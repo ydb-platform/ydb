@@ -346,10 +346,13 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         if (!IsGetAccelerateScheduled && GetsAccelerated < AccelerationParams.MaxNumOfSlowDisks) {
             // Count VDisks with requests in flight, if there are <= the maximum number of slow VDisks, Accelerate
             if (CountDisksWithActiveRequests() <= AccelerationParams.MaxNumOfSlowDisks) {
-                ui64 timeToAccelerateUs = GetImpl.GetTimeToAccelerateGetNs(LogCtx) / 1000;
+                const ui64 predictedDelayNs = GetImpl.GetTimeToAccelerateGetNs(LogCtx);
+                ui64 timeToAccelerateUs = predictedDelayNs / 1000;
                 TDuration timeToAccelerate = TDuration::MicroSeconds(timeToAccelerateUs);
                 TMonotonic now = TActivationContext::Monotonic();
                 TMonotonic nextAcceleration = RequestStartTime + timeToAccelerate;
+                GetImpl.History.AddAccelerationSchedule(false, GetsAccelerated + 1, predictedDelayNs,
+                    nextAcceleration > now ? nextAcceleration - now : TDuration::Zero());
                 LWTRACK(DSProxyScheduleAccelerate, Orbit, nextAcceleration > now ? (nextAcceleration - now).MicroSeconds() / 1000.0 : 0.0, "Get");
                 if (nextAcceleration > now) {
                     ui64 causeIdx = RootCauseTrack.RegisterAccelerate("Get");
@@ -366,10 +369,13 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         if (!IsPutAccelerateScheduled && PutsAccelerated < AccelerationParams.MaxNumOfSlowDisks) {
             // Count VDisks with requests in flight, if there are <= the maximum number of slow VDisks, Accelerate
             if (CountDisksWithActiveRequests() <= AccelerationParams.MaxNumOfSlowDisks) {
-                ui64 timeToAccelerateUs = GetImpl.GetTimeToAcceleratePutNs(LogCtx) / 1000;
+                const ui64 predictedDelayNs = GetImpl.GetTimeToAcceleratePutNs(LogCtx);
+                ui64 timeToAccelerateUs = predictedDelayNs / 1000;
                 TDuration timeToAccelerate = TDuration::MicroSeconds(timeToAccelerateUs);
                 TMonotonic now = TActivationContext::Monotonic();
                 TMonotonic nextAcceleration = RequestStartTime + timeToAccelerate;
+                GetImpl.History.AddAccelerationSchedule(true, PutsAccelerated + 1, predictedDelayNs,
+                    nextAcceleration > now ? nextAcceleration - now : TDuration::Zero());
                 LWTRACK(DSProxyScheduleAccelerate, Orbit, nextAcceleration > now ? (nextAcceleration - now).MicroSeconds() / 1000.0 : 0.0, "Put");
                 if (nextAcceleration > now) {
                     ui64 causeIdx = RootCauseTrack.RegisterAccelerate("Put");
@@ -408,6 +414,10 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
 
 
         if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(handleClass)) {
+            GetImpl.RecordPredictions(false, true);
+            if (IsPutStarted) {
+                GetImpl.RecordPredictions(true, true);
+            }
             STLOG(PRI_WARN, BS_PROXY_GET, BPG71, "Long TEvGet request detected",         
                     (LongRequestThreshold, LongRequestThreshold),
                     (GroupId, Info->GroupID),
@@ -415,6 +425,9 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                     (RequestTotalSize, requestSize),
                     (HandleClass, NKikimrBlobStorage::EGetHandleClass_Name(handleClass)),
                     (RestartCounter, RestartCounter),
+                    (MaxNumOfSlowDisks, AccelerationParams.MaxNumOfSlowDisks),
+                    (SlowDiskThreshold, AccelerationParams.SlowDiskThreshold),
+                    (PredictedDelayMultiplier, AccelerationParams.PredictedDelayMultiplier),
                     (History, GetImpl.PrintHistory()));
         }
 

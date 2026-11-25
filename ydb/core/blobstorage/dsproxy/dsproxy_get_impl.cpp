@@ -163,6 +163,17 @@ ui64 TGetImpl::GetTimeToAcceleratePutNs(TLogContext &logCtx) {
     return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.PutHandleClass));
 }
 
+void TGetImpl::RecordPredictions(bool isPut, bool isFinal) {
+    const auto queueId = isPut ? HandleClassToQueueId(Blackboard.PutHandleClass)
+        : HandleClassToQueueId(Blackboard.GetHandleClass);
+    TVector<ui64> predictedDelaysNs;
+    predictedDelaysNs.reserve(Info->GetTotalVDisksNum());
+    for (ui32 orderNumber = 0; orderNumber < Info->GetTotalVDisksNum(); ++orderNumber) {
+        predictedDelaysNs.push_back(Blackboard.GroupQueues->GetPredictedDelayNsByOrderNumber(orderNumber, queueId));
+    }
+    History.AddPredictions(isPut, isFinal, queueId, std::move(predictedDelaysNs));
+}
+
 TString TGetImpl::DumpFullState() const {
     TStringStream str;
 
@@ -225,6 +236,8 @@ TString TGetImpl::DumpFullState() const {
 
 void TGetImpl::GenerateInitialRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets) {
     Y_ABORT_UNLESS(QuerySize != 0, "internal consistency error");
+
+    RecordPredictions(false, false);
 
     // TODO(cthulhu): query politics
     // TODO(cthulhu): adaptive request from nearest domain, and from different DC only when local DC failed

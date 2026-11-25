@@ -257,7 +257,66 @@ public:
         AccelerationType Type;
     };
 
-    using TEntry = std::variant<TVPutEntry, TVGetEntry, TVPutResultEntry, TVGetResultEntry, TAccelerationEntry>;
+    struct TPredictionsEntry : public TBaseEntry {
+        bool IsPut;
+        bool IsFinal;
+        NKikimrBlobStorage::EVDiskQueueId QueueId;
+        // Keep the snapshot out of line: adding it must not inflate every history entry.
+        TVector<ui64> PredictedDelaysNs;
+
+        TPredictionsEntry(TMonotonic startTime, bool isPut, bool isFinal,
+                NKikimrBlobStorage::EVDiskQueueId queueId, TVector<ui64>&& predictedDelaysNs)
+            : TBaseEntry(startTime)
+            , IsPut(isPut)
+            , IsFinal(isFinal)
+            , QueueId(queueId)
+            , PredictedDelaysNs(std::move(predictedDelaysNs))
+        {}
+
+        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
+            Y_UNUSED(info);
+            str << (IsPut ? "PutPredictions" : "GetPredictions")
+                << "{ TimestampMs# " << Timestamp.MillisecondsFloat()
+                << " Stage# " << (IsFinal ? "Final" : "Initial")
+                << " QueueId# " << NKikimrBlobStorage::EVDiskQueueId_Name(QueueId)
+                << " Predictions# [";
+            for (ui32 orderNumber = 0; orderNumber < PredictedDelaysNs.size(); ++orderNumber) {
+                if (orderNumber) {
+                    str << ", ";
+                }
+                str << PredictedDelaysNs[orderNumber];
+            }
+            str << "] }";
+        }
+    };
+
+    struct TAccelerationScheduleEntry : public TBaseEntry {
+        bool IsPut;
+        ui32 Attempt;
+        ui64 PredictedDelayNs;
+        TDuration Delay;
+
+        TAccelerationScheduleEntry(TMonotonic startTime, bool isPut, ui32 attempt,
+                ui64 predictedDelayNs, TDuration delay)
+            : TBaseEntry(startTime)
+            , IsPut(isPut)
+            , Attempt(attempt)
+            , PredictedDelayNs(predictedDelayNs)
+            , Delay(delay)
+        {}
+
+        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
+            Y_UNUSED(info);
+            str << (IsPut ? "PutAccelerationSchedule" : "GetAccelerationSchedule")
+                << "{ TimestampMs# " << Timestamp.MillisecondsFloat()
+                << " Attempt# " << Attempt
+                << " PredictedDelayNs# " << PredictedDelayNs
+                << " DelayMs# " << Delay.MillisecondsFloat() << " }";
+        }
+    };
+
+    using TEntry = std::variant<TVPutEntry, TVGetEntry, TVPutResultEntry, TVGetResultEntry, TAccelerationEntry,
+        TPredictionsEntry, TAccelerationScheduleEntry>;
 
 private:
 
@@ -322,6 +381,15 @@ public:
     void AddAcceleration(bool isPut) {
         AccelerationType type = isPut ? AccelerationType::PUT : AccelerationType::GET;
         Entries.emplace_back(TAccelerationEntry(StartTime, type));
+    }
+
+    void AddPredictions(bool isPut, bool isFinal, NKikimrBlobStorage::EVDiskQueueId queueId,
+            TVector<ui64>&& predictedDelaysNs) {
+        Entries.emplace_back(TPredictionsEntry(StartTime, isPut, isFinal, queueId, std::move(predictedDelaysNs)));
+    }
+
+    void AddAccelerationSchedule(bool isPut, ui32 attempt, ui64 predictedDelayNs, TDuration delay) {
+        Entries.emplace_back(TAccelerationScheduleEntry(StartTime, isPut, attempt, predictedDelayNs, delay));
     }
 
     void AddAllWaiting() {

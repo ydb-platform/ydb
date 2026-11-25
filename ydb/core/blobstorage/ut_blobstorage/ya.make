@@ -73,6 +73,7 @@ RECURSE_FOR_TESTS(
     ut_comp_defrag
     ut_donor
     ut_group_reconfiguration
+    ut_get_request_history
     ut_huge
     ut_long_request_threshold
     ut_startup_brokers

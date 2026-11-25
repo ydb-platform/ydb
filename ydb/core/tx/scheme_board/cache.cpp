@@ -1068,8 +1068,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         {
             const auto& pqConfig = pqDesc.GetPQTabletConfig();
 
-            const bool splitByHash = NPQ::SplitMergeEnabled(pqConfig) && !pqConfig.GetSplitByPartitionKey();
-            if (splitByHash) {
+            if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()
+                && !pqConfig.GetSplitByPartitionKey()) {
                 partitioning.reserve(pqDesc.GetPartitions().size());
                 for (const auto& partition : pqDesc.GetPartitions()) {
                     if (NKikimrPQ::ETopicPartitionStatus::Active == partition.GetStatus()) {

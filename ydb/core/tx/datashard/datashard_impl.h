@@ -2038,7 +2038,7 @@ public:
             // Graphs, build buffers and MVCC journals share the node-wide
             // SharedCache quota with the shared table-page cache.
             Send(NMemory::MakeMemoryControllerId(),
-                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache, true),
+                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache, 0, std::numeric_limits<ui64>::max(), true),
                 NActors::IEventHandle::FlagTrackDelivery);
         }
         return HnswCacheMemoryTracker->GetLimit();

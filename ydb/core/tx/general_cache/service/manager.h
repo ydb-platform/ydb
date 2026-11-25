@@ -425,7 +425,6 @@ private:
     std::shared_ptr<NSource::IObjectsProcessor<TPolicy>> ObjectsProcessor;
     const std::shared_ptr<TConsumerClasses<EConsumer>> ConsumerClasses;
     TLRUCache<TAddress, TObject, TNoopDelete, typename TPolicy::TSizeCalcer> Cache;
-    const bool UseCacheSizeFromConfig;
     static constexpr ui64 DEFAULT_CACHE_SIZE = (ui64)1 << 30;
 
     THashMap<TSourceId, TSourceInfo> SourcesInfo;
@@ -467,9 +466,11 @@ private:
         return it->second;
     }
 
-    void AddObjectsToCache(const THashMap<TAddress, TObject>& add) {
-        for (auto&& i : add) {
-            Cache.Insert(i.first, i.second);
+    void UpdateConsumption() {
+        // TLRUCache retains its last item even when it exceeds the size limit.
+        const auto limit = Cache.GetMaxSize();
+        while (!Cache.Empty() && (!limit || Cache.TotalSize() > limit)) {
+            Cache.Erase(Cache.FindOldest());
         }
         Counters->CacheSizeCount->Set(Cache.Size());
 
@@ -478,6 +479,13 @@ private:
         if (MemoryConsumer) {
             MemoryConsumer->SetConsumption(cacheTotalSize);
         }
+    }
+
+    void AddObjectsToCache(const THashMap<TAddress, TObject>& add) {
+        for (auto&& i : add) {
+            Cache.Insert(i.first, i.second);
+        }
+        UpdateConsumption();
     }
 
     void RemoveObjectsFromCache(const THashSet<TAddress>& remove) {
@@ -487,13 +495,7 @@ private:
                 Cache.Erase(it);
             }
         }
-        Counters->CacheSizeCount->Set(Cache.Size());
-
-        const auto cacheTotalSize = Cache.TotalSize();
-        Counters->CacheSizeBytes->Set(cacheTotalSize);
-        if (MemoryConsumer) {
-            MemoryConsumer->SetConsumption(cacheTotalSize);
-        }
+        UpdateConsumption();
     }
 
 public:
@@ -501,8 +503,7 @@ public:
         : Counters(counters)
         , ObjectsProcessor(TPolicy::BuildObjectsProcessor(ownerActorId))
         , ConsumerClasses(std::make_shared<TConsumerClasses<EConsumer>>(Counters->GetConfig()))
-        , Cache(Counters->GetConfig().GetMemoryLimit().value_or(DEFAULT_CACHE_SIZE))
-        , UseCacheSizeFromConfig(Counters->GetConfig().GetMemoryLimit().has_value()) {
+        , Cache(Counters->GetConfig().GetMemoryLimit().value_or(DEFAULT_CACHE_SIZE)) {
         YDB_LOG_NOTICE_COMP(NKikimrServices::GENERAL_CACHE, "",
             {"event", "general_cache_manager"},
             {"ownerActorId", ownerActorId},
@@ -610,9 +611,13 @@ public:
         }
     }
 
-    void UpdateMaxCacheSize(const size_t maxCacheSize) {
-        if (UseCacheSizeFromConfig) {
-            return;
+    ui64 GetMaxCacheSize() const noexcept {
+        return Cache.GetMaxSize();
+    }
+
+    void UpdateMaxCacheSize(size_t maxCacheSize) {
+        if (const auto configuredLimit = Counters->GetConfig().GetMemoryLimit()) {
+            maxCacheSize = Min<ui64>(maxCacheSize, *configuredLimit);
         }
 
         if (Cache.GetMaxSize() == maxCacheSize) {
@@ -626,10 +631,12 @@ public:
             {"oldValue", Cache.GetMaxSize()});
         Cache.SetMaxSize(maxCacheSize);
         Counters->CacheSizeLimitBytes->Set(Cache.GetMaxSize());
+        UpdateConsumption();
     }
 
     void SetMemoryConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) {
         MemoryConsumer = std::move(consumer);
+        UpdateConsumption();
     }
 };
 

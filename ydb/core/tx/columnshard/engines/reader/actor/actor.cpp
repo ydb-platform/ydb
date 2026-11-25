@@ -44,7 +44,7 @@ NKqp::TScanStatistics TColumnShardScan::GetScanStats() {
 
 // TODO: Merge with GetScanStats.
 NColumnShard::TCsScanStats TColumnShardScan::GetCsScanStats() const {
-    return {.Steps = ScanCountersPool.GetStepStats()};
+    return { .Steps = ScanCountersPool.GetStepStats() };
 }
 
 LWTRACE_USING(YDB_CS_SCAN);
@@ -67,8 +67,7 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
     ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout,
     const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
     const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
-    std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId, std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> schedulerPool,
-    bool csStatsEnabled)
+    std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId, std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> schedulerPool, bool csStatsEnabled)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , ColumnDataManager(columnDataManager)

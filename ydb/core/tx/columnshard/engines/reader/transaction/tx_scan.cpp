@@ -231,13 +231,13 @@ void TTxScan::StartScanActor(const TReadMetadataBase::TConstPtr& readMetadataRan
         ctx.Send(Self->ScanDiagnosticsActorId, std::move(diagnostics));
     }
     const ui32 scanPoolId = request.GetUseBatchPool() ? AppDataVerified().BatchPoolId : Max<ui32>();
-    const bool csStatsEnabled = AppDataVerified().FeatureFlags.GetEnableColumnShardStats() &&
-        request.GetStatsMode() >= NYql::NDqProto::DQ_STATS_MODE_PROFILE;
+    const bool csStatsEnabled =
+        AppDataVerified().FeatureFlags.GetEnableColumnShardStats() && request.GetStatsMode() >= NYql::NDqProto::DQ_STATS_MODE_PROFILE;
     auto scanActor = std::make_unique<TColumnShardScan>(Self->SelfId(), Ev->Sender, Self->ScanDiagnosticsActorId, Self->GetStoragesManager(),
         Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), shardingPolicy, request.GetScanId(),
         request.GetTxId(), request.GetGeneration(), requestCookie, Self->TabletID(), TDuration::MilliSeconds(request.GetTimeoutMs()),
-        readMetadataRange, request.GetDataFormat(), Self->Counters.GetScanCounters(), cpuLimits, std::move(orbit), rawPathId,
-        GetSchedulerPool(), csStatsEnabled);
+        readMetadataRange, request.GetDataFormat(), Self->Counters.GetScanCounters(), cpuLimits, std::move(orbit), rawPathId, GetSchedulerPool(),
+        csStatsEnabled);
     auto scanActorId = ctx.Register(scanActor.release(), TMailboxType::HTSwap, scanPoolId);
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 

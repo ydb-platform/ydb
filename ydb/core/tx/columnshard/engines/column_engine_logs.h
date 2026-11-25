@@ -65,6 +65,7 @@ private:
     std::shared_ptr<NActualizer::TController> ActualizationController;
     std::shared_ptr<TSchemaObjectsCache> SchemaObjectsCache;
     TVersionedPresetSchemas VersionedSchemas;
+    std::optional<TInternalPathId> NextMoveDataGranule;
 
     void InitDerivedState();
     void RegisterSchemaVersion(const TSnapshot& snapshot, TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo);
@@ -189,7 +190,7 @@ public:
         const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
         const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit,
-        NActualizer::EActualizationScope scope) noexcept override;
+        NActualizer::EActualizationScope scope = NActualizer::EActualizationScope::TieringAndScheme) noexcept override;
 
     void ReturnToIndexes(const THashMap<TInternalPathId, THashSet<ui64>>& portions) const {
         return GranulesStorage->ReturnToIndexes(portions);
@@ -202,18 +203,13 @@ public:
     }
 
     void StopMoveData() {
+        NextMoveDataGranule.reset();
         for (auto& [_, granule] : GranulesStorage->GetTables()) {
             granule->StopMoveData();
         }
     }
 
-    NActualizer::TMoveDataQueueSizes UpdateMoveDataQueueSizes() {
-        NActualizer::TMoveDataQueueSizes result;
-        for (auto& [_, granule] : GranulesStorage->GetTables()) {
-            result += granule->UpdateMoveDataQueueSizes();
-        }
-        return result;
-    }
+    NActualizer::TMoveDataQueueSizes UpdateMoveDataQueueSizes();
 
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;
     virtual bool ApplyChangesOnExecute(

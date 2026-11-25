@@ -9,7 +9,6 @@ struct TMoveDataQueueSizes {
     ui64 Pending = 0;
     ui64 ConfirmedToMove = 0;
     ui64 RewriteStarted = 0;
-    // Uncommitted writes with blobs in the target groups: they cannot be rewritten, so the move waits for commit or abort.
     ui64 Uncommitted = 0;
     // Not a queue: seeded portions removed from the index but not yet erased by cleanup, so their blobs are not queued for GC.
     ui64 Retired = 0;

@@ -958,7 +958,7 @@ bool TColumnShard::SetupTtl() {
 
     const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : 512_MB;
     std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(
-        {}, DataLocksManager, memoryUsageLimit, NOlap::NActualizer::EActualizationScope::ExceptMoveData);
+        {}, DataLocksManager, memoryUsageLimit);
 
     if (indexChanges.empty()) {
         YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
@@ -1757,14 +1757,11 @@ public:
                         auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(i.first.GetRawValue(), p).Select();
                         if (!rowset.IsReady()) {
                             reask = true;
-                        } else if (rowset.EndOfSet()) {
-                            // Metadata scans can see retired portions between cleanup Execute (DB erase) and Complete (PortionInfo erase).
-                            YDB_LOG_VERIFY(itPortionConstructor->second.GetPortionInfo()->HasRemoveSnapshot(),
-                                {"pathId", i.first}, {"portionId", p},
-                                {"debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true)});
-                            Constructors.erase(itPortionConstructor);
-                            continue;
                         } else {
+                            YDB_LOG_VERIFY(!rowset.EndOfSet(),
+                                {"pathId", i.first},
+                                {"portionId", p},
+                                {"debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true)});
                             NOlap::TColumnChunkLoadContextV2 info(rowset, selector);
                             itPortionConstructor->second.SetRecords(std::move(info));
                         }
@@ -1800,10 +1797,6 @@ public:
         }
 
         for (auto&& i : Constructors) {
-            // On retry, GetPortions omits portions removed by cleanup, leaving their unfinished constructors.
-            if (!i.second.IsReady()) {
-                continue;
-            }
             FetchedAccessors.emplace_back(std::move(i.second));
         }
 

@@ -5,40 +5,9 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
-#include <util/generic/algorithm.h>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
-
-namespace {
-
-THashSet<ui32> GetRequestedGroups(const NKikimrTabletBase::TEvMoveData& record) {
-    return { record.GetGroups().begin(), record.GetGroups().end() };
-}
-
-// Same contract as keyvalue and blob_depot: a group that is still the latest entry keeps taking writes, so the move could never converge.
-std::optional<ui32> FindActiveGroup(const TTabletStorageInfo& info, const THashSet<ui32>& groups) {
-    if (groups.empty()) {
-        return std::nullopt;
-    }
-    const auto* channel = FindIfPtr(info.Channels, [&groups](const auto& channel) {
-        const auto* latest = channel.LatestEntry();
-        return latest != nullptr && groups.contains(latest->GroupID);
-    });
-    if (channel == nullptr) {
-        return std::nullopt;
-    }
-    return channel->LatestEntry()->GroupID;
-}
-
-void RefuseMoveData(const TActorId& sender, const ui64 tabletId, const ui32 activeGroup, const TActorContext& ctx) {
-    const TString reason = TStringBuilder() << "group " << activeGroup << " is still the latest history entry at tablet " << tabletId;
-    YDB_LOG_WARN("MoveData refused", {"tabletId", tabletId}, {"reason", reason});
-    ctx.Send(sender, new TEvTablet::TEvMoveDataResponse(tabletId, NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch, reason));
-}
-
-}   // namespace
 
 TMoveDataDriver::TMoveDataDriver(TColumnShard* self)
     : Self(self)
@@ -46,25 +15,8 @@ TMoveDataDriver::TMoveDataDriver(TColumnShard* self)
 {
 }
 
-void TMoveDataDriver::StartOrUpdateMigration(
-    TColumnShard& owner, const NKikimrTabletBase::TEvMoveData& request, const TActorId& sender, const TActorContext& ctx) {
-    const THashSet<ui32> requested = GetRequestedGroups(request);
-    if (const auto activeGroup = FindActiveGroup(*owner.Info(), requested)) {
-        RefuseMoveData(sender, owner.TabletID(), *activeGroup, ctx);
-        return;
-    }
-    if (owner.MoveDataDriver == nullptr) {
-        owner.MoveDataDriver = new TMoveDataDriver(&owner);
-        ctx.RegisterWithSameMailbox(owner.MoveDataDriver);
-        owner.Counters.GetCSCounters().OnMoveDataStarted();
-        owner.Executor()->StartMoveDataVacuumFromOwner();
-    }
-    owner.MoveDataDriver->AcceptRequest(sender, requested, ctx);
-}
-
 void TMoveDataDriver::AcceptRequest(const TActorId& sender, const THashSet<ui32>& requested, const TActorContext& ctx) {
-    State.HiveSender = sender;
-    // Admission is synchronous even though the gate runs on the driver's cadence.
+    State.Subscribers.insert(sender);
     for (const auto groupId : requested) {
         State.TargetsChanged |= State.TargetGroups.emplace(groupId).second;
     }
@@ -82,9 +34,7 @@ void TMoveDataDriver::RestartActualizer() {
     auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
     // A changed target set replaces the actualizers and seeds fresh queues.
     index.StopMoveData();
-    if (!State.TargetGroups.empty()) {
-        index.StartMoveData(State.TargetGroups);
-    }
+    index.StartMoveData(State.TargetGroups);
 }
 
 void TMoveDataDriver::Stop(TColumnShard& owner, const TActorContext& ctx) {
@@ -109,40 +59,52 @@ NOlap::NActualizer::TMoveDataQueueSizes TMoveDataDriver::UpdateQueueSizes() {
     return Self->MutableIndexAs<NOlap::TColumnEngineForLogs>().UpdateMoveDataQueueSizes();
 }
 
-bool TMoveDataDriver::CanCompleteMigration(const NOlap::NActualizer::TMoveDataQueueSizes& queues) {
+TMoveDataDriver::ECompletionBlocker TMoveDataDriver::GetCompletionBlocker(const NOlap::NActualizer::TMoveDataQueueSizes& queues) const {
+    if (!State.VacuumCompleted) {
+        return ECompletionBlocker::Vacuum;
+    }
+    if (queues.GetTotal() != 0) {
+        return ECompletionBlocker::Portions;
+    }
+    if (queues.Retired != 0) {
+        return ECompletionBlocker::Cleanup;
+    }
+    const auto& sharedBlobs = Self->GetStoragesManager()->GetDefaultOperator()->GetSharedBlobs();
+    AFL_VERIFY(sharedBlobs);
+    if (sharedBlobs->HasBlobsForGroups(State.TargetGroups)) {
+        return ECompletionBlocker::SharedBlobs;
+    }
+    return ECompletionBlocker::None;
+}
+
+void TMoveDataDriver::ReportProgress(const NOlap::NActualizer::TMoveDataQueueSizes& queues, ECompletionBlocker blocker) {
     Self->Counters.GetCSCounters().OnMoveDataGateChecked();
     Self->Counters.GetCSCounters().OnMoveDataQueues(queues);
     if (queues.Rejected > State.ReportedRejections) {
         Self->Counters.GetCSCounters().OnMoveDataPortionsRejected(queues.Rejected - State.ReportedRejections);
         State.ReportedRejections = queues.Rejected;
     }
-    if (!State.VacuumCompleted) {
-        Self->Counters.GetCSCounters().OnMoveDataGateBlockedByVacuum();
-        return false;
+    switch (blocker) {
+        case ECompletionBlocker::None:
+            break;
+        case ECompletionBlocker::Vacuum:
+            Self->Counters.GetCSCounters().OnMoveDataGateBlockedByVacuum();
+            break;
+        case ECompletionBlocker::Portions:
+            Self->Counters.GetCSCounters().OnMoveDataGateBlockedByPortions();
+            if (queues.Uncommitted) {
+                YDB_LOG_INFO("MoveData gate waits for uncommitted writes", {"tabletId", Self->TabletID()}, {"uncommitted", queues.Uncommitted});
+            }
+            break;
+        case ECompletionBlocker::Cleanup:
+            Self->Counters.GetCSCounters().OnMoveDataGateBlockedByCleanup();
+            YDB_LOG_INFO("MoveData gate waits for cleanup", {"tabletId", Self->TabletID()}, {"retired", queues.Retired});
+            break;
+        case ECompletionBlocker::SharedBlobs:
+            Self->Counters.GetCSCounters().OnMoveDataGateBlockedByShared();
+            YDB_LOG_INFO("MoveData gate waits for shared blobs", {"tabletId", Self->TabletID()});
+            break;
     }
-    if (queues.GetTotal() != 0) {
-        Self->Counters.GetCSCounters().OnMoveDataGateBlockedByPortions();
-        if (queues.Uncommitted) {
-            YDB_LOG_INFO("MoveData gate waits for uncommitted writes", {"tabletId", Self->TabletID()}, {"uncommitted", queues.Uncommitted});
-        }
-        return false;
-    }
-    // A retired seeded portion still in the granule has not reached the GC queues, so its blobs can still sit in a target group.
-    if (queues.Retired != 0) {
-        Self->Counters.GetCSCounters().OnMoveDataGateBlockedByCleanup();
-        YDB_LOG_INFO("MoveData gate waits for cleanup", {"tabletId", Self->TabletID()}, {"retired", queues.Retired});
-        return false;
-    }
-    const auto& defaultOperator = Self->GetStoragesManager()->GetDefaultOperator();
-    // A shared or borrowed link is not ours to collect, so it gets its own sensor.
-    const auto& sharedBlobs = defaultOperator->GetSharedBlobs();
-    AFL_VERIFY(sharedBlobs);
-    if (sharedBlobs->HasBlobsForGroups(State.TargetGroups)) {
-        Self->Counters.GetCSCounters().OnMoveDataGateBlockedByShared();
-        YDB_LOG_INFO("MoveData gate waits for shared blobs", {"tabletId", Self->TabletID()});
-        return false;
-    }
-    return true;
 }
 
 void TMoveDataDriver::FinishMigration(const TActorContext& ctx) {
@@ -152,12 +114,14 @@ void TMoveDataDriver::FinishMigration(const TActorContext& ctx) {
         Self->MutableIndexAs<NOlap::TColumnEngineForLogs>().StopMoveData();
     }
     // Rewrites and cleanup are committed. GC acknowledgements and CutHistory may follow after Hive restarts us.
-    ctx.Send(State.HiveSender, new TEvTablet::TEvMoveDataResponse(Self->TabletID(), NKikimrTabletBase::TEvMoveDataResponse::Success));
+    for (const auto& subscriber : State.Subscribers) {
+        ctx.Send(subscriber, new TEvTablet::TEvMoveDataResponse(Self->TabletID(), NKikimrTabletBase::TEvMoveDataResponse::Success));
+    }
     Self->Counters.GetCSCounters().OnMoveDataFinished();
     Stop(*Self, ctx);
 }
 
-void TMoveDataDriver::SetupMetadata() {
+void TMoveDataDriver::SetupMetadataRequests() {
     if (MetadataSubscribersInFlight->Val()) {
         return;
     }
@@ -194,15 +158,16 @@ void TMoveDataDriver::RunMigrationStep(const TActorContext& ctx) {
         }
         RestartActualizer();
     }
-    // Reconcile bounded batches of seeded portions, then select work and check the gate.
     const auto queues = UpdateQueueSizes();
     if (queues.Pending) {
-        SetupMetadata();
+        SetupMetadataRequests();
     }
     if (queues.ConfirmedToMove || queues.RewriteStarted) {
         StartPortionRewrites();
     }
-    if (CanCompleteMigration(queues)) {
+    const auto blocker = GetCompletionBlocker(queues);
+    ReportProgress(queues, blocker);
+    if (blocker == ECompletionBlocker::None) {
         FinishMigration(ctx);
     }
 }

@@ -54,14 +54,6 @@ private:
     bool ForcedMove = false;
 
 public:
-    bool GetForcedMove() const noexcept {
-        return ForcedMove;
-    }
-
-    void SetForcedMove() noexcept {
-        ForcedMove = true;
-    }
-
     TPortionEvictionFeatures(const ui64 portionSchemaVersion, const std::shared_ptr<ISnapshotSchema>& readScheme,
         const std::shared_ptr<ISnapshotSchema>& targetScheme, const TString& currentTierName)
         : PortionSchemaVersion(portionSchemaVersion)
@@ -70,6 +62,14 @@ public:
         , CurrentTierName(currentTierName)
     {
         YDB_LOG_VERIFY(CurrentTierName);
+    }
+
+    bool GetForcedMove() const noexcept {
+        return ForcedMove;
+    }
+
+    void SetForcedMove() noexcept {
+        ForcedMove = true;
     }
 
     const TString& GetTargetTierName() const {

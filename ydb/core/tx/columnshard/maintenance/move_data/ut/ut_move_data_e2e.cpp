@@ -183,7 +183,11 @@ public:
     }
 
     void StartMove(const std::vector<ui32>& groups = { OldGroup }) {
-        Runtime.SendToPipe(TabletId, Sender, new TEvTablet::TEvMoveData(groups), 0, GetPipeConfigWithRetries());
+        StartMove(Sender, groups);
+    }
+
+    void StartMove(const TActorId& sender, const std::vector<ui32>& groups) {
+        Runtime.SendToPipe(TabletId, sender, new TEvTablet::TEvMoveData(groups), 0, GetPipeConfigWithRetries());
     }
 
     void WaitForFirstGC() {
@@ -475,11 +479,14 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.StartMove({ OldGroup });
         UNIT_ASSERT_C(!f.DriveGateWithWrite(60, 3, 2000, 2001), "answered while the requested rewrites were disabled");
 
-        f.StartMove({ OldGroup, MidGroup });
+        const auto secondSender = f.Runtime.AllocateEdgeActor();
+        f.StartMove(secondSender, { OldGroup, MidGroup });
         f.Controller->EnableBackground(EBackground::MoveData);
         const auto response = f.DriveGateWithWrite(200, 4, 3000, 3001);
         UNIT_ASSERT_C(response, "no TEvMoveDataResponse after the expanded request");
         f.AssertSuccess(response);
+        auto secondResponse = f.Runtime.GrabEdgeEvent<TEvTablet::TEvMoveDataResponse>(secondSender, TDuration::Seconds(1));
+        f.AssertSuccess(secondResponse);
         // Both groups must eventually drain, although Success no longer waits for GC.
         f.DriveGate(150, {}, [&] {
             return LivePortionBlobs(*f.OldGroupProxy, TabletId).empty() && LivePortionBlobs(*f.MidGroupProxy, TabletId).empty();

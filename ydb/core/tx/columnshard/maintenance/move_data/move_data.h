@@ -12,10 +12,6 @@
 
 #include <memory>
 
-namespace NKikimrTabletBase {
-class TEvMoveData;
-}
-
 namespace NKikimr::NColumnShard {
 
 class TColumnShard;
@@ -41,11 +37,11 @@ class TMoveDataDriver: public TActorBootstrapped<TMoveDataDriver> {
 private:
     // On restart Hive resends the request; session progress is not persisted.
     struct TSession {
-        TActorId HiveSender;
+        THashSet<TActorId> Subscribers;
         THashSet<ui32> TargetGroups;
         bool VacuumCompleted = false;
         ui64 ReportedRejections = 0;
-        bool TargetsChanged = true;
+        bool TargetsChanged = false;
     };
 
     TColumnShard* Self;
@@ -54,16 +50,25 @@ private:
     const std::shared_ptr<TAtomicCounter> MetadataSubscribersInFlight = std::make_shared<TAtomicCounter>();
     static constexpr TDuration Cadence = TDuration::Seconds(5);
 
+private:
     void ScheduleWakeup(const TActorContext& ctx) {
         ctx.Schedule(Cadence, new TEvMoveData::TEvWakeup());
     }
 
-    void AcceptRequest(const TActorId& sender, const THashSet<ui32>& requested, const TActorContext& ctx);
     void RestartActualizer();
     NOlap::NActualizer::TMoveDataQueueSizes UpdateQueueSizes();
-    bool CanCompleteMigration(const NOlap::NActualizer::TMoveDataQueueSizes& queues);
+    enum class ECompletionBlocker {
+        None,
+        Vacuum,
+        Portions,
+        Cleanup,
+        SharedBlobs,
+    };
+
+    ECompletionBlocker GetCompletionBlocker(const NOlap::NActualizer::TMoveDataQueueSizes& queues) const;
+    void ReportProgress(const NOlap::NActualizer::TMoveDataQueueSizes& queues, ECompletionBlocker blocker);
     void FinishMigration(const TActorContext& ctx);
-    void SetupMetadata();
+    void SetupMetadataRequests();
     void StartPortionRewrites();
     void RunMigrationStep(const TActorContext& ctx);
 
@@ -74,9 +79,7 @@ private:
 public:
     explicit TMoveDataDriver(TColumnShard* self);
 
-    // Creates the actor on the first valid request, then admits groups synchronously before queued gate checks.
-    static void StartOrUpdateMigration(
-        TColumnShard& owner, const NKikimrTabletBase::TEvMoveData& request, const TActorId& sender, const TActorContext& ctx);
+    void AcceptRequest(const TActorId& sender, const THashSet<ui32>& requested, const TActorContext& ctx);
     static void Stop(TColumnShard& owner, const TActorContext& ctx);
     void OnVacuumCompleted(const TActorContext& ctx);
 

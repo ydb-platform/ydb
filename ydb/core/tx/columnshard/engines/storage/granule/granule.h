@@ -130,7 +130,7 @@ private:
     TMonotonic ModificationLastTime = TMonotonic::Now();
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>> InsertedPortions;
-    THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>> InsertedPortionsById;
+    TWrittenPortionsById InsertedPortionsById;
     THashMap<TInsertWriteId, std::shared_ptr<TPortionDataAccessor>> InsertedAccessors;
     std::unique_ptr<PortionIntervalTree::TPortionIntervalTree> IntervalTree;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
@@ -278,8 +278,8 @@ public:
         ActualizationIndex->StopMoveData();
     }
 
-    NActualizer::TMoveDataQueueSizes UpdateMoveDataQueueSizes() {
-        return ActualizationIndex->UpdateMoveDataQueueSizes(Portions, InsertedPortionsById);
+    NActualizer::TMoveDataQueueSizes UpdateMoveDataQueueSizes(size_t& visitsLeft) {
+        return ActualizationIndex->UpdateMoveDataQueueSizes(Portions, InsertedPortionsById, visitsLeft);
     }
 
     bool IsSchemeActualizationFinished() const {

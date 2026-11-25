@@ -235,7 +235,7 @@ public:
     // The scope keeps the move on its driver and tiering on the tablet loop, whichever of the two is off.
     virtual std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit,
-        NActualizer::EActualizationScope scope) noexcept = 0;
+        NActualizer::EActualizationScope scope = NActualizer::EActualizationScope::TieringAndScheme) noexcept = 0;
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) = 0;

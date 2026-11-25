@@ -1,8 +1,15 @@
 #pragma once
 
+#include <util/generic/hash.h>
 #include <util/system/types.h>
 
 #include <cstddef>
+#include <memory>
+
+namespace NKikimr::NOlap {
+class TWrittenPortionInfo;
+using TWrittenPortionsById = THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>;
+}
 
 namespace NKikimr::NOlap::NActualizer {
 
@@ -19,8 +26,11 @@ struct TMoveDataMetadataBudget {
     }
 
     bool IsExhausted() const noexcept {
-        // Allow the first portion even if it exceeds the soft memory limit.
-        return !PortionsLeft || (RequestedPortions && Memory >= MemoryLimit);
+        if (PortionsLeft == 0) {
+            return true;
+        }
+        // Apply the memory limit after the first request so an oversized portion can make progress.
+        return RequestedPortions != 0 && Memory >= MemoryLimit;
     }
 };
 

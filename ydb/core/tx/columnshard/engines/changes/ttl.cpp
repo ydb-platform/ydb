@@ -45,10 +45,9 @@ std::optional<TWritePortionInfoWithBlobsResult> TTTLColumnEngineChanges::UpdateE
 
     auto portionWithBlobs = TReadPortionInfoWithBlobs::RestorePortion(
         GetPortionDataAccessor(info.GetPortionInfo()->GetPortionId()), srcBlobs, blobSchema->GetIndexInfo());
-    std::optional<TWritePortionInfoWithBlobsResult> result = TReadPortionInfoWithBlobs::SyncPortion(std::move(portionWithBlobs), blobSchema,
-        evictFeatures.GetTargetScheme(), evictFeatures.GetTargetTierName(), SaverContext.GetStoragesManager(), context.Counters.SplitterCounters,
-        evictFeatures.GetForcedMove());
-    return std::move(result);
+    return TReadPortionInfoWithBlobs::SyncPortion(std::move(portionWithBlobs), blobSchema,
+        evictFeatures.GetTargetScheme(), evictFeatures.GetTargetTierName(), SaverContext.GetStoragesManager(),
+        context.Counters.SplitterCounters, evictFeatures.GetForcedMove());
 }
 
 NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {

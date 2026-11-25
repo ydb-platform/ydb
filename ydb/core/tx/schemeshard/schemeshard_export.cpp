@@ -99,6 +99,7 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
 
     case TExportInfo::EState::AutoDropping:
     case TExportInfo::EState::Transferring:
+    case TExportInfo::EState::PublishExportMetadata:
     case TExportInfo::EState::Done:
         for (ui32 itemIdx : xrange(exportInfo.Items.size())) {
             FillItemProgress(this, exportInfo, itemIdx, *exprt.AddItemsProgress());

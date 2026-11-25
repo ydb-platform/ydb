@@ -394,9 +394,12 @@ namespace {
             return {};
         }
 
-        ui64 StartCompletionMarkerExport(bool autoDropping = true) {
+        ui64 StartCompletionMarkerExport(bool autoDropping = true, bool withMapping = false) {
             Env();
             Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(autoDropping);
+            if (withMapping) {
+                Runtime().GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+            }
             TestCreateTable(Runtime(), 100, "/MyRoot", R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Uint32" }
@@ -410,9 +413,10 @@ namespace {
                     endpoint: "localhost:%d"
                     scheme: HTTP
                     number_of_retries: 2
-                    items { source_path: "/MyRoot/Table" destination_prefix: "backup/table" }
+                    destination_prefix: "%s"
+                    items { source_path: "/MyRoot/Table" destination_prefix: "%s" }
                 }
-            )", S3Port()));
+            )", S3Port(), withMapping ? "backup" : "", withMapping ? "table" : "backup/table"));
             return 101;
         }
 
@@ -506,23 +510,26 @@ namespace {
             }
         }
 
-        void CheckCompletionMarkerContents(ui64 exportId) {
-            for (const auto* path : {"/backup/table/data_complete.json", "/backup/table/export_complete.json"}) {
+        void CheckCompletionMarkerContents(ui64 exportId, bool withMapping = false) {
+            const char* operationMarker = withMapping ? "/backup/export_complete.json" : "/backup/table/export_complete.json";
+            for (const auto* path : {"/backup/table/data_complete.json", operationMarker}) {
                 const auto marker = ParseCompletionMarker(GetS3FileContent(path));
                 UNIT_ASSERT_VALUES_EQUAL_C(marker["export_id"].GetString(), ToString(exportId), path);
             }
         }
 
-        void RebootDuringMarkerUpload(bool operationMarker, bool afterPut) {
+        void RebootDuringMarkerUpload(bool operationMarker, bool afterPut, bool withMapping = false) {
             using namespace NKikimr::NWrappers::NExternalStorage;
             Env();
             const TString fileName = operationMarker ? "export_complete.json" : "data_complete.json";
             size_t dataRequests = 0;
             size_t markerRequests = 0;
+            size_t mappingRequests = 0;
             auto observer = Runtime().AddObserver<TEvPutObjectRequest>([&](auto& ev) {
                 const TString key(ev->Get()->Request.GetKey());
                 dataRequests += key.EndsWith(".csv");
                 markerRequests += key.EndsWith(fileName);
+                mappingRequests += key.EndsWith("SchemaMapping/mapping.json");
             });
             TBlockEvents<TEvPutObjectRequest> requests(Runtime(), [&](auto& ev) {
                 return !afterPut && TString(ev->Get()->Request.GetKey()).EndsWith(fileName);
@@ -530,12 +537,12 @@ namespace {
             TBlockEvents<NKikimr::NSchemeShard::TEvPrivate::TEvExportCompletionUploadResult> results(Runtime(), [&](auto& ev) {
                 return afterPut && ((ev->Get()->ItemIdx == Max<ui32>()) == operationMarker);
             });
-            const ui64 exportId = StartCompletionMarkerExport();
+            const ui64 exportId = StartCompletionMarkerExport(true, withMapping);
             Runtime().WaitFor("completion marker publication", [&] {
                 return afterPut ? !results.empty() : !requests.empty();
             });
             UNIT_ASSERT_VALUES_EQUAL(dataRequests, 2);
-            const TString path = "/backup/table/" + fileName;
+            const TString path = (withMapping && operationMarker ? "/backup/" : "/backup/table/") + fileName;
             UNIT_ASSERT_VALUES_EQUAL(HasS3File(path), afterPut);
             const auto status = TestGetExport(Runtime(), exportId, "/MyRoot");
             UNIT_ASSERT_VALUES_EQUAL(status.GetResponse().GetEntry().GetProgress(), Ydb::Export::ExportProgress::PROGRESS_TRANSFER_DATA);
@@ -545,9 +552,10 @@ namespace {
             RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
             Env().TestWaitNotification(Runtime(), exportId);
             TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-            CheckCompletionMarkerContents(exportId);
+            CheckCompletionMarkerContents(exportId, withMapping);
             UNIT_ASSERT_VALUES_EQUAL(dataRequests, 2);
             UNIT_ASSERT_VALUES_EQUAL(markerRequests, 2);
+            UNIT_ASSERT_VALUES_EQUAL(mappingRequests, withMapping ? 1 : 0);
 
             // A result from the uploader that died with the previous SchemeShard
             // must not change the recovered operation.
@@ -2453,6 +2461,7 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
     Y_UNIT_TEST(CompletionMarkerTableRebootAfterPut) { RebootDuringMarkerUpload(false, true); }
     Y_UNIT_TEST(CompletionMarkerOperationRebootBeforePut) { RebootDuringMarkerUpload(true, false); }
     Y_UNIT_TEST(CompletionMarkerOperationRebootAfterPut) { RebootDuringMarkerUpload(true, true); }
+    Y_UNIT_TEST(CompletionMarkerOperationRebootWithMapping) { RebootDuringMarkerUpload(true, true, true); }
     Y_UNIT_TEST(CompletionMarkerTableRetry) { CompletionMarkerUploadFailure(false, true, 1, true); }
     Y_UNIT_TEST(CompletionMarkerOperationRetry) { CompletionMarkerUploadFailure(true, true, 1, true); }
     Y_UNIT_TEST(CompletionMarkerTableRetriesExhausted) { CompletionMarkerUploadFailure(false, true, 3, false); }
@@ -2475,6 +2484,22 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         markers.Stop().Unblock();
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
         UNIT_ASSERT(!HasS3File("/backup/table/export_complete.json"));
+    }
+
+    Y_UNIT_TEST(CancelWhilePublishingSchemaMapping) {
+        Env();
+        TBlockEvents<NKikimr::NSchemeShard::TEvPrivate::TEvExportUploadMetadataResult> results(Runtime());
+        const ui64 exportId = StartCompletionMarkerExport(true, true);
+        Runtime().WaitFor("export metadata upload result", [&] { return !results.empty(); });
+        UNIT_ASSERT(HasS3File("/backup/SchemaMapping/mapping.json"));
+
+        TestCancelExport(Runtime(), 102, "/MyRoot", exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+
+        results.Stop().Unblock();
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        CheckNoSuchS3Files({"/backup/export_complete.json"});
     }
 
     Y_UNIT_TEST(CompletionMarkerLateCancellation) {
@@ -5335,6 +5360,20 @@ state: STATE_ENABLED
         UNIT_ASSERT(HasS3File("/my_export/Table1/scheme.pb"));
         UNIT_ASSERT(HasS3File("/my_export/table2_prefix/scheme.pb"));
         UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/my_export/metadata.json"), "{\"kind\":\"SimpleExportV0\",\"checksum\":\"sha256\"}");
+    }
+
+    Y_UNIT_TEST(SchemaMappingRejectsConflictingItemPrefix) {
+        RunS3({
+            R"(Name: "SchemaMapping" Columns { Name: "key" Type: "Uint32" } KeyColumnNames: ["key"])",
+        }, R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                destination_prefix: "backup"
+                items { source_path: "/MyRoot/SchemaMapping" }
+            }
+        )", Ydb::StatusIds::CANCELLED);
+        CheckNoS3Prefix({"/backup/"});
     }
 
     Y_UNIT_TEST(SchemaMappingEncryption) {

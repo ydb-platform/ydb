@@ -2442,6 +2442,55 @@ value {
         }
     }
 
+    Y_UNIT_TEST(RejectedPgFsExportPreservesManifest) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true).DisablePgCompatibility(false));
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "pgint4" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(55555u)}, {TCell::Make(55555u)});
+
+        const auto exportTable = [&](const char* itemPath) {
+            TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                ExportToFsSettings {
+                    base_path: "%s"
+                    source_path: "/MyRoot"
+                    items { source_path: "/MyRoot/Table" destination_path: "%s" }
+                }
+            )", tempDir.Name().c_str(), itemPath));
+            env.TestWaitNotification(runtime, txId);
+        };
+
+        exportTable("SavedTable");
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        const TString mappingPath = tempDir.Name() + "/SchemaMapping/mapping.json";
+        const TString mapping = TFileInput(mappingPath).ReadAll();
+
+        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(true);
+        exportTable("Replacement");
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(TFileInput(mappingPath).ReadAll(), mapping);
+
+        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(false);
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromFsSettings {
+                base_path: "%s"
+                items { source_path: "Table" destination_path: "/MyRoot/Restored" }
+            }
+        )", tempDir.Name().c_str()));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
     Y_UNIT_TEST_FLAG(ShouldRestoreTableWithMultiColumnStatistics, EnableDataShardDirectPartImport) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

@@ -18,6 +18,7 @@
 #include <ydb/core/backup/common/feature_flags.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 
+#include <util/folder/pathsplit.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/ptr.h>
 #include <util/generic/xrange.h>
@@ -672,6 +673,18 @@ private:
                 }
                 destinationPrefix = itemPrefix.str();
             }
+            TStringBuf firstComponent = TStringBuf(destinationPrefix).Before('/');
+            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
+                const TPathSplit path(destinationPrefix);
+                firstComponent = path.empty() ? TStringBuf() : path.front();
+            }
+            if (firstComponent.empty() || firstComponent == "SchemaMapping"
+                || firstComponent == "metadata.json" || firstComponent == "metadata.json.sha256")
+            {
+                issues = TStringBuilder() << "Item destination prefix '" << destinationPrefix << "' overlaps export metadata";
+                return false;
+            }
+
             schemaMappingItem.SetDestinationPrefix(destinationPrefix);
             if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
                 MutableItemDestination(exportItem) = destinationPrefix;
@@ -834,15 +847,15 @@ private:
     }
 
     void MaybeFinishTransfer(const TExportInfo::TPtr& exportInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
-        if (!AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
+        if (exportInfo->ExportMetadataUploader || !AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
             return;
         }
 
-        if (exportInfo->Kind == TExportInfo::EKind::S3) {
-            if (!exportInfo->ExportMetadataUploader
-                    && (!exportInfo->ExportMetadata.SchemaMappingSize() || !UploadExportMetadata(*exportInfo, ctx))) {
-                UploadCompletion(*exportInfo, Max<ui32>(), ctx);
-            }
+        if (exportInfo->ExportMetadata.SchemaMappingSize() && UploadExportMetadata(*exportInfo, ctx)) {
+            exportInfo->State = EState::PublishExportMetadata;
+            Self->PersistExportState(db, *exportInfo);
+        } else if (exportInfo->Kind == TExportInfo::EKind::S3) {
+            UploadCompletion(*exportInfo, Max<ui32>(), ctx);
         } else {
             CompleteTransfer(exportInfo, db);
         }
@@ -1122,13 +1135,14 @@ private:
             break;
 
         case EState::UploadExportMetadata:
+        case EState::PublishExportMetadata:
             Y_ABORT_UNLESS(UploadExportMetadata(*exportInfo, ctx));
             break;
 
         case EState::Transferring: {
             const bool allItemsDone = AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone);
             if (exportInfo->Kind == TExportInfo::EKind::S3 && allItemsDone) {
-                MaybeFinishTransfer(exportInfo, db, ctx);
+                UploadCompletion(*exportInfo, Max<ui32>(), ctx);
                 break;
             }
             TDeque<ui32> pendingTables;
@@ -1610,8 +1624,14 @@ private:
             return PersistExportStateAndNotify(exportInfo, db);
         }
 
-        if (exportInfo->State == EState::Transferring) {
-            UploadCompletion(*exportInfo, Max<ui32>(), ctx);
+        if (exportInfo->State == EState::PublishExportMetadata) {
+            if (exportInfo->Kind == TExportInfo::EKind::S3) {
+                exportInfo->State = EState::Transferring;
+                Self->PersistExportState(db, *exportInfo);
+                UploadCompletion(*exportInfo, Max<ui32>(), ctx);
+            } else {
+                CompleteTransfer(exportInfo, db);
+            }
             return;
         }
 
@@ -1697,17 +1717,11 @@ private:
                 break;
             }
 
-            if (supportExportFiltering && exportInfo->Kind == TExportInfo::EKind::S3 && exportInfo->ExportMetadata.SchemaMappingSize()) {
-                // Transfer uses the prepared paths and IVs. Publish the S3 manifest only after the items succeed.
+            if (supportExportFiltering && exportInfo->ExportMetadata.SchemaMappingSize()) {
                 Self->PersistExportMetadata(db, *exportInfo);
             }
 
-            if (supportExportFiltering && exportInfo->Kind != TExportInfo::EKind::S3 && UploadExportMetadata(*exportInfo, ctx)) {
-                exportInfo->State = EState::UploadExportMetadata;
-
-                // Persist modified metadata and new settings
-                Self->PersistExportMetadata(db, *exportInfo);
-            } else if (AnyOf(exportInfo->Items, &IsPathTypeTable)) {
+            if (AnyOf(exportInfo->Items, &IsPathTypeTable)) {
                 exportInfo->State = EState::CopyTables;
                 AllocateTxId(*exportInfo);
             } else {

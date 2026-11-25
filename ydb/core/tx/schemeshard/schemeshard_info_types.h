@@ -3863,6 +3863,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         CopyTables = 3,
         Transferring = 4,
         UploadExportMetadata = 5,
+        PublishExportMetadata = 6,
         Done = 240,
         Dropping = 241,
         Dropped = 242,
@@ -4003,7 +4004,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     }
 
     bool IsInProgress() const {
-        return IsPreparing() || IsWorking() || IsDropping() || IsAutoDropping() || IsCancelling();
+        return IsPreparing() || IsWorking() || State == EState::PublishExportMetadata || IsDropping() || IsAutoDropping() || IsCancelling();
     }
 
     bool IsDone() const {

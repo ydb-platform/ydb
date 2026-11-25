@@ -128,6 +128,7 @@ struct TTestArgs {
     TBlobStorageGroupType::EErasureSpecies ErasureSpecies;
     ui32 SleepMilliseconds = 0;
     bool StartBadDisks = true;
+    ui32 FailRealmCount = 1;
     ui32 FailDomainCount = 0;
     ui32 DrivesPerFailDomain = 0;
     TIntrusivePtr<ITestParametrs> Parametrs = nullptr;
@@ -146,6 +147,7 @@ struct TTestEnvironment : public TThrRefBase {
     bool ShouldBeUndiscoverable;
 
     ui64 FailDomainCount;
+    ui64 FailDomainsPerRealm;
     ui64 DrivesPerFailDomain;
     ui32 FailedDiskCount;
     TBlobStorageGroupType GroupType;
@@ -183,6 +185,8 @@ struct TTestEnvironment : public TThrRefBase {
             DrivesPerFailDomain = args.DrivesPerFailDomain;
             FailDomainCount = args.FailDomainCount;
         }
+        UNIT_ASSERT(args.FailRealmCount != 0 && FailDomainCount % args.FailRealmCount == 0);
+        FailDomainsPerRealm = FailDomainCount / args.FailRealmCount;
 
         VDisks.resize(VDiskCount);
         PDisks.resize(VDiskCount);
@@ -192,7 +196,7 @@ struct TTestEnvironment : public TThrRefBase {
                 ui32 i = GetVDiskTestIdx(failDomainIdx, driveIdx);
                 VDisks[i] = MakeBlobStorageVDiskID(2, i + 1, 1);
                 PDisks[i] = MakeBlobStoragePDiskID(2, i + 1);
-                VDiskIds.emplace_back(0, 1, 0, failDomainIdx, driveIdx);
+                VDiskIds.emplace_back(0, 1, failDomainIdx / FailDomainsPerRealm, failDomainIdx % FailDomainsPerRealm, driveIdx);
             }
         }
     }
@@ -202,7 +206,7 @@ struct TTestEnvironment : public TThrRefBase {
     }
 
     ui64 GetVDiskTestIdx(const TVDiskID &vDiskId) const {
-        ui64 failDomain = vDiskId.FailDomain;
+        ui64 failDomain = vDiskId.FailRealm * FailDomainsPerRealm + vDiskId.FailDomain;
         ui64 orderNumber = vDiskId.VDisk;
         return GetVDiskTestIdx(failDomain, orderNumber);
     }
@@ -363,12 +367,7 @@ protected:
                     }
                 }
                 if (isSendNeeded) {
-                    ui32 domains = BsInfo->GetTotalFailDomainsNum();
-                    ui32 drives = Env->VDiskCount / domains;
-                    ui32 domainIdx = InitVDiskIdx / drives;
-                    ui32 driveIdx = InitVDiskIdx - domainIdx * drives;
-
-                    TVDiskID vDiskId(0, 1, 0, domainIdx, driveIdx);
+                    const TVDiskID& vDiskId = Env->VDiskIds[InitVDiskIdx];
                     TLogoBlobID from(1, 0, 0, 0, 0, 0, 1);
                     TLogoBlobID to(1, 0, 0, 0, 0, 0, TLogoBlobID::MaxPartId);
                     auto x = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(vDiskId,
@@ -4222,7 +4221,7 @@ public:
         nameserverTable->StaticNodeTable[2] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12002));
 
         TIntrusivePtr<TBlobStorageGroupInfo> bsInfo(new TBlobStorageGroupInfo(args.ErasureSpecies,
-                env->DrivesPerFailDomain, env->FailDomainCount, 1, &env->VDisks));
+                env->DrivesPerFailDomain, env->FailDomainsPerRealm, args.FailRealmCount, &env->VDisks));
 
         // first node
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());

@@ -12,6 +12,7 @@ SRCS(
     replication_generation.cpp
     recover_lost_data_generation.cpp
     recover_lost_data_restart.cpp
+    rolling_wipe.cpp
 )
 
 PEERDIR(

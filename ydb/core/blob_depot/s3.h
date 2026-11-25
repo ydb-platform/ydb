@@ -111,7 +111,7 @@ namespace NKikimr::NBlobDepot {
         ui64 TotalS3TrashObjects = 0;
         ui64 TotalS3TrashSize = 0;
 
-        // Throttling state for S3 SlowDown responses on delete requests.
+        // Retry delay for failed deletes. SlowDown also decreases concurrency.
         TBackoff DeleteBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
         TMonotonic DeleteThrottleUntil;
         bool DeleteWakeupScheduled = false;

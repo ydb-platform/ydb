@@ -1691,13 +1691,18 @@ public:
         using Table = Schema::RetiredS3Namespaces;
         ui64 BlobDepotId = 0;
         TString S3Config;
+        TMaybe<TInstant> NextS3Sweep;
+        Table::ESweepPhase Phase = Table::AwaitingOwnership;
+        TActorId SchedulerId;
+
         NKikimrBlobDepot::TBlobDepotConfig GetConfig() const;
 
         template<typename T>
         static void Apply(TBlobStorageController*, T&& callback) {
             static TTableAdapter<Table, TRetiredS3Namespace,
-                Table::BlobDepotId, Table::S3Config> adapter(
-                    &TRetiredS3Namespace::BlobDepotId, &TRetiredS3Namespace::S3Config);
+                Table::BlobDepotId, Table::S3Config, Table::NextS3Sweep, Table::SweepPhase> adapter(
+                    &TRetiredS3Namespace::BlobDepotId, &TRetiredS3Namespace::S3Config,
+                    &TRetiredS3Namespace::NextS3Sweep, &TRetiredS3Namespace::Phase);
             callback(&adapter);
         }
     };
@@ -2890,6 +2895,12 @@ public:
             StartVirtualGroupDeleteMachine(groupId, info);
         }
 
+        for (auto& [groupId, info] : RetiredS3Namespaces) {
+            if (!BlobDepotDeleteQueue.contains(groupId)) {
+                StartRetiredS3Cleanup(groupId, info);
+            }
+        }
+
         for (; !InitQueue.empty(); InitQueue.pop_front()) {
             TAutoPtr<IEventHandle> &ev = InitQueue.front();
             YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Dequeue",
@@ -2986,6 +2997,8 @@ public:
     // VIRTUAL GROUP MANAGEMENT
 
     class TVirtualGroupSetupMachine;
+    class TRetiredS3Cleanup;
+    void StartRetiredS3Cleanup(TGroupId groupId, TRetiredS3Namespace& info);
 
     void CommitVirtualGroupUpdates(TConfigState& state);
 

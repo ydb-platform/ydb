@@ -1603,6 +1603,18 @@ public:
         return Impl.StatusFlags;
     }
 
+    // Colour the owner would be in once this many chunks are taken, mirroring
+    // TPDisk::AllocateChunkForOwner. Without a quota model there are no colour
+    // boundaries to run into, so nothing is ever refused on colour.
+    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateAllocationColor(ui32 count) {
+        if (Impl.SpaceColorPolicy != TPDiskMockState::ESpaceColorPolicy::SharedQuota) {
+            return NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
+        }
+        GetStatusFlags(); // resyncs the shared quota with the free chunk count
+        double occupancy;
+        return Impl.ChunkSharedQuota->EstimateSpaceColor(count, &occupancy);
+    }
+
     double GetOccupancy() {
         return (Impl.Occupancy == 0)
             ? ((double)(Impl.TotalChunks - Impl.GetNumFreeChunks()) / Impl.TotalChunks)

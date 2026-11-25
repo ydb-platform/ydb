@@ -14,6 +14,8 @@
 
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
+#include <util/generic/scope.h>
+#include <util/system/event.h>
 #include <util/system/hp_timer.h>
 
 namespace NKikimr {

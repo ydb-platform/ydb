@@ -423,6 +423,24 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
 
         TEntry& entry = it->second;
+        const TMonotonic now = TActivationContext::Monotonic();
+        // Leader-only traffic does not refresh the State Storage follower list.
+        if (auto pendingIt = UnconfirmedFollowers.find(tabletId); pendingIt != UnconfirmedFollowers.end()) {
+            auto& pending = pendingIt->second;
+            auto newEnd = std::remove_if(entry.KnownFollowers.begin(), entry.KnownFollowers.end(),
+                [&](const TFollowerInfo& follower) {
+                    auto expired = pending.find(follower.Follower);
+                    if (expired != pending.end() && expired->second <= now) {
+                        pending.erase(expired);
+                        return true;
+                    }
+                    return false;
+                });
+            entry.KnownFollowers.erase(newEnd, entry.KnownFollowers.end());
+            if (pending.empty()) {
+                UnconfirmedFollowers.erase(pendingIt);
+            }
+        }
         for (const auto& ready : update.Record.GetReadyFollowers()) {
             const TActorId actorId = ActorIdFromProto(ready.GetActorId());
             const TActorId userActorId = ActorIdFromProto(ready.GetUserActorId());
@@ -435,8 +453,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 [&](const TFollowerInfo& follower) { return follower.Follower == actorId; });
             if (known == entry.KnownFollowers.end()) {
                 entry.KnownFollowers.emplace_back(actorId, userActorId, followerId);
-                UnconfirmedFollowers[tabletId].emplace(actorId,
-                    TActivationContext::Monotonic() + TabletResolverFollowerRefreshPeriod);
+                UnconfirmedFollowers[tabletId].emplace(actorId, now + TabletResolverFollowerRefreshPeriod);
             } else {
                 known->FollowerTablet = userActorId;
                 known->FollowerId = followerId;

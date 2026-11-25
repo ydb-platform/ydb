@@ -299,10 +299,9 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     DataShard.ReplaceUserTable(tableId, newInfo, locksDb);
 
     // Activation already installed this version before offset cleanup, including on restart.
-    if (newInfo->NeedSchemaSnapshots()
-        && (!alterTableTx.ActivateCdcStreamsSize()
-            || !DataShard.GetSchemaSnapshotManager().FindSnapshot(TSchemaSnapshotKey(tableId, version))))
-    {
+    const bool hasActivationSnapshot = alterTableTx.ActivateCdcStreamsSize()
+        && DataShard.GetSchemaSnapshotManager().FindSnapshot(TSchemaSnapshotKey(tableId, version));
+    if (newInfo->NeedSchemaSnapshots() && !hasActivationSnapshot) {
         DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
     }
 

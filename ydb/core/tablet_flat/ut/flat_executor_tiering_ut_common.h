@@ -43,7 +43,6 @@ public:
         // MakeLogSnapshot finishes one synchronous commit and advances Step.
         return TTxStamp(executor.Generation(), executor.Step() - 1);
     }
-    static void Tick(TExecutor& executor) { executor.CompactionLogic->UpdateCompactions(); }
     static void Cancel(TExecutor& executor, ui64 serial) { executor.CancelCompaction(serial); }
     static TVector<NTable::TPartView> Parts(TExecutor& executor, ui32 table) {
         return executor.TableParts(table);
@@ -258,8 +257,6 @@ public:
 
     void Enable(bool value = true) { Env.GetAppData().FeatureFlags.SetEnableDataTiering(value); }
 
-    void Tick() { RawCall([](TExecutor& executor) { TExecutorCompactionLogic::Tick(executor); }); }
-
     void Restart() {
         THashSet<ui64> confirmed;
         auto observer = Env.AddObserver<TEvTablet::TEvCommitResult>([&](auto& event) {
@@ -280,13 +277,7 @@ public:
         observer.Remove();
         SendSync(new TEvents::TEvPoison, false, true);
         State = nullptr;
-        // Activation calls UpdateCompactions synchronously before TEvReady.
-        // Inspect the recovered placement before that initial policy sweep
-        // can replace parts; tests trigger subsequent TAC explicitly.
-        const bool enableTiering = Env.GetAppData().FeatureFlags.GetEnableDataTiering();
-        Enable(false);
         FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
-        Enable(enableTiering);
     }
 
     ui32 Tier(ui32 level) const {

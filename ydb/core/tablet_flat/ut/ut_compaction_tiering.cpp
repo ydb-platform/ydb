@@ -84,9 +84,9 @@ namespace {
             return part;
         }
 
-        TIntrusiveConstPtr<TColdPart> AddColdPart(i64 epoch, ui32 level) {
+        TIntrusiveConstPtr<TColdPart> AddColdPart(i64 epoch, ui32 level, ui64 tabletId = 123) {
             const TIntrusiveConstPtr<TColdPart> part = new TColdPart(
-                TLogoBlobID(123, 1, Serial++, 1, 0, 0), TEpoch::FromIndex(epoch));
+                TLogoBlobID(tabletId, 1, Serial++, 1, 0, 0), TEpoch::FromIndex(epoch));
             State.PartLevels[part->Label] = level;
             ColdParts.push_back(part);
             return part;
@@ -911,7 +911,7 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
             TStrategyFixture f;
             const auto hot = f.AddPart(20, 1);
             const auto loadedCold = f.AddPart(30, 3, 2);
-            const auto unloaded = f.AddColdPart(10, savedLevel);
+            const auto unloaded = f.AddColdPart(10, savedLevel, /* tabletId */ 124);
             f.Start();
 
             // Loaded parts retain their tier. Only the unloaded source's stale
@@ -925,6 +925,7 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
             f.Strategy->Start(f.State);
             UNIT_ASSERT(f.Strategy->SnapshotState().PartLevels == restored);
 
+            UNIT_ASSERT(f.Strategy->ScheduleBorrowedCompaction());
             const auto id = f.RunPending();
             const auto& params = *f.Backend.Started.at(id);
             UNIT_ASSERT(params.Mode == TCompactionParams::EMode::Regular);
@@ -958,6 +959,7 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
             TStrategyFixture f;
             f.AddPart(20, 1);
             const auto unloaded = f.AddColdPart(10, level);
+            f.Policy->Generations[level - 1].ForceCountToCompact = 1;
             f.Start();
             f.State = f.Strategy->SnapshotState();
             UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(unloaded->Label), level);
@@ -1003,17 +1005,38 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         UNIT_ASSERT_VALUES_EQUAL(f.Strategy->SnapshotState().PartLevels.at(unloaded->Label), 2);
     }
 
+    Y_UNIT_TEST(LoadedAndUnloadedPartsCountDistinctEpochsTowardsTheThreshold) {
+        for (bool sameEpoch : {true, false}) {
+            TStrategyFixture f;
+            const auto loaded = f.AddPart(20, 1);
+            const auto unloaded = f.AddColdPart(sameEpoch ? 20 : 10, 1);
+            f.Policy->Generations[0].ForceCountToCompact = 2;
+            f.Start();
+            if (sameEpoch) {
+                UNIT_ASSERT(!f.Broker.HasPending());
+                continue;
+            }
+            const auto id = f.RunPending();
+            const auto& params = *f.Backend.Started.at(id);
+            UNIT_ASSERT(Contains(params.Parts, loaded->Label));
+            UNIT_ASSERT(Contains(params.ColdParts, unloaded->Label));
+            f.Complete(id, {0});
+        }
+    }
+
     Y_UNIT_TEST(UnloadedFinalPartCompactsIntoTheDefaultTierDespiteColdLastGenerations) {
         TStrategyFixture f;
         auto hot = f.AddPart(20, 2);
         auto loaded = f.AddPart(10, 255, 2);
         auto unloaded = f.AddColdPart(9, 255);
+        f.Policy->Generations[1].ForceCountToCompact = 1;
         f.Start();
         const auto id = f.RunPending();
         const auto& params = *f.Backend.Started.at(id);
         UNIT_ASSERT(params.Mode == TCompactionParams::EMode::Regular);
         UNIT_ASSERT_VALUES_EQUAL(params.TierId, 0);
-        UNIT_ASSERT_VALUES_EQUAL(params.Context->Inputs.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(params.Context->Inputs.size(), 3);
+        UNIT_ASSERT(Contains(params.Parts, hot->Label));
         UNIT_ASSERT(Contains(params.Parts, loaded->Label));
         UNIT_ASSERT(Contains(params.ColdParts, unloaded->Label));
         const auto changes = f.Complete(id, {0});
@@ -1023,7 +1046,7 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         UNIT_ASSERT(!f.State.PartLevels.contains(loaded->Label));
         UNIT_ASSERT(!f.State.PartLevels.contains(unloaded->Label));
         UNIT_ASSERT(f.ColdParts.empty());
-        UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(hot->Label), 2);
+        UNIT_ASSERT(!f.State.PartLevels.contains(hot->Label));
         const auto before = f.State.PartLevels;
         f.Strategy->Stop();
         f.Strategy->Start(f.State);
@@ -1298,19 +1321,18 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
     }
 
     Y_UNIT_TEST(DisjointGenerationsAndTierFinalsCanRunConcurrentTacs) {
-        for (bool finals : {false, true}) {
+        for (bool withFinalParts : {false, true}) {
             TStrategyFixture f;
             f.Backend.Enabled = true;
-            const ui32 firstLevel = finals ? f.Policy->GetFinalLevel(ColdTier) : 4;
-            const ui32 secondLevel = finals ? f.Policy->GetFinalLevel(ArchiveTier) : 3;
-            f.AddPart(10, firstLevel, 100);
+            const ui32 firstLevel = 4;
+            const ui32 secondLevel = withFinalParts ? 5 : 3;
+            const auto first = f.AddPart(10, withFinalParts ? f.Policy->GetFinalLevel(ColdTier) : firstLevel, 100);
             f.AddPart(11, firstLevel, 101);
-            f.AddPart(40, secondLevel, 102);
+            const auto second = f.AddPart(40, withFinalParts ? f.Policy->GetFinalLevel(ArchiveTier) : secondLevel, 102);
             f.AddPart(41, secondLevel, 103);
-            if (!finals) {
-                f.Policy->Generations[firstLevel - 1].ForceCountToCompact = 2;
-                f.Policy->Generations[secondLevel - 1].ForceCountToCompact = 2;
-            }
+            const ui32 threshold = withFinalParts ? 1 : 2;
+            f.Policy->Generations[firstLevel - 1].ForceCountToCompact = threshold;
+            f.Policy->Generations[secondLevel - 1].ForceCountToCompact = threshold;
             f.Start();
             UNIT_ASSERT(f.Broker.RunPending(firstLevel));
             const ui64 firstId = f.Backend.OnlyStarted();
@@ -1320,6 +1342,8 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
             UNIT_ASSERT(f.Backend.Rejected.empty());
             UNIT_ASSERT(f.Backend.Started.at(firstId)->Mode == TCompactionParams::EMode::TierAware);
             UNIT_ASSERT(f.Backend.Started.at(secondId)->Mode == TCompactionParams::EMode::TierAware);
+            UNIT_ASSERT(Contains(f.Backend.Started.at(firstId)->Parts, first->Label));
+            UNIT_ASSERT(Contains(f.Backend.Started.at(secondId)->Parts, second->Label));
 
             f.Complete(firstId, {});
             f.Complete(secondId, {f.Tier(secondLevel)});
@@ -1375,25 +1399,49 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         }
     }
 
+    Y_UNIT_TEST(BorrowedFinalPartsWithTheSameEpochCountTowardsPostSplitCompaction) {
+        TStrategyFixture f;
+        constexpr ui32 lastHotGeneration = 2;
+        f.AddPart(20, 1);
+        const auto first = f.AddColdPart(10, 255, /* tabletId */ 124);
+        const auto second = f.AddColdPart(10, 255, /* tabletId */ 124);
+        f.Start();
+        UNIT_ASSERT(f.Broker.RunPending(lastHotGeneration));
+        const auto id = f.Backend.OnlyStarted();
+        const auto& params = *f.Backend.Started.at(id);
+        UNIT_ASSERT(Contains(params.ColdParts, first->Label));
+        UNIT_ASSERT(Contains(params.ColdParts, second->Label));
+        const auto changes = f.Complete(id, {0, 0});
+        UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.size(), 2);
+        for (const auto& [label, level] : changes.NewPartLevels) {
+            UNIT_ASSERT_VALUES_EQUAL(label.TabletID(), f.Backend.OwnerTabletId());
+            UNIT_ASSERT_VALUES_EQUAL(level, 255u);
+        }
+        UNIT_ASSERT(!f.Broker.HasPending());
+    }
+
     Y_UNIT_TEST(MergedBatchSchedulesFinalCompactionOnce) {
         TStrategyFixture f;
         const ui32 finalLevel = f.Policy->GetFinalLevel(0);
-        f.AddPart(20, finalLevel);
+        const ui32 lastHotGeneration = 2;
+        const auto recent = f.AddPart(40, lastHotGeneration);
+        TVector<TPartView> merged{f.AddPart(20, finalLevel)};
         f.Start();
         UNIT_ASSERT(!f.Broker.HasPending());
 
         // The batch also carries the existing label, as when extra slices of a bundle arrive.
-        f.AddPart(10, finalLevel);
-        f.AddPart(30, finalLevel);
+        merged.push_back(f.AddPart(10, finalLevel));
+        merged.push_back(f.AddPart(30, finalLevel));
         const auto unloaded = f.AddColdPart(15, finalLevel);
-        f.Strategy->PartsMerged(f.Parts, f.ColdParts, finalLevel);
+        f.Strategy->PartsMerged(merged, f.ColdParts, finalLevel);
 
-        // Scheduling after each part would cancel and resubmit the final task as the batch grows.
+        // Multiple final parts plus recent writes qualify for post-split compaction.
         UNIT_ASSERT_VALUES_EQUAL(f.Broker.CancelledPendingTasks, 0u);
         const auto state = f.Strategy->SnapshotState();
         UNIT_ASSERT_VALUES_EQUAL(state.PartLevels.size(), f.Parts.size() + 1);
-        ui64 backingSize = 0;
-        for (const auto& part : f.Parts) {
+        UNIT_ASSERT_VALUES_EQUAL(state.PartLevels.at(recent->Label), lastHotGeneration);
+        ui64 backingSize = recent->BackingSize();
+        for (const auto& part : merged) {
             backingSize += part->BackingSize();
             UNIT_ASSERT_VALUES_EQUAL(state.PartLevels.at(part->Label), finalLevel);
         }
@@ -1401,7 +1449,7 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetBackingSize(), backingSize);
         UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetBackingSize(f.Backend.OwnerTabletId()), backingSize);
 
-        UNIT_ASSERT(f.Broker.RunPending(finalLevel));
+        UNIT_ASSERT(f.Broker.RunPending(lastHotGeneration));
         const ui64 id = f.Backend.OnlyStarted();
         const auto& params = *f.Backend.Started.at(id);
         UNIT_ASSERT_VALUES_EQUAL(params.Parts.size(), f.Parts.size());
@@ -1505,24 +1553,28 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
             const ui32 coldLevel = f.Policy->GetFinalLevel(ColdTier);
             const ui32 archiveLevel = f.Policy->GetFinalLevel(ArchiveTier);
             f.AddPart(40, coldLevel, 100);
-            f.AddPart(41, coldLevel, 101);
+            const ui32 coldGeneration = 4;
+            f.AddPart(41, coldGeneration, 101);
             f.AddPart(10, archiveLevel, 100);
-            f.AddPart(11, archiveLevel, 101);
+            const ui32 archiveGeneration = 5;
+            f.AddPart(11, archiveGeneration, 101);
+            f.Policy->Generations[coldGeneration - 1].ForceCountToCompact = 1;
+            f.Policy->Generations[archiveGeneration - 1].ForceCountToCompact = 1;
             f.Start();
-            UNIT_ASSERT(f.Broker.RunPending(coldLevel));
-            const ui64 originalId = f.Backend.StartedGeneration(coldLevel);
-            UNIT_ASSERT(f.Broker.RunPending(archiveLevel));
-            const ui64 archiveId = f.Backend.StartedGeneration(archiveLevel);
+            UNIT_ASSERT(f.Broker.RunPending(coldGeneration));
+            const ui64 originalId = f.Backend.StartedGeneration(coldGeneration);
+            UNIT_ASSERT(f.Broker.RunPending(archiveGeneration));
+            const ui64 archiveId = f.Backend.StartedGeneration(archiveGeneration);
             f.Cancel(originalId);
 
             UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), archiveId);
-            UNIT_ASSERT(f.Broker.RunPending(coldLevel));
-            const ui64 retryId = f.Backend.StartedGeneration(coldLevel);
+            UNIT_ASSERT(f.Broker.RunPending(coldGeneration));
+            const ui64 retryId = f.Backend.StartedGeneration(coldGeneration);
             UNIT_ASSERT(retryId != originalId);
             f.Strategy->CompactionCancelled(originalId, *f.Backend.Cancelled.at(originalId));
             UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(coldLevel), retryId);
-            UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(archiveLevel), archiveId);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(coldGeneration), retryId);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(archiveGeneration), archiveId);
             const auto archive = f.Complete(archiveId, {ArchiveTier});
             UNIT_ASSERT_VALUES_EQUAL(archive.NewPartLevels.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(archive.NewPartLevels.begin()->second, archiveLevel);
@@ -1598,6 +1650,39 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         UNIT_ASSERT(!f.Broker.RunPending(4));
     }
 
+    Y_UNIT_TEST(ReservedEpochCanPutAPendingCompactionBelowItsBackgroundThreshold) {
+        TStrategyFixture f;
+        f.Backend.Enabled = true;
+        f.AddPart(20, 1);
+        f.AddPart(30, 1);
+        const auto first = f.AddPart(10, 4);
+        const auto second = f.AddPart(15, 4);
+        const auto shared = f.AddPart(25, 4);
+        f.Policy->Generations[0].ForceCountToCompact = 2;
+        auto& coldPolicy = f.Policy->Generations[3];
+        coldPolicy.ForceCountToCompact = 3;
+        coldPolicy.BackgroundCompactionPolicy.Threshold = 80;
+        f.Start();
+
+        UNIT_ASSERT(f.Broker.RunPending(1));
+        const ui64 hotId = f.Backend.OnlyStarted();
+        UNIT_ASSERT(Contains(f.Backend.Started.at(hotId)->Parts, shared->Label));
+        // Gen4 reached its threshold when queued, but only two of three epochs are free now.
+        UNIT_ASSERT(f.Broker.RunPending(4));
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), hotId);
+        UNIT_ASSERT(f.Backend.Rejected.empty());
+        UNIT_ASSERT(!f.Broker.RunPending(4));
+
+        f.Cancel(hotId);
+        UNIT_ASSERT(f.Broker.RunPending(4));
+        const ui64 coldId = f.Backend.OnlyStarted();
+        const auto& parts = f.Backend.Started.at(coldId)->Parts;
+        UNIT_ASSERT(Contains(parts, first->Label));
+        UNIT_ASSERT(Contains(parts, second->Label));
+        UNIT_ASSERT(Contains(parts, shared->Label));
+        f.Complete(coldId, {ColdTier});
+    }
+
     Y_UNIT_TEST(AFullFlushWithAnOverlappingMemoryEpochRetriesBeforeTheDiskPhase) {
         TStrategyFixture f;
         f.AddPart(20, 1);
@@ -1644,24 +1729,31 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
     }
 
     Y_UNIT_TEST(FullCompactionWithEmptyMemoryCompactsAllDiskTiers) {
-        TStrategyFixture f;
-        f.AddPart(30, 1);
-        f.AddPart(20, 3, 2);
-        f.AddPart(10, 5, 3);
-        f.Start();
-        constexpr ui64 forcedId = 777;
-        const ui64 flush = f.Strategy->BeginMemCompaction(0, {0, TEpoch::Max()}, forcedId);
-        UNIT_ASSERT(f.Backend.Started.at(flush)->Context->Inputs.empty());
-        f.Complete(flush, {});
-        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), 0);
-        const ui64 id = f.RunPending();
-        UNIT_ASSERT(f.Backend.Started.at(id)->Edge.Head == TEpoch::Zero());
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.at(id)->Context->Inputs.size(), 3);
-        f.Complete(id, {0, ColdTier, ArchiveTier});
+        for (bool enabled : {false, true}) {
+            TStrategyFixture f;
+            f.Backend.Enabled = enabled;
+            f.AddPart(30, 1);
+            f.AddPart(20, 3, 2);
+            f.AddPart(10, 5, 3);
+            f.Start();
+            UNIT_ASSERT(!f.Broker.HasPending());
+            constexpr ui64 forcedId = 777;
+            const ui64 flush = f.Strategy->BeginMemCompaction(0, {0, TEpoch::Max()}, forcedId);
+            UNIT_ASSERT(f.Backend.Started.at(flush)->Context->Inputs.empty());
+            f.Complete(flush, {});
+            UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), 0);
+            const ui64 id = f.RunPending();
+            const auto& params = *f.Backend.Started.at(id);
+            UNIT_ASSERT(params.Mode == TCompactionParams::EMode::TierAware);
+            UNIT_ASSERT_VALUES_EQUAL(params.Tiering->AllowCooling, enabled);
+            UNIT_ASSERT(params.Edge.Head == TEpoch::Zero());
+            UNIT_ASSERT_VALUES_EQUAL(params.Context->Inputs.size(), 3);
+            f.Complete(id, {0, ColdTier, ArchiveTier});
 
-        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), forcedId);
-        UNIT_ASSERT(f.Strategy->AllowForcedCompaction());
-        UNIT_ASSERT(f.Backend.Started.empty());
+            UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), forcedId);
+            UNIT_ASSERT(f.Strategy->AllowForcedCompaction());
+            UNIT_ASSERT(f.Backend.Started.empty());
+        }
     }
 
     Y_UNIT_TEST(FullCompactionAcknowledgesOnlyTheFlushIncludedInItsDiskPhase) {
@@ -1704,61 +1796,46 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         }
     }
 
-    Y_UNIT_TEST(IdleTickCanCoolASingletonWithoutImmediatelyRepeatingIt) {
-        TStrategyFixture f;
-        f.Backend.Enabled = true;
-        f.AddPart(10, 3);
-        f.Start();
-        UNIT_ASSERT(!f.Broker.HasPending());
-        f.Strategy->UpdateCompactions();
-        const auto id = f.RunPending();
-        UNIT_ASSERT(f.Backend.Started.at(id)->Mode == TCompactionParams::EMode::TierAware);
-        UNIT_ASSERT(f.Backend.Started.at(id)->Tiering->AllowCooling);
-        f.Complete(id, {ColdTier});
-
-        UNIT_ASSERT(f.Backend.Started.empty());
-        UNIT_ASSERT(!f.Broker.HasPending());
-    }
-
-    Y_UNIT_TEST(ACancelledSingletonFinalSweepIsRetriedWithoutAnotherTick) {
-        for (ui32 tier : {0u, ColdTier, ArchiveTier}) {
+    Y_UNIT_TEST(IdleTicksDoNotCompactPartsBelowThreshold) {
+        for (bool enabled : {false, true}) {
             TStrategyFixture f;
-            f.Backend.Enabled = true;
-            const ui32 level = f.Policy->GetFinalLevel(tier);
-            const auto final = f.AddPart(10, level);
+            f.Backend.Enabled = enabled;
+            f.AddPart(30, 3);
+            f.AddColdPart(40, 1);
+            f.AddColdPart(10, f.Policy->GetFinalLevel(0));
+            f.AddPart(20, f.Policy->GetFinalLevel(ArchiveTier));
+            f.AddPart(25, f.Policy->GetFinalLevel(ArchiveTier));
             f.Start();
             UNIT_ASSERT(!f.Broker.HasPending());
-            f.Strategy->UpdateCompactions();
-            const ui64 id = f.RunPending();
-            UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(level), id);
-            UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.at(id)->Context->Inputs.size(), 1);
-            f.Cancel(id);
 
-            UNIT_ASSERT(f.Backend.Started.empty());
-            UNIT_ASSERT(f.State.PartLevels.contains(final->Label));
-            UNIT_ASSERT(f.Broker.RunPending(level));
-            const ui64 retryId = f.Backend.OnlyStarted();
-            UNIT_ASSERT(retryId != id);
-            UNIT_ASSERT(f.Backend.Started.at(retryId)->Mode == TCompactionParams::EMode::TierAware);
-            UNIT_ASSERT(Contains(f.Backend.Started.at(retryId)->Parts, final->Label));
-            const auto changes = f.Complete(retryId, {tier});
-
-            UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.begin()->second, level);
-            UNIT_ASSERT(!f.State.PartLevels.contains(final->Label));
-            UNIT_ASSERT(f.Backend.Started.empty());
-            UNIT_ASSERT(!f.Broker.HasPending());
+            for (ui32 minute = 1; minute <= 5; ++minute) {
+                f.Time.Move(f.Now + TDuration::Minutes(minute));
+                f.Strategy->UpdateCompactions();
+                UNIT_ASSERT(!f.Broker.HasPending());
+                UNIT_ASSERT(f.Backend.Started.empty());
+            }
         }
     }
 
-    Y_UNIT_TEST(TheFlagOffDoesNotScheduleAnIdleCoolingSweep) {
+    Y_UNIT_TEST(ReachingTheGenerationThresholdSchedulesCoolingWithoutATick) {
         TStrategyFixture f;
-        f.AddPart(10, 3);
+        f.Backend.Enabled = true;
+        const auto part = f.AddPart(10, 3);
         f.Start();
-        f.Strategy->UpdateCompactions();
-
         UNIT_ASSERT(!f.Broker.HasPending());
-        UNIT_ASSERT(f.Backend.Started.empty());
+
+        auto policy = MakeIntrusive<NLocalDb::TCompactionPolicy>(*f.Policy);
+        policy->Generations[2].ForceCountToCompact = 1;
+        f.Table.CompactionPolicy = policy;
+        f.Strategy->ReflectSchema();
+        UNIT_ASSERT(f.Broker.RunPending(3));
+        const auto id = f.Backend.OnlyStarted();
+        const auto& params = *f.Backend.Started.at(id);
+        UNIT_ASSERT(params.Mode == TCompactionParams::EMode::TierAware);
+        UNIT_ASSERT(params.Tiering->AllowCooling);
+        UNIT_ASSERT(Contains(params.Parts, part->Label));
+        f.Complete(id, {ArchiveTier});
+        UNIT_ASSERT(!f.Broker.HasPending());
     }
 
     Y_UNIT_TEST(CancellationResubmitsNecessaryCompaction) {

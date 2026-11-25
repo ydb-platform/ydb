@@ -218,6 +218,12 @@ namespace NCompGen {
             TList<TPartInfo> Parts;
         };
 
+        struct TGenerationInputs {
+            ui64 BackingSize = 0;
+            ui64 EpochCount = 0;
+            size_t FinalCount = 0;
+        };
+
         struct TPartAggregator;
         struct TExtraState;
 
@@ -239,9 +245,10 @@ namespace NCompGen {
 
         void OnForcedGenCompactionDone();
 
+        ui64 BackgroundCompactionPercentage(ui32 generation, const TGenerationInputs& inputs) const;
         ui32 ComputeBackgroundPriority(
             ui32 generation,
-            const TCompactionPolicy::TGenerationPolicy& policy,
+            const TGenerationInputs& inputs,
             TInstant now) const;
 
         ui32 ComputeBackgroundPriority(
@@ -252,8 +259,9 @@ namespace NCompGen {
 
         void CheckOverload(ui32 generation);
         void CheckGeneration(ui32 generation);
-        EDesiredMode DesiredMode(ui32 generation) const;
-        bool NeedToCompactAfterSplit(ui32 generation) const;
+        TGenerationInputs GetGenerationInputs(ui32 generation) const;
+        EDesiredMode DesiredMode(ui32 generation, const TGenerationInputs& inputs) const;
+        bool NeedToCompactAfterSplit(ui32 generation, size_t finalCount) const;
 
         ui64 PrepareCompaction(
             TTaskId taskId,
@@ -286,8 +294,6 @@ namespace NCompGen {
         ui32 ChooseTierLevel(ui32 tierId, TEpoch epoch, ui32 preferredLevel) const;
         ui32 UpliftTierLevel(ui32 tierId, TEpoch epoch, const TStats& outputStats,
             ui32 preferredLevel) const;
-        void CancelPendingTierSweep(TTaskId grantedTaskId = 0);
-        void ScheduleTierSweep();
 
         void UpdateStats();
         void UpdateOverload();
@@ -316,8 +322,6 @@ namespace NCompGen {
         // Blocked generations retry after the reservation set changes.
         THashMap<ui32, ui64> TierWaitRevisions;
         ui64 TierOccupancyRevision = 0;
-        std::optional<ui32> TierSweepGeneration;
-        size_t NextTierSweep = 0;
 
         ui64 MemCompactionId = 0;
         ui64 FinalCompactionId = 0;

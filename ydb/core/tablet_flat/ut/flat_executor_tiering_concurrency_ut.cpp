@@ -218,10 +218,12 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringConcurrency) {
         env.FlushPart({{1, time, "old rule"}});
         env.Enable();
         TBlockEvents<NOps::TEvResult> blocked(env.Env);
-        env.Tick();
+        auto diskPolicy = MakePolicy();
+        diskPolicy->Generations.front().ForceCountToCompact = 1;
+        env.Policy(*diskPolicy);
         env->WaitFor("held disk TAC", [&] { return blocked.size() == 1; }, TDuration::Seconds(10));
         const auto& disk = Product(blocked.front());
-        UNIT_ASSERT(Generation(blocked.front()) != 0);
+        UNIT_ASSERT_VALUES_EQUAL(Generation(blocked.front()), 1u);
         CheckAdjacentOutputs(disk, ColdTier);
         UNIT_ASSERT_VALUES_EQUAL(disk.Results.size(), 1);
         const auto oldLabel = disk.Results.front().Part->Label;
@@ -268,20 +270,24 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringConcurrency) {
             return true;
         });
 
-        env.FlushPart({{1, 0, "on disk"}});
+        env.FlushPart({{1, 0, "first disk row"}});
+        env.FlushPart({{2, 0, "second disk row"}});
         env.Enable();
         TBlockEvents<NOps::TEvResult> blocked(env.Env);
-        env.Tick();
+        auto diskPolicy = MakePolicy();
+        diskPolicy->Generations.front().ForceCountToCompact = 2;
+        env.Policy(*diskPolicy);
         env->WaitFor("held disk TAC", [&] { return blocked.size() == 1; }, TDuration::Seconds(10));
-        UNIT_ASSERT(Generation(blocked.front()) != 0);
+        UNIT_ASSERT_VALUES_EQUAL(Generation(blocked.front()), 1u);
         UNIT_ASSERT(Product(blocked.front()).Params->Mode == NTable::TCompactionParams::EMode::TierAware);
 
-        env.Write({{2, 0, "in memory"}});
+        env.Write({{3, env.NowSeconds(), "in memory"}});
         env.SendSync(new NFake::TEvCompact(TableId, true));
         env->WaitFor("held MemTable flush", [&] { return blocked.size() == 2; }, TDuration::Seconds(10));
         UNIT_ASSERT_VALUES_EQUAL(Generation(blocked.back()), 0);
         const auto& disk = Product(blocked.front());
         const auto& flush = Product(blocked.back());
+        UNIT_ASSERT_VALUES_EQUAL(disk.Params->Context->Inputs.size(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(disk.Results.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(flush.Results.size(), 1);
         const auto diskOutput = disk.Results.front().Part->Label;

@@ -129,3 +129,28 @@ def test_runtime_slot_ids_can_be_reused_between_piles():
     d.check()
     assert d.node_piles == {1: 0, 2: 1, 4: 0, 3: 1}
     assert len(d._known) == 4 and not d.missing
+
+
+@pytest.mark.parametrize("same_pile", [False, True])
+def test_missing_slot_survives_runtime_id_reuse(same_pile):
+    d = ClusterDiscovery("http://localhost:12001")
+    c, v = responses(4)
+    c["NameserviceConfig"]["Node"] = c["NameserviceConfig"]["Node"][:2]
+    if same_pile:
+        v["Nodes"][3]["SystemState"]["Location"]["BridgePileName"] = "a"
+    d.publish(d._parse(c, v, [], d.http[0]))
+    absent = v["Nodes"].pop(2)
+    v["TotalNodes"] = 3
+    v["Nodes"][2]["NodeId"] = 3
+    for _ in range(2):
+        snapshot = d._parse(c, v, [], d.http[0])
+        d.publish(snapshot)
+        assert set(snapshot.inventory.slots) == {10003, 10004}
+        with pytest.raises(RecoveryUnavailable, match="missing"):
+            d.check()
+    absent["NodeId"] = 4
+    v["Nodes"].append(absent)
+    v["TotalNodes"] = 4
+    d.publish(d._parse(c, v, [], d.http[0]))
+    d.check()
+    assert not d.missing and len(d._known) == 4

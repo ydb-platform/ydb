@@ -244,3 +244,42 @@ def test_async_restore_failure_retries_before_health_release(tmp_path):
     e.publish(e.membership)
     e.probe.tick()
     assert not e.probe.pending()
+
+
+def test_failed_remote_resume_can_restore_retained_lease(tmp_path):
+    from unittest.mock import Mock
+    import requests
+    from ydb.tests.stability.nemesis.internal.agent.nemesis.runner import NemesisManager
+    from ydb.tests.stability.nemesis.internal.agent.nemesis.service import AgentExecutionService
+    from ydb.tests.stability.nemesis.internal.nemesis.command_transport import AgentCommandTransport
+
+    service = AgentExecutionService(NemesisManager(), {"slot": {"runner": Mock(), "recovery": "extract"}})
+    assert service.shutdown()["status"] == "ok"
+    resumes = []
+
+    def post(url, json=None, **kwargs):
+        if url.endswith("/resume"):
+            resumes.append(url)
+            if len(resumes) == 1:
+                raise requests.Timeout("resume not delivered")
+            service.resume()
+            result = {"status": "ok"}
+        else:
+            result = service.start(json["type"], json["action"], json["payload"])
+        return Mock(json=lambda: result)
+
+    transport = AgentCommandTransport(is_local_host=lambda h: False, start_local=None,
+                                      get_app_port=lambda: 31434, resolve_http_host=lambda h: h,
+                                      post=post, resume_remote=True,
+                                      get=lambda url, **kw: Mock(json=lambda: service.result(url.rsplit("/", 1)[1])))
+    e = setup_engine(tmp_path, toggle=True, send=transport.send)
+    with pytest.raises(requests.Timeout):
+        e.engine.inject("slot", slot_target(e.inventory, 0, 0))
+    assert e.probe.pending() and e.guard.snapshot()["tracked_executions"] == 1
+    e.engine.restore_operation(e.engine.operations()[0]["operation_id"])
+    assert service.wait_for_processes() == 0
+    e.probe.tick()
+    e.publish(e.membership)
+    e.probe.tick()
+    assert len(resumes) == 2 and not e.probe.pending()
+    assert e.guard.snapshot()["tracked_executions"] == 0

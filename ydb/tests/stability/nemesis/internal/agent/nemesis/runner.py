@@ -122,11 +122,22 @@ class NemesisManager:
                 self._extracts[key] = proc_data
 
             inject_done = self._injecting.get(key) if action == "extract" else None
-            thread = threading.Thread(
-                target=self._run, args=(proc_id, runner, action, type_name, payload, previous_effect, inject_done), daemon=True,
-            )
-            self._threads.append(thread)
-            thread.start()
+            thread = None
+            try:
+                thread = threading.Thread(
+                    target=self._run, args=(proc_id, runner, action, type_name, payload, previous_effect, inject_done), daemon=True,
+                )
+                self._threads.append(thread)
+                thread.start()
+            except Exception as error:
+                if thread is not None:
+                    self._threads.remove(thread)
+                proc_data.update(status="error", ret_code=1, logs=str(error))
+                if action == "inject":
+                    self._injecting.pop(key).set()
+                    if previous_effect is None:
+                        self._effects.pop(key, None)
+                raise
         return proc_data
 
     def _run(self, proc_id, runner, action, type_name, payload, previous_effect, inject_done):

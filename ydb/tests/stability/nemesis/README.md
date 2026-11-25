@@ -590,8 +590,8 @@ its own state, independently of the orchestrator and service stop order.
 When the orchestrator stops, it calls the internal `/api/agent/drain` endpoint
 concurrently on remote agents and waits for execution completion, not just command
 acceptance. A new orchestrator reopens fully-drained agents through the internal
-`/api/agent/resume` endpoint before its first new injection on each host. A failed
-resume is retried on the next injection attempt; an agent processing its own SIGTERM
+`/api/agent/resume` endpoint before its first command on each host, including restore. A failed
+resume is retried on the next command attempt; an agent processing its own SIGTERM
 cannot reopen.
 The `nemesis stop` command stops the orchestrator first while agents are available,
 then stops agents. Test clients continue using the existing

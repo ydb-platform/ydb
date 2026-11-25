@@ -384,3 +384,20 @@ def test_manual_restore_waits_for_accepted_inject(monkeypatch):
         release.set()
     assert service.shutdown(3)["status"] == "ok"
     assert [call[0] for call in runner.method_calls] == ["inject_fault", "extract_fault"]
+
+
+@pytest.mark.parametrize("failed_action", ["inject", "extract"])
+def test_thread_start_failure_does_not_block_restore(monkeypatch, failed_action):
+    runner = Mock()
+    service = AgentExecutionService(NemesisManager(), {"fault": {"runner": runner, "recovery": "extract"}})
+    if failed_action == "extract":
+        assert service.start("fault")["status"] == "started"
+        assert service.wait_for_processes() == 0
+    with monkeypatch.context() as patch:
+        patch.setattr(threading.Thread, "start", Mock(side_effect=RuntimeError("cannot start thread")))
+        assert service.start("fault", failed_action)["status"] == "error"
+    result = service.start("fault", "extract")
+    assert result["status"] == "started" and service.wait_for_processes(timeout=1) == 0
+    assert service.result(result["execution"])["status"] == "finished"
+    assert service.shutdown()["status"] == "ok"
+    runner.extract_fault.assert_called_once()

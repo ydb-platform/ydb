@@ -97,6 +97,7 @@ class ClusterDiscovery:
         observed = set()
         by_port = {s.ic_port: s for s in specs}
         updated_specs = {}
+        known_ids = {s.node_id for s in self._known.values()}
         known_slots = {(s.host, s.ic_port): s for s in self._known.values() if isinstance(s, SlotInfo)}
         for row in nodes:
             nid = int(row["NodeId"])
@@ -108,7 +109,7 @@ class ClusterDiscovery:
             host = info.get("Host") or state.get("Host")
             location = state.get("Location") or info.get("Location", {})
             if not host or "ic" not in advertised:
-                if nid in records:
+                if nid in known_ids:
                     continue
                 raise ValueError(f"Missing endpoint identity for node {nid}")
             port = urlsplit(endpoint(host, advertised["ic"], "tcp")).port
@@ -124,14 +125,13 @@ class ClusterDiscovery:
             kind = "node" if nid in static else "slot"
             record = (NodeInfo(nid, host, port, str(rack), dc, pile) if kind == "node" else
                       SlotInfo(port, host, port, nid, str(rack), dc, pile))
-            # Dynamic node IDs can change; IC port identifies a local slot.
-            records = {key: old for key, old in records.items()
-                       if not (old.host == host and old.ic_port == port and key != nid)}
-            previous = self._known.get(nid) if kind == "node" else known_slots.get((host, port))
+            # Runtime IDs may be reused while another slot is still missing.
+            key = self.resource_key(record)
+            previous = self._known.get(key) if kind == "node" else known_slots.get((host, port))
             if previous is not None and previous.bridge_pile_id != pile:
                 raise ValueError(f"Node {nid} changed pile; drain and restart Nemesis")
-            records[nid] = record
-            observed.add(nid)
+            records[key] = record
+            observed.add(key)
             if spec is not None:
                 updated_specs[port] = replace(
                     spec, kind=kind, node_id=nid, slot_idx=port if kind == "slot" else None,
@@ -143,7 +143,7 @@ class ClusterDiscovery:
                 http.append(endpoint(host, advertised["http-mon"], urlsplit(base).scheme))
             if "grpc" in advertised:
                 grpc.append(endpoint(host, advertised["grpc"], "grpc"))
-        if not set(static).issubset(records) or not http or not grpc:
+        if not set(static).issubset(n.node_id for n in records.values() if isinstance(n, NodeInfo)) or not http or not grpc:
             raise ValueError("Missing static nodes or service endpoints")
         hosts = {}
         for record in records.values():
@@ -161,7 +161,11 @@ class ClusterDiscovery:
         return DiscoverySnapshot(topology, inventory,
                                  tuple(updated_specs.get(s.ic_port, s) for s in specs),
                                  tuple(dict.fromkeys(http)), tuple(dict.fromkeys(grpc)), membership,
-                                 frozenset(set(records) - observed))
+                                 frozenset(records[key].node_id for key in records.keys() - observed))
+
+    @staticmethod
+    def resource_key(record):
+        return ("node", record.node_id) if isinstance(record, NodeInfo) else ("slot", record.host, record.ic_port)
 
     @staticmethod
     def signature(snapshot):
@@ -185,7 +189,8 @@ class ClusterDiscovery:
             self.generation += 1
         self._signature = signature
         self._pile_names = tuple(snapshot.topology.pile_names.values())
-        self._known = {n.node_id: n for n in [*snapshot.inventory.nodes.values(), *snapshot.inventory.slots.values()]}
+        self._known = {self.resource_key(n): n
+                       for n in [*snapshot.inventory.nodes.values(), *snapshot.inventory.slots.values()]}
         self.last_success = time.monotonic()
         self.last_observation = self.last_success
         self.error = None

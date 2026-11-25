@@ -48,7 +48,7 @@ class AgentCommandTransport:
         if self._is_local_host(cmd.host):
             result = self._start_local(cmd.nemesis_type, cmd.action, payload=payload)
         else:
-            if cmd.action == "inject" and self._resume_remote and cmd.host not in self._resumed:
+            if self._resume_remote and cmd.host not in self._resumed:
                 response = self._post(
                     f"http://{self._resolve_http_host(cmd.host)}:{self._get_app_port()}/api/agent/resume",
                     timeout=5,

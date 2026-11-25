@@ -719,9 +719,6 @@ message TFlatSchemeTransaction {
     optional TTruncateTable TruncateTable = 25;
 
     optional TPrepareIndexValidation PrepareIndexValidation = 26;
-
-    // Sent without AlterTable so DataShards that do not know this operation reject it at prepare.
-    optional NKikimrSchemeOp.TTableDescription AlterTableForCdcHandoff = 27;
 }
 
 message TDistributedEraseTransaction {

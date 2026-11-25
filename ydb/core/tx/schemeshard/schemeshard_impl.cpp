@@ -8473,10 +8473,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
 
     NKikimrTxDataShard::TFlatSchemeTransaction tx;
     FillSeqNo(tx, seqNo);
-    const auto& description = alterData->TableDescriptionFull;
-    auto* proto = description.Defined() && description->ActivateCdcStreamsSize()
-        ? tx.MutableAlterTableForCdcHandoff()
-        : tx.MutableAlterTable();
+    auto* proto = tx.MutableAlterTable();
     FillTableSchemaVersion(alterData->AlterVersion, proto);
     proto->SetName(path->Name);
 
@@ -8529,8 +8526,8 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             *patch);
     }
 
-    if (tx.HasAlterTableForCdcHandoff()) {
-        *proto->MutableActivateCdcStreams() = description->GetActivateCdcStreams();
+    if (alterData->TableDescriptionFull.Defined()) {
+        *proto->MutableActivateCdcStreams() = alterData->TableDescriptionFull->GetActivateCdcStreams();
     }
 
     if (alterData->TableDescriptionFull.Defined() && alterData->TableDescriptionFull->HasReplicationConfig()) {

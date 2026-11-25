@@ -14,6 +14,7 @@
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -6733,6 +6734,62 @@ Y_UNIT_TEST_SUITE(Cdc) {
         Sort(rowKeys);
         UNIT_ASSERT_VALUES_EQUAL(rowKeys, TVector<TString>({SerializeUint32Key(1), SerializeUint32Key(2)}));
         UNIT_ASSERT(!heartbeatHasRowKey);
+    }
+
+    bool IsSourceRegistered(TTestActorRuntime& runtime, const TActorId& sender, ui32 partitionId, ui64 dataShardId) {
+        auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto& record = *request->Record.MutablePartitionRequest();
+        record.SetPartition(partitionId);
+        record.MutableCmdGetMaxSeqNo()->AddSourceId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(dataShardId)));
+        ForwardToTablet(runtime, ResolvePqTablet(runtime, sender, "/Root/Table/Stream", partitionId), sender, request.Release());
+
+        auto response = runtime.GrabEdgeEventRethrow<TEvPersQueue::TEvResponse>(sender);
+        const auto& result = response->Get()->Record.GetPartitionResponse().GetCmdGetMaxSeqNoResult().GetSourceIdInfo();
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+        return result.Get(0).GetState() == NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED;
+    }
+
+    Y_UNIT_TEST(ShouldRegisterSplitChildrenOnlyInPartitionsOfTheirRangeWhenKeyRangeHeartbeats) {
+        // given
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions().Shards(2));
+
+        auto forceKeyRangeHeartbeatMode = ForceKeyRangeHeartbeatMode(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        const auto shards = GetTableShards(server, edgeActor, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2);
+
+        // when
+        WaitTxNotification(server, edgeActor, AsyncSplitTable(server, edgeActor, "/Root/Table", shards.at(1), 3000000000u));
+
+        // then
+        TVector<ui64> children;
+        for (const auto shard : GetTableShards(server, edgeActor, "/Root/Table")) {
+            if (Find(shards, shard) == shards.end()) {
+                children.push_back(shard);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(children.size(), 2);
+
+        for (const auto child : children) {
+            for (ui32 attempt = 0; attempt < 60 && !IsSourceRegistered(runtime, edgeActor, 1, child); ++attempt) {
+                SimulateSleep(server, TDuration::Seconds(1));
+            }
+            UNIT_ASSERT_C(IsSourceRegistered(runtime, edgeActor, 1, child), child);
+            UNIT_ASSERT_C(!IsSourceRegistered(runtime, edgeActor, 0, child), child);
+        }
     }
 
     Y_UNIT_TEST(ShouldResolveTopicWithSyncVersionWhenPartitionWriterFailsAndKeyRangeHeartbeats) {

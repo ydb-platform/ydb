@@ -96,7 +96,8 @@ Y_UNIT_TEST_SUITE(EventBundle) {
         auto forwarded = event->Forward(recipient);
         UNIT_ASSERT_VALUES_EQUAL(forwarded->Recipient, recipient);
         UNIT_ASSERT_VALUES_EQUAL(forwarded->Sender, sender);
-        UNIT_ASSERT_VALUES_EQUAL(forwarded->Flags & ~IEventHandle::FlagDebugTrackReceive, IEventHandle::FlagTrackDelivery);
+        UNIT_ASSERT_VALUES_EQUAL(forwarded->Flags & ~IEventHandle::FlagDebugTrackReceive,
+            static_cast<IEventHandle::TEventFlags>(IEventHandle::FlagTrackDelivery));
         UNIT_ASSERT_VALUES_EQUAL(forwarded->Cookie, 17);
         UNIT_ASSERT_VALUES_EQUAL(forwarded->Get<TEvTracked>(), payload);
         event.reset();

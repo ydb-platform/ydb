@@ -1525,7 +1525,7 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         bool sawAnalyzeCompilation = false;
         const auto observeCompile = runtime.AddObserver<NKqp::NPrivateEvents::TEvCompileRequest>([&](auto& ev) {
             const auto& request = *ev->Get();
-            if (request.Query && request.Query->Settings.IsAnalyze && request.Query->Text.Contains("/Root/Database/Table")) {
+            if (request.Query && request.Query->Settings().IsAnalyze && request.Query->Text().Contains("/Root/Database/Table")) {
                 UNIT_ASSERT(!request.DisablePgCompatibility.value_or(true));
                 sawAnalyzeCompilation = true;
             }

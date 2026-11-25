@@ -666,6 +666,27 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         });
     }
 
+    Y_UNIT_TEST(ForceDoneRequiresCdcHandoffBeforeStoppingReplication) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
+        env.TestWaitNotification(runtime, txId);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterReplicationRequest(
+            ++txId, "/MyRoot", R"(Name: "Replication" ManagesChangefeeds: true)")));
+        TestModificationResult(runtime, txId);
+        env.TestWaitNotification(runtime, txId);
+
+        const TString forceDone = R"(Name: "Replication" State { Done { FailoverMode: FAILOVER_MODE_FORCE } })";
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, AlterReplicationRequest(++txId, "/MyRoot", forceDone));
+        TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "EnableCdcHandoff"}});
+
+        runtime.GetAppData().FeatureFlags.SetEnableCdcHandoff(true);
+        TestAlterReplication(runtime, ++txId, "/MyRoot", forceDone);
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(DoneBeforeChangefeedRegistration) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));

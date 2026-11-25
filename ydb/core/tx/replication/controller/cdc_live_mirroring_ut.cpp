@@ -68,14 +68,14 @@ class TLiveCdcMirror {
         }, "destination data and consumer offsets");
     }
 
-    void CreateReplication() {
-        Scheme(Destination, Sprintf(R"(CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica`
+    static void CreateReplication(TEnv<>& destination, const TString& sourceEndpoint) {
+        Scheme(destination, Sprintf(R"(CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica`
             WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", TOKEN = "root@builtin",
-                CONSISTENCY_LEVEL = "ROW", INITIAL_SCAN = TRUE);)", Source.GetEndpoint().c_str()));
+                CONSISTENCY_LEVEL = "ROW", INITIAL_SCAN = TRUE);)", sourceEndpoint.c_str()));
     }
 
     void ReplicateInitialRow(const TString& expectedPath) {
-        CreateReplication();
+        CreateReplication(Destination, Source.GetEndpoint());
         WaitForReplication(Destination, [&] {
             return Destination.GetDescription(expectedPath).GetSchemeStatus() == NKikimrScheme::StatusSuccess;
         }, expectedPath);
@@ -103,10 +103,53 @@ public:
         Execute(Source, "UPSERT INTO `/Root/source` (key, value) VALUES (1u, 10u);");
     }
 
-    void DropAfterCdcCreationFailed() {
+    static void ResumeBeforeParentAttachment() {
+        auto flags = TopicReplicationFlags();
+        flags.FeatureFlags.SetEnableCdcReplication(true);
+        TEnv<> env(flags, true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        runtime.RegisterService(MakeReplicationServiceId(runtime.GetNodeId(0)), runtime.Register(CreateReplicationService()));
+        env.RunCall([&] {
+            Scheme(env, "CREATE TABLE `/Root/source` (key Uint32, value Uint32, PRIMARY KEY (key));");
+            Scheme(env, "ALTER TABLE `/Root/source` ADD CHANGEFEED feed WITH (FORMAT = 'JSON', MODE = 'UPDATES');");
+            Execute(env, "UPSERT INTO `/Root/source` (key, value) VALUES (1u, 10u);");
+        });
+
+        ui32 blocked = 0;
+        auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (blocked == 2 || ev->GetTypeRewrite() != TEvPrivate::EvCreateDstResult || !ev->HasEvent()) {
+                return;
+            }
+            const auto* result = dynamic_cast<TEvPrivate::TEvCreateDstResult*>(ev->GetBase());
+            if (result && result->PreparingCdc) {
+                ++blocked;
+                ev.Reset();
+            }
+        });
+        env.RunCall([&] { CreateReplication(env, env.GetEndpoint()); });
+        WaitForReplication(env, [&] { return blocked == 1; }, "initial parent attachment");
+        env.RunCall([&] { Scheme(env, "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'PAUSED');"); });
+        WaitForReplication(env, [&] { return blocked == 2; }, "parent attachment while paused");
+        env.RunCall([&] { Scheme(env, "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'STANDBY');"); });
+
+        WaitForReplication(env, [&] {
+            return env.RunCall([&] {
+                return Execute(env, "SELECT key FROM `/Root/replica` WHERE key = 1u AND value = 10u;")
+                    .GetResultSet(0).RowsCount() == 1;
+            });
+        }, "replicated row after parent attachment");
+    }
+
+    void DropAfterCdcCreationFailed(bool forceDone) {
         const auto sourceFeedId = Source.GetPathId(SourceFeed);
-        CreateReplication();
+        CreateReplication(Destination, Source.GetEndpoint());
         WaitForState(NKikimrReplication::TReplicationState::kError, "source feed has 2 partitions, destination table has 1");
+
+        if (forceDone) {
+            Scheme(Destination, "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');");
+            WaitForState(NKikimrReplication::TReplicationState::kDone);
+            Execute(Destination, "UPSERT INTO `/Root/replica` (key, value) VALUES (2u, 20u);");
+        }
 
         const auto dropped = Session(Destination).ExecuteSchemeQuery("DROP ASYNC REPLICATION `/Root/replication`;",
             NYdb::NTable::TExecSchemeQuerySettings().ClientTimeout(TDuration::Seconds(60))).GetValueSync();
@@ -130,6 +173,7 @@ public:
     }
 
     void InitialScanAndMirror() {
+        Scheme(Source, "ALTER TABLE `/Root/source` ADD INDEX by_value GLOBAL SYNC ON (value);");
         const auto first = ReadTopic(Source, SourceFeed, 1).front();
         UNIT_ASSERT_VALUES_EQUAL(first.Data, R"({"update":{"value":10},"key":[1]})");
         NYdb::NTopic::TTopicClient client(Source.GetDriver());
@@ -137,6 +181,12 @@ public:
         UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
 
         ReplicateInitialRow(DestinationFeed);
+        const auto index = Destination.GetDescription("/Root/replica/by_value/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(index.GetSchemeStatus(), NKikimrScheme::StatusSuccess);
+        const auto& indexConfig = index.GetPathDescription().GetTable().GetReplicationConfig();
+        UNIT_ASSERT_VALUES_EQUAL(indexConfig.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        UNIT_ASSERT_VALUES_EQUAL(indexConfig.GetImportState(), NKikimrSchemeOp::TTableReplicationConfig::IMPORT_STATE_NONE);
+
         const auto mirrored = ReadTopic(Destination, DestinationFeed, 1).front();
         UNIT_ASSERT_VALUES_EQUAL(mirrored.Data, first.Data);
         UNIT_ASSERT_VALUES_EQUAL(mirrored.Offset, first.Offset);
@@ -240,11 +290,16 @@ Y_UNIT_TEST_SUITE(CdcLiveMirroring) {
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Success, !ConflictingId);
     }
 
-    Y_UNIT_TEST(DropAfterCdcCreationFailed) {
+    Y_UNIT_TEST(ResumeBeforeParentAttachment) {
+        TLiveCdcMirror::ResumeBeforeParentAttachment();
+    }
+
+    Y_UNIT_TEST_TWIN(DropAfterCdcCreationFailed, ForceDone) {
         auto flags = TopicReplicationFlags();
         flags.FeatureFlags.SetEnableCdcReplication(true);
+        flags.FeatureFlags.SetEnableCdcHandoff(ForceDone);
         TLiveCdcMirror test(flags, 2);
-        test.DropAfterCdcCreationFailed();
+        test.DropAfterCdcCreationFailed(ForceDone);
     }
 
     Y_UNIT_TEST(InitialScanSkipsChangefeedsByDefault) {

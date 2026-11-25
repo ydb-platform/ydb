@@ -138,7 +138,11 @@ public:
                 {"rid", rid},
                 {"tid", tid},
                 {"pathId", Ev->Get()->DstPathId});
-        } else if (cdc && Ev->Get()->CdcStreamAbsent && Replication->GetState() == TReplication::EState::Removing) {
+        } else if (cdc && Ev->Get()->CdcStreamAbsent
+            && (Replication->GetState() == TReplication::EState::Removing
+                || (Replication->GetDesiredState() == TReplication::EState::Done
+                    && cdc->GetCdc().GetPhase() == NKikimrReplicationController::TCdcTarget::STOPPING)))
+        {
             auto& state = cdc->GetCdc();
             state.ClearInitialCreateTxId();
             state.SetPhase(NKikimrReplicationController::TCdcTarget::FINISHED);

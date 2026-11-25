@@ -322,7 +322,8 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
     }
 
     const bool startingTable = GetDstState() == EDstState::Ready || GetDstState() == EDstState::PreparingCdc
-        || (GetDstState() == EDstState::Alter && replication->GetDesiredState() == TReplication::EState::Ready);
+        || (GetDstState() == EDstState::Alter && GetDstPathId()
+            && replication->GetDesiredState() == TReplication::EState::Ready);
     if (GetKind() == ETargetKind::Table && startingTable && !HasWorkers()) {
         for (const auto* child : replication->GetCdcChildren(GetId())) {
             if (child->GetDstState() != EDstState::Ready) {

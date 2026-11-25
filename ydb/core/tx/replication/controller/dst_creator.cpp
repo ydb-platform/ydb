@@ -660,6 +660,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         if (Cdc) {
             const auto status = record.GetStatus();
+            // SchemeShard also uses ResourceExhausted for the per-table changefeed limit.
+            if (status == NKikimrScheme::StatusResourceExhausted
+                && record.GetReason().StartsWith("the limit of operations with tx type "))
+            {
+                return Retry();
+            }
             if (status == NKikimrScheme::StatusAlreadyExists) {
                 return AllocateTxId();
             }

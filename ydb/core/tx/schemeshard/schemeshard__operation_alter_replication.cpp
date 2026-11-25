@@ -451,12 +451,18 @@ public:
             return result;
         }
 
-        if (op.GetState().HasDone() && replication->Description.GetManagesChangefeeds()
-            && op.GetState().GetDone().GetFailoverMode() != NKikimrReplication::TReplicationState::TDone::FAILOVER_MODE_FORCE)
-        {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                "Changefeed mirroring requires FAILOVER_MODE = 'FORCE' to finish replication");
-            return result;
+        if (op.GetState().HasDone() && replication->Description.GetManagesChangefeeds()) {
+            if (op.GetState().GetDone().GetFailoverMode() != NKikimrReplication::TReplicationState::TDone::FAILOVER_MODE_FORCE) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Changefeed mirroring requires FAILOVER_MODE = 'FORCE' to finish replication");
+                return result;
+            }
+
+            if (!AppData()->FeatureFlags.GetEnableCdcHandoff()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Finishing replication with managed changefeeds requires EnableCdcHandoff on the destination SchemeShard");
+                return result;
+            }
         }
 
         if (op.HasState() && !ValidateAlterState(*result, replication->Description, op.GetState())) {

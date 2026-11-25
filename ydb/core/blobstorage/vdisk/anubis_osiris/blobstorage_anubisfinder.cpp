@@ -90,11 +90,10 @@ namespace NKikimr {
                 Y_UNUSED(subsMerger);
                 // calculate keep status
                 bool allowKeepFlags = HullCtx->AllowKeepFlags;
-                NGc::TKeepStatus keep = brs->Keep(dbIt.GetCurKey(), dbMerger.GetMemRec(), {subsMerger.GetNumKeepFlags(),
-                    subsMerger.GetNumDoNotKeepFlags(), dbMerger.GetNumKeepFlags(), dbMerger.GetNumDoNotKeepFlags()},
-                    allowKeepFlags, true /*allowGarbageCollection*/);
-                if (keep.KeepIndex && !keep.KeepByBarrier) {
-                    // we keep this record because of keep flags
+                NGc::TKeepStatus keep = brs->Keep(dbIt.GetCurKey(), dbMerger.GetMemRec(), {}, allowKeepFlags,
+                    true /*allowGarbageCollection*/);
+                if (keep.KeepData && !keep.KeepByBarrier) {
+                    // Only a live Keep can be a phantom. A retained DoNotKeep has already released it.
                     candidates.AddCandidate(dbIt.GetCurKey().LogoBlobID());
                 }
             };

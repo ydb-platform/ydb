@@ -7,6 +7,8 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_block.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap.h>
 
+#include <optional>
+
 namespace NKikimr {
 
     namespace NBarriers {
@@ -81,6 +83,13 @@ namespace NGcOpt {
                 ui8 channel,
                 TMaybe<NBarriers::TCurrentBarrier> &soft,
                 TMaybe<NBarriers::TCurrentBarrier> &hard) const;
+
+        struct TSyncIngress {
+            TIngress Ingress;
+            bool CollectedDoNotKeep;
+        };
+        std::optional<TSyncIngress> GetIngressForSync(const TKeyLogoBlob& key, const TMemRecLogoBlob& memRec,
+                bool allowKeepFlags) const;
 
         void Output(IOutputStream &str) const;
         TString ToString() const;

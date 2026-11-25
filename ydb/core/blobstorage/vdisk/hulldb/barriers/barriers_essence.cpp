@@ -34,6 +34,19 @@ namespace NKikimr {
             MemViewSnap.GetBarrier(tabletId, channel, soft, hard);
         }
 
+        std::optional<TBarriersEssence::TSyncIngress> TBarriersEssence::GetIngressForSync(const TKeyLogoBlob& key,
+                const TMemRecLogoBlob& memRec, bool allowKeepFlags) const {
+            const auto keep = Keep(key, memRec, {}, allowKeepFlags, true);
+            if (keep.KeepData) {
+                return TSyncIngress{memRec.GetIngress(), false};
+            }
+            if (keep.KeepIndex) {
+                // Before compaction the collected record can still describe its former parts.
+                return TSyncIngress{TIngress::CreateDoNotKeep(IngressMode, true), true};
+            }
+            return std::nullopt;
+        }
+
         void TBarriersEssence::Output(IOutputStream &str) const {
             MemViewSnap.Output(str);
         }
@@ -102,11 +115,10 @@ namespace NKikimr {
             // check if we have to keep data associated with this blob
             const bool keepData = (keepBySoftBarrier || keepByFlags) && keepByHardBarrier;
 
-            // check if we have to keep index data; when item is stored in multiple SSTables, we can't just drop one
-            // index and keep others as this index may contain Keep flag vital for blob consistency -- in case when
-            // we drop such record, we will lose keep flag and item will be occasionally on next compaction; anyway,
-            // if hard barrier tells us to drop this item, we drop it unconditinally
-            const bool keepIndex = (keepData || keepFlagStat.Needed) && keepByHardBarrier;
+            // Partial compaction must preserve flags needed by other SSTs. An explicit release also suppresses
+            // a stale Keep from another pile, even after all local Keep records are gone.
+            const bool keepIndex = (keepData || keepFlagStat.Needed || ingress.HasExplicitDoNotKeep(IngressMode))
+                && keepByHardBarrier;
 
             return NGc::TKeepStatus(keepIndex, keepData, keepBySoftBarrier && keepByHardBarrier);
         }

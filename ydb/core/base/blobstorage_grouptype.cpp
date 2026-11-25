@@ -56,10 +56,12 @@ TBlobStorageGroupType::TBlobStorageGroupType(TErasureType::EErasureSpecies s)
     Y_ABORT_UNLESS(BlobSubgroupSize() <= MaxSubgroupSize);
     Y_ABORT_UNLESS(handoff <= MaxHandoffNodes);
     if (s != ErasureMirror3of4) {
-        // Generic ingress stores keep flags, main/local parts and two bits per handoff part in ui64.
-        Y_ABORT_UNLESS(2 + 2 * totalParts * (1 + handoff) <= 64,
+        // The two collect-mode bits precede the layout. The final bit marks an explicit DoNotKeep.
+        Y_ABORT_UNLESS(2 + 2 * totalParts * (1 + handoff) + 1 <= 64,
             "generic ingress does not fit its persistent 64-bit representation: parts# %u handoff# %u",
             totalParts, handoff);
+    } else {
+        Y_ABORT_UNLESS(2 + totalParts * (1 + BlobSubgroupSize()) + 1 <= 64);
     }
 }
 

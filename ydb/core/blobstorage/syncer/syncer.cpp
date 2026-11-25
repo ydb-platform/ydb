@@ -144,8 +144,12 @@ namespace NKikimr::NGroupSyncer {
             return; // nothing to merge yet
         }
 
-        std::vector<TLogoBlobID> keepToIssue;
-        std::vector<TLogoBlobID> doNotKeepToIssue;
+        struct TFlags {
+            TVector<TLogoBlobID> Keep;
+            TVector<TLogoBlobID> DoNotKeep;
+        };
+        // Each blob is merged once. Group flags by tablet and by the provenance of the DoNotKeep list.
+        std::map<std::pair<ui64, bool>, TFlags> flagsToIssue;
 
         auto mergeBlocks = [&](auto *sourceItem, auto *targetItem, const auto& key) {
             STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS05, "merging block", (LogId, LogId), (SourceItem, sourceItem),
@@ -219,7 +223,7 @@ namespace NKikimr::NGroupSyncer {
         };
 
         // check the target blob (restoring its redundancy) and copy it from the source when it is missing
-        auto restoreBlob = [&](auto *sourceItem, auto *targetItem, const TLogoBlobID& blobId, bool missingData) {
+        auto restoreBlob = [&](auto *sourceItem, const TLogoBlobID& blobId, bool missingData) {
             RestoreQueue.push_back(blobId);
             if (missingData) {
                 CountToCopy(blobId);
@@ -227,9 +231,6 @@ namespace NKikimr::NGroupSyncer {
             }
             if (sourceItem->Keep || sourceItem->DoNotKeep) {
                 SourceBlobFlags.emplace(blobId, TSourceBlobFlags{sourceItem->Keep, sourceItem->DoNotKeep});
-            }
-            if (sourceItem->DoNotKeep && (!targetItem || !targetItem->DoNotKeep)) {
-                doNotKeepToIssue.push_back(blobId);
             }
             SyncerDataStats->BytesTotal += blobId.BlobSize();
             ++SyncerDataStats->BlobsTotal;
@@ -241,18 +242,30 @@ namespace NKikimr::NGroupSyncer {
 
             const auto& [blobId] = key;
 
+            if (sourceItem && sourceItem->DoNotKeep && (Reconcile || Stage != NKikimrBridge::TGroupState::WRITE_KEEP)) {
+                if (sourceItem->ExplicitDoNotKeep) {
+                    // A single VDisk can report an unconfirmed release. Repair missing flags on reachable target replicas.
+                    if (!targetItem || !targetItem->ExplicitDoNotKeepQuorum) {
+                        flagsToIssue[{blobId.TabletID(), true}].DoNotKeep.push_back(blobId);
+                    }
+                } else if (!targetItem || !targetItem->DoNotKeep) {
+                    flagsToIssue[{blobId.TabletID(), false}].DoNotKeep.push_back(blobId);
+                }
+            }
+            if (sourceItem && sourceItem->CollectedDoNotKeep) {
+                return; // only the release is left to copy
+            }
+
             // Is the target missing the data of this source blob? A Keep flag reaches the target before the data
             // does, so the target may have a record of the blob with no data in it.
             const bool missingData = sourceItem && (!targetItem || !targetItem->HasData);
 
             if (Reconcile) {
                 if (sourceItem && (Thorough || missingData)) {
-                    restoreBlob(sourceItem, targetItem, blobId, missingData);
+                    restoreBlob(sourceItem, blobId, missingData);
                 } else if (sourceItem) {
-                    if (sourceItem->DoNotKeep && !targetItem->DoNotKeep) {
-                        doNotKeepToIssue.push_back(blobId);
-                    } else if (sourceItem->Keep && !targetItem->Keep && !targetItem->DoNotKeep) {
-                        keepToIssue.push_back(blobId);
+                    if (sourceItem->Keep && !sourceItem->DoNotKeep && !targetItem->Keep && !targetItem->DoNotKeep) {
+                        flagsToIssue[{blobId.TabletID(), false}].Keep.push_back(blobId);
                     }
                 } else if (targetItem->Keep && !targetItem->DoNotKeep) {
                     // the source has collected the blob (or the write racing the scan has got to the target first)
@@ -263,9 +276,10 @@ namespace NKikimr::NGroupSyncer {
 
             switch (Stage) {
                 case NKikimrBridge::TGroupState::WRITE_KEEP:
-                    if (sourceItem && sourceItem->Keep && targetItem && !targetItem->Keep) {
+                    if (sourceItem && sourceItem->Keep && !sourceItem->ExplicitDoNotKeep && targetItem
+                            && !targetItem->Keep && !targetItem->ExplicitDoNotKeep) {
                         // we have target blob and it misses the Keep flag -- go recover it
-                        keepToIssue.push_back(blobId);
+                        flagsToIssue[{blobId.TabletID(), false}].Keep.push_back(blobId);
                     }
                     if (missingData) {
                         CountToCopy(blobId); // an estimate for the data stage
@@ -276,9 +290,7 @@ namespace NKikimr::NGroupSyncer {
                     if (missingData) {
                         CountToCopy(blobId); // an estimate for the data stage
                     }
-                    if (sourceItem && sourceItem->DoNotKeep && (!targetItem || !targetItem->DoNotKeep)) {
-                        doNotKeepToIssue.push_back(blobId);
-                    } else if (!sourceItem && targetItem && targetItem->Keep && !targetItem->DoNotKeep) {
+                    if (!sourceItem && targetItem && targetItem->Keep && !targetItem->DoNotKeep) {
                         // The source scan may predate a concurrent Put followed by Keep, which reaches the target
                         // even though Put does not at this stage. Confirm absence after observing the target's Keep
                         // before releasing it. Genuinely collected source blobs must still be collected in the target.
@@ -293,7 +305,7 @@ namespace NKikimr::NGroupSyncer {
                         // there is a bug and this blob is a phantom; or there is a data loss
                         break;
                     }
-                    restoreBlob(sourceItem, targetItem, blobId, missingData);
+                    restoreBlob(sourceItem, blobId, missingData);
                     break;
 
                 default:
@@ -302,32 +314,14 @@ namespace NKikimr::NGroupSyncer {
         };
 
         auto finish = [&] {
-            std::ranges::sort(keepToIssue);
-            std::ranges::sort(doNotKeepToIssue);
-            size_t keep = 0;
-            size_t doNotKeep = 0;
-            while (keep < keepToIssue.size() || doNotKeep < doNotKeepToIssue.size()) {
-                ui64 tabletId;
-                if (keep == keepToIssue.size()) {
-                    tabletId = doNotKeepToIssue[doNotKeep].TabletID();
-                } else if (doNotKeep == doNotKeepToIssue.size()) {
-                    tabletId = keepToIssue[keep].TabletID();
-                } else {
-                    tabletId = Min(keepToIssue[keep].TabletID(), doNotKeepToIssue[doNotKeep].TabletID());
-                }
-                std::vector<TLogoBlobID> tempKeep;
-                auto dkv = std::make_unique<TVector<TLogoBlobID>>();
-                while (keep < keepToIssue.size() && keepToIssue[keep].TabletID() == tabletId) {
-                    tempKeep.push_back(keepToIssue[keep++]);
-                }
-                while (doNotKeep < doNotKeepToIssue.size() && doNotKeepToIssue[doNotKeep].TabletID() == tabletId) {
-                    dkv->push_back(doNotKeepToIssue[doNotKeep++]);
-                }
-                auto kv = std::make_unique<TVector<TLogoBlobID>>();
-                std::ranges::set_difference(tempKeep, *dkv, std::back_inserter(*kv)); // do not keep flag overrides keep
-                IssueQuery(true, std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, Max<ui32>(), 0u, 0u,
-                    false, 0u, 0u, kv->empty() ? nullptr : kv.release(), dkv->empty() ? nullptr : dkv.release(),
-                    TInstant::Max(), true, TWriteSource::SyncerMergeGC, false, true));
+            for (auto& [key, flags] : flagsToIssue) {
+                const auto& [tabletId, explicitDoNotKeep] = key;
+                auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, Max<ui32>(), 0u, 0u,
+                    false, 0u, 0u, flags.Keep.empty() ? nullptr : new TVector<TLogoBlobID>(std::move(flags.Keep)),
+                    flags.DoNotKeep.empty() ? nullptr : new TVector<TLogoBlobID>(std::move(flags.DoNotKeep)),
+                    TInstant::Max(), true, TWriteSource::SyncerMergeGC, false, true);
+                ev->ExplicitDoNotKeep = explicitDoNotKeep;
+                IssueQuery(true, std::move(ev));
             }
         };
 
@@ -766,12 +760,11 @@ namespace NKikimr::NGroupSyncer {
         // The size of a page is known only after it has come, so a page gets charged when the next one is requested. There
         // is one such request at a time, so this can't let much through. Reading ends with a result having no items, and it
         // is the only one left uncharged, unless the syncer gets stopped between pages.
-        IssueQuery(toTargetGroup, std::make_unique<TEvBlobStorage::TEvAssimilate>(
-            state.SkipBlocksUpTo, state.SkipBarriersUpTo, state.SkipBlobsUpTo,
-            /*ignoreDecommitState=*/ true, /*reverse=*/ true),
-            TQueryPayload{
-                .ToTargetGroup = toTargetGroup,
-            }, std::exchange(state.UnchargedReplyBytes, 0));
+        auto request = std::make_unique<TEvBlobStorage::TEvAssimilate>(state.SkipBlocksUpTo, state.SkipBarriersUpTo,
+            state.SkipBlobsUpTo, /*ignoreDecommitState=*/ true, /*reverse=*/ true);
+        request->IncludeCollectedDoNotKeep = ScansBlobs() && (Reconcile || Stage != NKikimrBridge::TGroupState::WRITE_KEEP);
+        IssueQuery(toTargetGroup, std::move(request), TQueryPayload{.ToTargetGroup = toTargetGroup},
+            std::exchange(state.UnchargedReplyBytes, 0));
 
         Y_ABORT_UNLESS(!state.RequestInFlight);
         state.RequestInFlight = true;

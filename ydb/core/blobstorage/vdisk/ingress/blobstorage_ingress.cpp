@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 
 #include <util/generic/bitops.h>
+#include <util/system/byteorder.h>
 
 namespace NKikimr {
 
@@ -95,6 +96,25 @@ namespace NKikimr {
 
     bool TIngress::KeepUnconditionally(EMode ingressMode) const {
         return GetCollectMode(ingressMode) == CollectModeKeep;
+    }
+
+    static ui64 ExplicitDoNotKeepMask(TIngress::EMode mode) {
+        // The last bit after the part vectors: generic addresses bytes in memory order,
+        // mirror-3-of-4 packs its fields from the high end of the integer.
+        return mode == TIngress::EMode::GENERIC ? HostToInet(ui64{1}) : ui64{1};
+    }
+
+    TIngress TIngress::CreateDoNotKeep(EMode mode, bool explicitDoNotKeep) {
+        TIngress ingress;
+        ingress.SetKeep(mode, CollectModeDoNotKeep);
+        if (explicitDoNotKeep) {
+            ingress.Data |= ExplicitDoNotKeepMask(mode);
+        }
+        return ingress;
+    }
+
+    bool TIngress::HasExplicitDoNotKeep(EMode mode) const {
+        return (Data & ExplicitDoNotKeepMask(mode)) && (GetCollectMode(mode) & CollectModeDoNotKeep);
     }
 
     void TIngress::SetKeep(EMode ingressMode, ECollectMode mode) {

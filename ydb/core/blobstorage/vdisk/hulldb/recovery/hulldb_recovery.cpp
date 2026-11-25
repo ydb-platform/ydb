@@ -351,8 +351,8 @@ namespace NKikimr {
         }
 
         // set up do not keep bits
-        TIngress ingressDontKeep;
-        ingressDontKeep.SetKeep(TIngress::IngressMode(HullDs->HullCtx->VCtx->Top->GType), CollectModeDoNotKeep);
+        const TIngress ingressDontKeep = TIngress::CreateDoNotKeep(TIngress::IngressMode(HullDs->HullCtx->VCtx->Top->GType),
+            record.GetExplicitDoNotKeep());
         for (ui32 i = 0; i < record.DoNotKeepSize(); ++i) {
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetDoNotKeep(i));
             Y_VERIFY_S(id.PartId() == 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);

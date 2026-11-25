@@ -112,6 +112,33 @@ namespace NKikimr {
             UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead());
         }
 
+        Y_UNIT_TEST(BridgeRetainsOnlyExplicitReleasesUnderSoftBarrier) {
+            TWriter writer;
+            NBarriers::TMemView memView(writer.GetCache0(), VDiskLogPrefix, true);
+            const TKeyLogoBlob key(TLogoBlobID(100500, 1, 10, 0, 20, 0));
+            const auto mode = TIngress::IngressMode(writer.GetGType());
+            const TMemRecLogoBlob released(TIngress::CreateDoNotKeep(mode, true));
+            const TMemRecLogoBlob phantom(TIngress::CreateDoNotKeep(mode, false));
+
+            writer.Write(memView, TKeyBarrier(100500, 0, 1, 1, false), 1, 9);
+            {
+                NGcOpt::TBarriersEssence essence(memView.GetSnapshot(), writer.GetGType());
+                UNIT_ASSERT(essence.Keep(key, released, {}, true, true).KeepData);
+            }
+            writer.Write(memView, TKeyBarrier(100500, 0, 1, 2, false), 1, 10);
+            {
+                NGcOpt::TBarriersEssence essence(memView.GetSnapshot(), writer.GetGType());
+                const auto keep = essence.Keep(key, released, {}, true, true);
+                UNIT_ASSERT(keep.KeepIndex && !keep.KeepData);
+                UNIT_ASSERT(!essence.Keep(key, phantom, {}, true, true).KeepIndex);
+                UNIT_ASSERT(!essence.GetIngressForSync(key, phantom, true));
+            }
+            writer.Write(memView, TKeyBarrier(100500, 0, 1, 3, true), 1, 10);
+            NGcOpt::TBarriersEssence essence(memView.GetSnapshot(), writer.GetGType());
+            UNIT_ASSERT(!essence.Keep(key, released, {}, true, true).KeepIndex);
+            UNIT_ASSERT(!essence.GetIngressForSync(key, released, true));
+        }
+
         Y_UNIT_TEST(CompleteTabletDeletionDropsBarriersKeepsBlobsUnneeded) {
             TWriter writer;
             NBarriers::TMemView memView(writer.GetCache0(), VDiskLogPrefix, true);

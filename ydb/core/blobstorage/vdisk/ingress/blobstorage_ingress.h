@@ -81,6 +81,11 @@ namespace NKikimr {
         bool KeepUnconditionally(EMode ingressMode) const;
         void SetKeep(EMode ingressMode, ECollectMode mode);
 
+        // Only an explicit GC release can suppress future repairs from other piles.
+        // Phantom cleanup uses the ordinary DoNotKeep bit within its physical group.
+        static TIngress CreateDoNotKeep(EMode mode, bool explicitDoNotKeep);
+        bool HasExplicitDoNotKeep(EMode mode) const;
+
         int GetCollectMode(EMode ingressMode) const;
         bool IsDoNotKeep(const TBlobStorageGroupType& gtype) const;
         bool IsKeep(const TBlobStorageGroupType& gtype) const;
@@ -232,11 +237,6 @@ namespace NKikimr {
 
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
         const TVDiskIdShort VDisk;
-    };
-
-    struct TFakeFilter {
-        template<typename... T>
-        bool Check(T&&...) const { return true; }
     };
 
 } // NKikimr

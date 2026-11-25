@@ -17,6 +17,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
     const bool Reverse;
     const std::optional<ui32> ExpectedGeneration;
     const bool IncludePartPlacement;
+    const bool IncludeCollectedDoNotKeep;
 
     struct TBlock : TEvBlobStorage::TEvAssimilateResult::TBlock {
         TBlock(const TBlock&) = default;
@@ -91,6 +92,8 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
     };
 
     struct TBlob : TEvBlobStorage::TEvAssimilateResult::TBlob {
+        ui64 ExplicitDoNotKeepDisks = 0;
+
         TBlob(const TBlob&) = default;
 
         TBlob(TLogoBlobID key, const NKikimrBlobStorage::TEvVAssimilateResult::TBlob& msg, TBlobStorageGroupType gtype) {
@@ -101,6 +104,8 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
             Keep = collectMode & CollectModeKeep;
             DoNotKeep = collectMode & CollectModeDoNotKeep;
             HasData = !ingress.LocalParts(gtype).Empty();
+            CollectedDoNotKeep = msg.GetCollectedDoNotKeep();
+            ExplicitDoNotKeep = ingress.HasExplicitDoNotKeep(TIngress::IngressMode(gtype));
         }
 
         bool Merge(const TBlob& other) {
@@ -108,6 +113,9 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
                 Keep |= other.Keep;
                 DoNotKeep |= other.DoNotKeep;
                 HasData |= other.HasData;
+                CollectedDoNotKeep &= other.CollectedDoNotKeep;
+                ExplicitDoNotKeep |= other.ExplicitDoNotKeep;
+                ExplicitDoNotKeepDisks |= other.ExplicitDoNotKeepDisks;
                 for (ui32 part = 0; part < PartDisks.size(); ++part) {
                     PartDisks[part] |= other.PartDisks[part];
                 }
@@ -190,11 +198,13 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
                     if (expected(skipUpTo)) {
                         field.emplace_back(key, item, gtype);
                         if constexpr (std::is_same_v<TRecord, NKikimrBlobStorage::TEvVAssimilateResult::TBlob>) {
+                            TBlob& blob = field.back();
+                            if (self.IncludeCollectedDoNotKeep && blob.ExplicitDoNotKeep) {
+                                blob.ExplicitDoNotKeepDisks = ui64{1} << orderNumber;
+                            }
                             if (self.IncludePartPlacement) {
-                                const TBlobStorageGroupInfo::TTopology& topology = self.Info->GetTopology();
-                                TVDiskIdShort disk = topology.GetVDiskId(orderNumber);
-                                ui32 index = topology.GetIdxInSubgroup(disk, key.Hash());
-                                TBlob& blob = field.back();
+                                const auto& topology = self.Info->GetTopology();
+                                const ui32 index = topology.GetIdxInSubgroup(topology.GetVDiskId(orderNumber), key.Hash());
                                 blob.PartDisks.resize(gtype.TotalPartCount(), 0);
                                 if (index < gtype.BlobSubgroupSize()) {
                                     for (ui8 part : TIngress(item.GetIngress()).LocalParts(gtype)) {
@@ -318,6 +328,7 @@ public:
         , Reverse(params.Common.Event->Reverse)
         , ExpectedGeneration(params.Common.Event->ExpectedGeneration)
         , IncludePartPlacement(params.Common.Event->IncludePartPlacement)
+        , IncludeCollectedDoNotKeep(params.Common.Event->IncludeCollectedDoNotKeep)
         , PerVDiskInfo(Info->GetTotalVDisksNum())
         , Result(new TEvBlobStorage::TEvAssimilateResult(NKikimrProto::OK, {}))
     {
@@ -380,11 +391,15 @@ public:
             return diskIsAhead ? disk : merged;
         };
 
-        SendToQueue(std::make_unique<TEvBlobStorage::TEvVAssimilate>(Info->GetVDiskId(orderNumber),
+        auto request = std::make_unique<TEvBlobStorage::TEvVAssimilate>(Info->GetVDiskId(orderNumber),
             pickCursor(SkipBlocksUpTo, info.LastProcessedBlock),
             pickCursor(SkipBarriersUpTo, info.LastProcessedBarrier),
             pickCursor(SkipBlobsUpTo, info.LastProcessedBlob),
-            IgnoreDecommitState, Reverse), 0);
+            IgnoreDecommitState, Reverse);
+        if (IncludeCollectedDoNotKeep) {
+            request->Record.SetIncludeCollectedDoNotKeep(true);
+        }
+        SendToQueue(std::move(request), 0);
 
         DSP_LOG_DEBUG_S("BPA03", "Request orderNumber# " << orderNumber << " VDiskId# " << Info->GetVDiskId(orderNumber));
 
@@ -434,29 +449,47 @@ public:
         }
     }
 
+    bool HasQuorum(const TBlobStorageGroupInfo::TGroupVDisks& disks) const {
+        if (Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
+            return TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(*Info, ~disks);
+        }
+        return Info->GetQuorumChecker().CheckQuorumForGroup(disks);
+    }
+
+    bool HasExplicitDoNotKeepQuorum(const TBlob& blob, ui64 respondingGCQuorum) const {
+        if (!blob.ExplicitDoNotKeepDisks || !respondingGCQuorum) {
+            return false;
+        }
+        const ui64 missing = respondingGCQuorum & ~blob.ExplicitDoNotKeepDisks;
+        if (!missing) {
+            return true;
+        }
+        // Only the blob's subgroup stores its release. Repair each reachable recipient that lacks it.
+        TBlobStorageGroupInfo::TOrderNums subgroup;
+        Info->GetTopology().PickSubgroup(blob.Id.Hash(), subgroup);
+        return std::ranges::none_of(subgroup, [&](ui32 disk) { return missing & (ui64{1} << disk); });
+    }
+
     void Merge() {
         TStackVec<ui8, 32> requests;
 
         const TBlobStorageGroupInfo::TTopology *top = &Info->GetTopology();
         TBlobStorageGroupInfo::TGroupVDisks disksWithData(top);
+        ui64 respondingGCQuorum = 0;
         for (ui32 i = 0; i < PerVDiskInfo.size(); ++i) {
             TPerVDiskInfo& info = PerVDiskInfo[i];
             if (info.Excluded) {
                 continue;
             }
             if (info.HasItemsToMerge() || info.Finished()) {
-                disksWithData += {top, top->GetVDiskId(i)};
+                const auto disk = top->GetVDiskId(i);
+                disksWithData += {top, disk};
+                if (IncludeCollectedDoNotKeep && Info->IsWriteTargetRealm(disk.FailRealm)) {
+                    respondingGCQuorum |= ui64{1} << i;
+                }
             }
         }
-        bool isMirror3dc = Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc;
-
-        bool hasQuorum;
-        if (isMirror3dc) {
-            hasQuorum = TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(*Info, ~disksWithData);
-        } else {
-            hasQuorum = Info->GetQuorumChecker().CheckQuorumForGroup(disksWithData);
-        }
-        if (!hasQuorum) {
+        if (!HasQuorum(disksWithData)) {
             bool emptyResult = Result->Blocks.empty() && Result->Barriers.empty() && Result->Blobs.empty();
             if (emptyResult) {
                 // An empty successful page would signal end of scan.
@@ -467,6 +500,12 @@ public:
                 SendResponseAndDie(std::move(Result));
             }
             return;
+        }
+        if (respondingGCQuorum) {
+            const auto recipients = TBlobStorageGroupInfo::TGroupVDisks::CreateFromMask(top, respondingGCQuorum);
+            if (recipients != disksWithData && !HasQuorum(recipients)) {
+                respondingGCQuorum = 0;
+            }
         }
         while (requests.empty()) {
             if (Heap.empty()) {
@@ -507,6 +546,7 @@ public:
                 },
                 [&](TBlob& blob) {
                     SkipBlobsUpTo.emplace(blob.Id);
+                    blob.ExplicitDoNotKeepQuorum = HasExplicitDoNotKeepQuorum(blob, respondingGCQuorum);
                     Result->Blobs.push_back(blob);
                 }
             }, item);
@@ -528,6 +568,7 @@ public:
             OriginalSkipBlobsUpTo, IgnoreDecommitState, Reverse);
         ev->ExpectedGeneration = ExpectedGeneration;
         ev->IncludePartPlacement = IncludePartPlacement;
+        ev->IncludeCollectedDoNotKeep = IncludeCollectedDoNotKeep;
         ev->RestartCounter = counter;
         return ev;
     }

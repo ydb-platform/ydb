@@ -112,6 +112,36 @@ namespace NKikimr {
     } // anonymous namespace
 
     Y_UNIT_TEST_SUITE(TBlobStorageIngress) {
+        Y_UNIT_TEST(ExplicitDoNotKeepEncoding) {
+            for (const auto species : {TErasureType::ErasureNone, TErasureType::Erasure4Plus2Block,
+                    TErasureType::ErasureMirror3dc, TErasureType::Erasure4Plus3Block, TErasureType::Erasure3Plus3Block,
+                    TErasureType::ErasureMirror3of4, TErasureType::Erasure8Plus2Block}) {
+                const TBlobStorageGroupType type(species);
+                const auto mode = TIngress::IngressMode(type);
+                TIngress legacy;
+                legacy.SetKeep(mode, CollectModeDoNotKeep);
+                UNIT_ASSERT_VALUES_EQUAL(TIngress::CreateDoNotKeep(mode, false).Raw(), legacy.Raw());
+                UNIT_ASSERT(!legacy.HasExplicitDoNotKeep(mode));
+
+                const auto release = TIngress::CreateDoNotKeep(mode, true);
+                const ui64 tag = mode == TIngress::EMode::MIRROR3OF4 ? 1 : RawBit(63);
+                UNIT_ASSERT_VALUES_EQUAL(release.Raw(), legacy.Raw() | tag);
+                UNIT_ASSERT_VALUES_EQUAL(release.GetCollectMode(mode), CollectModeDoNotKeep);
+                UNIT_ASSERT(release.LocalParts(type).Empty());
+                UNIT_ASSERT(release.PartsWeKnowAbout(type).Empty());
+
+                auto local = TVectorType::MakeOneHot(type.TotalPartCount() - 1, type.TotalPartCount());
+                const auto withPart = release.ReplaceLocal(type, local);
+                UNIT_ASSERT_EQUAL(withPart.LocalParts(type), local);
+                UNIT_ASSERT_VALUES_EQUAL(withPart.CopyWithoutLocal(type).Raw(), release.Raw());
+                TIngress kept;
+                kept.SetKeep(mode, CollectModeKeep);
+                kept.Merge(TIngress(withPart.Raw()));
+                UNIT_ASSERT(kept.HasExplicitDoNotKeep(mode));
+                UNIT_ASSERT(!kept.KeepUnconditionally(mode));
+            }
+        }
+
         Y_UNIT_TEST(Block82AllThirtyValidPlacementsAndInvalidMainPlacements) {
             const TBlock82Fixture f;
             ui32 valid = 0, invalid = 0;

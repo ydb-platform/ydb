@@ -108,8 +108,8 @@ namespace NKikimr {
             }
 
             // set up do not keep bits
-            TIngress ingressDontKeep;
-            ingressDontKeep.SetKeep(TIngress::IngressMode(gtype), CollectModeDoNotKeep);
+            const TIngress ingressDontKeep = TIngress::CreateDoNotKeep(TIngress::IngressMode(gtype),
+                record.GetExplicitDoNotKeep());
             for (ui32 i = 0; i < record.DoNotKeepSize(); ++i, ++lsnPos) {
                 if (lsnPos > lastLsnOfIndexRecord) {
                     TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetDoNotKeep(i));

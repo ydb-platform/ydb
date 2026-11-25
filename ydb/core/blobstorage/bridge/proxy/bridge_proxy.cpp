@@ -250,7 +250,13 @@ namespace NKikimr {
                         [](auto& to, const auto& from) {
                             to.Keep |= from.Keep;
                             to.DoNotKeep |= from.DoNotKeep;
+                            to.HasData |= from.HasData;
+                            to.CollectedDoNotKeep &= from.CollectedDoNotKeep;
+                            to.ExplicitDoNotKeep |= from.ExplicitDoNotKeep;
                         });
+                    for (auto& blob : result->Blobs) {
+                        blob.ExplicitDoNotKeepQuorum = false; // the bridged group has no single physical subgroup
+                    }
                     return result;
                 }
             };
@@ -2111,6 +2117,12 @@ namespace NKikimr {
 
             if (!res) {
                 res = std::make_unique<TEvent>(TEvBlobStorage::CloneEventPolicy, ev);
+            }
+
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
+                // Only logical requests pass through here. Forced-generation requests from a syncer keep their
+                // original provenance when forwarded to the physical group.
+                res->ExplicitDoNotKeep = res->DoNotKeep && !res->DoNotKeep->empty();
             }
 
             if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut>) {

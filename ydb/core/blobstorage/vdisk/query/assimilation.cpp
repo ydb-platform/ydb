@@ -200,8 +200,9 @@ namespace NKikimr {
             if (!BarriersEssence) {
                 BarriersEssence = Snap.BarriersSnap.CreateEssence(Snap.HullCtx);
             }
-            if (auto keep = BarriersEssence->Keep(key, memRec, {}, Snap.HullCtx->AllowKeepFlags, true); !keep.KeepData) {
-                return iter.Next(); // we are not interested in this blob -- it is going to be collected
+            const auto ingress = BarriersEssence->GetIngressForSync(key, memRec, Snap.HullCtx->AllowKeepFlags);
+            if (!ingress || (ingress->CollectedDoNotKeep && !Ev->Get()->Record.GetIncludeCollectedDoNotKeep())) {
+                return iter.Next();
             }
 
             auto *pb = Result->Record.AddBlobs();
@@ -232,7 +233,11 @@ namespace NKikimr {
 
             memcpy(LastRawBlobId, raw, 3 * sizeof(ui64));
 
-            pb->SetIngress(memRec.GetIngress().Raw());
+            pb->SetIngress(ingress->Ingress.Raw());
+            if (ingress->CollectedDoNotKeep) {
+                pb->SetCollectedDoNotKeep(true);
+                len += CountUnsigned(T::kCollectedDoNotKeepFieldNumber, true);
+            }
 
             len += CountUnsigned(T::kIngressFieldNumber, pb->GetIngress());
             len += CountMessage(NKikimrBlobStorage::TEvVAssimilateResult::kBlobsFieldNumber, len);

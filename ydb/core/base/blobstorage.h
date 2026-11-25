@@ -2249,6 +2249,7 @@ struct TEvBlobStorage {
         bool IsMonitored = true;
 
         bool IgnoreBlock = false;
+        bool ExplicitDoNotKeep = false; // the bridged blob owner's release, including a copy of its stored flag
 
         bool Decommission = false;
 
@@ -2270,6 +2271,7 @@ struct TEvBlobStorage {
             , IsMultiCollectAllowed(origin.IsMultiCollectAllowed)
             , IsMonitored(origin.IsMonitored)
             , IgnoreBlock(origin.IgnoreBlock)
+            , ExplicitDoNotKeep(origin.ExplicitDoNotKeep)
             , Decommission(origin.Decommission)
             , WriteSource(origin.WriteSource)
         {}
@@ -2508,6 +2510,7 @@ struct TEvBlobStorage {
         bool Reverse;
         std::optional<ui32> ExpectedGeneration;
         bool IncludePartPlacement = false;
+        bool IncludeCollectedDoNotKeep = false;
 
         TEvAssimilate(TCloneEventPolicy, const TEvAssimilate& origin)
             : TEvRequestCommon(CloneEventPolicy, origin)
@@ -2518,6 +2521,7 @@ struct TEvBlobStorage {
             , Reverse(origin.Reverse)
             , ExpectedGeneration(origin.ExpectedGeneration)
             , IncludePartPlacement(origin.IncludePartPlacement)
+            , IncludeCollectedDoNotKeep(origin.IncludeCollectedDoNotKeep)
         {}
 
         TEvAssimilate(std::optional<ui64> skipBlocksUpTo, std::optional<std::tuple<ui64, ui8>> skipBarriersUpTo,
@@ -2630,6 +2634,12 @@ struct TEvBlobStorage {
             // some disk has a part of the blob; a disk may have a record of the blob with flags only, e.g. a Keep flag
             // that has come before the data
             bool HasData = true;
+            // The scan found only release records for data already covered by the soft barrier.
+            bool CollectedDoNotKeep = false;
+            // An explicit logical release was observed, as distinct from a VDisk's local phantom flag.
+            bool ExplicitDoNotKeep = false;
+            // The scan reached a physical GC quorum and every responding GC recipient in the subgroup has the release.
+            bool ExplicitDoNotKeepQuorum = false;
 
             // Masks of subgroup positions holding each part, populated for a placement scan.
             TStackVec<ui16, TBlobStorageGroupType::MaxTotalParts> PartDisks{};
@@ -2650,6 +2660,9 @@ struct TEvBlobStorage {
                 }
                 if (!HasData) {
                     s << "n";
+                }
+                if (CollectedDoNotKeep) {
+                    s << " (collected)";
                 }
             }
 

@@ -11,28 +11,6 @@ using namespace NKikimrServices;
 
 namespace NKikimr {
 
-    struct TLogoBlobFilterForHull : public TLogoBlobFilter {
-        TLogoBlobFilterForHull(const TIntrusivePtr<THullCtx> &hullCtx, const TVDiskID &vdisk)
-            : TLogoBlobFilter(hullCtx->VCtx->Top, vdisk)
-            , HullCtx(hullCtx)
-        {}
-
-        void BuildBarriersEssence(const TBarriersSnapshot &bsnap) {
-            BarriersEssence = bsnap.CreateEssence(HullCtx);
-        }
-
-        bool Check(const TKeyLogoBlob &key,
-                   const TMemRecLogoBlob &memRec,
-                   bool allowKeepFlags,
-                   bool allowGarbageCollection) const {
-            return TLogoBlobFilter::Check(key.LogoBlobID()) && BarriersEssence->Keep(key, memRec, {},
-                allowKeepFlags, allowGarbageCollection).KeepData;
-        }
-
-        TIntrusivePtr<THullCtx> HullCtx;
-        TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> BarriersEssence;
-    };
-
     ////////////////////////////////////////////////////////////////////////////
     // THullSyncFullBase
     ////////////////////////////////////////////////////////////////////////////
@@ -57,9 +35,8 @@ namespace NKikimr {
         TEvBlobStorage::TEvVSyncFull::TPtr CurrentEvent;
         std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> Result;
 
-        // filters for record processing
-        TFakeFilter FakeFilter;
-        TLogoBlobFilterForHull LogoBlobFilter;
+        TLogoBlobFilter LogoBlobFilter;
+        TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> BarriersEssence;
 
         constexpr static TDuration MaxProcessingTime = TDuration::MilliSeconds(5);  // half of a quota for mailbox
 
@@ -74,9 +51,16 @@ namespace NKikimr {
         void Serialize(TString *buf,
                        const TKeyLogoBlob &key,
                        const TMemRecLogoBlob &memRec) {
+            if (!LogoBlobFilter.Check(key.LogoBlobID())) {
+                return;
+            }
+            const auto ingress = BarriersEssence->GetIngressForSync(key, memRec, HullCtx->AllowKeepFlags);
+            if (!ingress) {
+                return;
+            }
             char tmpBuf[NSyncLog::MaxRecFullSize];
             auto s = NSyncLog::TSerializeRoutines::SetLogoBlob;
-            ui32 size = s(HullCtx->VCtx->Top->GType, tmpBuf, 0, key.LogoBlobID(), memRec.GetIngress());
+            ui32 size = s(HullCtx->VCtx->Top->GType, tmpBuf, 0, key.LogoBlobID(), ingress->Ingress);
             buf->append(tmpBuf, size);
         }
 
@@ -105,11 +89,10 @@ namespace NKikimr {
         static const ui32 YieldedFlag = 0x4;
         static const ui32 WaitFlag = 0x8;
 
-        template <class TKey, class TMemRec, class TFilter>
+        template <class TKey, class TMemRec>
         ui32 Process(
                 ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>& snapshot,
                 TKey& key,
-                const TFilter& filter,
                 TString* data) {
 
             // reserve some space for data
@@ -137,8 +120,7 @@ namespace NKikimr {
                     return YieldedFlag;
                 }
 
-                if (filter.Check(key, it.GetMemRec(), HullCtx->AllowKeepFlags, true /*allowGarbageCollection*/))
-                    Serialize(data, key, it.GetMemRec());
+                Serialize(data, key, it.GetMemRec());
                 it.Next();
             }
             // key points to the last seen key
@@ -158,7 +140,7 @@ namespace NKikimr {
                         SyncState, CurrentEvent->Get()->Record.GetCookie(), TActivationContext::Now(),
                         IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, CurrentEvent->GetChannel(),
                         GetProtocol());
-                LogoBlobFilter.BuildBarriersEssence(FullSnap.BarriersSnap);
+                BarriersEssence = FullSnap.BarriersSnap.CreateEssence(HullCtx);
             }
 
             TString* data = Result->Record.MutableData();
@@ -166,7 +148,7 @@ namespace NKikimr {
             switch (Stage) {
                 case NKikimrBlobStorage::LogoBlobs:
                     Stage = NKikimrBlobStorage::LogoBlobs;
-                    pres = Process(FullSnap.LogoBlobsSnap, KeyLogoBlob, LogoBlobFilter, data);
+                    pres = Process(FullSnap.LogoBlobsSnap, KeyLogoBlob, data);
                     if (pres & MsgFullFlag) {
                         break;
                     } else if (pres & YieldedFlag) {
@@ -176,7 +158,7 @@ namespace NKikimr {
                     [[fallthrough]];
                 case NKikimrBlobStorage::Blocks:
                     Stage = NKikimrBlobStorage::Blocks;
-                    pres = Process(FullSnap.BlocksSnap, KeyBlock, FakeFilter, data);
+                    pres = Process(FullSnap.BlocksSnap, KeyBlock, data);
                     if (pres & MsgFullFlag) {
                         break;
                     } else if (pres & YieldedFlag) {
@@ -186,7 +168,7 @@ namespace NKikimr {
                     [[fallthrough]];
                 case NKikimrBlobStorage::Barriers:
                     Stage = NKikimrBlobStorage::Barriers;
-                    pres = Process(FullSnap.BarriersSnap, KeyBarrier, FakeFilter, data);
+                    pres = Process(FullSnap.BarriersSnap, KeyBarrier, data);
                     if (pres & MsgFullFlag) {
                         break;
                     } else if (pres & YieldedFlag) {
@@ -255,8 +237,7 @@ namespace NKikimr {
             , IFaceMonGroup(ifaceMonGroup)
             , FullSyncGroup(fullSyncGroup)
             , CurrentEvent(ev)
-            , FakeFilter()
-            , LogoBlobFilter(HullCtx, VDiskIDFromVDiskID(CurrentEvent->Get()->Record.GetSourceVDiskID()))
+            , LogoBlobFilter(HullCtx->VCtx->Top, VDiskIDFromVDiskID(CurrentEvent->Get()->Record.GetSourceVDiskID()))
             , KeyLogoBlob(keyLogoBlob)
             , KeyBlock(keyBlock)
             , KeyBarrier(keyBarrier)

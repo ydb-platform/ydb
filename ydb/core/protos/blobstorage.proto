@@ -533,6 +533,7 @@ message TEvVAssimilate {
 
     optional bool IgnoreDecommitState = 13 [default = false]; // do not check if VDisk belongs to a being-decommitted group
     optional bool Reverse = 14 [default = false]; // generate records in reverse order
+    optional bool IncludeCollectedDoNotKeep = 15; // also scan release records retained under the soft barrier
 }
 
 message TEvVAssimilateResult {
@@ -565,6 +566,7 @@ message TEvVAssimilateResult {
         optional uint64 DiffX3 = 6;
 
         optional uint64 Ingress = 7;
+        optional bool CollectedDoNotKeep = 8; // only the release metadata is visible under the soft barrier
     }
 
     optional NKikimrProto.EReplyStatus Status = 1;
@@ -620,6 +622,7 @@ message TEvVCollectGarbage {
     optional bool NotifyIfNotReady = 9;
     optional TMsgQoS MsgQoS = 10;
     optional uint32 WriteSourceOp = 14;
+    optional bool ExplicitDoNotKeep = 15; // these releases came from the owner of the bridged group
 }
 
 message TEvVCollectGarbageResult {

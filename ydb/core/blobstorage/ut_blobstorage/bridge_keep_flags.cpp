@@ -2,6 +2,8 @@
 #include "bridge_pile_ops.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_osiris.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 #include <ydb/library/testlib/helpers.h>
 
 #include <util/system/type_name.h>
@@ -52,6 +54,36 @@ namespace {
             .NumPiles = 3,
             .AutomaticBootstrap = true,
         };
+    }
+
+    void CompactPileGroup(TEnvironmentSetup& env, ui32 pileGroupId) {
+        const auto info = env.GetGroupInfo(pileGroupId);
+        for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+            env.CompactVDisk(info->GetActorId(i));
+        }
+    }
+
+    // A payload GET cannot distinguish a collected blob with a release marker from a missing index record.
+    ui32 CountVDisksWithDoNotKeep(TEnvironmentSetup& env, ui32 pileGroupId, const TLogoBlobID& id) {
+        const auto info = env.GetGroupInfo(pileGroupId);
+        ui32 count = 0;
+        for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+            const auto disk = info->GetVDiskId(i);
+            env.WithQueueId(disk, NKikimrBlobStorage::GetFastRead, [&](TActorId queue) {
+                using TVGet = TEvBlobStorage::TEvVGet;
+                const auto result = env.SyncQueryFactory<TEvBlobStorage::TEvVGetResult>(queue, [&] {
+                    return TVGet::CreateExtremeIndexQuery(disk, TInstant::Max(), NKikimrBlobStorage::FastRead,
+                        TVGet::EFlags::None, {}, {id});
+                });
+                const auto& record = result->Record;
+                UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), NKikimrProto::OK, record.ShortDebugString());
+                UNIT_ASSERT_VALUES_EQUAL(record.ResultSize(), 1);
+                const auto& item = record.GetResult(0);
+                UNIT_ASSERT_VALUES_EQUAL_C(item.GetStatus(), NKikimrProto::NODATA, item.ShortDebugString());
+                count += item.GetDoNotKeep();
+            });
+        }
+        return count;
     }
 
     // VDisks apply the barrier once they know their quorum has it; the unkept blob behind it vanishes then
@@ -127,6 +159,11 @@ namespace {
             WaitForBarrierInEffect(env, pileGroups[pile], 1 + 8 * pile, probe, data);
             WaitForBarrierInEffect(env, pileGroups[pile], 1 + 8 * pile, id, data);
         }
+        // The syncer copied this release before the barrier covered it. It still has to
+        // suppress a delayed kept PUT after compaction on the rejoined pile.
+        CompactPileGroup(env, pileGroups[1]);
+        PutToPileGroup(env, pileGroups[1], 9, id, data, true);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[1], 9, id, data), NKikimrProto::NODATA);
     }
 
     void CheckSyncerCollectsObsoleteKeptBlob(std::optional<NKikimrProto::EReplyStatus> confirmationError = {},
@@ -138,14 +175,16 @@ namespace {
         const auto pileGroups = GetPileGroups(env, groupId);
         const TString data = "blob collected while the target pile is disconnected";
         const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        // Only the target has Keep. Source compaction can erase the entire record,
+        // exercising the syncer's absence check even when explicit releases are retained.
         for (ui32 pile = 0; pile < pileGroups.size(); ++pile) {
-            PutToPileGroup(env, pileGroups[pile], 1 + 8 * pile, id, data, true);
+            PutToPileGroup(env, pileGroups[pile], 1 + 8 * pile, id, data, pile == 1);
         }
 
         SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
         env.Sim(TDuration::Seconds(30));
         CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10,
-            nullptr, new TVector<TLogoBlobID>{id}, TInstant::Max(), false), {}, groupId);
+            nullptr, nullptr, TInstant::Max(), false), {}, groupId);
         WaitForBarrierInEffect(env, pileGroups[0], 1, id, data);
         if (threePiles) {
             WaitForBarrierInEffect(env, pileGroups[2], 17, id, data);
@@ -482,8 +521,89 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         CheckSyncerCopiesDoNotKeep(false);
     }
 
+    Y_UNIT_TEST(SyncerCopiesCompactedReleaseToEmptyPile) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto piles = GetPileGroups(env, groupId);
+        const TString data = "kept only in the source pile";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        const TLogoBlobID probe(100500, 1, 2, 0, data.size(), 0);
+        PutToPileGroup(env, piles[0], 1, id, data, true);
+        PutToPileGroup(env, piles[1], 9, probe, data);
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10,
+            nullptr, new TVector<TLogoBlobID>{id}, TInstant::Max(), false), {}, groupId);
+        WaitForBarrierInEffect(env, piles[0], 1, id, data);
+        CompactPileGroup(env, piles[0]);
+
+        // Ordinary assimilation clients enumerate live blobs. Only the syncer asks to see collected releases.
+        for (bool includeReleases : {false, true}) {
+            auto *scan = new TEvBlobStorage::TEvAssimilate(ui64(0), std::make_tuple(ui64(0), ui8(0)),
+                std::nullopt, true, true);
+            scan->IncludeCollectedDoNotKeep = includeReleases;
+            const auto result = QueryPileGroup<TEvBlobStorage::TEvAssimilateResult>(env, piles[0], 1, scan);
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Status, NKikimrProto::OK, result->ErrorReason);
+            const auto item = std::ranges::find(result->Blobs, id, &TEvBlobStorage::TEvAssimilateResult::TBlob::Id);
+            UNIT_ASSERT_VALUES_EQUAL(item != result->Blobs.end(), includeReleases);
+            if (includeReleases) {
+                UNIT_ASSERT(item->CollectedDoNotKeep && item->DoNotKeep && !item->Keep && !item->HasData);
+            }
+        }
+
+        RejoinPile(env, 1);
+        WaitForBarrierInEffect(env, piles[1], 9, probe, data);
+        CompactPileGroup(env, piles[1]);
+        // A repair begun before GC may still arrive after the target has caught up.
+        PutToPileGroup(env, piles[1], 9, id, data, true);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, id, data), NKikimrProto::NODATA);
+    }
+
     Y_UNIT_TEST(SyncerKeepsDoNotKeepFromAssimilation) {
         CheckSyncerCopiesDoNotKeep(true);
+    }
+
+    Y_UNIT_TEST(ReleaseScanRequiresGCQuorum) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const ui32 pile = GetPileGroups(env, groupId)[0];
+        const auto info = env.GetGroupInfo(pile);
+        const TLogoBlobID id(100500, 1, 1, 0, 10, 0);
+        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, false, 0, 0,
+            nullptr, new TVector<TLogoBlobID>{id}, TInstant::Max(), false), {}, groupId);
+        const auto mode = TIngress::IngressMode(info->Type);
+        const ui32 numDisks = info->GetTotalVDisksNum();
+        for (const auto& [numExplicit, unavailable] : {std::pair{1u, false}, {numDisks - 1, false}, {numDisks - 1, true}}) {
+            // An available replica with an untagged release still needs a replay. An unavailable replica
+            // can receive the release through ordinary VDisk synchronization once it comes back.
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvVAssimilateResult) {
+                    auto& record = ev->Get<TEvBlobStorage::TEvVAssimilateResult>()->Record;
+                    const auto disk = VDiskIDFromVDiskID(record.GetVDiskID());
+                    if (disk.GroupID.GetRawId() == pile && info->GetOrderNumber(disk) >= numExplicit) {
+                        if (unavailable) {
+                            record.SetStatus(NKikimrProto::ERROR);
+                        } else {
+                            for (auto& blob : *record.MutableBlobs()) {
+                                if (TIngress(blob.GetIngress()).HasExplicitDoNotKeep(mode)) {
+                                    blob.SetIngress(TIngress::CreateDoNotKeep(mode, false).Raw());
+                                }
+                            }
+                        }
+                    }
+                }
+                return true;
+            };
+            auto *scan = new TEvBlobStorage::TEvAssimilate(ui64(0), std::make_tuple(ui64(0), ui8(0)),
+                std::nullopt, true, true);
+            scan->IncludeCollectedDoNotKeep = true;
+            const auto result = QueryPileGroup<TEvBlobStorage::TEvAssimilateResult>(env, pile, 1, scan);
+            env.Runtime->FilterFunction = {};
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Status, NKikimrProto::OK, result->ErrorReason);
+            const auto item = std::ranges::find(result->Blobs, id, &TEvBlobStorage::TEvAssimilateResult::TBlob::Id);
+            UNIT_ASSERT(item != result->Blobs.end() && item->ExplicitDoNotKeep);
+            UNIT_ASSERT_VALUES_EQUAL(item->ExplicitDoNotKeepQuorum, unavailable);
+        }
     }
 
     Y_UNIT_TEST(SyncerCollectsObsoleteKeptBlob) {
@@ -932,6 +1052,177 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         UNIT_ASSERT_VALUES_EQUAL(getCounts[0], 1);
         UNIT_ASSERT_VALUES_EQUAL(getCounts[1], 1);
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[1], 9, id, data), NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST_TWIN(DelayedRepairCannotReinstateReleasedKeep, delayPut) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto pileGroups = GetPileGroups(env, groupId);
+        const ui32 target = pileGroups[1];
+        const ui32 numTargetDisks = env.GetGroupInfo(target)->GetTotalVDisksNum();
+        const TString data = "blob released during repair";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        const TLogoBlobID probe(100500, 1, 2, 0, data.size(), 0);
+        PutToPileGroup(env, pileGroups[0], 1, id, data, true);
+        PutToPileGroup(env, target, 9, probe, data);
+
+        // In one order only the source has answered the bridge. In the other the repair PUT is already in flight.
+        bool sawSourceKeep = false;
+        std::unique_ptr<IEventHandle> held;
+        ui32 heldNode = 0;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (!ev->HasEvent()) {
+                return true;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult) {
+                const auto& msg = *ev->Get<TEvBlobStorage::TEvGetResult>();
+                if (msg.ResponseSz != 1 || msg.Responses[0].Id != id) {
+                    return true;
+                }
+                const auto& item = msg.Responses[0];
+                if (msg.GroupId == pileGroups[0]) {
+                    UNIT_ASSERT_VALUES_EQUAL(item.Status, NKikimrProto::OK);
+                    UNIT_ASSERT(item.Keep && !item.DoNotKeep);
+                    sawSourceKeep = true;
+                }
+                if (delayPut || msg.GroupId != target) {
+                    return true;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(item.Status, NKikimrProto::NODATA);
+            } else if (delayPut && ev->GetTypeRewrite() == TEvBlobStorage::EvPut) {
+                const auto& put = *ev->Get<TEvBlobStorage::TEvPut>();
+                if (put.Id != id || put.WriteSource != TWriteSource::BridgeProxyRestorePut) {
+                    return true;
+                }
+                UNIT_ASSERT(put.IssueKeepFlag);
+            } else {
+                return true;
+            }
+            UNIT_ASSERT(!held);
+            heldNode = nodeId;
+            held = std::move(ev);
+            return false;
+        };
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::FastRead, /*mustRestoreFirst=*/ true));
+        });
+        WaitUntil(env, [&] { return sawSourceKeep && held; }, "repair in progress");
+        env.Runtime->FilterFunction = {};
+
+        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10,
+            nullptr, new TVector<TLogoBlobID>{id}, TInstant::Max(), false), {}, groupId);
+        WaitForBarrierInEffect(env, pileGroups[0], 1, id, data);
+        WaitForBarrierInEffect(env, target, 9, probe, data);
+        WaitUntil(env, [&] { return CountVDisksWithDoNotKeep(env, target, id) == numTargetDisks; },
+            "release on every target VDisk");
+        CompactPileGroup(env, target);
+        UNIT_ASSERT_VALUES_EQUAL(CountVDisksWithDoNotKeep(env, target, id), numTargetDisks);
+
+        env.Runtime->Send(held.release(), heldNode);
+        const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Id, id);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, target, 9, id, data), NKikimrProto::NODATA);
+        CompactPileGroup(env, target);
+        UNIT_ASSERT_VALUES_EQUAL(CountVDisksWithDoNotKeep(env, target, id), numTargetDisks);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, target, 9, id, data), NKikimrProto::NODATA);
+
+        CollectGarbage(env, TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(id.TabletID(), 1, 1, 0, 1, 10,
+            TInstant::Max()).Release(), {}, groupId);
+        WaitUntil(env, [&] {
+            CompactPileGroup(env, target);
+            return CountVDisksWithDoNotKeep(env, target, id) == 0;
+        }, "hard barrier collecting the release markers");
+    }
+
+    Y_UNIT_TEST(FullSyncRestoresCompactedDoNotKeep) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const ui32 pile = GetPileGroups(env, groupId)[1];
+        const auto info = env.GetGroupInfo(pile);
+        const TString data = "kept blob on the recovering pile";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        PutToPileGroup(env, pile, 9, id, data, true);
+        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10,
+            nullptr, new TVector<TLogoBlobID>{id}, TInstant::Max(), false), {}, groupId);
+        WaitForBarrierInEffect(env, pile, 9, id, data);
+        CompactPileGroup(env, pile);
+        UNIT_ASSERT_VALUES_EQUAL(CountVDisksWithDoNotKeep(env, pile, id), info->GetTotalVDisksNum());
+
+        const auto recoveringDisk = info->GetVDiskInSubgroup(0, id.Hash());
+        const auto serviceId = info->GetActorId(recoveringDisk);
+        const auto [nodeId, pdiskId, vslotId] = DecomposeVDiskServiceId(serviceId);
+        const auto release = TIngress::CreateDoNotKeep(TIngress::IngressMode(info->Type), /*explicitDoNotKeep=*/ true);
+        bool releaseReceived = false;
+        env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& ev) {
+            if (node == nodeId && ev->GetTypeRewrite() == TEvBlobStorage::EvVSyncFullResult) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvVSyncFullResult>()->Record;
+                if (record.GetStatus() == NKikimrProto::OK && !record.GetData().empty() &&
+                        VDiskIDFromVDiskID(record.GetVDiskID()).GroupID.GetRawId() == pile) {
+                    NSyncLog::TFragmentReader reader(record.GetData());
+                    for (const auto* rec : reader.ListRecords()) {
+                        if (rec->RecType == NSyncLog::TRecordHdr::RecLogoBlob && rec->GetLogoBlob()->LogoBlobID() == id) {
+                            // The peer transfers the release without advertising the blob's former parts.
+                            UNIT_ASSERT_VALUES_EQUAL(rec->GetLogoBlob()->Ingress.Raw(), release.Raw());
+                            releaseReceived = true;
+                        }
+                    }
+                }
+            }
+            return true;
+        };
+        env.Wipe(nodeId, pdiskId, vslotId, recoveringDisk);
+        WaitUntil(env, [&] { return releaseReceived; }, "release in the wiped VDisk's full sync",
+            TDuration::Seconds(1), 300);
+        env.Runtime->FilterFunction = {};
+        // Wiping a VDisk can change the group generation. Read the current identity before waiting for replication.
+        const auto current = env.GetGroupInfo(pile);
+        env.WaitForVDiskToGetRunning(current->GetVDiskInSubgroup(0, id.Hash()), serviceId);
+        CompactPileGroup(env, pile);
+        UNIT_ASSERT_VALUES_EQUAL(CountVDisksWithDoNotKeep(env, pile, id), current->GetTotalVDisksNum());
+    }
+
+    Y_UNIT_TEST(LocalPhantomDoesNotSuppressLiveRestore) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto piles = GetPileGroups(env, groupId);
+        const auto target = env.GetGroupInfo(piles[1]);
+        const TString data = "live in the source, phantom in the target";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        const TLogoBlobID probe(100500, 1, 2, 0, data.size(), 0);
+        PutToPileGroup(env, piles[0], 1, id, data, true);
+        PutToPileGroup(env, piles[1], 9, probe, data);
+        // The target received a Keep for the blob but has no parts. Anubis releases its local phantom.
+        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, false, 0, 0,
+            new TVector<TLogoBlobID>{id}, nullptr, TInstant::Max(), false), piles[1]);
+        for (ui32 i = 0; i < target->GetTotalVDisksNum(); ++i) {
+            const auto serviceId = target->GetActorId(i);
+            const auto edge = env.Runtime->AllocateEdgeActor(serviceId.NodeId(), __FILE__, __LINE__);
+            auto ev = std::make_unique<IEventHandle>(serviceId, edge, new TEvAnubisOsirisPut(id));
+            ev->Rewrite(TEvBlobStorage::EvForwardToSkeleton, serviceId);
+            env.Runtime->Send(ev.release(), edge.NodeId());
+            const auto res = env.WaitForEdgeActorEvent<TEvAnubisOsirisPutResult>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(CountVDisksWithDoNotKeep(env, piles[1], id), target->GetTotalVDisksNum());
+        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 1, 0, true, 1, 10,
+            nullptr, nullptr, TInstant::Max(), false), {}, groupId);
+        WaitForBarrierInEffect(env, piles[1], 9, probe, data);
+        WaitUntil(env, [&] {
+            CompactPileGroup(env, piles[1]);
+            return CountVDisksWithDoNotKeep(env, piles[1], id) == 0;
+        }, "compaction reclaiming the target's local phantom");
+
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::FastRead, /*mustRestoreFirst=*/ true));
+        });
+        CheckGetResult(*env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge)->Get(), data);
+        CompactPileGroup(env, piles[1]);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, id, data), NKikimrProto::OK);
     }
 
     Y_UNIT_TEST(GetRestoreKeepsFlagOfAnyPile) {

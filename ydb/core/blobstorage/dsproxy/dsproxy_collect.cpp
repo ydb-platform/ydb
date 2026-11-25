@@ -26,6 +26,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     const bool Collect;
     const bool Decommission;
     const bool IgnoreBlock;
+    const bool ExplicitDoNotKeep;
     const TWriteSource WriteSource;
 
     TGroupQuorumTracker QuorumTracker;
@@ -123,6 +124,9 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
         if (IgnoreBlock) {
             msg->Record.SetIgnoreBlock(true);
         }
+        if (ExplicitDoNotKeep && DoNotKeep && !DoNotKeep->empty()) {
+            msg->Record.SetExplicitDoNotKeep(true);
+        }
         SendToQueue(std::move(msg), cookie);
         RequestsSent++;
     }
@@ -134,6 +138,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
             Hard, IgnoreBlock);
         ev->RestartCounter = counter;
         ev->Decommission = Decommission;
+        ev->ExplicitDoNotKeep = ExplicitDoNotKeep;
         return ev;
     }
 
@@ -161,6 +166,7 @@ public:
         , Collect(params.Common.Event->Collect)
         , Decommission(params.Common.Event->Decommission)
         , IgnoreBlock(params.Common.Event->IgnoreBlock)
+        , ExplicitDoNotKeep(params.Common.Event->ExplicitDoNotKeep)
         , WriteSource(params.Common.Event->WriteSource)
         , QuorumTracker(Info.Get())
     {}

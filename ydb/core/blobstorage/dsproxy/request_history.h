@@ -274,20 +274,19 @@ public:
         {}
 
         void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
+            Y_UNUSED(info);
             str << (IsPut ? "PutPredictions" : "GetPredictions")
                 << "{ TimestampMs# " << Timestamp.MillisecondsFloat()
                 << " Stage# " << (IsFinal ? "Final" : "Initial")
                 << " QueueId# " << NKikimrBlobStorage::EVDiskQueueId_Name(QueueId)
-                << " VDisks# [";
+                << " Predictions# [";
             for (ui32 orderNumber = 0; orderNumber < PredictedDelaysNs.size(); ++orderNumber) {
                 if (orderNumber) {
-                    str << ",";
+                    str << ", ";
                 }
-                str << " { VDiskId# " << info->GetVDiskId(orderNumber).ToString()
-                    << " NodeId# " << info->GetActorId(orderNumber).NodeId()
-                    << " PredictedDelayNs# " << PredictedDelaysNs[orderNumber] << " }";
+                str << PredictedDelaysNs[orderNumber];
             }
-            str << " ] }";
+            str << "] }";
         }
     };
 

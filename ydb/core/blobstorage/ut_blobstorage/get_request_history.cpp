@@ -4,7 +4,6 @@
 #include <ydb/core/blobstorage/dsproxy/group_sessions.h>
 
 #include <util/stream/str.h>
-#include <util/string/builder.h>
 #include <util/string/cast.h>
 
 namespace {
@@ -87,7 +86,7 @@ void CheckLongRequestLog(ui64 thresholdMs, bool expectWarning) {
     UNIT_ASSERT_C(initial != TString::npos && schedule != TString::npos && final != TString::npos, text);
     UNIT_ASSERT_C(initial < text.find("TEvVGet{") && initial < schedule && schedule < final, text);
     const TStringBuf initialSnapshot(text.data() + initial, schedule - initial);
-    UNIT_ASSERT_C(initialSnapshot.Contains("PredictedDelayNs# 20000000"), text);
+    UNIT_ASSERT_C(initialSnapshot.Contains("Predictions# [20000000]"), text);
     const size_t scheduleEnd = text.find('}', schedule);
     const TStringBuf firstSchedule(text.data() + schedule, scheduleEnd - schedule);
     UNIT_ASSERT_C(firstSchedule.Contains("Attempt# 1"), text);
@@ -145,12 +144,10 @@ Y_UNIT_TEST_SUITE(GetRequestHistory) {
             UNIT_ASSERT_C(initial != TString::npos && final != TString::npos && initial < final, text);
             const TStringBuf initialSnapshot(text.data() + initial, final - initial);
             const TStringBuf finalSnapshot(text.data() + final, text.size() - final);
-            for (ui32 disk = 0; disk < 8; ++disk) {
-                const TString prefix = TStringBuilder() << "VDiskId# " << info->GetVDiskId(disk).ToString()
-                    << " NodeId# " << info->GetActorId(disk).NodeId() << " PredictedDelayNs# ";
-                UNIT_ASSERT_C(initialSnapshot.Contains(TStringBuilder() << prefix << (disk + 1) * 1'000'000), text);
-                UNIT_ASSERT_C(finalSnapshot.Contains(TStringBuilder() << prefix << (disk + 11) * 1'000'000), text);
-            }
+            UNIT_ASSERT_C(initialSnapshot.Contains("Predictions# [1000000, 2000000, 3000000, 4000000, "
+                "5000000, 6000000, 7000000, 8000000]"), text);
+            UNIT_ASSERT_C(finalSnapshot.Contains("Predictions# [11000000, 12000000, 13000000, 14000000, "
+                "15000000, 16000000, 17000000, 18000000]"), text);
         });
     }
 }

@@ -298,6 +298,11 @@ struct TShortTableInfo {
 
         for (const auto& it: tableInfo->Columns) {
             const auto& column = it.second;
+            if (column.IsBuildInProgress) {
+                // Retain names for diagnostics without exposing unreadable columns.
+                BuildingColumns.emplace(it.first, column.Name);
+                continue;
+            }
             Columns.emplace(it.first, TShortColumnInfo(it.first, column.Type, column.Name));
         }
     }
@@ -367,6 +372,7 @@ struct TShortTableInfo {
     size_t KeyColumnCount = 0;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TMap<NTable::TTag, TShortColumnInfo> Columns;
+    TMap<NTable::TTag, TString> BuildingColumns;
     TUserTable::TCPtr HnswTable;
 };
 
@@ -2884,10 +2890,18 @@ public:
         for (auto col: record.GetColumns()) {
             auto it = TableInfo.Columns.find(col);
             if (it == TableInfo.Columns.end()) {
+                TString reason;
+                if (const auto building = TableInfo.BuildingColumns.find(col);
+                    building != TableInfo.BuildingColumns.end()) {
+                    reason = TStringBuilder() << "Cannot read column '" << building->second
+                        << "' (" << col << "): column build is in progress";
+                } else {
+                    reason = TStringBuilder() << "Unknown column: " << col;
+                }
                 SetStatusError(
                     Result->Record,
                     Ydb::StatusIds::SCHEME_ERROR,
-                    TStringBuilder() << "Unknown column: " << col
+                    TStringBuilder() << reason
                         << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
                 return;
             }

@@ -462,4 +462,5 @@ message TFeatureFlags {
     optional bool EnableIndexShadowDataRepair = 393 [default = false];
     optional bool EnableTopicReplication = 396 [default = false];
     optional bool ShareShardedMkqlProgram = 399 [default = false];
+    optional bool EnableChecksumTable = 402 [default = false];
 }

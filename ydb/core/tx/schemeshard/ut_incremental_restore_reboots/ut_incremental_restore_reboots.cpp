@@ -81,6 +81,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             UNIT_ASSERT_C(!ss->FindTx(TOperationId(TTxId(rejectedId), 0)),
                 "Rejected proposal left an orphan TxState");
             UNIT_ASSERT(!ss->LongIncrementalRestoreOps.contains(TOperationId(TTxId(rejectedId), 0)));
+            UNIT_ASSERT(!ss->PersistedIncrementalRestoreOps.contains(rejectedId));
+            UNIT_ASSERT(!ss->PersistedIncrementalRestoreItems.contains(rejectedId));
             return true;
         });
     }
@@ -122,7 +124,9 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
 
         const ui64 restoreId = ++txId;
         TBlockEvents<TEvPrivate::TEvProgressOperation> blockedProgress(runtime, [&](const auto& ev) {
-            return ev->Get()->TxId == restoreId;
+            // Private event ids can collide with events from other actors, e.g. TEvActivateExecution.
+            const auto* progress = dynamic_cast<const TEvPrivate::TEvProgressOperation*>(ev->GetBase());
+            return progress && progress->TxId == restoreId;
         });
         TestRestoreBackupCollection(runtime, restoreId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");

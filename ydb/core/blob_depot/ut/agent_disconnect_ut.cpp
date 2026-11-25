@@ -2,6 +2,8 @@
 #include "../agent/agent.h"
 #include "../agent/agent_impl.h"
 #include "../events.h"
+#include "../s3_request_timer.h"
+#include "../s3_router.h"
 #include "../s3_router_events.h"
 #include "../types.h"
 
@@ -13,7 +15,9 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/wrappers/abstract.h>
+#include <ydb/core/wrappers/fake_storage.h>
 
+#include <google/protobuf/unknown_field_set.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NBlobDepot {
@@ -483,27 +487,110 @@ void CheckPutCompletesDuringReconnect(bool holdRegistrationResult) {
     UNIT_ASSERT_VALUES_EQUAL(nextResult->Get()->Status, NKikimrProto::OK);
 }
 
-struct TS3ReadEnv : TTestEnv {
+struct TS3WriteEnv : TTestEnv {
     using TStorage = NWrappers::TEvExternalStorage;
     const TActorId Edge = Runtime.AllocateEdgeActor();
-    const TLogoBlobID Id{12345, 1, 1, 0, 3, 0};
     const TActorId AgentId;
-    TBlockEvents<TStorage::TEvGetObjectRequest> Reads{Runtime};
+    TBlockEvents<TStorage::TEvPutObjectRequest> Writes{Runtime};
 
-    TS3ReadEnv()
+    TS3WriteEnv()
         : TTestEnv(TSyncMode{.VirtualGroup = true})
         , AgentId(StartAgent())
-    {
-        TControlBoard::SetValue(1, Runtime.GetAppData().Icb->BlobDepotControls.S3MaxGetsInFlight);
-        TBlockEvents<TStorage::TEvPutObjectRequest> writes(Runtime);
-        Runtime.SendAsync(new IEventHandle(AgentId, Edge, new TEvBlobStorage::TEvPut(Id, "abc", TInstant::Max())));
-        Runtime.WaitFor("S3 PUT", [&] { return !writes.empty(); }, TDuration::Seconds(2));
-        const auto& put = writes.front();
+    {}
+
+    void Put(TLogoBlobID id, TInstant deadline) {
+        Runtime.SendAsync(new IEventHandle(AgentId, Edge, new TEvBlobStorage::TEvPut(id, "abc", deadline)));
+    }
+
+    void FinishPut() {
+        Runtime.WaitFor("S3 PUT", [&] { return !Writes.empty(); }, TDuration::Seconds(1));
+        auto put = std::move(Writes.front());
+        Writes.pop_front();
+        ReplyPut(put);
+    }
+
+    void ReplyPut(const TStorage::TEvPutObjectRequest::TPtr& put) {
         Runtime.SendAsync(new IEventHandle(put->Sender, Edge, new TStorage::TEvPutObjectResponse(
             TString(put->Get()->GetRequest().GetKey()), Aws::S3::Model::PutObjectResult{})));
+    }
+
+    void ExpectPut(TLogoBlobID id, NKikimrProto::EReplyStatus status) {
         const auto result = Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvPutResult>(Edge, TDuration::Seconds(1));
         UNIT_ASSERT(result);
-        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK, result->Get()->ErrorReason);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Id, id);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, status, result->Get()->ErrorReason);
+    }
+};
+
+void CheckS3PutTimeout(bool dispatched) {
+    TS3WriteEnv env;
+    const TLogoBlobID expired{12345, 1, 1, 0, 3, 0};
+    const TLogoBlobID next{12345, 1, 2, 0, 3, 0};
+    TBlockEvents<TEvBlobDepot::TEvPrepareWriteS3Result> prepares(env.Runtime);
+    TBlockEvents<TEvBlobDepot::TEvDiscardSpoiledBlobSeq> discards(env.Runtime);
+    TBlockEvents<TEvBlobDepot::TEvCommitBlobSeq> expiredCommits(env.Runtime, [&](const auto& ev) {
+        return ev->Get()->Record.GetItems(0).GetKey() == expired.AsBinaryString();
+    });
+
+    env.Put(expired, env.Runtime.GetCurrentTime() + TDuration::MilliSeconds(300));
+    env.Runtime.WaitFor("locator allocation", [&] { return !prepares.empty(); }, TDuration::Seconds(1));
+    const auto& item = prepares.front()->Get()->Record.GetItems(0);
+    UNIT_ASSERT_VALUES_EQUAL(item.GetStatus(), NKikimrProto::OK);
+    UNIT_ASSERT(item.HasS3Locator());
+    const auto locator = TS3Locator::FromProto(item.GetS3Locator());
+    const TActorId pipe = prepares.front()->Sender;
+    TS3WriteEnv::TStorage::TEvPutObjectRequest::TPtr latePut;
+    if (dispatched) {
+        prepares.Stop().Unblock();
+        env.Runtime.WaitFor("physical S3 PUT", [&] { return !env.Writes.empty(); }, TDuration::Seconds(1));
+        latePut = std::move(env.Writes.front());
+        env.Writes.pop_front();
+    }
+    env.ExpectPut(expired, NKikimrProto::TIMEOUT);
+
+    TBlockEvents<TEvBlobDepot::TEvPrepareWriteS3> nextPrepare(env.Runtime);
+    env.Put(next, TInstant::Max());
+    env.Runtime.WaitFor("next locator request", [&] { return !nextPrepare.empty(); }, TDuration::Seconds(1));
+    UNIT_ASSERT(expiredCommits.empty());
+    if (!dispatched) {
+        // This request reached the pipe before the old prepare reply could trigger its discard.
+        nextPrepare.Stop().Unblock();
+        UNIT_ASSERT(discards.empty());
+        prepares.Stop().Unblock();
+    }
+
+    env.Runtime.WaitFor("expired locator discard", [&] { return !discards.empty(); }, TDuration::Seconds(1));
+    const auto& discard = discards.front();
+    UNIT_ASSERT_VALUES_EQUAL(discard->Recipient, pipe);
+    const auto& msg = discard->Get()->Record;
+    UNIT_ASSERT_VALUES_EQUAL(msg.S3LocatorsSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(msg.GetS3PutMayArriveLate(), dispatched);
+    UNIT_ASSERT_VALUES_EQUAL(TS3Locator::FromProto(msg.GetS3Locators(0)).ToString(), locator.ToString());
+    UNIT_ASSERT(env.Writes.empty());
+    discards.Unblock(1);
+    if (dispatched) {
+        // The timed-out PUT sent its discard before the next prepare. Preserve pipe message order.
+        nextPrepare.Stop().Unblock();
+    }
+    env.FinishPut();
+    env.ExpectPut(next, NKikimrProto::OK);
+    if (latePut) {
+        env.ReplyPut(latePut);
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(10));
+    }
+    UNIT_ASSERT(expiredCommits.empty());
+    UNIT_ASSERT(discards.empty());
+}
+
+struct TS3ReadEnv : TS3WriteEnv {
+    const TLogoBlobID Id{12345, 1, 1, 0, 3, 0};
+    TBlockEvents<TStorage::TEvGetObjectRequest> Reads{Runtime};
+
+    TS3ReadEnv() {
+        TControlBoard::SetValue(1, Runtime.GetAppData().Icb->BlobDepotControls.S3MaxGetsInFlight);
+        Put(Id, TInstant::Max());
+        FinishPut();
+        ExpectPut(Id, NKikimrProto::OK);
     }
 
     void Get(TActorId agent, ui32 offset, TInstant deadline) {
@@ -539,6 +626,47 @@ struct TS3ReadEnv : TTestEnv {
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Buffer.ConvertToString(), TString(1, value));
     }
 };
+
+void CheckExpiredS3Reads(bool slowDown) {
+    TS3ReadEnv env;
+    const auto pending = GetServiceCounters(env.Runtime.GetAppData().Counters, "blob_depot_agent")
+        ->GetSubgroup("group", ToString(TTestEnv::VirtualGroupId))->GetSubgroup("subsystem", "s3")
+        ->GetCounter("GetsPendingQueueSize", false);
+    const auto deadline = env.Runtime.GetCurrentTime() + TDuration::MilliSeconds(300);
+    env.Get(env.AgentId, 0, deadline);
+    env.Runtime.WaitFor("in-flight S3 GET", [&] { return !env.Reads.empty(); }, TDuration::Seconds(1));
+    env.Get(env.AgentId, 1, deadline);
+    const auto checkEdge = env.Runtime.AllocateEdgeActor();
+    env.Runtime.SendAsync(new IEventHandle(env.AgentId, checkEdge,
+        new TEvBlobStorage::TEvCheckIntegrity(env.Id, deadline, NKikimrBlobStorage::FastRead)));
+    env.Get(env.AgentId, 2, TInstant::Max());
+    env.Runtime.WaitFor("three queued reads", [&] { return pending->Val() == 3; }, TDuration::MilliSeconds(200));
+
+    for (ui32 i = 0; i < 2; ++i) {
+        const auto result = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(env.Edge, TDuration::Seconds(2));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::TIMEOUT);
+    }
+    const auto integrity = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvCheckIntegrityResult>(checkEdge, TDuration::Seconds(1));
+    UNIT_ASSERT(integrity);
+    UNIT_ASSERT_VALUES_EQUAL(integrity->Get()->Status, NKikimrProto::TIMEOUT);
+    env.Runtime.WaitFor("live S3 GET dispatched", [&] { return env.Reads.size() == 2; }, TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(pending->Val(), 0);
+
+    env.Get(env.AgentId, 1, TInstant::Max());
+    env.Runtime.WaitFor("one GET waiting for the live read", [&] { return pending->Val() == 1; }, TDuration::Seconds(1));
+    env.Reply(0, slowDown);
+    env.Runtime.SimulateSleep(TDuration::MilliSeconds(10));
+    UNIT_ASSERT_VALUES_EQUAL(env.Reads.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(pending->Val(), 1);
+    env.Reply(2);
+    env.ExpectRead('c');
+    env.Reply(1);
+    env.ExpectRead('b');
+    env.Runtime.SimulateSleep(TDuration::Seconds(1));
+    UNIT_ASSERT(env.Reads.empty());
+    UNIT_ASSERT_VALUES_EQUAL(pending->Val(), 0);
+}
 
 void CheckGetCompletesAfterDisconnect(bool nodata) {
     TTestEnv env(TLocalMode{});
@@ -669,6 +797,14 @@ void CheckQueuedMetadataDeadlines(bool reconnectAtDeadline) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
+    Y_UNIT_TEST(TimedOutS3PutDiscardsLatePreparation) {
+        CheckS3PutTimeout(false);
+    }
+
+    Y_UNIT_TEST(TimedOutS3PutDiscardsAfterPhysicalReply) {
+        CheckS3PutTimeout(true);
+    }
+
     Y_UNIT_TEST(S3ReadReplyAfterAgentEjection) {
         TS3ReadEnv env;
         env.Get(env.AgentId, 0, TInstant::Max());
@@ -689,35 +825,38 @@ Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
     }
 
     Y_UNIT_TEST(ExpiredS3ReadsLeaveQueueAndDoNotRetrySlowDown) {
-        TS3ReadEnv env;
-        const auto pending = GetServiceCounters(env.Runtime.GetAppData().Counters, "blob_depot_agent")
-            ->GetSubgroup("group", ToString(TTestEnv::VirtualGroupId))->GetSubgroup("subsystem", "s3")
-            ->GetCounter("GetsPendingQueueSize", false);
-        const auto deadline = env.Runtime.GetCurrentTime() + TDuration::MilliSeconds(300);
-        env.Get(env.AgentId, 0, deadline);
-        env.Runtime.WaitFor("in-flight S3 GET", [&] { return !env.Reads.empty(); }, TDuration::Seconds(1));
-        env.Get(env.AgentId, 1, deadline);
-        const auto checkEdge = env.Runtime.AllocateEdgeActor();
-        env.Runtime.SendAsync(new IEventHandle(env.AgentId, checkEdge,
-            new TEvBlobStorage::TEvCheckIntegrity(env.Id, deadline, NKikimrBlobStorage::FastRead)));
-        env.Get(env.AgentId, 2, TInstant::Max());
-        env.Runtime.WaitFor("three queued reads", [&] { return pending->Val() == 3; }, TDuration::MilliSeconds(200));
+        CheckExpiredS3Reads(true);
+    }
 
-        for (ui32 i = 0; i < 2; ++i) {
-            const auto result = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(env.Edge, TDuration::Seconds(2));
-            UNIT_ASSERT(result);
-            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::TIMEOUT);
+    Y_UNIT_TEST(LateS3GetSuccessPreservesNextReadSlot) {
+        CheckExpiredS3Reads(false);
+    }
+
+    Y_UNIT_TEST(FailedRangeCancelsOutstandingS3Get) {
+        TS3WriteEnv env;
+        const TLogoBlobID first(12345, 1, 1, 0, 3, 0);
+        const TLogoBlobID last(12345, 1, 2, 0, 3, 0);
+        for (const auto& id : {first, last}) {
+            env.Put(id, TInstant::Max());
+            env.FinishPut();
+            env.ExpectPut(id, NKikimrProto::OK);
         }
-        const auto integrity = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvCheckIntegrityResult>(checkEdge, TDuration::Seconds(1));
-        UNIT_ASSERT(integrity);
-        UNIT_ASSERT_VALUES_EQUAL(integrity->Get()->Status, NKikimrProto::TIMEOUT);
-        UNIT_ASSERT_VALUES_EQUAL(pending->Val(), 1);
-        env.Reply(0, true);
-        env.Reply(2);
-        env.ExpectRead('c');
-        env.Runtime.SimulateSleep(TDuration::Seconds(1));
-        UNIT_ASSERT(env.Reads.empty());
-        UNIT_ASSERT_VALUES_EQUAL(pending->Val(), 0);
+        TBlockEvents<TS3WriteEnv::TStorage::TEvGetObjectRequest> reads(env.Runtime);
+        env.Runtime.SendAsync(new IEventHandle(env.AgentId, env.Edge,
+            new TEvBlobStorage::TEvRange(first.TabletID(), first, last, false, TInstant::Max())));
+        env.Runtime.WaitFor("both S3 reads of the range", [&] { return reads.size() == 2; }, TDuration::Seconds(1));
+
+        const auto failed = std::move(reads.front());
+        reads.pop_front();
+        const auto canContinue = reads.front()->Get()->GetRequest().GetContinueRequestHandler();
+        UNIT_ASSERT(canContinue);
+        UNIT_ASSERT(canContinue(nullptr));
+        env.Runtime.SendAsync(new IEventHandle(failed->Sender, env.Edge, new TEvents::TEvUndelivered(
+            TS3WriteEnv::TStorage::TEvGetObjectRequest::EventType, TEvents::TEvUndelivered::ReasonActorUnknown)));
+        const auto range = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvRangeResult>(env.Edge, TDuration::Seconds(1));
+        UNIT_ASSERT(range);
+        UNIT_ASSERT_VALUES_EQUAL(range->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(!canContinue(nullptr));
     }
 
     Y_UNIT_TEST(GetPhysicalReadCompletesAfterDisconnect) {
@@ -1043,6 +1182,120 @@ Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
         // The mock storage reports that the first request already installed this block.
         env.ExpectBlocked(blocker, NKikimrProto::ALREADY);
     }
+
+#ifndef KIKIMR_DISABLE_S3_OPS
+    Y_UNIT_TEST(DelayedDeleteUsesStorageRouteAndKeyScope) {
+        using namespace NWrappers::NExternalStorage;
+        TTestEnv env;
+        const TString bucketName = "delete-route-scope";
+        const TString key = "archive/vg/1/a/b/1";
+        auto* storage = Singleton<TFakeExternalStorage>();
+        auto& bucket = storage->MutableBucket(bucketName);
+        NKikimrBlobDepot::TS3BackendSettings settings;
+        settings.MutableSyncMode();
+        settings.MutableSettings()->SetBucket(bucketName);
+        settings.MutableSettings()->SetObjectKeyPattern("archive");
+        settings.MutableSettings()->SetEndpoint("fake.fake");
+        settings.MutableSettings()->SetSecretKey(storage->GetSecretKey());
+        const auto router = env.Runtime.Register(CreateBlobDepotS3Router(settings, TTestEnv::TabletId));
+        env.Runtime.EnableScheduleForActor(router);
+        const auto edge = env.Runtime.AllocateEdgeActor();
+        const auto sendDelete = [&](const NKikimrBlobDepot::TS3BackendSettings& source) {
+            auto route = std::make_shared<const TString>(TS3DeleteContext::MakeRouteKey(source));
+            auto context = std::make_shared<TS3DeleteContext>(env.Runtime.GetCurrentMonotonicTime() + TDuration::Seconds(10),
+                std::move(route));
+            auto request = Aws::S3::Model::DeleteObjectRequest().WithBucket(bucketName).WithKey(key);
+            env.Runtime.SendAsync(new IEventHandle(router, edge, new TEvDeleteObjectRequest(request, std::move(context))));
+            const auto reply = env.Runtime.GrabEdgeEventRethrow<TEvDeleteObjectResponse>(edge, TDuration::Seconds(1));
+            UNIT_ASSERT(reply);
+            return reply->Get()->IsSuccess();
+        };
+
+        auto source = settings;
+        source.MutableSettings()->SetObjectKeyPattern("/archive//");
+        source.MutableSettings()->SetAccessKey("rotated access key");
+        source.MutableSettings()->SetSecretKey("rotated secret");
+        source.MutableSettings()->SetRequestTimeoutMs(3000);
+        source.SetMetricsPushIntervalMs(5000);
+        bucket.PutObject(key, "collected");
+        UNIT_ASSERT(sendDelete(source));
+        UNIT_ASSERT(!bucket.GetObject(key));
+
+        bucket.PutObject(key, "live");
+        source.MutableSettings()->SetObjectKeyPattern("another-prefix");
+        UNIT_ASSERT(!sendDelete(source));
+        source = settings;
+        source.GetReflection()->MutableUnknownFields(&source)->AddVarint(1234, 1);
+        UNIT_ASSERT(!sendDelete(source));
+        UNIT_ASSERT_VALUES_EQUAL(bucket.GetObject(key).value(), "live");
+        bucket.Remove(key);
+    }
+
+    Y_UNIT_TEST(DelayedTabletDeleteCannotReachReplacementS3Backend) {
+        using namespace NWrappers::NExternalStorage;
+        TTestEnv env;
+        const auto owner = env.Connect(0);
+        env.Prepare(owner, 1);
+        env.ExpectPrepared(owner, 1);
+
+        // Losing the owner of the staged locator registers a tablet deleter.
+        TBlockEvents<TEvents::TEvBootstrap> bootstraps(env.Runtime, [&](const auto& ev) {
+            return env.Runtime.FindActorName(ev->GetRecipientRewrite()).Contains("TDeleterActor");
+        });
+        env.Disconnect(owner);
+        UNIT_ASSERT_VALUES_EQUAL(bootstraps.size(), 1);
+        const auto deleter = bootstraps.front()->GetRecipientRewrite();
+        const auto latestOriginalDeadline = env.Runtime.GetCurrentMonotonicTime() + TS3RequestTimer::Timeout;
+        env.Runtime.AdvanceCurrentTime(TDuration::Seconds(30));
+
+        // The new endpoint has the same bucket and a live object at the old key.
+        const TString bucketName = "test-bucket";
+        auto* storage = Singleton<TFakeExternalStorage>();
+        auto& bucket = storage->MutableBucket(bucketName);
+        NKikimrBlobDepot::TS3BackendSettings replacement;
+        replacement.MutableSyncMode();
+        replacement.MutableSettings()->SetEndpoint("fake.fake");
+        replacement.MutableSettings()->SetBucket(bucketName);
+        replacement.MutableSettings()->SetSecretKey(storage->GetSecretKey());
+        const auto router = env.Runtime.Register(CreateBlobDepotS3Router(replacement, TTestEnv::TabletId));
+        env.Runtime.EnableScheduleForActor(router);
+        const auto service = MakeBlobDepotS3RouterID(TTestEnv::TabletId);
+        const auto originalRouter = env.Runtime.GetLocalServiceId(service);
+        UNIT_ASSERT(originalRouter && originalRouter != router);
+        env.Runtime.RegisterService(service, router);
+
+        TString key;
+        auto requests = env.Runtime.AddObserver<TEvDeleteObjectRequest>([&](TEvDeleteObjectRequest::TPtr& ev) {
+            if (ev->Sender == deleter && key.empty()) {
+                const auto& request = *ev->Get();
+                key = request.GetRequest().GetKey().c_str();
+                bucket.PutObject(key, "replacement object");
+                const auto context = std::dynamic_pointer_cast<TS3RequestDeadline>(request.GetRequestContext());
+                UNIT_ASSERT(context);
+                UNIT_ASSERT(context->Deadline <= latestOriginalDeadline);
+                if (ev->Recipient == originalRouter) {
+                    // A deleter bound to a concrete router still addresses the original backend.
+                    // Present that same request to the replacement to exercise its route check.
+                    env.Runtime.SendAsync(ev->Forward(router));
+                    ev.Reset();
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Recipient, service);
+                }
+            }
+        });
+        TBlockEvents<TEvDeleteObjectResponse> responses(env.Runtime, [&](const auto& ev) {
+            return ev->Recipient == deleter;
+        });
+        bootstraps.Stop().Unblock();
+        env.Runtime.WaitFor("stale delete rejected", [&] { return !responses.empty(); }, TDuration::Seconds(1));
+        const auto& response = *responses.front()->Get();
+        UNIT_ASSERT(!response.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(response.GetError().GetMessage().c_str(), "different BlobDepot configuration");
+        UNIT_ASSERT(!key.empty());
+        UNIT_ASSERT_VALUES_EQUAL(bucket.GetObject(key).value(), "replacement object");
+        bucket.Remove(key);
+    }
+#endif
 }
 
 } // namespace NKikimr::NBlobDepot

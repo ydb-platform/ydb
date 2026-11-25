@@ -21,6 +21,7 @@ namespace NKikimr::NBlobDepot {
         YDB_LOG_DEBUG("Init",
             {"marker", "BDTS05"},
             {"settings", settings});
+        DeleteRoute = settings ? std::make_shared<const TString>(TS3DeleteContext::MakeRouteKey(*settings)) : nullptr;
         if (settings) {
             // All S3 traffic goes through the per-node router managed by NodeWarden.
             // Acquire is fire-and-forget: NodeWarden registers the router under its
@@ -43,6 +44,9 @@ namespace NKikimr::NBlobDepot {
             CurrentMaxDeletesInFlight = MaxDeletesInFlight();
             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = CurrentMaxDeletesInFlight;
             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] = CurrentMaxWritesInFlight;
+            if (!DeleteQueue.empty()) {
+                RunDeletersIfNeeded();
+            }
         } else {
             SyncMode = false;
             AsyncMode = false;

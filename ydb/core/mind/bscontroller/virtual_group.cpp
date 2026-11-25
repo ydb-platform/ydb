@@ -5,6 +5,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/blob_depot/config.h>
+#include <ydb/core/blob_depot/s3_route.h>
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/blob_depot/types.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -63,56 +64,6 @@ namespace NKikimr::NBsController {
                     throw TExError() << "S3 object keys including the depot namespace and locator must fit in 1024 bytes";
                 }
             }
-        }
-
-        // Keep unknown and newly introduced fields in the comparison until their routing semantics are known.
-        NKikimrBlobDepot::TS3BackendSettings GetS3Route(NKikimrBlobDepot::TS3BackendSettings route) {
-            route.ClearSyncMode();
-            route.ClearAsyncMode();
-            route.ClearBalancerRefreshSecMin();
-            route.ClearBalancerRefreshSecMax();
-            route.ClearMetricsPushIntervalMs();
-            route.ClearMaxRetiringWrappers();
-            route.ClearMinRetireGracePeriodSec();
-            if (route.GetBalancerHost().empty()) {
-                route.ClearBalancerHost();
-                route.ClearBalancerProxyScheme();
-                route.ClearBalancerProxyPort();
-            } else {
-                route.SetBalancerProxyScheme(route.GetBalancerProxyScheme());
-                route.SetBalancerProxyPort(route.GetBalancerProxyPort());
-            }
-            auto& settings = *route.MutableSettings();
-            // The bucket and physical key prefix are checked separately.
-            settings.ClearBucket();
-            settings.ClearObjectKeyPattern();
-            settings.ClearAccessKey();
-            settings.ClearSecretKey();
-            settings.ClearSecretableAccessKey();
-            settings.ClearSecretableSecretKey();
-            settings.ClearVerifySSL();
-            settings.ClearStorageClass();
-            settings.ClearExportDataSettings();
-            settings.ClearLimits();
-            settings.ClearRequestTimeoutMs();
-            settings.ClearHttpRequestTimeoutMs();
-            settings.ClearConnectionTimeoutMs();
-            settings.ClearExecutorThreadsCount();
-            settings.ClearMaxConnectionsCount();
-            // Preserve region and proxy-host presence, which switches the SDK away from its defaults.
-            if (settings.GetEndpoint().empty()) {
-                settings.ClearEndpoint();
-            }
-            settings.SetScheme(settings.GetScheme());
-            settings.SetUseVirtualAddressing(settings.GetUseVirtualAddressing());
-            if (settings.HasProxyHost()) {
-                settings.SetProxyPort(settings.GetProxyPort());
-                settings.SetProxyScheme(settings.GetProxyScheme());
-            } else {
-                settings.ClearProxyPort();
-                settings.ClearProxyScheme();
-            }
-            return route;
         }
 
         void RecordS3NamespaceValidation(NKikimrBlobDepot::TBlobDepotConfig& config) {
@@ -541,7 +492,7 @@ namespace NKikimr::NBsController {
         }
         const bool namespaceChanged = GetS3Namespace(config) != GetS3Namespace(next, storageName);
         const bool routeChanged = hasExistingBucket && hasNextBucket && cmd.HasS3BackendSettings() &&
-            !google::protobuf::util::MessageDifferencer::Equals(GetS3Route(previous), GetS3Route(next));
+            !google::protobuf::util::MessageDifferencer::Equals(NBlobDepot::GetS3Route(previous), NBlobDepot::GetS3Route(next));
         const bool coolingChanged = previous.HasAsyncMode() != next.HasAsyncMode() ||
             !google::protobuf::util::MessageDifferencer::Equals(previous.GetAsyncMode(), next.GetAsyncMode());
         // A name-only reconfigure explicitly authorizes a stored AsyncMode configuration after upgrade.

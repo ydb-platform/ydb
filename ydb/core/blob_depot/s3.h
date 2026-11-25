@@ -17,6 +17,7 @@ namespace NKikimr::NBlobDepot {
         ui32 RouterGeneration = 0;
         TString BasePath;
         TString Bucket;
+        std::shared_ptr<const TString> DeleteRoute;
 
         bool OrphanScanEnabled = false;
         bool SyncMode = false;

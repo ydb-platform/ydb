@@ -2,7 +2,6 @@
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blob_depot/config.h>
-#include <ydb/core/blob_depot/s3_put_timeout.h>
 #include <ydb/core/blob_depot/s3_error.h>
 #include <ydb/core/blob_depot/s3_router_events.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -14,6 +13,12 @@
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
+
+    namespace {
+        struct TS3Write : TRequestContext {
+            std::atomic_bool Retried{false};
+        };
+    }
 
     void TBlobDepotAgent::InitS3(const TString& name) {
         if (S3BackendSettings) {
@@ -53,6 +58,7 @@ namespace NKikimr::NBlobDepot {
             fFunc(NWrappers::NExternalStorage::EvGetObjectResponse, Finish)
             fFunc(NWrappers::NExternalStorage::EvPutObjectResponse, Finish)
             fFunc(TEvents::TSystem::Undelivered, Finish)
+            fFunc(TEvents::TSystem::Poison, Finish)
         )
 
     public:
@@ -73,6 +79,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::IssueReadS3(const TString& key, ui32 offset, ui32 len, TFinishCallback finish, ui64 readId) {
+        LimitS3Deadline(Deadline);
         auto read = std::make_shared<TS3Read>();
         read->RequestId = Agent.NextOtherRequestId++;
         read->Deadline = DeadlineMonotonic;
@@ -87,10 +94,12 @@ namespace NKikimr::NBlobDepot {
             read->Span.Attribute("size", static_cast<i64>(len));
         }
 
-        Agent.RegisterRequest(read->RequestId, this, read, [agent = &Agent, read] {
+        Agent.RegisterRequest(read->RequestId, this, read, [agent = &Agent, system = TActivationContext::ActorSystem(), read] {
             if (read->Queued) {
                 agent->PendingS3Reads.erase(*read->Queued);
                 *agent->S3GetsPendingQueueSizeCounter = agent->PendingS3Reads.size();
+            } else if (read->ReplyActorId) {
+                system->Send(read->ReplyActorId, new TEvents::TEvPoison);
             }
         }, false);
         Agent.IssueOrEnqueueS3Read(*read);
@@ -127,7 +136,7 @@ namespace NKikimr::NBlobDepot {
         DispatchS3Read(read);
     }
 
-    void TBlobDepotAgent::DispatchS3Read(const TS3Read& read) {
+    void TBlobDepotAgent::DispatchS3Read(TS3Read& read) {
         if (TActivationContext::Monotonic() >= read.Deadline) {
             return; // The watchdog will complete the query with TIMEOUT.
         }
@@ -145,14 +154,20 @@ namespace NKikimr::NBlobDepot {
             {"S3GetsInFlight", S3GetsInFlight},
             {"currentMaxS3GetsInFlight", CurrentMaxS3GetsInFlight});
 
-        const TActorId actorId = RegisterWithSameMailbox(new TS3ReplyActor(SelfId(), read.RequestId, ES3Operation::Read));
-        auto request = std::make_unique<NWrappers::TEvExternalStorage::TEvGetObjectRequest>(
-            Aws::S3::Model::GetObjectRequest()
-                .WithBucket(S3BackendSettings->GetSettings().GetBucket())
-                .WithKey(read.Key)
-                .WithRange(TStringBuilder() << "bytes=" << read.Offset << '-' << ui64(read.Offset) + read.Len - 1)
-        );
-        TActivationContext::Send(new IEventHandle(S3WrapperId, actorId, request.release(), IEventHandle::FlagTrackDelivery));
+        read.ReplyActorId = RegisterWithSameMailbox(new TS3ReplyActor(SelfId(), read.RequestId, ES3Operation::Read));
+        if (!S3BackendSettings || !S3WrapperId) {
+            Send(read.ReplyActorId, new TEvents::TEvUndelivered(NWrappers::TEvExternalStorage::TEvGetObjectRequest::EventType,
+                TEvents::TEvUndelivered::ReasonActorUnknown));
+            return;
+        }
+        auto request = Aws::S3::Model::GetObjectRequest()
+            .WithBucket(S3BackendSettings->GetSettings().GetBucket())
+            .WithKey(read.Key)
+            .WithRange(TStringBuilder() << "bytes=" << read.Offset << '-' << ui64(read.Offset) + read.Len - 1);
+        request.SetContinueRequestHandler([active = read.weak_from_this()](const auto*) { return !active.expired(); });
+        TActivationContext::Send(new IEventHandle(S3WrapperId, read.ReplyActorId,
+            new NWrappers::TEvExternalStorage::TEvGetObjectRequest(request, std::make_shared<TS3GetContext>(read.Deadline)),
+            IEventHandle::FlagTrackDelivery));
     }
 
     void TBlobDepotAgent::HandleS3ReadResult(ui64 id, IEventHandle& result) {
@@ -163,6 +178,7 @@ namespace NKikimr::NBlobDepot {
             return;
         }
         auto read = std::static_pointer_cast<TS3Read>(it->Context);
+        read->ReplyActorId = {};
         if (TActivationContext::Monotonic() >= read->Deadline) {
             ExtractRequest(id, OtherRequestInFlight);
             return;
@@ -292,18 +308,23 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::HandleS3WriteResult(ui64 id, IEventHandle& result) {
         Y_ABORT_UNLESS(S3PutsInFlight);
         *S3PutsInFlightCounter = --S3PutsInFlight;
-        if (!OtherRequestInFlight.contains(id)) {
+        auto it = OtherRequestInFlight.find(id);
+        if (it == OtherRequestInFlight.end()) {
             return;
         }
         TS3PutResult outcome;
+        outcome.MayArriveLate = it->Context->Obtain<TS3Write>().Retried.load();
         if (result.Type == TEvents::TSystem::Undelivered) {
             outcome.Error = "event undelivered";
+            outcome.MayArriveLate |= result.Get<TEvents::TEvUndelivered>()->Unsure;
         } else {
             const auto& msg = *result.Get<NWrappers::TEvExternalStorage::TEvPutObjectResponse>();
             if (!msg.IsSuccess()) {
                 outcome.Error.emplace(msg.GetError().GetMessage());
                 outcome.SlowDown = IsS3SlowDown(msg.GetError());
-                IncS3HttpErrorCounter("Puts", static_cast<int>(msg.GetError().GetResponseCode()));
+                const int status = static_cast<int>(msg.GetError().GetResponseCode());
+                outcome.MayArriveLate |= status < 400 || status >= 500 || status == 408;
+                IncS3HttpErrorCounter("Puts", status);
             }
         }
         OnRequestComplete(id, std::move(outcome), OtherRequestInFlight);
@@ -314,8 +335,11 @@ namespace NKikimr::NBlobDepot {
         *Agent.S3PutsInFlightCounter = Agent.S3PutsInFlight;
 
         const ui64 requestId = Agent.NextOtherRequestId++;
-        Agent.RegisterRequest(requestId, this, nullptr, {}, false);
         const auto writerActorId = Agent.RegisterWithSameMailbox(new TS3ReplyActor(Agent.SelfId(), requestId, ES3Operation::Write));
+        auto write = std::make_shared<TS3Write>();
+        Agent.RegisterRequest(requestId, this, write, [system = TActivationContext::ActorSystem(), writerActorId] {
+            system->Send(writerActorId, new TEvents::TEvPoison);
+        }, false);
 
         YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Issue_S3_write",
             {"marker", "BDEV38"},
@@ -326,18 +350,22 @@ namespace NKikimr::NBlobDepot {
             {"blobId", id},
             {"locator", locator});
 
+        auto request = Aws::S3::Model::PutObjectRequest()
+            .WithBucket(Agent.S3BackendSettings->GetSettings().GetBucket())
+            .WithKey(std::move(key))
+            .AddMetadata("key", id.ToString());
+        const std::weak_ptr<TS3Write> active = write;
+        request.SetContinueRequestHandler([active](const auto*) { return !active.expired(); });
+        request.SetRequestRetryHandler([active](const auto&) {
+            if (const auto write = active.lock()) {
+                write->Retried.store(true);
+            }
+        });
         TActivationContext::Send(new IEventHandle(Agent.S3WrapperId, writerActorId,
-            new NWrappers::TEvExternalStorage::TEvPutObjectRequest(
-                Aws::S3::Model::PutObjectRequest()
-                    .WithBucket(std::move(Agent.S3BackendSettings->GetSettings().GetBucket()))
-                    .WithKey(std::move(key))
-                    .AddMetadata("key", id.ToString()),
+            new NWrappers::TEvExternalStorage::TEvPutObjectRequest(request,
                 buffer.ExtractUnderlyingContainerOrCopy<TString>(),
-                std::make_shared<TS3PutContext>(TActivationContext::Monotonic() +
-                    GetS3PutTimeout(Agent.S3BackendSettings->GetSettings(), AppData()->AwsClientConfig),
-                    TS3PutContext::ESource::Agent)),
+                std::make_shared<TS3PutContext>(DeadlineMonotonic, TS3PutContext::ESource::Agent)),
             IEventHandle::FlagTrackDelivery));
-
     }
 
 } // NKikimr::NBlobDepot

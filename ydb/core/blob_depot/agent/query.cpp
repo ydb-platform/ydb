@@ -1,6 +1,8 @@
 #include "agent_impl.h"
 #include "blocks.h"
 
+#include <ydb/core/blob_depot/s3_put_timeout.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
@@ -16,7 +18,7 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        bool PendingEventBudgetUsed(const THPTimer& timer, size_t processed) {
+        bool EventBudgetUsed(const THPTimer& timer, size_t processed) {
             return processed >= 256 || TDuration::Seconds(timer.Passed()) >= TDuration::MilliSeconds(1);
         }
     }
@@ -147,7 +149,7 @@ namespace NKikimr::NBlobDepot {
                 auto item = ExtractPendingEvent(PendingEventQ.begin());
                 ProcessStorageEvent(std::move(item.Event), item.Received);
             }
-            if (!PendingEventQ.empty() && PendingEventBudgetUsed(timer, ++processed)) {
+            if (!PendingEventQ.empty() && EventBudgetUsed(timer, ++processed)) {
                 if (!ProcessPendingEventInFlight) {
                     TActivationContext::Send(new IEventHandle(TEvPrivate::EvProcessPendingEvent, 0, SelfId(), {}, nullptr, 0));
                     ProcessPendingEventInFlight = true;
@@ -222,7 +224,7 @@ namespace NKikimr::NBlobDepot {
             size_t processed = 0;
             while (!PendingEventExpirations.empty() && PendingEventExpirations.begin()->first <= now) {
                 ExpirePendingEvent(PendingEventExpirations.begin()->second);
-                if (PendingEventBudgetUsed(timer, ++processed)) {
+                if (EventBudgetUsed(timer, ++processed)) {
                     break;
                 }
             }
@@ -234,13 +236,26 @@ namespace NKikimr::NBlobDepot {
         ev->Get()->Process(this);
     }
 
-    void TBlobDepotAgent::HandleQueryWatchdog() {
+    void TBlobDepotAgent::ScheduleQueryWatchdog() {
+        if (!QueryWatchdogMap.empty()) {
+            QueryWatchdogTimer.Schedule(QueryWatchdogMap.begin()->first, SelfId(), TEvPrivate::EvQueryWatchdog);
+        }
+    }
+
+    void TBlobDepotAgent::HandleQueryWatchdog(const TAutoPtr<IEventHandle>& ev) {
+        if (!QueryWatchdogTimer.Consume(ev->Cookie)) {
+            return;
+        }
         const auto now = TActivationContext::Monotonic();
+        THPTimer timer;
+        size_t processed = 0;
         while (!QueryWatchdogMap.empty() && QueryWatchdogMap.begin()->first <= now) {
             QueryWatchdogMap.begin()->second->CheckQueryExecutionTime(now);
+            if (EventBudgetUsed(timer, ++processed)) {
+                break;
+            }
         }
-        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvQueryWatchdog, 0, SelfId(),
-            {}, nullptr, 0));
+        ScheduleQueryWatchdog();
     }
 
     TBlobDepotAgent::TQuery::TQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event, TMonotonic received)
@@ -257,6 +272,7 @@ namespace NKikimr::NBlobDepot {
                 NWilson::EFlags::AUTO_END)
     {
         agent.ExecutingQueries.PushBack(this);
+        agent.ScheduleQueryWatchdog();
         if (Span) {
             Span
                 .Name(TStringBuilder() << "BlobDepotAgent." << GetName())
@@ -296,6 +312,22 @@ namespace NKikimr::NBlobDepot {
         }
         EndWithError(NKikimrProto::TIMEOUT, "request deadline exceeded");
         return true;
+    }
+
+    void TBlobDepotAgent::TQuery::LimitS3Deadline(TInstant callerDeadline) {
+        if (!Agent.S3BackendSettings) {
+            return;
+        }
+        const auto timeout = GetS3PutTimeout(Agent.S3BackendSettings->GetSettings(), AppData()->AwsClientConfig);
+        const auto now = TActivationContext::Monotonic();
+        const auto remaining = Min(timeout, callerDeadline - TActivationContext::Now());
+        DeadlineMonotonic = Min(DeadlineMonotonic, now + remaining);
+        if (QueryWatchdogMapIter->first > DeadlineMonotonic) {
+            auto entry = Agent.QueryWatchdogMap.extract(QueryWatchdogMapIter);
+            entry.key() = DeadlineMonotonic;
+            QueryWatchdogMapIter = Agent.QueryWatchdogMap.insert(std::move(entry));
+            Agent.ScheduleQueryWatchdog();
+        }
     }
 
     void TBlobDepotAgent::TQuery::SetResolveParameters(NKikimrBlobDepot::TEvResolve& resolve,

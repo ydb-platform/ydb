@@ -2,10 +2,12 @@
 #include "s3_put_timeout.h"
 #include "s3_request_timer.h"
 #include "s3_router_events.h"
+#include "types.h"
 #include "wakeup_timer.h"
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
@@ -112,6 +114,7 @@ namespace NKikimr::NBlobDepot {
 
     class TWrapperInFlight : public TThrRefBase {
         std::atomic<i64> Count{0};
+        std::atomic_bool Cancelled{false};
 
     public:
         void Inc() {
@@ -125,6 +128,9 @@ namespace NKikimr::NBlobDepot {
         i64 Get() const {
             return Count.load(std::memory_order_acquire);
         }
+
+        void Cancel() { Cancelled.store(true, std::memory_order_relaxed); }
+        bool IsCancelled() const { return Cancelled.load(std::memory_order_relaxed); }
     };
 
     // Adapter installed on the inner storage wrapper. It does NOT redirect the response
@@ -194,7 +200,8 @@ namespace NKikimr::NBlobDepot {
             };
         };
 
-        NKikimrBlobDepot::TS3BackendSettings Settings;
+        const NKikimrBlobDepot::TS3BackendSettings Settings;
+        const TString DeleteRoute;
         ui64 TabletId = 0;
         TString LogId;
         TString OriginalEndpoint;
@@ -224,11 +231,16 @@ namespace NKikimr::NBlobDepot {
         static constexpr size_t MaxPendingRequests = 256;
         std::deque<TPendingRequest> PendingRequests;
         TWakeupTimer PendingTimer;
-        TDuration PutTimeout;
+        TDuration TransferTimeout;
+        TControlWrapper MaxAgentGets = 32;
+        TControlWrapper MaxAgentPuts = 32;
+        TControlWrapper MaxDeletes = 3;
         // The router and physical SDK operations share these counts across wrapper and router replacement.
         struct TSdkRequests : std::enable_shared_from_this<TSdkRequests> {
             using TKey = std::pair<TActorSystem*, ui64>;
             const TKey Key;
+            std::atomic<size_t> AgentGets{0};
+            std::atomic<size_t> AgentPuts{0};
             std::atomic<size_t> CoolingPuts{0};
             std::atomic<size_t> Deletes{0};
 
@@ -425,6 +437,7 @@ namespace NKikimr::NBlobDepot {
                 IncCounter(Mon.RetiringWrappersAborted);
             }
 
+            wrapper.InFlight->Cancel();
             Send(wrapper.ActorId, new TEvents::TEvPoison());
         }
 
@@ -529,10 +542,10 @@ namespace NKikimr::NBlobDepot {
         }
 
         void BuildInnerWrapper(const TString& endpoint) {
-            auto* mutableSettings = Settings.MutableSettings();
-            mutableSettings->SetEndpoint(endpoint);
+            auto settings = Settings.GetSettings();
+            settings.SetEndpoint(endpoint);
             RegisterInnerWrapper(NWrappers::IExternalStorageConfig::Construct(
-                AppData()->AwsClientConfig, *mutableSettings),
+                AppData()->AwsClientConfig, settings),
                 MakeRouteCounters(false));
             CurrentEndpoint = endpoint;
 
@@ -546,14 +559,14 @@ namespace NKikimr::NBlobDepot {
 
         void BuildInnerWrapperViaProxy(const TString& host, ui16 port) {
             const TString prevEndpoint = CurrentEndpoint;
-            auto* mutableSettings = Settings.MutableSettings();
-            mutableSettings->SetEndpoint(OriginalEndpoint);
-            mutableSettings->SetProxyHost(host);
-            mutableSettings->SetProxyPort(port);
-            mutableSettings->SetProxyScheme(Settings.GetBalancerProxyScheme());
+            auto settings = Settings.GetSettings();
+            settings.SetEndpoint(OriginalEndpoint);
+            settings.SetProxyHost(host);
+            settings.SetProxyPort(port);
+            settings.SetProxyScheme(Settings.GetBalancerProxyScheme());
             const TString proxyEndpoint = TStringBuilder() << host << ':' << port;
             RegisterInnerWrapper(NWrappers::IExternalStorageConfig::Construct(
-                AppData()->AwsClientConfig, *mutableSettings),
+                AppData()->AwsClientConfig, settings),
                 MakeRouteCounters(true));
             CurrentEndpoint = proxyEndpoint;
 
@@ -686,33 +699,36 @@ namespace NKikimr::NBlobDepot {
             return (type - EvBegin) % 2 == 1;
         }
 
-        static std::shared_ptr<TS3PutContext> GetPutContext(IEventHandle& ev) {
-            return std::dynamic_pointer_cast<TS3PutContext>(
-                ev.Get<NWrappers::TEvExternalStorage::TEvPutObjectRequest>()->GetRequestContext());
-        }
-
-        TMonotonic GetDeadline(IEventHandle& ev, TMonotonic now) const {
+        template<typename TCallback>
+        static void VisitRequest(IEventHandle& ev, TCallback&& visit) {
             using namespace NWrappers::NExternalStorage;
             switch (ev.GetTypeRewrite()) {
+#define VISIT_REQUEST(name) \
+                case TEv##name##Request::EventType: visit(*ev.Get<TEv##name##Request>()); break;
+                Y_FOR_EACH_S3_WRAPPER_OP(VISIT_REQUEST)
+#undef VISIT_REQUEST
+            }
+        }
+
+        TDuration RequestTimeout(ui32 type) const {
+            using namespace NWrappers::NExternalStorage;
+            switch (type) {
+                case TEvGetObjectRequest::EventType:
                 case TEvPutObjectRequest::EventType:
-                    if (const auto context = GetPutContext(ev)) {
-                        return context->Deadline;
-                    }
-                    return now + PutTimeout;
-                case TEvDeleteObjectRequest::EventType:
-                case TEvDeleteObjectsRequest::EventType:
-                    return now + TS3RequestTimer::Timeout;
+                case TEvUploadPartRequest::EventType:
+                case TEvUploadPartCopyRequest::EventType:
+                    return TransferTimeout;
                 default:
-                    return TMonotonic::Max();
+                    return TS3RequestTimer::Timeout;
             }
         }
 
         template<class T>
-        static void SetSdkDeadline(T& request, TMonotonic deadline, std::shared_ptr<TSdkRequests::TSlot> slot) {
-            request.SetContinueRequestHandler(TCancellableAwsRequest{[deadline, slot = std::move(slot),
+        void SetSdkDeadline(T& request, TMonotonic deadline, const std::shared_ptr<TSdkRequests::TSlot>& slot) {
+            request.SetContinueRequestHandler(TCancellableAwsRequest{[deadline, slot, wrapper = InnerWrapperInFlight,
                     previous = request.GetContinueRequestHandler()](const auto* http) {
                 Y_UNUSED(slot); // retain the physical slot through the SDK callback
-                return TMonotonic::Now() < deadline && (!previous || previous(http));
+                return !wrapper->IsCancelled() && TMonotonic::Now() < deadline && (!previous || previous(http));
             }});
         }
 
@@ -720,37 +736,48 @@ namespace NKikimr::NBlobDepot {
             using namespace NWrappers::NExternalStorage;
             auto& ev = pending.Ev;
             if (pending.Deadline != TMonotonic::Max()) {
-                // SDK callbacks run outside the actor runtime. Convert the remaining budget, including queue time.
-                const auto deadline = TMonotonic::Now() + (pending.Deadline - now);
+                std::shared_ptr<TSdkRequests::TSlot> slot;
                 switch (ev->GetTypeRewrite()) {
-                    case TEvPutObjectRequest::EventType: {
-                        const auto context = GetPutContext(*ev);
-                        const bool cooling = context && context->Source == TS3PutContext::ESource::Cooling;
-                        auto slot = cooling ? SdkRequests->Acquire(SdkRequests->CoolingPuts,
-                            Settings.GetAsyncMode().GetUploadPutsInFlight()) : nullptr;
-                        if (cooling && !slot) {
-                            // This attempt never reached storage. No additional late-PUT watch is needed.
-                            Send(ev->Sender, new TEvents::TEvUndelivered(TEvPutObjectRequest::EventType,
-                                TEvents::TEvUndelivered::ReasonUnknown), 0, ev->Cookie);
-                            return;
+                    case TEvGetObjectRequest::EventType: {
+                        auto& get = *ev->Get<TEvGetObjectRequest>();
+                        // Tablet-side source reads have their own concurrency budget.
+                        if (std::dynamic_pointer_cast<TS3GetContext>(get.GetRequestContext())) {
+                            slot = SdkRequests->Acquire(SdkRequests->AgentGets, S3ControlLimit(MaxAgentGets));
+                            if (!slot) {
+                                return RejectRequest(std::move(ev), "too many outstanding S3 agent reads");
+                            }
                         }
-                        SetSdkDeadline(ev->Get<TEvPutObjectRequest>()->MutableRequest(), deadline, std::move(slot));
+                        break;
+                    }
+                    case TEvPutObjectRequest::EventType: {
+                        const auto context = std::dynamic_pointer_cast<TS3PutContext>(ev->Get<TEvPutObjectRequest>()->GetRequestContext());
+                        const bool cooling = context && context->Source == TS3PutContext::ESource::Cooling;
+                        slot = cooling ? SdkRequests->Acquire(SdkRequests->CoolingPuts,
+                            Settings.GetAsyncMode().GetUploadPutsInFlight())
+                            : SdkRequests->Acquire(SdkRequests->AgentPuts, S3ControlLimit(MaxAgentPuts));
+                        if (!slot) {
+                            if (cooling) {
+                                // This attempt never reached storage. No additional late-PUT watch is needed.
+                                Send(ev->Sender, new TEvents::TEvUndelivered(TEvPutObjectRequest::EventType,
+                                    TEvents::TEvUndelivered::ReasonUnknown), 0, ev->Cookie);
+                                return;
+                            }
+                            return RejectRequest(std::move(ev), "too many outstanding S3 agent writes");
+                        }
                         break;
                     }
                     case TEvDeleteObjectRequest::EventType:
                     case TEvDeleteObjectsRequest::EventType: {
-                        auto slot = SdkRequests->Acquire(SdkRequests->Deletes, MaxPendingRequests);
+                        slot = SdkRequests->Acquire(SdkRequests->Deletes, S3ControlLimit(MaxDeletes));
                         if (!slot) {
                             return RejectRequest(std::move(ev), "too many outstanding S3 deletes");
-                        }
-                        if (ev->GetTypeRewrite() == TEvDeleteObjectRequest::EventType) {
-                            SetSdkDeadline(ev->Get<TEvDeleteObjectRequest>()->MutableRequest(), deadline, std::move(slot));
-                        } else {
-                            SetSdkDeadline(ev->Get<TEvDeleteObjectsRequest>()->MutableRequest(), deadline, std::move(slot));
                         }
                         break;
                     }
                 }
+                // SDK callbacks run outside the actor runtime. Convert the remaining budget, including queue time.
+                const auto deadline = TMonotonic::Now() + (pending.Deadline - now);
+                VisitRequest(*ev, [&](auto& request) { SetSdkDeadline(request.MutableRequest(), deadline, slot); });
             }
             if (InnerWrapperInFlight && IsRequestEvent(ev->GetTypeRewrite())) {
                 InnerWrapperInFlight->Inc();
@@ -758,29 +785,31 @@ namespace NKikimr::NBlobDepot {
             TActivationContext::Send(IEventHandle::Forward(std::move(ev), InnerWrapperId));
         }
 
-        bool MatchesBucket(IEventHandle& ev) const {
-            using namespace NWrappers::NExternalStorage;
-            switch (ev.GetTypeRewrite()) {
-#define CHECK_BUCKET(name) \
-                case TEv##name##Request::EventType: { \
-                    const auto& request = ev.Get<TEv##name##Request>()->GetRequest(); \
-                    return !request.BucketHasBeenSet() || request.GetBucket() == Settings.GetSettings().GetBucket(); \
-                }
-                Y_FOR_EACH_S3_WRAPPER_OP(CHECK_BUCKET)
-#undef CHECK_BUCKET
-                default:
-                    return true;
-            }
-        }
-
         void Forward(STATEFN_SIG) {
+            const auto now = TActivationContext::Monotonic();
+            auto deadline = TMonotonic::Max();
+            bool matchesBucket = true;
+            bool matchesDeleteRoute = true;
+            VisitRequest(*ev, [&](const auto& event) {
+                const auto& request = event.GetRequest();
+                matchesBucket = !request.BucketHasBeenSet() || request.GetBucket() == Settings.GetSettings().GetBucket();
+                deadline = now + RequestTimeout(event.EventType);
+                if (const auto context = std::dynamic_pointer_cast<TS3RequestDeadline>(event.GetRequestContext())) {
+                    deadline = Min(deadline, context->Deadline);
+                    if (const auto* deletion = dynamic_cast<const TS3DeleteContext*>(context.get())) {
+                        matchesDeleteRoute = *deletion->Route == DeleteRoute;
+                    }
+                }
+            });
             // A delayed request can reach the replacement router during a namespace migration.
             // The storage wrapper otherwise replaces the request's bucket with its configured bucket.
-            if (!MatchesBucket(*ev)) {
+            if (!matchesBucket) {
                 return RejectRequest(std::unique_ptr<IEventHandle>(ev.Release()), "S3 request targets a different bucket");
             }
-            const auto now = TActivationContext::Monotonic();
-            TPendingRequest pending{now, GetDeadline(*ev, now), std::unique_ptr<IEventHandle>(ev.Release())};
+            if (!matchesDeleteRoute) {
+                return RejectRequest(std::unique_ptr<IEventHandle>(ev.Release()), "S3 delete targets a different BlobDepot configuration");
+            }
+            TPendingRequest pending{now, deadline, std::unique_ptr<IEventHandle>(ev.Release())};
             if (pending.Deadline <= now) {
                 return RejectRequest(std::move(pending.Ev), "S3 request deadline exceeded before dispatch");
             }
@@ -810,6 +839,7 @@ namespace NKikimr::NBlobDepot {
 
         explicit TBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings, ui64 tabletId)
             : Settings(std::move(settings))
+            , DeleteRoute(TS3DeleteContext::MakeRouteKey(Settings))
             , TabletId(tabletId)
             , LogId(TStringBuilder() << '{' << tabletId << ":s3r}")
         {}
@@ -818,7 +848,11 @@ namespace NKikimr::NBlobDepot {
             const TString& endpoint = Settings.GetSettings().GetEndpoint();
             OriginalEndpoint = endpoint;
             SdkRequests = TSdkRequests::Get(TActivationContext::ActorSystem(), TabletId);
-            PutTimeout = GetS3PutTimeout(Settings.GetSettings(), AppData()->AwsClientConfig);
+            TransferTimeout = GetS3PutTimeout(Settings.GetSettings(), AppData()->AwsClientConfig);
+            auto& controls = AppData()->Icb->BlobDepotControls;
+            TControlBoard::RegisterSharedControl(MaxAgentGets, controls.S3MaxGetsInFlight);
+            TControlBoard::RegisterSharedControl(MaxAgentPuts, controls.S3MaxWritesInFlight);
+            TControlBoard::RegisterSharedControl(MaxDeletes, controls.S3MaxDeletesInFlight);
             SetupCounters();
             ScheduleSweepRetiring();
 
@@ -853,12 +887,14 @@ namespace NKikimr::NBlobDepot {
             }
 
             if (InnerWrapperId) {
+                InnerWrapperInFlight->Cancel();
                 Send(InnerWrapperId, new TEvents::TEvPoison());
                 InnerWrapperId = {};
                 InnerWrapperInFlight.Reset();
             }
 
             for (auto&& wrapper : RetiringWrappers) {
+                wrapper.InFlight->Cancel();
                 Send(wrapper.ActorId, new TEvents::TEvPoison());
             }
 

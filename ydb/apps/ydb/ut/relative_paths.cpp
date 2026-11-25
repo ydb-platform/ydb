@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(RelativePathCompatibility) {
 
     Y_UNIT_TEST_F(BenchmarkKeepsExplicitAbsolutePaths, TCliTestFixture) {
         const auto output = RunCli({"-e", GetEndpoint(), "-d", "tenant", "workload", "clickbench",
-            "--path", "/test_database/bench", "run", "--dry-run"});
+            "--path", "/test_database/bench", "run", "--dry-run", "--verbose"});
         UNIT_ASSERT_STRING_CONTAINS(output, "/test_database/bench");
     }
 
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(RelativePathCompatibility) {
         }) {
             for (const TString workload : {"query", "imdb"}) {
                 TList<TString> args = {"-e", GetEndpoint(), "-d", testCase.Database, "workload", workload,
-                    "--path", testCase.Path, "run", "--dry-run"};
+                    "--path", testCase.Path, "run", "--dry-run", "--verbose"};
                 if (workload == "query") {
                     args.insert(args.end(), {"--query", "SELECT 1;"});
                 }
@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(RelativePathCompatibility) {
         EnvHomeFile("suite/init/nested/second.sql", "CREATE TABLE `RelativeInitSecond`" + columns);
         const auto output = RunCli({"-e", GetEndpoint(), "-d", "tenant", "workload", "query",
             "--path", "RelativeQueryInitPaths", "init", "--suite-path", TFsPath(first).Parent().Parent().GetPath(),
-            "--query", "CREATE TABLE `RelativeInitCustom`" + columns, "--dry-run"});
+            "--query", "CREATE TABLE RelativeInitCustom" + columns, "--dry-run"});
         const auto begin = output.find("PRAGMA ");
         const auto end = output.rfind(';');
         UNIT_ASSERT(begin != TString::npos && end != TString::npos && end > begin);

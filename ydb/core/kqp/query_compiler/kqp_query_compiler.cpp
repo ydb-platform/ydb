@@ -3088,11 +3088,12 @@ private:
             *vectorResolveProto.MutableIndexSettings() = kmeansDesc.GetSettings().Getsettings();
             vectorResolveProto.SetOverlapClusters(kmeansDesc.GetSettings().overlap_clusters());
             vectorResolveProto.SetOverlapRatio(kmeansDesc.GetSettings().overlap_ratio());
-            vectorResolveProto.SetHnswAllowEmptyRouting(indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw
-                && indexDesc->KeyColumns.size() == 1);
-            // Deleting an old posting must work even if its embedding is invalid.
-            vectorResolveProto.SetValidateDirectLeaves(indexDesc->KeyColumns.size() > 1
-                && vectorResolve.WithData() == "true");
+            vectorResolveProto.SetIndexType(indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw
+                ? NKqpProto::TKqpPhyCnVectorResolve::INDEX_TYPE_HNSW
+                : NKqpProto::TKqpPhyCnVectorResolve::INDEX_TYPE_KMEANS_TREE);
+            vectorResolveProto.SetOperation(vectorResolve.WithData() == "true"
+                ? NKqpProto::TKqpPhyCnVectorResolve::OPERATION_UPSERT
+                : NKqpProto::TKqpPhyCnVectorResolve::OPERATION_DELETE);
 
             // Main table
             FillTablesMap(vectorResolve.Table(), tablesMap);

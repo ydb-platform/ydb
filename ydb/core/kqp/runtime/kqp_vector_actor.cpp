@@ -191,7 +191,9 @@ private:
                             if (!NKikimr::NTableIndex::NKMeans::HasPostingParentFlag(rootClusterId)) {
                                 LevelClusters[rootClusterId].push_back(i);
                             } else {
-                                if (Settings.GetValidateDirectLeaves()) {
+                                // A delete uses only the posting key and must also remove
+                                // postings made with invalid embeddings by older writers.
+                                if (Settings.GetOperation() == NKqpProto::TKqpPhyCnVectorResolve::OPERATION_UPSERT) {
                                     if (!DirectLeafValidator) {
                                         TString error;
                                         DirectLeafValidator = NKMeans::CreateClusters(
@@ -434,7 +436,8 @@ private:
             return;
         }
         if (FetchedClusters.empty()) {
-            if (!ReadingChildClustersOf && Settings.GetHnswAllowEmptyRouting()) {
+            if (!ReadingChildClustersOf && !IsPrefixed
+                    && Settings.GetIndexType() == NKqpProto::TKqpPhyCnVectorResolve::INDEX_TYPE_HNSW) {
                 // Older inline HNSW indexes can lack the initial centroid. Use
                 // the same root leaf as newly created indexes for their postings.
                 FetchedClusters.emplace(NTableIndex::NKMeans::SetPostingParentFlag(1), clusters->GetEmptyRow());

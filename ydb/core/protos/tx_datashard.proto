@@ -388,9 +388,9 @@ message TKqpVectorResolveSettings {
     optional uint64 QuerySpanId = 20;
 
     optional string PoolId = 21;
-    // Preserve inserts into an inline unprefixed HNSW index with an empty level table.
-    optional bool HnswAllowEmptyRouting = 22 [default = false];
-    optional bool ValidateDirectLeaves = 23 [default = false];
+    reserved 22, 23;
+    optional NKqpProto.TKqpPhyCnVectorResolve.EIndexType IndexType = 24;
+    optional NKqpProto.TKqpPhyCnVectorResolve.EOperation Operation = 25;
 }
 
 // Settings of the input-transform actor reading top-K rows from a vector KMeans tree index.

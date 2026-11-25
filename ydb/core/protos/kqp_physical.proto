@@ -342,6 +342,19 @@ message TKqpPhyCnStreamLookup {
 }
 
 message TKqpPhyCnVectorResolve {
+    enum EIndexType {
+        INDEX_TYPE_UNSPECIFIED = 0;
+        INDEX_TYPE_KMEANS_TREE = 1;
+        INDEX_TYPE_HNSW = 2;
+    }
+
+    enum EOperation {
+        OPERATION_UNSPECIFIED = 0;
+        OPERATION_UPSERT = 1;
+        OPERATION_DELETE = 2;
+    }
+
+    reserved 13, 14;
     optional Ydb.Table.VectorIndexSettings IndexSettings = 1;
     TKqpPhyTableId Table = 2;
     TKqpPhyTableId LevelTable = 3;
@@ -354,9 +367,8 @@ message TKqpPhyCnVectorResolve {
     optional uint32 RootClusterColumnIndex = 10;
     optional uint32 OverlapClusters = 11;
     optional double OverlapRatio = 12;
-    // Inline unprefixed HNSW indexes can accept rows before any centroids exist.
-    bool HnswAllowEmptyRouting = 13;
-    bool ValidateDirectLeaves = 14;
+    EIndexType IndexType = 15;
+    EOperation Operation = 16;
 }
 
 message TKqpPhyCnVectorSearch {

@@ -25,6 +25,9 @@ TString SerializeKey(ui64 value) {
 
 void EnableSplit(NKikimrPQ::TPQTabletConfig& config) {
     config.MutablePartitionStrategy()->SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig::CAN_SPLIT);
+    if (config.PartitionKeySchemaSize()) {
+        config.SetSplitByPartitionKey(true);
+    }
 }
 
 NKikimrPQ::TPQTabletConfig MakeTabletConfig(bool withKeySchema, bool canSplit = true) {
@@ -220,7 +223,7 @@ Y_UNIT_TEST_SUITE(TExplicitMessageGroupsTest) {
         UNIT_ASSERT(groups->empty());
     }
 
-    Y_UNIT_TEST(ShouldRegisterAllGroupsWhenKeySchemaTopicCannotSplit) {
+    Y_UNIT_TEST(ShouldRegisterAllGroupsWhenTopicDoesNotSplitByPartitionKey) {
         // given
         const auto tabletConfig = MakeTabletConfig(true, false);
         const auto bootstrapConfig = MakeBootstrapConfig(true);

@@ -99,25 +99,15 @@ struct TKeyRangePartition {
 };
 
 std::optional<TKeyRangePartition> MakeKeyRangePartition(const NKikimrPQ::TPQTabletConfig& tabletConfig, ui32 partitionId) {
-    // Register every source in every partition if the topic is not partitioned by the table key
-    if (!tabletConfig.PartitionKeySchemaSize()) {
-        return std::nullopt;
-    }
-    // Register every source in every partition if the topic cannot split: it is not a key range CDC topic
-    if (!SplitMergeEnabled(tabletConfig)) {
+    // Register every source in every partition unless the topic splits by partition key
+    if (!tabletConfig.GetSplitByPartitionKey()) {
         return std::nullopt;
     }
     const auto* partition = GetPartitionConfig(tabletConfig, partitionId);
     AFL_ENSURE(partition)("partition_id", partitionId);
-    auto keyTypes = MakePartitionKeyTypes(tabletConfig);
-    auto keyRange = ParseTypedKeyRange(partition->GetKeyRange(), keyTypes);
-    // Register every source in every partition if its bounds are not table keys, like after a split by hash on main
-    if (!keyRange) {
-        return std::nullopt;
-    }
     return TKeyRangePartition{
-        .KeyTypes = std::move(keyTypes),
-        .KeyRange = std::move(*keyRange),
+        .KeyTypes = MakePartitionKeyTypes(tabletConfig),
+        .KeyRange = TPartitionKeyRange::Parse(partition->GetKeyRange()),
         .CreateVersion = partition->GetCreateVersion(),
     };
 }

@@ -2231,13 +2231,12 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
                                                                 Partition);
 
         result->Data.SetPartitionId(Partition.OriginalPartitionId);
-        const bool keyRangeTopic = Config.PartitionKeySchemaSize() && SplitMergeEnabled(Config);
         for (auto& [id, v] : SourceIdStorage.GetInMemorySourceIds()) {
             if (v.Explicit) {
                 auto* m = result->Data.AddMessageGroup();
                 m->SetId(id);
                 m->SetSeqNo(v.SeqNo);
-                if (keyRangeTopic && v.KeyRange) {
+                if (Config.GetSplitByPartitionKey() && v.KeyRange) {
                     v.KeyRange->Serialize(*m->MutableKeyRange());
                 }
             }

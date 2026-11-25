@@ -579,7 +579,7 @@ IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabl
     }
 
     // TODO: split key range CDC topics by the table keys of written records
-    if (config.PartitionKeySchemaSize() > 0) {
+    if (config.GetSplitByPartitionKey()) {
         return new TNoneAutopartitioningManager(config);
     }
 

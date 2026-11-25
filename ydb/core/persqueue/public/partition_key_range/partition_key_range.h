@@ -7,8 +7,6 @@
 
 #include <util/generic/maybe.h>
 
-#include <optional>
-
 // forward declarations
 namespace NKikimrPQ {
     class TPartitionKeyRange;
@@ -144,8 +142,6 @@ private:
 bool Intersects(const TPartitionKeyRange& lhs, const TPartitionKeyRange& rhs, TConstArrayRef<NScheme::TTypeInfo> keyTypes);
 
 TVector<NScheme::TTypeInfo> MakePartitionKeyTypes(const NKikimrPQ::TPQTabletConfig& tabletConfig);
-
-std::optional<TPartitionKeyRange> ParseTypedKeyRange(const NKikimrPQ::TPartitionKeyRange& proto, TConstArrayRef<NScheme::TTypeInfo> keyTypes);
 
 } // namespace NKikimr::NPQ
 

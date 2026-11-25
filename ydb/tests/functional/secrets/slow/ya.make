@@ -8,7 +8,6 @@ TEST_SRCS(
     test_secrets_monitoring.py
 )
 
-TAG(ya:fat)
 SIZE(LARGE)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/flavours/flavours_deps.inc)

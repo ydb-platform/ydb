@@ -399,27 +399,29 @@ public:
 
 private:
     void Fail(CURLcode result, const TIssue& error) final {
+        Fail(result, error, 0);
+    }
+
+    void Fail(CURLcode result, const TIssue& error, long httpResponseCode) {
         TIssues issues{ error };
         const std::unique_lock lock(SyncCallbacks);
         while (!Callbacks.empty()) {
-            Callbacks.top()(IHTTPGateway::TResult(result, issues));
+            IHTTPGateway::TResult response(result, issues);
+            response.Content.HttpResponseCode = httpResponseCode;
+            Callbacks.top()(std::move(response));
             Callbacks.pop();
         }
     }
 
     void Done(CURLcode result, long httpResponseCode) final {
-        TIssues issues;
         if (CURLE_OK != result) {
-            issues.AddIssue(TIssue(TStringBuilder{} << curl_easy_strerror(result) << ". Detailed: " << GetDetailedErrorText()));
+            return Fail(
+                result, TIssue(TStringBuilder{} << curl_easy_strerror(result) << ". Detailed: " << GetDetailedErrorText()), httpResponseCode);
         }
 
         const std::unique_lock lock(SyncCallbacks);
         while (!Callbacks.empty()) {
-            if (CURLE_OK != result) {
-                IHTTPGateway::TResult response(result, issues);
-                response.Content.HttpResponseCode = httpResponseCode;
-                Callbacks.top()(std::move(response));
-            } else if (1U == Callbacks.size()) {
+            if (1U == Callbacks.size()) {
                 Callbacks.top()(IHTTPGateway::TContent(std::move(Buffer), httpResponseCode, std::move(Header)));
             } else {
                 Callbacks.top()(IHTTPGateway::TContent(Buffer, httpResponseCode, Header));

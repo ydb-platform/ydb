@@ -585,6 +585,7 @@ ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnot
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-4-1_to_prestable-27-1-1-True]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-4-1_to_stable-26-3-1-False]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-4-1_to_stable-26-3-1-True]
+ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-4-1_to_stable-26-4-1-False]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-4-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_stable-26-4-1-False]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_stable-26-4-1-True]

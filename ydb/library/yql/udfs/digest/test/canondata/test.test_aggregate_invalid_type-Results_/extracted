@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:1:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
+    	SELECT DigestAggregate::AggregateFinalize(DigestAggregate::AggregateAddValue(
+	^
+        <tmp_path>/program.sql:<main>:1:25: Error: At function: SqlCall, At tuple, At function: PositionalArgs
+        	SELECT DigestAggregate::AggregateFinalize(DigestAggregate::AggregateAddValue(
+	                        ^
+            <tmp_path>/program.sql:<main>:1:60: Error: At function: Apply, At function: Udf, At DigestAggregate.AggregateAddValue
+            	SELECT DigestAggregate::AggregateFinalize(DigestAggregate::AggregateAddValue(
+	                                                           ^
+                <tmp_path>/program.sql:<main>:1:60: Error: Failed to find UDF function: DigestAggregate.AggregateAddValue, reason: Error: Module: DigestAggregate, function: AggregateAddValue, error: (yexception) ydb/library/yql/udfs/digest/udf.cpp:xxx: Digest aggregate expects Tuple<Uint64, Uint64>
+                	SELECT DigestAggregate::AggregateFinalize(DigestAggregate::AggregateAddValue(
+	                                                           ^

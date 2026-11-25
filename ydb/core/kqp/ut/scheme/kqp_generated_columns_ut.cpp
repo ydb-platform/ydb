@@ -3767,6 +3767,12 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         });
         UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
 
+        auto seed = kikimr.RunCall([&] {
+            return client.ExecuteQuery("UPSERT INTO `/Root/SplitStored` (k, a, b, v) VALUES (1u, 8, 9, 7ul);",
+                TTxControl::NoTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(seed.IsSuccess(), seed.GetIssues().ToString());
+
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         const auto edgeActor = runtime.AllocateEdgeActor();
         const auto initialShards = GetTableShards(&kikimr.GetTestServer(), edgeActor, "/Root/SplitStored");
@@ -3894,7 +3900,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         });
 
         UNIT_ASSERT_C(check.IsSuccess(), check.GetIssues().ToString());
-        CompareYson("[[1u;11;42u];[5u;51;42u];[9u;91;42u];[10u;101;42u];[15u;151;42u];[20u;201;42u]]",
+        CompareYson("[[1u;11;7u];[5u;51;42u];[9u;91;42u];[10u;101;42u];[15u;151;42u];[20u;201;42u]]",
             FormatResultSetYson(check.GetResultSet(0)));
     }
 

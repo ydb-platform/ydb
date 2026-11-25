@@ -181,6 +181,18 @@ public:
                 << "\nAST:\n" << ast);
     }
 
+    void CheckTargetReadCount(const std::string& query, size_t expected) {
+        const TString ast = ExplainAst(query);
+        size_t actual = 0;
+        for (const TStringBuf callable : {"(KqpCnStreamLookup ", "(KqpCnLookupTable ", "(KqpLookupTable ",
+                "(KqpReadTable ", "(KqpReadTableRanges ", "(KqpRowsSourceSettings "}) {
+            for (size_t pos = ast.find(callable); pos != TString::npos; pos = ast.find(callable, pos + callable.size())) {
+                ++actual;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, "target reads for: " << query << "\nAST:\n" << ast);
+    }
+
     // The column description as SchemeShard persisted it
     NKikimrSchemeOp::TColumnDescription ColumnDesc(const std::string& path, const std::string& column) {
         auto describe = Kikimr.GetTestClient().Ls(TString(path));
@@ -1371,7 +1383,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         };
 
         fixture.CheckStreamLookup(query("INSERT INTO TestTable (k, other) VALUES (1, 10)"), false);
-        fixture.CheckStreamLookup(query("UPSERT INTO TestTable (k, other) VALUES (1, 10)"), true);
+        fixture.CheckStreamLookup(query("UPSERT INTO TestTable (k, other) VALUES (1, 10)"), WithReturning);
         fixture.CheckStreamLookup(query("REPLACE INTO TestTable (k, other) VALUES (1, 10)"), false);
         fixture.CheckStreamLookup(query("UPDATE TestTable SET other = 10 WHERE k = 1"), WithReturning);
         fixture.CheckStreamLookup(query("DELETE FROM TestTable WHERE k = 1"), WithReturning);
@@ -1405,6 +1417,29 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec("INSERT INTO TestTable (k, v) VALUES (1, 7ul);");
         fixture.Exec("UPSERT INTO TestTable (k, other) VALUES (1, 5);");
         fixture.Check("SELECT k, other, v FROM TestTable;", "[[1;[5];[7u]]]");
+    }
+
+    Y_UNIT_TEST_TWIN(UpsertOmittedDefaultsUseWritePath, StreamIndexWrite) {
+        TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = StreamIndexWrite});
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                other Int32,
+                expr Uint64 DEFAULT RandomNumber(1) * 0ul + 42ul,
+                literal Uint64 DEFAULT 8ul,
+                PRIMARY KEY (k)
+            );
+        )");
+        fixture.Exec("UPSERT INTO TestTable (k, expr, literal) VALUES (1, NULL, 7ul);");
+
+        const std::string upsert = "UPSERT INTO TestTable (k, other) VALUES (1, 10), (2, 20);";
+        fixture.CheckTargetReadCount(upsert, 0);
+        auto result = fixture.Runner().GetQueryClient().ExecuteQuery(upsert, TTxControl::NoTx(),
+            TExecuteQuerySettings().StatsMode(EStatsMode::Full)).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetStats());
+        AssertTableStats(result, "/Root/TestTable", {.ExpectedReads = 0, .ExpectedUpdates = 2});
+        fixture.Check("SELECT k, other, expr, literal FROM TestTable ORDER BY k;", "[[1;[10];#;[7u]];[2;[20];[42u];[8u]]]");
     }
 
     Y_UNIT_TEST(ExpressionLiteralAndGeneratedDefaultsStayConsistent) {
@@ -1467,6 +1502,35 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             "[[1;9u;[2u];11u];[2;4u;[3u];7u]]");
     }
 
+    Y_UNIT_TEST_TWIN(UpsertGeneratedUsesStoredDependenciesOrDefaults, CompileTimeDefaults) {
+        TTestFixture fixture(TFixtureOptions{.GeneratedStored = true, .CompileTimeDefaults = CompileTimeDefaults});
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32,
+                a Uint64 NOT NULL DEFAULT COALESCE(RandomNumber(1) % 1000000000ul, 0ul) + 100ul,
+                b Uint64 DEFAULT 8ul,
+                g Uint64 NOT NULL GENERATED ALWAYS AS (a + COALESCE(b, 0ul)) STORED,
+                PRIMARY KEY (k)
+            );
+        )");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "a"),
+            "COALESCE(RandomNumber(1) % 1000000000ul, 0ul) + 100ul");
+        UNIT_ASSERT(fixture.ColumnDesc("/Root/TestTable", "b").HasDefaultFromLiteral());
+        fixture.Exec("UPSERT INTO TestTable (k, a, b) VALUES (NULL, 7ul, 9ul), (1, 17ul, NULL);");
+
+        const std::string supplied = "UPSERT INTO TestTable (k, a, b) VALUES (3, 10ul, 11ul);";
+        fixture.CheckTargetReadCount(supplied, 0);
+        fixture.Exec(supplied);
+        fixture.Check("SELECT g FROM TestTable WHERE k = 3;", "[[21u]]");
+
+        const std::string omitted = "UPSERT INTO TestTable (k) VALUES (NULL), (1), (2);";
+        fixture.CheckTargetReadCount(omitted, 1);
+        fixture.Exec(omitted);
+        fixture.Check("SELECT a, b, g FROM TestTable WHERE k IS NULL OR k = 1 ORDER BY k;",
+            "[[7u;[9u];16u];[17u;#;17u]]");
+        fixture.Check("SELECT b, g = a + 8ul FROM TestTable WHERE k = 2;", "[[[8u];%true]]");
+    }
+
     Y_UNIT_TEST(StoredAndVirtualColumnsUseDefaultedValue) {
         auto appConfig = DefaultExprAppConfig(TFixtureOptions{.GeneratedStored = true});
         appConfig.MutableFeatureFlags()->SetEnableGeneratedVirtual(true);
@@ -1496,43 +1560,38 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             "[[1;7u;8u;9u];[2;50u;51u;52u]]");
     }
 
-    Y_UNIT_TEST_QUAD(FailingDefaultOnlyRunsOnUpsertInsert, StreamWrite, WithIndex) {
+    Y_UNIT_TEST_QUAD(FailingDefaultIsEvaluatedBeforeUpsert, StreamWrite, WithIndex) {
         TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = StreamWrite});
         fixture.Exec(DefaultExprDDL(
             R"(v Uint64 DEFAULT Ensure(RandomNumber(1), false, "default evaluated"))"));
         if (WithIndex) {
             fixture.Exec("ALTER TABLE TestTable ADD INDEX idx GLOBAL SYNC ON (other) COVER (v);");
         }
-        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (1, 7ul);");
-        fixture.Check("UPSERT INTO TestTable (k, other) VALUES (1, 5) RETURNING k, other, v;",
-            "[[1;[5];[7u]]]");
-        fixture.Check("SELECT k, other, v FROM TestTable;", "[[1;[5];[7u]]]");
-        if (WithIndex) {
-            fixture.Check("SELECT k, other, v FROM TestTable VIEW idx;", "[[1;[5];[7u]]]");
-        }
+        fixture.Exec("INSERT INTO TestTable (k, other, v) VALUES (1, 4, 7ul);");
+        fixture.Rejects("UPSERT INTO TestTable (k, other) VALUES (1, 5) RETURNING k, other, v;", "default evaluated");
         fixture.Rejects("UPSERT INTO TestTable (k, other) VALUES (2, 6);", "default evaluated");
-        fixture.Check("SELECT k, other, v FROM TestTable;", "[[1;[5];[7u]]]");
+        fixture.Check("SELECT k, other, v FROM TestTable;", "[[1;[4];[7u]]]");
+        if (WithIndex) {
+            fixture.Check("SELECT k, other, v FROM TestTable VIEW idx;", "[[1;[4];[7u]]]");
+        }
         fixture.Exec("UPSERT INTO TestTable (k, other, v) VALUES (2, 6, 8ul);");
-        fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", "[[1;[5];[7u]];[2;[6];[8u]]]");
-        fixture.Exec("UPSERT INTO TestTable (k, v) VALUES (1, NULL);");
-        fixture.Check("UPSERT INTO TestTable (k, other) VALUES (1, 9) RETURNING k, other, v;",
-            "[[1;[9];#]]");
+        fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", "[[1;[4];[7u]];[2;[6];[8u]]]");
     }
 
-    Y_UNIT_TEST_QUAD(NullKeyUpsertPreservesLazyDefaults, StreamWrite, WithIndex) {
+    Y_UNIT_TEST_QUAD(NullKeyUpsertPreservesStoredDefaults, StreamWrite, WithIndex) {
         TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = StreamWrite});
         fixture.Exec(TStringBuilder() << R"(
             CREATE TABLE NullKeyTable (
                 k Int32,
                 other Int32,
-                v Uint64 DEFAULT Ensure(RandomNumber(1), false, "default evaluated"),
+                v Uint64 DEFAULT )" << DefaultExpr << R"(,
                 PRIMARY KEY (k)
             );
             CREATE TABLE CompositeNullKeyTable (
                 k Int32,
                 part Int32,
                 other Int32,
-                v Uint64 DEFAULT Ensure(RandomNumber(1), false, "default evaluated"),
+                v Uint64 DEFAULT )" << DefaultExpr << R"(,
                 PRIMARY KEY (k, part)
             );
             CREATE TABLE NullKeyInsertTable (
@@ -1561,8 +1620,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             fixture.Check("SELECT k, other, v FROM NullKeyTable VIEW idx;", "[[#;[6];#]]");
         }
         fixture.Exec("DELETE FROM NullKeyTable WHERE k IS NULL;");
-        fixture.Rejects("UPSERT INTO NullKeyTable (k, other) VALUES (NULL, 7);", "default evaluated");
-        fixture.Check("SELECT COUNT(*) FROM NullKeyTable;", "[[0u]]");
+        fixture.Exec("UPSERT INTO NullKeyTable (k, other) VALUES (NULL, 7);");
+        fixture.Check("SELECT k, other, v FROM NullKeyTable;", "[[#;[7];[42u]]]");
         fixture.Rejects("UPSERT INTO NullKeyTable (other) VALUES (8);", "Missing key column in input: k");
 
         fixture.Exec("INSERT INTO CompositeNullKeyTable (k, part, v) VALUES (1, NULL, 7ul), (NULL, 1, NULL);");
@@ -1570,11 +1629,11 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.CheckUnordered("UPSERT INTO CompositeNullKeyTable (k, part, other) "
             "VALUES (1, NULL, 5), (NULL, 1, 6) RETURNING k, part, other, v;", existingRows);
         fixture.CheckUnordered("SELECT k, part, other, v FROM CompositeNullKeyTable;", existingRows);
-        fixture.Rejects("UPSERT INTO CompositeNullKeyTable (k, part, other) VALUES (NULL, NULL, 7);",
-            "default evaluated");
-        fixture.CheckUnordered("SELECT k, part, other, v FROM CompositeNullKeyTable;", existingRows);
+        fixture.Exec("UPSERT INTO CompositeNullKeyTable (k, part, other) VALUES (NULL, NULL, 7);");
+        const TString allRows = "[[[1];#;[5];[7u]];[#;[1];[6];#];[#;#;[7];[42u]]]";
+        fixture.CheckUnordered("SELECT k, part, other, v FROM CompositeNullKeyTable;", allRows);
         if (WithIndex) {
-            fixture.CheckUnordered("SELECT k, part, other, v FROM CompositeNullKeyTable VIEW idx;", existingRows);
+            fixture.CheckUnordered("SELECT k, part, other, v FROM CompositeNullKeyTable VIEW idx;", allRows);
         }
 
         const TString insertedRows = "[[#;[1];[10];[42u]];[[1];#;[20];[42u]];[#;#;[30];[42u]]]";
@@ -1926,7 +1985,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             R"(CAST("invalid" || CAST(RandomNumber(1) AS String) AS Int32))");
         fixture.Check("UPSERT INTO TestTable (other) VALUES (5) RETURNING k, other, v;", "[[#;[5];[42u]]]");
         fixture.Exec(R"(
-            ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT Ensure(RandomNumber(1), false, "unused default");
+            ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT RandomNumber(1) * 0ul + 50ul;
         )");
         fixture.Check("UPSERT INTO TestTable (other) VALUES (6) RETURNING k, other, v;", "[[#;[6];[42u]]]");
         fixture.Check("SELECT k, other, v FROM TestTable;", "[[#;[6];[42u]]]");

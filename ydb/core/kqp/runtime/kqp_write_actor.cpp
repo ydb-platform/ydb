@@ -3376,7 +3376,7 @@ public:
                 GetOperation(Settings.GetType()),
                 std::move(keyColumnsMetadata),
                 std::move(columnsMetadata),
-                0,
+                Settings.GetDefaultColumnsIds().size(),
                 Settings.GetPriority(),
                 GetOptionalMvccSnapshot(Settings));
             WaitingForTableActor = true;

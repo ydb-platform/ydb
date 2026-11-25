@@ -74,19 +74,14 @@ Y_UNIT_TEST_SUITE(KqpRboEffectsGuardsFallback) {
         auto seed = client.ExecuteQuery("INSERT INTO D (k, payload, v) VALUES (1, 0, 7ul);", TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(seed.IsSuccess(), seed.GetIssues().ToString());
 
-        // The lookup for omitted defaults passes the input row and its key as a tuple.
         auto result = client.ExecuteQuery("UPSERT INTO D (k, payload) VALUES (1, 5), (2, 6);", TTxControl::NoTx()).GetValueSync();
         const auto issues = result.GetIssues().ToString();
-        UNIT_ASSERT_STRING_CONTAINS(issues, "New RBO cannot import a table-effect Map whose body is not AsStruct");
-        UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), Fallback, issues);
-        if constexpr (Fallback) {
-            UNIT_ASSERT_STRING_CONTAINS(issues, "Compilation with the new RBO failed");
-        }
+        UNIT_ASSERT_C(result.IsSuccess(), issues);
+        UNIT_ASSERT_C(!TStringBuf(issues).Contains("Compilation with the new RBO failed"), issues);
 
         auto stored = client.ExecuteQuery("SELECT k, payload, v FROM D ORDER BY k;", TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(stored.IsSuccess(), stored.GetIssues().ToString());
-        CompareYson(Fallback ? "[[1;[5];[7u]];[2;[6];[42u]]]" : "[[1;[0];[7u]]]",
-            FormatResultSetYson(stored.GetResultSet(0)));
+        CompareYson("[[1;[5];[7u]];[2;[6];[42u]]]", FormatResultSetYson(stored.GetResultSet(0)));
     }
 
     Y_UNIT_TEST(SingleReturningWithoutStreamIndex) {

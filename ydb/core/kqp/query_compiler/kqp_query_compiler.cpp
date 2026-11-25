@@ -33,6 +33,8 @@
 
 #include <util/generic/bitmap.h>
 
+#include <algorithm>
+
 namespace NKikimr::NKqp {
 
 using namespace NKikimr::NMiniKQL;
@@ -2615,7 +2617,6 @@ private:
 
             const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Path()).Metadata;
 
-            // Default columns processed locally (filled by the stream-write path only).
             TLocalDefaultColumns localDefaultColumns;
 
             const bool streamIndexWrite = Config->GetEnableIndexStreamWrite();
@@ -2623,6 +2624,12 @@ private:
                 localDefaultColumns = BuildStreamIndexWrite(settings, settingsProto, tablesMap, tableMeta, shape, streamIndexWrite);
             } else {
                 SetSinkOperationType(settings, settingsProto);
+                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
+                        && tableMeta->Kind == EKikimrTableKind::Datashard && !tableMeta->IsIndexImplTable
+                        && settings.ReturningColumns().Empty()
+                        && std::ranges::none_of(tableMeta->Indexes, &TIndexDescription::ItUsedForWrite)) {
+                    localDefaultColumns = CollectLocalDefaultColumns(settings, tableMeta);
+                }
             }
 
             FillMainTableColumnsAndOrder(settings, settingsProto, tableMeta, shape, localDefaultColumns);

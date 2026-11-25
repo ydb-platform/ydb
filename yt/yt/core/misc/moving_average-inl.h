@@ -20,7 +20,7 @@ void TMovingAverage<TValue>::AddValue(TValue value)
     Total_ += value;
     Values_.push_back(std::move(value));
 
-    if (std::ssize(Values_) > WindowSize_) {
+    while (std::ssize(Values_) > WindowSize_) {
         RemoveOldestValue();
     }
 }

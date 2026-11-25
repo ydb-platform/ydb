@@ -33,13 +33,13 @@ std::expected<std::optional<TMirror3dcGroupConfiguration>, TString> TBlobStorage
             return {}; // Wait for recovery to make the next DC transition possible.
         }
     }
-    using S = NKikimrBlobStorage::TGroupState;
-    if (group.TargetInvariant == S::INVARIANT_2) {
-        if (current.State == S::DC_FAILURE_INV1) {
-            return MakeMirror3dcGroupConfiguration(S::DC_FAILURE_INV2_PENDING, current.Realms);
+    using NKikimrBlobStorage::TGroupState;
+    if (group.TargetInvariant == TGroupState::INVARIANT_2) {
+        if (current.State == TGroupState::DC_FAILURE_INV1) {
+            return MakeMirror3dcGroupConfiguration(TGroupState::DC_FAILURE_INV2_PENDING, current.Realms);
         }
-        if (current.State == S::DC_SOLO_INV1) {
-            return MakeMirror3dcGroupConfiguration(S::DC_SOLO_INV2_PENDING, current.Realms);
+        if (current.State == TGroupState::DC_SOLO_INV1) {
+            return MakeMirror3dcGroupConfiguration(TGroupState::DC_SOLO_INV2_PENDING, current.Realms);
         }
     }
     return {};

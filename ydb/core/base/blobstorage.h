@@ -1230,9 +1230,16 @@ struct TEvBlobStorage {
             ui32 RequestedSize;
             TRope Buffer;
             TVector<TPartMapItem> PartMap;
+            // GC metadata reported by the replicas contributing to this response. DoNotKeep overrides Keep.
+            // Both false means no flag was reported. A retained index record can report a flag even on NODATA.
             bool Keep = false;
             bool DoNotKeep = false;
             std::optional<bool> LooksLikePhantom; // filled only when PhantomCheck is true
+
+            void MergeKeepFlags(bool keep, bool doNotKeep) {
+                DoNotKeep |= doNotKeep;
+                Keep = (Keep || keep) && !DoNotKeep;
+            }
 
             TResponse()
                 : Status(NKikimrProto::UNKNOWN)

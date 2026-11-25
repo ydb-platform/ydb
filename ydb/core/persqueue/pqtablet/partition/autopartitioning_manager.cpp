@@ -1,4 +1,5 @@
 #include "autopartitioning_manager.h"
+#include "key_range_autopartitioning_manager.h"
 
 #include <memory>
 #include <type_traits>
@@ -568,7 +569,7 @@ private:
     TStatefulAutopartitioningManager AutopartitioningManager;
 };
 
-IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId) {
+IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId, const TSourceIdStorage& sourceIds) {
     auto withAutopartitioning = SplitMergeEnabled(config) && !MirroringEnabled(config);
     if (!withAutopartitioning) {
         return new TNoneAutopartitioningManager(config);
@@ -576,6 +577,10 @@ IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabl
 
     if (partitionId.IsSupportivePartition()) {
         return new TSupportiveAutopartitioningManager(config, partitionId.OriginalPartitionId);
+    }
+
+    if (config.PartitionKeySchemaSize() > 0) {
+        return CreateKeyRangeAutopartitioningManager(config, partitionId.OriginalPartitionId, sourceIds);
     }
 
     return new TStatefulAutopartitioningManager(config, partitionId.OriginalPartitionId);

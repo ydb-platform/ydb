@@ -16,6 +16,15 @@ Y_UNIT_TEST_SUITE(TKllMedianTest) {
         UNIT_ASSERT_EXCEPTION(sketch.Quantile(0.5), yexception);
     }
 
+    Y_UNIT_TEST(RankSumsWeightsBelowValue) {
+        const TVector<std::pair<int, ui64>> items = {{30, 5}, {10, 2}, {20, 3}, {20, 4}};
+        UNIT_ASSERT_VALUES_EQUAL(GetRank(items, 5), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetRank(items, 10), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetRank(items, 20), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetRank(items, 25), 9);
+        UNIT_ASSERT_VALUES_EQUAL(GetRank(items, 31), 14);
+    }
+
     Y_UNIT_TEST(SmallKThrows) {
         UNIT_ASSERT_EXCEPTION(TKllSketch<int>(1, 42), yexception);
     }

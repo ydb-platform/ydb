@@ -39,6 +39,8 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/strbuf.h>
 
+#include <optional>
+
 //TODO: move this code to vieiwer
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
@@ -88,8 +90,53 @@ static bool IsDirectReadCmd(const auto& cmd) {
     return cmd.GetDirectReadId() != 0;
 }
 
+namespace {
 
-TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrapConfig& bootstrapCfg, const NKikimrPQ::TPartitions& partitionsData, const TPartitionGraph& graph, ui32 partitionId) {
+struct TKeyRangePartition {
+    TVector<NScheme::TTypeInfo> KeyTypes;
+    TPartitionKeyRange KeyRange;
+    ui64 CreateVersion = 0;
+};
+
+std::optional<TKeyRangePartition> MakeKeyRangePartition(const NKikimrPQ::TPQTabletConfig& tabletConfig, ui32 partitionId) {
+    // Register every source in every partition if the topic is not partitioned by the table key
+    if (!tabletConfig.PartitionKeySchemaSize()) {
+        return std::nullopt;
+    }
+    // Register every source in every partition if the topic cannot split: it is not a key range CDC topic
+    if (!SplitMergeEnabled(tabletConfig)) {
+        return std::nullopt;
+    }
+    const auto* partition = GetPartitionConfig(tabletConfig, partitionId);
+    AFL_ENSURE(partition)("partition_id", partitionId);
+    auto keyTypes = MakePartitionKeyTypes(tabletConfig);
+    auto keyRange = ParseTypedKeyRange(partition->GetKeyRange(), keyTypes);
+    // Register every source in every partition if its bounds are not table keys, like after a split by hash on main
+    if (!keyRange) {
+        return std::nullopt;
+    }
+    return TKeyRangePartition{
+        .KeyTypes = std::move(keyTypes),
+        .KeyRange = std::move(*keyRange),
+        .CreateVersion = partition->GetCreateVersion(),
+    };
+}
+
+void KeepKeyRangeMessageGroups(TEvPQ::TMessageGroups& messageGroups, const TKeyRangePartition& partition, ui64 configVersion) {
+    // Take the parent sources only when the partition is created: a later config would bring back sources that have left it
+    if (partition.CreateVersion && partition.CreateVersion < configVersion) {
+        messageGroups.clear();
+        return;
+    }
+    // Keep only the sources whose key range intersects the partition
+    EraseNodesIf(messageGroups, [&](const auto& group) {
+        return !Intersects(group.second.KeyRange, partition.KeyRange, partition.KeyTypes);
+    });
+}
+
+} // anonymous
+
+TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrapConfig& bootstrapCfg, const NKikimrPQ::TPartitions& partitionsData, const NKikimrPQ::TPQTabletConfig& tabletConfig, const TPartitionGraph& graph, ui32 partitionId) {
     TEvPQ::TMessageGroupsPtr explicitMessageGroups = std::make_shared<TEvPQ::TMessageGroups>();
 
     for (const auto& mg : bootstrapCfg.GetExplicitMessageGroups()) {
@@ -109,9 +156,16 @@ TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrap
                 for (const auto& g : p.GetMessageGroup()) {
                     auto& group = (*explicitMessageGroups)[g.GetId()];
                     group.SeqNo = std::max(group.SeqNo, g.GetSeqNo());
+                    if (g.HasKeyRange()) {
+                        group.KeyRange = TPartitionKeyRange::Parse(g.GetKeyRange());
+                    }
                 }
             }
         }
+    }
+
+    if (const auto keyRangePartition = MakeKeyRangePartition(tabletConfig, partitionId)) {
+        KeepKeyRangeMessageGroups(*explicitMessageGroups, *keyRangePartition, tabletConfig.GetVersion());
     }
 
     return explicitMessageGroups;
@@ -4582,7 +4636,7 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
 
     auto graph = MakePartitionGraph(tx.TabletConfig);
     for (const ui32 partitionId : tx.Partitions) {
-        auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData, graph, partitionId);
+        auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData, tx.TabletConfig, graph, partitionId);
         auto event = std::make_unique<TEvPQ::TEvTxCommit>(tx.Step, tx.TxId, explicitMessageGroups);
 
         event->SerializedTx = serializedTx;

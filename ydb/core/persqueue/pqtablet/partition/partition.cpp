@@ -757,7 +757,7 @@ void TPartition::PrepareCdcReplicationTrim(TEvKeyValue::TEvRequest& request) {
     // cycle must have finished too, so neither can restore these data keys.
     PQ_ENSURE(ChangeConfig && ShouldTrimCdcReplication(ChangeConfig->Config));
     PQ_ENSURE(!CompactionInProgress);
-    PendingCdcReplicationTrimOffset = GetEndOffset();
+    PendingCdcReplicationTrimOffset = Max(GetEndOffset(), GetMirroredOffset());
 
     NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeData, Partition);
     NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeTmpData, Partition);
@@ -784,7 +784,6 @@ void TPartition::CompleteCdcReplicationTrim() {
 
     FinalizeEmptyBlobEncoder(BlobEncoder, CdcReplicationTrimOffset, true);
     FinalizeEmptyBlobEncoder(CompactionBlobEncoder, CdcReplicationTrimOffset, true);
-    BlobEncoder.MirroredOffset = Min(BlobEncoder.MirroredOffset, CdcReplicationTrimOffset);
     BlobEncoder.FirstUncompactedOffset = CdcReplicationTrimOffset;
     BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
     CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
@@ -800,10 +799,8 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
 
     NKikimrPQ::TPartitionMeta meta;
     meta.SetStartOffset(PendingCdcReplicationTrimOffset.value_or(GetStartOffset()));
-    meta.SetEndOffset(GetEndOffset());
-    meta.SetMirroredOffset(PendingCdcReplicationTrimOffset
-        ? Min(BlobEncoder.MirroredOffset, *PendingCdcReplicationTrimOffset)
-        : BlobEncoder.MirroredOffset);
+    meta.SetEndOffset(PendingCdcReplicationTrimOffset.value_or(GetEndOffset()));
+    meta.SetMirroredOffset(GetMirroredOffset());
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
     meta.SetNextMessageIdDeduplicatorWAL(MessageIdDeduplicator.NextMessageIdDeduplicatorWAL);

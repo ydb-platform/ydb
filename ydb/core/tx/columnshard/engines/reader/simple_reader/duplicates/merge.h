@@ -63,19 +63,19 @@ private:
 
             THashMap<ui64, THashMap<ui32, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>> columnsByPortion;
             for (auto&& [address, data] : DataByAddress) {
-                AFL_VERIFY(columnsByPortion[address.GetPortionId()].emplace(address.GetColumnId(), data).second);
+                YDB_LOG_VERIFY(columnsByPortion[address.GetPortionId()].emplace(address.GetColumnId(), data).second);
             }
 
             for (auto& [portion, columns] : columnsByPortion) {
                 std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> sortedColumns;
                 for (const auto& [columnId, field] : fieldByColumn) {
                     auto column = columns.FindPtr(columnId);
-                    AFL_VERIFY(column);
+                    YDB_LOG_VERIFY(column);
                     sortedColumns.emplace_back(*column);
                 }
                 std::shared_ptr<NArrow::TGeneralContainer> container =
                     std::make_shared<NArrow::TGeneralContainer>(fields, std::move(sortedColumns));
-                AFL_VERIFY(dataByPortion.emplace(portion, std::move(container)).second);
+                YDB_LOG_VERIFY(dataByPortion.emplace(portion, std::move(container)).second);
             }
 
             return dataByPortion;

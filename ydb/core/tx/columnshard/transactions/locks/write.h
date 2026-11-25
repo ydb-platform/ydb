@@ -36,9 +36,9 @@ public:
         , RecordBatch(NArrow::TColumnOperator().Extract(batch, NArrow::ColumnNames(pkSchema)))
         , LogicalTypes(NArrow::ColumnTypes(pkSchema))
     {
-        AFL_VERIFY(PathId);
-        AFL_VERIFY(RecordBatch);
-        AFL_VERIFY(LogicalTypes.size() == static_cast<size_t>(RecordBatch->num_columns()));
+        YDB_LOG_VERIFY(PathId);
+        YDB_LOG_VERIFY(RecordBatch);
+        YDB_LOG_VERIFY(LogicalTypes.size() == static_cast<size_t>(RecordBatch->num_columns()));
     }
 };
 

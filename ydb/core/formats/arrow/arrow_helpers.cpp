@@ -265,14 +265,14 @@ std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::Recor
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
     const std::vector<std::pair<TString, NScheme::TTypeInfo>>& sortingSchema, const bool andUnique) {
     const auto keyBatch = TColumnOperator().Extract(batch, ColumnNames(sortingSchema));
-    AFL_VERIFY(keyBatch);
+    YDB_LOG_VERIFY(keyBatch);
     return SortBatch(batch, keyBatch->columns(), ColumnTypes(sortingSchema), andUnique);
 }
 
 bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
     const std::vector<std::pair<TString, NScheme::TTypeInfo>>& sortingSchema, const bool desc) {
     const auto keyBatch = TColumnOperator().Extract(batch, ColumnNames(sortingSchema));
-    AFL_VERIFY(keyBatch);
+    YDB_LOG_VERIFY(keyBatch);
     return desc ? IsSelfSorted<true, true>(keyBatch, ColumnTypes(sortingSchema))
                 : IsSelfSorted<false, true>(keyBatch, ColumnTypes(sortingSchema));
 }
@@ -305,7 +305,7 @@ std::shared_ptr<arrow::ChunkedArray> ReallocateArray(const std::shared_ptr<arrow
     auto f = std::make_shared<arrow::Field>("1", original->type());
     auto table = arrow::Table::Make(std::make_shared<arrow::Schema>(arrow::FieldVector({ f })), { original }, original->length());
     table = ReallocateBatch(table, pool);
-    AFL_VERIFY(table->num_columns() == 1);
+    YDB_LOG_VERIFY(table->num_columns() == 1);
     return table->column(0);
 }
 
@@ -318,7 +318,7 @@ std::shared_ptr<arrow::Array> ReallocateArray(
         return arr;
     }
     auto cArray = NArrow::ReallocateArray(std::make_shared<arrow::ChunkedArray>(arr), pool);
-    AFL_VERIFY(cArray->num_chunks() == 1);
+    YDB_LOG_VERIFY(cArray->num_chunks() == 1);
     return cArray->chunk(0);
 }
 

@@ -105,6 +105,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , VolatilePhantomFlagStorageBlobSizeLimitBytes(1'000'000, 1, 10'000'000)
     , EnableChecksumReadValidationOnVDisk(0, 0, 1)
     , EnableChecksumWriteValidationOnVDisk(0, 0, 1)
+    , EnableVDiskSectorPreparation(0, 0, 1)
     , EnableChunkKeeper(0, 0, 1)
     , SpaceReportPeriodSeconds(0, 0, 86400)
     , MaxCommonLogChunksHDD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
@@ -256,6 +257,11 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
         hFunc(TEvNodeWardenNotifySyncerFinished, Handle);
+        hFunc(NGroupSyncer::TEvRunMirror3dcRepair, Handle);
+        hFunc(NGroupSyncer::TEvMirror3dcRepairScanResult, Handle);
+        hFunc(TEvNodeWardenStandbyDirty, Handle);
+        hFunc(TEvNodeWardenRegisterBridgeProxy, Handle);
+        hFunc(TEvNodeWardenStandbySealed, Handle);
 
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse, Handle);
@@ -431,6 +437,11 @@ void TNodeWarden::PassAway() {
         new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(SelfId()));
 
     NTabletPipe::CloseClient(SelfId(), PipeClientId);
+    WorkingSyncers.clear();
+    UpdateSyncerCounters();
+    if (BridgeSyncNodeCounters) {
+        BridgeSyncNodeCounters->RateLimit->Set(0);
+    }
     StopInvalidGroupProxy();
     TerminateBlobDepotS3Routers();
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, DsProxyNodeMonActor, {}, nullptr, 0));
@@ -581,6 +592,7 @@ void TNodeWarden::Bootstrap() {
                 icb->VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes);
         TControlBoard::RegisterSharedControl(EnableChecksumReadValidationOnVDisk, icb->VDiskControls.EnableChecksumReadValidationOnVDisk);
         TControlBoard::RegisterSharedControl(EnableChecksumWriteValidationOnVDisk, icb->VDiskControls.EnableChecksumWriteValidationOnVDisk);
+        TControlBoard::RegisterSharedControl(EnableVDiskSectorPreparation, icb->VDiskControls.EnableVDiskSectorPreparation);
         TControlBoard::RegisterSharedControl(EnableChunkKeeper, icb->VDiskControls.EnableChunkKeeper);
         TControlBoard::RegisterSharedControl(SpaceReportPeriodSeconds, icb->VDiskControls.SpaceReportPeriodSeconds);
 
@@ -658,6 +670,7 @@ void TNodeWarden::Bootstrap() {
     // create bridge syncer rate quoter
     SyncRateConfigLimit = Cfg->BlobStorageConfig->GetBridgeSyncRateBytesPerSecond();
     SyncRateQuoter = std::make_shared<TReplQuoter>(SyncRateConfigLimit);
+    UpdateSyncerCounters();
 
     // start compaction broker
     actorSystem->RegisterLocalService(MakeBlobStorageCompBrokerID(), Register(
@@ -1127,12 +1140,16 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
         ApplyControllerServiceSet(record.GetServiceSet(), comprehensive);
     }
 
+    bool syncersChanged = false;
     for (const auto& item : record.GetGroupMetadata()) {
         const ui32 groupId = item.GetGroupId();
         const ui32 generation = item.GetCurrentGeneration();
         if (const auto it = Groups.find(groupId); it != Groups.end() && it->second.MaxKnownGeneration < generation) {
-            ApplyGroupInfo(groupId, generation, nullptr, false, false);
+            syncersChanged |= ApplyGroupInfo(groupId, generation, nullptr, false, false);
         }
+    }
+    if (syncersChanged) {
+        UpdateSyncerCounters();
     }
 
     if (record.HasShredRequest()) {
@@ -1231,6 +1248,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
     if (record.GetUpdateSyncers()) {
         ApplyWorkingSyncers(record);
     }
+    ApplyStandbySeals(record);
 }
 
 void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId, TDuration backoff) {

@@ -1,4 +1,6 @@
-PROGRAM()
+G_BENCHMARK()
+
+SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/presort

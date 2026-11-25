@@ -4,6 +4,8 @@
 #include <ydb/core/formats/arrow/rows/view.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
+#include <ydb/library/actors/core/log.h>
+
 namespace NKikimr::NOlap::NReader::NCommon {
 
 template <class TSysViewSchema>
@@ -14,7 +16,7 @@ NArrow::TSimpleRow BuildSysViewPKRow(const TString& data) {
         std::vector<std::pair<TString, NScheme::TTypeInfo>> keyColumns;
         for (const auto id : table.KeyColumns) {
             const auto it = table.Columns.find(id);
-            AFL_VERIFY(it != table.Columns.end());
+            YDB_LOG_VERIFY(it != table.Columns.end());
             keyColumns.emplace_back(it->second.Name, it->second.PType);
         }
 

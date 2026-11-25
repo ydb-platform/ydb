@@ -12,7 +12,6 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bits_storage/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/meta.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -33,18 +32,16 @@ namespace {
 
 constexpr ui32 PkColumnId = 1;
 constexpr ui32 ValueColumnId = 2;
-constexpr ui32 MaxIndexId = 1001;
+constexpr ui32 MinMaxIndexId = 1001;
 constexpr ui32 BloomIndexId = 1002;
-constexpr ui32 MinMaxIndexId = 1003;
-constexpr const char* MaxIndexMarker = "REUSE_MAX_INDEX_MARKER_v1";
+constexpr const char* MinMaxIndexMarker = "REUSE_MIN_MAX_INDEX_MARKER_v1";
 constexpr const char* BloomIndexMarker = "REUSE_BLOOM_INDEX_MARKER_v1";
 constexpr std::array<i32, 3> TestValueColumnData = { 10, 20, 30 };
 constexpr i32 ExpectedMaxColumnValue = TestValueColumnData.back();
 
 struct TTestSchemaOptions {
-    bool WithMaxIndex = false;
-    bool WithBloomIndex = false;
     bool WithMinMaxIndex = false;
+    bool WithBloomIndex = false;
     bool DecimalValue = false;
 };
 
@@ -67,9 +64,10 @@ ISnapshotSchema::TPtr MakeTestSchema(const ui64 presetId, const TTestSchemaOptio
     FillDefaultSchemaProto(
         proto, presetId, options.DecimalValue ? NScheme::TTypeInfo(NScheme::TDecimalType(22, 0)) : NScheme::TTypeInfo(NScheme::NTypeIds::Int32));
 
-    if (options.WithMaxIndex) {
-        *proto.AddIndexes() = NIndexes::TIndexMetaContainer(std::make_shared<NIndexes::NMax::TIndexMeta>(MaxIndexId, "max_value",
-                                                                IStoragesManager::LocalMetadataStorageId, false, ValueColumnId))
+    if (options.WithMinMaxIndex) {
+        *proto.AddIndexes() = NIndexes::TIndexMetaContainer(
+            std::make_shared<NIndexes::NMinMax::TIndexMeta>(MinMaxIndexId, "min_max_value", IStoragesManager::LocalMetadataStorageId, false,
+                ValueColumnId, NIndexes::TReadDataExtractorContainer(std::make_shared<NIndexes::TDefaultDataExtractor>())))
                                   .SerializeToProto();
     }
 
@@ -80,13 +78,6 @@ ISnapshotSchema::TPtr MakeTestSchema(const ui64 presetId, const TTestSchemaOptio
             std::make_shared<NIndexes::TBloomIndexMeta>(BloomIndexId, "bloom_value", IStoragesManager::LocalMetadataStorageId, false,
                 ValueColumnId, bloomRequest, NIndexes::TReadDataExtractorContainer(std::make_shared<NIndexes::TDefaultDataExtractor>()),
                 NIndexes::IBitsStorageConstructor::GetDefault()))
-                                  .SerializeToProto();
-    }
-
-    if (options.WithMinMaxIndex) {
-        *proto.AddIndexes() = NIndexes::TIndexMetaContainer(
-            std::make_shared<NIndexes::NMinMax::TIndexMeta>(MinMaxIndexId, "min_max_value", IStoragesManager::LocalMetadataStorageId, false,
-                ValueColumnId, NIndexes::TReadDataExtractorContainer(std::make_shared<NIndexes::TDefaultDataExtractor>())))
                                   .SerializeToProto();
     }
 
@@ -194,7 +185,7 @@ void FillReadBlobs(TWritePortionInfoWithBlobsResult& portion, NBlobOperations::N
         const TString& data = blob.GetResultBlob();
         for (auto&& chunkAddress : blob.GetChunks()) {
             const auto* recordInfo = portion.GetPortionResult().GetRecordPointer(chunkAddress);
-            AFL_VERIFY(recordInfo);
+            YDB_LOG_VERIFY(recordInfo);
             const auto range = portion.GetPortionResult().RestoreBlobRange(recordInfo->GetBlobRange());
             blobs.Add(IStoragesManager::DefaultStorageId, range, data.substr(range.Offset, range.Size));
         }
@@ -214,11 +205,11 @@ TString GetInplaceIndexData(const TWritePortionInfoWithBlobsResult& result, cons
     return "";
 }
 
-i32 GetMaxIndexValue(const ISnapshotSchema::TPtr& schema, const TString& indexData) {
-    const auto maxMeta =
-        std::static_pointer_cast<NIndexes::NMax::TIndexMeta>(schema->GetIndexInfo().GetIndexVerified(MaxIndexId).GetObjectPtr());
-    const auto scalar = maxMeta->GetMaxScalarVerified({ indexData }, schema->GetIndexInfo());
-    return std::static_pointer_cast<arrow::Int32Scalar>(scalar)->value;
+void CheckMinMaxIndexValues(const ISnapshotSchema::TPtr& schema, const TString& indexData) {
+    const auto dataType = schema->GetFieldByColumnIdOptional(ValueColumnId)->type();
+    const auto minmax = NArrow::NAccessor::TMinMax::FromBinaryString(indexData, dataType);
+    UNIT_ASSERT_VALUES_EQUAL(std::static_pointer_cast<arrow::Int32Scalar>(minmax.Min())->value, TestValueColumnData.front());
+    UNIT_ASSERT_VALUES_EQUAL(std::static_pointer_cast<arrow::Int32Scalar>(minmax.Max())->value, ExpectedMaxColumnValue);
 }
 
 std::shared_ptr<NColumnShard::TSplitterCounters> MakeSplitterCounters() {
@@ -248,48 +239,6 @@ bool IsMemoryTierAvailable() {
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
-    Y_UNIT_TEST(MaxIndexUsesNumericOrder) {
-        TActorSystemStub actorSystem;
-        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(true);
-        const auto schema = MakeTestSchema(1, { .WithMaxIndex = true, .DecimalValue = true });
-        const auto& indexInfo = schema->GetIndexInfo();
-        const auto maxMeta = std::static_pointer_cast<NIndexes::NMax::TIndexMeta>(indexInfo.GetIndexVerified(MaxIndexId).GetObjectPtr());
-        const auto first = MakeDecimalArray({ std::nullopt, 1, 256 });
-        const auto second = MakeDecimalArray({ 0, -1, std::nullopt });
-        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks = {
-            { ValueColumnId,
-                { BuildColumnChunkFromArray(*schema, ValueColumnId, first), BuildColumnChunkFromArray(*schema, ValueColumnId, second) } },
-        };
-
-        auto index = maxMeta->BuildIndexOptional(chunks, first->length() + second->length(), indexInfo);
-        UNIT_ASSERT_C(index.IsSuccess(), index.GetErrorMessage());
-        UNIT_ASSERT_VALUES_EQUAL(index.GetResult().size(), 1);
-
-        const auto max = maxMeta->GetMaxScalarVerified({ index.GetResult().front()->GetData() }, indexInfo);
-        UNIT_ASSERT(max->Equals(first->GetScalar(2).ValueOrDie()));
-    }
-
-    Y_UNIT_TEST(MaxIndexPreservesLegacyOrder) {
-        TActorSystemStub actorSystem;
-        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(false);
-        const auto schema = MakeTestSchema(1, { .WithMaxIndex = true, .DecimalValue = true });
-        const auto& indexInfo = schema->GetIndexInfo();
-        const auto maxMeta = std::static_pointer_cast<NIndexes::NMax::TIndexMeta>(indexInfo.GetIndexVerified(MaxIndexId).GetObjectPtr());
-        const auto values = MakeDecimalArray({ 1, 256 });
-        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks = {
-            { ValueColumnId, { BuildColumnChunkFromArray(*schema, ValueColumnId, values) } },
-        };
-
-        auto index = maxMeta->BuildIndexOptional(chunks, values->length(), indexInfo);
-        UNIT_ASSERT_C(index.IsSuccess(), index.GetErrorMessage());
-        UNIT_ASSERT_VALUES_EQUAL(index.GetResult().size(), 1);
-
-        const auto max = maxMeta->GetMaxScalarVerified({ index.GetResult().front()->GetData() }, indexInfo);
-        UNIT_ASSERT(max->Equals(values->GetScalar(0).ValueOrDie()));
-    }
-
     Y_UNIT_TEST(MinMaxIndexBuildsNumericBoundsAndPrunesPredicates) {
         TActorSystemStub actorSystem;
         actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -367,29 +316,6 @@ Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
         UNIT_ASSERT(!meta->CheckValue(payload, std::nullopt, requests->GetScalar(2).ValueOrDie(), equals, indexInfo));
     }
 
-    Y_UNIT_TEST(MaxIndexIgnoresNullChunks) {
-        TActorSystemStub actorSystem;
-        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        const auto schema = MakeTestSchema(1, { .WithMaxIndex = true, .DecimalValue = true });
-        const auto& indexInfo = schema->GetIndexInfo();
-        const auto meta = std::static_pointer_cast<NIndexes::NMax::TIndexMeta>(indexInfo.GetIndexVerified(MaxIndexId).GetObjectPtr());
-        const auto nulls = MakeDecimalArray({ std::nullopt, std::nullopt });
-        const auto values = MakeDecimalArray({ 1, 256 });
-        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks = {
-            { ValueColumnId,
-                { BuildColumnChunkFromArray(*schema, ValueColumnId, nulls), BuildColumnChunkFromArray(*schema, ValueColumnId, values),
-                    BuildColumnChunkFromArray(*schema, ValueColumnId, nulls) } },
-        };
-        for (const bool numeric : { false, true }) {
-            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
-            const auto index = meta->BuildIndexOptional(chunks, 2 * nulls->length() + values->length(), indexInfo);
-            UNIT_ASSERT_C(index.IsSuccess(), index.GetErrorMessage());
-            UNIT_ASSERT_VALUES_EQUAL(index.GetResult().size(), 1);
-            const auto max = meta->GetMaxScalarVerified({ index.GetResult().front()->GetData() }, indexInfo);
-            UNIT_ASSERT(max->Equals(values->GetScalar(numeric ? 1 : 0).ValueOrDie()));
-        }
-    }
-
     Y_UNIT_TEST(NumericDecimalDoesNotPruneLegacyMinMaxPayload) {
         TActorSystemStub actorSystem;
         actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -413,37 +339,37 @@ Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
 
 Y_UNIT_TEST_SUITE(TReuseIndexChunksTests) {
     Y_UNIT_TEST(PlacesInplaceIndexChunk) {
-        const auto schema = MakeTestSchema(1, { .WithMaxIndex = true });
+        const auto schema = MakeTestSchema(1, { .WithMinMaxIndex = true });
         const auto batch = MakeTestBatch();
-        const TString marker(MaxIndexMarker);
+        const TString marker(MinMaxIndexMarker);
 
         TIndexInfo::TSecondaryData secondaryData;
         std::vector<std::shared_ptr<IPortionDataChunk>> chunks = {
-            std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(MaxIndexId, 0), batch->num_rows(), marker.size(), marker),
+            std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(MinMaxIndexId, 0), batch->num_rows(), marker.size(), marker),
         };
 
-        const auto status = schema->GetIndexInfo().ReuseIndexChunks(std::move(chunks), MaxIndexId, TTestStoragesManager::GetInstance(),
+        const auto status = schema->GetIndexInfo().ReuseIndexChunks(std::move(chunks), MinMaxIndexId, TTestStoragesManager::GetInstance(),
             batch->num_rows(), IStoragesManager::DefaultStorageId, secondaryData);
         UNIT_ASSERT(status.Ok());
 
         const auto& inplace = secondaryData.GetSecondaryInplaceData();
         UNIT_ASSERT_EQUAL(inplace.size(), 1u);
-        UNIT_ASSERT(inplace.contains(MaxIndexId));
-        UNIT_ASSERT_VALUES_EQUAL(inplace.at(MaxIndexId)->GetData(), marker);
+        UNIT_ASSERT(inplace.contains(MinMaxIndexId));
+        UNIT_ASSERT_VALUES_EQUAL(inplace.at(MinMaxIndexId)->GetData(), marker);
     }
 }
 
 Y_UNIT_TEST_SUITE(TSyncPortionIndexReuseTests) {
-    Y_UNIT_TEST(TierChangeReusesMaxIndex) {
+    Y_UNIT_TEST(TierChangeReusesMinMaxIndex) {
         if (!IsMemoryTierAvailable()) {
             return;
         }
 
-        const auto schema = MakeTestSchema(1, { .WithMaxIndex = true });
+        const auto schema = MakeTestSchema(1, { .WithMinMaxIndex = true });
         const auto batch = MakeTestBatch();
         const auto splitterCounters = MakeSplitterCounters();
 
-        auto writePortion = BuildTestPortion(schema, batch, { { MaxIndexId, MaxIndexMarker } }, splitterCounters);
+        auto writePortion = BuildTestPortion(schema, batch, { { MinMaxIndexId, MinMaxIndexMarker } }, splitterCounters);
         FinalizeWritePortion(writePortion);
 
         auto syncResult = RunSyncPortion(writePortion, schema, schema, IStoragesManager::MemoryStorageId, splitterCounters);
@@ -452,7 +378,7 @@ Y_UNIT_TEST_SUITE(TSyncPortionIndexReuseTests) {
         FinalizeWritePortion(*syncResult);
         UNIT_ASSERT_VALUES_EQUAL(syncResult->GetPortionResult().GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId),
             IStoragesManager::MemoryStorageId);
-        UNIT_ASSERT_VALUES_EQUAL(GetInplaceIndexData(*syncResult, MaxIndexId), MaxIndexMarker);
+        UNIT_ASSERT_VALUES_EQUAL(GetInplaceIndexData(*syncResult, MinMaxIndexId), MinMaxIndexMarker);
     }
 
     Y_UNIT_TEST(DifferentSchemaReusesCompatibleBloomIndex) {
@@ -471,27 +397,27 @@ Y_UNIT_TEST_SUITE(TSyncPortionIndexReuseTests) {
         UNIT_ASSERT_VALUES_EQUAL(GetInplaceIndexData(*syncResult, BloomIndexId), BloomIndexMarker);
     }
 
-    Y_UNIT_TEST(DifferentSchemaRebuildsIncompatibleMaxIndex) {
-        const auto schemaFrom = MakeTestSchema(1, { .WithMaxIndex = true });
-        const auto schemaTo = MakeTestSchema(2, { .WithMaxIndex = true });
+    Y_UNIT_TEST(DifferentSchemaRebuildsIncompatibleMinMaxIndex) {
+        const auto schemaFrom = MakeTestSchema(1, { .WithMinMaxIndex = true });
+        const auto schemaTo = MakeTestSchema(2, { .WithMinMaxIndex = true });
         const auto batch = MakeTestBatch();
         const auto splitterCounters = MakeSplitterCounters();
 
-        auto writePortion = BuildTestPortion(schemaFrom, batch, { { MaxIndexId, MaxIndexMarker } }, splitterCounters);
+        auto writePortion = BuildTestPortion(schemaFrom, batch, { { MinMaxIndexId, MinMaxIndexMarker } }, splitterCounters);
         FinalizeWritePortion(writePortion);
 
         auto syncResult = RunSyncPortion(writePortion, schemaFrom, schemaTo, IStoragesManager::DefaultStorageId, splitterCounters);
 
         UNIT_ASSERT(syncResult);
         FinalizeWritePortion(*syncResult);
-        const TString indexData = GetInplaceIndexData(*syncResult, MaxIndexId);
-        UNIT_ASSERT_VALUES_UNEQUAL(indexData, MaxIndexMarker);
-        UNIT_ASSERT_VALUES_EQUAL(GetMaxIndexValue(schemaTo, indexData), ExpectedMaxColumnValue);
+        const TString indexData = GetInplaceIndexData(*syncResult, MinMaxIndexId);
+        UNIT_ASSERT_VALUES_UNEQUAL(indexData, MinMaxIndexMarker);
+        CheckMinMaxIndexValues(schemaTo, indexData);
     }
 
     Y_UNIT_TEST(MissingIndexChunksRebuildsIndex) {
-        const auto schemaFrom = MakeTestSchema(1, { .WithMaxIndex = true });
-        const auto schemaTo = MakeTestSchema(2, { .WithMaxIndex = true });
+        const auto schemaFrom = MakeTestSchema(1, { .WithMinMaxIndex = true });
+        const auto schemaTo = MakeTestSchema(2, { .WithMinMaxIndex = true });
         const auto batch = MakeTestBatch();
         const auto splitterCounters = MakeSplitterCounters();
 
@@ -502,15 +428,15 @@ Y_UNIT_TEST_SUITE(TSyncPortionIndexReuseTests) {
 
         UNIT_ASSERT(syncResult);
         FinalizeWritePortion(*syncResult);
-        const TString indexData = GetInplaceIndexData(*syncResult, MaxIndexId);
-        UNIT_ASSERT_VALUES_UNEQUAL(indexData, MaxIndexMarker);
-        UNIT_ASSERT_VALUES_EQUAL(GetMaxIndexValue(schemaTo, indexData), ExpectedMaxColumnValue);
+        const TString indexData = GetInplaceIndexData(*syncResult, MinMaxIndexId);
+        UNIT_ASSERT_VALUES_UNEQUAL(indexData, MinMaxIndexMarker);
+        CheckMinMaxIndexValues(schemaTo, indexData);
     }
 
     // ReuseIndexChunks rejects index blobs above MaxBlobSize; SyncPortion must rebuild via AppendIndex.
     Y_UNIT_TEST(OversizedIndexFallsBackToRebuild) {
-        const auto schemaFrom = MakeTestSchema(1, { .WithMaxIndex = true });
-        const auto schemaTo = MakeTestSchema(2, { .WithMaxIndex = true });
+        const auto schemaFrom = MakeTestSchema(1, { .WithMinMaxIndex = true });
+        const auto schemaTo = MakeTestSchema(2, { .WithMinMaxIndex = true });
         const auto batch = MakeTestBatch();
         const auto splitterCounters = MakeSplitterCounters();
         const auto storages = TTestStoragesManager::GetInstance();
@@ -518,36 +444,36 @@ Y_UNIT_TEST_SUITE(TSyncPortionIndexReuseTests) {
             storages->GetOperatorVerified(IStoragesManager::LocalMetadataStorageId)->GetBlobSplitSettings().GetMaxBlobSize();
         const TString hugeMarker(maxBlobSize + 1024, 'X');
 
-        auto writePortion = BuildTestPortion(schemaFrom, batch, { { MaxIndexId, hugeMarker } }, splitterCounters);
+        auto writePortion = BuildTestPortion(schemaFrom, batch, { { MinMaxIndexId, hugeMarker } }, splitterCounters);
         FinalizeWritePortion(writePortion);
 
         auto syncResult = RunSyncPortion(writePortion, schemaFrom, schemaTo, IStoragesManager::DefaultStorageId, splitterCounters);
 
         UNIT_ASSERT(syncResult);
         FinalizeWritePortion(*syncResult);
-        const TString indexData = GetInplaceIndexData(*syncResult, MaxIndexId);
+        const TString indexData = GetInplaceIndexData(*syncResult, MinMaxIndexId);
         UNIT_ASSERT_VALUES_UNEQUAL(indexData, hugeMarker);
-        UNIT_ASSERT_VALUES_EQUAL(GetMaxIndexValue(schemaTo, indexData), ExpectedMaxColumnValue);
+        CheckMinMaxIndexValues(schemaTo, indexData);
     }
 
     Y_UNIT_TEST(MixedIndexesPartialReuse) {
-        const TTestSchemaOptions options{ .WithMaxIndex = true, .WithBloomIndex = true };
+        const TTestSchemaOptions options{ .WithMinMaxIndex = true, .WithBloomIndex = true };
         const auto schemaFrom = MakeTestSchema(1, options);
         const auto schemaTo = MakeTestSchema(2, options);
         const auto batch = MakeTestBatch();
         const auto splitterCounters = MakeSplitterCounters();
 
         auto writePortion =
-            BuildTestPortion(schemaFrom, batch, { { MaxIndexId, MaxIndexMarker }, { BloomIndexId, BloomIndexMarker } }, splitterCounters);
+            BuildTestPortion(schemaFrom, batch, { { MinMaxIndexId, MinMaxIndexMarker }, { BloomIndexId, BloomIndexMarker } }, splitterCounters);
         FinalizeWritePortion(writePortion);
 
         auto syncResult = RunSyncPortion(writePortion, schemaFrom, schemaTo, IStoragesManager::DefaultStorageId, splitterCounters);
 
         UNIT_ASSERT(syncResult);
         FinalizeWritePortion(*syncResult);
-        const TString maxIndexData = GetInplaceIndexData(*syncResult, MaxIndexId);
-        UNIT_ASSERT_VALUES_UNEQUAL(maxIndexData, MaxIndexMarker);
-        UNIT_ASSERT_VALUES_EQUAL(GetMaxIndexValue(schemaTo, maxIndexData), ExpectedMaxColumnValue);
+        const TString minMaxIndexData = GetInplaceIndexData(*syncResult, MinMaxIndexId);
+        UNIT_ASSERT_VALUES_UNEQUAL(minMaxIndexData, MinMaxIndexMarker);
+        CheckMinMaxIndexValues(schemaTo, minMaxIndexData);
         UNIT_ASSERT_VALUES_EQUAL(GetInplaceIndexData(*syncResult, BloomIndexId), BloomIndexMarker);
     }
 }

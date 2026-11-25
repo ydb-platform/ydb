@@ -5,7 +5,7 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_expr_helpers.h>
 #include <ydb/library/json_index/json_index.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
@@ -1148,7 +1148,7 @@ private:
 
             NKikimrKqp::TKqpTableSinkSettings tableSinkSettings;
             {
-                AFL_ENSURE(stagePlanNode.StageProto);
+                YDB_LOG_ENSURE(stagePlanNode.StageProto);
                 bool found = false;
                 for (const auto& protoSink : stagePlanNode.StageProto->GetSinks()) {
                     if (FromString<ui32>(TStringBuf(sinkLike.Index())) == protoSink.GetOutputIndex()
@@ -1166,7 +1166,7 @@ private:
                                 break;
                     }
                 }
-                AFL_ENSURE(found);
+                YDB_LOG_ENSURE(found);
             }
 
             TString tablePath;
@@ -1203,7 +1203,7 @@ private:
                 op.Properties["Path"] = tablePath;
             } else {
                 const auto originalPathNode = GetSetting(settings.Settings().Ref(), "OriginalPath");
-                AFL_ENSURE(originalPathNode);
+                YDB_LOG_ENSURE(originalPathNode);
                 tablePath = TCoNameValueTuple(originalPathNode).Value().Cast<TCoAtom>().StringValue();
                 op.Properties["Path"] = tablePath;
 

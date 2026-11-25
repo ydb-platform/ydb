@@ -793,6 +793,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
             if (!syncLogEntryPointCommit) {
                 if (!gotOwner) {
+                    // Only the target VDisk receives puts. Other VDisks can still write
+                    // startup entry points, so identify the owner by the target's data log.
+                    if (signature != TLogSignature::SignatureLogoBlobOpt) {
+                        return;
+                    }
                     owner = msg.Owner;
                     gotOwner = true;
                 } else if (msg.Owner != owner) {
@@ -851,7 +856,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                 }
 
                 case TEvBlobStorage::EvSyncLogCommitDone:
-                    ++syncLogCommitDoneEvents;
+                    if (ev->Recipient == syncLogKeeperId) {
+                        ++syncLogCommitDoneEvents;
+                    }
                     break;
             }
 
@@ -1085,12 +1092,18 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         TString lastPDiskErrorReason;
 
         auto observePDiskLog = [&](const NPDisk::TEvLog& msg) {
+            const ui32 signature = msg.Signature.GetUnmasked();
             const bool syncLogEntryPointCommit =
-                msg.Signature.GetUnmasked() == TLogSignature::SignatureSyncLogIdx &&
+                signature == TLogSignature::SignatureSyncLogIdx &&
                 msg.CommitRecord.IsStartingPoint;
 
             if (!syncLogEntryPointCommit) {
                 if (!gotOwner) {
+                    // Only the target VDisk receives puts. Other VDisks can still write
+                    // startup entry points, so identify the owner by the target's data log.
+                    if (signature != TLogSignature::SignatureLogoBlobOpt) {
+                        return;
+                    }
                     owner = msg.Owner;
                     gotOwner = true;
                 } else if (msg.Owner != owner) {
@@ -2633,6 +2646,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
             if (!syncLogEntryPointCommit) {
                 if (!gotOwner) {
+                    // Only the target VDisk receives puts. Other VDisks can still write
+                    // startup entry points, so identify the owner by the target's data log.
+                    if (signature != TLogSignature::SignatureLogoBlobOpt) {
+                        return;
+                    }
                     owner = msg.Owner;
                     gotOwner = true;
                 } else if (msg.Owner != owner) {
@@ -2710,7 +2728,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                 }
 
                 case TEvBlobStorage::EvSyncLogCommitDone:
-                    ++syncLogCommitDoneEvents;
+                    if (ev->Recipient == syncLogKeeperId) {
+                        ++syncLogCommitDoneEvents;
+                    }
                     break;
 
                 case TEvBlobStorage::EvSyncLogFreeChunk: {

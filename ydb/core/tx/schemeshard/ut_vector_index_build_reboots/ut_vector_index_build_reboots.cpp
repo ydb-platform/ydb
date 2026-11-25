@@ -211,8 +211,6 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildLastKeyAckTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-
         SetupVectorTable(runtime, env, txId);
 
         TBlockEvents<TEvDataShard::TEvPrefixKMeansResponse> blocker(runtime,
@@ -249,8 +247,6 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildLastKeyAckTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
         SetupVectorTable(runtime, env, txId);
 

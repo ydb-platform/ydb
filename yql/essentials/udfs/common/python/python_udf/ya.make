@@ -4,6 +4,7 @@ YQL_ABI_VERSION(2 45 0)
 
 SRCS(
     python_udf.cpp
+    python_function_factory.cpp
 )
 
 PEERDIR(
@@ -16,5 +17,10 @@ CFLAGS(
 )
 
 NO_COMPILER_WARNINGS()
+
+PEERDIR_FROM_POLICY(
+    ALLOW
+    statbox/nile_debug
+)
 
 END()

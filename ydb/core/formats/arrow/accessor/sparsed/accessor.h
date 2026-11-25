@@ -44,7 +44,7 @@ private:
             , Size(size)
             , IsDefault(defaultFlag)
         {
-            AFL_VERIFY(Size);
+            YDB_LOG_VERIFY(Size);
         }
 
         bool operator<(const TInternalChunkInfo& item) const {
@@ -58,12 +58,12 @@ private:
     TSparsedArrayChunk(const ui32 recordsCount, const TSparsedArrayChunk& original)
         : TSparsedArrayChunk(original)
     {
-        AFL_VERIFY(!original.GetNotDefaultRecordsCount());
+        YDB_LOG_VERIFY(!original.GetNotDefaultRecordsCount());
         RecordsCount = recordsCount;
-        AFL_VERIFY(RemapExternalToInternal.size() == 1);
-        AFL_VERIFY(RemapExternalToInternal[0].GetStartExt() == 0);
-        AFL_VERIFY(RemapExternalToInternal[0].GetStartInt() == 0);
-        AFL_VERIFY(RemapExternalToInternal[0].GetIsDefault());
+        YDB_LOG_VERIFY(RemapExternalToInternal.size() == 1);
+        YDB_LOG_VERIFY(RemapExternalToInternal[0].GetStartExt() == 0);
+        YDB_LOG_VERIFY(RemapExternalToInternal[0].GetStartInt() == 0);
+        YDB_LOG_VERIFY(RemapExternalToInternal[0].GetIsDefault());
         RemapExternalToInternal[0] = TInternalChunkInfo(0, 0, recordsCount, true);
     }
 
@@ -124,7 +124,7 @@ public:
         if (!!DefaultValue) {
             return ColValue->null_count();
         } else {
-            AFL_VERIFY(GetNotDefaultRecordsCount() <= GetRecordsCount());
+            YDB_LOG_VERIFY(GetNotDefaultRecordsCount() <= GetRecordsCount());
             return GetRecordsCount() - GetNotDefaultRecordsCount();
         }
     }
@@ -216,7 +216,7 @@ protected:
             result = schemaResult;
             return true;
         });
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return result;
     }
 
@@ -254,7 +254,7 @@ public:
     }
 
     const TSparsedArrayChunk& GetSparsedChunk(const ui64 position) const {
-        AFL_VERIFY(position < Record.GetRecordsCount());
+        YDB_LOG_VERIFY(position < Record.GetRecordsCount());
         return Record;
     }
 
@@ -280,7 +280,9 @@ public:
 
         void AdvanceRecordIndex(const ui32 recordIndex) {
             if (LastRecordIndex) {
-                AFL_VERIFY(*LastRecordIndex < recordIndex)("last", LastRecordIndex)("index", recordIndex);
+                YDB_LOG_VERIFY(*LastRecordIndex < recordIndex,
+                    {"last", LastRecordIndex},
+                    {"index", recordIndex});
             }
             LastRecordIndex = recordIndex;
         }
@@ -293,7 +295,7 @@ public:
         template <class TAppender>
         void AddAt(const ui32 recordIndex, const TAppender& append) {
             AdvanceRecordIndex(recordIndex);
-            AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
+            YDB_LOG_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
             append(*ValueBuilder);
         }
 
@@ -305,13 +307,13 @@ public:
             , ValueType(valueType)
             , DefaultValue(defaultValue)
         {
-            AFL_VERIFY(!!ValueBuilder);
+            YDB_LOG_VERIFY(!!ValueBuilder);
         }
 
         void AddNull(const ui32 recordIndex) {
             AdvanceRecordIndex(recordIndex);
             if (!!DefaultValue && DefaultValue->type->id() != arrow::null()->id()) {
-                AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
+                YDB_LOG_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
                 TStatusValidator::Validate(ValueBuilder->AppendNull());
             }
         }
@@ -333,7 +335,7 @@ public:
 
         void AddRecord(const ui32 recordIndex, const std::string_view value) {
             AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) {
-                AFL_VERIFY(NArrow::Append<TDataType>(builder, arrow::util::string_view(value.data(), value.size())));
+                YDB_LOG_VERIFY(NArrow::Append<TDataType>(builder, arrow::util::string_view(value.data(), value.size())));
             });
         }
     };
@@ -365,11 +367,11 @@ public:
         void AddChunk(TSparsedArrayChunk&& chunk) {
             RecordsCount += chunk.GetRecordsCount();
             Chunks.emplace_back(std::move(chunk));
-            AFL_VERIFY(Chunks.size() == 1);
+            YDB_LOG_VERIFY(Chunks.size() == 1);
         }
 
         std::shared_ptr<TSparsedArray> Finish() {
-            AFL_VERIFY(Chunks.size() == 1);
+            YDB_LOG_VERIFY(Chunks.size() == 1);
             return std::shared_ptr<TSparsedArray>(new TSparsedArray(std::move(Chunks.front()), DefaultValue, Type));
         }
     };

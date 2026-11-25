@@ -52,7 +52,7 @@ private:
     }
 
     void AdvanceStage() {
-        AFL_VERIFY(!Stages.empty());
+        YDB_LOG_VERIFY(!Stages.empty());
         Stages.pop_front();
         if (Stages.size()) {
             TBase::Register(
@@ -103,7 +103,7 @@ protected:
 
     void Handle(NRequest::TEvRequestResult<NRequest::TDialogYQLRequest>::TPtr& ev) {
         const auto& operation = ev->Get()->GetResult().operation();
-        AFL_VERIFY(operation.ready());
+        YDB_LOG_VERIFY(operation.ready());
 
         Ydb::Table::ExecuteQueryResult result;
         operation.result().UnpackTo(&result);

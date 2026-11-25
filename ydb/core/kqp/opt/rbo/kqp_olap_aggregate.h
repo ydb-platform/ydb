@@ -30,8 +30,11 @@ struct TOlapAggregate {
 };
 
 // Match an aggregate whose keys and aggregations column shards can compute over
-// the read below it. The aggregate phase and pushdown settings are the caller's concern.
-std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, TExprContext& ctx);
+// the read below it. `castAverageInput` is whether the read program can cast the
+// input of an AVG, see TOlapAggregate. The aggregate phase and pushdown settings
+// are the caller's concern.
+std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, bool castAverageInput,
+                                                 TExprContext& ctx);
 
 // AVG accumulates in Double. The read program casts an AVG column of any other
 // type with a YQL kernel, which column shards run only with scalar apply enabled.

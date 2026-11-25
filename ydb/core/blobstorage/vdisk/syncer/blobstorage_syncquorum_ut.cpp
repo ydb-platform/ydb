@@ -33,6 +33,26 @@ namespace NKikimr {
             UNIT_ASSERT(tracker.HasQuorum());
         }
 
+        Y_UNIT_TEST(SoloMirror3dcQuorumInSurvivingRealm) {
+            using TDC = NKikimrBlobStorage::TDataCenterState;
+            TBlobStorageGroupInfo::TDynamicInfo dynamic(TGroupId::Zero(), 1);
+            dynamic.Mirror3dcState = {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1,
+                {TDC::INCLUDED, TDC::EXCLUDED, TDC::EXCLUDED}};
+            TBlobStorageGroupInfo info(TBlobStorageGroupInfo::TTopology(
+                TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1), std::move(dynamic), "");
+            TQuorumTracker tracker(info.GetVDiskId(0), info.PickTopology(), true);
+            for (const auto& vdisk : GetDisks(&info)) {
+                if (vdisk.FailRealm == 0) {
+                    UNIT_ASSERT(!tracker.HasQuorum(info));
+                    tracker.Update(vdisk);
+                }
+            }
+            UNIT_ASSERT(tracker.HasQuorum(info));
+            UNIT_ASSERT(!tracker.HasQuorum());
+            tracker.ResetTopology(info);
+            UNIT_ASSERT(!tracker.HasQuorum(info));
+        }
+
         Y_UNIT_TEST(ErasureNoneNeverHasQuorum_4_1) {
             TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureNone, 1, 4);
 
@@ -43,7 +63,7 @@ namespace NKikimr {
             TQuorumTracker tracker(self, groupInfo.PickTopology(), false);
             for (unsigned i = 1; i < vdisks.size(); i++) {
                 tracker.Update(vdisks[i]);
-                UNIT_ASSERT(!tracker.HasQuorum());
+                UNIT_ASSERT(!tracker.HasQuorum(groupInfo));
                 STR << tracker.ToString() << "\n";
             }
             UNIT_ASSERT(!tracker.HasQuorum());

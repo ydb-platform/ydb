@@ -330,12 +330,12 @@ TExprBase KqpRemoveRedundantSortOverReadTableFSM(
             return node;
         }
 
-        AFL_ENSURE(settings.GetSorting() == ERequestSorting::NONE);
+        YDB_LOG_ENSURE(settings.GetSorting() == ERequestSorting::NONE);
         settings.SetSorting(ERequestSorting::DESC);
         input = BuildReadNode(input.Pos(), ctx, input, settings);
     } else {
         if (UseSource(kqpCtx, tableDesc)) {
-            AFL_ENSURE(settings.GetSorting() == ERequestSorting::NONE);
+            YDB_LOG_ENSURE(settings.GetSorting() == ERequestSorting::NONE);
             settings.SetSorting(ERequestSorting::ASC);
             input = BuildReadNode(input.Pos(), ctx, input, settings);
         }

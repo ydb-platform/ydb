@@ -52,6 +52,105 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
         return result;
     }
 
+    NKikimrSchemeOp::TModifyScheme BuildPublicAlterWithChangefeed(Ydb::Table::Changefeed changefeed) {
+        TActorSystemStub actorSystem;
+        Ydb::Table::AlterTableRequest request;
+        request.set_path("/Root/Table");
+        changefeed.set_name("feed");
+        changefeed.set_mode(Ydb::Table::ChangefeedMode::MODE_NEW_AND_OLD_IMAGES);
+        changefeed.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+        *request.add_add_changefeeds() = std::move(changefeed);
+        NKikimrSchemeOp::TModifyScheme result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+        UNIT_ASSERT_C(BuildAlterTableModifyScheme(&request, &result, TTableProfiles{}, TPathId{}, status, error), error);
+        return result;
+    }
+
+    Y_UNIT_TEST(ChangefeedTopicMaxDefaultsToMin) {
+        Ydb::Table::Changefeed changefeed;
+        auto& settings = *changefeed.mutable_topic_partitioning_settings();
+        settings.set_min_active_partitions(64);
+        settings.mutable_auto_partitioning_settings()->set_strategy(
+            Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+
+        const auto result = BuildPublicAlterWithChangefeed(std::move(changefeed));
+        const auto& stream = result.GetCreateCdcStream();
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetTopicPartitions(), 64);
+        UNIT_ASSERT(stream.GetTopicAutoPartitioning());
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetMaxPartitionCount(), 64);
+    }
+
+    Y_UNIT_TEST(ChangefeedTopicUnsetMinMaxDefaultToFifty) {
+        Ydb::Table::Changefeed changefeed;
+        changefeed.mutable_topic_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(
+            Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+
+        const auto result = BuildPublicAlterWithChangefeed(std::move(changefeed));
+        const auto& stream = result.GetCreateCdcStream();
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetTopicPartitions(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetMaxPartitionCount(), 50);
+    }
+
+    Y_UNIT_TEST(ChangefeedTopicExplicitMaxKept) {
+        Ydb::Table::Changefeed changefeed;
+        auto& settings = *changefeed.mutable_topic_partitioning_settings();
+        settings.set_min_active_partitions(10);
+        settings.set_max_active_partitions(100);
+        settings.mutable_auto_partitioning_settings()->set_strategy(
+            Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+
+        const auto result = BuildPublicAlterWithChangefeed(std::move(changefeed));
+        const auto& stream = result.GetCreateCdcStream();
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetTopicPartitions(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetMaxPartitionCount(), 100);
+    }
+
+    Y_UNIT_TEST(ChangefeedTopicMinActivePartitionsOverflow) {
+        // 2^32 + 64 fits the public int64 field but would silently truncate
+        // to 64 in the uint32 internal fields.
+        TActorSystemStub actorSystem;
+        Ydb::Table::AlterTableRequest request;
+        request.set_path("/Root/Table");
+        auto& changefeed = *request.add_add_changefeeds();
+        changefeed.set_name("feed");
+        changefeed.set_mode(Ydb::Table::ChangefeedMode::MODE_NEW_AND_OLD_IMAGES);
+        changefeed.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+        auto& settings = *changefeed.mutable_topic_partitioning_settings();
+        settings.set_min_active_partitions(4294967360LL);
+        settings.mutable_auto_partitioning_settings()->set_strategy(
+            Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+
+        NKikimrSchemeOp::TModifyScheme result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+        UNIT_ASSERT(!BuildAlterTableModifyScheme(&request, &result, TTableProfiles{}, TPathId{}, status, error));
+        UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(error, "must not exceed");
+    }
+
+    Y_UNIT_TEST(ChangefeedTopicMaxActivePartitionsOverflow) {
+        TActorSystemStub actorSystem;
+        Ydb::Table::AlterTableRequest request;
+        request.set_path("/Root/Table");
+        auto& changefeed = *request.add_add_changefeeds();
+        changefeed.set_name("feed");
+        changefeed.set_mode(Ydb::Table::ChangefeedMode::MODE_NEW_AND_OLD_IMAGES);
+        changefeed.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+        auto& settings = *changefeed.mutable_topic_partitioning_settings();
+        settings.set_min_active_partitions(10);
+        settings.set_max_active_partitions(4294967296LL); // 2^32
+        settings.mutable_auto_partitioning_settings()->set_strategy(
+            Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+
+        NKikimrSchemeOp::TModifyScheme result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+        UNIT_ASSERT(!BuildAlterTableModifyScheme(&request, &result, TTableProfiles{}, TPathId{}, status, error));
+        UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(error, "must not exceed");
+    }
+
     Y_UNIT_TEST(InternalGeneratedColumnPreservesExpression) {
         TActorSystemStub actorSystem;
         for (const bool stored : {false, true}) {
@@ -307,6 +406,77 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
             UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
             UNIT_ASSERT_STRING_CONTAINS(error, "Default values are not supported in column tables");
         }
+    }
+
+    Y_UNIT_TEST(ColumnTableNullabilityFromType) {
+        TActorSystemStub actorSystem;
+
+        google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta> columns;
+        {
+            // not_null is not set: NOT NULL is inferred from the non-optional type, as for row tables
+            auto& column = *columns.Add();
+            column.set_name("key");
+            column.mutable_type()->set_type_id(Ydb::Type::INT64);
+        }
+        {
+            auto& column = *columns.Add();
+            column.set_name("value");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+        }
+        {
+            auto& column = *columns.Add();
+            column.set_name("explicit_not_null");
+            column.mutable_type()->set_type_id(Ydb::Type::UINT32);
+            column.set_not_null(true);
+        }
+        {
+            auto& column = *columns.Add();
+            column.set_name("explicit_nullable");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
+            column.set_not_null(false);
+        }
+
+        NKikimrSchemeOp::TColumnTableDescription result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+        UNIT_ASSERT_C(FillColumnDescription(result, columns, status, error), error);
+
+        const auto& schema = result.GetSchema();
+        UNIT_ASSERT_VALUES_EQUAL(schema.ColumnsSize(), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(0).GetName(), "key");
+        UNIT_ASSERT(schema.GetColumns(0).GetNotNull());
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(1).GetName(), "value");
+        UNIT_ASSERT(!schema.GetColumns(1).GetNotNull());
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(2).GetName(), "explicit_not_null");
+        UNIT_ASSERT(schema.GetColumns(2).GetNotNull());
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(3).GetName(), "explicit_nullable");
+        UNIT_ASSERT(!schema.GetColumns(3).GetNotNull());
+    }
+
+    Y_UNIT_TEST(ColumnTableRejectsInconsistentNullability) {
+        TActorSystemStub actorSystem;
+
+        const auto check = [](const bool optionalType, const bool notNull) {
+            google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta> columns;
+            auto& column = *columns.Add();
+            column.set_name("value");
+            if (optionalType) {
+                column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT32);
+            } else {
+                column.mutable_type()->set_type_id(Ydb::Type::INT32);
+            }
+            column.set_not_null(notNull);
+
+            NKikimrSchemeOp::TColumnTableDescription result;
+            auto status = Ydb::StatusIds::SUCCESS;
+            TString error;
+            UNIT_ASSERT(!FillColumnDescription(result, columns, status, error));
+            UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(error, "Not consistent column type and not_null option for column: value");
+        };
+
+        check(/* optionalType */ true, /* notNull */ true);
+        check(/* optionalType */ false, /* notNull */ false);
     }
 
     Y_UNIT_TEST(ColumnTablesRejectSetNotNull) {

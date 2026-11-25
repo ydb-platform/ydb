@@ -830,6 +830,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterThroughAggregateRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterThroughUnionAllRule>());
+    logicalStage_I_Rules.emplace_back(std::make_unique<TEliminateDuplicateAggregationsRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStage_I_Rules)));
 
     TVector<std::unique_ptr<IRule>> logicalStage_II_Rules;
@@ -867,6 +868,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     TVector<std::unique_ptr<IRule>> indexSelectionRules;
     indexSelectionRules.emplace_back(std::make_unique<TPushRangesRule>(NYql::EStorageType::RowStorage));
+    indexSelectionRules.emplace_back(std::make_unique<TSelectIndexForTopSortRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Index selection rules", std::move(indexSelectionRules)));
 
     // CBO stages.

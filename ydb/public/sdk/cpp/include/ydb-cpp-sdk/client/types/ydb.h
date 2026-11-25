@@ -44,7 +44,8 @@ enum EPileState {
     NOT_SYNCHRONIZED = 4 /* "not_synchronized" */,
     SUSPENDED = 5 /* "suspended" */,
     DISCONNECTED = 6 /* "disconnected" */,
-    INACTIVE = 7 /* "inactive" */
+    INACTIVE = 7 /* "inactive" */,
+    HOT_STANDBY = 8 /* "hot_standby" */
 };
 
 enum class EGrpcCompressionAlgorithm {

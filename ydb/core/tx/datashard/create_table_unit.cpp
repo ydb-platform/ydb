@@ -75,7 +75,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
 
     info->ForEachAsyncIndex([&](const auto& indexPathId, const auto&) {
         AddSenders.emplace_back(new TEvChangeExchange::TEvAddSender(
-            tableId, TEvChangeExchange::ESenderType::AsyncIndex, indexPathId
+            tableId, indexPathId, TEvChangeExchange::TAsyncIndexSender{}
         ));
     });
 

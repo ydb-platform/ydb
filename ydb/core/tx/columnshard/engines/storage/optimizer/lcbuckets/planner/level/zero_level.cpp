@@ -4,7 +4,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks(const TMayUsePortion& mayUsePortion) const {
     std::vector<TCompactionTaskData> result;
-    AFL_VERIFY(Portions.size());
+    YDB_LOG_VERIFY(Portions.size());
     result.emplace_back(NextLevel->GetLevelId(), CompactionTaskMemoryLimit, CompactionTaskPortionsCountLimit,
         CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
     i64 tasksLeft = GetMaxConcurrency();

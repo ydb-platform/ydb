@@ -1,5 +1,5 @@
 RECURSE_FOR_TESTS(
-    ut_auditsettings
+    ut_audit
     ut_topic_cloud_events
     ut_background_cleaning
     ut_backup
@@ -19,6 +19,7 @@ RECURSE_FOR_TESTS(
     ut_consistent_copy_tables
     ut_continuous_backup
     ut_continuous_backup_reboots
+    ut_database_freeze
     ut_shred
     ut_shred_reboots
     ut_export
@@ -77,6 +78,7 @@ RECURSE_FOR_TESTS(
     ut_system_names
     ut_sysview
     ut_sysview_reboots
+    ut_topic_common
     ut_topic_splitmerge
     ut_topic_set_boundaries
     ut_test_shard
@@ -111,6 +113,8 @@ SRCS(
     schemeshard__init_populator.cpp
     schemeshard__init_root.cpp
     schemeshard__init_schema.cpp
+    schemeshard__index_shadow_data_repair.cpp
+    schemeshard__index_shadow_data_repair.h
     schemeshard__list_users.cpp
     schemeshard__local_index_migration.cpp
     schemeshard__local_index_migration.h
@@ -144,6 +148,7 @@ SRCS(
     schemeshard__operation_alter_streaming_query.cpp
     schemeshard__operation_alter_subdomain.cpp
     schemeshard__operation_alter_table.cpp
+    schemeshard__operation_repair_index_shadow_data.cpp
     schemeshard__operation_alter_user_attrs.cpp
     schemeshard__operation_assign_bsv.cpp
     schemeshard__operation_backup_backup_collection.cpp
@@ -241,6 +246,7 @@ SRCS(
     schemeshard__state_changed_reply.cpp
     schemeshard__storage_space.cpp
     schemeshard__sync_update_tenants.cpp
+    schemeshard_database_freeze.cpp
     schemeshard__table_partitions_format.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
@@ -301,6 +307,7 @@ SRCS(
     schemeshard_import__get.cpp
     schemeshard_import__list.cpp
     schemeshard_import_flow_proposals.cpp
+    schemeshard_import_kesus_restorer.cpp
     schemeshard_import_scheme_query_executor.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
@@ -417,6 +424,7 @@ PEERDIR(
     ydb/library/protobuf_printer
     ydb/public/lib/ydb_cli/dump/files
     ydb/public/lib/ydb_cli/dump/util
+    ydb/public/lib/ydb_cli/dump/util/compatibility
     yql/essentials/minikql
     yql/essentials/providers/common/proto
     yql/essentials/public/udf

@@ -28,7 +28,8 @@ namespace grpc_core {
 
 // Loads the content of a file into a slice. add_null_terminator will add a NULL
 // terminator if true.
-y_absl::StatusOr<Slice> LoadFile(TString filename, bool add_null_terminator);
+y_absl::StatusOr<Slice> LoadFile(const TString& filename,
+                               bool add_null_terminator);
 }  // namespace grpc_core
 
 #endif  // GRPC_SRC_CORE_LIB_GPRPP_LOAD_FILE_H

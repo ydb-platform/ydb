@@ -23,7 +23,7 @@ public:
     TSaverContext(const std::shared_ptr<IStoragesManager>& storagesManager)
         : StoragesManager(storagesManager)
     {
-        AFL_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(StoragesManager);
     }
 };
 
@@ -42,7 +42,7 @@ public:
         : TBase(columnId, arrowField, serializer, needMinMax, isSorted, isNullable, defaultValue, pkColumnIndex, typeInfo)
         , Operator(bOperator)
     {
-        AFL_VERIFY(Operator);
+        YDB_LOG_VERIFY(Operator);
     }
 
     TConclusionStatus DeserializeFromProto(

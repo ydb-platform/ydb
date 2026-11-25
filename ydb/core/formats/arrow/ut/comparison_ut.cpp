@@ -352,6 +352,25 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
         UNIT_ASSERT_VALUES_EQUAL(ScalarCompareNullable(invalid, invalid, logicalType), 0);
     }
 
+    Y_UNIT_TEST(SimpleRowNullScalarKeepsType) {
+        const std::vector<NScheme::TTypeInfo> logicalTypes = { NScheme::TTypeInfo(NScheme::NTypeIds::Int64) };
+        arrow::Int64Builder builder;
+        UNIT_ASSERT(builder.AppendNull().ok());
+        UNIT_ASSERT(builder.Append(7).ok());
+        const auto batch = MakeBatch(Finish(builder));
+
+        const auto nullScalar = TSimpleRow(batch, 0, logicalTypes).GetScalar(0);
+        UNIT_ASSERT(nullScalar);
+        UNIT_ASSERT(!nullScalar->is_valid);
+        UNIT_ASSERT_VALUES_EQUAL(nullScalar->type->ToString(), "int64");
+        UNIT_ASSERT(!TSimpleRow(batch, 0, logicalTypes).GetValue<i64>(0));
+
+        const auto valueScalar = TSimpleRow(batch, 1, logicalTypes).GetScalar(0);
+        UNIT_ASSERT(valueScalar->is_valid);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::Int64Scalar&>(*valueScalar).value, 7);
+        UNIT_ASSERT_VALUES_EQUAL(*TSimpleRow(batch, 1, logicalTypes).GetValue<i64>(0), 7);
+    }
+
     Y_UNIT_TEST(NativeBooleanDispatchIsUnchanged) {
         const NScheme::TTypeInfo logicalType(NScheme::NTypeIds::Bool);
         const std::vector<NScheme::TTypeInfo> logicalTypes = { logicalType };

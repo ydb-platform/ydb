@@ -29,11 +29,12 @@ protected:
     void Initialize(const std::shared_ptr<arrow::RecordBatch>& data) {
         Schema = data->schema();
         Rows = TRowsCollection(data);
-        AFL_VERIFY(data);
+        YDB_LOG_VERIFY(data);
         Y_DEBUG_ABORT_UNLESS(data->ValidateFull().ok());
-        AFL_VERIFY(data->num_rows());
-        AFL_VERIFY(data->num_columns());
-        AFL_VERIFY(data->num_rows() <= 2)("count", data->num_rows());
+        YDB_LOG_VERIFY(data->num_rows());
+        YDB_LOG_VERIFY(data->num_columns());
+        YDB_LOG_VERIFY(data->num_rows() <= 2,
+            {"count", data->num_rows()});
     }
 
 public:
@@ -94,8 +95,8 @@ public:
     explicit TFirstLastSpecialKeys(const TSimpleRow& firstRow, const TSimpleRow& lastRow)
         : TBase(std::vector<TString>({ firstRow.GetData(), lastRow.GetData() }), firstRow.GetSchema())
     {
-        AFL_VERIFY(firstRow.GetSchema()->Equals(*lastRow.GetSchema()));
-        AFL_VERIFY(firstRow.GetLogicalTypes() == lastRow.GetLogicalTypes());
+        YDB_LOG_VERIFY(firstRow.GetSchema()->Equals(*lastRow.GetSchema()));
+        YDB_LOG_VERIFY(firstRow.GetLogicalTypes() == lastRow.GetLogicalTypes());
     }
 
     explicit TFirstLastSpecialKeys(const TString& firstRow, const TString& lastRow, const std::shared_ptr<arrow::Schema>& schema)

@@ -24,7 +24,9 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
         const auto& logicalTypes = pred.GetSortableBatchPosition().GetSorting()->GetLogicalTypes();
         auto it = cols.empty() ? NArrow::NMerger::TRWSortableBatchPosition(data, 0, false, logicalTypes)
                                : NArrow::NMerger::TRWSortableBatchPosition(data, 0, cols, {}, false, logicalTypes);
-        AFL_VERIFY(it.InitPosition(static_cast<i64>(atPos)))("atPos", atPos)("recordsCount", recordsCount);
+        YDB_LOG_VERIFY(it.InitPosition(static_cast<i64>(atPos)),
+            {"atPos", atPos},
+            {"recordsCount", recordsCount});
         return it;
     };
 
@@ -40,7 +42,7 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
             const auto findBegin = predFrom.FindFirstIncluded(itFrom);
             return findBegin ? findBegin->GetPosition() : recordsCount;
         }();
-        AFL_VERIFY(beginIdx >= initialIdx);
+        YDB_LOG_VERIFY(beginIdx >= initialIdx);
         result.Add(false, beginIdx - initialIdx);
         pos = beginIdx;
         if (pos >= recordsCount) {
@@ -56,7 +58,7 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
             const auto findEnd = predTo.FindFirstExcluded(itTo);
             return findEnd ? findEnd->GetPosition() : recordsCount;
         }();
-        AFL_VERIFY(endIdx >= pos);
+        YDB_LOG_VERIFY(endIdx >= pos);
         result.Add(true, endIdx - pos);
         pos = endIdx;
         if (pos >= recordsCount) {
@@ -203,8 +205,8 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
     std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>(TPKRangesFilter(batch));
     auto pkBatch = NArrow::TColumnOperator().Adapt(batch, pkSchema).DetachResult();
     auto c = batch->GetColumnByName(".ydb_operation_type");
-    AFL_VERIFY(c);
-    AFL_VERIFY(c->type_id() == arrow::Type::UINT32);
+    YDB_LOG_VERIFY(c);
+    YDB_LOG_VERIFY(c->type_id() == arrow::Type::UINT32);
     auto cUi32 = static_pointer_cast<arrow::UInt32Array>(c);
     const auto decodeOperation = [](const ui32 value) -> NKernels::EOperation {
         switch (value) {
@@ -223,7 +225,7 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
             case static_cast<ui32>(NKernels::EOperation::Equal):
                 return NKernels::EOperation::Equal;
             default:
-                AFL_VERIFY(false)("operation", value);
+                YDB_LOG_VERIFY(false, {"operation", value});
         }
     };
     for (ui32 i = 0; i < batch->num_rows();) {
@@ -238,7 +240,7 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
             } else if (op == NKernels::EOperation::Equal) {
                 return TPredicate(NKernels::EOperation::GreaterEqual, batchRow);
             } else {
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
             }
         }();
         NOlap::TPredicate pTo = [&]() {
@@ -250,7 +252,7 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
             } else if (op == NKernels::EOperation::Equal) {
                 return TPredicate(NKernels::EOperation::LessEqual, batchRow);
             } else {
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
             }
         }();
         result->Add(std::move(pFrom), std::move(pTo)).Validate();
@@ -287,19 +289,23 @@ void TRangesBuilder::AddRange(TSerializedTableRange&& range) {
         for (size_t i = 0; i < size; ++i) {
             if (i < cells.size() && !cells[i].IsNull()) {
                 cellsWithDefaults.push_back(cells[i]);
-                AFL_VERIFY(explicitPrefixLen == i)("serialized_prefix_len", explicitPrefixLen)("i", i);
+                YDB_LOG_VERIFY(explicitPrefixLen == i,
+                    {"serializedPrefixLen", explicitPrefixLen},
+                    {"i", i});
                 ++explicitPrefixLen;
             } else if (i < cells.size() && cells[i].IsNull()) {
                 cellsWithDefaults.emplace_back();
-                AFL_VERIFY(explicitPrefixLen == i)("serialized_prefix_len", explicitPrefixLen)("i", i);
+                YDB_LOG_VERIFY(explicitPrefixLen == i,
+                    {"serializedPrefixLen", explicitPrefixLen},
+                    {"i", i});
                 ++explicitPrefixLen;
             } else {
                 TConclusion<TCell> defaultCell = MakeDefaultCell(YdbPK[i]);
-                AFL_VERIFY(!!defaultCell);
+                YDB_LOG_VERIFY(!!defaultCell);
                 cellsWithDefaults.push_back(defaultCell.DetachResult());
             }
         }
-        AFL_VERIFY(cellsWithDefaults.size() == YdbPK.size());
+        YDB_LOG_VERIFY(cellsWithDefaults.size() == YdbPK.size());
         BatchBuilder.AddRow(NKikimr::TDbTupleRef(), NKikimr::TDbTupleRef(YdbPK.data(), cellsWithDefaults.data(), cellsWithDefaults.size()));
 
         return explicitPrefixLen;
@@ -307,9 +313,9 @@ void TRangesBuilder::AddRange(TSerializedTableRange&& range) {
 
     const ui32 leftPrefix = addRow(range.From.GetCells());
     const ui32 rightPrefix = addRow(range.To.GetCells());
-    AFL_VERIFY(BatchBuilder.Rows());
-    AFL_VERIFY(leftPrefix <= YdbPK.size());
-    AFL_VERIFY(rightPrefix <= YdbPK.size());
+    YDB_LOG_VERIFY(BatchBuilder.Rows());
+    YDB_LOG_VERIFY(leftPrefix <= YdbPK.size());
+    YDB_LOG_VERIFY(rightPrefix <= YdbPK.size());
 
     RangesInfo.emplace_back(TPredicateInfo(range.FromInclusive ? NKernels::EOperation::GreaterEqual : NKernels::EOperation::Greater, leftPrefix,
                                 BatchBuilder.Rows() - 2),

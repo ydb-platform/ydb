@@ -35,8 +35,8 @@ bool TEvReadStart::DoDeserializeFromProto(const NKikimrColumnShardTxProto::TEven
 }
 
 void TEvReadStart::DoSerializeToProto(NKikimrColumnShardTxProto::TEvent& proto) const {
-    AFL_VERIFY(!!Filter);
-    AFL_VERIFY(!!Schema);
+    YDB_LOG_VERIFY(!!Filter);
+    YDB_LOG_VERIFY(!!Schema);
     *proto.MutableRead()->MutableFilter() = Filter->SerializeToString(Schema);
     *proto.MutableRead()->MutableSchema() = NArrow::SerializeSchema(*Schema);
 }

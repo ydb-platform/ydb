@@ -163,7 +163,7 @@ public:
         OutForeign = OverlapClusters > 1 && request.GetOverlapOutForeign();
 
         const auto& embedding = request.GetEmbeddingColumn();
-        const auto& data = request.GetDataColumns();
+        const auto data = MakeUploadDataColumns(table, embedding, request.GetDataColumns(), request.GetIndexType());
         ScanTags = MakeScanTags(table, embedding, data, toBuild,
             EmbeddingPos, DataPos, InForeign ? &IsForeignPos : nullptr);
         Lead.SetTags(ScanTags);
@@ -756,8 +756,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             badRequest("Wrong upload");
         }
 
-        if (request.GetK() < 2) {
-            badRequest("Should be requested partition on at least two rows");
+        if (request.GetK() == 0) {
+            badRequest("At least one cluster should be requested");
         }
 
         const auto parentFrom = request.GetParentFrom();

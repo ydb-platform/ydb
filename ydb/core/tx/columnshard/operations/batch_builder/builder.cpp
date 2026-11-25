@@ -119,7 +119,8 @@ void StartWritingPreparedBatch(
             } else {
                 auto insertionConclusion = context.GetActualSchema()->CheckColumnsDefault(defaultFields);
                 auto conclusion = context.GetActualSchema()->BuildDefaultBatch(context.GetActualSchema()->GetIndexInfo().ArrowSchema(), 1, true);
-                AFL_VERIFY(!conclusion.IsFail())("error", conclusion.GetErrorMessage());
+                YDB_LOG_VERIFY(!conclusion.IsFail(),
+                    {"error", conclusion.GetErrorMessage()});
                 auto batchDefault = conclusion.DetachResult();
                 std::vector<NScheme::TTypeInfo> defaultTypes;
                 defaultTypes.reserve(batchDefault->num_columns());

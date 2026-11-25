@@ -2,6 +2,7 @@
 #include "mon_impl.h"
 #include "mon_events.h"
 #include "counters_adapter_impl.h"
+#include "counters_memonly.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
@@ -2097,7 +2098,7 @@ NMonitoring::IMonPage* TMon::RegisterActorPage(TRegisterActorPageFields fields) 
 }
 
 NMonitoring::IMonPage* TMon::RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
-    CountersMonPage = new TDynamicCountersPage(path, title, counters);
+    CountersMonPage = new NMemOnlyShim::TDynamicCountersPage(path, title, counters);
     CountersMonPage->SetUnknownGroupPolicy(EUnknownGroupPolicy::Ignore);
     Register(CountersMonPage.Get());
     return CountersMonPage.Get();

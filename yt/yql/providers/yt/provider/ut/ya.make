@@ -12,6 +12,7 @@ SRCS(
     yql_yt_epoch_ut.cpp
     yql_yt_cbo_ut.cpp
     yql_lineage_ut.cpp
+    yql_nile_cluster_validation_ut.cpp
 )
 
 PEERDIR(
@@ -25,6 +26,7 @@ PEERDIR(
     yql/essentials/ast
     yql/essentials/public/udf/service/terminate_policy
     yql/essentials/core/services
+    yql/essentials/core/facade
     yql/essentials/core
     yql/essentials/core/qplayer/storage/memory
     yql/essentials/providers/common/gateway

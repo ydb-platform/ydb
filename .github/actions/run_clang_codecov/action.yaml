@@ -108,6 +108,7 @@ runs:
         params=(
           -tA --build profile
           --clang-coverage --coverage-report --keep-temps
+          -DDEBUGINFO_LINES_ONLY # Match PR-check and avoid DWARF32 overflows in large test binaries.
           "-DCOVERAGE_TARGET_REGEXP=${REGEXP}"
           "--coverage-exclude-regexp=${EXCL}"
           --test-threads "${TEST_THREADS}"

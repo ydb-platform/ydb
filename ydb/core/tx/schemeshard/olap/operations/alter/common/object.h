@@ -32,17 +32,17 @@ public:
     }
 
     const TColumnTableInfo& GetTableInfoVerified() const {
-        AFL_VERIFY(!!TableInfo);
+        YDB_LOG_VERIFY(!!TableInfo);
         return *TableInfo;
     }
 
     TColumnTableInfo::TPtr GetTableInfoPtrVerified() const {
-        AFL_VERIFY(!!TableInfo);
+        YDB_LOG_VERIFY(!!TableInfo);
         return TableInfo;
     }
 
     const NKikimrSchemeOp::TColumnDataLifeCycle& GetTableTTLProto() {
-        AFL_VERIFY(TableInfo);
+        YDB_LOG_VERIFY(TableInfo);
         return TableInfo->Description.GetTtlSettings();
     }
 };

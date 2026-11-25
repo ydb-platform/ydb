@@ -86,7 +86,7 @@ bool TStreamingQueryTranslation::ParseStreamingQuerySetting(const TRule_streamin
     YQL_ENSURE(settings.Features);
 
     const auto& name = Id(node.GetRule_an_id_or_type1(), *this);
-    const auto pos = Ctx_.Pos();
+    const auto pos = Ctx_.Position(node.GetRule_an_id_or_type1());
 
     TColumnRefScope scope(Ctx_, EColumnRefState::AsStringLiteral);
     const auto value = Unwrap(TSqlExpression(*this).Build(node.GetRule_expr3()));
@@ -100,10 +100,8 @@ bool TStreamingQueryTranslation::ParseStreamingQuerySettings(const TRule_streami
     //     (, streaming_query_setting)* ,?
     // )
 
-    Ctx_.Token(node.GetToken1());
-
     if (!settings.Features) {
-        settings.Features = new TObjectFeatureNode(Ctx_.Pos());
+        settings.Features = new TObjectFeatureNode(Ctx_.Position(node));
     }
 
     if (!ParseStreamingQuerySetting(node.GetRule_streaming_query_setting2(), settings)) {
@@ -123,11 +121,12 @@ bool TStreamingQueryTranslation::ParseStreamingQueryDefinition(const TRule_strea
     // streaming_query_definition: AS DO (BEGIN define_action_or_subquery_body END DO);
 
     const auto& inlineAction = node.GetRule_inline_action3();
-    const auto& queryBegin = inlineAction.GetToken1();
-    Ctx_.Token(queryBegin);
+    const auto& body = inlineAction.GetRule_define_action_or_subquery_body2();
+    const auto pos = Ctx_.Position(inlineAction);
+    const auto bodyPos = Ctx_.Position(body);
 
     if (!settings.Features) {
-        settings.Features = new TObjectFeatureNode(Ctx_.Pos());
+        settings.Features = new TObjectFeatureNode(pos);
     }
 
     // Save query ast to perform type check and validation of allowed expressions
@@ -140,12 +139,12 @@ bool TStreamingQueryTranslation::ParseStreamingQueryDefinition(const TRule_strea
     TSqlQuery query(Ctx_, Ctx_.Settings.Mode, /* topLevel */ false, /* allowTopLevelPragmas */ true);
     TBlocks innerBlocks;
 
-    TNodePtr clearWorldNode = new TAstListNodeImpl(Ctx_.Pos());
+    TNodePtr clearWorldNode = new TAstListNodeImpl(pos);
     clearWorldNode->Add("World");
     innerBlocks.push_back(clearWorldNode);
 
-    const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, inlineAction.GetRule_define_action_or_subquery_body2());
-    auto queryNode = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, /*topLevel=*/false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
+    const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, body);
+    auto queryNode = hasValidBody ? BuildQuery(bodyPos, innerBlocks, /*topLevel=*/false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
     if (!WarnUnusedNodes()) {
         return false;
     }
@@ -156,25 +155,12 @@ bool TStreamingQueryTranslation::ParseStreamingQueryDefinition(const TRule_strea
         return false;
     }
 
-    TNodePtr blockNode = new TAstListNodeImpl(Ctx_.Pos());
+    TNodePtr blockNode = new TAstListNodeImpl(pos);
     blockNode->Add("block", blockNode->Q(queryNode));
-    settings.Features->AddFeature(TStreamingQuerySettings::QUERY_AST_FEATURE, Ctx_.Pos()).first = blockNode;
+    settings.Features->AddFeature(TStreamingQuerySettings::QUERY_AST_FEATURE, pos).first = blockNode;
 
-    // Extract whole query text between BEGIN and END tokens
-
-    const auto& queryEnd = inlineAction.GetToken3();
-    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(queryBegin.GetId(), BEGIN));
-    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(queryEnd.GetId(), END));
-
-    auto beginPos = GetQueryPosition(Ctx_.Query, queryBegin);
-    const auto endPos = GetQueryPosition(Ctx_.Query, queryEnd);
-    if (beginPos == std::string::npos || endPos == std::string::npos) {
-        Error() << "Failed to parse streaming query definition";
-        return false;
-    }
-
-    beginPos += queryBegin.value().size();
-    settings.Features->AddFeature(TStreamingQuerySettings::QUERY_TEXT_FEATURE, Ctx_.Pos()).first = BuildQuotedAtom(Ctx_.Pos(), Ctx_.Query.substr(beginPos, endPos - beginPos));
+    settings.Features->AddFeature(TStreamingQuerySettings::QUERY_TEXT_FEATURE, pos).first =
+        BuildQuotedAtom(bodyPos, Ctx_.QueryText(body, {.IsSurroundingTriviaIncluded = true}));
 
     return true;
 }
@@ -187,7 +173,6 @@ bool TStreamingQueryTranslation::ParseAlterStreamingQueryAction(const TRule_alte
     switch (node.GetAltCase()) {
         case TRule_alter_streaming_query_action::kAltAlterStreamingQueryAction1: {
             const auto& alterSettingsNode = node.GetAlt_alter_streaming_query_action1().GetRule_alter_streaming_query_set_settings1();
-            Ctx_.Token(alterSettingsNode.GetToken1());
 
             if (!ParseStreamingQuerySettings(alterSettingsNode.GetRule_streaming_query_settings2(), settings)) {
                 return false;
@@ -200,7 +185,6 @@ bool TStreamingQueryTranslation::ParseAlterStreamingQueryAction(const TRule_alte
 
             if (action.HasBlock1()) {
                 const auto& alterSettingsNode = action.GetBlock1().GetRule_alter_streaming_query_set_settings1();
-                Ctx_.Token(alterSettingsNode.GetToken1());
 
                 if (!ParseStreamingQuerySettings(alterSettingsNode.GetRule_streaming_query_settings2(), settings)) {
                     return false;
@@ -224,8 +208,6 @@ TNodePtr TStreamingQueryTranslation::Build(const TRule_create_streaming_query_st
     // create_streaming_query_stmt: CREATE (OR REPLACE)? STREAMING QUERY (IF NOT EXISTS)? object_ref
     //     (WITH streaming_query_settings)?
     //     streaming_query_definition;
-
-    Ctx_.Token(node.GetToken1());
 
     // object_ref
     TObjectOperatorContext context(Ctx_.Scoped);
@@ -255,7 +237,6 @@ TNodePtr TStreamingQueryTranslation::Build(const TRule_create_streaming_query_st
     TStreamingQuerySettings settings;
     if (node.HasBlock7()) {
         const auto& features = node.GetBlock7().GetRule_create_streaming_query_features1();
-        Ctx_.Token(features.GetToken1());
 
         if (!ParseStreamingQuerySettings(features.GetRule_streaming_query_settings2(), settings)) {
             return {};
@@ -267,7 +248,7 @@ TNodePtr TStreamingQueryTranslation::Build(const TRule_create_streaming_query_st
         return {};
     }
 
-    return BuildCreateStreamingQuery(Ctx_.Pos(), *objectPath, existingOk, replaceIfExists,
+    return BuildCreateStreamingQuery(Ctx_.Position(node), *objectPath, existingOk, replaceIfExists,
                                      std::move(settings.Features), context);
 }
 
@@ -296,7 +277,7 @@ TNodePtr TStreamingQueryTranslation::Build(const TRule_alter_streaming_query_stm
         return {};
     }
 
-    return BuildAlterStreamingQuery(Ctx_.Pos(), *objectPath, missingOk,
+    return BuildAlterStreamingQuery(Ctx_.Position(node), *objectPath, missingOk,
                                     std::move(settings.Features), context);
 }
 
@@ -318,7 +299,7 @@ TNodePtr TStreamingQueryTranslation::Build(const TRule_drop_streaming_query_stmt
             IS_TOKEN(node.GetBlock4().GetToken2().GetId(), EXISTS));
     }
 
-    return BuildDropStreamingQuery(Ctx_.Pos(), *objectPath, missingOk, context);
+    return BuildDropStreamingQuery(Ctx_.Position(node), *objectPath, missingOk, context);
 }
 
 } // namespace NSQLTranslationV1

@@ -85,9 +85,9 @@ When choosing the minimum number of partitions, it makes sense to consider that 
 #### AUTO_PARTITIONING_PARTITION_SIZE_MB
 
 * Type: `Uint64`.
-* Default value: `2000 MB` (`2 GB`).
+* Default value: `2048 MiB` (`2 GiB`).
 
-The desired partition size threshold in megabytes. Recommended values range from `10 MB` to `2000 MB`. If this threshold is exceeded, a shard may split.
+The desired partition size threshold in mebibytes. Recommended values range from `10 MiB` to `2048 MiB`. If this threshold is exceeded, a shard may split.
 The specified value serves only as a recommendation for splitting. Splitting may not occur even if the configured size is exceeded.
 This setting applies when the [`AUTO_PARTITIONING_BY_SIZE`](#auto_partitioning_by_size) mode is enabled.
 
@@ -196,7 +196,7 @@ Every table has a primary column group named `default` containing all columns no
 For a column group, attributes that affect data storage and caching are set:
 
 * the type of storage devices used (SSD or HDD, with availability depending on the {{ ydb-short-name }} cluster configuration)
-* Data compression mode (no compression or [LZ4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm)) algorithm compression);
+* Data compression mode: no compression, [LZ4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm)), or [Zstandard](https://en.wikipedia.org/wiki/Zstd);
 * caching mode.
 
 For table data compression, see [{#T}](../../compression.md).

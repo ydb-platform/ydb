@@ -16,9 +16,13 @@
 
 #include <library/cpp/protobuf/util/pb_io.h>
 
+#include <util/folder/path.h>
+#include <util/generic/hash.h>
 #include <util/generic/scope.h>
 #include <util/stream/str.h>
+#include <util/string/join.h>
 #include <util/string/strip.h>
+#include <util/system/fs.h>
 #include <util/system/shellcommand.h>
 #include <util/string/split.h>
 
@@ -31,13 +35,64 @@ using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
 namespace {
+
+constexpr TStringBuf UdfResolverMountPoint = "/usr/bin/udf_resolver";
+
+TString PreparePortoMounts(const TString& resolverPath, const THashMap<TString, TString>& extraMounts) {
+    TStringBuilder builder;
+    const auto addMount = [&](const TString& hostPath, TStringBuf containerPath) {
+        if (!builder.empty()) {
+            builder << "; ";
+        }
+
+        // porto bind mount requires symlinks to be resolved
+        builder << TFsPath(hostPath).RealPath() << " " << containerPath << " ro";
+    };
+
+    addMount(resolverPath, UdfResolverMountPoint);
+    for (const auto& [hostPath, containerPath] : extraMounts) {
+        addMount(hostPath, containerPath);
+    }
+
+    return builder;
+}
+
+void ConfigurePortoProxy(
+    const TOutProcUdfResolverOptions::TPortoConfig& portoConfig,
+    const THashMap<TString, TString>& extraMounts,
+    TString& commandPath,
+    TList<TString>& commandArgs,
+    THashMap<TString, TString>& commandEnv) {
+    commandEnv["PORTO_PROXY_MOUNTS"] = PreparePortoMounts(commandPath, extraMounts);
+
+    YQL_ENSURE(!portoConfig.Layers.empty());
+    commandEnv["PORTO_PROXY_LAYERS"] = JoinSeq(" ", portoConfig.Layers);
+
+    commandArgs.emplace_front(UdfResolverMountPoint);
+    commandPath = portoConfig.ProxyBinaryPath;
+}
+
 template <typename F>
 void RunResolver(
-    const TString& resolverPath,
-    const TList<TString>& args,
+    const TOutProcUdfResolverOptions& options,
+    const TVector<TString>& additionalArgs,
     IInputStream* input,
     const F& outputHandler,
-    const TString& ldLibraryPath = {}) {
+    const TString& ldLibraryPath = {},
+    const THashMap<TString, TString>& extraMounts = {}) {
+    TString commandPath = options.ResolverPath;
+    TList<TString> commandArgs;
+    if (options.User) {
+        commandArgs.insert(commandArgs.end(), {"-U", *options.User});
+    }
+    if (options.Group) {
+        commandArgs.insert(commandArgs.end(), {"-G", *options.Group});
+    }
+    if (options.FilterSysCalls) {
+        commandArgs.push_back("-F");
+    }
+    commandArgs.insert(commandArgs.end(), additionalArgs.begin(), additionalArgs.end());
+
     TShellCommandOptions shellOptions;
     shellOptions
         .SetUseShell(false)
@@ -54,7 +109,11 @@ void RunResolver(
         shellOptions.Environment["LD_LIBRARY_PATH"] = ldLibraryPath;
     }
 
-    TShellCommand shell(resolverPath, args, shellOptions);
+    if (options.PortoConfig) {
+        ConfigurePortoProxy(*options.PortoConfig, extraMounts, commandPath, commandArgs, shellOptions.Environment);
+    }
+
+    TShellCommand shell(commandPath, commandArgs, shellOptions);
     auto status = shell.Run().GetStatus();
     auto exitCode = shell.GetExitCode();
     TStringBuilder formattedExitcode;
@@ -88,14 +147,15 @@ void RunResolver(
 
 template <typename F>
 void RunResolver(
-    const TString& resolverPath,
-    const TList<TString>& args,
+    const TOutProcUdfResolverOptions& options,
+    const TVector<TString>& additionalArgs,
     const TResolve& request,
     const F& outputHandler,
-    const TString& ldLibraryPath = {}) {
+    const TString& ldLibraryPath = {},
+    const THashMap<TString, TString>& extraMounts = {}) {
     TStringStream input;
     YQL_ENSURE(request.SerializeToArcadiaStream(&input), "Cannot serialize TResolve proto message");
-    RunResolver(resolverPath, args, &input, outputHandler, ldLibraryPath);
+    RunResolver(options, additionalArgs, &input, outputHandler, ldLibraryPath, extraMounts);
 }
 
 TString ExtractSharedObjectNameFromErrorMessage(const char* message) {
@@ -103,11 +163,15 @@ TString ExtractSharedObjectNameFromErrorMessage(const char* message) {
         return "";
     }
 
-    // example:
+    // Examples:
     // util/system/dynlib.cpp:56: libcuda.so.1: cannot open shared object file: No such file or directory
+    // (or)
+    // Importing layer some-udf-layer.tar.zst as SOME_LAYER
+    // util/system/dynlib.cpp:56: libcuda.so.1: cannot open shared object file: No such file or directory
+    // Container exit code: 1
     static std::regex Re(".*: (.+): cannot open shared object file: No such file or directory");
     std::cmatch match;
-    if (!std::regex_match(message, match, Re)) {
+    if (!std::regex_search(message, match, Re)) {
         return "";
     }
 
@@ -118,23 +182,16 @@ TString ExtractSharedObjectNameFromErrorMessage(const char* message) {
 class TOutProcUdfResolver: public IUdfResolver {
 public:
     TOutProcUdfResolver(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-                        TFileStoragePtr fileStorage, TString resolverPath,
-                        const TString& user, const TString& group, bool filterSyscalls,
-                        TString udfDependencyStubPath, const TMap<TString, TString>& path2md5)
+                        TFileStoragePtr fileStorage, TOutProcUdfResolverOptions options,
+                        const TMap<TString, TString>& path2md5)
         : FunctionRegistry_(functionRegistry)
         , TypeInfoHelper_(new TTypeInfoHelper)
         , FileStorage_(std::move(fileStorage))
-        , ResolverPath_(std::move(resolverPath))
-        , UdfDependencyStubPath_(std::move(udfDependencyStubPath))
+        , Options_(std::move(options))
         , Path2Md5_(path2md5)
     {
-        if (user) {
-            UserGroupArgs_ = {"-U", user, "-G", group};
-        }
-
-        if (filterSyscalls) {
-            UserGroupArgs_.push_back("-F");
-        }
+        YQL_ENSURE(!Options_.PortoConfig || (!Options_.User && !Options_.Group),
+                   "user/group settings cannot be combined with Porto configuration");
     }
 
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const override {
@@ -291,21 +348,25 @@ private:
     }
 
     TResolveResult RunResolverAndParseResult(const TResolve& request, const TVector<TString>& additionalArgs, TFilesBox& filesBox) const {
-        auto args = UserGroupArgs_;
-        args.insert(args.end(), additionalArgs.begin(), additionalArgs.end());
-
         TString ldLibraryPath;
         TSet<TString> stubbedLibraries;
         return WithRetry<yexception>(10, [&]() {
+            THashMap<TString, TString> extraMounts;
+            if (Options_.PortoConfig) {
+                // Mount all UDF stuff to container, accessible at the same paths
+                for (const auto& link : filesBox.GetLinks()) {
+                    extraMounts.emplace(link, link);
+                }
+            }
             TResolveResult response;
-            RunResolver(ResolverPath_, args, request, [&](const TString& output) {
+            RunResolver(Options_, additionalArgs, request, [&](const TString& output) {
                 YQL_ENSURE(response.ParseFromString(output), "Cannot deserialize TResolveResult proto message");
-            }, ldLibraryPath);
+            }, ldLibraryPath, extraMounts);
             return response; }, [&](const yexception& e, int, int) {
             TStringStream stream;
             SerializeToTextFormat(request, stream);
             YQL_LOG(DEBUG) << "Exception from UdfResolver: " << e.what() << " for request " << stream.Str();
-            if (!UdfDependencyStubPath_) {
+            if (!Options_.UdfDependencyStubPath) {
                 YQL_LOG(DEBUG) << "UdfDependencyStubPath is not specified, unable to recover error " << e.what();
                 throw e;
             }
@@ -328,8 +389,8 @@ private:
     }
 
     void PutSharedLibraryStub(const TString& sharedLibrary, TFilesBox& filesBox) const {
-        YQL_ENSURE(UdfDependencyStubPath_);
-        filesBox.MakeLinkFrom(UdfDependencyStubPath_, sharedLibrary);
+        YQL_ENSURE(Options_.UdfDependencyStubPath);
+        filesBox.MakeLinkFrom(*Options_.UdfDependencyStubPath, sharedLibrary);
     }
 
     static bool ExtractMetadata(const TResolveResult& response, const TVector<TImport*>& usedImports, const TVector<TFunction*>& functions, TExprContext& ctx) {
@@ -395,19 +456,16 @@ private:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
     TFileStoragePtr FileStorage_;
-    const TString ResolverPath_;
-    const TString UdfDependencyStubPath_;
-    TList<TString> UserGroupArgs_;
+    const TOutProcUdfResolverOptions Options_;
     const TMap<TString, TString> Path2Md5_;
 };
 
 void LoadSystemModulePaths(
-    const TString& resolverPath,
+    const TOutProcUdfResolverOptions& options,
     const TString& dir,
     TUdfModulePathsMap* paths)
 {
-    const TList<TString> args = {TString("--list"), dir};
-    RunResolver(resolverPath, args, /*input=*/nullptr, [&](const TString& output) {
+    RunResolver(options, {"--list", dir}, /*input=*/nullptr, [&](const TString& output) {
         // output format is:
         // {{module_name}}\t{{module_path}}\n
 
@@ -420,19 +478,15 @@ void LoadSystemModulePaths(
                 paths->emplace(moduleName, modulePath);
             }
         }
-    });
+    }, /*ldLibraryPath=*/{}, /*extraMounts=*/{{dir, dir}});
 }
 
 IUdfResolver::TPtr CreateOutProcUdfResolver(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TFileStoragePtr& fileStorage,
-    const TString& resolverPath,
-    const TString& user,
-    const TString& group,
-    bool filterSyscalls,
-    const TString& udfDependencyStubPath,
+    TOutProcUdfResolverOptions options,
     const TMap<TString, TString>& path2md5) {
-    return new TOutProcUdfResolver(functionRegistry, fileStorage, resolverPath, user, group, filterSyscalls, udfDependencyStubPath, path2md5);
+    return new TOutProcUdfResolver(functionRegistry, fileStorage, std::move(options), path2md5);
 }
 
 } // namespace NYql::NCommon

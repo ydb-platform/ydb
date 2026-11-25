@@ -2,6 +2,7 @@
 
 #include "helpers.h"
 #include "name_table.h"
+#include "row_batch.h"
 #include "row_buffer.h"
 #include "schema.h"
 #include "unversioned_writer.h"
@@ -318,9 +319,15 @@ TWritingValueConsumer::TWritingValueConsumer(
     TTypeConversionConfigPtr typeConversionConfig,
     i64 maxRowBufferSize,
     IMemoryUsageTrackerPtr tracker)
-    : TValueConsumerBase(writer->GetSchema(), std::move(typeConversionConfig))
+    : TValueConsumerBase(writer->GetSchema(), typeConversionConfig)
     , Writer_(std::move(writer))
     , MaxRowBufferSize_(maxRowBufferSize)
+    , IsTypeConversionEnabled_(
+        typeConversionConfig->EnableTypeConversion ||
+        typeConversionConfig->EnableStringToAllConversion ||
+        typeConversionConfig->EnableAllToStringConversion ||
+        typeConversionConfig->EnableIntegralTypeConversion ||
+        typeConversionConfig->EnableIntegralToDoubleConversion)
     , RowBuffer_(New<TRowBuffer>(
         TWritingValueConsumerBufferTag(),
         TChunkedMemoryPool::DefaultStartChunkSize,
@@ -334,7 +341,7 @@ TWritingValueConsumer::TWritingValueConsumer(
 TFuture<void> TWritingValueConsumer::Flush()
 {
     if (RowBuffer_->GetSize() == 0) {
-        return OKFuture;
+        return WriteNeedsWait_ ? Writer_->GetReadyEvent() : OKFuture;
     }
 
     // We could have multiple value consumers writing into the same Writer.
@@ -358,6 +365,34 @@ TFuture<void> TWritingValueConsumer::Flush()
         })
         .AsyncVia(GetCurrentInvoker())
         .Run();
+}
+
+void TWritingValueConsumer::Write(IUnversionedColumnarRowBatchPtr batch)
+{
+    if (IsTypeConversionEnabled_) {
+        THROW_ERROR_EXCEPTION("Type conversion is not supported for columnar writes");
+    }
+
+    auto* columnarWriter = dynamic_cast<IColumnarUnversionedWriter*>(Writer_.Get());
+    if (!columnarWriter) {
+        THROW_ERROR_EXCEPTION("Underlying writer does not support columnar writes");
+    }
+
+    YT_VERIFY(Values_.empty());
+
+    WaitFor(Flush())
+        .ThrowOnError();
+
+    while (true) {
+        auto readyEvent = Writer_->GetReadyEvent();
+        if (readyEvent.IsSet() && readyEvent.GetOrCrash().IsOK()) {
+            break;
+        }
+        WaitFor(readyEvent)
+            .ThrowOnError();
+    }
+
+    WriteNeedsWait_ = !columnarWriter->Write(std::move(batch));
 }
 
 const TNameTablePtr& TWritingValueConsumer::GetNameTable() const

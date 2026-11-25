@@ -17,7 +17,7 @@ public:
             : TabletId(tabletId)
             , HashIntervalLeftClosed(hashIntervalLeftClosed)
             , HashIntervalRightOpened(hashIntervalRightOpened) {
-            AFL_VERIFY(HashIntervalLeftClosed < HashIntervalRightOpened);
+            YDB_LOG_VERIFY(HashIntervalLeftClosed < HashIntervalRightOpened);
         }
 
         void CutHalfIntervalFromStart() {
@@ -44,7 +44,7 @@ public:
             TabletId = proto.GetTabletId();
             HashIntervalLeftClosed = proto.GetHashIntervalLeftClosed();
             HashIntervalRightOpened = proto.GetHashIntervalRightOpened();
-            AFL_VERIFY(HashIntervalLeftClosed < HashIntervalRightOpened);
+            YDB_LOG_VERIFY(HashIntervalLeftClosed < HashIntervalRightOpened);
             return TConclusionStatus::Success();
         }
 
@@ -112,7 +112,7 @@ public:
     }
 
     THashMap<ui64, std::vector<ui32>> MakeShardingWrite(const std::vector<ui64> hashes) const {
-        AFL_VERIFY(IndexConstructed);
+        YDB_LOG_VERIFY(IndexConstructed);
         std::vector<std::vector<ui32>> result;
         result.resize(ActiveWriteSpecialSharding.size());
         for (auto&& i : result) {
@@ -130,7 +130,7 @@ public:
                 found = true;
                 ++idxShard;
             }
-            AFL_VERIFY(found);
+            YDB_LOG_VERIFY(found);
             ++idxRecord;
         }
         THashMap<ui64, std::vector<ui32>> resultHash;
@@ -143,7 +143,7 @@ public:
     }
 
     void SerializeToProto(NKikimrSchemeOp::TColumnTableSharding& proto) const {
-        AFL_VERIFY(IndexConstructed);
+        YDB_LOG_VERIFY(IndexConstructed);
         for (auto&& i : SpecialSharding) {
             *proto.MutableHashSharding()->AddTabletsForConsistency() = i.SerializeToProto();
         }
@@ -188,7 +188,7 @@ public:
                 return i;
             }
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return Default<TConsistencyShardingTablet>();
     }
 
@@ -196,7 +196,7 @@ public:
         if (originalShardsCount != SpecialSharding.size()) {
             return false;
         }
-        AFL_VERIFY(IndexConstructed);
+        YDB_LOG_VERIFY(IndexConstructed);
         std::set<ui64> activeReadTabletIds;
         for (auto&& i : ActiveReadSpecialSharding) {
             activeReadTabletIds.emplace(i->GetTabletId());
@@ -249,7 +249,7 @@ public:
 
     void AddShardInfo(const TConsistencyShardingTablet& info) {
         for (auto&& i : SpecialSharding) {
-            AFL_VERIFY(i.GetTabletId() != info.GetTabletId());
+            YDB_LOG_VERIFY(i.GetTabletId() != info.GetTabletId());
         }
         SpecialSharding.emplace_back(info);
 
@@ -276,7 +276,7 @@ private:
 
     bool UpdateShardInfo(const TSpecificShardingInfo::TConsistencyShardingTablet& info) {
         GetShardInfoVerified(info.GetTabletId()).IncrementVersion();
-        AFL_VERIFY(!!SpecialShardingInfo);
+        YDB_LOG_VERIFY(!!SpecialShardingInfo);
         if (SpecialShardingInfo->UpdateShardInfo(info)) {
             return true;
         }
@@ -290,7 +290,7 @@ private:
     }
 
     bool DeleteShardInfo(const ui64 tabletId) {
-        AFL_VERIFY(!!SpecialShardingInfo);
+        YDB_LOG_VERIFY(!!SpecialShardingInfo);
         return SpecialShardingInfo->DeleteShardInfo(tabletId);
     }
 
@@ -298,7 +298,7 @@ private:
 
     virtual TConclusionStatus DoOnBeforeModification() override {
         if (!SpecialShardingInfo) {
-            AFL_VERIFY(!HasReadClosedShards() && !HasWriteClosedShards());
+            YDB_LOG_VERIFY(!HasReadClosedShards() && !HasWriteClosedShards());
             SpecialShardingInfo = TSpecificShardingInfo(GetOrderedShardIds());
         }
         return TConclusionStatus::Success();

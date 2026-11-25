@@ -15,12 +15,12 @@
       "add_date": "2026-10-23T16:25:20",
       "resources": [
         {
-          "id": 14113735081,
+          "id": 14198456158,
           "platform": "linux",
           "arch": "x64"
         },
         {
-          "id": 14113749785,
+          "id": 14198456102,
           "platform": "linux",
           "arch": "arm64"
         },

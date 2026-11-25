@@ -17,7 +17,7 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TParseDataTypesTest, TestBasicTypes)
+TEST(TParseDataTypesTest, BasicTypes)
 {
     for (auto simpleType : TEnumTraits<ESimpleLogicalValueType>::GetDomainValues()) {
         if (simpleType == ESimpleLogicalValueType::Any || simpleType == ESimpleLogicalValueType::Boolean) {
@@ -37,7 +37,7 @@ TEST(TParseDataTypesTest, TestBasicTypes)
     EXPECT_ANY_THROW(ParseType("Boolean"));
 }
 
-TEST(TParseDataTypesTest, TestOptional)
+TEST(TParseDataTypesTest, Optional)
 {
     EXPECT_EQ(
         *OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Date32)),
@@ -59,7 +59,7 @@ TEST(TParseDataTypesTest, TestOptional)
     EXPECT_ANY_THROW(ParseType("Optional<List<>"));
 }
 
-TEST(TParseDataTypesTest, TestList)
+TEST(TParseDataTypesTest, List)
 {
     EXPECT_EQ(
         *ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Uuid)),
@@ -71,7 +71,7 @@ TEST(TParseDataTypesTest, TestList)
     EXPECT_ANY_THROW(ParseType("'List'<Int32>"));
 }
 
-TEST(TParseDataTypesTest, TestDict)
+TEST(TParseDataTypesTest, Dict)
 {
     EXPECT_EQ(
         *DictLogicalType(
@@ -86,7 +86,7 @@ TEST(TParseDataTypesTest, TestDict)
     EXPECT_ANY_THROW(ParseType("'Dict'<Int8, Int16>"));
 }
 
-TEST(TParseDataTypesTest, TestDecimal)
+TEST(TParseDataTypesTest, Decimal)
 {
     EXPECT_EQ(
         *DecimalLogicalType(3, 2),
@@ -98,7 +98,7 @@ TEST(TParseDataTypesTest, TestDecimal)
     EXPECT_ANY_THROW(ParseType("Decimal<1, 1>"));
 }
 
-TEST(TParseDataTypesTest, TestVariant)
+TEST(TParseDataTypesTest, Variant)
 {
     EXPECT_EQ(
         *VariantTupleLogicalType({
@@ -134,7 +134,7 @@ TEST(TParseDataTypesTest, TestVariant)
     EXPECT_ANY_THROW(ParseType("Variant<Interval64:Am,Void>"));
 }
 
-TEST(TParseDataTypesTest, TestTuple)
+TEST(TParseDataTypesTest, Tuple)
 {
     EXPECT_EQ(*TupleLogicalType({}), *ParseType("Tuple<>"));
     EXPECT_EQ(*TupleLogicalType({TupleLogicalType({})}), *ParseType("Tuple<Tuple<>>"));
@@ -150,7 +150,7 @@ TEST(TParseDataTypesTest, TestTuple)
     EXPECT_ANY_THROW(ParseType("Tuple<Am:Int64,Cmaj7:Datetime>"));
 }
 
-TEST(TParseDataTypesTest, TestTagged)
+TEST(TParseDataTypesTest, Tagged)
 {
     EXPECT_EQ(
         *TaggedLogicalType("TAG", SimpleLogicalType(ESimpleLogicalValueType::Uint16)),
@@ -167,7 +167,7 @@ TEST(TParseDataTypesTest, TestTagged)
     EXPECT_ANY_THROW(ParseType("Tagged<Int32, Int64, TAG>"));
 }
 
-TEST(TParseDataTypesTest, TestStruct)
+TEST(TParseDataTypesTest, Struct)
 {
     auto structType = StructLogicalType(std::vector<TStructField>{
         TStructField{
@@ -185,7 +185,7 @@ TEST(TParseDataTypesTest, TestStruct)
     EXPECT_EQ(*structType, *ParseType("Struct<Am:Utf8,Cmaj7:Null>"));
 }
 
-TEST(TParseDataTypesTest, TestEscape)
+TEST(TParseDataTypesTest, Escape)
 {
     auto taggedType = TaggedLogicalType("'quote_and_single_slash\\", SimpleLogicalType(ESimpleLogicalValueType::Interval));
     EXPECT_EQ(*taggedType, *ParseType("Tagged<Interval, '\\\'quote_and_single_slash\\\\'>"));
@@ -193,7 +193,7 @@ TEST(TParseDataTypesTest, TestEscape)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TPrintDataTypesTest, TestVarious)
+TEST(TPrintDataTypesTest, Various)
 {
     auto types = std::vector<TLogicalTypePtr>{
         SimpleLogicalType(ESimpleLogicalValueType::Int64),
@@ -241,7 +241,7 @@ TEST(TPrintDataTypesTest, TestVarious)
     }
 }
 
-TEST(TPrintDataTypesTest, TestEscape)
+TEST(TPrintDataTypesTest, Escape)
 {
     auto taggedType = TaggedLogicalType("'quote_and_single_slash\\", SimpleLogicalType(ESimpleLogicalValueType::Interval));
     auto typeString = ToString(*taggedType);

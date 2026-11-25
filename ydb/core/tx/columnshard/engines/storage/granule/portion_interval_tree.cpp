@@ -50,7 +50,8 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
             case SimpleRow:
                 return NArrow::TSimpleRowViewV0(std::get<SimpleRow>(pos).GetData());
             default:
-                AFL_VERIFY(false)("pos.index()", pos.index());
+                YDB_LOG_VERIFY(false,
+                    {"posIndex", pos.index()});
                 break;
         }
     };
@@ -64,7 +65,8 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
             case SimpleRow:
                 return std::get<SimpleRow>(pos).GetSchema();
             default:
-                AFL_VERIFY(false)("pos.index()", pos.index());
+                YDB_LOG_VERIFY(false,
+                    {"posIndex", pos.index()});
                 break;
         }
     };
@@ -78,7 +80,9 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
             case SimpleRow:
                 return std::get<SimpleRow>(pos).GetLogicalTypes();
             default:
-                AFL_VERIFY(false)("pos.index()", pos.index());
+                YDB_LOG_VERIFY(false,
+                    {"posIndex", pos.index()});
+                break;
         }
     };
 
@@ -88,7 +92,7 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
     const auto& lhsTypes = getLogicalTypes(Position);
     const auto& rhsTypes = getLogicalTypes(rhs.Position);
     const bool lhsShorter = lhsSchema->num_fields() <= rhsSchema->num_fields();
-    AFL_VERIFY_DEBUG(std::equal(lhsTypes.begin(), lhsTypes.begin() + std::min(lhsTypes.size(), rhsTypes.size()), rhsTypes.begin()));
+    YDB_LOG_VERIFY_DEBUG(std::equal(lhsTypes.begin(), lhsTypes.begin() + std::min(lhsTypes.size(), rhsTypes.size()), rhsTypes.begin()));
     return getKeyView(Position)
         .Compare(getKeyView(rhs.Position), lhsShorter ? *lhsSchema : *rhsSchema, lhsShorter ? lhsTypes : rhsTypes)
         .GetResult();

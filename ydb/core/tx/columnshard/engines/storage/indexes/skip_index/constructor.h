@@ -60,7 +60,7 @@ protected:
 
 public:
     const std::shared_ptr<IBitsStorageConstructor>& GetBitsStorageConstructor() const {
-        AFL_VERIFY(!!BitsStorageConstructor);
+        YDB_LOG_VERIFY(!!BitsStorageConstructor);
         return BitsStorageConstructor;
     }
 

@@ -18,7 +18,7 @@ private:
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
 
     void Initialize() {
-        AFL_VERIFY(FalsePositiveProbability < 1 && FalsePositiveProbability >= 0.01);
+        YDB_LOG_VERIFY(FalsePositiveProbability < 1 && FalsePositiveProbability >= 0.01);
         HashesCount = -1 * std::log(FalsePositiveProbability) / std::log(2);
     }
 
@@ -46,7 +46,7 @@ protected:
             return TConclusionStatus::Fail(
                 "cannot read meta as appropriate class: " + GetClassName() + ". Meta said that class name is " + newMeta.GetClassName());
         }
-        AFL_VERIFY(FalsePositiveProbability < 1 && FalsePositiveProbability >= 0.01);
+        YDB_LOG_VERIFY(FalsePositiveProbability < 1 && FalsePositiveProbability >= 0.01);
         return TBase::CheckSameColumnsForModification(newMeta);
     }
 

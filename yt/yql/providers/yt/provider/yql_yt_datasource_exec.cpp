@@ -234,6 +234,7 @@ protected:
 
         auto future = State_->Gateway->ResOrPull(resOrPull.Ptr(), ctx,
             IYtGateway::TResOrPullOptions(State_->SessionId)
+                .SkipFmr(FmrFallbackOperations_.contains(resOrPull.Origin().Ref().UniqueId()))
                 .FillSettings(fillSettings)
                 .UserDataBlocks(files)
                 .UdfModules(State_->Types->UdfModules)
@@ -253,9 +254,15 @@ protected:
                 .BridgeBinaryPath(State_->Types->UdfBridgeBinaryPath)
             );
 
-        return WrapFuture(future, [](const IYtGateway::TResOrPullResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
-            auto ret = ctx.NewAtom(input->Pos(), res.Data);
-            return ret;
+        return WrapFutureCallback(future, [this](const IYtGateway::TResOrPullResult& res, const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) {
+            if (res.FmrFallback) {
+                FmrFallbackOperations_.insert(TResOrPullBase(input).Origin().Ref().UniqueId());
+                input->SetState(TExprNode::EState::ExecutionRequired);
+                return TStatus(TStatus::Repeat, false);
+            }
+            input->SetState(TExprNode::EState::ExecutionComplete);
+            input->SetResult(ctx.NewAtom(input->Pos(), res.Data));
+            return TStatus(TStatus::Ok);
         });
     }
 
@@ -289,10 +296,12 @@ protected:
 
     void Rewind() final {
         State_->Configuration->ClearVersions();
+        FmrFallbackOperations_.clear();
         TExecTransformerBase::Rewind();
     }
 
     const TYtState::TPtr State_;
+    THashSet<ui64> FmrFallbackOperations_;
 };
 
 }

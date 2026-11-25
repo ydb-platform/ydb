@@ -108,7 +108,7 @@ protected:
                         {"sourceNodeId", tablet->Node->Id},
                         {"targetNodeId", node->Id});
                     Hive->TabletCounters->Cumulative()[NHive::COUNTER_DRAIN_EXECUTED].Increment(1);
-                    Hive->RecordTabletMove(THive::TTabletMoveInfo(TInstant::Now(), *tablet, tablet->Node->Id, node->Id), EHiveEventReason::Drain);
+                    Hive->RecordTabletMove(TInstant::Now(), *tablet, *tablet->Node, *node, EHiveEventReason::Drain);
                     Hive->Execute(Hive->CreateRestartTablet(tabletId, node->Id));
                 } else {
                     if (std::holds_alternative<THive::TNoNodeFound>(result) || std::holds_alternative<THive::TNotEnoughResources>(result)) {
@@ -317,9 +317,12 @@ void THive::StartPileDrain(TBridgePileInfo& pile) {
     if (!pile.Drain || pile.DrainActor || IsPrimaryPile(pile.Id)) {
         return;
     }
-    if (std::none_of(Nodes.begin(), Nodes.end(), [this](const auto& item) {
+    // a default filter allows the piles where any tablet may run: the primary pile, or all the synchronized ones
+    // when BridgeTabletPlacement allows that
+    const TNodeFilter filter(*this);
+    if (std::none_of(Nodes.begin(), Nodes.end(), [&](const auto& item) {
         const auto& node = item.second;
-        return node.IsAlive() && !node.Down && IsPrimaryPile(node.BridgePileId);
+        return node.IsAlive() && !node.Down && node.BridgePileId != pile.Id && filter.IsAllowedPile(node.BridgePileId);
     })) {
         return;
     }

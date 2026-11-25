@@ -9,9 +9,10 @@ using TDataCenter = NKikimrBlobStorage::TDataCenterState;
 
 } // namespace
 
-std::expected<TDataCenterStates, TString> ParseDataCenterStates(const NKikimrBlobStorage::TDefineDataCenterStates& command) {
+std::expected<TDataCenterStates, TString> ParseDataCenterStates(
+        const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TDataCenterStates::TDataCenter>& dataCenters) {
     TDataCenterStates result;
-    for (const auto& dataCenter : command.GetDataCenter()) {
+    for (const auto& dataCenter : dataCenters) {
         if (!dataCenter.HasName() || dataCenter.GetName().empty() || result.contains(dataCenter.GetName())) {
             return std::unexpected<TString>(TStringBuilder() << "empty or duplicate DataCenter# " << dataCenter.GetName());
         }
@@ -31,8 +32,8 @@ std::expected<TDataCenterStates, TString> ParseDataCenterStates(const NKikimrBlo
     return result;
 }
 
-NKikimrBlobStorage::TDefineDataCenterStates SerializeDataCenterStates(const TDataCenterStates& states) {
-    NKikimrBlobStorage::TDefineDataCenterStates result;
+NKikimrBlobStorage::TDataCenterStates SerializeDataCenterStates(const TDataCenterStates& states) {
+    NKikimrBlobStorage::TDataCenterStates result;
     for (const auto& [name, state] : states) {
         auto* dataCenter = result.AddDataCenter();
         dataCenter->SetName(name);

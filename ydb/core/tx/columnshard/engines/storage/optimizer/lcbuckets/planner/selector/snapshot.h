@@ -21,7 +21,7 @@ public:
         : StartInstant(start)
         , FinishInstant(finish)
     {
-        AFL_VERIFY(!StartInstant || !FinishInstant || *StartInstant <= *FinishInstant);
+        YDB_LOG_VERIFY(!StartInstant || !FinishInstant || *StartInstant <= *FinishInstant);
     }
 
     TConclusionStatus DeserializeFromJson(const NJson::TJsonValue& jsonValue) {

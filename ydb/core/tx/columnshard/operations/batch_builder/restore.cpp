@@ -90,7 +90,7 @@ TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeD
     , Context(context)
     , ReadOnlyConflicts(readOnlyConflicts)
 {
-    AFL_VERIFY(context.GetApplyToSnapshot().Valid());
+    YDB_LOG_VERIFY(context.GetApplyToSnapshot().Valid());
 }
 
 void TModificationRestoreTask::SendErrorMessage(const TString& errorMessage, const EErrorClass errorClass) {

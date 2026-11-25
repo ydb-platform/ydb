@@ -21,8 +21,12 @@ namespace {
     template <typename T>
     int GetOperation(NOperation::TOperationClient& client, const TOperationId& id, EDataFormat format) {
         T operation = client.Get<T>(id).GetValueSync();
+        // Failed or cancelled operations can still carry useful progress and issues.
+        // Print returned operations before throwing, while preserving the failure exit code.
+        if (!operation.Id().ToString().empty()) {
+            PrintOperation(operation, format);
+        }
         ThrowOnError(operation);
-        PrintOperation(operation, format);
         return EXIT_SUCCESS;
     }
 
@@ -115,6 +119,8 @@ int TCommandGetOperation::Run(TConfig& config) {
         return GetOperation<NTable::TAnalyzeOperation>(client, OperationId, OutputFormat);
     case TOperationId::SET_NOT_NULL:
         return GetOperation<NTable::TSetNotNullOperation>(client, OperationId, OutputFormat);
+    case TOperationId::REASSIGN_TABLETS:
+        return GetOperation<NTablet::TReassignTabletsOperation>(client, OperationId, OutputFormat);
     default:
         throw TMisuseException() << "Invalid operation ID (unexpected kind of operation)";
     }

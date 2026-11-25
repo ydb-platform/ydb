@@ -1,0 +1,364 @@
+dstool -e <endpoint> --mon-port <mon_port> cluster balance --sort-by=group_slots --storage-pool=test-pool --max-iterations=1
+Exit Status: 0
+===== stdout =====
+
+Start balancing iteration 1
+VSlots distribuition: 2..1 (ideal 2)
+
+===== stderr =====
+success
+
+===== grpc_calls =====
+
+===== mock_base_config =====
+
+TBaseConfig {
+PDisk {
+  NodeId: 1
+  PDiskId: 1
+  PDiskConfig {
+    ExpectedSlotCount: 10
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 10
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    ExpectedSlotCount: 10
+    SlotSizeInUnits: 0
+  }
+}
+PDisk {
+  NodeId: 2
+  PDiskId: 1
+  PDiskConfig {
+    ExpectedSlotCount: 10
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 10
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    ExpectedSlotCount: 10
+    SlotSizeInUnits: 0
+  }
+}
+PDisk {
+  NodeId: 3
+  PDiskId: 1
+  PDiskConfig {
+    ExpectedSlotCount: 10
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 10
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    ExpectedSlotCount: 10
+    SlotSizeInUnits: 0
+  }
+}
+PDisk {
+  NodeId: 4
+  PDiskId: 1
+  PDiskConfig {
+    ExpectedSlotCount: 10
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 10
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    ExpectedSlotCount: 10
+    SlotSizeInUnits: 0
+  }
+}
+PDisk {
+  NodeId: 5
+  PDiskId: 1
+  PDiskConfig {
+    ExpectedSlotCount: 10
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 10
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    ExpectedSlotCount: 10
+    SlotSizeInUnits: 0
+  }
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1
+    VSlotId: 1
+  }
+  GroupId: 2147483649
+  GroupGeneration: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+VSlot {
+  VSlotId {
+    NodeId: 2
+    PDiskId: 1
+    VSlotId: 1
+  }
+  GroupId: 2147483649
+  GroupGeneration: 1
+  FailDomainIdx: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+VSlot {
+  VSlotId {
+    NodeId: 4
+    PDiskId: 1
+    VSlotId: 1
+  }
+  GroupId: 2147483649
+  GroupGeneration: 1
+  FailDomainIdx: 2
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+VSlot {
+  VSlotId {
+    NodeId: 5
+    PDiskId: 1
+    VSlotId: 2
+  }
+  GroupId: 2147483650
+  GroupGeneration: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+VSlot {
+  VSlotId {
+    NodeId: 2
+    PDiskId: 1
+    VSlotId: 2
+  }
+  GroupId: 2147483650
+  GroupGeneration: 1
+  FailDomainIdx: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+VSlot {
+  VSlotId {
+    NodeId: 3
+    PDiskId: 1
+    VSlotId: 2
+  }
+  GroupId: 2147483650
+  GroupGeneration: 1
+  FailDomainIdx: 2
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1
+    VSlotId: 3
+  }
+  GroupId: 2147483651
+  GroupGeneration: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+VSlot {
+  VSlotId {
+    NodeId: 4
+    PDiskId: 1
+    VSlotId: 3
+  }
+  GroupId: 2147483651
+  GroupGeneration: 1
+  FailDomainIdx: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+VSlot {
+  VSlotId {
+    NodeId: 3
+    PDiskId: 1
+    VSlotId: 3
+  }
+  GroupId: 2147483651
+  GroupGeneration: 1
+  FailDomainIdx: 2
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+Group {
+  GroupId: 2147483649
+  GroupGeneration: 1
+  ErasureSpecies: "mirror-3"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1
+    VSlotId: 1
+  }
+  VSlotId {
+    NodeId: 2
+    PDiskId: 1
+    VSlotId: 1
+  }
+  VSlotId {
+    NodeId: 4
+    PDiskId: 1
+    VSlotId: 1
+  }
+  BoxId: 1
+  StoragePoolId: 1
+}
+Group {
+  GroupId: 2147483650
+  GroupGeneration: 1
+  ErasureSpecies: "mirror-3"
+  VSlotId {
+    NodeId: 5
+    PDiskId: 1
+    VSlotId: 2
+  }
+  VSlotId {
+    NodeId: 2
+    PDiskId: 1
+    VSlotId: 2
+  }
+  VSlotId {
+    NodeId: 3
+    PDiskId: 1
+    VSlotId: 2
+  }
+  BoxId: 1
+  StoragePoolId: 1
+}
+Group {
+  GroupId: 2147483651
+  GroupGeneration: 1
+  ErasureSpecies: "mirror-3"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1
+    VSlotId: 3
+  }
+  VSlotId {
+    NodeId: 4
+    PDiskId: 1
+    VSlotId: 3
+  }
+  VSlotId {
+    NodeId: 3
+    PDiskId: 1
+    VSlotId: 3
+  }
+  BoxId: 1
+  StoragePoolId: 1
+}
+Node {
+  NodeId: 1
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+Node {
+  NodeId: 2
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+Node {
+  NodeId: 3
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+Node {
+  NodeId: 4
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+Node {
+  NodeId: 5
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+}
+
+DefineStoragePool {
+BoxId: 1
+StoragePoolId: 1
+Name: "test-pool"
+ErasureSpecies: "none"
+Kind: "hdd"
+}

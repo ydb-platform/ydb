@@ -11,6 +11,7 @@
 #include "hive_log.h"
 #include "monitoring.h"
 #include "tx__set_down.h"
+#include "tx__reassign_tablets.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
@@ -35,44 +36,8 @@ TString GetMonUserForLog(const NMon::TEvRemoteHttpInfo* ev) {
 }
 
 TLoggedMonTransaction::TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& ev, THive* self)
-    : Index(++self->OperationsLogIndex)
-    , User(GetMonUser(ev->Get()))
-    , LogPrefix(self->GetLogPrefix())
+    : TLoggedTransaction(GetMonUser(ev->Get()), self)
 {}
-
-// JSON object -> structured log fields: a nested object becomes "key.subkey" fields, an array is written as JSON text
-static NActors::NStructuredLog::TStructuredMessage JsonToStructuredMessage(const NJson::TJsonValue& json) {
-    using namespace NActors::NStructuredLog;
-    TStructuredMessage message;
-    for (const auto& [key, value] : json.GetMap()) {
-        switch (value.GetType()) {
-            case NJson::JSON_UNDEFINED:
-            case NJson::JSON_NULL:
-                break;
-            case NJson::JSON_MAP:
-                message.AppendSubMessage(TKeyName(key), JsonToStructuredMessage(value));
-                break;
-            case NJson::JSON_STRING:
-                message.AppendValue({TKeyName(key)}, value.GetString());
-                break;
-            default:
-                message.AppendValue({TKeyName(key)}, NJson::WriteJson(value, false));
-                break;
-        }
-    }
-    return message;
-}
-
-void TLoggedMonTransaction::WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op, TStringBuf description) {
-    TStringStream str;
-    NJson::WriteJson(&str, &op);
-    TInstant timestamp = TActivationContext::Now();
-    db.Table<Schema::OperationsLog>().Key(Index).Update<Schema::OperationsLog::User, Schema::OperationsLog::OperationTimestamp, Schema::OperationsLog::Operation>(User, timestamp.MilliSeconds(), str.Str());
-    YDB_LOG_INFO(description,
-        {"logPrefix", LogPrefix},
-        {"user", GetUserForLog()},
-        JsonToStructuredMessage(op));
-}
 
 TCgiParameters GetParams(const NMon::TEvRemoteHttpInfo* ev) {
     auto cgi = ev->Cgi();
@@ -752,6 +717,7 @@ public:
         out << "<th>Write</th>";
         out << "<th>Usage impact</th>";
         out << "<th>Isolation</th>";
+        out << "<th>Named</th>";
         out << "</tr>";
         out << "</thead>";
 
@@ -766,6 +732,7 @@ public:
             out << GetResourceValuesHtml(tablet.GetResourceValues());
             out << "<td>" << tablet.GetUsageImpact() << "</td>";
             out << "<td>" << (tablet.IsPinnedToNode() ? "pinned" : (tablet.IsHighImpact() ? "high-impact" : "")) << "</td>";
+            out << "<td>" << EncodeHtmlPcdata(tablet.GetResourceValues().NamedResources.ToString()) << "</td>";
             out << "</tr>";
         }
         out <<"</tbody>";
@@ -866,6 +833,7 @@ public:
     bool ChangeRequest = false;
     std::optional<TString> Status;
     TStringBuilder Changes; // applied changes in "Name: from -> to" form, for the operations log
+    std::optional<NKikimrConfig::THiveConfig::EBridgeTabletPlacement> PreviousBridgeTabletPlacement;
 
     TTxMonEvent_Settings(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
         : TBase(hive)
@@ -1044,6 +1012,8 @@ public:
         UpdateConfig(db, "DataCenterChangeReactionPeriod", configUpdates);
         UpdateConfig(db, "TabletEventHistorySize", configUpdates);
         UpdateConfig(db, "NodeEventHistorySize", configUpdates);
+        UpdateConfig(db, "CountersExportMode", configUpdates);
+        UpdateConfig(db, "BridgeTabletPlacement", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -1115,6 +1085,7 @@ public:
 
         if (ChangeRequest && !Status) {
             Self->BuildCurrentConfig();
+            PreviousBridgeTabletPlacement = previousConfig.GetBridgeTabletPlacement();
             db.Table<Schema::State>().Key(TSchemeIds::State::DefaultState).Update<Schema::State::Config>(Self->DatabaseConfig);
             Self->ProcessWaitQueue();
             const google::protobuf::Descriptor* descriptor = NKikimrConfig::THiveConfig::GetDescriptor();
@@ -1216,6 +1187,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
+        if (PreviousBridgeTabletPlacement) {
+            Self->OnBridgeTabletPlacementChanged(*PreviousBridgeTabletPlacement);
+        }
         if (ChangeRequest) {
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"" << Status.value_or("ok") << "\"}"));
         } else {
@@ -1339,7 +1313,7 @@ public:
                     out << "<div class='col-sm-2' style='padding-top:5px'><select id='" << param << "' style='max-width:170px;margin-top:7px' onchange='edit(this);'>";
                     TString base = GetEnumValueCommonPrefix(enumfield);
                     for (int n = 0; n < enumfield->value_count(); ++n) {
-                        const google::protobuf::EnumValueDescriptor* enumdescr = enumfield->FindValueByNumber(n);
+                        const google::protobuf::EnumValueDescriptor* enumdescr = enumfield->value(n);
                         out << "<option value=" << enumdescr->number() << (enumvalue == enumdescr->number() ? " selected" : "") << ">"
                             << enumdescr->name().substr(base.size())
                             << "</option>";
@@ -1496,6 +1470,8 @@ public:
         ShowConfig(out, "DataCenterChangeReactionPeriod");
         ShowConfig(out, "TabletEventHistorySize");
         ShowConfig(out, "NodeEventHistorySize");
+        ShowConfig(out, "CountersExportMode");
+        ShowConfig(out, "BridgeTabletPlacement");
 
         out << "<div class='row' style='margin-top:40px'>";
         bool allowedMetricsLocalOverridden = !Self->TabletTypeAllowedMetrics.empty();
@@ -1695,32 +1671,25 @@ public:
             jsonUpdate["MaxCount"] = *maxCount;
             jsonOperation["TabletAvailability"].AppendValue(std::move(jsonUpdate));
             db.Table<Schema::TabletAvailabilityRestrictions>().Key(NodeId, changeType).Update<Schema::TabletAvailabilityRestrictions::MaxCount>(*maxCount);
-            Node->TabletAvailabilityRestrictions[changeType] = *maxCount;
-            auto it = Node->TabletAvailability.find(changeType);
-            if (it != Node->TabletAvailability.end()) {
-                it->second.UpdateRestriction(*maxCount);
-            }
+            Node->SetTabletAvailabilityRestriction(changeType, *maxCount);
         }
-        if (resetType != TTabletTypes::TypeInvalid) {
+        // For types the node does not report, reset can only remove an existing restriction
+        if (resetType != TTabletTypes::TypeInvalid
+            && (Node->TabletAvailability.contains(resetType) || Node->TabletAvailabilityRestrictions.contains(resetType))) {
             ChangeRequest = true;
             eventDetails << "type=" << GetTabletTypeShortName(resetType) << " maxCount=default ";
             NJson::TJsonValue jsonUpdate;
             jsonUpdate["Type"] = GetTabletTypeShortName(resetType);
             jsonUpdate["MaxCount"] = "[default]";
             jsonOperation["TabletAvailability"].AppendValue(std::move(jsonUpdate));
-            Node->TabletAvailabilityRestrictions.erase(resetType);
-            auto it = Node->TabletAvailability.find(resetType);
-            if (it != Node->TabletAvailability.end()) {
-                it->second.RemoveRestriction();
-                if (it->second.IsSet) {
-                    db.Table<Schema::TabletAvailabilityRestrictions>()
-                      .Key(NodeId, resetType)
-                      .Update<Schema::TabletAvailabilityRestrictions::MaxCount>(TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE);
-                } else {
-                    db.Table<Schema::TabletAvailabilityRestrictions>()
-                      .Key(NodeId, resetType)
-                      .Delete();
-                }
+            if (Node->ResetTabletAvailabilityRestriction(resetType)) {
+                db.Table<Schema::TabletAvailabilityRestrictions>()
+                  .Key(NodeId, resetType)
+                  .Update<Schema::TabletAvailabilityRestrictions::MaxCount>(TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE);
+            } else {
+                db.Table<Schema::TabletAvailabilityRestrictions>()
+                  .Key(NodeId, resetType)
+                  .Delete();
             }
         }
         if (ChangeRequest) {
@@ -1883,11 +1852,46 @@ public:
             EBalancerType::Scatter,
             EBalancerType::Manual,
             EBalancerType::Storage,
+            EBalancerType::ScatterNamed,
         }) {
             int balancer = static_cast<int>(type);
             out << "<tr id='balancer" << balancer << "'><td>" << EBalancerTypeName(type) << "</td><td></td><td></td><td></td><td></td><td></td></tr>";
         }
         out << "</table></div></div>";
+
+        if (!Self->NamedResourceRegistry.GetKnownNames().empty()) {
+            out << "<div style='margin-bottom:10px'><table class='simple-table1'>";
+            out << "<tr><th>Named resource</th><th>Balance mode</th><th>Total</th><th>Transferable</th>"
+                   "<th>Max node usage</th><th>Nodes over capacity</th><th>Nodes with spare capacity</th></tr>";
+            for (const TString& name : Self->NamedResourceRegistry.GetKnownNames()) {
+                const auto& settings = Self->GetNamedResourceSettings(name);
+                ui64 total = 0;
+                ui64 transferable = 0;
+                double maxUsage = 0;
+                ui64 overCapacity = 0;
+                ui64 spareCapacity = 0;
+                for (const auto& [nodeId, node] : Self->Nodes) {
+                    if (!node.IsAlive()) {
+                        continue;
+                    }
+                    total += node.NamedResourceValues.GetValue(name);
+                    transferable += node.NamedResourceValues.GetTransferableValue(name);
+                    if (auto usage = node.GetNamedResourceUsage(name)) {
+                        maxUsage = std::max(maxUsage, *usage);
+                        overCapacity += *usage > 1;
+                        spareCapacity += *usage < 1;
+                    }
+                }
+                out << "<tr><td>" << EncodeHtmlPcdata(name) << "</td>"
+                    << "<td>" << NKikimrConfig::THiveConfig::TNamedResourceSettings::EBalanceMode_Name(settings.BalanceMode) << "</td>"
+                    << "<td>" << total << "</td>"
+                    << "<td>" << transferable << "</td>"
+                    << "<td>" << Sprintf("%.3f", maxUsage) << "</td>"
+                    << "<td>" << overCapacity << "</td>"
+                    << "<td>" << spareCapacity << "</td></tr>";
+            }
+            out << "</table></div>";
+        }
 
         out << "<table id='node_table' class='table simple-table2 table-hover table-condensed'>";
         out << "<thead><tr>"
@@ -2957,6 +2961,7 @@ public:
         ui64 LeaderCount = 0;
         ui64 FollowerCount = 0;
         ui64 MaxCount = 0;
+        bool Explicit = false; // availability is set on the node, overriding DefaultTabletLimit
 
         TTabletsRunningInfo(TNodeId node, TTabletTypes::EType tabletType) : NodeId(node)
                                                                           , TabletType(tabletType)
@@ -2966,14 +2971,22 @@ public:
         TString ToHTML() const {
             auto totalCount = LeaderCount + FollowerCount;
             TStringBuilder str;
-            str << "<span title='" << TTabletTypes::EType_Name(TabletType) << "' ";
+            str << "<span title='" << TTabletTypes::EType_Name(TabletType)
+                << (Explicit ? " (set on node)" : " (default)") << "' ";
             if (MaxCount > 0) {
                 str << " class='box' ";
             } else {
                 str << " class='box box-disabled' ";
             }
-            if (totalCount > MaxCount) {
-                str << " style='color: red' ";
+            if (totalCount > MaxCount || Explicit) {
+                str << " style='";
+                if (totalCount > MaxCount) {
+                    str << "color: red;";
+                }
+                if (Explicit) {
+                    str << "font-weight: bold;";
+                }
+                str << "' ";
             }
             str << " onclick='"  << (MaxCount == 0 ? "enableType" : "disableType")
                 << "(this," << NodeId << "," << (ui32)TabletType << ")";
@@ -3022,6 +3035,9 @@ public:
                 tabletsByType.emplace_back(pr.first, tabletType);
                 auto& current = tabletsByType.back();
                 current.MaxCount = pr.second.GetMaxCountForTabletType(tabletType);
+                if (auto itAvailability = pr.second.TabletAvailability.find(tabletType); itAvailability != pr.second.TabletAvailability.end()) {
+                    current.Explicit = itAvailability->second.IsSet;
+                }
                 auto tabletsRunningIt = pr.second.TabletsRunningByType.find(tabletType);
                 if (tabletsRunningIt == pr.second.TabletsRunningByType.end()) {
                     continue;
@@ -3561,66 +3577,9 @@ public:
     }
 };
 
-class TTxMonEvent_ReassignTablet : public TTransactionBase<THive>, public TLoggedMonTransaction {
-public:
-    struct TTabletFilter {
-        struct TAllTablets {};
-
-        std::variant<std::monostate, TTabletId, TAllTablets> TabletId;
-        TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
-
-        explicit TTabletFilter(const TCgiParameters& cgi) {
-            auto tablet = cgi.Get("tablet");
-            if (tablet == "all") {
-                TabletId = TAllTablets();
-            } else if (auto tabletId = TryFromString<TTabletId>(tablet)) {
-                TabletId = *tabletId;
-            }
-
-            TabletType = (TTabletTypes::EType)FromStringWithDefault<int>(cgi.Get("type"), TabletType);
-        }
-
-        bool CheckTabletId(const TLeaderTabletInfo* tablet) const {
-            if (auto* tabletId = std::get_if<TTabletId>(&TabletId)) {
-                return tablet->Id == *tabletId;
-            }
-            return true;
-        }
-
-        bool CheckTabletType(const TLeaderTabletInfo* tablet) const {
-            return TabletType == TTabletTypes::TypeInvalid || TabletType == tablet->Type;
-        }
-
-        bool operator()(const TLeaderTabletInfo* tablet) const {
-            return CheckTabletId(tablet) && CheckTabletType(tablet);
-        }
-
-        bool IsValidFilter(TString& error) const {
-            if (std::holds_alternative<std::monostate>(TabletId)) {
-                error = "must specify tablet";
-                return false;
-            }
-            return true;
-        }
-
-        bool AllowsEverything() const {
-            return std::holds_alternative<TAllTablets>(TabletId) && TabletType == TTabletTypes::TypeInvalid;
-        }
-
-        template <typename TStream>
-        void ToString(TStream& out) const {
-            if (std::holds_alternative<TTabletId>(TabletId)) {
-                out << std::get<TTabletId>(TabletId) << ", ";
-            }
-            if (TabletType != TTabletTypes::TypeInvalid) {
-                out << TTabletTypes::EType_Name(TabletType) << ", ";
-            }
-        }
-
-    };
-
+class TTxMonEvent_ReassignTablet : public TTxReassignTablets {
     struct TMonitoringReassignCallback : IReassignCallback {
-        virtual IEventBase* MakeEvent(ui64 tabletsDone) override {
+        IEventBase* MakeEvent(ui64 tabletsDone) override {
             NJson::TJsonValue response;
             response["total"] = tabletsDone;
             return new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(response, false));
@@ -3628,26 +3587,30 @@ public:
     };
 
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
-    const TActorId Source;
-    TTabletFilter TabletFilter;
-    TVector<ui32> TabletChannels;
-    ui32 GroupId = 0;
-    TString StoragePool;
-    TVector<ui32> ForcedGroupIds;
-    TString Error;
     bool Wait = true;
-    bool Async = false;
-    ui64 MaxInFlight = 1;
-    ui32 TabletPercent = 100;
     i64 NumTablets = MAX_REASSIGNS_WITHOUT_CONFIRMATION;
 
+    bool CheckTabletsCount(ui64 count) override {
+        if (count > MAX_REASSIGNS_WITHOUT_CONFIRMATION && std::abs(static_cast<i64>(count) - NumTablets) > REASSIGN_CONFIRMATION_ERROR_MARGIN) {
+            Error = "must confirm number of tablets";
+            return false;
+        }
+        return true;
+    }
+
+public:
     TTxMonEvent_ReassignTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive, const TCgiParameters& params)
-        : TBase(hive)
-        , TLoggedMonTransaction(ev, hive)
+        : TTxReassignTablets(source, hive, GetMonUser(ev->Get()))
         , Event(ev->Release())
-        , Source(source)
-        , TabletFilter(params)
     {
+        auto tablet = params.Get("tablet");
+        TabletFilter.TabletId = std::monostate{};
+        if (tablet == "all") {
+            TabletFilter.TabletId = TTabletFilter::TAllTablets{};
+        } else if (auto tabletId = TryFromString<TTabletId>(tablet)) {
+            TabletFilter.TabletId = *tabletId;
+        }
+        TabletFilter.TabletType = (TTabletTypes::EType)FromStringWithDefault<int>(params.Get("type"), TabletFilter.TabletType);
         TabletChannels = Scan<ui32>(SplitString(params.Get("channel"), ","));
         GroupId = FromStringWithDefault(params.Get("group"), GroupId);
         StoragePool = params.Get("storagePool");
@@ -3658,125 +3621,29 @@ public:
         TabletPercent = FromStringWithDefault<ui32>(params.Get("percent"), TabletPercent);
         TabletPercent = std::min(TabletPercent, 100u);
         NumTablets = FromStringWithDefault(params.Get("numTablets"), NumTablets);
+        LogDescription = "Hive UI: reassign requested";
+        if (Wait) {
+            Callback = std::make_unique<TMonitoringReassignCallback>();
+        }
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REASSIGN_TABLET; }
 
-    TInstant GetMaxTimestamp(const TReassignOperation& operation) const {
-        TInstant max;
-        const auto* tablet = Self->FindTablet(operation.TabletId);
-        for (const auto& channel : tablet->TabletStorageInfo->Channels) {
-            if (operation.TabletChannels.empty()
-                    || std::find(
-                        operation.TabletChannels.begin(),
-                        operation.TabletChannels.end(),
-                        channel.Channel) != operation.TabletChannels.end()) {
-                if (tablet->ChannelProfileNewGroup.test(channel.Channel)) {
-                    return TInstant::Max();
-                }
-                const auto* latest = channel.LatestEntry();
-                if (latest != nullptr && latest->Timestamp > max) {
-                    max = latest->Timestamp;
-                }
-            }
-        }
-        return max;
-    }
-
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             Error = "Must use POST request";
             return true;
         }
-        if (!ForcedGroupIds.empty() && ForcedGroupIds.size() != TabletChannels.size()) {
-            Error = "forcedGroup size should be equal to channel size";
-            return true;
-        }
-        if (!ForcedGroupIds.empty() && Async) {
-            Error = "cannot provide force groups in async mode";
-            return true;
-        }
-        if (!TabletFilter.IsValidFilter(Error)) {
-            return true;
-        }
-        auto tablets = Self->Tablets
-            | std::views::transform([](auto&& p) -> TLeaderTabletInfo* { return &p.second; })
-            | std::views::filter(TabletFilter);
-
-        std::vector<TReassignOperation> operations;
-        for (TLeaderTabletInfo* tablet : tablets) {
-            TVector<ui32> channels;
-            TVector<ui32> forcedGroupIds;
-            bool skip = false;
-            if (GroupId != 0 || StoragePool != "") {
-                skip = true;
-                for (const auto& channel : tablet->TabletStorageInfo->Channels) {
-                    if (StoragePool && channel.StoragePool != StoragePool) {
-                        continue;
-                    }
-                    if (TabletChannels.empty() || Find(TabletChannels, channel.Channel) != TabletChannels.end()) {
-                        const auto* latest = channel.LatestEntry();
-                        if (latest != nullptr && (GroupId == 0 || latest->GroupID == GroupId)) {
-                            skip = false;
-                            channels.push_back(channel.Channel);
-                            if (!ForcedGroupIds.empty()) {
-                                auto itTabletChannel = Find(TabletChannels, channel.Channel);
-                                forcedGroupIds.push_back(ForcedGroupIds[std::distance(TabletChannels.begin(), itTabletChannel)]);
-                            }
-                        }
-                    }
-                }
-            } else {
-                channels = TabletChannels;
-                forcedGroupIds = ForcedGroupIds;
-            }
-            if (skip) {
-                continue;
-            }
-            operations.emplace_back(tablet->Id, channels, forcedGroupIds, Async);
-        }
-
-        TStringBuilder description;
-        if (TabletPercent != 100) {
-            description << TabletPercent << "% of ";
-        }
-        TabletFilter.ToString(description);
-        if (StoragePool) {
-            description << StoragePool << ", ";
-        }
-        description << (GroupId ? ToString(GroupId) : "all groups");
-        if (TabletPercent != 100) {
-            std::sort(operations.begin(), operations.end(), [this](const auto& lhs, const auto& rhs) -> bool {
-                return GetMaxTimestamp(lhs) < GetMaxTimestamp(rhs);
-            });
-            auto it = operations.begin() + operations.size() * TabletPercent / 100;
-            operations.erase(it, operations.end());
-        }
-
-        if (operations.size() > MAX_REASSIGNS_WITHOUT_CONFIRMATION && std::abs(static_cast<i64>(operations.size()) - NumTablets) > REASSIGN_CONFIRMATION_ERROR_MARGIN) {
-            Error = "must confirm number of tablets";
-            return true;
-        }
-
-        NIceDb::TNiceDb db(txc.DB);
-        NJson::TJsonValue jsonOperation;
-        jsonOperation["Reassign"] = description;
-        jsonOperation["TabletsCount"] = operations.size();
-        jsonOperation["MaxInFlight"] = MaxInFlight;
-        jsonOperation["Async"] = Async;
-        WriteOperation(db, jsonOperation, "Hive UI: reassign requested");
-
-        Self->StartReassignActor(std::move(operations), Wait ? Source : TActorId(), MaxInFlight, description, std::make_unique<TMonitoringReassignCallback>());
-        return true;
+        return TTxReassignTablets::Execute(txc, ctx);
     }
 
     void Complete(const TActorContext& ctx) override {
         if (Error) {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
-        } else {
-            if (!Wait) {
-                ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
-            }
+            NJson::TJsonValue response;
+            response["error"] = Error;
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, NJson::WriteJson(response, false)));
+        } else if (!Wait) {
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
         }
     }
 };
@@ -5912,6 +5779,14 @@ public:
         add("ResourceValues", GetResourceValuesText(node.ResourceValues));
         add("ResourceTotalValues", GetResourceValuesText(node.ResourceTotalValues));
         add("ResourceMaximumValues", GetResourceValuesText(node.ResourceMaximumValues));
+        add("NamedResourceValues", node.NamedResourceValues.ToString());
+        {
+            TStringBuilder maximum;
+            for (const auto& [name, value] : TMap<TString, ui64>(node.NamedResourceMaximum.begin(), node.NamedResourceMaximum.end())) {
+                maximum << (maximum.empty() ? "" : ", ") << name << "=" << value;
+            }
+            add("NamedResourceMaximum", maximum);
+        }
         add("MaxTabletsScheduled", node.GetMaxTabletsScheduled());
         {
             TStringBuilder availability;
@@ -5931,7 +5806,12 @@ public:
         {
             TStringBuilder restrictions;
             for (const auto& [type, maxCount] : node.TabletAvailabilityRestrictions) {
-                restrictions << (restrictions.empty() ? "" : ", ") << GetTabletTypeShortName(type) << "=" << maxCount;
+                restrictions << (restrictions.empty() ? "" : ", ") << GetTabletTypeShortName(type) << "=";
+                if (maxCount == TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE) {
+                    restrictions << "allowed";
+                } else {
+                    restrictions << maxCount;
+                }
             }
             add("TabletAvailabilityRestrictions", restrictions);
         }

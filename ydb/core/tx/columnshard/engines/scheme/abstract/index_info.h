@@ -163,7 +163,7 @@ public:
 
     static ui32 GetColumnIdVerified(const std::string& name) {
         auto result = GetColumnIdOptional(name);
-        AFL_VERIFY(!!result);
+        YDB_LOG_VERIFY(!!result);
         return *result;
     }
 

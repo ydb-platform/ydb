@@ -11,12 +11,15 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
 #include <ydb/core/blobstorage/incrhuge/incrhuge.h>
+#include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/util/backoff.h>
+
+#include <array>
 
 namespace NKikimr {
     struct TNodeWardenConfig;
@@ -35,6 +38,9 @@ namespace NKikimr::NStorage {
     struct TEvNodeWardenWriteMetadata;
     struct TEvNodeWardenQueryCacheResult;
     struct TEvNodeWardenNotifySyncerFinished;
+    struct TEvNodeWardenStandbyDirty;
+    struct TEvNodeWardenRegisterBridgeProxy;
+    struct TEvNodeWardenStandbySealed;
     struct TEvNodeWardenAcquireBlobDepotS3Router;
     struct TEvNodeWardenReleaseBlobDepotS3Router;
 
@@ -340,6 +346,7 @@ namespace NKikimr::NStorage {
         TControlWrapper VolatilePhantomFlagStorageBlobSizeLimitBytes;
         TControlWrapper EnableChecksumReadValidationOnVDisk;
         TControlWrapper EnableChecksumWriteValidationOnVDisk;
+        TControlWrapper EnableVDiskSectorPreparation;
 
         TControlWrapper EnableChunkKeeper;
         TControlWrapper SpaceReportPeriodSeconds;
@@ -771,9 +778,9 @@ namespace NKikimr::NStorage {
         // get encryption key for the group
         TEncryptionKey& GetGroupMainKey(ui32 groupId);
 
-        // process group information structure
-        void ApplyGroupInfo(ui32 groupId, ui32 generation, const NKikimrBlobStorage::TGroupInfo *newGroup, bool fromController,
-            bool fromResolver);
+        // Returns whether local syncers changed and their gauges need to be refreshed after the batch.
+        [[nodiscard]] bool ApplyGroupInfo(ui32 groupId, ui32 generation, const NKikimrBlobStorage::TGroupInfo *newGroup,
+            bool fromController, bool fromResolver);
 
         // issue GetGroup request to BSC/GroupResolver actor
         void RequestGroupConfig(ui32 groupId, TGroupRecord& group);
@@ -808,8 +815,9 @@ namespace NKikimr::NStorage {
 
         struct TBlobDepotS3RouterRec {
             TActorId Router;
+            ui32 Generation = 0;
             NKikimrBlobDepot::TS3BackendSettings Settings;
-            THashSet<TActorId> Consumers;
+            THashMap<TActorId, ui32> Consumers;
         };
         THashMap<ui64 /*tabletId*/, TBlobDepotS3RouterRec> BlobDepotS3Routers;
 
@@ -898,6 +906,9 @@ namespace NKikimr::NStorage {
             ui32 PendingBridgeProxyGroupGeneration = 0;
             const TGroupId SourceGroupId;
             const TGroupId TargetGroupId;
+            const bool Reconcile = false;
+            const bool Thorough = false;
+            const ui64 AssignmentId = 0; // the attempt BSC has made, its result is reported with it
             TActorId ActorId;
             bool Finished = false;
             std::optional<TString> ErrorReason;
@@ -914,6 +925,7 @@ namespace NKikimr::NStorage {
             ui64 ReportedBlobsDone = 0;
             ui64 ReportedBlobsTotal = 0;
             ui64 ReportedBlobsError = 0;
+            ui64 ReportedScannedItems = 0;
             ui64 ReportedBytesToCopy = 0;
             ui64 ReportedBytesCopied = 0;
             bool ReportedScanFinished = false;
@@ -921,22 +933,80 @@ namespace NKikimr::NStorage {
             bool ForceProgressReport = false;
 
             friend std::strong_ordering operator <=>(const TWorkingSyncer& x, const TWorkingSyncer& y) {
-                return std::tie(x.BridgeProxyGroupId, x.SourceGroupId, x.TargetGroupId) <=>
-                    std::tie(y.BridgeProxyGroupId, y.SourceGroupId, y.TargetGroupId);
+                return std::tie(x.BridgeProxyGroupId, x.SourceGroupId, x.TargetGroupId, x.Reconcile, x.Thorough,
+                        x.AssignmentId) <=>
+                    std::tie(y.BridgeProxyGroupId, y.SourceGroupId, y.TargetGroupId, y.Reconcile, y.Thorough,
+                        y.AssignmentId);
             }
         };
 
         std::set<TWorkingSyncer> WorkingSyncers;
+        struct TBridgeSyncNodeCounters {
+            using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+            struct TModeCounters {
+                TCounterPtr Running;
+                TCounterPtr WaitingForConfig;
+                TCounterPtr NodeActive;
+            };
+            std::array<TModeCounters, 2> Modes;
+            TCounterPtr AnyNodeActive;
+            TCounterPtr RateLimit;
+
+            explicit TBridgeSyncNodeCounters(const ::NMonitoring::TDynamicCounterPtr& root);
+        };
+        std::optional<TBridgeSyncNodeCounters> BridgeSyncNodeCounters;
+
+        // the parts of HOT_STANDBY piles the local bridge proxies have found missing a write, reported to BSC along
+        // with the syncer progress; the value tells whether a blob write may have been lost
+        THashMap<TGroupId, bool> StandbyDirty;
+
+        // the bridge proxies running on this node by the group they serve, and the seals of the parts promoted from
+        // HOT_STANDBY being waited for from them (by cookie); a proxy registering while the seal is in progress gets it
+        // too
+        THashMap<TGroupId, THashSet<TActorId>> BridgeProxies;
+        struct TStandbySealInProgress {
+            TGroupId BridgeProxyGroupId;
+            ui32 BridgeProxyGroupGeneration;
+            TGroupId TargetGroupId;
+            ui64 SealId;
+            bool Flush = false;
+            THashSet<TActorId> ProxiesPending;
+        };
+        THashMap<ui64, TStandbySealInProgress> StandbySealsInProgress;
+        ui64 LastStandbySealCookie = 0;
+        std::vector<std::tuple<TGroupId, ui64>> StandbySealed; // the seals to report to BSC
 
         TReplQuoter::TPtr SyncRateQuoter;
         ui64 SyncRateConfigLimit = 0; // BridgeSyncRateBytesPerSecond, 0 means no limit
         ui64 SyncRateControllerLimit = 0; // the share of the node in the limit for the cluster, 0 means no limit
         ui32 ControllerGeneration = 0; // the newest tablet generation of BSC that has told the node its syncers and share
 
+        struct TRepairSyncer {
+            ui32 Generation;
+            TActorId ActorId;
+            TActorId Requester;
+            ui64 Cookie;
+        };
+        THashMap<ui32, TRepairSyncer> RepairSyncers;
+        THashMap<TActorId, ui32> RepairSyncerGroups;
+
+        void Handle(NGroupSyncer::TEvRunMirror3dcRepair::TPtr& ev);
+        void Handle(NGroupSyncer::TEvMirror3dcRepairScanResult::TPtr& ev);
+
         void UpdateSyncRateQuoter();
+        void UpdateSyncerCounters();
         void ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
-        void StartSyncerIfNeeded(TWorkingSyncer& syncer);
+        bool StartSyncerIfNeeded(TWorkingSyncer& syncer);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenNotifySyncerFinished>> ev);
+        void Handle(TAutoPtr<TEventHandle<TEvNodeWardenStandbyDirty>> ev);
+        void Handle(TAutoPtr<TEventHandle<TEvNodeWardenRegisterBridgeProxy>> ev);
+        void Handle(TAutoPtr<TEventHandle<TEvNodeWardenStandbySealed>> ev);
+        void ApplyStandbySeals(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
+        void SendStandbySeal(ui64 cookie, TStandbySealInProgress& seal, TActorId proxyId);
+        void OnStandbySealResolved(ui64 cookie, TActorId proxyId);
+        void CheckStandbySeals();
+        bool FillInStandbyReports(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update);
+        void SendStandbyReports();
         bool FillInWorkingSyncer(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update, TWorkingSyncer& syncer,
             bool forceProgress);
         void NotifySyncersProgress();

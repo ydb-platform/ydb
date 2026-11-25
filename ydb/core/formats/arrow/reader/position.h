@@ -37,7 +37,7 @@ public:
         : Position(position)
         , PositionAddress(addresses)
         , LogicalTypes(logicalTypes) {
-        AFL_VERIFY(LogicalTypes.empty() || LogicalTypes.size() == PositionAddress.size());
+        YDB_LOG_VERIFY(LogicalTypes.empty() || LogicalTypes.size() == PositionAddress.size());
     }
 
     NJson::TJsonValue DebugJson() const {
@@ -50,7 +50,7 @@ public:
     }
 
     std::shared_ptr<arrow::RecordBatch> ExtractSortingPosition(const std::vector<std::shared_ptr<arrow::Field>>& fields) const {
-        AFL_VERIFY(fields.size() == PositionAddress.size());
+        YDB_LOG_VERIFY(fields.size() == PositionAddress.size());
         std::vector<std::shared_ptr<arrow::Array>> columns;
         std::shared_ptr<arrow::Schema> schema = std::make_shared<arrow::Schema>(fields);
         for (ui32 i = 0; i < PositionAddress.size(); ++i) {
@@ -90,10 +90,10 @@ private:
     }
 
     std::partial_ordering CompareImpl(const ui64 position, const TSortableScanData& item, const ui64 itemPosition, const ui32 size) const {
-        AFL_VERIFY(size <= PositionAddress.size() && size <= item.PositionAddress.size());
-        AFL_VERIFY(size);
-        AFL_VERIFY(LogicalTypes.size() == PositionAddress.size());
-        AFL_VERIFY(item.LogicalTypes.size() == item.PositionAddress.size());
+        YDB_LOG_VERIFY(size <= PositionAddress.size() && size <= item.PositionAddress.size());
+        YDB_LOG_VERIFY(size);
+        YDB_LOG_VERIFY(LogicalTypes.size() == PositionAddress.size());
+        YDB_LOG_VERIFY(item.LogicalTypes.size() == item.PositionAddress.size());
         for (ui32 idx = 0; idx < size; ++idx) {
             AFL_VERIFY_DEBUG(LogicalTypes[idx] == item.LogicalTypes[idx]);
         }
@@ -119,7 +119,7 @@ private:
                     auto temporaryAddress = Columns[idx]->GetChunk(PositionAddress[idx].GetAddress(), position);
                     cmp = temporaryAddress.Compare(position, item.PositionAddress[idx], itemPosition, LogicalTypes[idx]);
                 } else {
-                    AFL_VERIFY(false);
+                    YDB_LOG_VERIFY(false);
                 }
                 if (cmp != std::partial_ordering::equivalent) {
                     return cmp;
@@ -170,12 +170,12 @@ public:
         const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<NScheme::TTypeInfo>& logicalTypes);
 
     const NAccessor::IChunkedArray::TFullDataAddress& GetPositionAddress(const ui32 colIdx) const {
-        AFL_VERIFY(colIdx < PositionAddress.size());
+        YDB_LOG_VERIFY(colIdx < PositionAddress.size());
         return PositionAddress[colIdx];
     }
 
     ui32 GetPositionInChunk(const ui32 colIdx, const ui32 pos) const {
-        AFL_VERIFY(colIdx < PositionAddress.size());
+        YDB_LOG_VERIFY(colIdx < PositionAddress.size());
         return PositionAddress[colIdx].GetAddress().GetLocalIndex(pos);
     }
 
@@ -184,7 +184,9 @@ public:
     }
 
     std::shared_ptr<TSortableScanData> Trim(const ui64 numFields) const {
-        AFL_VERIFY(numFields < Fields.size())("req", numFields)("self", Fields.size());
+        YDB_LOG_VERIFY(numFields < Fields.size(),
+            {"req", numFields},
+            {"self", Fields.size()});
         auto result = BuildCopy();
         result->Columns.resize(numFields);
         result->Fields.resize(numFields);
@@ -212,7 +214,7 @@ public:
     }
 
     std::partial_ordering Compare(const ui64 position, const TSortableScanData& item, const ui64 itemPosition) const {
-        AFL_VERIFY(PositionAddress.size() == item.PositionAddress.size());
+        YDB_LOG_VERIFY(PositionAddress.size() == item.PositionAddress.size());
         return CompareImpl(position, item, itemPosition, item.PositionAddress.size());
     }
 
@@ -300,7 +302,9 @@ protected:
         Y_ABORT_UNLESS(batch);
         Y_ABORT_UNLESS(batch->num_rows());
         RecordsCount = batch->num_rows();
-        AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
+        YDB_LOG_VERIFY(Position < RecordsCount,
+            {"position", Position},
+            {"count", RecordsCount});
 
         if (dataColumns.size()) {
             Data = std::make_shared<TSortableScanData>(Position, batch, dataColumns, std::vector<NScheme::TTypeInfo>{});
@@ -316,8 +320,8 @@ protected:
         , ReverseSort(reverseSort)
         , Sorting(sorting)
         , Data(data) {
-        AFL_VERIFY(!!Sorting);
-        AFL_VERIFY(IsAvailablePosition(Position));
+        YDB_LOG_VERIFY(!!Sorting);
+        YDB_LOG_VERIFY(IsAvailablePosition(Position));
     }
 
 public:
@@ -361,12 +365,12 @@ public:
     TRWSortableBatchPosition BuildRWPosition(const bool needData, const bool deepCopy) const;
 
     std::shared_ptr<arrow::Table> SliceData(const ui64 offset, const ui64 count) const {
-        AFL_VERIFY(Data);
+        YDB_LOG_VERIFY(Data);
         return Data->Slice(offset, count);
     }
 
     std::shared_ptr<arrow::Table> SliceKeys(const ui64 offset, const ui64 count) const {
-        AFL_VERIFY(Sorting);
+        YDB_LOG_VERIFY(Sorting);
         return Sorting->Slice(offset, count);
     }
 
@@ -436,7 +440,7 @@ public:
         const ui64 posFinish, const TSortableBatchPosition& forFound, const bool greater);
 
     const TSortableScanData& GetData() const {
-        AFL_VERIFY(!!Data);
+        YDB_LOG_VERIFY(!!Data);
         return *Data;
     }
 
@@ -492,7 +496,7 @@ public:
         const std::vector<std::string>& dataColumns, const bool reverseSort, const std::vector<NScheme::TTypeInfo>& logicalTypes)
         : Position(position)
         , ReverseSort(reverseSort) {
-        AFL_VERIFY(logicalTypes.size() == sortingColumns.size());
+        YDB_LOG_VERIFY(logicalTypes.size() == sortingColumns.size());
         InitBatch(batch, dataColumns);
         Sorting = std::make_shared<TSortableScanData>(Position, batch, sortingColumns, logicalTypes);
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
@@ -506,9 +510,11 @@ public:
         Y_ABORT_UNLESS(batch);
         Y_ABORT_UNLESS(batch->num_rows());
         RecordsCount = batch->num_rows();
-        AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
+        YDB_LOG_VERIFY(Position < RecordsCount,
+            {"position", Position},
+            {"count", RecordsCount});
         Sorting = std::make_shared<TSortableScanData>(Position, batch, logicalTypes);
-        AFL_VERIFY(logicalTypes.size() == Sorting->GetFields().size());
+        YDB_LOG_VERIFY(logicalTypes.size() == Sorting->GetFields().size());
         Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
@@ -517,14 +523,16 @@ public:
         const ui32 position, const bool reverseSort, const std::vector<NScheme::TTypeInfo>& logicalTypes)
         : Position(position)
         , ReverseSort(reverseSort) {
-        AFL_VERIFY(logicalTypes.size() == fields.size());
+        YDB_LOG_VERIFY(logicalTypes.size() == fields.size());
         Y_ABORT_UNLESS(columns.size());
         Y_ABORT_UNLESS(columns.front()->length());
         for (ui32 i = 1; i < columns.size(); ++i) {
-            AFL_VERIFY(columns.front()->length() == columns[i]->length());
+            YDB_LOG_VERIFY(columns.front()->length() == columns[i]->length());
         }
         RecordsCount = columns.front()->length();
-        AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
+        YDB_LOG_VERIFY(Position < RecordsCount,
+            {"position", Position},
+            {"count", RecordsCount});
         Sorting = std::make_shared<TSortableScanData>(Position, RecordsCount, columns, fields, logicalTypes);
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
@@ -548,7 +556,7 @@ public:
     }
 
     std::partial_ordering Compare(const TCursor& cursor) const {
-        AFL_VERIFY(!!Sorting);
+        YDB_LOG_VERIFY(!!Sorting);
         if (ReverseSort) {
             return cursor.Compare(*Sorting, Position);
         } else {
@@ -603,7 +611,9 @@ public:
     }
 
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 colIdx) const {
-        AFL_VERIFY(colIdx < Sorting->GetColumns().size())("req", colIdx)("size", Sorting->GetColumns().size());
+        YDB_LOG_VERIFY(colIdx < Sorting->GetColumns().size(),
+            {"req", colIdx},
+            {"size", Sorting->GetColumns().size()});
         return Sorting->GetColumns()[colIdx]->GetScalar(Sorting->GetPositionInChunk(colIdx, Position));
     }
 
@@ -756,9 +766,13 @@ public:
         if (!IsAvailablePosition(position)) {
             return false;
         }
-        AFL_VERIFY(Sorting->InitPosition(position))("pos", position)("count", RecordsCount);
+        YDB_LOG_VERIFY(Sorting->InitPosition(position),
+            {"pos", position},
+            {"count", RecordsCount});
         if (Data) {
-            AFL_VERIFY(Data->InitPosition(position))("pos", position)("count", RecordsCount);
+            YDB_LOG_VERIFY(Data->InitPosition(position),
+                {"pos", position},
+                {"count", RecordsCount});
         }
         Position = position;
         return true;
@@ -777,7 +791,7 @@ public:
             if (!Owner.IsAvailablePosition(position)) {
                 return false;
             }
-            AFL_VERIFY(Owner.Sorting->InitPosition(position));
+            YDB_LOG_VERIFY(Owner.Sorting->InitPosition(position));
             Owner.Position = position;
             return true;
         }
@@ -785,7 +799,7 @@ public:
         ~TAsymmetricPositionGuard() {
             if (Owner.IsAvailablePosition(Owner.Position)) {
                 if (Owner.Data) {
-                    AFL_VERIFY(Owner.Data->InitPosition(Owner.Position));
+                    YDB_LOG_VERIFY(Owner.Data->InitPosition(Owner.Position));
                 }
             }
         }
@@ -839,12 +853,12 @@ public:
             }
             result.emplace_back(nullptr);
         } else {
-            AFL_VERIFY(!it.IsValid());
+            YDB_LOG_VERIFY(!it.IsValid());
             result.emplace_back(batch->Slice(pos.GetPosition()));
-            AFL_VERIFY(result.back()->num_rows());
+            YDB_LOG_VERIFY(result.back()->num_rows());
             recordsCountSplitted += result.back()->num_rows();
         }
-        AFL_VERIFY(batch->num_rows() == recordsCountSplitted);
+        YDB_LOG_VERIFY(batch->num_rows() == recordsCountSplitted);
         return result;
     }
 

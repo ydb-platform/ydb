@@ -699,6 +699,7 @@ public:
         if (OriginalGroupId == Info->GroupID) {
             SendToProxy(std::move(get), PatchedId.Hash(), Span.GetTraceId());
         } else {
+            get->IsProxySubrequest = true;
             SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash(), Span.GetTraceId());
         }
     }
@@ -966,7 +967,8 @@ public:
         }
 
         IsGoodPatchedBlobId = result;
-        IsAllowedErasure = Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
+        IsAllowedErasure = (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
+                && Info->Type.GetErasure() != TErasureType::Erasure8Plus2Block)
                 || Info->Type.GetErasure() == TErasureType::ErasureNone
                 || Info->Type.GetErasure() == TErasureType::ErasureMirror3dc;
         if (EnableVPatchForTesting && IsGoodPatchedBlobId && IsAllowedErasure && UseVPatch

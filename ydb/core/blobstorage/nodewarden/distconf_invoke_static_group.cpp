@@ -1,10 +1,238 @@
 #include "distconf_invoke.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
+#include <ydb/core/blobstorage/syncer/group_state.h>
+
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
+
+    static bool IsOrdinaryMirror3dcGroup(const NKikimrBlobStorage::TGroupInfo& group) {
+        return group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc
+            && !group.HasBridgeGroupState() && !group.HasBridgeProxyGroupId();
+    }
+
+    static TMirror3dcGroupConfiguration ReadMirror3dcConfiguration(const NKikimrBlobStorage::TGroupInfo& group) {
+        TMirror3dcGroupConfiguration config{group.GetMirror3dcState(), {}};
+        for (ui32 realm = 0; realm < config.Realms.size(); ++realm) {
+            config.Realms[realm] = group.GetRings(realm).GetState();
+        }
+        return config;
+    }
+
+    static void AdvanceStaticGroup(NKikimrBlobStorage::TGroupInfo *group, const TMirror3dcGroupConfiguration& next) {
+        group->SetGroupGeneration(group->GetGroupGeneration() + 1);
+        group->SetMirror3dcState(next.State);
+        for (ui32 realm = 0; realm < next.Realms.size(); ++realm) {
+            group->MutableRings(realm)->SetState(next.Realms[realm]);
+        }
+    }
+
+    static std::optional<TMirror3dcGroupConfiguration> NextStaticRepairState(const NKikimrBlobStorage::TGroupInfo& group) {
+        if (!IsOrdinaryMirror3dcGroup(group) || group.RingsSize() != 3) {
+            return std::nullopt;
+        }
+        return RecoveringComplete(ReadMirror3dcConfiguration(group));
+    }
+
+    void TInvokeRequestHandlerActor::CheckStaticGroupStateUpdate(const NKikimrBlobStorage::TStorageConfig& proposed) const {
+        THashMap<ui32, const NKikimrBlobStorage::TGroupInfo*> managedGroups;
+        for (const auto& group : Self->StorageConfig->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+            if (IsOrdinaryMirror3dcGroup(group)) {
+                managedGroups.emplace(group.GetGroupID(), &group);
+            }
+        }
+        const auto role = &NKikimrBlobStorage::TGroupInfo::TFailRealm::GetState;
+        for (const auto& group : proposed.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+            if (const auto it = managedGroups.find(group.GetGroupID()); it != managedGroups.end()) {
+                const auto& existing = *it->second;
+                bool sameRoles = std::ranges::equal(group.GetRings(), existing.GetRings(), std::ranges::equal_to{}, role, role);
+                if (group.GetMirror3dcState() != existing.GetMirror3dcState() || !sameRoles) {
+                    throw TExError() << "UpdateConfig cannot change mirror-3-dc state or realm roles for static group "
+                        << group.GetGroupID();
+                }
+            }
+        }
+    }
+
+    static std::optional<NGroupSyncer::TGroupReplicationInfo> GetStaticGroupReplicationInfo(const NKikimrBlobStorage::TGroupInfo& group) {
+        if (!NextStaticRepairState(group)) {
+            return std::nullopt;
+        }
+        TIntrusivePtr<TBlobStorageGroupInfo> info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+        const TMirror3dcGroupState& state = info->GetMirror3dcState();
+        NGroupSyncer::TGroupReplicationInfo result;
+        result.Generation = info->GroupGeneration;
+        result.Topology = info->PickTopology();
+        result.GroupState = state.State;
+        result.States = state.FailRealmStates;
+        for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+            result.VDisks.push_back({info->GetVDiskId(i), info->GetActorId(i)});
+        }
+        return result;
+    }
+
+    bool ApplyStaticDataCenterStates(NKikimrBlobStorage::TStorageConfig *config,
+            const NKikimrBlobStorage::TDataCenterStates& command) {
+        auto states = ParseDataCenterStates(command);
+        Y_ENSURE(states, states.error());
+        THashMap<ui32, TString> dataCenters;
+        for (const auto& node : config->GetAllNodes()) {
+            dataCenters.emplace(node.GetNodeId(), node.GetLocation().GetDataCenter());
+        }
+        auto *serviceSet = config->MutableBlobStorageConfig()->MutableServiceSet();
+        THashMap<TGroupId, ui32> generations;
+        for (auto& group : *serviceSet->MutableGroups()) {
+            if (!IsOrdinaryMirror3dcGroup(group)) {
+                continue;
+            }
+            Y_ENSURE(group.RingsSize() == 3, "Static mirror-3-dc group must have three realms");
+            TMirror3dcGroupConfiguration current = ReadMirror3dcConfiguration(group);
+            std::array<bool, 3> excluded{};
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                const auto& ring = group.GetRings(realm);
+                std::optional<TString> realmDataCenter;
+                for (const auto& domain : ring.GetFailDomains()) {
+                    for (const auto& disk : domain.GetVDiskLocations()) {
+                        auto it = dataCenters.find(disk.GetNodeID());
+                        Y_ENSURE(it != dataCenters.end(), "Unknown static VDisk node");
+                        Y_ENSURE(!realmDataCenter || *realmDataCenter == it->second,
+                            "Static fail realm spans different data centers");
+                        realmDataCenter = it->second;
+                    }
+                }
+                Y_ENSURE(realmDataCenter, "Empty static fail realm");
+                auto it = states->find(*realmDataCenter);
+                excluded[realm] = it != states->end() && it->second == NKikimrBlobStorage::TDataCenterState::EXCLUDED;
+            }
+            Y_ENSURE(IsValidMirror3dcGroupConfiguration(current), "Invalid static mirror-3-dc configuration");
+            ui32 changes = 0;
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                if (IsDown(current.Realms[realm]) == excluded[realm]) {
+                    continue;
+                }
+                Y_ENSURE(++changes == 1, "Only one static fail realm may change availability at a time");
+                auto next = excluded[realm] ? TakeDownFailRealm(current, realm) : ReturnFailRealm(current, realm);
+                Y_ENSURE(next, "Invalid static mirror-3-dc transition");
+                current = *next;
+            }
+            if (changes) {
+                Y_ENSURE(group.GetGroupGeneration() != Max<ui32>(), "Static group generation overflow");
+                AdvanceStaticGroup(&group, current);
+                generations.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID),
+                    group.GetGroupGeneration());
+            }
+        }
+        UpdateStaticVDiskGenerations(serviceSet, generations);
+        auto previous = ParseDataCenterStates(config->GetDataCenterStates());
+        Y_ENSURE(previous, previous.error());
+        bool changed = !generations.empty() || !config->HasDataCenterStates() || *previous != *states;
+        if (changed) {
+            *config->MutableDataCenterStates() = SerializeDataCenterStates(*states);
+        }
+        return changed;
+    }
+
+    void TInvokeRequestHandlerActor::ApplyDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& command) {
+        RunCommonChecks();
+        auto config = *Self->StorageConfig;
+        try {
+            if (!ApplyStaticDataCenterStates(&config, command)) {
+                return StartDataCenterReconciliation();
+            }
+        } catch (const yexception& error) {
+            throw TExError() << error.what();
+        }
+        if (Self->StorageConfig->HasDataCenterStates()) {
+            ProposedStorageConfig = std::move(config);
+            DataCenterPreflight = true;
+            return StartDataCenterReconciliation();
+        }
+        StartProposition(&config);
+    }
+
+    void TDistributedConfigKeeper::RefreshStaticGroupRepairs() {
+        if (!Scepter || !SelfManagementEnabled || !StorageConfig || !StorageConfig->GetGeneration()) {
+            return StopStaticGroupRepairs();
+        }
+
+        THashMap<ui32, ui32> generations;
+        for (const auto& group : StorageConfig->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+            ui32 id = group.GetGroupID();
+            ui32 generation = group.GetGroupGeneration();
+            if (auto it = StaticGroupRepairGenerations.find(id); it != StaticGroupRepairGenerations.end() && it->second == generation) {
+                generations.emplace(id, generation);
+                continue;
+            }
+            auto info = GetStaticGroupReplicationInfo(group);
+            if (!info) {
+                continue;
+            }
+            if (!StaticGroupStateActor) {
+                StaticGroupStateActor = Register(NGroupSyncer::CreateGroupStateActor(SelfId()));
+            }
+            auto update = std::make_unique<NGroupSyncer::TEvGroupState::TEvUpdate>(id);
+            update->Info = std::move(info);
+            Send(StaticGroupStateActor, update.release());
+            generations.emplace(id, generation);
+        }
+        if (generations.empty()) {
+            return StopStaticGroupRepairs();
+        }
+        for (const auto& [id, generation] : StaticGroupRepairGenerations) {
+            if (!generations.contains(id)) {
+                Send(StaticGroupStateActor, new NGroupSyncer::TEvGroupState::TEvUpdate(id));
+            }
+        }
+        StaticGroupRepairGenerations = std::move(generations);
+    }
+
+    void TDistributedConfigKeeper::StopStaticGroupRepairs() {
+        if (StaticGroupStateActor) {
+            Send(std::exchange(StaticGroupStateActor, {}), new TEvents::TEvPoisonPill);
+        }
+        StaticGroupRepairGenerations.clear();
+    }
+
+    void TDistributedConfigKeeper::Handle(NGroupSyncer::TEvGroupState::TEvPropose::TPtr ev) {
+        if (!StaticGroupStateActor || ev->Sender != StaticGroupStateActor) {
+            return;
+        }
+        const auto& msg = *ev->Get();
+        Invoke(TPromoteStaticGroup{ev->Sender, ev->Cookie, msg.GroupId, msg.Generation, msg.Next});
+    }
+
+    void TInvokeRequestHandlerActor::PromoteStaticGroup(const TPromoteStaticGroup& op) {
+        RunCommonChecks();
+        if (Self->StaticGroupStateActor != op.Sender) {
+            throw TExRace() << "Static group repair coordinator changed";
+        }
+        auto config = *Self->StorageConfig;
+        auto *ss = config.MutableBlobStorageConfig()->MutableServiceSet();
+        for (auto& group : *ss->MutableGroups()) {
+            if (group.GetGroupID() != op.GroupId) {
+                continue;
+            }
+            if (group.GetGroupGeneration() != op.Generation) {
+                throw TExRace() << "Static group generation changed";
+            }
+            if (NextStaticRepairState(group) != op.Next) {
+                throw TExRace() << "Static group recovery target changed";
+            }
+            if (op.Generation == Max<ui32>()) {
+                throw TExError() << "Static group generation overflow";
+            }
+            AdvanceStaticGroup(&group, op.Next);
+            UpdateStaticVDiskGenerations(ss, {{TGroupId::FromValue(op.GroupId), group.GetGroupGeneration()}});
+            return StartProposition(&config);
+        }
+        throw TExRace() << "Static group removed";
+    }
 
     namespace {
 

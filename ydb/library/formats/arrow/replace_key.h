@@ -90,7 +90,7 @@ public:
         , Position(position)
         , LogicalTypes(StoreLogicalTypes(logicalTypes)) {
         Y_ABORT_UNLESS(GetColumnsCount() > 0 && Position < (ui64)Column(0).length());
-        AFL_VERIFY(GetColumnsCount() == GetLogicalTypes().size());
+        YDB_LOG_VERIFY(GetColumnsCount() == GetLogicalTypes().size());
     }
 
     TReplaceKeyTemplate(TArrayVecPtr, ui64, const TLogicalTypes&&)
@@ -104,7 +104,7 @@ public:
         , Position(position)
         , LogicalTypes(StoreLogicalTypes(logicalTypes)) {
         Y_ABORT_UNLESS(GetColumnsCount() > 0 && Position < (ui64)Column(0).length());
-        AFL_VERIFY(GetColumnsCount() == GetLogicalTypes().size());
+        YDB_LOG_VERIFY(GetColumnsCount() == GetLogicalTypes().size());
     }
 
     template <typename T>
@@ -181,15 +181,20 @@ public:
 
     template <typename T = TArrayVecPtr>
     std::shared_ptr<arrow::RecordBatch> RestoreBatch(const std::shared_ptr<arrow::Schema>& schema) const {
-        AFL_VERIFY(GetColumnsCount())("columns", DebugString())("schema", JoinSeq(",", schema->field_names()));
-        AFL_VERIFY(GetColumnsCount() == (ui32)schema->num_fields())("columns", DebugString())("schema", JoinSeq(",", schema->field_names()));
+        YDB_LOG_VERIFY(GetColumnsCount(),
+            {"columns", DebugString()},
+            {"schema", JoinSeq(",", schema->field_names())});
+        YDB_LOG_VERIFY(GetColumnsCount() == (ui32)schema->num_fields(),
+            {"columns", DebugString()},
+            {"schema", JoinSeq(",", schema->field_names())});
         const auto& columns = *Columns;
         return arrow::RecordBatch::Make(schema, columns[0]->length(), columns);
     }
 
     template <typename T = TArrayVecPtr>
     std::vector<std::shared_ptr<arrow::Field>> RestoreFakeFields() const {
-        AFL_VERIFY(GetColumnsCount())("columns", DebugString());
+        YDB_LOG_VERIFY(GetColumnsCount(),
+            {"columns", DebugString()});
         return BuildFakeFields(*Columns);
     }
 
@@ -250,7 +255,7 @@ public:
     }
 
     const TLogicalTypes& GetLogicalTypes() const {
-        AFL_VERIFY(LogicalTypes);
+        YDB_LOG_VERIFY(LogicalTypes);
         return *LogicalTypes;
     }
 };
@@ -307,7 +312,7 @@ private:
     ui64 CalcHash() const {
         size_t result = 0;
         for (auto&& i : *Columns) {
-            AFL_VERIFY(NArrow::SwitchType(i->type_id(), [&](const auto& type) {
+            YDB_LOG_VERIFY(NArrow::SwitchType(i->type_id(), [&](const auto& type) {
                 auto* arr = type.CastArray(i.get());
                 result = CombineHashes<size_t>(result, type.CalcHash(type.GetValue(*arr, Position)));
                 return true;
@@ -330,7 +335,7 @@ public:
         for (ui32 i = 0; i < count; ++i) {
             Y_DEBUG_ABORT_UNLESS(Column(i).type_id() == key.Column(i).type_id());
             bool equal = false;
-            AFL_VERIFY(NArrow::SwitchType((*Types)[i], [&](const auto& type) {
+            YDB_LOG_VERIFY(NArrow::SwitchType((*Types)[i], [&](const auto& type) {
                 using TArrowType = typename std::decay_t<decltype(type)>::T;
                 if constexpr (std::is_same_v<TArrowType, arrow::BooleanType> || std::is_same_v<TArrowType, arrow::HalfFloatType>) {
                     equal = true;
@@ -340,8 +345,8 @@ public:
                 } else {
                     const auto* left = type.CastArray(&Column(i));
                     const auto* right = type.CastArray(&key.Column(i));
-                    AFL_VERIFY(!left->IsNull(Position));
-                    AFL_VERIFY(!right->IsNull(key.Position));
+                    YDB_LOG_VERIFY(!left->IsNull(Position));
+                    YDB_LOG_VERIFY(!right->IsNull(key.Position));
                     const auto lhs = type.GetValue(*left, Position);
                     const auto rhs = type.GetValue(*right, key.Position);
                     if constexpr (std::decay_t<decltype(type)>::IsStringView) {
@@ -373,7 +378,7 @@ public:
     }
 
     void Next() {
-        AFL_VERIFY(GetPosition() < Columns->front()->length());
+        YDB_LOG_VERIFY(GetPosition() < Columns->front()->length());
         ++Position;
         if (!IsFinished()) {
             HashPrecalculated = CalcHash();
@@ -386,9 +391,9 @@ public:
         : Columns(&columns)
         , Position(position)
         , Types(&types) {
-        AFL_VERIFY(!columns.empty());
-        AFL_VERIFY(Position < (ui64)columns.front()->length());
-        AFL_VERIFY(Types->size() == columns.size());
+        YDB_LOG_VERIFY(!columns.empty());
+        YDB_LOG_VERIFY(Position < (ui64)columns.front()->length());
+        YDB_LOG_VERIFY(Types->size() == columns.size());
         HashPrecalculated = CalcHash();
     }
 };
@@ -406,10 +411,10 @@ public:
             if (!result) {
                 result = i;
             } else {
-                AFL_VERIFY(*result == i);
+                YDB_LOG_VERIFY(*result == i);
             }
         }
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 
@@ -435,14 +440,14 @@ public:
 
     TComparablePosition(const std::shared_ptr<arrow::Table>& table, const ui32 position, const std::vector<NScheme::TTypeInfo>& logicalTypes)
         : LogicalTypes(logicalTypes) {
-        AFL_VERIFY(LogicalTypes.size() == (size_t)table->num_columns());
-        AFL_VERIFY(position < table->num_rows());
+        YDB_LOG_VERIFY(LogicalTypes.size() == (size_t)table->num_columns());
+        YDB_LOG_VERIFY(position < table->num_rows());
         for (auto&& col : table->columns()) {
             ui32 pos = 0;
             bool found = false;
             for (auto&& chunk : col->chunks()) {
                 if (position < pos + chunk->length()) {
-                    AFL_VERIFY(pos <= position);
+                    YDB_LOG_VERIFY(pos <= position);
                     Arrays.emplace_back(chunk);
                     Positions.emplace_back(position - pos);
                     found = true;
@@ -450,20 +455,20 @@ public:
                 }
                 pos += chunk->length();
             }
-            AFL_VERIFY(found);
+            YDB_LOG_VERIFY(found);
         }
     }
 
     TComparablePosition(const std::vector<std::shared_ptr<arrow::ChunkedArray>>& tableColumns, const ui32 position,
         const std::vector<NScheme::TTypeInfo>& logicalTypes)
         : LogicalTypes(logicalTypes) {
-        AFL_VERIFY(LogicalTypes.size() == tableColumns.size());
+        YDB_LOG_VERIFY(LogicalTypes.size() == tableColumns.size());
         for (auto&& col : tableColumns) {
             ui32 pos = 0;
             bool found = false;
             for (auto&& chunk : col->chunks()) {
                 if (position < pos + chunk->length()) {
-                    AFL_VERIFY(pos <= position);
+                    YDB_LOG_VERIFY(pos <= position);
                     Arrays.emplace_back(chunk);
                     Positions.emplace_back(position - pos);
                     found = true;
@@ -471,14 +476,14 @@ public:
                 }
                 pos += chunk->length();
             }
-            AFL_VERIFY(found);
+            YDB_LOG_VERIFY(found);
         }
     }
 
     TComparablePosition(const std::shared_ptr<arrow::RecordBatch>& rb, const ui32 position, const std::vector<NScheme::TTypeInfo>& logicalTypes)
         : LogicalTypes(logicalTypes) {
-        AFL_VERIFY(LogicalTypes.size() == (size_t)rb->num_columns());
-        AFL_VERIFY(position < rb->num_rows());
+        YDB_LOG_VERIFY(LogicalTypes.size() == (size_t)rb->num_columns());
+        YDB_LOG_VERIFY(position < rb->num_rows());
         for (auto&& col : rb->columns()) {
             Arrays.emplace_back(col);
             Positions.emplace_back(position);
@@ -500,9 +505,9 @@ public:
 
     template <bool NotNull = false>
     std::partial_ordering Compare(const TComparablePosition& pos) const {
-        AFL_VERIFY(pos.Positions.size() == Positions.size());
+        YDB_LOG_VERIFY(pos.Positions.size() == Positions.size());
         for (ui32 i = 0; i < Positions.size(); ++i) {
-            AFL_VERIFY(Arrays[i]->type()->id() == pos.Arrays[i]->type()->id());
+            YDB_LOG_VERIFY(Arrays[i]->type()->id() == pos.Arrays[i]->type()->id());
             Y_DEBUG_ABORT_UNLESS(LogicalTypes[i] == pos.LogicalTypes[i]);
             const std::partial_ordering cmpResult =
                 TComparator::TypedCompare<NotNull>(*Arrays[i], Positions[i], *pos.Arrays[i], pos.Positions[i], LogicalTypes[i]);
@@ -516,7 +521,7 @@ public:
     template <bool NotNull = false>
     std::partial_ordering ComparePartial(const TComparablePosition& pos) const {
         for (ui32 i = 0; i < std::min<ui32>(Positions.size(), pos.Positions.size()); ++i) {
-            AFL_VERIFY(Arrays[i]->type()->id() == pos.Arrays[i]->type()->id());
+            YDB_LOG_VERIFY(Arrays[i]->type()->id() == pos.Arrays[i]->type()->id());
             Y_DEBUG_ABORT_UNLESS(LogicalTypes[i] == pos.LogicalTypes[i]);
             const std::partial_ordering cmpResult =
                 TComparator::TypedCompare<NotNull>(*Arrays[i], Positions[i], *pos.Arrays[i], pos.Positions[i], LogicalTypes[i]);
@@ -585,7 +590,7 @@ public:
 
 template <bool desc, bool uniq>
 static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
-    AFL_VERIFY(logicalTypes.size() == (size_t)batch->num_columns());
+    YDB_LOG_VERIFY(logicalTypes.size() == (size_t)batch->num_columns());
     if (batch->num_rows() < 2) {
         return true;
     }

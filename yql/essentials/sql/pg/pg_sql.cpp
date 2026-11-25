@@ -595,10 +595,34 @@ public:
         return VL(State_.Statements.data(), State_.Statements.size());
     }
 
+    static TMaybe<EStatementKind> GetStatementKind(const Node* node) {
+        switch (NodeTag(node)) {
+            case T_SelectStmt:
+            case T_VariableSetStmt:
+            case T_VariableShowStmt:
+                return Nothing();
+            case T_InsertStmt:
+            case T_UpdateStmt:
+            case T_DeleteStmt:
+            case T_TruncateStmt:
+                return EStatementKind::DML;
+            case T_TransactionStmt:
+                return EStatementKind::TxControl;
+            default:
+                return EStatementKind::DDL;
+        }
+    }
+
     [[nodiscard]]
     bool ParseRawStmt(const RawStmt* value) {
         AT_LOCATION_EX(value, stmt_location);
         auto node = value->stmt;
+        const auto statementKind = GetStatementKind(node);
+        if (statementKind && Settings_.AllowedStatementKinds && !Settings_.AllowedStatementKinds->contains(*statementKind)) {
+            AddError(TStringBuilder() << GetCommandName(node)
+                                      << " statement belongs to disallowed kind " << *statementKind);
+            return false;
+        }
         if (Settings_.Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW) {
             if (NodeTag(node) != T_SelectStmt && NodeTag(node) != T_VariableSetStmt) {
                 AddError("Unsupported statement in LIMITED_VIEW mode");
@@ -6644,10 +6668,10 @@ public:
     }
 
     NYql::TAstParseResult TextAndMessageToAst(const TString& query, const google::protobuf::Message& protoAst,
-                                              const NSQLTranslation::TSQLHints& hints, const NSQLTranslation::TTranslationSettings& settings) final {
+                                              const NSQLTranslation::TParsedTokenList& tokens, const NSQLTranslation::TTranslationSettings& settings) final {
         Y_UNUSED(query);
         Y_UNUSED(protoAst);
-        Y_UNUSED(hints);
+        Y_UNUSED(tokens);
         Y_UNUSED(settings);
         ythrow yexception() << "Unsupported method";
     }

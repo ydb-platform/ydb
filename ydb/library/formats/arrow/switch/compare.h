@@ -93,7 +93,9 @@ public:
     template <bool notNull>
     static std::partial_ordering TypedCompare(
         const arrow::Array& lhs, const int lpos, const arrow::Array& rhs, const int rpos, const NScheme::TTypeInfo& logicalType) {
-        AFL_VERIFY(lhs.type_id() == rhs.type_id())("lhs", lhs.type()->ToString())("rhs", rhs.type()->ToString());
+        YDB_LOG_VERIFY(lhs.type_id() == rhs.type_id(),
+            {"lhs", lhs.type()->ToString()},
+            {"rhs", rhs.type()->ToString()});
         return ConcreteTypedCompare<notNull>(lhs.type_id(), lhs, lpos, rhs, rpos, logicalType);
     }
 
@@ -103,8 +105,8 @@ public:
         auto& left = static_cast<const T&>(lhs);
         auto& right = static_cast<const T&>(rhs);
         if constexpr (notNull) {
-            AFL_VERIFY(!left.IsNull(lpos));
-            AFL_VERIFY(!right.IsNull(rpos));
+            YDB_LOG_VERIFY(!left.IsNull(lpos));
+            YDB_LOG_VERIFY(!right.IsNull(rpos));
             return CompareValueNotNull(left.GetView(lpos), right.GetView(rpos), logicalType);
         } else {
             return CompareValue(left.GetView(lpos), right.GetView(rpos), left.IsNull(lpos), right.IsNull(rpos), logicalType);
@@ -129,7 +131,7 @@ public:
     static std::partial_ordering CompareValueNotNull(const T& x, const T& y, [[maybe_unused]] const NScheme::TTypeInfo& logicalType) {
         if constexpr (std::is_same_v<T, arrow::util::string_view>) {
             if (GetComparisonOrder(logicalType) == EComparisonOrder::DecimalNumeric) {
-                AFL_VERIFY(x.size() == 16 && y.size() == 16);
+                YDB_LOG_VERIFY(x.size() == 16 && y.size() == 16);
                 const auto high = ReadUnaligned<i64>(x.data() + sizeof(ui64)) <=> ReadUnaligned<i64>(y.data() + sizeof(ui64));
                 if (high != 0) {
                     return high;

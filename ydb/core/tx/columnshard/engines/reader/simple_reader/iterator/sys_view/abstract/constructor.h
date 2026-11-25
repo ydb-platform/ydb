@@ -70,7 +70,7 @@ private:
                 Constructors.PopFront();
                 continue;
             }
-            AFL_VERIFY(!usage);
+            YDB_LOG_VERIFY(!usage);
             Constructors.PopFront();
             break;
         }

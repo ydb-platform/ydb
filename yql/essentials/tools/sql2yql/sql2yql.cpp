@@ -470,11 +470,10 @@ int BuildAST(int argc, char** argv) {
                             }
                         }
 
-                        NSQLTranslation::TSQLHints hints;
+                        NSQLTranslation::TParsedTokenList tokens;
                         auto lexer = SqlLexer(translators, query, parseRes.Issues, settings);
-                        if (lexer && CollectSqlHints(*lexer, query, queryFile, settings.File, hints, parseRes.Issues,
-                                                     settings.MaxErrors, settings.Antlr4Parser)) {
-                            parseRes = NSQLTranslation::SqlASTToYql(translators, query, *ast, hints, settings);
+                        if (lexer && NSQLTranslation::Tokenize(*lexer, query, queryFile, tokens, parseRes.Issues, settings.MaxErrors)) {
+                            parseRes = NSQLTranslation::SqlASTToYql(translators, query, *ast, tokens, settings);
                         }
                     }
                 } else {

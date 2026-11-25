@@ -14,6 +14,7 @@ namespace NKikimr::NGroupSyncer {
         std::atomic_uint64_t BlobsTotal = 0;
         std::atomic_uint64_t BlobsDone = 0;
         std::atomic_uint64_t BlobsError = 0;
+        std::atomic_uint64_t ScannedItems = 0;
 
         // Bytes of the source blobs the target doesn't have, found by the blob scan of this stage; the scan of a
         // stage before the data one tells how much the data stage is going to copy, as data doesn't get to the target
@@ -26,6 +27,14 @@ namespace NKikimr::NGroupSyncer {
         // a blob it has been found to have
         std::atomic_bool ScanFinished = false;
     };
+
+    struct TEvRunMirror3dcRepair
+        : TEventPB<TEvRunMirror3dcRepair, NKikimrBlobStorage::TEvRunMirror3dcRepair, TEvBlobStorage::EvRunMirror3dcRepair>
+    {};
+
+    struct TEvRunMirror3dcRepairResult
+        : TEventPB<TEvRunMirror3dcRepairResult, NKikimrBlobStorage::TEvRunMirror3dcRepairResult, TEvBlobStorage::EvRunMirror3dcRepairResult>
+    {};
 
     struct TEvMirror3dcRepairScanResult
         : TEventLocal<TEvMirror3dcRepairScanResult, TEvBlobStorage::EvMirror3dcRepairScanResult>
@@ -40,7 +49,11 @@ namespace NKikimr::NGroupSyncer {
     // Run one pass over the observed placements at this generation.
     IActor* CreateMirror3dcRepairSyncer(TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId notifyId);
 
+    // with reconcile set, the syncer brings the part of HOT_STANDBY pile up to its source without changing the stage of
+    // the part: one pass syncs blocks, keep flags and the blobs the part misses (every blob when thorough), and then the
+    // barriers of the source
     IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
-        std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter);
+        std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter, bool reconcile = false,
+        bool thorough = false);
 
 } // NKikimr::NGroupSyncer

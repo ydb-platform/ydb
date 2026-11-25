@@ -1,7 +1,9 @@
 #pragma once
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/sys_view/common/events.h>
 
 #include <util/string/printf.h>
 
@@ -11,6 +13,45 @@
 
 // helpers shared by bridge tests
 namespace NBridgeTest {
+
+    inline ::NMonitoring::TDynamicCounterPtr GetBridgeRequestCounters(TEnvironmentSetup& env, ui32 nodeId,
+            const TString& poolName) {
+        return GetServiceCounters(env.Runtime->GetNode(nodeId)->AppData->Counters, "dsproxynode")
+            ->GetSubgroup("subsystem", "bridge_request")->GetSubgroup("storagePool", poolName);
+    }
+
+    inline ::NMonitoring::TDynamicCounterPtr GetBridgeRequestCounters(TEnvironmentSetup& env, ui32 nodeId) {
+        return GetBridgeRequestCounters(env, nodeId, env.StoragePoolName);
+    }
+
+    inline auto GetBridgeHandleCounters(const ::NMonitoring::TDynamicCounterPtr& pool, const TString& handleClass,
+            const TString& sizeClass) {
+        return pool->GetSubgroup("handleClass", handleClass)->GetSubgroup("sizeClass", sizeClass);
+    }
+
+    inline auto GetBridgeCompletedRequests(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& status) {
+        return counters->GetSubgroup("status", status)->GetCounter("completedRequests", true);
+    }
+
+    inline void CheckSingleBridgeResponseLatency(const ::NMonitoring::TDynamicCounterPtr& counters, TDuration elapsed) {
+        const auto hist = counters->FindHistogram("bridgeResponseTimeMs");
+        UNIT_ASSERT(hist);
+        const auto snapshot = hist->Snapshot();
+        const double elapsedMs = elapsed.MillisecondsFloat();
+        bool found = false;
+        for (ui32 i = 0; i < snapshot->Count(); ++i) {
+            const bool expected = !found && elapsedMs <= snapshot->UpperBound(i);
+            UNIT_ASSERT_VALUES_EQUAL_C(snapshot->Value(i), expected, "elapsed " << elapsed << " bucket " << i);
+            found |= expected;
+        }
+        UNIT_ASSERT(found);
+    }
+
+    // TDataChecker writes small blobs with the TabletLog handle class.
+    inline auto GetCompletedTestWrites(TEnvironmentSetup& env, ui32 nodeId, const TString& poolName) {
+        const auto pool = GetBridgeRequestCounters(env, nodeId, poolName);
+        return GetBridgeCompletedRequests(GetBridgeHandleCounters(pool, "PutTabletLog", "256"), "OK");
+    }
 
     // nodes of natively bridged cluster: 8 nodes per pile
     inline TNodeLocation GetBridgedLocation(ui32 nodeId) {
@@ -32,12 +73,14 @@ namespace NBridgeTest {
     }
 
     // settings of the cluster to be converted into bridged one
-    inline TEnvironmentSetup::TSettings MakeUnbridgedSettings(bool setupHive = false, ui32 nodeCount = 9) {
+    inline TEnvironmentSetup::TSettings MakeUnbridgedSettings(bool setupHive = false, ui32 nodeCount = 9,
+            const TFeatureFlags& flags = {}) {
         return {
             .NodeCount = nodeCount, // 9 is one spare node to make disk reassignment possible
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
             .LocationGenerator = GetUnbridgedLocation,
             .SetupHive = setupHive,
+            .FeatureFlags = flags,
             .SelfManagementConfig = true,
             .AutomaticBootstrap = true,
         };
@@ -67,6 +110,20 @@ namespace NBridgeTest {
         UNIT_ASSERT_VALUES_EQUAL(m.ResponseSz, 1);
         UNIT_ASSERT_VALUES_EQUAL_C(m.Responses[0].Status, NKikimrProto::OK, m.ToString());
         UNIT_ASSERT_VALUES_EQUAL(m.Responses[0].Buffer.ConvertToString(), data);
+    }
+
+    inline void CheckCrossGroupPatch(TEnvironmentSetup& env, TActorId edge, ui32 sourceGroup, ui32 targetGroup,
+            const TLogoBlobID& originalId) {
+        const TLogoBlobID patchedId(originalId.TabletID(), 2, 1, 0, originalId.BlobSize(), 0);
+        using TDiff = TEvBlobStorage::TEvPatch::TDiff;
+        TArrayHolder<TDiff> diffs(new TDiff[1]);
+        diffs[0].Set(TString("X"), 0);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, targetGroup, new TEvBlobStorage::TEvPatch(sourceGroup, originalId, patchedId, 0,
+                std::move(diffs), 1, env.Runtime->GetClock() + TDuration::Minutes(1)));
+        });
+        const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPatchResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK, result->Get()->ToString());
     }
 
     inline const NKikimrBlobStorage::TBaseConfig::TGroup& FindGroup(const NKikimrBlobStorage::TBaseConfig& baseConfig,
@@ -274,14 +331,18 @@ namespace NBridgeTest {
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
-    // define new storage pool with the same settings as the existing one
-    inline void CreateAnotherPool(TEnvironmentSetup& env, ui64 storagePoolId) {
+    // define new storage pool with the same settings as the existing one, but the ones the callback changes
+    inline void CreateAnotherPool(TEnvironmentSetup& env, ui64 storagePoolId,
+            const std::function<void(NKikimrBlobStorage::TDefineStoragePool&)>& adjust = {}) {
         NKikimrBlobStorage::TDefineStoragePool pool = ReadStoragePool(env, 1);
         pool.SetStoragePoolId(storagePoolId);
         pool.SetName(TStringBuilder() << "pool_" << storagePoolId);
         pool.SetKind(pool.GetName());
         pool.SetNumGroups(1);
         pool.ClearItemConfigGeneration();
+        if (adjust) {
+            adjust(pool);
+        }
 
         NKikimrBlobStorage::TConfigRequest request;
         request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
@@ -385,6 +446,24 @@ namespace NBridgeTest {
         Y_UNREACHABLE();
     }
 
+    inline NKikimrSysView::TGroupInfo QueryGroupSystemView(TEnvironmentSetup& env, ui32 groupId,
+            TDuration timeout = TDuration::Minutes(1)) {
+        env.Sim(TDuration::Seconds(6)); // BSC publishes the system views every 5 s.
+        const auto edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        env.Runtime->SendToPipe(env.TabletId, edge, new NSysView::TEvSysView::TEvGetGroupsRequest, 0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        const auto response = env.WaitForEdgeActorEvent<NSysView::TEvSysView::TEvGetGroupsResponse>(edge, false,
+            env.Runtime->GetClock() + timeout);
+        UNIT_ASSERT_C(response, "No group system view response GroupId# " << groupId << " timeout# " << timeout);
+        for (const auto& entry : response->Get()->Record.GetEntries()) {
+            if (entry.GetKey().GetGroupId() == groupId) {
+                return entry.GetInfo();
+            }
+        }
+        UNIT_FAIL("Group is missing from system views GroupId# " << groupId);
+        Y_UNREACHABLE();
+    }
+
     // ids of the parts of the bridged group, indexed by pile
     inline std::vector<ui32> GetPileGroups(TEnvironmentSetup& env, ui32 groupId) {
         const auto info = GetGroupInfo(env, groupId);
@@ -484,6 +563,18 @@ namespace NBridgeTest {
         });
         auto res = env.WaitForEdgeActorEvent<TResult>(edge, false);
         return std::unique_ptr<TResult>(res->Release().Release());
+    }
+
+    inline void PutToPileGroup(TEnvironmentSetup& env, ui32 pileGroupId, ui32 nodeId, const TLogoBlobID& id,
+            const TString& data, bool issueKeepFlag = false) {
+        auto res = QueryPileGroup<TEvBlobStorage::TEvPutResult>(env, pileGroupId, nodeId,
+            new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
+                .BlobId = id,
+                .Buffer = TRope(data),
+                .Deadline = TInstant::Max(),
+                .IssueKeepFlag = issueKeepFlag,
+            }));
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
     }
 
     // read the blob from the physical group of the pile, so that the bridge proxy can't restore it

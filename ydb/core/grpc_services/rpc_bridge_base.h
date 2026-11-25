@@ -26,6 +26,8 @@ inline Ydb::Bridge::PileState::State GetPublicBridgePileState(const NKikimrBridg
         switch (from.GetPerPileState(pileId.GetPileIndex())) {
             case NKikimrBridge::TClusterState::SUSPENDED:
                 return Ydb::Bridge::PileState::SUSPENDED;
+            case NKikimrBridge::TClusterState::HOT_STANDBY:
+                return Ydb::Bridge::PileState::HOT_STANDBY;
             case NKikimrBridge::TClusterState::DISCONNECTED:
                 return Ydb::Bridge::PileState::DISCONNECTED;
             case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:

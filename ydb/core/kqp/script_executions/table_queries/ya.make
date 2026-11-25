@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/fq/libs/common
     ydb/core/kqp/common
     ydb/core/kqp/common/events
+    ydb/core/kqp/common/stats
     ydb/core/kqp/counters
     ydb/core/kqp/script_executions/common
     ydb/core/kqp/script_executions/proto

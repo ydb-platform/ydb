@@ -1,5 +1,4 @@
 import logging
-import time
 
 from hamcrest import assert_that, greater_than
 
@@ -34,8 +33,7 @@ class AbstractLocalClusterTest(object):
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
 
-        time.sleep(120)
-        cms.request_increase_ratio_limit(cls.cluster.client)
+        utils.configure_cms_and_wait(cls.cluster, cls.mode)
         host = cls.cluster.nodes[1].host
         mon_port = cls.cluster.nodes[1].mon_port
         cls.swagger_client = SwaggerClient(host, mon_port)

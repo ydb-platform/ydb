@@ -1,4 +1,5 @@
 #pragma once
+#include "blobstorage_pdisk_chunk_nonces.h"
 
 #include <ydb/core/blobstorage/pdisk/mock/pdisk_mock.h>
 #include <ydb/core/util/random.h>
@@ -305,6 +306,9 @@ struct TVDiskMock {
     ui64 FirstLsnToKeep = 1;
 
     TMap<EChunkState, TSet<TChunkIdx>> Chunks;
+    // From TEvYardInitResult and TEvChunkReserveResult, for building sectors as a VDisk does.
+    NPDisk::TFormatContextPtr FormatContext;
+    std::shared_ptr<const NPDisk::TChunkNonces> ChunkNonces;
 
     TVDiskMock(TActorTestContext *testCtx, bool dynamicGroup = false, TActorId whiteboardProxyId = {})
         : TestCtx(testCtx)
@@ -336,6 +340,8 @@ struct TVDiskMock {
                 NKikimrProto::OK);
 
         PDiskParams = evInitRes->PDiskParams;
+        FormatContext = evInitRes->FormatContext;
+        ChunkNonces = evInitRes->ChunkNonces;
 
         TSet<TChunkIdx> commited = Chunks[EChunkState::COMMITTED];
         for (TChunkIdx chunk : evInitRes->OwnedChunks) {

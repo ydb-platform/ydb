@@ -5,7 +5,6 @@ Work in progress, breaking changes are possible.
 
 from __future__ import absolute_import, unicode_literals
 
-
 try:
     import ydb
     from ydb.dbapi.errors import NotSupportedError

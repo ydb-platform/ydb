@@ -46,7 +46,7 @@ TCell MakeResourceType(const TString& resourceType) {
 }
 
 NOlap::TPKRangesFilter MakeRanges(const std::vector<std::pair<TBorder, TBorder>>& ranges) {
-    NOlap::TRangesBuilder builder(NArrow::ComparisonSchema(MakePk()), MakePkSchema());
+    NOlap::TRangesBuilder builder(MakePk(), MakePkSchema());
     for (const auto& [from, to] : ranges) {
         const TString fromBuf = TSerializedCellVec::Serialize(from.Cells);
         const TString toBuf = TSerializedCellVec::Serialize(to.Cells);

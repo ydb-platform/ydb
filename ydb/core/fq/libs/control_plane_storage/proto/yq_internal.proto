@@ -72,6 +72,7 @@ message ConnectionInternal {
 
 message BindingInternal {
     string cloud_id = 2;
+    reserved 3; // rename
 }
 
 message ComputeDatabaseInternal {

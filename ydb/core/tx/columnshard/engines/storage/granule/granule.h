@@ -27,6 +27,7 @@ class TGranulesStorage;
 class TGranulesStat;
 class TColumnChunkLoadContext;
 class TVersionedIndex;
+class TColumnEngineForLogs;
 
 class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
 private:
@@ -128,7 +129,6 @@ class TGranuleMeta: TNonCopyable {
 private:
     TMonotonic ModificationLastTime = TMonotonic::Now();
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
-    TAtomic LastInsertWriteId = 1;
     THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>> InsertedPortions;
     THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>> InsertedPortionsById;
     THashMap<TInsertWriteId, std::shared_ptr<TPortionDataAccessor>> InsertedAccessors;
@@ -153,7 +153,7 @@ private:
     TLoadedKeyRanges LoadedKeyRanges = TLoadedKeyRanges::BuildNothing();
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
-    void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, const bool onLoad = false);
+    void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, const bool passToOptimizer = true);
     void OnAdditiveSummaryChange() const;
 
     TConclusion<std::shared_ptr<TPortionInfo>> GetInnerPortion(const TPortionInfo::TConstPtr& portion) const {
@@ -178,16 +178,12 @@ public:
         return ActualizationIndex->CollectMetadataRequests(Portions);
     }
 
-    TInsertWriteId BuildNextInsertWriteId() {
-        return (TInsertWriteId)AtomicIncrement(LastInsertWriteId);
-    }
-
     const NStorageOptimizer::IOptimizerPlanner& GetOptimizerPlanner() const {
         return *OptimizerPlanner;
     }
 
-    std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
-    bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
+    std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, TColumnEngineForLogs& engine);
+    bool TestingLoad(IDbWrapper& db, TColumnEngineForLogs& engine);
 
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& GetDataAccessorsManager() const {
         return DataAccessorsManager;
@@ -202,7 +198,7 @@ public:
     void ModifyPortionOnExecute(
         IDbWrapper& wrapper, const TPortionDataAccessor& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
         const auto innerPortion = GetInnerPortion(portion.GetPortionInfoPtr()).DetachResult();
-        AFL_VERIFY((ui64)innerPortion.get() == (ui64)&portion.GetPortionInfo());
+        YDB_LOG_VERIFY((ui64)innerPortion.get() == (ui64)&portion.GetPortionInfo());
         auto copy = innerPortion->MakeCopy();
         modifier(*copy);
         if (!HasAppData() || AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
@@ -216,7 +212,7 @@ public:
     template <class TModifier>
     void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
         const auto innerPortion = GetInnerPortion(portion).DetachResult();
-        AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
+        YDB_LOG_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
         OnBeforeChangePortion(innerPortion);
         modifier(innerPortion);
         OnAfterChangePortion(innerPortion);
@@ -233,8 +229,8 @@ public:
     void AbortPortionOnExecute(
         NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot ssRemove) const {
         auto it = InsertedPortions.find(insertWriteId);
-        AFL_VERIFY(it != InsertedPortions.end());
-        AFL_VERIFY(InsertedPortionsById.contains(it->second->GetPortionId()));
+        YDB_LOG_VERIFY(it != InsertedPortions.end());
+        YDB_LOG_VERIFY(InsertedPortionsById.contains(it->second->GetPortionId()));
         // it is better to set remove snapshot before the commit snapshot
         // because otherwise concurrent readers may see the portion as just committed while
         // the commit snapshot is already set, but the remove snapshot is not set yet.
@@ -269,12 +265,16 @@ public:
         ActualizationIndex->RefreshScheme(context);
     }
 
+    bool IsSchemeActualizationFinished() const {
+        return ActualizationIndex->IsSchemeActualizationFinished();
+    }
+
     void ReturnToIndexes(const THashSet<ui64>& portionIds) {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
         context.SetPortionExclusiveGuarantee(false);
         for (auto&& p : portionIds) {
             auto it = Portions.find(p);
-            AFL_VERIFY(it != Portions.end());
+            YDB_LOG_VERIFY(it != Portions.end());
             ActualizationIndex->AddPortion(it->second, context);
         }
     }
@@ -325,15 +325,6 @@ public:
         return result;
     }
 
-    void OnAfterPortionsLoad() {
-        for (auto&& i : Portions) {
-            OnAfterChangePortion(i.second, true);
-        }
-        if (ActualizationIndex->IsStarted()) {
-            RefreshScheme();
-        }
-    }
-
     void PrefetchPortionsMetadata() {
         if (!MetadataMemoryManager->NeedPrefetch() || Portions.empty()) {
             return;
@@ -344,15 +335,6 @@ public:
         }
         request->RegisterSubscriber(std::make_shared<TFakeDataAccessorsSubscriber>());
         DataAccessorsManager->AskData(request);
-    }
-
-    void AddLoadedPortionsToOptimizer() {
-        auto g = OptimizerPlanner->StartModificationGuard();
-        for (auto&& [_, portion] : Portions) {
-            if (!portion->HasRemoveSnapshot()) {
-                g.AddPortion(portion);
-            }
-        }
     }
 
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;
@@ -387,7 +369,17 @@ public:
                                 << ")";
     }
 
+    bool LoadsChunksAtStart() const {
+        return MetadataMemoryManager->LoadsChunksAtStart();
+    }
+
     void UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& portion);
+    void AddPortionsToOptimizer(const std::vector<std::shared_ptr<TPortionInfo>>& activePortions);
+    // One batch of deferred loading, in the order of the index; returns the committed portions it added
+    std::vector<std::shared_ptr<TPortionInfo>> AddPortionsLoadedInBatch(
+        const std::vector<std::shared_ptr<TPortionInfo>>& portions, TLoadedKeyRanges&& loadedKeyRanges);
+    // the portions without a remove snapshot
+    std::vector<std::shared_ptr<TPortionInfo>> GetActivePortions() const;
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;
@@ -398,7 +390,7 @@ public:
     }
 
     const PortionIntervalTree::TPortionIntervalTree& GetPortionIntervalTreeVerified() const {
-        AFL_VERIFY(HasPortionIntervalTree());
+        YDB_LOG_VERIFY(HasPortionIntervalTree());
         return *IntervalTree;
     }
 
@@ -406,9 +398,13 @@ public:
         return InsertedPortions;
     }
 
+    bool HasInsertedPortion(const ui64 portionId) const {
+        return InsertedPortionsById.contains(portionId);
+    }
+
     const std::shared_ptr<TWrittenPortionInfo>& GetInsertedPortionVerifiedPtr(const TInsertWriteId portionId) const {
         auto it = InsertedPortions.find(portionId);
-        AFL_VERIFY(it != InsertedPortions.end());
+        YDB_LOG_VERIFY(it != InsertedPortions.end());
         return it->second;
     }
 
@@ -434,7 +430,9 @@ public:
 
     const TPortionInfo& GetPortionVerified(const ui64 portion) const {
         auto it = Portions.find(portion);
-        AFL_VERIFY(it != Portions.end())("portion_id", portion)("count", Portions.size());
+        YDB_LOG_VERIFY(it != Portions.end(),
+            {"portionId", portion},
+            {"count", Portions.size()});
         return *it->second;
     }
 
@@ -445,10 +443,10 @@ public:
                 return it->second;
             }
         }
-        AFL_VERIFY(!committedOnly);
+        YDB_LOG_VERIFY(!committedOnly);
         {
             auto it = InsertedPortionsById.find(portion);
-            AFL_VERIFY(it != InsertedPortionsById.end());
+            YDB_LOG_VERIFY(it != InsertedPortionsById.end());
             return it->second;
         }
     }

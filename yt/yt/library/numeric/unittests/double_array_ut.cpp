@@ -15,7 +15,7 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TDoubleArrayTest, TestOperatorAt)
+TEST_F(TDoubleArrayTest, OperatorAt)
 {
     TDoubleArray<5> arr = {7, 3, 12, 43, -3.1};
     EXPECT_EQ(7, arr[0]);
@@ -28,7 +28,7 @@ TEST_F(TDoubleArrayTest, TestOperatorAt)
     EXPECT_EQ(1.7, arr[2]);
 }
 
-TEST_F(TDoubleArrayTest, TestExample)
+TEST_F(TDoubleArrayTest, Example)
 {
     TDoubleArray<4> vec1 = {1, 2, 3, 4};
     EXPECT_EQ(vec1[3], 4.0);
@@ -43,7 +43,7 @@ TEST_F(TDoubleArrayTest, TestExample)
     EXPECT_TRUE(TDoubleArray<4>::All(vec1, vec1Square, [] (double x, double y) { return y == x * x; }));
 }
 
-TEST_F(TDoubleArrayTest, TestPlusMinus)
+TEST_F(TDoubleArrayTest, PlusMinus)
 {
     struct TTestCase
     {

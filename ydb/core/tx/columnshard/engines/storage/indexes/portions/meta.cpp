@@ -10,8 +10,8 @@ namespace NKikimr::NOlap::NIndexes {
 
 TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> TIndexByColumns::DoBuildIndexOptional(
     const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo) const {
-    AFL_VERIFY(Serializer);
-    AFL_VERIFY(data.size());
+    YDB_LOG_VERIFY(Serializer);
+    YDB_LOG_VERIFY(data.size());
     std::vector<TChunkedColumnReader> columnReaders;
     for (auto&& i : ColumnIds) {
         auto it = data.find(i);

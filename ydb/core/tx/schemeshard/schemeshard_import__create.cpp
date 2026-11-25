@@ -2282,7 +2282,21 @@ private:
         if (item.State == EState::Done || item.State == EState::CreateSchemeObject) {
             UpdateItemDstPathId(db, *importInfo, itemIdx);
             for (auto childIdx : item.ChildItems) {
-                UpdateItemDstPathId(db, *importInfo, childIdx);
+                auto& child = importInfo->Items.at(childIdx);
+                const auto path = TPath::Resolve(child.DstPathName, Self);
+                if (!path.Parent().IsResolved()) {
+                    // The accepted create left this index for a rebuild. Its backup files
+                    // have no destination, including on replay after losing the reply.
+                    child.State = EState::Done;
+                    Self->PersistImportItemState(db, *importInfo, childIdx);
+                    continue;
+                }
+                if (!path.IsResolved() || path.IsDeleted()) {
+                    return CancelAndPersist(db, importInfo, itemIdx,
+                        TStringBuilder() << "Missing implementation table '" << child.DstPathName << "'", "invalid materialized index");
+                }
+                child.DstPathId = path.Base()->PathId;
+                Self->PersistImportItemDstPathId(db, *importInfo, childIdx);
             }
         }
 
@@ -2472,6 +2486,9 @@ private:
                     Y_ABORT_UNLESS(childIdx < importInfo->Items.size());
                     auto& childItem = importInfo->Items.at(childIdx);
 
+                    if (childItem.State == EState::Done) {
+                        continue;
+                    }
                     childItem.State = EState::Transferring;
                     Self->PersistImportItemState(db, *importInfo, childIdx);
                     AllocateTxId(*importInfo, childIdx);

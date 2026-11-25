@@ -13947,6 +13947,7 @@ struct TComplexIndexBackupOptions {
     bool ToggleCompactForExport = false;
     bool Encrypted = true;
     bool LegacyWithoutIndexList = false;
+    bool ChangeLayoutBeforeCreate = false;
 };
 
 void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, const TComplexIndexBackupOptions& options = {}) {
@@ -13998,7 +13999,7 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, const
     const auto build = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
     UNIT_ASSERT_VALUES_EQUAL(build.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
-    if (options.ToggleCompactForExport) {
+    if (options.ToggleCompactForExport || options.ChangeLayoutBeforeCreate) {
         for (const char* name : {"z_global", "zz_global"}) {
             Ydb::Table::TableIndex global;
             global.set_name(name);
@@ -14007,6 +14008,8 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, const
             TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", global);
             env.TestWaitNotification(runtime, txId);
         }
+    }
+    if (options.ToggleCompactForExport) {
         runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(!compact);
     }
     TestExport(runtime, ++txId, "/MyRoot", storage.ExportRequest({{"/MyRoot/Table", "backup"}}, true, "zstd"));
@@ -14017,6 +14020,35 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, const
         runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(compact);
     }
     using TSettings = Ydb::Import::ImportFromS3Settings;
+    if (options.ChangeLayoutBeforeCreate) {
+        const TString dst = "/MyRoot/Restored";
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> create(runtime, [&](const auto& ev) {
+            const auto& rec = ev->Get()->Record;
+            return rec.TransactionSize() && rec.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexedTable;
+        });
+        TVector<TString> rebuilt;
+        auto observer = runtime.AddObserver<TEvIndexBuilder::TEvCreateRequest>([&](const auto& ev) {
+            rebuilt.push_back(ev->Get()->Record.GetSettings().index().name());
+        });
+        TestImport(runtime, ++txId, "/MyRoot", storage.ImportRequest(TSettings::INDEX_POPULATION_MODE_AUTO, {dst}));
+        runtime.WaitFor("validated index layout, before table creation", [&] { return !create.empty(); });
+        create.Stop().clear();
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(!compact);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        env.TestWaitNotification(runtime, txId);
+        const auto result = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_C(result.GetResponse().GetEntry().GetIssues().empty(), result.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(rebuilt, TVector<TString>{"index1"});
+        TestDescribeResult(DescribePrivatePath(runtime, dst + "/index1"), {
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexType(compact ? NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
+                : NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance),
+        });
+        CheckRestoredRows(runtime, dst, "", rowCount);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, dst + "/index1/indexImplDocsTable"), rowCount);
+        CheckRestoredRows(runtime, dst, "/z_global/indexImplTable", rowCount);
+        return;
+    }
     const auto restore = [&](const TString& restoredPath, TSettings::IndexPopulationMode mode) {
         TestImport(runtime, ++txId, "/MyRoot", storage.ImportRequest(mode, {restoredPath}));
         env.TestWaitNotification(runtime, txId);
@@ -14823,6 +14855,11 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         runImport(1);
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Restored0"), {NLs::PathExist, NLs::IndexesCount(4)});
+    }
+
+    Y_UNIT_TEST_FLAG(FulltextLayoutChangedBeforeImportCreate, Compact) {
+        ExportImportComplexIndex(true, Compact ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
+            : NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance, {.ChangeLayoutBeforeCreate = true});
     }
 
     Y_UNIT_TEST_FLAG(FulltextRelevanceLayoutChangedBeforeExport, Compact) {

@@ -176,6 +176,30 @@ bool FillRowTableIndexesForRestore(
     });
 }
 
+using TImplTableSchemes = TVector<std::pair<TStringBuf, const Ydb::Table::CreateTableRequest*>>;
+
+THashMap<TStringBuf, TImplTableSchemes> GetMaterializedIndexSchemes(const TImportInfo& importInfo, const TImportInfo::TItem& item) {
+    THashMap<TStringBuf, TImplTableSchemes> schemes;
+    const auto add = [&](TStringBuf path, const Ydb::Table::CreateTableRequest& scheme) {
+        schemes[path.Before('/')].emplace_back(path.After('/'), &scheme);
+    };
+    if (!item.MaterializedIndexes.empty()) {
+        for (const auto& [metadata, scheme] : item.MaterializedIndexes) {
+            add(metadata.ImplTablePrefix, scheme);
+        }
+    } else {
+        const TString prefix = TStringBuilder() << item.DstPathName << "/";
+        for (ui32 idx : item.ChildItems) {
+            const auto& child = importInfo.Items.at(idx);
+            TStringBuf path(child.DstPathName);
+            if (child.Table && path.SkipPrefix(prefix)) {
+                add(path, *child.Table);
+            }
+        }
+    }
+    return schemes;
+}
+
 // Returns true if the materialized impl tables of `indexDesc` from the backup can be restored into
 // the index as it would be created in this database. Returns false (and fills `error`) when they
 // cannot - for example when a backup of a compact fulltext index is restored with
@@ -183,7 +207,7 @@ bool FillRowTableIndexesForRestore(
 bool CheckIndexMaterializationCompatible(
     const NKikimrSchemeOp::TTableDescription& baseTable,
     const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
-    const TImportInfo::TItem& item,
+    const TImplTableSchemes& schemes,
     TString& error
 ) {
     THashMap<TString, NKikimrSchemeOp::TTableDescription> expected;
@@ -191,13 +215,7 @@ bool CheckIndexMaterializationCompatible(
         expected[tbl.GetName()] = std::move(tbl);
     }
 
-    const TString indexPrefix = TStringBuilder() << indexDesc.GetName() << "/";
-    for (const auto& [metadata, scheme] : item.MaterializedIndexes) {
-        if (!metadata.ImplTablePrefix.StartsWith(indexPrefix)) {
-            continue;
-        }
-
-        const TString implTableName = metadata.ImplTablePrefix.substr(indexPrefix.size());
+    for (const auto& [implTableName, scheme] : schemes) {
         auto expectedIt = expected.find(implTableName);
         if (expectedIt == expected.end()) {
             error = TStringBuilder() << "materialized index '" << indexDesc.GetName()
@@ -208,12 +226,12 @@ bool CheckIndexMaterializationCompatible(
         NKikimrSchemeOp::TTableDescription backupDesc;
         Ydb::StatusIds::StatusCode status;
         TString parseError;
-        if (!FillColumnDescription(backupDesc, scheme.columns(), status, parseError)) {
-            error = TStringBuilder() << "cannot parse the materialized scheme of '" << metadata.ImplTablePrefix
-                << "': " << parseError;
+        if (!FillColumnDescription(backupDesc, scheme->columns(), status, parseError)) {
+            error = TStringBuilder() << "cannot parse the materialized scheme of '" << indexDesc.GetName() << "/"
+                << implTableName << "': " << parseError;
             return false;
         }
-        backupDesc.MutableKeyColumnNames()->CopyFrom(scheme.primary_key());
+        backupDesc.MutableKeyColumnNames()->CopyFrom(scheme->primary_key());
 
         google::protobuf::util::MessageDifferencer diff;
         // TypeId is redundant with Type, and the backup scheme is parsed without it.
@@ -304,30 +322,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
         if (indexedTable.IndexDescriptionSize()) {
             const auto& baseTable = indexedTable.GetTableDescription();
 
-            // An index is materialized if the backup has impl tables for it. Before the impl-table
-            // items are created this is known from the downloaded schemes; afterwards (and after a
-            // restart) - from the already created impl-table child items.
-            THashSet<TString> materializedIndexes;
-            if (item.MaterializedIndexes.empty()) {
-                const TString prefix = TStringBuilder() << item.DstPathName << "/";
-                for (ui32 childIdx : item.ChildItems) {
-                    if (childIdx >= importInfo.Items.size()) {
-                        continue;
-                    }
-                    const TString& childPath = importInfo.Items[childIdx].DstPathName;
-                    if (!childPath.StartsWith(prefix)) {
-                        continue;
-                    }
-                    const auto start = prefix.size();
-                    const auto end = childPath.find('/', start);
-                    materializedIndexes.insert(childPath.substr(start, end == TString::npos ? end : end - start));
-                }
-            } else {
-                for (const auto& [metadata, scheme] : item.MaterializedIndexes) {
-                    auto pos = metadata.ImplTablePrefix.find('/');
-                    materializedIndexes.insert(pos == TStringBuf::npos ? metadata.ImplTablePrefix : metadata.ImplTablePrefix.substr(0, pos));
-                }
-            }
+            // Recheck the persisted child schemes when proposing the actual create. The
+            // destination layout can change after the getter validates the backup.
+            const auto materializedIndexes = GetMaterializedIndexSchemes(importInfo, item);
 
             std::vector<NKikimrSchemeOp::TIndexCreationConfig> compatible;
             compatible.reserve(indexedTable.IndexDescriptionSize());
@@ -338,11 +335,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
                     continue;
                 }
                 TString indexError;
-                bool ok = materializedIndexes.contains(indexDesc.GetName());
-                if (ok && !item.MaterializedIndexes.empty()) {
-                    ok = CheckIndexMaterializationCompatible(baseTable, indexDesc, item, indexError);
-                }
-                if (ok) {
+                const auto* schemes = materializedIndexes.FindPtr(indexDesc.GetName());
+                if (schemes && CheckIndexMaterializationCompatible(baseTable, indexDesc, *schemes, indexError)) {
                     compatible.push_back(indexDesc);
                 } else {
                     indexesToBuild.push_back(indexDesc.GetName());

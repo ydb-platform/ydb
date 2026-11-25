@@ -9,6 +9,7 @@ from ``github_issue_utils`` — it maps None / empty / unknown to the sentinel `
 """
 
 import os
+from collections.abc import MutableMapping
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.normpath(os.path.join(_MODULE_DIR, '..', '..', '..'))
@@ -45,13 +46,13 @@ def sort_codeowners_lines(codeowners_lines):
 
 
 def _suite_path_for_codeowners(test):
-    if isinstance(test, dict):
+    if isinstance(test, MutableMapping):
         return test['suite_folder']
     return getattr(test, 'classname', None) or getattr(test, 'suite_folder', '') or ''
 
 
 def _set_owners_field(test, owners_str: str) -> None:
-    if isinstance(test, dict):
+    if isinstance(test, MutableMapping):
         test['owners'] = owners_str
     else:
         test.owners = owners_str
@@ -65,7 +66,7 @@ def get_testowners_for_tests(tests_data):
 
     Same owner string format as test_results: ``;;`` / ``:`` between tokens.
 
-    Entry may be a dict with key ``suite_folder`` (upload pipeline) or any object with
+    Entry may be a mutable mapping with key ``suite_folder`` (upload pipeline) or any object with
     ``classname`` (e.g. generate-summary.TestResult — same path as suite_folder in JSON).
     """
     from codeowners import CodeOwners

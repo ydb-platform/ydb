@@ -111,10 +111,7 @@ public:
 
         virtual EStreamState GetStreamState() const = 0;
         virtual void SetStreamState(EStreamState value) = 0;
-        bool HasMissingIndexStream() const {
-            return GetKind() == ETargetKind::IndexTable && GetStreamState() == EStreamState::Removed
-                && GetDstState() != EDstState::Removing;
-        }
+        bool HasMissingIndexStream() const;
         virtual bool IsExpectedStreamCreator(const TActorId& actorId) const = 0;
 
         virtual std::optional<bool> GetStreamSchemaChanges() const = 0;
@@ -203,6 +200,7 @@ public:
     ui64 GetNextTargetId() const;
 
     bool IsCredentialsReady() const;
+    bool AreCredentialsSame(const TString& credentialInstanceId) const;
     void UpdateSecret(const TString& secretValue, const TString& revision = {}, const TString& credentialInstanceId = {});
     const TString& GetSecretRevision() const;
     const TString& GetAuthenticationErrorRevision() const;

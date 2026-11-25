@@ -92,7 +92,7 @@ public:
             "Handle TEvGone",
             {"toString", ev->Get()->ToString()}
         );
-        if (ev->Get()->Status == TEvWorker::TEvGone::DONE) {
+        if (ev->Get()->Status == TEvWorker::TEvGone::EStatus::DONE) {
             NotifySchemeShard();
         }
     }

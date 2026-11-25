@@ -57,7 +57,7 @@ public:
         db.Table<Schema::Replications>().Key(result.ReplicationId).Update(
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
             NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue()),
-            NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(Replication->GetAuthenticationErrorRevision()));
+            NIceDb::TUpdate<Schema::Replications::AuthenticationRecoverySecretRevision>(Replication->GetAuthenticationErrorRevision()));
         return true;
     }
 

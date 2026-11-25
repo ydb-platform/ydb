@@ -157,14 +157,14 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             TEvWorker::TEvGone::EStatus Expected;
         };
         const TCase cases[] = {
-            {NYdb::EStatus::UNAUTHORIZED, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::AUTH_ERROR},
-            {NYdb::EStatus::CLIENT_UNAUTHENTICATED, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::AUTH_ERROR},
-            {NYdb::EStatus::UNAVAILABLE, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::UNAVAILABLE},
-            {NYdb::EStatus::TRANSPORT_UNAVAILABLE, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::UNAVAILABLE},
-            {NYdb::EStatus::CLIENT_DISCOVERY_FAILED, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::UNAVAILABLE},
-            {NYdb::EStatus::CLIENT_CANCELLED, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::UNAVAILABLE},
-            {NYdb::EStatus::CLIENT_UNAUTHENTICATED, EAuthFailurePolicy::SourceRejectionOnly, TEvWorker::TEvGone::UNAVAILABLE},
-            {NYdb::EStatus::UNAUTHORIZED, EAuthFailurePolicy::SourceRejectionOnly, TEvWorker::TEvGone::AUTH_ERROR},
+            {NYdb::EStatus::UNAUTHORIZED, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::EStatus::AUTH_ERROR},
+            {NYdb::EStatus::CLIENT_UNAUTHENTICATED, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::EStatus::AUTH_ERROR},
+            {NYdb::EStatus::UNAVAILABLE, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::EStatus::UNAVAILABLE},
+            {NYdb::EStatus::TRANSPORT_UNAVAILABLE, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::EStatus::UNAVAILABLE},
+            {NYdb::EStatus::CLIENT_DISCOVERY_FAILED, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::EStatus::UNAVAILABLE},
+            {NYdb::EStatus::CLIENT_CANCELLED, EAuthFailurePolicy::StaticLoginInitialization, TEvWorker::TEvGone::EStatus::UNAVAILABLE},
+            {NYdb::EStatus::CLIENT_UNAUTHENTICATED, EAuthFailurePolicy::SourceRejectionOnly, TEvWorker::TEvGone::EStatus::UNAVAILABLE},
+            {NYdb::EStatus::UNAUTHORIZED, EAuthFailurePolicy::SourceRejectionOnly, TEvWorker::TEvGone::EStatus::AUTH_ERROR},
         };
         for (const auto& test : cases) {
             TStringStream logs;
@@ -248,7 +248,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
                 new TEvYdbProxy::TEvTopicReaderGone(NYdb::TStatus(NYdb::EStatus::SCHEME_ERROR, {})));
             const auto gone = runtime.GrabEdgeEvent<TEvWorker::TEvGone>(worker);
             UNIT_ASSERT_VALUES_EQUAL(gone->Get()->Status, retryOnSchemeError
-                ? TEvWorker::TEvGone::UNAVAILABLE : TEvWorker::TEvGone::SCHEME_ERROR);
+                ? TEvWorker::TEvGone::EStatus::UNAVAILABLE : TEvWorker::TEvGone::EStatus::SCHEME_ERROR);
         }
     }
 
@@ -405,7 +405,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         const auto events = s.Runtime.CaptureMailboxEvents(s.Worker.Hint(), s.Worker.NodeId());
         UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(events[0]->GetTypeRewrite(), TEvWorker::EvGone);
-        UNIT_ASSERT_VALUES_EQUAL(events[0]->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::DATA_LOSS);
+        UNIT_ASSERT_VALUES_EQUAL(events[0]->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::EStatus::DATA_LOSS);
     }
 
     Y_UNIT_TEST(OffsetGapBetweenBatchesReportsDataLoss) {
@@ -421,7 +421,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         const auto events = s.Runtime.CaptureMailboxEvents(s.Worker.Hint(), s.Worker.NodeId());
         UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(events[0]->GetTypeRewrite(), TEvWorker::EvGone);
-        UNIT_ASSERT_VALUES_EQUAL(events[0]->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::DATA_LOSS);
+        UNIT_ASSERT_VALUES_EQUAL(events[0]->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::EStatus::DATA_LOSS);
     }
 
     Y_UNIT_TEST(FirstOffsetAfterCommittedOffsetReportsDataLoss) {
@@ -434,7 +434,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         const auto events = s.Runtime.CaptureMailboxEvents(s.Worker.Hint(), s.Worker.NodeId());
         UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(events[0]->GetTypeRewrite(), TEvWorker::EvGone);
-        UNIT_ASSERT_VALUES_EQUAL(events[0]->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::DATA_LOSS);
+        UNIT_ASSERT_VALUES_EQUAL(events[0]->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::EStatus::DATA_LOSS);
     }
 
     Y_UNIT_TEST(OffsetGapIsAllowedWhenDataLossCheckIsDisabled) {
@@ -643,7 +643,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             if (result->GetTypeRewrite() == TEvWorker::EvData) {
                 UNIT_FAIL("Reader delivered data after retention advanced beyond committed offset " << InitialOffset);
             }
-            UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::DATA_LOSS);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::EStatus::DATA_LOSS);
             UNIT_ASSERT_STRING_CONTAINS(result->Get<TEvWorker::TEvGone>()->ErrorDescription,
                 TStringBuilder() << "expected offset " << InitialOffset << ", got " << InitialOffset + 1);
         }
@@ -657,7 +657,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             UNIT_ASSERT(result);
             UNIT_ASSERT_VALUES_EQUAL(result->Sender, reader);
             UNIT_ASSERT_VALUES_EQUAL(result->GetTypeRewrite(), TEvWorker::EvGone);
-            UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::DATA_LOSS);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::EStatus::DATA_LOSS);
             UNIT_ASSERT_STRING_CONTAINS(result->Get<TEvWorker::TEvGone>()->ErrorDescription,
                 "read offset 0 is before retained start offset 1");
         }
@@ -733,7 +733,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         UNIT_ASSERT_C(emptyReadAdvancedOffset, "Server did not advance its read offset after an empty read");
         UNIT_ASSERT_VALUES_EQUAL(result->Sender, reader);
         UNIT_ASSERT_VALUES_EQUAL(result->GetTypeRewrite(), TEvWorker::EvGone);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::DATA_LOSS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::EStatus::DATA_LOSS);
         UNIT_ASSERT_STRING_CONTAINS(result->Get<TEvWorker::TEvGone>()->ErrorDescription,
             TStringBuilder() << "expected offset " << initialOffset
                 << " is before server read offset " << initialOffset + 1);
@@ -864,7 +864,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             TEvYdbProxy::TTopicReaderStatusResult{"read-session", 1}));
 
         const auto gone = s.Runtime.GrabEdgeEvent<TEvWorker::TEvGone>(s.Worker);
-        UNIT_ASSERT_VALUES_EQUAL(gone->Get()->Status, TEvWorker::TEvGone::DATA_LOSS);
+        UNIT_ASSERT_VALUES_EQUAL(gone->Get()->Status, TEvWorker::TEvGone::EStatus::DATA_LOSS);
     }
 
     Y_UNIT_TEST(StatusAtNextExpectedOffsetDoesNotReportDataLoss) {
@@ -937,7 +937,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         if (GapAfterData) {
             const auto gone = s.Runtime.GrabEdgeEvent<TEvWorker::TEvGone>(s.Worker, TDuration::Seconds(30));
             UNIT_ASSERT(gone);
-            UNIT_ASSERT_VALUES_EQUAL(gone->Get()->Status, TEvWorker::TEvGone::DATA_LOSS);
+            UNIT_ASSERT_VALUES_EQUAL(gone->Get()->Status, TEvWorker::TEvGone::EStatus::DATA_LOSS);
             UNIT_ASSERT_STRING_CONTAINS(gone->Get()->ErrorDescription,
                 "expected offset 8 is before server read offset 9");
         } else {

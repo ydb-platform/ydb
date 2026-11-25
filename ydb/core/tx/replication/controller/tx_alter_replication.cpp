@@ -332,7 +332,7 @@ public:
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::Config>(Replication->GetConfig().SerializeAsString()),
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
-            NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(Replication->GetAuthenticationErrorRevision()),
+            NIceDb::TUpdate<Schema::Replications::AuthenticationRecoverySecretRevision>(Replication->GetAuthenticationErrorRevision()),
             NIceDb::TUpdate<Schema::Replications::DesiredState>(desiredState),
             NIceDb::TUpdate<Schema::Replications::Issue>(Replication->IsReconcilingIndexStreams() ? Replication->GetIssue() : issue)
         );
@@ -399,7 +399,7 @@ public:
             Replication->SetState(desiredState);
             db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
                 NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
-                NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(Replication->GetAuthenticationErrorRevision()),
+                NIceDb::TUpdate<Schema::Replications::AuthenticationRecoverySecretRevision>(Replication->GetAuthenticationErrorRevision()),
                 NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
             );
         }

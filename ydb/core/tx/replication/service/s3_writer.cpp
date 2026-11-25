@@ -108,7 +108,7 @@ class TS3Writer
             {"error", error});
 
         // TODO support different error kinds
-        Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::S3_ERROR));
+        Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::EStatus::S3_ERROR));
 
         PassAway();
     }
@@ -194,7 +194,7 @@ class TS3Writer
         } else if (!Finished) {
             Send(Worker, new TEvWorker::TEvPoll());
         } else {
-            Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::DONE));
+            Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::EStatus::DONE));
         }
     }
 

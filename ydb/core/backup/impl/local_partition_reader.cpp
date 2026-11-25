@@ -73,7 +73,7 @@ private:
             YDB_LOG_WARN("[LocalPartitionReader] HandleInit unexpected response",
                 {"leaving", ev->Get()->ToString()});
             Y_ABORT_UNLESS(Worker, "Worker is always set before any PQ response: the offset request is only sent from the handshake handler");
-            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+            return Leave(TEvWorker::TEvGone::EStatus::UNAVAILABLE);
         }
         const auto& resp = record.GetPartitionResponse().GetCmdGetClientOffsetResult();
         Offset = resp.GetOffset();

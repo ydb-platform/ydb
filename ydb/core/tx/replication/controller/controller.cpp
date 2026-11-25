@@ -643,8 +643,7 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
     case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
         if (record.GetErrorKind() == NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION) {
             const auto replication = Find(id.ReplicationId());
-            if (!replication || record.GetCredentialInstanceId()
-                != replication->GetConfig().GetSrcConnectionParams().GetCredentialInstanceId())
+            if (!replication || !replication->AreCredentialsSame(record.GetCredentialInstanceId()))
             {
                 // A controller restart can adopt a worker using the previous
                 // credentials. Retire its ownership through the stop handshake:

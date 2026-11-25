@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(S3Writer) {
 
         auto res = env.Send<TEvWorker::TEvGone>(writer, new TEvWorker::TEvData(0, "TestSource", {}));
 
-        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, TEvWorker::TEvGone::DONE);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, TEvWorker::TEvGone::EStatus::DONE);
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().at("/TEST/writer.AtufpxzetsqaVnEuozdXpD.json"),
                                  R"({"finished":true,"table_name":"/MyRoot/Table","writer_name":"AtufpxzetsqaVnEuozdXpD"})");

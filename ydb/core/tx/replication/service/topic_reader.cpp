@@ -104,7 +104,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
                 if (Settings.ReportStats_) {
                     SendError();
                 }
-                return Leave(TEvWorker::TEvGone::DATA_ERROR, MakeDecompressionIssue(
+                return Leave(TEvWorker::TEvGone::EStatus::DATA_ERROR, MakeDecompressionIssue(
                     TString(Settings.GetBase().Topics_.at(0).Path_), readResult.PartitionId, msg.GetOffset(),
                     CurrentExceptionMessage(), static_cast<ui32>(msg.GetCodec())));
             }
@@ -130,7 +130,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         if (Settings.FailOnDataLoss_) {
             for (const auto& msg : result.Messages) {
                 if (msg.GetOffset() != NextReadOffset) {
-                    Leave(TEvWorker::TEvGone::DATA_LOSS, TStringBuilder()
+                    Leave(TEvWorker::TEvGone::EStatus::DATA_LOSS, TStringBuilder()
                         << "Unexpected message offset in topic " << Settings.GetBase().Topics_.at(0).Path_
                         << ", partition " << result.PartitionId << ", consumer " << Settings.GetBase().ConsumerName_
                         << ": expected offset " << NextReadOffset << ", got " << msg.GetOffset());
@@ -174,7 +174,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         }
 
         if (*PendingStatusReadOffset > NextReadOffset) {
-            return Leave(TEvWorker::TEvGone::DATA_LOSS, TStringBuilder()
+            return Leave(TEvWorker::TEvGone::EStatus::DATA_LOSS, TStringBuilder()
                 << "Topic " << Settings.GetBase().Topics_.at(0).Path_
                 << ", partition " << Settings.GetBase().Topics_.at(0).PartitionIds_.at(0)
                 << ", consumer " << Settings.GetBase().ConsumerName_
@@ -211,7 +211,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         NextReadOffset = result.ReadOffset;
         PendingStatusReadOffset.reset();
         if (Settings.FailOnDataLoss_ && result.RetainedStartOffset && *result.RetainedStartOffset > NextReadOffset) {
-            return Leave(TEvWorker::TEvGone::DATA_LOSS, TStringBuilder()
+            return Leave(TEvWorker::TEvGone::EStatus::DATA_LOSS, TStringBuilder()
                 << "Topic " << Settings.GetBase().Topics_.at(0).Path_
                 << ", consumer " << Settings.GetBase().ConsumerName_
                 << ": read offset " << NextReadOffset
@@ -225,7 +225,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             {"ev", ev->Get()->ToString()});
 
         if (!*YdbProxy || !ReadSessionId) {
-            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+            return Leave(TEvWorker::TEvGone::EStatus::UNAVAILABLE);
         }
 
         const auto offset = ev->Get()->Offset;
@@ -258,7 +258,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             }
             YDB_LOG_WARN("Handle",
                 {"ev", ev->Get()->ToString()});
-            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+            return Leave(TEvWorker::TEvGone::EStatus::UNAVAILABLE);
         } else {
             YDB_LOG_DEBUG("Handle",
                 {"committedOffset", CommittedOffset},
@@ -301,7 +301,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         }
         const auto outcome = status == NYdb::EStatus::UNAUTHORIZED
                 || AuthFailurePolicy == EAuthFailurePolicy::StaticLoginInitialization
-            ? TEvWorker::TEvGone::AUTH_ERROR : TEvWorker::TEvGone::UNAVAILABLE;
+            ? TEvWorker::TEvGone::EStatus::AUTH_ERROR : TEvWorker::TEvGone::EStatus::UNAVAILABLE;
         Leave(outcome, TStringBuilder() << "Source authentication failed (" << status << ")");
         return true;
     }
@@ -318,21 +318,21 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         }
 
         if (ev->Get()->FailureKind == TEvYdbProxy::TEvTopicReaderGone::EFailureKind::DataError) {
-            return Leave(TEvWorker::TEvGone::DATA_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
+            return Leave(TEvWorker::TEvGone::EStatus::DATA_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
         }
 
         switch (ev->Get()->Result.GetStatus()) {
         case NYdb::EStatus::SCHEME_ERROR:
             if (Settings.RetryOnSchemeError_) {
                 // Only the base-table CDC snapshot authorizes index removal.
-                return Leave(TEvWorker::TEvGone::UNAVAILABLE, ev->Get()->Result.GetIssues().ToOneLineString());
+                return Leave(TEvWorker::TEvGone::EStatus::UNAVAILABLE, ev->Get()->Result.GetIssues().ToOneLineString());
             }
 
             [[fallthrough]];
         case NYdb::EStatus::BAD_REQUEST:
-            return Leave(TEvWorker::TEvGone::SCHEME_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
+            return Leave(TEvWorker::TEvGone::EStatus::SCHEME_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
         default:
-            return Leave(TEvWorker::TEvGone::UNAVAILABLE, ev->Get()->Result.GetIssues().ToOneLineString());
+            return Leave(TEvWorker::TEvGone::EStatus::UNAVAILABLE, ev->Get()->Result.GetIssues().ToOneLineString());
         }
     }
 

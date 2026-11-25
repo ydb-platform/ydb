@@ -55,7 +55,7 @@ public:
         }
 
         if (ErrorKind == NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION
-            && CredentialInstanceId != replication->GetConfig().GetSrcConnectionParams().GetCredentialInstanceId())
+            && !replication->AreCredentialsSame(CredentialInstanceId))
         {
             // An ALTER can run between event acceptance and this transaction.
             // Retire the assigned worker without attributing its old failure to
@@ -98,7 +98,7 @@ public:
             Self->ReplicationsWithSourceOffsetMismatch.insert(WorkerId.ReplicationId());
             db.Table<Schema::Replications>().Key(WorkerId.ReplicationId()).Update(
                 NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
-                NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(replication->GetAuthenticationErrorRevision()),
+                NIceDb::TUpdate<Schema::Replications::AuthenticationRecoverySecretRevision>(replication->GetAuthenticationErrorRevision()),
                 NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue()),
                 NIceDb::TUpdate<Schema::Replications::SourceOffsetMismatch>(true));
             YDB_LOG_ERROR_CTX(ctx, "Destination source offset mismatch", {"worker", WorkerId}, {"issue", replication->GetIssue()});
@@ -128,7 +128,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(WorkerId.ReplicationId()).Update(
             NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
-            NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(replication->GetAuthenticationErrorRevision()),
+            NIceDb::TUpdate<Schema::Replications::AuthenticationRecoverySecretRevision>(replication->GetAuthenticationErrorRevision()),
             NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue())
         );
         db.Table<Schema::Targets>().Key(WorkerId.ReplicationId(), WorkerId.TargetId()).Update(

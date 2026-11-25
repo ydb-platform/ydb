@@ -1012,7 +1012,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         runtime.GrabEdgeEventRethrow<TEvWorker::TEvData>(edge);
 
         runtime.Send(new IEventHandle(worker, reader,
-            new TEvWorker::TEvGone(TEvWorker::TEvGone::UNAVAILABLE)));
+            new TEvWorker::TEvGone(TEvWorker::TEvGone::EStatus::UNAVAILABLE)));
         auto replacementHandshake = runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(edge);
         const auto replacementReader = latestReader;
         UNIT_ASSERT_VALUES_EQUAL(readerGeneration, 2);
@@ -1123,7 +1123,7 @@ Y_UNIT_TEST_SUITE(Worker) {
             TTopicMessage(100, R"({})")
         })));
         runtime.GrabEdgeEventRethrow<TEvWorker::TEvCommit>(edge);
-        runtime.Send(new IEventHandle(worker, reader, new TEvWorker::TEvGone(TEvWorker::TEvGone::UNAVAILABLE)));
+        runtime.Send(new IEventHandle(worker, reader, new TEvWorker::TEvGone(TEvWorker::TEvGone::EStatus::UNAVAILABLE)));
         auto replacementReady = runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(edge);
         const auto replacementReader = replacementReady->Sender;
         runtime.Send(new IEventHandle(replacementReader, edge, new TEvents::TEvWakeup()));
@@ -1204,7 +1204,7 @@ Y_UNIT_TEST_SUITE(Worker) {
             void Handle(TEvService::TEvSchemaChangeResult::TPtr&) {
                 Send(Worker, new TEvWorker::TEvSchemaChangeApplied(Schema));
                 if (Generation == 1) {
-                    Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::UNAVAILABLE));
+                    Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::EStatus::UNAVAILABLE));
                 }
             }
 
@@ -1284,7 +1284,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         // to PendingSchemaChange and must finish that active barrier rather
         // than enter historical completion recovery.
         runtime.Send(new IEventHandle(worker, reader,
-            new TEvWorker::TEvGone(TEvWorker::TEvGone::UNAVAILABLE)));
+            new TEvWorker::TEvGone(TEvWorker::TEvGone::EStatus::UNAVAILABLE)));
         ready = runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(edge);
         const auto replacementReader = ready->Sender;
         UNIT_ASSERT_VALUES_UNEQUAL(replacementReader, reader);
@@ -1450,7 +1450,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         UNIT_ASSERT(report->Get()->Record.GetCompleted());
 
         runtime.Send(new IEventHandle(worker, latestWriter,
-            new TEvWorker::TEvGone(TEvWorker::TEvGone::UNAVAILABLE)));
+            new TEvWorker::TEvGone(TEvWorker::TEvGone::EStatus::UNAVAILABLE)));
         auto replacementRefresh = runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(edge);
         UNIT_ASSERT_VALUES_EQUAL(writerGeneration, 2);
         UNIT_ASSERT_VALUES_EQUAL(replacementRefresh->Sender, latestWriter);
@@ -1594,7 +1594,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         runtime.GrabEdgeEventRethrow<TEvService::TEvSchemaChangeReport>(edge);
 
         runtime.Send(new IEventHandle(worker, latestWriter,
-            new TEvWorker::TEvGone(TEvWorker::TEvGone::UNAVAILABLE)));
+            new TEvWorker::TEvGone(TEvWorker::TEvGone::EStatus::UNAVAILABLE)));
         auto replacementHandshake = runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(edge);
         UNIT_ASSERT_VALUES_EQUAL(writerGeneration, 2);
         UNIT_ASSERT_VALUES_EQUAL(replacementHandshake->Sender, latestWriter);
@@ -1879,7 +1879,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         runtime.GrabEdgeEvents<TEvYdbProxy::TEvCreateTopicReaderRequest, TEvWorker::TEvGone>(ev);
         UNIT_ASSERT_VALUES_EQUAL(ev->GetTypeRewrite(), TEvWorker::TEvGone::EventType);
         UNIT_ASSERT_VALUES_EQUAL(ev->Sender, worker);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::UNAVAILABLE);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::EStatus::UNAVAILABLE);
         UNIT_ASSERT_C(ev->Get<TEvWorker::TEvGone>()->ErrorDescription.Contains(issue),
             ev->Get<TEvWorker::TEvGone>()->ErrorDescription);
     }
@@ -1968,7 +1968,7 @@ public:
         if (gone) {
             // A fatal child error makes the worker send Gone and terminate.
             Runtime.Send(new IEventHandle(actors.Worker, actors.Child,
-                new TEvWorker::TEvGone(TEvWorker::TEvGone::SCHEME_ERROR, "test reader failure")), 0, true);
+                new TEvWorker::TEvGone(TEvWorker::TEvGone::EStatus::SCHEME_ERROR, "test reader failure")), 0, true);
         } else {
             auto stop = MakeHolder<TEvService::TEvStopWorker>();
             stop->Record.MutableController()->SetTabletId(42);

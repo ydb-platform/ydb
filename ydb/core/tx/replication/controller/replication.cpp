@@ -523,6 +523,11 @@ TReplication::ITarget* TReplication::FindTarget(ui64 id) {
     return Impl->FindTarget(id);
 }
 
+bool TReplication::ITarget::HasMissingIndexStream() const {
+    return GetKind() == ETargetKind::IndexTable && GetStreamState() == EStreamState::Removed
+        && GetDstState() != EDstState::Removing;
+}
+
 void TReplication::UpdateMissingIndexStream(const ITarget& target) {
     if (target.HasMissingIndexStream()) {
         Impl->MissingIndexStreams.insert(target.GetId());
@@ -701,6 +706,10 @@ bool TReplication::IsCredentialsReady() const {
     default:
         return false;
     }
+}
+
+bool TReplication::AreCredentialsSame(const TString& credentialInstanceId) const {
+    return GetConfig().GetSrcConnectionParams().GetCredentialInstanceId() == credentialInstanceId;
 }
 
 void TReplication::UpdateSecret(const TString& secretValue, const TString& revision, const TString& credentialInstanceId) {

@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(WorkerLifecycle) {
                 ++Counters->StopCommands;
             } else if (ev->GetTypeRewrite() == NService::TEvWorker::TEvGone::EventType) {
                 const auto* gone = ev->Get<NService::TEvWorker::TEvGone>();
-                if (gone->Status == NService::TEvWorker::TEvGone::DATA_ERROR
+                if (gone->Status == NService::TEvWorker::TEvGone::EStatus::DATA_ERROR
                     && gone->ErrorDescription.Contains("Failed to decompress topic message:")) {
                     ++Counters->DataErrors;
                 } else {

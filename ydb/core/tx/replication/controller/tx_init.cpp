@@ -75,7 +75,7 @@ class TController::TTxInit: public TTxBase {
             // An intervening old binary cannot clear the new auth marker. A
             // generation gap therefore disables automatic recovery, fail closed.
             const ui64 generation = Self->Executor()->Generation();
-            const auto storedRevision = rowset.GetValueOrDefault<Schema::Replications::AuthenticationErrorRevision>(TString());
+            const auto storedRevision = rowset.GetValueOrDefault<Schema::Replications::AuthenticationRecoverySecretRevision>(TString());
             TString authRevision;
             if (generation > 1 && Self->SysParams.GetAuthenticationRecoveryGeneration() == generation - 1
                 && state == TReplication::EState::Error && desiredState == TReplication::EState::Ready)
@@ -93,7 +93,7 @@ class TController::TTxInit: public TTxBase {
             }
             if (authRevision != storedRevision) {
                 db.Table<Schema::Replications>().Key(rid).Update(
-                    NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(authRevision));
+                    NIceDb::TUpdate<Schema::Replications::AuthenticationRecoverySecretRevision>(authRevision));
             }
             Self->CommittedVersions[rid] = TRowVersion(
                 rowset.GetValueOrDefault<Schema::Replications::CommittedStep>(0),

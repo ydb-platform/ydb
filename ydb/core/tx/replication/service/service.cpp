@@ -1170,7 +1170,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             {"worker", ev->Sender});
         WorkerActorIdToSession.erase(ev->Sender);
         session->StopWorker(this, ev->Sender, ToReason(ev->Get()->Status), ev->Get()->ErrorDescription, Nothing(),
-            ev->Get()->Status == TEvWorker::TEvGone::AUTH_ERROR
+            ev->Get()->Status == TEvWorker::TEvGone::EStatus::AUTH_ERROR
                 ? NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION
                 : NKikimrReplication::TEvWorkerStatus::ERROR_KIND_UNSPECIFIED);
     }
@@ -1216,10 +1216,10 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     static NKikimrReplication::TEvWorkerStatus::EReason ToReason(TEvWorker::TEvGone::EStatus status) {
         switch (status) {
-        case TEvWorker::TEvGone::SCHEME_ERROR:
-        case TEvWorker::TEvGone::DATA_ERROR:
-        case TEvWorker::TEvGone::DATA_LOSS:
-        case TEvWorker::TEvGone::AUTH_ERROR:
+        case TEvWorker::TEvGone::EStatus::SCHEME_ERROR:
+        case TEvWorker::TEvGone::EStatus::DATA_ERROR:
+        case TEvWorker::TEvGone::EStatus::DATA_LOSS:
+        case TEvWorker::TEvGone::EStatus::AUTH_ERROR:
             return NKikimrReplication::TEvWorkerStatus::REASON_ERROR;
         default:
             return NKikimrReplication::TEvWorkerStatus::REASON_UNSPECIFIED;

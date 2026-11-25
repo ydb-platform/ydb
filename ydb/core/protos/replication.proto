@@ -489,12 +489,6 @@ message TWorkerStats {
 }
 
 message TEvWorkerStatus {
-    enum EErrorKind {
-        ERROR_KIND_UNSPECIFIED = 0;
-        ERROR_KIND_SOURCE_AUTHENTICATION = 1;
-    }
-    optional EErrorKind ErrorKind = 8;
-    optional string CredentialInstanceId = 9;
     enum EStatus {
         STATUS_UNSPECIFIED = 0;
         STATUS_RUNNING = 1;
@@ -510,6 +504,11 @@ message TEvWorkerStatus {
         REASON_SOURCE_OFFSET_MISMATCH = 5;
     }
 
+    enum EErrorKind {
+        ERROR_KIND_UNSPECIFIED = 0;
+        ERROR_KIND_SOURCE_AUTHENTICATION = 1;
+    }
+
     optional TWorkerIdentity Worker = 1;
     optional EStatus Status = 2;
     optional EReason Reason = 3;
@@ -517,6 +516,8 @@ message TEvWorkerStatus {
     optional uint32 LagMilliSeconds = 5;
     optional TWorkerStats Stats = 6;
     optional uint64 SourceCommittedOffset = 7;
+    optional EErrorKind ErrorKind = 8;
+    optional string CredentialInstanceId = 9;
 }
 
 message TEvWorkerDataEnd {

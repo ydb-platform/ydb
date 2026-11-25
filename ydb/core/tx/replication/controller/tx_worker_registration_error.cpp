@@ -48,7 +48,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(result.ReplicationId).Update(
             NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
-            NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(replication->GetAuthenticationErrorRevision()),
+            NIceDb::TUpdate<Schema::Replications::AuthenticationRecoverySecretRevision>(replication->GetAuthenticationErrorRevision()),
             NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue()));
         db.Table<Schema::Targets>().Key(result.ReplicationId, result.TargetId).Update(
             NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),

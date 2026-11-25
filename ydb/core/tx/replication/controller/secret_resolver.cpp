@@ -3,6 +3,7 @@
 #include "secret_resolver.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/services/scheme_secret/resolver.h>

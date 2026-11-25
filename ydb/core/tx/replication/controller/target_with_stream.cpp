@@ -27,6 +27,7 @@ namespace {
 class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
         const auto status = ev->Get()->Result.GetStatus();
+        YDB_LOG_TRACE("Handle", {"status", status});
         if (status == NYdb::EStatus::UNAUTHORIZED || status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
             // Classify before logging the response: remote issues can contain credentials.
             const bool remoteStaticLogin = !ConnectionParams.GetEndpoint().empty()
@@ -42,9 +43,6 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
                 {"status", status}, {"outcome", "retry"});
             return Retry();
         }
-
-        YDB_LOG_TRACE("Handle",
-            {"ev", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {

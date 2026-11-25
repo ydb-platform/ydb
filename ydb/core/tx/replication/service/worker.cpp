@@ -498,7 +498,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         if (it == records.end()) {
             YDB_LOG_ERROR("Schema barrier offset is not in the in-flight batch",
                 {"offset", offset});
-            Send(Parent, new TEvWorker::TEvGone(TEvWorker::TEvGone::SCHEME_ERROR,
+            Send(Parent, new TEvWorker::TEvGone(TEvWorker::TEvGone::EStatus::SCHEME_ERROR,
                 "Schema barrier offset is not in the in-flight batch"));
             return PassAway();
         }
@@ -916,7 +916,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
     void MaybeRecreateActor(TEvWorker::TEvGone::TPtr& ev, TActorInfo& info) {
         switch (ev->Get()->Status) {
-        case TEvWorker::TEvGone::UNAVAILABLE:
+        case TEvWorker::TEvGone::EStatus::UNAVAILABLE:
             if (info.GetCreateAttempt() < MaxAttempts) {
                 return info.Register(this);
             }

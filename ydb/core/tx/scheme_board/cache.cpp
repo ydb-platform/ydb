@@ -16,6 +16,7 @@
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/path.h>
 #include <ydb/core/sys_view/common/resolver.h>
@@ -1061,14 +1062,61 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return std::make_shared<TPartitioning>(std::move(partitions), version);
         }
 
+        static bool HasTypedPartitionRanges(const NKikimrSchemeOp::TPersQueueGroupDescription& pqDesc) {
+            const auto& pqConfig = pqDesc.GetPQTabletConfig();
+            if (pqConfig.GetPartitionKeySchema().empty()) {
+                return false;
+            }
+
+            TVector<NScheme::TTypeInfo> keyTypes;
+            keyTypes.reserve(pqConfig.PartitionKeySchemaSize());
+            for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
+                keyTypes.push_back(NScheme::TypeInfoModFromProtoColumnType(keySchema.GetTypeId(),
+                    keySchema.HasTypeInfo() ? &keySchema.GetTypeInfo() : nullptr).TypeInfo);
+            }
+
+            auto isFullKey = [&](const TString& bound) {
+                TSerializedCellVec cells;
+                if (!TSerializedCellVec::TryParse(bound, cells) || cells.GetCells().size() != keyTypes.size()) {
+                    return false;
+                }
+                for (size_t i = 0; i < keyTypes.size(); ++i) {
+                    if (NScheme::HasUnexpectedValueSize(cells.GetCells()[i], keyTypes[i])) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+
+            size_t unboundedCount = 0;
+            for (const auto& partition : pqDesc.GetPartitions()) {
+                if (NKikimrPQ::ETopicPartitionStatus::Active != partition.GetStatus()) {
+                    continue;
+                }
+
+                const auto& keyRange = partition.GetKeyRange();
+                if ((keyRange.HasFromBound() && !isFullKey(keyRange.GetFromBound()))
+                    || (keyRange.HasToBound() && !isFullKey(keyRange.GetToBound())))
+                {
+                    return false;
+                }
+                if (!keyRange.HasToBound()) {
+                    ++unboundedCount;
+                }
+            }
+
+            return unboundedCount <= 1;
+        }
+
         static void FillTopicPartitioning(
                 const NKikimrSchemeOp::TPersQueueGroupDescription& pqDesc,
                 TVector<NScheme::TTypeInfo>& schema,
                 TVector<NKikimr::TKeyDesc::TPartitionInfo>& partitioning)
         {
             const auto& pqConfig = pqDesc.GetPQTabletConfig();
+            const bool splitEnabled = ::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType();
 
-            if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
+            if (splitEnabled && !HasTypedPartitionRanges(pqDesc)) {
                 partitioning.reserve(pqDesc.GetPartitions().size());
                 for (const auto& partition : pqDesc.GetPartitions()) {
                     if (NKikimrPQ::ETopicPartitionStatus::Active == partition.GetStatus()) {
@@ -1092,6 +1140,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             partitioning.reserve(pqDesc.PartitionsSize());
             for (const auto& partition : pqDesc.GetPartitions()) {
+                if (NKikimrPQ::ETopicPartitionStatus::Active != partition.GetStatus()) {
+                    continue;
+                }
+
                 auto keyRange = NPQ::TPartitionKeyRange::Parse(partition.GetKeyRange());
                 Y_ABORT_UNLESS(!keyRange.FromBound || keyRange.FromBound->GetCells().size() == schema.size());
                 Y_ABORT_UNLESS(!keyRange.ToBound || keyRange.ToBound->GetCells().size() == schema.size());

@@ -671,42 +671,48 @@ namespace NKafka::NTests {
             return runtime->GrabEdgeEvent<TEvKafka::TEvTopicDescribeResponse>(handle);
         }
 
-        Y_UNIT_TEST(DescribeCdcStreamWithoutChildren) {
-            // Both the empty children list and the missing list node entry (the exact
-            // null-deref abort from YDBBUGS-1205) are answered with an error instead of
-            // an abort. Run them on a single server to keep the test runtime low.
+        Y_UNIT_TEST(DescribeCdcStream) {
+            // A CDC stream describe must answer with an error instead of aborting for any
+            // layout that is not exactly one private topic: 0 children, the missing list
+            // node entry (the null-deref abort from YDBBUGS-1205), and 2 children all map
+            // to SCHEME_ERROR. A 1-child layout is valid and continues to the private
+            // topic. All cases run on a single simulated server to keep the suite runtime
+            // low; each case re-arms a fresh observer on the same topic path.
             auto server = CreateSimulatedServer();
             TAutoPtr<IEventHandle> handle;
 
-            auto* ev = DescribeTopicAsCdcStream(*server, 0, handle);
-            UNIT_ASSERT(ev);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Status, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
-            UNIT_ASSERT_STRING_CONTAINS(ev->Message, "unexpected scheme layout");
+            // 0 children.
+            {
+                auto* ev = DescribeTopicAsCdcStream(*server, 0, handle);
+                UNIT_ASSERT(ev);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Status, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+                UNIT_ASSERT_STRING_CONTAINS(ev->Message, "unexpected scheme layout");
+            }
 
-            auto* evNoEntry = DescribeTopicAsCdcStream(*server, 0, handle, /*hasListNodeEntry=*/false);
-            UNIT_ASSERT(evNoEntry);
-            UNIT_ASSERT_VALUES_EQUAL(evNoEntry->Status, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
-            UNIT_ASSERT_STRING_CONTAINS(evNoEntry->Message, "unexpected scheme layout");
-        }
+            // Missing list node entry entirely (the original abort).
+            {
+                auto* ev = DescribeTopicAsCdcStream(*server, 0, handle, /*hasListNodeEntry=*/false);
+                UNIT_ASSERT(ev);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Status, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+                UNIT_ASSERT_STRING_CONTAINS(ev->Message, "unexpected scheme layout");
+            }
 
-        Y_UNIT_TEST(DescribeCdcStreamWithTwoChildren) {
-            auto server = CreateSimulatedServer();
-            TAutoPtr<IEventHandle> handle;
-            auto* ev = DescribeTopicAsCdcStream(*server, 2, handle);
-            UNIT_ASSERT(ev);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Status, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
-            UNIT_ASSERT_STRING_CONTAINS(ev->Message, "unexpected scheme layout");
-        }
+            // 2 children.
+            {
+                auto* ev = DescribeTopicAsCdcStream(*server, 2, handle);
+                UNIT_ASSERT(ev);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Status, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+                UNIT_ASSERT_STRING_CONTAINS(ev->Message, "unexpected scheme layout");
+            }
 
-        Y_UNIT_TEST(DescribeCdcStreamWithSingleChildContinuesToPrivateTopic) {
-            auto server = CreateSimulatedServer();
-            TAutoPtr<IEventHandle> handle;
-            auto* ev = DescribeTopicAsCdcStream(*server, 1, handle);
-            UNIT_ASSERT(ev);
-            // The single-child layout is processed without an abort and the describe
-            // continues into the (nonexisting) private topic which yields the regular
+            // 1 child: the valid layout is processed without an abort and the describe
+            // continues into the (nonexisting) private topic, yielding the regular
             // "not found" error for it.
-            UNIT_ASSERT_STRING_CONTAINS(ev->Message, "does not exist or you do not have access rights");
+            {
+                auto* ev = DescribeTopicAsCdcStream(*server, 1, handle);
+                UNIT_ASSERT(ev);
+                UNIT_ASSERT_STRING_CONTAINS(ev->Message, "does not exist or you do not have access rights");
+            }
         }
     }
 

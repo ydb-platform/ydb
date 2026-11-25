@@ -37,28 +37,10 @@ $\mathrm{MaxUsage}$ и $\mathrm{MinUsage}$ — максимум и миниму�
 
 Наличие сильно загруженного узла может негативно сказываться на работе {{ ydb-short-name }}: загруженность по CPU приводит к голоданию и увеличению задержки, а загруженность по памяти может привести к падению узла по out-of-memory. Балансировка запускается, если загрузка самого загруженного узла превышает 90%, а наименее загруженного — ниже 70%.
 
-Максимальное потребление на узле доступно в виде [сенсора](../devops/observability/monitoring.md) `Hive/MAX(BalanceScatter)` в подгруппе `tablets`.
+Максимальное потребление на узле доступно в виде [сенсора](../devops/observability/monitoring.md) `MAX(Hive/BalanceUsageMax)` в подгруппе `tablets`.
 
-<<<<<<< HEAD
 ### Равномерное распределение конкретного объекта
 
 Для таблеток, которые используют ресурс Counter, также отслеживается равномерность распределения таблеток каждого объекта (каждой таблицы) с помощью метрики `ObjectImbalance`, аналогичной описанной выше $Scatter$. При рестартах узлов равномерность может нарушаться, и тогда запускается балансировка.
 
-Максимальное из значений `ObjectImbalance` по разным объектам доступно в виде [сенсора](../devops/observability/monitoring.md) `Hive/MAX(BalanceObjectImbalance)` в подгруппе `tablets`.
-=======
-Максимальное потребление на узле доступно в виде [сенсора](../devops/observability/monitoring.md) `MAX(Hive/BalanceUsageMax)` в подгруппе `tablets`.
-
-### Равномерное распределение конкретного объекта {#imbalance}
-
-Для таблеток, которые используют ресурс Counter, также отслеживается равномерность распределения таблеток каждого объекта (каждой таблицы) с помощью метрики `ObjectImbalance`, аналогичной описанной выше $Scatter$. При рестартах узлов равномерность может нарушаться, и тогда запускается балансировка.
-
 [Сенсор](../devops/observability/monitoring.md) `MAX(Hive/ImbalancedObjects)` показывает максимальное среди Hive в подгруппе `tablets` количество объектов с ненулевым `ObjectImbalance`. Для каждого Hive значение `WorstObjectVariance` равно дисперсии числа таблеток по узлам у объекта с наибольшим `ObjectImbalance`; сенсор `MAX(Hive/WorstObjectVariance)` показывает максимум этих значений.
-
-## Смотрите также
-
-- [Настройка Hive](../reference/configuration/hive_config.md)
-- [Hive web-viewer](../reference/ydb-ui/hive.md)
-- [Запуск таблеток](hive-booting.md)
-
-{% include [career](./_includes/career.md) %}
->>>>>>> 8651fb69407 (Fix Hive sensor names in contributor docs (#58214))

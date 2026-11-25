@@ -37,6 +37,7 @@ NActors::IActor* CreateMemoryController(
     TIntrusiveConstPtr<IProcessMemoryInfoProvider> processMemoryInfoProvider,
     const NKikimrConfig::TMemoryControllerConfig& config,
     const TResourceBrokerConfig& resourceBrokerSelfConfig,
-    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+    bool resourceBrokerEnabled = true);
 
 }

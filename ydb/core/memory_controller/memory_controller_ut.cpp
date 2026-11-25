@@ -59,10 +59,11 @@ struct TControllerFixture {
     TActorId MemoryController;
 
     explicit TControllerFixture(const NKikimrConfig::TMemoryControllerConfig& config,
-        const TResourceBrokerConfig& brokerConfig = {}) {
+        const TResourceBrokerConfig& brokerConfig = {}, bool resourceBrokerEnabled = true) {
         Runtime.Initialize(TAppPrepare().Unwrap());
         MemoryController = Runtime.Register(CreateMemoryController(
-            TDuration::Seconds(1), TIntrusivePtr<IProcessMemoryInfoProvider>(Provider), config, brokerConfig, CountersRoot));
+            TDuration::Seconds(1), TIntrusivePtr<IProcessMemoryInfoProvider>(Provider), config, brokerConfig,
+            CountersRoot, resourceBrokerEnabled));
         Runtime.EnableScheduleForActor(MemoryController);
         NActors::TDispatchOptions bootstrapOptions;
         bootstrapOptions.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
@@ -556,6 +557,25 @@ Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
     fixture.Tick();
     UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Reserved"), 0);
+}
+
+Y_UNIT_TEST(DisabledBrokerSkipsConfiguration) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(2_GB);
+    TControllerFixture fixture(config, {}, /*resourceBrokerEnabled=*/false);
+    using TConfigure = NResourceBroker::TEvResourceBroker::TEvConfigure;
+    TBlockEvents<TConfigure> requests(fixture.Runtime, [&](const TConfigure::TPtr& event) {
+        return event->Sender == fixture.MemoryController;
+    });
+
+    auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
+    UNIT_ASSERT(!quota.IsBrokerConfigurationPending());
+    fixture.Provider->ProcessMemoryInfo.AllocatedMemory = 128_MB;
+    fixture.Tick();
+
+    UNIT_ASSERT(requests.empty());
+    UNIT_ASSERT(!quota.IsBrokerConfigurationPending());
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/AllocatedMemory"), 128_MB);
 }
 
 Y_UNIT_TEST(IndexBuildBrokerCapacityRefreshWaitsForAcknowledgement) {

@@ -342,13 +342,15 @@ public:
             TIntrusiveConstPtr<IProcessMemoryInfoProvider> processMemoryInfoProvider,
             const NKikimrConfig::TMemoryControllerConfig& config,
             const TResourceBrokerConfig& resourceBrokerConfig,
-            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+            bool resourceBrokerEnabled)
         : Interval(interval)
         , MemTables(std::make_shared<TMemTableMemoryConsumersCollection>(counters,
             Consumers.emplace(EMemoryConsumerKind::MemTable, MakeIntrusive<TMemoryConsumer>(EMemoryConsumerKind::MemTable)).first->second))
         , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
         , Config(config)
         , ResourceBrokerSelfConfig(resourceBrokerConfig)
+        , ResourceBrokerEnabled(resourceBrokerEnabled)
         , Counters(counters)
     {
         Consumers.emplace(EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache, MakeIntrusive<TColumnTablesPortionsMetaDataCacheMemoryConsumer>());
@@ -774,7 +776,7 @@ private:
             ? Min(config.IndexBuildMemoryLimit, queueOverride->second)
             : config.IndexBuildMemoryLimit;
         admission.SetTotalLimit(indexBuildLimit, Min(activeIndexLimit, config.LimitBytes),
-            config != CurrentResourceBrokerConfig);
+            ResourceBrokerEnabled && config != CurrentResourceBrokerConfig);
 
         // TODO: counters and logs for all column table queues
         if (Collections.contains(EMemoryConsumerKind::QueryExecution)) {
@@ -791,7 +793,9 @@ private:
         }
 
         // Note: for now ResourceBroker and its queues aren't MemoryController consumers and don't share limits with other caches
-        ApplyResourceBrokerConfig(config);
+        if (ResourceBrokerEnabled) {
+            ApplyResourceBrokerConfig(config);
+        }
     }
 
     void ApplyResourceBrokerConfig(TResourceBrokerConfig config) {
@@ -878,6 +882,7 @@ private:
     const TIntrusiveConstPtr<IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     NKikimrConfig::TMemoryControllerConfig Config;
     TResourceBrokerConfig ResourceBrokerSelfConfig;
+    const bool ResourceBrokerEnabled;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TMap<EMemoryConsumerKind, TConsumerCounters> ConsumerCounters;
     std::optional<TResourceBrokerConfig> CurrentResourceBrokerConfig;
@@ -894,13 +899,15 @@ IActor* CreateMemoryController(
         TIntrusiveConstPtr<IProcessMemoryInfoProvider> processMemoryInfoProvider,
         const NKikimrConfig::TMemoryControllerConfig& config,
         const TResourceBrokerConfig& resourceBrokerSelfConfig,
-        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+        bool resourceBrokerEnabled) {
     return new TMemoryController(
         interval,
         std::move(processMemoryInfoProvider),
         config,
         resourceBrokerSelfConfig,
-        GetServiceCounters(counters, "utils")->GetSubgroup("component", "memory_controller"));
+        GetServiceCounters(counters, "utils")->GetSubgroup("component", "memory_controller"),
+        resourceBrokerEnabled);
 }
 
 }

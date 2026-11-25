@@ -2,6 +2,8 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <library/cpp/yt/misc/cast.h>
+
 namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -78,6 +80,12 @@ TRemoteRegistry::TRemoteRegistry(TSolomonRegistry* registry)
 void TRemoteRegistry::Transfer(const NProto::TSensorDump& dump)
 {
     for (const auto& cube : dump.cubes()) {
+        // Reject unknown policies before changing state so Detach can still remove existing sensors.
+        if (!TryCheckedEnumCast<ESummaryPolicy>(cube.summary_policy())) {
+            THROW_ERROR_EXCEPTION("Unknown summary policy for sensor %Qv", cube.name())
+                .With("summary_policy", cube.summary_policy());
+        }
+
         for (const auto& projection : cube.projections()) {
             for (const auto& tagId : projection.tag_ids()) {
                 if (tagId <= 0 || tagId > dump.tags().size()) {

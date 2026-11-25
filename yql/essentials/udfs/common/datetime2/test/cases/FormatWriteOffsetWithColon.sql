@@ -1,4 +1,3 @@
-/* syntax version 1 */
 $parse = DateTime::Parse("%Y-%m-%d %H:%M:%S");
 $dt = $parse("2025-12-04 23:24:54");
 

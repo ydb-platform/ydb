@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.compute.v1;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/compute;compute";
+option java_outer_classname = "PEX";
+option java_package = "yandex.cloud.priv.compute.v1";
+
+// Destination of an export to an S3-compatible storage.
+message ExportDestination {
+  // HTTP(S) endpoint of an S3-compatible storage.
+  string endpoint = 1;
+
+  // Signing region; empty when the storage does not use one.
+  string region = 2;
+
+  // The bucket must exist.
+  string bucket = 3;
+
+  // Optional prefix of the exported objects.
+  string prefix = 4;
+}
+
+// Credentials used to access the destination storage.
+message ExportS3Credentials {
+  string access_key_id = 1;
+  string secret_access_key = 2;
+}
+
+message ExportResponse {
+  string bucket = 1;
+  string manifest_key = 2;
+}

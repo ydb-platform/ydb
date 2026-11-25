@@ -2,7 +2,10 @@
 #include "datashard_ut_common_kqp.h"
 #include "datashard_active_transaction.h"
 #include "datashard_failpoints.h"
+#include "datashard_impl.h"
 #include "read_iterator.h"
+
+#include <ydb/core/tx/datashard/hnsw_index/hnsw_index_build_unit.h>
 
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -11,6 +14,10 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
+#include <ydb/core/memory_controller/consumer_collection.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>
@@ -21,6 +28,9 @@
 #include <ydb/core/protos/query_stats.pb.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+
+#include <util/generic/scope.h>
+#include <thread>
 
 #include <algorithm>
 #include <map>
@@ -394,8 +404,36 @@ struct TTestHelper {
         }
     }
 
-    void CreateCustomTable(const TString & name, TVector<TShardedTableOptions::TColumn> columns) {
+    void CreateCustomTable(const TString & name, TVector<TShardedTableOptions::TColumn> columns, bool hnsw = false,
+                           const TVector<TShardedTableOptions::TFamily>& families = {},
+                           std::function<void(NKikimrSchemeOp::TTableDescription&)> customize = {}) {
         auto &runtime = *Server->GetRuntime();
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (hnsw && ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                    UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                    if (tx.HasCreateTable() && tx.GetCreateTable().GetName() == name) {
+                        auto* table = tx.MutableCreateTable();
+                        auto* index = table->MutableLocalHnswIndex();
+                        TPathId(table->GetPathId().GetOwnerId(), Max<ui64>() - 1).ToProto(index->MutableIndexId());
+                        auto* description = index->MutableHnswIndexDescription();
+                        description->SetEmbeddingColumnId(columns.size());
+                        auto* settings = description->MutableSettings()->mutable_settings();
+                        settings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+                        settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+                        settings->set_vector_dimension(2);
+                        settings->set_min_rows(1);
+                        settings->set_delta_rows(1000);
+                        if (customize) { customize(*table); }
+                        UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
 
         auto& table1 = Tables[name];
         table1.Name = name;
@@ -403,6 +441,9 @@ struct TTestHelper {
         auto opts = TShardedTableOptions()
             .Shards(ShardCount)
             .Columns(columns);
+        if (!families.empty()) {
+            opts.Families(families);
+        }
         if (WithFollower)
             opts.Followers(1);
         auto [shards, tableId] = CreateShardedTable(Server, Sender, "/Root", name, opts);
@@ -4263,6 +4304,101 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorState) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
+    Y_UNIT_TEST(AdmittedReadDoesNotWaitForQuotaAfterPageFault) {
+        using namespace NKqp::NScheduler;
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+        serverSettings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(0);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableResourcePools(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableResourcePoolsScheduler(true);
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+        const auto schedulerId = NKqp::MakeKqpSchedulerServiceId(runtime.GetFirstNodeId());
+        runtime.Send(schedulerId, sender, new TEvAddDatabase("/Root"));
+        InitRoot(server, sender);
+
+        // Create the pool before registering it so the workload manager can resolve the subscription.
+        auto createPool = MakeSQLRequest(R"(CREATE RESOURCE POOL read_pool WITH (TOTAL_CPU_LIMIT_PERCENT_PER_NODE = "10");)", false);
+        createPool->Record.MutableRequest()->SetDatabase("/Root");
+        runtime.Send(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, createPool.Release());
+        const auto createPoolResult = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
+        const auto& createPoolRecord = createPoolResult->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL_C(createPoolRecord.GetYdbStatus(), Ydb::StatusIds::SUCCESS, createPoolRecord.DebugString());
+        runtime.Send(schedulerId, sender, new TEvAddPool("/Root", "read_pool"));
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().ExecutorCacheSize(1));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)"));
+        SimulateSleep(runtime, TDuration::Seconds(1));
+        const auto shard = shards.at(0);
+        CompactTable(runtime, shard, tableId, false);
+        RebootTablet(runtime, shard, sender);
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        const auto scheduler = runtime.GetAppData().KqpComputeScheduler;
+        runtime.WaitFor("read_pool quota to be published", [&] {
+            const auto tree = scheduler->GetStaticTree();
+            const auto* db = tree->GetDatabase("/Root");
+            const auto* pool = db ? db->GetPool("read_pool") : nullptr;
+            return pool && pool->GetReadLimit() == TDuration::MilliSeconds(100);
+        }, TDuration::Seconds(30));
+        auto query = scheduler->GetReadQuery("/Root", "read_pool");
+        UNIT_ASSERT_C(query, "The scheduler must have a read query for read_pool");
+        bool replied = false;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvReadResult>(
+            [&](TEvDataShard::TEvReadResult::TPtr&) { replied = true; });
+        TBlockEvents<NSharedCache::TEvRequest> pages(runtime);
+        bool retried = false;
+        auto retryObserver = runtime.AddObserver<TEvDataShard::TEvReadContinue>(
+            [&](TEvDataShard::TEvReadContinue::TPtr& ev) {
+                retried = true;
+                ev.Reset();
+            });
+        auto readSender = runtime.AllocateEdgeActor();
+        auto pipe = runtime.ConnectToPipe(shard, readSender, 0, NTabletPipe::TClientConfig());
+        auto request = std::make_unique<TEvDataShard::TEvRead>();
+        request->Record.SetReadId(1);
+        request->Record.SetDatabaseId("/Root");
+        request->Record.SetPoolId("read_pool");
+        request->Record.SetMaxRows(1);
+        request->Record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+        request->Record.MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+        request->Record.MutableTableId()->SetSchemaVersion(tableId.SchemaVersion);
+        request->Record.AddColumns(1);
+        request->Record.AddColumns(2);
+        request->Ranges.emplace_back(TOwnedCellVec(), true, TOwnedCellVec(), true);
+        runtime.SendToPipe(pipe, readSender, request.release());
+
+        runtime.WaitFor("first read page fault", [&] { return !pages.empty() || replied || retried; });
+        UNIT_ASSERT(!replied);
+        UNIT_ASSERT(!retried);
+        UNIT_ASSERT_C(!pages.empty(), "The admitted operation must actually wait for a page");
+        UNIT_ASSERT_VALUES_EQUAL(query->CpuUsage.load(), 0u);
+
+        // Exhaust fair-share after admission. Completing this first operation
+        // must depend only on the page, with no new quota wait in the pipeline.
+        constexpr ui64 blockedUsage = 1'000'000;
+        query->CpuUsage += blockedUsage;
+        query->GetParent()->CpuUsage += blockedUsage;
+        Y_DEFER {
+            query->CpuUsage -= blockedUsage;
+            query->GetParent()->CpuUsage -= blockedUsage;
+        };
+        pages.Stop().Unblock();
+        runtime.WaitFor("resumed read or unexpected quota wait", [&] { return replied || retried; });
+        UNIT_ASSERT_C(!retried, "An admitted pipeline operation must not wait for quota after a restart");
+        UNIT_ASSERT(replied);
+        auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender, TDuration::Seconds(5));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->GetRowsCount(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(query->CpuUsage.load(), blockedUsage);
+    }
+
     Y_UNIT_TEST(CancelPageFaultedReadThenDropTable) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -6265,6 +6401,2301 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorFastCancel) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
+    Y_UNIT_TEST(HnswOptionalMetadataSurvivesReplacementAndDisable) {
+        NKikimrSchemeOp::TTableDescription schema;
+        schema.SetPath("/Root/posting");
+        UNIT_ASSERT(!schema.HasLocalHnswIndex());
+        UNIT_ASSERT(!schema.GetDescriptor()->FindFieldByName("LocalHnswIndex")->is_repeated());
+        TUserTable bare(1, schema, 0);
+        UNIT_ASSERT(bare.HnswIndexes.empty());
+        auto* index = schema.MutableLocalHnswIndex();
+        TPathId(1, 2).ToProto(index->MutableIndexId());
+        index->SetSchemaVersion(12);
+        auto* description = index->MutableHnswIndexDescription();
+        description->SetEmbeddingColumnId(42);
+        description->MutableSettings()->mutable_settings()->set_vector_dimension(2);
+        TUserTable table(1, schema, 0);
+        UNIT_ASSERT(table.Indexes.empty());
+        UNIT_ASSERT(!table.HasAsyncIndexes());
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.size(), 1u);
+        table.UpdateLocalHnswIndex(NKikimrSchemeOp::TTableDescription{});
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.at(TPathId(1, 2)).VectorColumnTag, 42u);
+        table.GetSchema(schema);
+        UNIT_ASSERT(schema.HasLocalHnswIndex());
+        TUserTable restored(1, schema, 0);
+        UNIT_ASSERT_VALUES_EQUAL(restored.HnswIndexes.at(TPathId(1, 2)).SchemaVersion, 12u);
+
+        // An explicitly supplied descriptor replaces the previous identity.
+        NKikimrSchemeOp::TTableDescription replacement;
+        *replacement.MutableLocalHnswIndex() = schema.GetLocalHnswIndex();
+        TPathId(1, 3).ToProto(replacement.MutableLocalHnswIndex()->MutableIndexId());
+        replacement.MutableLocalHnswIndex()->SetSchemaVersion(13);
+        restored.UpdateLocalHnswIndex(replacement);
+        UNIT_ASSERT_VALUES_EQUAL(restored.HnswIndexes.size(), 1u);
+        UNIT_ASSERT(!restored.HnswIndexes.contains(TPathId(1, 2)));
+        UNIT_ASSERT_VALUES_EQUAL(restored.HnswIndexes.at(TPathId(1, 3)).SchemaVersion, 13u);
+        restored.GetSchema(schema);
+        TUserTable replaced(1, schema, 0);
+        UNIT_ASSERT(replaced.HnswIndexes.contains(TPathId(1, 3)));
+
+        NKikimrSchemeOp::TTableDescription delta;
+        TPathId(1, 3).ToProto(delta.MutableLocalHnswIndex()->MutableIndexId());
+        replaced.UpdateLocalHnswIndex(delta);
+        replaced.GetSchema(schema);
+        UNIT_ASSERT(schema.HasLocalHnswIndex());
+        TUserTable disabled(1, schema, 0);
+        UNIT_ASSERT(disabled.HnswIndexes.empty());
+        UNIT_ASSERT(disabled.Indexes.empty());
+
+        // Presence of an empty descriptor clears the declaration, unlike omission.
+        table.UpdateLocalHnswIndex(NKikimrSchemeOp::TTableDescription{});
+        delta.MutableLocalHnswIndex()->Clear();
+        table.UpdateLocalHnswIndex(delta);
+        table.GetSchema(schema);
+        TUserTable cleared(1, schema, 0);
+        UNIT_ASSERT(cleared.HnswIndexes.empty());
+    }
+
+    Y_UNIT_TEST(HnswPhysicalTableDescriptionsRemainIndependent) {
+        NKikimrSchemeOp::TTableDescription firstSchema, secondSchema;
+        firstSchema.SetPath("/Root/table/index_a/indexImplPostingTable");
+        secondSchema.SetPath("/Root/table/index_b/indexImplPostingTable");
+        for (auto* schema : {&firstSchema, &secondSchema}) {
+            auto* index = schema->MutableLocalHnswIndex();
+            const bool first = schema == &firstSchema;
+            TPathId(1, first ? 2 : 3).ToProto(index->MutableIndexId());
+            index->MutableHnswIndexDescription()->SetEmbeddingColumnId(first ? 42 : 43);
+            index->MutableHnswIndexDescription()->MutableSettings()->mutable_settings()->set_vector_dimension(2);
+        }
+        TUserTable first(1, firstSchema, 0), second(2, secondSchema, 0);
+        NKikimrSchemeOp::TTableDescription disable;
+        TPathId(1, 2).ToProto(disable.MutableLocalHnswIndex()->MutableIndexId());
+        first.UpdateLocalHnswIndex(disable);
+        first.GetSchema(firstSchema);
+        second.GetSchema(secondSchema);
+        TUserTable restoredFirst(1, firstSchema, 0), restoredSecond(2, secondSchema, 0);
+        UNIT_ASSERT(restoredFirst.HnswIndexes.empty());
+        UNIT_ASSERT_VALUES_EQUAL(restoredSecond.HnswIndexes.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(restoredSecond.HnswIndexes.at(TPathId(1, 3)).VectorColumnTag, 43u);
+    }
+
+    Y_UNIT_TEST(HnswLogicalIndexesAreSeparateFromLocalGraphs) {
+        NKikimrSchemeOp::TTableDescription schema;
+        schema.SetPath("/Root/posting");
+        NKikimrSchemeOp::TIndexDescription child;
+        child.SetName("child");
+        child.SetPathOwnerId(1);
+        child.SetLocalPathId(3);
+        child.SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+        auto* description = child.MutableHnswIndexDescription();
+        description->MutableSettings()->mutable_settings()->set_vector_dimension(2);
+        description->SetEmbeddingColumnId(42);
+
+        // Even a logical index description carrying graph settings must not
+        // configure a local graph or make its column id meaningful on this table.
+        auto baseSchema = schema;
+        baseSchema.AddTableIndexes()->CopyFrom(child);
+        TUserTable baseTable(1, baseSchema, 0);
+        UNIT_ASSERT(baseTable.HnswIndexes.empty());
+        UNIT_ASSERT_VALUES_EQUAL(baseTable.Indexes.size(), 1u);
+
+        auto* local = schema.MutableLocalHnswIndex();
+        TPathId(1, 2).ToProto(local->MutableIndexId());
+        *local->MutableHnswIndexDescription() = *description;
+        TUserTable table(1, schema, 0);
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.size(), 1u);
+        UNIT_ASSERT(table.Indexes.empty());
+        table.AddIndex(child);
+        UNIT_ASSERT_VALUES_EQUAL(table.Indexes.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.at(TPathId(1, 2)).VectorColumnTag, 42);
+        UNIT_ASSERT(!table.HnswIndexes.contains(TPathId(1, 3)));
+        table.SwitchIndexState(TPathId(1, 3), NKikimrSchemeOp::EIndexStateWriteOnly);
+        table.GetSchema(schema);
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetTableIndexes(0).GetState(), NKikimrSchemeOp::EIndexStateWriteOnly);
+        UNIT_ASSERT(schema.HasLocalHnswIndex());
+        TUserTable restored(1, schema, 0);
+        UNIT_ASSERT_VALUES_EQUAL(restored.HnswIndexes.size(), 1u);
+        restored.DropIndex(TPathId(1, 3));
+        UNIT_ASSERT(restored.Indexes.empty());
+        UNIT_ASSERT_VALUES_EQUAL(restored.HnswIndexes.size(), 1u);
+        restored.GetSchema(schema);
+        UNIT_ASSERT_VALUES_EQUAL(schema.TableIndexesSize(), 0);
+        UNIT_ASSERT(schema.HasLocalHnswIndex());
+        TUserTable dropped(1, schema, 0);
+        UNIT_ASSERT(dropped.Indexes.empty());
+        UNIT_ASSERT_VALUES_EQUAL(dropped.HnswIndexes.size(), 1u);
+    }
+
+
+    Y_UNIT_TEST_TWIN(HnswRequiresDeclaredVectorColumn, WrongColumn) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TTestHelper helper(settings);
+        helper.CreateCustomTable("exact-vector", {{"key", "Uint32", true, false}, {"emb", "String", false, false},
+                                                  {"other", "String", false, false}}, WrongColumn);
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/exact-vector` (key, emb) VALUES
+                (1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
+                (2, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
+        )");
+        auto& runtime = *helper.Server->GetRuntime();
+        auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(
+            ResolveTablet(runtime, helper.Tables.at("exact-vector").TabletId)));
+        UNIT_ASSERT(shard);
+        const auto tid = shard->GetUserTables().begin()->second->LocalTid;
+        for (ui64 readId = 1; readId <= 5; ++readId) {
+            auto request = helper.GetBaseReadRequest("exact-vector", readId, NKikimrDataEvents::FORMAT_CELLVEC);
+            request->Record.ClearSnapshot();
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(1); // HNSW metadata, if present, belongs to column 3.
+            top->SetLimit(1);
+            top->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            auto* vector = top->MutableSettings();
+            vector->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            vector->set_vector_dimension(2);
+            vector->set_min_rows(1);
+            auto result = helper.SendRead("exact-vector", request.release());
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[0].template AsValue<ui32>(), 1u);
+            runtime.SimulateSleep(TDuration::Seconds(6));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(shard->GetHnswBuildToken(tid), 0u);
+        UNIT_ASSERT(!shard->IsHnswCacheMemoryLimitKnown());
+    }
+
+    void TestHnswSmallShardBuildResumesAfterGrowth(bool growthDuringScan, bool lowerMinRows = false, bool emptyShard = false) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TTestHelper helper(settings);
+        helper.CreateCustomTable("small-hnsw", {{"key", "Uint32", true, false}, {"emb", "String", false, false}}, true);
+        if (!emptyShard) {
+            ExecSQL(helper.Server, helper.Sender, R"(
+                UPSERT INTO `/Root/small-hnsw` (key, emb) VALUES
+                    (1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
+                    (2, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
+            )");
+        }
+        auto& runtime = *helper.Server->GetRuntime();
+        auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(
+            ResolveTablet(runtime, helper.Tables.at("small-hnsw").TabletId)));
+        UNIT_ASSERT(shard);
+        const auto tid = shard->GetUserTables().begin()->second->LocalTid;
+        TVector<TAutoPtr<IEventHandle>> pending;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 35;
+            if (growthDuringScan && ev->GetTypeRewrite() == buildResult) {
+                pending.push_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER {
+            runtime.SetObserverFunc(observer);
+        };
+        ui64 readId = 0;
+        ui64 minRows = emptyShard ? 0 : 3;
+        auto read = [&] {
+            auto request = helper.GetBaseReadRequest("small-hnsw", ++readId, NKikimrDataEvents::FORMAT_CELLVEC);
+            request->Record.ClearSnapshot();
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(1);
+            top->SetLimit(1);
+            top->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            auto* vector = top->MutableSettings();
+            vector->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            vector->set_vector_dimension(2);
+            vector->set_min_rows(minRows);
+            auto result = helper.SendRead("small-hnsw", request.release());
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            return result->Record.GetStats().GetRows();
+        };
+        for (ui32 attempt = 0; attempt < 20 && !shard->GetHnswBuildToken(tid); ++attempt) {
+            UNIT_ASSERT_VALUES_EQUAL(read(), emptyShard ? 0u : 2u);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        if (growthDuringScan) {
+            runtime.WaitFor("small HNSW snapshot scan", [&] { return !pending.empty(); });
+        }
+        const auto token = shard->GetHnswBuildToken(tid);
+        UNIT_ASSERT(token);
+        for (ui32 attempt = 0; attempt < 5; ++attempt) {
+            runtime.SimulateSleep(TDuration::Seconds(6));
+            UNIT_ASSERT_VALUES_EQUAL(read(), emptyShard ? 0u : 2u);
+            UNIT_ASSERT_VALUES_EQUAL(shard->GetHnswBuildToken(tid), token);
+        }
+        if (lowerMinRows) {
+            minRows = 1;
+        } else {
+            ExecSQL(helper.Server, helper.Sender, R"(
+                UPSERT INTO `/Root/small-hnsw` (key, emb) VALUES
+                    (3, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            )");
+        }
+        runtime.SetObserverFunc(observer);
+        for (auto& event : pending) {
+            runtime.Send(event.Release());
+        }
+        bool cached = false;
+        for (ui32 attempt = 0; attempt < 20 && !cached; ++attempt) {
+            cached = read() == 1 && bool(shard->GetHnswIndex(tid, 2,
+                                                             shard->GetUserTables().begin()->second->HnswIndexes.begin()->second.Settings, false));
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_C(cached, "growth did not re-enable the HNSW build");
+    }
+
+    Y_UNIT_TEST(HnswSmallShardBuildResumesAfterGrowth) {
+        TestHnswSmallShardBuildResumesAfterGrowth(false);
+    }
+
+    Y_UNIT_TEST(HnswSmallShardGrowthDuringScan) {
+        TestHnswSmallShardBuildResumesAfterGrowth(true);
+    }
+
+    Y_UNIT_TEST(HnswSmallShardBuildResumesAfterSettingsChange) {
+        TestHnswSmallShardBuildResumesAfterGrowth(false, true);
+    }
+
+    Y_UNIT_TEST(HnswEmptyShardDisablesBuildWithZeroMinRows) {
+        TestHnswSmallShardBuildResumesAfterGrowth(false, false, true);
+    }
+
+    Y_UNIT_TEST_TWIN(HnswFeatureFlagCache, DisableDuringBuild) {
+        constexpr bool Followers = false;
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
+        settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TTestHelper helper(settings, 1, Followers);
+        helper.CreateCustomTable("hnsw-flag", {{"parent", "Uint32", true, false}, {"key", "Uint32", true, false},
+                                               {"emb", "String", false, false}}, true);
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-flag` (parent, key, emb) VALUES
+                (1, 1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
+                (1, 2, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
+        )");
+        auto& runtime = *helper.Server->GetRuntime();
+        const auto snapshot = CreateVolatileSnapshot(helper.Server, {"/Root/hnsw-flag"}, TDuration::Hours(1));
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        ui64 readId = 0;
+        auto read = [&] {
+            auto request = helper.GetBaseReadRequest("hnsw-flag", ++readId,
+                                                     NKikimrDataEvents::FORMAT_CELLVEC, Followers ? snapshot : TRowVersion{});
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(2);
+            top->SetLimit(1);
+            top->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            auto* vectorSettings = top->MutableSettings();
+            vectorSettings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            vectorSettings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            vectorSettings->set_vector_dimension(2);
+            vectorSettings->set_min_rows(1);
+            auto result = helper.SendRead("hnsw-flag", request.release());
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[1].template AsValue<ui32>(), 1u);
+            return result->Record.GetStats().GetRows();
+        };
+        auto setEnabled = [&](bool enabled) {
+            for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+                runtime.GetAppData(node).FeatureFlags.SetEnableHnswIndex(enabled);
+            }
+        };
+        // Default-off reads stay correct and never become accelerated.
+        for (ui32 i = 0; i < 3; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(read(), 2u);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        if (DisableDuringBuild) {
+            TVector<TAutoPtr<IEventHandle>> pending;
+            constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 35;
+            auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == buildResult) {
+                    pending.push_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+            Y_DEFER {
+                runtime.SetObserverFunc(observer);
+            };
+            setEnabled(true);
+            for (ui32 attempt = 0; attempt < 30 && pending.empty(); ++attempt) {
+                read();
+                runtime.SimulateSleep(TDuration::MilliSeconds(200));
+            }
+            UNIT_ASSERT_C(!pending.empty(), "HNSW build did not produce a result");
+            setEnabled(false);
+            UNIT_ASSERT_VALUES_EQUAL(read(), 2u);
+            runtime.SetObserverFunc(observer);
+            for (auto& ev : pending) {
+                runtime.Send(ev.Release());
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+            UNIT_ASSERT_VALUES_EQUAL(read(), 2u);
+        }
+        for (ui32 cycle = 0; cycle < 2; ++cycle) {
+            setEnabled(true);
+            bool accelerated = false;
+            for (ui32 attempt = 0; attempt < 30; ++attempt) {
+                if (read() == 1) {
+                    accelerated = true;
+                    break;
+                }
+                runtime.SimulateSleep(TDuration::MilliSeconds(200));
+            }
+            UNIT_ASSERT_C(accelerated, "enabling HNSW did not enable the cache");
+            setEnabled(false);
+            UNIT_ASSERT_VALUES_EQUAL(read(), 2u);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(HnswPrefixRangeUsesLegacyBorders, Distinct) {
+        constexpr bool Followers = false;
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
+        serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TTestHelper helper(serverSettings, 1, Followers);
+        helper.CreateCustomTable("table-vector-prefix", {{"parent", "Uint64", true, false},
+                                                         {"key", "Uint64", true, false},
+                                                         {"emb", "String", false, false}}, true, {}, [](auto& table) {
+            table.MutableLocalHnswIndex()->MutableHnswIndexDescription()->MutableSettings()->mutable_settings()
+                ->set_metric(Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
+        });
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-vector-prefix` (parent, key, emb) VALUES
+                (9223372036854775809ul, 1ul, "\x00\x00\xC8\x42\x00\x00\x00\x00\x01"),
+                (9223372036854775810ul, 2ul, "\x00\x00\x00\x40\x00\x00\x00\x00\x01"),
+                (9223372036854775810ul, 3ul, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
+                (9223372036854775811ul, 4ul, "\x00\x00\x48\x43\x00\x00\x00\x00\x01");
+        )");
+        auto& runtime = *helper.Server->GetRuntime();
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        constexpr ui64 previous = (ui64(1) << 63) + 1;
+        constexpr ui64 selected = previous + 1;
+        ui64 readId = 0;
+        auto read = [&](bool restricted) {
+            // Avoid creating a new volatile snapshot on every probe: that
+            // advances the follower edge and prevents a repeatable HEAD cache.
+            auto request = helper.GetBaseReadRequest("table-vector-prefix", ++readId,
+                                                     NKikimrDataEvents::FORMAT_CELLVEC, TRowVersion::Max());
+            request->Record.ClearSnapshot();
+            if (restricted) {
+                // Exactly the legacy prefix range produced by VectorSearch:
+                // (previous,+inf) .. (selected,+inf], excluding ALL previous keys.
+                AddRangeQuery<ui64>(*request, {previous}, false, {selected}, true);
+            } else {
+                AddRangeQuery<ui64>(*request, {}, true, {}, true);
+            }
+            auto* topK = request->Record.MutableVectorTopK();
+            topK->SetColumn(2);
+            topK->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            topK->SetLimit(1);
+            if (Distinct) {
+                topK->AddDistinctColumns(1);
+            }
+            auto* settings = topK->MutableSettings();
+            settings->set_metric(Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
+            settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            settings->set_vector_dimension(2);
+            settings->set_min_rows(1);
+            return helper.SendRead("table-vector-prefix", request.release());
+        };
+        const auto cold = read(true);
+        UNIT_ASSERT_VALUES_EQUAL(cold->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(cold->GetRowsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cold->GetCells(0)[0].template AsValue<ui64>(), selected);
+        bool accelerated = false;
+        for (ui32 attempt = 0; attempt < 20; ++attempt) {
+            auto result = read(false);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            if (result->Record.GetStats().GetRows() == 1) {
+                accelerated = true;
+                break;
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_C(accelerated, "full-range graph did not become ready");
+        auto result = read(true);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(result->Record.GetFinished());
+        CheckResult(helper.Tables.at("table-vector-prefix").UserTable, *result, {
+                                                                                    {TCell::Make(selected), TCell::Make(ui64(2)),
+                                                                                     TCell("\x00\x00\x00\x40\x00\x00\x00\x00\x01", 9)},
+                                                                                },
+                    {NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
+                     NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
+                     NScheme::TTypeInfo(NScheme::NTypeIds::String)});
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 2);
+    }
+
+    void TestHnswDistinctCandidateBudget(ui32 duplicateRows, bool withChanges) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TTestHelper helper(settings);
+        helper.CreateCustomTable("hnsw-distinct", {{"parent", "Uint32", true, false},
+                                                 {"key", "Uint32", true, false},
+                                                 {"emb", "String", false, false}}, true);
+        auto writeRows = [&](bool changed) {
+            TStringBuilder sql;
+            sql << "UPSERT INTO `/Root/hnsw-distinct` (parent, key, emb) VALUES ";
+            for (ui32 parent = 0; parent <= duplicateRows; ++parent) {
+                if (parent) {
+                    sql << ", ";
+                }
+                const bool far = parent == duplicateRows;
+                sql << "(" << parent << ", " << (far ? 2 : 1) << ", "
+                    << (far ? "\"\\x00\\x00\\x80\\xBF" : "\"\\x00\\x00\\x80\\x3F")
+                    << (changed ? "\\x00\\x00\\x00\\x3F\\x01\")" : "\\x00\\x00\\x00\\x00\\x01\")");
+            }
+            // Duplicate keys are closest to (1, 0); key 2 is farther away.
+            // Changing the second component from 0 to 0.5 preserves this order.
+            sql << ";";
+            ExecSQL(helper.Server, helper.Sender, sql);
+        };
+        writeRows(false);
+
+        auto& runtime = *helper.Server->GetRuntime();
+        ui64 readId = 0;
+        auto read = [&](bool distinct) {
+            auto request = helper.GetBaseReadRequest("hnsw-distinct", ++readId,
+                NKikimrDataEvents::FORMAT_CELLVEC, TRowVersion::Max());
+            request->Record.ClearSnapshot();
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(2);
+            top->SetLimit(distinct ? 2 : 1);
+            top->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            if (distinct) {
+                top->AddDistinctColumns(1);
+            }
+            auto* vector = top->MutableSettings();
+            vector->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            vector->set_vector_dimension(2);
+            vector->set_min_rows(1);
+            vector->set_delta_rows(1000);
+            auto result = helper.SendRead("hnsw-distinct", request.release());
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            return result;
+        };
+        bool accelerated = false;
+        for (ui32 attempt = 0; attempt < 30; ++attempt) {
+            if (read(false)->Record.GetStats().GetRows() == 1) {
+                accelerated = true;
+                break;
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_C(accelerated, "HNSW graph did not become ready");
+        if (withChanges) {
+            writeRows(true);
+            auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(
+                ResolveTablet(runtime, helper.Tables.at("hnsw-distinct").TabletId)));
+            UNIT_ASSERT(shard);
+            const auto& table = *shard->GetUserTables().begin()->second;
+            auto graph = shard->GetHnswIndex(table.LocalTid, 3, table.HnswIndexes.begin()->second.Settings, false);
+            UNIT_ASSERT(graph);
+            UNIT_ASSERT_VALUES_EQUAL(graph->ChangeCount(), duplicateRows + 1);
+        }
+
+        auto result = read(true);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[1].AsValue<ui32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(1)[1].AsValue<ui32>(), 2);
+        // Enough duplicates must exhaust the ANN budget and take the exact scan,
+        // even though wider graph searches could eventually find the second key.
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), duplicateRows > 2 ? duplicateRows + 1 : 2);
+    }
+
+    Y_UNIT_TEST_TWIN(HnswDistinctCandidateBudgetFallsBack, WithChanges) {
+        TestHnswDistinctCandidateBudget(16, WithChanges);
+    }
+
+    Y_UNIT_TEST(HnswDistinctCandidateBudgetAllowsOneExpansion) {
+        TestHnswDistinctCandidateBudget(2, false);
+    }
+
+    Y_UNIT_TEST_TWIN(HnswMaterializationRetriesExternalBlobs, ExternalEmbedding) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true)
+            .AddStoragePool("ssd").AddStoragePool("hdd").AddStoragePool("ext");
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TTestHelper helper(settings);
+        const TShardedTableOptions::TFamily family = {
+            .Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd",
+            .ExternalPoolKind = "ext", .DataThreshold = 1u, .ExternalThreshold = ExternalEmbedding ? 8u : 1_KB,
+        };
+        helper.CreateCustomTable("hnsw-blobs", {{"key", "Uint32", true, false},
+                                              {"payload", "String", false, false},
+                                              {"emb", "String", false, false}}, true, {family});
+        const TString payload(2_KB, 'x');
+        ExecSQL(helper.Server, helper.Sender, TStringBuilder()
+            << "UPSERT INTO `/Root/hnsw-blobs` (key, payload, emb) VALUES "
+            << "(1, \"inline\", \"\\x00\\x00\\x80\\x3F\\x00\\x00\\x00\\x00\\x01\"), "
+            << "(2, \"" << payload << "\", \"\\x00\\x00\\x00\\x00\\x00\\x00\\x80\\x3F\\x01\"), "
+            << "(3, \"unused\", \"\\x00\\x00\\x80\\xBF\\x00\\x00\\x00\\x00\\x01\");");
+        auto& runtime = *helper.Server->GetRuntime();
+        Ydb::Table::VectorIndexSettings vectorSettings;
+        vectorSettings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        vectorSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        vectorSettings.set_vector_dimension(2);
+        vectorSettings.set_min_rows(1);
+        vectorSettings.set_delta_rows(1000);
+        ui64 readId = 0;
+        auto read = [&] {
+            auto request = helper.GetBaseReadRequest("hnsw-blobs", ++readId,
+                NKikimrDataEvents::FORMAT_CELLVEC, TRowVersion::Max());
+            request->Record.ClearSnapshot();
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(2);
+            top->SetLimit(2);
+            top->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            *top->MutableSettings() = vectorSettings;
+            auto result = helper.SendRead("hnsw-blobs", request.release());
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            return result;
+        };
+        bool accelerated = false;
+        for (ui32 attempt = 0; attempt < 30; ++attempt) {
+            if (read()->Record.GetStats().GetRows() == 2) {
+                accelerated = true;
+                break;
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_C(accelerated, "HNSW graph did not become ready");
+
+        // Build from in-memory rows, then write cold external blobs while keeping
+        // the graph. Neither compaction nor the graph scan preloads these blobs.
+        const auto& table = helper.Tables.at("hnsw-blobs");
+        CompactTable(runtime, table.TabletId, table.TableId, false);
+        ui32 blobRequests = 0;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvGet::EventType) {
+                blobRequests += ev->Get<TEvBlobStorage::TEvGet>()->QuerySize;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+
+        const auto result = read();
+        UNIT_ASSERT_GT(blobRequests, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[0].template AsValue<ui32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(1)[0].template AsValue<ui32>(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[1].AsBuf(), "inline");
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(1)[1].AsBuf(), payload);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[2].AsBuf(),
+            TStringBuf("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(1)[2].AsBuf(),
+            TStringBuf("\x00\x00\x00\x00\x00\x00\x80\x3F\x01", 9));
+    }
+
+    Y_UNIT_TEST(HnswSharesPageCacheBudgetAndEvictsOnLimit) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
+        serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TTestHelper helper(serverSettings);
+        helper.CreateCustomTable("table-vector-memory", {{"parent", "Uint32", true, false},
+                                                         {"key", "Uint32", true, false},
+                                                         {"emb", "String", false, false}}, true);
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-vector-memory` (parent, key, emb) VALUES
+                (1, 1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
+                (1, 2, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
+        )");
+        auto& runtime = *helper.Server->GetRuntime();
+        const auto shardActor = ResolveTablet(runtime, helper.Tables.at("table-vector-memory").TabletId);
+        auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(shardActor));
+        UNIT_ASSERT(shard);
+        const auto localTid = shard->GetUserTables().begin()->second->LocalTid;
+        TIntrusivePtr<NMemory::TRegistrantConsumer> consumer;
+        ui32 registrations = 0;
+        std::optional<ui64> limitOverride;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegister::EventType && ev->Sender == shardActor) {
+                UNIT_ASSERT(ev->Get<NMemory::TEvConsumerRegister>()->Kind == NMemory::EMemoryConsumerKind::SharedCache);
+                ++registrations;
+            } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegistered::EventType && ev->Recipient == shardActor) {
+                consumer = dynamic_cast<NMemory::TRegistrantConsumer*>(ev->Get<NMemory::TEvConsumerRegistered>()->Consumer.Get());
+            } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType && ev->Recipient == shardActor && limitOverride) {
+                ev->Get<NMemory::TEvConsumerLimit>()->LimitBytes = *limitOverride;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER {
+            runtime.SetObserverFunc(observer);
+        };
+
+        Ydb::Table::VectorIndexSettings settings;
+        settings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.set_vector_dimension(2);
+        settings.set_min_rows(1);
+        // Isolate the reader's pinned graph and journal from rebuild buffers.
+        settings.set_delta_rows(1000);
+        ui64 readId = 0;
+        auto read = [&] {
+            auto request = helper.GetBaseReadRequest("table-vector-memory", ++readId, NKikimrDataEvents::FORMAT_CELLVEC);
+            request->Record.ClearSnapshot();
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* topK = request->Record.MutableVectorTopK();
+            topK->SetColumn(2);
+            topK->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            topK->SetLimit(1);
+            topK->AddDistinctColumns(1);
+            *topK->MutableSettings() = settings;
+            return helper.SendRead("table-vector-memory", request.release());
+        };
+        auto cached = [&] { return shard->GetHnswIndex(localTid, 3, settings, false); };
+        auto warmCache = [&] {
+            for (ui32 attempt = 0; attempt < 20 && !cached(); ++attempt) {
+                read();
+                runtime.SimulateSleep(TDuration::MilliSeconds(200));
+            }
+            UNIT_ASSERT(cached());
+        };
+        warmCache();
+        UNIT_ASSERT_VALUES_EQUAL(registrations, 1);
+        UNIT_ASSERT(consumer);
+        UNIT_ASSERT_GT(consumer->GetReport().Used, 0);
+        UNIT_ASSERT_GT(shard->GetHnswCacheMemoryLimit(), 0);
+        UNIT_ASSERT_LT(shard->GetHnswCacheMemoryLimit(), 64_MB);
+        UNIT_ASSERT_VALUES_EQUAL(read()->Record.GetStats().GetRows(), 1);
+
+        // Simulate an active reader pinning a graph and its write deltas.
+        auto pinned = cached();
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-vector-memory` (parent, key, emb) VALUES
+                (1, 3, "\x00\x00\x00\x00\x00\x00\x80\xBF\x01");
+        )");
+        const ui64 pinnedBytes = consumer->GetReport().Used;
+        limitOverride = 0;
+        runtime.Send(new IEventHandle(shardActor, helper.Sender, new NMemory::TEvConsumerLimit(0)));
+        runtime.WaitFor("HNSW cache eviction", [&] { return !cached(); });
+        UNIT_ASSERT_VALUES_EQUAL(consumer->GetReport().Used, pinnedBytes);
+        UNIT_ASSERT_VALUES_EQUAL(read()->Record.GetStats().GetRows(), 3);
+        pinned.reset();
+        runtime.WaitFor("released HNSW reservations", [&] { return consumer->GetReport().Used == 0; });
+
+        limitOverride.reset();
+        warmCache();
+        UNIT_ASSERT_VALUES_EQUAL(registrations, 1);
+        UNIT_ASSERT_VALUES_EQUAL(read()->Record.GetStats().GetRows(), 1);
+    }
+
+    Y_UNIT_TEST(HnswMvccBuildCatchesConcurrentWrites) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false);
+        serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+        serverSettings.SetNeedStatsCollectors(true);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TTestHelper helper(serverSettings);
+
+        TVector<TShardedTableOptions::TColumn> columns = {
+            {"parent", "Uint32", true, false},
+            {"key", "Uint32", true, false},
+            {"emb", "String", false, false}};
+        helper.CreateCustomTable("table-vector-race", columns, true);
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-vector-race` (parent, key, emb) VALUES
+                (1, 1, "\x66\x66\x66\x3F\xCD\xCC\xCC\x3D\x01"),
+                (1, 2, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
+        )");
+
+        auto makeRequest = [&](ui64 readId) {
+            auto request = helper.GetBaseReadRequest(
+                "table-vector-race", readId, NKikimrDataEvents::FORMAT_CELLVEC);
+            request->Record.ClearSnapshot();
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* topK = request->Record.MutableVectorTopK();
+            topK->SetColumn(2);
+            topK->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            topK->SetLimit(1);
+            topK->AddDistinctColumns(1);
+            auto* settings = topK->MutableSettings();
+            settings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            settings->set_vector_dimension(2);
+            settings->set_min_rows(1);
+            settings->set_delta_rows(1000);
+            return request;
+        };
+
+        auto& runtime = *helper.Server->GetRuntime();
+        TVector<TAutoPtr<IEventHandle>> delayedBuildResults;
+        // Keep in sync with TDataShard::TEvPrivate::EvHnswIndexBuildResult.
+        constexpr ui32 hnswBuildResultEvent = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 35;
+        auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == hnswBuildResultEvent) {
+                delayedBuildResults.push_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER {
+            runtime.SetObserverFunc(previousObserver);
+        };
+
+        auto result = helper.SendRead("table-vector-race", makeRequest(1).release());
+        UNIT_ASSERT(result->Record.GetFinished());
+        // Registration and the first controller grant precede lazy construction.
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        result = helper.SendRead("table-vector-race", makeRequest(10).release());
+        runtime.WaitFor("lazy HNSW build result", [&] { return !delayedBuildResults.empty(); });
+
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-vector-race` (parent, key, emb) VALUES
+                (1, 100, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+        )");
+        for (auto& event : delayedBuildResults) {
+            runtime.Send(event.Release());
+        }
+        delayedBuildResults.clear();
+
+        // The original graph installs with the concurrent insert in its journal.
+        // The write and foreground reads did not wait for the delayed build.
+        result = helper.SendRead("table-vector-race", makeRequest(2).release());
+        CheckResult(helper.Tables.at("table-vector-race").UserTable, *result, {
+                                                                                  {TCell::Make<ui32>(1), TCell::Make<ui32>(100),
+                                                                                   TCell("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9)},
+                                                                              },
+                    {
+                        NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
+                        NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
+                        NScheme::TTypeInfo(NScheme::NTypeIds::String),
+                    });
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1);
+        UNIT_ASSERT(delayedBuildResults.empty());
+
+        result = helper.SendRead("table-vector-race", makeRequest(3).release());
+        CheckResult(helper.Tables.at("table-vector-race").UserTable, *result, {
+                                                                                  {TCell::Make<ui32>(1), TCell::Make<ui32>(100),
+                                                                                   TCell("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9)},
+                                                                              },
+                    {
+                        NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
+                        NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
+                        NScheme::TTypeInfo(NScheme::NTypeIds::String),
+                    });
+    }
+
+    Y_UNIT_TEST_TWIN(HnswMvccReadsIntermediateInsertAfterDelete, Rebuild) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
+        settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        settings.AppConfig->MutableDataShardConfig()->SetKeepSnapshotTimeout(1000);
+        settings.AppConfig->MutableDataShardConfig()->SetCleanupSnapshotPeriod(100);
+        TTestHelper helper(settings);
+        helper.CreateCustomTable("hnsw-mvcc", {{"parent", "Uint32", true, false}, {"key", "Uint32", true, false},
+                                               {"emb", "String", false, false}}, true);
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-mvcc` (parent, key, emb) VALUES
+                (1, 1, "\x66\x66\x66\x3F\xCD\xCC\xCC\x3D\x01"),
+                (1, 2, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
+        )");
+        auto& runtime = *helper.Server->GetRuntime();
+        const auto shardActor = ResolveTablet(runtime, helper.Tables.at("hnsw-mvcc").TabletId);
+        auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(shardActor));
+        UNIT_ASSERT(shard);
+        const auto tid = shard->GetUserTables().begin()->second->LocalTid;
+        Ydb::Table::VectorIndexSettings indexSettings;
+        indexSettings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        indexSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        indexSettings.set_vector_dimension(2);
+        indexSettings.set_min_rows(1);
+        indexSettings.set_delta_rows(Rebuild ? 1 : 1000);
+        ui64 readId = 0;
+        auto read = [&](TRowVersion version) {
+            auto request = helper.GetBaseReadRequest("hnsw-mvcc", ++readId,
+                                                     NKikimrDataEvents::FORMAT_CELLVEC, version);
+            if (version.IsMax()) {
+                request->Record.ClearSnapshot();
+            }
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(2);
+            top->SetLimit(1);
+            top->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            *top->MutableSettings() = indexSettings;
+            auto result = helper.SendRead("hnsw-mvcc", request.release());
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 1);
+            return result;
+        };
+        for (ui32 attempt = 0; attempt < 20 && !shard->GetHnswIndex(tid, 3, indexSettings, false); ++attempt) {
+            read(TRowVersion::Max());
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT(shard->GetHnswIndex(tid, 3, indexSettings, false));
+        const auto before = CreateVolatileSnapshot(helper.Server, {"/Root/hnsw-mvcc"}, TDuration::Hours(1));
+        auto original = shard->GetHnswIndex(tid, 3, indexSettings, false);
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-mvcc` (parent, key, emb) VALUES
+                (1, 3, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+        )");
+        const auto inserted = CreateVolatileSnapshot(helper.Server, {"/Root/hnsw-mvcc"}, TDuration::Hours(1));
+        ExecSQL(helper.Server, helper.Sender, "DELETE FROM `/Root/hnsw-mvcc` WHERE parent=1 AND key=3;");
+        const auto deleted = CreateVolatileSnapshot(helper.Server, {"/Root/hnsw-mvcc"}, TDuration::Hours(1));
+        for (const auto& [version, expected] : std::vector<std::pair<TRowVersion, ui32>>{
+                 {before, 1}, {inserted, 3}, {deleted, 1}}) {
+            auto result = read(version);
+            UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[1].template AsValue<ui32>(), expected);
+            // Assert acceleration, not just correctness of the fallback scan.
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1);
+        }
+        if (Rebuild) {
+            // Inserting and deleting the same key changes one distinct row:
+            // exactly delta_rows=1, so no automatic rebuild may have started.
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+            UNIT_ASSERT(shard->GetHnswIndex(tid, 3, indexSettings, false) == original);
+            TVector<TAutoPtr<IEventHandle>> delayed;
+            bool capture = true;
+            constexpr ui32 buildResultEvent = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 35;
+            auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (capture && ev->GetTypeRewrite() == buildResultEvent) {
+                    delayed.push_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+            Y_DEFER {
+                runtime.SetObserverFunc(observer);
+            };
+            ExecSQL(helper.Server, helper.Sender, R"(
+                UPSERT INTO `/Root/hnsw-mvcc` (parent, key, emb) VALUES
+                    (1, 2, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            )");
+            runtime.WaitFor("automatic HNSW rebuild", [&] { return !delayed.empty(); });
+            UNIT_ASSERT_VALUES_EQUAL(delayed.size(), 1);
+            // Both a write and a read complete while the rebuild is suspended.
+            ExecSQL(helper.Server, helper.Sender, R"(
+                UPSERT INTO `/Root/hnsw-mvcc` (parent, key, emb) VALUES
+                    (1, 4, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(read(TRowVersion::Max())->GetCells(0)[1].template AsValue<ui32>(), 4);
+            UNIT_ASSERT(shard->GetHnswIndex(tid, 3, indexSettings, false) == original);
+            capture = false;
+            for (auto& ev : delayed) {
+                runtime.Send(ev.Release());
+            }
+            runtime.WaitFor("published HNSW rebuild", [&] {
+                auto current = shard->GetHnswIndex(tid, 3, indexSettings, false);
+                return current && current != original;
+            });
+            auto current = shard->GetHnswIndex(tid, 3, indexSettings, false);
+            UNIT_ASSERT_VALUES_EQUAL(current->Size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(current->ChangeCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(read(TRowVersion::Max())->GetCells(0)[1].template AsValue<ui32>(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(read(inserted)->GetCells(0)[1].template AsValue<ui32>(), 3);
+            // A completely erased table can publish an empty generation.
+            ExecSQL(helper.Server, helper.Sender, "DELETE FROM `/Root/hnsw-mvcc` WHERE parent=1;");
+            runtime.WaitFor("empty HNSW rebuild", [&] {
+                auto empty = shard->GetHnswIndex(tid, 3, indexSettings, false);
+                return empty && empty->Size() == 0;
+            });
+            const auto emptyBase = shard->GetHnswIndex(tid, 3, indexSettings, false)->GetBaseVersion();
+            runtime.SimulateSleep(TDuration::Seconds(10));
+            UNIT_ASSERT(shard->GetSnapshotManager().GetLowWatermark() >= emptyBase);
+            // Explicit snapshots below the watermark still keep their generation.
+            UNIT_ASSERT(shard->GetHnswIndex(tid, 3, indexSettings, false, before) == original);
+            UNIT_ASSERT(DiscardVolatileSnapshot(helper.Server, {"/Root/hnsw-mvcc"}, before));
+            UNIT_ASSERT(DiscardVolatileSnapshot(helper.Server, {"/Root/hnsw-mvcc"}, inserted));
+            UNIT_ASSERT(DiscardVolatileSnapshot(helper.Server, {"/Root/hnsw-mvcc"}, deleted));
+            runtime.SimulateSleep(TDuration::Seconds(6));
+            UNIT_ASSERT(!shard->GetHnswIndex(tid, 3, indexSettings, false, before));
+            // Cache retirement cannot destroy a reader's owning reference.
+            std::weak_ptr<THnswIndex> oldGraph = original;
+            UNIT_ASSERT(!oldGraph.expired());
+            original.reset();
+            UNIT_ASSERT(oldGraph.expired());
+        }
+    }
+
+    Y_UNIT_TEST(HnswMvccColdHistoricalReadDoesNotPoisonHead) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
+        settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TTestHelper helper(settings);
+        helper.CreateCustomTable("hnsw-cold", {{"key", "Uint32", true, false}, {"emb", "String", false, false}}, true);
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-cold` (key, emb) VALUES
+                (1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
+                (2, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+        )");
+        const auto old = CreateVolatileSnapshot(helper.Server, {"/Root/hnsw-cold"}, TDuration::Hours(1));
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-cold` (key, emb) VALUES
+                (1, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01"),
+                (2, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+        )");
+        auto& runtime = *helper.Server->GetRuntime();
+        auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(
+            ResolveTablet(runtime, helper.Tables.at("hnsw-cold").TabletId)));
+        UNIT_ASSERT(shard);
+        const auto tid = shard->GetUserTables().begin()->second->LocalTid;
+        Ydb::Table::VectorIndexSettings indexSettings;
+        indexSettings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        indexSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        indexSettings.set_vector_dimension(2);
+        indexSettings.set_min_rows(1);
+        ui64 id = 0;
+        auto read = [&](TRowVersion version, ui32 expected) {
+            auto request = helper.GetBaseReadRequest("hnsw-cold", ++id, NKikimrDataEvents::FORMAT_CELLVEC, version);
+            if (version.IsMax()) {
+                request->Record.ClearSnapshot();
+            }
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(1);
+            top->SetLimit(1);
+            top->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            *top->MutableSettings() = indexSettings;
+            auto result = helper.SendRead("hnsw-cold", request.release());
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[0].AsValue<ui32>(), expected);
+            return result->Record.GetStats().GetRows();
+        };
+        for (ui32 attempt = 0; attempt < 20 && !shard->GetHnswIndex(tid, 2, indexSettings, false); ++attempt) {
+            UNIT_ASSERT_VALUES_EQUAL(read(old, 1), 2);
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT(shard->GetHnswIndex(tid, 2, indexSettings, false));
+        UNIT_ASSERT_VALUES_EQUAL(read(TRowVersion::Max(), 2), 1);
+        UNIT_ASSERT_VALUES_EQUAL(read(old, 1), 2);
+        UNIT_ASSERT(!shard->GetHnswIndex(tid, 2, indexSettings, false, old));
+    }
+
+    struct THnswLifecycleFixture {
+        TPortManager Ports;
+        TTestHelper Helper;
+        ui64 ReadId = 0;
+
+        static TServerSettings Configure(TPortManager& ports) {
+            TServerSettings settings(ports.GetPort(2134));
+            settings.SetDomainName("Root").SetEnableHnswIndex(true).SetEnableForceImmediateEffectsExecution(true).SetUseRealThreads(false).SetNeedStatsCollectors(true);
+            settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+            settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
+            settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+            settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+            return settings;
+        }
+
+        explicit THnswLifecycleFixture(bool follower = false, bool annotate = true,
+                bool shadow = false, ui64 minRows = 1)
+            : Helper(Configure(Ports), 1, follower)
+        {
+            TVector<TShardedTableOptions::TColumn> columns = {{"key", "Uint32", true, false}, {"label", "Uint32", false, false},
+                                                             {"emb", "String", false, false}};
+            Helper.CreateCustomTable("hnsw-lifecycle", columns, annotate, {}, [&](auto& table) {
+                if (shadow) { table.MutablePartitionConfig()->SetShadowData(true); }
+                auto* settings = table.MutableLocalHnswIndex()->MutableHnswIndexDescription()->MutableSettings()->mutable_settings();
+                settings->set_m(16);
+                settings->set_min_rows(minRows);
+            });
+            ExecSQL(Helper.Server, Helper.Sender, R"(
+                UPSERT INTO `/Root/hnsw-lifecycle` (key, label, emb) VALUES
+                    (1, 7, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
+                    (2, 8, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
+            )");
+        }
+
+        TDataShard* Shard() {
+            auto& runtime = *Helper.Server->GetRuntime();
+            auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(
+                ResolveTablet(runtime, Helper.Tables.at("hnsw-lifecycle").TabletId)));
+            UNIT_ASSERT(shard);
+            return shard;
+        }
+
+        Ydb::Table::VectorIndexSettings Settings() const {
+            Ydb::Table::VectorIndexSettings settings;
+            settings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            settings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            settings.set_vector_dimension(2);
+            settings.set_min_rows(1);
+            settings.set_delta_rows(1000);
+            return settings;
+        }
+
+        std::shared_ptr<THnswIndex> Index() {
+            auto* shard = Shard();
+            const auto tid = shard->GetUserTables().begin()->second->LocalTid;
+            return shard->GetHnswIndex(tid, 3, Settings(), false);
+        }
+
+        std::unique_ptr<TEvDataShard::TEvRead> Request(TRowVersion version = TRowVersion::Max()) {
+            auto request = Helper.GetBaseReadRequest("hnsw-lifecycle", ++ReadId,
+                                                     NKikimrDataEvents::FORMAT_CELLVEC, version);
+            request->Record.MutableTableId()->ClearSchemaVersion();
+            if (version.IsMax()) {
+                request->Record.ClearSnapshot();
+            }
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(2);
+            top->SetLimit(1);
+            top->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            *top->MutableSettings() = Settings();
+            return request;
+        }
+
+        std::unique_ptr<TEvDataShard::TEvReadResult> Read(ui32 expected = 1) {
+            auto result = Helper.SendRead("hnsw-lifecycle", Request().release());
+            Check(*result, expected);
+            return result;
+        }
+
+        static void Check(const TEvDataShard::TEvReadResult& result, ui32 expected) {
+            UNIT_ASSERT_VALUES_EQUAL(result.Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetRowsCount(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetCells(0)[0].AsValue<ui32>(), expected);
+        }
+
+        void Warm() {
+            auto& runtime = *Helper.Server->GetRuntime();
+            for (ui32 attempt = 0; attempt < 30 && !Index(); ++attempt) {
+                Read();
+                runtime.SimulateSleep(TDuration::MilliSeconds(200));
+            }
+            UNIT_ASSERT(Index());
+            UNIT_ASSERT_VALUES_EQUAL(Read()->Record.GetStats().GetRows(), 1u);
+        }
+    };
+
+    struct THnswIndexFixture : THnswLifecycleFixture {
+        static constexpr ui32 Count = 1;
+        ui64 IndexIdOffset = 0;
+        TVector<Ydb::Table::VectorIndexSettings::Metric> Metrics;
+        TVector<ui64> Thresholds;
+
+        THnswIndexFixture()
+            : Metrics(1, Ydb::Table::VectorIndexSettings::DISTANCE_COSINE), Thresholds(1, 1000)
+        {}
+
+        TPathId Id(ui32 index) {
+            UNIT_ASSERT_VALUES_EQUAL(index, 0u);
+            return {Helper.Tables.at("hnsw-lifecycle").TableId.PathId.OwnerId, Max<ui64>() - 1 - index - IndexIdOffset};
+        }
+
+        ui32 Column(ui32 index) const { UNIT_ASSERT_VALUES_EQUAL(index, 0u); return 3; }
+
+        Ydb::Table::VectorIndexSettings SettingsAt(ui32 index) const {
+            auto settings = Settings();
+            settings.set_m(16 + index);
+            settings.set_metric(Metrics[index]);
+            settings.set_delta_rows(Thresholds[index]);
+            return settings;
+        }
+
+        auto Graph(ui32 index) {
+            return Shard()->GetHnswIndex(Shard()->GetUserTables().begin()->second->LocalTid,
+                Column(index), SettingsAt(index), false, TRowVersion::Max(), Id(index));
+        }
+
+        auto ReadAt(ui32 index, bool explicitId = true, TRowVersion version = TRowVersion::Max()) {
+            auto request = Request(version);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(Column(index) - 1);
+            top->MutableSettings()->set_metric(Metrics[index]);
+            top->MutableSettings()->set_delta_rows(Thresholds[index]);
+            // Missing M is inherited from an explicitly selected index.
+            if (explicitId) { Id(index).ToProto(top->MutableHnswIndexId()); }
+            return Helper.SendRead("hnsw-lifecycle", request.release());
+        }
+
+        void WarmAll() {
+            auto& runtime = *Helper.Server->GetRuntime();
+            for (ui32 attempt = 0; attempt < 60; ++attempt) {
+                bool ready = true;
+                for (ui32 i = 0; i < Count; ++i) { ReadAt(i); ready &= bool(Graph(i)); }
+                if (ready) { return; }
+                runtime.SimulateSleep(TDuration::MilliSeconds(200));
+            }
+            UNIT_FAIL("Not all independent HNSW graphs became ready");
+        }
+
+        // Exercise the actual schema-transaction persistence/reconciliation path.
+        void Alter(ui32 index, bool enabled, ui64 version = 1) {
+            auto& runtime = *Helper.Server->GetRuntime();
+            auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                    auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                    if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                        NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                        UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                        if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
+                            auto* description = tx.MutableAlterTable()->MutableLocalHnswIndex();
+                            Id(index).ToProto(description->MutableIndexId());
+                            description->SetSchemaVersion(version);
+                            auto* hnsw = description->MutableHnswIndexDescription();
+                            if (enabled) {
+                                hnsw->SetEmbeddingColumnId(Column(index));
+                                *hnsw->MutableSettings()->mutable_settings() = SettingsAt(index);
+                            }
+                            UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+                        }
+                    }
+                }
+            });
+            UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime, TStringBuilder()
+                << "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra_" << ++ReadId << " String;"), "SUCCESS");
+        }
+    };
+
+    class THnswTableSetupTx : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+    public:
+        using TBase = NTabletFlatExecutor::TTransactionBase<TDataShard>;
+        using TCallback = std::function<void(TDataShard&, NTabletFlatExecutor::TTransactionContext&)>;
+
+        THnswTableSetupTx(TDataShard* shard, TCallback callback, bool& done)
+            : TBase(shard), Callback(std::move(callback)), Done(done)
+        {}
+
+        bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext&) override {
+            Callback(*Self, txc);
+            return true;
+        }
+
+        void Complete(const TActorContext&) override { Done = true; }
+
+    private:
+        TCallback Callback;
+        bool& Done;
+    };
+
+    class TSubmitHnswTableSetupTx : public TActorBootstrapped<TSubmitHnswTableSetupTx> {
+    public:
+        TSubmitHnswTableSetupTx(NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor,
+                TAutoPtr<NTabletFlatExecutor::ITransaction> tx)
+            : Executor(executor), Tx(std::move(tx))
+        {}
+
+        void Bootstrap() {
+            Executor->Enqueue(Tx);
+            PassAway();
+        }
+
+    private:
+        NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* Executor;
+        TAutoPtr<NTabletFlatExecutor::ITransaction> Tx;
+    };
+
+    // Exercise shard-wide admission and eviction across physical tables. Each
+    // table persists exactly one local HNSW description, as SchemeShard does.
+    struct THnswPhysicalTablesFixture : THnswLifecycleFixture {
+        ui32 Count;
+
+        explicit THnswPhysicalTablesFixture(ui32 count)
+            : Count(count)
+        {
+            auto& runtime = *Helper.Server->GetRuntime();
+            const auto primary = Helper.Tables.at("hnsw-lifecycle");
+            auto* shard = Shard();
+            auto* executor = dynamic_cast<NTabletFlatExecutor::NFlatExecutorSetup::IExecutor*>(
+                runtime.FindActor(shard->ExecutorID()));
+            UNIT_ASSERT(executor);
+            bool done = false;
+            auto create = [&](TDataShard& ds, NTabletFlatExecutor::TTransactionContext& txc) {
+                const auto source = ds.GetUserTables().at(primary.TableId.PathId.LocalPathId);
+                for (ui32 i = 1; i < Count; ++i) {
+                    NKikimrSchemeOp::TTableDescription description;
+                    source->GetSchema(description);
+                    description.SetName(Name(i));
+                    description.SetPath(TStringBuilder() << "/Root/" << Name(i));
+                    const TPathId tableId(primary.TableId.PathId.OwnerId, Max<ui64>() / 2 - i);
+                    tableId.ToProto(description.MutablePathId());
+                    description.SetId_Deprecated(tableId.LocalPathId);
+                    auto* index = description.MutableLocalHnswIndex();
+                    Id(i).ToProto(index->MutableIndexId());
+                    *index->MutableHnswIndexDescription()->MutableSettings()->mutable_settings() = SettingsAt(i);
+                    auto table = ds.CreateUserTable(txc, description);
+                    ds.AddUserTable(tableId, table);
+                    for (ui32 row : {1u, 2u}) {
+                        const auto key = NScheme::TUint32::TInstance(row);
+                        const auto label = NScheme::TUint32::TInstance(6 + row);
+                        const TString vector = row == 1
+                            ? TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9)
+                            : TString("\x00\x00\x00\x00\x00\x00\x80\x3F\x01", 9);
+                        const auto embedding = NScheme::TString::TInstance(vector);
+                        NTable::TUpdateOp updates[] = {{2, NTable::ECellOp::Set, label},
+                                                       {3, NTable::ECellOp::Set, embedding}};
+                        txc.DB.Update(table->LocalTid, NTable::ERowOp::Upsert, {key}, updates);
+                    }
+                }
+            };
+            runtime.Register(new TSubmitHnswTableSetupTx(executor, new THnswTableSetupTx(shard, create, done)));
+            runtime.WaitFor("physical HNSW tables created", [&] { return done; });
+            auto [tables, owner] = GetTables(Helper.Server, primary.TabletId);
+            Y_UNUSED(owner);
+            for (ui32 i = 1; i < Count; ++i) {
+                auto table = primary;
+                table.Name = Name(i);
+                table.TableId.PathId = TPathId(primary.TableId.PathId.OwnerId, Max<ui64>() / 2 - i);
+                table.UserTable = tables.at(Name(i));
+                Helper.Tables[Name(i)] = std::move(table);
+            }
+        }
+
+        TString Name(ui32 index) const {
+            return index ? TString(TStringBuilder() << "hnsw-physical-" << index) : "hnsw-lifecycle";
+        }
+
+        TPathId Id(ui32 index) const {
+            return {Helper.Tables.at("hnsw-lifecycle").TableId.PathId.OwnerId, Max<ui64>() - 1 - index};
+        }
+
+        ui32 Column(ui32) const { return 3; }
+
+        ui32 Tid(ui32 index) {
+            return Shard()->GetUserTables().at(Helper.Tables.at(Name(index)).TableId.PathId.LocalPathId)->LocalTid;
+        }
+
+        Ydb::Table::VectorIndexSettings SettingsAt(ui32 index) const {
+            auto settings = Settings();
+            settings.set_m(16 + index);
+            return settings;
+        }
+
+        auto Graph(ui32 index) {
+            return Shard()->GetHnswIndex(Tid(index), Column(index), SettingsAt(index), false,
+                TRowVersion::Max(), Id(index));
+        }
+
+        auto ReadAt(ui32 index) {
+            auto request = Helper.GetBaseReadRequest(Name(index), ++ReadId,
+                NKikimrDataEvents::FORMAT_CELLVEC, TRowVersion::Max());
+            request->Record.MutableTableId()->ClearSchemaVersion();
+            request->Record.ClearSnapshot();
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(Column(index) - 1);
+            top->SetLimit(1);
+            top->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            *top->MutableSettings() = SettingsAt(index);
+            Id(index).ToProto(top->MutableHnswIndexId());
+            return Helper.SendRead(Name(index), request.release());
+        }
+
+        void WarmAll() {
+            auto& runtime = *Helper.Server->GetRuntime();
+            for (ui32 attempt = 0; attempt < 60; ++attempt) {
+                bool ready = true;
+                for (ui32 i = 0; i < Count; ++i) {
+                    auto result = ReadAt(i);
+                    Check(*result, 1);
+                    ready &= bool(Graph(i));
+                }
+                if (ready) { return; }
+                runtime.SimulateSleep(TDuration::MilliSeconds(200));
+            }
+            UNIT_FAIL("Not all physical HNSW tables became ready");
+        }
+    };
+
+    Y_UNIT_TEST(HnswTableDescriptionMetadataFollowsTableMove) {
+        THnswIndexFixture fixture;
+        fixture.WarmAll();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        auto& table = fixture.Helper.Tables.at("hnsw-lifecycle");
+        const auto oldTableId = table.TableId.PathId;
+        constexpr ui64 indexIdOffset = 100;
+        bool sawMove = false;
+        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != TEvDataShard::TEvProposeTransaction::EventType) { return; }
+            auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+            if (record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) { return; }
+            NKikimrTxDataShard::TFlatSchemeTransaction tx;
+            UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+            if (!tx.HasMoveTable() || TPathId::FromProto(tx.GetMoveTable().GetPathId()) != oldTableId) { return; }
+            // A physical posting-table move also remaps its owning HNSW index.
+            for (ui32 i = 0; i < fixture.Count; ++i) {
+                const auto id = fixture.Id(i);
+                auto* remap = tx.MutableMoveTable()->AddReMapIndexes();
+                id.ToProto(remap->MutableSrcPathId());
+                TPathId(id.OwnerId, id.LocalPathId - indexIdOffset).ToProto(remap->MutableDstPathId());
+            }
+            UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+            sawMove = true;
+        });
+        const auto tx = AsyncMoveTable(fixture.Helper.Server, "/Root/hnsw-lifecycle", "/Root/hnsw-renamed");
+        WaitTxNotification(fixture.Helper.Server, fixture.Helper.Sender, tx);
+        observer.Remove();
+        UNIT_ASSERT(sawMove);
+        fixture.IndexIdOffset = indexIdOffset;
+        table.TableId = ResolveTableId(fixture.Helper.Server, fixture.Helper.Sender, "/Root/hnsw-renamed");
+        table.Name = "hnsw-renamed";
+        table.ClientId = {};
+        UNIT_ASSERT(table.TableId.PathId != oldTableId);
+        auto verifyMetadata = [&] {
+            const auto& metadata = *fixture.Shard()->GetUserTables().at(table.TableId.PathId.LocalPathId);
+            UNIT_ASSERT_VALUES_EQUAL(metadata.HnswIndexes.size(), fixture.Count);
+            NKikimrSchemeOp::TTableDescription schema;
+            metadata.GetSchema(schema);
+            UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(schema.GetPathId()), table.TableId.PathId);
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetId_Deprecated(), table.TableId.PathId.LocalPathId);
+            UNIT_ASSERT(schema.HasLocalHnswIndex());
+            UNIT_ASSERT_VALUES_EQUAL(schema.TableIndexesSize(), 0);
+            for (ui32 i = 0; i < fixture.Count; ++i) {
+                UNIT_ASSERT(metadata.HnswIndexes.contains(fixture.Id(i)));
+            }
+            UNIT_ASSERT(metadata.HnswIndexes.contains(TPathId::FromProto(schema.GetLocalHnswIndex().GetIndexId())));
+        };
+        verifyMetadata();
+        fixture.WarmAll();
+        RebootTablet(runtime, table.TabletId, fixture.Helper.Sender);
+        table.ClientId = {};
+        verifyMetadata();
+        fixture.WarmAll();
+    }
+
+    Y_UNIT_TEST_TWIN(HnswIndexTracksCommitAndRollback, Commit) {
+        THnswIndexFixture fixture;
+        fixture.WarmAll();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        TString session, tx;
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleBegin(runtime, session, tx, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (1, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            SELECT key FROM `/Root/hnsw-lifecycle` WHERE key = 1;
+        )"), "{ items { uint32_value: 1 } }");
+        fixture.Check(*fixture.ReadAt(0), 1);
+        if (Commit) {
+            UNIT_ASSERT_VALUES_EQUAL(KqpSimpleCommit(runtime, session, tx, "SELECT 1;"), "{ items { int32_value: 1 } }");
+        } else {
+            Ydb::Table::DeleteSessionRequest request;
+            request.set_session_id(session);
+            auto future = NRpcService::DoLocalRpc<TEvDeleteSessionRequest>(std::move(request), "", "", runtime.GetActorSystem(0));
+            UNIT_ASSERT_VALUES_EQUAL(AwaitResponse(runtime, std::move(future)).operation().status(), Ydb::StatusIds::SUCCESS);
+        }
+        for (ui32 i = 0; i < fixture.Count; ++i) {
+            fixture.Check(*fixture.ReadAt(i), Commit ? 2 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Graph(i)->HasChanges(), Commit);
+        }
+    }
+
+    Y_UNIT_TEST(HnswIndexSurvivesMetadataChangesAndRestart) {
+        THnswIndexFixture fixture;
+        fixture.WarmAll();
+        auto removed = fixture.Graph(0);
+        fixture.Alter(0, false);
+        UNIT_ASSERT(!fixture.Graph(0));
+        UNIT_ASSERT(!removed->CanRead(TRowVersion::Max()));
+        fixture.Alter(0, true, 2);
+        fixture.WarmAll();
+        UNIT_ASSERT(fixture.Graph(0) != removed);
+        fixture.Alter(0, true, 3);
+        fixture.WarmAll();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        RebootTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId, fixture.Helper.Sender);
+        fixture.Helper.Tables.at("hnsw-lifecycle").ClientId = {};
+        fixture.WarmAll();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Shard()->GetUserTables().begin()->second->HnswIndexes.size(), 1u);
+    }
+
+    Y_UNIT_TEST(HnswIndexSupportsMetricAndRebuildThresholdChanges) {
+        THnswIndexFixture fixture;
+        fixture.WarmAll();
+        fixture.Metrics[0] = Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
+        fixture.Thresholds[0] = 0;
+        fixture.Alter(0, true, 1);
+        fixture.WarmAll();
+        auto first = fixture.Graph(0);
+        ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (1, "\x00\x00\x00\x40\x00\x00\x00\x00\x01"),
+                (2, "\x00\x00\x80\x3F\x00\x00\x80\x3E\x01");
+        )");
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        for (ui32 attempt = 0; attempt < 30 && fixture.Graph(0) == first; ++attempt) {
+            fixture.ReadAt(0);
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT(fixture.Graph(0) && fixture.Graph(0) != first);
+        fixture.Check(*fixture.ReadAt(0), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.ReadAt(0, false)->Record.GetStats().GetRows(), 1u);
+        auto mismatch = fixture.Request(); // Cosine request explicitly selecting the L2 index.
+        fixture.Id(0).ToProto(mismatch->Record.MutableVectorTopK()->MutableHnswIndexId());
+        auto result = fixture.Helper.SendRead("hnsw-lifecycle", mismatch.release());
+        fixture.Check(*result, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 2u);
+    }
+
+    Y_UNIT_TEST(HnswIndexKeepsHistoricalAndProjectedOnlyWrites) {
+        THnswIndexFixture fixture;
+        fixture.WarmAll();
+        auto first = fixture.Graph(0);
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        const auto snapshot = CreateVolatileSnapshot(fixture.Helper.Server,
+            {"/Root/hnsw-lifecycle"}, TDuration::Hours(1));
+        TString session, tx;
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleBegin(runtime, session, tx, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, label) VALUES (1, 99);
+            SELECT key FROM `/Root/hnsw-lifecycle` WHERE key = 1;
+        )"), "{ items { uint32_value: 1 } }");
+        fixture.ReadAt(0);
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleCommit(runtime, session, tx, "SELECT 1;"), "{ items { int32_value: 1 } }");
+        for (ui32 i = 0; i < fixture.Count; ++i) {
+            auto result = fixture.ReadAt(i);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[1].AsValue<ui32>(), 99u);
+            UNIT_ASSERT(!fixture.Graph(i)->HasChanges());
+        }
+        ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (1, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+        )");
+        for (ui32 i = 0; i < fixture.Count; ++i) {
+            fixture.Check(*fixture.ReadAt(i), 2);
+            fixture.Check(*fixture.ReadAt(i, true, snapshot), 1);
+        }
+        UNIT_ASSERT(fixture.Graph(0) == first);
+    }
+
+    Y_UNIT_TEST(HnswIndexRejectsStaleRecreatedWorker) {
+        THnswIndexFixture fixture;
+        fixture.WarmAll();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        TVector<TAutoPtr<IEventHandle>> delayed;
+        constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 35;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == buildResult) {
+                delayed.push_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        fixture.Alter(0, true, 1);
+        runtime.WaitFor("old HNSW worker", [&] { return !delayed.empty(); });
+        const auto tid = fixture.Shard()->GetUserTables().begin()->second->LocalTid;
+        const auto token = fixture.Shard()->GetHnswBuildToken(tid, fixture.Id(0));
+        fixture.Alter(0, false, 2);
+        fixture.Alter(0, true, 3);
+        runtime.WaitFor("recreated HNSW worker", [&] { return delayed.size() >= 2; });
+        UNIT_ASSERT(fixture.Shard()->GetHnswBuildToken(tid, fixture.Id(0)) != token);
+        runtime.SetObserverFunc(observer);
+        runtime.Send(delayed.front().Release());
+        fixture.ReadAt(0);
+        UNIT_ASSERT(!fixture.Graph(0));
+        for (size_t i = 1; i < delayed.size(); ++i) { runtime.Send(delayed[i].Release()); }
+        fixture.WarmAll();
+    }
+
+    Y_UNIT_TEST(HnswPhysicalTablesBoundConcurrentBuildsAndDrainQueue) {
+        THnswPhysicalTablesFixture fixture(4);
+        fixture.WarmAll();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        fixture.Shard()->InvalidateHnswIndexes();
+        TVector<TAutoPtr<IEventHandle>> delayed;
+        constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 35;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == buildResult) {
+                delayed.push_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        for (ui32 i = 0; i < 4; ++i) { fixture.ReadAt(i); }
+        runtime.WaitFor("two admitted HNSW builds", [&] { return delayed.size() == 2; });
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        ui32 building = 0;
+        for (ui32 i = 0; i < 4; ++i) {
+            const auto stats = fixture.Shard()->GetHnswIndexStats(fixture.Tid(i), fixture.Id(i));
+            UNIT_ASSERT(stats);
+            building += stats->Building;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(building, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(delayed.size(), 2u);
+        runtime.SetObserverFunc(observer);
+        for (auto& result : delayed) { runtime.Send(result.Release()); }
+        fixture.WarmAll();
+    }
+
+    Y_UNIT_TEST(HnswDisabledQueuedIndexDoesNotBlockSiblingBuilds) {
+        THnswPhysicalTablesFixture fixture(4);
+        fixture.WarmAll();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        auto* shard = fixture.Shard();
+        shard->InvalidateHnswIndexes();
+        runtime.RunCall([&] {
+            const auto base = shard->GetHnswBuildVersion();
+            auto start = [&](ui32 index) {
+                return shard->TryStartHnswIndexBuild(fixture.Tid(index), fixture.Column(index), fixture.SettingsAt(index), base, fixture.Id(index));
+            };
+            UNIT_ASSERT(start(0));
+            UNIT_ASSERT(start(1));
+            UNIT_ASSERT(!start(2));
+            UNIT_ASSERT(!start(3));
+            shard->DisableHnswIndexBuild(fixture.Tid(2), fixture.Id(2));
+            // Complete one admitted job. The disabled queue head must not keep
+            // the remaining sibling out of the newly available build slot.
+            shard->SetHnswIndex(fixture.Tid(0), {}, {}, 0, fixture.Column(0), fixture.SettingsAt(0), base,
+                shard->GetHnswBuildToken(fixture.Tid(0), fixture.Id(0)), fixture.Id(0));
+            UNIT_ASSERT(start(3));
+            return true;
+        });
+    }
+
+    Y_UNIT_TEST(HnswMemoryLimitEvictsOnlyRequiredIndexes) {
+        THnswPhysicalTablesFixture fixture(3);
+        fixture.WarmAll();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        auto* shard = fixture.Shard();
+        const auto actor = ResolveTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId);
+        std::vector<std::shared_ptr<THnswIndex>> pinned;
+        ui64 used = 0;
+        for (ui32 i = 0; i < fixture.Count; ++i) {
+            pinned.push_back(fixture.Graph(i));
+            used += shard->GetHnswIndexStats(fixture.Tid(i), fixture.Id(i))->MemoryBytes;
+        }
+        UNIT_ASSERT_GT(used, 0u);
+        std::optional<ui64> limit = used - 1;
+        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (limit && ev->Recipient == actor && ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType) {
+                ev->Get<NMemory::TEvConsumerLimit>()->LimitBytes = *limit;
+            }
+        });
+        auto ready = [&] {
+            ui32 count = 0;
+            for (ui32 i = 0; i < fixture.Count; ++i) { count += bool(fixture.Graph(i)); }
+            return count;
+        };
+        auto setLimit = [&] {
+            runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(*limit)));
+        };
+        setLimit();
+        runtime.WaitFor("one HNSW graph evicted", [&] { return ready() != fixture.Count; });
+        UNIT_ASSERT_VALUES_EQUAL(ready(), 2u);
+        // Pin the retired graph to make deferred reclamation deterministic.
+        // Repeated grants and reads must neither evict siblings nor start a
+        // replacement build while the old reservation still exceeds the limit.
+        setLimit();
+        for (ui32 i = 0; i < fixture.Count; ++i) { fixture.ReadAt(i); }
+        runtime.SimulateSleep(TDuration::Seconds(6));
+        UNIT_ASSERT_VALUES_EQUAL(ready(), 2u);
+        for (ui32 i = 0; i < fixture.Count; ++i) {
+            const auto stats = shard->GetHnswIndexStats(fixture.Tid(i), fixture.Id(i));
+            UNIT_ASSERT(!stats->Building);
+            UNIT_ASSERT_VALUES_EQUAL(stats->Builds, 1u);
+            if (fixture.Graph(i)) { UNIT_ASSERT(fixture.Graph(i) == pinned[i]); }
+        }
+        pinned.clear();
+        limit = 64_MB;
+        setLimit();
+        fixture.WarmAll();
+    }
+
+    Y_UNIT_TEST_TWIN(HnswEvictedIndexExhaustsMemoryRetryBudget, ZeroLimit) {
+        THnswLifecycleFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        const auto actor = ResolveTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId);
+        TIntrusivePtr<NMemory::TRegistrantConsumer> consumer;
+        std::optional<ui64> limit;
+        ui32 rebuildRequests = 0;
+        constexpr ui32 rebuild = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 36;
+        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() != actor) { return; }
+            if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegistered::EventType) {
+                consumer = dynamic_cast<NMemory::TRegistrantConsumer*>(ev->Get<NMemory::TEvConsumerRegistered>()->Consumer.Get());
+            } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType && limit) {
+                ev->Get<NMemory::TEvConsumerLimit>()->LimitBytes = *limit;
+            } else if (ev->GetTypeRewrite() == rebuild) {
+                ++rebuildRequests;
+            }
+        });
+        fixture.Warm();
+        UNIT_ASSERT(consumer);
+        auto pinned = fixture.Index();
+        const auto used = consumer->GetReport().Used;
+        UNIT_ASSERT_GT(used, 0u);
+        limit = ZeroLimit ? 0 : used - 1;
+        runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(*limit)));
+        runtime.WaitFor("HNSW graph evicted", [&] { return !fixture.Index(); });
+        const auto before = rebuildRequests;
+        fixture.Read();
+        for (ui32 second = 0; second < 40; ++second) { runtime.SimulateSleep(TDuration::Seconds(1)); }
+        UNIT_ASSERT_GT(rebuildRequests, before);
+        UNIT_ASSERT_LE(rebuildRequests - before, 32u);
+        const auto exhausted = rebuildRequests;
+        for (ui32 second = 0; second < 10; ++second) { runtime.SimulateSleep(TDuration::Seconds(1)); }
+        UNIT_ASSERT_VALUES_EQUAL(rebuildRequests, exhausted);
+        pinned.reset();
+        runtime.WaitFor("retired HNSW graph released", [&] { return consumer->GetReport().Used == 0; });
+        UNIT_ASSERT_VALUES_EQUAL(consumer->GetReport().Demand, 0u);
+        fixture.Read();
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(rebuildRequests, exhausted);
+
+        limit = 64_MB;
+        runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(*limit)));
+        fixture.Warm(); // A real grant increase may start a fresh bounded attempt.
+    }
+
+    Y_UNIT_TEST(HnswHotKeyWritesDoNotAccumulateBetweenPeriodicPrunes) {
+        THnswLifecycleFixture fixture;
+        fixture.Warm();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        auto* shard = fixture.Shard();
+        auto graph = fixture.Index();
+        const auto tid = shard->GetUserTables().begin()->second->LocalTid;
+        const auto actor = ResolveTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId);
+        constexpr ui32 periodic = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 7;
+        TVector<TAutoPtr<IEventHandle>> periodicEvents;
+        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == actor && ev->GetTypeRewrite() == periodic) {
+                periodicEvents.push_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        auto write = [&](bool negative) {
+            ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, negative ? R"(
+                UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                    (1, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            )" : R"(
+                UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                    (1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+            )");
+        };
+        write(true);
+        const auto snapshot = CreateVolatileSnapshot(fixture.Helper.Server,
+            {"/Root/hnsw-lifecycle"}, TDuration::Hours(1));
+        const auto baseline = shard->GetHnswIndexStats(tid, {})->MemoryBytes;
+        const TVector<TCell> key{TCell::Make<ui32>(1)};
+        const auto versionBytes = THnswIndexChanges::EstimateBytes(TSerializedCellVec::Serialize(key), 9);
+        for (ui32 update = 0; update < 128; ++update) {
+            write(update % 2 == 0);
+            UNIT_ASSERT(fixture.Index() == graph);
+            UNIT_ASSERT_LE(shard->GetHnswIndexStats(tid, {})->MemoryBytes, baseline + 8 * versionBytes);
+        }
+        auto historical = fixture.Helper.SendRead("hnsw-lifecycle", fixture.Request(snapshot).release());
+        fixture.Check(*historical, 2);
+        UNIT_ASSERT_VALUES_EQUAL(historical->Record.GetStats().GetRows(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Read(1)->Record.GetStats().GetRows(), 1u);
+        observer.Remove();
+        for (auto& ev : periodicEvents) { runtime.Send(ev.Release()); }
+    }
+
+    Y_UNIT_TEST(HnswIndexSurvivesSplitAndMergeRecovery) {
+        THnswIndexFixture fixture;
+        fixture.WarmAll();
+        auto sourceFirst = fixture.Graph(0);
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        auto& table = fixture.Helper.Tables.at("hnsw-lifecycle");
+        SetSplitMergePartCountLimit(&runtime, -1);
+        const auto tx = AsyncSplitTable(fixture.Helper.Server, fixture.Helper.Sender,
+            "/Root/hnsw-lifecycle", table.TabletId, 2);
+        WaitTxNotification(fixture.Helper.Server, fixture.Helper.Sender, tx);
+        UNIT_ASSERT(!sourceFirst->CanRead(TRowVersion::Max()));
+        const auto shards = GetTableShards(fixture.Helper.Server, fixture.Helper.Sender, "/Root/hnsw-lifecycle");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+        for (const auto tablet : shards) {
+            table.TabletId = tablet;
+            table.ClientId = {};
+            auto [tables, owner] = GetTables(fixture.Helper.Server, tablet);
+            Y_UNUSED(owner);
+            table.UserTable = tables.at("hnsw-lifecycle");
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Shard()->GetUserTables().begin()->second->HnswIndexes.size(), 1u);
+            UNIT_ASSERT(fixture.Shard()->GetUserTables().begin()->second->Indexes.empty());
+            NKikimrSchemeOp::TTableDescription schema;
+            fixture.Shard()->GetUserTables().begin()->second->GetSchema(schema);
+            UNIT_ASSERT_VALUES_EQUAL(schema.TableIndexesSize(), 0);
+            UNIT_ASSERT(schema.HasLocalHnswIndex());
+            auto raw = fixture.Request();
+            raw->Record.ClearVectorTopK();
+            auto rows = fixture.Helper.SendRead("hnsw-lifecycle", raw.release());
+            UNIT_ASSERT_VALUES_EQUAL(rows->GetRowsCount(), 1u);
+            fixture.WarmAll();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Graph(0)->Size(), 1u);
+            // Give each split shard ownership of its parts before merging them.
+            const auto compaction = CompactTable(runtime, tablet, table.TableId, true);
+            UNIT_ASSERT_VALUES_EQUAL(compaction.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+        }
+        const auto mergeTx = AsyncMergeTable(fixture.Helper.Server, fixture.Helper.Sender, "/Root/hnsw-lifecycle", shards);
+        WaitTxNotification(fixture.Helper.Server, fixture.Helper.Sender, mergeTx);
+        const auto merged = GetTableShards(fixture.Helper.Server, fixture.Helper.Sender, "/Root/hnsw-lifecycle");
+        UNIT_ASSERT_VALUES_EQUAL(merged.size(), 1u);
+        table.TabletId = merged.front();
+        table.ClientId = {};
+        auto [mergedTables, mergedOwner] = GetTables(fixture.Helper.Server, table.TabletId);
+        Y_UNUSED(mergedOwner);
+        table.UserTable = mergedTables.at("hnsw-lifecycle");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Shard()->GetUserTables().begin()->second->HnswIndexes.size(), 1u);
+        fixture.WarmAll();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Graph(0)->Size(), 2u);
+    }
+
+    Y_UNIT_TEST(HnswPhysicalTablesHonorFeatureFlagAndIndependentEviction) {
+        THnswPhysicalTablesFixture fixture(2);
+        fixture.WarmAll();
+        auto sibling = fixture.Graph(1);
+        fixture.Shard()->InvalidateHnswIndex(fixture.Tid(0), fixture.Id(0));
+        UNIT_ASSERT(!fixture.Graph(0));
+        UNIT_ASSERT(fixture.Graph(1) == sibling);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.ReadAt(1)->Record.GetStats().GetRows(), 1u);
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetEnableHnswIndex(false);
+        }
+        for (ui32 i = 0; i < 2; ++i) {
+            auto result = fixture.ReadAt(i);
+            fixture.Check(*result, 1);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 2u);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(HnswIndexInvalidatesOnTruncate, Unsafe) {
+        THnswIndexFixture fixture;
+        fixture.WarmAll();
+        auto first = fixture.Graph(0);
+        if (Unsafe) {
+            ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, R"(
+                PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
+                TRUNCATE TABLE `/Root/hnsw-lifecycle` WITH (unsafe = true);
+            )");
+        } else {
+            const auto tx = AsyncTruncateTable(fixture.Helper.Server, fixture.Helper.Sender,
+                "/Root", "hnsw-lifecycle");
+            WaitTxNotification(fixture.Helper.Server, fixture.Helper.Sender, tx);
+        }
+        UNIT_ASSERT(!first->CanRead(TRowVersion::Max()));
+        ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, label, emb) VALUES
+                (1, 7, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01"),
+                (2, 8, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+        )");
+        fixture.WarmAll();
+        fixture.Check(*fixture.ReadAt(0), 2);
+        UNIT_ASSERT(fixture.Graph(0) != first);
+    }
+
+    Y_UNIT_TEST(HnswVolatileCommitRanksOwnWriteAboveFlushedLockWrite) {
+        THnswLifecycleFixture fixture;
+        fixture.Warm();
+        auto graph = fixture.Index();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        TString session, tx;
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleBegin(runtime, session, tx, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (1, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            SELECT key FROM `/Root/hnsw-lifecycle` WHERE key = 1;
+        )"), "{ items { uint32_value: 1 } }");
+        // The first request flushed the negative vector under the lock id.
+        // A distributed commit supplies a newer positive vector under its own id.
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleCommit(runtime, session, tx, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+            UPSERT INTO `/Root/movies` (id, title, rating) VALUES (99, "participant", 1);
+            SELECT 1;
+        )"), "{ items { int32_value: 1 } }");
+        UNIT_ASSERT(fixture.Index() == graph);
+        fixture.Read(1);
+        TString stored;
+        const TVector<TCell> key{TCell::Make<ui32>(1)};
+        UNIT_ASSERT(graph->GetVector(TSerializedCellVec::Serialize(key), stored));
+        UNIT_ASSERT_VALUES_EQUAL(stored, TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+    }
+
+    Y_UNIT_TEST(HnswHistoricalReadIgnoresFutureVolatileTransaction) {
+        THnswLifecycleFixture fixture;
+        fixture.Warm();
+        auto graph = fixture.Index();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardWriteAlwaysVolatile(true);
+        const auto snapshot = CreateVolatileSnapshot(fixture.Helper.Server,
+            {"/Root/hnsw-lifecycle"}, TDuration::Hours(1));
+        const auto actor = ResolveTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId);
+        std::vector<TEvTxProcessing::TEvReadSet::TPtr> blocked;
+        auto capture = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](TEvTxProcessing::TEvReadSet::TPtr& ev) {
+            if (ev->GetRecipientRewrite() == actor) { blocked.push_back(std::move(ev)); }
+        });
+        auto write = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (1, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            UPSERT INTO `/Root/movies` (id, title, rating) VALUES (99, "participant", 1);
+        )");
+        runtime.WaitFor("future volatile transaction", [&] {
+            return !blocked.empty() && fixture.Shard()->GetVolatileTxManager().GetTxInFlight();
+        });
+        UNIT_ASSERT(!fixture.Shard()->GetVolatileTxManager().HasVolatileTxsAtSnapshot(snapshot));
+        auto old = fixture.Helper.SendRead("hnsw-lifecycle", fixture.Request(snapshot).release());
+        fixture.Check(*old, 1);
+        UNIT_ASSERT_VALUES_EQUAL(old->Record.GetStats().GetRows(), 1u);
+        capture.Remove();
+        for (auto& ev : blocked) { runtime.Send(ev.Release(), 0, true); }
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(write))), "<empty>");
+        UNIT_ASSERT(fixture.Index() == graph);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Read(2)->Record.GetStats().GetRows(), 1u);
+    }
+
+    Y_UNIT_TEST_TWIN(HnswExactRangeDoesNotWaitForUnrelatedVolatileTransaction, ReadyGraph) {
+        THnswLifecycleFixture fixture;
+        if (ReadyGraph) { fixture.Warm(); }
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        auto* shard = fixture.Shard();
+        if (!ReadyGraph) {
+            shard->InvalidateHnswIndexes();
+            shard->DisableHnswIndexBuild(shard->GetUserTables().begin()->second->LocalTid);
+        }
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardWriteAlwaysVolatile(true);
+        const auto actor = ResolveTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId);
+        std::vector<TEvTxProcessing::TEvReadSet::TPtr> blocked;
+        auto capture = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](TEvTxProcessing::TEvReadSet::TPtr& ev) {
+            if (ev->GetRecipientRewrite() == actor) { blocked.push_back(std::move(ev)); }
+        });
+        auto write = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (2, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            UPSERT INTO `/Root/movies` (id, title, rating) VALUES (99, "participant", 1);
+        )");
+        runtime.WaitFor("unrelated volatile transaction", [&] {
+            return !blocked.empty() && shard->GetVolatileTxManager().GetTxInFlight();
+        });
+        auto request = fixture.Request();
+        request->Ranges.clear();
+        AddRangeQuery<ui32>(*request, {1}, true, {1}, true);
+        auto result = fixture.Helper.SendRead("hnsw-lifecycle", request.release(), 0, {}, TDuration::Seconds(5));
+        UNIT_ASSERT(result);
+        fixture.Check(*result, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1u);
+        UNIT_ASSERT(shard->GetVolatileTxManager().GetTxInFlight());
+        capture.Remove();
+        for (auto& ev : blocked) { runtime.Send(ev.Release(), 0, true); }
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(write))), "<empty>");
+    }
+
+    Y_UNIT_TEST(HnswLockOnlyCommitPreservesGraph) {
+        THnswLifecycleFixture fixture;
+        fixture.Warm();
+        auto graph = fixture.Index();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        TString session, tx;
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleBegin(runtime, session, tx,
+            "SELECT key FROM `/Root/hnsw-lifecycle` WHERE key = 1;"), "{ items { uint32_value: 1 } }");
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleCommit(runtime, session, tx, R"(
+            UPSERT INTO `/Root/movies` (id, title, rating) VALUES (99, "participant", 1);
+            SELECT 1;
+        )"), "{ items { int32_value: 1 } }");
+        UNIT_ASSERT(fixture.Index() == graph);
+        UNIT_ASSERT(!graph->HasChanges());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 1u);
+    }
+
+    Y_UNIT_TEST(HnswPreJournalWritesResolveBeforeInitialBuild) {
+        THnswLifecycleFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        runtime.GetAppData(0).FeatureFlags.SetEnableHnswIndex(false);
+        fixture.Shard()->InvalidateHnswIndexes();
+        TString session, tx;
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleBegin(runtime, session, tx, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, emb) VALUES
+                (1, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            SELECT key FROM `/Root/hnsw-lifecycle` WHERE key = 1;
+        )"), "{ items { uint32_value: 1 } }");
+        runtime.GetAppData(0).FeatureFlags.SetEnableHnswIndex(true);
+        for (ui32 i = 0; i < 5; ++i) {
+            fixture.Read(1);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT(!fixture.Index()); // Unobserved pre-journal intents must resolve first.
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleCommit(runtime, session, tx, "SELECT 1;"), "{ items { int32_value: 1 } }");
+        runtime.WaitFor("HNSW graph after pre-journal commit", [&] { return bool(fixture.Index()); });
+        auto graph = fixture.Index();
+        UNIT_ASSERT(graph);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Read(2)->Record.GetStats().GetRows(), 1u);
+        UNIT_ASSERT(!graph->HasChanges());
+    }
+
+    Y_UNIT_TEST(HnswDroppingTableInvalidatesReaderOwnedGraph) {
+        THnswLifecycleFixture fixture;
+        fixture.Warm();
+        auto graph = fixture.Index();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime, "DROP TABLE `/Root/hnsw-lifecycle`;"), "SUCCESS");
+        UNIT_ASSERT(!graph->CanRead(TRowVersion::Max()));
+    }
+
+    Y_UNIT_TEST(HnswGraphDestructionRetainsReservationUntilBackgroundRelease) {
+        THnswLifecycleFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        const auto caller = std::this_thread::get_id();
+        std::atomic<bool> released = false;
+        std::atomic<bool> releasedOffThread = false;
+        auto reservation = std::shared_ptr<void>(new int(0), [&](void* value) {
+            delete static_cast<int*>(value);
+            releasedOffThread.store(std::this_thread::get_id() != caller);
+            released.store(true);
+        });
+        std::optional<THnswIndexBuildResult> built;
+        runtime.Register(CreateHnswIndexBuildWorker(fixture.Settings(), {
+            {"key", TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9)}
+        }, std::move(reservation), 0,
+            [&](THnswIndexBuildResult&& result, const TActorContext&) { built.emplace(std::move(result)); }));
+        runtime.WaitFor("background HNSW build", [&] { return built.has_value(); });
+        UNIT_ASSERT_C(built->Index, built->Error);
+        built->MemoryReservation.reset();
+        UNIT_ASSERT(!released.load());
+        built->Index.reset();
+        runtime.WaitFor("background HNSW graph release", [&] { return released.load(); });
+        UNIT_ASSERT(releasedOffThread.load());
+    }
+
+    Y_UNIT_TEST(HnswCancelledSnapshotCannotStartGraphWorker) {
+        THnswLifecycleFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        constexpr ui32 snapshotFinished = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 38;
+        TVector<TAutoPtr<IEventHandle>> snapshots;
+        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == snapshotFinished) {
+                snapshots.push_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        fixture.Shard()->InvalidateHnswIndexes();
+        fixture.Read();
+        runtime.WaitFor("completed HNSW snapshot scan", [&] { return !snapshots.empty(); });
+        auto* shard = fixture.Shard();
+        const auto tid = shard->GetUserTables().begin()->second->LocalTid;
+        const auto token = shard->GetHnswBuildToken(tid);
+        UNIT_ASSERT(shard->IsHnswBuildCurrent(tid, token));
+        runtime.GetAppData(0).FeatureFlags.SetEnableHnswIndex(false);
+        shard->InvalidateHnswIndexes();
+        UNIT_ASSERT(!shard->IsHnswBuildCurrent(tid, token));
+        observer.Remove();
+        for (auto& ev : snapshots) { runtime.Send(ev.Release()); }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(!fixture.Index());
+        const auto stats = shard->GetHnswIndexStats(tid, {});
+        UNIT_ASSERT(stats);
+        UNIT_ASSERT(!stats->Building);
+        UNIT_ASSERT_VALUES_EQUAL(stats->MemoryBytes, 0u);
+    }
+
+    Y_UNIT_TEST_TWIN(HnswTabletShutdownWithSnapshotScan, TabletDead) {
+        THnswLifecycleFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        constexpr ui32 snapshotFinished = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 38;
+        TVector<TAutoPtr<IEventHandle>> snapshots;
+        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == snapshotFinished) {
+                snapshots.push_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        fixture.Read();
+        runtime.WaitFor("registered HNSW snapshot scan", [&] { return !snapshots.empty(); });
+        const auto tablet = fixture.Helper.Tables.at("hnsw-lifecycle").TabletId;
+        const auto actor = ResolveTablet(runtime, tablet);
+        if (TabletDead) {
+            runtime.Send(new IEventHandle(actor, fixture.Helper.Sender,
+                new TEvTablet::TEvTabletDead(tablet, TEvTablet::TEvTabletDead::ReasonPill, 0)));
+        } else {
+            runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new TEvents::TEvPoison()));
+        }
+        runtime.WaitFor("DataShard shutdown with a registered scan", [&] { return !runtime.FindActor(actor); });
+    }
+
+    Y_UNIT_TEST_TWIN(HnswPendingWritesPublishOnlyOnCommit, Commit) {
+        THnswLifecycleFixture fixture;
+        fixture.Warm();
+        auto graph = fixture.Index();
+        UNIT_ASSERT(!graph->HasChanges());
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleBegin(runtime, sessionId, txId, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, label, emb) VALUES
+                (1, 7, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            SELECT key FROM `/Root/hnsw-lifecycle` WHERE key = 1;
+        )"), "{ items { uint32_value: 1 } }");
+        UNIT_ASSERT(!txId.empty());
+        fixture.Read(1);
+        UNIT_ASSERT(!graph->HasChanges());
+        if (Commit) {
+            UNIT_ASSERT_VALUES_EQUAL(KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1;"),
+                                     "{ items { int32_value: 1 } }");
+        } else {
+            Ydb::Table::DeleteSessionRequest request;
+            request.set_session_id(sessionId);
+            auto future = NRpcService::DoLocalRpc<TEvDeleteSessionRequest>(
+                std::move(request), "", "", runtime.GetActorSystem(0));
+            const auto response = AwaitResponse(runtime, std::move(future));
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+        }
+        fixture.Read(Commit ? 2 : 1);
+        UNIT_ASSERT(fixture.Index() == graph);
+        UNIT_ASSERT_VALUES_EQUAL(graph->HasChanges(), Commit);
+    }
+
+    Y_UNIT_TEST_TWIN(HnswPreservesUnrelatedSchemaAndRebuildsOnRestart, Reboot) {
+        THnswLifecycleFixture fixture;
+        fixture.Warm();
+        auto graph = fixture.Index();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        if (Reboot) {
+            RebootTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId,
+                         fixture.Helper.Sender);
+            fixture.Helper.Tables.at("hnsw-lifecycle").ClientId = {};
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime,
+                "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra String;"), "SUCCESS");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(graph->CanRead(TRowVersion::Max()), !Reboot);
+        fixture.Warm();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Index() == graph, !Reboot);
+    }
+
+
+    Y_UNIT_TEST_QUAD(HnswSchemaFinalizationRequestsBackgroundBuild, BelowMinRows, Reboot) {
+        THnswLifecycleFixture fixture(false, true, true, BelowMinRows ? 100 : 1);
+        UNIT_ASSERT(!fixture.Index());
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        if (Reboot) {
+            RebootTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId, fixture.Helper.Sender);
+            fixture.Helper.Tables.at("hnsw-lifecycle").ClientId = {};
+        }
+        const auto& table = *fixture.Shard()->GetUserTables().begin()->second;
+        UNIT_ASSERT(table.ShadowTid);
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.begin()->second.VectorColumnTag, 3u);
+        const auto localTid = table.LocalTid;
+        const auto indexId = table.HnswIndexes.begin()->first;
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Shard()->GetHnswBuildToken(localTid), 0u);
+        ui32 publications = 0;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                    UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                    if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
+                        UNIT_ASSERT_VALUES_EQUAL(tx.GetAlterTable().TableIndexesSize(), 0);
+                        tx.MutableAlterTable()->MutablePartitionConfig()->SetShadowData(false);
+                        UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+                        ++publications;
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime,
+            "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra String;"), "SUCCESS");
+        runtime.SetObserverFunc(observer);
+        UNIT_ASSERT(publications);
+        if (BelowMinRows) {
+            runtime.WaitFor("below-minimum publication scan", [&] {
+                const auto stats = fixture.Shard()->GetHnswIndexStats(localTid, indexId);
+                return stats && !stats->Building && fixture.Shard()->GetHnswBuildToken(localTid);
+            });
+            const auto token = fixture.Shard()->GetHnswBuildToken(localTid);
+            UNIT_ASSERT(!fixture.Index());
+            // A normal full-config alter may still contain ShadowData=false.
+            // It must not reset a below-minimum entry after publication.
+            auto refresh = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() != TEvDataShard::TEvProposeTransaction::EventType) {
+                    return;
+                }
+                auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                    UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                    if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
+                        tx.MutableAlterTable()->MutablePartitionConfig()->SetShadowData(false);
+                        UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+                    }
+                }
+            });
+            UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime,
+                "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN another String;"), "SUCCESS");
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Shard()->GetHnswBuildToken(localTid), token);
+            UNIT_ASSERT(!fixture.Index());
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 2u);
+        } else {
+            runtime.WaitFor("background HNSW build after publication", [&] { return bool(fixture.Index()); });
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 1u);
+        }
+    }
+
+    Y_UNIT_TEST(HnswBackgroundPublicationBuildDoesNotBlockWrites) {
+        THnswLifecycleFixture fixture(false, true, true);
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        auto* shard = fixture.Shard();
+        const auto actor = ResolveTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId);
+        runtime.RunCall([&] { return shard->GetHnswCacheMemoryLimit(); });
+        constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 35;
+        TAutoPtr<IEventHandle> delayed;
+        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType && ev->Recipient == actor) {
+                ev->Get<NMemory::TEvConsumerLimit>()->LimitBytes = 64_MB;
+            }
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                    UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                    if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
+                        UNIT_ASSERT_VALUES_EQUAL(tx.GetAlterTable().TableIndexesSize(), 0);
+                        tx.MutableAlterTable()->MutablePartitionConfig()->SetShadowData(false);
+                        UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+                    }
+                }
+            }
+            if (ev->GetTypeRewrite() == buildResult && ev->Recipient == actor) {
+                UNIT_ASSERT(!delayed);
+                delayed = ev.Release();
+            }
+        });
+        runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(64_MB)));
+        runtime.WaitFor("HNSW memory grant", [&] { return shard->GetHnswCacheMemoryLimit() == 64_MB; });
+        UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime,
+            "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra String;"), "SUCCESS");
+        runtime.WaitFor("background graph installation", [&] { return bool(delayed); });
+        UNIT_ASSERT(!fixture.Index());
+        // A completed schema publication must let later writes commit while
+        // graph construction/installation is still outstanding.
+        ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, label, emb) VALUES
+                (2, 9, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+        )");
+        observer.Remove();
+        runtime.Send(delayed.Release());
+        fixture.Warm();
+        UNIT_ASSERT(fixture.Index());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 1u);
+    }
+
+    Y_UNIT_TEST(HnswExplicitMetadataDisableSurvivesRestart) {
+        THnswLifecycleFixture fixture;
+        fixture.Warm();
+        auto graph = fixture.Index();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        ui32 annotationsCleared = 0;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                    UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                    if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
+                        auto* index = tx.MutableAlterTable()->MutableLocalHnswIndex();
+                        TPathId(tx.GetAlterTable().GetPathId().GetOwnerId(), Max<ui64>() - 1)
+                            .ToProto(index->MutableIndexId());
+                        index->MutableHnswIndexDescription();
+                        UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+                        ++annotationsCleared;
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime,
+            "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra String;"), "SUCCESS");
+        runtime.SetObserverFunc(observer);
+        UNIT_ASSERT(annotationsCleared);
+        UNIT_ASSERT(!graph->CanRead(TRowVersion::Max()));
+        UNIT_ASSERT(fixture.Shard()->GetUserTables().begin()->second->HnswIndexes.empty());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 2u);
+        RebootTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId,
+            fixture.Helper.Sender);
+        fixture.Helper.Tables.at("hnsw-lifecycle").ClientId = {};
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 2u);
+        UNIT_ASSERT(fixture.Shard()->GetUserTables().begin()->second->HnswIndexes.empty());
+        UNIT_ASSERT(!fixture.Index());
+    }
+
+    Y_UNIT_TEST_TWIN(HnswUnsupportedReadsKeepExactScan, Locked) {
+        THnswLifecycleFixture fixture;
+        fixture.Warm();
+        auto request = fixture.Request();
+        if (Locked) {
+            request->Record.SetLockTxId(12345678);
+            request->Record.SetLockNodeId(fixture.Helper.Server->GetRuntime()->GetNodeId());
+        } else {
+            // label is a payload column, so graph keys cannot deduplicate it.
+            request->Record.MutableVectorTopK()->AddDistinctColumns(1);
+        }
+        auto result = fixture.Helper.SendRead("hnsw-lifecycle", request.release());
+        fixture.Check(*result, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 2u);
+    }
+
+    Y_UNIT_TEST(HnswFollowersKeepExactScan) {
+        THnswLifecycleFixture fixture(true);
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        const auto snapshot = CreateVolatileSnapshot(fixture.Helper.Server,
+                                                     {"/Root/hnsw-lifecycle"}, TDuration::Hours(1));
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        TDataShard* follower = nullptr;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
+                auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(ev->GetRecipientRewrite()));
+                if (shard && shard->IsFollower()) {
+                    follower = shard;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER {
+            runtime.SetObserverFunc(observer);
+        };
+        for (ui32 attempt = 0; attempt < 5; ++attempt) {
+            auto result = fixture.Helper.SendRead("hnsw-lifecycle", fixture.Request(snapshot).release());
+            fixture.Check(*result, 1);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 2u);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT(follower);
+        const auto tid = follower->GetUserTables().begin()->second->LocalTid;
+        UNIT_ASSERT_VALUES_EQUAL(follower->GetHnswBuildToken(tid), 0u);
+        UNIT_ASSERT(!follower->IsHnswCacheMemoryLimitKnown());
+    }
 
     Y_UNIT_TEST(BadRequest) {
         TTestHelper helper;

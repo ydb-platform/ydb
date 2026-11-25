@@ -186,8 +186,7 @@ public:
     }
 
     template <typename TResponse, typename TRequest, typename TIndex>
-    void Reply(TRequest& request, TIndex& index) {
-        const auto& record = request->Get()->Record;
+    THolder<TResponse> BuildResponse(const TRequest& record, const TIndex& index) {
         auto response = MakeHolder<TResponse>();
 
         auto begin = index.begin();
@@ -209,29 +208,50 @@ public:
             }
         }
 
-        for (; begin != end; ++begin) {
+        for (; begin != index.end(); ++begin) {
+            if (end != index.end() && !(begin->first < end->first)) {
+                break;
+            }
             auto* entry = response->Record.AddEntries();
             FillKey(entry->MutableKey(), begin->first);
             entry->MutableInfo()->CopyFrom(*begin->second);
         }
 
-        Send(request->Sender, response.Release());
+        return response;
     }
 
     void Handle(TEvSysView::TEvGetPDisksRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetPDisksResponse>(ev, PDiskIndex);
+        Send(ev->Sender, BuildResponse<TEvSysView::TEvGetPDisksResponse>(ev->Get()->Record, PDiskIndex).Release());
     }
 
     void Handle(TEvSysView::TEvGetVSlotsRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetVSlotsResponse>(ev, VSlotIndex);
+        const auto& request = ev->Get()->Record;
+        auto response = BuildResponse<TEvSysView::TEvGetVSlotsResponse>(request, VSlotIndex);
+        if (request.GetIncludeDDiskPoolNames()) {
+            for (auto& entry : *response->Record.MutableEntries()) {
+                auto* slot = entry.MutableInfo();
+                if (!slot->GetDDisk()) {
+                    continue;
+                }
+                const auto group = GroupIndex.find(TGroupId::FromValue(slot->GetGroupId()));
+                if (group == GroupIndex.end()) {
+                    continue;
+                }
+                const TBoxStoragePoolId poolId(group->second->GetBoxId(), group->second->GetStoragePoolId());
+                if (const auto pool = StoragePoolIndex.find(poolId); pool != StoragePoolIndex.end() && pool->second->HasName()) {
+                    slot->SetStoragePoolName(pool->second->GetName());
+                }
+            }
+        }
+        Send(ev->Sender, response.Release());
     }
 
     void Handle(TEvSysView::TEvGetGroupsRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetGroupsResponse>(ev, GroupIndex);
+        Send(ev->Sender, BuildResponse<TEvSysView::TEvGetGroupsResponse>(ev->Get()->Record, GroupIndex).Release());
     }
 
     void Handle(TEvSysView::TEvGetStoragePoolsRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetStoragePoolsResponse>(ev, StoragePoolIndex);
+        Send(ev->Sender, BuildResponse<TEvSysView::TEvGetStoragePoolsResponse>(ev->Get()->Record, StoragePoolIndex).Release());
     }
 
     void Handle(TEvSysView::TEvGetStorageStatsRequest::TPtr& ev) {
@@ -315,6 +335,15 @@ IActor* TBlobStorageController::CreateSystemViewsCollector() {
 }
 
 void TBlobStorageController::ForwardToSystemViewsCollector(STATEFN_SIG) {
+    if (ev->GetTypeRewrite() == TEvSysView::EvGetStoragePoolsRequest &&
+            ev->Get<TEvSysView::TEvGetStoragePoolsRequest>()->Record.GetNbsDiscoveryOnly()) {
+        auto response = std::make_unique<TEvSysView::TEvGetStoragePoolsResponse>();
+        response->Record.SetHasDDiskPools(std::ranges::any_of(StoragePools, [](const auto& entry) {
+            return entry.second.DDisk;
+        }));
+        Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
     TActivationContext::Forward(ev, SystemViewsCollectorId);
 }
 
@@ -734,41 +763,29 @@ void TBlobStorageController::UpdateSystemViews() {
         }
 
         for (auto& [groupId, g] : state.Groups) {
-            if (const auto it = BridgeSyncState.find(groupId); it != BridgeSyncState.end()) {
+            g.SetBridgeSyncStatus(GetBridgeSyncStatus(groupId));
+            if (const auto timestamp = GetBridgeSyncLastProgressTimestamp(groupId)) {
+                g.SetBridgeSyncLastProgressTimestamp(timestamp->GetValue());
+            }
+            if (const auto it = BridgeSyncState.find(groupId); it != BridgeSyncState.end() && it->second.ErrorCount) {
                 TBridgeSyncState& state = it->second;
                 g.SetBridgeSyncLastError(state.LastError);
                 g.SetBridgeSyncLastErrorTimestamp(state.LastErrorTimestamp.GetValue());
                 g.SetBridgeSyncFirstErrorTimestamp(state.FirstErrorTimestamp.GetValue());
                 g.SetBridgeSyncErrorCount(state.ErrorCount);
             }
-            if (const TGroupInfo *group = FindGroup(groupId); group && group->BridgeProxyGroupId && group->BridgePileId) {
-                if (const TGroupInfo *proxyGroup = FindGroup(*group->BridgeProxyGroupId); proxyGroup && proxyGroup->BridgeGroupInfo) {
-                    const auto& bridgeGroupState = proxyGroup->BridgeGroupInfo->GetBridgeGroupState();
-                    if (const auto *pile = NBridge::GetGroupPile(bridgeGroupState, group->BridgePileId)) {
-                        g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile->GetStage()));
-                    }
-                }
-            } else if (const auto it = StaticGroups.find(groupId); it != StaticGroups.end() &&
-                    it->second.Info &&
-                    it->second.Info->Group &&
-                    it->second.Info->Group->HasBridgeProxyGroupId() &&
-                    it->second.Info->Group->HasBridgePileId()) {
-                if (const auto proxyIt = StaticGroups.find(TGroupId::FromProto(&it->second.Info->Group.value(),
-                            &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId));
-                        proxyIt != StaticGroups.end() &&
-                        proxyIt->second.Info &&
-                        proxyIt->second.Info->Group &&
-                        proxyIt->second.Info->Group->HasBridgeGroupState()) {
-                    const auto& bridgeGroupState = proxyIt->second.Info->Group->GetBridgeGroupState();
-                    const auto bridgePileId = TBridgePileId::FromProto(&it->second.Info->Group.value(),
-                        &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
-                    if (const auto *pile = NBridge::GetGroupPile(bridgeGroupState, bridgePileId)) {
-                        g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile->GetStage()));
+            if (const auto stage = GetBridgeSyncStage(groupId)) {
+                g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(*stage));
+                if (*stage != NKikimrBridge::TGroupState::SYNCED) {
+                    if (const auto remaining = GetBridgeSyncRemaining(groupId, *stage)) {
+                        g.SetBridgeSyncRemainingBytes(remaining->Bytes);
+                        g.SetBridgeSyncRemainingBytesComplete(remaining->Complete);
                     }
                 }
             }
             if (const auto it = TargetGroupToSyncerState.find(groupId); it != TargetGroupToSyncerState.end()) {
                 TSyncerState& syncerState = it->second;
+                g.SetBridgeSyncCopyBytesPerSecond(syncerState.CopyRate);
                 for (const auto& perNodeInfo : syncerState.NodeIds | std::views::values) {
                     if (perNodeInfo.Progress.BytesTotal) {
                         const double progress = intmax_t(perNodeInfo.Progress.BytesDone) * 1'000'000 /

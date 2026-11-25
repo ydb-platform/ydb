@@ -40,7 +40,7 @@ struct TStdIAllocator {
 
     void deallocate(const_pointer p, size_type n) noexcept // NOLINT(readability-identifier-naming)
     {
-        return Allocator->Release(IAllocator::TBlock{.Data = (void*)p, .Len = n * sizeof(value_type)});
+        Allocator->Release(IAllocator::TBlock{.Data = (void*)p, .Len = n * sizeof(value_type)});
     }
 
     // NOLINTNEXTLINE(google-explicit-constructor)

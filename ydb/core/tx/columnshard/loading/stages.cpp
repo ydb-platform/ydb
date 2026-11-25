@@ -42,11 +42,10 @@ bool TOperationsManagerInitializer::DoPrecharge(NTabletFlatExecutor::TTransactio
 }
 
 bool TStoragesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    AFL_VERIFY(Self->StoragesManager);
+    YDB_LOG_VERIFY(Self->StoragesManager);
     if (!Self->StoragesManager->LoadIdempotency(txc.DB)) {
         return false;
     }
-    Self->InitFindEmptyHistoryIntervals();
     return true;
 }
 
@@ -228,7 +227,9 @@ bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
 
 std::shared_ptr<NKikimr::ITxReader> TTablesManagerInitializer::BuildNextReaderAfterLoad() {
     if (Self->TablesManager.HasPrimaryIndex()) {
-        return Self->TablesManager.MutablePrimaryIndex().BuildLoader(std::make_shared<TBlobGroupSelector>(Self->Info()));
+        const bool deferPortions = Self->DeferredPortionLoader.DecideOnStart();
+        return Self->TablesManager.MutablePrimaryIndex().BuildLoader(
+            std::make_shared<TBlobGroupSelector>(Self->Info()), Self->GetOperationsManager().GetUncommittedPortionAddresses(), !deferPortions);
     } else {
         return nullptr;
     }
@@ -253,7 +254,7 @@ bool TTiersManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContex
 
     while (!rowset.EndOfSet()) {
         NKikimrTxColumnShard::TTableVersionInfo versionInfo;
-        AFL_VERIFY(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));
+        YDB_LOG_VERIFY(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));
         if (versionInfo.GetTtlSettings().HasEnabled()) {
             NOlap::TTiering tiering;
             tiering.DeserializeFromProto(versionInfo.GetTtlSettings().GetEnabled()).Validate();

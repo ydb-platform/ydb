@@ -2,11 +2,12 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/rapidjson
+    contrib/libs/zstd
     library/cpp/json
+    library/cpp/openssl/crypto
     library/cpp/string_utils/base64
     ydb/core/base
     ydb/core/change_exchange
-    ydb/core/fq/libs/row_dispatcher/events
     ydb/core/io_formats/cell_maker
     ydb/core/protos
     ydb/core/scheme

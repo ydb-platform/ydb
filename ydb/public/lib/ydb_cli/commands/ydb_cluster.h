@@ -10,6 +10,7 @@ namespace NYdb::NConsoleClient::NCluster {
 class TCommandCluster : public TClientCommandTree {
 public:
     TCommandCluster();
+    void Validate(TConfig& config) override;
 };
 
 class TCommandClusterBootstrap : public TYdbCommand {

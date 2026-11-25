@@ -1,47 +1,47 @@
 {
-    "test.test[ListDistinctDictInDict]": [
+    "test.test[ListDistinct-Results]": [
         {
-            "uri": "file://test.test_ListDistinctDictInDict_/results.txt"
+            "uri": "file://test.test_ListDistinct-Results_/results.txt"
         }
     ],
-    "test.test[ListDistinctDict]": [
+    "test.test[ListDistinctDict-Results]": [
         {
-            "uri": "file://test.test_ListDistinctDict_/results.txt"
+            "uri": "file://test.test_ListDistinctDict-Results_/results.txt"
         }
     ],
-    "test.test[ListDistinctLazyList]": [
+    "test.test[ListDistinctDictInDict-Results]": [
         {
-            "uri": "file://test.test_ListDistinctLazyList_/results.txt"
+            "uri": "file://test.test_ListDistinctDictInDict-Results_/results.txt"
         }
     ],
-    "test.test[ListDistinctLimit]": [
+    "test.test[ListDistinctLazyList-Results]": [
         {
-            "uri": "file://test.test_ListDistinctLimit_/results.txt"
+            "uri": "file://test.test_ListDistinctLazyList-Results_/results.txt"
         }
     ],
-    "test.test[ListDistinctSingular]": [
+    "test.test[ListDistinctLimit-Results]": [
         {
-            "uri": "file://test.test_ListDistinctSingular_/results.txt"
+            "uri": "file://test.test_ListDistinctLimit-Results_/results.txt"
         }
     ],
-    "test.test[ListDistinctStructInDict]": [
+    "test.test[ListDistinctSingular-Results]": [
         {
-            "uri": "file://test.test_ListDistinctStructInDict_/results.txt"
+            "uri": "file://test.test_ListDistinctSingular-Results_/results.txt"
         }
     ],
-    "test.test[ListDistinctTuple]": [
+    "test.test[ListDistinctStructInDict-Results]": [
         {
-            "uri": "file://test.test_ListDistinctTuple_/results.txt"
+            "uri": "file://test.test_ListDistinctStructInDict-Results_/results.txt"
         }
     ],
-    "test.test[ListDistinctVariant]": [
+    "test.test[ListDistinctTuple-Results]": [
         {
-            "uri": "file://test.test_ListDistinctVariant_/results.txt"
+            "uri": "file://test.test_ListDistinctTuple-Results_/results.txt"
         }
     ],
-    "test.test[ListDistinct]": [
+    "test.test[ListDistinctVariant-Results]": [
         {
-            "uri": "file://test.test_ListDistinct_/results.txt"
+            "uri": "file://test.test_ListDistinctVariant-Results_/results.txt"
         }
     ]
 }

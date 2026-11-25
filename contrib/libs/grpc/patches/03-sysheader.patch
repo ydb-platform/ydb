@@ -145,9 +145,9 @@ index 885bd8d..fedfe08 100644
 +#pragma GCC system_header
 +#endif
 +
- #include <grpc/support/port_platform.h>
- 
  #include <list>
+ #include <memory>
+ #include <vector>
 diff --git a/include/grpcpp/support/channel_arguments.h b/include/grpcpp/support/channel_arguments.h
 index 217929d..01861c9 100644
 --- a/include/grpcpp/support/channel_arguments.h

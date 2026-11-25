@@ -26,8 +26,8 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
             statRecordsCount += sub->GetRecordsCount();
         }
     }
-    AFL_VERIFY(stats.size());
-    AFL_VERIFY(statRecordsCount);
+    YDB_LOG_VERIFY(stats.size());
+    YDB_LOG_VERIFY(statRecordsCount);
     auto commonStats = TDictStats::Merge(stats, GetSettings(), statRecordsCount);
     ResultColumnStats = commonStats.SelectSeparatedColumns(GetSettings(), statRecordsCount);
     RemapKeyIndex.RegisterColumnStats(*ResultColumnStats);
@@ -37,7 +37,7 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
 }
 
 TColumnPortionResult TSubColumnsMerger::DoExecute(const TChunkMergeContext& context, TMergingContext& /*mergeContext*/) {
-    AFL_VERIFY(ResultColumnStats);
+    YDB_LOG_VERIFY(ResultColumnStats);
     NSubColumns::TMergedBuilder builder(*ResultColumnStats, context, GetSettings(), RemapKeyIndex);
     NColumnShard::TSubColumnsStat columnStats;
     NColumnShard::TSubColumnsStat otherStats;

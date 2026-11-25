@@ -41,7 +41,7 @@ public:
         : Begin(begin)
         , End(end)
     {
-        AFL_VERIFY(end >= begin);
+        YDB_LOG_VERIFY(end >= begin);
     }
 
     std::partial_ordering operator<=>(const TRowRange& other) const {
@@ -87,7 +87,7 @@ private:
 
 public:
     NArrow::TSimpleRow GetIndexKey(const TPortionInfo& portion) const {
-        AFL_VERIFY(PortionId == portion.GetPortionId());
+        YDB_LOG_VERIFY(PortionId == portion.GetPortionId());
         switch (Border) {
             case EBorder::FIRST:
                 return portion.GetMeta().IndexKeyStart();
@@ -142,7 +142,8 @@ public:
 
     TPortionInfo::TConstPtr GetPortionVerified(const ui64 portionId) const {
         auto* findPortion = Portions.FindPtr(portionId);
-        AFL_VERIFY(findPortion)("portion", portionId);
+        YDB_LOG_VERIFY(findPortion,
+            {"portion", portionId});
         return *findPortion;
     }
 };
@@ -193,7 +194,8 @@ public:
         : Begin(begin)
         , End(end)
     {
-        AFL_VERIFY(Begin->Compare(*End) != std::partial_ordering::greater)("borders", DebugString());
+        YDB_LOG_VERIFY(Begin->Compare(*End) != std::partial_ordering::greater,
+            {"borders", DebugString()});
     }
 
     TString DebugString() const {
@@ -304,7 +306,7 @@ public:
     }
 
     ui64 GetExclusivePortionId() const {
-        AFL_VERIFY(IsExclusive());
+        YDB_LOG_VERIFY(IsExclusive());
         return ExclusivePortionId;
     }
 

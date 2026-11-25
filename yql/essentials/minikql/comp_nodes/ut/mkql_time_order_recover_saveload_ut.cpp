@@ -1,5 +1,5 @@
 #include "../mkql_time_order_recover.h"
-#include "mkql_program_builder_test_utils.h"
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>

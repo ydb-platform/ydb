@@ -6,36 +6,31 @@ import logging
 
 import pytest
 
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
 import ydb.public.api.protos.ydb_value_pb2 as ydb
-import ydb.public.api.protos.draft.fq_pb2 as fq
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 
 
-class TestS3(TestYdsBase):
-    @yq_all
+class TestS3:
     @pytest.mark.parametrize(
-        "client, column_type, is_correct",
+        'column_type, is_correct',
         [
-            ({"folder_id": "my_folder1"}, "year Int32", False),
-            ({"folder_id": "my_folder2"}, "year Int32 NOT NULL", False),
-            ({"folder_id": "my_folder3"}, "year Uint32", False),
-            ({"folder_id": "my_folder4"}, "year Uint32 NOT NULL", True),
-            ({"folder_id": "my_folder5"}, "year Int64", False),
-            ({"folder_id": "my_folder6"}, "year Int64 NOT NULL", False),
-            ({"folder_id": "my_folder7"}, "year Uint64", False),
-            ({"folder_id": "my_folder8"}, "year Uint64 NOT NULL", False),
-            ({"folder_id": "my_folder9"}, "year String NOT NULL", True),
-            ({"folder_id": "my_folder10"}, "year String", False),
-            ({"folder_id": "my_folder11"}, "year Utf8", False),
-            ({"folder_id": "my_folder12"}, "year Utf8 NOT NULL", True),
-            ({"folder_id": "my_folder13"}, "year Date", False),
-            ({"folder_id": "my_folder14"}, "year Date NOT NULL", True),
-            ({"folder_id": "my_folder15"}, "year Datetime", False),
-            ({"folder_id": "my_folder16"}, "year Datetime NOT NULL", True),
+            ('year Int32', False),
+            ('year Int32 NOT NULL', False),
+            ('year Uint32', False),
+            ('year Uint32 NOT NULL', True),
+            ('year Int64', False),
+            ('year Int64 NOT NULL', False),
+            ('year Uint64', False),
+            ('year Uint64 NOT NULL', False),
+            ('year String NOT NULL', True),
+            ('year String', False),
+            ('year Utf8', False),
+            ('year Utf8 NOT NULL', True),
+            ('year Date', False),
+            ('year Date NOT NULL', True),
+            ('year Datetime', False),
+            ('year Datetime NOT NULL', True),
         ],
-        indirect=["client"],
     )
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
     def test_projection_date_type_validation(
@@ -60,9 +55,8 @@ Banana,3,100'''
             Key='2022-03-05/fruits.csv',
             ContentType='text/plain',
         )
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "test_projection_date_type_invalid_validation")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "test_projection_date_type_invalid_validation")
 
         sql = (
             f'''
@@ -101,73 +95,41 @@ Banana,3,100'''
             '''
         )
 
-        query_id = client.create_query("simple", sql).result.query_id
+        query = client.execute(sql)
         if is_correct:
-            client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-            data = client.get_result_data(query_id)
-            result_set = data.result.result_set
+            query.check()
+            data = query.result_set()
+            result_set = data
             logging.debug(str(result_set))
             assert len(result_set.columns) == 2
             assert result_set.columns[0].name == "Fruit"
             assert result_set.columns[0].type.type_id == ydb.Type.STRING
             assert len(result_set.rows) == 1
-            assert result_set.rows[0].items[0].bytes_value == b"Banana"
+            assert result_set.rows[0][0] == b"Banana"
         else:
-            client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-            describe_result = client.describe_query(query_id).result
-            logging.info("AST: {}".format(describe_result.query.ast.data))
-            assert "Projection column \\\"year\\\" has invalid type" in str(describe_result.query.issue), str(
-                describe_result.query.issue
-            )
+            query.check(False)
+            describe_result = query
+            logging.info("AST: {}".format(describe_result.ast))
+            assert 'Projection column "year" has invalid type' in str(describe_result.error), str(describe_result.error)
 
-    @yq_all
     @pytest.mark.parametrize(
-        "client, column_type, is_correct",
+        'column_type, is_correct',
         [
-            ({"folder_id": "my_folder1"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32), True),
-            ({"folder_id": "my_folder2"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32), True),
-            ({"folder_id": "my_folder3"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64), True),
-            ({"folder_id": "my_folder4"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE), False),
-            ({"folder_id": "my_folder5"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64), True),
-            ({"folder_id": "my_folder6"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING), True),
-            ({"folder_id": "my_folder7"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8), True),
-            (
-                {"folder_id": "my_folder8"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder9"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder10"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder11"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder12"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder13"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder14"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))),
-                False,
-            ),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32), True),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32), True),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64), True),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE), False),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64), True),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING), True),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8), True),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))), False),
         ],
-        indirect=["client"],
     )
     def test_binding_projection_integer_type_validation(
         self, kikimr, s3, client, column_type, is_correct, unique_prefix
@@ -191,18 +153,17 @@ Banana,3,100'''
             Key='2022-03-05/fruits.csv',
             ContentType='text/plain',
         )
-        kikimr.control_plane.wait_bootstrap(1)
-        connection_response = client.create_storage_connection(
+        connection_response = client.create_external_data_source(
             unique_prefix + "fruitbucket", "test_binding_projection_integer_type_validation"
         )
 
         year = ydb.Column(name="year", type=column_type)
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
-        binding_response = client.create_object_storage_binding(
+        binding_response = client.create_external_table(
             name=unique_prefix + "my_binding",
             path="/",
             format="csv_with_names",
-            connection_id=connection_response.result.connection_id,
+            data_source=connection_response.name,
             columns=[year, fruitType],
             projection={
                 "projection.enabled": "true",
@@ -212,59 +173,29 @@ Banana,3,100'''
                 "storage.location.template": "${year}-03-05",
             },
             partitioned_by=["year"],
-            check_issues=is_correct,
+            expect_error=not is_correct,
         )
         if not is_correct:
-            assert "Column \\\"year\\\" from projection does not support" in str(binding_response.issues)
+            assert 'Column "year" from projection does not support' in str(binding_response.error)
 
-    @yq_all
     @pytest.mark.parametrize(
-        "client, column_type, is_correct",
+        'column_type, is_correct',
         [
-            ({"folder_id": "my_folder1"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32), False),
-            ({"folder_id": "my_folder2"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32), False),
-            ({"folder_id": "my_folder3"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64), False),
-            ({"folder_id": "my_folder4"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE), False),
-            ({"folder_id": "my_folder5"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64), False),
-            ({"folder_id": "my_folder6"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING), True),
-            ({"folder_id": "my_folder7"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8), False),
-            (
-                {"folder_id": "my_folder8"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder9"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder10"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder11"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder12"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder13"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder14"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))),
-                False,
-            ),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32), False),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32), False),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64), False),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE), False),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64), False),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING), True),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))), False),
         ],
-        indirect=["client"],
     )
     def test_binding_projection_enum_type_validation(self, kikimr, s3, client, column_type, is_correct, unique_prefix):
         resource = boto3.resource(
@@ -286,18 +217,17 @@ Banana,3,100'''
             Key='2022-03-05/fruits.csv',
             ContentType='text/plain',
         )
-        kikimr.control_plane.wait_bootstrap(1)
-        connection_response = client.create_storage_connection(
+        connection_response = client.create_external_data_source(
             unique_prefix + "fruitbucket", "test_binding_projection_enum_type_validation"
         )
 
         year = ydb.Column(name="year", type=column_type)
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
-        binding_response = client.create_object_storage_binding(
+        binding_response = client.create_external_table(
             name=unique_prefix + "my_binding",
             path="/",
             format="csv_with_names",
-            connection_id=connection_response.result.connection_id,
+            data_source=connection_response.name,
             columns=[year, fruitType],
             projection={
                 "projection.enabled": "true",
@@ -306,65 +236,31 @@ Banana,3,100'''
                 "storage.location.template": "${year}-03-05",
             },
             partitioned_by=["year"],
-            check_issues=is_correct,
+            expect_error=not is_correct,
         )
         if not is_correct:
-            assert "Column \\\"year\\\" from projection does not support" in str(binding_response.issues)
+            assert 'Column "year" from projection does not support' in str(binding_response.error)
 
-    @yq_all
     @pytest.mark.parametrize(
-        "client, column_type, is_correct",
+        'column_type, is_correct',
         [
-            ({"folder_id": "my_folder1"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32), False),
-            ({"folder_id": "my_folder2"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32), True),
-            ({"folder_id": "my_folder3"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64), False),
-            ({"folder_id": "my_folder4"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE), True),
-            ({"folder_id": "my_folder5"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME), True),
-            ({"folder_id": "my_folder6"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64), False),
-            ({"folder_id": "my_folder7"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING), True),
-            ({"folder_id": "my_folder8"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8), True),
-            (
-                {"folder_id": "my_folder9"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder10"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder11"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder12"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder13"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder14"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder15"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))),
-                False,
-            ),
-            (
-                {"folder_id": "my_folder16"},
-                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))),
-                False,
-            ),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32), False),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32), True),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64), False),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE), True),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME), True),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64), False),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING), True),
+            (ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8), True),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))), False),
+            (ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))), False),
         ],
-        indirect=["client"],
     )
     def test_binding_projection_date_type_validation(self, kikimr, s3, client, column_type, is_correct, unique_prefix):
         resource = boto3.resource(
@@ -386,18 +282,17 @@ Banana,3,100'''
             Key='2022-03-05/fruits.csv',
             ContentType='text/plain',
         )
-        kikimr.control_plane.wait_bootstrap(1)
-        connection_response = client.create_storage_connection(
+        connection_response = client.create_external_data_source(
             unique_prefix + "fruitbucket", "test_binding_projection_date_type_validation"
         )
 
         year = ydb.Column(name="year", type=column_type)
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
-        binding_response = client.create_object_storage_binding(
+        binding_response = client.create_external_table(
             name=unique_prefix + "my_binding",
             path="/",
             format="csv_with_names",
-            connection_id=connection_response.result.connection_id,
+            data_source=connection_response.name,
             columns=[year, fruitType],
             projection={
                 "projection.enabled": "true",
@@ -410,15 +305,13 @@ Banana,3,100'''
                 "storage.location.template": "${year}-03-05",
             },
             partitioned_by=["year"],
-            check_issues=is_correct,
+            expect_error=not is_correct,
         )
         if not is_correct:
-            assert "Column \\\"year\\\" from projection does not support" in str(binding_response.issues)
+            assert 'Column "year" from projection does not support' in str(binding_response.error)
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
-    def test_raw_format(self, kikimr, s3, client, runtime_listing, yq_version, unique_prefix):
+    def test_raw_format(self, kikimr, s3, client, runtime_listing, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
@@ -437,9 +330,8 @@ Banana,3,100'''
             ContentType='text/plain',
         )
 
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "rawbucket"
-        client.create_storage_connection(storage_connection_name, "raw_bucket")
+        storage_connection_name = client.path(unique_prefix + "rawbucket")
+        client.create_external_data_source(storage_connection_name, "raw_bucket")
 
         sql = (
             f'''
@@ -478,17 +370,15 @@ Banana,3,100'''
         )
 
         # temporary fix for dynamic listing
-        if yq_version == "v1":
-            sql = 'pragma dq.MaxTasksPerStage="10"; ' + sql
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        describe_result = client.describe_query(query_id).result
-        logging.info("AST: {}".format(describe_result.query.ast.data))
+        describe_result = query
+        logging.info("AST: {}".format(describe_result.ast))
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
 
         assert len(result_set.columns) == 2
@@ -497,11 +387,9 @@ Banana,3,100'''
         assert result_set.columns[1].name == "timestamp"
         assert result_set.columns[1].type.type_id == ydb.Type.DATE
         assert len(result_set.rows) == 1
-        assert result_set.rows[0].items[0].bytes_value == b"text"
-        assert result_set.rows[0].items[1].uint32_value == 19371
+        assert result_set.rows[0][0] == b"text"
+        assert result_set.rows[0][1] == 19371
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
     def test_parquet(self, kikimr, s3, client, runtime_listing, unique_prefix):
         resource = boto3.resource(
@@ -512,23 +400,22 @@ Banana,3,100'''
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "pb"
-        client.create_storage_connection(storage_connection_name, "parquets")
+        storage_connection_name = client.path(unique_prefix + "pb")
+        client.create_external_data_source(storage_connection_name, "parquets")
 
         sql = fR'''
             insert into `{storage_connection_name}`.`part/x=1/` with (format="parquet")
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
             '''
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
         sql = fR'''
             insert into `{storage_connection_name}`.`part/x=2/` with (format="parquet")
             select * from AS_TABLE([<|foo:234, bar:"zzz"u|>,<|foo:567, bar:"ttt"u|>]);
             '''
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
         sql = f'''
             pragma s3.UseRuntimeListing="{runtime_listing}";
@@ -547,11 +434,11 @@ Banana,3,100'''
             ORDER BY foo
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 3
         assert result_set.columns[0].name == "foo"
@@ -562,23 +449,21 @@ Banana,3,100'''
         assert result_set.columns[2].name == "x"
         assert result_set.columns[2].type.type_id == ydb.Type.INT32
         assert len(result_set.rows) == 4
-        assert result_set.rows[0].items[0].int32_value == 123
-        assert result_set.rows[1].items[0].int32_value == 234
-        assert result_set.rows[2].items[0].int32_value == 456
-        assert result_set.rows[3].items[0].int32_value == 567
-        assert result_set.rows[0].items[1].bytes_value == b"xxx"
-        assert result_set.rows[1].items[1].bytes_value == b"zzz"
-        assert result_set.rows[2].items[1].bytes_value == b"yyy"
-        assert result_set.rows[3].items[1].bytes_value == b"ttt"
-        assert result_set.rows[0].items[2].int32_value == 1
-        assert result_set.rows[1].items[2].int32_value == 2
-        assert result_set.rows[2].items[2].int32_value == 1
-        assert result_set.rows[3].items[2].int32_value == 2
+        assert result_set.rows[0][0] == 123
+        assert result_set.rows[1][0] == 234
+        assert result_set.rows[2][0] == 456
+        assert result_set.rows[3][0] == 567
+        assert result_set.rows[0][1] == b"xxx"
+        assert result_set.rows[1][1] == b"zzz"
+        assert result_set.rows[2][1] == b"yyy"
+        assert result_set.rows[3][1] == b"ttt"
+        assert result_set.rows[0][2] == 1
+        assert result_set.rows[1][2] == 2
+        assert result_set.rows[2][2] == 1
+        assert result_set.rows[3][2] == 2
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", ["true"])
-    def test_valid_projected_column_values(self, kikimr, s3, client, runtime_listing, yq_version, unique_prefix):
+    def test_valid_projected_column_values(self, kikimr, s3, client, runtime_listing, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
@@ -612,9 +497,8 @@ text3''',
             ContentType='text/plain',
         )
 
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "bucket"
-        client.create_storage_connection(storage_connection_name, "bucket")
+        storage_connection_name = client.path(unique_prefix + "bucket")
+        client.create_external_data_source(storage_connection_name, "bucket")
 
         sql = (
             f'''
@@ -660,17 +544,15 @@ text3''',
         )
 
         # temporary fix for dynamic listing
-        if yq_version == "v1":
-            sql = 'pragma dq.MaxTasksPerStage="10"; ' + sql
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        describe_result = client.describe_query(query_id).result
-        logging.info("AST: {}".format(describe_result.query.ast.data))
+        describe_result = query
+        logging.info("AST: {}".format(describe_result.ast))
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
 
         assert len(result_set.columns) == 3
@@ -681,6 +563,6 @@ text3''',
         assert result_set.columns[2].name == "year"
         assert result_set.columns[2].type.type_id == ydb.Type.INT32
         assert len(result_set.rows) == 1
-        assert result_set.rows[0].items[0].bytes_value == b"text2"
-        assert result_set.rows[0].items[1].int32_value == 2
-        assert result_set.rows[0].items[2].int32_value == 2024
+        assert result_set.rows[0][0] == b"text2"
+        assert result_set.rows[0][1] == 2
+        assert result_set.rows[0][2] == 2024

@@ -24,8 +24,8 @@ class TestOther(object):
         node = self.cluster.nodes[1]
         return f"http://{node.host}:{node.mon_port}{path}"
 
-    def http_get(self, path, params):
-        return requests.get(self.http_url(path), params=params)
+    def http_get(self, path, params, timeout=30):
+        return requests.get(self.http_url(path), params=params, timeout=timeout)
 
     @pytest.mark.parametrize("from_tablet_id,to_tablet_id", [(2, 1), (1, 2), (2, 2)])
     def test_blob_range_mismatched_tablet_id(self, from_tablet_id, to_tablet_id):
@@ -57,11 +57,18 @@ class TestOther(object):
         r.raise_for_status()
         assert "NODATA" in r.text, r.text
 
-        r = self.http_get("/check_integrity", {
-            "groupId": group_id,
-            "blob": fake_blob,
-        })
-        r.raise_for_status()
+        def check_integrity_ready():
+            nonlocal r
+            r = self.http_get("/check_integrity", {
+                "groupId": group_id,
+                "blob": fake_blob,
+            }, timeout=10)
+            r.raise_for_status()
+            # Cluster startup needs a quorum, but integrity checks query every
+            # VDisk. A disk still recovering makes the placement unknown.
+            return "PS_UNKNOWN" not in r.text
+
+        assert wait_for(check_integrity_ready, timeout_seconds=60), r.text
         assert "BLOB_IS_LOST" in r.text, r.text
         assert "NODATA" in r.text, r.text
 
@@ -129,14 +136,13 @@ class TestOther(object):
         blob = self.create_blob()
         data = self.get_blob(blob)
         subgroup = self.check_integrity(blob)
-        for index, (vdisk, parts) in enumerate(subgroup.items()):
+        for index, vdisk in enumerate(subgroup):
             for part in (1, 2, 3):
                 if index < 3 and part != index + 1:
                     assert self.restore_part(blob, vdisk, part) == "ERROR"
                 else:
-                    expected = {"ALREADY"} if part in parts else {"OK", "ALREADY"}
-                    assert self.restore_part(blob, vdisk, part) in expected
-                    assert self.restore_part(blob, vdisk, part) == "ALREADY"
+                    assert self.restore_part(blob, vdisk, part) == "OK"
+                    assert self.restore_part(blob, vdisk, part) == "OK"
         assert self.check_integrity(blob) == {
             vdisk: {index + 1} if index < 3 else {1, 2, 3} for index, vdisk in enumerate(subgroup)
         }

@@ -51,6 +51,7 @@ namespace {
             case TableIndex::kGlobalAsyncIndex:
             case TableIndex::kGlobalUniqueIndex:
             case TableIndex::kGlobalVectorKmeansTreeIndex:
+            case TableIndex::kGlobalHnswIndex:
             case TableIndex::kGlobalFulltextPlainIndex:
             case TableIndex::kGlobalFulltextRelevanceIndex:
             case TableIndex::kGlobalJsonIndex:
@@ -609,6 +610,8 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     bool isLocalBloomFilter = false;
     bool isLocalBloomNgramFilter = false;
     switch (index.type_case()) {
+        case TableIndex::kGlobalHnswIndex:
+            ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "HNSW index implementation is not available yet");
         case TableIndex::kGlobalIndex: {
             Stream << " GLOBAL SYNC ON ";
             break;
@@ -1018,6 +1021,11 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
 
     if (compression) {
         Stream << del << "COMPRESSION = " << "\"" << compression << "\"";
+        del = ", ";
+    }
+
+    if (familyDesc.HasColumnCodecLevel()) {
+        Stream << del << "COMPRESSION_LEVEL = " << familyDesc.GetColumnCodecLevel();
         del = ", ";
     }
 
@@ -2200,28 +2208,6 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& tablePath, const TS
 
             if (bloomFilter.HasFalsePositiveProbability()) {
                 json[NIndexParameters::FalsePositiveProbability] = bloomFilter.GetFalsePositiveProbability();
-            }
-
-            EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
-            Stream << ");";
-            break;
-        }
-        case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex: {
-            const auto& maxIndex = indexDesc.GetMaxIndex();
-            Stream << "ALTER OBJECT ";
-            EscapeName(fullPath, Stream);
-            Stream << " (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=";
-            Stream << indexDesc.GetName();
-            Stream << ", TYPE=MAX, ";
-            Stream << "FEATURES=";
-            NJson::TJsonValue json;
-
-            if (maxIndex.HasColumnId()) {
-                const auto& columnName = columns.at(maxIndex.GetColumnId())->GetName();
-                json[NIndexParameters::ColumnName] = columnName;
-            } else {
-                ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
-                    TStringBuilder() << "ColumnId have to be in MAX index description");
             }
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);

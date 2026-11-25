@@ -136,6 +136,7 @@ template <bool Bool>
 TExprNode::TPtr MakeBool(TPositionHandle position, TExprContext& ctx);
 TExprNode::TPtr MakePgBool(TPositionHandle position, bool value, TExprContext& ctx);
 TExprNode::TPtr MakeIdentityLambda(TPositionHandle position, TExprContext& ctx);
+TExprNode::TPtr ExpandTraitsDefaultLambda(const TExprNode& lambda, TExprNode::TPtr finishType, TExprContext& ctx);
 
 constexpr std::initializer_list<std::string_view> SkippableCallables = {
     "Unordered",

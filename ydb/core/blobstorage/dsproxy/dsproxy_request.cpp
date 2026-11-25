@@ -312,7 +312,6 @@ namespace NKikimr {
                         .RestartCounter = ev->Get()->RestartCounter,
                         .TraceId = std::move(ev->TraceId),
                         .Event = ev->Get(),
-                        .ExecutionRelay = ev->Get()->ExecutionRelay,
                         .LatencyQueueKind = kind,
                         .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                         .EnableStorageRetroTraceGeneration = static_cast<bool>(Controls.EnableStorageRetroTraceGeneration.Update(now)),
@@ -658,7 +657,6 @@ namespace NKikimr {
                                     .RestartCounter = ev->Get()->RestartCounter,
                                     .TraceId = std::move(ev->TraceId),
                                     .Event = ev->Get(),
-                                    .ExecutionRelay = ev->Get()->ExecutionRelay,
                                     .LatencyQueueKind = kind,
                                     .ForceGroupGeneration = forceGroupGeneration,
                                     .EnableStorageRetroTraceGeneration = static_cast<bool>(Controls.EnableStorageRetroTraceGeneration.Update(now)),
@@ -708,15 +706,15 @@ namespace NKikimr {
                 };
 
                 if (InlinePileBridgeProxyId) {
-                    // requests batched before the bridge proxy was put in front of us have to go through it, just like
-                    // the ones handled by HandleWork
+                    // requests batched before the bridge proxy was put in front of us go to the actor in front of the
+                    // group, just like the ones handled by HandleWork
                     auto& queue = batchedPuts.Queue;
                     const auto newEnd = std::remove_if(queue.begin(), queue.end(), [&](auto& ev) {
-                        if (ev->Get()->ForceGroupGeneration) {
+                        const ui64 partSize = Info->Type.PartSize(ev->Get()->Id);
+                        if (!ResendToGroupService(ev)) {
                             return false;
                         }
-                        batchedPuts.Bytes -= Info->Type.PartSize(ev->Get()->Id);
-                        TActivationContext::Send(ev->Forward(InlinePileBridgeProxyId));
+                        batchedPuts.Bytes -= partSize;
                         return true;
                     });
                     queue.erase(newEnd, queue.end());
@@ -895,6 +893,7 @@ namespace NKikimr {
                 Y_DEBUG_ABORT_UNLESS(common);
                 if (common) {
                     common->DataKind = DataKind;
+                    common->IsProxySubrequest = IsProxySubrequest;
                 }
             }
             ++*Mon->NodeMon->RestartHisto[Min<size_t>(Mon->NodeMon->RestartHisto.size() - 1, RestartCounter)];
@@ -1005,16 +1004,6 @@ namespace NKikimr {
     TLogoBlobID TBlobStorageGroupRequestActor::GetBlobId(TEvBlobStorage::TEvVPatchDiff &ev) {
         Y_ABORT_UNLESS(ev.Record.HasPatchedPartBlobId());
         return LogoBlobIDFromLogoBlobID(ev.Record.GetPatchedPartBlobId());
-    }
-
-    void TBlobStorageGroupRequestActor::SendToProxy(std::unique_ptr<IEventBase> event, ui64 cookie, NWilson::TTraceId traceId) {
-        if (ForceGroupGeneration || DataKind != NKikimrBlobStorage::TDataKind::USER) {
-            if (auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(event.get())) {
-                common->ForceGroupGeneration = ForceGroupGeneration;
-                common->DataKind = DataKind;
-            }
-        }
-        Send(ProxyActorId, event.release(), 0, cookie, std::move(traceId));
     }
 
     void TBlobStorageGroupRequestActor::SendResponseAndDie(std::unique_ptr<IEventBase>&& ev,
@@ -1264,7 +1253,13 @@ namespace NKikimr {
             ReplyAndDie(NKikimrProto::RACE);
             return false;
         }
-        Y_VERIFY_S(!Info->Group || !Info->Group->HasBridgeProxyGroupId() || ForceGroupGeneration, "Type# " << TypeName(*this));
+        if (Info->Group && Info->Group->HasBridgeProxyGroupId() && !ForceGroupGeneration) {
+            // a part of bridged group is reached through its bridge proxy, which fences every request with the
+            // generation of the part; a request addressed to the part directly (e.g. from a monitoring page) is refused
+            ErrorReason = "request to a part of bridged group without forced generation";
+            ReplyAndDie(NKikimrProto::ERROR);
+            return false;
+        }
         return true;
     }
 

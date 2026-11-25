@@ -10,7 +10,4 @@ PEERDIR(
     ydb/tests/sql/lib
 )
 
-FORK_SUBTESTS()
-FORK_TEST_FILES()
-
 END()

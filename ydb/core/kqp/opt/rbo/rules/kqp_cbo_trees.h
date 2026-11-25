@@ -66,7 +66,9 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(
 TIntrusivePtr<IOperator> ConvertOptimizedTree(
     std::shared_ptr<IBaseOptimizerNode> tree,
     const TVector<TCBOLeaf>& leaves,
-    TPositionHandle pos);
+    TPositionHandle pos,
+    TExprContext& ctx,
+    TPlanProps& props);
 
 std::string FormatJoinTree(const char* title, const std::shared_ptr<IBaseOptimizerNode>& joinTree);
 

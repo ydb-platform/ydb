@@ -12,9 +12,9 @@ SELECT
     i_wholesale_cost,
     i_brand
 FROM
-    `/Root/test/ds/store`
+    `store`
 ,
-    `/Root/test/ds/item`
+    `item`
 , (
     SELECT
         ss_store_sk,
@@ -25,9 +25,9 @@ FROM
             ss_item_sk,
             Sum(ss_sales_price) AS revenue
         FROM
-            `/Root/test/ds/store_sales`
+            `store_sales`
         ,
-            `/Root/test/ds/date_dim`
+            `date_dim`
         WHERE
             ss_sold_date_sk == d_date_sk AND d_month_seq BETWEEN $to_decimal(1212) AND $to_decimal(1212 + 11)
         GROUP BY
@@ -43,9 +43,9 @@ FROM
         ss_item_sk,
         Sum(ss_sales_price) AS revenue
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         ss_sold_date_sk == d_date_sk AND d_month_seq BETWEEN $to_decimal(1212) AND $to_decimal(1212 + 11)
     GROUP BY

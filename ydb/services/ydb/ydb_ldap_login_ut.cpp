@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.h>
@@ -12,6 +13,12 @@
 
 #include <ydb/core/security/ldap_auth_provider/test_utils/test_settings.h>
 #include "ydb_common_ut.h"
+
+#include <grpcpp/client_context.h>
+#include <grpcpp/create_channel.h>
+#include <grpcpp/security/credentials.h>
+
+#include <chrono>
 
 namespace NKikimr {
 
@@ -44,6 +51,25 @@ public:
 
     std::shared_ptr<NYdb::ICoreFacility> GetCoreFacility() {
         return Client.GetCoreFacility();
+    }
+
+    void CheckUnavailableLogin(const TString& login, const TString& password, const TString& expectedErrorMessage) {
+        auto stub = Ydb::Auth::V1::AuthService::NewStub(grpc::CreateChannel(
+            "localhost:" + ToString(Server.GetPort()), grpc::InsecureChannelCredentials()));
+        grpc::ClientContext context;
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+        Ydb::Auth::LoginRequest request;
+        request.set_user(login);
+        request.set_password(password);
+        Ydb::Auth::LoginResponse response;
+        const auto status = stub->Login(&context, request, &response);
+        UNIT_ASSERT_C(status.ok(), status.error_message());
+        const auto& operation = response.operation();
+        UNIT_ASSERT_C(operation.ready(), response.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), Ydb::StatusIds::UNAVAILABLE, response.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(operation.issues_size(), 1, response.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(operation.issues(0).message(), expectedErrorMessage);
+        UNIT_ASSERT_C(!operation.has_result(), response.DebugString());
     }
 
     NYdb::NQuery::TExecuteQueryResult ExecuteSql(const TString& token, const TString& sql) {
@@ -239,9 +265,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         LdapMock::TSimpleServer ldapServer({.Port = loginConnection.GetLdapPort()}, responses);
 
         ldapServer.Start();
-        auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
-        auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, expectedErrorMessage);
+        loginConnection.CheckUnavailableLogin(login + "@ldap", password, expectedErrorMessage);
 
         loginConnection.Stop();
     }
@@ -527,11 +551,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         }, responses);
 
         ldapServer.Start();
-        auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
-        auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        TString token;
-        UNIT_ASSERT_EXCEPTION_CONTAINS(token = loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
-        UNIT_ASSERT(token.empty());
+        loginConnection.CheckUnavailableLogin(login + "@ldap", password, "Could not login via LDAP");
 
         loginConnection.Stop();
     }

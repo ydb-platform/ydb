@@ -2,8 +2,8 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -16,10 +16,10 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/workload_manager/actors/resource_pool_tracker.h>
 #include <ydb/services/workload_manager/common/helpers.h>
+#include <ydb/services/workload_manager/common/service_id.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/gateway_internal.h>
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
-#include <ydb/services/workload_manager/service/service.h>
 
 namespace NKikimr::NWorkloadManager {
 

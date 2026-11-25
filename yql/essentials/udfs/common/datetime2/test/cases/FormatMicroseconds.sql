@@ -1,4 +1,3 @@
-/* syntax version 1 */
 $parse = DateTime::Parse("%Y-%m-%d %H:%M:%S");
 
 $dt0 = $parse("2024-01-01 00:00:00");

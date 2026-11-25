@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import logging
-import time
 from hamcrest import assert_that
 
 from ydb.core.protos.cms_pb2 import EAvailabilityMode
@@ -23,16 +22,13 @@ class AbstractLocalClusterTest(object):
 
     @classmethod
     def setup_class(cls):
-        nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
+        nodes_count = max(9 if cls.erasure == Erasure.MIRROR_3_DC else 1, cls.erasure.min_fail_domains)
         configurator = KikimrConfigGenerator(cls.erasure,
                                              nodes=nodes_count,
                                              )
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
-        # CMS will not let disable state storage
-        # nodes for first 2 minutes
-        time.sleep(120)
-        cms.request_increase_ratio_limit(cls.cluster.client)
+        utils.configure_cms_and_wait(cls.cluster, cls.mode)
         host = cls.cluster.nodes[1].host
         mon_port = cls.cluster.nodes[1].mon_port
         cls.swagger_client = SwaggerClient(host, mon_port)
@@ -76,4 +72,14 @@ class TestDegradedGroupMirror3dcMax(AbstractTestCmsDegradedGroups):
 
 class TestDegradedGroupMirror3dcKeep(AbstractTestCmsDegradedGroups):
     erasure = Erasure.MIRROR_3_DC
+    mode = EAvailabilityMode.MODE_KEEP_AVAILABLE
+
+
+class TestDegradedGroupBlock82Max(AbstractTestCmsDegradedGroups):
+    erasure = Erasure.BLOCK_8_2
+    mode = EAvailabilityMode.MODE_MAX_AVAILABILITY
+
+
+class TestDegradedGroupBlock82Keep(AbstractTestCmsDegradedGroups):
+    erasure = Erasure.BLOCK_8_2
     mode = EAvailabilityMode.MODE_KEEP_AVAILABLE

@@ -1,4 +1,5 @@
 from devtools.yamaker import fileutil
+from devtools.yamaker.modules import Linkable, Switch
 from devtools.yamaker.project import CMakeNinjaNixProject
 
 
@@ -22,6 +23,8 @@ def post_install(self):
     with self.yamakes["."] as m:
         # Remove ADDINCL GLOBAL to keep status quo.
         m.ADDINCL.get(self.arcdir + "/include").GLOBAL = False
+        m.SRCS.remove("src/util.cpp")
+        m.after("SRCS", Switch({"NOT ARCH_XTENSA": Linkable(SRCS=["src/util.cpp"])}))
 
 
 flatbuffers = CMakeNinjaNixProject(

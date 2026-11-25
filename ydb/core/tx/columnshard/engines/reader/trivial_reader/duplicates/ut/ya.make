@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(

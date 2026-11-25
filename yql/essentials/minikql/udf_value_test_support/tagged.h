@@ -6,13 +6,13 @@
 
 namespace NYql::NUdf::NTest {
 
-enum class TTag {
+enum class ETag {
     A,
     B,
     C
 };
 
-template <typename T, TTag tag>
+template <typename T, ETag tag>
 class TTagged {
 public:
     TTagged()
@@ -30,11 +30,11 @@ public:
 
     TStringBuf Tag() const {
         switch (tag) {
-            case TTag::A:
+            case ETag::A:
                 return "A";
-            case TTag::B:
+            case ETag::B:
                 return "B";
-            case TTag::C:
+            case ETag::C:
                 return "C";
         };
     }

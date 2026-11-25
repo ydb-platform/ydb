@@ -817,7 +817,6 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         using TTxControl = TTxControlFor<UseQueryService>;
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(false);
         TKikimrRunner kikimr(settings);
         auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
@@ -1827,7 +1826,6 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
     Y_UNIT_TEST_TWIN(MixedWithSchemeRejected, UseQueryService) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(false);
         TKikimrRunner kikimr(settings);
         auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();

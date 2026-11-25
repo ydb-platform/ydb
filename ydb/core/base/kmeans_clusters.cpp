@@ -14,6 +14,7 @@
 #include <cmath>
 #include <span>
 #include <util/stream/str.h>
+#include <util/generic/size_literals.h>
 
 namespace NKikimr::NKMeans {
 
@@ -220,6 +221,7 @@ class TClusters: public IClusters {
     const ui32 Dimensions = 0;
     const ui32 MaxRounds = 0;
     const ui8 FormatByte = 0;
+    const EClustersMode Mode;
 
     TVector<TString> Clusters;
     TVector<ui64> ClusterSizes;
@@ -229,10 +231,11 @@ class TClusters: public IClusters {
     ui32 Round = 0;
 
 public:
-    TClusters(ui32 dimensions, ui32 maxRounds, ui8 formatByte)
+    TClusters(ui32 dimensions, ui32 maxRounds, ui8 formatByte, EClustersMode mode)
         : Dimensions(dimensions)
         , MaxRounds(maxRounds)
         , FormatByte(formatByte)
+        , Mode(mode)
     {
     }
 
@@ -285,16 +288,19 @@ public:
         ClusterSizes.clear();
         ClusterSizes.resize(Clusters.size());
         NextClusterSizes.clear();
-        NextClusterSizes.resize(Clusters.size());
         NextClusters.clear();
-        NextClusters.resize(Clusters.size());
-        for (auto& aggregate : NextClusters) {
-            aggregate.resize(Dimensions, 0);
+        if (Mode == EClustersMode::Accumulate) {
+            NextClusterSizes.resize(Clusters.size());
+            NextClusters.resize(Clusters.size());
+            for (auto& aggregate : NextClusters) {
+                aggregate.resize(Dimensions, 0);
+            }
         }
         return true;
     }
 
     bool RecomputeClusters() override {
+        Y_ENSURE(Mode == EClustersMode::Accumulate, "Assignment-only clusters cannot accumulate vectors");
         ui64 vectorCount = 0;
         ui64 reassignedCount = 0;
         for (size_t i = 0; auto& aggregate : NextClusters) {
@@ -358,13 +364,14 @@ public:
         return false;
     }
 
-    void FindClusters(const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+    void FindClustersImpl(ui32 clusterCount, std::function<TStringBuf(ui32)> getCentroid,
+        const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) {
         clusters.clear();
         if (!IsExpectedFormat(embedding)) {
             return;
         }
-        for (ui32 i = 0; const auto& cluster : Clusters) {
-            auto cl = std::make_pair(i, (double)TMetric::Distance(cluster, embedding));
+        for (ui32 i = 0; i < clusterCount; i++) {
+            auto cl = std::make_pair(i, (double)TMetric::Distance(getCentroid(i), embedding));
             // upper_bound, not lower_bound: on equal distances the cluster with the lower number wins,
             // the same way as in FindCluster(). Otherwise rows may be assigned to different clusters
             // during the K-means and the upload passes of the index build.
@@ -377,7 +384,6 @@ public:
                 clusters.insert(it, cl);
                 clusters.pop_back();
             }
-            ++i;
         }
         if (skipRatio > 0 && clusters.size() > 1) {
             double thresh = (clusters[0].second < 0 ? clusters[0].second/skipRatio : clusters[0].second*skipRatio);
@@ -388,6 +394,18 @@ public:
                 }
             }
         }
+    }
+
+    void FindClusters(const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+        FindClustersImpl((ui32)Clusters.size(), [&](ui32 n) { return Clusters.at(n); }, embedding, clusters, n, skipRatio);
+    }
+
+    void FindClusters(TConstArrayRef<TStringBuf> centroids, const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+        FindClustersImpl((ui32)centroids.size(), [&](ui32 n) { return centroids.at(n); }, embedding, clusters, n, skipRatio);
+    }
+
+    void FindClusters(TConstArrayRef<TCell> centroids, const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+        FindClustersImpl((ui32)centroids.size(), [&](ui32 n) { return centroids.at(n).AsBuf(); }, embedding, clusters, n, skipRatio);
     }
 
     std::optional<ui32> FindCluster(const TStringBuf embedding) override {
@@ -417,6 +435,7 @@ public:
     }
 
     void AggregateToCluster(ui32 pos, const TArrayRef<const char>& embedding, ui64 weight) override {
+        Y_ENSURE(Mode == EClustersMode::Accumulate, "Assignment-only clusters cannot accumulate vectors");
         auto& aggregate = NextClusters.at(pos);
         auto* coords = aggregate.data();
         Y_ENSURE(IsExpectedFormat(embedding));
@@ -656,7 +675,7 @@ private:
     }
 };
 
-std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error) {
+std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error, EClustersMode mode) {
     if (!ValidateSettings(settings, error)) {
         return nullptr;
     }
@@ -667,16 +686,16 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
         constexpr ui8 formatByte = Format<T>;
         switch (settings.metric()) {
             case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
-                return std::make_unique<TClusters<TMaxInnerProductSimilarity<T>>>(dim, maxRounds, formatByte);
+                return std::make_unique<TClusters<TMaxInnerProductSimilarity<T>>>(dim, maxRounds, formatByte, mode);
             case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
             case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
                 // We don't need to have separate implementation for distance,
                 // because clusters will be same as for similarity
-                return std::make_unique<TClusters<TCosineDistance<T>>>(dim, maxRounds, formatByte);
+                return std::make_unique<TClusters<TCosineDistance<T>>>(dim, maxRounds, formatByte, mode);
             case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
-                return std::make_unique<TClusters<TL1Distance<T>>>(dim, maxRounds, formatByte);
+                return std::make_unique<TClusters<TL1Distance<T>>>(dim, maxRounds, formatByte, mode);
             case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
-                return std::make_unique<TClusters<TL2Distance<T>>>(dim, maxRounds, formatByte);
+                return std::make_unique<TClusters<TL2Distance<T>>>(dim, maxRounds, formatByte, mode);
             default:
                 error = TStringBuilder() << "Invalid metric: " << static_cast<int>(settings.metric());
                 return nullptr;
@@ -803,8 +822,13 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
 }
 
 namespace {
-    bool ValidateSettingsImpl(const Ydb::Table::VectorIndexSettings& settings, bool partial, TString& error) {
-        if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
+    bool ValidateSettingsImpl(const Ydb::Table::VectorIndexSettings& settings, bool partial, TString& error, bool hnsw = false) {
+        auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count();
+        if (!hnsw) {
+            unknownCount += settings.has_m() + settings.has_ef_construction()
+                + settings.has_min_rows() + settings.has_delta_rows();
+        }
+        if (unknownCount > 0) {
             error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
             return false;
         }
@@ -815,6 +839,15 @@ namespace {
         }
         if (!Ydb::Table::VectorIndexSettings::Metric_IsValid(settings.metric())) {
             error = TStringBuilder() << "Invalid metric: " << static_cast<int>(settings.metric());
+            return false;
+        }
+
+        if (settings.has_m()
+            && !ValidateSettingInRange("M", settings.m(), MinHnswM, MaxHnswM, error)) {
+            return false;
+        }
+        if (settings.has_ef_construction()
+            && !ValidateSettingInRange("ef_construction", settings.ef_construction(), 1, MaxHnswEfConstruction, error)) {
             return false;
         }
 
@@ -863,8 +896,9 @@ namespace {
         return true;
     }
 
-    bool ValidateSettingsImpl(const Ydb::Table::KMeansTreeSettings& settings, bool partial, TString& error) {
+    bool ValidateSettingsImpl(const Ydb::Table::KMeansTreeSettings& settings, bool partial, TString& error, bool hnsw = false) {
         error = "";
+        const ui64 minClusters = hnsw ? 1 : MinClusters;
 
         if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
             error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
@@ -876,7 +910,7 @@ namespace {
             return false;
         }
 
-        if (!ValidateSettingsImpl(settings.settings(), partial, error)) {
+        if (!ValidateSettingsImpl(settings.settings(), partial, error, hnsw)) {
             return false;
         }
 
@@ -894,7 +928,7 @@ namespace {
             if (settings.has_clusters()) {
                 if (!ValidateSettingInRange("clusters",
                     std::optional<ui64>(settings.clusters()),
-                    MinClusters, MaxClusters,
+                    minClusters, MaxClusters,
                     error))
                 {
                     return false;
@@ -911,7 +945,7 @@ namespace {
 
             if (!ValidateSettingInRange("clusters",
                 settings.has_clusters() ? std::optional<ui64>(settings.clusters()) : std::nullopt,
-                MinClusters, MaxClusters,
+                minClusters, MaxClusters,
                 error))
             {
                 return false;
@@ -968,6 +1002,27 @@ bool ValidateSettingsPartial(const Ydb::Table::VectorIndexSettings& settings, TS
 
 bool ValidateSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
     return ValidateSettingsImpl(settings, true, error);
+}
+
+bool ValidateHnswSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
+    return ValidateSettingsImpl(settings, false, error, true);
+}
+
+bool ValidateHnswSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
+    return ValidateSettingsImpl(settings, true, error, true);
+}
+
+bool AutoSelectHnswSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 dataSizeBytes, TString& error) {
+    if (!settings.has_levels() || !settings.levels()) {
+        settings.set_levels(1);
+    }
+    if (!settings.has_clusters() || !settings.clusters()) {
+        // Cap the default before narrowing to the protobuf's uint32 field.
+        // Explicit cluster counts are validated below without clamping.
+        const ui64 clusters = Min<ui64>(dataSizeBytes / 1_GB + 1, MaxClusters);
+        settings.set_clusters(clusters);
+    }
+    return ValidateHnswSettingsPartial(settings, error);
 }
 
 ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector) {

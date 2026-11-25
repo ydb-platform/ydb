@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 
@@ -402,6 +402,7 @@ struct TTaskMeta {
             Blocks
         };
         ui64 ItemsLimit = 0;
+        bool RequireSortedRead = false;
         EReadType ReadType = EReadType::Rows;
         TKqpOlapProgram OlapProgram;
         TVector<NScheme::TTypeInfo> ResultColumnsTypes;
@@ -566,6 +567,5 @@ private:
     TTaskPlanningConstraints PlanningConstraints;
     TPqSourcePlanningSnapshot PqSourcePlanningSnapshot;
 };
-
 
 } // namespace NKikimr::NKqp

@@ -1,5 +1,6 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_block_coalesce.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_block_test_helper.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_block_coalesce_blending_helper.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
@@ -10,7 +11,6 @@
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/arrow/arrow_util.h>
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_block_test_helper.h>
 
 #include <arrow/compute/exec_internal.h>
 
@@ -358,7 +358,7 @@ Y_UNIT_TEST(TestBooleanType) {
 
 // Test for Tagged types
 Y_UNIT_TEST(TestTaggedType) {
-    using TaggedIntType = TTagged<ui32, TTag::A>;
+    using TaggedIntType = TTagged<ui32, ETag::A>;
 
     // Test with mixed null/non-null left operands
     TestCoalesceKernel(

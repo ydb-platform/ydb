@@ -7,9 +7,12 @@
 
 #include <yql/essentials/utils/prefetch.h>
 
+#include <util/generic/array_ref.h>
 #include <util/generic/buffer.h>
 
 #include <bit>
+#include <limits>
+#include <type_traits>
 
 #include "tuple.h"
 #include "join_defs.h"
@@ -66,8 +69,10 @@ template <class T> class TBloomFilterMasks {
     }
 };
 
-template <bool ConsecutiveDuplicates = false, bool Prefetch = true>
+template <bool ConsecutiveDuplicates = false, bool Prefetch = true, bool ExternalKeys = false>
 class TNeumannHashTable {
+    static_assert(!(ConsecutiveDuplicates && ExternalKeys));
+
     /// hash = [bloom_filter_bits] [directory_bits] [bucket_bits]
     using Hash = ui32;
     using TBloom = ui16;
@@ -165,7 +170,7 @@ class TNeumannHashTable {
         Clear();
 
         Layout_ = layout;
-        IsInplace_ = layout->TotalRowSize <= kEmbeddedSize;
+        IsInplace_ = !ExternalKeys && layout->TotalRowSize <= kEmbeddedSize;
         RowIndexSize_ = IsInplace_ ? layout->TotalRowSize : sizeof(TOutplace);
         BufferSlotSize_ = RowIndexSize_;
         if constexpr (ConsecutiveDuplicates) {
@@ -197,7 +202,7 @@ class TNeumannHashTable {
     }
 
     void Build(const ui8 *const tuples, const ui8 *const overflow, int nItems,
-               std::optional<ui32> estimatedLogSize = std::nullopt) {
+               std::optional<ui32> estimatedLogSize = std::nullopt) requires (!ExternalKeys) {
         MKQL_ENSURE_S(Layout_ != nullptr);
         MKQL_ENSURE_S(Directories_.empty() && Buffer_.empty() &&
                  Tuples_ == nullptr && Overflow_ == nullptr);
@@ -228,15 +233,7 @@ class TNeumannHashTable {
             dir |= kBloomTags[thash.BloomTagSlot];
         }
 
-        {
-            ui32 accum = 0;
-            for (auto &directory : Directories_) {
-                accum += directory.BufferSlot;
-                directory.BufferSlot = accum;
-
-                directory.BloomFilter = ~directory.BloomFilter;
-            }
-        }
+        AccumulateDirectories();
 
         Buffer_.resize(static_cast<size_t>(BufferSlotSize_) * nItems);
 
@@ -320,9 +317,10 @@ class TNeumannHashTable {
                     ui8 *right = end;
                     ui32 size = 1;
 
+                    const THash thash = ReadUnaligned<THash>(row);
                     bool checkLeft = true;
                     while (left != right) {
-                        while (left != right && checkLeft && GetRowMatch(left, row, overflow, &matchedRow)) {
+                        while (left != right && checkLeft && GetRowMatch(left, row, overflow, thash, TLayoutKeysEqual{}, &matchedRow)) {
                             ++size;
                             left += BufferSlotSize_;
                         }
@@ -333,7 +331,7 @@ class TNeumannHashTable {
                         }
                         right -= BufferSlotSize_;
 
-                        if (GetRowMatch(right, row, overflow, &matchedRow)) {
+                        if (GetRowMatch(right, row, overflow, thash, TLayoutKeysEqual{}, &matchedRow)) {
                             ui8 buf[kEmbeddedSize];
                             std::memcpy(buf, left, RowIndexSize_);
                             std::memcpy(left, right, RowIndexSize_);
@@ -352,7 +350,7 @@ class TNeumannHashTable {
         }
     }
 
-    Y_FORCE_INLINE const ui8 *NextMatch(TIterator &iter, const ui8 *overflow) const {
+    Y_FORCE_INLINE const ui8 *NextMatch(TIterator &iter, const ui8 *overflow) const requires (!ExternalKeys) {
         const ui8 *result = nullptr;
 
         if constexpr (ConsecutiveDuplicates) {
@@ -362,8 +360,9 @@ class TNeumannHashTable {
                 iter.Len_--;
             }
         } else {
+            const THash thash = ReadUnaligned<THash>(iter.Row_);
             for (auto& it = iter.It_; it != iter.End_; it += BufferSlotSize_) { /// allow multiple false calls
-                if (GetRowMatch(it, iter.Row_, overflow, &result)) {
+                if (GetRowMatch(it, iter.Row_, overflow, thash, TLayoutKeysEqual{}, &result)) {
                     it += BufferSlotSize_;
                     break;
                 }
@@ -374,7 +373,7 @@ class TNeumannHashTable {
         return result;
     }
 
-    TIterator Find(const ui8 *const row, const ui8 *const overflow) const {
+    TIterator Find(const ui8 *const row, const ui8 *const overflow) const requires (!ExternalKeys) {
         Y_ASSERT(Layout_ != nullptr);
         Y_ASSERT(!Directories_.empty() && Tuples_ != nullptr);
 
@@ -406,7 +405,7 @@ class TNeumannHashTable {
                 const ui8 *matchedRow;
                 auto size  = ReadUnaligned<ui32>(it + RowIndexSize_);
 
-                if (GetRowMatch(it, row, overflow, &matchedRow)) {
+                if (GetRowMatch(it, row, overflow, thash, TLayoutKeysEqual{}, &matchedRow)) {
                     iter.It_ = it;
                     iter.Len_ = size;
                     break;
@@ -421,7 +420,7 @@ class TNeumannHashTable {
 
     template <size_t Size>
     std::array<TIterator, Size> FindBatch(const std::array<const ui8 *, Size> &rows,
-                                          const ui8 *const overflow) const {
+                                          const ui8 *const overflow) const requires (!ExternalKeys) {
         if constexpr (Prefetch) {
             if (Directories_.size() > 1024 * 1024 / sizeof(TDirectory)) {
                 for (ui32 index = 0; index < Size && rows[index]; ++index) {
@@ -447,12 +446,12 @@ class TNeumannHashTable {
 
         return iters;
     }
-    void PrefetchDirectory(const ui8 *const row) const {
+    void PrefetchDirectory(const ui8 *const row) const requires (!ExternalKeys) {
         const THash thash = ReadUnaligned<THash>(row);
         NYql::PrefetchForRead(&Directories_[getDirectorySlot(thash)]);
     }
 
-    void PrefetchBuffer(const ui8 *const row) const {
+    void PrefetchBuffer(const ui8 *const row) const requires (!ExternalKeys) {
         const THash thash = ReadUnaligned<THash>(row);
         const TDirectory dir = Directories_[getDirectorySlot(thash)];
         if (kBloomTags[thash.BloomTagSlot] & dir.BloomFilter) {
@@ -461,7 +460,7 @@ class TNeumannHashTable {
         NYql::PrefetchForRead(Buffer_.data() + BufferSlotSize_ * dir.BufferSlot);
     }
 
-    void PrefetchTuple(const ui8 *const row) const {
+    void PrefetchTuple(const ui8 *const row) const requires (!ExternalKeys) {
         if (IsInplace_) {
             return;
         }
@@ -484,7 +483,7 @@ class TNeumannHashTable {
     }
 
     void Apply(const ui8 *const row, const ui8 *const overflow,
-               std::predicate<const ui8*> auto onMatch) const {
+               std::predicate<const ui8*> auto onMatch) const requires (!ExternalKeys) {
         size_t slot = 0;
         Apply(row, overflow, slot, onMatch);
     }
@@ -492,11 +491,75 @@ class TNeumannHashTable {
     // slot is the next directory slot of this key. onMatch returns false to stop the scan,
     // leaving slot at the slot to continue from
     void Apply(const ui8 *const row, const ui8 *const overflow, size_t& slot,
-               std::predicate<const ui8*> auto onMatch) const {
+               std::predicate<const ui8*> auto onMatch) const requires (!ExternalKeys) {
+        ApplyImpl(row, overflow, ReadUnaligned<THash>(row), TLayoutKeysEqual{}, slot, onMatch);
+    }
+
+    void Apply(const ui8 *const row, const ui8 *const overflow, const Hash hash,
+               std::predicate<const ui8*, const ui8*, const ui8*, const ui8*> auto keysEqual,
+               std::predicate<const ui8*> auto onMatch) const requires ExternalKeys {
+        THash thash;
+        *thash = hash;
+        size_t slot = 0;
+        ApplyImpl(row, overflow, thash, keysEqual, slot, onMatch);
+    }
+
+    void Build(const ui8 *const tuples, const ui8 *const overflow, TArrayRef<const ui32> indices,
+               TArrayRef<const Hash> hashes) requires ExternalKeys {
+        MKQL_ENSURE_S(Layout_ != nullptr);
+        MKQL_ENSURE_S(Directories_.empty() && Buffer_.empty() &&
+                 Tuples_ == nullptr && Overflow_ == nullptr);
+        MKQL_ENSURE(indices.size() == hashes.size(), "every row needs a hash");
+        MKQL_ENSURE(indices.size() <= static_cast<size_t>(std::numeric_limits<int>::max()), "too many rows");
+        const int nItems = static_cast<int>(indices.size());
+
+        Tuples_ = tuples;
+        Overflow_ = overflow;
+
+        DirectoryHashBits_ = EstimateLogSize(nItems);
+        DirectoryHashMask_ = (1ul << DirectoryHashBits_) - 1;
+        Directories_.resize((1ul << DirectoryHashBits_) + 1, TDirectory{});
+
+        for (const Hash hash : hashes) {
+            THash thash;
+            *thash = hash;
+            auto &dir = *Directories_[getDirectorySlot(thash)];
+            dir += 1ul << TDirectory::kBufferSlotShift;
+            dir |= kBloomTags[thash.BloomTagSlot];
+        }
+
+        AccumulateDirectories();
+
+        Buffer_.resize(static_cast<size_t>(BufferSlotSize_) * nItems);
+        for (int ind = 0; ind != nItems; ++ind) {
+            THash thash;
+            *thash = hashes[ind];
+            auto &dir = *Directories_[getDirectorySlot(thash)];
+            dir -= 1ul << TDirectory::kBufferSlotShift;
+            const ui32 dataSlot = dir >> TDirectory::kBufferSlotShift;
+            WriteUnaligned<TOutplace>(Buffer_.data() + BufferSlotSize_ * dataSlot,
+                                      TOutplace{.Hash = *thash, .Index = indices[ind]});
+        }
+    }
+
+  private:
+    struct TLayoutKeysEqual {};
+
+    void AccumulateDirectories() {
+        ui32 accum = 0;
+        for (auto &directory : Directories_) {
+            accum += directory.BufferSlot;
+            directory.BufferSlot = accum;
+
+            directory.BloomFilter = ~directory.BloomFilter;
+        }
+    }
+
+    void ApplyImpl(const ui8 *const row, const ui8 *const overflow, const THash thash,
+                   auto keysEqual, size_t& slot, std::predicate<const ui8*> auto onMatch) const {
         MKQL_ENSURE(Layout_ != nullptr, "sanity check");
         MKQL_ENSURE(!Directories_.empty() && Tuples_ != nullptr, "lookup to empty table?");
 
-        const THash thash = ReadUnaligned<THash>(row);
         const TBloom hashBloomTag = kBloomTags[thash.BloomTagSlot];
 
         const Hash dirSlot = getDirectorySlot(thash);
@@ -519,7 +582,7 @@ class TNeumannHashTable {
             const ui8* it = begin + slot * BufferSlotSize_;
             MKQL_ENSURE(it <= end, "Apply resume past the end of the directory");
             for (; it != end; it += BufferSlotSize_) {
-                if (GetRowMatch(it, row, overflow, &matchedRow) && !onMatch(matchedRow)) {
+                if (GetRowMatch(it, row, overflow, thash, keysEqual, &matchedRow) && !onMatch(matchedRow)) {
                     slot = (it - begin) / BufferSlotSize_ + 1;
                     return;
                 }
@@ -529,7 +592,7 @@ class TNeumannHashTable {
             ui32 size = 0;
             for (auto it = begin; it != end; it += size * BufferSlotSize_) {
                 size = ReadUnaligned<ui32>(it + RowIndexSize_);
-                if (!GetRowMatch(it, row, overflow, &matchedRow)) {
+                if (!GetRowMatch(it, row, overflow, thash, keysEqual, &matchedRow)) {
                     continue;
                 }
 
@@ -543,6 +606,7 @@ class TNeumannHashTable {
         }
     }
 
+  public:
     size_t IndexOfPackedRow(const ui8* packedRow) const {
         return IsInplace_ ? (packedRow - Buffer_.data()) / BufferSlotSize_
                           : (packedRow - Tuples_) / Layout_->TotalRowSize;
@@ -572,9 +636,8 @@ class TNeumannHashTable {
         }
     } 
 
-    bool GetRowMatch(const ui8 *const it, const ui8 *const row, const ui8 *const overflow, const ui8 **matchedRow) const {
-        const THash &thash = ReadUnaligned<THash>(row);
-
+    Y_FORCE_INLINE bool GetRowMatch(const ui8 *const it, const ui8 *const row, const ui8 *const overflow,
+                                    const THash thash, auto keysEqual, const ui8 **matchedRow) const {
         if (IsInplace_) {
             const Hash matchRowHash = ReadUnaligned<Hash>(it);
             if (matchRowHash != *thash) {
@@ -590,10 +653,11 @@ class TNeumannHashTable {
             *matchedRow = Tuples_ + Layout_->TotalRowSize * outRow.Index;
         }
 
-        if (Layout_->KeysEqual(row, overflow, *matchedRow, Overflow_)) {
-            return true;
+        if constexpr (std::is_same_v<decltype(keysEqual), TLayoutKeysEqual>) {
+            return Layout_->KeysEqual(row, overflow, *matchedRow, Overflow_);
+        } else {
+            return keysEqual(row, overflow, *matchedRow, Overflow_);
         }
-        return false;
     }
 
   private:

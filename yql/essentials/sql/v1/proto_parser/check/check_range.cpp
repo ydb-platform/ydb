@@ -97,7 +97,7 @@ private:
             if (!index) {
                 return Nothing();
             }
-            return TVisitResult{{true, *index, *index}, *index};
+            return TVisitResult{.Range = {.HasToken = true, .Start = *index, .End = *index}, .NextTokenIndex = *index};
         }
 
         const auto* reflection = node.GetReflection();
@@ -131,17 +131,17 @@ private:
 
         // The EOF terminal is consumed but intentionally has no TToken message.
         if (descriptor->name() == "TRule_sql_stmt_list" || descriptor->name() == "TRule_ansi_sql_stmt_list") {
-            derived.Include({true, static_cast<ui32>(Tokens_.size() - 1), static_cast<ui32>(Tokens_.size() - 1)});
+            derived.Include({.HasToken = true, .Start = static_cast<ui32>(Tokens_.size() - 1), .End = static_cast<ui32>(Tokens_.size() - 1)});
         }
 
-        TTokenIndexRange expected{nextTokenIndex, static_cast<ui32>(nextTokenIndex - 1)};
+        TTokenIndexRange expected{.Start = nextTokenIndex, .End = static_cast<ui32>(nextTokenIndex - 1)};
         if (derived.HasToken) {
-            expected = {derived.Start, derived.End};
+            expected = {.Start = derived.Start, .End = derived.End};
         }
         if (!CheckStoredRange(node, path, expected)) {
             return Nothing();
         }
-        return TVisitResult{derived, nextTokenIndex};
+        return TVisitResult{.Range = derived, .NextTokenIndex = nextTokenIndex};
     }
 
     bool CheckStoredRange(const Message& node, const TString& path, TTokenIndexRange expected) {
@@ -153,7 +153,7 @@ private:
             return false;
         }
         const auto* reflection = node.GetReflection();
-        const TTokenIndexRange actual{reflection->GetUInt32(node, start), reflection->GetUInt32(node, end)};
+        const TTokenIndexRange actual{.Start = reflection->GetUInt32(node, start), .End = reflection->GetUInt32(node, end)};
         if (actual.Start != expected.Start || actual.End != expected.End) {
             Issues_.AddIssue(TStringBuilder() << path << " (" << descriptor->full_name() << ") has token range [" << actual.Start << ", " << actual.End
                                               << "], expected [" << expected.Start << ", " << expected.End << ']');

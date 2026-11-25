@@ -4,6 +4,7 @@ SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/core/kqp/common/dynamic_function_registry
     ydb/core/testlib/default
     ydb/services/udf_store
     ydb/services/udf_store/compile_controller/protos
@@ -14,6 +15,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     compile_controller_ut.cpp
     dinode_client_ut.cpp
+    service_module_load_ut.cpp
     chunk_read_ut.cpp
 )
 

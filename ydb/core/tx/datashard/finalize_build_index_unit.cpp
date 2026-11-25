@@ -39,13 +39,13 @@ public:
         Y_ENSURE(version);
 
         TUserTable::TPtr tableInfo;
-        bool indexBecameReady = false;
+        bool schemaChanged = false;
         if (params.HasOutcome() && params.GetOutcome().HasApply()) {
             const auto indexPathId = TPathId::FromProto(params.GetOutcome().GetApply().GetIndexPathId());
 
             const auto oldTable = DataShard.FindUserTable(pathId);
             if (const auto it = oldTable->Indexes.find(indexPathId); it != oldTable->Indexes.end()) {
-                indexBecameReady = it->second.State != NKikimrSchemeOp::EIndexStateReady;
+                schemaChanged = it->second.State != NKikimrSchemeOp::EIndexStateReady;
             }
 
             tableInfo = DataShard.AlterTableSwitchIndexState(ctx, txc, pathId, version, indexPathId, NKikimrSchemeOp::EIndexStateReady);
@@ -60,7 +60,12 @@ public:
 
             tableInfo = DataShard.AlterTableDropIndex(ctx, txc, pathId, version, indexPathId);
         } else {
-            tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version);
+            // Column builds carry no outcome. Successful builds make their columns ready;
+            // cancelled builds have already dropped their columns.
+            tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version, false);
+            schemaChanged = tableInfo->FinishColumnBuilding();
+            NIceDb::TNiceDb db(txc.DB);
+            DataShard.PersistUserTable(db, pathId.LocalPathId, *tableInfo);
         }
 
         Y_ENSURE(tableInfo);
@@ -71,7 +76,7 @@ public:
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
         }
 
-        if (indexBecameReady) {
+        if (schemaChanged) {
             PersistCdcSchemaChange(DataShard, txc, op, pathId, *tableInfo);
         }
 

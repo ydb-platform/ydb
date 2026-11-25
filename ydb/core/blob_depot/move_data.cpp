@@ -161,6 +161,13 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(state.Phase == TMoveDataState::EPhase::UpdatingIndex);
             Y_ABORT_UNLESS(state.Key);
 
+            // A reused copy may have lost its last reference since the scan.
+            // Retry through scanning; newly copied blobs are still protected.
+            if (!state.ProtectedBlobSeqIds.contains(state.NewBlobSeqId) &&
+                    !Self->Data->IsBlobReferenced(MakeFirstBlobId(Self->TabletID(), state.NewBlobLocator))) {
+                return true;
+            }
+
             const TData::TKey key = TData::TKey::FromBinaryKey(*state.Key, Self->Config);
             Result = Self->Data->ReplaceLocatorForMoveData(key, state.ValueChainIndex, state.ValueVersion,
                 state.BlobLocator, state.NewBlobLocator, txc, this);

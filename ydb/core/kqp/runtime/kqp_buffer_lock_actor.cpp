@@ -97,7 +97,7 @@ public:
             Settings.Counters->MaxInFlightLockTimeOnExit->Collect(maxInFlightTime.MilliSeconds());
         }
 
-        AFL_ENSURE(Settings.Alloc);
+        YDB_LOG_ENSURE(Settings.Alloc);
         {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Settings.Alloc);
             CookieToLockState.clear();
@@ -121,7 +121,7 @@ public:
     }
 
     void Unlink() override {
-        AFL_ENSURE(LockIdToState.empty());
+        YDB_LOG_ENSURE(LockIdToState.empty());
         EndQueryTraceSpan(LockActorSpan, Ydb::StatusIds::SUCCESS);
 
         for (auto& [_, state] : ShardToState) {
@@ -166,7 +166,7 @@ public:
         if (!LockActorSpan) {
             LockActorSpan = NWilson::TSpan(TWilsonKqp::LockActor, NWilson::TTraceId(traceId), "Lock rows");
         }
-        AFL_ENSURE(mvccSnapshot.GetStep() || mvccSnapshot.GetTxId()); // Snapshot must be set for the operation.
+        YDB_LOG_ENSURE(mvccSnapshot.GetStep() || mvccSnapshot.GetTxId()); // Snapshot must be set for the operation.
         TKqpStreamLockSettings lockSettings(Settings.HolderFactory);
         lockSettings.Table.SetOwnerId(Settings.TableId.PathId.OwnerId);
         lockSettings.Table.SetTableId(Settings.TableId.PathId.LocalPathId);
@@ -191,10 +191,10 @@ public:
                 KeyColumnTypes.push_back(typeInfo);
             }
         } else {
-            AFL_ENSURE(KeyColumnTypes.size() == keyColumns.size());
+            YDB_LOG_ENSURE(KeyColumnTypes.size() == keyColumns.size());
         }
 
-        AFL_ENSURE(CookieToLockState.emplace(
+        YDB_LOG_ENSURE(CookieToLockState.emplace(
                 cookie,
                 TLockState{
                     .Worker = CreateStreamLockWorker(std::move(lockSettings)),
@@ -207,7 +207,7 @@ public:
         auto& state = CookieToLockState.at(cookie);
         auto& worker = state.Worker;
 
-        AFL_ENSURE(state.LocksInflight == 0);
+        YDB_LOG_ENSURE(state.LocksInflight == 0);
 
         for (const auto& row : rows) {
             worker->AddInputRow(row);
@@ -246,7 +246,7 @@ public:
     }
 
     void ExtractResult(ui64 cookie, std::function<void(const TOwnedCellVec& row, bool modified)>&& callback) override {
-        AFL_ENSURE(HasResult(cookie) || IsEmpty(cookie));
+        YDB_LOG_ENSURE(HasResult(cookie) || IsEmpty(cookie));
         auto& state = CookieToLockState.at(cookie);
 
         for (const auto& [row, modified] : state.CollectedRows) {
@@ -295,11 +295,11 @@ public:
         shardState.HasPipe = true;
 
         if (Settings.CollectShardMetas && !ShardMetas.contains(shardId)) {
-            AFL_ENSURE(Partitioning);
+            YDB_LOG_ENSURE(Partitioning);
             ShardMetas[shardId] = MakeShardMeta(Settings.TableId, Partitioning, shardId, KeyColumnTypes.size());
         }
 
-        AFL_ENSURE(LockIdToState.emplace(
+        YDB_LOG_ENSURE(LockIdToState.emplace(
             requestId,
             TRequestState {
                 .LockCookie = cookie,
@@ -333,8 +333,8 @@ public:
         Settings.TxManager->AddParticipantNode(ev->Sender.NodeId());
 
         auto& lockState = CookieToLockState.at(cookie);
-        AFL_ENSURE(lockState.Worker);
-        AFL_ENSURE(lockState.LocksInflight > 0);
+        YDB_LOG_ENSURE(lockState.Worker);
+        YDB_LOG_ENSURE(lockState.LocksInflight > 0);
 
         YDB_LOG_DEBUG("Received TEvLockRowsResult for buffer lock",
             {"logPrefix", this->LogPrefix},
@@ -455,7 +455,7 @@ public:
         }
 
         for (const auto& lock : record.GetLocks()) {
-            AFL_ENSURE(Settings.TxManager->AddLock(shardId, lock, Settings.QuerySpanId));
+            YDB_LOG_ENSURE(Settings.TxManager->AddLock(shardId, lock, Settings.QuerySpanId));
             lockState.CollectedLocks.push_back(lock);
         }
 
@@ -467,7 +467,7 @@ public:
                     lockState.CollectedRows.emplace_back(row, modified);
                 } else {
                     // skipped absent row
-                    AFL_ENSURE(!modified);
+                    YDB_LOG_ENSURE(!modified);
                 }
             });
 
@@ -550,7 +550,7 @@ public:
     }
 
     void DoRetryLockRequest(const ui64 failedRequestId, TLockState& lockState, TRequestState& failedRequest) {
-        AFL_ENSURE(failedRequest.Blocked);
+        YDB_LOG_ENSURE(failedRequest.Blocked);
         --lockState.LocksInflight;
         const auto guard = Settings.TypeEnv.BindAllocator();
         lockState.Worker->RebuildLockRequest(failedRequestId, LockRequestId);

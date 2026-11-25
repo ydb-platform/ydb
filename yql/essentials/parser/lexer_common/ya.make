@@ -14,6 +14,11 @@ SRCS(
     parse_hints_impl.h
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    cml/util/yql_split_code/lib
+)
+
 END()
 
 RECURSE_FOR_TESTS(

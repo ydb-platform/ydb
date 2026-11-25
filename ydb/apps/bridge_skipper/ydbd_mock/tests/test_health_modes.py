@@ -54,8 +54,12 @@ class HealthModesTest(unittest.IsolatedAsyncioTestCase):
         for f in c.inst("pile3").node_faults:
             f.down = True
         await c.inst("pile2").heartbeat_once()
-        part = self.parts(self.build(c, "pile2"))["pile3"]
+        result = self.build(c, "pile2")
+        part = self.parts(result)["pile3"]
         self.assertEqual((part.type, part.status), ("STORAGE_GROUP", M.StatusFlag.RED))
+        reasons = {i.id: i for i in result.issue_log if i.id in part.reason}
+        self.assertEqual(len(reasons), 1)
+        self.assertEqual([(i.type, i.status) for i in reasons.values()], [("VDISK", M.StatusFlag.RED)])
         for f in c.inst("pile3").node_faults:
             f.down = False
             f.silence = True

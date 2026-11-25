@@ -37,6 +37,15 @@ namespace NKikimr::NBlobDepot {
         bool DeleteTabletDataInFlight = false;
 
     private:
+        struct TBlockRequest {
+            ui64 TabletId;
+            ui32 BlockedGeneration;
+            ui32 NodeId;
+            ui64 IssuerGuid;
+            std::optional<ui32> Version;
+            bool SkipBridgeAccountingForSubrequests;
+        };
+
         class TTxUpdateBlock;
         class TTxQueryBlocks;
         class TTxDeleteTabletData;
@@ -44,6 +53,7 @@ namespace NKikimr::NBlobDepot {
 
         void OnTabletDeleted(ui64 tabletId);
         void ProcessTabletsToDelete();
+        void OnBlockCommitted(const TBlockRequest& request, std::unique_ptr<IEventHandle> response);
 
     public:
         TBlocksManager(TBlobDepot *self)
@@ -52,8 +62,6 @@ namespace NKikimr::NBlobDepot {
 
         void AddBlockOnLoad(ui64 tabletId, ui32 blockedGeneration, ui64 issuerGuid, ui32 version);
         void AddBlockOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlock& block, NTabletFlatExecutor::TTransactionContext& txc);
-        void OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,
-            std::optional<ui32> version, std::unique_ptr<IEventHandle> response);
         void Handle(TEvBlobDepot::TEvBlock::TPtr ev);
         void Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev);
         void OnDataLoaded();

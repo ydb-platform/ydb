@@ -192,8 +192,8 @@ TActorContext TExecutor::OwnerCtx() const {
 void TExecutor::Registered(TActorSystem *sys, const TActorId&)
 {
     Logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_EXECUTOR);
-    Broker = new TBroker(this, Emitter);
-    Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId);
+    Broker = new TBroker(this, Emitter, Owner->TabletID(), FollowerId);
+    Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId, FollowerId);
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
     MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
     auto& icb = *AppData()->Icb;
@@ -986,6 +986,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     Become(&TThis::StateBoot);
     Stats->IsActive = false;
     Stats->FollowerId = 0;
+    FollowerId = 0; // a follower promoted to leader, broker and scans owner must become the leader
 
     TEvTablet::TEvBoot *msg = ev->Get();
     Generation0 = msg->Generation;
@@ -4123,12 +4124,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     // We have applied all effects, time to notify compaction of completion
 
-    auto compactionResult = MakeHolder<NTable::TCompactionResult>(
-        results ? results.front().Part.Epoch() : NTable::TEpoch::Max(),
-        results.size());
-    for (const auto& result : results) {
-        compactionResult->Parts.emplace_back(result.Part);
-    }
+    auto compactionResult = TProdCompact::MakeCompactionResult(results);
 
     const auto logicResult = CompactionLogic->CompleteCompaction(
         ops->Serial,
@@ -4147,11 +4143,23 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     if (results) {
         auto *snap = proto.MutableIntroducedParts();
+        const auto& levels = logicResult.Changes.NewPartLevels;
+        Y_ENSURE(levels.empty() || levels.size() == results.size(),
+            "Compaction levels do not cover all output parts");
 
         for (const auto &result : results) {
             const auto &newPart = result.Part;
 
-            TPageCollectionProtoHelper::Snap(snap, newPart, tableId, logicResult.Changes.NewPartsLevel);
+            ui32 level = logicResult.Changes.NewPartsLevel;
+            if (!levels.empty()) {
+                const auto* partLevel = levels.FindPtr(newPart->Label);
+                Y_ENSURE(partLevel, "Compaction levels do not cover all output parts: missing level for part " << newPart->Label);
+                level = *partLevel;
+            }
+            TPageCollectionProtoHelper::Snap(snap, newPart, tableId, level);
+            if (!levels.empty()) {
+                snap->MutableBundles(snap->BundlesSize() - 1)->SetCompactionLevel(level);
+            }
             TPageCollectionProtoHelper(true).Do(bySwitchAux->AddHotBundles(), newPart);
         }
     }
@@ -5313,6 +5321,7 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
         auto& writeGroup = cfg.Writer.Groups.at(group);
 
         pageGroup.Codec = family.Codec;
+        pageGroup.CodecLevel = family.CodecLevel;
         pageGroup.PageSize = policy->MinDataPageSize;
         pageGroup.BTreeIndexNodeTargetSize = policy->MinBTreeIndexNodeSize;
         pageGroup.BTreeIndexNodeKeysMin = policy->MinBTreeIndexNodeKeys;
@@ -5388,28 +5397,29 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     const ECache cache = params->KeepInCache ? ECache::Once : ECache::None;
 
     TAutoPtr<TCompactCfg> comp = new TCompactCfg(std::move(params));
+    auto& output = comp->Outputs.emplace_back();
 
     comp->Epoch = snapshot->Subset->Epoch(); /* narrows requested to actual */
-    comp->Layout.Final = comp->Params->IsFinal;
+    output.Layout.Final = comp->Params->IsFinal;
     const bool writeBTreeIndexV1 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
     const bool writeBTreeIndexV2 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
     const bool writeBTreeIndex = writeBTreeIndexV1 || writeBTreeIndexV2;
-    comp->Layout.WriteBTreeIndexV1 = writeBTreeIndexV1;
-    comp->Layout.WriteBTreeIndexV2 = writeBTreeIndexV2;
+    output.Layout.WriteBTreeIndexV1 = writeBTreeIndexV1;
+    output.Layout.WriteBTreeIndexV2 = writeBTreeIndexV2;
     // V2 b-tree index replaces the flat index
-    comp->Layout.WriteFlatIndex = !writeBTreeIndexV2 && AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
-    comp->Writer.StickyFlatIndex = !writeBTreeIndex;
-    comp->Writer.WriteBTreeIndexV1 = writeBTreeIndexV1;
-    comp->Writer.WriteBTreeIndexV2 = writeBTreeIndexV2;
-    comp->Layout.MaxRows = snapshot->Subset->MaxRows();
+    output.Layout.WriteFlatIndex = !writeBTreeIndexV2 && AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
+    output.Writer.StickyFlatIndex = !writeBTreeIndex;
+    output.Writer.WriteBTreeIndexV1 = writeBTreeIndexV1;
+    output.Writer.WriteBTreeIndexV2 = writeBTreeIndexV2;
+    output.Layout.MaxRows = snapshot->Subset->MaxRows();
     for (const auto& p : tableInfo->ByKeyFilterPrefixes) {
-        comp->Layout.ByKeyFilterPrefixes.push_back({p.PrefixLength, p.FalsePositiveProbability});
+        output.Layout.ByKeyFilterPrefixes.push_back({p.PrefixLength, p.FalsePositiveProbability});
     }
-    comp->Layout.UnderlayMask = comp->Params->UnderlayMask.Get();
-    comp->Layout.SplitKeys = comp->Params->SplitKeys.Get();
-    comp->Layout.MinRowVersion = snapshot->Subset->MinRowVersion();
-    comp->Layout.Groups.resize(rowScheme->Families.size());
-    comp->Writer.Groups.resize(rowScheme->Families.size());
+    output.Layout.UnderlayMask = comp->Params->UnderlayMask.Get();
+    output.Layout.SplitKeys = comp->Params->SplitKeys.Get();
+    output.Layout.MinRowVersion = snapshot->Subset->MinRowVersion();
+    output.Layout.Groups.resize(rowScheme->Families.size());
+    output.Writer.Groups.resize(rowScheme->Families.size());
 
     // Detect fulltext compact tables
     if (tableInfo->SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
@@ -5436,7 +5446,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     auto addChannel = [&](ui8 channel) {
         auto group = Owner->Info()->GroupFor(channel, Generation());
 
-        comp->Writer.Slots.emplace_back(channel, group);
+        output.Writer.Slots.emplace_back(channel, group);
     };
 
     auto addChannels = [&](const std::vector<ui8>& channels) {
@@ -5455,10 +5465,11 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         auto* room = tableInfo->Rooms.FindPtr(family.Room);
         Y_ENSURE(room, "Cannot find room " << family.Room << " in table " << table);
 
-        auto& pageGroup = comp->Layout.Groups.at(group);
-        auto& writeGroup = comp->Writer.Groups.at(group);
+        auto& pageGroup = output.Layout.Groups.at(group);
+        auto& writeGroup = output.Writer.Groups.at(group);
 
         pageGroup.Codec = family.Codec;
+        pageGroup.CodecLevel = family.CodecLevel;
         pageGroup.PageSize = policy->MinDataPageSize;
         pageGroup.BTreeIndexNodeTargetSize = policy->MinBTreeIndexNodeSize;
         pageGroup.BTreeIndexNodeKeysMin = policy->MinBTreeIndexNodeKeys;
@@ -5471,24 +5482,29 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 
         if (group == 0) {
             // Small/Large edges are taken from the leader family
-            comp->Layout.SmallEdge = family.Small;
-            comp->Layout.LargeEdge = family.Large;
+            output.Layout.SmallEdge = family.Small;
+            output.Layout.LargeEdge = family.Large;
+            output.MaterializeExtEdge = family.Large;
 
             // Small/Large channels are taken from the leader family
-            comp->Writer.BlobsChannels = room->Blobs;
-            comp->Writer.OuterChannel = room->Outer;
+            output.Writer.BlobsChannels = room->Blobs;
+            output.Writer.OuterChannel = room->Outer;
             addChannels(room->Blobs);
             addChannel(room->Outer);
 
-            comp->Writer.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
+            output.Writer.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
 
             descriptorChannel = room->Main;
         }
     }
 
+    // Transaction status uses the extra channel even when the leader family
+    // stores its data in another room.
+    addChannel(output.Writer.ExtraChannel);
+
     // Data of the main group is written to the leader family channel too until tier compaction,
     // so parts keep descriptor pages and main group data in a single page collection
-    if (NWriter::ApplyDescriptorChannel(comp->Layout, comp->Writer, descriptorChannel)) {
+    if (NWriter::ApplyDescriptorChannel(output.Layout, output.Writer, descriptorChannel)) {
         // The descriptor channel differs from the main group channel then and may be missing from
         // the slots (e.g. of a tier output); a slot of an already added channel is merged
         addChannel(descriptorChannel);
@@ -5500,7 +5516,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         comp->RemovedRowVersions = ranges.Snapshot();
 
         // We have to adjust MinRowVersion, so it correctly expects an adjusted version
-        comp->Layout.MinRowVersion = comp->RemovedRowVersions.AdjustDown(comp->Layout.MinRowVersion);
+        output.Layout.MinRowVersion = comp->RemovedRowVersions.AdjustDown(output.Layout.MinRowVersion);
     }
 
     bool compactTxStatus = false;
@@ -5540,7 +5556,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     TLogoBlobID mask(Owner->TabletID(), Generation(),
                     snapshot->Barrier->Step, Max<ui8>(), 0, 0);
 
-    auto *scan = new TOpsCompact(SelfId(), mask, comp);
+    auto *scan = new TOpsCompact(SelfId(), mask, comp, MakeHolder<TDefaultCompactionRouter>());
 
     NOps::TConf conf;
 

@@ -397,7 +397,8 @@ void TKafkaOffsetCommitActor::SendAuthRequest(const NActors::TActorContext& ctx)
         topicConverterFactory
     );
 
-    auto topicsToConverter = topicHandler->GetReadTopicsList(topicsToResolve, false, Context->DatabasePath);
+    auto topicsToConverter = topicHandler->GetReadTopicsList(topicsToResolve, false, Context->DatabasePath,
+        NKikimr::AppData()->FeatureFlags.GetEnableRelativePaths());
     if (!topicsToConverter.IsValid) {
         YDB_LOG_CRIT("Commit offsets failed. topicsToConverter is not valid",
             {LogPrefix()});
@@ -408,7 +409,7 @@ void TKafkaOffsetCommitActor::SendAuthRequest(const NActors::TActorContext& ctx)
 
     AuthInitActor = ctx.Register(new NKikimr::NGRpcProxy::V1::TReadInitAndAuthActor(
             ctx, ctx.SelfID, Message->GroupId.value(), 0, "",
-            NKikimr::NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), NKikimr::MakeSchemeCacheID(), nullptr, Context->Token.UserToken, topicsToConverter,
+            Context->DatabasePath, NKikimr::MakeSchemeCacheID(), nullptr, Context->Token.UserToken, topicsToConverter,
         topicHandler->GetLocalCluster(), false)
     );
 }

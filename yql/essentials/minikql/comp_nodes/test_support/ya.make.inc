@@ -1,0 +1,22 @@
+SRCS(
+    ../mkql_block_fuzzer.cpp
+    ../mkql_block_fuzzer.h
+    ../mkql_block_test_helper.cpp
+    ../mkql_block_test_helper.h
+    ../mkql_counting_test_stream.cpp
+    ../mkql_counting_test_stream.h
+    ../mkql_program_builder_test_utils.cpp
+    ../mkql_program_builder_test_utils.h
+    ../mkql_test_factory.cpp
+    ../mkql_test_registrar.cpp
+    ../mkql_test_registrar.h
+    ../mkql_test_setup.cpp
+    ../mkql_test_setup.h
+)
+
+PEERDIR(
+    library/cpp/testing/unittest
+    yql/essentials/minikql/udf_value_test_support
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/public/udf/arrow
+)

@@ -1,8 +1,7 @@
 UNITTEST_FOR(ydb/core/client/server)
 
 FORK_SUBTESTS()
-
-SPLIT_FACTOR(20)
+SPLIT_FACTOR(5)
 
 SIZE(MEDIUM)
 
@@ -18,6 +17,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     msgbus_server_pq_metarequest_ut.cpp
+    msgbus_server_pq_metacache_ut.cpp
 )
 
 END()

@@ -947,13 +947,6 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<bool>(
-        "merge_versioned_rows",
-        [] (TThis* command) -> auto& {
-            return command->Options.MergeVersionedRows;
-        })
-        .Optional(/*init*/ false);
-
     registrar.ParameterWithUniversalAccessor<std::optional<EExecutionBackend>>(
         "execution_backend",
         [] (TThis* command) -> auto& {

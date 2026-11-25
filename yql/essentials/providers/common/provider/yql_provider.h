@@ -10,6 +10,7 @@
 #include <library/cpp/yson/writer.h>
 
 #include <util/generic/hash_set.h>
+#include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 
@@ -194,6 +195,8 @@ struct TPgObjectSettings {
 const TStructExprType* BuildCommonTableListType(TExprContext& ctx);
 
 TExprNode::TPtr BuildTypeExpr(TPositionHandle pos, const TTypeAnnotationNode& ann, TExprContext& ctx);
+
+TMaybe<TString> TryGetUdfName(const TExprNode& node);
 
 bool HasResOrPullOption(const TExprNode& node, const TStringBuf& option);
 

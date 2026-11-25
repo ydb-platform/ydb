@@ -25,7 +25,7 @@ public:
         , SnapshotVersion(version)
         , PathId(pathId)
     {
-        AFL_VERIFY(!!ShardingInfo);
+        YDB_LOG_VERIFY(!!ShardingInfo);
     }
 };
 
@@ -43,7 +43,7 @@ private:
         }
 
         void AddIgnoreSchemaVersionTo(const ui64 to) {
-            AFL_VERIFY(!IgnoreToVersion);
+            YDB_LOG_VERIFY(!IgnoreToVersion);
             IgnoreToVersion = to;
         }
 
@@ -66,8 +66,10 @@ private:
     std::shared_ptr<arrow::Schema> PrimaryKey;
     std::map<ui64, TSchemaInfoByVersion> SnapshotByVersion;
     ui64 LastSchemaVersion = 0;
-    std::optional<ui64> SchemeVersionForActualization;
-    ISnapshotSchema::TPtr SchemeForActualization;
+    // schema actualization (the SchemeNeedActualization option, ALTER TABLE ... COMPACT WITH (CASCADE = true)): every
+    // portion whose stored version is below the threshold is rewritten with the latest schema at the time of the
+    // rewrite, see TPortionInfo::NeedSchemeActualization and TSchemeActualizer
+    std::optional<ui64> SchemeActualizationThreshold;
 
     TVersionedIndex(const TVersionedIndex& base) = default;
     TVersionedIndex& operator=(const TVersionedIndex&) = delete;
@@ -77,7 +79,7 @@ public:
 
     void AddIgnoreSchemaVersionTo(const ui64 from, const ui64 to) {
         auto it = SnapshotByVersion.find(from);
-        AFL_VERIFY(it != SnapshotByVersion.end());
+        YDB_LOG_VERIFY(it != SnapshotByVersion.end());
         it->second.AddIgnoreSchemaVersionTo(to);
     }
 
@@ -95,9 +97,9 @@ public:
 
     void EraseVersion(const ui64 version) {
         auto it = SnapshotByVersion.find(version);
-        AFL_VERIFY(it != SnapshotByVersion.end());
+        YDB_LOG_VERIFY(it != SnapshotByVersion.end());
         auto itSnapshot = Snapshots.find(it->second->GetSnapshot());
-        AFL_VERIFY(itSnapshot != Snapshots.end());
+        YDB_LOG_VERIFY(itSnapshot != Snapshots.end());
         Snapshots.erase(itSnapshot);
         SnapshotByVersion.erase(it);
     }
@@ -108,16 +110,20 @@ public:
 
     bool IsEqualTo(const TVersionedIndex& vIndex) const {
         return LastSchemaVersion == vIndex.LastSchemaVersion && SnapshotByVersion.size() == vIndex.SnapshotByVersion.size() &&
-               ShardingInfo.size() == vIndex.ShardingInfo.size() && SchemeVersionForActualization == vIndex.SchemeVersionForActualization;
+               ShardingInfo.size() == vIndex.ShardingInfo.size() && SchemeActualizationThreshold == vIndex.SchemeActualizationThreshold;
     }
 
-    ISnapshotSchema::TPtr GetLastCriticalSchema() const {
-        return SchemeForActualization;
+    const std::optional<ui64>& GetSchemeActualizationThreshold() const {
+        return SchemeActualizationThreshold;
     }
 
-    ISnapshotSchema::TPtr GetLastCriticalSchemaDef(const ISnapshotSchema::TPtr defaultSchema) const {
-        auto result = GetLastCriticalSchema();
-        return result ? result : defaultSchema;
+    // true: the current schema version becomes the threshold, false: no actualization
+    void SetSchemeNeedActualization(const bool value) {
+        if (value) {
+            SchemeActualizationThreshold = LastSchemaVersion;
+        } else {
+            SchemeActualizationThreshold.reset();
+        }
     }
 
     std::optional<TGranuleShardingInfo> GetShardingInfoOptional(const TInternalPathId pathId, const TSnapshot& ss) const {
@@ -140,7 +146,7 @@ public:
     std::optional<TGranuleShardingInfo> GetShardingInfoActual(const TInternalPathId pathId) const;
 
     void AddShardingInfo(const TGranuleShardingInfo& shardingInfo) {
-        AFL_VERIFY(ShardingInfo[shardingInfo.GetPathId()].emplace(shardingInfo.GetSinceSnapshot(), shardingInfo).second);
+        YDB_LOG_VERIFY(ShardingInfo[shardingInfo.GetPathId()].emplace(shardingInfo.GetSinceSnapshot(), shardingInfo).second);
     }
 
     TString DebugString() const {
@@ -158,7 +164,9 @@ public:
 
     ISnapshotSchema::TPtr GetSchemaVerified(const ui64 version) const {
         auto it = SnapshotByVersion.lower_bound(version);
-        AFL_VERIFY(it != SnapshotByVersion.end())("problem", "no schema for version")("version", version);
+        YDB_LOG_VERIFY(it != SnapshotByVersion.end(),
+            {"problem", "no schema for version"},
+            {"version", version});
         return it->second.GetSchema();
     }
 

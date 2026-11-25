@@ -214,6 +214,7 @@ message RegisterNodeRequest {
     uint32 Pid = 24;
 
     repeated TDownloadGroup DownloadGroups = 27;
+    uint32 MonitoringPort = 28; // HTTP monitoring port; 0 means disabled.
 }
 
 message RegisterNodeResponse {
@@ -292,6 +293,7 @@ message ClusterStatusResponse {
         bool Dead = 23;
         RegisterNodeRequest.TRusage Rusage = 25;
         string RequestStartTime = 27;
+        uint32 MonitoringPort = 28; // HTTP monitoring port; 0 means disabled.
     }
 
     string Revision = 1;

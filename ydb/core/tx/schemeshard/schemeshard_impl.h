@@ -348,8 +348,27 @@ public:
     THashMap<TTxId, TOperation::TPtr> Operations;
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
+    // One entry per database domain path; a SchemeShard may serve multiple databases.
+    THashMap<TPathId, NKikimrScheme::TDatabaseFreezeState> DatabaseFreezeStates;
+    THashMap<TPathId, TActorId> DatabaseFreezeWorkers;
+    // Pending progress is rebuilt by the worker after a restart, unlike the
+    // durable result in DatabaseFreezeStates.
+    THashMap<TPathId, TString> DatabaseFreezeProgress;
+    bool IsDatabaseFreezeBlocking(const NKikimrSchemeOp::TModifyScheme& transaction);
+    bool IsDatabaseFreezeBlocking(const TPathId& pathId) const;
+    bool HasDatabaseFreezeSchemaWork(const TPathId& domainId) const;
+    void Handle(TEvSchemeShard::TEvDatabaseFreeze::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvDatabaseFreezeResult::TPtr& ev, const TActorContext& ctx);
+    struct TTxDatabaseFreeze;
+    struct TTxDatabaseFreezeDone;
     THashMap<TPathId, TPathDbRef> OwnDbRefs; // path's own type info record ref
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
+    // Inventory of durable rows, independent of active restore bookkeeping.
+    // Completed headers remain until FORGET/DROP; legacy items may have no state.
+    // Rebuilt on init and maintained by the persistence helpers below, so DROP
+    // can remove all owned records without reads in its plan callback.
+    THashMap<ui64, TPathId> PersistedIncrementalRestoreOps;
+    THashMap<ui64, THashSet<ui32>> PersistedIncrementalRestoreItems;
 
     // Simplified state tracking for sequential incremental restore
 
@@ -431,6 +450,7 @@ public:
     bool EnableBackgroundCompactionServerless = false;
     bool EnableBorrowedSplitCompaction = false;
     bool EnableMoveIndex = true;
+    bool EnableRebuildIndex = false;
     bool EnableAlterDatabaseCreateHiveFirst = false;
     bool EnableStatistics = false;
     bool EnableWasmCompileController = false;
@@ -442,6 +462,7 @@ public:
     bool EnableInitialUniqueIndex = false;
     bool EnableAddUniqueIndex = false;
     bool EnableOnlineAddUniqueIndex = false;
+    bool EnableHnswIndex = false;
     bool EnableFulltextIndex = false;
     bool EnableCompactFulltextIndex = false;
     bool EnableJsonIndex = false;
@@ -486,6 +507,7 @@ public:
     bool SysViewsRosterUpdateStarted = false;
     bool LocalIndexMigrationStarted = false;
     TActorId LocalIndexMigratorId;
+    TActorId IndexShadowDataRepairerId;
 
     TSet<TPathId> CleanDroppedPathsCandidates;
     TSet<TPathId> CleanDroppedSubDomainsCandidates;
@@ -1081,6 +1103,9 @@ public:
     void PersistRemoveTestShardSet(NIceDb::TNiceDb& db, TPathId pathId);
 
     void PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op);
+    void PersistRemoveLongIncrementalRestoreOp(NIceDb::TNiceDb& db, ui64 operationId);
+    void PersistIncrementalRestoreItem(NIceDb::TNiceDb& db, ui64 operationId, const TIncrementalRestoreState::TItem& item);
+    void PersistRemoveIncrementalRestoreItem(NIceDb::TNiceDb& db, ui64 operationId, ui32 itemSeq);
 
     // Secret
     void PersistSecret(NIceDb::TNiceDb& db, TPathId pathId, const TSecretInfo& secretInfo);
@@ -1129,6 +1154,7 @@ public:
         TVector<ui64> ImportsIds;
         TVector<TPathId> CdcStreamScans;
         TVector<TPathId> TablesToClean;
+        TVector<TPathId> TablesWithShadowData;
         TDeque<TPathId> BlockStoreVolumesToClean;
         TVector<TPathId> RestoreTablesToUnmark;
         TVector<ui64> IncrementalBackupIds;
@@ -1141,6 +1167,8 @@ public:
     void CollectSysViewUpdates(const TActorContext& ctx);
 
     void CollectLocalIndexMigrations(const TActorContext& ctx);
+
+    void StartIndexShadowDataRepair(const TActorContext& ctx, TVector<TPathId>&& paths);
 
     void ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts);
 
@@ -1775,6 +1803,7 @@ public:
     THashMap<TTxId, std::pair<ui64, ui32>> TxIdToImport;
     THashSet<TActorId> RunningImportSchemeGetters;
     THashSet<TActorId> RunningImportSchemeQueryExecutors;
+    THashSet<TActorId> RunningImportKesusRestorers;
 
     void FromXxportInfo(NKikimrImport::TImport& exprt, const TImportInfo& importInfo);
     void AddImport(const TImportInfo::TPtr& importInfo);
@@ -1814,6 +1843,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportSchemeReady::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportSchemaMappingReady::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportKesusResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvIndexBuilder::TEvCreateResponse::TPtr& ev);
@@ -1828,6 +1858,7 @@ public:
     void Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvImportSchemaMappingReady::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvImportKesusResult::TPtr& ev, const TActorContext& ctx);
 
     void ResumeImports(const TVector<ui64>& ids, const TActorContext& ctx);
     // } // NImport

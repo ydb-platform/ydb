@@ -1,4 +1,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/library/persqueue/topic_parser/counters.h>
+#include <ydb/core/testlib/actor_helpers.h>
+#include <ydb/library/testlib/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NPersQueue::NTests {
@@ -68,6 +71,59 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
+    Y_UNIT_TEST_TWIN(AbsolutePathsWithDatabasePrefixAreCounted, firstClass) {
+        NKikimr::TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = new NMonitoring::TDynamicCounters();
+        auto counter = NKikimr::GetServiceCounters(actorSystem.AppData.Counters, "pqproxy|pathResolution", false)
+            ->GetSubgroup("database", "/Root/Db")
+            ->GetCounter("AbsolutePathWithDatabasePrefix", true);
+        TTopicNamesConverterFactory factory(firstClass, "/Root/PQ", "dc1");
+
+        for (const TString topic : {"topic", "/Root/Db/topic", "//Root//Db//topic"}) {
+            factory.MakeDiscoveryConverter(topic, {}, "dc1", "/Root/Db");
+            UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
+        }
+
+        auto converter = factory.MakeDiscoveryConverter("/other/topic", {}, "dc1", "/Root/Db");
+        UNIT_ASSERT_C(converter->IsValid(), converter->GetReason());
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(), "/Root/Db/other/topic");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
+
+        // Resolving persisted tablet paths must not count client requests.
+        NKikimrPQ::TPQTabletConfig config;
+        config.SetTopicPath("/other/topic");
+        config.SetTopicName("topic");
+        config.SetYdbDatabasePath("/Root/Db");
+        config.SetFederationAccount("account");
+        config.SetDC("dc1");
+        factory.MakeTopicConverter(config);
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
+    }
+
+    Y_UNIT_TEST(AbsolutePathsPreservedByRelativePathsAreNotCounted) {
+        NKikimr::TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = new NMonitoring::TDynamicCounters();
+        auto counter = NKikimr::GetServiceCounters(actorSystem.AppData.Counters, "pqproxy|pathResolution", false)
+            ->GetSubgroup("database", "/Root/Db")
+            ->GetCounter("AbsolutePathWithDatabasePrefix", true);
+        TTopicNamesConverterFactory factory(true, "/Root/PQ", "");
+        auto converter = factory.MakeDiscoveryConverter("/other/topic", {}, "", "/Root/Db", true);
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(), "/other/topic");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
+    }
+
+    Y_UNIT_TEST_TWIN(FirstClassPathsRespectFeatureFlag, enableRelativePaths) {
+        TTopicNamesConverterFactory factory(true, "/Root/PQ", "");
+        auto converter = factory.MakeDiscoveryConverter("Root/Db/topic", {}, "", "/Root/Db", enableRelativePaths);
+        UNIT_ASSERT_C(converter->IsValid(), converter->GetReason());
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(),
+            enableRelativePaths ? "/Root/Db/Root/Db/topic" : "/Root/Db/topic");
+        converter = factory.MakeDiscoveryConverter("/other/topic", {}, "", "/Root/Db", enableRelativePaths);
+        UNIT_ASSERT_C(converter->IsValid(), converter->GetReason());
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(),
+            enableRelativePaths ? "/other/topic" : "/Root/Db/other/topic");
+    }
+
     Y_UNIT_TEST(FullLegacyNames) {
 
         TConverterTestWrapper wrapper(false, "/Root/PQ", TString("dc1"));
@@ -225,6 +281,28 @@ Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
         wrapper.SetConverter("/somedb2/account/stream", "", "");
         UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/somedb2/account/stream");
     }
+
+    Y_UNIT_TEST(FirstClassFullAndRelativePaths) {
+        TConverterTestWrapper wrapper(true, "", "");
+        for (const auto& database : {TString("/Root/db"), TString("Root/db")}) {
+            for (const auto& [path, expected] : TVector<std::pair<TString, TString>>{
+                {"dir/topic", "/Root/db/dir/topic"},
+                {"Root/db/dir/topic", "/Root/db/Root/db/dir/topic"},
+                {"/Root/db/dir/topic", "/Root/db/dir/topic"},
+                {"Root/other/topic", "/Root/db/Root/other/topic"},
+                {"/Root/other/topic", "/Root/other/topic"},
+                {"Root/db2/topic", "/Root/db/Root/db2/topic"},
+                {"/Root/db2/topic", "/Root/db2/topic"},
+                {"Root2/topic", "/Root/db/Root2/topic"},
+                {"root/topic", "/Root/db/root/topic"},
+                {"db/topic", "/Root/db/db/topic"},
+            }) {
+                wrapper.DiscoveryConverter = wrapper.Factory.MakeDiscoveryConverter(path, {}, "", database, true);
+                wrapper.BasicFirstClassChecks();
+                UNIT_ASSERT_VALUES_EQUAL_C(wrapper.DiscoveryConverter->GetPrimaryPath(), expected, path);
+            }
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(TopicNameConverterTest) {
@@ -354,6 +432,11 @@ Y_UNIT_TEST_SUITE(TopicNameConverterTest) {
         UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetTopicForSrcIdHash(), "lb/database/my-stream");
         UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetModernName(), "my-stream");
         UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetFederationPath(), "my-stream");
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetInternalName(), "/lb/database/my-stream");
+        // Persisted full paths without '/' must not become database-relative.
+        pqConfig.SetTopicPath("lb/database/my-stream");
+        wrapper.SetConverter(pqConfig);
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetPrimaryPath(), "/lb/database/my-stream");
         UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetInternalName(), "/lb/database/my-stream");
     }
     Y_UNIT_TEST(PathFromDiscoveryConverter) {

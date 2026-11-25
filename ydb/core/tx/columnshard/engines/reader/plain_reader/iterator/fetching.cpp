@@ -46,7 +46,7 @@ TConclusion<TExecutionResult> TDeletionFilter::DoExecuteInplace(NCommon::IDataSo
     if (!filterTable) {
         return TExecutionResult::Done();
     }
-    AFL_VERIFY(filterTable->column(0)->type()->id() == arrow::boolean()->id());
+    YDB_LOG_VERIFY(filterTable->column(0)->type()->id() == arrow::boolean()->id());
     NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
     for (auto&& i : filterTable->column(0)->chunks()) {
         auto filterFlags = static_pointer_cast<arrow::BooleanArray>(i);
@@ -89,7 +89,7 @@ TConclusion<TExecutionResult> TDetectInMem::DoExecuteInplace(NCommon::IDataSourc
     } else {
         source.SetSourceInMemory(true);
     }
-    AFL_VERIFY(!source.GetAs<IDataSource>()->NeedAccessorsFetching());
+    YDB_LOG_VERIFY(!source.GetAs<IDataSource>()->NeedAccessorsFetching());
     auto plan = source.GetContext()->GetColumnsFetchingPlan(source, true);
     source.MutableAs<IDataSource>()->InitFetchingPlan(plan);
     TFetchingScriptCursor cursor(plan, 0);

@@ -354,14 +354,17 @@ public:
                 read.Value.Write(readItem.ValueOffset, std::move(response.Buffer));
             } else {
                 if (response.Status == NKikimrProto::NODATA) {
-                    const ui32 refCount = StateLifetimeToken.lock() ? State->GetRefCount(readItem.LogoBlobId) : 0;
-                    if (refCount != 0) {
+                    const auto lifetime = StateLifetimeToken.lock();
+                    const ui32 refCount = lifetime ? State->GetRefCount(readItem.LogoBlobId) : 0;
+                    const ui64 readRefCount = lifetime ? State->GetReadBlobRefCount(readItem.LogoBlobId) : 0;
+                    if (refCount != 0 || readRefCount != 0) {
                         TStringStream str;
                         str << "NODATA received for TEvGet, but blob is still referenced"
                             << " TabletId# " << TabletInfo->TabletID
                             << " BlobId# " << readItem.LogoBlobId.ToString()
                             << " GroupId# " << groupId
-                            << " RefCount# " << refCount;
+                            << " RefCount# " << refCount
+                            << " ReadBlobRefCount# " << readRefCount;
                         Y_DEBUG_ABORT_UNLESS(false, "%s", str.Str().c_str());
                         ReplyErrorAndDie(ctx, str.Str());
                         return;

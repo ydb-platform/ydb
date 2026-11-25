@@ -121,7 +121,7 @@ public:
         tableInfo->AlterVersion += 1;
         tableInfo->MutablePartitionConfig().ClearShadowData();
         tableInfo->MutablePartitionConfig().MutableCompactionPolicy()->SetKeepEraseMarkers(false);
-        context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
+        context.SS->PersistTableAltered(db, txState->TargetPathId, tableInfo);
 
         auto tablePath = context.SS->PathsById.at(txState->TargetPathId);
         context.SS->ClearDescribePathCaches(tablePath);

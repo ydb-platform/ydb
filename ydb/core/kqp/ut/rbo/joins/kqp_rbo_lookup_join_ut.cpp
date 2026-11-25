@@ -27,9 +27,10 @@ void PrintPlan(const TString& plan, bool analyzeMode) {
 
 Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
 
-    Y_UNIT_TEST(LookupJoins_oldRbo) {
+    Y_UNIT_TEST_TWIN(LookupJoins_oldRbo, ScalarHashJoinForMap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        appConfig.MutableTableServiceConfig()->SetUseScalarHashJoinForMap(ScalarHashJoinForMap);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         // appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
@@ -193,6 +194,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
                     NYdb::NQuery::TTxControl::NoTx(),
                     NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
                 ).ExtractValueSync();
+            UNIT_ASSERT_C(result2.IsSuccess(), result2.GetIssues().ToString());
             const auto plan = TString{*result2.GetStats()->GetPlan()};
             PrintPlan(plan, /*analyzeMode=*/false);
             const auto ast = TString{*result2.GetStats()->GetAst()};
@@ -202,7 +204,8 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             if (cases[i].Lookup) {
                 UNIT_ASSERT_C(lookupPlan, "query #" << i << " expected a lookup join, plan:\n" << plan);
             } else {
-                UNIT_ASSERT_C(plan.Contains("InnerJoin (Map)"), "query #" << i << " expected a map join, plan:\n" << plan);
+                const TStringBuf expectedJoin = ScalarHashJoinForMap ? "InnerJoin (ScalarHash)" : "InnerJoin (Map)";
+                UNIT_ASSERT_C(plan.Contains(expectedJoin), "query #" << i << " expected " << expectedJoin << ", plan:\n" << plan);
                 UNIT_ASSERT_C(!lookupPlan, "query #" << i << " expected no lookup join, plan:\n" << plan);
             }
 

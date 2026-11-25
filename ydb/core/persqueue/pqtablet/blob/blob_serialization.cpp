@@ -37,9 +37,14 @@ ui32 GetBatchClientBlobCount(const NKikimrPQ::TBatchHeader& header) {
 
 NScheme::TDataRef GetChunk(const char*& data, const char *end)
 {
-    ui32 size = ReadUnaligned<ui32>(data);
-    data += sizeof(ui32) + size;
     AFL_ENSURE(data <= end);
+    AFL_ENSURE(static_cast<size_t>(end - data) >= sizeof(ui32));
+
+    ui32 size = ReadUnaligned<ui32>(data);
+    data += sizeof(ui32);
+    AFL_ENSURE(static_cast<size_t>(end - data) >= size);
+
+    data += size;
     return NScheme::TDataRef(data - size, size);
 }
 
@@ -332,6 +337,12 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
     AFL_ENSURE(Batch.PackedData.size());
 
     ui32 totalBlobs = GetBatchClientBlobCount(Batch.Header);
+    // The compressed Data chunk stores one ui32 cumulative offset per client
+    // blob, so the payload of any well-formed batch is at least
+    // totalBlobs * sizeof(ui32) bytes.
+    AFL_ENSURE(static_cast<ui64>(totalBlobs) * sizeof(ui32) <= Batch.PackedData.size())
+        ("description", "Batch header blob count is inconsistent with the payload size")
+        ("totalBlobs", totalBlobs)("payloadSize", Batch.PackedData.size());
     ui32 partsSize = 0;
     TVector<ui32> end;
     TVector<ui32> pos;
@@ -347,13 +358,21 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
         auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui32Codecs);
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < totalBlobs; ++i) {
-            pos.push_back(ReadUnaligned<ui32>(iter->Next().Data()));
+            ui32 blobPos = ReadUnaligned<ui32>(iter->Next().Data());
+            AFL_ENSURE(blobPos < totalBlobs);
+            pos.push_back(blobPos);
         }
         sourceIdCount = ReadUnaligned<ui32>(iter->Next().Data());
+        AFL_ENSURE(sourceIdCount > 0 || totalBlobs == 0);
+        AFL_ENSURE(sourceIdCount <= totalBlobs);
         end.reserve(sourceIdCount);
         for (ui32 i = 0; i < sourceIdCount; ++i) {
-            end.push_back(ReadUnaligned<ui32>(iter->Next().Data()));
+            ui32 sourceIdEnd = ReadUnaligned<ui32>(iter->Next().Data());
+            AFL_ENSURE(sourceIdEnd <= totalBlobs);
+            AFL_ENSURE(end.empty() || end.back() < sourceIdEnd);
+            end.push_back(sourceIdEnd);
         }
+        AFL_ENSURE(end.empty() || end.back() == totalBlobs);
     }
 
     sourceIds.reserve(sourceIdCount);
@@ -366,6 +385,7 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
             sourceIds.emplace_back(ref.Data(), ref.Size());
         }
     }
+    AFL_ENSURE(sourceIds.size() == end.size());
     TVector<ui64> seqNo;
     seqNo.reserve(totalBlobs);
 
@@ -396,6 +416,9 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
         auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui32Codecs);
         auto iter = chunk->MakeIterator();
         partsSize = ReadUnaligned<ui32>(iter->Next().Data());
+        AFL_ENSURE(partsSize <= totalBlobs)
+            ("description", "Batch part data count is inconsistent with the blob count")
+            ("partsSize", partsSize)("totalBlobs", totalBlobs);
         partData.reserve(partsSize);
         for (ui32 i = 0; i < partsSize; ++i) {
             ui32 ps = ReadUnaligned<ui32>(iter->Next().Data());
@@ -494,6 +517,7 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
     blobs->resize(totalBlobs);
     ui32 currentSID = 0;
     for (ui32 i = 0; i < totalBlobs; ++i) {
+        AFL_ENSURE(currentSID < end.size());
         TMaybe<TPartData> pd;
         if (auto it = partData.find(pos[i]); it != partData.end()) {
             pd = it->second;
@@ -524,6 +548,7 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
             ++currentSID;
         }
     }
+    AFL_ENSURE(currentSID == sourceIds.size());
 }
 
 template<>
@@ -692,17 +717,26 @@ TClientBlob DeserializeClientBlob(const char *data, ui32 size) {
     AFL_ENSURE(size > TClientBlob::OVERHEAD);
     ui32 totalSize = ReadUnaligned<ui32>(data);
     AFL_ENSURE(size >= totalSize);
+    AFL_ENSURE(totalSize >= sizeof(ui32));
     const char *end = data + totalSize;
     data += sizeof(ui32);
 
+    auto ensureRemaining = [&] (size_t length) {
+        AFL_ENSURE(data <= end);
+        AFL_ENSURE(length <= static_cast<size_t>(end - data));
+    };
+
+    ensureRemaining(sizeof(ui64));
     ui64 seqNo = ReadUnaligned<ui64>(data);
     data += sizeof(ui64);
 
+    ensureRemaining(sizeof(ui8));
     TMessageFlags flags(ReadUnaligned<ui8>(data));
     ++data;
 
     TMaybe<TPartData> partData;
     if (flags.F.HasPartData) {
+            ensureRemaining(sizeof(ui16) + sizeof(ui16) + sizeof(ui32));
             ui16 partNo = ReadUnaligned<ui16>(data);
             data += sizeof(ui16);
             ui16 totalParts = ReadUnaligned<ui16>(data);
@@ -715,43 +749,53 @@ TClientBlob DeserializeClientBlob(const char *data, ui32 size) {
     TString partitionKey;
     TString explicitHashKey;
     if (flags.F.HasKinesisData) {
+            ensureRemaining(sizeof(ui8));
             ui8 keySize = ReadUnaligned<ui8>(data);
             data += sizeof(ui8);
-            partitionKey = TString(data, keySize == 0 ? 256 : keySize);
-            data += partitionKey.size();
+            const size_t partitionKeySize = keySize == 0 ? 256 : keySize;
+            ensureRemaining(partitionKeySize);
+            partitionKey = TString(data, partitionKeySize);
+            data += partitionKeySize;
+
+            ensureRemaining(sizeof(ui8));
             keySize = ReadUnaligned<ui8>(data);
             data += sizeof(ui8);
+            ensureRemaining(keySize);
             explicitHashKey = TString(data, keySize);
-            data += explicitHashKey.size();
+            data += keySize;
     }
 
     ui32 logicalMessageCount = 1;
     bool isBatch = false;
     if (flags.F.HasBatchInfo) {
+        ensureRemaining(sizeof(ui32));
         std::tie(logicalMessageCount, isBatch) = UnpackMessageMetadata(ReadUnaligned<ui32>(data));
         data += sizeof(ui32);
     }
 
     TInstant writeTimestamp;
     if (flags.F.HasWriteTimestamp) {
+            ensureRemaining(sizeof(ui64));
             writeTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data));
             data += sizeof(ui64);
     }
     TInstant createTimestamp;
     if (flags.F.HasCreateTimestamp) {
+            ensureRemaining(sizeof(ui64));
             createTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data));
             data += sizeof(ui64);
     }
     ui32 uncompressedSize = 0;
     if (flags.F.HasUncompressedSize) {
+            ensureRemaining(sizeof(ui32));
             uncompressedSize = ReadUnaligned<ui32>(data);
             data += sizeof(ui32);
     }
 
-    AFL_ENSURE(data < end);
+    ensureRemaining(sizeof(ui16));
     ui16 sz = ReadUnaligned<ui16>(data);
     data += sizeof(ui16);
-    AFL_ENSURE(data + sz <= end);
+    ensureRemaining(sz);
     TString sourceId(data, sz);
     data += sz;
 

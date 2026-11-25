@@ -2,10 +2,6 @@ UNITTEST_FOR(ydb/core/blobstorage/pdisk)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    ENV(VALGRIND_OPTS=--max-stackframe=16000000)
-ENDIF()
-
 REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SPLIT_FACTOR(20)
@@ -48,6 +44,7 @@ SRCS(
     blobstorage_pdisk_ut_context.cpp
     blobstorage_pdisk_ut_env.cpp
     blobstorage_pdisk_ut_helpers.cpp
+    blobstorage_pdisk_ut_log_restart.cpp
     blobstorage_pdisk_ut_races.cpp
     blobstorage_pdisk_ut_run.cpp
     blobstorage_pdisk_ut_sectormap.cpp

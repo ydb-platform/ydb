@@ -7,6 +7,8 @@ SRCS(
     log.cpp
     profile.cpp
     tls_backend.cpp
+    log_component.cpp
+    log_level.cpp
 )
 
 PEERDIR(
@@ -18,6 +20,11 @@ PEERDIR(
     yql/essentials/utils/log/proto
     yql/essentials/utils/backtrace
     yql/essentials/utils
+)
+
+PEERDIR_FROM_POLICY(
+    ALLOW
+    quality/relev_tools/personalization/user_history/antifraud/udf/library
 )
 
 END()

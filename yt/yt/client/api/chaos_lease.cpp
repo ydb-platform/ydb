@@ -118,6 +118,7 @@ TFuture<void> TChaosLease::Ping(const TPrerequisitePingOptions& /*options*/)
 
 TFuture<void> TChaosLease::Abort(const TPrerequisiteAbortOptions& options)
 {
+    TFuture<void> futureAbort;
     {
         auto guard = Guard(SpinLock_);
         if (AbortPromise_) {
@@ -125,14 +126,15 @@ TFuture<void> TChaosLease::Abort(const TPrerequisiteAbortOptions& options)
         }
 
         AbortPromise_ = NewPromise<void>();
+        futureAbort = AbortPromise_.ToFuture();
     }
 
     auto chaosLeasePath = FromObjectId(GetId());
     auto removeOptions = TRemoveNodeOptions{
         .Force = options.Force,
     };
-    return Client_->RemoveNode(chaosLeasePath, removeOptions)
-        .Apply(BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<void>& rspOrError) {
+    Client_->RemoveNode(chaosLeasePath, removeOptions)
+        .Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<void>& rspOrError) {
                 {
                     auto guard = Guard(SpinLock_);
 
@@ -165,6 +167,8 @@ TFuture<void> TChaosLease::Abort(const TPrerequisiteAbortOptions& options)
                     abortPromise.Set(std::move(abortError));
                 }
         }));
+
+    return futureAbort;
 }
 
 void TChaosLease::SubscribeAborted(const TAbortedHandler& handler)

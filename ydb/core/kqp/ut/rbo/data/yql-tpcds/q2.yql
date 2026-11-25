@@ -14,13 +14,13 @@ $wscs = (
             ws_sold_date_sk AS sold_date_sk,
             ws_ext_sales_price AS sales_price
         FROM
-            `/Root/test/ds/web_sales` as web_sales
+            `web_sales` as web_sales
         UNION ALL
         SELECT
             cs_sold_date_sk AS sold_date_sk,
             cs_ext_sales_price AS sales_price
         FROM
-            `/Root/test/ds/catalog_sales` as catalog_sales
+            `catalog_sales` as catalog_sales
     )
 );
 
@@ -72,7 +72,7 @@ $wswscs = (
     FROM
         $wscs
     ,
-        `/Root/test/ds/date_dim` as date_dim
+        `date_dim` as date_dim
     WHERE
         d_date_sk == sold_date_sk
     GROUP BY
@@ -101,7 +101,7 @@ FROM (
     FROM
         $wswscs AS wswscs
     ,
-        `/Root/test/ds/date_dim` as date_dim
+        `date_dim` as date_dim
     WHERE
         date_dim.d_week_seq == wswscs.d_week_seq
         AND d_year == 2001
@@ -119,7 +119,7 @@ FROM (
     FROM
         $wswscs AS wswscs
     ,
-        `/Root/test/ds/date_dim` as date_dim
+        `date_dim` as date_dim
     WHERE
         date_dim.d_week_seq == wswscs.d_week_seq
         AND d_year == 2001 + 1

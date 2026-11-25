@@ -8,11 +8,11 @@ SELECT
     o_orderdate,
     o_shippriority
 FROM
-    `/Root/customer` as customer
+    `customer` as customer
 ,
-    `/Root/orders` as orders
+    `orders` as orders
 ,
-    `/Root/lineitem` as lineitem
+    `lineitem` as lineitem
 WHERE
     c_mktsegment == 'BUILDING'
     AND c_custkey == o_custkey

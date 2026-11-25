@@ -9,9 +9,9 @@ $customer_total_return = (
         sr_store_sk AS ctr_store_sk,
         Sum(sr_fee) AS ctr_total_return
     FROM
-        `/Root/test/ds/store_returns` as store_returns
+        `store_returns` as store_returns
     ,
-        `/Root/test/ds/date_dim` as date_dim
+        `date_dim` as date_dim
     WHERE
         sr_returned_date_sk == d_date_sk
         AND d_year == 2000
@@ -25,9 +25,9 @@ SELECT
 FROM
     $customer_total_return AS ctr1
 ,
-    `/Root/test/ds/store` as store
+    `store` as store
 ,
-    `/Root/test/ds/customer` as customer
+    `customer` as customer
 WHERE
     ctr1.ctr_total_return > (
         SELECT

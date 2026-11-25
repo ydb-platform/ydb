@@ -90,3 +90,25 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         sdk/src/trace/samplers/trace_id_ratio.cc [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c91e957ece7f5f1a8cc86b69a0c30412
+BELONGS api/ya.make
+    License text:
+          return IsAsciiLower(c) || IsAsciiUpper(c);
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        api/include/opentelemetry/common/detail/ascii.h [37:37]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d2a16282f6cee0cb5caffe391e5d080b
+BELONGS api/ya.make
+    License text:
+          return IsAsciiAlpha(c) || IsAsciiDigit(c);
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        api/include/opentelemetry/common/detail/ascii.h [42:42]

@@ -151,7 +151,7 @@ public:
     TIndexMetaContainer(const std::shared_ptr<IIndexMeta>& object)
         : TBase(object)
     {
-        AFL_VERIFY(Object);
+        YDB_LOG_VERIFY(Object);
     }
 };
 

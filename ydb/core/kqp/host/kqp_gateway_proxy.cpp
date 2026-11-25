@@ -441,10 +441,6 @@ bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSchemeOp
         }
     }
 
-    if (families.Modified && !families.ValidateColumnFamilies(&code, &error)) {
-        return false;
-    }
-
     if (!NGRpcService::FillCreateTableSettingsDesc(tableDesc, createTableProto, profiles, code, error, warnings)) {
         return false;
     }
@@ -3195,6 +3191,15 @@ public:
             }
             if (const auto& consistency = settings.Settings.GlobalConsistency) {
                 consistency->Serialize(*config.MutableConsistencySettings()->MutableGlobal());
+            }
+            if (const auto& bootstrap = settings.Settings.Bootstrap) {
+                if (*bootstrap == "scan") {
+                    config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SCAN);
+                } else if (*bootstrap == "import") {
+                    config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_IMPORT);
+                } else {
+                    config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SWITCHOVER);
+                }
             }
             if (const auto& initialScan = settings.Settings.InitialScan) {
                 config.SetInitialScan(*initialScan);

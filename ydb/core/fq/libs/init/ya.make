@@ -34,6 +34,7 @@ PEERDIR(
     ydb/library/security
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/actors/input_transforms
+    ydb/library/yql/dq/actors/task_runner
     ydb/library/yql/dq/transform
     ydb/library/yql/providers/dq/actors
     ydb/library/yql/providers/dq/api/protos

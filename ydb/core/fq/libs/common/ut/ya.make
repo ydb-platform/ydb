@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/fq/libs/common)
 
-FORK_SUBTESTS()
-
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
 ENDIF()

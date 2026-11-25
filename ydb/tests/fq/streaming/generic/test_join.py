@@ -1338,7 +1338,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
 
         # 3. Create TOKEN-auth external data source.
         # (shared_reading with local topics is not implemented, hence use eds)
-        create_source(kikimr, source_name, secret_name, endpoint, shared_reading=True)
+        create_source(kikimr, source_name, secret_name, endpoint, shared_reading=False)
 
         options = ()
         streamlookup_hint = Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else ''
@@ -1358,12 +1358,14 @@ class TestJoinYdbStreaming(StreamingTestBase):
                             user Int32,
                             skip Bool
                         )
-                        , WATERMARK = $event_time(`ts`) - Interval('PT3S')
-                        , WATERMARK_GRANULARITY = 'PT2S'
-                        {idle_clause}
                     )            ;
-            $input =
-                SELECT e.*, $event_time(ts) AS event_time FROM $input AS e WHERE skip IS DISTINCT FROM true;
+            $input = SELECT e.*, $event_time(ts) AS event_time FROM $input AS e;
+            $input = SELECT * FROM $input WITH (
+                        WATERMARK = event_time - Interval('PT3S'),
+                        WATERMARK_GRANULARITY = 'PT2S'
+                        {idle_clause}
+            );
+            $input = SELECT * FROM $input WHERE skip IS DISTINCT FROM true;
             $enriched = SELECT event_time, ts, u.data as uid
                 FROM
                     $input as e

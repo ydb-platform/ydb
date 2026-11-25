@@ -1,5 +1,11 @@
 YQL_LIBRARY()
 
+IF (MKQL_DISABLE_UDF_SERVICE_DISPATCH)
+    CFLAGS(
+        GLOBAL -DMKQL_DISABLE_UDF_SERVICE_DISPATCH
+    )
+ENDIF()
+
 SRCS(
     compact_hash.cpp
     compact_hash.h
@@ -57,6 +63,26 @@ SRCS(
     primes.h
     watermark_tracker.cpp
     watermark_tracker.h
+    mkql_udf_service.cpp
+    defs.cpp
+    mkql_core_win_frames_collector.cpp
+    mkql_core_win_frames_collector.h
+    mkql_core_window_frames_collector_params_deserializer.cpp
+    mkql_core_window_frames_collector_params_deserializer.h
+    mkql_numeric_cast.cpp
+    mkql_numeric_cast.h
+    mkql_safe_arithmetic_ops.cpp
+    mkql_safe_arithmetic_ops.h
+    mkql_saturated_math.cpp
+    mkql_saturated_math.h
+    mkql_type_helper.cpp
+    mkql_type_helper.h
+    mkql_utils.cpp
+    mkql_utils.h
+    mkql_watermark.cpp
+    mkql_window_comparator_bounds.cpp
+    mkql_window_defs.cpp
+    mkql_window_defs.h
 )
 
 PEERDIR(
@@ -80,6 +106,7 @@ PEERDIR(
     yql/essentials/public/issue
     yql/essentials/public/langver
     yql/essentials/public/udf
+    yql/essentials/public/udf/service/dispatch
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
     yql/essentials/types/uuid

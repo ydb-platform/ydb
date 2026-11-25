@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/common/events/scan.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -26,7 +26,7 @@ public:
     virtual TDuration GetTimeout() const = 0;
 
     TConclusionStatus OnDataChunk(const std::shared_ptr<arrow::Table>& data) {
-        AFL_VERIFY(data->num_rows());
+        YDB_LOG_VERIFY(data->num_rows());
         return DoOnDataChunk(data);
     }
 
@@ -71,7 +71,10 @@ private:
 
     void SwitchStage(const std::optional<EStage> from, const EStage to) {
         if (from) {
-            AFL_VERIFY(Stage == *from)("from", (ui32)*from)("real", (ui32)Stage)("to", (ui32)to);
+            YDB_LOG_VERIFY(Stage == *from,
+                {"from", (ui32)*from},
+                {"real", (ui32)Stage},
+                {"to", (ui32)to});
         }
         Stage = to;
     }
@@ -92,7 +95,7 @@ public:
     TActor(const std::shared_ptr<IRestoreTask>& rTask)
         : RestoreTask(rTask)
     {
-        AFL_VERIFY(RestoreTask);
+        YDB_LOG_VERIFY(RestoreTask);
     }
 
     STATEFN(StateFunc) {
@@ -110,10 +113,11 @@ public:
                 hFunc(NActors::TEvents::TEvUndelivered, HandleExecute);
                 hFunc(NActors::TEvents::TEvWakeup, HandleExecute);
                 default:
-                    AFL_VERIFY(false)("type", ev->GetTypeName());
+                    YDB_LOG_VERIFY(false,
+                        {"type", ev->GetTypeName()});
             }
         } catch (...) {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
     }
 

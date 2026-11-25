@@ -13,24 +13,25 @@ namespace NYql::NUdf::NTest {
 
 template <size_t N>
 struct TStructMemberName {
-    char Data[N];
-    // NOLINTNEXTLINE(google-explicit-constructor)
+    std::array<char, N> Data;
+    // The array reference preserves the string literal extent for template argument deduction.
+    // NOLINTNEXTLINE(google-explicit-constructor, modernize-avoid-c-arrays)
     constexpr TStructMemberName(const char (&str)[N]) {
-        std::copy_n(str, N, Data);
+        std::copy_n(str, N, Data.data());
     }
     constexpr explicit TStructMemberName(char fill) {
-        std::fill_n(Data, N - 1, fill);
+        std::fill_n(Data.data(), N - 1, fill);
         Data[N - 1] = '\0';
     }
 
     // NOLINTNEXTLINE(google-explicit-constructor)
     constexpr operator std::string_view() const {
-        return std::string_view{Data, N - 1};
+        return std::string_view{Data.data(), N - 1};
     }
 
     // NOLINTNEXTLINE(google-explicit-constructor)
     constexpr operator TStringBuf() const {
-        return TStringBuf{Data, N - 1};
+        return TStringBuf{Data.data(), N - 1};
     }
 };
 

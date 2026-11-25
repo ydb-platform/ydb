@@ -183,11 +183,11 @@ class Controller:
 
 
 class Environment:
-    def __init__(self, binary, root, names=("a", "b"), mode="auto", initial=None, timing=None):
+    def __init__(self, binary, root, names=("a", "b"), mode="auto", initial=None, timing=None, mock_heartbeat_timeout=0.4):
         self.root = Path(root)
         self.ports = PortManager()
         topology = Topology(
-            names, 3, initial=initial, timings=tiny_timings(lifecycle_delay=0.05),
+            names, 3, initial=initial, timings=tiny_timings(lifecycle_delay=0.05, heartbeat_timeout=mock_heartbeat_timeout),
             control_ports=[self.ports.get_port() for _ in names],
             grpc_ports=[[self.ports.get_port() for _ in range(3)] for _ in names])
         self.cluster = LiveCluster(topology=topology)

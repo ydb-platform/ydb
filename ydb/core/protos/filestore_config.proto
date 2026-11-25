@@ -12,6 +12,9 @@ message TChannelProfile {
     optional uint32 DataKind = 7; // the kind of data to be stored, e.g. mixed/merged/etc.
 }
 
+// When changing fields, review BuildShardCreationTargetConfigForHash in the
+// filestore shard creation state companion. Operational metadata that can change
+// between retries must be excluded from the target config hash.
 message TConfig {
     // Version number for atomic updates
     optional uint32 Version = 1;

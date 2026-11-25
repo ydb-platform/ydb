@@ -3,12 +3,15 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <set>
 #include <unordered_map>
 #include <vector>
@@ -28,6 +31,15 @@ bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config);
 bool ReplicationEnabled(const NKikimrPQ::TPQTabletConfig& config);
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config);
 
+// Empty when writes are allowed. WRITE_UNAVAILABLE is retryable, WRITE_PROHIBITED is not.
+struct TWriteModeError {
+    NPersQueue::NErrorCode::EErrorCode Code;
+    Ydb::StatusIds::StatusCode Status;
+    TString Reason;
+};
+
+std::optional<TWriteModeError> GetWriteModeError(const NKikimrPQ::TPQTabletConfig& config);
+
 size_t CountActivePartitions(const ::google::protobuf::RepeatedPtrField< ::NKikimrPQ::TPQTabletConfig_TPartition >& partitions);
 
 ui64 PutUnitsSize(const ui64 size);
@@ -35,6 +47,8 @@ ui64 PutUnitsSize(const ui64 size);
 TString SourceIdHash(const TString& sourceId);
 
 void Migrate(NKikimrPQ::TPQTabletConfig& config);
+
+TString NormalizeDlqTopicPath(const TString& dlq, const TString& database);
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);
 const NKikimrPQ::TPQTabletConfig::TConsumer* GetConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);

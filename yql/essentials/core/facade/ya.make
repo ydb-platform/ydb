@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/core/project_settings/convert
     library/cpp/deprecated/split
     library/cpp/random_provider
     library/cpp/string_utils/base64

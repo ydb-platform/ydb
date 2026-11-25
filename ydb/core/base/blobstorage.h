@@ -38,6 +38,8 @@ namespace NWilson {
 
 namespace NKikimr {
 
+struct TBridgeProxyPoolCounters;
+
 static constexpr ui32 MaxProtobufSize = 67108000;
 static constexpr ui32 MaxVDiskBlobSize = 10 << 20; // 10 megabytes
 static constexpr ui64 MaxCollectGarbageFlagsPerMessage = 10000;
@@ -580,6 +582,8 @@ struct TEvBlobStorage {
         EvControllerDDiskInfoGetTabletResult        = 0x10031635,
         EvControllerDDiskInfoTabletRevisionChanged  = 0x10031636,
         EvControllerSubscribeDatabaseSpace          = 0x10031637,
+        EvControllerQueryBridgeStorage             = 0x10031638,
+        EvControllerQueryBridgeStorageResult       = 0x10031639,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -647,6 +651,11 @@ struct TEvBlobStorage {
         EvNodeWardenAcquireBlobDepotS3Router,
         EvNodeWardenReleaseBlobDepotS3Router,
         EvNodeConfigGetSelfHealState,
+        EvNodeWardenStandbyDirty,
+        EvNodeWardenRegisterBridgeProxy,
+        EvNodeWardenStandbySeal,
+        EvNodeWardenStandbySealed,
+        EvNodeWardenBlobDepotS3RouterReady,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -676,6 +685,9 @@ struct TEvBlobStorage {
 
         EvVRestorePart,
         EvVRestorePartResult,
+        EvMirror3dcRepairScanResult,
+        EvRunMirror3dcRepair,
+        EvRunMirror3dcRepairResult,
 
         EvEnd
     };
@@ -683,7 +695,10 @@ struct TEvBlobStorage {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_BLOBSTORAGE),
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_BLOBSTORAGE)");
 
-    struct TExecutionRelay {};
+    struct TExecutionRelay {
+        // A reply observer owns the terminal sample while the forwarded request can still be routed by a bridge.
+        std::shared_ptr<const TBridgeProxyPoolCounters> BridgeProxyPoolCounters;
+    };
     static constexpr struct TCloneEventPolicy {} CloneEventPolicy{};
 
     struct TEvPutResult;
@@ -703,11 +718,16 @@ struct TEvBlobStorage {
         ui32 RestartCounter = 0;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
         std::optional<ui32> ForceGroupGeneration;
+        // Capture time and pool on first receipt by the logical bridge. Restarts keep both on the original event.
+        TMonotonic BridgeProxyStartTime;
+        std::shared_ptr<const TBridgeProxyPoolCounters> BridgeProxyPoolCounters;
 
         // Admission hint deciding whether the write this request performs -- the put itself, or the
         // restore a MustRestoreFirst read triggers -- is still accepted when the group is low on
         // space. It is never stored along with the blob.
         NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
+        // I/O generated on behalf of another proxy request must not start a new logical bridge sample.
+        bool IsProxySubrequest = false;
 
         TEvRequestCommon() = default;
 
@@ -718,6 +738,7 @@ struct TEvBlobStorage {
         // A clone keeps the admission hint, but starts its own restart counter and execution relay.
         TEvRequestCommon(TCloneEventPolicy, const TEvRequestCommon& origin)
             : DataKind(origin.DataKind)
+            , IsProxySubrequest(origin.IsProxySubrequest)
         {}
 
         static TString GetRequestName(ui32 eventType) {
@@ -729,7 +750,7 @@ struct TEvBlobStorage {
             case EvBlock:
                 return "Block";
             case EvCollectGarbage:
-                return "CollectGarbase";
+                return "CollectGarbage";
             case EvDiscover:
                 return "Discover";
             case EvPatch:
@@ -1029,6 +1050,14 @@ struct TEvBlobStorage {
             }
         };
 
+        static ui64 CountRequestBytes(TConstArrayRef<TQuery> queries) {
+            ui64 bytes = 0;
+            for (const auto& query : queries) {
+                bytes += query.Size ? query.Size : Max<i32>(0, query.Id.BlobSize() - query.Shift);
+            }
+            return bytes;
+        }
+
         // todo: replace with queue-like thing
         const ui32 QuerySize;
         TArrayHolder<TQuery> Queries;
@@ -1284,8 +1313,8 @@ struct TEvBlobStorage {
             return Print(false);
         }
 
-        ui32 PayloadSizeBytes() const {
-            ui32 size = 0;
+        ui64 PayloadSizeBytes() const {
+            ui64 size = 0;
             for (ui32 i = 0; i < ResponseSz; ++i) {
                 size += Responses[i].Buffer.size();
             }
@@ -2470,6 +2499,8 @@ struct TEvBlobStorage {
         std::optional<TLogoBlobID> SkipBlobsUpTo;
         bool IgnoreDecommitState;
         bool Reverse;
+        std::optional<ui32> ExpectedGeneration;
+        bool IncludePartPlacement = false;
 
         TEvAssimilate(TCloneEventPolicy, const TEvAssimilate& origin)
             : TEvRequestCommon(CloneEventPolicy, origin)
@@ -2478,6 +2509,8 @@ struct TEvBlobStorage {
             , SkipBlobsUpTo(origin.SkipBlobsUpTo)
             , IgnoreDecommitState(origin.IgnoreDecommitState)
             , Reverse(origin.Reverse)
+            , ExpectedGeneration(origin.ExpectedGeneration)
+            , IncludePartPlacement(origin.IncludePartPlacement)
         {}
 
         TEvAssimilate(std::optional<ui64> skipBlocksUpTo, std::optional<std::tuple<ui64, ui8>> skipBarriersUpTo,
@@ -2587,6 +2620,12 @@ struct TEvBlobStorage {
             TLogoBlobID Id;
             bool Keep = false;
             bool DoNotKeep = false;
+            // some disk has a part of the blob; a disk may have a record of the blob with flags only, e.g. a Keep flag
+            // that has come before the data
+            bool HasData = true;
+
+            // Masks of subgroup positions holding each part, populated for a placement scan.
+            TStackVec<ui16, TBlobStorageGroupType::MaxTotalParts> PartDisks{};
 
             TString ToString() const {
                 TStringStream str;
@@ -2601,6 +2640,9 @@ struct TEvBlobStorage {
                 }
                 if (DoNotKeep) {
                     s << "d";
+                }
+                if (!HasData) {
+                    s << "n";
                 }
             }
 
@@ -2756,6 +2798,8 @@ struct TEvBlobStorage {
     struct TEvControllerDistconfResponse;
     struct TEvControllerUpdateSyncerState;
     struct TEvControllerSubscribeDatabaseSpace;
+    struct TEvControllerQueryBridgeStorage;
+    struct TEvControllerQueryBridgeStorageResult;
     struct TEvControllerDatabaseSpaceState;
 
     struct TEvControllerAllocateDDiskBlockGroup;

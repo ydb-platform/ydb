@@ -25,25 +25,31 @@ using namespace Aws::S3;
 using namespace Aws::S3::Model;
 using namespace Aws::Utils::Stream;
 
-TEvListObjectsResponse::TResult TFakeExternalStorage::BuildListObjectsResult(const TEvListObjectsRequest::TRequest& request) const {
-    auto& bucket = GetBucket(AwsToString(request.GetBucket()));
-    auto& awsPrefix = request.GetPrefix();
-    const TString prefix(awsPrefix.data(), awsPrefix.size());
-    THolder<TEvListObjectsResponse> result;
+TEvListObjectsResponse::TAwsResult TFakeBucketStorage::ListObjects(TStringBuf prefix, TStringBuf marker, int maxKeys) const {
     TGuard<TMutex> g(Mutex);
-    TEvListObjectsResponse::TAwsResult awsResult;
-    for (auto&& i : bucket) {
-        if (!!prefix && !i.first.StartsWith(prefix)) {
-            continue;
-        }
-        Aws::S3::Model::Object objectMeta;
-        objectMeta.SetKey(i.first);
-        objectMeta.SetSize(i.second.size());
-        awsResult.AddContents(std::move(objectMeta));
-        break;
+    TEvListObjectsResponse::TAwsResult result;
+    if (maxKeys <= 0) {
+        return result;
     }
-    awsResult.SetIsTruncated(bucket.GetSize() > 1);
-    return awsResult;
+
+    auto it = marker.empty() || marker < prefix ? Data.lower_bound(TString(prefix)) : Data.upper_bound(TString(marker));
+    for (; it != Data.end() && it->first.StartsWith(prefix) && maxKeys; ++it, --maxKeys) {
+        result.AddContents(Aws::S3::Model::Object().WithKey(it->first).WithSize(it->second.size()));
+    }
+    if (it != Data.end() && it->first.StartsWith(prefix)) {
+        result.SetIsTruncated(true);
+        result.SetNextMarker(result.GetContents().back().GetKey());
+    }
+    return result;
+}
+
+TEvListObjectsResponse::TResult TFakeExternalStorage::BuildListObjectsResult(const TEvListObjectsRequest::TRequest& request) const {
+    TGuard<TMutex> g(Mutex);
+    const auto& bucket = GetBucket(AwsToString(request.GetBucket()));
+    const auto& prefix = request.GetPrefix();
+    const auto& marker = request.GetMarker();
+    return bucket.ListObjects(TStringBuf(prefix.data(), prefix.size()), TStringBuf(marker.data(), marker.size()),
+        request.MaxKeysHasBeenSet() ? request.GetMaxKeys() : 1000);
 }
 
 void TFakeExternalStorage::Execute(TEvListObjectsRequest::TPtr& ev, const TReplyAdapterContainer& adapter) const {
@@ -63,7 +69,8 @@ void TFakeExternalStorage::Execute(TEvGetObjectRequest::TPtr& ev, const TReplyAd
     auto awsRange = ev->Get()->GetRequest().GetRange();
     Y_ABORT_UNLESS(awsRange.size());
     const TString strRange(awsRange.data(), awsRange.size());
-    AFL_VERIFY(TEvGetObjectResponse::TryParseRange(strRange, range))("original", strRange);
+    YDB_LOG_VERIFY(TEvGetObjectResponse::TryParseRange(strRange, range),
+        {"original", strRange});
 
     if (!!object) {
         YDB_LOG_DEBUG("",

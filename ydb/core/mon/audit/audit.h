@@ -32,9 +32,16 @@ public:
     bool AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) const;
 
 private:
-    void AddAuditLogPart(TStringBuf name, const TString& value);
-
-    TAuditParts Parts;
+    TString RemoteAddress;
+    TString Method;
+    TString Url;
+    TString Params;
+    TString Body;
+    TString Subject;
+    TString SanitizedToken;
+    TString CloudId;
+    TString FolderId;
+    TString ResourceId;
     bool Auditable = false;
     NACLibProto::ESubjectType SubjectType = NACLibProto::SUBJECT_TYPE_ANONYMOUS;
 };

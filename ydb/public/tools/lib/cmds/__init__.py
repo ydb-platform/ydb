@@ -628,7 +628,7 @@ def deploy(arguments, actor_system_config=None):
     database = cluster.domain_name
     recipe.write_metafile(info)
     recipe.write_endpoint(endpoint)
-    recipe.write_database(cluster.domain_name)
+    recipe.write_database("/" + cluster.domain_name)
     recipe.write_connection_string(("grpcs://" if enable_tls() else "grpc://") + endpoint + "?database=/" + cluster.domain_name)
     if report_monitoring_info():
         recipe.write_mon_port(mon_port)

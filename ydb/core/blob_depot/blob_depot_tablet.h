@@ -6,6 +6,7 @@
 #include "schema.h"
 #include "mon_main.h"
 
+#include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
@@ -239,9 +240,7 @@ namespace NKikimr::NBlobDepot {
 
         void ProcessRegisterAgentQ();
 
-        bool ReadyForAgentQueries() const {
-            return Configured && (!Config.GetIsDecommittingGroup() || DecommitState >= EDecommitState::BlocksFinished);
-        }
+        bool ReadyForAgentQueries() const;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -437,6 +436,7 @@ namespace NKikimr::NBlobDepot {
         // Configuration
 
         bool Configured = false;
+        bool RestartingForConfigChange = false;
         NKikimrBlobDepot::TBlobDepotConfig Config;
 
         void Handle(TEvBlobDepot::TEvApplyConfig::TPtr ev);

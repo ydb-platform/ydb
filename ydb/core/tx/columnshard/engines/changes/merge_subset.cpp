@@ -52,13 +52,14 @@ std::shared_ptr<NArrow::TColumnFilter> ISubsetToMerge::BuildPortionFilter(const 
             fieldNames.emplace(i);
         }
         auto table = batch->BuildTableVerified(fieldNames);
-        AFL_VERIFY(table);
+        YDB_LOG_VERIFY(table);
         filter = shardingActual->GetShardingInfo()->GetFilter(table);
     }
     NArrow::TColumnFilter filterDeleted = NArrow::TColumnFilter::BuildAllowFilter();
     if (pInfo.GetMeta().GetDeletionsCount() && useDeletionFilter) {
         // A deletion marker has to be kept only while some portion outside of this task may still hold an older record with the
         // same key. Elsewhere the marker (together with the records it shadows inside the task) is dropped from the result.
+        YDB_LOG_VERIFY(HasDeletions && PortionsIndexSnapshot);
         const std::vector<TKeyInterval> olderIntervals =
             NGranule::NPortionsIndex::TPortionsIndex::GetOlderIntervals(*PortionsIndexSnapshot, pInfo, portionsInUsage);
         const NArrow::TSimpleRow keyStart = pInfo.IndexKeyStart();
@@ -68,14 +69,14 @@ std::shared_ptr<NArrow::TColumnFilter> ISubsetToMerge::BuildPortionFilter(const 
         });
         if (!coveredByOlder) {
             if (pInfo.GetPortionType() == EPortionType::Written) {
-                AFL_VERIFY(pInfo.GetMeta().GetDeletionsCount() == pInfo.GetRecordsCount());
+                YDB_LOG_VERIFY(pInfo.GetMeta().GetDeletionsCount() == pInfo.GetRecordsCount());
                 filterDeleted = NArrow::TColumnFilter::BuildDenyFilter();
             } else {
                 auto table = batch->BuildTableVerified(std::set<std::string>({ TIndexInfo::SPEC_COL_DELETE_FLAG }));
-                AFL_VERIFY(table);
+                YDB_LOG_VERIFY(table);
                 auto col = table->GetColumnByName(TIndexInfo::SPEC_COL_DELETE_FLAG);
-                AFL_VERIFY(col);
-                AFL_VERIFY(col->type()->id() == arrow::Type::BOOL);
+                YDB_LOG_VERIFY(col);
+                YDB_LOG_VERIFY(col->type()->id() == arrow::Type::BOOL);
                 for (auto&& c : col->chunks()) {
                     auto bCol = static_pointer_cast<arrow::BooleanArray>(c);
                     for (ui32 i = 0; i < bCol->length(); ++i) {
@@ -132,8 +133,9 @@ ui64 TWritePortionsToMerge::GetColumnMaxChunkMemory() const {
 }
 
 TWritePortionsToMerge::TWritePortionsToMerge(std::vector<TWritePortionInfoWithBlobsResult>&& portions,
-    const std::shared_ptr<TGranuleMeta>& granuleMeta, const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot)
-    : TBase(granuleMeta, portionsIndexSnapshot)
+    const std::shared_ptr<TGranuleMeta>& granuleMeta, const bool hasDeletions,
+    const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot)
+    : TBase(granuleMeta, hasDeletions, portionsIndexSnapshot)
     , WritePortions(std::move(portions))
 {
     ui32 idx = 0;

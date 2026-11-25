@@ -1,10 +1,12 @@
 #pragma once
 
+#include <ydb/core/kqp/common/stats/progress.h>
+
 #include <array>
 #include <optional>
 
 #include "kqp_tasks_graph.h"
-#include <ydb/core/kqp/common/kqp_current_query_stats.h>
+#include <ydb/core/kqp/common/simple/current_query_stats.h>
 
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
@@ -412,6 +414,8 @@ struct TAggExecStat {
     ui64 TasksCount = 0;
     ui64 InputBytes = 0;
     ui64 OutputBytes = 0;
+    ui64 HopInputEventsCount = 0;
+    ui64 HopLateEventsCount = 0;
 };
 
 struct TQueryExecutionStats {
@@ -531,27 +535,6 @@ public:
     TCurrentExecStatsReport TakeCurrentStats(bool finished = false);
 };
 
-struct TTableStat {
-    ui64 Rows = 0;
-    ui64 Bytes = 0;
-
-    TTableStat& operator+=(const TTableStat& rhs);
-    TTableStat& operator-=(const TTableStat& rhs);
-};
-
-struct TProgressStatEntry {
-    TDuration ComputeTime;
-    TTableStat ReadIOStat;
-    bool Defined = false;
-
-    TProgressStatEntry& operator+=(const TProgressStatEntry& rhs);
-
-    void Out(IOutputStream& o) const;
-};
-
-TTableStat CalcSumTableReadStat(const TProgressStatEntry& entry);
-TDuration CalcCumComputeTime(const TProgressStatEntry& entry);
-
 class TProgressStat {
 public:
     using TEntry = TProgressStatEntry;
@@ -607,8 +590,3 @@ public:
 
 } // namespace NKqp
 } // namespace NKikimr
-
-template<>
-inline void Out<NKikimr::NKqp::TProgressStatEntry>(IOutputStream& o, const NKikimr::NKqp::TProgressStatEntry& x) {
-    return x.Out(o);
-}

@@ -259,7 +259,8 @@ def procstat_flags(args: List[str], ps_dir: Path) -> List[str]:
     """Return the ``-fproc-stat-report`` flag directing output to ``ps_dir``.
 
     The clang driver itself measures each subprocess it spawns (cc1) and
-    appends one CSV line ``"tool","output",wall_us,user_us,peak_rss_kb``.
+    appends one CSV line ``"tool","output",cpu_us,user_us,peak_rss_kb``.
+    Here cpu_us is user + system CPU time, not wall-clock time.
     That gives per-TU CPU time for free: no wrapper process, no perf, and
     no dependency on kernel counter permissions.
     """

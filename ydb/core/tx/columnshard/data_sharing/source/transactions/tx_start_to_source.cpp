@@ -18,7 +18,7 @@ bool TTxStartToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, 
 void TTxStartToSource::DoComplete(const TActorContext& /*ctx*/) {
     YDB_LOG_DEBUG("",
         {"info", "TTxStartToSource::Complete"});
-    AFL_VERIFY(Sessions->emplace(Session->GetSessionId(), Session).second);
+    YDB_LOG_VERIFY(Sessions->emplace(Session->GetSessionId(), Session).second);
 }
 
 }   // namespace NKikimr::NOlap::NDataSharing

@@ -6,6 +6,9 @@
 
 namespace NPersQueue {
 
+// Count slash-prefixed client paths that acquire a database prefix during resolution.
+void CountTopicPathWithDatabasePrefix(TStringBuf database, TStringBuf originalPath, TStringBuf resolvedPath);
+
 TVector<NPersQueue::TPQLabelsInfo> GetLabels(const TTopicConverterPtr& topic);
 //TVector<NPersQueue::TPQLabelsInfo> GetLabelsForLegacyName(const TString& topic);
 TVector<NPersQueue::TPQLabelsInfo> GetLabelsForCustomCluster(const TTopicConverterPtr& topic, TString cluster);

@@ -31,6 +31,8 @@ items:
   when: feature_changefeed
 - name: Time to live and eviction
   href: ttl.md
+- name: Table data compression
+  href: compression.md
 - name: Database limits
   href: limits-ydb.md
 - name: Backup and restore

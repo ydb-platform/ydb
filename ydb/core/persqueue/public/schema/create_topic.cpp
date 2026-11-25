@@ -192,6 +192,10 @@ TResult ApplyChangesInt(
         return {errorCode, std::move(error)};
     }
 
+    if (auto result = ApplyReplicationConsumerAttribute(request.attributes(), *pqTabletConfig); !result) {
+        return result;
+    }
+
     if (request.has_metrics_level()) {
         pqTabletConfig->SetMetricsLevel(request.metrics_level());
     }
@@ -290,6 +294,7 @@ NActors::IActor* CreateCreateTopicActor(const NActors::TActorId& parentId, TCrea
         .PrepareOnly = settings.PrepareOnly,
         .Strategy = std::make_unique<TCreateTopicStrategy>(std::move(settings.Request)),
         .Cookie = settings.Cookie,
+        .EnableRelativePaths = true,
     });
 }
 

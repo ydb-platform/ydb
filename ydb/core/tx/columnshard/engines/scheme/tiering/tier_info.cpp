@@ -34,6 +34,11 @@ std::optional<TInstant> DyNumberToInstant(TStringBuf binary, ui64 unitsInSecond)
 }   // namespace
 
 std::optional<TInstant> TTierInfo::ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar, NScheme::TTypeId columnType) const {
+    if (!scalar || !scalar->is_valid) {
+        // NULL in the TTL column never expires (the same rule as for row tables).
+        // With nullable key columns the max value of the first PK column of a portion may be NULL.
+        return TInstant::Max();
+    }
     const ui64 unitsInSeconds = TtlUnitsInSecond ? TtlUnitsInSecond : 1;
     // Datetime64 and Timestamp64 both use Arrow Int64, so the logical type
     // is required to distinguish seconds from microseconds.
@@ -67,7 +72,7 @@ std::optional<TInstant> TTierInfo::ScalarToInstant(const std::shared_ptr<arrow::
 
 TTiering::TTieringContext TTiering::GetTierToMove(
     const std::shared_ptr<arrow::Scalar>& max, const TInstant now, const bool skipEviction, NScheme::TTypeId columnType) const {
-    AFL_VERIFY(OrderedTiers.size());
+    YDB_LOG_VERIFY(OrderedTiers.size());
     std::optional<TString> nextTierName;
     std::optional<TDuration> nextTierDuration;
     for (auto& tierRef : GetOrderedTiers()) {

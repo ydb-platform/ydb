@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/common/result_set_format/kqp_result_set_format_settings.h>
+#include <ydb/core/kqp/common/result_set_format/settings/settings.h>
 
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 

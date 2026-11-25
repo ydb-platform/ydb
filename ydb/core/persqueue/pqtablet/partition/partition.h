@@ -163,6 +163,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitDataStep;
     friend TInitEndWriteTimestampStep;
     friend TInitFieldsStep;
+    friend TNotifyWriteSessionsQuoterStep;
 
     friend TPartitionSourceManager;
 
@@ -171,6 +172,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
 
 public:
     const TString& TopicName() const;
+    void PassAway() override;
 
     ui64 GetUsedStorage(const TInstant& ctx);
 
@@ -206,6 +208,7 @@ private:
 
     bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
     void SendInfoToAutopartitioningManager(const TWriteMsg& p);
+    static ECumulativeCounters UserActCounter(TEvPQ::TEvSetClientInfo::ESetClientInfoType type, bool ok);
 
     TActorId ReplyTo(const ui64 destination, const TActorId& replyTo) const;
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo = {});
@@ -286,6 +289,7 @@ private:
     void Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx);
     void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx);
+    void HandleOnIdle(TEvPQ::TEvEmitHeartbeat::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvUpdateAvailableSize::TPtr& ev, const TActorContext& ctx);
@@ -348,7 +352,10 @@ private:
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
 
-    TInstant GetWriteTimeEstimate(ui64 offset) const;
+    // firstUnreadMessage: true if offset is the first UNREAD message (step 1
+    // key back to that message itself); false if offset is the next-to-commit
+    // offset (step 2 keys back to the last committed message).
+    TInstant GetWriteTimeEstimate(ui64 offset, bool firstUnreadMessage = false) const;
     bool CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
 
     // Removes blobs that are no longer required. Blobs are no longer required if the storage time of all messages
@@ -736,6 +743,7 @@ private:
             HFuncTraced(TEvPQ::TEvRegisterMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnIdle);
+            HFuncTraced(TEvPQ::TEvEmitHeartbeat, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvUpdateReadMetrics, Handle);
             HFuncTraced(TEvPQ::TEvConsumerBatchProcessorMetrics, Handle);
             HFuncTraced(NBatching::TEvProcessBatchKeysResult, Handle);
@@ -811,6 +819,7 @@ private:
 
 private:
     ui32 TabletGeneration;
+    bool WriteSessionsQuoterNotified = false;
     const TPartitionId Partition;
     NKikimrPQ::TPQTabletConfig Config;
     NKikimrPQ::TPQTabletConfig TabletConfig;
@@ -933,11 +942,15 @@ private:
                                      TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
     EProcessResult PreProcessRequest(TWriteMsg& msg,
                                      TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    EProcessResult PreProcessRequest(TEmitHeartbeatMsg& msg,
+                                     TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
 
     void ExecRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& parameters);
     void ExecRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters);
     void ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
     bool ExecRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request);
+    void ExecRequest(TEmitHeartbeatMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request);
+    void EmitHeartbeat(const THeartbeat& heartbeat, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request);
     bool ValidateBatchMessage(const TActorContext& ctx, const TWriteMsg& msg);
 
     [[nodiscard]] EProcessResult BeginTransactionData(TTransaction& t,
@@ -1119,6 +1132,8 @@ private:
     TInstant WriteTimestampEstimate;
     bool ManageWriteTimestampEstimate = true;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteInitThrottledMs;
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> WriteInitSessions;
     //ToDo - counters.
     THolder<TPercentileCounter> InputTimeLag;
     THolder<TMultiBucketCounter> SupportivePartitionTimeLag;
@@ -1150,6 +1165,7 @@ private:
     // Writing blob with topic quota variables.
     // BlobQuotaSize / MessagesQuotaSize belong to TopicQuotaRequestCookie, not to the KV write
     // cycle. The next quota request may already be in flight when HandleWriteResponse runs.
+    // With EnablePQWriteQuotaAccountingFix off (default), HandleWriteResponse zeroes them (legacy).
     ui64 TopicQuotaRequestCookie = 0;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
     ui64 BlobQuotaSize = 0;

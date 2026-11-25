@@ -7,14 +7,31 @@ namespace NKikimr::NKqp::NScheduler {
 
 // Create special query on demand inside each pool - for datashards only
 struct TSchedulableRead : TSchedulableTask {
-    explicit TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query);
+    // The factory retains the budget independently of readers and their CPU demand.
+    struct TQuotaState {
+        ui64 MaxQuotaMs = 1000;
+        double QuotaPerSecond = 1.0;
+        i64 AvailableQuotaMs = 1000;
+        ui64 RefillRemainder = 0;
+        TMonotonic LastRefill = TMonotonic::Now();
+
+        void Refill();
+    };
+
+    explicit TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query,
+        std::shared_ptr<TQuotaState> quota = std::make_shared<TQuotaState>());
 
     bool TryConsumeQuota(TDuration expectedQuota);
+    // An admitted first read must finish without quota waits while it holds
+    // pipeline dependencies. Reserve and charge its attempts even over quota.
+    // Returns false only if the current policy prohibits reading.
+    bool ConsumeQuotaForAdmittedRead(TDuration expectedQuota);
     void ReturnQuota(NHPTimer::STime elapsedCycles = 0);
 
     // Estimate delay until quota becomes available.
     // Must be called only after refilling is already done, i.e. TryConsumeQuota or HasAvailableQuota fails.
-    TDuration EstimateQuotaDelay(TDuration expectedQuota) const;
+    // No delay means that the observed policy prohibits reading: fail the iterator instead of retrying.
+    TMaybe<TDuration> EstimateQuotaDelay(TDuration expectedQuota) const;
 
     // Non-consuming availability check: refills the bucket and reports whether any
     // quota is left, without reserving it or touching fair-share usage.
@@ -22,20 +39,17 @@ struct TSchedulableRead : TSchedulableTask {
 
     // Returns false if the MaxQuotaMs is zero. It's possible if the resource pool
     // also has TOTAL_CPU_LIMIT_PERCENT = 0.
-    bool IsValid() const {
-        return MaxQuotaMs != 0;
-    }
+    bool IsValid() const;
 
 private:
+    void RefreshQuota();
+    void ReserveQuota(ui64 expectedQuotaMs);
+
     // Milliseconds precision - because THPTimer::STime to TDuration has the same precision
-    ui64 MaxQuotaMs;
-    double QuotaPerSecond;
+    const std::shared_ptr<TQuotaState> Quota;
     ui64 ReservedQuotaMs = 0;
-    i64 AvailableQuotaMs = 0;
 
     mutable ui8 FairShareRetryCount = 0;
-
-    TMonotonic LastRefill;
 };
 
 // Thread-unsafe and should be used by a single actor (i.e. Datashard)
@@ -48,8 +62,13 @@ public:
     void CleanupReadsCache() const;
 
 private:
+    struct TCachedRead {
+        std::shared_ptr<TSchedulableRead::TQuotaState> Quota;
+        TSchedulableReadPtr::weak_type Read;
+    };
+
     TComputeSchedulerPtr Scheduler;
-    mutable THashMap<NHdrf::TFullPoolId, TSchedulableReadPtr::weak_type> ReadsCache;
+    mutable THashMap<NHdrf::TFullPoolId, TCachedRead> ReadsCache;
 };
 
 } // namespace NKikimr::NKqp::NScheduler

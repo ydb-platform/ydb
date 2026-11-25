@@ -25,8 +25,6 @@ struct TTetsEnvBase {
         UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
         GroupInfo = Env.GetGroupInfo(groups.front());
 
-        VDiskActorId = GroupInfo->GetActorId(0);
-
         Sender = Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
 
         NKikimrBlobStorage::TConfigRequest request;
@@ -80,8 +78,16 @@ struct TTetsEnvBase {
         Env.SetIcbControl(0, "VDiskControls.EnableChecksumWriteValidationOnVDisk", 1);
     }
 
+    TVDiskID GetLastPartVDiskId() const {
+        TBlobStorageGroupInfo::TVDiskIds vdiskIds;
+        GroupInfo->PickSubgroup(LastBlobId.Hash(), &vdiskIds, nullptr);
+        UNIT_ASSERT(!vdiskIds.empty());
+        return vdiskIds[0];
+    }
+
     void RestartVDiskNode() {
-        Env.RestartNode(VDiskActorId.NodeId());
+        const ui32 orderNumber = GroupInfo->GetOrderNumber(GetLastPartVDiskId());
+        Env.RestartNode(GroupInfo->GetActorId(orderNumber).NodeId());
         Env.Sim(TDuration::Seconds(5));
         Sender = Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
     }
@@ -97,10 +103,7 @@ struct TTetsEnvBase {
     NKikimrProto::EReplyStatus ReadLastPartFromVDisk(ui32 shift, ui32 size, TString* partData = nullptr,
             const std::function<void(TEvBlobStorage::TEvVGetResult&)>& inspect = {}) {
         NKikimrProto::EReplyStatus status = NKikimrProto::ERROR;
-        TBlobStorageGroupInfo::TVDiskIds vdiskIds;
-        GroupInfo->PickSubgroup(LastBlobId.Hash(), &vdiskIds, nullptr);
-        UNIT_ASSERT(!vdiskIds.empty());
-        const TVDiskID& vdiskId = vdiskIds[0];
+        const TVDiskID vdiskId = GetLastPartVDiskId();
 
         Env.WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::GetFastRead, [&](TActorId queueId) {
             const TActorId& edge = Env.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
@@ -145,7 +148,6 @@ struct TTetsEnvBase {
 
     TEnvironmentSetup Env;
     TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
-    TActorId VDiskActorId;
     ui32 CollectGeneration = 0;
     TActorId Sender;
     TRcBuf Payload;
@@ -224,18 +226,21 @@ Y_UNIT_TEST(PutEightBytesWithoutXxh3BlobHeader) {
     UNIT_ASSERT_VALUES_EQUAL(env.DecryptLastPart(partData), data);
 }
 
-Y_UNIT_TEST(ReadsXxh3HeaderBlobAfterHeaderModeRollback) {
+void TestReadsXxh3HeaderBlobAfterHeaderModeRollback(TBlobStorageGroupType type, ui32 size) {
     EBlobHeaderMode blobHeaderMode = EBlobHeaderMode::XXH3_64BIT_HEADER;
     ui32 vDiskConfigPreprocessorCalled = 0;
     TTetsEnvBase env({
+        .NodeCount = Max<ui32>(9, type.BlobSubgroupSize()),
+        .Erasure = type,
         .VDiskConfigPreprocessor = [&](TVDiskConfig& config) {
             config.BlobHeaderMode = blobHeaderMode;
             ++vDiskConfigPreprocessorCalled;
         },
+        .MinHugeBlobInBytes = 128_KB,
     });
     env.EnableChecksumReadValidationOnVDisk();
 
-    const TString data = GenData(16_KB, 11);
+    const TString data = GenData(size, 11);
     auto writeResult = env.WriteData(data);
     UNIT_ASSERT_EQUAL(writeResult->Get()->Status, NKikimrProto::OK);
 
@@ -250,19 +255,42 @@ Y_UNIT_TEST(ReadsXxh3HeaderBlobAfterHeaderModeRollback) {
         });
     }), NKikimrProto::OK);
     UNIT_ASSERT(sawStoredChecksum);
-    UNIT_ASSERT_VALUES_EQUAL(env.DecryptLastPart(partData), data);
+    TDataPartSet encoded;
+    type.SplitData(TErasureType::CrcModeNone, data, encoded);
+    UNIT_ASSERT_VALUES_EQUAL(partData, encoded.Parts[0].OwnedString.ConvertToString());
 
     blobHeaderMode = EBlobHeaderMode::NO_HEADER;
     vDiskConfigPreprocessorCalled = 0;
     env.RestartVDiskNode();
     UNIT_ASSERT_VALUES_EQUAL(vDiskConfigPreprocessorCalled, 1);
 
+    for (const auto& disk : env.GroupInfo->GetVDisks()) {
+        env.Env.CompactVDisk(env.GroupInfo->GetActorId(disk.OrderNumber));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(env.ReadLastPartFromVDisk(&partData), NKikimrProto::OK);
+    UNIT_ASSERT_VALUES_EQUAL(partData, encoded.Parts[0].OwnedString.ConvertToString());
     auto readResult = env.ReadDataFromDsProxy();
     UNIT_ASSERT_VALUES_EQUAL_C(readResult->Get()->Status, NKikimrProto::OK, readResult->Get()->ToString());
     UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->ResponseSz, 1);
     const auto& response = readResult->Get()->Responses[0];
     UNIT_ASSERT_VALUES_EQUAL(response.Status, NKikimrProto::OK);
     UNIT_ASSERT_VALUES_EQUAL(response.Buffer.ConvertToString(), data);
+}
+
+Y_UNIT_TEST(ReadsXxh3HeaderBlobAfterHeaderModeRollback) {
+    TestReadsXxh3HeaderBlobAfterHeaderModeRollback(TBlobStorageGroupType::ErasureNone, 16_KB);
+}
+
+Y_UNIT_TEST(ReadsXxh3HeaderBlobAfterHeaderModeRollbackBlock42) {
+    for (ui32 size : {16_KB, 2_MB}) {
+        TestReadsXxh3HeaderBlobAfterHeaderModeRollback(TBlobStorageGroupType::Erasure4Plus2Block, size);
+    }
+}
+
+Y_UNIT_TEST(ReadsXxh3HeaderBlobAfterHeaderModeRollbackBlock82) {
+    for (ui32 size : {16_KB, 2_MB}) {
+        TestReadsXxh3HeaderBlobAfterHeaderModeRollback(TBlobStorageGroupType::Erasure8Plus2Block, size);
+    }
 }
 
 Y_UNIT_TEST(DsProxySendsXxh3ChecksumToVDisk) {

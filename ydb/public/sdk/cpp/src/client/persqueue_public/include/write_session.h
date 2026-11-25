@@ -85,7 +85,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
 
     FLUENT_SETTING_OPTIONAL(TWriterCounters::TPtr, Counters);
 
-    //! Executor for compression tasks.
+    //! Executor for compression tasks and sending messages.
     //! If not set, default executor will be used.
     FLUENT_SETTING(IExecutor::TPtr, CompressionExecutor);
 

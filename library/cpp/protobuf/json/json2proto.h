@@ -119,6 +119,21 @@ namespace NProtobufJson {
             return *this;
         }
 
+        TSelf& SetAllowDuplicateJsonKeys(bool value) {
+            AllowDuplicateJsonKeys = value;
+            return *this;
+        }
+
+        TSelf& SetAllowMultipleFieldAliases(bool value) {
+            AllowMultipleFieldAliases = value;
+            return *this;
+        }
+
+        TSelf& SetAllowOneofConflicts(bool value) {
+            AllowOneofConflicts = value;
+            return *this;
+        }
+
         TSelf& SetAllowFieldNameAliases(bool value) {
             AllowFieldNameAliases = value;
             return *this;
@@ -196,6 +211,15 @@ namespace NProtobufJson {
 
         /// Stores information about unknown fields
         TSimpleSharedPtr<IUnknownFieldsCollector> UnknownFieldsCollector = nullptr;
+
+        /// Allow duplicate keys when reading JSON text or streams.
+        bool AllowDuplicateJsonKeys = true;
+
+        /// Allow multiple accepted names for a field, including null values.
+        bool AllowMultipleFieldAliases = true;
+
+        /// Allow multiple non-null, defined members of a oneof in the input.
+        bool AllowOneofConflicts = true;
     };
 
     /// @throw yexception
@@ -232,12 +256,20 @@ namespace NProtobufJson {
         Json2Proto(TStringBuf(in.ReadAll()), proto, config);
     }
 
+    namespace NDetail {
+        void ReadJsonTreeWithDuplicateKeyValidation(IInputStream& in, const NJson::TJsonReaderConfig& config, NJson::TJsonValue& value);
+    } // namespace NDetail
+
     /// @throw yexception
     template <typename T>
     T Json2Proto(IInputStream& in, const NJson::TJsonReaderConfig& readerConfig,
                  const TJson2ProtoConfig& config = TJson2ProtoConfig()) {
         NJson::TJsonValue jsonValue;
-        NJson::ReadJsonTree(&in, &readerConfig, &jsonValue, true);
+        if (!config.AllowDuplicateJsonKeys) {
+            NDetail::ReadJsonTreeWithDuplicateKeyValidation(in, readerConfig, jsonValue);
+        } else {
+            NJson::ReadJsonTree(&in, &readerConfig, &jsonValue, true);
+        }
         T protoValue;
         Json2Proto(jsonValue, protoValue, config);
         return protoValue;

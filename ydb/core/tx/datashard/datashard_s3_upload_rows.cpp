@@ -6,6 +6,7 @@ TDataShard::TTxS3UploadRows::TTxS3UploadRows(TDataShard* ds, TEvDataShard::TEvS3
     : TBase(ds)
     , TCommonUploadOps(ev, false, false)
 {
+    ++Self->DatabaseFreezeLocalWrites;
 }
 
 bool TDataShard::TTxS3UploadRows::Execute(TTransactionContext& txc, const TActorContext&) {
@@ -32,6 +33,7 @@ bool TDataShard::TTxS3UploadRows::Execute(TTransactionContext& txc, const TActor
 }
 
 void TDataShard::TTxS3UploadRows::Complete(const TActorContext&) {
+    --Self->DatabaseFreezeLocalWrites;
     TActorId target;
     THolder<IEventBase> event;
     ui64 cookie;

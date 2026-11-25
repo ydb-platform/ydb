@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/opt/rbo/kqp_plan_conversion_utils.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_transformer.h>
 
+#include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -445,6 +446,63 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         }
     }
 
+    Y_UNIT_TEST(TextPlansReuseExplainRanges) {
+        const auto compile = [](TStringBuf expression, NYql::TExprContext& ctx) {
+            const auto ast = NYql::ParseAst(TStringBuilder() << "((return " << expression << "))");
+            UNIT_ASSERT_C(ast.IsOk(), ast.Issues.ToString());
+            NYql::TExprNode::TPtr node;
+            UNIT_ASSERT_C(NYql::CompileExpr(*ast.Root, node, ctx, nullptr, nullptr), ctx.IssueManager.GetIssues().ToString());
+            return node;
+        };
+        NYql::TExprContext ctx;
+        const NYql::TPositionHandle pos;
+        TInfoUnitRegistry registry;
+        const auto a = registry.Add(TInfoUnit("t", "a"));
+        const auto table = Build<TKqpTable>(ctx, pos)
+            .Path().Build("/Root/table").PathId().Build("1:1")
+            .SysView().Build("").Version().Build("1").Done().Ptr();
+        const auto point = compile("(RangeFinalize (RangeFor '== (Int64 '1) (DataType 'Int64)))", ctx);
+        const auto literal = compile("'((KqlKeyInc (Int64 '1)) (KqlKeyInc (Int64 '1)))", ctx);
+        const auto parameter = compile("(RangeFor '>= (Parameter '$lo (DataType 'Int64)) (DataType 'Int64))", ctx);
+
+        for (const auto storage : {NYql::EStorageType::RowStorage, NYql::EStorageType::ColumnStorage}) {
+            TOpRead read("t", {a}, storage, table, nullptr, nullptr, std::nullopt, std::nullopt,
+                ESortDir::None, TPhysicalOpProps{}, pos);
+            for (const bool useLiteral : {false, true}) {
+                read.RangeInfo = TOpRead::TRangeInfo{
+                    .ComputeNode = point, .KeyColumns = {"_alias_t\\.nested.a"}, .UsedPrefixLen = 1,
+                    .ExpectedMaxRanges = 1, .LiteralRange = useLiteral ? literal : nullptr,
+                };
+                const auto json = read.ToJson(0, registry);
+                const auto text = read.ToString(ctx, registry);
+                UNIT_ASSERT_VALUES_EQUAL(json["ReadRanges"].GetArray().front().GetStringSafe(), "[{a: 1}, {a: 1}]");
+                UNIT_ASSERT_STRING_CONTAINS(text, "Ranges: [[{a: 1}, {a: 1}]]");
+                UNIT_ASSERT(!text.Contains("RangeFor"));
+                UNIT_ASSERT(!text.Contains("Literal range:"));
+            }
+
+            read.RangeInfo = TOpRead::TRangeInfo{.ComputeNode = parameter, .KeyColumns = {"t.a"}, .UsedPrefixLen = 1};
+            UNIT_ASSERT_VALUES_EQUAL(read.ToJson(0, registry)["ReadRangesExpression"].GetStringSafe(), "a ∈ [$lo, +∞)");
+            UNIT_ASSERT_STRING_CONTAINS(read.ToString(ctx, registry), "Ranges expression: (a ∈ [$lo, +∞))");
+
+            // Empty interpreted ranges are still a description.
+            read.RangeInfo = TOpRead::TRangeInfo{
+                .ComputeNode = compile("(RangeEmpty (DataType 'Int64))", ctx),
+                .KeyColumns = {"t.a"}, .ExpectedMaxRanges = 0,
+            };
+            UNIT_ASSERT(read.ToJson(0, registry)["ReadRanges"].GetArray().empty());
+            UNIT_ASSERT_STRING_CONTAINS(read.ToString(ctx, registry), "Ranges: []");
+
+            // Opaque range programs remain available in the optimizer's diagnostic text.
+            read.RangeInfo = TOpRead::TRangeInfo{
+                .ComputeNode = compile("(Parameter '$ranges (ListType (DataType 'Int64)))", ctx), .KeyColumns = {"t.a"},
+            };
+            UNIT_ASSERT_STRING_CONTAINS(read.ToString(ctx, registry), "$ranges");
+            read.RangeInfo = TOpRead::TRangeInfo{};
+            UNIT_ASSERT(!read.ToString(ctx, registry).Contains("Ranges:"));
+        }
+    }
+
     Y_UNIT_TEST(ReadSeparatesStorageNamesFromPhysicalIds) {
         TExprContext ctx;
         const TPositionHandle pos;
@@ -459,6 +517,8 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         for (const auto storage : {NYql::EStorageType::RowStorage, NYql::EStorageType::ColumnStorage}) {
             TOpRead read("t", {z, a, anotherZ}, storage, table, nullptr, nullptr,
                 std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, pos);
+            // The plan uses every column of the read.
+            read.Props.Analysis.LiveOut = TUnorderedIUs{z, a, anotherZ};
             if (storage == NYql::EStorageType::ColumnStorage) {
                 auto row = ctx.NewArgument(pos, "row");
                 row->SetTypeAnn(ctx.MakeType<TFlowExprType>(ctx.MakeType<TStructExprType>(
@@ -468,9 +528,13 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                 auto filter = ctx.NewCallable(pos, "KqpOlapFilter", {row, condition});
                 read.OlapFilterLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(filter));
             }
-            const auto result = TPhysicalSourceBuilder(read, ctx, pos, names, registry, "stage").BuildPhysicalOp().AsNarrow(ctx);
+            TPhysicalSourceBuilder builder(read, ctx, pos, names, registry);
+            const auto result = builder.BuildPhysicalOp().AsNarrow(ctx);
+            // A row read is a source input of its stage, and its body reads the stage argument.
+            const auto& stageSource = builder.GetStageSource();
+            UNIT_ASSERT_VALUES_EQUAL(stageSource.has_value(), storage == NYql::EStorageType::RowStorage);
             TExprNode::TPtr storageRead;
-            VisitExpr(result, [&](const TExprNode::TPtr& node) {
+            VisitExpr(stageSource ? stageSource->Source : result, [&](const TExprNode::TPtr& node) {
                 if (TKqpReadRangesSourceSettings::Match(node.Get()) || TKqpBlockReadOlapTableRanges::Match(node.Get())) {
                     storageRead = node;
                 }
@@ -490,8 +554,10 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
             UNIT_ASSERT_VALUES_EQUAL(columns.Item(0).Value(), "a");
             UNIT_ASSERT_VALUES_EQUAL(columns.Item(1).Value(), "z");
 
-            const auto map = storage == NYql::EStorageType::RowStorage
-                ? TDqPhyStage(result).Program().Body().Ptr() : result->HeadPtr();
+            const auto map = stageSource ? result : result->HeadPtr();
+            if (stageSource) {
+                UNIT_ASSERT(map->HeadPtr() == stageSource->Argument);
+            }
             const auto& lambda = map->Tail();
             const auto& fields = lambda.Tail();
             UNIT_ASSERT_VALUES_EQUAL(fields.ChildrenSize(), 3);
@@ -511,9 +577,11 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         const auto table = f.Read({})->TableCallable;
         TOpRead read("t", {}, NYql::EStorageType::ColumnStorage, table, nullptr, nullptr,
             std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, f.Pos);
+        // The plan uses no column, only the row count.
+        read.Props.Analysis.LiveOut = TUnorderedIUs{};
         const TPhysicalNames names(f.Props.InfoUnitRegistry);
         const auto ast = TPhysicalSourceBuilder(read, f.ExprCtx, f.Pos, names,
-            f.Props.InfoUnitRegistry, "stage", /*isSysView=*/false, "key").BuildPhysicalOp().AsNarrow(f.ExprCtx);
+            f.Props.InfoUnitRegistry, /*isSysView=*/false, "key").BuildPhysicalOp().AsNarrow(f.ExprCtx);
         const auto source = FindNode(ast, [](const auto& node) {
             return TKqpBlockReadOlapTableRanges::Match(node.Get());
         });
@@ -729,7 +797,7 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                 f.SetType(partial);
                 const TPhysicalNames names(root->PlanProps.InfoUnitRegistry);
                 auto stage = TPhysicalSourceBuilder(*read, f.ExprCtx, f.Pos, names,
-                    root->PlanProps.InfoUnitRegistry, "stage").BuildPhysicalOp().AsNarrow(f.ExprCtx);
+                    root->PlanProps.InfoUnitRegistry).BuildPhysicalOp().AsNarrow(f.ExprCtx);
                 stage = NPhysicalConvertionUtils::BuildSwitch(stage, *hub, names, f.ExprCtx);
                 // A sibling consumer may have adapted its branch before this
                 // aggregate is visited in the normal postorder traversal.
@@ -738,15 +806,13 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                     TOpTableLookup rawLookup(raw, f.Pos, nullptr, {}, {{rawValue, "raw_storage_key"}});
                     stage = NLookupJoinBuilder::BuildLookupKeys(rawLookup, stage, f.ExprCtx, names).InputStage;
                 }
-                const auto before = storage == NYql::EStorageType::RowStorage
-                    ? TDqPhyStage(stage).Program().Body().Ptr() : stage;
+                const auto before = stage;
                 stage = NPhysicalConvertionUtils::TransformStageOutput(stage, [&](TExprNode::TPtr body) {
                     return TPhysicalAggregationBuilder(partial, f.ExprCtx, f.Pos, names)
                         .BuildPhysicalOp(NPhysicalConvertionUtils::TStageBody::Narrow(body), std::nullopt)
                         .AsNarrow(f.ExprCtx);
                 }, GetReplicateOutputIndex(partial), f.ExprCtx);
-                const auto body = storage == NYql::EStorageType::RowStorage
-                    ? TDqPhyStage(stage).Program().Body().Ptr() : stage;
+                const auto body = stage;
                 UNIT_ASSERT_VALUES_EQUAL(body->IsCallable("Switch"), !testCase.SinglePort);
                 if (!testCase.SinglePort) {
                     UNIT_ASSERT(body->HeadPtr() == before->HeadPtr());
@@ -758,16 +824,12 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                 UNIT_ASSERT(FindNode(testCase.SinglePort ? body : body->ChildPtr(5), [](const auto& node) {
                     return node->IsCallable("DqPhyHashCombine");
                 }));
-                if (storage == NYql::EStorageType::RowStorage) {
-                    UNIT_ASSERT(TDqPhyStage::Match(stage.Get()));
-                }
 
                 // Lookup key adaptation follows the aggregate's output index.
                 const auto lookupKey = *partial.GetAggregationTraits().Keys().begin();
                 TOpTableLookup lookup(final.GetInput(), f.Pos, nullptr, {}, {{lookupKey, "storage_key"}});
                 const auto keys = NLookupJoinBuilder::BuildLookupKeys(lookup, stage, f.ExprCtx, names);
-                const auto lookupBody = storage == NYql::EStorageType::RowStorage
-                    ? TDqPhyStage(keys.InputStage).Program().Body().Ptr() : keys.InputStage;
+                const auto lookupBody = keys.InputStage;
                 if (!testCase.SinglePort) {
                     UNIT_ASSERT(lookupBody->HeadPtr() == body->HeadPtr());
                     UNIT_ASSERT(lookupBody->ChildPtr(3) == body->ChildPtr(3));

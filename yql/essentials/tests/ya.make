@@ -5,5 +5,5 @@ RECURSE(
     postgresql
     s-expressions
     sql
+    sql_benchmarks
 )
-

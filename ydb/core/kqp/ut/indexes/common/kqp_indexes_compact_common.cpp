@@ -52,7 +52,7 @@ TString FormatFulltextIndex(TKikimrRunner& kikimr, const TString& name, bool wit
             ui64 docId;
             ui32 freq;
             auto& list = tokens[lastToken];
-            while (mr.Read(docId, freq)) {
+            while (mr.ReadPositive(docId, freq)) {
                 list[docId] = freq;
             }
             segments.clear();

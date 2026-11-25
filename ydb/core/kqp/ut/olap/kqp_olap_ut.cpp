@@ -3435,8 +3435,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         class TTestExecutor: public TManyColumnShardsWithRestartsExecutor {
         private:
             virtual void OnAfterTest() const override {
-                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
-                AFL_VERIFY(!NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
+                YDB_LOG_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
+                YDB_LOG_VERIFY(!NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
             }
             virtual void FillSettings(Tests::TServerSettings& settings) const override {
                 settings.SetDomainName("Root").SetUseRealThreads(false).SetNodeCount(2).SetColumnShardReaderClassName("SIMPLE");
@@ -3449,8 +3449,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         class TTestExecutor: public TManyColumnShardsWithRestartsExecutor {
         private:
             virtual void OnAfterTest() const override {
-                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
-                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
+                YDB_LOG_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
+                YDB_LOG_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
             }
             virtual void FillSettings(Tests::TServerSettings& settings) const override {
                 settings.SetDomainName("Root")
@@ -4733,7 +4733,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY level
             )");
 
-            AFL_VERIFY(rows.size() == 4)("count", rows.size());
+            YDB_LOG_VERIFY(rows.size() == 4,
+                {"count", rows.size()});
             if (GetUint64(rows[0].at("sum_records_count")) == 0 && GetUint64(rows[1].at("sum_records_count")) == 0 &&
                 GetUint64(rows[2].at("sum_records_count")) == 0 && GetUint64(rows[3].at("sum_records_count")) == 70000) {
                 break;
@@ -5079,6 +5080,57 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     [[1];[2];["value"]]
                 ]
             )", FormatResultSetYson(resultSet));
+        }
+    }
+
+    Y_UNIT_TEST(InsertIntoNullablePKAfterFlagDisabled) {
+        // The flag gates table creation only: a table created with nullable key columns keeps accepting NULL keys
+        // after the flag is turned off, while NOT NULL key columns still reject NULL.
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
+        TTestHelper testHelper(settings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("pk1").SetType(NScheme::NTypeIds::Int64).SetNullable(true),
+            TTestHelper::TColumnSchema().SetName("pk2").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::String).SetNullable(true),
+        };
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ttt").SetPrimaryKey({ "pk1", "pk2" }).SetSharding({ "pk1" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        testHelper.GetKikimr().GetTestServer().GetRuntime()->GetAppData().ColumnShardConfig.SetAllowNullableColumnsInPK(false);
+
+        auto client = testHelper.GetKikimr().GetQueryClient();
+        {
+            const auto result = client
+                .ExecuteQuery(
+                    R"(INSERT INTO `/Root/ttt` (pk1, pk2, value) VALUES (null, 1, "a"), (2, 2, "b"))",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto result = client
+                .ExecuteQuery(
+                    R"(INSERT INTO `/Root/ttt` (pk1, pk2, value) VALUES (3, null, "c"))",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), "NULL in a NOT NULL key column must be rejected");
+        }
+        {
+            const auto resultSelect = client
+                .ExecuteQuery("SELECT * FROM `/Root/ttt` ORDER BY pk1, pk2", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+            UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
+            NYdb::TResultSetParser parser(resultSelect.GetResultSet(0));
+            UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 2);
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT(!parser.ColumnParser("pk1").GetOptionalInt64());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("pk2").GetInt32(), 1);
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser("pk1").GetOptionalInt64(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("pk2").GetInt32(), 2);
         }
     }
 

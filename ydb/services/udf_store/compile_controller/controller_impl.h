@@ -51,7 +51,8 @@ struct TGapKeyHash {
     }
 };
 
-class TWasmCompileController: public NKikimr::NTabletFlatExecutor::TTabletActor<NActors::TActor<TWasmCompileController>>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TWasmCompileController: public NKikimr::NTabletFlatExecutor::TTabletActor<NActors::TActor<TWasmCompileController>>,
+                              public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     using Schema = TCompileControllerSchema;
 

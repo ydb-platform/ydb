@@ -31,7 +31,8 @@ class TVolumeActorTestAccessor;
 // UpdateVolumeConfig in the local database, so a restart can still reach
 // that partition. Pipes open only after that id is loaded.
 class TVolumeActor
-    : public NKikimr::NTabletFlatExecutor::TTabletActor<TActorBootstrapped<TVolumeActor>>
+    : public NKikimr::NTabletFlatExecutor::TTabletActor<
+          TActorBootstrapped<TVolumeActor>>
     , public NBlockStore::NStorage::TTabletBase<TVolumeActor>
 {
     enum EState

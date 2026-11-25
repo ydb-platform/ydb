@@ -17,7 +17,8 @@ namespace {
 
 // Partition tablet that accepts UpdateVolumeConfig and replies OK.
 class TFakePartitionActor final
-    : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TFakePartitionActor>>
+    : public NKikimr::NTabletFlatExecutor::TTabletActor<
+          TActor<TFakePartitionActor>>
     , public NTabletFlatExecutor::TTabletExecutedFlat
 {
 public:

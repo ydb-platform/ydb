@@ -182,56 +182,6 @@ bool IsKeyRangeHeartbeatsStream(const TPathId& streamPathId, const TOperationCon
     return stream->HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
 }
 
-template <typename TItem, typename TCallback>
-void ForEachPairwise(const TVector<TItem*>& items, TCallback&& callback) {
-    const TItem* prev = nullptr;
-    for (const auto* item : items) {
-        callback(prev, *item);
-        prev = item;
-    }
-}
-
-NKikimrPQ::TMessageGroup MakeRangelessCdcMessageGroup(const TTableShardInfo& shard, const TOperationContext& context) {
-    const auto* shardInfo = context.SS->ShardInfos.FindPtr(shard.ShardIdx);
-    Y_ABORT_UNLESS(shardInfo != nullptr);
-
-    //NOTE: No KeyRange on the group: nothing consumes the key ranges on the pqtablet side.
-    // Routing is datashard-side over the topic partitioning, split continuity is
-    // the change-exchange re-registration, and the table split/merge re-registration
-    // produces rangeless ids anyway.
-    NKikimrPQ::TMessageGroup messageGroup;
-    messageGroup.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shardInfo->TabletID)));
-    return messageGroup;
-}
-
-NKikimrPQ::TMessageGroup MakeKeyRangeCdcMessageGroup(const TTableShardInfo* prev, const TTableShardInfo& shard, const TOperationContext& context) {
-    auto messageGroup = MakeRangelessCdcMessageGroup(shard, context);
-    auto& keyRange = *messageGroup.MutableKeyRange();
-    if (prev) {
-        keyRange.SetFromBound(prev->EndOfRange);
-    }
-    if (shard.EndOfRange) {
-        keyRange.SetToBound(shard.EndOfRange);
-    }
-    return messageGroup;
-}
-
-NKikimrPQ::TBootstrapConfig BuildRangelessCdcBootstrapConfig(const TTableInfo& table, const TOperationContext& context) {
-    NKikimrPQ::TBootstrapConfig bootstrapConfig;
-    for (const auto* shard : table.GetPartitions()) {
-        *bootstrapConfig.AddExplicitMessageGroups() = MakeRangelessCdcMessageGroup(*shard, context);
-    }
-    return bootstrapConfig;
-}
-
-NKikimrPQ::TBootstrapConfig BuildKeyRangeCdcBootstrapConfig(const TTableInfo& table, const TOperationContext& context) {
-    NKikimrPQ::TBootstrapConfig bootstrapConfig;
-    ForEachPairwise(table.GetPartitions(), [&](const TTableShardInfo* prev, const TTableShardInfo& shard) {
-        *bootstrapConfig.AddExplicitMessageGroups() = MakeKeyRangeCdcMessageGroup(prev, shard, context);
-    });
-    return bootstrapConfig;
-}
-
 }  // anonymous namespace
 
 // Serializes the cdc bootstrap as a TEvProposeTransaction prefix
@@ -501,9 +451,30 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
-        bootstrapConfig = IsKeyRangeHeartbeatsStream(topicPath.Parent().Base()->PathId, context)
-            ? BuildKeyRangeCdcBootstrapConfig(*table, context)
-            : BuildRangelessCdcBootstrapConfig(*table, context);
+        const bool keyRangeHeartbeats = IsKeyRangeHeartbeatsStream(topicPath.Parent().Base()->PathId, context);
+        const auto& partitions = table->GetPartitions();
+        for (size_t i = 0; i < partitions.size(); ++i) {
+            const auto* shardInfo = context.SS->ShardInfos.FindPtr(partitions[i]->ShardIdx);
+            Y_ABORT_UNLESS(shardInfo != nullptr);
+
+            auto& mg = *bootstrapConfig.AddExplicitMessageGroups();
+            mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shardInfo->TabletID)));
+
+            // Pass the DataShard key range to a key range CDC topic: PQ registers the source only in its partitions
+            if (keyRangeHeartbeats) {
+                if (i > 0) {
+                    mg.MutableKeyRange()->SetFromBound(partitions[i - 1]->EndOfRange);
+                }
+                if (i + 1 < partitions.size()) {
+                    mg.MutableKeyRange()->SetToBound(partitions[i]->EndOfRange);
+                }
+            }
+
+            //NOTE: Other CDC topics get no KeyRange on the group: nothing consumes the key ranges on the pqtablet side.
+            // Routing is datashard-side over the topic partitioning, split continuity is
+            // the change-exchange re-registration, and the table split/merge re-registration
+            // produces rangeless ids anyway.
+        }
     }
 
     // Common parts of the pass, shared by all shard messages by refcount

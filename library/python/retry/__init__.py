@@ -192,10 +192,12 @@ def retry(conf=DEFAULT_CONF, **kwargs):
     if kwargs:
         conf = conf.clone(**kwargs)
 
+    runner = _RetryRunner(conf)
+
     def decorator(f):
         @functools.wraps(f)
         def wrapped(*f_args, **f_kwargs):
-            return _retry(conf, functools.partial(f, *f_args, **f_kwargs))
+            return runner.run(functools.partial(f, *f_args, **f_kwargs))
 
         return wrapped
 
@@ -216,34 +218,44 @@ def retry_intrusive(f):
 
 
 def _retry(conf, f):
-    start = datetime.datetime.now()
-    delay = 0
-    for n in itertools.count(1):
-        try:
-            return f()
-        except Exception as error:
-            raised_after = datetime.datetime.now() - start
-            if conf.handle_error:
-                conf.handle_error(error, n, raised_after)
-            delay = conf.get_delay(n, raised_after, delay)
-            retry_after = raised_after + datetime.timedelta(seconds=delay)
-            retrying = (
-                conf.retriable(error)
-                and (conf.max_times is None or n <= conf.max_times)
-                and (conf.max_time is None or retry_after <= conf.max_time)
-            )
-            if not retrying:
-                raise
-            if delay:
-                conf.sleep(delay)
-            if conf.logger:
-                conf.logger.warning(
-                    "Retrying (try %d) after %s (%s + %s sec) on %s: %s",
-                    n,
-                    retry_after,
-                    raised_after,
-                    delay,
-                    error.__class__.__name__,
-                    error,
-                    exc_info=True,
+    return _RetryRunner(conf).run(f)
+
+
+class _RetryRunner(object):
+    def __init__(self, conf):
+        self.conf = conf
+
+    def run(self, f):
+        conf = self.conf
+        start = datetime.datetime.now()
+        self.delay = 0
+        for n in itertools.count(1):
+            try:
+                return f()
+            except Exception as error:
+                raised_after = datetime.datetime.now() - start
+                if conf.handle_error:
+                    conf.handle_error(error, n, raised_after)
+                self.delay = conf.get_delay(n, raised_after, self.delay)
+                delay = self.delay
+                retry_after = raised_after + datetime.timedelta(seconds=delay)
+                retrying = (
+                    conf.retriable(error)
+                    and (conf.max_times is None or n <= conf.max_times)
+                    and (conf.max_time is None or retry_after <= conf.max_time)
                 )
+                if not retrying:
+                    raise
+                if delay:
+                    conf.sleep(delay)
+                if conf.logger:
+                    conf.logger.warning(
+                        "Retrying (try %d) after %s (%s + %s sec) on %s: %s",
+                        n,
+                        retry_after,
+                        raised_after,
+                        delay,
+                        error.__class__.__name__,
+                        error,
+                        exc_info=True,
+                    )

@@ -146,7 +146,8 @@ namespace NKikimr::NGRpcProxy::V1 {
                 {"childrenCount", childrenCount},
                 {"hasListNodeEntry", static_cast<bool>(response.ListNodeEntry)});
             AddIssue(FillIssue(
-                TStringBuilder() << "path '" << GetTopicPath() << "' is not created yet or has an unexpected scheme layout",
+                TStringBuilder() << "path '" << GetTopicPath() << "' is not created yet or has an unexpected scheme layout"
+                                 << " (private topic children: " << childrenCount << ", expected 1)",
                 Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
             ));
             RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);

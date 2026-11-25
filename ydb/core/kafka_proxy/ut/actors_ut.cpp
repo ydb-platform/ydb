@@ -634,29 +634,34 @@ namespace NKafka::NTests {
             return out;
         }
 
-        TEvKafka::TEvTopicDescribeResponse* DescribeTopicAsCdcStream(size_t childrenCount, TAutoPtr<IEventHandle>& handle) {
-            auto server = CreateSimulatedServer();
-            auto* runtime = &server->GetRuntime();
+        TEvKafka::TEvTopicDescribeResponse* DescribeTopicAsCdcStream(
+            TSimulatedServer& server,
+            size_t childrenCount,
+            TAutoPtr<IEventHandle>& handle,
+            bool hasListNodeEntry = true) {
+            auto* runtime = &server.GetRuntime();
             const TString topicPath = "/Root/TopicForCdcDescribe";
 
             const TString expectedPath = JoinPath(SplitPath(topicPath));
             auto observer = runtime->AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
-                [&expectedPath, childrenCount](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+                [&expectedPath, childrenCount, hasListNodeEntry](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
                     for (auto& entry : ev->Get()->Request.Get()->ResultSet) {
                         if (JoinPath(entry.Path) != expectedPath) {
                             continue;
                         }
                         entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
                         entry.Kind = NSchemeCache::TSchemeCacheNavigate::KindCdcStream;
-                        auto listEntry = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TListNodeEntry>();
-                        listEntry->Kind = NSchemeCache::TSchemeCacheNavigate::KindCdcStream;
-                        for (size_t i = 0; i < childrenCount; ++i) {
-                            listEntry->Children.emplace_back(
-                                "priv" + ToString(i),
-                                TPathId(),
-                                NSchemeCache::TSchemeCacheNavigate::KindTopic);
+                        if (hasListNodeEntry) {
+                            auto listEntry = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TListNodeEntry>();
+                            listEntry->Kind = NSchemeCache::TSchemeCacheNavigate::KindPath;
+                            for (size_t i = 0; i < childrenCount; ++i) {
+                                listEntry->Children.emplace_back(
+                                    "priv" + ToString(i),
+                                    TPathId(),
+                                    NSchemeCache::TSchemeCacheNavigate::KindTopic);
+                            }
+                            entry.ListNodeEntry = listEntry;
                         }
-                        entry.ListNodeEntry = listEntry;
                     }
                 });
 
@@ -667,24 +672,36 @@ namespace NKafka::NTests {
         }
 
         Y_UNIT_TEST(DescribeCdcStreamWithoutChildren) {
+            // Both the empty children list and the missing list node entry (the exact
+            // null-deref abort from YDBBUGS-1205) are answered with an error instead of
+            // an abort. Run them on a single server to keep the test runtime low.
+            auto server = CreateSimulatedServer();
             TAutoPtr<IEventHandle> handle;
-            auto* ev = DescribeTopicAsCdcStream(0, handle);
+
+            auto* ev = DescribeTopicAsCdcStream(*server, 0, handle);
             UNIT_ASSERT(ev);
             UNIT_ASSERT_VALUES_EQUAL(ev->Status, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
             UNIT_ASSERT_STRING_CONTAINS(ev->Message, "unexpected scheme layout");
+
+            auto* evNoEntry = DescribeTopicAsCdcStream(*server, 0, handle, /*hasListNodeEntry=*/false);
+            UNIT_ASSERT(evNoEntry);
+            UNIT_ASSERT_VALUES_EQUAL(evNoEntry->Status, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+            UNIT_ASSERT_STRING_CONTAINS(evNoEntry->Message, "unexpected scheme layout");
         }
 
         Y_UNIT_TEST(DescribeCdcStreamWithTwoChildren) {
+            auto server = CreateSimulatedServer();
             TAutoPtr<IEventHandle> handle;
-            auto* ev = DescribeTopicAsCdcStream(2, handle);
+            auto* ev = DescribeTopicAsCdcStream(*server, 2, handle);
             UNIT_ASSERT(ev);
             UNIT_ASSERT_VALUES_EQUAL(ev->Status, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
             UNIT_ASSERT_STRING_CONTAINS(ev->Message, "unexpected scheme layout");
         }
 
         Y_UNIT_TEST(DescribeCdcStreamWithSingleChildContinuesToPrivateTopic) {
+            auto server = CreateSimulatedServer();
             TAutoPtr<IEventHandle> handle;
-            auto* ev = DescribeTopicAsCdcStream(1, handle);
+            auto* ev = DescribeTopicAsCdcStream(*server, 1, handle);
             UNIT_ASSERT(ev);
             // The single-child layout is processed without an abort and the describe
             // continues into the (nonexisting) private topic which yields the regular

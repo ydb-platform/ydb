@@ -43,11 +43,7 @@ $\mathrm{MaxUsage}$ и $\mathrm{MinUsage}$ — максимум и миниму�
 
 Этот вариант балансировки отличается от других более аггресивными перевозами таблеток.
 
-<<<<<<< HEAD
-Максимальное потребление на узле доступно в виде [сенсора](../devops/observability/monitoring.md) `Hive/MAX(BalanceScatter)` в подгруппе `tablets`.
-=======
 Максимальное потребление на узле доступно в виде [сенсора](../devops/observability/monitoring.md) `MAX(Hive/BalanceUsageMax)` в подгруппе `tablets`.
->>>>>>> 8651fb69407 (Fix Hive sensor names in contributor docs (#58214))
 
 ### Равномерное распределение конкретного объекта {#imbalance}
 

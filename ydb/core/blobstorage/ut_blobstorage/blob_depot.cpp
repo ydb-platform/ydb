@@ -3175,7 +3175,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         auto settings = MakeS3Settings(destination, &async);
         SetDataCoolingEnabled(runtime, false);
         std::optional<NKikimrBlobDepot::TBlobDepotConfig> applied;
-        bool registeredAtDestination = false;
+        ui32 registeredGeneration = 0;
         runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobDepot::EvApplyConfig) {
                 const auto& config = ev->Get<TEvBlobDepot::TEvApplyConfig>()->Record.GetConfig();
@@ -3185,8 +3185,9 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
             } else if (ev->GetTypeRewrite() == TEvBlobDepot::EvRegisterAgentResult && ev->GetRecipientRewrite() == agent) {
                 const auto& registration = ev->Get<TEvBlobDepot::TEvRegisterAgentResult>()->Record;
                 const auto& s3 = registration.GetS3BackendSettings().GetSettings();
-                registeredAtDestination = s3.GetBucket() == destination &&
-                    s3.GetAccessKey() == "rotated";
+                if (s3.GetBucket() == destination && s3.GetAccessKey() == "rotated") {
+                    registeredGeneration = Max(registeredGeneration, registration.GetGeneration());
+                }
             }
             return true;
         };
@@ -3200,11 +3201,13 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         SetDataCoolingEnabled(runtime, true);
         settings.MutableSettings()->SetAccessKey("rotated");
         ReconfigureS3Group(env, settings);
-        WaitForS3Condition(env, [&] { return applied->GetS3BackendSettings().GetSettings().GetAccessKey() == "rotated"; });
+        WaitForS3Condition(env, [&] { return registeredGeneration != 0; });
         UNIT_ASSERT(applied->GetS3NamespaceValidated());
         UNIT_ASSERT(!applied->GetS3CoolingAuthorized());
+        // Authorization restarts the tablet again with the same credentials.
+        const ui32 rotatedGeneration = registeredGeneration;
         ReconfigureS3Group(env);
-        WaitForS3Condition(env, [&] { return applied->GetS3CoolingAuthorized() && registeredAtDestination; });
+        WaitForS3Condition(env, [&] { return registeredGeneration > rotatedGeneration && applied->GetS3CoolingAuthorized(); });
         runtime.FilterFunction = {};
 
         const TLogoBlobID id(100500, 1, 1, 0, 8, 0);

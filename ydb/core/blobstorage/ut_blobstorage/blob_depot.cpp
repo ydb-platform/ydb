@@ -1212,15 +1212,19 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         UNIT_ASSERT_C(attached.GetSuccess(), attached.GetErrorDescription());
     }
 
-    NKikimrMiniKQL::TResult RunBscLocalQuery(TEnvironmentSetup& env, const TString& program) {
+    NKikimrMiniKQL::TResult RunTabletLocalQuery(TEnvironmentSetup& env, ui64 tabletId, const TString& program) {
         auto request = std::make_unique<TEvTablet::TEvLocalMKQL>();
         request->Record.MutableProgram()->MutableProgram()->SetText(program);
         const auto sender = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId);
-        env.Runtime->SendToPipe(env.TabletId, sender, request.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
+        env.Runtime->SendToPipe(tabletId, sender, request.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
         const auto response = env.WaitForEdgeActorEvent<TEvTablet::TEvLocalMKQLResponse>(sender);
         const auto& record = response->Get()->Record;
         UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), NKikimrProto::OK, record.GetMiniKQLErrors());
         return record.GetExecutionEngineEvaluatedResponse();
+    }
+
+    NKikimrMiniKQL::TResult RunBscLocalQuery(TEnvironmentSetup& env, const TString& program) {
+        return RunTabletLocalQuery(env, env.TabletId, program);
     }
 
     // Seed a pre-upgrade BSC row: current allocation rules cannot create these legacy namespaces.
@@ -2327,6 +2331,76 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Status, NKikimrProto::ERROR);
         UNIT_ASSERT_VALUES_EQUAL(bool(resolvesAfterFailure), noSuchKey);
         env.Runtime->FilterFunction = {};
+    }
+
+    Y_UNIT_TEST(SharedS3RangesSurviveRestartAndLastReferenceDeletion) {
+        const auto registry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
+        TEnvironmentSetup env(MakeCoolingTestSettings(false));
+        auto& runtime = *env.Runtime;
+        for (const ui32 node : runtime.GetNodes()) {
+            runtime.GetNode(node)->AppData->FunctionRegistry = registry.Get();
+        }
+        const TString bucketName = "shared-ranges-on-recovery";
+        const ui32 groupId = CreateS3VirtualGroup(env, bucketName);
+        const auto tabletId = TryGetBlobDepotTabletId(env, groupId);
+        UNIT_ASSERT(tabletId);
+        const auto edge = runtime.AllocateEdgeActor(1);
+        const TLogoBlobID original(100500, 1, 1, 0, 8, 0);
+        const TLogoBlobID first(100500, 1, 2, 0, 4, 0);
+        const TLogoBlobID second(100500, 1, 3, 0, 4, 0);
+
+        std::optional<TS3Locator> pack;
+        runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobDepot::TEvCommitBlobSeq::EventType) {
+                for (const auto& item : ev->Get<TEvBlobDepot::TEvCommitBlobSeq>()->Record.GetItems()) {
+                    if (item.GetKey() == original.AsBinaryString() && item.HasS3Locator()) {
+                        pack = TS3Locator::FromProto(item.GetS3Locator());
+                    }
+                }
+            }
+            return true;
+        };
+        PutToS3VirtualGroup(env, edge, groupId, original, "abcdwxyz");
+        runtime.FilterFunction = {};
+        UNIT_ASSERT(pack);
+        const auto& bucket = Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket(bucketName);
+        UNIT_ASSERT_VALUES_EQUAL(bucket.GetSize(), 1);
+        const TString packKey = bucket.GetObjectKeys().front();
+
+        // Seed the state left by an interrupted last-reference check. Each key owns one half
+        // of a real object, and the restart must resolve the trash candidate from those owners.
+        auto serializeRange = [&](ui32 begin, ui32 end) {
+            NKikimrBlobDepot::TValue value;
+            auto* link = value.AddValueChain();
+            pack->ToProto(link->MutableS3Locator());
+            link->SetSubrangeBegin(begin);
+            link->SetSubrangeEnd(end);
+            return HexEncode(value.SerializeAsString());
+        };
+        RunTabletLocalQuery(env, *tabletId, Sprintf(R"(
+            ((return (AsList
+                (EraseRow 'Data '('('Key (String 'x"%s"))))
+                (UpdateRow 'Data '('('Key (String 'x"%s"))) '('('Value (String 'x"%s"))))
+                (UpdateRow 'Data '('('Key (String 'x"%s"))) '('('Value (String 'x"%s"))))
+                (UpdateRow 'TrashS3 '('('Generation (Uint32 '%u)) '('KeyId (Uint64 '%s)))
+                    '('('Len (Uint32 '8)) '('CheckReferences (Bool 'true)))))))
+        )", HexEncode(original.AsBinaryString()).c_str(),
+            HexEncode(first.AsBinaryString()).c_str(), serializeRange(0, 4).c_str(),
+            HexEncode(second.AsBinaryString()).c_str(), serializeRange(4, 8).c_str(),
+            pack->Generation, ToString(pack->KeyId).c_str()));
+        RebootBlobDepotTablet(env, *tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromS3VirtualGroup(env, edge, groupId, first), "abcd");
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromS3VirtualGroup(env, edge, groupId, second), "wxyz");
+
+        PutToS3VirtualGroup(env, edge, groupId, first, "abcd");
+        RebootBlobDepotTablet(env, *tabletId);
+        UNIT_ASSERT(bucket.GetObject(packKey));
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromS3VirtualGroup(env, edge, groupId, second), "wxyz");
+
+        PutToS3VirtualGroup(env, edge, groupId, second, "wxyz");
+        WaitForS3Condition(env, [&] { return !bucket.GetObject(packKey); });
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromS3VirtualGroup(env, edge, groupId, first), "abcd");
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromS3VirtualGroup(env, edge, groupId, second), "wxyz");
     }
 
     // the value written to S3 has no blob parts; its integrity is checked by reading it from S3, and the check gets its

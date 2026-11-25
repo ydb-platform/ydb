@@ -142,31 +142,8 @@ namespace NKikimr::NBlobDepot {
             const ui32 begin = value.SubrangeBegin;
             const ui32 end = value.SubrangeEnd;
 
-            // calculate the whole length of current part
-            ui64 partLen = end - begin;
-            if (offset >= partLen) {
-                // just skip this part
-                offset -= partLen;
-                continue;
-            }
-
-            // adjust it to fit size and offset
-            partLen = Min(size ? size : Max<ui64>(), partLen - offset);
-            Y_ABORT_UNLESS(partLen);
-
-            ui32 itemLen = 0;
-            ui32 partOffset = offset + begin;
-
-            if (value.Blob) {
-                const auto& [blobId, groupId] = *value.Blob;
-                items.push_back(TReadItem{groupId, blobId, partOffset, ui32(partLen), outputOffset});
-                itemLen = blobId.BlobSize();
-            } else if (const auto& locator = value.S3Locator) {
-                TString key = locator->MakeObjectName(Agent.S3BasePath);
-                s3items.push_back(TS3ReadItem{std::move(key), partOffset, ui32(partLen), outputOffset});
-                itemLen = locator->Len;
-            }
-
+            const ui32 itemLen = value.Blob ? std::get<0>(*value.Blob).BlobSize() :
+                value.S3Locator ? value.S3Locator->Len : 0;
             if (end <= begin || itemLen < end) {
                 error = "incorrect SubrangeBegin/SubrangeEnd pair";
                 YDB_LOG_CRIT(error,
@@ -179,6 +156,23 @@ namespace NKikimr::NBlobDepot {
                     {"size", arg.Size},
                     {"value", arg.Value});
                 return false;
+            }
+
+            ui64 partLen = end - begin;
+            if (offset >= partLen) {
+                offset -= partLen;
+                continue;
+            }
+
+            partLen = Min(size ? size : Max<ui64>(), partLen - offset);
+            const ui32 partOffset = offset + begin;
+
+            if (value.Blob) {
+                const auto& [blobId, groupId] = *value.Blob;
+                items.push_back(TReadItem{groupId, blobId, partOffset, ui32(partLen), outputOffset});
+            } else {
+                TString key = value.S3Locator->MakeObjectName(Agent.S3BasePath);
+                s3items.push_back(TS3ReadItem{std::move(key), partOffset, ui32(partLen), outputOffset});
             }
 
             outputOffset += partLen;
@@ -458,6 +452,11 @@ namespace NKikimr::NBlobDepot {
                 // the object is checked by reading the range the value refers to: this is all the agent can tell about
                 // the data stored in S3
                 TString key = locator->MakeObjectName(Agent.S3BasePath);
+                if (value.SubrangeBegin >= value.SubrangeEnd || value.SubrangeEnd > locator->Len) {
+                    checkContext->Result->Status = NKikimrProto::ERROR;
+                    checkContext->AddErrorReason(key, "invalid S3 value chain range");
+                    continue;
+                }
                 const ui32 len = value.SubrangeEnd - value.SubrangeBegin;
 
                 YDB_LOG_DEBUG("Issuing S3 read to check integrity",

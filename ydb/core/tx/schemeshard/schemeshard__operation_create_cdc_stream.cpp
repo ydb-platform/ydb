@@ -16,32 +16,30 @@ namespace NCdc {
 
 namespace {
 
-bool HasCapabilityInReplicationAttribute(TStringBuf replicationAttribute, TStringBuf capability) {
-    NJson::TJsonValue attributes;
-    const NJson::TJsonValue* value = nullptr;
-    bool enabled = false;
-    return NJson::ReadJsonTree(replicationAttribute, &attributes)
-        && attributes.GetValuePointer(capability, &value)
-        && value->GetBoolean(&enabled) && enabled;
-}
-
-bool HasCapabilityInStreamDescription(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc, TStringBuf capability) {
-    for (const auto& attribute : streamDesc.GetUserAttributes()) {
+bool IsReplicationSupport(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc, const TString& capability) {
+    for (auto& attribute : streamDesc.GetUserAttributes()) {
         if (attribute.GetKey() == ATTR_ASYNC_REPLICATION) {
-            return HasCapabilityInReplicationAttribute(attribute.GetValue(), capability);
+            if (!attribute.HasValue()) {
+                break;
+            }
+
+            NJson::TJsonValue result;
+            if (!NJson::ReadJsonFastTree(attribute.GetValue(), &result)) {
+                break;
+            }
+
+            auto map = result.GetMap();
+            return map[capability].GetBoolean();
         }
     }
-    return false;
-}
 
-bool SendsPeriodicResolvedHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
-    return streamDesc.GetResolvedTimestampsIntervalMs() > 0;
+    return false;
 }
 
 bool ShouldUseKeyRangeHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc, const TFeatureFlags& featureFlags) {
     return featureFlags.GetEnableCdcKeyRangeHeartbeats()
-        && SendsPeriodicResolvedHeartbeats(streamDesc)
-        && HasCapabilityInStreamDescription(streamDesc, "supports_key_range_autopartitioning");
+        && streamDesc.GetResolvedTimestampsIntervalMs() > 0
+        && IsReplicationSupport(streamDesc, "supports_key_range_autopartitioning");
 }
 
 class TPropose: public TSubOperationState {
@@ -747,30 +745,33 @@ void DoCreateLock(
     result.push_back(CreateLock(NextPartId(opId, result), outTx));
 }
 
-bool ShouldUseHashAutoPartitioning(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
-    return HasCapabilityInStreamDescription(streamDesc, "supports_topic_autopartitioning");
-}
+} // anonymous
 
-TCdcPqPartParams MakeKeyRangeCdcPqPartParams(ui64 tablePartitionCount, ui64 maxShardsInPath) {
-    const ui64 maxPartitionCountLimit = std::min<ui64>(maxShardsInPath, Max<ui32>());
-    const auto totalGroupCount = static_cast<ui32>(tablePartitionCount);
-    return TCdcPqPartParams{
-        .TotalGroupCount = totalGroupCount,
-        .KeyRangeAutoPartitioning = true,
-        .MinPartitionCount = totalGroupCount,
-        .MaxPartitionCount = static_cast<ui32>(std::max<ui64>(totalGroupCount, maxPartitionCountLimit)),
-    };
-}
-
-TCdcPqPartParams MakeHashCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount, ui64 maxShardsInPath) {
+TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount,
+        ui64 maxShardsInPath, const TFeatureFlags& featureFlags) {
     // Autopartitioned replication topics are hash-partitioned. Cap that split
     // range by the path shard limit so a large table still gets a creatable topic.
     const ui64 maxPartitionCountLimit = std::min<ui64>(maxShardsInPath, Max<ui32>());
     const ui64 minPartitionCountLimit = maxPartitionCountLimit / 4;
 
+    // Start a key range CDC topic with one partition per table shard and let it split up to the path shard limit
+    if (ShouldUseKeyRangeHeartbeats(op.GetStreamDescription(), featureFlags)) {
+        const auto totalGroupCount = static_cast<ui32>(tablePartitionCount);
+        return TCdcPqPartParams{
+            .TotalGroupCount = totalGroupCount,
+            .KeyRangeAutoPartitioning = true,
+            .MinPartitionCount = totalGroupCount,
+            .MaxPartitionCount = static_cast<ui32>(std::max<ui64>(totalGroupCount, maxPartitionCountLimit)),
+        };
+    }
+
     TCdcPqPartParams params;
     params.TotalGroupCount = static_cast<ui32>(op.HasTopicPartitions() ? op.GetTopicPartitions() : tablePartitionCount);
     params.PartitionPerTablet = 2;
+
+    if (!IsReplicationSupport(op.GetStreamDescription(), "supports_topic_autopartitioning")) {
+        return params;
+    }
 
     ui64 minParts = std::min<ui64>(std::max<ui64>(tablePartitionCount / 16, 1), minPartitionCountLimit);
     ui64 maxParts = std::min<ui64>(std::max<ui64>(tablePartitionCount * 16, 50), maxPartitionCountLimit);
@@ -793,26 +794,6 @@ TCdcPqPartParams MakeHashCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream
     params.MinPartitionCount = static_cast<ui32>(minParts);
     params.MaxPartitionCount = static_cast<ui32>(maxParts);
     return params;
-}
-
-TCdcPqPartParams MakeRequestedCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount) {
-    return TCdcPqPartParams{
-        .TotalGroupCount = static_cast<ui32>(op.HasTopicPartitions() ? op.GetTopicPartitions() : tablePartitionCount),
-    };
-}
-
-} // anonymous
-
-TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount,
-        ui64 maxShardsInPath, const TFeatureFlags& featureFlags) {
-    if (ShouldUseKeyRangeHeartbeats(op.GetStreamDescription(), featureFlags)) {
-        return MakeKeyRangeCdcPqPartParams(tablePartitionCount, maxShardsInPath);
-    }
-    if (ShouldUseHashAutoPartitioning(op.GetStreamDescription())) {
-        return MakeHashCdcPqPartParams(op, tablePartitionCount, maxShardsInPath);
-    }
-    // A regular changefeed: the topic takes TopicPartitions from the request, otherwise one partition per table shard.
-    return MakeRequestedCdcPqPartParams(op, tablePartitionCount);
 }
 
 void DoCreatePqPart(
@@ -1060,8 +1041,8 @@ bool FillBoundaries(const TTableInfo& table, const NKikimrSchemeOp::TCreateCdcSt
 bool ShouldAggregateHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
     return AppData()->FeatureFlags.GetEnableCdcAggregator()
         // DataShards emit heartbeats only with a resolved timestamps interval, otherwise there is nothing to aggregate
-        && SendsPeriodicResolvedHeartbeats(streamDesc)
-        && !HasCapabilityInStreamDescription(streamDesc, "supports_key_range_autopartitioning");
+        && streamDesc.GetResolvedTimestampsIntervalMs() > 0
+        && !IsReplicationSupport(streamDesc, "supports_key_range_autopartitioning");
 }
 
 TMaybe<TChannelsBindings> CheckCdcAggregatorCanBeCreated(

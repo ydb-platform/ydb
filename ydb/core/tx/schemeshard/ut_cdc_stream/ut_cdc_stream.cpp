@@ -2279,7 +2279,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         // when
         SplitStreamTopicPartition(runtime, txId, 0, SerializeUint64Key(Max<ui64>() - 5),
-            {{NKikimrScheme::StatusInvalidParameter, "Split boundary is not less than ToBound"}});
+            {{NKikimrScheme::StatusInvalidParameter, "Split boundary is not strictly inside the partition"}});
 
         // then
         const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");

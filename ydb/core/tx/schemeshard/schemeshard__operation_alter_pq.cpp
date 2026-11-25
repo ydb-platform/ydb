@@ -17,6 +17,8 @@
 
 #include <ydb/services/lib/sharding/sharding.h>
 
+#include <optional>
+
 #include <format>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
@@ -26,66 +28,32 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-bool CheckTypedSplitBoundary(
-        const TTopicTabletInfo::TKeySchema& keySchema,
-        const TMaybe<TTopicTabletInfo::TKeyRange>& keyRange,
-        const TString& splitBoundary,
-        TString& error)
+// Checks a split boundary of a topic split by partition key: keys are compared by their column types, not by bytes
+std::optional<TString> CheckTypedSplitBoundary(const TTopicTabletInfo::TKeySchema& keyTypes,
+        const TMaybe<TTopicTabletInfo::TKeyRange>& keyRange, const TString& splitBoundary)
 {
-    auto parseFullKey = [&](const TString& data, TSerializedCellVec& key) {
-        if (!TSerializedCellVec::TryParse(data, key) || key.GetCells().size() != keySchema.size()) {
-            return false;
-        }
-        for (size_t i = 0; i < keySchema.size(); ++i) {
-            if (NScheme::HasUnexpectedValueSize(key.GetCells()[i], keySchema[i])) {
-                return false;
-            }
-        }
-        return true;
-    };
-
+    // Reject a boundary that is not a full table key of the topic
     TSerializedCellVec boundary;
-    if (!parseFullKey(splitBoundary, boundary)) {
-        error = "Split boundary is not a full key of the topic key schema";
-        return false;
+    if (!TSerializedCellVec::TryParse(splitBoundary, boundary) || boundary.GetCells().size() != keyTypes.size()) {
+        return "Split boundary is not a full key of the topic key schema";
     }
-
-    if (!keyRange) {
-        return true;
-    }
-
-    auto compareWith = [&](const TString& data, int& result) {
-        TSerializedCellVec bound;
-        if (!parseFullKey(data, bound)) {
-            return false;
+    for (size_t i = 0; i < keyTypes.size(); ++i) {
+        if (NScheme::HasUnexpectedValueSize(boundary.GetCells()[i], keyTypes[i])) {
+            return "Split boundary is not a full key of the topic key schema";
         }
-        result = CompareTypedCellVectors(boundary.GetCells().data(), bound.GetCells().data(), keySchema.data(), keySchema.size());
-        return true;
+    }
+
+    auto compareWith = [&](const TString& bound) {
+        const TSerializedCellVec cells(bound);
+        return CompareTypedCellVectors(boundary.GetCells().data(), cells.GetCells().data(), keyTypes.data(), keyTypes.size());
     };
-
-    int result = 0;
-    if (keyRange->FromBound) {
-        if (!compareWith(*keyRange->FromBound, result)) {
-            error = "FromBound of partition is not a full key of the topic key schema";
-            return false;
-        }
-        if (result <= 0) {
-            error = "Split boundary is not greater than FromBound of partition";
-            return false;
-        }
+    // Accept a boundary strictly inside the partition
+    const bool afterStart = !keyRange || !keyRange->FromBound || compareWith(*keyRange->FromBound) > 0;
+    const bool beforeEnd = !keyRange || !keyRange->ToBound || compareWith(*keyRange->ToBound) < 0;
+    if (afterStart && beforeEnd) {
+        return std::nullopt;
     }
-    if (keyRange->ToBound) {
-        if (!compareWith(*keyRange->ToBound, result)) {
-            error = "ToBound of partition is not a full key of the topic key schema";
-            return false;
-        }
-        if (result >= 0) {
-            error = "Split boundary is not less than ToBound of partition";
-            return false;
-        }
-    }
-
-    return true;
+    return "Split boundary is not strictly inside the partition";
 }
 
 bool ShouldCreateSiblingAtRootLevel(const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit& split, const TTopicInfo::TPtr& topic) {
@@ -933,8 +901,8 @@ public:
                 }
                 const auto keyRange = splittedPartition->KeyRange;
                 if (tabletConfig.GetSplitByPartitionKey()) {
-                    if (!CheckTypedSplitBoundary(topic->KeySchema, keyRange, splitBoundary, errStr)) {
-                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                    if (const auto error = CheckTypedSplitBoundary(topic->KeySchema, keyRange, splitBoundary)) {
+                        result->SetError(NKikimrScheme::StatusInvalidParameter, *error);
                         return result;
                     }
                 } else if (keyRange) {

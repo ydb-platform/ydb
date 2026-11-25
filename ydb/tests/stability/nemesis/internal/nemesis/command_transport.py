@@ -72,18 +72,19 @@ class AgentCommandTransport:
         if not isinstance(result, dict) or result.get("status") != "started":
             raise RuntimeError(f"Agent did not accept {cmd.nemesis_type} on {cmd.host}: {result!r}")
 
-        if cmd.action == "extract":
-            execution = result.get("execution")
-            if not execution:
-                raise RuntimeError("Agent did not provide an execution receipt")
+        execution = result.get("execution")
+        if not execution and cmd.action == "extract":
+            raise RuntimeError("Agent did not provide an execution receipt")
 
-            def completion():
-                if self._is_local_host(cmd.host):
-                    return self._result_local(execution)["status"]
-                response = self._get(
-                    f"http://{self._resolve_http_host(cmd.host)}:{self._get_app_port()}/api/executions/{execution}",
-                    timeout=5,
-                )
-                response.raise_for_status()
-                return response.json()["status"]
-            return completion
+        def completion():
+            if not execution:
+                return {"status": "unknown", "error": "Agent did not provide an execution receipt"}
+            if self._is_local_host(cmd.host):
+                return self._result_local(execution)
+            response = self._get(
+                f"http://{self._resolve_http_host(cmd.host)}:{self._get_app_port()}/api/executions/{execution}",
+                timeout=5,
+            )
+            response.raise_for_status()
+            return response.json()
+        return completion

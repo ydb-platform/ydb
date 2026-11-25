@@ -283,3 +283,105 @@ def test_failed_remote_resume_can_restore_retained_lease(tmp_path):
     e.probe.tick()
     assert len(resumes) == 2 and not e.probe.pending()
     assert e.guard.snapshot()["tracked_executions"] == 0
+
+
+@pytest.mark.parametrize("result", ["finished", "error"])
+def test_execution_result_survives_recovery_and_preserves_command_identity(tmp_path, result):
+    e = setup_engine(tmp_path)
+    status = {"status": "running"}
+    e.engine._dispatch = lambda cmd: lambda: dict(status)
+    e.engine.inject("slot", slot_target(e.inventory, 0, 0))
+    e.publish(e.membership)
+    e.probe.tick()
+    assert e.probe.pending()  # HC must not overtake an in-flight inject
+    e.engine.poll_executions()
+    assert e.engine.operations()[0]["execution"]["status"] == "running"
+    status.update(status=result, ret_code=int(result == "error"), error="failed action" if result == "error" else None)
+    e.engine.poll_executions()
+    e.publish(e.membership)
+    e.probe.tick()
+    row = e.engine.operations()[0]
+    assert row["state"] == "recovered"
+    assert row["execution"]["status"] == ("succeeded" if result == "finished" else "failed")
+    assert row["commands"][0]["ret_code"] == int(result == "error")
+
+
+def test_sql_failure_and_pre_restore_success_hold_both_pile_budgets(tmp_path):
+    from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.workload_probe import WorkloadProbe
+    e = setup_engine(tmp_path, toggle=True)
+    failure = []
+
+    def check():
+        if failure:
+            raise TimeoutError("SQL timed out")
+    workload = WorkloadProbe(check, clock=lambda: e.now[0], max_age=10)
+    e.probe._workload = workload
+    with pytest.raises(RecoveryUnavailable):
+        e.engine.inject("slot", slot_target(e.inventory, 0, 0))
+    for pile in (0, 1):
+        workload.tick()
+        e.engine.inject("slot", slot_target(e.inventory, pile, 0))
+    workload.tick()  # success before restore must not release either pile
+    e.now[0] += 1
+    for row in e.engine.operations():
+        e.engine.restore_operation(row["operation_id"])
+    e.publish(e.membership)
+    e.probe.tick()
+    assert e.guard.snapshot()["impaired_slots"] == 2
+    failure.append(True)
+    workload.tick()
+    e.probe.tick()
+    assert e.guard.snapshot()["impaired_slots"] == 2
+    assert all(row["recovery"]["workload_recovery"]["status"] == "failed" for row in e.engine.operations())
+    failure.clear()
+    workload.tick()
+    e.probe.tick()
+    assert not e.probe.pending()
+    e.now[0] += 11
+    with pytest.raises(RecoveryUnavailable):
+        e.engine.inject("slot", slot_target(e.inventory, 0, 0))
+
+
+def test_completed_receipt_cannot_end_fanout_delivery(tmp_path):
+    e = setup_engine(tmp_path)
+    targets = [slot_target(e.inventory, p, 0) for p in (0, 1)]
+    e.engine._plan_inject = lambda n, t: [dispatch(n, target, "inject", {}) for target in targets]
+    calls = []
+
+    def send(cmd):
+        calls.append(cmd)
+        if len(calls) == 2:
+            e.engine.poll_executions()
+            e.publish(e.membership)
+            e.probe.tick()
+            assert e.probe.pending()[0].dispatching
+            assert e.guard.snapshot()["impaired_slots"] == 2
+        return lambda: {"status": "finished", "ret_code": 0}
+
+    e.engine._dispatch = send
+    e.engine.inject("slot", targets[0])
+    e.engine.poll_executions()
+    e.publish(e.membership)
+    e.probe.tick()
+    assert not e.probe.pending()
+
+
+def test_completion_during_health_predicate_requires_new_evidence(tmp_path):
+    e = setup_engine(tmp_path, send=lambda cmd: lambda: {"status": "finished"})
+    e.engine.inject("slot", slot_target(e.inventory, 0, 0))
+    pending = e.probe.pending()[0]
+    predicate = pending.recovered
+
+    def raced(snap):
+        e.now[0] += 1
+        e.engine.poll_executions()
+        return predicate(snap)
+
+    pending.recovered = raced
+    e.publish(e.membership)
+    e.probe.tick()
+    assert e.probe.pending()
+    pending.recovered = predicate
+    e.publish(e.membership)
+    e.probe.tick()
+    assert not e.probe.pending()

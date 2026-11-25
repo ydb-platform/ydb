@@ -88,6 +88,9 @@ class FaultEngine:
         self._stopping = threading.Event()
         self._operations_lock = threading.Lock()
         self._operations = {}
+        self._receipts = {}
+        self._poll_stop = threading.Event()
+        self._poll_thread = None
 
     @property
     def can_restore(self):
@@ -99,7 +102,8 @@ class FaultEngine:
         with self._operations_lock:
             # Never evict active operations; retain the latest 100 completed records.
             terminal = [key for key, row in self._operations.items()
-                        if row["state"] in ("recovered", "accepted", "aborted", "delivery_failed")]
+                        if row["state"] in ("recovered", "accepted", "aborted", "delivery_failed")
+                        and not any(owner == key for owner, _ in self._receipts.values())]
             for key in terminal[:-99]:
                 self._operations.pop(key, None)
             self._operations[operation_id] = {
@@ -108,7 +112,9 @@ class FaultEngine:
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "state": "injecting", "delivery": "sending", "error": None,
                 "tracked": tracked, "restorable": restorable, "piles": sorted(piles),
-                "commands": [{"execution_id": c.execution_id, "target": c.target.to_dict()}
+                "execution": {"status": "pending"},
+                "commands": [{"execution_id": c.execution_id, "target": c.target.to_dict(),
+                              "status": "pending", "ret_code": None, "error": None}
                              for c in plan.commands],
             }
         return sorted(piles)
@@ -116,7 +122,82 @@ class FaultEngine:
     def _update_operation(self, operation_id, **fields):
         with self._operations_lock:
             if operation_id in self._operations:
-                self._operations[operation_id].update(fields)
+                row = self._operations[operation_id]
+                row.update(fields)
+                if fields.get("delivery") in ("accepted", "failed", "not_sent"):
+                    for command in row["commands"]:
+                        if command["status"] == "pending":
+                            command["status"] = "not_sent"
+                self._execution_summary(row)
+
+    @staticmethod
+    def _execution_summary(row):
+        statuses = {c["status"] for c in row["commands"]}
+        status = next((s for s in ("failed", "unknown", "running", "pending", "not_sent") if s in statuses), "succeeded")
+        row["execution"] = {"status": status}
+
+    def _execution_result(self, operation_id, execution_id, result):
+        with self._operations_lock:
+            row = self._operations.get(operation_id)
+            if row is None:
+                return
+            command = next(c for c in row["commands"] if c["execution_id"] == execution_id)
+            status = result.get("status", "unknown")
+            command.update(status={"finished": "succeeded", "error": "failed"}.get(status, status),
+                           ret_code=result.get("ret_code"), error=result.get("error"))
+            self._execution_summary(row)
+
+    def _send_inject(self, cmd, operation_id):
+        self._execution_result(operation_id, cmd.execution_id, {"status": "running"})
+        try:
+            receipt = self._send(cmd)
+        except Exception as error:
+            self._execution_result(operation_id, cmd.execution_id, {"status": "unknown", "error": str(error)})
+            raise
+        if callable(receipt):
+            with self._operations_lock:
+                self._receipts[cmd.execution_id] = (operation_id, receipt)
+        else:
+            self._execution_result(operation_id, cmd.execution_id, {"status": "finished"})
+
+    def _execution_pending(self, operation_id):
+        with self._operations_lock:
+            return any(owner == operation_id for owner, _ in self._receipts.values())
+
+    def poll_executions(self):
+        with self._operations_lock:
+            pending = list(self._receipts.items())
+        for execution_id, (operation_id, receipt) in pending:
+            if self._poll_stop.is_set():
+                break
+            try:
+                result = receipt()
+                if isinstance(result, str):
+                    result = {"status": result}
+                if not isinstance(result, dict) or result.get("status") not in ("running", "finished", "error", "unknown"):
+                    raise ValueError("Invalid execution receipt")
+            except Exception as error:
+                result = {"status": "unknown", "error": str(error)}
+            self._execution_result(operation_id, execution_id, result)
+            if result.get("status") in ("finished", "error"):
+                # Move the recovery evidence boundary past actual execution, not HTTP acceptance.
+                if self._recovery_probe is not None:
+                    self._recovery_probe.execution_finished(operation_id)
+                with self._operations_lock:
+                    self._receipts.pop(execution_id, None)
+
+    def start(self):
+        def poll():
+            while not self._poll_stop.is_set():
+                self.poll_executions()
+                self._poll_stop.wait(1)
+        self._poll_thread = threading.Thread(target=poll, name="fault-executions", daemon=True)
+        self._poll_thread.start()
+
+    def stop(self):
+        self._poll_stop.set()
+        if self._poll_thread is not None:
+            self._poll_thread.join(timeout=2)
 
     def operations(self):
         pending = (self._recovery_probe.snapshot().get("faults", [])
@@ -184,6 +265,8 @@ class FaultEngine:
             if self._stopping.is_set():
                 raise FaultRejected("Nemesis is stopping")
             self.check_topology()
+            if self._recovery_probe is not None:
+                self._recovery_probe.check_workload()
             scope, kind = self._scope_for(nemesis_type), self._kind_for(nemesis_type)
             full = self._mode_for(nemesis_type) is not GuardMode.BYPASS
             by_extract = self._recovery_mode_for(nemesis_type) == "extract"
@@ -235,11 +318,13 @@ class FaultEngine:
                 commands = [replace(c, lease_id=operation_id) for c in commands]
                 try:
                     for cmd in commands:
-                        self._send(cmd)
+                        self._send_inject(cmd, operation_id)
                 except Exception as error:
                     self._update_operation(operation_id, state="delivery_failed", delivery="failed", error=str(error))
                     error.operation_id = operation_id
                     raise
+                if self._recovery_probe is not None:
+                    self._recovery_probe.invalidate_workload()
                 self._update_operation(operation_id, state="accepted", delivery="accepted")
                 return commands
             predicates = [
@@ -251,7 +336,7 @@ class FaultEngine:
             ]
 
             def recovered(snap):
-                return all(predicate(snap) for predicate in predicates)
+                return not self._execution_pending(lease) and all(predicate(snap) for predicate in predicates)
 
             lease = self._guard.reserve(
                 footprint, identity_key=target.identity_key(),
@@ -274,7 +359,7 @@ class FaultEngine:
                 raise
             try:
                 for cmd in commands:
-                    self._send(cmd)
+                    self._send_inject(cmd, lease)
                 self._update_operation(lease, state="recovering", delivery="accepted")
             except Exception as error:
                 self._update_operation(lease, state="recovering", delivery="failed", error=str(error))
@@ -331,7 +416,7 @@ class FaultEngine:
                 recovered=recovered,
                 dispatching=True, piles=piles,
                 pile_baseline=baseline if isinstance(baseline, dict) else {},
-                on_recovered=lambda: self._update_operation(lease, state="recovered"),
+                on_recovered=lambda: self._update_operation(lease, state="recovered", workload_recovery=self._recovery_probe.workload_status()),
                 stuck_timeout_sec=self._stuck_timeout_for(nemesis_type),
                 recover_action=self._extract_action(nemesis_type, commands, lease),
                 extract_after_sec=hold_sec if hold_sec is not None else self._extract_after_sec(nemesis_type),
@@ -343,7 +428,7 @@ class FaultEngine:
                 recovered=recovered,
                 dispatching=True, piles=piles,
                 pile_baseline=baseline if isinstance(baseline, dict) else {},
-                on_recovered=lambda: self._update_operation(lease, state="recovered"),
+                on_recovered=lambda: self._update_operation(lease, state="recovered", workload_recovery=self._recovery_probe.workload_status()),
                 stuck_timeout_sec=self._stuck_timeout_for(nemesis_type),
             )
 
@@ -373,6 +458,8 @@ class FaultEngine:
                     receipt = receipts[index]
                     # Synchronous adapters may return True/None; production returns a receipt.
                     status = receipt() if callable(receipt) else "finished"
+                    if isinstance(status, dict):
+                        status = status.get("status", "unknown")
                     if status == "finished":
                         completed.add(index)
                     elif status != "running":

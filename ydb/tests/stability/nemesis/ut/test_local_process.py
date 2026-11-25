@@ -321,7 +321,8 @@ def test_local_app_wires_process_inventory_and_engine_without_harness(tmp_path, 
         {"name": "localhost", "location": {"rack": "r1", "data_center": "dc1"}},
     ]}))
     settings = SimpleNamespace(local_process_config=str(config), nemesis_type="orchestrator",
-                               install_root=str(tmp_path), shutdown_timeout_sec=5, mon_port=8765)
+                               install_root=str(tmp_path), shutdown_timeout_sec=5, mon_port=8765,
+                               sql_recovery_database="", sql_recovery_query_file="")
     monkeypatch.setattr(module, "get_settings", lambda: settings)
     monkeypatch.setattr(module, "_shutdown_coordinator", None)
     monkeypatch.setattr(module, "AgentWardenChecker", lambda **k: None)
@@ -331,6 +332,7 @@ def test_local_app_wires_process_inventory_and_engine_without_harness(tmp_path, 
         last_results={}, last_update=None,
     ))
     monkeypatch.setattr(module.RecoveryProbe, "start", lambda self: None)
+    monkeypatch.setattr(module.FaultEngine, "start", lambda self: None)
     monkeypatch.setattr(ClusterInventory, "_load_from_harness", lambda self: pytest.fail("harness used"))
     for name in ("hosts", "host_endpoints", "mon_port", "healthcheck_reporter", "chaos_problems",
                  "failure_guard", "cluster_inventory", "nemesis_metrics", "chaos_store",

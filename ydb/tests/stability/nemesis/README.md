@@ -670,3 +670,51 @@ after successful execution and a newer healthcheck for the affected pile. Deploy
 orchestrator and agents together after draining; mixed versions of this execution
 protocol are not supported. Existing scheduler start/stop and problems APIs remain
 unchanged.
+
+
+### SQL workload recovery and execution results
+
+HTTP acceptance, command execution, and recovery are separate outcomes.
+`GET /api/operations` preserves the existing lifecycle `state` and adds
+`execution.status` (`pending`, `running`, `succeeded`, `failed`, `unknown`,
+`not_sent`). Each command includes its result, exit code and bounded error text.
+An execution failure remains visible after recovery; `unknown` means that the
+agent result is unavailable, not success. The operations UI shows these fields.
+Active execution receipts are polled independently of HTTP requests and restores.
+
+SQL recovery is optional, so existing `/api/scheduler/start`, `/stop`, and
+`/api/problems` clients need no changes. To enable it on the orchestrator, set:
+
+```sh
+SQL_RECOVERY_DATABASE=/Root
+SQL_RECOVERY_QUERY_FILE=/absolute/path/workload-recovery.sql
+SQL_RECOVERY_TIMEOUT_SEC=10
+# For YAML-based installations without endpoint discovery:
+SQL_RECOVERY_ENDPOINT=grpc://localhost:2135
+```
+
+The query must read the workload's tables and return exactly one result set,
+one row, and a Boolean `ok=true`. For example, for a workload-owned sentinel:
+
+```sql
+SELECT COUNT(*) = 1 AND MIN(value) = "ready" AS ok
+FROM recovery_marker WHERE id = 1;
+```
+
+The table/data are owned by the campaign; Nemesis does not create or repair them.
+The query runs in a snapshot read-only transaction, every five seconds after the
+previous attempt. Connection, session acquisition and SQL execution each have
+the configured timeout; an attempt has no retries. A fresh driver rotates among
+currently discovered endpoints and uses SDK discovery. Configure normal SDK
+credentials for authenticated clusters. Avoid unbounded scans in this query.
+This is one database-level workload invariant, not proof of every application's
+correctness or SQL routing to each pile.
+
+When enabled, fresh SQL success is required before admitting any fault. The
+failure budget is released only after both the existing per-pile healthcheck
+predicates and a SQL check **started after injection/restore** pass. A failure,
+missing observation or observation older than 30 seconds holds the budget.
+SQL checks run separately, so an unavailable workload cannot prevent restore or
+`systemctl stop nemesis`. Shutdown still confirms restoration of effects; it
+does not claim that SQL has recovered. Scheduler and operations views display
+SQL status and errors separately from healthcheck and execution results.

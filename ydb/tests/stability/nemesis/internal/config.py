@@ -74,6 +74,10 @@ class Settings(BaseSettings):
     mon_port: int = 8765
     nemesis_mon_port: int = 8666
     cluster_endpoint: str = ''
+    sql_recovery_database: str = ''
+    sql_recovery_query_file: str = ''
+    sql_recovery_endpoint: str = ''
+    sql_recovery_timeout_sec: int = 10
     topology_refresh_sec: int = 15
     topology_max_age_sec: int = 90
     yaml_config_location: str = ''

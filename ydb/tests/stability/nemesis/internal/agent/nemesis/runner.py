@@ -246,7 +246,11 @@ class NemesisManager:
 
     def get_result(self, index):
         with self.processes_lock:
-            return {"status": self.processes[index]["status"] if index < len(self.processes) else "unknown"}
+            if not 0 <= index < len(self.processes):
+                return {"status": "unknown"}
+            row = self.processes[index]
+            return {"status": row["status"], "ret_code": row.get("ret_code"),
+                    "error": row.get("logs", "")[-2000:] if row["status"] == "error" else None}
 
     def get_all(self):
         with self.processes_lock:

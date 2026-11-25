@@ -84,7 +84,9 @@ class RecoveryProbe:
         clock: Callable[[], float] = time.monotonic,
         metrics=None,
         node_piles_source=None,
+        workload=None,
     ) -> None:
+        self._workload = workload
         self._guard = guard
         self._hc_source = hc_source  # duck-typed: .last_results (dict), .last_update (monotonic)
         self._on_stuck = on_stuck
@@ -105,6 +107,18 @@ class RecoveryProbe:
         self._ever_fresh = False
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+
+    def workload_status(self, after=0):
+        return self._workload.status(after) if self._workload else {"status": "disabled"}
+
+    def check_workload(self):
+        if self.workload_status()["status"] not in ("disabled", "healthy"):
+            from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.fault_engine import RecoveryUnavailable
+            raise RecoveryUnavailable("SQL workload recovery is not confirmed; restore remains available")
+
+    def invalidate_workload(self):
+        if self._workload:
+            self._workload.invalidate()
 
     def set_metrics(self, metrics) -> None:
         self._metrics = metrics
@@ -145,11 +159,19 @@ class RecoveryProbe:
         return counts if all(n > 0 for n in counts.values()) else None
 
     def dispatched(self, lease_id):
+        self.invalidate_workload()
         with self._lock:
             p = self._pending.get(lease_id)
             if p is not None:
                 p.reserved_at = self._clock()
                 p.dispatching = False
+
+    def execution_finished(self, lease_id):
+        self.invalidate_workload()
+        with self._lock:
+            p = self._pending.get(lease_id)
+            if p is not None:
+                p.reserved_at = self._clock()
 
     def restore_operation(self, lease_id):
         with self._lock:
@@ -252,7 +274,7 @@ class RecoveryProbe:
             if held < p.min_hold_sec:
                 continue
             # Only trust HC data produced after the fault / extract.
-            evidence_after = p.confirm_since if p.phase == PHASE_CONFIRM else p.reserved_at
+            evidence_after = max(p.confirm_since or p.reserved_at, p.reserved_at)
             if snap.data_at is not None and snap.data_at < evidence_after:
                 continue
             try:
@@ -260,7 +282,12 @@ class RecoveryProbe:
             except Exception:
                 logger.exception("recovery check raised for %s", p.target.identity_key())
                 is_recovered = False
-            if is_recovered:
+            # Completion polling can advance this boundary while the predicate runs.
+            evidence_after = max(p.confirm_since or p.reserved_at, p.reserved_at)
+            held = now - p.reserved_at
+            if held < p.min_hold_sec or (snap.data_at is not None and snap.data_at < evidence_after):
+                continue
+            if is_recovered and self.workload_status(evidence_after)["status"] in ("disabled", "healthy"):
                 self._release(p, held)
                 continue
             fault: StuckFault | None = None
@@ -338,6 +365,7 @@ class RecoveryProbe:
                     "toggle": p.recover_action is not None, "piles": list(p.piles),
                     "dispatching": p.dispatching, "extracting": p.extracting, "extract_ok": p.extract_ok,
                     "extract_status": p.extract_status, "extract_error": p.extract_error,
+                    "workload_recovery": self.workload_status(max(p.confirm_since or p.reserved_at, p.reserved_at)),
                     "pile_recovery": {
                         str(pile): {"baseline": p.pile_baseline.get(pile), "alive": alive.get(pile)}
                         for pile in p.piles
@@ -348,7 +376,7 @@ class RecoveryProbe:
             return {
                 "tracked": len(faults), "stuck": sum(f["stuck"] for f in faults),
                 "confirming": sum(f["phase"] == PHASE_CONFIRM for f in faults),
-                "blind": self._blind, "faults": faults,
+                "blind": self._blind, "faults": faults, "workload_recovery": self.workload_status(),
                 "piles": {str(pile): {
                     "tracked": sum(pile in f["piles"] for f in faults),
                     "confirming": sum(pile in f["piles"] and f["phase"] == PHASE_CONFIRM for f in faults),
@@ -422,6 +450,7 @@ class RecoveryProbe:
             p.confirm_since = self._clock()
             p.extract_ok = True
             p.extracting = False
+        self.invalidate_workload()
         logger.info(
             "extract dispatched: %s (%s) after %.0fs hold (%s); awaiting healthcheck confirm",
             p.target.host, p.nemesis_type, now - p.reserved_at, reason,
@@ -514,11 +543,15 @@ class RecoveryProbe:
         if self._thread and self._thread.is_alive():
             return
         self._stop.clear()
+        if self._workload:
+            self._workload.start()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
         self._stop.set()
+        if self._workload:
+            self._workload.stop()
         t = self._thread
         if t and t.is_alive() and t is not threading.current_thread():
             t.join(timeout=2.0)

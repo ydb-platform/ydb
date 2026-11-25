@@ -157,6 +157,10 @@ export default {
             <span v-if="enabledTypes.length === 0" class="text-xs opacity-50">no types enabled</span>
           </div>
 
+          <div class="text-sm" v-if="probe?.workload_recovery">
+            SQL workload: <strong :class="['failed', 'stale'].includes(probe.workload_recovery.status) ? 'text-error' : ''">{{ probe.workload_recovery.status }}</strong>
+            <p v-if="probe.workload_recovery.error" class="text-error break-words">{{ probe.workload_recovery.error }}</p>
+          </div>
           <!-- Failure budget -->
           <div>
             <h3 class="font-bold text-sm mb-1 flex items-center gap-2">

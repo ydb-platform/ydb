@@ -42,10 +42,20 @@ export default {
           <div class="font-mono text-xs break-all">{{ targetLabel(o.target) }}</div>
           <div class="flex flex-wrap gap-2 text-sm">
             <span class="badge" :class="o.delivery === 'failed' ? 'badge-error' : 'badge-ghost'">Delivery: {{ o.delivery }}</span>
+            <span class="badge" :class="o.execution?.status === 'failed' ? 'badge-error' : o.execution?.status === 'succeeded' ? 'badge-success' : 'badge-warning'">Execution: {{ o.execution?.status || 'unknown' }}</span>
             <span class="badge" :class="o.recovery?.stuck ? 'badge-error' : o.state === 'recovered' ? 'badge-success' : 'badge-warning'">{{ recoveryLabel(o) }}</span>
             <span v-for="pile in o.piles" :key="pile" class="badge badge-outline">Pile {{ pile }}</span>
           </div>
           <div v-for="line in pileProgress(o.recovery)" :key="line" class="text-sm font-mono">{{ line }}</div>
+          <p class="text-sm">SQL recovery: {{ (o.recovery?.workload_recovery || o.workload_recovery)?.status || 'not tracked' }}</p>
+          <p v-if="o.recovery?.workload_recovery?.error" class="text-error text-sm break-words">{{ o.recovery.workload_recovery.error }}</p>
+          <details v-if="o.commands?.length" class="text-xs">
+            <summary>Command results</summary>
+            <div v-for="c in o.commands" :key="c.execution_id" class="my-1 break-words">
+              {{ targetLabel(c.target) }}: {{ c.status || 'unknown' }} · exit {{ c.ret_code ?? 'unknown' }}
+              <pre v-if="c.error" class="whitespace-pre-wrap text-error">{{ c.error }}</pre>
+            </div>
+          </details>
           <p v-if="o.error" class="text-error text-sm break-words">{{ o.error }}</p>
           <p v-if="errors[o.operation_id]" role="alert" class="text-error text-sm">{{ errors[o.operation_id] }}</p>
           <div class="flex flex-wrap items-center justify-between gap-2">

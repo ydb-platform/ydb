@@ -43,6 +43,7 @@ PY_SRCS(
     internal/orchestrator/nemesis/runtime_topology.py
     internal/orchestrator/nemesis/discovery.py
     internal/orchestrator/nemesis/recovery_probe.py
+    internal/orchestrator/nemesis/workload_probe.py
     internal/orchestrator/nemesis/hc_model.py
     internal/orchestrator/nemesis/chaos_state.py
     internal/orchestrator/nemesis/chaos_problems.py

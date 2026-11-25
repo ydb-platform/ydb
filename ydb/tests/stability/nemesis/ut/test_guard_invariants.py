@@ -154,6 +154,9 @@ def test_budget_is_never_exceeded_across_many_ticks(topology, seed):
 
 
 class ProbeStub:
+    def check_workload(self):
+        pass
+
     def start(self) -> None:
         pass
 

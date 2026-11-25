@@ -203,7 +203,23 @@ def _initialize_app_body():
             get_monitored_hosts=lambda: orchestrator_router.hosts,
         )
         # App-owned probe: boundary and manual operations release through it.
+        workload = None
+        if settings.sql_recovery_database or settings.sql_recovery_query_file:
+            from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.workload_probe import WorkloadProbe, sql_check
+            if not settings.sql_recovery_database or not settings.sql_recovery_query_file:
+                raise ValueError("SQL recovery requires both database and query file")
+            if not discovery and not settings.sql_recovery_endpoint:
+                raise ValueError("SQL recovery requires discovery or sql_recovery_endpoint")
+            if not 1 <= settings.sql_recovery_timeout_sec <= 60:
+                raise ValueError("sql_recovery_timeout_sec must be 1..60")
+            query = Path(settings.sql_recovery_query_file).read_text()
+            if not query.strip():
+                raise ValueError("SQL recovery query is empty")
+            workload = WorkloadProbe(sql_check(
+                (lambda: discovery.grpc) if discovery else (lambda: (settings.sql_recovery_endpoint,)),
+                settings.sql_recovery_database, query, settings.sql_recovery_timeout_sec))
         probe = RecoveryProbe(
+            workload=workload,
             guard=failure_guard,
             hc_source=orchestrator_router.healthcheck_reporter,
             node_piles_source=(discovery.fresh_node_piles if discovery else (RuntimeNodePiles(
@@ -248,6 +264,7 @@ def _initialize_app_body():
             recovery_probe=probe,
         )
         orchestrator_router.fault_engine = engine
+        engine.start()
         if discovery is not None:
             engine.check_topology = discovery.check
             discovery.start(engine=engine, controller=controller, service=execution_service,
@@ -278,6 +295,8 @@ def _finish_shutdown():
         errors.append("Fault dispatch did not quiesce")
     if orchestrator_router.nemesis_scheduler:
         orchestrator_router.nemesis_scheduler.stop(drain=False)
+    if orchestrator_router.fault_engine:
+        orchestrator_router.fault_engine.stop()
     if orchestrator_router.recovery_probe:
         orchestrator_router.recovery_probe.stop()
     # Every agent owns its restore ledger. Wait for actual actions, not merely

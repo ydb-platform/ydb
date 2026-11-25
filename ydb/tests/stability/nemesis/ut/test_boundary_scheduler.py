@@ -76,6 +76,15 @@ class RecordingProbe:
     def stop(self) -> None:
         pass
 
+    def check_workload(self):
+        pass
+
+    def invalidate_workload(self):
+        pass
+
+    def workload_status(self):
+        return {"status": "disabled"}
+
     def drain_extracts(self) -> int:
         return 0
 

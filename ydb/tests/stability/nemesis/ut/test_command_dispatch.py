@@ -172,7 +172,7 @@ def test_restore_requires_execution_success(delivery, status):
     delivery.manager.get_result.return_value = {"status": status}
     command = dispatch("KillNodeNemesis", "h1", "extract", {})
     receipt = delivery.transport(True).send(command)
-    assert receipt() == status
+    assert receipt()["status"] == status
 
 
 def test_remote_resume_retries_after_transient_failure():
@@ -190,3 +190,13 @@ def test_remote_resume_retries_after_transient_failure():
     transport.send(command)
     assert [call.args[0].rsplit("/", 1)[-1] for call in post.call_args_list] == [
         "resume", "resume", "processes", "processes"]
+
+
+@pytest.mark.parametrize("local", [True, False])
+def test_inject_receipt_reports_actual_failure_over_both_transports(delivery, local):
+    delivery.manager.get_result.return_value = {"status": "error", "ret_code": 1, "error": "tablet kill failed"}
+    transport = delivery.transport(local)
+    transport._get = lambda url, **kw: SimpleNamespace(
+        raise_for_status=lambda: None, json=lambda: delivery.client.get("/api/executions/" + url.rsplit("/", 1)[1]).json)
+    receipt = transport.send(dispatch("KillNodeNemesis", "h1", "inject", {}))
+    assert receipt() == delivery.manager.get_result.return_value

@@ -97,7 +97,8 @@ namespace {
             std::optional<ui32> pileGroupId = std::nullopt, ui32 groupId = 0) {
         std::unique_ptr<TEvBlobStorage::TEvCollectGarbageResult> res;
         if (pileGroupId) {
-            res = QueryPileGroup<TEvBlobStorage::TEvCollectGarbageResult>(env, *pileGroupId, 1, request);
+            const ui32 nodeId = env.GetGroupInfo(*pileGroupId)->GetActorId(0).NodeId();
+            res = QueryPileGroup<TEvBlobStorage::TEvCollectGarbageResult>(env, *pileGroupId, nodeId, request);
         } else {
             const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
             env.Runtime->WrapInActorContext(edge, [&] {

@@ -126,7 +126,7 @@ namespace NKikimr {
                 const auto release = TIngress::CreateDoNotKeep(mode, true);
                 const ui64 tag = mode == TIngress::EMode::MIRROR3OF4 ? 1 : RawBit(63);
                 UNIT_ASSERT_VALUES_EQUAL(release.Raw(), legacy.Raw() | tag);
-                UNIT_ASSERT_VALUES_EQUAL(release.GetCollectMode(mode), CollectModeDoNotKeep);
+                UNIT_ASSERT(release.GetCollectMode(mode) == CollectModeDoNotKeep);
                 UNIT_ASSERT(release.LocalParts(type).Empty());
                 UNIT_ASSERT(release.PartsWeKnowAbout(type).Empty());
 

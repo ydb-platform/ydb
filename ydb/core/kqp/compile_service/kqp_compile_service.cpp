@@ -113,6 +113,9 @@ struct TKqpCompileRequest {
     bool RevalidatePgCompatibility = false;
 
     ui64 ConfigGeneration = 0;
+    std::optional<TQueryCacheSnapshotRecord> SourceSnapshot;
+    bool IsRecompile = false;
+    bool HasTempTables() const { return TempTablesState && !TempTablesState->TempTables.empty(); }
 
     TInstant CompileQueueEnqueuedAt = TInstant::Now();
 
@@ -190,30 +193,48 @@ public:
         return {};
     }
 
-    TVector<TKqpCompileRequest> ExtractByQuery(const TKqpQueryId& query, const TString& uid, bool canJoinPrepare) {
-        auto queryIt = QueryIndex.find(query);
+    // A recompile belongs to a plan delivery already counted for this client request.
+    ui64 CountClientPlanDeliveries(const TKqpCompileRequest& active) const {
+        const auto counts = [](const TKqpCompileRequest& request) {
+            return !request.IsRecompile && !request.CompileSettings.IsWarmupCompilation && request.IsIntrestedInResult();
+        };
+        ui64 deliveries = counts(active);
+        if (const auto* waiting = QueryIndex.FindPtr(active.Query)) {
+            for (const auto& it : *waiting) {
+                if (CanJoinCompilation(active, *it) && counts(*it)) {
+                    ++deliveries;
+                }
+            }
+        }
+        return deliveries;
+    }
+
+    TVector<TKqpCompileRequest> ExtractByQuery(const TKqpCompileRequest& active, bool snapshotRules, bool canJoinPrepare) {
+        auto queryIt = QueryIndex.find(active.Query);
         if (queryIt == QueryIndex.end()) {
             return {};
         }
 
         TVector<TKqpCompileRequest> result;
-        auto& requests = queryIt->second;
-        for (auto it = requests.begin(); it != requests.end();) {
+        auto& waiting = queryIt->second;
+        for (auto it = waiting.begin(); it != waiting.end();) {
             auto requestIt = *it;
-            Y_ENSURE(requestIt != Queue.end());
-            if ((requestIt->RecompileByUid && requestIt->Uid != uid)
-                || (requestIt->CompileSettings.IsQueryActionPrepare && !canJoinPrepare))
-            {
+            if ((requestIt->RecompileByUid && requestIt->Uid != active.Uid)
+                || (requestIt->CompileSettings.IsQueryActionPrepare && !canJoinPrepare)
+                || (snapshotRules && !CanJoinCompilation(active, *requestIt))) {
                 ++it;
                 continue;
             }
+            waiting.erase(it++);
+            Y_ENSURE(requestIt != Queue.end());
+            auto request = std::move(*requestIt);
 
-            result.push_back(std::move(*requestIt));
-            requests.erase(it++);
             Queue.erase(requestIt);
+
+            result.push_back(std::move(request));
         }
 
-        if (requests.empty()) {
+        if (waiting.empty()) {
             QueryIndex.erase(queryIt);
         }
         return result;
@@ -243,6 +264,11 @@ public:
     }
 
 private:
+    static bool CanJoinCompilation(const TKqpCompileRequest& active, const TKqpCompileRequest& waiting) {
+        return !active.HasTempTables() && !waiting.HasTempTables()
+            && ((!active.SourceSnapshot && !waiting.SourceSnapshot) || active.Uid == waiting.Uid);
+    }
+
     TIntrusivePtr<TKqpCounters> Counters;
     size_t MaxSize = 0;
     TRequestsList Queue;
@@ -466,9 +492,7 @@ private:
 
         auto currentIt = startIt;
         for (; currentIt != endIt; ++currentIt) {
-                        currentIt->CompileResult->SerializeTo(record.AddCacheCacheQueries(),
-                {currentIt->LastTouched.MicroSeconds()}
-            );
+            currentIt->SerializeTo(record.AddCacheCacheQueries());
             const ui64 msgSize = record.ByteSizeLong();
 
             if (firstRecordSent && msgSize > batchLimit) {
@@ -481,7 +505,7 @@ private:
 
         record.SetFinished(finished);
         if (!finished) {
-            record.SetContinuationToken(currentIt->CompileResult->Uid);
+            record.SetContinuationToken(currentIt->GetUid());
         }
         record.SetNodeId(SelfId().NodeId());
         Send(ev->Sender, response.release());
@@ -567,7 +591,7 @@ private:
         const bool disablePgCompatibility = request.DisablePgCompatibility
             ? *request.DisablePgCompatibility
             : AppData(ctx)->FeatureFlags.GetDisablePgCompatibility();
-        auto compileResult = QueryCache->Find(
+        auto record = QueryCache->Lookup(
             request.Uid,
             request.Query,
             disablePgCompatibility,
@@ -580,14 +604,16 @@ private:
             ctx,
             request.IsWarmupCompilation ? EWarmupAttributionMode::Warmup : EWarmupAttributionMode::Client);
 
+        auto compileResult = record.GetPlan();
+        const auto* snapshot = record.GetSnapshot();
         TString revalidateUid;
-        if (request.Uid && !compileResult) {
-            const auto previous = QueryCache->FindByUid(*request.Uid, false);
-            if (previous && previous->Query->DisablePgCompatibility() != disablePgCompatibility
-                && previous->Query->UserSid() == userSid
-                && !HasTempTablesNameClashes(previous, request.TempTablesState))
+        if (request.Uid && !record) {
+            const auto previous = QueryCache->LookupByUid(*request.Uid, false);
+            if (previous && previous.GetQuery().DisablePgCompatibility() != disablePgCompatibility
+                && previous.GetQuery().UserSid() == userSid
+                && !HasTempTablesNameClashes(previous.GetPlan(), request.TempTablesState))
             {
-                request.Query = *previous->Query;
+                request.Query = previous.GetQuery();
                 request.Query->SetDisablePgCompatibility(disablePgCompatibility);
                 request.GUCSettings = std::make_shared<TGUCSettings>(request.Query->DecodeGUCSettings());
                 request.UsePessimisticLocks = request.Query->Settings().UsePessimisticLocks;
@@ -616,7 +642,7 @@ private:
                         {"expectedSid", compileResult->Query->UserSid()},
                         {"actualSid", userSid});
                 }
-            } else {
+            } else if (!snapshot) {
                 Counters->ReportQueryCacheHit(dbCounters, false);
                 YDB_LOG_DEBUG_CTX(ctx, "Query not found",
                     {"sender", ev->Sender},
@@ -651,12 +677,18 @@ private:
                 ? ECompileActorAction::SPLIT
                 : ECompileActorAction::COMPILE,
             request.IsWarmupCompilation);
-        TKqpCompileRequest compileRequest(ev->Sender, revalidateUid.empty() ? CreateGuidAsString() : revalidateUid, std::move(*request.Query),
+        TKqpCompileRequest compileRequest(ev->Sender, snapshot ? snapshot->Info->Uid : revalidateUid.empty() ? CreateGuidAsString() : revalidateUid,
+            snapshot ? snapshot->Info->Query : std::move(*request.Query),
             compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
             std::move(ev->Get()->TempTablesState), request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks, request.CollectDiagnostics);
         compileRequest.RevalidatePgCompatibility = !revalidateUid.empty();
         compileRequest.RecompileByUid = compileRequest.RevalidatePgCompatibility;
+
+        if (snapshot) {
+            compileRequest.SourceSnapshot = *snapshot;
+            compileRequest.ConfigGeneration = ConfigGeneration;
+        }
 
         // Report the miss before queueing, even if the request is later rejected,
         // times out or is cancelled. SPLIT is not a cache lookup.
@@ -689,13 +721,18 @@ private:
         const bool disablePgCompatibility = request.DisablePgCompatibility
             ? *request.DisablePgCompatibility
             : AppData(ctx)->FeatureFlags.GetDisablePgCompatibility();
-        TKqpCompileResult::TConstPtr compileResult = QueryCache->FindByUid(request.Uid, false);
-        if (HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
-            compileResult = nullptr;
+        auto record = QueryCache->LookupByUid(request.Uid, false);
+        if (HasTempTablesNameClashes(record.GetPlan(), request.TempTablesState)) {
+            record = {};
         }
-        const bool modeChanged = compileResult && compileResult->Query->DisablePgCompatibility() != disablePgCompatibility;
+        // A snapshot record is resumed under the requester's identity.
+        if (record.GetSnapshot() && record.GetQuery().UserSid() != request.UserToken->GetUserSID()) {
+            record = {};
+        }
+        auto compileResult = record.GetPlan();
+        const bool modeChanged = record && record.GetQuery().DisablePgCompatibility() != disablePgCompatibility;
 
-        if (compileResult || request.Query) {
+        if (record || request.Query) {
             Counters->ReportCompileRequestCompile(dbCounters);
 
             NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "Get query plan");
@@ -708,7 +745,7 @@ private:
                 ev->Get()->Split
                     ? ECompileActorAction::SPLIT
                     : ECompileActorAction::COMPILE);
-            auto query = request.Query ? *request.Query : *compileResult->Query;
+            auto query = request.Query ? *request.Query : record.GetQuery();
             query.SetDisablePgCompatibility(disablePgCompatibility);
             if (compileResult && !modeChanged) {
                 query.SetUserSid(compileResult->Query->UserSid());
@@ -732,6 +769,11 @@ private:
             compileRequest.RecompileByUid = true;
             compileRequest.RevalidatePgCompatibility = modeChanged;
 
+            compileRequest.IsRecompile = true;
+            if (auto* snapshot = record.GetSnapshot(); snapshot && !modeChanged) {
+                compileRequest.SourceSnapshot = *snapshot;
+                compileRequest.ConfigGeneration = ConfigGeneration;
+            }
             EnqueueCompileRequest(std::move(compileRequest), ctx);
             return;
         } else {
@@ -785,7 +827,7 @@ private:
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 bool canJoinPrepare = !compileRequest.RevalidatePgCompatibility;
-                if (!hasTempTablesNameClashes && !skipRevalidationCacheUpdate) {
+                if (!hasTempTablesNameClashes && !skipRevalidationCacheUpdate && !(compileRequest.SourceSnapshot && compileRequest.HasTempTables())) {
                     if (isStale) {
                         YDB_LOG_DEBUG_CTX(ctx, "Skipped caching compile result from stale config generation",
                             {"queryUid", compileResult->Uid},
@@ -794,7 +836,10 @@ private:
                     } else if (compileRequest.RevalidatePgCompatibility) {
                         canJoinPrepare = QueryCache->Replace(compileResult);
                     } else {
-                        UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, compileRequest.CompileSettings.IsWarmupCompilation);
+                        const ui64 accesses = QueryCache->CountsAccesses() ? RequestsQueue.CountClientPlanDeliveries(compileRequest) : 0;
+                        auto snapshot = compileResult->UsedNewRbo && !compileRequest.HasTempTables() && QueryCache->SupportsSnapshots()
+                            ? ev->Get()->CacheOutput.CacheSnapshot : nullptr;
+                        UpdateQueryCache(ctx, compileResult, std::move(snapshot), compileRequest.SourceSnapshot, accesses, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, compileRequest.CompileSettings.IsWarmupCompilation);
                     }
                 }
 
@@ -805,7 +850,7 @@ private:
                     }
                 }
 
-                auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query, compileResult->Uid, canJoinPrepare);
+                auto requests = RequestsQueue.ExtractByQuery(compileRequest, QueryCache->SupportsSnapshots(), canJoinPrepare);
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, TString(request.Query.UserSid()), compileActorId.ToString());
                     MarkJoinedCompilation(request.CompileServiceSpan, compileRequest.CompileServiceSpan);
@@ -818,7 +863,7 @@ private:
                 // A stale failure must not erase a fresh entry with the same UID: after the
                 // config change a new compile may have already succeeded under this UID
                 // (e.g. a recompile reuses the UID of the cached query).
-                if (!isStale && !hasTempTablesNameClashes && !compileRequest.RevalidatePgCompatibility) {
+                if (!compileRequest.SourceSnapshot && !isStale && !hasTempTablesNameClashes && !compileRequest.RevalidatePgCompatibility) {
                     const auto current = QueryCache->FindByUid(compileResult->Uid, false);
                     if (current && current->Query->DisablePgCompatibility() == compileRequest.Query.DisablePgCompatibility()) {
                         QueryCache->EraseByUid(compileResult->Uid);
@@ -874,9 +919,17 @@ private:
         StartCheckQueriesTtlTimer();
     }
 
-    void UpdateQueryCache(const TActorContext& ctx, TKqpCompileResult::TConstPtr compileResult, bool keepInCache, bool isQueryActionPrepare, bool isWarmupCompilation) {
-        if (QueryCache->FindByUid(compileResult->Uid, false)) {
-            QueryCache->Replace(compileResult);
+    void UpdateQueryCache(const TActorContext& ctx, TKqpCompileResult::TConstPtr compileResult,
+        TPreCboSnapshotPtr snapshot, const std::optional<TQueryCacheSnapshotRecord>& source, ui64 accesses,
+        bool keepInCache, bool isQueryActionPrepare, bool isWarmupCompilation) {
+        auto current = QueryCache->LookupByUid(compileResult->Uid, false);
+        if (source && (!current.GetSnapshot() || current.GetSnapshot()->Info != source->Info)) {
+            return; // The source entry expired, was invalidated or was replaced while compiling.
+        }
+        if (current) {
+            if (!source || source->Snapshot != snapshot || accesses) {
+                QueryCache->Replace(compileResult, snapshot, accesses);
+            }
             // Warmup re-validated an already-cached entry: keep client hit attribution.
             if (isWarmupCompilation) {
                 QueryCache->MarkWarmupInsert(compileResult->Uid);
@@ -885,15 +938,15 @@ private:
             if (compileResult->Query) {
                 YDB_LOG_DEBUG_CTX(ctx, "Insert query into compile cache",
                     {"queryId", compileResult->Query->SerializeToString()});
-                if (QueryCache->FindByQuery(*compileResult->Query, keepInCache)) {
+                if (QueryCache->LookupByQuery(*compileResult->Query, keepInCache)) {
                     YDB_LOG_ERROR_CTX(ctx, "Trying to insert query into compile cache when it is already there");
                 }
             }
-            if (QueryCache->Insert(compileResult)) {
+            if (QueryCache->Insert(compileResult, snapshot, accesses)) {
                 Counters->CompileQueryCacheEvicted->Inc();
             }
             if (compileResult->Query && isQueryActionPrepare && !isWarmupCompilation) {
-                if (InsertPreparingQuery(ctx, compileResult, true)) {
+                if (InsertPreparingQuery(ctx, compileResult, snapshot)) {
                     Counters->CompileQueryCacheEvicted->Inc();
                 };
             }
@@ -934,7 +987,10 @@ private:
     }
 
 private:
-    bool InsertPreparingQuery(const TActorContext& ctx, const TKqpCompileResult::TConstPtr& compileResult, bool keepInCache) {
+    // TODO(anely-d): a later non-PREPARE replacement of the first record does not touch this second key,
+    // so it can keep a plan while the first record holds a snapshot. Decide after the cache key
+    // proposal: it removes the second key altogether.
+    bool InsertPreparingQuery(const TActorContext& ctx, const TKqpCompileResult::TConstPtr& compileResult, const TPreCboSnapshotPtr& snapshot) {
         YQL_ENSURE(compileResult->Query);
         auto query = *compileResult->Query;
 
@@ -950,7 +1006,7 @@ private:
             queryParameterTypes->insert({param.GetName(), paramType});
         }
         query.SetQueryParameterTypes(queryParameterTypes);
-        if (QueryCache->FindByQuery(query, keepInCache)) {
+        if (QueryCache->LookupByQuery(query, true)) {
             return false;
         }
         auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), compileResult->Status, compileResult->Issues, compileResult->MaxReadType, compileResult->CompilationDuration, std::move(query),
@@ -960,7 +1016,7 @@ private:
         newCompileResult->PreparedQuery = compileResult->PreparedQuery;
         YDB_LOG_DEBUG_CTX(ctx, "Insert preparing query with params",
             {"queryId", compileResult->Query->SerializeToString()});
-        return QueryCache->Insert(newCompileResult);
+        return QueryCache->Insert(newCompileResult, snapshot);
     }
 
     void ProcessQueue(const TActorContext& ctx) {
@@ -993,10 +1049,18 @@ private:
 
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
         request.WaitSpan.EndOk();
+        TOptimizerInput optimizerInput;
+        optimizerInput.EnableSnapshots = QueryCache->SupportsSnapshots() && TableServiceConfig.GetEnableNewRBO()
+            && !request.Query.Settings.IsAnalyze && !request.HasTempTables()
+            && (request.CompileSettings.KeepInCache || request.SourceSnapshot)
+            && request.CompileSettings.Action == ECompileActorAction::COMPILE;
+        if (optimizerInput.EnableSnapshots && request.SourceSnapshot && request.ConfigGeneration == ConfigGeneration) {
+            optimizerInput.CacheSnapshot = request.SourceSnapshot->Snapshot;
+        }
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, PathNormalizer, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
             request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, request.CollectDiagnostics,
-            request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks);
+            request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks, std::move(optimizerInput));
         auto compileActorId = ctx.Register(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
         request.WaitSpan = request.CompileServiceSpan.CreateChild(
@@ -1106,6 +1170,19 @@ private:
 };
 
 
+void TKqpQueryCacheSnapshot::TEntry::SerializeTo(NKikimrKqp::TCompileCacheQueryInfo* to) const {
+    if (const auto* plan = std::get_if<TKqpCompileResult::TConstPtr>(&Info)) {
+        (*plan)->SerializeTo(to, LastTouched.MicroSeconds());
+        if (AccessCount) {
+            to->SetAccessCount(*AccessCount);
+        }
+    } else {
+        const auto& info = *std::get<std::shared_ptr<const TQuerySnapshotInfo>>(Info);
+        SerializeCompileCacheQuery(to, info.Uid, &info.Query, info.CompiledAt, info.Duration,
+            info.Issues, info.CompileMeta, AccessCount.value(), LastTouched.MicroSeconds());
+    }
+}
+
 void TKqpQueryCacheSnapshot::Clear() {
     Entries_.clear();
     Index_.clear();
@@ -1129,7 +1206,7 @@ void TKqpQueryCacheSnapshot::Erase(const TString& uid) {
 
     if (pos != last) {
         Entries_[pos] = Entries_[last];
-        const TString& movedUid = Entries_[pos].CompileResult->Uid;
+        const TString& movedUid = Entries_[pos].GetUid();
         Index_[movedUid] = pos;
     }
     Entries_.pop_back();
@@ -1140,7 +1217,7 @@ void TKqpQueryCacheSnapshot::Replace(const TString& uid, const TKqpCompileResult
     Y_ABORT_UNLESS(newResult, "Snapshot OnReplace: null CompileResult");
     auto it = Index_.find(uid);
     Y_ABORT_UNLESS(it != Index_.end(), "Snapshot OnReplace: uid not found");
-    Entries_[it->second].CompileResult = newResult;
+    Entries_[it->second].Info = newResult;
 }
 
 void TKqpQueryCacheSnapshot::Touch(const TString& uid, TInstant now) {
@@ -1159,7 +1236,7 @@ TVector<TKqpQueryCacheSnapshot::TEntry> TKqpQueryCacheSnapshot::GetSnapshot() co
 
 // QueryCache
 
-bool TKqpQueryCacheV1::Insert(const TKqpCompileResult::TConstPtr& compileResult) {
+bool TKqpQueryCacheV1::Insert(const TKqpCompileResult::TConstPtr& compileResult, TPreCboSnapshotPtr, ui64) {
     TGuard<TAdaptiveLock> guard(Lock);
 
     auto ts = TInstant::Now();
@@ -1274,7 +1351,7 @@ bool TKqpQueryCacheV1::EraseByUidImpl(const TString& uid) {
     return true;
 }
 
-bool TKqpQueryCacheV1::Replace(const TKqpCompileResult::TConstPtr& compileResult) {
+bool TKqpQueryCacheV1::Replace(const TKqpCompileResult::TConstPtr& compileResult, TPreCboSnapshotPtr, ui64) {
     TGuard<TAdaptiveLock> guard(Lock);
 
     auto it = Index.find(TItem(compileResult->Uid));
@@ -1360,7 +1437,7 @@ void TKqpQueryCacheV1::AccountWarmupMissImpl(
 }
 
 // find by either uid or query
-TKqpCompileResult::TConstPtr TKqpQueryCacheV1::Find(
+TQueryCacheRecord TKqpQueryCacheV1::Lookup(
     const TMaybe<TString>& uid,
     TMaybe<TKqpQueryId>& query,
     bool disablePgCompatibility,
@@ -1371,7 +1448,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCacheV1::Find(
     TKqpDbCountersPtr& dbCounters,
     const TActorId& sender,
     const TActorContext& ctx,
-    EWarmupAttributionMode warmupAttribution)
+    EWarmupAttributionMode warmupAttribution, bool)
 {
     // Rebuilds the key, so it is done before taking the lock.
     if (!uid && query) {
@@ -1418,7 +1495,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCacheV1::Find(
         if (!hadEntry) {
             AccountWarmupMissImpl(warmupAttribution, counters);
         }
-        return nullptr;
+        return {};
     }
 
     Y_ENSURE(query);
@@ -1445,7 +1522,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCacheV1::Find(
     // note, we don't report cache miss, because it's up to caller to decide what to do:
     // in particular, session actor will go to the compile service, which will actually report the miss.
 
-    return nullptr;
+    return {};
 }
 
 TVector<TKqpQueryCacheSnapshot::TEntry> TKqpQueryCacheV1::GetSnapshot() const {

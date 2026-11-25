@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/kqp/common/compile_cache/types.h>
+
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
@@ -136,7 +138,7 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     bool keepConfigChanges = false, bool isInternalCall = false, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
     NActors::TActorSystem* actorSystem = nullptr /*take from TLS by default*/,
     NYql::TExprContext* ctx = nullptr, const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr,
-    bool usePessimisticLocks = false);
+    bool usePessimisticLocks = false, TOptimizerInput optimizerInput = {});
 
 } // namespace NKqp
 } // namespace NKikimr

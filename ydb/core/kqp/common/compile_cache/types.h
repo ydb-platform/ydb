@@ -13,7 +13,9 @@ struct TPreCboSnapshot {
     virtual ~TPreCboSnapshot() = default;
     virtual ui64 ByteSize() const = 0;
 
-    std::unordered_map<TPathId, ui64> SchemaVersions;   // every table, index and view the snapshot is bound to
+    // Every table, index and view the snapshot is bound to. KQP does not check these versions: the
+    // optimizer does when it restores the snapshot and compiles from scratch on a mismatch.
+    std::unordered_map<TPathId, ui64> SchemaVersions;
 };
 
 struct TPeepholeResult {
@@ -38,10 +40,12 @@ using IPeepholeLookupPtr = std::shared_ptr<IPeepholeLookup>;
 struct TOptimizerInput {
     TPreCboSnapshotPtr CacheSnapshot;    // nullptr: no snapshot for this query
     IPeepholeLookupPtr PeepholeLookup;   // nullptr: always miss
+    bool EnableSnapshots = false;
 };
 
 struct TOptimizerCacheOutput {
-    // Set: KQP keeps the snapshot instead of the compiled plan. Null: as today.
+    // Return the snapshot usable by the next compilation, including an unchanged input snapshot.
+    // A null snapshot selects the final plan, including after a cold fallback.
     TPreCboSnapshotPtr CacheSnapshot;
     std::unordered_map<TPeepholeKey, TPeepholeResultPtr> NewPeephole;
 

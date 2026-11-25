@@ -96,7 +96,8 @@ protected:
     // replacement of the entry; a mutation that changes TPolicy::Size must be followed by
     // ReaccountLocked(). An expired entry is dropped on the spot (through OnDropped, into
     // `graveyard`) and reported as a miss.
-    TValue* FindEntryLocked(const TKey& key, bool promote, TInstant now, TGraveyard& graveyard) {
+    template <typename TShouldPromote>
+    TValue* FindEntryLocked(const TKey& key, TShouldPromote promote, TInstant now, TGraveyard& graveyard) {
         if (TValue* value = Storage.Find(key, promote, now)) {
             return value;
         }
@@ -112,12 +113,12 @@ protected:
         return {admitted, Notify(before, graveyard)};
     }
 
-    // Caller holds Lock and has just mutated the entry in place; counts as a use (LRU and TTL).
+    // Caller holds Lock and has just mutated the entry in place.
     // Returns false if the policy no longer admits it and it was dropped: any pointer to it is
     // dangling then.
-    bool ReaccountLocked(const TKey& key, TInstant now, TGraveyard& graveyard) {
+    bool ReaccountLocked(const TKey& key, TGraveyard& graveyard) {
         const size_t before = graveyard.size();
-        const bool kept = Storage.Reaccount(key, now, graveyard);
+        const bool kept = Storage.Reaccount(key, graveyard);
         Notify(before, graveyard);
         return kept;
     }

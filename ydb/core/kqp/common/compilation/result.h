@@ -65,6 +65,10 @@ struct TKqpCompileResult {
     TMaybe<NJson::TJsonValue> CompileMeta; // consist of parameters of query
 };
 
+void SerializeCompileCacheQuery(NKikimrKqp::TCompileCacheQueryInfo* to, const TString& uid,
+    const TKqpQueryId* query, TInstant compiledAt, TDuration duration, const NYql::TIssues& issues,
+    const TMaybe<NJson::TJsonValue>& meta, ui64 accesses, std::optional<ui64> lastAccessedAt);
+
 struct TKqpStatsCompile {
     bool FromCache = false;
     ui64 DurationUs = 0;

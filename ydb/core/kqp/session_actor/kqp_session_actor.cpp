@@ -917,10 +917,12 @@ public:
         if (QueryState->TryGetFromCache(*QueryCache, query, Counters, SelfId(), QuickPathWarmupAttribution()) && !QueryState->CompileResult->NeedToSplit) {
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
+            if (!QueryCache->CountsAccesses()) {
+                QueryState->CompileResult->IncUsage();
+            }
             // even if we have successfully compilation result, it doesn't mean anything
             // in terms of current schema version of the table if response of compilation is from the cache.
             // because of that, we are forcing to run schema version check
-            QueryState->CompileResult->IncUsage();
             if (QueryState->NeedCheckTableVersions()) {
                 auto ev = QueryState->BuildNavigateKeySet();
                 Send(MakeSchemeCacheID(), ev.release(), 0, 0, QueryState->KqpSessionSpan.GetTraceId());
@@ -1024,7 +1026,9 @@ public:
             return;
         }
 
-        QueryState->CompileResult->IncUsage();
+        if (!QueryCache->CountsAccesses()) {
+            QueryState->CompileResult->IncUsage();
+        }
         LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
         // even if we have successfully compilation result, it doesn't mean anything
         // in terms of current schema version of the table if response of compilation is from the cache.

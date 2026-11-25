@@ -353,6 +353,24 @@ namespace {
         return userSids;
     }
 
+    // QueryId -> AccessCount of the entries in one node's compile cache.
+    THashMap<TString, ui64> GetLocalCacheAccessCounts(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& tenantName) {
+        auto edgeActor = runtime.AllocateEdgeActor(nodeIndex);
+        auto* request = new TEvKqp::TEvListQueryCacheQueriesRequest();
+        request->Record.SetTenantName(tenantName);
+        request->Record.SetFreeSpace(1024 * 1024);
+        runtime.Send(new IEventHandle(MakeKqpCompileServiceID(runtime.GetNodeId(nodeIndex)), edgeActor, request), nodeIndex);
+
+        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvListQueryCacheQueriesResponse>(edgeActor, TDuration::Seconds(5));
+        UNIT_ASSERT_C(response, "Failed to get local cache entries from node " << nodeIndex);
+
+        THashMap<TString, ui64> accessCounts;
+        for (const auto& query : response->Get()->Record.GetCacheCacheQueries()) {
+            accessCounts[query.GetQueryId()] = query.GetAccessCount();
+        }
+        return accessCounts;
+    }
+
     void VerifyLocalCacheContainsUsers(
         TTestActorRuntime& runtime,
         ui32 nodeIndex,
@@ -567,6 +585,44 @@ namespace {
                 << ", expected unique: " << env.ExpectedUniqueCount);
             VerifyLocalCacheContainsUsers(env.Runtime, env.NodeId, "/Root", env.UserSids);
             VerifyQueriesServedFromCache(kikimr, env.UserSids, env.IsThreadLocked);
+        }
+
+        // Warmup is not a client use: it changes no AccessCount, whether it hits an entry or adds one.
+        // Otherwise warmup on other nodes would take its own work for popular queries.
+        Y_UNIT_TEST_TWIN(WarmupAccessCount, CompileCacheV2) {
+            TWarmupTestParams params;
+            params.CompileCacheV2 = CompileCacheV2;
+            params.UserSids = {"user0", "user1"};
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+            const auto before = GetLocalCacheAccessCounts(env.Runtime, env.NodeId, "/Root");
+
+            TKqpWarmupConfig warmupActorConfig;
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor did not complete within timeout");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should complete successfully: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded > 0, "Warmup loaded nothing, the check would be empty");
+
+            const auto after = GetLocalCacheAccessCounts(env.Runtime, env.NodeId, "/Root");
+            if (!CompileCacheV2) {
+                // V1 counts warmup in the session.
+                ui64 sumBefore = 0, sumAfter = 0;
+                for (const auto& [_, accessCount] : before) {
+                    sumBefore += accessCount;
+                }
+                for (const auto& [_, accessCount] : after) {
+                    sumAfter += accessCount;
+                }
+                UNIT_ASSERT_GT(sumAfter, sumBefore);
+                return;
+            }
+            for (const auto& [queryId, accessCount] : after) {
+                const auto it = before.find(queryId);
+                UNIT_ASSERT_VALUES_EQUAL_C(accessCount, it == before.end() ? 0 : it->second,
+                    "Warmup changed AccessCount of " << queryId);
+            }
         }
 
         Y_UNIT_TEST_QUAD(WarmupLoadsOtherUsersQueriesWithRestrictedAdmins, LegacyMetadata, SysViewSource) {

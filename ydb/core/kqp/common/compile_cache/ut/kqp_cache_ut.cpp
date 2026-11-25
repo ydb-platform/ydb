@@ -53,7 +53,7 @@ struct TTestCache : TKqpCache<TTestCache<TPolicy>, int, TSized, TPolicy> {
             return false;
         }
         mutate(*value);
-        return this->ReaccountLocked(key, Now(), graveyard);
+        return this->ReaccountLocked(key, graveyard);
     }
 
     size_t Dropped = 0;
@@ -98,8 +98,7 @@ Y_UNIT_TEST_SUITE(KqpCache) {
         UNIT_ASSERT(!cache.Has(4));
         UNIT_ASSERT_VALUES_EQUAL(cache.TotalBytes(), 60);
 
-        // Growing an entry in place is reaccounted as a use: the byte limit pushes the oldest other
-        // one out. Growing past the per-entry limit drops the entry itself.
+        // Growing the newest entry pushes out the oldest. Exceeding the per-entry limit drops the entry itself.
         cache.Insert(6, Sized(30));
         UNIT_ASSERT(cache.Mutate(6, [](TSized& value) { value.Bytes = 45; }));
         UNIT_ASSERT(!cache.Has(5));
@@ -123,11 +122,10 @@ Y_UNIT_TEST_SUITE(KqpCache) {
         UNIT_ASSERT_VALUES_EQUAL(cache.EraseExpired(), 0);
         UNIT_ASSERT(cache.Has(8));
 
-        // An in-place update is a use too: it restarts the TTL along with the LRU position, so the
-        // list stays ordered by expiry.
-        UNIT_ASSERT(cache.Mutate(8, [](TSized&) {}));         // now expires at +26s
-        TCache::Clock += TDuration::Seconds(6);               // +22s, past the TTL it had before
-        UNIT_ASSERT(cache.Has(8));
+        // An explicit promotion refreshes the TTL. Changing the size alone preserves that deadline.
+        UNIT_ASSERT(cache.Find(8, /*promote=*/true).Bytes);   // expires at +26s
+        TCache::Clock += TDuration::Seconds(6);
+        UNIT_ASSERT(cache.Mutate(8, [](TSized& value) { value.Bytes = 20; }));
 
         // Every entry that left one at a time went through OnDropped: 2, 3, 1, 4, 5, 6, 7, 9.
         UNIT_ASSERT_VALUES_EQUAL(cache.Dropped, 8);
@@ -140,6 +138,42 @@ Y_UNIT_TEST_SUITE(KqpCache) {
         UNIT_ASSERT(lastToken.expired());
         UNIT_ASSERT_VALUES_EQUAL(cache.Cleared, 1);
         UNIT_ASSERT_VALUES_EQUAL(cache.Dropped, 8);
+    }
+
+    Y_UNIT_TEST(ExpiryWithOutOfOrderTimestamps) {
+        using TCache = TTestCache<TSizedPolicy<true, false, false>>;
+        TCache cache(TCacheLimits{}, TDuration::Seconds(10));
+        const auto start = TCache::Clock;
+
+        cache.Insert(1, Sized(1));
+        TCache::Clock = start + TDuration::Seconds(5);
+        cache.Insert(2, Sized(1));
+        TCache::Clock = start + TDuration::Seconds(2);
+        UNIT_ASSERT(cache.Find(1, /*promote=*/true).Bytes); // after insert(2), expires at +15s
+
+        TCache::Clock = start + TDuration::Seconds(7);
+        UNIT_ASSERT(cache.Find(2, /*promote=*/true).Bytes);
+        TCache::Clock = start + TDuration::Seconds(4);
+        cache.Insert(3, Sized(1)); // after promote(2), expires at +17s
+
+        TCache::Clock = start + TDuration::Seconds(14);
+        UNIT_ASSERT(cache.Has(1));
+        TCache::Clock = start + TDuration::Seconds(15);
+        UNIT_ASSERT_VALUES_EQUAL(cache.EraseExpired(), 1);
+        UNIT_ASSERT(cache.Has(3));
+        TCache::Clock = start + TDuration::Seconds(17);
+        UNIT_ASSERT_VALUES_EQUAL(cache.EraseExpired(), 2);
+    }
+
+    Y_UNIT_TEST(ReaccountCanEvictTheUpdatedEntry) {
+        using TCache = TTestCache<TSizedPolicy<false, true, false>>;
+        TCache cache(TCacheLimits{.MaxBytes = 10}, TDuration::Zero());
+        cache.Insert(1, Sized(4));
+        cache.Insert(2, Sized(4));
+        UNIT_ASSERT(!cache.Mutate(1, [](TSized& value) { value.Bytes = 7; }));
+        UNIT_ASSERT(!cache.Has(1));
+        UNIT_ASSERT(cache.Has(2));
+        UNIT_ASSERT_VALUES_EQUAL(cache.TotalBytes(), 4);
     }
 
     // A limit the policy turns off is not enforced even when a value for it is passed; the bytes are

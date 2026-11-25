@@ -7,6 +7,7 @@ REQUIREMENTS(cpu:1)
 SIZE(MEDIUM)
 
 SRCS(
+    kqp_compile_cache_snapshots_ut.cpp
     kqp_document_api_ut.cpp
     kqp_kill_session_ut.cpp
     kqp_qs_queries_ut.cpp

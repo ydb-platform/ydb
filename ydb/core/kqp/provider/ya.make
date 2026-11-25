@@ -30,6 +30,7 @@ SRCS(
 PEERDIR(
     library/cpp/resource
     ydb/core/base
+    ydb/core/kqp/common/compile_cache
     ydb/core/docapi
     ydb/core/external_sources
     ydb/core/kqp/common/pg_policy

@@ -46,6 +46,11 @@ public:
     // mutation through the pointer that changes TPolicy::Size must be followed by Reaccount().
     // An expired entry is a miss.
     TValue* Find(const TKey& key, bool promote, TInstant now) {
+        return Find(key, [promote](const TValue&) { return promote; }, now);
+    }
+
+    template <typename TShouldPromote>
+    TValue* Find(const TKey& key, TShouldPromote shouldPromote, TInstant now) {
         auto it = Index.find(key);
         if (it == Index.end()) {
             return nullptr;
@@ -54,7 +59,7 @@ public:
         if (HasTtl() && item.Value.ExpiredAt <= now) {
             return nullptr;
         }
-        if (promote) {
+        if (shouldPromote(item.Value.Value)) {
             Touch(item, now);
         }
         return &item.Value.Value;
@@ -69,7 +74,7 @@ public:
         if (!Admits(bytes)) {
             return false;
         }
-        auto inserted = Index.emplace(key, TEntry{std::move(value), now + Ttl, bytes});
+        auto inserted = Index.emplace(key, TEntry{std::move(value), ExpiryAfterTouch(now), bytes});
         Y_ABORT_UNLESS(inserted.second);
         TItem* item = &Mutable(*inserted.first);
         Y_ABORT_UNLESS(!List.Insert(item));   // the list has no budget of its own
@@ -78,10 +83,9 @@ public:
         return true;
     }
 
-    // Re-reads the size of an entry mutated in place and counts it as a use, like a promoting
-    // Find. Evicts other entries while over budget. Returns false if the policy no longer admits
-    // the entry and it was dropped.
-    bool Reaccount(const TKey& key, TInstant now, TDropped& dropped) {
+    // Updates byte accounting after a mutation, preserving LRU order and expiry.
+    // Returns whether the updated entry survived admission and budget eviction.
+    bool Reaccount(const TKey& key, TDropped& dropped) {
         auto it = Index.find(key);
         if (it == Index.end()) {
             return false;
@@ -95,9 +99,7 @@ public:
             dropped.push_back(Drop(it));
             return false;
         }
-        Touch(item, now);
-        EvictOverBudget(&item, dropped);
-        return true;
+        return EvictOverBudget(&item, dropped);
     }
 
     bool Erase(const TKey& key, TDropped& dropped) {
@@ -170,24 +172,11 @@ private:
         ui64 Bytes = 0;     // as accounted in TotalBytes; the value may have changed since
     };
 
-    // The list only orders entries; its own size budget is disabled (unbounded, one per entry).
-    struct TOnePerEntry {
-        size_t operator()(const TEntry&) const { return 1; }
-    };
-
-    using TList = TLRUList<TKey, TEntry, TOnePerEntry>;
+    using TList = TLRUList<TKey, TEntry>;
     using TItem = typename TList::TItem;
 
     // Lookups go by TKey directly; no temporary TItem with a copied key and an empty value.
-    struct TItemHash {
-        size_t operator()(const TItem& item) const { return THash<TKey>()(item.Key); }
-        size_t operator()(const TKey& key) const { return THash<TKey>()(key); }
-    };
-    struct TItemEqual {
-        bool operator()(const TItem& a, const TItem& b) const { return a.Key == b.Key; }
-        bool operator()(const TItem& item, const TKey& key) const { return item.Key == key; }
-    };
-    using TIndex = THashSet<TItem, TItemHash, TItemEqual>;
+    using TIndex = THashSet<TItem, typename TItem::THash, typename TItem::TEqualTo>;
 
     // THashSet hands out its elements as const because the key feeds the hash. The list links and
     // the entry live in the same item and change in place; the key never does, so the set stays
@@ -196,11 +185,14 @@ private:
         return const_cast<TItem&>(item);
     }
 
-    // A use: moves the item to the fresh end of the list and restarts its TTL. The two always go
-    // together, so the list stays ordered by expiry and EraseExpired can stop at the first live
-    // entry. TLRUList knows nothing about TTL; this is the only place that ties them.
+    // Callers sample the clock before locking. Keep expiry times ordered as entries reach the LRU tail.
+    TInstant ExpiryAfterTouch(TInstant now) {
+        LastTouch = Max(LastTouch, now);
+        return LastTouch + Ttl;
+    }
+
     void Touch(TItem& item, TInstant now) {
-        item.Value.ExpiredAt = now + Ttl;
+        item.Value.ExpiredAt = ExpiryAfterTouch(now);
         List.Promote(&item);
     }
 
@@ -224,16 +216,17 @@ private:
         return over;
     }
 
-    // Evicts the least recently used entries while over budget; `keep` (the newest) always stays.
-    void EvictOverBudget(const TItem* keep, TDropped& dropped) {
-        while (OverBudget()) {
+    // Keep the newest entry, even if it alone exceeds the total byte budget.
+    bool EvictOverBudget(const TItem* updated, TDropped& dropped) {
+        while (OverBudget() && List.GetSize() > 1) {
             TItem* oldest = List.GetOldest();
-            if (!oldest || oldest == keep) {
-                break;
+            if (oldest == updated) {
+                updated = nullptr;
             }
             List.Erase(oldest);
             dropped.push_back(Drop(Index.find(oldest->Key)));
         }
+        return updated != nullptr;
     }
 
     // The item must already be unlinked from the list.
@@ -251,6 +244,7 @@ private:
 
     TIndex Index;
     TList List;
+    TInstant LastTouch = TInstant::Zero();
     ui64 TotalBytes = 0;
 };
 

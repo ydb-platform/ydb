@@ -15,28 +15,23 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-// Drops entry on temp-table clash; returns whether an entry existed before the
-// drop so callers can distinguish a rejected hit from a true miss. A copy of the V1 helper in
-// kqp_compile_service.cpp, which goes away with V1.
-bool RejectOnTempTableClash(
-    TKqpCompileResult::TConstPtr& compileResult,
-    const TKqpTempTablesState::TConstPtr& tempTablesState)
-{
-    const bool hadEntry = static_cast<bool>(compileResult);
-    if (HasTempTablesNameClashes(compileResult, tempTablesState)) {
-        compileResult = nullptr;
-    }
-    return hadEntry;
-}
+// TODO(anely-d): make the per-node snapshot budget configurable.
+constexpr ui64 SnapshotBudget = 64_MB;
 
 // Mutable only under the cache lock.
 struct TQueryCacheEntryV2 {
-    TKqpCompileResult::TConstPtr CompileResult;
+    TQueryCacheRecord Record;
+    // Successful client plan deliveries over the lifetime of this UID.
+    ui64 AccessCount = 0;
     TString ReplayMessage;
     TInstant LastReplayTime = TInstant::Zero();
     TInstant LastTouched = TInstant::Zero();
 
-    ui64 AccountedBytes = 0;    // plan size + replay message, as charged to the budget
+    ui64 AccountedBytes = 0;
+
+    ui64 SnapshotBytes() const {
+        return Record.GetSnapshot() ? AccountedBytes - ReplayMessage.size() : 0;
+    }
 };
 
 // Compile-time policy of the query cache: the budget is the entry count (CompileQueryCacheSize);
@@ -68,7 +63,10 @@ public:
         , Enabled(maxEntries != 0)
     {}
 
-    bool Insert(const TKqpCompileResult::TConstPtr& compileResult) override {
+    bool SupportsSnapshots() const override { return Enabled; }
+    bool CountsAccesses() const override { return true; }
+
+    bool Insert(const TKqpCompileResult::TConstPtr& compileResult, TPreCboSnapshotPtr snapshot, ui64 accesses) override {
         Y_ENSURE(compileResult->Query);
         YQL_ENSURE(compileResult->PreparedQuery);
         if (!Enabled) {
@@ -79,19 +77,20 @@ public:
         const TInstant now = Now();
         const TString& uid = compileResult->Uid;
         const TKqpQueryId& query = *compileResult->Query;
-        TQueryCacheEntryV2 entry = MakeEntry(compileResult, now);
+        auto entry = MakeEntry(compileResult, snapshot, accesses, now);
+        auto plan = snapshot ? MakeEntry(compileResult, {}, accesses, now) : TQueryCacheEntryV2{};
 
         TGraveyard graveyard;
         TGuard<TAdaptiveLock> guard(Lock);
 
-        size_t dropped = 0;
-        // One entry per query text: a new UID for the same text replaces the old entry.
-        if (const TString* oldUid = QueryIndex.FindPtr(query); oldUid && *oldUid != uid) {
-            // The copy is required: OnDropped forgets this very mapping and invalidates oldUid.
-            dropped += EraseLocked(TString(*oldUid), graveyard);
+        EraseOtherUidLocked(query, uid, graveyard);
+        if (snapshot) {
+            const auto* previous = FindEntryLocked(uid, false, now, graveyard);
+            if (entry.SnapshotBytes() > SnapshotBudget - SnapshotBytes + (previous ? previous->SnapshotBytes() : 0)) {
+                std::swap(entry, plan);
+            }
         }
-        dropped += InsertEntryLocked(uid, std::move(entry), query, now, graveyard);
-        return dropped != 0;
+        return InsertEntryLocked(uid, std::move(entry), query, now, graveyard);
     }
 
     void MarkWarmupInsert(const TString& uid) override {
@@ -112,7 +111,7 @@ public:
             entry->ReplayMessage = std::move(replayMessage);
             entry->LastReplayTime = now;
             entry->LastTouched = now;
-            ReaccountLocked(uid, now, graveyard);
+            ReaccountLocked(uid, graveyard);
         }
     }
 
@@ -131,44 +130,59 @@ public:
         return "";
     }
 
-    TKqpCompileResult::TConstPtr FindByUid(const TString& uid, bool promote) override {
+    TQueryCacheRecord LookupByUid(const TString& uid, bool promote) override {
         const TInstant now = NowFor(promote);
         TGraveyard graveyard;
         TGuard<TAdaptiveLock> guard(Lock);
-        return FindByUidImpl(uid, promote, now, graveyard);
+        auto* entry = FindByUidImpl(uid, promote, now, graveyard);
+        return entry ? entry->Record : TQueryCacheRecord{};
     }
 
-    TKqpCompileResult::TConstPtr FindByQuery(const TKqpQueryId& query, bool promote) override {
+    TQueryCacheRecord LookupByQuery(const TKqpQueryId& query, bool promote) override {
         const TInstant now = NowFor(promote);
         TGraveyard graveyard;
         TGuard<TAdaptiveLock> guard(Lock);
-        return FindByQueryImpl(query, promote, now, graveyard);
+        auto* entry = FindByQueryImpl(query, promote, now, graveyard);
+        return entry ? entry->Record : TQueryCacheRecord{};
     }
 
-    bool Replace(const TKqpCompileResult::TConstPtr& compileResult) override {
+    bool Replace(const TKqpCompileResult::TConstPtr& compileResult, TPreCboSnapshotPtr snapshot, ui64 accesses) override {
         Y_ENSURE(compileResult->Query);
         YQL_ENSURE(compileResult->PreparedQuery);
 
         // Before the lock: the clock and the plan size.
         const TInstant now = Now();
-        TQueryCacheEntryV2 fresh = MakeEntry(compileResult, now);
+        auto fresh = MakeEntry(compileResult, snapshot, accesses, now);
+        auto plan = snapshot ? MakeEntry(compileResult, {}, accesses, now) : TQueryCacheEntryV2{};
 
-        TKqpCompileResult::TConstPtr retired;   // the old plan, freed after the lock is released
         TGraveyard graveyard;
         TGuard<TAdaptiveLock> guard(Lock);
 
-        auto* entry = FindEntryLocked(compileResult->Uid, false, now, graveyard);
+        auto* entry = FindEntryLocked(compileResult->Uid, true, now, graveyard);
         if (!entry) {
             return false;
         }
 
-        if (*entry->CompileResult->Query == *compileResult->Query) {
-            // Same text: swap the plan in place and re-account its size. The entry keeps its replay
-            // message; the recompile counts as a use, so its LRU position and TTL restart.
-            entry->AccountedBytes = fresh.AccountedBytes + entry->ReplayMessage.size();
-            retired = std::exchange(entry->CompileResult, compileResult);
+        const bool sameQuery = entry->Record.GetQuery() == *compileResult->Query;
+        if (!sameQuery) {
+            EraseOtherUidLocked(*compileResult->Query, compileResult->Uid, graveyard);
+        }
+        if (snapshot && fresh.SnapshotBytes() > SnapshotBudget - SnapshotBytes + entry->SnapshotBytes()) {
+            std::swap(fresh, plan);
+        }
+
+        if (sameQuery) {
+            entry->AccessCount += accesses;
             entry->LastTouched = now;
-            ReaccountLocked(compileResult->Uid, now, graveyard);
+            const auto* previous = entry->Record.GetSnapshot();
+            if (previous && fresh.Record.GetSnapshot() && previous->Snapshot == snapshot) {
+                return true; // The same snapshot keeps its original compilation metadata.
+            }
+            SnapshotBytes -= entry->SnapshotBytes();
+            SnapshotBytes += fresh.SnapshotBytes();
+            entry->AccountedBytes = fresh.AccountedBytes + entry->ReplayMessage.size();
+            std::swap(entry->Record, fresh.Record);
+            ReaccountLocked(compileResult->Uid, graveyard);
             return true;
         }
 
@@ -176,12 +190,13 @@ public:
         // regular hooks.
         fresh.ReplayMessage = entry->ReplayMessage;
         fresh.LastReplayTime = entry->LastReplayTime;
+        fresh.AccessCount += entry->AccessCount;
         fresh.AccountedBytes += fresh.ReplayMessage.size();
         InsertEntryLocked(compileResult->Uid, std::move(fresh), *compileResult->Query, now, graveyard);
         return true;
     }
 
-    TKqpCompileResult::TConstPtr Find(
+    TQueryCacheRecord Lookup(
         const TMaybe<TString>& uid,
         TMaybe<TKqpQueryId>& query,
         bool disablePgCompatibility,
@@ -190,9 +205,9 @@ public:
         const NACLib::TSID& userSid,
         TIntrusivePtr<TKqpCounters> counters,
         TIntrusivePtr<TKqpDbCounters>& dbCounters,
-        const TActorId& sender,
-        const TActorContext& ctx,
-        EWarmupAttributionMode warmupAttribution) override
+        const TActorId&,
+        const TActorContext&,
+        EWarmupAttributionMode warmupAttribution, bool plansOnly) override
     {
         if (!uid) {
             Y_ENSURE(query);
@@ -207,83 +222,68 @@ public:
         // Before the lock: the clock.
         const TInstant now = NowFor(promote);
 
-        TKqpCompileResult::TConstPtr compileResult;
-        size_t size = 0;
-        ui64 bytes = 0;
+        TQueryCacheRecord record;
+        size_t size;
+        ui64 bytes;
+        const bool hasTempTables = tempTablesState && !tempTablesState->TempTables.empty();
+        // Warmup is not a client use. V1 counts it in the session, so a query no client runs
+        // any more can pass from node to node through warmup.
+        const bool countsAccess = warmupAttribution != EWarmupAttributionMode::Warmup;
         {
             TGraveyard graveyard;
             TGuard<TAdaptiveLock> guard(Lock);
-            compileResult = uid
-                ? FindByUidImpl(*uid, promote, now, graveyard, disablePgCompatibility)
-                : FindByQueryImpl(*query, promote, now, graveyard);
+            auto* entry = uid ? FindByUidImpl(*uid, promote, now, graveyard, disablePgCompatibility)
+                              : FindByQueryImpl(*query, promote, now, graveyard);
+            if (entry) {
+                record = entry->Record;
+                if (countsAccess && !hasTempTables && !record.GetSnapshot() && (!uid || record.GetQuery().UserSid() == userSid)) {
+                    ++entry->AccessCount;
+                }
+            }
             size = SizeLocked();
             bytes = TotalBytesLocked();
         }
-
-        // After the lock: the result is immutable, the checks and accounting need no cache state.
         *counters->CompileQueryCacheSize = size;
         *counters->CompileQueryCacheBytes = bytes;
-
         if (uid) {
             counters->ReportCompileRequestGet(dbCounters);
-            const bool hadEntry = RejectOnTempTableClash(compileResult, tempTablesState);
-
-            if (compileResult) {
-                Y_ENSURE(compileResult->Query);
-                if (compileResult->Query->UserSid() == userSid) {
-                    counters->ReportQueryCacheHit(dbCounters, true);
-
-                    YDB_LOG_DEBUG_CTX(ctx, "Served query from cache by uid",
-                        {"sender", sender},
-                        {"queryUid", *uid});
-
-                    AccountWarmupHit(compileResult, warmupAttribution, counters);
-                    return compileResult;
-                } else {
-                    YDB_LOG_NOTICE_CTX(ctx, "Non-matching user sid for query",
-                        {"sender", sender},
-                        {"queryUid", *uid},
-                        {"expectedSid", compileResult->Query->UserSid()},
-                        {"actualSid", userSid});
-                }
-            }
-
-            // hadEntry => uid was present but rejected (SID / TempTables) -- not a true miss.
-            if (!hadEntry) {
-                AccountWarmupMiss(warmupAttribution, counters);
-            }
-            return nullptr;
         }
-
-        YDB_LOG_DEBUG_CTX(ctx, "Try to find query by queryId",
-            {"queryId", query->SerializeToString()});
-        const bool hadEntry = RejectOnTempTableClash(compileResult, tempTablesState);
-
-        if (compileResult) {
-            counters->ReportQueryCacheHit(dbCounters, true);
-            YDB_LOG_DEBUG_CTX(ctx, "Served query from cache from query text",
-                {"sender", sender},
-                {"queryUid", compileResult->Uid});
-
-            AccountWarmupHit(compileResult, warmupAttribution, counters);
-            return compileResult;
-        }
-
-        if (!hadEntry) {
+        if (!record) {
             AccountWarmupMiss(warmupAttribution, counters);
+            return {};
+        }
+        if (uid && record.GetQuery().UserSid() != userSid) {
+            return {};
+        }
+        if (record.GetSnapshot()) {
+            // A UID-only request may still need the query key for a cold compilation.
+            return plansOnly || (hasTempTables && !uid) ? TQueryCacheRecord{} : record;
         }
 
-        // note, we don't report cache miss, because it's up to caller to decide what to do:
-        // in particular, session actor will go to the compile service, which will actually report the miss.
-
-        return nullptr;
+        auto plan = record.GetPlan();
+        if (HasTempTablesNameClashes(plan, tempTablesState)) {
+            return {};
+        }
+        if (countsAccess && hasTempTables) {
+            // The potentially expensive name check above must run outside the cache lock.
+            TGraveyard graveyard;
+            TGuard<TAdaptiveLock> guard(Lock);
+            auto* entry = FindEntryLocked(plan->Uid, false, now, graveyard);
+            if (entry && entry->Record.GetPlan() == plan) {
+                ++entry->AccessCount;
+            }
+        }
+        counters->ReportQueryCacheHit(dbCounters, true);
+        AccountWarmupHit(plan, warmupAttribution, counters);
+        return record;
     }
 
     bool EraseIfCurrent(const TKqpCompileResult::TConstPtr& result) override {
         const TInstant now = NowFor(false);
         TGraveyard graveyard;
         TGuard<TAdaptiveLock> guard(Lock);
-        return FindByUidImpl(result->Uid, false, now, graveyard) == result && EraseLocked(result->Uid, graveyard);
+        auto* entry = FindByUidImpl(result->Uid, false, now, graveyard);
+        return entry && entry->Record.GetPlan() == result && EraseLocked(result->Uid, graveyard);
     }
 
     bool EraseByUid(const TString& uid) override {
@@ -305,7 +305,11 @@ public:
         TVector<TKqpQueryCacheSnapshot::TEntry> out;
         out.reserve(SizeLocked());
         ForEachLocked([&](const TString&, const TQueryCacheEntryV2& entry) {
-            out.push_back({entry.CompileResult, entry.LastTouched});
+            if (auto* snapshot = entry.Record.GetSnapshot()) {
+                out.push_back({snapshot->Info, entry.LastTouched, entry.AccessCount});
+            } else {
+                out.push_back({entry.Record.GetPlan(), entry.LastTouched, entry.AccessCount});
+            }
         });
         return out;
     }
@@ -327,62 +331,79 @@ private:
     // a time, OnCleared once after Clear() emptied it.
     void OnDropped(const TEvicted& evicted) {
         const auto& entry = evicted.Value;
-        Y_ABORT_UNLESS(entry.CompileResult && entry.CompileResult->Query);
+        SnapshotBytes -= entry.SnapshotBytes();
 
         // Only if the text still maps to this uid: a late drop of a replaced entry must not take
         // the live mapping with it.
-        auto it = QueryIndex.find(*entry.CompileResult->Query);
+        auto it = QueryIndex.find(entry.Record.GetQuery());
         if (it != QueryIndex.end() && it->second == evicted.Key) {
             QueryIndex.erase(it);
         }
     }
 
     void OnCleared() {
+        SnapshotBytes = 0;
         QueryIndex.clear();
         ResetWarmupLocked();
     }
 
     // Builds an entry without the lock: the plan size is the expensive part.
-    static TQueryCacheEntryV2 MakeEntry(const TKqpCompileResult::TConstPtr& compileResult, TInstant now) {
+    static TQueryCacheEntryV2 MakeEntry(const TKqpCompileResult::TConstPtr& compileResult,
+        const TPreCboSnapshotPtr& snapshot, ui64 accesses, TInstant now) {
+        if (snapshot) {
+            auto info = std::make_shared<const TQuerySnapshotInfo>(compileResult->Uid, *compileResult->Query,
+                compileResult->CompiledAt, compileResult->CompilationDuration, compileResult->Issues, compileResult->CompileMeta);
+            return TQueryCacheEntryV2{
+                .Record = TQueryCacheSnapshotRecord{std::move(info), snapshot},
+                .AccessCount = accesses,
+                .LastTouched = now,
+                .AccountedBytes = snapshot->ByteSize(),
+            };
+        }
         return TQueryCacheEntryV2{
-            .CompileResult = compileResult,
+            .Record = compileResult,
+            .AccessCount = accesses,
             .LastTouched = now,
             .AccountedBytes = compileResult->PreparedQuery->ByteSize(),
         };
     }
 
-    // Inserts the entry and maps its text to it. An entry the policy rejects is not stored and not
-    // mapped; the dropped count is returned either way.
-    size_t InsertEntryLocked(const TString& uid, TQueryCacheEntryV2&& entry, const TKqpQueryId& query,
+    void EraseOtherUidLocked(const TKqpQueryId& query, const TString& uid, TGraveyard& graveyard) {
+        if (const TString* oldUid = QueryIndex.FindPtr(query); oldUid && *oldUid != uid) {
+            // OnDropped erases the mapping that owns oldUid.
+            EraseLocked(TString(*oldUid), graveyard);
+        }
+    }
+
+    // Returns whether inserting this entry evicted another UID to stay within the LRU limit.
+    bool InsertEntryLocked(const TString& uid, TQueryCacheEntryV2&& entry, const TKqpQueryId& query,
         TInstant now, TGraveyard& graveyard)
     {
+        const ui64 snapshotBytes = entry.SnapshotBytes();
         const auto result = InsertLocked(uid, std::move(entry), now, graveyard);
         if (result.Admitted) {
+            SnapshotBytes += snapshotBytes;
             // Mapped after the insert: dropping the replaced entry under this uid must not forget
             // the mapping of the new one.
             QueryIndex[query] = uid;
         }
-        return result.Dropped;
+        return AnyOf(graveyard.end() - result.Dropped, graveyard.end(),
+            [&](const TEvicted& dropped) { return dropped.Key != uid; });
     }
 
-    TKqpCompileResult::TConstPtr FindByUidImpl(const TString& uid, bool promote, TInstant now, TGraveyard& graveyard, std::optional<bool> mode = {}) {
-        if (mode) {
-            auto* entry = FindEntryLocked(uid, false, now, graveyard);
-            if (!entry || entry->CompileResult->Query->DisablePgCompatibility() != *mode) {
-                return nullptr;
+    TQueryCacheEntryV2* FindByUidImpl(const TString& uid, bool promote, TInstant now, TGraveyard& graveyard, std::optional<bool> mode = {}) {
+        // A snapshot lookup only starts a compilation. Refresh its TTL on successful delivery.
+        auto* entry = FindEntryLocked(uid, [promote, now, mode](TQueryCacheEntryV2& entry) {
+            if (!promote || entry.Record.GetSnapshot() || (mode && entry.Record.GetQuery().DisablePgCompatibility() != *mode)) {
+                return false;
             }
-        }
-        auto* entry = FindEntryLocked(uid, promote, now, graveyard);
-        if (!entry) {
-            return nullptr;
-        }
-        if (promote) {
-            entry->LastTouched = now;
-        }
-        return entry->CompileResult;
+            entry.LastTouched = now;
+            return true;
+        }, now, graveyard);
+        return entry && (!mode || entry->Record.GetQuery().DisablePgCompatibility() == *mode) ? entry : nullptr;
     }
 
-    TKqpCompileResult::TConstPtr FindByQueryImpl(const TKqpQueryId& query, bool promote, TInstant now, TGraveyard& graveyard) {
+    TQueryCacheEntryV2* FindByQueryImpl(const TKqpQueryId& query, bool promote, TInstant now, TGraveyard& graveyard) {
         const TString* uid = QueryIndex.FindPtr(query);
         // The copy is required: a lazy expiry of the entry forgets this very mapping.
         return uid ? FindByUidImpl(TString(*uid), promote, now, graveyard) : nullptr;
@@ -492,6 +513,7 @@ private:
         AtomicSet(WarmupHasPendingAtomic, 0);
     }
 
+    ui64 SnapshotBytes = 0;
     const bool Enabled;
     // Query text -> uid, one entry per text. Hashing and comparing the key is TKqpQueryId's job.
     THashMap<TKqpQueryId, TString> QueryIndex;

@@ -36,6 +36,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
+    ydb/core/kqp/runtime/scheduler
     ydb/core/testlib/basics
     ydb/public/lib/ut_helpers
     ydb/public/sdk/cpp/src/client/operation

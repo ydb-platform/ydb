@@ -595,7 +595,7 @@
     function copyTestNameToClipboard(text) {
         const cmdArg = getTestRunCommand(text);
         if (!cmdArg) {
-            window.alert("Run command unavailable: the build profile could not be resolved for this revision.");
+            window.alert("Run command is unavailable for this test result.");
             return;
         }
 

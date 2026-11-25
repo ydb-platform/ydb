@@ -57,6 +57,23 @@ class BuildProfilesTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Unknown build profile'):
             build_profile.resolve_profile('unknown', {})
 
+    def test_workflow_presets_resolve(self):
+        # Public presets used by the workflow matrices and choice inputs.
+        presets = ['release', 'debug', 'relwithdebinfo', 'release-asan', 'release-tsan', 'release-msan']
+        with patch.object(build_profile, 'PROFILE_PATH', PROFILES):
+            for name in presets:
+                with self.subTest(name=name):
+                    self.assertTrue(build_profile.resolve_profile(name)['args'])
+
+    def test_cli_reports_configuration_error(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), 'missing', '--output-dir', 'out'],
+            cwd=self.tmp.name, capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('error:', result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
+
     def test_build_type_required(self):
         self.path.write_text('release: {}\n')
         with self.assertRaisesRegex(ValueError, 'build_type'):

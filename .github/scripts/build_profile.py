@@ -65,7 +65,10 @@ if __name__ == "__main__":
     parser.add_argument("profile")
     parser.add_argument("--output-dir", required=True)
     options = parser.parse_args()
-    profile = resolve_profile(options.profile)
+    try:
+        profile = resolve_profile(options.profile)
+    except (ValueError, OSError, yaml.YAMLError) as error:
+        parser.error(str(error))
     output_dir = Path(options.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     if any("\n" in arg or "\r" in arg for arg in profile["args"]):

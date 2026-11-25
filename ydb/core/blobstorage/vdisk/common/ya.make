@@ -63,6 +63,7 @@ SRCS(
     vdisk_pdisk_error.h
     vdisk_pdiskctx.h
     vdisk_private_events.h
+    vdisk_query_result.h
     vdisk_sector_sealing.cpp
     vdisk_sector_sealing.h
     vdisk_queues.h

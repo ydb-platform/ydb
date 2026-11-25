@@ -48,6 +48,12 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
                 item.RequestedSize = Queries[i].Size;
             }
             PendingResult->ErrorReason = ErrorReason;
+        } else {
+            for (ui32 i = 0; i < PendingResult->ResponseSz; ++i) {
+                auto& response = PendingResult->Responses[i];
+                const auto& [keep, doNotKeep] = KeepFlags.at(response.Id);
+                response.MergeKeepFlags(keep, doNotKeep);
+            }
         }
         Y_ABORT_UNLESS(PendingResult);
         Mon->CountIndexRestoreGetResponseTime(TActivationContext::Monotonic() - RequestStartTime);
@@ -138,10 +144,6 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
             auto &a = PendingResult->Responses[idx];
             a.Id = q.Id;
 
-            const auto it = KeepFlags.find(q.Id);
-            Y_ABORT_UNLESS(it != KeepFlags.end());
-            std::tie(a.Keep, a.DoNotKeep) = it->second;
-
             DSP_LOG_DEBUG_S("DSPI11", "OnEnoughVGetResults Id# " << q.Id << " BlobStatus# " << DumpBlobStatus(idx));
 
             if (blobState == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
@@ -210,6 +212,9 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
         Y_ABORT_UNLESS(PendingResult);
         for (ui32 i = 0; i < getResult.ResponseSz; ++i) {
             TEvBlobStorage::TEvGetResult::TResponse &response = getResult.Responses[i];
+            auto& [keep, doNotKeep] = KeepFlags.at(response.Id);
+            keep |= response.Keep;
+            doNotKeep |= response.DoNotKeep;
             if (response.Status != NKikimrProto::OK) {
                 if (!DoNotReportIndexRestoreGetMissingBlobs) {
                     DSP_LOG_ERROR_S("DSPI07", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status)

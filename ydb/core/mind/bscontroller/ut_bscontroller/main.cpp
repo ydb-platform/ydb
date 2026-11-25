@@ -1044,7 +1044,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
         env.Runtime->SetEventFilter(previous);
         const TVector<EMirror3dcGroupState> expected = {TGroupState::DC_FAILURE, TGroupState::DC_SOLO_INV1, TGroupState::DC_SOLO_INV2_PENDING};
-        UNIT_ASSERT_VALUES_EQUAL(proposals, expected);
+        UNIT_ASSERT(proposals == expected);
     }
 
     Y_UNIT_TEST(DataCenterReturnSupersedesDelayedInvariantPromotion) {

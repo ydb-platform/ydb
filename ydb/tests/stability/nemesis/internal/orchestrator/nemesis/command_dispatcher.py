@@ -41,7 +41,7 @@ class CommandDispatcher:
         mode = guard_mode_for(cmd.nemesis_type)
         guard_mode_val = mode.value if mode is not None else None
         try:
-            self._transport.send(cmd)
+            completion = self._transport.send(cmd)
 
             if track_history:
                 self.append_executions_history(
@@ -76,7 +76,7 @@ class CommandDispatcher:
                         lease_id=lease_id,
                         source="dispatch",
                     )
-            return True
+            return completion or True
         except Exception as e:
             logger.error("Failed to dispatch %s to %s: %s", cmd.nemesis_type, cmd.host, e)
             if metrics is not None:

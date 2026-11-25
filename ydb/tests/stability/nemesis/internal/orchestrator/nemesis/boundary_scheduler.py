@@ -13,16 +13,12 @@ from typing import Callable, Sequence
 
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
-    confirm_timeout_for,
     guard_mode_for,
     impact_scope_for,
     recovery_mode_for as catalog_recovery_mode_for,
-    recovery_sec_for,
-    stuck_timeout_for,
     supports_boundary_scheduler,
     target_kind_for,
 )
-from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget, TargetKind
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     FailureModelGuard,
@@ -30,12 +26,8 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model imp
     GuardMode,
     ImpactScope,
 )
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.hc_model import (
-    hc_predicate_for,
-)
-
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.fault_engine import (
-    FaultEngine, FaultRejected, RecoveryUnavailable,
+    FaultRejected, RecoveryUnavailable,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,21 +68,14 @@ class BoundaryNemesisScheduler:
         self,
         *,
         guard: FailureModelGuard,
-        engine=None,
+        engine,
         inventory,
-        plan_inject: Callable[[str, ChaosTarget], list[DispatchCommand]],
-        dispatch: Callable[[DispatchCommand], None],
         recovery_probe=None,
-        plan_extract: Callable[[str, ChaosTarget], list[DispatchCommand]] | None = None,
         enabled_types: Sequence[str] | None = None,
         scope_for: Callable[[str], ImpactScope] = impact_scope_for,
         kind_for: Callable[[str], TargetKind] = target_kind_for,
         mode_for: Callable[[str], GuardMode] = guard_mode_for,
-        recovery_sec_for: Callable[[str], float | None] = recovery_sec_for,
         recovery_mode_for: Callable[[str], str] = catalog_recovery_mode_for,
-        stuck_timeout_for: Callable[[str], float] = stuck_timeout_for,
-        confirm_timeout_for: Callable[[str], float] = confirm_timeout_for,
-        predicate_for: Callable = hc_predicate_for,
         base_interval: float = 15.0,
         jitter: float = 0.5,
         max_per_tick: int = 16,
@@ -101,25 +86,12 @@ class BoundaryNemesisScheduler:
     ) -> None:
         self._guard = guard
         self._inventory = inventory
-        self._plan_inject = plan_inject
-        self._plan_extract = plan_extract
-        self._dispatch = dispatch
         self._recovery_probe = recovery_probe
         self._scope_for = scope_for
         self._kind_for = kind_for
         self._mode_for = mode_for
-        self._recovery_sec_for = recovery_sec_for
         self._recovery_mode_for = recovery_mode_for
-        self._stuck_timeout_for = stuck_timeout_for
-        self._confirm_timeout_for = confirm_timeout_for
-        self._predicate_for = predicate_for
-        self._engine = engine or FaultEngine(
-            guard=guard, inventory=inventory, plan_inject=plan_inject, dispatch=dispatch,
-            recovery_probe=recovery_probe, plan_extract=plan_extract, scope_for=scope_for,
-            kind_for=kind_for, mode_for=mode_for, recovery_sec_for=recovery_sec_for,
-            recovery_mode_for=recovery_mode_for, stuck_timeout_for=stuck_timeout_for,
-            confirm_timeout_for=confirm_timeout_for, predicate_for=predicate_for,
-        )
+        self._engine = engine
         self._no_probe_warned = False
         self._rng = rng or random.Random()
         self._cfg_lock = threading.Lock()
@@ -179,7 +151,7 @@ class BoundaryNemesisScheduler:
     # -- tick ---------------------------------------------------------------
 
     def _can_extract(self) -> bool:
-        return self._plan_extract is not None and self._recovery_probe is not None
+        return self._engine.can_restore
 
     def _menu(
         self,

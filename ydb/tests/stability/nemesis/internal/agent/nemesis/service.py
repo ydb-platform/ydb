@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from collections.abc import Mapping
 
 from ydb.tests.stability.nemesis.internal.agent.nemesis.runner import NemesisManager
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class AgentExecutionService:
     def __init__(self, manager: NemesisManager, definitions: Mapping[str, dict]) -> None:
+        self._instance = uuid.uuid4().hex
         self._manager = manager
         self._definitions = definitions
         if hasattr(manager, "configure_recovery"):
@@ -23,12 +25,18 @@ class AgentExecutionService:
         if process_type not in self._definitions:
             return {"status": "error", "message": "Invalid process type"}
         try:
-            self._manager.start_process(
+            result = self._manager.start_process(
                 process_type, self._definitions[process_type]["runner"], action, payload=payload,
             )
         except (ValueError, RuntimeError) as error:
             return {"status": "error", "message": str(error)}
-        return {"status": "started"}
+        return {"status": "started", "execution": f"{self._instance}:{result['id']}"}
+
+    def result(self, execution):
+        instance, _, index = execution.partition(":")
+        if instance != self._instance or not index.isdigit():
+            return {"status": "unknown"}
+        return self._manager.get_result(int(index))
 
     def begin_shutdown(self):
         self._manager.begin_shutdown(permanent=True)

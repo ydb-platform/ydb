@@ -645,3 +645,26 @@ The bootstrap must expose `/viewer/config` and `/viewer/json/nodes`, including
 SystemState endpoints and location. An incomplete response or unsupported erasure
 is rejected. This initial discovery mode supports local process control; existing
 YAML-based multi-host installation and stability test API remain supported.
+
+### Discovery updates and restore results
+
+Discovery keeps pile identity stable by name within one Nemesis installation;
+reordering the cluster's pile list does not change budget ownership. Changing the
+set of pile names or moving an existing node between piles requires draining and
+restarting Nemesis. Unexplained disappearance of a previously discovered resource
+blocks new injections; restoration stays available. For an intentional permanent
+removal, drain and restart against the new inventory. Missing historical resources
+are never usable as additional failure capacity.
+
+`GET /api/discovery` distinguishes observation freshness, applied generation,
+pending updates and `missing_nodes`. Unchanged observations refresh freshness
+without changing generation, including while faults are active. Changed budgets
+and targets are applied together through FaultEngine after existing owners drain.
+
+Restore delivery is asynchronous. Agent responses include an execution receipt;
+`GET /api/executions/<receipt>` distinguishes running, finished, error and unknown
+results. RecoveryProbe retries failed restores, and releases the reservation only
+after successful execution and a newer healthcheck for the affected pile. Deploy
+orchestrator and agents together after draining; mixed versions of this execution
+protocol are not supported. Existing scheduler start/stop and problems APIs remain
+unchanged.

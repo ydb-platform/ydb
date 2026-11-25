@@ -109,6 +109,13 @@ class ProcessController:
         self._lock = threading.RLock()
         self._active = {}
 
+    def replace_specs(self, specs):
+        with self._lock:
+            if self._active:
+                return False
+            self.specs = tuple(specs)
+            return True
+
     def spec_for(self, target):
         found = [s for s in self.specs if s.host == target.host and s.kind == target.kind.value
                  and (target.ic_port is None or target.ic_port == s.ic_port)

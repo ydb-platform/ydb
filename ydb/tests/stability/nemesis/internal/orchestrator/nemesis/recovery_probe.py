@@ -59,6 +59,8 @@ class _Pending:
     phase: str = PHASE_HOLD
     confirm_since: float | None = None
     extract_ok: bool = False  # True only after recover_action() succeeds
+    extract_status: str = "not_started"
+    extract_error: str | None = None
     extracting: bool = False  # in-flight guard vs concurrent drain/tick
     dispatching: bool = False
     stuck_reported: bool = False
@@ -155,7 +157,7 @@ class RecoveryProbe:
             if p is None or p.recover_action is None:
                 return False
         self._dispatch_extract(p, self._clock(), reason="manual operation restore")
-        if not p.extract_ok:
+        if not p.extract_ok and p.extract_status != "running":
             raise RuntimeError("Restore failed or is still in progress; budget remains held")
         return True
 
@@ -166,7 +168,7 @@ class RecoveryProbe:
                        and p.recover_action is not None]
         for p in pending:
             self._dispatch_extract(p, self._clock(), reason="manual restore")
-            if not p.extract_ok:
+            if not p.extract_ok and p.extract_status != "running":
                 raise RuntimeError("Restore failed or still in progress; budget remains held")
         return bool(pending)
 
@@ -335,6 +337,7 @@ class RecoveryProbe:
                     "held_sec": round(now - p.reserved_at, 1), "stuck": p.stuck_reported,
                     "toggle": p.recover_action is not None, "piles": list(p.piles),
                     "dispatching": p.dispatching, "extracting": p.extracting, "extract_ok": p.extract_ok,
+                    "extract_status": p.extract_status, "extract_error": p.extract_error,
                     "pile_recovery": {
                         str(pile): {"baseline": p.pile_baseline.get(pile), "alive": alive.get(pile)}
                         for pile in p.piles
@@ -403,14 +406,19 @@ class RecoveryProbe:
                 return
             p.extracting = True
         try:
-            p.recover_action()
-        except Exception:
+            completed = p.recover_action()
+        except Exception as error:
             # Leave extract_ok False: tick/drain will retry; confirm_timeout → stuck.
             logger.exception("extract action raised for %s", p.target.identity_key())
             with self._lock:
                 p.extracting = False
+                p.extract_status, p.extract_error = "failed", str(error)
             return
         with self._lock:
+            p.extract_status, p.extract_error = ("running" if completed is False else "succeeded"), None
+            p.extracting = False
+            if completed is False:
+                return
             p.confirm_since = self._clock()
             p.extract_ok = True
             p.extracting = False

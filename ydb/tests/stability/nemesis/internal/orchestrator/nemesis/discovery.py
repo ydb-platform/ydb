@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 import requests
 
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.cluster_inventory import ClusterInventory, NodeInfo, SlotInfo
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import ClusterTopologyModel, FailureModelGuard
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import ClusterTopologyModel
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.fault_engine import RecoveryUnavailable
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,7 @@ class DiscoverySnapshot:
     http: tuple
     grpc: tuple
     node_piles: dict
+    missing: frozenset = frozenset()
 
 
 class ClusterDiscovery:
@@ -51,6 +52,9 @@ class ClusterDiscovery:
         self._stop = threading.Event()
         self._thread = None
         self._known = {}
+        self._pile_names = ()
+        self.missing = frozenset()
+        self._signature = None
 
     def _json(self, base, path):
         response = self._get(base + path, timeout=10)
@@ -70,7 +74,14 @@ class ClusterDiscovery:
 
     def _parse(self, config, view, specs, base):
         static = {int(n["NodeId"]): n for n in config["NameserviceConfig"]["Node"]}
-        piles = {p["Name"]: i for i, p in enumerate(config.get("BridgeConfig", {}).get("Piles", []))}
+        names = [p["Name"] for p in config.get("BridgeConfig", {}).get("Piles", [])]
+        if len(names) != len(set(names)):
+            raise ValueError("Duplicate pile names")
+        # IDs are installation-local identities, never positions in a viewer response.
+        if self.generation and set(names) != set(self._pile_names):
+            raise ValueError("Pile membership changed; drain and restart Nemesis")
+        names = self._pile_names or tuple(sorted(names))
+        piles = {name: i for i, name in enumerate(names)}
         erasure = config.get("SelfManagementConfig", {}).get("ErasureSpecies")
         if not erasure:
             groups = config.get("BlobStorageConfig", {}).get("ServiceSet", {}).get("Groups", [])
@@ -83,6 +94,7 @@ class ClusterDiscovery:
             raise ValueError("Incomplete discovery response")
         records = dict(self._known)
         http, grpc, membership = [], [], {}
+        observed = set()
         by_port = {s.ic_port: s for s in specs}
         updated_specs = {}
         for row in nodes:
@@ -114,7 +126,11 @@ class ClusterDiscovery:
             # Dynamic node IDs can change; IC port identifies a local slot.
             records = {key: old for key, old in records.items()
                        if not (old.host == host and old.ic_port == port and key != nid)}
+            previous = self._known.get(nid)
+            if previous is not None and previous.bridge_pile_id != pile:
+                raise ValueError(f"Node {nid} changed pile; drain and restart Nemesis")
             records[nid] = record
+            observed.add(nid)
             if spec is not None:
                 updated_specs[port] = replace(
                     spec, kind=kind, node_id=nid, slot_idx=port if kind == "slot" else None,
@@ -143,54 +159,64 @@ class ClusterDiscovery:
         inventory.slots = {n.slot_idx: n for n in records.values() if isinstance(n, SlotInfo)}
         return DiscoverySnapshot(topology, inventory,
                                  tuple(updated_specs.get(s.ic_port, s) for s in specs),
-                                 tuple(dict.fromkeys(http)), tuple(dict.fromkeys(grpc)), membership)
+                                 tuple(dict.fromkeys(http)), tuple(dict.fromkeys(grpc)), membership,
+                                 frozenset(set(records) - observed))
+
+    @staticmethod
+    def signature(snapshot):
+        return (tuple(sorted(snapshot.inventory.nodes.items())), tuple(sorted(snapshot.inventory.slots.items())),
+                snapshot.specs, tuple(snapshot.topology.pile_names.items()), snapshot.topology.tolerance.erasure)
+
+    def matches(self, snapshot):
+        return self.signature(snapshot) == self._signature
+
+    def observe(self, snapshot):
+        self.http, self.grpc = snapshot.http, snapshot.grpc
+        self.node_piles = dict(snapshot.node_piles)
+        self.missing = snapshot.missing
+        self.last_observation = time.monotonic()
+        self.error = None
 
     def publish(self, snapshot):
-        self.http, self.grpc = snapshot.http, snapshot.grpc
-        self.node_piles = snapshot.node_piles
+        self.observe(snapshot)
+        signature = self.signature(snapshot)
+        if signature != self._signature:
+            self.generation += 1
+        self._signature = signature
+        self._pile_names = tuple(snapshot.topology.pile_names.values())
         self._known = {n.node_id: n for n in [*snapshot.inventory.nodes.values(), *snapshot.inventory.slots.values()]}
         self.last_success = time.monotonic()
         self.last_observation = self.last_success
         self.error = None
         self.deferred = False
-        self.generation += 1
 
     def check(self):
-        if self.last_success is None or time.monotonic() - self.last_success > self.max_age:
+        if self.missing:
+            raise RecoveryUnavailable("Discovered resources are missing; restore remains available")
+        if self.deferred:
+            raise RecoveryUnavailable("Topology update awaits recovery of active faults")
+        if self.last_observation is None or time.monotonic() - self.last_observation > self.max_age:
             raise RecoveryUnavailable("Cluster discovery is stale; restore remains available")
 
     def status(self):
         return {"generation": self.generation, "http_endpoints": self.http, "grpc_endpoints": self.grpc,
                 "age_sec": None if self.last_success is None else time.monotonic() - self.last_success,
-                "error": self.error, "deferred": self.deferred}
+                "error": self.error, "deferred": self.deferred, "missing_nodes": sorted(self.missing),
+                "observation_age_sec": None if self.last_observation is None else time.monotonic() - self.last_observation}
 
     def fresh_node_piles(self):
         if self.last_observation is None or time.monotonic() - self.last_observation > self.max_age:
             return {}
         return dict(self.node_piles)
 
-    def start(self, *, engine, guard, inventory, controller, service, probe, interval, specs_source=None):
+    def start(self, *, engine, controller, service, interval, specs_source=None):
         def refresh():
             while not self._stop.wait(interval):
                 try:
                     snapshot = self.fetch(specs_source() if specs_source else controller.specs)
-                    replacement = FailureModelGuard(snapshot.topology, inventory=snapshot.inventory,
-                                                    total_slots=len(snapshot.inventory.slots))
-                    with engine._lock:
-                        if self._stop.is_set():
-                            return
-                        if probe.pending() or any(p["status"] == "running" for p in service.get_all()) or controller._active:
-                            self.deferred = True
-                            # Endpoint failover is independent of budget placement.
-                            self.http, self.grpc = snapshot.http, snapshot.grpc
-                            self.node_piles = snapshot.node_piles
-                            self.last_observation = time.monotonic()
-                            continue
-                        guard.reconfigure(replacement)
-                        inventory.__dict__ = snapshot.inventory.__dict__.copy()
-                        controller.specs = snapshot.specs
-                        self.publish(snapshot)
+                    engine.refresh_topology(self, snapshot, controller=controller, service=service)
                 except Exception as error:
+                    self.node_piles = {}
                     self.error = str(error)
                     logger.warning("Cluster discovery refresh failed: %s", error)
         self._thread = threading.Thread(target=refresh, name="cluster-discovery", daemon=True)

@@ -66,6 +66,11 @@ def get_all_processes():
     return jsonify(get_all_processes_helper())
 
 
+@blueprint.route("/api/executions/<execution>", methods=["GET"])
+def get_execution(execution):
+    return jsonify(execution_service.result(execution))
+
+
 @blueprint.route("/api/processes", methods=["POST"])
 def create_process():
     data = request.get_json()

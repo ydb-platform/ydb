@@ -17,7 +17,8 @@ from ydb.tests.stability.nemesis.routers import agent_router, orchestrator_route
 
 @pytest.fixture
 def delivery(monkeypatch):
-    manager = Mock(spec=["start_process", "get_all"], get_all=Mock(return_value=[]))
+    manager = Mock(spec=["start_process", "get_all", "get_result"], get_all=Mock(return_value=[]),
+                   start_process=Mock(return_value={"id": 0}), get_result=Mock(return_value={"status": "finished"}))
     service = AgentExecutionService(manager, {"KillNodeNemesis": {"runner": object()}})
     monkeypatch.setattr(agent_router, "execution_service", service)
     app = Flask(__name__)
@@ -39,6 +40,7 @@ def delivery(monkeypatch):
         return AgentCommandTransport(
             is_local_host=lambda host: local,
             start_local=service.start,
+            result_local=service.result,
             get_app_port=lambda: 31434,
             resolve_http_host=lambda host: "[::1]",
             post=post,
@@ -128,10 +130,8 @@ def test_shared_history_and_metrics_keep_existing_api(delivery, monkeypatch):
 
 
 def test_agent_api_and_local_service_share_execution(delivery):
-    assert delivery.client.post("/api/processes", json={"type": "KillNodeNemesis"}).get_json() == {
-        "status": "started",
-    }
-    assert delivery.service.start("KillNodeNemesis", "extract") == {"status": "started"}
+    assert delivery.client.post("/api/processes", json={"type": "KillNodeNemesis"}).get_json()["status"] == "started"
+    assert delivery.service.start("KillNodeNemesis", "extract")["status"] == "started"
     assert [c.args[2] for c in delivery.manager.start_process.call_args_list] == ["inject", "extract"]
     assert delivery.client.get("/api/processes").get_json() == []
     assert delivery.service.wait_for_processes(timeout=0) == 0
@@ -165,3 +165,11 @@ def test_existing_manual_api_uses_shared_dispatcher(delivery, monkeypatch, local
     assert body["executions"][0]["target"] == target.to_dict()
     assert delivery.manager.start_process.call_args.kwargs["payload"]["chaos_target"] == target.to_dict()
     assert sender.recent_history() == []
+
+
+@pytest.mark.parametrize("status", ["finished", "error", "running", "unknown"])
+def test_restore_requires_execution_success(delivery, status):
+    delivery.manager.get_result.return_value = {"status": status}
+    command = dispatch("KillNodeNemesis", "h1", "extract", {})
+    receipt = delivery.transport(True).send(command)
+    assert receipt() == status

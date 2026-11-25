@@ -22,6 +22,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import Dispatch
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget, TargetKind
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     DEFAULT_RECOVERY_SEC,
+    FailureModelGuard,
     Footprint,
     GuardMode,
 )
@@ -88,6 +89,10 @@ class FaultEngine:
         self._operations_lock = threading.Lock()
         self._operations = {}
 
+    @property
+    def can_restore(self):
+        return self._plan_extract is not None and self._recovery_probe is not None
+
     def _record_operation(self, operation_id, plan, *, tracked, restorable):
         piles = set(p for p, _ in plan.footprint.slots_by_pile)
         piles.update(int(d.split("/", 1)[0][5:]) for d in plan.footprint.racks if d.startswith("pile:"))
@@ -137,6 +142,31 @@ class FaultEngine:
                 raise FaultRejected("This operation recovers without an explicit restore")
         if self._recovery_probe is None or not self._recovery_probe.restore_operation(operation_id):
             raise FaultRejected("Operation is no longer pending restoration")
+
+    def refresh_topology(self, discovery, snapshot, *, controller, service):
+        with self._lock:
+            if self._stopping.is_set():
+                return
+            discovery.observe(snapshot)
+            discovery.deferred = (not discovery.matches(snapshot)
+                                  and not self.apply_topology(snapshot, controller=controller, service=service))
+            if not discovery.deferred:
+                discovery.publish(snapshot)
+
+    def apply_topology(self, snapshot, *, controller, service):
+        """Publish budgets and targets together, only after all old owners drain."""
+        with self._lock:
+            if self._stopping.is_set() or self._recovery_probe.pending():
+                return False
+            if any(row["status"] == "running" for row in service.get_all()):
+                return False
+            replacement = FailureModelGuard(snapshot.topology, inventory=snapshot.inventory,
+                                            total_slots=len(snapshot.inventory.slots))
+            if not controller.replace_specs(snapshot.specs):
+                return False
+            self._guard.reconfigure(replacement)
+            self._inventory.replace(snapshot.inventory)
+            return True
 
     def begin_shutdown(self):
         self._stopping.set()
@@ -259,8 +289,10 @@ class FaultEngine:
     def _send(self, cmd):
         if cmd.action == "inject" and self._stopping.is_set():
             raise FaultRejected("Nemesis is stopping")
-        if self._dispatch(cmd) is False:
+        result = self._dispatch(cmd)
+        if result is False:
             raise DispatchFailed(f"dispatch failed for {cmd.nemesis_type}")
+        return result
 
     def extract(self, nemesis_type, target):
         # The probe arbitrates automatic/manual restore; keep the lease until HC confirmation.
@@ -329,8 +361,22 @@ class FaultEngine:
                 raise FaultRejected("Planner produced no valid restore commands")
             commands.extend(replace(c, lease_id=lease) for c in restore)
 
+        receipts, completed = {}, set()
+
         def recover():
             with self._lock:
-                for cmd in commands:
-                    self._send(cmd)
+                for index, cmd in enumerate(commands):
+                    if index in completed:
+                        continue
+                    if index not in receipts:
+                        receipts[index] = self._send(cmd)
+                    receipt = receipts[index]
+                    # Synchronous adapters may return True/None; production returns a receipt.
+                    status = receipt() if callable(receipt) else "finished"
+                    if status == "finished":
+                        completed.add(index)
+                    elif status != "running":
+                        receipts.pop(index)
+                        raise DispatchFailed(f"Restore execution {cmd.execution_id}: {status}")
+                return len(completed) == len(commands)
         return recover

@@ -228,6 +228,10 @@ class NemesisManager:
                 with self.processes_lock:
                     self._injecting.discard(self._effect_key(type_name, payload))
 
+    def get_result(self, index):
+        with self.processes_lock:
+            return {"status": self.processes[index]["status"] if index < len(self.processes) else "unknown"}
+
     def get_all(self):
         with self.processes_lock:
             return [dict(row) for row in self.processes]

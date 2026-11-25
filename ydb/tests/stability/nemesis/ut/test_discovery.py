@@ -50,7 +50,7 @@ def test_failover_and_stale_discovery():
     config, nodes = responses()
     d._get = Mock(side_effect=[ValueError("offline"), Mock(json=lambda: config), Mock(json=lambda: nodes)])
     assert d.fetch([]).grpc == first.grpc
-    d.last_success -= 11
+    d.last_observation -= 11
     with pytest.raises(RecoveryUnavailable):
         d.check()
     assert d.grpc == first.grpc
@@ -94,3 +94,26 @@ def test_endpoint_healthcheck_preserves_host_identity(address):
     snapshot = build_snapshot({address: {"self_check_result": "GOOD"}},
                               now=1, last_update=1, max_age_sec=10)
     assert snapshot.fresh and snapshot.answering == {"localhost"}
+
+
+def test_reorder_shrink_and_fresh_observations():
+    d = ClusterDiscovery("http://localhost:12001")
+    c, v = responses(22)
+    c["NameserviceConfig"]["Node"] = c["NameserviceConfig"]["Node"][:2]
+    first = d._parse(c, v, [], d.http[0])
+    d.publish(first)
+    c["BridgeConfig"]["Piles"].reverse()
+    reordered = d._parse(c, v, [], d.http[0])
+    assert reordered.node_piles == first.node_piles
+    d.last_observation -= 100
+    from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.fault_engine import FaultEngine
+    engine = FaultEngine(guard=None, inventory=None, plan_inject=None, dispatch=None,
+                         recovery_probe=Mock(pending=Mock(return_value=[object()])))
+    engine.refresh_topology(d, reordered, controller=None, service=None)
+    d.check()
+    assert d.generation == 1
+    v["Nodes"], v["TotalNodes"] = v["Nodes"][:6], 6
+    d.publish(d._parse(c, v, [], d.http[0]))
+    assert len(d.missing) == 16
+    with pytest.raises(RecoveryUnavailable, match="missing"):
+        d.check()

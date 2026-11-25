@@ -217,3 +217,30 @@ def test_bridge_storage_missing_from_healthcheck_is_not_recovered(tmp_path):
     assert not recovered(snap)  # only the other pile reported healthy storage
     snap.storage_by_node[t.node_id] = {f"{t.node_id}-1": "GREEN"}
     assert recovered(snap)
+
+
+def test_async_restore_failure_retries_before_health_release(tmp_path):
+    e = setup_engine(tmp_path, toggle=True)
+    status = ["running"]
+    sends = []
+
+    def send(cmd):
+        sends.append(cmd.action)
+        return (lambda: status[0]) if cmd.action == "extract" else True
+
+    e.engine._dispatch = send
+    e.engine.inject("slot", slot_target(e.inventory, 0, 0))
+    operation = e.engine.operations()[0]["operation_id"]
+    e.engine.restore_operation(operation)
+    e.publish(e.membership)
+    e.probe.tick()
+    assert sends.count("extract") == 1 and e.probe.pending()
+    status[0] = "error"
+    e.probe.tick()
+    assert e.engine.operations()[0]["can_restore"]
+    status[0] = "finished"
+    e.engine.restore_operation(operation)
+    assert sends.count("extract") == 2 and e.probe.pending()
+    e.publish(e.membership)
+    e.probe.tick()
+    assert not e.probe.pending()

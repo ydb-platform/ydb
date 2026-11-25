@@ -96,7 +96,11 @@ def _scheduler(guard, inventory, dispatched, probe, rng, **overrides):
         rng=rng,
     )
     kwargs.update(overrides)
-    return BoundaryNemesisScheduler(**kwargs)
+    from inspect import signature
+    from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.fault_engine import FaultEngine
+    engine = FaultEngine(**{k: v for k, v in kwargs.items() if k in signature(FaultEngine).parameters})
+    return BoundaryNemesisScheduler(engine=engine, **{
+        k: v for k, v in kwargs.items() if k in signature(BoundaryNemesisScheduler).parameters})
 
 
 def _assert_within_budget(guard, where: str) -> None:

@@ -66,6 +66,12 @@ class ClusterInventory:
         else:
             self._load_from_harness()
 
+    def replace(self, snapshot):
+        self._topology = snapshot._topology
+        self._agent_hosts = list(snapshot._agent_hosts)
+        self.nodes, self.slots = dict(snapshot.nodes), dict(snapshot.slots)
+        self.degraded_reason = snapshot.degraded_reason
+
     # -- loading ------------------------------------------------------------
 
     def _load_from_harness(self) -> None:

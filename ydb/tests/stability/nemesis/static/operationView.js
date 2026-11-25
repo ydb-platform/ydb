@@ -14,7 +14,8 @@ export function recoveryLabel(operation) {
   if (!operation.tracked) return 'No recovery tracking'
   const recovery = operation.recovery
   if (!recovery) return operation.state === 'injecting' ? 'Sending' : 'Awaiting observation'
-  if (recovery.extracting) return 'Sending restore'
+  if (recovery.extracting) return 'Checking restore'
+  if (recovery.extract_status === 'running') return 'Restoring'
   if (recovery.stuck) return 'Stuck — budget held'
   if (recovery.dispatching) return 'Sending'
   if (recovery.phase === 'confirm') return recovery.extract_ok ? 'Confirming recovery' : 'Restore failed — retry pending'

@@ -117,7 +117,11 @@ def _make_scheduler(guard, inventory, dispatched, **overrides):
         recovery_probe=RecordingProbe(),
     )
     kwargs.update(overrides)
-    return BoundaryNemesisScheduler(**kwargs)
+    from inspect import signature
+    from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.fault_engine import FaultEngine
+    engine = FaultEngine(**{k: v for k, v in kwargs.items() if k in signature(FaultEngine).parameters})
+    return BoundaryNemesisScheduler(engine=engine, **{
+        k: v for k, v in kwargs.items() if k in signature(BoundaryNemesisScheduler).parameters})
 
 
 def _nodes() -> list[ChaosTarget]:

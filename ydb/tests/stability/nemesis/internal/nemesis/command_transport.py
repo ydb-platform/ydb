@@ -22,12 +22,16 @@ class AgentCommandTransport:
         get_app_port: Callable[[], int],
         resolve_http_host: Callable[[str], str],
         post: Callable = requests.post,
+        result_local: Callable | None = None,
+        get: Callable = requests.get,
     ) -> None:
         self._is_local_host = is_local_host
         self._start_local = start_local
         self._get_app_port = get_app_port
         self._resolve_http_host = resolve_http_host
         self._post = post
+        self._get = get
+        self._result_local = result_local
 
     def send(self, cmd: DispatchCommand) -> None:
         """Return on acceptance; raise on rejection/delivery failure. Never retry.
@@ -55,3 +59,19 @@ class AgentCommandTransport:
             result = response.json()
         if not isinstance(result, dict) or result.get("status") != "started":
             raise RuntimeError(f"Agent did not accept {cmd.nemesis_type} on {cmd.host}: {result!r}")
+
+        if cmd.action == "extract":
+            execution = result.get("execution")
+            if not execution:
+                raise RuntimeError("Agent did not provide an execution receipt")
+
+            def completion():
+                if self._is_local_host(cmd.host):
+                    return self._result_local(execution)["status"]
+                response = self._get(
+                    f"http://{self._resolve_http_host(cmd.host)}:{self._get_app_port()}/api/executions/{execution}",
+                    timeout=5,
+                )
+                response.raise_for_status()
+                return response.json()["status"]
+            return completion

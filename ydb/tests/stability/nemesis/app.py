@@ -229,6 +229,7 @@ def _initialize_app_body():
             AgentCommandTransport(
                 is_local_host=orchestrator_router.is_local_host,
                 start_local=execution_service.start,
+                result_local=execution_service.result,
                 get_app_port=orchestrator_router.get_app_port,
                 resolve_http_host=orchestrator_router.agent_http_host,
             ),
@@ -255,8 +256,7 @@ def _initialize_app_body():
         orchestrator_router.fault_engine = engine
         if discovery is not None:
             engine.check_topology = discovery.check
-            discovery.start(engine=engine, guard=failure_guard, inventory=inventory,
-                            controller=controller, service=execution_service, probe=probe,
+            discovery.start(engine=engine, controller=controller, service=execution_service,
                             interval=settings.topology_refresh_sec,
                             specs_source=lambda: load_process_specs(settings.local_process_config, discovery=True))
         # Boundary scheduler, started on demand via /api/scheduler/start.
@@ -265,9 +265,6 @@ def _initialize_app_body():
             enabled_types=list(definitions) if process_specs is not None else None,
             guard=failure_guard,
             inventory=inventory,
-            plan_inject=orchestrator_router.chaos_store.plan_inject_target,
-            plan_extract=orchestrator_router.chaos_store.plan_extract_target,
-            dispatch=lambda cmd: dispatcher.dispatch(cmd, track_history=True),
             recovery_probe=probe,
         )
 

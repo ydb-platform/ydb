@@ -2,6 +2,7 @@ import copy
 import json
 import logging
 import os
+import socket
 import tempfile
 import time
 import yatest.common
@@ -181,7 +182,6 @@ def get_ydb_config(request, enable_fq_connector=None):
         replication_config=replication_config,
         default_clusteradmin="root@builtin",
         use_in_memory_pdisks=False,
-        log_prefix="logfile_main_",
     )
 
     if enable_fq_connector:
@@ -778,7 +778,15 @@ class Kikimr:
 
     def wait_for_node_readiness(self, node_id: int, timeout: int = 60) -> None:
         node = self.cluster.slots[node_id]
-        if not wait_for(lambda: node.is_port_listening(node.port), timeout_seconds=timeout):
+
+        def is_port_ready():
+            try:
+                with socket.create_connection((node.host, node.port), timeout=1):
+                    return True
+            except OSError:
+                return False
+
+        if not wait_for(is_port_ready, timeout_seconds=timeout):
             raise TimeoutError(f"Node {node_id} did not open gRPC port {node.port} after {timeout}s")
         self.recreate_driver(node_id)
         self.wait_for_readiness(timeout)

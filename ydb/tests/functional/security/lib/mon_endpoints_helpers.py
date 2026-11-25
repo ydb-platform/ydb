@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 from concurrent.futures import ThreadPoolExecutor
+import json
 import threading
 from urllib.parse import urlencode
 
 import pytest
 import requests
+import yatest.common
 
 requests.packages.urllib3.disable_warnings()
 
@@ -136,3 +138,11 @@ MON_ENDPOINTS_AUTH_CASES = (
         id='require_healthcheck_authentication-with_schema_grants',
     ),
 )
+
+
+def canonize(name, results):
+    out_path = yatest.common.output_path(f'{name}.json')
+    with open(out_path, 'w', encoding='utf-8') as f:
+        json.dump(results, f, indent=2)
+        f.write('\n')
+    return yatest.common.canonical_file(out_path, local=True, universal_lines=True)

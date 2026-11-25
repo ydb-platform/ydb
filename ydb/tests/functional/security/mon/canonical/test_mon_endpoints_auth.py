@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
-import json
-
 import pytest
-import yatest.common
 
 from ydb.tests.functional.security.lib.mon_endpoints_helpers import (
     DATABASE,
     MON_ENDPOINTS_AUTH_CASES,
     TENANT_DATABASE,
+    canonize,
     collect_endpoints,
 )
 
@@ -93,7 +91,7 @@ ENDPOINT_SPECS = [
     {'path': '/login'},
     {'path': '/memory/statistics'},
     # Some /memory/* endpoints are intentionally omitted here because they are unavailable in ASan builds.
-    # They are covered separately in functional tests.
+    # They are covered separately in test_memory_endpoints_auth.py in non-sanitized builds.
     {'path': '/monitoring/'},
     {
         'path_factory': lambda cluster: f'/node/{cluster.nodes[1].node_id}/monitoring',
@@ -205,16 +203,8 @@ ENDPOINT_SPECS = [
 ]
 
 
-def _canonize(name, results):
-    out_path = yatest.common.output_path(f'{name}.json')
-    with open(out_path, 'w', encoding='utf-8') as f:
-        json.dump(results, f, indent=2)
-        f.write('\n')
-    return yatest.common.canonical_file(out_path, local=True, universal_lines=True)
-
-
 def _run_mon_endpoints_auth_test(canon_case_id, cluster):
-    return _canonize(
+    return canonize(
         f'mon_endpoints_auth-{canon_case_id}',
         collect_endpoints(cluster, ENDPOINT_SPECS),
     )

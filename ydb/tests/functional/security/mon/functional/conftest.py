@@ -22,7 +22,6 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 pytest_plugins = [
     'ydb.tests.library.fixtures',
     'ydb.tests.library.flavours',
-    'ydb.tests.functional.security.lib.mon_endpoints_fixtures',
 ]
 
 

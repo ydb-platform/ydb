@@ -2311,6 +2311,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
+        appConfig.MutableFeatureFlags()->SetDisableOldSecrets(false);
         appConfig.MutableFeatureFlags()->SetEnableExternalSourceSchemaInference(true);
         auto kikimr = NTestUtils::MakeKikimrRunner(appConfig);
 

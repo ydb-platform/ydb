@@ -198,6 +198,7 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         }
 
         featureFlags.SetDisableOldSecretCreation(false);
+        featureFlags.SetDisableOldSecrets(false);
         featureFlags.SetEnableStreamingQueries(true);
         featureFlags.SetEnableSchemaSecrets(true);
 

@@ -398,6 +398,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
     Y_UNIT_TEST_QUAD(TestLoadServiceAccountSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets, UseAuthToken) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
+        appCfg.MutableFeatureFlags()->SetDisableOldSecrets(false);
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
@@ -448,6 +449,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
     Y_UNIT_TEST_TWIN(TestLoadBasicSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
+        appCfg.MutableFeatureFlags()->SetDisableOldSecrets(false);
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
         TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
@@ -487,6 +489,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
     Y_UNIT_TEST_TWIN(TestLoadMdbBasicSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
+        appCfg.MutableFeatureFlags()->SetDisableOldSecrets(false);
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
         TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
@@ -532,6 +535,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
      Y_UNIT_TEST_TWIN(TestLoadAwsSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
+        appCfg.MutableFeatureFlags()->SetDisableOldSecrets(false);
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
@@ -577,6 +581,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
     Y_UNIT_TEST_TWIN(TestLoadDataSourceProperties, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
+        appCfg.MutableFeatureFlags()->SetDisableOldSecrets(false);
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
         TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
@@ -632,6 +637,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
     Y_UNIT_TEST_TWIN(TestLoadTokenSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
+        appCfg.MutableFeatureFlags()->SetDisableOldSecrets(false);
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("YT");
         TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
@@ -669,6 +675,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
     Y_UNIT_TEST_TWIN(TestSecretsExistingValidation, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
+        appCfg.MutableFeatureFlags()->SetDisableOldSecrets(false);
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);

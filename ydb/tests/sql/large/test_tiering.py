@@ -12,7 +12,7 @@ class TestYdbS3TTL(TestBase, S3Base):
 
     @classmethod
     def get_disabled_feature_flags(cls):
-        return super().get_disabled_feature_flags() + ["disable_old_secret_creation"]
+        return super().get_disabled_feature_flags() + ["disable_old_secret_creation", "disable_old_secrets"]
 
     def test_basic_tiering_operations(self):
         """

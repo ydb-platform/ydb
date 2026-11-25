@@ -7,8 +7,6 @@ SPLIT_FACTOR(23)
 
 SIZE(LARGE)
 
-TAG(ya:fat)
-
 REQUIREMENTS(cpu:4 ram:8)
 
 PEERDIR(

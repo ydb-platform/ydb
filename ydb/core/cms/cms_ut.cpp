@@ -673,6 +673,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         NKikimrCms::TDDiskDiskListRequest disksRequest;
         disksRequest.SetTabletId(tabletId);
         disksRequest.SetOnlyProblems(true);
+        disksRequest.SetIncludeComponentProblems(true);
         disksRequest.SetLimit(0);
         const auto disks = env.RequestDDiskDiskList(disksRequest);
         UNIT_ASSERT_VALUES_EQUAL(disks.GetTotalCount(), 2);
@@ -684,6 +685,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT(disks.GetDisks(0).GetPersistentBufferStatus() == TDDiskStateInfo::Broken);
         UNIT_ASSERT_VALUES_EQUAL(disks.GetDisks(0).GetPersistentBufferStatusReason(), "buffer failure");
         UNIT_ASSERT_VALUES_EQUAL(disks.GetDisks(1).GetDiskId().GetDDiskSlotId(), 102);
+        const TString problemsUri = "/api/json/ddisk/disks?only_problems=1";
+        auto problemCount = [&](const TString& uri) {
+            const auto json = ParseHttpOkJson(SendDDiskHttpRequest(env, uri));
+            UNIT_ASSERT_VALUES_EQUAL(json["Status"]["Code"].GetString(), "OK");
+            return json["TotalCount"].GetUInteger();
+        };
+        UNIT_ASSERT_VALUES_EQUAL(problemCount(problemsUri), 0);
+        UNIT_ASSERT_VALUES_EQUAL(problemCount(problemsUri + "&include_component_problems=1"), 2);
         {
             TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
             TFakeNodeWhiteboardService::Info.at(pdisk.NodeId).DDiskStateInfo.clear();
@@ -698,6 +707,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             UNIT_ASSERT(!slot.HasPersistentBufferStatus());
             UNIT_ASSERT_VALUES_EQUAL(slot.GetPDiskState(), "Normal");
         }
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            TFakeNodeWhiteboardService::Info.at(pdisk.NodeId).PDiskStateInfo.at(pdisk.DiskId).SetState(TPDiskState::DeviceIoError);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(problemCount(problemsUri), 3);
+        UNIT_ASSERT_VALUES_EQUAL(problemCount(problemsUri + "&include_component_problems=1"), 3);
     }
 
     Y_UNIT_TEST(DDiskTabletListDegrade)

@@ -156,6 +156,9 @@ const Nbs2Tablets = {
             sort_by: sortBy,
         });
 
+        if (params.only_problems === '1') {
+            params.include_component_problems = '1';
+        }
         $.getJSON('cms/api/json/ddisk/disks', params)
             .done((data) => {
                 if (token !== this.requestToken) return;
@@ -181,7 +184,8 @@ const Nbs2Tablets = {
         const pdiskState = this.field(disk, 'PDiskState', 'pDiskState', 'pdiskState', 'State', 'state');
         const component = (status, reason) => ({
             unavailable: available === false || (status !== undefined && status !== 'Ready' && status !== 1),
-            state: (status || pdiskState || 'Unknown') + (reason ? ': ' + reason : ''),
+            pdiskState,
+            status: status === undefined ? undefined : status + (reason ? ': ' + reason : ''),
         });
         return {
             DDisk: component(this.field(disk, 'DDiskStatus', 'dDiskStatus', 'ddiskStatus'),
@@ -212,12 +216,20 @@ const Nbs2Tablets = {
     },
 
     loadSnapshot: function(tabletId, row) {
+        const token = this.requestToken;
+        if (this.snapshots[tabletId] === null) return;
+        this.snapshots[tabletId] = null; // A request for this tablet is pending on the current page.
         const loading = $('<tr id="nbs2-tablet-loading-' + tabletId + '"><td colspan="5">Loading snapshot...</td></tr>').insertAfter(row);
-        const showError = (message) => loading.children('td').addClass('text-danger').text('Failed to load snapshot: ' + message);
+        const showError = (message) => {
+            if (token !== this.requestToken) return;
+            delete this.snapshots[tabletId];
+            loading.children('td').addClass('text-danger').text('Failed to load snapshot: ' + message);
+        };
         $.getJSON('cms/api/json/ddisk/tablet', {
             tablet_id: String(tabletId),
             include_health: 1,
         }).done((snapshot) => {
+            if (token !== this.requestToken) return;
             try {
                 this.checkStatus(snapshot);
             } catch (error) {
@@ -244,7 +256,8 @@ const Nbs2Tablets = {
         const pdiskId = this.field(id, 'PDiskId', 'pdiskId') || 0;
         const slotId = this.field(id, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId') || 0;
         const label = nodeId + ':' + pdiskId + ':' + slotId;
-        const hint = 'Node: ' + (nodeId || '-') + '\nState: ' + (component?.state || 'Unknown');
+        const hint = 'Node: ' + (nodeId || '-') + '\nPDisk State: ' + (component?.pdiskState || 'Unknown') +
+            '\n' + role + ': ' + (component?.status || 'Unknown');
         const url = role === 'PersistentBuffer'
             ? this.persistentBufferUrl(nodeId, pdiskId, slotId)
             : this.ddiskUrl(nodeId, pdiskId, slotId);
@@ -343,8 +356,8 @@ const Nbs2Tablets = {
             const linkRole = ddiskTabletIds.length && (failedDDisk || !failedBuffer) ? 'DDisk' : 'PersistentBuffer';
             const key = this.ddiskKey(diskIdObj);
             const problems = [];
-            if (failedDDisk) problems.push('DDisk: ' + health.DDisk.state);
-            if (failedBuffer) problems.push('Persistent Buffer: ' + health.PersistentBuffer.state);
+            if (failedDDisk) problems.push('DDisk: ' + (health.DDisk.status || health.DDisk.pdiskState || 'Unknown'));
+            if (failedBuffer) problems.push('Persistent Buffer: ' + (health.PersistentBuffer.status || health.PersistentBuffer.pdiskState || 'Unknown'));
             const status = problems.join('; ') || this.field(disk, 'State', 'state') || 'Unknown';
             const detailsId = key.replace(/:/g, '-');
             const roles = [];

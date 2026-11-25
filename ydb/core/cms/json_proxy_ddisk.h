@@ -176,6 +176,7 @@ public:
                     event->Record.SetTabletId(tabletId);
                 }
                 event->Record.SetInventory(IsTrue(params.Get("inventory")));
+                event->Record.SetIncludeComponentProblems(IsTrue(params.Get("include_component_problems")));
                 event->Record.SetGroupsOnly(IsTrue(params.Get("groups_only")));
                 if (params.Get("group_by") == "state") {
                     event->Record.SetGroupBy(NKikimrCms::DDISK_DISK_GROUP_BY_STATE);

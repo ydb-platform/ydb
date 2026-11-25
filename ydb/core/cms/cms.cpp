@@ -2546,6 +2546,7 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
     const bool sortDescending = request.GetSortDescending();
     const bool onlyProblems = request.GetOnlyProblems();
     const bool inventory = request.GetInventory();
+    const bool includeComponentProblems = inventory || request.GetIncludeComponentProblems();
     const bool groupsOnly = request.GetGroupsOnly();
     const bool includeTabletIds = request.GetIncludeTabletIds() && !groupsOnly;
     const bool groupByState = request.GetGroupBy() == NKikimrCms::DDISK_DISK_GROUP_BY_STATE;
@@ -2674,7 +2675,7 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
         };
         const bool unavailableRole = ((inventory || usage.DDisk.Count) && knownUnavailable(usage.DDiskStatus))
             || ((inventory || usage.PersistentBuffer.Count) && knownUnavailable(usage.PersistentBufferStatus));
-        if (onlyProblems && usage.Available && !unavailableRole) {
+        if (onlyProblems && usage.Available && !(includeComponentProblems && unavailableRole)) {
             continue;
         }
         usage.State = pdisk.GetName();

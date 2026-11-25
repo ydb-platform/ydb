@@ -2082,6 +2082,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(config.PartitionKeySchemaSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(config.GetPartitionStrategy().GetPartitionStrategyType()),
             static_cast<int>(NKikimrPQ::TPQTabletConfig::CAN_SPLIT));
+        UNIT_ASSERT(config.GetSplitByPartitionKey());
     }
 
     Y_UNIT_TEST(ShouldPassDataShardKeyRangesInBootstrapWhenKeyRangeHeartbeats) {
@@ -2285,7 +2286,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(topic.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 2);
     }
 
-    Y_UNIT_TEST(ShouldRejectRootPartitionBoundsWhenTopicHasKeySchema) {
+    Y_UNIT_TEST(ShouldRejectRootPartitionBoundsWhenTopicSplitsByPartitionKey) {
         // given
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
@@ -2304,7 +2305,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(topic.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 1);
     }
 
-    Y_UNIT_TEST(ShouldRejectMinPartitionCountIncreaseWhenTopicHasKeySchema) {
+    Y_UNIT_TEST(ShouldRejectMinPartitionCountIncreaseWhenTopicSplitsByPartitionKey) {
         // given
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
@@ -2329,7 +2330,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(topic.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 1);
     }
 
-    Y_UNIT_TEST(ShouldRejectRootLevelSiblingWhenTopicHasKeySchema) {
+    Y_UNIT_TEST(ShouldRejectRootLevelSiblingWhenTopicSplitsByPartitionKey) {
         // given
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
@@ -2351,7 +2352,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(topic.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 1);
     }
 
-    Y_UNIT_TEST(ShouldRejectStrategyChangeWhenTopicHasKeySchema) {
+    Y_UNIT_TEST(ShouldRejectStrategyChangeWhenTopicSplitsByPartitionKey) {
         // given
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
@@ -2379,31 +2380,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             .GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy();
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(after.GetPartitionStrategyType()),
             static_cast<int>(before.GetPartitionStrategyType()));
-    }
-
-    Y_UNIT_TEST(ShouldRejectEnablingAutopartitioningWhenTopicHasKeySchema) {
-        // given
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
-        ui64 txId = 100;
-        CreateReplicationStream(runtime, env, txId, 2, GlobalReplicationStream(false, false));
-
-        // when
-        AlterStreamTopic(runtime, txId, [](auto& alter) {
-            auto& config = *alter.MutablePQTabletConfig();
-            config.MutablePartitionConfig();
-            auto& strategy = *config.MutablePartitionStrategy();
-            strategy.SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
-            strategy.SetMinPartitionCount(2);
-            strategy.SetMaxPartitionCount(100);
-        }, {{NKikimrScheme::StatusInvalidParameter, "Changing the autopartitioning strategy is not supported"}});
-
-        // then
-        const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
-        const auto& config = topic.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
-        UNIT_ASSERT_VALUES_EQUAL(config.PartitionKeySchemaSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(config.GetPartitionStrategy().GetPartitionStrategyType()),
-            static_cast<int>(NKikimrPQ::TPQTabletConfig::DISABLED));
     }
 
     Y_UNIT_TEST(ShouldKeepKeyRangeHeartbeatsWhenSchemeShardReboots) {
@@ -2441,6 +2417,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
             NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect),
         });
+        const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        UNIT_ASSERT(!topic.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().HasSplitByPartitionKey());
     }
 
     Y_UNIT_TEST(ShouldUseDirectHeartbeatsWhenReplicationDoesNotSupportKeyRange) {

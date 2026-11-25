@@ -16,7 +16,6 @@
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/path.h>
 #include <ydb/core/sys_view/common/resolver.h>
@@ -1062,53 +1061,6 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return std::make_shared<TPartitioning>(std::move(partitions), version);
         }
 
-        static TVector<NScheme::TTypeInfo> MakeTopicKeyTypes(const NKikimrPQ::TPQTabletConfig& pqConfig) {
-            TVector<NScheme::TTypeInfo> keyTypes;
-            for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
-                keyTypes.push_back(NScheme::TypeInfoModFromProtoColumnType(keySchema.GetTypeId(),
-                    keySchema.HasTypeInfo() ? &keySchema.GetTypeInfo() : nullptr).TypeInfo);
-            }
-            return keyTypes;
-        }
-
-        static bool IsFullTypedKey(const TString& bound, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
-            TSerializedCellVec cells;
-            if (!TSerializedCellVec::TryParse(bound, cells) || cells.GetCells().size() != keyTypes.size()) {
-                return false;
-            }
-            for (size_t i = 0; i < keyTypes.size(); ++i) {
-                if (NScheme::HasUnexpectedValueSize(cells.GetCells()[i], keyTypes[i])) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        static bool IsPartitionedByTableKey(const NKikimrSchemeOp::TPersQueueGroupDescription& pqDesc) {
-            const auto keyTypes = MakeTopicKeyTypes(pqDesc.GetPQTabletConfig());
-            if (keyTypes.empty()) {
-                return false;
-            }
-
-            size_t unboundedPartitions = 0;
-            for (const auto& partition : pqDesc.GetPartitions()) {
-                if (NKikimrPQ::ETopicPartitionStatus::Active != partition.GetStatus()) {
-                    continue;
-                }
-                const auto& keyRange = partition.GetKeyRange();
-                // A partition bounded by hashes or key prefixes is not partitioned by the table key
-                if (keyRange.HasFromBound() && !IsFullTypedKey(keyRange.GetFromBound(), keyTypes)) {
-                    return false;
-                }
-                if (keyRange.HasToBound() && !IsFullTypedKey(keyRange.GetToBound(), keyTypes)) {
-                    return false;
-                }
-                unboundedPartitions += !keyRange.HasToBound();
-            }
-            // Only the last active partition has no upper bound
-            return unboundedPartitions <= 1;
-        }
-
         static void FillTopicPartitioning(
                 const NKikimrSchemeOp::TPersQueueGroupDescription& pqDesc,
                 TVector<NScheme::TTypeInfo>& schema,
@@ -1116,8 +1068,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         {
             const auto& pqConfig = pqDesc.GetPQTabletConfig();
 
-            // Describe a topic split by hash with hash ranges, a topic partitioned by the table key with key ranges
-            if (NPQ::SplitMergeEnabled(pqConfig) && !IsPartitionedByTableKey(pqDesc)) {
+            // Fill only partition ids for a topic split by hash
+            if (NPQ::SplitMergeEnabled(pqConfig) && !pqConfig.GetSplitByPartitionKey()) {
                 partitioning.reserve(pqDesc.GetPartitions().size());
                 for (const auto& partition : pqDesc.GetPartitions()) {
                     if (NKikimrPQ::ETopicPartitionStatus::Active == partition.GetStatus()) {
@@ -1141,6 +1093,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             partitioning.reserve(pqDesc.PartitionsSize());
             for (const auto& partition : pqDesc.GetPartitions()) {
+                // Skip a partition closed by a split
                 if (NKikimrPQ::ETopicPartitionStatus::Active != partition.GetStatus()) {
                     continue;
                 }

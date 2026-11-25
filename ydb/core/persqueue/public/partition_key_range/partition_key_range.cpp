@@ -2,7 +2,6 @@
 
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_borders.h>
-#include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/lib/sharding/sharding.h>
@@ -178,31 +177,6 @@ TVector<NScheme::TTypeInfo> MakePartitionKeyTypes(const NKikimrPQ::TPQTabletConf
         keyTypes.push_back(typeInfoMod.TypeInfo);
     }
     return keyTypes;
-}
-
-std::optional<TPartitionKeyRange> ParseTypedKeyRange(const NKikimrPQ::TPartitionKeyRange& proto, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
-    auto parseBound = [&](const TString& data, TMaybe<TSerializedCellVec>& bound) {
-        TSerializedCellVec cells;
-        if (!TSerializedCellVec::TryParse(data, cells) || cells.GetCells().size() > keyTypes.size()) {
-            return false;
-        }
-        for (size_t i = 0; i < cells.GetCells().size(); ++i) {
-            if (NScheme::HasUnexpectedValueSize(cells.GetCells()[i], keyTypes[i])) {
-                return false;
-            }
-        }
-        bound.ConstructInPlace(std::move(cells));
-        return true;
-    };
-
-    TPartitionKeyRange result;
-    if (proto.HasFromBound() && !parseBound(proto.GetFromBound(), result.FromBound)) {
-        return std::nullopt;
-    }
-    if (proto.HasToBound() && !parseBound(proto.GetToBound(), result.ToBound)) {
-        return std::nullopt;
-    }
-    return result;
 }
 
 } // namespace NKikimr::NPQ

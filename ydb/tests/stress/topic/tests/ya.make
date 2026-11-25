@@ -9,7 +9,6 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
-TAG(ya:fat)
 
 REQUIREMENTS(ram:32 cpu:4)
 

@@ -310,4 +310,5 @@ enum ETxTypes {
     TXTYPE_BRIDGE_ROLLBACK = 43 [(TxTypeOpts) = {Name: "TTxBridgeRollback"}];
     TXTYPE_UPDATE_PILE_OVERRIDES = 44 [(TxTypeOpts) = {Name: "TTxUpdatePileOverrides"}];
     TXTYPE_UPDATE_DATABASE_SPACE = 45 [(TxTypeOpts) = {Name: "TTxUpdateDatabaseSpace"}];
+    TXTYPE_SCHEDULE_RETIRED_S3_SWEEP = 46 [(TxTypeOpts) = {Name: "TTxScheduleRetiredS3Sweep"}];
 }

@@ -28,6 +28,7 @@ PEERDIR(
 
 DATA(
     arcadia/devtools/frontend_build_platform/nots/tier0-settings/src/settings.yaml
+    arcadia/devtools/frontend_build_platform/nots/tier0-settings/src/pnpmfile.mjs
     arcadia/build/rules/go/extended_lint.yaml
     arcadia/build/rules/go/migrations.yaml
     arcadia/build/rules/go/risky_imports.yaml

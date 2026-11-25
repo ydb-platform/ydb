@@ -10,15 +10,14 @@ namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TS3Manager {
         TBlobDepot* const Self;
-        // WrapperId is always the per-node router service id managed by NodeWarden
-        // (acquired via TEvNodeWardenAcquireBlobDepotS3Router on Init, released on
-        // TerminateAllActors). All S3 traffic is forwarded through the router.
+        // Set by NodeWarden after it has bound this tablet generation to a concrete router.
         TActorId WrapperId;
-        TActorId UploaderId;
+        ui32 RouterGeneration = 0;
         TString BasePath;
         TString Bucket;
+        std::shared_ptr<const TString> DeleteRoute;
 
-        bool Enabled = false;
+        bool GarbageCollectionEnabled = false;
         bool SyncMode = false;
         bool AsyncMode = false;
 
@@ -110,7 +109,7 @@ namespace NKikimr::NBlobDepot {
         ui64 TotalS3TrashObjects = 0;
         ui64 TotalS3TrashSize = 0;
 
-        // Throttling state for S3 SlowDown responses on delete requests.
+        // Retry delay for failed deletes. SlowDown also decreases concurrency.
         TBackoff DeleteBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
         TMonotonic DeleteThrottleUntil;
         bool DeleteWakeupScheduled = false;

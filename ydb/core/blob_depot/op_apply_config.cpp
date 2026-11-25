@@ -14,6 +14,7 @@ namespace NKikimr::NBlobDepot {
         class TTxApplyConfig : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             std::unique_ptr<IEventHandle> Response;
             TString ConfigProtobuf;
+            bool Changed = false;
 
         public:
             TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_APPLY_CONFIG; }
@@ -42,12 +43,12 @@ namespace NKikimr::NBlobDepot {
                     return false;
                 }
 
-                db.Table<Schema::Config>().Key(Schema::Config::Key::Value).Update(
-                    NIceDb::TUpdate<Schema::Config::ConfigProtobuf>(ConfigProtobuf)
-                );
-
-                const bool success = Self->Config.ParseFromString(ConfigProtobuf);
-                Y_ABORT_UNLESS(success);
+                Changed = !table.IsValid() || !table.HaveValue<Schema::Config::ConfigProtobuf>() ||
+                    table.GetValue<Schema::Config::ConfigProtobuf>() != ConfigProtobuf;
+                if (Changed) {
+                    db.Table<Schema::Config>().Key(Schema::Config::Key::Value).Update(
+                        NIceDb::TUpdate<Schema::Config::ConfigProtobuf>(ConfigProtobuf));
+                }
 
                 return true;
             }
@@ -57,14 +58,17 @@ namespace NKikimr::NBlobDepot {
                     {"marker", "BDT17"},
                     {"id", Self->GetLogId()});
 
-                if (!std::exchange(Self->Configured, true)) {
+                const bool wasConfigured = std::exchange(Self->Configured, true);
+                if (!wasConfigured) {
+                    const bool success = Self->Config.ParseFromString(ConfigProtobuf);
+                    Y_ABORT_UNLESS(success);
                     Self->StartOperation();
-                } else {
-                    // TODO(alexvru): handle it in a better way, without tablet restart
+                }
+                TActivationContext::Send(Response.release());
+                if (wasConfigured && Changed) {
+                    Self->RestartingForConfigChange = true;
                     Self->Send(Self->Tablet(), new TEvents::TEvPoison);
                 }
-
-                TActivationContext::Send(Response.release());
             }
         };
 

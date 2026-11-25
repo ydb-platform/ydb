@@ -1568,6 +1568,98 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    // As in the old optimizer, a top-N sort over a row table read without ranges reads the table through an index
+    // whose key order matches the sort and that covers the read, so the read stops at the limit.
+    Y_UNIT_TEST(TopSortSelectsIndex) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // Several shards, so that the merge of the read tasks decides the order of the result.
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64,
+                s String,
+                PRIMARY KEY (a, b)
+            ) WITH (PARTITION_AT_KEYS = (1, 2));
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [a, b, c, s] : std::vector<std::tuple<i64, i64, std::optional<i64>, std::string>>{
+                {0, 9, 5, "e"}, {1, 1, std::nullopt, "d"}, {1, 2, 3, "c"}, {2, 1, 1, "b"}, {2, 2, 4, "a"}}) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("a").Int64(a)
+                .AddMember("b").Int64(b)
+                .AddMember("c").OptionalInt64(c)
+                .AddMember("s").OptionalString(s)
+            .EndStruct();
+        }
+        rows.EndList();
+        const auto rowsResult = db.BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(rowsResult.IsSuccess(), rowsResult.GetIssues().ToString());
+
+        // The indexes are built over the loaded rows.
+        for (const auto* index : {"ALTER TABLE `/Root/t` ADD INDEX idx_c GLOBAL ON (c)",
+                                  "ALTER TABLE `/Root/t` ADD INDEX idx_s GLOBAL ON (s) COVER (c)"}) {
+            schemeResult = session.ExecuteSchemeQuery(index).GetValueSync();
+            UNIT_ASSERT_C(schemeResult.IsSuccess(), index << ": " << schemeResult.GetIssues().ToString());
+        }
+
+        struct TCase {
+            TString Query;
+            TString Expected;
+            // The table the query reads, a path relative to /Root.
+            TString Table;
+            // Whether the read returns the rows in the order of the sort and takes its limit, so the plan has no sort.
+            bool SortedRead;
+            bool Reverse = false;
+        };
+
+        const std::vector<TCase> cases = {
+            // NULLs come first in the key order of the index, as in an ascending sort.
+            {"select a, b, c from `/Root/t` order by c limit 2", "[[1;1;#];[2;1;[1]]]", "t/idx_c/indexImplTable", true},
+            {"select a, b, c from `/Root/t` order by c desc limit 2", "[[0;9;[5]];[2;2;[4]]]", "t/idx_c/indexImplTable", true, true},
+            // The sort keys may continue with the key of the main table, which ends the key of the index.
+            {"select c, a from `/Root/t` order by c, a limit 3", "[[#;1];[[1];2];[[3];1]]", "t/idx_c/indexImplTable", true},
+            // A map can rename the sort keys.
+            {"select a as x, c as y from `/Root/t` order by y limit 2", "[[1;#];[2;[1]]]", "t/idx_c/indexImplTable", true},
+            // An index covers its own columns, those of the main table key and those it stores.
+            {"select a, b, c from `/Root/t` order by s limit 2", "[[2;2;[4]];[2;1;[1]]]", "t/idx_s/indexImplTable", true},
+            // The main table is read in the order of its key without an index.
+            {"select a, b, c from `/Root/t` order by a, b limit 2", "[[0;9;[5]];[1;1;#]]", "t", true},
+            // An index that does not cover the read is not chosen, it needs a lookup into the main table.
+            {"select a, b, s from `/Root/t` order by c limit 2", "[[1;1;[\"d\"]];[2;1;[\"b\"]]]", "t", false},
+        };
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = "PRAGMA YqlSelect = 'force'; " + testCase.Query + ";";
+            auto explain = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString ast{*explain.GetStats()->GetAst()};
+            UNIT_ASSERT_C(ast.Contains("(KqpTable '\"/Root/" + testCase.Table + "\""), query << ": expected a read of " << testCase.Table << ", ast: " << ast);
+            if (testCase.Table == "t") {
+                UNIT_ASSERT_C(!ast.Contains("indexImplTable"), query << ": expected no index read, ast: " << ast);
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("'\"Sorted\""), testCase.SortedRead, query << ", ast: " << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("TopSort"), !testCase.SortedRead, query << ", ast: " << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("'\"ItemsLimit\""), testCase.SortedRead, query << ", ast: " << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("'\"Reverse\""), testCase.Reverse, query << ", ast: " << ast);
+
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYson(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(ExistsDropsSubquerySort) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

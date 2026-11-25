@@ -10,6 +10,7 @@ class TTxSyncTablets : public TTransactionBase<THive> {
     TActorId Local;
     NKikimrLocal::TEvSyncTablets SyncTablets;
     TSideEffects SideEffects;
+    bool DrainPending = false;
 
 public:
     TTxSyncTablets(const TActorId &local, NKikimrLocal::TEvSyncTablets& rec, THive* hive)
@@ -39,11 +40,36 @@ public:
         return false;
     }
 
+    bool IsMovedOutByPileDrain(const TNodeInfo& node, const TTabletInfo& tablet) const {
+        if (!Self->BridgeInfo || tablet.GetNodeFilter().IsAllowedPile(node.BridgePileId)) {
+            return false;
+        }
+        const auto* pile = Self->FindPile(node.BridgePileId);
+        if (!pile || !NBridge::PileStateTraits(pile->State).AllowsConnection) {
+            return false; // the pile is disconnected, its tablets are restarted elsewhere anyway
+        }
+        return node.MatchesFilter(tablet.GetNodeFilter(), nullptr, /* checkPile */ false);
+    }
+
+    void MarkPileForDrain(NIceDb::TNiceDb& db, TBridgePileId pileId) {
+        DrainPending = true;
+        auto& pile = Self->GetPile(pileId);
+        if (pile.Drain) {
+            return;
+        }
+        YDB_LOG_NOTICE("THive::TTxSyncTablets::Execute pile has tablets its placement does not allow, draining",
+            {"logPrefix", GetLogPrefix()},
+            {"pileId", pileId});
+        pile.Drain = true;
+        db.Table<Schema::BridgePile>().Key(pile.GetId()).Update<Schema::BridgePile::Drain>(true);
+    }
+
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG("THive::TTxSyncTablets::Execute synchronizing tablets with node",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", Local.NodeId()});
         SideEffects.Reset(Self->SelfId());
+        DrainPending = false;
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo& node = Self->GetNode(Local.NodeId());
         THashSet<std::pair<TTabletId, TFollowerId>> tabletsToRestart;
@@ -65,6 +91,17 @@ public:
                     {"state", state},
                     {"tabletId", tabletId});
                 tabletsToRestart.erase(tabletId);
+            } else if (IsMovedOutByPileDrain(node, *tablet)) {
+                // the tablet is only in a pile it is not allowed in anymore (e.g. after a switchover):
+                // keep it running, the pile drain moves it out gradually instead of restarting everything at once
+                YDB_LOG_TRACE("THive::TTxSyncTablets::Execute confirmed tablet left for the pile drain",
+                    {"logPrefix", GetLogPrefix()},
+                    {"nodeId", Local.NodeId()},
+                    {"pileId", node.BridgePileId},
+                    {"state", state},
+                    {"tabletId", tabletId});
+                tabletsToRestart.erase(tabletId);
+                MarkPileForDrain(db, node.BridgePileId);
             } else {
                 YDB_LOG_TRACE("THive::TTxSyncTablets::Execute confirmed tablet not allowed on this node",
                     {"logPrefix", GetLogPrefix()},
@@ -196,6 +233,9 @@ public:
             {"logPrefix", GetLogPrefix()},
             {"nodeId", Local.NodeId()});
         SideEffects.Complete(ctx, Self->Requests);
+        if (DrainPending) {
+            Self->ProcessPileDrains();
+        }
     }
 };
 

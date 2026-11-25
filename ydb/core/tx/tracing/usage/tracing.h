@@ -58,7 +58,7 @@ public:
         if (!First || *First > start) {
             First = start;
         }
-        AFL_VERIFY(!ActualStart);
+        YDB_LOG_VERIFY(!ActualStart);
         ActualStart = start;
     }
 
@@ -66,7 +66,7 @@ public:
         if (!Last || *Last < value) {
             Last = value;
         }
-        AFL_VERIFY(ActualStart);
+        YDB_LOG_VERIFY(ActualStart);
         Duration += value - *ActualStart;
         ++Count;
         ActualStart.reset();
@@ -90,7 +90,7 @@ private:
     NJson::TJsonValue ToJsonImpl(THashSet<TString>& readyIds) const;
 public:
     void SetType(const TString& value) {
-        AFL_VERIFY(!Type || Type == value);
+        YDB_LOG_VERIFY(!Type || Type == value);
         Type = value;
     }
 
@@ -115,7 +115,7 @@ public:
     }
 
     void RegisterChildren(const std::shared_ptr<TTraceClient>& client) {
-        AFL_VERIFY(client->GetParentId() == ClientId);
+        YDB_LOG_VERIFY(client->GetParentId() == ClientId);
         auto it = Children.find(client->GetClientId());
         if (it == Children.end()) {
             Children.emplace(client->GetClientId(), client);
@@ -124,7 +124,7 @@ public:
 
     const std::shared_ptr<TTraceClient>& GetChildrenVerified(const TString& id) const {
         auto it = Children.find(id);
-        AFL_VERIFY(it != Children.end());
+        YDB_LOG_VERIFY(it != Children.end());
         return it->second;
     }
 
@@ -137,7 +137,7 @@ public:
         TDurationGuard(TTraceClient& owner, const TString& id, const bool isNotFake);
         TDurationGuard(const TString& id);
         TStatInfo& GetStatInfo() {
-            AFL_VERIFY(Stat);
+            YDB_LOG_VERIFY(Stat);
             return *Stat;
         }
         ~TDurationGuard();

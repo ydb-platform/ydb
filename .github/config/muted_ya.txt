@@ -2,9 +2,13 @@ ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiB
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
+ydb/core/kqp/ut/rbo/statistics/join_order KqpJoinOrderAnalyzedStatistics.TPCDS+ColumnStore
+ydb/core/kqp/ut/rbo/statistics/join_order KqpJoinOrderAnalyzedStatistics.TPCDS-ColumnStore
 ydb/core/persqueue/ut TPartitionTests.ReadLagClampsWhenFirstUnreadWrittenAfterLastRead
 ydb/core/persqueue/ut TPartitionTests.ReadLagEstimateUsesFirstUnreadMessage
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
+ydb/tests/compatibility/common test_checksum_table.py.TestChecksumTable.test_checksum_survives_upgrade[restart_stable-26-3-1_to_stable-26-4-1]
+ydb/tests/compatibility/common test_checksum_table.py.TestChecksumTable.test_checksum_survives_upgrade[restart_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simple[restart_prestable-27-1-1_to_prestable-27-1-1-column]
 ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simple[restart_prestable-27-1-1_to_prestable-27-1-1-row]
 ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simple[restart_prestable-27-1-1_to_stable-26-4-1-column]
@@ -12,21 +16,21 @@ ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simp
 ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simple[restart_stable-26-4-1_to_prestable-27-1-1-column]
 ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simple[restart_stable-26-4-1_to_prestable-27-1-1-row]
 ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_prestable-27-1-1_to_prestable-27-1-1-COLUMN]
+ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_prestable-27-1-1_to_stable-26-4-1-COLUMN]
 ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_stable-26-3-1_to_stable-26-4-1-COLUMN]
 ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_stable-26-4-1_to_prestable-27-1-1-COLUMN]
 ydb/tests/compatibility/common test_followers.py.TestFollowersCompatibility.test_followers_compatability[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/common test_snapshot_isolation.py.TestSnapshotIsolation.test_column_tables[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableMixedCluster.test_external_data_source[mixed_prestable-27-1-1_and_stable-26-4-1]
-ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_stable-26-4-1-lax]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_stable-26-4-1-strict]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-4-1_to_prestable-27-1-1-lax]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-4-1_to_prestable-27-1-1-strict]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRestart.test_rename_table[restart_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/topics py3test.[test_topic.py */*] chunk
+ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/topics test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-27-1-1_and_stable-26-4-1]
-ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/mirror3dc test_mirror3dc.py.TestMirror3dc.test_exclude_one_dc_external_recovery
 ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy

@@ -227,7 +227,7 @@ public:
         return Id;
     }
 
-    bool MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debugState = nullptr) const;
+    bool MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debugState = nullptr, bool checkPile = true) const;
     bool IsAllowedToRunTablet(TTabletDebugState* debugState = nullptr) const;
     bool IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState = nullptr) const;
     bool IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState = nullptr) const;

@@ -181,7 +181,8 @@ template <typename SideEnum> using TDqRenames = std::vector<TIndexAndSide<SideEn
 
 using TDqUserRenames = TDqRenames<EJoinSide>;
 
-void ValidateRenames(const TDqUserRenames& renames, EJoinKind kind, int leftTypesWidth, int rightTypesWidth);
+void ValidateRenames(const TDqUserRenames& renames, EJoinKind kind, int leftTypesWidth, int rightTypesWidth,
+                     bool mark = false);
 
 struct TGraceJoinRenames {
     TVector<ui32> Left;

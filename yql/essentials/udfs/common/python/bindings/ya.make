@@ -52,6 +52,11 @@ PEERDIR(
 
 NO_COMPILER_WARNINGS()
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    statbox/nile_debug
+)
+
 END()
 
 IF (NOT EXPORT_CMAKE)

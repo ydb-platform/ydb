@@ -2261,7 +2261,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         // when
         SplitStreamTopicPartition(runtime, txId, 0, "\x7f",
-            {{NKikimrScheme::StatusInvalidParameter, "Split boundary is not a full key"}});
+            {{NKikimrScheme::StatusInvalidParameter, "Split boundary must be a table key strictly inside the partition"}});
 
         // then
         const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
@@ -2279,7 +2279,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         // when
         SplitStreamTopicPartition(runtime, txId, 0, SerializeUint64Key(Max<ui64>() - 5),
-            {{NKikimrScheme::StatusInvalidParameter, "Split boundary is not strictly inside the partition"}});
+            {{NKikimrScheme::StatusInvalidParameter, "Split boundary must be a table key strictly inside the partition"}});
 
         // then
         const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
@@ -2298,7 +2298,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         // when
         AlterStreamTopic(runtime, txId, [](auto& alter) {
             alter.AddRootPartitionBoundaries()->SetPartition(0);
-        }, {{NKikimrScheme::StatusInvalidParameter, "Changing root partition bounds is not supported"}});
+        }, {{NKikimrScheme::StatusInvalidParameter, "Root partition bounds and the strategy of a topic split by partition key cannot change"}});
 
         // then
         const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
@@ -2373,7 +2373,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
                 before.GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
                     ? ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_PAUSED
                     : ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
-        }, {{NKikimrScheme::StatusInvalidParameter, "Changing the autopartitioning strategy is not supported"}});
+        }, {{NKikimrScheme::StatusInvalidParameter, "Root partition bounds and the strategy of a topic split by partition key cannot change"}});
 
         // then
         const auto after = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl")

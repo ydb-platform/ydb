@@ -21,4 +21,6 @@ PEERDIR(
     ydb/public/sdk/python
 )
 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+
 END()

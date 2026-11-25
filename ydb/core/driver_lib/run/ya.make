@@ -85,6 +85,7 @@ PEERDIR(
     ydb/core/metering
     ydb/core/mind
     ydb/core/mind/address_classification
+    ydb/core/mind/bootstrapper
     ydb/core/mind/bscontroller
     ydb/core/mind/hive
     ydb/core/mon

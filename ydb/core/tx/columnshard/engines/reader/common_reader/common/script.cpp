@@ -3,8 +3,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
 
-#include <util/string/escape.h>
-
 namespace NKikimr::NOlap::NReader::NCommon {
 
 TString TFetchingScript::DebugString() const {
@@ -47,68 +45,6 @@ std::vector<NColumnShard::TStepColumn> ResolveStatisticsColumns(const std::set<u
         columns.push_back({ id, resolver ? resolver->GetColumnName(id, false) : TString() });
     }
     return columns;
-}
-
-namespace {
-
-TString FormatPKBound(const TPredicateContainer& bound, char comparison) {
-    if (bound.IsAll()) {
-        return {};
-    }
-    const auto columns = bound.GetColumnNames();
-    const auto& position = bound.GetSortableBatchPosition();
-    TStringBuilder values;
-    for (ui32 i = 0; i < columns.size(); ++i) {
-        if (i != 0) {
-            values << ", ";
-        }
-        const auto scalar = position.GetScalar(i);
-        if (!scalar->is_valid) {
-            values << "NULL";
-            continue;
-        }
-        const TString value(scalar->ToString());
-        switch (scalar->type->id()) {
-            case arrow::Type::STRING:
-            case arrow::Type::BINARY:
-            case arrow::Type::LARGE_STRING:
-            case arrow::Type::LARGE_BINARY:
-            case arrow::Type::FIXED_SIZE_BINARY:
-                values << '"' << EscapeC(value) << '"';
-                break;
-            default:
-                values << value;
-                break;
-        }
-    }
-    return TStringBuilder() << "KEY(" << JoinSeq(", ", columns) << ") " << comparison << (bound.IsInclude() ? "=" : "") << " (" << values << ')';
-}
-
-}   // namespace
-
-NColumnShard::TStepDetails BuildPKFilterStatistics(const TSpecialReadContext* context) {
-    NColumnShard::TPKFilterDetails details;
-    if (context) {
-        const auto& metadata = *context->GetReadMetadata();
-        const auto& ranges = metadata.GetPKRangesFilter();
-        if (ranges.IsEmpty()) {
-            details.Predicates.emplace_back("All keys");
-            return details;
-        }
-        details.Columns = ResolveStatisticsColumns(ranges.GetColumnIds(metadata.GetResultSchema()->GetIndexInfo()), context);
-        for (const auto& range : ranges) {
-            const auto lower = FormatPKBound(range.GetPredicateFrom(), '>');
-            const auto upper = FormatPKBound(range.GetPredicateTo(), '<');
-            if (lower && upper) {
-                details.Predicates.push_back(lower + " AND " + upper);
-            } else if (lower || upper) {
-                details.Predicates.push_back(lower ? lower : upper);
-            } else {
-                details.Predicates.emplace_back("All keys");
-            }
-        }
-    }
-    return details;
 }
 
 NColumnShard::TStepDetails BuildShardingFilterStatistics(const TSpecialReadContext* context) {

@@ -25,7 +25,6 @@ public:
 };
 
 std::vector<NColumnShard::TStepColumn> ResolveStatisticsColumns(const std::set<ui32>& ids, const TSpecialReadContext* context);
-NColumnShard::TStepDetails BuildPKFilterStatistics(const TSpecialReadContext* context);
 NColumnShard::TStepDetails BuildShardingFilterStatistics(const TSpecialReadContext* context);
 
 class IFetchingStep: public TNonCopyable {

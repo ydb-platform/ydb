@@ -115,8 +115,8 @@ public:
 };
 
 class TPredicateFilter: public IFetchingStep {
-    NColumnShard::TStepDetails BuildStatisticsDetails(const NCommon::TSpecialReadContext* context) const override {
-        return NCommon::BuildPKFilterStatistics(context);
+    NColumnShard::TStepDetails BuildStatisticsDetails(const NCommon::TSpecialReadContext*) const override {
+        return NColumnShard::TPKFilterDetails{};
     }
 
 private:

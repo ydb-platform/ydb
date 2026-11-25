@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/fq/libs/checkpointing/events
     ydb/core/fq/libs/common
     ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/core/kqp/executer_actor
     ydb/core/kqp/script_executions/common
     ydb/core/kqp/script_executions/proto

@@ -34,6 +34,21 @@
 
 namespace NYql {
 
+bool ValidateExternalTablePgCompatibility(const TKikimrTableMetadata& metadata, bool disablePgCompatibility, TExprContext& ctx, TPositionHandle pos) {
+    if (disablePgCompatibility) {
+        for (const auto& [name, column] : metadata.Columns) {
+            if (column.TypeInfo.GetTypeId() == NKikimr::NScheme::NTypeIds::Pg) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_UNSUPPORTED,
+                    TStringBuilder() << "PostgreSQL compatibility is disabled for external table '" << metadata.Name
+                        << "' because its schema contains PostgreSQL column '" << name << "' of type '" << column.Type
+                        << "' (DisablePgCompatibility feature flag is on)"));
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content) {
     TExprNode::TListType items;
     items.emplace_back(BuildSchemaFromMetadata(pos, ctx, columns));
@@ -985,6 +1000,10 @@ public:
                     if (!databaseType) {
                         ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder()
                             << "Unknown source type for external table \"" << tablePath << "\""));
+                        return nullptr;
+                    }
+                    if (!ValidateExternalTablePgCompatibility(*tableDesc.Metadata,
+                            SessionCtx->Config().FeatureFlags.GetDisablePgCompatibility(), ctx, read->Child(2)->Pos())) {
                         return nullptr;
                     }
                     const auto& source = ExternalSourceFactory->GetOrCreate(*databaseType);

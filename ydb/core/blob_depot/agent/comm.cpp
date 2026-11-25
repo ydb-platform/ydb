@@ -57,6 +57,7 @@ namespace NKikimr::NBlobDepot {
             {"marker", "BDA06"},
             {"agentId", LogId},
             {"msg", msg});
+        ReleaseS3Wrapper();
         if (BlobDepotGeneration != msg.GetGeneration()) {
             // Expiry watermarks belong to one generation; the new tablet starts allocating from step 1 again.
             ExpiredSteps.clear();
@@ -145,8 +146,6 @@ namespace NKikimr::NBlobDepot {
             ? std::make_optional(msg.GetS3BackendSettings())
             : std::nullopt;
 
-        ReleaseS3Wrapper();
-
 #ifndef KIKIMR_DISABLE_S3_OPS
         InitS3(msg.GetName());
 #endif
@@ -208,9 +207,7 @@ namespace NKikimr::NBlobDepot {
         ++ConnectionInstance;
 
         while (!TabletRequestInFlight.empty()) {
-            auto node = TabletRequestInFlight.extract(TabletRequestInFlight.begin());
-            auto& requestInFlight = node.value();
-            requestInFlight.Sender->OnRequestComplete(requestInFlight, TTabletDisconnected{}, nullptr);
+            OnRequestComplete(TabletRequestInFlight.begin()->Id, TTabletDisconnected{}, TabletRequestInFlight);
         }
 
         for (auto& [_, kind] : ChannelKinds) {

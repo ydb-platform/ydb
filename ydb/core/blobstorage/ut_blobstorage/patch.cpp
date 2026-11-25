@@ -68,7 +68,12 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
     };
 
     void MakePatchingTest(TString erasure) {
-        TEnvironmentSetup env(true, GetErasureTypeByString(erasure));
+        const auto type = GetErasureTypeByString(erasure);
+        TEnvironmentSetup env({
+            .NodeCount = Max<ui32>(9, type.BlobSubgroupSize()),
+            .VDiskReplPausedAtStart = true,
+            .Erasure = type,
+        });
         TTestInfo test = InitTest(env);
 
         constexpr ui32 size = 100;
@@ -103,7 +108,8 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement(originalBlobId, &truePatchedBlobId3, TLogoBlobID::MaxCookie,
                 test.Info->GroupID.GetRawId(), test.Info->GroupID.GetRawId());
         UNIT_ASSERT(patchedBlobId3 != truePatchedBlobId3);
-        NKikimrProto::EReplyStatus statusWhenNotMatchingCookie = (erasure == "block-4-2" ? NKikimrProto::ERROR : NKikimrProto::OK);
+        NKikimrProto::EReplyStatus statusWhenNotMatchingCookie =
+            type.ErasureFamily() == TErasureType::ErasureParityBlock ? NKikimrProto::ERROR : NKikimrProto::OK;
         SendPatch(test, originalBlobId, patchedBlobId3, TLogoBlobID::MaxCookie, diffs2, statusWhenNotMatchingCookie);
         SendPatch(test, originalBlobId, truePatchedBlobId3, TLogoBlobID::MaxCookie, diffs2, NKikimrProto::OK);
         SendGet(test, truePatchedBlobId3, patchedData2, NKikimrProto::OK);
@@ -148,6 +154,10 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
 
     Y_UNIT_TEST(Block42) {
         MakePatchingTest("block-4-2");
+    }
+
+    Y_UNIT_TEST(Block82) {
+        MakePatchingTest("block-8-2");
     }
 
     Y_UNIT_TEST(None) {

@@ -33,4 +33,5 @@ END()
 
 RECURSE_FOR_TESTS(
     rollback
+    topic
 )

@@ -40,11 +40,11 @@ bool TSchedulableTask::TryIncreaseUsage() {
         if (fairShare == 0 && snapshot->CpuMaxDemand == 0) {
             auto prevMaxDemand = snapshot->CpuMaxDemand.fetch_add(1);
             if (prevMaxDemand == 0) {
-                fairShare = Query->AllowMinFairShare;
+                fairShare = Query->GetAllowMinFairShare();
             }
         }
     } else { // The pool of the query is not in the snapshot yet - see TQuery::InitSnapshot().
-        fairShare = Query->AllowMinFairShare;
+        fairShare = Query->GetAllowMinFairShare();
         poolOrQuery = Query.get();
     }
 

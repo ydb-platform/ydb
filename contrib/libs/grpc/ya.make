@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(1.61.3)
+VERSION(1.63.2)
 
-ORIGINAL_SOURCE(https://github.com/grpc/grpc/archive/v1.61.3.tar.gz)
+ORIGINAL_SOURCE(https://github.com/grpc/grpc/archive/v1.63.2.tar.gz)
 
 LICENSE(
     Apache-2.0 AND
@@ -49,74 +49,28 @@ IF (OS_LINUX OR OS_DARWIN)
 ENDIF()
 
 SRCS(
+    src/core/client_channel/backup_poller.cc
+    src/core/client_channel/client_channel_channelz.cc
+    src/core/client_channel/client_channel_factory.cc
+    src/core/client_channel/client_channel_filter.cc
+    src/core/client_channel/client_channel_plugin.cc
+    src/core/client_channel/client_channel_service_config.cc
+    src/core/client_channel/config_selector.cc
+    src/core/client_channel/dynamic_filters.cc
+    src/core/client_channel/global_subchannel_pool.cc
+    src/core/client_channel/http_proxy_mapper.cc
+    src/core/client_channel/local_subchannel_pool.cc
+    src/core/client_channel/retry_filter.cc
+    src/core/client_channel/retry_filter_legacy_call_data.cc
+    src/core/client_channel/retry_service_config.cc
+    src/core/client_channel/retry_throttle.cc
+    src/core/client_channel/subchannel.cc
+    src/core/client_channel/subchannel_pool_interface.cc
+    src/core/client_channel/subchannel_stream_client.cc
     src/core/ext/filters/backend_metrics/backend_metric_filter.cc
     src/core/ext/filters/census/grpc_context.cc
-    src/core/ext/filters/channel_idle/channel_idle_filter.cc
     src/core/ext/filters/channel_idle/idle_filter_state.cc
     src/core/ext/filters/channel_idle/legacy_channel_idle_filter.cc
-    src/core/ext/filters/client_channel/backend_metric.cc
-    src/core/ext/filters/client_channel/backup_poller.cc
-    src/core/ext/filters/client_channel/channel_connectivity.cc
-    src/core/ext/filters/client_channel/client_channel.cc
-    src/core/ext/filters/client_channel/client_channel_channelz.cc
-    src/core/ext/filters/client_channel/client_channel_factory.cc
-    src/core/ext/filters/client_channel/client_channel_plugin.cc
-    src/core/ext/filters/client_channel/client_channel_service_config.cc
-    src/core/ext/filters/client_channel/config_selector.cc
-    src/core/ext/filters/client_channel/dynamic_filters.cc
-    src/core/ext/filters/client_channel/global_subchannel_pool.cc
-    src/core/ext/filters/client_channel/http_proxy_mapper.cc
-    src/core/ext/filters/client_channel/lb_policy/address_filtering.cc
-    src/core/ext/filters/client_channel/lb_policy/child_policy_handler.cc
-    src/core/ext/filters/client_channel/lb_policy/endpoint_list.cc
-    src/core/ext/filters/client_channel/lb_policy/grpclb/client_load_reporting_filter.cc
-    src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb.cc
-    src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb_balancer_addresses.cc
-    src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb_client_stats.cc
-    src/core/ext/filters/client_channel/lb_policy/grpclb/load_balancer_api.cc
-    src/core/ext/filters/client_channel/lb_policy/health_check_client.cc
-    src/core/ext/filters/client_channel/lb_policy/oob_backend_metric.cc
-    src/core/ext/filters/client_channel/lb_policy/outlier_detection/outlier_detection.cc
-    src/core/ext/filters/client_channel/lb_policy/pick_first/pick_first.cc
-    src/core/ext/filters/client_channel/lb_policy/priority/priority.cc
-    src/core/ext/filters/client_channel/lb_policy/ring_hash/ring_hash.cc
-    src/core/ext/filters/client_channel/lb_policy/rls/rls.cc
-    src/core/ext/filters/client_channel/lb_policy/round_robin/round_robin.cc
-    src/core/ext/filters/client_channel/lb_policy/weighted_round_robin/static_stride_scheduler.cc
-    src/core/ext/filters/client_channel/lb_policy/weighted_round_robin/weighted_round_robin.cc
-    src/core/ext/filters/client_channel/lb_policy/weighted_target/weighted_target.cc
-    src/core/ext/filters/client_channel/lb_policy/xds/cds.cc
-    src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_impl.cc
-    src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_manager.cc
-    src/core/ext/filters/client_channel/lb_policy/xds/xds_override_host.cc
-    src/core/ext/filters/client_channel/lb_policy/xds/xds_wrr_locality.cc
-    src/core/ext/filters/client_channel/local_subchannel_pool.cc
-    src/core/ext/filters/client_channel/resolver/binder/binder_resolver.cc
-    src/core/ext/filters/client_channel/resolver/dns/c_ares/dns_resolver_ares.cc
-    src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_posix.cc
-    src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_windows.cc
-    src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper.cc
-    src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_posix.cc
-    src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_windows.cc
-    src/core/ext/filters/client_channel/resolver/dns/dns_resolver_plugin.cc
-    src/core/ext/filters/client_channel/resolver/dns/event_engine/event_engine_client_channel_resolver.cc
-    src/core/ext/filters/client_channel/resolver/dns/event_engine/service_config_helper.cc
-    src/core/ext/filters/client_channel/resolver/dns/native/dns_resolver.cc
-    src/core/ext/filters/client_channel/resolver/fake/fake_resolver.cc
-    src/core/ext/filters/client_channel/resolver/google_c2p/google_c2p_resolver.cc
-    src/core/ext/filters/client_channel/resolver/polling_resolver.cc
-    src/core/ext/filters/client_channel/resolver/sockaddr/sockaddr_resolver.cc
-    src/core/ext/filters/client_channel/resolver/xds/xds_dependency_manager.cc
-    src/core/ext/filters/client_channel/resolver/xds/xds_resolver.cc
-    src/core/ext/filters/client_channel/resolver/xds/xds_resolver_trace.cc
-    src/core/ext/filters/client_channel/retry_filter.cc
-    src/core/ext/filters/client_channel/retry_filter_legacy_call_data.cc
-    src/core/ext/filters/client_channel/retry_service_config.cc
-    src/core/ext/filters/client_channel/retry_throttle.cc
-    src/core/ext/filters/client_channel/service_config_channel_arg_filter.cc
-    src/core/ext/filters/client_channel/subchannel.cc
-    src/core/ext/filters/client_channel/subchannel_pool_interface.cc
-    src/core/ext/filters/client_channel/subchannel_stream_client.cc
     src/core/ext/filters/deadline/deadline_filter.cc
     src/core/ext/filters/fault_injection/fault_injection_filter.cc
     src/core/ext/filters/fault_injection/fault_injection_service_config_parser.cc
@@ -124,7 +78,6 @@ SRCS(
     src/core/ext/filters/http/client_authority_filter.cc
     src/core/ext/filters/http/http_filters_plugin.cc
     src/core/ext/filters/http/message_compress/compression_filter.cc
-    src/core/ext/filters/http/message_compress/legacy_compression_filter.cc
     src/core/ext/filters/http/server/http_server_filter.cc
     src/core/ext/filters/message_size/message_size_filter.cc
     src/core/ext/filters/rbac/rbac_filter.cc
@@ -215,6 +168,7 @@ SRCS(
     src/core/ext/upb-gen/envoy/config/core/v3/grpc_method_list.upb_minitable.c
     src/core/ext/upb-gen/envoy/config/core/v3/grpc_service.upb_minitable.c
     src/core/ext/upb-gen/envoy/config/core/v3/health_check.upb_minitable.c
+    src/core/ext/upb-gen/envoy/config/core/v3/http_service.upb_minitable.c
     src/core/ext/upb-gen/envoy/config/core/v3/http_uri.upb_minitable.c
     src/core/ext/upb-gen/envoy/config/core/v3/protocol.upb_minitable.c
     src/core/ext/upb-gen/envoy/config/core/v3/proxy_protocol.upb_minitable.c
@@ -379,6 +333,7 @@ SRCS(
     src/core/ext/upbdefs-gen/envoy/config/core/v3/grpc_method_list.upbdefs.c
     src/core/ext/upbdefs-gen/envoy/config/core/v3/grpc_service.upbdefs.c
     src/core/ext/upbdefs-gen/envoy/config/core/v3/health_check.upbdefs.c
+    src/core/ext/upbdefs-gen/envoy/config/core/v3/http_service.upbdefs.c
     src/core/ext/upbdefs-gen/envoy/config/core/v3/http_uri.upbdefs.c
     src/core/ext/upbdefs-gen/envoy/config/core/v3/protocol.upbdefs.c
     src/core/ext/upbdefs-gen/envoy/config/core/v3/proxy_protocol.upbdefs.c
@@ -542,6 +497,7 @@ SRCS(
     src/core/lib/channel/channelz.cc
     src/core/lib/channel/channelz_registry.cc
     src/core/lib/channel/connected_channel.cc
+    src/core/lib/channel/metrics.cc
     src/core/lib/channel/promise_based_filter.cc
     src/core/lib/channel/server_call_tracer_filter.cc
     src/core/lib/channel/status_util.cc
@@ -633,7 +589,6 @@ SRCS(
     src/core/lib/gpr/windows/sync.cc
     src/core/lib/gpr/windows/time.cc
     src/core/lib/gpr/windows/tmpfile.cc
-    src/core/lib/gpr/wrap_memcpy.cc
     src/core/lib/gprpp/crash.cc
     src/core/lib/gprpp/examine_stack.cc
     src/core/lib/gprpp/fork.cc
@@ -653,6 +608,7 @@ SRCS(
     src/core/lib/gprpp/time.cc
     src/core/lib/gprpp/time_averaged_stats.cc
     src/core/lib/gprpp/time_util.cc
+    src/core/lib/gprpp/uuid_v4.cc
     src/core/lib/gprpp/validation_errors.cc
     src/core/lib/gprpp/windows/directory_reader.cc
     src/core/lib/gprpp/windows/env.cc
@@ -700,7 +656,6 @@ SRCS(
     src/core/lib/iomgr/iomgr_posix.cc
     src/core/lib/iomgr/iomgr_posix_cfstream.cc
     src/core/lib/iomgr/iomgr_windows.cc
-    src/core/lib/iomgr/load_file.cc
     src/core/lib/iomgr/lockfree_event.cc
     src/core/lib/iomgr/polling_entity.cc
     src/core/lib/iomgr/pollset.cc
@@ -746,18 +701,14 @@ SRCS(
     src/core/lib/json/json_reader.cc
     src/core/lib/json/json_util.cc
     src/core/lib/json/json_writer.cc
-    src/core/lib/load_balancing/lb_policy.cc
-    src/core/lib/load_balancing/lb_policy_registry.cc
     src/core/lib/matchers/matchers.cc
     src/core/lib/promise/activity.cc
     src/core/lib/promise/party.cc
     src/core/lib/promise/sleep.cc
     src/core/lib/promise/trace.cc
-    src/core/lib/resolver/endpoint_addresses.cc
-    src/core/lib/resolver/resolver.cc
-    src/core/lib/resolver/resolver_registry.cc
     src/core/lib/resource_quota/api.cc
     src/core/lib/resource_quota/arena.cc
+    src/core/lib/resource_quota/connection_quota.cc
     src/core/lib/resource_quota/memory_quota.cc
     src/core/lib/resource_quota/periodic_update.cc
     src/core/lib/resource_quota/resource_quota.cc
@@ -817,37 +768,32 @@ SRCS(
     src/core/lib/security/security_connector/insecure/insecure_security_connector.cc
     src/core/lib/security/security_connector/load_system_roots_fallback.cc
     src/core/lib/security/security_connector/load_system_roots_supported.cc
+    src/core/lib/security/security_connector/load_system_roots_windows.cc
     src/core/lib/security/security_connector/local/local_security_connector.cc
     src/core/lib/security/security_connector/security_connector.cc
     src/core/lib/security/security_connector/ssl/ssl_security_connector.cc
     src/core/lib/security/security_connector/ssl_utils.cc
     src/core/lib/security/security_connector/tls/tls_security_connector.cc
     src/core/lib/security/transport/client_auth_filter.cc
-    src/core/lib/security/transport/legacy_server_auth_filter.cc
     src/core/lib/security/transport/secure_endpoint.cc
     src/core/lib/security/transport/security_handshaker.cc
     src/core/lib/security/transport/server_auth_filter.cc
     src/core/lib/security/transport/tsi_error.cc
     src/core/lib/security/util/json_util.cc
-    src/core/lib/service_config/service_config_impl.cc
-    src/core/lib/service_config/service_config_parser.cc
-    src/core/lib/slice/b64.cc
     src/core/lib/slice/percent_encoding.cc
     src/core/lib/slice/slice.cc
     src/core/lib/slice/slice_buffer.cc
     src/core/lib/slice/slice_refcount.cc
     src/core/lib/slice/slice_string_helpers.cc
     src/core/lib/surface/api_trace.cc
-    src/core/lib/surface/builtins.cc
     src/core/lib/surface/byte_buffer.cc
     src/core/lib/surface/byte_buffer_reader.cc
     src/core/lib/surface/call.cc
     src/core/lib/surface/call_details.cc
     src/core/lib/surface/call_log_batch.cc
-    src/core/lib/surface/call_trace.cc
     src/core/lib/surface/channel.cc
+    src/core/lib/surface/channel_create.cc
     src/core/lib/surface/channel_init.cc
-    src/core/lib/surface/channel_ping.cc
     src/core/lib/surface/channel_stack_type.cc
     src/core/lib/surface/completion_queue.cc
     src/core/lib/surface/completion_queue_factory.cc
@@ -855,19 +801,28 @@ SRCS(
     src/core/lib/surface/init.cc
     src/core/lib/surface/init_internally.cc
     src/core/lib/surface/lame_client.cc
+    src/core/lib/surface/legacy_channel.cc
     src/core/lib/surface/metadata_array.cc
     src/core/lib/surface/server.cc
     src/core/lib/surface/validate_metadata.cc
     src/core/lib/surface/version.cc
+    src/core/lib/surface/wait_for_cq_end_op.cc
     src/core/lib/transport/batch_builder.cc
     src/core/lib/transport/bdp_estimator.cc
+    src/core/lib/transport/call_filters.cc
     src/core/lib/transport/call_final_info.cc
+    src/core/lib/transport/call_size_estimator.cc
+    src/core/lib/transport/call_spine.cc
     src/core/lib/transport/connectivity_state.cc
+    src/core/lib/transport/endpoint_info_handshaker.cc
     src/core/lib/transport/error_utils.cc
     src/core/lib/transport/handshaker.cc
     src/core/lib/transport/handshaker_registry.cc
     src/core/lib/transport/http_connect_handshaker.cc
+    src/core/lib/transport/message.cc
+    src/core/lib/transport/metadata.cc
     src/core/lib/transport/metadata_batch.cc
+    src/core/lib/transport/metadata_info.cc
     src/core/lib/transport/parsed_metadata.cc
     src/core/lib/transport/status_conversion.cc
     src/core/lib/transport/tcp_connect_handshaker.cc
@@ -875,8 +830,59 @@ SRCS(
     src/core/lib/transport/transport.cc
     src/core/lib/transport/transport_op_string.cc
     src/core/lib/uri/uri_parser.cc
+    src/core/load_balancing/address_filtering.cc
+    src/core/load_balancing/backend_metric_parser.cc
+    src/core/load_balancing/child_policy_handler.cc
+    src/core/load_balancing/endpoint_list.cc
+    src/core/load_balancing/grpclb/client_load_reporting_filter.cc
+    src/core/load_balancing/grpclb/grpclb.cc
+    src/core/load_balancing/grpclb/grpclb_balancer_addresses.cc
+    src/core/load_balancing/grpclb/grpclb_client_stats.cc
+    src/core/load_balancing/grpclb/load_balancer_api.cc
+    src/core/load_balancing/health_check_client.cc
+    src/core/load_balancing/lb_policy.cc
+    src/core/load_balancing/lb_policy_registry.cc
+    src/core/load_balancing/oob_backend_metric.cc
+    src/core/load_balancing/outlier_detection/outlier_detection.cc
+    src/core/load_balancing/pick_first/pick_first.cc
+    src/core/load_balancing/priority/priority.cc
+    src/core/load_balancing/ring_hash/ring_hash.cc
+    src/core/load_balancing/rls/rls.cc
+    src/core/load_balancing/round_robin/round_robin.cc
+    src/core/load_balancing/weighted_round_robin/static_stride_scheduler.cc
+    src/core/load_balancing/weighted_round_robin/weighted_round_robin.cc
+    src/core/load_balancing/weighted_target/weighted_target.cc
+    src/core/load_balancing/xds/cds.cc
+    src/core/load_balancing/xds/xds_cluster_impl.cc
+    src/core/load_balancing/xds/xds_cluster_manager.cc
+    src/core/load_balancing/xds/xds_override_host.cc
+    src/core/load_balancing/xds/xds_wrr_locality.cc
     src/core/plugin_registry/grpc_plugin_registry.cc
     src/core/plugin_registry/grpc_plugin_registry_extra.cc
+    src/core/resolver/binder/binder_resolver.cc
+    src/core/resolver/dns/c_ares/dns_resolver_ares.cc
+    src/core/resolver/dns/c_ares/grpc_ares_ev_driver_posix.cc
+    src/core/resolver/dns/c_ares/grpc_ares_ev_driver_windows.cc
+    src/core/resolver/dns/c_ares/grpc_ares_wrapper.cc
+    src/core/resolver/dns/c_ares/grpc_ares_wrapper_posix.cc
+    src/core/resolver/dns/c_ares/grpc_ares_wrapper_windows.cc
+    src/core/resolver/dns/dns_resolver_plugin.cc
+    src/core/resolver/dns/event_engine/event_engine_client_channel_resolver.cc
+    src/core/resolver/dns/event_engine/service_config_helper.cc
+    src/core/resolver/dns/native/dns_resolver.cc
+    src/core/resolver/endpoint_addresses.cc
+    src/core/resolver/fake/fake_resolver.cc
+    src/core/resolver/google_c2p/google_c2p_resolver.cc
+    src/core/resolver/polling_resolver.cc
+    src/core/resolver/resolver.cc
+    src/core/resolver/resolver_registry.cc
+    src/core/resolver/sockaddr/sockaddr_resolver.cc
+    src/core/resolver/xds/xds_dependency_manager.cc
+    src/core/resolver/xds/xds_resolver.cc
+    src/core/resolver/xds/xds_resolver_trace.cc
+    src/core/service_config/service_config_channel_arg_filter.cc
+    src/core/service_config/service_config_impl.cc
+    src/core/service_config/service_config_parser.cc
     src/core/tsi/alts/crypt/aes_gcm.cc
     src/core/tsi/alts/crypt/gsec.cc
     src/core/tsi/alts/frame_protector/alts_counter.cc
@@ -906,7 +912,9 @@ SRCS(
     src/core/tsi/ssl_transport_security_utils.cc
     src/core/tsi/transport_security.cc
     src/core/tsi/transport_security_grpc.cc
+    src/cpp/client/call_credentials.cc
     src/cpp/client/channel_cc.cc
+    src/cpp/client/channel_credentials.cc
     src/cpp/client/client_callback.cc
     src/cpp/client/client_context.cc
     src/cpp/client/client_interceptor.cc
@@ -924,7 +932,6 @@ SRCS(
     src/cpp/common/resource_quota_cc.cc
     src/cpp/common/rpc_method.cc
     src/cpp/common/secure_auth_context.cc
-    src/cpp/common/secure_channel_arguments.cc
     src/cpp/common/secure_create_auth_context.cc
     src/cpp/common/tls_certificate_provider.cc
     src/cpp/common/tls_certificate_verifier.cc
@@ -945,6 +952,7 @@ SRCS(
     src/cpp/server/server_callback.cc
     src/cpp/server/server_cc.cc
     src/cpp/server/server_context.cc
+    src/cpp/server/server_credentials.cc
     src/cpp/server/server_posix.cc
     src/cpp/server/xds_server_builder.cc
     src/cpp/server/xds_server_credentials.cc

@@ -32,6 +32,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    datashard_ut_cdc_building_columns.cpp
     datashard_ut_change_exchange.cpp
 )
 

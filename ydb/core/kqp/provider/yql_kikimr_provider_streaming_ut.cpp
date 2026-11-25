@@ -2,7 +2,7 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_settings.h"
 
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>

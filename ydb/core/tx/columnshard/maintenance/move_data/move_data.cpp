@@ -188,6 +188,10 @@ void TMoveDataDriver::StartPortionRewrites() {
 
 void TMoveDataDriver::RunMigrationStep(const TActorContext& ctx) {
     if (State.TargetsChanged) {
+        // Seed the migration only after deferred loading has populated the portion catalog.
+        if (Self->HasIndex() && !Self->GetIndexAs<NOlap::TColumnEngineForLogs>().AreAllPortionsLoaded(std::nullopt)) {
+            return;
+        }
         RestartActualizer();
     }
     // Reconcile bounded batches of seeded portions, then select work and check the gate.

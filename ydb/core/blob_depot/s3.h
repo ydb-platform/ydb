@@ -14,11 +14,11 @@ namespace NKikimr::NBlobDepot {
         // (acquired via TEvNodeWardenAcquireBlobDepotS3Router on Init, released on
         // TerminateAllActors). All S3 traffic is forwarded through the router.
         TActorId WrapperId;
-        TActorId UploaderId;
+        ui32 RouterGeneration = 0;
         TString BasePath;
         TString Bucket;
 
-        bool Enabled = false;
+        bool OrphanScanEnabled = false;
         bool SyncMode = false;
         bool AsyncMode = false;
 

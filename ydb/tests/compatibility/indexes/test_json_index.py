@@ -85,7 +85,7 @@ class TestJsonIndex(RollingUpgradeAndDowngradeFixture):
     def _get_queries_for(self, table_name, index_name, json_type, mode):
         queries = []
         for query_idx in range(self.query_count):
-            predicate = json.get_random_predicate(mode=mode)
+            predicate = json.get_random_predicate(mode=mode, explicit_index=True)
             logger.debug(f"Query {query_idx + 1}/{self.query_count} for {table_name} ({mode}): predicate=`{predicate}`")
 
             queries.append(f"""
@@ -129,7 +129,7 @@ class TestJsonIndex(RollingUpgradeAndDowngradeFixture):
             for json_type in ['Json', 'JsonDocument']:
                 table_name = f"table_{json_type.lower()}"
                 index_name = f"idx_{json_type.lower()}"
-                predicate = json.get_random_predicate(mode=mode)
+                predicate = json.get_random_predicate(mode=mode, explicit_index=True)
 
                 def select(view):
                     result = session_pool.execute_with_retries(f"""

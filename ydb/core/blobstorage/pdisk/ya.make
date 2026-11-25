@@ -96,6 +96,8 @@ JOIN_SRCS(
 # (ydb/apps/version), and those tests would not link.
 SRCS(
     blobstorage_pdisk_params.cpp
+    # Used by VDisk writers and readers to build and check sectors themselves; standalone like the params.
+    blobstorage_pdisk_format_context.cpp
 )
 
 END()

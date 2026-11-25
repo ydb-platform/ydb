@@ -10,7 +10,7 @@ std::shared_ptr<NKikimr::NTracing::TTraceClient> TTracing::GetClient(const TStri
     TGuard<TMutex> g(Mutex);
     auto parent = CreateOrGetClient(parentId, "");
     auto client = CreateOrGetClient(clientId, parentId);
-    AFL_VERIFY(client->GetParentId() == parentId);
+    YDB_LOG_VERIFY(client->GetParentId() == parentId);
     client->SetType(type);
     parent->RegisterChildren(client);
     return client;

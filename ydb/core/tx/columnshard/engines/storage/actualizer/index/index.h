@@ -51,6 +51,7 @@ public:
 
     void RefreshTiering(const std::optional<TTiering>& info, const TAddExternalContext& context);
     void RefreshScheme(const TAddExternalContext& context);
+    bool IsSchemeActualizationFinished() const;
 
     void StartMoveData(THashSet<ui32> targetGroups, const TAddExternalContext& context,
         const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);

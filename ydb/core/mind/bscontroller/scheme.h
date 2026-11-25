@@ -139,7 +139,7 @@ struct Schema : NIceDb::Schema {
         struct EnableConfigV2 : Column<29, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct DatabaseSpaceBlockColor : Column<30, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
         struct DatabaseSpaceUnblockColor : Column<31, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
-        struct DataCenterStates : Column<32, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TDefineDataCenterStates; };
+        struct DataCenterStates : Column<32, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TDataCenterStates; };
         struct BridgeSyncTotalRate : Column<33, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         struct BridgeSyncMaxSyncers : Column<34, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 64; };
         struct AppliedPileOverrides : Column<35, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TStoragePoolPileOverrides; };
@@ -534,6 +534,16 @@ struct Schema : NIceDb::Schema {
     };
 
 
+    // Hive completion (including on an older controller during rollback) must not
+    // erase the durable intent to remove retired S3 objects and late PUTs.
+    struct RetiredS3Namespaces : Table<137> {
+        struct GroupId : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct BlobDepotId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct S3Config : Column<3, NScheme::NTypeIds::String> {};
+        using TKey = TableKey<GroupId>;
+        using TColumns = TableColumns<GroupId, BlobDepotId, S3Config>;
+    };
+
     using TTables = SchemaTables<
         Node,
         PDisk,
@@ -558,6 +568,7 @@ struct Schema : NIceDb::Schema {
         ScrubState,
         DriveSerial,
         BlobDepotDeleteQueue,
+        RetiredS3Namespaces,
         BridgeSyncState,
         DirectBlockGroupTabletState,
         DirectBlockGroupClaims,

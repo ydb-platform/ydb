@@ -96,7 +96,8 @@ bool TReadPortionInfoWithBlobs::ExtractColumnChunks(
 std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncPortion(TReadPortionInfoWithBlobs&& source,
     const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier,
     const std::shared_ptr<IStoragesManager>& storages, std::shared_ptr<NColumnShard::TSplitterCounters> counters, bool forcedMove) {
-    if (!forcedMove && from->GetVersion() == to->GetVersion() &&
+    // by the version stored in the portion: with schema collapsing `from` (the lookup of that version) may already be `to`
+    if (!forcedMove && source.GetPortionInfo().GetSchemaVersionVerified() == to->GetVersion() &&
         targetTier == source.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId)) {
         YDB_LOG_WARN("",
             {"event", "we don't need sync portion"});
@@ -116,6 +117,8 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     }
 
     THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> entityChunksNew;
+    // the columns of the target schema the source has, re-encoded if their features changed; a column added since gets
+    // no chunks (its default is applied on read), the chunks of a dropped column are left behind
     for (auto&& i : to->GetIndexInfo().GetColumnIds()) {
         auto it = columnChunks.find(i);
         std::vector<std::shared_ptr<IPortionDataChunk>> newChunks;

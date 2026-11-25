@@ -2,6 +2,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/kqp/common/compilation/events.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -102,13 +103,13 @@ Y_UNIT_TEST_SUITE(KqpStats) {
 // A miss is reported once per query lookup, before the request is queued.
 // Recompile and SPLIT requests are not lookups.
 Y_UNIT_TEST(CompilationCacheHitMissCounters) {
-    auto settings = TKikimrSettings().SetWithSampleTables(false);
+    auto settings = TKikimrSettings().SetUseRealThreads(false).SetWithSampleTables(false).SetDisablePgCompatibility(true);
     auto* config = settings.AppConfig.MutableTableServiceConfig();
     config->SetEnableCreateTableAs(true);
     config->SetEnableDataShardCreateTableAs(true);
     TKikimrRunner kikimr(settings);
     // The compile service is registered during the KQP proxy bootstrap; a session is the readiness barrier.
-    UNIT_ASSERT(kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess());
+    UNIT_ASSERT(kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess(); }));
     auto& runtime = *kikimr.GetTestServer().GetRuntime();
     const auto counters = runtime.GetAppData().Counters->FindSubgroup("counters", "ydb");
     UNIT_ASSERT(counters);
@@ -163,10 +164,75 @@ Y_UNIT_TEST(CompilationCacheHitMissCounters) {
     check(0, 1);
 
     // Recompile bypasses the cache and is neither a hit nor a miss.
-    runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvRecompileRequest(token, "", uid, Nothing(), false,
-        TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
-    UNIT_ASSERT(!receive()->Get()->Stats.FromCache);
-    check(0, 0);
+    auto recompile = [&](const TMaybe<TKqpQueryId>& query, bool disablePgCompatibility) {
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvRecompileRequest(token, "", uid, query, false,
+            TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context,
+            NLWTrace::TOrbit(), nullptr, false, nullptr, nullptr, false, false, disablePgCompatibility)));
+        auto response = receive();
+        const auto& result = *response->Get()->CompileResult;
+        UNIT_ASSERT(!response->Get()->Stats.FromCache);
+        UNIT_ASSERT_VALUES_EQUAL(result.Uid, uid);
+        UNIT_ASSERT(result.Query);
+        UNIT_ASSERT_VALUES_EQUAL(result.Query->DisablePgCompatibility, disablePgCompatibility);
+        check(0, 0);
+    };
+    recompile(Nothing(), true);
+    auto& appData = runtime.GetAppData();
+    NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+    flags.SetDisablePgCompatibility(false);
+    appData.UpdateRuntimeFlags(flags);
+    send(text);
+    const TString textUid = receive()->Get()->CompileResult->Uid;
+    UNIT_ASSERT_UNEQUAL(textUid, uid);
+    check(0, 1);
+
+    TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin", text,
+        TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings);
+    query->DisablePgCompatibility = true;
+    flags.SetDisablePgCompatibility(true);
+    appData.UpdateRuntimeFlags(flags);
+    auto sendByUid = [&](const TString& cachedUid) {
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(token, "", cachedUid, Nothing(), true, false,
+            TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+    };
+    {
+        const auto serviceActor = runtime.GetLocalServiceId(service);
+        const auto forceUncacheable = runtime.AddObserver<TEvKqp::TEvCompileResponse>(
+            [&](TEvKqp::TEvCompileResponse::TPtr& ev) {
+                const auto& result = ev->Get()->CompileResult;
+                if (ev->Recipient == serviceActor && result->Uid == uid) {
+                    std::const_pointer_cast<TKqpCompileResult>(result)->AllowCache = false;
+                }
+            });
+        recompile(query, false);
+    }
+    sendByUid(uid);
+    const auto oldModeHit = receive();
+    UNIT_ASSERT(oldModeHit->Get()->Stats.FromCache);
+    UNIT_ASSERT_VALUES_EQUAL(oldModeHit->Get()->CompileResult->Uid, uid);
+    check(1, 0);
+
+    recompile(query, false);
+
+    flags.SetDisablePgCompatibility(false);
+    appData.UpdateRuntimeFlags(flags);
+    send(text);
+    const auto textHit = receive();
+    UNIT_ASSERT(textHit->Get()->Stats.FromCache);
+    UNIT_ASSERT_VALUES_EQUAL(textHit->Get()->CompileResult->Uid, textUid);
+    check(1, 0);
+
+    for (const auto& cachedUid : { uid, textUid }) {
+        sendByUid(cachedUid);
+        const auto uidHit = receive();
+        UNIT_ASSERT(uidHit->Get()->Stats.FromCache);
+        UNIT_ASSERT_VALUES_EQUAL(uidHit->Get()->CompileResult->Uid, cachedUid);
+        check(1, 0);
+    }
+
+    flags.SetDisablePgCompatibility(true);
+    appData.UpdateRuntimeFlags(flags);
+    recompile(Nothing(), true);
 
     // NeedToSplit is an ordinary miss; the follow-up SPLIT request is not a lookup.
     // A NeedToSplit reply carries no success status, the session actor checks the flag first.
@@ -183,6 +249,174 @@ Y_UNIT_TEST(CompilationCacheHitMissCounters) {
     send(Q1_("SELECT 43 AS cache_counter;"), NKikimrKqp::QUERY_TYPE_SQL_DML, false, TInstant::MicroSeconds(1));
     receive(Ydb::StatusIds::TIMEOUT);
     check(0, 1);
+}
+
+namespace {
+
+class TPreparedCompileCacheTest {
+    static TKikimrSettings MakeSettings(ui32 cacheSize) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false).SetWithSampleTables(false).SetDisablePgCompatibility(false);
+        auto* config = settings.AppConfig.MutableTableServiceConfig();
+        config->SetCompileQueryCacheSize(cacheSize);
+        config->SetCompileMaxActiveRequests(2);
+        return settings;
+    }
+
+    TKikimrRunner Kikimr;
+
+public:
+    explicit TPreparedCompileCacheTest(ui32 cacheSize)
+        : Kikimr(MakeSettings(cacheSize))
+        , Runtime(*Kikimr.GetTestServer().GetRuntime())
+        , Service(MakeKqpCompileServiceID(Runtime.GetNodeId()))
+        , Edge(Runtime.AllocateEdgeActor())
+    {
+        UNIT_ASSERT(Kikimr.RunCall([&] { return Kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess(); }));
+    }
+
+    void DisablePgCompatibility() {
+        auto& appData = Runtime.GetAppData();
+        NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+        flags.SetDisablePgCompatibility(true);
+        appData.UpdateRuntimeFlags(flags);
+    }
+
+    void Prepare(const TActorId& sender, const TString& text) {
+        TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin", text,
+            TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *GucSettings);
+        Send(sender, new TEvKqp::TEvCompileRequest(Token, "", Nothing(), std::move(query), true, true,
+            TInstant::Max(), nullptr, GucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), Context));
+    }
+
+    void CompileByUid(const TString& uid) {
+        Send(Edge, new TEvKqp::TEvCompileRequest(Token, "", uid, Nothing(), true, false,
+            TInstant::Max(), nullptr, GucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), Context));
+    }
+
+    void Recompile(const TActorId& sender, const TString& uid) {
+        Send(sender, new TEvKqp::TEvRecompileRequest(Token, "", uid, Nothing(), false,
+            TInstant::Max(), nullptr, GucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), Context));
+    }
+
+    void Invalidate(const TKqpCompileResult::TConstPtr& plan) {
+        Send(Edge, new TEvKqp::TEvCompileInvalidateRequest(plan, nullptr));
+    }
+
+    TEvKqp::TEvCompileResponse::TPtr Receive(const TActorId& recipient, Ydb::StatusIds::StatusCode expected = Ydb::StatusIds::SUCCESS) {
+        auto response = Runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(recipient, TDuration::Seconds(30));
+        UNIT_ASSERT(response && response->Get()->CompileResult);
+        const auto& result = *response->Get()->CompileResult;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Status, expected, result.Issues.ToString());
+        return response;
+    }
+
+    TTestActorRuntime& Runtime;
+    const TActorId Service;
+    const TActorId Edge;
+
+private:
+    void Send(const TActorId& sender, NActors::IEventBase* event) {
+        Runtime.Send(new IEventHandle(Service, sender, event));
+    }
+
+    TIntrusiveConstPtr<NACLib::TUserToken> Token = new NACLib::TUserToken("root@builtin", {});
+    const TIntrusivePtr<TUserRequestContext> Context = MakeIntrusive<TUserRequestContext>("prepared-cache", "/Root", "prepared-cache");
+    const std::shared_ptr<TGUCSettings> GucSettings = std::make_shared<TGUCSettings>();
+};
+
+} // anonymous namespace
+
+Y_UNIT_TEST(QueuedPrepareAfterRevalidationTargetEvicted) {
+    TPreparedCompileCacheTest cache(1);
+    const TString text = "SELECT 42 AS prepared_cache;";
+    cache.Prepare(cache.Edge, text);
+    const TString oldUid = cache.Receive(cache.Edge)->Get()->CompileResult->Uid;
+
+    cache.DisablePgCompatibility();
+    const auto serviceActor = cache.Runtime.GetLocalServiceId(cache.Service);
+    NActors::TBlockEvents<TEvKqp::TEvCompileResponse> blocked(cache.Runtime, [&](const auto& ev) {
+        return ev->GetRecipientRewrite() == serviceActor && ev->Get()->CompileResult->Uid == oldUid;
+    });
+    cache.CompileByUid(oldUid);
+    cache.Runtime.WaitFor("PG revalidation response", [&] { return !blocked.empty(); }, TDuration::Seconds(30));
+
+    const auto waiter = cache.Runtime.AllocateEdgeActor();
+    const auto unrelated = cache.Runtime.AllocateEdgeActor();
+    cache.Prepare(waiter, text);
+    cache.Prepare(unrelated, "SELECT 43 AS prepared_cache;");
+    cache.Receive(unrelated);
+    cache.CompileByUid(oldUid);
+    cache.Receive(cache.Edge, Ydb::StatusIds::NOT_FOUND);
+
+    blocked.Stop().Unblock();
+    UNIT_ASSERT_VALUES_EQUAL(cache.Receive(cache.Edge)->Get()->CompileResult->Uid, oldUid);
+    const TString preparedUid = cache.Receive(waiter)->Get()->CompileResult->Uid;
+    cache.CompileByUid(preparedUid);
+    UNIT_ASSERT(cache.Receive(cache.Edge)->Get()->Stats.FromCache);
+}
+
+Y_UNIT_TEST(ConcurrentRecompilesPreservePreparedUids) {
+    TPreparedCompileCacheTest cache(4);
+    const TString text = "SELECT 42 AS prepared_cache;";
+    cache.Prepare(cache.Edge, text);
+    const TString firstUid = cache.Receive(cache.Edge)->Get()->CompileResult->Uid;
+
+    cache.DisablePgCompatibility();
+    cache.Prepare(cache.Edge, text);
+    const auto second = cache.Receive(cache.Edge)->Get()->CompileResult;
+    UNIT_ASSERT_UNEQUAL(second->Uid, firstUid);
+    cache.CompileByUid(firstUid);
+    const auto first = cache.Receive(cache.Edge)->Get()->CompileResult;
+    UNIT_ASSERT_VALUES_EQUAL(first->Uid, firstUid);
+    UNIT_ASSERT(*first->Query == *second->Query);
+
+    const auto serviceActor = cache.Runtime.GetLocalServiceId(cache.Service);
+    NActors::TBlockEvents<TEvKqp::TEvCompileResponse> blocked(cache.Runtime, [&](const auto& ev) {
+        return ev->GetRecipientRewrite() == serviceActor && ev->Get()->CompileResult->Uid == firstUid;
+    });
+    cache.Recompile(cache.Edge, firstUid);
+    cache.Runtime.WaitFor("first schema recompile response", [&] { return !blocked.empty(); }, TDuration::Seconds(30));
+
+    const auto waiter = cache.Runtime.AllocateEdgeActor();
+    const auto unrelated = cache.Runtime.AllocateEdgeActor();
+    cache.Recompile(waiter, second->Uid);
+    cache.Prepare(unrelated, "SELECT 43 AS prepared_cache;");
+    cache.Receive(unrelated); // The service has enqueued the second recompile while the first is still active.
+
+    blocked.Stop().Unblock();
+    const auto firstRecompile = cache.Receive(cache.Edge)->Get()->CompileResult;
+    const auto secondRecompile = cache.Receive(waiter)->Get()->CompileResult;
+    UNIT_ASSERT_VALUES_EQUAL(firstRecompile->Uid, firstUid);
+    UNIT_ASSERT_VALUES_EQUAL(secondRecompile->Uid, second->Uid);
+    for (const auto& plan : {firstRecompile, secondRecompile}) {
+        cache.CompileByUid(plan->Uid);
+        const auto hit = cache.Receive(cache.Edge);
+        UNIT_ASSERT(hit->Get()->Stats.FromCache);
+        UNIT_ASSERT(hit->Get()->CompileResult == plan);
+    }
+}
+
+Y_UNIT_TEST(LateInvalidationPreservesReplacementPreparedPlan) {
+    TPreparedCompileCacheTest cache(1);
+    cache.Prepare(cache.Edge, "SELECT 42 AS prepared_cache;");
+    const auto oldPlan = cache.Receive(cache.Edge)->Get()->CompileResult;
+
+    cache.DisablePgCompatibility();
+    cache.CompileByUid(oldPlan->Uid);
+    const auto replacement = cache.Receive(cache.Edge)->Get()->CompileResult;
+    UNIT_ASSERT_VALUES_EQUAL(replacement->Uid, oldPlan->Uid);
+    UNIT_ASSERT(replacement != oldPlan);
+
+    cache.Invalidate(oldPlan);
+    cache.CompileByUid(replacement->Uid);
+    const auto hit = cache.Receive(cache.Edge);
+    UNIT_ASSERT(hit->Get()->Stats.FromCache);
+    UNIT_ASSERT(hit->Get()->CompileResult == replacement);
+
+    cache.Invalidate(replacement);
+    cache.CompileByUid(replacement->Uid);
+    cache.Receive(cache.Edge, Ydb::StatusIds::NOT_FOUND);
 }
 
 Y_UNIT_TEST(PathAliasesInvalidateCompilationCache) {

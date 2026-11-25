@@ -33,7 +33,7 @@
 
 namespace grpc_core {
 
-class XdsHttpStatefulSessionFilter : public XdsHttpFilterImpl {
+class XdsHttpStatefulSessionFilter final : public XdsHttpFilterImpl {
  public:
   y_absl::string_view ConfigProtoName() const override;
   y_absl::string_view OverrideConfigProtoName() const override;

@@ -435,7 +435,7 @@ namespace NKikimr::NBsController {
         bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
-            if (auto result = state.ApplyDataCenterStates(parameters.SuppressFailModelChecking, parameters.SuppressDegradedGroupsChecking); !result) {
+            if (auto result = state.ValidateMirror3dcGroupStates(parameters); !result) {
                 *errorDescription = result.error();
                 return false;
             }
@@ -656,7 +656,18 @@ namespace NKikimr::NBsController {
         void TBlobStorageController::CommitConfigUpdates(TConfigState& state, TTransactionContext& txc) {
             NIceDb::TNiceDb db(txc.DB);
             for (const auto& [base, overlay] : state.Groups.Diff()) {
-                state.GroupStateUpdates.push_back(overlay->first.GetRawId());
+                state.GroupStateUpdates.insert(overlay->first.GetRawId());
+            }
+
+            bool policySubmitted = state.DataCenterStates.Changed();
+            bool firstPolicy = policySubmitted && !HasDataCenterPolicy;
+            bool targetsChanged = policySubmitted && state.DataCenterStates.Get() != DataCenterStates;
+            if (firstPolicy || targetsChanged) {
+                state.Groups.ForEach([&](TGroupId id, const TGroupInfo& group) {
+                    if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {
+                        state.GroupStateUpdates.insert(id.GetRawId());
+                    }
+                });
             }
 
             if (state.HostConfigs.Changed()) {
@@ -678,6 +689,10 @@ namespace NKikimr::NBsController {
             }
             if (state.BlobDepotDeleteQueue.Changed()) {
                 MakeTableMerger<Schema::BlobDepotDeleteQueue>(&BlobDepotDeleteQueue, &state.BlobDepotDeleteQueue.Get(), this)(txc);
+            }
+            if (!state.NewRetiredS3Namespaces.empty()) {
+                MakeTableMerger<Schema::RetiredS3Namespaces>(
+                    static_cast<const TRetiredS3Namespaces*>(nullptr), &state.NewRetiredS3Namespaces, this)(txc);
             }
 
             // while converting to bridged cluster, watch for groups that have to be converted or stop blocking conversion
@@ -864,6 +879,7 @@ namespace NKikimr::NBsController {
             TNodeWardenUpdateNotifier(this, state).Execute();
 
             state.CheckConsistency();
+            HasDataCenterPolicy |= state.DataCenterStates.Changed();
             state.Commit();
             ValidateInternalState();
 
@@ -1675,6 +1691,9 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(std::get<0>(group.StoragePoolId));
             pb->SetStoragePoolId(std::get<1>(group.StoragePoolId));
             pb->SetSeenOperational(group.SeenOperational);
+            if (group.DDisk) {
+                pb->SetDDisk(true);
+            }
             if (group.GroupSizeInUnits != 0) {
                 pb->SetGroupSizeInUnits(group.GroupSizeInUnits);
             }

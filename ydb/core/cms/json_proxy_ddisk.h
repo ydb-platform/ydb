@@ -10,7 +10,11 @@
 #include <ydb/library/actors/core/mon.h>
 
 #include <library/cpp/protobuf/json/proto2json.h>
+#include <util/generic/hash_set.h>
 #include <util/string/cast.h>
+#include <util/string/split.h>
+
+#include <vector>
 
 namespace NKikimr::NCms {
 
@@ -44,11 +48,29 @@ public:
             return;
         }
 
+        const auto& params = request.GetParams();
+        ui32 timeout = 30'000;
+        if (params.contains("timeout")) {
+            if (!TryFromString(params.Get("timeout"), timeout) || timeout == 0) {
+                ReplyBadParameter("timeout", ctx);
+                return;
+            }
+        }
+        if (Mode != EMode::TabletGet && params.contains("fields_required")) {
+            const auto fields = params.Get("fields_required");
+            if (fields && fields != "all") {
+                StringSplitter(fields).Split(',').SkipEmpty().Collect(&FieldsRequired);
+                if (FieldsRequired.empty()) {
+                    ReplyBadParameter("fields_required", ctx);
+                    return;
+                }
+            }
+        }
+
         auto pipeConfig = NTabletPipe::TClientConfig();
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         Pipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(), pipeConfig));
 
-        const auto& params = request.GetParams();
         switch (Mode) {
             case EMode::TabletList: {
                 auto event = MakeHolder<TEvCms::TEvDDiskTabletListRequest>();
@@ -90,6 +112,7 @@ public:
                 if (params.contains("group_by_degrade")) {
                     event->Record.SetGroupByDegrade(IsTrue(params.Get("group_by_degrade")));
                 }
+                event->Record.SetGroupsOnly(IsTrue(params.Get("groups_only")));
                 NTabletPipe::SendData(ctx, Pipe, event.Release());
                 break;
             }
@@ -100,6 +123,7 @@ public:
                 }
                 auto event = MakeHolder<TEvCms::TEvDDiskInfoGetRequest>();
                 event->Record.SetTabletId(TabletId);
+                event->Record.SetIncludeHealth(IsTrue(params.Get("include_health")));
                 NTabletPipe::SendData(ctx, Pipe, event.Release());
                 break;
             }
@@ -114,6 +138,38 @@ public:
                 }
                 if (params.contains("filter_tablet_id")) {
                     event->Record.SetFilterTabletId(params.Get("filter_tablet_id"));
+                }
+                if (params.contains("node_id")) {
+                    ui32 nodeId;
+                    if (!TryFromString(params.Get("node_id"), nodeId)) {
+                        ReplyBadParameter("node_id", ctx);
+                        return;
+                    }
+                    event->Record.SetNodeId(nodeId);
+                }
+                if (params.contains("pdisk_id")) {
+                    ui32 pdiskId;
+                    if (!TryFromString(params.Get("pdisk_id"), pdiskId)) {
+                        ReplyBadParameter("pdisk_id", ctx);
+                        return;
+                    }
+                    event->Record.SetPDiskId(pdiskId);
+                }
+                if (params.contains("tablet_id")) {
+                    ui64 tabletId;
+                    if (!TryFromString(params.Get("tablet_id"), tabletId)) {
+                        ReplyBadParameter("tablet_id", ctx);
+                        return;
+                    }
+                    event->Record.SetTabletId(tabletId);
+                }
+                event->Record.SetInventory(IsTrue(params.Get("inventory")));
+                event->Record.SetGroupsOnly(IsTrue(params.Get("groups_only")));
+                if (params.Get("group_by") == "state") {
+                    event->Record.SetGroupBy(NKikimrCms::DDISK_DISK_GROUP_BY_STATE);
+                }
+                if (params.contains("filter_group")) {
+                    event->Record.SetFilterGroup(params.Get("filter_group"));
                 }
                 if (params.contains("sort_by")) {
                     const auto& sortBy = params.Get("sort_by");
@@ -138,7 +194,7 @@ public:
             }
         }
 
-        Become(&TThis::StateWork, ctx, TDuration::Seconds(30), new TEvents::TEvWakeup());
+        Become(&TThis::StateWork, ctx, TDuration::MilliSeconds(Min(timeout, 30'000u)), new TEvents::TEvWakeup());
     }
 
 private:
@@ -154,6 +210,13 @@ private:
         } else {
             record.SetLimit(limit);
         }
+    }
+
+    void ReplyBadParameter(TStringBuf name, const TActorContext& ctx) {
+        TString reply = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nInvalid field '";
+        reply.append(name);
+        reply.append("'");
+        Reply(reply, ctx);
     }
 
     static bool IsTrue(const TString& value) {
@@ -190,8 +253,33 @@ private:
         Reply(TString(NMonitoring::HTTPOKJSON) + NProtobufJson::Proto2Json(record, config), ctx);
     }
 
+    template <typename TRecord, typename TRow>
+    void SelectListFields(TRecord& record, NProtoBuf::RepeatedPtrField<TRow>& rows, TStringBuf identity) {
+        if (FieldsRequired.empty()) {
+            return;
+        }
+        const auto* descriptor = TRow::descriptor();
+        std::vector<const NProtoBuf::FieldDescriptor*> omitted;
+        for (int index = 0; index < descriptor->field_count(); ++index) {
+            const auto* field = descriptor->field(index);
+            const TStringBuf name(field->name().data(), field->name().size());
+            if (name == identity || FieldsRequired.contains(TString(name))) {
+                record.AddFieldsAvailable(TString(name));
+            } else {
+                omitted.push_back(field);
+            }
+        }
+        for (auto& row : rows) {
+            for (const auto* field : omitted) {
+                row.GetReflection()->ClearField(&row, field);
+            }
+        }
+    }
+
     void Handle(TEvCms::TEvDDiskTabletListResponse::TPtr& ev, const TActorContext& ctx) {
-        ReplyRecord(ev->Get()->Record, ctx);
+        auto& record = ev->Get()->Record;
+        SelectListFields(record, *record.MutableTablets(), "TabletId");
+        ReplyRecord(record, ctx);
     }
 
     void Handle(TEvCms::TEvDDiskInfoGetResponse::TPtr& ev, const TActorContext& ctx) {
@@ -199,7 +287,9 @@ private:
     }
 
     void Handle(TEvCms::TEvDDiskDiskListResponse::TPtr& ev, const TActorContext& ctx) {
-        ReplyRecord(ev->Get()->Record, ctx);
+        auto& record = ev->Get()->Record;
+        SelectListFields(record, *record.MutableDisks(), "DiskId");
+        ReplyRecord(record, ctx);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
@@ -228,6 +318,7 @@ private:
     TActorId Pipe;
     ui64 TabletId = 0;
     EMode Mode = EMode::TabletList;
+    THashSet<TString> FieldsRequired;
 };
 
 } // namespace NKikimr::NCms

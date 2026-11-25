@@ -26,6 +26,7 @@ struct TGranuleRecord;
 class IColumnEngine;
 class TPortionInfo;
 class TPortionInfoConstructor;
+class TPortionAddress;
 
 class IDbWrapper {
 public:
@@ -81,6 +82,8 @@ public:
     bool LoadPortions(
         const std::function<bool(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback,
         const std::optional<TInternalPathId> pathId = std::nullopt, const std::optional<ui64> portionId = std::nullopt) override;
+    bool LoadPortionVerified(const TPortionAddress& address,
+        const std::function<void(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback);
 
     void WriteColumn(
         const TPortionDataAccessor& acc, const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override;

@@ -114,10 +114,19 @@ namespace TEvSchemeShard {
         EvShredInfoResponse,
         EvShredManualStartupRequest,
 
+        EvDatabaseFreeze,
+        EvDatabaseFreezeResult,
+
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD)");
+
+    struct TEvDatabaseFreeze : public TEventPB<TEvDatabaseFreeze,
+        NKikimrScheme::TEvDatabaseFreeze, EvDatabaseFreeze> {};
+
+    struct TEvDatabaseFreezeResult : public TEventPB<TEvDatabaseFreezeResult,
+        NKikimrScheme::TEvDatabaseFreezeResult, EvDatabaseFreezeResult> {};
 
     struct TEvProcessingResponse: public TEventPB<TEvProcessingResponse,
         NKikimrScheme::TEvProcessingResponse, EvProcessingResponse> {

@@ -348,8 +348,27 @@ public:
     THashMap<TTxId, TOperation::TPtr> Operations;
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
+    // One entry per database domain path; a SchemeShard may serve multiple databases.
+    THashMap<TPathId, NKikimrScheme::TDatabaseFreezeState> DatabaseFreezeStates;
+    THashMap<TPathId, TActorId> DatabaseFreezeWorkers;
+    // Pending progress is rebuilt by the worker after a restart, unlike the
+    // durable result in DatabaseFreezeStates.
+    THashMap<TPathId, TString> DatabaseFreezeProgress;
+    bool IsDatabaseFreezeBlocking(const NKikimrSchemeOp::TModifyScheme& transaction);
+    bool IsDatabaseFreezeBlocking(const TPathId& pathId) const;
+    bool HasDatabaseFreezeSchemaWork(const TPathId& domainId) const;
+    void Handle(TEvSchemeShard::TEvDatabaseFreeze::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvDatabaseFreezeResult::TPtr& ev, const TActorContext& ctx);
+    struct TTxDatabaseFreeze;
+    struct TTxDatabaseFreezeDone;
     THashMap<TPathId, TPathDbRef> OwnDbRefs; // path's own type info record ref
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
+    // Inventory of durable rows, independent of active restore bookkeeping.
+    // Completed headers remain until FORGET/DROP; legacy items may have no state.
+    // Rebuilt on init and maintained by the persistence helpers below, so DROP
+    // can remove all owned records without reads in its plan callback.
+    THashMap<ui64, TPathId> PersistedIncrementalRestoreOps;
+    THashMap<ui64, THashSet<ui32>> PersistedIncrementalRestoreItems;
 
     // Simplified state tracking for sequential incremental restore
 
@@ -431,6 +450,7 @@ public:
     bool EnableBackgroundCompactionServerless = false;
     bool EnableBorrowedSplitCompaction = false;
     bool EnableMoveIndex = true;
+    bool EnableRebuildIndex = false;
     bool EnableAlterDatabaseCreateHiveFirst = false;
     bool EnableStatistics = false;
     bool EnableWasmCompileController = false;
@@ -442,6 +462,7 @@ public:
     bool EnableInitialUniqueIndex = false;
     bool EnableAddUniqueIndex = false;
     bool EnableOnlineAddUniqueIndex = false;
+    bool EnableHnswIndex = false;
     bool EnableFulltextIndex = false;
     bool EnableCompactFulltextIndex = false;
     bool EnableJsonIndex = false;
@@ -1082,6 +1103,9 @@ public:
     void PersistRemoveTestShardSet(NIceDb::TNiceDb& db, TPathId pathId);
 
     void PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op);
+    void PersistRemoveLongIncrementalRestoreOp(NIceDb::TNiceDb& db, ui64 operationId);
+    void PersistIncrementalRestoreItem(NIceDb::TNiceDb& db, ui64 operationId, const TIncrementalRestoreState::TItem& item);
+    void PersistRemoveIncrementalRestoreItem(NIceDb::TNiceDb& db, ui64 operationId, ui32 itemSeq);
 
     // Secret
     void PersistSecret(NIceDb::TNiceDb& db, TPathId pathId, const TSecretInfo& secretInfo);

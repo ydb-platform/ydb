@@ -40,6 +40,8 @@ namespace NKikimr::NHttpProxy {
         NKikimrConfig::TServerlessProxyConfig Config;
         THolder<THttpRequestProcessors> Processors;
         THolder<NYdb::TDriver> Driver;
+        // Keeps the IAM response facility alive for ServiceAccountCredentialsProvider.
+        std::shared_ptr<NYdb::ICoreFacility> CoreFacility;
         std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
         TIntrusivePtr<NHttp::TSocketDescriptor> PreboundSocket;
     };
@@ -48,6 +50,7 @@ namespace NKikimr::NHttpProxy {
         : TBase(NKikimrServices::HTTP_PROXY)
         , Config(cfg.Config)
     {
+        CoreFacility = cfg.CoreFacility;
         ServiceAccountCredentialsProvider = cfg.CredentialsProvider;
         Processors = MakeHolder<THttpRequestProcessors>(Config);
         if (cfg.UseSDK) {

@@ -34,6 +34,7 @@ SRCS(
     ut_fulltext.cpp
     ut_fulltext_dict.cpp
     ut_helpers.cpp
+    ut_kmeans_helper.cpp
     ut_local_kmeans.cpp
     ut_table_range_reader.cpp
     ut_vector_resolve_actor.cpp

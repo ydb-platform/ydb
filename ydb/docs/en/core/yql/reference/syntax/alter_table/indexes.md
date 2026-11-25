@@ -267,13 +267,14 @@ The `WITH` clause accepts the following parameters:
 | `overlap_clusters` | Number of nearest leaf clusters to which each vector is added. When specified, an integer from `2` to `2048` and no greater than `clusters`. When omitted, retains the existing setting; if the existing index has no value, the effective default is `1`. |
 | `overlap_ratio` | Non-negative distance ratio threshold for adding a vector to additional clusters; `0` disables the threshold. |
 | `adaptive_clusters` | Whether to select the number of clusters automatically for each filtering-column value in a filtered index. Accepts `true` or `false`. |
+| `autoupdate` | Whether subsequent table writes maintain the rebuilt index. Accepts `true` or `false`; when omitted, preserves the existing setting. See [Disabling automatic updates](../../../../dev/vector-indexes.md#autoupdate). |
 | `parallel` | Maximum number of partition handlers involved in rebuilding. Uses the same limits and default as [`ADD INDEX`](#add-index). |
 
 Clustering parameters omitted from `WITH` retain their existing values. In particular, omitting `clusters` and `levels` does not automatically select new values for the current table size. The [vector index parameter constraints](#add-index) also apply when rebuilding.
 
 The index keeps its indexed and covered columns. Its distance or similarity function, vector value type, and vector dimensionality are inherited from the existing index. Do not specify `distance`, `similarity`, `vector_type`, or `vector_dimension` in `WITH`: the statement rejects these parameters, even if their values match the existing settings. To change them, create a separate index.
 
-The existing index remains available for queries and continues to receive table updates while the replacement is built. After a successful build, {{ ydb-short-name }} atomically switches to the replacement. Queries continue to use the same index name. If rebuilding fails or is cancelled before replacement, the old index remains available. Rebuilding can resume after a restart of the schema management tablet.
+The existing index remains available for queries while the replacement is built and continues to receive table updates if its `autoupdate` setting is enabled. After a successful build, {{ ydb-short-name }} atomically switches to the replacement. Queries continue to use the same index name. If rebuilding fails or is cancelled before replacement, the old index remains available. Rebuilding can resume after a restart of the schema management tablet.
 
 Replacing the index can invalidate cached query plans. A query using the index may return a transient `ABORTED` status during the switch. If this happens while the [rebuild operation](../../../../reference/ydb-cli/operation-list.md) is completing, retry the entire query using the standard [SDK retry mechanism](../../../../recipes/ydb-sdk/retry.md).
 

@@ -21,6 +21,8 @@ namespace NYql {
 
 constexpr TStringBuf YtUnspecifiedCluster = "$runtime";
 
+bool ValidateNilePermissions(const TExprNode& node, const TYtState& state, TExprContext& ctx);
+
 // Equivalent to Derive* with mode=Auto
 TString GetClusterFromSection(const NNodes::TYtSection& section);
 TString GetClusterFromSectionList(const NNodes::TYtSectionList& sectionList);
@@ -160,6 +162,7 @@ NNodes::TYtReadTable ConvertContentInputToRead(NNodes::TExprBase input, NNodes::
 size_t GetMapDirectOutputsCount(const NNodes::TYtMapReduce& mapReduce);
 
 bool HasYtRowNumber(const TExprNode& node);
+bool HasYtTableIndex(const TExprNode& node);
 
 bool IsYtTableSuitableForArrowInput(NNodes::TExprBase table, std::function<void(const TString&)> unsupportedHandler);
 

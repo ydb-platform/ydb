@@ -14,7 +14,6 @@
 #include "bridge_storage.h"
 #include "indir.h"
 #include "self_heal.h"
-#include "group_state.h"
 #include "storage_pool_stat.h"
 #include "database_space.h"
 #include "yaml_config_helpers.h"
@@ -33,6 +32,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/blobstorage/syncer/group_state.h>
 #include <ydb/core/mind/table_adapter.h>
 #include <ydb/core/tablet/tablet_responsiveness_pinger.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -1683,6 +1683,25 @@ public:
         }
     };
 
+    enum class EBlobDepotClaim { GroupName, LogicalPrefix, PhysicalPrefix, AmbiguousBucket, RetiredPrefix };
+    using TBlobDepotClaim = std::tuple<EBlobDepotClaim, TString, TString>; // kind, bucket, name or normalized prefix
+    using TBlobDepotOwners = std::map<TBlobDepotClaim, std::set<TGroupId>>;
+
+    struct TRetiredS3Namespace {
+        using Table = Schema::RetiredS3Namespaces;
+        ui64 BlobDepotId = 0;
+        TString S3Config;
+        NKikimrBlobDepot::TBlobDepotConfig GetConfig() const;
+
+        template<typename T>
+        static void Apply(TBlobStorageController*, T&& callback) {
+            static TTableAdapter<Table, TRetiredS3Namespace,
+                Table::BlobDepotId, Table::S3Config> adapter(
+                    &TRetiredS3Namespace::BlobDepotId, &TRetiredS3Namespace::S3Config);
+            callback(&adapter);
+        }
+    };
+
     struct TConfigValidationInfo {
         enum class ESource {
             Distconf,
@@ -1722,11 +1741,20 @@ private:
     TTabletResponsivenessPinger* ResponsivenessPinger;
     using TDataCenterStates = std::unordered_map<TString, NKikimrBlobStorage::TDataCenterState::EState>;
     TDataCenterStates DataCenterStates;
+    bool HasDataCenterPolicy = false;
+    void ReconcileDataCenterStates();
+    void RetryDataCenterStates();
+    bool DataCenterRetryScheduled = false;
     TMap<THostConfigId, THostConfigInfo> HostConfigs;
     TMap<TBoxId, TBoxInfo> Boxes;
     TMap<TBoxStoragePoolId, TStoragePoolInfo> StoragePools;
     std::set<std::pair<TBoxStoragePoolId, TGroupId>> StoragePoolGroups;
     TMap<TGroupId, TBlobDepotDeleteQueueInfo> BlobDepotDeleteQueue;
+    using TRetiredS3Namespaces = TMap<TGroupId, TRetiredS3Namespace>;
+    TRetiredS3Namespaces RetiredS3Namespaces;
+
+    TBlobDepotOwners BlobDepotOwners;
+    void RebuildBlobDepotOwners();
     ui64 NextOperationLogIndex = 1;
     TActorId StatProcessorActorId;
     bool SelfHealEnable = false;
@@ -1820,6 +1848,7 @@ private:
             EvRetryBridgeGroupModes,
             EvCheckBridgeGroupModes,
             EvRetrySyncers,
+            EvReconcileDataCenterStates,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -1858,6 +1887,7 @@ private:
     void UpdateSystemViews();
 
     struct TValidateConfigUpdatesParameters {
+        bool FromGroupStateActor = false;
         bool SuppressFailModelChecking = false;
         bool SuppressDegradedGroupsChecking = false;
         bool SuppressDisintegratedGroupsChecking = false;
@@ -2097,6 +2127,7 @@ public:
     IActor *CreateSelfHealActor();
     TActorId SelfHealId;
     TActorId GroupStateActorId;
+    std::optional<NGroupSyncer::TExcludedRealms> GetTargetExcludedRealms(const TGroupInfo& group) const;
     void UpdateGroupStateActor(TGroupId groupId);
 
     TActorId ClusterBalanceActorId;
@@ -2127,6 +2158,7 @@ private:
     void Handle(TEvBlobStorage::TEvRequestControllerInfo::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerNodeReport::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev);
+    void Handle(NGroupSyncer::TEvGroupState::TEvPropose::TPtr& ev);
     void Handle(TEvBlobStorage::TEvControllerProposeGroupKey::TPtr &ev);
     void ForwardToSystemViewsCollector(STATEFN_SIG);
     void Handle(TEvPrivate::TEvUpdateSystemViews::TPtr &ev);
@@ -2790,6 +2822,7 @@ public:
             hFunc(TEvBlobStorage::TEvRequestControllerInfo, Handle);
             hFunc(TEvBlobStorage::TEvControllerNodeReport, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigRequest, Handle);
+            hFunc(NGroupSyncer::TEvGroupState::TEvPropose, Handle);
             hFunc(TEvBlobStorage::TEvControllerProposeGroupKey, Handle);
             hFunc(TEvPrivate::TEvUpdateSystemViews, Handle);
             cFunc(TEvPrivate::EvUpdateSelfHealCounters, UpdateSelfHealCounters);
@@ -2819,6 +2852,7 @@ public:
             {"marker", "BSC09"});
         Become(&TThis::StateWork);
 
+        RebuildBlobDepotOwners();
         SubscribeToFeatureFlags();
 
         ValidateInternalState();
@@ -2829,7 +2863,7 @@ public:
         UpdateSystemViews();
         UpdateSelfHealCounters();
         SignalTabletActive(TActivationContext::AsActorContext());
-        GroupStateActorId = Register(CreateGroupStateActor(SelfId()));
+        GroupStateActorId = Register(NGroupSyncer::CreateGroupStateActor(SelfId()));
         for (const auto& [groupId, group] : GroupMap) {
             UpdateGroupStateActor(groupId);
         }
@@ -2837,6 +2871,7 @@ public:
         LoadedAt = TActivationContext::Monotonic();
         UpdatePileOverrides();
         ApplyStorageConfig();
+        ReconcileDataCenterStates();
 
         // configs handled while loading (the first one at least) didn't make BSC check parts of its groups in unsynced
         // piles: the ones not reset for the current sync of the pile yet are reset now, and if everything is synced

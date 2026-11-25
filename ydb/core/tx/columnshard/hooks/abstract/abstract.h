@@ -74,6 +74,7 @@ public:
         Cleanup,
         GC,
         CleanupSchemas,
+        PortionLoading,
         MoveData
     };
     YDB_ACCESSOR(bool, InterruptionOnLockedTransactions, false);
@@ -402,6 +403,10 @@ public:
     }
 
     virtual void OnSwitchToWork(const ui64 tabletId) {
+        Y_UNUSED(tabletId);
+    }
+
+    virtual void OnPortionsBatchLoaded(const ui64 tabletId) {
         Y_UNUSED(tabletId);
     }
 

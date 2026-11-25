@@ -35,7 +35,7 @@ void TCdcAggregatorStreamRepository::ApplyCdcAggregatorStreamHeartbeatsDiff(NIce
             NIceDb::TUpdate<Schema::Sources::LastHeartbeatData>(heartbeat.Data));
     }
 
-    if (const auto& heartbeat = diff.CurrentHeartbeat) {
+    if (const auto& heartbeat = diff.UpdatedCurrentHeartbeat) {
         db.Table<Schema::State>().Key(Schema::State::Id::Value).Update(
             NIceDb::TUpdate<Schema::State::CurrentHeartbeatStep>(heartbeat->Version.Step),
             NIceDb::TUpdate<Schema::State::CurrentHeartbeatTxId>(heartbeat->Version.TxId),

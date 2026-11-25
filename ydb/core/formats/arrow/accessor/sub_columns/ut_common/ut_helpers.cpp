@@ -16,7 +16,7 @@ TString PrintBinaryJsons(const std::shared_ptr<arrow::ChunkedArray>& array) {
     sb << "[";
     for (auto&& i : array->chunks()) {
         sb << "[";
-        AFL_VERIFY(i->type()->id() == arrow::binary()->id());
+        YDB_LOG_VERIFY(i->type()->id() == arrow::binary()->id());
         auto views = std::static_pointer_cast<arrow::BinaryArray>(i);
         for (ui32 r = 0; r < views->length(); ++r) {
             if (views->IsNull(r)) {
@@ -36,7 +36,7 @@ TString PrintBinaryJsons(const std::shared_ptr<arrow::ChunkedArray>& array) {
 
 std::shared_ptr<TTrivialArray> CreateTrivialArrayAccessor(const TStringBuf data) {
     auto binaryJsonResult = NBinaryJson::SerializeToBinaryJson(data);
-    AFL_VERIFY(std::holds_alternative<NBinaryJson::TBinaryJson>(binaryJsonResult));
+    YDB_LOG_VERIFY(std::holds_alternative<NBinaryJson::TBinaryJson>(binaryJsonResult));
     const auto binaryJson = std::get<NBinaryJson::TBinaryJson>(binaryJsonResult);
     return std::make_shared<TTrivialArray>(TTrivialArray::BuildArrayFromScalar(std::make_shared<arrow::BinaryScalar>(
         std::make_shared<arrow::Buffer>((const ui8*)binaryJson.data(), binaryJson.size()), arrow::binary())));
@@ -65,7 +65,7 @@ std::shared_ptr<TSubColumnsArray> BuildArrayWithStoredPaths(const std::initializ
 
     auto othersStats = BuildStats({ { otherName, EValueType::BinaryJson } });
     auto binaryJsonResult = NBinaryJson::SerializeToBinaryJson(otherValue);
-    AFL_VERIFY(std::holds_alternative<NBinaryJson::TBinaryJson>(binaryJsonResult));
+    YDB_LOG_VERIFY(std::holds_alternative<NBinaryJson::TBinaryJson>(binaryJsonResult));
     const auto& binaryJson = std::get<NBinaryJson::TBinaryJson>(binaryJsonResult);
     auto othersBuilder = TOthersData::MakeMergedBuilder();
     othersBuilder->Add(0, 0, std::string_view(binaryJson.data(), binaryJson.size()));

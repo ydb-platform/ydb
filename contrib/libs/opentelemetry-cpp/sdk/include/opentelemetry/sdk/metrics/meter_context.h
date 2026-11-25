@@ -86,7 +86,7 @@ public:
           ,
       ExemplarFilterType exemplar_filter_type = exemplar_filter_env::GetExemplarFilterFromEnv()
 #endif
-          ) noexcept;
+  );
 
   /**
    * Obtain the resource associated with this meter context.
@@ -105,6 +105,15 @@ public:
    * @return The ScopeConfigurator for this meter context.
    */
   const instrumentationscope::ScopeConfigurator<MeterConfig> &GetMeterConfigurator() const noexcept;
+
+  /**
+   * Replace the ScopeConfigurator for this meter context.
+   *
+   * Note: Not thread safe. Called via MeterProvider::UpdateMeterConfigurator, which holds lock_.
+   * @param meter_configurator The new configurator.
+   */
+  void SetMeterConfigurator(std::unique_ptr<instrumentationscope::ScopeConfigurator<MeterConfig>>
+                                meter_configurator) noexcept;
 
   /**
    * NOTE - INTERNAL method, can change in the future.

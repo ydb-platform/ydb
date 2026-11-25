@@ -535,6 +535,7 @@ private:
 
         if (WriteActive_) {
             Failed_ = true;
+            WriteBuffer_.Reset();
             WritePromise_.Set(Error_);
             WriteActive_ = false;
         }

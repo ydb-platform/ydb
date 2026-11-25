@@ -181,9 +181,9 @@ NScheduler::TComputeSchedulerPtr MakeComputeScheduler() {
                 .MaxRandomDelay = TDuration::MicroSeconds(100),
             },
         });
-    scheduler->SetTotalCpuLimit(12);
-    scheduler->SetTotalMemoryLimit(QUERY_MEMORY_LIMIT);
-    scheduler->AddOrUpdatePool(DATABASE_ID, POOL_ID, {.MemoryLimit = POOL_MEMORY_LIMIT});
+    auto configuration = std::make_unique<NScheduler::NHdrf::NStatic::TRoot>(12, QUERY_MEMORY_LIMIT);
+    configuration->GetOrCreateDatabase(DATABASE_ID).GetOrCreatePool(POOL_ID).MemoryLimit = POOL_MEMORY_LIMIT;
+    scheduler->UpdateConfiguration(std::move(configuration));
     return scheduler;
 }
 
@@ -3465,7 +3465,7 @@ void KqpRm::SchedulerQueryQuotaManager() {
 
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
     auto scheduler = MakeComputeScheduler();
-    auto schedulerQuery = scheduler->AddOrUpdateQuery(DATABASE_ID, POOL_ID, 1, {});
+    auto schedulerQuery = scheduler->AddOrUpdateQuery(DATABASE_ID, POOL_ID, 1);
     scheduler->UpdateFairShare();
     UNIT_ASSERT_VALUES_EQUAL(schedulerQuery->GetSnapshot()->MemoryFairShare, POOL_MEMORY_LIMIT);
 

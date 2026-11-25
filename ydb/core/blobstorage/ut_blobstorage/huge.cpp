@@ -260,8 +260,7 @@ namespace {
             }
         }
 
-        static void CompactionTest() {
-            for (ui32 fresh1 = 0; fresh1 < 8; ++fresh1) {
+        static void CompactionTest(ui32 fresh1) {
             for (ui32 fresh2 = 0; fresh2 < 2; ++fresh2) {
             for (ui32 huge1 = 0; huge1 < 4; ++huge1) {
             for (ui32 huge2 = 0; huge2 < 2; ++huge2) {
@@ -279,7 +278,7 @@ namespace {
                     << Endl;
                 THugeBlobTest test = THugeBlobTest::CreateHugeBlobTest();
                 test.RunTest(fresh1, fresh2, huge1, huge2, targetHuge, fresh3, huge3, targetHuge2, targetHuge3);
-            }}}}}}}}}
+            }}}}}}}}
         }
     };
 
@@ -287,9 +286,14 @@ namespace {
 
 Y_UNIT_TEST_SUITE(HugeBlobOnlineSizeChange) {
 
-    Y_UNIT_TEST(Compaction) {
-        THugeBlobTest::CompactionTest();
-    }
+    Y_UNIT_TEST(Compaction0) { THugeBlobTest::CompactionTest(0); }
+    Y_UNIT_TEST(Compaction1) { THugeBlobTest::CompactionTest(1); }
+    Y_UNIT_TEST(Compaction2) { THugeBlobTest::CompactionTest(2); }
+    Y_UNIT_TEST(Compaction3) { THugeBlobTest::CompactionTest(3); }
+    Y_UNIT_TEST(Compaction4) { THugeBlobTest::CompactionTest(4); }
+    Y_UNIT_TEST(Compaction5) { THugeBlobTest::CompactionTest(5); }
+    Y_UNIT_TEST(Compaction6) { THugeBlobTest::CompactionTest(6); }
+    Y_UNIT_TEST(Compaction7) { THugeBlobTest::CompactionTest(7); }
 
     Y_UNIT_TEST(SendHugeViaDSProxy) {
         // https://github.com/ydb-platform/ydb/issues/30753

@@ -182,7 +182,8 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
         char separator = SingleLine ? ' ' : '\n';
 
         const auto& dataChecker = Info->GetTopology().GetDataIntegrityChecker();
-        auto partsState = dataChecker.GetDataState(Id, PartsData, separator);
+        const ui32 maxRestores = Info->Type.GetErasure() == TBlobStorageGroupType::Erasure8Plus2Block ? 100 : 0;
+        auto partsState = dataChecker.GetDataState(Id, PartsData, separator, maxRestores);
 
         if (partsState.IsOk) {
             PendingResult->DataStatus = (PendingResult->PlacementStatus == TEvCheckIntegrityResult::PS_UNKNOWN) ?

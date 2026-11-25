@@ -8,5 +8,10 @@ IF (USE_ARCADIA_COMPILER_RUNTIME)
     ADDINCL(GLOBAL contrib/libs/clang${COMPILER_VERSION}-rt/include)
 ENDIF()
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    contrib
+)
+
 END()
 

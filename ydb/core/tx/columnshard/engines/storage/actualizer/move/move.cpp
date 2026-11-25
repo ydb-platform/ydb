@@ -50,10 +50,9 @@ public:
 
 TTieringProcessContext::EAddPortionResult AddPortionToMove(
     TTieringProcessContext& tasks, const TPortionInfo::TConstPtr& portion, const TVersionedIndex& index) {
-    auto currentSchema = portion->GetSchema(index);
-    auto targetSchema = currentSchema;
+    const auto schema = portion->GetSchema(index);
     auto tier = portion->GetTierNameDef(IStoragesManager::DefaultStorageId);
-    TPortionEvictionFeatures features(std::move(currentSchema), std::move(targetSchema), tier);
+    TPortionEvictionFeatures features(portion->GetSchemaVersionVerified(), schema, schema, tier);
     features.SetTargetTierName(std::move(tier));
     features.SetForcedMove();
     return tasks.AddPortion(portion, std::move(features), TDuration::Zero());

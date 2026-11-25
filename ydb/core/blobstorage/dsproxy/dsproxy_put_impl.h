@@ -213,6 +213,8 @@ public:
 
     ui64 GetTimeToAccelerateNs(TLogContext &logCtx);
 
+    THistory::TPredictionsEntry GetPredictionSnapshot(THistory::EPredictionStage stage) const;
+
     TString DumpFullState() const;
 
     TString ToString() const;

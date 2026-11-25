@@ -95,6 +95,7 @@ RECURSE_FOR_TESTS(
     ut_read_only_vdisk
     ut_osiris
     ut_phantom_blobs
+    ut_put_request_history
     ut_replication
     ut_scrub
     ut_statestorage

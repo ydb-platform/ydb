@@ -440,7 +440,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     void TryToScheduleNextAcceleration() {
         if (!IsAccelerateScheduled && AccelerateRequestsSent < AccelerationParams.MaxNumOfSlowDisks) {
             if (WaitingVDiskCount > 0 && WaitingVDiskCount <= AccelerationParams.MaxNumOfSlowDisks && RequestsSent > 1) {
-                ui64 timeToAccelerateUs = Max<ui64>(1, PutImpl.GetTimeToAccelerateNs(LogCtx) / 1000);
+                const ui64 predictedDelayNs = PutImpl.GetTimeToAccelerateNs(LogCtx);
+                ui64 timeToAccelerateUs = Max<ui64>(1, predictedDelayNs / 1000);
                 if (RequestsPendingBeforeAcceleration == 1 && AccelerateRequestsSent == 1) {
                     // if there is only one request pending, but first accelerate is unsuccessful, make a pause
                     timeToAccelerateUs *= 2;
@@ -448,6 +449,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                 TDuration timeToAccelerate = TDuration::MicroSeconds(timeToAccelerateUs);
                 TMonotonic now = TActivationContext::Monotonic();
                 TMonotonic nextAcceleration = RequestStartTime + timeToAccelerate;
+                PutImpl.History.AddAccelerationSchedule(true, AccelerateRequestsSent + 1, predictedDelayNs,
+                    timeToAccelerate, nextAcceleration > now ? nextAcceleration - now : TDuration::Zero());
                 LWTRACK(DSProxyScheduleAccelerate, Orbit,  nextAcceleration > now ? (nextAcceleration - now).MicroSeconds() / 1000.0 : 0.0, "Put");
                 if (nextAcceleration > now) {
                     ui64 causeIdx = RootCauseTrack.RegisterAccelerate("Put");
@@ -475,6 +478,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
 
         if (TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) {
             if (PopAllowToken(HandleClass)) {
+                const auto predictions = PutImpl.GetPredictionSnapshot(ResponsesSent == PutImpl.Blobs.size()
+                    ? THistory::EPredictionStage::Final : THistory::EPredictionStage::Current);
                 YDB_LOG_WARN("Long TEvPut request detected",
                     {"marker", "BPP71"},
                     {"longRequestThreshold", LongRequestThreshold},
@@ -482,7 +487,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                     {"handleClass", NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)},
                     {"tactic", TEvBlobStorage::TEvPut::TacticName(Tactic)},
                     {"restartCounter", RestartCounter},
-                    {"history", PutImpl.PrintHistory()});
+                    {"maxNumOfSlowDisks", AccelerationParams.MaxNumOfSlowDisks},
+                    {"slowDiskThreshold", AccelerationParams.SlowDiskThreshold},
+                    {"predictedDelayMultiplier", AccelerationParams.PredictedDelayMultiplier},
+                    {"history", PutImpl.History.Print(&predictions)});
             }
             if (ResponsesSent == PutImpl.Blobs.size() && EnableStorageRetroTraceCollectionSlowRequests) {
                 if (TNamedSpan* retroSpan = Span.GetRetroSpanPtr()) {
@@ -692,6 +700,7 @@ public:
     }
 
     void Bootstrap() override {
+        PutImpl.History.AddPredictions(PutImpl.GetPredictionSnapshot(THistory::EPredictionStage::Initial));
         DSP_LOG_INFO_S("BPP13", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID

@@ -512,15 +512,21 @@ namespace NKikimr {
         template<typename TQueryRecord>
         TEvVResultBaseWithQoSPB(TInstant now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
                 const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel,
-                ui32 recByteSize, TQueryRecord *queryRecord, const TActorIDPtr &skeletonFrontIDPtr)
+                ui32 recByteSize, TQueryRecord *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
+                bool takeMsgQoS = false)
             : TBase(GetReceivedTimestamp(queryRecord, now), counterPtr, histoPtr, channel)
             , MsgCtx(queryRecord ? TVMsgContext(recByteSize, queryRecord->GetMsgQoS()) : TVMsgContext())
             , SkeletonFrontIDPtr(skeletonFrontIDPtr)
         {
             if (queryRecord) {
                 Y_ABORT_UNLESS(queryRecord->HasMsgQoS());
-                auto *resultQoS = TBase::Record.MutableMsgQoS();
-                resultQoS->Swap(queryRecord->MutableMsgQoS());
+                if (takeMsgQoS) {
+                    // the request is left without MsgQoS
+                    TBase::Record.set_allocated_msgqos(queryRecord->release_msgqos());
+                } else {
+                    TBase::Record.MutableMsgQoS()->Swap(queryRecord->MutableMsgQoS());
+                }
+                NKikimrBlobStorage::TMsgQoS *resultQoS = TBase::Record.MutableMsgQoS();
                 resultQoS->ClearDeadlineSeconds();
                 resultQoS->ClearSendMeCostSettings();
                 resultQoS->ClearInternalMessageId();

@@ -58,9 +58,10 @@ struct THugeAdmissionEnv {
                 case TEvBlobStorage::EvCutLog:
                     return false;
                 case TEvBlobStorage::EvVPut:
-                    // the skeleton front forwards the put to the skeleton, which reserves Fresh chunks
-                    if (ev->Recipient != Info->GetActorId(0)) {
-                        Skeleton = ev->Recipient;
+                    // the skeleton front passes the put on to the skeleton, which reserves Fresh chunks
+                    if (IActor *actor = Env.Runtime->GetActor(ev->GetRecipientRewrite()); actor &&
+                            TypeName(*actor).EndsWith("::TSkeleton")) {
+                        Skeleton = ev->GetRecipientRewrite();
                     }
                     break;
                 case TEvBlobStorage::EvHullWriteHugeBlob: {

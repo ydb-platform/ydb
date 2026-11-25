@@ -602,7 +602,7 @@ namespace NKikimr {
         }
 
         template <typename TEvResult>
-        std::pair<std::unique_ptr<NPDisk::TEvLog>, NWilson::TTraceId> CreatePutLogEvent(const TActorContext &ctx, TString evPrefix,
+        std::pair<std::unique_ptr<NPDisk::TEvLog>, NWilson::TTraceId> CreatePutLogEvent(const TActorContext &ctx, TStringBuf evPrefix,
                 NActors::TActorId sender, ui64 cookie, NLWTrace::TOrbit &&orbit, NKikimrBlobStorage::EPutHandleClass handleClass,
                 TVPutInfo &info, std::unique_ptr<TEvResult> result)
         {
@@ -668,7 +668,7 @@ namespace NKikimr {
             return ev;
         }
 
-        THullCheckStatus ValidateVPut(const TActorContext &ctx, TString evPrefix,
+        THullCheckStatus ValidateVPut(const TActorContext &ctx, TStringBuf evPrefix,
                 TLogoBlobID id, const TRope& buffer, const std::optional<ui64>& checksum,
                 const std::optional<NKikimrBlobStorage::TChecksumType>& checksumType,
                 bool ignoreBlock, bool issueKeepFlag,

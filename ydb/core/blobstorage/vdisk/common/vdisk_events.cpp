@@ -30,10 +30,21 @@ namespace NKikimr {
             const NVDiskMon::TLtcHistoPtr &histoPtr, const ui64 bufferSizeBytes,
             ui64 incarnationGuid, const TString& errorReason)
         : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG,
-                recByteSize, record, skeletonFrontIDPtr)
+                recByteSize, record, skeletonFrontIDPtr, status == NKikimrProto::OK)
     {
         IncrementSize(bufferSizeBytes);
         Record.SetStatus(status);
+        // A request answered with OK is not looked at any more, so its submessages are moved to the result instead of
+        // being allocated anew; on errors the request stays intact, as it may be inspected after the result is created.
+        const bool takeSubmessages = record && status == NKikimrProto::OK;
+        if (takeSubmessages) {
+            if (record->HasBlobID()) {
+                Record.set_allocated_blobid(record->release_blobid());
+            }
+            if (record->HasVDiskID()) {
+                Record.set_allocated_vdiskid(record->release_vdiskid());
+            }
+        }
         LogoBlobIDFromLogoBlobID(logoBlobId, Record.MutableBlobID());
         VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
         if (cookie) {
@@ -42,7 +53,11 @@ namespace NKikimr {
         Record.SetStatusFlags(oosStatus.Flags);
         Record.SetApproximateFreeSpaceShare(oosStatus.ApproximateFreeSpaceShare);
         if (record && record->HasTimestamps()) {
-            Record.MutableTimestamps()->CopyFrom(record->GetTimestamps());
+            if (takeSubmessages) {
+                Record.set_allocated_timestamps(record->release_timestamps());
+            } else {
+                Record.MutableTimestamps()->CopyFrom(record->GetTimestamps());
+            }
         }
         if (status == NKikimrProto::OK) {
             Record.SetIncarnationGuid(incarnationGuid);

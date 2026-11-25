@@ -293,5 +293,5 @@ To prevent degradation:
 To determine when an index replacement is required:
 
 1. Select a representative set of query vectors. Measure recall by comparing the index search results with the exact results of a full scan of the same table.
-2. Measure the search time for the same queries. Repeat the measurements with the same distance function and search settings, including [KMeansTreeSearchTopSize](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize).
-3. Build a new index and atomically replace the old one if recall has consistently decreased or search time has increased after the data distribution changed. A growing row count alone is a reason to measure, not a replacement threshold.
+1. Measure the search time for the same queries. Repeat the measurements with the same distance function and search settings, including [KMeansTreeSearchTopSize](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize).
+1. Build a new index and atomically replace the old one if recall has consistently decreased or search time has increased after the data distribution changed. A growing row count alone is a reason to measure, not a replacement threshold.

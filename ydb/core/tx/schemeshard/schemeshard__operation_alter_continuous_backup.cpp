@@ -4,6 +4,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_rotate_cdc_stream.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -171,12 +172,10 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
         const auto [_, newStreamPath] = std::get<NCdc::TStreamPaths>(cdcChecksResult);
 
         if (AppData(context.Ctx)->FeatureFlags.GetDisablePgCompatibility()) {
-            for (const auto& [_, column] : table->Columns) {
-                if (!column.IsDropped() && column.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                    result = {CreateReject(opId, NKikimrScheme::StatusSchemeError,
-                        TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << column.Name << "'")};
-                    return false;
-                }
+            if (auto name = FindPgColumn(*context.SS, tablePath->PathId)) {
+                result = {CreateReject(opId, NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << name << "'")};
+                return false;
             }
         }
 

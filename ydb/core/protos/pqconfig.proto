@@ -388,7 +388,7 @@ message TPQTabletConfig {
     // Source service-consumer id identifying the replication that created this topic.
     optional string ReplicationSourceConsumer = 50;
 
-    optional bool SplitByPartitionKey = 51;
+    optional bool SplitByPartitionKey = 52;
 
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory

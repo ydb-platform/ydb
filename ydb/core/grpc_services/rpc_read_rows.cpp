@@ -108,6 +108,9 @@ public:
         THashSet<TString> keyColumnNamesInSchema;
         THashMap<TString, const NKikimr::TSysTables::TTableColumnInfo*> nameToColumn;
         for (const auto& [colId, colInfo] : entry.Columns) {
+            if (colInfo.IsBuildInProgress) {
+                continue;
+            }
             nameToColumn[colInfo.Name] = &colInfo;
 
             const i32 keyOrder = colInfo.KeyOrder;

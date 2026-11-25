@@ -933,6 +933,10 @@ public:
     TRows DecodeResultSet(const TString& data, const TProjection& projection, bool orderedColumns = true) {
         Ydb::ResultSet proto;
         UNIT_ASSERT(proto.ParseFromString(data));
+        return DecodeResultSet(proto, projection, orderedColumns);
+    }
+
+    TRows DecodeResultSet(const Ydb::ResultSet& proto, const TProjection& projection, bool orderedColumns = true) {
         NYdb::TResultSet result(proto);
         TProjection names;
         for (const auto& column : result.GetColumnsMeta()) { names.emplace_back(column.Name); }
@@ -1287,6 +1291,52 @@ public:
         }
     }
 
+    void CheckReadRows(const TProjection& projection, EColumnState state) {
+        using TEvRequest = NGRpcService::TGrpcRequestNoOperationCall<
+            Ydb::Table::ReadRowsRequest, Ydb::Table::ReadRowsResponse>;
+        Ydb::Table::ReadRowsRequest request;
+        request.set_path("/Root/Table");
+        auto* keys = request.mutable_keys();
+        auto* member = keys->mutable_type()->mutable_list_type()->mutable_item()->mutable_struct_type()->add_members();
+        member->set_name("key");
+        member->mutable_type()->set_type_id(Ydb::Type::UINT32);
+        for (const auto key : Keys) {
+            keys->mutable_value()->add_items()->add_items()->set_uint32_value(key);
+        }
+        for (const auto& name : projection) { request.add_columns(name); }
+        const auto response = Runtime().WaitFuture(NRpcService::DoLocalRpc<TEvRequest>(
+            std::move(request), "/Root", Nothing(), Runtime().GetActorSystem(0)));
+        const auto badColumn = RejectedColumn(projection, state);
+        UNIT_ASSERT_VALUES_EQUAL_C(response.status(), badColumn
+            ? Ydb::StatusIds::SCHEME_ERROR : Ydb::StatusIds::SUCCESS, response.DebugString());
+        if (badColumn) {
+            UNIT_ASSERT(!response.has_result_set());
+            UNIT_ASSERT_VALUES_EQUAL(response.issues_size(), 1);
+            const auto& issue = response.issues(0);
+            UNIT_ASSERT_VALUES_EQUAL(issue.issue_code(), ui32(NKikimrIssues::TIssuesIds::DEFAULT_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(issue.severity(), ui32(NYql::TSeverityIds::S_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(issue.message(), "Unknown result column: " + badColumn);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(response.issues_size(), 0);
+            UNIT_ASSERT(response.has_result_set());
+            auto expected = projection;
+            if (projection.empty()) {
+                expected = ExistingColumns;
+                if (state == EColumnState::Ready) { expected.insert(expected.end(), {"extra", "other"}); }
+            }
+            AssertRows(DecodeResultSet(response.result_set(), expected, !projection.empty()), expected, Keys);
+        }
+    }
+
+    void CheckReadRowsInvariants(EColumnState state) {
+        CheckReadRows({}, state);
+        CheckReadRows({"value", "key"}, state);
+        for (const auto& projection : TVector<TProjection>{
+                {"extra"}, {"other"}, {"value", "extra", "key"}, {"other", "key", "extra", "value"}}) {
+            CheckReadRows(projection, state);
+        }
+    }
+
     void CheckDescribeTable(EColumnState state) {
         using TEvRequest = NGRpcService::TGrpcRequestOperationCall<
             Ydb::Table::DescribeTableRequest, Ydb::Table::DescribeTableResponse>;
@@ -1348,6 +1398,7 @@ public:
         }
         CheckReadTable({}, state);
         CheckDescribeTable(state);
+        CheckReadRowsInvariants(state);
     }
 
     void CheckInvariants(ERead read, EColumnState state) {
@@ -1710,6 +1761,29 @@ Y_UNIT_TEST_SUITE(DataShardBuildingColumns) {
     Y_UNIT_TEST(KqpScan) { TestBuildingColumn(ERead::KqpScan); }
     Y_UNIT_TEST(ReadTable) { TestBuildingColumn(ERead::ReadTable); }
     Y_UNIT_TEST(SelectRow) { TestBuildingColumn(ERead::MiniKQL); }
+
+    Y_UNIT_TEST_TWIN(ReadRowsDuringBackfill, Cancel) {
+        TBuildingColumnFixture fixture;
+        fixture.CheckReadRowsInvariants(EColumnState::Absent);
+        TColumnBuild build(fixture);
+        fixture.CheckReadRowsInvariants(EColumnState::Building);
+        build.CommitBatch(1);
+        fixture.CheckReadRowsInvariants(EColumnState::Building);
+        if constexpr (Cancel) {
+            build.Cancel();
+        } else {
+            build.CommitBatch(2);
+            fixture.CheckReadRowsInvariants(EColumnState::Building);
+            build.WaitForFinalization();
+            fixture.CheckReadRowsInvariants(EColumnState::Building);
+            build.Finish();
+        }
+        const auto state = Cancel ? EColumnState::Absent : EColumnState::Ready;
+        fixture.CheckReadRowsInvariants(state);
+        fixture.RestartSchemeShard();
+        fixture.RestartDataShards();
+        fixture.CheckReadRowsInvariants(state);
+    }
 
     Y_UNIT_TEST_TWIN(ConcurrentRowChangesDuringBackfill, Cancel) {
         TBuildingColumnFixture fixture;

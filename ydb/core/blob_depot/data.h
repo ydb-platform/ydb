@@ -910,6 +910,7 @@ namespace NKikimr::NBlobDepot {
         class TLoadCycleAccounting;
 
         void FinishLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx);
+        void RunLoadSuccessorTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx);
         void RestartLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx, bool progress);
         ELoadTrashResult RunLoadTrashLoop(TCoroTx::TContextBase& tx, TLoadCycleAccounting& accounting, TString& from);
     };

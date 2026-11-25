@@ -1178,44 +1178,56 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             }
         }
 
-        if (const auto& indexes = item.Metadata.GetIndexes()) {
-            // Plaintext paths identify their index by name. AUTO can check each downloaded
-            // layout in CreateTablePropose and rebuild only the incomplete ones.
-            if (item.Table && (Key || IndexPopulationMode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT)) {
+        const auto& prefixes = item.ExportIndexIVs.GetExportPrefixes();
+        const auto& indexIVs = item.ExportIndexIVs.GetIVs();
+        const bool strict = IndexPopulationMode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT;
+        if (Key && item.Table && !prefixes.empty()) {
+            // SchemeShard records the directories it actually exported. An older DataShard
+            // can list a different full-text layout in metadata.json and renumber later indexes.
+            THashSet<TStringBuf> mappedIndexes;
+            for (const auto& [path, prefix] : prefixes) {
+                mappedIndexes.insert(TStringBuf(path).Before('/'));
+            }
+            for (auto& index : NBackup::MakeIndexesMetadata(item.Table->indexes(), 0, false)) {
+                const auto it = prefixes.find(index.ImplTablePrefix);
+                if (it != prefixes.end()) {
+                    index.ExportPrefix = it->second;
+                    IndexImplTablePrefixes.push_back(std::move(index));
+                } else {
+                    const auto name = TStringBuf(index.ImplTablePrefix).Before('/');
+                    if (mappedIndexes.contains(name) || indexIVs.contains(index.ImplTablePrefix)) {
+                        if (strict) {
+                            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Missing index export prefix in schema mapping: " << index.ImplTablePrefix);
+                        }
+                        IndexesToRebuild.emplace(name);
+                    }
+                }
+            }
+        } else if (const auto& indexes = item.Metadata.GetIndexes()) {
+            // Without a directory mapping, a layout mismatch can shift all encrypted prefixes.
+            if (item.Table && (Key || strict)) {
                 if (const auto issue = NBackup::GetIndexMetadataIssue(item.Table->indexes(), *indexes)) {
-                    if (IndexPopulationMode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT) {
+                    if (strict) {
                         return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << MetadataKey << ": " << issue);
                     }
-                    // Older DataShards may also have numbered the remaining tables differently.
                     return StartDownloadingChangefeeds();
                 }
             }
-            IndexImplTablePrefixes.reserve(indexes->size());
-            for (const auto& index : *indexes) {
-                auto& indexMetadata = IndexImplTablePrefixes.emplace_back(index);
-                // An older DataShard numbers directories using its own changefeed flag.
-                // SchemeShard records the actual destination of each separate backup item.
-                const auto& prefixes = item.ExportIndexIVs.GetExportPrefixes();
-                if (const auto it = prefixes.find(index.ImplTablePrefix); it != prefixes.end()) {
-                    indexMetadata.ExportPrefix = it->second;
-                }
-                // The IV of a separate index impl-table item is stored only in the
-                // authenticated schema mapping of its parent table
-                const auto& indexIVs = item.ExportIndexIVs.GetIVs();
-                if (const auto it = indexIVs.find(index.ImplTablePrefix); it != indexIVs.end()) {
-                    indexMetadata.IV = NBackup::TEncryptionIV::FromBinaryString(it->second);
-                }
-            }
-
-            DownloadMaterializedIndexes();
+            IndexImplTablePrefixes.assign(indexes->begin(), indexes->end());
         } else if (!Key) {
             if (item.Table) {
                 IndexImplTablePrefixes = NBackup::MakeIndexesMetadata(item.Table->indexes(), 0, false);
             }
-            DownloadMaterializedIndexes();
         } else {
-            Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << MetadataKey << ": no indexes described in table metadata");
+            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << MetadataKey << ": no indexes described in table metadata");
         }
+
+        for (auto& index : IndexImplTablePrefixes) {
+            if (const auto it = indexIVs.find(index.ImplTablePrefix); it != indexIVs.end()) {
+                index.IV = NBackup::TEncryptionIV::FromBinaryString(it->second);
+            }
+        }
+        DownloadMaterializedIndexes();
     }
 
     void DownloadMaterializedIndexes() {

@@ -14148,24 +14148,55 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, const
             }
         });
 
-        restore("/MyRoot/Incomplete", TSettings::INDEX_POPULATION_MODE_IMPORT);
-        const auto result = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(result.GetResponse().GetEntry().GetIssues()),
-            "index1/indexImplDictTable");
+        const auto checkRejected = [&](const TString& dst, const TString& issue) {
+            restore(dst, TSettings::INDEX_POPULATION_MODE_IMPORT);
+            const auto result = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(result.GetResponse().GetEntry().GetIssues()), issue);
+        };
+        const auto checkRestored = [&](const TString& dst, TSettings::IndexPopulationMode mode, const TVector<TString>& expectedBuilds) {
+            TVector<TString> builds;
+            auto observer = runtime.AddObserver<TEvIndexBuilder::TEvCreateRequest>([&](const auto& ev) {
+                builds.push_back(ev->Get()->Record.GetSettings().index().name());
+            });
+            restore(dst, mode);
+            TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+            Sort(builds);
+            UNIT_ASSERT_VALUES_EQUAL(builds, expectedBuilds);
+            CheckRestoredRows(runtime, dst, "/z_global/indexImplTable", rowCount);
+            CheckRestoredRows(runtime, dst, "/zz_global/indexImplTable", rowCount);
+            for (const auto& impl : implTables) {
+                const TString suffix = TStringBuilder() << "/index1/" << impl;
+                UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table" + suffix),
+                    ReadShards(runtime, TTestTxConfig::SchemeShard, dst + suffix));
+            }
+        };
 
-        TVector<TString> builds;
-        auto observer = runtime.AddObserver<TEvIndexBuilder::TEvCreateRequest>([&](const auto& ev) {
-            builds.push_back(ev->Get()->Record.GetSettings().index().name());
-        });
-        restore("/MyRoot/Rebuilt", TSettings::INDEX_POPULATION_MODE_AUTO);
-        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        Sort(builds);
-        UNIT_ASSERT_VALUES_EQUAL(builds, (options.Encrypted ? TVector<TString>{"index1", "z_global", "zz_global"} : TVector<TString>{"index1"}));
-        CheckRestoredRows(runtime, "/MyRoot/Rebuilt", "/z_global/indexImplTable", rowCount);
-        CheckRestoredRows(runtime, "/MyRoot/Rebuilt", "/zz_global/indexImplTable", rowCount);
-        const TString suffix = compact ? "/index1/indexImplDocsTable" : "/index1/indexImplDictTable";
-        UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table" + suffix),
-            ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Rebuilt" + suffix));
+        if (!options.Encrypted) {
+            checkRejected("/MyRoot/Incomplete", "index1/indexImplDictTable");
+            checkRestored("/MyRoot/Rebuilt", TSettings::INDEX_POPULATION_MODE_AUTO, {"index1"});
+            return;
+        }
+
+        checkRestored("/MyRoot/MappedImport", TSettings::INDEX_POPULATION_MODE_IMPORT, {});
+        checkRestored("/MyRoot/MappedAuto", TSettings::INDEX_POPULATION_MODE_AUTO, {});
+
+        const TString path = "SchemaMapping/mapping.json.enc";
+        const auto [plain, iv] = storage.ReadEncrypted(path);
+        NBackup::TSchemaMapping mapping;
+        TString error;
+        UNIT_ASSERT_C(mapping.Deserialize(plain, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(mapping.Items.size(), 1);
+        auto& prefixes = mapping.Items.front().IndexExportPrefixes;
+        const TString missing = compact ? "index1/indexImplDocsTable" : "index1/indexImplDictTable";
+        UNIT_ASSERT_VALUES_EQUAL(prefixes.erase(missing), 1);
+        storage.WriteEncrypted(path, mapping.Serialize(), iv);
+        checkRejected("/MyRoot/PartialImport", missing);
+        checkRestored("/MyRoot/PartialAuto", TSettings::INDEX_POPULATION_MODE_AUTO, {"index1"});
+
+        prefixes.clear(); // Older backups have no directory mapping.
+        storage.WriteEncrypted(path, mapping.Serialize(), iv);
+        checkRejected("/MyRoot/LegacyImport", "index1/indexImplDictTable");
+        checkRestored("/MyRoot/LegacyAuto", TSettings::INDEX_POPULATION_MODE_AUTO, {"index1", "z_global", "zz_global"});
     }
 }
 

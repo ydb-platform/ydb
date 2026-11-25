@@ -50,6 +50,8 @@
 #include <util/random/mersenne.h>
 #include <util/random/random.h>
 #include <util/random/shuffle.h>
+#include <util/stream/format.h>
+#include <util/string/builder.h>
 #include <util/string/escape.h>
 #include <util/string/printf.h>
 #include <util/system/backtrace.h>
@@ -62,21 +64,25 @@
 
 namespace NKikimr {
 
-#define TEST_RESPONSE_3(msg, st, sz) \
+#define TEST_RESPONSE_3_C(msg, st, sz, context) \
 do { \
-    UNIT_ASSERT_EQUAL_C(LastResponse.Message, TResponseData::msg, "Unexpected message " << (int)LastResponse.Message); \
+    UNIT_ASSERT_EQUAL_C(LastResponse.Message, TResponseData::msg, "Unexpected message " << (int)LastResponse.Message << context); \
     UNIT_ASSERT_EQUAL_C(LastResponse.Status, NKikimrProto::st, "Unexpected status " \
-            << StatusToString(LastResponse.Status) << " deadVDisks " << Env->DeadVDisksMask); \
+            << StatusToString(LastResponse.Status) << " deadVDisks " << Env->DeadVDisksMask << context); \
     UNIT_ASSERT_VALUES_EQUAL_C(LastResponse.Data.size(), sz, "Data size " \
-        << (int)LastResponse.Data.size() << " while expected " << (sz)); \
+        << (int)LastResponse.Data.size() << " while expected " << (sz) << context); \
 } while(false)
 
-#define TEST_RESPONSE(msg, st, sz, d) \
+#define TEST_RESPONSE_3(msg, st, sz) TEST_RESPONSE_3_C(msg, st, sz, "")
+
+#define TEST_RESPONSE_C(msg, st, sz, d, context) \
 do { \
-    TEST_RESPONSE_3(msg, st, sz); \
+    TEST_RESPONSE_3_C(msg, st, sz, context); \
     UNIT_ASSERT_C(!((sz) > 0 && TString(LastResponse.Data[0]) != TString(d)), "Got '" \
-        << EscapeC(TString(LastResponse.Data[0])).c_str() << "' instead of '" << EscapeC(TString(d)).c_str() << "'"); \
+        << EscapeC(TString(LastResponse.Data[0])).c_str() << "' instead of '" << EscapeC(TString(d)).c_str() << "'" << context); \
 } while(false)
+
+#define TEST_RESPONSE(msg, st, sz, d) TEST_RESPONSE_C(msg, st, sz, d, "")
 
 
 #define TEST_RESPONSE_FULLCHECK(msg, st, sz, d) \
@@ -102,6 +108,27 @@ do { \
         } while (!isOk); \
     } \
 } while(false)
+
+#define FOR_EACH_ERASURE(M)   \
+    M(ErasureNone)            \
+    M(ErasureMirror3)         \
+    M(Erasure3Plus1Block)     \
+    M(Erasure3Plus1Stripe)    \
+    M(Erasure4Plus2Block)     \
+    M(Erasure3Plus2Block)     \
+    M(Erasure4Plus2Stripe)    \
+    M(Erasure3Plus2Stripe)    \
+    M(ErasureMirror3Plus2)    \
+    M(ErasureMirror3dc)       \
+    M(Erasure4Plus3Block)     \
+    M(Erasure4Plus3Stripe)    \
+    M(Erasure3Plus3Block)     \
+    M(Erasure3Plus3Stripe)    \
+    M(Erasure2Plus3Block)     \
+    M(Erasure2Plus3Stripe)    \
+    M(Erasure2Plus2Block)     \
+    M(Erasure2Plus2Stripe)    \
+    M(ErasureMirror3of4)
 
 
 constexpr ui32 TEST_TIMEOUT = NSan::PlainOrUnderSanitizer(1800000, 2400000);
@@ -3421,6 +3448,96 @@ protected:
     {}
 };
 
+class TTestPutGetRestoreDropped : public TTestBlobStorageProxyForRequest {
+public:
+    struct TParameters : ITestParametrs {
+        TErasureType::ECrcMode CrcMode = TErasureType::CrcModeNone;
+        ui32 DropMask = 0;
+    };
+
+private:
+    const TParameters Parameters;
+    const TString DropMaskContext;
+    const TString Data;
+    const TLogoBlobID BlobId;
+
+    class TGetResultFilter final : public TDecorator {
+        const ui32 DropMask;
+
+    public:
+        explicit TGetResultFilter(IActor* actor, ui32 dropMask)
+            : TDecorator(THolder<IActor>(actor))
+            , DropMask(dropMask)
+        {}
+
+        bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext&) override {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvVGetResult) {
+                auto& record = ev->Get<TEvBlobStorage::TEvVGetResult>()->Record;
+                for (auto& item : *record.MutableResult()) {
+                    const auto partId = LogoBlobIDFromLogoBlobID(item.GetBlobID()).PartId();
+                    const bool drop = ((1 << partId) & DropMask) != 0;
+                    if (item.GetStatus() == NKikimrProto::OK && drop) {
+                        item.SetStatus(NKikimrProto::NODATA);
+                        item.ClearPayloadId();
+                        item.ClearBufferData();
+                    }
+                }
+            }
+            return true;
+        }
+    };
+
+    void TestFSM(const TActorContext& ctx) override {
+        static constexpr int getCount = 128;
+
+        if (TestStep == 0) {
+            TTestBlobStorageProxyForRequest::TestFSM(ctx);
+            ctx.Send(Proxy, new TEvBlobStorage::TEvPut(BlobId, Data, TInstant::Max()));
+        } else if (TestStep == 1) {
+            TEST_RESPONSE_C(MessagePutResult, OK, 0, "", DropMaskContext);
+            for (int i = 0; i < getCount; ++i) {
+                auto get = std::make_unique<TEvBlobStorage::TEvGet>(
+                    BlobId, 0, 0, TInstant::Max(), NKikimrBlobStorage::AsyncRead);
+                auto* actor = CreateBlobStorageGroupGetRequest({
+                    .Common = {
+                        .GroupInfo = BsInfo,
+                        .GroupQueues = GroupQueues,
+                        .Mon = Mon,
+                        .Source = SelfId(),
+                        .Cookie = 0,
+                        .Now = TMonotonic::Now(),
+                        .StoragePoolCounters = StoragePoolCounters,
+                        .RestartCounter = get->RestartCounter,
+                        .Event = get.get(),
+                    },
+                    .LongRequestThreshold = TDuration::Seconds(1),
+                });
+                ctx.Register(new TGetResultFilter(actor, Parameters.DropMask),
+                             TMailboxType::HTSwap, 1);
+            }
+        } else if (TestStep < getCount + 2) {
+            TEST_RESPONSE_C(MessageGetResult, OK, 1, Data, DropMaskContext);
+            if (TestStep == getCount + 1) {
+                Env->DoneEvent.Signal();
+            }
+        } else {
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+        }
+        ++TestStep;
+    }
+
+public:
+    TTestPutGetRestoreDropped(
+            const TActorId& proxy, const TIntrusivePtr<TBlobStorageGroupInfo>& bsInfo,
+            const TIntrusivePtr<TTestEnvironment>& env, const TIntrusivePtr<ITestParametrs>& params)
+        : TTestBlobStorageProxyForRequest(proxy, bsInfo, env, params)
+        , Parameters(*static_cast<TParameters*>(params.Get()))
+        , DropMaskContext(TStringBuilder() << " (DropMask=" << Bin(Parameters.DropMask, HF_ADDX) << ')')
+        , Data(NUnitTest::RandomString(4096, 0))
+        , BlobId(1, 1, 1, 0, Data.size(), 0, 0, Parameters.CrcMode)
+    {}
+};
+
 class TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob : public TTestBlobStorageProxyForRequest {
     void TestFSM(const TActorContext &ctx) {
         TTestBlobStorageProxyForRequest::TestFSM(ctx);
@@ -3533,6 +3650,12 @@ class TBlobStorageProxyTest: public TTestBase {
         PROXY_UNIT_TEST(TestProxyDiscoverSingleTimeout);
         PROXY_UNIT_TEST(TestEmptyRange);
         PROXY_UNIT_TEST(TestPutGetMany);
+
+#define TEST_PUT_GET_RESTORE_DROPPED(erasureType)                           \
+    PROXY_UNIT_TEST(TestPutGetRestoreDropped_CrcWholePart_##erasureType);   \
+    PROXY_UNIT_TEST(TestPutGetRestoreDropped_CrcNone_##erasureType);
+    FOR_EACH_ERASURE(TEST_PUT_GET_RESTORE_DROPPED)
+#undef TEST_PUT_GET_RESTORE_DROPPED
 
         PROXY_UNIT_TEST(TestPutGetStatusErasureMirror3);
         PROXY_UNIT_TEST(TestPutGetStatusErasure3Plus1Block);
@@ -4101,6 +4224,108 @@ public:
         TestBlobStorage<TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob>(nullptr, args);
         SectorMapByPath.clear();
     }
+
+    template <TErasureType::EErasureSpecies erasureSpecies>
+    void TestPutGetRestoreDropped(TErasureType::ECrcMode crcMode) {
+        const TErasureType type(erasureSpecies);
+
+        TTestArgs args{};
+        args.ErasureSpecies = erasureSpecies;
+        args.FailRealmCount = erasureSpecies == TErasureType::ErasureMirror3dc ? 3 : 1;
+        auto parameters = MakeIntrusive<TTestPutGetRestoreDropped::TParameters>();
+        args.Parametrs = parameters;
+        parameters->CrcMode = crcMode;
+
+        const ui32 dropWhole = 1;
+        const ui32 dataPartsCount = type.DataParts();
+        const ui32 parityPartsCount = type.ParityParts();
+        for (ui32 i = 1; i <= dataPartsCount; ++i) {
+            const ui32 dropData = 1 << i;
+            for (ui32 j = 1; j <= parityPartsCount; ++j) {
+                const ui32 dropParity = 1 << (dataPartsCount + j);
+                parameters->DropMask = dropWhole | dropData | dropParity;
+                TestBlobStorage<TTestPutGetRestoreDropped>(nullptr, args);
+                SectorMapByPath.clear();
+            }
+        }
+    }
+
+    template <>
+    void TestPutGetRestoreDropped<TErasureType::ErasureNone>(TErasureType::ECrcMode crcMode) {
+        TTestArgs args{};
+        args.ErasureSpecies = TErasureType::ErasureNone;
+        auto parameters = MakeIntrusive<TTestPutGetRestoreDropped::TParameters>();
+        args.Parametrs = parameters;
+        parameters->CrcMode = crcMode;
+        parameters->DropMask = 0;
+
+        TestBlobStorage<TTestPutGetRestoreDropped>(nullptr, args);
+        SectorMapByPath.clear();
+    }
+
+    template <>
+    void TestPutGetRestoreDropped<TErasureType::ErasureMirror3of4>(TErasureType::ECrcMode crcMode) {
+        TTestArgs args{};
+        args.ErasureSpecies = TErasureType::ErasureMirror3of4;
+        auto parameters = MakeIntrusive<TTestPutGetRestoreDropped::TParameters>();
+        args.Parametrs = parameters;
+        parameters->CrcMode = crcMode;
+
+        // Can drop only the first or the second part
+        for (ui32 dropMask : {0b010, 0b100}) {
+            parameters->DropMask = dropMask;
+            TestBlobStorage<TTestPutGetRestoreDropped>(nullptr, args);
+            SectorMapByPath.clear();
+        }
+    }
+
+    template <>
+    void TestPutGetRestoreDropped<TErasureType::Erasure3Plus1Block>(TErasureType::ECrcMode crcMode) {
+        const TErasureType type(TErasureType::Erasure3Plus1Block);
+
+        TTestArgs args{};
+        args.ErasureSpecies = TErasureType::Erasure3Plus1Block;
+        auto parameters = MakeIntrusive<TTestPutGetRestoreDropped::TParameters>();
+        args.Parametrs = parameters;
+        parameters->CrcMode = crcMode;
+
+        const ui32 dropWhole = 1;
+
+        // Can drop just one part out of all:
+        for (ui32 i = 1; i <= type.TotalPartCount(); ++i) {
+            const ui32 dropData = 1 << i;
+            parameters->DropMask = dropWhole | dropData;
+            TestBlobStorage<TTestPutGetRestoreDropped>(nullptr, args);
+            SectorMapByPath.clear();
+        }
+    }
+
+    template <>
+    void TestPutGetRestoreDropped<TErasureType::Erasure4Plus3Block>(TErasureType::ECrcMode) {
+        // Not supported due to TSubgroupPartLayout::MaxNodes
+    }
+
+    template <TErasureType::EErasureSpecies erasureSpecies>
+        requires (erasureSpecies == TErasureType::Erasure3Plus1Stripe
+            || erasureSpecies == TErasureType::Erasure4Plus2Stripe
+            || erasureSpecies == TErasureType::Erasure3Plus2Stripe
+            || erasureSpecies == TErasureType::Erasure4Plus3Stripe
+            || erasureSpecies == TErasureType::Erasure3Plus3Stripe
+            || erasureSpecies == TErasureType::Erasure2Plus3Stripe
+            || erasureSpecies == TErasureType::Erasure2Plus2Stripe)
+    void TestPutGetRestoreDropped(TErasureType::ECrcMode) {
+        // Not supported yet
+    }
+
+#define TEST_PUT_GET_RESTORE_DROPPED(erasureType)                                                       \
+    void TestPutGetRestoreDropped_CrcWholePart_##erasureType() {                                        \
+        TestPutGetRestoreDropped<TErasureType::erasureType>(TErasureType::CrcModeWholePart);            \
+    }                                                                                                   \
+    void TestPutGetRestoreDropped_CrcNone_##erasureType() {                                             \
+        TestPutGetRestoreDropped<TErasureType::erasureType>(TErasureType::CrcModeNone);                 \
+    }
+    FOR_EACH_ERASURE(TEST_PUT_GET_RESTORE_DROPPED)
+#undef TEST_PUT_GET_RESTORE_DROPPED
 
     THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 nodeId, ::NMonitoring::TDynamicCounters &counters,
             TIntrusivePtr<TTableNameserverSetup> &nameserverTable, TInterconnectMock &interconnectMock) {

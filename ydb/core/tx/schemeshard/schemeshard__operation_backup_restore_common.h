@@ -732,6 +732,28 @@ public:
             }
         }
 
+        if (TxType == TTxState::TxBackup && context.SS->Tables.contains(path.Base()->PathId)) {
+            TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
+            for (const auto& [_, column] : table->Columns) {
+                if (column.DefaultKind == ETableColumnDefaultKind::FromExpression && !column.IsDropped()) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        TStringBuilder() << "Cannot backup table with generated column '" << column.Name << "'");
+                    return result;
+                }
+            }
+        }
+
+        TString errStr;
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            return result;
+        }
+
+        if (!context.SS->CheckLocks(path.Base()->PathId, Transaction, errStr)) {
+            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
+            return result;
+        }
+
         if (TxType == TTxState::TxRestore && !restoreImportingReplica && AppData()->FeatureFlags.GetDisablePgCompatibility()) {
             if (path->IsTable()) {
                 const auto* table = context.SS->Tables.FindPtr(path->PathId);
@@ -757,28 +779,6 @@ public:
                     }
                 }
             }
-        }
-
-        if (TxType == TTxState::TxBackup && context.SS->Tables.contains(path.Base()->PathId)) {
-            TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
-            for (const auto& [_, column] : table->Columns) {
-                if (column.DefaultKind == ETableColumnDefaultKind::FromExpression && !column.IsDropped()) {
-                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                        TStringBuilder() << "Cannot backup table with generated column '" << column.Name << "'");
-                    return result;
-                }
-            }
-        }
-
-        TString errStr;
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
-            return result;
-        }
-
-        if (!context.SS->CheckLocks(path.Base()->PathId, Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
-            return result;
         }
 
         PrepareChanges(path.Base(), context);

@@ -143,7 +143,7 @@ bool CreateConsistentCopyTables(
     TOperationId nextId,
     const TTxTransaction& tx,
     TOperationContext& context,
-    TVector<ISubOperation::TPtr>& result, bool fromBackupCollection)
+    TVector<ISubOperation::TPtr>& result, bool allowPgForBackupCollection)
 {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables);
 
@@ -172,7 +172,7 @@ bool CreateConsistentCopyTables(
     const auto allForBackup = AllOf(op.GetCopyTableDescriptions(), [](const auto& item) {
         return item.GetIsBackup();
     });
-    const bool allowPgForBackup = fromBackupCollection || (allForBackup && context.IsSelfProposed && tx.GetInternal());
+    const bool allowPgForBackup = allowPgForBackupCollection || (allForBackup && context.IsSelfProposed && tx.GetInternal());
 
     const auto& limits = firstPath.DomainInfo()->GetSchemeLimits();
     const auto limit = allForBackup
@@ -234,21 +234,11 @@ bool CreateConsistentCopyTables(
 
         THashSet<TString> sequences = GetLocalSequences(context, srcPath);
 
-        if (descr.HasTargetPathTargetState()) {
-            result.push_back(CreateCopyAnyTable(
-                                srcPath,
-                                NextPartId(nextId, result),
-                                CopyAnyTableTask(srcPath, dstPath, descr),
-                                sequences,
-                                allowPgForBackup,
-                                descr.GetTargetPathTargetState()));
-        } else {
-            result.push_back(CreateCopyAnyTable(
-                                srcPath,
-                                NextPartId(nextId, result),
-                                CopyAnyTableTask(srcPath, dstPath, descr),
-                                sequences, allowPgForBackup));
-        }
+        const auto targetState = descr.HasTargetPathTargetState()
+            ? TMaybe<TPathElement::EPathState>(descr.GetTargetPathTargetState())
+            : Nothing();
+        result.push_back(CreateCopyAnyTable(srcPath, NextPartId(nextId, result),
+            CopyAnyTableTask(srcPath, dstPath, descr), sequences, allowPgForBackup, targetState));
 
         // Log information about the table being copied
         YDB_LOG_TRACE_CTX(context.Ctx, "CreateConsistentCopyTables: Processing table",

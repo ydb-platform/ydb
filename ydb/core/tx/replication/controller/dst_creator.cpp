@@ -467,6 +467,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             NeedToCheck = true;
             TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
             TxBody.SetInternal(true);
+            TxBody.MutableCreateIndexedTable()->SetPrepareCdc(PrepareCdcTable);
             desc = TxBody.MutableCreateIndexedTable()->MutableTableDescription();
             if (!FillIndexDescription(*TxBody.MutableCreateIndexedTable(), scheme, AppData()->FeatureFlags.GetEnableCompactFulltextIndex(), status, error)) {
                 return Error(NKikimrScheme::StatusSchemeError, error);
@@ -480,6 +481,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         desc->SetName(pathPair.second);
 
         FillReplicationConfig(*desc->MutableReplicationConfig());
+        if (PrepareCdcTable) {
+            desc->MutableReplicationConfig()->SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTING);
+        }
+
         if (scheme.indexes_size()) {
             for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
                 // Local indexes live inside the table and have no impl tables to replicate.
@@ -545,9 +550,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
-        if (PrepareCdcTable) {
-            replicationConfig.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTING);
-        } else if (CreatePlaceholder) {
+        if (CreatePlaceholder) {
             replicationConfig.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
         }
         if (AssignOwner) {
@@ -652,6 +655,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         const auto& record = ev->Get()->Record;
         if (record.GetTxId() != TxId) {
             return;
+        }
+
+        // SchemeShard also uses ResourceExhausted for the per-table changefeed limit.
+        if (Cdc && record.GetStatus() == NKikimrScheme::StatusResourceExhausted
+            && record.GetReason().StartsWith("the limit of operations with tx type "))
+        {
+            return Retry();
         }
 
         if (Cdc && EqualToOneOf(record.GetStatus(), NKikimrScheme::StatusAlreadyExists,
@@ -1218,6 +1228,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void PassAway() override {
+        if (PipeCache) {
+            Send(PipeCache, new TEvPipeCache::TEvUnlink(SchemeShardId));
+        }
+
         if (const auto& actorId = std::exchange(Subscriber, {})) {
             Send(actorId, new TEvents::TEvPoison());
         }

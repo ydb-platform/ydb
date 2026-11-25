@@ -449,7 +449,13 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                         == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
                     && GetIndexType(indexDescription) != NKikimrSchemeOp::EIndexTypeGlobalAsync)
             {
-                implTableDesc.MutableReplicationConfig()->CopyFrom(baseTableDescription.GetReplicationConfig());
+                auto& replicationConfig = *implTableDesc.MutableReplicationConfig();
+                replicationConfig.CopyFrom(baseTableDescription.GetReplicationConfig());
+                if (tx.GetInternal() && indexedTable.GetPrepareCdc()
+                    && replicationConfig.GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING)
+                {
+                    replicationConfig.ClearImportState();
+                }
             }
 
             auto scheme = TransactionTemplate(

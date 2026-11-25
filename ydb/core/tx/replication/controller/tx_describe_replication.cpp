@@ -133,6 +133,10 @@ class TController::TTxDescribeReplication: public TTxBase {
     THolder<TEvController::TEvDescribeReplicationResult> Result;
     THashMap<ui64, TString> TargetsToDescribe;
 
+    static bool HasInitialScan(TReplication::ETargetKind kind) {
+        return EqualToOneOf(kind, TReplication::ETargetKind::Table, TReplication::ETargetKind::IndexTable);
+    }
+
 public:
     explicit TTxDescribeReplication(TController* self, TEvController::TEvDescribeReplication::TPtr& ev)
         : TTxBase("TxDescribeReplication", self)
@@ -185,7 +189,7 @@ public:
         {
             for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
                 auto* target = Replication->FindTarget(tid);
-                if (!target) {
+                if (!target || !HasInitialScan(target->GetKind())) {
                     continue;
                 }
 
@@ -295,7 +299,7 @@ public:
                 item.SetLagMilliSeconds(lag->MilliSeconds());
             }
 
-            if (PrivEv) {
+            if (PrivEv && HasInitialScan(target->GetKind())) {
                 const auto& result = PrivEv->Get()->Result;
 
                 auto it = result.find(tid);

@@ -1151,6 +1151,9 @@ private:
         programProto.SetLangVer(Config->GetDefaultLangVer());
 
         stagePredictor.SerializeToKqpSettings(*programProto.MutableSettings());
+        for (const auto& module : stagePredictor.GetWasmUdfModules()) {
+            stageProto.AddWasmUdfModules(module);
+        }
 
         for (auto member : paramsType->GetItems()) {
             auto paramName = TString(member->GetName());

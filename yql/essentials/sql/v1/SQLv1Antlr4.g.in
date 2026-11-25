@@ -88,6 +88,7 @@ sql_stmt_core:
   | drop_secret_stmt
   | truncate_table_stmt
   | materialize_stmt
+  | checksum_table_stmt
 ;
 
 expr:
@@ -1250,6 +1251,8 @@ analyze_table: simple_table_ref (LPAREN column_list RPAREN)?;
 analyze_table_list: analyze_table (COMMA analyze_table)* COMMA?;
 analyze_stmt: ANALYZE analyze_table_list;
 
+checksum_table_stmt: CHECKSUM TABLE simple_table_ref_core with_table_settings?;
+
 alter_sequence_stmt: ALTER SEQUENCE (IF EXISTS)? object_ref alter_sequence_action+;
 alter_sequence_action:
   START WITH? integer
@@ -1495,6 +1498,7 @@ keyword_as_compat:
   | CASCADE
   | CHANGEFEED
   | CHECK
+  | CHECKSUM
   | CLASSIFIER
   // | COLLATE
   | COLLECTION
@@ -1737,6 +1741,7 @@ keyword_compat: (
   | CASCADE
   | CHANGEFEED
   | CHECK
+  | CHECKSUM
   | CLASSIFIER
   | COLLATE
   | COLLECTION
@@ -2087,6 +2092,7 @@ CASE: C A S E;
 CAST: C A S T;
 CHANGEFEED: C H A N G E F E E D;
 CHECK: C H E C K;
+CHECKSUM: C H E C K S U M;
 CLASSIFIER: C L A S S I F I E R;
 COLLATE: C O L L A T E;
 COLUMN: C O L U M N;

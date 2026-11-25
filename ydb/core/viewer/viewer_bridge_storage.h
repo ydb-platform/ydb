@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/blobstorage/base/bridge_events.h>
+#include <ydb/core/protos/bind_channel_storage_pool.pb.h>
 #include <ydb/core/protos/sys_view.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 

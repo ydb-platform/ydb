@@ -358,3 +358,29 @@ def test_install_root_environment_controls_shutdown_report_directory(monkeypatch
     from ydb.tests.stability.nemesis.internal.config import Settings
     monkeypatch.setenv("NEMESIS_INSTALL_ROOT", "/tmp/nemesis-test-install")
     assert Settings().install_root == "/tmp/nemesis-test-install"
+
+
+def test_manual_restore_waits_for_accepted_inject(monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+    runner, service = execution()
+    manager = service._manager
+    original = manager._run
+
+    def delayed(*args):
+        if args[2] == "inject":
+            entered.set()
+            assert release.wait(2)
+        original(*args)
+
+    monkeypatch.setattr(manager, "_run", delayed)
+    service.start("fault")
+    assert entered.wait(1)
+    service.start("fault", "extract")
+    try:
+        manager._threads[1].join(0.05)
+        assert manager._threads[1].is_alive()
+        assert runner.extract_fault.call_count == 0
+    finally:
+        release.set()
+    assert service.shutdown(3)["status"] == "ok"
+    assert [call[0] for call in runner.method_calls] == ["inject_fault", "extract_fault"]

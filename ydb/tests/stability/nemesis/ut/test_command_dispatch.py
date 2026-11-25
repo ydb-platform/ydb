@@ -173,3 +173,20 @@ def test_restore_requires_execution_success(delivery, status):
     command = dispatch("KillNodeNemesis", "h1", "extract", {})
     receipt = delivery.transport(True).send(command)
     assert receipt() == status
+
+
+def test_remote_resume_retries_after_transient_failure():
+    post = Mock(side_effect=[
+        requests.Timeout("offline"), Mock(json=lambda: {"status": "ok"}),
+        Mock(json=lambda: {"status": "started"}), Mock(json=lambda: {"status": "started"}),
+    ])
+    transport = AgentCommandTransport(is_local_host=lambda h: False, start_local=None,
+                                      get_app_port=lambda: 31434, resolve_http_host=lambda h: h,
+                                      post=post, resume_remote=True)
+    command = dispatch("KillNodeNemesis", "h1", "inject", {})
+    with pytest.raises(requests.Timeout):
+        transport.send(command)
+    transport.send(command)
+    transport.send(command)
+    assert [call.args[0].rsplit("/", 1)[-1] for call in post.call_args_list] == [
+        "resume", "resume", "processes", "processes"]

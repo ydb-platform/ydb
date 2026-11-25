@@ -150,13 +150,6 @@ def _initialize_app_body():
         orchestrator_router.hosts = loaded_hosts
         # Resolve once at boot: agent HTTP must not depend on live DNS (DnsNemesis).
         orchestrator_router.host_endpoints = resolve_agent_endpoints(loaded_hosts)
-        for host in loaded_hosts:
-            if not orchestrator_router.is_local_host(host):
-                try:
-                    response = requests.post(orchestrator_router.agent_url(host, "/api/agent/resume"), timeout=5)
-                    response.raise_for_status()
-                except requests.RequestException:
-                    logger.exception("Could not resume agent %s; injections there remain unavailable", host)
         orchestrator_router.healthcheck_reporter = HealthCheckReporter(
             loaded_hosts, store_results=True,
             **({"endpoints_source": lambda: discovery.grpc[:2]} if discovery else {}),
@@ -230,6 +223,7 @@ def _initialize_app_body():
                 is_local_host=orchestrator_router.is_local_host,
                 start_local=execution_service.start,
                 result_local=execution_service.result,
+                resume_remote=True,
                 get_app_port=orchestrator_router.get_app_port,
                 resolve_http_host=orchestrator_router.agent_http_host,
             ),

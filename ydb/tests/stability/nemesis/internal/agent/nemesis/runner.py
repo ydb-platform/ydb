@@ -27,7 +27,7 @@ class NemesisManager:
         self._extracts = {}
         self._threads = []
         self._effects = {}
-        self._injecting = set()
+        self._injecting = {}
         self._reversible_types = set()
         self._runner_locks = {}
 
@@ -103,7 +103,7 @@ class NemesisManager:
                         or (previous_effect is not None and type_name in self._reversible_types)):
                     raise RuntimeError("Target already has an unfinished agent action")
                 self._extracts.pop(key, None)
-                self._injecting.add(key)
+                self._injecting[key] = threading.Event()
                 # A failed self-recovering action may still own a partial effect.
                 # Retain its original payload until reconciliation succeeds.
                 self._effects.setdefault(key, (runner, payload))
@@ -121,15 +121,20 @@ class NemesisManager:
             if action == "extract":
                 self._extracts[key] = proc_data
 
+            inject_done = self._injecting.get(key) if action == "extract" else None
             thread = threading.Thread(
-                target=self._run, args=(proc_id, runner, action, type_name, payload, previous_effect), daemon=True,
+                target=self._run, args=(proc_id, runner, action, type_name, payload, previous_effect, inject_done), daemon=True,
             )
             self._threads.append(thread)
             thread.start()
         return proc_data
 
-    def _run(self, proc_id, runner, action, type_name, payload, previous_effect):
+    def _run(self, proc_id, runner, action, type_name, payload, previous_effect, inject_done):
         try:
+            # Mutex acquisition is not FIFO: an early restore must wait for its
+            # accepted inject, including a partially failed inject, before running.
+            if inject_done is not None:
+                inject_done.wait()
             # It's a nemesis runner
             log_capture_string = io.StringIO()
 
@@ -226,7 +231,7 @@ class NemesisManager:
         finally:
             if action == "inject":
                 with self.processes_lock:
-                    self._injecting.discard(self._effect_key(type_name, payload))
+                    self._injecting.pop(self._effect_key(type_name, payload)).set()
 
     def get_result(self, index):
         with self.processes_lock:

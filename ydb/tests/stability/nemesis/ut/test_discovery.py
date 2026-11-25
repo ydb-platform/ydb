@@ -117,3 +117,15 @@ def test_reorder_shrink_and_fresh_observations():
     assert len(d.missing) == 16
     with pytest.raises(RecoveryUnavailable, match="missing"):
         d.check()
+
+
+def test_runtime_slot_ids_can_be_reused_between_piles():
+    d = ClusterDiscovery("http://localhost:12001")
+    c, v = responses(4)
+    c["NameserviceConfig"]["Node"] = c["NameserviceConfig"]["Node"][:2]
+    d.publish(d._parse(c, v, [], d.http[0]))
+    v["Nodes"][2]["NodeId"], v["Nodes"][3]["NodeId"] = 4, 3
+    d.publish(d._parse(c, v, [], d.http[0]))
+    d.check()
+    assert d.node_piles == {1: 0, 2: 1, 4: 0, 3: 1}
+    assert len(d._known) == 4 and not d.missing

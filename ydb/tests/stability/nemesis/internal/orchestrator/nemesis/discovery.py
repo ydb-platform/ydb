@@ -97,6 +97,7 @@ class ClusterDiscovery:
         observed = set()
         by_port = {s.ic_port: s for s in specs}
         updated_specs = {}
+        known_slots = {(s.host, s.ic_port): s for s in self._known.values() if isinstance(s, SlotInfo)}
         for row in nodes:
             nid = int(row["NodeId"])
             state = row.get("SystemState", {})
@@ -126,7 +127,7 @@ class ClusterDiscovery:
             # Dynamic node IDs can change; IC port identifies a local slot.
             records = {key: old for key, old in records.items()
                        if not (old.host == host and old.ic_port == port and key != nid)}
-            previous = self._known.get(nid)
+            previous = self._known.get(nid) if kind == "node" else known_slots.get((host, port))
             if previous is not None and previous.bridge_pile_id != pile:
                 raise ValueError(f"Node {nid} changed pile; drain and restart Nemesis")
             records[nid] = record

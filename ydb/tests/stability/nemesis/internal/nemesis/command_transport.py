@@ -23,6 +23,7 @@ class AgentCommandTransport:
         resolve_http_host: Callable[[str], str],
         post: Callable = requests.post,
         result_local: Callable | None = None,
+        resume_remote: bool = False,
         get: Callable = requests.get,
     ) -> None:
         self._is_local_host = is_local_host
@@ -31,6 +32,8 @@ class AgentCommandTransport:
         self._resolve_http_host = resolve_http_host
         self._post = post
         self._get = get
+        self._resume_remote = resume_remote
+        self._resumed = set()
         self._result_local = result_local
 
     def send(self, cmd: DispatchCommand) -> None:
@@ -45,6 +48,15 @@ class AgentCommandTransport:
         if self._is_local_host(cmd.host):
             result = self._start_local(cmd.nemesis_type, cmd.action, payload=payload)
         else:
+            if cmd.action == "inject" and self._resume_remote and cmd.host not in self._resumed:
+                response = self._post(
+                    f"http://{self._resolve_http_host(cmd.host)}:{self._get_app_port()}/api/agent/resume",
+                    timeout=5,
+                )
+                response.raise_for_status()
+                if response.json().get("status") != "ok":
+                    raise RuntimeError("Agent did not resume")
+                self._resumed.add(cmd.host)
             response = self._post(
                 f"http://{self._resolve_http_host(cmd.host)}:{self._get_app_port()}/api/processes",
                 json={

@@ -6,6 +6,7 @@ PEERDIR(
 )
 
 SRCS(
+    key_range_split_ut.cpp
     partition_key_range_sequence_ut.cpp
     partition_key_range_ut.cpp
 )

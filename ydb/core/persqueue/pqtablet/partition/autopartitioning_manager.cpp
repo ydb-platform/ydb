@@ -1,4 +1,5 @@
 #include "autopartitioning_manager.h"
+#include "key_range_autopartitioning_manager.h"
 
 #include <memory>
 #include <type_traits>
@@ -568,21 +569,21 @@ private:
     TStatefulAutopartitioningManager AutopartitioningManager;
 };
 
-IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId) {
+std::unique_ptr<IAutopartitioningManager> CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId, const TSourceIdStorage& sourceIds) {
     auto withAutopartitioning = SplitMergeEnabled(config) && !MirroringEnabled(config);
     if (!withAutopartitioning) {
-        return new TNoneAutopartitioningManager(config);
+        return std::make_unique<TNoneAutopartitioningManager>(config);
     }
 
     if (partitionId.IsSupportivePartition()) {
-        return new TSupportiveAutopartitioningManager(config, partitionId.OriginalPartitionId);
+        return std::make_unique<TSupportiveAutopartitioningManager>(config, partitionId.OriginalPartitionId);
     }
 
     if (config.GetSplitByPartitionKey()) {
-        return new TNoneAutopartitioningManager(config);
+        return CreateKeyRangeAutopartitioningManager(config, partitionId.OriginalPartitionId, sourceIds);
     }
 
-    return new TStatefulAutopartitioningManager(config, partitionId.OriginalPartitionId);
+    return std::make_unique<TStatefulAutopartitioningManager>(config, partitionId.OriginalPartitionId);
 }
 
 }

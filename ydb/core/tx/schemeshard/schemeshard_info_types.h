@@ -3881,6 +3881,8 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
 
+    TMaybe<TString> CancelRequestedBy;
+
     bool EnableChecksums = false;
     bool EnablePermissions = false;
     bool IncludeIndexData = false;
@@ -4359,8 +4361,16 @@ struct TIncrementalRestoreState {
         explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}
 
         bool AllShardsComplete() const {
-            return CompletedShards.size() + FailedShards.size() == ExpectedShards.size() &&
-                    !ExpectedShards.empty();
+            if (ExpectedShards.empty()) {
+                return false;
+            }
+            // Unexpected or overlapping replies cannot replace a missing expected shard.
+            for (const auto& shard : ExpectedShards) {
+                if (!CompletedShards.contains(shard) && !FailedShards.contains(shard)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         bool HasFailures() const {

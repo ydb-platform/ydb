@@ -350,6 +350,12 @@ public:
     THashMap<TOperationId, TTxState> TxInFlight;
     THashMap<TPathId, TPathDbRef> OwnDbRefs; // path's own type info record ref
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
+    // Inventory of durable rows, independent of active restore bookkeeping.
+    // Completed headers remain until FORGET/DROP; legacy items may have no state.
+    // Rebuilt on init and maintained by the persistence helpers below, so DROP
+    // can remove all owned records without reads in its plan callback.
+    THashMap<ui64, TPathId> PersistedIncrementalRestoreOps;
+    THashMap<ui64, THashSet<ui32>> PersistedIncrementalRestoreItems;
 
     // Simplified state tracking for sequential incremental restore
 
@@ -1073,6 +1079,9 @@ public:
     void PersistRemoveTestShardSet(NIceDb::TNiceDb& db, TPathId pathId);
 
     void PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op);
+    void PersistRemoveLongIncrementalRestoreOp(NIceDb::TNiceDb& db, ui64 operationId);
+    void PersistIncrementalRestoreItem(NIceDb::TNiceDb& db, ui64 operationId, const TIncrementalRestoreState::TItem& item);
+    void PersistRemoveIncrementalRestoreItem(NIceDb::TNiceDb& db, ui64 operationId, ui32 itemSeq);
 
     // Secret
     void PersistSecret(NIceDb::TNiceDb& db, TPathId pathId, const TSecretInfo& secretInfo);

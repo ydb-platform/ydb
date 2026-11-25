@@ -1,6 +1,9 @@
 #include "mkql_proto.h"
 
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/library/mkql_proto/ut/helpers/helpers.h>
+
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
@@ -711,6 +714,20 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
             "    }"
             )
         );
+    }
+
+    Y_UNIT_TEST(CellToValueDateIsUnsigned) {
+        // 32768 is 2059-09-19. A signed i16 read turns it into 4294934528,
+        // which import rejects as an invalid Date split point.
+        const ui16 days[] = {0, 3597, 32767, 32768, 38766, static_cast<ui16>(NYql::NUdf::MAX_DATE - 1)};
+        for (ui16 day : days) {
+            const TCell cell = TCell::Make(day);
+            NKikimrMiniKQL::TValue value;
+            TString err;
+            UNIT_ASSERT_C(CellToValue(NScheme::TTypeInfo(NScheme::NTypeIds::Date), cell, value, err), err);
+            UNIT_ASSERT(value.HasOptional());
+            UNIT_ASSERT_VALUES_EQUAL(value.GetOptional().GetUint32(), static_cast<ui32>(day));
+        }
     }
 }
 

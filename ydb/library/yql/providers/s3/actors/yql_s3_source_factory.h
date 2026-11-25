@@ -11,9 +11,10 @@ inline void RegisterS3ReadActorFactory(
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy = GetHTTPDefaultRetryPolicy(),
     const TS3ReadActorFactoryConfig& factoryConfig = {},
     ::NMonitoring::TDynamicCounterPtr counters = nullptr,
-    bool allowLocalFiles = false) {
+    bool allowLocalFiles = false,
+    ::NMonitoring::TDynamicCounterPtr cpuCounters = nullptr) {
         CreateS3ActorsFactory()->RegisterS3ReadActorFactory(
-            factory, credentialsFactory, gateway, retryPolicy, factoryConfig, counters, allowLocalFiles
+            factory, credentialsFactory, gateway, retryPolicy, factoryConfig, counters, allowLocalFiles, cpuCounters
         );
 }
 

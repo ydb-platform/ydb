@@ -1804,6 +1804,17 @@ protected:
                 }
                 ExtraMonitoringInfo(str, cgi);
 
+                for (const auto& [id, source] : SourcesMap) {
+                    if (source.AsyncInput) {
+                        const auto debugInfo = source.AsyncInput->GetDebugInfo();
+                        if (!debugInfo.empty()) {
+                            str << Endl << "  Source Id: " << id
+                                << " Type: " << NHtml::EscapeText(source.Type) << Endl
+                                << NHtml::EscapeText(debugInfo);
+                        }
+                    }
+                }
+
                 COLLAPSED_BUTTON_CONTENT("ProcessOutputsState", TStringBuilder() << "ProcessOutputsState: " << ProcessOutputsState.LastRunTime << ' ' << ProcessOutputsState.LastRunStatus) {
                     str << "  Inflight: " << ProcessOutputsState.Inflight << Endl;
                     str << "  ChannelsReady: " << ProcessOutputsState.ChannelsReady << Endl;

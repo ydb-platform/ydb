@@ -2419,9 +2419,9 @@ FROM `{table_name}`"""
                     filter = operator[pushdown_key]
                     assert "`bar`" in filter
                     assert "`bat`" in filter
-                    assert "((`foo`).`bum`).`b`" in filter
-                    assert "(((`foo`).`bum`).`cd`).`c`" in filter
-                    assert "(((`foo`).`bum`).`cd`).`d`" in filter
+                    assert "((`foo`).`but`).`b`" in filter
+                    assert "(((`foo`).`but`).`cd`).`c`" in filter
+                    assert "(((`foo`).`but`).`cd`).`d`" in filter
                     sources += 1
         assert sources > 0
 

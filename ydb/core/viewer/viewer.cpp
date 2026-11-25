@@ -445,7 +445,6 @@ public:
                         return {TMon::EAuthMode::Enforce, databaseAllowedSIDs};
                     case EViewerEndpointAccessType::Any: {
                         static const TVector<TString> emptyAllowedSIDs; // empty list allows any SID to proceed
-                        // The endpoint is available to anyone, so it needs no authentication at all.
                         return {TMon::EAuthMode::Disabled, emptyAllowedSIDs};
                     }
                 }
@@ -463,6 +462,7 @@ public:
                         .Handler = ctx.SelfID,
                         .AuthMode = auth.AuthMode,
                         .AllowedSIDs = auth.AllowedSIDs,
+                        .ExtractDatabaseUserToken = path == "/viewer/capabilities",
                     });
                 }
 
@@ -832,7 +832,7 @@ private:
         const TMonotonic now = TActivationContext::Monotonic();
         ForgetExpiredBridgeModeWaiters(now);
         bool needUpdate = false;
-        const auto pools = ev->Get()->UseCache ? GetCachedStoragePools(needUpdate) : nullptr;
+        const auto pools = GetCachedStoragePools(needUpdate);
         if (needUpdate || !pools) {
             RequestPoolRefresh(now);
         }
@@ -898,16 +898,13 @@ private:
         }
     }
 
-    void UpdateCache(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse> update, bool freshPoolResponse = false) {
+    void UpdateCache(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse> update) {
         if (const auto* pools = std::get_if<TPoolSnapshot>(&update->Response)) {
             ForgetExpiredBridgeModeWaiters(TActivationContext::Monotonic());
-            std::erase_if(BridgeModeWaiters, [&](const auto& waiter) {
-                if (!freshPoolResponse && !waiter.second->Get()->UseCache) {
-                    return false;
-                }
+            for (const auto& waiter : BridgeModeWaiters) {
                 ReplyBridgeMode(*pools, waiter.second);
-                return true;
-            });
+            }
+            BridgeModeWaiters.clear();
         }
         UpdateSharedCacheData(std::move(update));
     }
@@ -919,7 +916,7 @@ private:
     void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
         if (ev->Recipient == PoolRefreshAlias) {
             EndPoolRefresh();
-            UpdateCache(std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(TPoolSnapshot(ev->Release().Release())), true);
+            UpdateCache(std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(TPoolSnapshot(ev->Release().Release())));
         }
     }
 

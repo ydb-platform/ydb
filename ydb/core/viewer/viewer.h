@@ -48,12 +48,10 @@ struct TEvViewer {
 
     struct TEvGetDatabaseBridgeMode : TEventLocal<TEvGetDatabaseBridgeMode, EvGetDatabaseBridgeMode> {
         THashSet<TString> PoolNames;
-        bool UseCache;
         static constexpr TDuration MaxWait = TDuration::MilliSeconds(250);
 
-        TEvGetDatabaseBridgeMode(THashSet<TString> poolNames, bool useCache)
+        explicit TEvGetDatabaseBridgeMode(THashSet<TString> poolNames)
             : PoolNames(std::move(poolNames))
-            , UseCache(useCache)
         {}
     };
 

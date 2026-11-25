@@ -154,8 +154,8 @@ void InitViewerCapabilitiesJsonHandler(TJsonHandlers& jsonHandlers) {
         .Method = "get",
         .Tag = "viewer",
         .Summary = "Viewer capabilities",
-        .Description = "Viewer capabilities and settings. When database is specified, Settings.Database.BridgeModeEnabled "
-            "reports whether its storage uses Bridge mode. Omitted when the mode is mixed or unavailable.",
+        .Description = "Viewer capabilities and settings. Settings.Database.BridgeModeEnabled reports the cached storage mode "
+            "when the caller can describe the requested database. Omitted when the mode is mixed or unavailable.",
     });
     jsonHandlers.AddHandler("/viewer/capabilities", new THttpHandler<TViewerCapabilities>(yaml));
     jsonHandlers.Capabilities["/cms/api/json/ddisk/tablets"] = 1;

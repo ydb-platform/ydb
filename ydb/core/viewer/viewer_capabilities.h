@@ -22,16 +22,21 @@ public:
         if (TBase::NeedToRedirect(false/* don't check auth for capabilities on purpose */)) {
             return;
         }
-        if (!AppData()->BridgeModeEnabled) {
-            DatabaseBridgeMode = false;
-        } else if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
-            const auto& entry = DatabaseNavigateResponse->Get()->Request->ResultSet.front();
+        if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
+            const auto& navigate = *DatabaseNavigateResponse->Get()->Request;
+            const auto& entry = navigate.ResultSet.front();
+            if (!navigate.UserToken || !entry.SecurityObject || !entry.SecurityObject->CheckAccess(NACLib::DescribeSchema, *navigate.UserToken)) {
+                return ReplyAndPassAway();
+            }
+            if (!AppData()->BridgeModeEnabled) {
+                DatabaseBridgeMode = false;
+                return ReplyAndPassAway();
+            }
             const auto* resource = ResourceNavigateResponse && ResourceNavigateResponse->IsOk()
                 ? &ResourceNavigateResponse->Get()->Request->ResultSet.front() : nullptr;
             auto poolNames = GetBridgeDatabaseStoragePools(entry, resource);
             if (poolNames && !poolNames->empty()) {
-                const bool useCache = FromStringWithDefault<bool>(Params.Get("use_cache"), true);
-                Send(MakeViewerID(SelfId().NodeId()), new TEvViewer::TEvGetDatabaseBridgeMode(std::move(*poolNames), useCache));
+                Send(MakeViewerID(SelfId().NodeId()), new TEvViewer::TEvGetDatabaseBridgeMode(std::move(*poolNames)));
                 Become(&TThis::StateWaitPools, Min(Timeout, TEvViewer::TEvGetDatabaseBridgeMode::MaxWait), new TEvents::TEvWakeup());
                 return;
             }

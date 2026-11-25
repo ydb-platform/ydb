@@ -1053,6 +1053,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         settings.FeatureFlags.SetEnableExtraSidsControlForHttpViewer(true);
         auto* security = settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
         security->SetEnforceUserTokenCheckRequirement(true);
+        security->ClearDefaultUserSIDs();
         security->AddAdministrationAllowedSIDs(ROOT_TOKEN);
         security->AddMonitoringAllowedSIDs(ROOT_TOKEN);
         security->AddViewerAllowedSIDs(ROOT_TOKEN);
@@ -1074,6 +1075,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
         const auto json = NJson::ReadJsonTree(&response, true);
         UNIT_ASSERT_VALUES_EQUAL(json["TenantInfo"][0]["Name"].GetString(), "/alias");
+
+        for (bool authenticated : {false, true}) {
+            TStringStream caps;
+            UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/capabilities?database=/alias&direct=true", &caps,
+                authenticated ? headers : TKeepAliveHttpClient::THeaders{}), HTTP_OK);
+            const auto result = NJson::ReadJsonTree(&caps, true);
+            UNIT_ASSERT(result["Capabilities"].Has("/viewer/tenantinfo"));
+            UNIT_ASSERT_VALUES_EQUAL(result["Settings"]["Database"].Has("BridgeModeEnabled"), authenticated);
+        }
 
         NJson::TJsonReaderConfig describeJsonConfig;
         describeJsonConfig.DontValidateUtf8 = true; // Describe includes binary ACL fields.
@@ -1705,7 +1715,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
     enum class EBridgeStorageScopeCase {
         Dedicated,
         CachedCapabilities,
-        FreshCapabilities,
+        PoolCapabilities,
         Shared,
         SharedOnly,
         SharedMixed,
@@ -1757,11 +1767,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 request->ResultSet.resize(1);
                 auto& entry = request->ResultSet.front();
                 const auto& incoming = ev->Get<TEvTxProxySchemeCache::TEvNavigateKeySet>()->Request->ResultSet.front();
+                request->UserToken = ev->Get<TEvTxProxySchemeCache::TEvNavigateKeySet>()->Request->UserToken;
                 const TString path = CanonizePath(incoming.Path);
                 const bool resource = incoming.TableId.PathId == resourceKey || path == "/Root/shared";
                 const bool domainRoot = path == "/Root";
                 entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
                 entry.Path = SplitPath(domainRoot ? "/Root" : resource ? "/Root/shared" : "/Root/db");
+                entry.SecurityObject = new TSecurityObject("database-owner", {}, true);
+                entry.SecurityObject->AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, "database-reader");
                 entry.TableId.PathId = domainRoot ? rootKey : resource ? resourceKey : databaseKey;
                 auto* domain = new NSchemeCache::TDomainInfo(entry.TableId.PathId,
                     domainRoot ? rootKey : shared ? resourceKey : databaseKey);
@@ -1895,12 +1908,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
             return TTestActorRuntime::EEventAction::DROP;
         });
         const auto sender = runtime.AllocateEdgeActor();
-        auto sendRequest = [&](const TActorId& client, const TString& path) {
+        const TString readerToken = NACLib::TUserToken({.UserSID = "database-reader"}).SerializeAsString();
+        auto sendRequest = [&](const TActorId& client, const TString& path, const TString& token = {}) {
             auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
             NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
                 TStringBuilder() << "GET " << path << " HTTP/1.1\r\n\r\n", endpoint, {});
-            runtime.Send(new IEventHandle(MakeViewerID(0), client,
-                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+            auto event = std::make_unique<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(request);
+            event->UserToken = token;
+            runtime.Send(new IEventHandle(MakeViewerID(0), client, event.release()));
         };
         auto receiveJson = [&](const TActorId& client) {
             auto ev = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(client, TDuration::Seconds(30));
@@ -1911,8 +1926,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
             NJson::ReadJsonTree(response->Response->Body, &json, true);
             return json;
         };
-        auto getJson = [&](const TString& path) {
-            sendRequest(sender, path);
+        auto getJson = [&](const TString& path, const TString& token = {}) {
+            sendRequest(sender, path, token);
             return receiveJson(sender);
         };
         auto getTenant = [&](bool general = false) {
@@ -1935,7 +1950,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         if (testCase == EBridgeStorageScopeCase::CachedCapabilities) {
             using TPoolsResponse = NSysView::TEvSysView::TEvGetStoragePoolsResponse;
             auto getDatabaseSettings = [&] {
-                const auto json = getJson("/viewer/capabilities?database=/Root/db&direct=true");
+                const auto json = getJson("/viewer/capabilities?database=/Root/db&direct=true", readerToken);
                 return json["Settings"]["Database"];
             };
             TBlockEvents<TPoolsResponse> pendingPools(runtime, isViewerReply);
@@ -1971,66 +1986,59 @@ Y_UNIT_TEST_SUITE(Viewer) {
             UNIT_ASSERT_VALUES_EQUAL(warmRequests, 0);
             return;
         }
-        if (testCase == EBridgeStorageScopeCase::FreshCapabilities) {
+        if (testCase == EBridgeStorageScopeCase::PoolCapabilities) {
             using TPoolsResponse = NSysView::TEvSysView::TEvGetStoragePoolsResponse;
-            const TString cachedPath = "/viewer/capabilities?database=/Root/db&direct=true";
-            const TString freshPath = cachedPath + "&use_cache=false";
-            auto cacheBridgedPool = [&] {
-                auto snapshot = std::make_shared<TPoolsResponse>();
-                auto* pool = snapshot->Record.AddEntries()->MutableInfo();
-                pool->SetName("database-pool");
-                pool->SetBridgeMode(true);
-                runtime.Send(new IEventHandle(viewerId, sender, new TEvViewer::TEvUpdateSharedCacheTabletResponse(snapshot)));
-            };
+            const TString path = "/viewer/capabilities?database=/Root/db&direct=true";
+            const TString bypass = path + "&use_cache=false";
             auto getMode = [](const NJson::TJsonValue& json) {
                 const auto& database = json["Settings"]["Database"];
                 UNIT_ASSERT(database.Has("BridgeModeEnabled"));
                 return database["BridgeModeEnabled"].GetBoolean();
             };
-            cacheBridgedPool();
-            UNIT_ASSERT(getMode(getJson(cachedPath)));
-
-            const ui32 before = poolResponses;
-            mode = NKikimrBridge::ORDINARY;
             ui32 modeRequests = 0;
             auto observer = runtime.AddObserver<TEvViewer::TEvGetDatabaseBridgeMode>([&](auto&) { ++modeRequests; });
+            for (const auto& token : {TString(), NACLib::TUserToken({.UserSID = "other-user"}).SerializeAsString()}) {
+                const auto json = getJson(bypass, token);
+                UNIT_ASSERT(json["Capabilities"].Has("/storage/groups"));
+                UNIT_ASSERT(json["Settings"]["Cluster"]["BridgeModeEnabled"].GetBoolean());
+                UNIT_ASSERT(!json["Settings"]["Database"].Has("BridgeModeEnabled"));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(modeRequests, 0);
+            UNIT_ASSERT_VALUES_EQUAL(poolResponses, 0);
+
             TBlockEvents<TPoolsResponse> pendingPools(runtime, isViewerReply);
             const auto second = runtime.AllocateEdgeActor();
-            sendRequest(sender, freshPath);
-            sendRequest(second, freshPath);
+            sendRequest(sender, path, readerToken);
+            sendRequest(second, bypass, readerToken);
             runtime.WaitFor("both mode requests and the controller response", [&] {
                 return modeRequests == 2 && !pendingPools.empty();
             }, TDuration::Seconds(1));
             UNIT_ASSERT_VALUES_EQUAL(pendingPools.size(), 1);
-            cacheBridgedPool();
             pendingPools.Stop().Unblock();
-            UNIT_ASSERT(!getMode(receiveJson(sender)));
-            UNIT_ASSERT(!getMode(receiveJson(second)));
-            UNIT_ASSERT_VALUES_EQUAL(poolResponses - before, 1);
-            UNIT_ASSERT(!getMode(getJson(cachedPath)));
-            UNIT_ASSERT_VALUES_EQUAL(poolResponses - before, 1);
+            UNIT_ASSERT(getMode(receiveJson(sender)));
+            UNIT_ASSERT(getMode(receiveJson(second)));
+            mode = NKikimrBridge::ORDINARY;
+            UNIT_ASSERT(getMode(getJson(bypass, readerToken)));
+            UNIT_ASSERT_VALUES_EQUAL(poolResponses, 1);
 
-            mode = NKikimrBridge::BRIDGED;
-            UNIT_ASSERT(getMode(getJson(freshPath)));
-            UNIT_ASSERT_VALUES_EQUAL(poolResponses - before, 2);
-
+            runtime.AdvanceCurrentTime(TDuration::Minutes(1));
             TBlockEvents<TPoolsResponse> delayed(runtime, isViewerReply);
-            UNIT_ASSERT(!getJson(freshPath)["Settings"]["Database"].Has("BridgeModeEnabled"));
+            UNIT_ASSERT(!getJson(path, readerToken)["Settings"]["Database"].Has("BridgeModeEnabled"));
             runtime.SimulateSleep(TDuration::Seconds(11));
-            sendRequest(second, freshPath);
+            sendRequest(second, path, readerToken);
             runtime.WaitFor("retried pool response", [&] { return delayed.size() == 2; }, TDuration::Seconds(1));
             delayed.Unblock(1);
             UNIT_ASSERT(!receiveJson(second)["Settings"]["Database"].Has("BridgeModeEnabled"));
-            mode = NKikimrBridge::ORDINARY;
             delayed.Stop().Unblock();
-            UNIT_ASSERT(!getMode(getJson(cachedPath)));
+            UNIT_ASSERT(!getMode(getJson(path, readerToken)));
             return;
         }
         auto checkCapabilities = [&](std::optional<bool> expected) {
             const auto beforeBridge = bridgeRequests;
             const auto beforeGroups = groupResponses;
             const auto beforePools = poolResponses;
-            const auto json = getJson("/viewer/capabilities?database=/Root/db&direct=true&use_cache=false");
+            runtime.AdvanceCurrentTime(TDuration::Minutes(1));
+            const auto json = getJson("/viewer/capabilities?database=/Root/db&direct=true", readerToken);
             const auto& database = json["Settings"]["Database"];
             UNIT_ASSERT_VALUES_EQUAL(database.Has("BridgeModeEnabled"), expected.has_value());
             if (expected) {
@@ -2104,8 +2112,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::CachedCapabilities);
     }
 
-    Y_UNIT_TEST(CapabilitiesCoalescesFreshPoolRequests) {
-        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::FreshCapabilities);
+    Y_UNIT_TEST(CapabilitiesChecksDatabaseAclAndCachesPoolMode) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::PoolCapabilities);
     }
 
     Y_UNIT_TEST(TenantInfoBridgeStorageShared) {

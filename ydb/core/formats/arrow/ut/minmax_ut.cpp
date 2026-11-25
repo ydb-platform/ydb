@@ -1,8 +1,6 @@
 #include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
-#include <ydb/core/protos/config.pb.h>
-#include <ydb/core/testlib/actor_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -48,8 +46,7 @@ void CheckBounds(const IChunkedArray& accessor, const NScheme::TTypeInfo& type, 
 }   // namespace
 
 Y_UNIT_TEST_SUITE(ArrowMinMaxLogicalTypes) {
-    Y_UNIT_TEST(AccessorsUseLogicalTypeAndCurrentConfig) {
-        TActorSystemStub actorSystem;
+    Y_UNIT_TEST(AccessorsUseComparisonType) {
         const auto values = MakeValues({ std::nullopt, 1, 256, -1, -256, std::nullopt });
         const TTrivialArray plain(values);
         const TTrivialChunkedArray chunked(
@@ -62,39 +59,36 @@ Y_UNIT_TEST_SUITE(ArrowMinMaxLogicalTypes) {
         const auto sparseNullDefault = TSparsedArray::Make(plain, nullptr);
         const std::array<const IChunkedArray*, 5> accessors = { &plain, &chunked, &dictionary, sparse.get(), sparseNullDefault.get() };
         for (const bool numeric : { false, true }) {
-            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
             for (const auto& type : { NScheme::TTypeInfo(NScheme::TDecimalType(22, 0)), NScheme::TTypeInfo(NScheme::NTypeIds::Uuid) }) {
                 const bool useNumeric = numeric && type.GetTypeId() == NScheme::NTypeIds::Decimal;
                 const auto min = values->GetScalar(useNumeric ? 4 : 2).ValueOrDie();
                 const auto max = values->GetScalar(useNumeric ? 2 : 3).ValueOrDie();
                 for (const auto* accessor : accessors) {
-                    CheckBounds(*accessor, type, min, max);
+                    CheckBounds(*accessor, type.WithDecimalNumericComparison(numeric), min, max);
                 }
             }
         }
     }
 
     Y_UNIT_TEST(SparseExtremaIgnoreUnusedDefault) {
-        TActorSystemStub actorSystem;
-        const NScheme::TTypeInfo type(NScheme::TDecimalType(22, 0));
+        const NScheme::TTypeInfo decimal(NScheme::TDecimalType(22, 0));
         const auto values = MakeValues({ 1, 256 });
         const auto unusedDefault = MakeValues({ -1 })->GetScalar(0).ValueOrDie();
         const auto sparse = TSparsedArray::Make(TTrivialArray(values), unusedDefault);
         for (const bool numeric : { false, true }) {
-            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
+            const auto type = decimal.WithDecimalNumericComparison(numeric);
             CheckBounds(*sparse, type, values->GetScalar(numeric ? 0 : 1).ValueOrDie(), values->GetScalar(numeric ? 1 : 0).ValueOrDie());
         }
     }
 
     Y_UNIT_TEST(EmptyAndNullChunksDoNotChangeExtrema) {
-        TActorSystemStub actorSystem;
-        const NScheme::TTypeInfo type(NScheme::TDecimalType(22, 0));
+        const NScheme::TTypeInfo decimal(NScheme::TDecimalType(22, 0));
         const auto empty = MakeValues({});
         const auto nulls = MakeValues({ std::nullopt, std::nullopt });
         const auto values = MakeValues({ 1, 256 });
         const TTrivialChunkedArray chunked(std::make_shared<arrow::ChunkedArray>(arrow::ArrayVector{ nulls, empty, values, nulls }));
         for (const bool numeric : { false, true }) {
-            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
+            const auto type = decimal.WithDecimalNumericComparison(numeric);
             for (const auto& array : { empty, nulls }) {
                 const auto bounds = TMinMax::Compute(array, type);
                 UNIT_ASSERT(bounds.IsNull());
@@ -106,22 +100,21 @@ Y_UNIT_TEST_SUITE(ArrowMinMaxLogicalTypes) {
         }
     }
 
-    Y_UNIT_TEST(PersistedOrderCannotBeReinterpretedAfterConfigChange) {
-        TActorSystemStub actorSystem;
-        const NScheme::TTypeInfo type(NScheme::TDecimalType(22, 0));
+    Y_UNIT_TEST(PersistedOrderCannotBeReinterpretedInAnotherMode) {
+        const NScheme::TTypeInfo decimal(NScheme::TDecimalType(22, 0));
         const auto values = MakeValues({ 1, 2, 256 });
         const auto request = values->GetScalar(0).ValueOrDie();
         for (const bool numeric : { false, true }) {
-            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
+            const auto type = decimal.WithDecimalNumericComparison(numeric);
             const auto data = TMinMax::Compute(values, type).ToBinaryString();
             UNIT_ASSERT_VALUES_EQUAL(data[0], numeric ? '2' : '1');
             const auto bounds = TMinMax::FromBinaryString(data, values->type());
             UNIT_ASSERT(bounds.CompareWithMin(request, type) != std::partial_ordering::unordered);
             UNIT_ASSERT(bounds.CompareWithMax(request, type) != std::partial_ordering::unordered);
 
-            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(!numeric);
-            UNIT_ASSERT(bounds.CompareWithMin(request, type) == std::partial_ordering::unordered);
-            UNIT_ASSERT(bounds.CompareWithMax(request, type) == std::partial_ordering::unordered);
+            const auto otherType = decimal.WithDecimalNumericComparison(!numeric);
+            UNIT_ASSERT(bounds.CompareWithMin(request, otherType) == std::partial_ordering::unordered);
+            UNIT_ASSERT(bounds.CompareWithMax(request, otherType) == std::partial_ordering::unordered);
         }
     }
 

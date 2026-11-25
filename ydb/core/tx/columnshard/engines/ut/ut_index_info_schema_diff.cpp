@@ -240,7 +240,7 @@ void CheckMergedDiffBuildsSchema(const TSchemaHistory& history) {
 Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
     Y_UNIT_TEST(PrimaryKeyTypesComeFromLogicalSchema) {
         auto storages = TTestStoragesManager::GetInstance();
-        auto cache = std::make_shared<TSchemaObjectsCache>();
+        auto cache = std::make_shared<TSchemaObjectsCache>(true);
         const NScheme::TTypeInfo decimal(NScheme::TDecimalType(22, 9));
         TSchemaHistory history;
         history.NextVersion().DropColumn(3).AddColumn(4, "added", NScheme::NTypeIds::Uint64);
@@ -259,6 +259,8 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             UNIT_ASSERT(types.front() == indexInfo->GetPrimaryKeyColumns().front().second);
             UNIT_ASSERT(types.front() == decimal);
+            UNIT_ASSERT(types.front().IsDecimalNumericComparisonEnabled());
+            UNIT_ASSERT(indexInfo->GetColumnFeaturesVerified(KeyColumnId).GetTypeInfo().IsDecimalNumericComparisonEnabled());
         }
     }
 

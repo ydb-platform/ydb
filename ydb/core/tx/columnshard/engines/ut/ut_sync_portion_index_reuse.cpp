@@ -1,5 +1,4 @@
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
@@ -43,6 +42,7 @@ struct TTestSchemaOptions {
     bool WithMinMaxIndex = false;
     bool WithBloomIndex = false;
     bool DecimalValue = false;
+    bool NumericComparison = false;
 };
 
 void FillDefaultSchemaProto(NKikimrSchemeOp::TColumnTableSchema& proto, const ui64 presetId, const NScheme::TTypeInfo& valueType) {
@@ -58,7 +58,7 @@ void FillDefaultSchemaProto(NKikimrSchemeOp::TColumnTableSchema& proto, const ui
 
 ISnapshotSchema::TPtr MakeTestSchema(const ui64 presetId, const TTestSchemaOptions& options) {
     auto storages = TTestStoragesManager::GetInstance();
-    auto cache = std::make_shared<TSchemaObjectsCache>();
+    auto cache = std::make_shared<TSchemaObjectsCache>(options.NumericComparison);
 
     NKikimrSchemeOp::TColumnTableSchema proto;
     FillDefaultSchemaProto(
@@ -242,8 +242,7 @@ Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
     Y_UNIT_TEST(MinMaxIndexBuildsNumericBoundsAndPrunesPredicates) {
         TActorSystemStub actorSystem;
         actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(true);
-        const auto schema = MakeTestSchema(1, { .WithMinMaxIndex = true, .DecimalValue = true });
+        const auto schema = MakeTestSchema(1, { .WithMinMaxIndex = true, .DecimalValue = true, .NumericComparison = true });
         const auto& indexInfo = schema->GetIndexInfo();
         const auto meta = std::static_pointer_cast<NIndexes::NMinMax::TIndexMeta>(indexInfo.GetIndexVerified(MinMaxIndexId).GetObjectPtr());
         const auto nulls = MakeDecimalArray({ std::nullopt, std::nullopt });
@@ -278,12 +277,11 @@ Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
             }
         }
 
-        // Turning the flag off must not interpret numeric bounds as byte-ordered bounds either.
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(false);
+        const auto legacySchema = MakeTestSchema(1, { .WithMinMaxIndex = true, .DecimalValue = true });
         for (const auto& [op, expected] : cases) {
             for (ui32 i = 0; i < expected.size(); ++i) {
-                UNIT_ASSERT(meta->CheckValue(
-                    payload, std::nullopt, requests->GetScalar(i).ValueOrDie(), NArrow::NSSA::TIndexCheckOperation(op, true), indexInfo));
+                UNIT_ASSERT(meta->CheckValue(payload, std::nullopt, requests->GetScalar(i).ValueOrDie(),
+                    NArrow::NSSA::TIndexCheckOperation(op, true), legacySchema->GetIndexInfo()));
             }
         }
     }
@@ -291,7 +289,6 @@ Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
     Y_UNIT_TEST(MinMaxIndexPreservesLegacyOrderAndPayload) {
         TActorSystemStub actorSystem;
         actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(false);
         const auto schema = MakeTestSchema(1, { .WithMinMaxIndex = true, .DecimalValue = true });
         const auto& indexInfo = schema->GetIndexInfo();
         const auto meta = std::static_pointer_cast<NIndexes::NMinMax::TIndexMeta>(indexInfo.GetIndexVerified(MinMaxIndexId).GetObjectPtr());
@@ -319,8 +316,7 @@ Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
     Y_UNIT_TEST(NumericDecimalDoesNotPruneLegacyMinMaxPayload) {
         TActorSystemStub actorSystem;
         actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(true);
-        const auto numericSchema = MakeTestSchema(1, { .WithMinMaxIndex = true, .DecimalValue = true });
+        const auto numericSchema = MakeTestSchema(1, { .WithMinMaxIndex = true, .DecimalValue = true, .NumericComparison = true });
         const auto index = std::static_pointer_cast<NIndexes::NMinMax::TIndexMeta>(
             numericSchema->GetIndexInfo().GetIndexVerified(MinMaxIndexId).GetObjectPtr());
         const auto values = MakeDecimalArray({ 256, 1, 255 });

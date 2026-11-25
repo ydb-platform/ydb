@@ -1,6 +1,3 @@
-#include <ydb/core/protos/config.pb.h>
-#include <ydb/core/testlib/actor_helpers.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/reader/merger.h>
@@ -167,11 +164,7 @@ private:
 
 Y_UNIT_TEST_SUITE(SortableBatchPosition) {
     Y_UNIT_TEST(LogicalTypesSurviveCursorAndTrim) {
-        TActorSystemStub actorSystem;
-        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(true);
-
-        const TTypeInfo decimalType(NScheme::TDecimalType(22, 9));
+        const auto decimalType = TTypeInfo(NScheme::TDecimalType(22, 9)).WithDecimalNumericComparison(true);
         const TTypeInfo uuidType(NTypeIds::Uuid);
         const auto schema =
             arrow::schema({ arrow::field("decimal", arrow::fixed_size_binary(16)), arrow::field("uuid", arrow::fixed_size_binary(16)) });
@@ -229,7 +222,6 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
     }
 
     Y_UNIT_TEST(DecimalModeAcrossChunkBoundaries) {
-        const std::vector<TTypeInfo> types = { TTypeInfo(NScheme::TDecimalType(22, 9)), TTypeInfo(NTypeIds::Uuid) };
         arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16));
         for (const ui16 value : { 0, 1, 256, 257 }) {
             std::string bytes(16, '\0');
@@ -245,9 +237,8 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         const auto second = std::make_shared<arrow::ChunkedArray>(arrow::ArrayVector{ values->Slice(0, 1), values->Slice(1, 3) });
         const auto table = arrow::Table::Make(schema, { first, second });
         for (const bool numeric : { false, true }) {
-            TActorSystemStub actorSystem;
-            actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
+            const std::vector<TTypeInfo> types = { TTypeInfo(NScheme::TDecimalType(22, 9)).WithDecimalNumericComparison(numeric),
+                TTypeInfo(NTypeIds::Uuid) };
             const auto expected = numeric ? std::partial_ordering::greater : std::partial_ordering::less;
             NMerger::TSortableScanData atZero(0, table, schema->field_names(), types);
             NMerger::TSortableScanData atOne(1, table, schema->field_names(), types);

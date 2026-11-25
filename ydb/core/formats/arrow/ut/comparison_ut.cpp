@@ -2,15 +2,12 @@
 #include <ydb/core/formats/arrow/reader/result_builder.h>
 #include <ydb/core/formats/arrow/rows/view.h>
 #include <ydb/core/formats/arrow/special_keys.h>
-#include <ydb/core/protos/config.pb.h>
-#include <ydb/core/testlib/actor_helpers.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/switch/compare.h>
 #include <ydb/library/testlib/helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 
@@ -113,8 +110,6 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
     }
 
     Y_UNIT_TEST(SortAndDeduplicateUseSelectedDecimalOrder) {
-        const std::vector<NScheme::TTypeInfo> logicalTypes = { NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)),
-            NScheme::TTypeInfo(NScheme::NTypeIds::Uuid) };
         std::string zero(16, '\0');
         std::string one = zero;
         one[0] = 1;
@@ -136,9 +131,10 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
         const auto schema = arrow::schema({ keySchema->field(0), keySchema->field(1), arrow::field("id", ids->type()) });
         const auto batch = arrow::RecordBatch::Make(schema, 5, { decimals, uuids, ids });
         for (const bool numeric : { false, true }) {
-            TActorSystemStub actorSystem;
-            actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
+            const std::vector<NScheme::TTypeInfo> logicalTypes = {
+                NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)).WithDecimalNumericComparison(numeric),
+                NScheme::TTypeInfo(NScheme::NTypeIds::Uuid)
+            };
             const std::vector<std::pair<TString, NScheme::TTypeInfo>> sortingSchema = { { "decimal", logicalTypes[0] },
                 { "uuid", logicalTypes[1] } };
             const auto sorted = SortBatch(batch, sortingSchema, true);
@@ -178,10 +174,7 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
     }
 
     Y_UNIT_TEST_TWIN(MergeUsesLogicalSchemaAndLatestVersion, NumericComparison) {
-        TActorSystemStub actorSystem;
-        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(NumericComparison);
-        const NScheme::TTypeInfo decimalType(NScheme::TDecimalType(22, 9));
+        const auto decimalType = NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)).WithDecimalNumericComparison(NumericComparison);
         const NScheme::TTypeInfo uuidType(NScheme::NTypeIds::Uuid);
         const NScheme::TTypeInfo versionType(NScheme::NTypeIds::Uint64);
         // Physical column order differs from both the key and version order.
@@ -257,10 +250,6 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
     }
 
     Y_UNIT_TEST(NumericDecimalValues) {
-        TActorSystemStub actorSystem;
-        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(true);
-
         using namespace NYql::NDecimal;
         const TInt128 highWord = TInt128(1) << 64;
         const std::vector<TInt128> values = { -Inf(), -highWord - 1, -highWord, -256, -1, 0, 1, 255, 256, highWord - 1, highWord, Inf(), Nan() };
@@ -272,7 +261,7 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
             UNIT_ASSERT(builder.Append(bytes).ok());
         }
 
-        CheckOrderedValues(Finish(builder), NScheme::TTypeInfo(NScheme::TDecimalType(35, 0)));
+        CheckOrderedValues(Finish(builder), NScheme::TTypeInfo(NScheme::TDecimalType(35, 0)).WithDecimalNumericComparison(true));
     }
 
     Y_UNIT_TEST(PrimitiveValues) {
@@ -322,7 +311,6 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
             UNIT_ASSERT(builder.Append(value).ok());
         }
         const auto values = Finish(builder);
-        CheckOrderedValues(values, NScheme::TTypeInfo(NScheme::NTypeIds::Uuid));
         CheckOrderedValues(values, NScheme::TTypeInfo(NScheme::NTypeIds::Uuid));
         CheckOrderedValues(values, NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)));
     }

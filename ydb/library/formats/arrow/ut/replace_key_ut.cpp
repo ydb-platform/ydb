@@ -1,9 +1,5 @@
-#include <ydb/core/protos/config.pb.h>
-#include <ydb/core/testlib/actor_helpers.h>
-
 #include <ydb/library/formats/arrow/replace_key.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 
@@ -91,7 +87,7 @@ arrow::util::string_view AsView(const std::string& value) {
 }   // namespace
 
 Y_UNIT_TEST_SUITE(ArrowReplaceKeyLogicalTypes) {
-    Y_UNIT_TEST(ComparisonReadsCurrentColumnShardConfig) {
+    Y_UNIT_TEST(ComparisonUsesKeyType) {
         const NScheme::TTypeInfo decimal(NScheme::TDecimalType(22, 0));
         const NScheme::TTypeInfo uuid(NScheme::NTypeIds::Uuid);
         const auto oneBytes = MakeDecimalBytes(1);
@@ -102,15 +98,18 @@ Y_UNIT_TEST_SUITE(ArrowReplaceKeyLogicalTypes) {
         const auto values = builder.Finish().ValueOrDie();
         const auto schema = arrow::schema({ arrow::field("key", values->type()) });
         const auto batch = arrow::RecordBatch::Make(schema, 2, { values });
-        const TLogicalTypes types = { decimal };
-        const TReplaceKey one = TReplaceKey::FromBatch(batch, 0, types);
-        const TReplaceKey large = TReplaceKey::FromBatch(batch, 1, types);
-        const TStoreReplaceKey storedOne(one);
-        const TStoreReplaceKey storedLarge(large);
-        const TComparablePosition onePosition(one);
-        const TComparablePosition largePosition(large);
+        NScheme::TTypeInfo type;
+        for (const bool numeric : { true, false }) {
+            type = decimal.WithDecimalNumericComparison(numeric);
+            UNIT_ASSERT(type == decimal);
+            const TLogicalTypes types = { type };
+            const TReplaceKey one = TReplaceKey::FromBatch(batch, 0, types);
+            const TReplaceKey large = TReplaceKey::FromBatch(batch, 1, types);
+            const TStoreReplaceKey storedOne(one);
+            const TStoreReplaceKey storedLarge(large);
+            const TComparablePosition onePosition(one);
+            const TComparablePosition largePosition(large);
 
-        const auto check = [&](const bool numeric) {
             UNIT_ASSERT_VALUES_EQUAL(one < large, numeric);
             UNIT_ASSERT_VALUES_EQUAL(one.ToRaw() < large.ToRaw(), numeric);
             UNIT_ASSERT_VALUES_EQUAL(one.GetView() < large.GetView(), numeric);
@@ -118,32 +117,16 @@ Y_UNIT_TEST_SUITE(ArrowReplaceKeyLogicalTypes) {
             UNIT_ASSERT_VALUES_EQUAL(storedOne < storedLarge, numeric);
             UNIT_ASSERT_VALUES_EQUAL(onePosition < largePosition, numeric);
             UNIT_ASSERT_VALUES_EQUAL((IsSelfSorted<false, true>(batch, types)), numeric);
-            UNIT_ASSERT_VALUES_EQUAL(ScalarCompare(GetScalar(values, 0), GetScalar(values, 1), decimal) < 0, numeric);
-            for (const auto& type : { uuid, NScheme::TTypeInfo(NScheme::NTypeIds::String), NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) }) {
-                UNIT_ASSERT(TComparator::CompareValueNotNull(AsView(oneBytes), AsView(largeBytes), type) > 0);
-            }
-        };
-
-        // Standalone callers have no AppData and retain the legacy byte order.
-        check(false);
-        {
-            TActorSystemStub actorSystem;
-            actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-            UNIT_ASSERT(!actorSystem.AppData.ColumnShardConfig.GetEnableDecimalNumericComparison());
-            for (const bool numeric : { false, true, false }) {
-                actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
-                check(numeric);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(ScalarCompare(GetScalar(values, 0), GetScalar(values, 1), type) < 0, numeric);
         }
 
-        check(false);
+        for (const auto& type : { uuid, NScheme::TTypeInfo(NScheme::NTypeIds::String), NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) }) {
+            UNIT_ASSERT(!type.WithDecimalNumericComparison(true).IsDecimalNumericComparisonEnabled());
+            UNIT_ASSERT(TComparator::CompareValueNotNull(AsView(oneBytes), AsView(largeBytes), type) > 0);
+        }
     }
 
     Y_UNIT_TEST(NumericDecimalOrdering) {
-        TActorSystemStub actorSystem;
-        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(true);
-
         using namespace NYql::NDecimal;
         const TInt128 highWord = TInt128(1) << 64;
         const std::vector<TInt128> values = { -Inf(), -Inf() + 1, -highWord - 1, -highWord, -256, -1, 0, 1, 255, 256, highWord - 1, highWord,
@@ -156,7 +139,7 @@ Y_UNIT_TEST_SUITE(ArrowReplaceKeyLogicalTypes) {
 
         std::shared_ptr<arrow::Array> array;
         UNIT_ASSERT(builder.Finish(&array).ok());
-        const NScheme::TTypeInfo type(NScheme::TDecimalType(35, 0));
+        const auto type = NScheme::TTypeInfo(NScheme::TDecimalType(35, 0)).WithDecimalNumericComparison(true);
         for (size_t left = 0; left < values.size(); ++left) {
             const auto leftScalar = GetScalar(array, left + 1);
             for (size_t right = 0; right < values.size(); ++right) {
@@ -174,11 +157,7 @@ Y_UNIT_TEST_SUITE(ArrowReplaceKeyLogicalTypes) {
     }
 
     Y_UNIT_TEST(UnalignedDecimalViews) {
-        TActorSystemStub actorSystem;
-        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(true);
-
-        const NScheme::TTypeInfo type(NScheme::TDecimalType(35, 2));
+        const auto type = NScheme::TTypeInfo(NScheme::TDecimalType(35, 2)).WithDecimalNumericComparison(true);
         const std::string left = "x" + MakeDecimalBytes(-256);
         const std::string right = "x" + MakeDecimalBytes(1);
         const arrow::util::string_view leftView(left.data() + 1, 16);

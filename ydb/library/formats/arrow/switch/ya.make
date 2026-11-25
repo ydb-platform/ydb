@@ -2,8 +2,6 @@ LIBRARY(library-formats-arrow-switch)
 
 PEERDIR(
     contrib/libs/apache/arrow
-    ydb/core/base
-    ydb/core/protos
     ydb/core/scheme_types
     ydb/library/actors/core
     ydb/library/formats/arrow/validation

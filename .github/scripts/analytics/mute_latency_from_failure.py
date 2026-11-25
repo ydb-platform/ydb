@@ -155,15 +155,10 @@ def _criteria_met_in_window(
     fails_in_window = f_end - f_start
     runs_in_window  = a_end - a_start
 
-    if runs_in_window > runs_bound:
-        threshold = fail_threshold_high
-    else:
-        threshold = fail_threshold_low
-
-    if fails_in_window >= threshold:
-        # The bot ran after the last failure and found criteria met.
-        return failure_ts[f_end - 1]
-    return None
+    threshold = fail_threshold_high if runs_in_window >= runs_bound else fail_threshold_low
+    if fails_in_window < threshold:
+        return None
+    return failure_ts[f_end - 1]
 
 
 def classify_muted_ya_lines(

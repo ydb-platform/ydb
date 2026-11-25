@@ -8,6 +8,11 @@ SRCS(
     models_archive_reader.cpp
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    contrib/libs/lua
+)
+
 END()
 
 RECURSE_FOR_TESTS(

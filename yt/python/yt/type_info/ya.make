@@ -14,6 +14,11 @@ ELSE()
     )
 ENDIF()
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    library/python/type_info
+)
+
 END()
 
 RECURSE(

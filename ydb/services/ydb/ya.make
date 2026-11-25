@@ -30,6 +30,8 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/api/protos
+    # Monitoring settings used by core/persqueue/public/schema.
+    ydb/services/lib/actors
 )
 
 END()

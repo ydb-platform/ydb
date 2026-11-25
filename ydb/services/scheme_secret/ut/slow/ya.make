@@ -2,10 +2,6 @@ UNITTEST_FOR(ydb/services/scheme_secret)
 
 SIZE(LARGE)
 
-TAG(
-    ya:fat
-)
-
 PEERDIR(
     ydb/services/scheme_secret
     ydb/services/scheme_secret/ut/common

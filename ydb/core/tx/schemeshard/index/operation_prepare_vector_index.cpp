@@ -124,42 +124,18 @@ public:
         context.SS->SnapshotsStepIds[OperationId.GetTxId()] = step;
         context.SS->PersistSnapshotStepId(db, OperationId.GetTxId(), step);
 
-        auto tablePath = context.SS->PathsById.at(txState->TargetPathId);
-        // The index metadata is a part of the table description, so bump the table
-        // directory version to make SchemeCache refetch it after the state change.
-        ++tablePath->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, tablePath);
-        context.SS->ClearDescribePathCaches(tablePath);
-        context.OnComplete.PublishToSchemeBoard(OperationId, tablePath->PathId);
-
         // Apply the prepared index state at the snapshot step. The index path id is
         // kept in BuildIndexId (persisted with the tx state) to select exactly the
         // index this operation was created for.
-        const auto indexLocalId = ui64(txState->BuildIndexId);
-        for (const auto& [childName, childPathId] : tablePath->GetChildren()) {
-            Y_UNUSED(childName);
-            if (ui64(childPathId.LocalPathId) != indexLocalId) {
-                continue;
-            }
-            if (!context.SS->PathsById.contains(childPathId)) {
-                continue;
-            }
-            auto childPath = context.SS->PathsById.at(childPathId);
-            if (!childPath->IsTableIndex() || childPath->Dropped()) {
-                continue;
-            }
-            if (!context.SS->Indexes.contains(childPathId)) {
-                continue;
-            }
-            auto index = context.SS->Indexes.at(childPathId);
-            if (!index->AlterData || index->AlterData->State != TTableIndexInfo::EState::EIndexStateWriteOnly) {
-                continue;
-            }
-            context.SS->PersistTableIndex(db, childPathId);
-            context.SS->Indexes.Set(childPathId, index->AlterData);
-            context.SS->ClearDescribePathCaches(childPath);
-            context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);
-        }
+        const auto indexPathId = TPathId(txState->TargetPathId.OwnerId, ui64(txState->BuildIndexId));
+        auto indexPath = context.SS->PathsById.at(indexPathId);
+        TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(indexPathId);
+        auto index = context.SS->Indexes.at(indexPathId);
+        context.SS->PersistTableIndex(db, indexPathId);
+        Y_ENSURE(index->AlterData);
+        context.SS->Indexes.Set(indexPathId, index->AlterData);
+        context.SS->ClearDescribePathCaches(indexPath);
+        context.OnComplete.PublishToSchemeBoard(OperationId, indexPathId);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;
@@ -266,10 +242,10 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        auto schema = Transaction.GetPrepareVectorIndex();
+        auto prepareOp = Transaction.GetPrepareVectorIndex();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& indexName = schema.GetTableName();
+        const TString& indexName = prepareOp.GetTableName();
 
         YDB_LOG_NOTICE_CTX(context.Ctx, "",
             {"path", TStringBuilder() << parentPathStr << "/" << indexName},

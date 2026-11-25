@@ -85,7 +85,7 @@ public:
 
                 tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, schemaVersion, streamDesc);
 
-                AddCdcStream(txc, pathId, streamId, streamDesc,
+                AddCdcStream(txc, pathId, streamId, streamDesc, *tableInfo,
                     notice.HasSnapshotName() ? notice.GetSnapshotName() : TString(),
                     op->GetStep(), op->GetTxId());
             }
@@ -103,7 +103,7 @@ public:
 
             tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, schemaVersion, streamDesc);
 
-            AddCdcStream(txc, pathId, streamPathId, streamDesc,
+            AddCdcStream(txc, pathId, streamPathId, streamDesc, *tableInfo,
                 params.HasSnapshotName() ? params.GetSnapshotName() : TString(),
                 op->GetStep(), op->GetTxId());
         }

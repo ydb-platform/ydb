@@ -6552,6 +6552,237 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     }
 
+    auto ForceKeyRangeHeartbeatMode(TTestActorRuntime& runtime) {
+        return runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([](auto& ev) {
+            if (!ev->Get()->Request) {
+                return;
+            }
+            for (auto& entry : ev->Get()->Request->ResultSet) {
+                if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindCdcStream || !entry.CdcStreamInfo) {
+                    continue;
+                }
+                auto info = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TCdcStreamInfo>(*entry.CdcStreamInfo);
+                info->Description.SetHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange);
+                entry.CdcStreamInfo = info;
+            }
+        });
+    }
+
+    bool HasKey(const TVector<std::pair<TString, TString>>& records, const TString& key) {
+        return AnyOf(records, [&](const auto& record) {
+            return record.second.Contains("\"key\":[" + key + "]");
+        });
+    }
+
+    Y_UNIT_TEST(ShouldDeliverChangesAndHeartbeatsOnlyToOwnPartitionWhenKeyRangeHeartbeats) {
+        // given
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions().Shards(2));
+
+        THashMap<ui32, THashSet<TString>> partitionToHeartbeatSources;
+        auto observeHeartbeats = runtime.AddObserver<TEvPersQueue::TEvRequest>([&](auto& ev) {
+            const auto& request = ev->Get()->Record.GetPartitionRequest();
+            for (const auto& write : request.GetCmdWrite()) {
+                if (write.HasHeartbeat()) {
+                    partitionToHeartbeatSources[request.GetPartition()].insert(write.GetSourceId());
+                }
+            }
+        });
+
+        auto forceKeyRangeHeartbeatMode = ForceKeyRangeHeartbeatMode(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        // when
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (3000000000, 20);
+        )");
+
+        // then
+        TVector<TVector<std::pair<TString, TString>>> records(2);
+        for (ui32 attempt = 0; attempt < 60 && !(HasKey(records[0], "1") && HasKey(records[1], "3000000000") && partitionToHeartbeatSources.size() == 2); ++attempt) {
+            SimulateSleep(server, TDuration::Seconds(1));
+            for (ui32 i = 0; i < records.size(); ++i) {
+                records[i] = GetRecords(runtime, edgeActor, "/Root/Table/Stream", i);
+            }
+        }
+
+        UNIT_ASSERT(HasKey(records[0], "1"));
+        UNIT_ASSERT(!HasKey(records[0], "3000000000"));
+        UNIT_ASSERT(HasKey(records[1], "3000000000"));
+        UNIT_ASSERT(!HasKey(records[1], "1"));
+        UNIT_ASSERT_VALUES_EQUAL(partitionToHeartbeatSources.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(partitionToHeartbeatSources[0].size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(partitionToHeartbeatSources[1].size(), 1);
+        UNIT_ASSERT_VALUES_UNEQUAL(*partitionToHeartbeatSources[0].begin(), *partitionToHeartbeatSources[1].begin());
+    }
+
+    Y_UNIT_TEST(ShouldDeliverChangesOnlyToOwnPartitionWhenKeyRangeHeartbeatsUseCompositeKey) {
+        // given
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions()
+            .Shards(2)
+            .Columns({
+                {"id", "Uint32", true, false},
+                {"name", "Utf8", true, false},
+                {"value", "Uint32", false, false},
+            }));
+
+        auto forceKeyRangeHeartbeatMode = ForceKeyRangeHeartbeatMode(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        // when
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (id, name, value) VALUES
+            (1u, "b"u, 10u),
+            (2147483647u, "zz"u, 20u),
+            (3000000000u, "a"u, 30u);
+        )");
+
+        // then
+        TVector<TVector<std::pair<TString, TString>>> records(2);
+        for (ui32 attempt = 0; attempt < 60 && !(HasKey(records[0], R"(2147483647,"zz")") && HasKey(records[1], R"(3000000000,"a")")); ++attempt) {
+            SimulateSleep(server, TDuration::Seconds(1));
+            for (ui32 i = 0; i < records.size(); ++i) {
+                records[i] = GetRecords(runtime, edgeActor, "/Root/Table/Stream", i);
+            }
+        }
+
+        UNIT_ASSERT(HasKey(records[0], R"(1,"b")"));
+        UNIT_ASSERT(HasKey(records[0], R"(2147483647,"zz")"));
+        UNIT_ASSERT(!HasKey(records[0], R"(3000000000,"a")"));
+        UNIT_ASSERT(HasKey(records[1], R"(3000000000,"a")"));
+        UNIT_ASSERT(!HasKey(records[1], R"(1,"b")"));
+        UNIT_ASSERT(!HasKey(records[1], R"(2147483647,"zz")"));
+    }
+
+    TString SerializeUint32Key(ui32 value) {
+        const TVector<TCell> cells = {TCell::Make<ui32>(value)};
+        return TSerializedCellVec::Serialize(cells);
+    }
+
+    Y_UNIT_TEST(ShouldPassRowKeyToTopicWhenKeyRangeHeartbeats) {
+        // given
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions());
+
+        TVector<TString> rowKeys;
+        bool heartbeatHasRowKey = false;
+        auto observeWrites = runtime.AddObserver<TEvPersQueue::TEvRequest>([&](auto& ev) {
+            for (const auto& write : ev->Get()->Record.GetPartitionRequest().GetCmdWrite()) {
+                if (write.HasHeartbeat()) {
+                    heartbeatHasRowKey |= write.HasChoosePartitionKey();
+                } else if (write.HasData()) {
+                    rowKeys.push_back(write.GetChoosePartitionKey());
+                }
+            }
+        });
+
+        auto forceKeyRangeHeartbeatMode = ForceKeyRangeHeartbeatMode(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        // when
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20);
+        )");
+
+        // then
+        for (ui32 attempt = 0; attempt < 60 && rowKeys.size() < 2; ++attempt) {
+            SimulateSleep(server, TDuration::Seconds(1));
+        }
+        for (ui32 attempt = 0; attempt < 10; ++attempt) {
+            SimulateSleep(server, TDuration::Seconds(1));
+        }
+
+        Sort(rowKeys);
+        UNIT_ASSERT_VALUES_EQUAL(rowKeys, TVector<TString>({SerializeUint32Key(1), SerializeUint32Key(2)}));
+        UNIT_ASSERT(!heartbeatHasRowKey);
+    }
+
+    Y_UNIT_TEST(ShouldResolveTopicWithSyncVersionWhenPartitionWriterFailsAndKeyRangeHeartbeats) {
+        // given
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions());
+
+        auto forceKeyRangeHeartbeatMode = ForceKeyRangeHeartbeatMode(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+        for (ui32 attempt = 0; attempt < 60 && !HasKey(GetRecords(runtime, edgeActor, "/Root/Table/Stream", 0), "1"); ++attempt) {
+            SimulateSleep(server, TDuration::Seconds(1));
+        }
+
+        ui32 syncTopicResolves = 0;
+        auto observeResolves = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySet>([&](auto& ev) {
+            for (const auto& entry : ev->Get()->Request->ResultSet) {
+                if (entry.Operation == NSchemeCache::TSchemeCacheNavigate::OpTopic && entry.SyncVersion) {
+                    ++syncTopicResolves;
+                }
+            }
+        });
+
+        // when
+        RebootTablet(runtime, ResolvePqTablet(runtime, edgeActor, "/Root/Table/Stream", 0), edgeActor);
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (2, 20);");
+
+        // then
+        bool delivered = false;
+        for (ui32 attempt = 0; attempt < 60 && !(delivered && syncTopicResolves); ++attempt) {
+            SimulateSleep(server, TDuration::Seconds(1));
+            delivered = HasKey(GetRecords(runtime, edgeActor, "/Root/Table/Stream", 0), "2");
+        }
+
+        UNIT_ASSERT(delivered);
+        UNIT_ASSERT_VALUES_UNEQUAL(syncTopicResolves, 0);
+    }
+
     Y_UNIT_TEST(InitialScanAndResolvedTimestamps) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

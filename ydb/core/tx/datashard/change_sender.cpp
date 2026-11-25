@@ -66,7 +66,7 @@ class TChangeSender: public TActor<TChangeSender> {
                 return Register(CreateAsyncIndexChangeSender(DataShard, sender.UserTableId, pathId));
             },
             [&](const TCdcStreamSender& cdcStream) {
-                return Register(CreateCdcStreamChangeSender(DataShard, pathId, cdcStream.Stream));
+                return Register(CreateCdcStreamChangeSender(DataShard, pathId, cdcStream.Stream, cdcStream.ShardKeyRange));
             },
         }, sender.Params);
     }
@@ -288,7 +288,7 @@ public:
             });
 
             for (const auto& [streamPathId, stream] : tableInfo->CdcStreams) {
-                AddChangeSender(streamPathId, fullTableId, TCdcStreamSender{stream});
+                AddChangeSender(streamPathId, fullTableId, TCdcStreamSender{stream, tableInfo->Range});
             }
         }
     }

@@ -101,6 +101,7 @@ message TDataCenterStates {
 message TFailRealmStates {
     repeated TDataCenterState.EState State = 1;
     optional TGroupState.EState GroupState = 2;
+    optional TGroupState.ETargetInvariant TargetInvariant = 3;
 }
 
 message TFailRealmInfo {
@@ -147,6 +148,7 @@ message TGroupInfo {
     optional uint32 BridgePileId = 20;
     optional bool DDisk = 21; // is this a Direct Block Group?
     optional TGroupState.EState Mirror3dcState = 22;
+    optional TGroupState.ETargetInvariant TargetInvariant = 23;
 }
 
 // VDiskStatus ordering is assumed to be lower for bad statuses and higher for good ones

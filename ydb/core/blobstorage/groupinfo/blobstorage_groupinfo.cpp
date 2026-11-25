@@ -739,6 +739,7 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     if (group.HasMirror3dcState()) {
         dyn.Mirror3dcState.State = group.GetMirror3dcState();
     }
+    dyn.Mirror3dcState.TargetInvariant = group.GetTargetInvariant();
     topology.FailRealms.resize(group.RingsSize());
     for (ui32 ringIdx = 0; ringIdx < group.RingsSize(); ++ringIdx) {
         const auto& realm = group.GetRings(ringIdx);

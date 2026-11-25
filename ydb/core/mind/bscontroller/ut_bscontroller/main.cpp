@@ -593,6 +593,7 @@ namespace {
                 const NKikimrBlobStorage::TGroupInfo& info = record.GetServiceSet().GetGroups(0);
                 if (info.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
                     UNIT_ASSERT_VALUES_EQUAL(group.FailRealmsSize(), 3);
+                    UNIT_ASSERT(group.GetTargetInvariant() == info.GetTargetInvariant());
                     for (ui32 realm = 0; realm < 3; ++realm) {
                         UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetFailRealms(realm).GetState()), ui32(info.GetRings(realm).GetState()));
                         TSet<TString> names;
@@ -860,6 +861,16 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             }
         }
         UNIT_ASSERT(id);
+        NKikimrBlobStorage::TConfigRequest setTarget;
+        auto* target = setTarget.AddCommand()->MutableDefineGroupState()->AddGroups();
+        target->SetGroupId(id);
+        target->SetTargetInvariant(static_cast<EMirror3dcTargetInvariant>(77));
+        UNIT_ASSERT(!env.Invoke(setTarget).GetSuccess());
+        target->SetTargetInvariant(S::INVARIANT_2);
+        UNIT_ASSERT(env.Invoke(setTarget).GetSuccess());
+        const auto normal = env.ReadGroups().at(id);
+        UNIT_ASSERT(normal.GetMirror3dcState() == S::NORMAL);
+        UNIT_ASSERT(normal.GetTargetInvariant() == S::INVARIANT_2);
         auto request = env.SetGroupStates(id, {R::INCLUDED, R::INCLUDED, R::EXCLUDED}, S::DC_FAILURE_INV2_PENDING);
         UNIT_ASSERT(env.Invoke(request).GetSuccess());
         auto pending = env.ReadGroups().at(id);
@@ -867,9 +878,13 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         // An idempotent request explicitly preserves PENDING and the physical roles.
         UNIT_ASSERT(env.Invoke(env.SetGroupStates(id, {R::INCLUDED, R::INCLUDED, R::EXCLUDED}, S::DC_FAILURE_INV2_PENDING)).GetSuccess());
         pending = env.ReadGroups().at(id);
+        UNIT_ASSERT(pending.GetTargetInvariant() == S::INVARIANT_2);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(pending.GetMirror3dcState()), static_cast<ui32>(S::DC_FAILURE_INV2_PENDING));
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
         UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(id).SerializeAsString(), pending.SerializeAsString());
+        target->SetTargetInvariant(S::NO_INVARIANT);
+        UNIT_ASSERT(env.Invoke(setTarget).GetSuccess());
+        UNIT_ASSERT(env.ReadGroups().at(id).GetTargetInvariant() == S::NO_INVARIANT);
     }
 
     Y_UNIT_TEST(ForceGroupFailRealmStatesOnlyUpdatesTarget) {

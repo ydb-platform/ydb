@@ -11,6 +11,7 @@ namespace NKikimr {
 
 // Numeric group states and realm roles are part of the on-disk format.
 using EMirror3dcGroupState = NKikimrBlobStorage::TGroupState::EState;
+using EMirror3dcTargetInvariant = NKikimrBlobStorage::TGroupState::ETargetInvariant;
 
 using EMirror3dcFailRealmState = NKikimrBlobStorage::TDataCenterState::EState;
 using TMirror3dcFailRealmStates = std::array<EMirror3dcFailRealmState, 3>;
@@ -48,6 +49,7 @@ struct TMirror3dcGroupState {
     EMirror3dcGroupState State = NKikimrBlobStorage::TGroupState::NORMAL;
     // Indexed by physical failrealm and stored with the group generation.
     TMirror3dcFailRealmStates FailRealmStates{};
+    EMirror3dcTargetInvariant TargetInvariant = NKikimrBlobStorage::TGroupState::NO_INVARIANT;
 
     bool operator==(const TMirror3dcGroupState&) const = default;
 };

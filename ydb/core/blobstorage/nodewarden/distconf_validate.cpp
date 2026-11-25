@@ -153,6 +153,9 @@ namespace NKikimr::NStorage {
                 if (group.GetGroupGeneration() != currentGroup.GetGroupGeneration() &&
                         group.GetGroupGeneration() != currentGroup.GetGroupGeneration() + 1) {
                     return "incorrect group generation change";
+                } else if (group.GetTargetInvariant() != currentGroup.GetTargetInvariant()
+                        && group.GetGroupGeneration() == currentGroup.GetGroupGeneration()) {
+                    return "changing the target invariant requires a new group generation";
                 } else if (removedPartGroupIds.contains(group.GetGroupID()) && !group.RingsSize()) {
                     // inline pile of the pile being removed, the group stays as bridge proxy one only
                 } else if (group.GetErasureSpecies() != currentGroup.GetErasureSpecies()) {

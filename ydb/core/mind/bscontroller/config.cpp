@@ -756,6 +756,9 @@ namespace NKikimr::NBsController {
                     if (overlay->second->Mirror3dcState) {
                         states.SetGroupState(*overlay->second->Mirror3dcState);
                     }
+                    if (overlay->second->TargetInvariant) {
+                        states.SetTargetInvariant(*overlay->second->TargetInvariant);
+                    }
                     db.Table<Schema::Group>().Key(overlay->first.GetRawId())
                         .Update<Schema::Group::FailRealmStates>(states);
                 }
@@ -1674,6 +1677,9 @@ namespace NKikimr::NBsController {
             if (group.Mirror3dcState) {
                 pb->SetMirror3dcState(*group.Mirror3dcState);
             }
+            if (group.TargetInvariant) {
+                pb->SetTargetInvariant(*group.TargetInvariant);
+            }
             pb->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies));
             if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {
                 for (ui32 realm = 0; realm < 3; ++realm) {
@@ -1787,6 +1793,9 @@ namespace NKikimr::NBsController {
 
             if (groupInfo.Mirror3dcState) {
                 group->SetMirror3dcState(*groupInfo.Mirror3dcState);
+            }
+            if (groupInfo.TargetInvariant) {
+                group->SetTargetInvariant(*groupInfo.TargetInvariant);
             }
             if (groupInfo.VDisksInGroup) {
                 group->SetErasureSpecies(groupInfo.ErasureSpecies);

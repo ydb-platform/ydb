@@ -98,15 +98,15 @@ static TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetada
     // Must match the list that DataShard writes into the table metadata.json
     // (see TS3Export::CreateUploader and GenRowTableScheme): DataShard numbers
     // anonymized index prefixes after the exported changefeeds, lists only the
-    // indexes it can convert and lists nothing if it fails to build the scheme.
+    // indexes that appear in the converted scheme.
     Ydb::Table::CreateTableRequest scheme;
     NKikimrMiniKQL::TType mkqlKeyType;
     try {
         FillColumnDescription(scheme, mkqlKeyType, table);
         FillTableBoundary(scheme, table, mkqlKeyType);
         FillIndexDescription(scheme, table);
-    } catch (const yexception&) {
-        return TVector<NBackup::TIndexMetadata>{};
+    } catch (const yexception& e) {
+        return TConclusionStatus::Fail(TStringBuilder() << "Cannot convert table description for index export: " << e.what());
     }
 
     const auto& featureFlags = AppData()->FeatureFlags;
@@ -128,13 +128,30 @@ static void FillChangefeedTopics(TSchemeShard* ss, const NKikimrSchemeOp::TTable
     }
 }
 
+static bool HasMaterializedIndexData(NKikimrSchemeOp::EIndexType type) {
+    return type != NKikimrSchemeOp::EIndexTypeGlobalHnsw && type != NKikimrSchemeOp::EIndexTypeGlobalAsync
+        && !TTableIndexInfo::IsLocalIndex(type);
+}
+
 TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetadata(TSchemeShard* ss, const TPathId& tablePathId,
-    bool encrypted, NKikimrSchemeOp::TBackupTask* snapshot)
+    bool encrypted, NKikimrSchemeOp::TExportMetadata::TSchemaMappingItem* mapping)
 {
-    const auto description = GetDescription(ss, tablePathId);
-    const auto& table = description.GetTable();
+    auto description = GetDescription(ss, tablePathId);
+    auto& table = *description.MutableTable();
+    if (mapping) {
+        THashSet<TStringBuf> planned;
+        for (const auto& [path, iv] : mapping->GetIndexIVs().GetIVs()) {
+            planned.insert(TStringBuf(path).Before('/'));
+        }
+        // An index added since the export items were selected has no data item.
+        // Remove it before numbering so older DataShards derive the same prefixes.
+        EraseIf(*table.MutableTableIndexes(), [&](const auto& index) {
+            return HasMaterializedIndexData(index.GetType()) && !planned.contains(index.GetName());
+        });
+    }
     auto indexes = GetTableIndexesExportMetadata(table, encrypted);
-    if (indexes.IsSuccess() && snapshot) {
+    if (indexes.IsSuccess() && mapping) {
+        auto* snapshot = mapping->MutableIndexExportSnapshot();
         snapshot->Clear();
         auto& savedTable = *snapshot->MutableTable()->MutableTable();
         *savedTable.MutableTableIndexes() = table.GetTableIndexes();
@@ -308,72 +325,76 @@ void FillEncryptionSettings(
     NKikimrSchemeOp::TBackupTask& task,
     const TSettings& exportSettings,
     const TExportInfo& exportInfo,
-    ui32 itemIdx,
-    const NKikimrSchemeOp::TTableDescription& copiedTable)
+    ui32 itemIdx)
 {
-    bool hasFrozenIndexes = false;
     if (exportSettings.has_encryption_settings()) {
         auto& encryptionSettings = *task.MutableEncryptionSettings();
         encryptionSettings.SetEncryptionAlgorithm(exportInfo.ExportMetadata.GetEncryptionAlgorithm());
         encryptionSettings.SetIV(GetExportItemIV(exportInfo, itemIdx));
         *encryptionSettings.MutableSymmetricKey() = exportSettings.encryption_settings().symmetric_key();
+    }
+}
 
-        const bool isTableItem = exportInfo.Items.at(itemIdx).ParentIdx == Max<ui32>();
-        if (isTableItem && itemIdx < exportInfo.ExportMetadata.SchemaMappingSize()) {
-            const auto& mapping = exportInfo.ExportMetadata.GetSchemaMapping(itemIdx);
-            if (mapping.HasIndexExportPrefixes()) {
-                *task.MutableIndexExportPrefixes() = mapping.GetIndexExportPrefixes();
-            }
-            if (mapping.HasIndexExportSnapshot()) {
-                hasFrozenIndexes = true;
-                // Older receivers derive prefixes from these existing fields.
-                // Keep their inputs consistent with the frozen index prefixes,
-                // even if changefeeds or indexes were added in the meantime.
-                const auto& snapshot = mapping.GetIndexExportSnapshot();
-                auto& table = *task.MutableTable()->MutableTable();
-                // A KMeans build can publish its detected settings after index prefixes have been frozen.
-                THashMap<TPathId, const NKikimrSchemeOp::TVectorIndexKmeansTreeDescription*> readyKMeans;
-                for (const auto& current : table.GetTableIndexes()) {
-                    if (current.HasVectorIndexKmeansTreeDescription() && current.GetState() == NKikimrSchemeOp::EIndexStateReady) {
-                        readyKMeans.emplace(TPathId(current.GetPathOwnerId(), current.GetLocalPathId()),
-                            &current.GetVectorIndexKmeansTreeDescription());
-                    }
-                }
-
-                auto indexes = snapshot.GetTable().GetTable().GetTableIndexes();
-                for (auto& saved : indexes) {
-                    if (!saved.HasVectorIndexKmeansTreeDescription()) {
-                        continue;
-                    }
-                    const auto it = readyKMeans.find(TPathId(saved.GetPathOwnerId(), saved.GetLocalPathId()));
-                    if (it != readyKMeans.end()) {
-                        *saved.MutableVectorIndexKmeansTreeDescription() = *it->second;
-                    }
-                }
-                table.MutablePartitionConfig()->MutableByKeyFilterPrefixes()->CopyFrom(
-                    copiedTable.GetPartitionConfig().GetByKeyFilterPrefixes());
-                table.MutableColumns()->CopyFrom(copiedTable.GetColumns());
-                table.MutableKeyColumnNames()->CopyFrom(copiedTable.GetKeyColumnNames());
-                table.MutableKeyColumnIds()->CopyFrom(copiedTable.GetKeyColumnIds());
-                table.MutableTableIndexes()->Swap(&indexes);
-                table.MutableCdcStreams()->CopyFrom(snapshot.GetTable().GetTable().GetCdcStreams());
-                task.MutableChangefeedUnderlyingTopics()->CopyFrom(snapshot.GetChangefeedUnderlyingTopics());
+static void FillIndexExportSettings(NKikimrSchemeOp::TBackupTask& task, const TExportInfo& exportInfo,
+    ui32 itemIdx, const NKikimrSchemeOp::TTableDescription& copiedTable)
+{
+    if (!exportInfo.IncludeIndexData || exportInfo.Items.at(itemIdx).ParentIdx != Max<ui32>() || !task.GetTable().HasTable()) {
+        return;
+    }
+    const auto* mapping = itemIdx < exportInfo.ExportMetadata.SchemaMappingSize()
+        ? &exportInfo.ExportMetadata.GetSchemaMapping(itemIdx) : nullptr;
+    if (mapping && mapping->HasIndexExportPrefixes()) {
+        *task.MutableIndexExportPrefixes() = mapping->GetIndexExportPrefixes();
+    }
+    auto& table = *task.MutableTable()->MutableTable();
+    const bool hasFrozenIndexes = mapping && mapping->HasIndexExportSnapshot();
+    if (hasFrozenIndexes) {
+        // Older receivers derive prefixes from these existing fields.
+        // Keep their inputs consistent with the frozen index prefixes,
+        // even if changefeeds or indexes were added in the meantime.
+        const auto& snapshot = mapping->GetIndexExportSnapshot();
+        // A KMeans build can publish its detected settings after index prefixes have been frozen.
+        THashMap<TPathId, const NKikimrSchemeOp::TVectorIndexKmeansTreeDescription*> readyKMeans;
+        for (const auto& current : table.GetTableIndexes()) {
+            if (current.HasVectorIndexKmeansTreeDescription() && current.GetState() == NKikimrSchemeOp::EIndexStateReady) {
+                readyKMeans.emplace(TPathId(current.GetPathOwnerId(), current.GetLocalPathId()),
+                    &current.GetVectorIndexKmeansTreeDescription());
             }
         }
-    }
-    if (exportInfo.IncludeIndexData && exportInfo.Items.at(itemIdx).ParentIdx == Max<ui32>() && task.GetTable().HasTable()) {
-        // HNSW is always definition-only. A frozen prefix plan also excludes async and local indexes.
-        const auto useCopiedIndex = [hasFrozenIndexes](const auto& index) {
-            const auto type = index.GetType();
-            return type == NKikimrSchemeOp::EIndexTypeGlobalHnsw || (hasFrozenIndexes
-                && (type == NKikimrSchemeOp::EIndexTypeGlobalAsync || TTableIndexInfo::IsLocalIndex(type)));
-        };
-        auto& indexes = *task.MutableTable()->MutableTable()->MutableTableIndexes();
-        EraseIf(indexes, useCopiedIndex);
-        for (const auto& index : copiedTable.GetTableIndexes()) {
-            if (useCopiedIndex(index)) {
-                *indexes.Add() = index;
+
+        auto indexes = snapshot.GetTable().GetTable().GetTableIndexes();
+        for (auto& saved : indexes) {
+            if (!saved.HasVectorIndexKmeansTreeDescription()) {
+                continue;
             }
+            const auto it = readyKMeans.find(TPathId(saved.GetPathOwnerId(), saved.GetLocalPathId()));
+            if (it != readyKMeans.end()) {
+                *saved.MutableVectorIndexKmeansTreeDescription() = *it->second;
+            }
+        }
+        table.MutablePartitionConfig()->MutableByKeyFilterPrefixes()->CopyFrom(
+            copiedTable.GetPartitionConfig().GetByKeyFilterPrefixes());
+        table.MutableColumns()->CopyFrom(copiedTable.GetColumns());
+        table.MutableKeyColumnNames()->CopyFrom(copiedTable.GetKeyColumnNames());
+        table.MutableKeyColumnIds()->CopyFrom(copiedTable.GetKeyColumnIds());
+        table.MutableTableIndexes()->Swap(&indexes);
+        table.MutableCdcStreams()->CopyFrom(snapshot.GetTable().GetTable().GetCdcStreams());
+        task.MutableChangefeedUnderlyingTopics()->CopyFrom(snapshot.GetChangefeedUnderlyingTopics());
+    }
+    // Older DataShards derive the list from the scheme even when the materialization plan is empty.
+    const bool emptyPlan = task.HasIndexExportPrefixes() && !task.GetIndexExportPrefixes().IndexesSize();
+    const auto useCopiedIndex = [hasFrozenIndexes](const auto& index) {
+        const auto type = index.GetType();
+        return type == NKikimrSchemeOp::EIndexTypeGlobalHnsw || (hasFrozenIndexes
+            && (type == NKikimrSchemeOp::EIndexTypeGlobalAsync || TTableIndexInfo::IsLocalIndex(type)));
+    };
+    auto& indexes = *table.MutableTableIndexes();
+    EraseIf(indexes, [&](const auto& index) {
+        return useCopiedIndex(index) || (emptyPlan && HasMaterializedIndexData(index.GetType()));
+    });
+    for (const auto& index : copiedTable.GetTableIndexes()) {
+        if (useCopiedIndex(index)) {
+            *indexes.Add() = index;
         }
     }
 }
@@ -432,7 +453,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     }
 
     // Backup copies disable TTL. Its live definition must still be usable with
-    // the copied columns that FillEncryptionSettings puts into the backup.
+    // the copied columns that go into the backup.
     const auto& ttl = task.GetTable().GetTable().GetTTLSettings();
     if (ttl.HasEnabled() && item.ParentIdx == Max<ui32>()
             && itemIdx < exportInfo.ExportMetadata.SchemaMappingSize()
@@ -453,6 +474,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     }
 
     task.SetNeedToBill(!exportInfo.UserSID || !ss->SystemBackupSIDs.contains(*exportInfo.UserSID));
+    if (exportInfo.Kind != TExportInfo::EKind::YT) {
+        FillIndexExportSettings(task, exportInfo, itemIdx, copiedParent.GetTable());
+    }
     task.SetSnapshotStep(exportInfo.SnapshotStep);
     task.SetSnapshotTxId(exportInfo.SnapshotTxId);
 
@@ -533,7 +557,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             task.SetEnableChecksums(exportInfo.EnableChecksums);
             task.SetEnablePermissions(exportInfo.EnablePermissions);
 
-            FillEncryptionSettings(task, exportSettings, exportInfo, itemIdx, copiedParent.GetTable());
+            FillEncryptionSettings(task, exportSettings, exportInfo, itemIdx);
         }
         break;
     case TExportInfo::EKind::FS:
@@ -560,7 +584,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             task.SetEnableChecksums(exportInfo.EnableChecksums);
             task.SetEnablePermissions(exportInfo.EnablePermissions);
 
-            FillEncryptionSettings(task, exportSettings, exportInfo, itemIdx, copiedParent.GetTable());
+            FillEncryptionSettings(task, exportSettings, exportInfo, itemIdx);
         }
         break;
     }

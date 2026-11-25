@@ -14491,6 +14491,86 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
             {NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync), NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
     }
 
+    Y_UNIT_TEST(EncryptedIndexExportReportsSchemeConversionError) {
+        TBackupStorage storage(true);
+        TTestBasicRuntime runtime;
+        TSchemeShard* ss = nullptr;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true),
+            [&](const TActorId& tablet, TTabletStorageInfo* info) { return ss = new TSchemeShard(tablet, info); });
+        ConfigureIndexBackup(runtime, true);
+        ui64 txId = 100;
+        CreateVectorIndexTable(runtime, env, txId, "vector_idx", false);
+        // Simulate a stored table description that the public scheme converter cannot represent.
+        runtime.RunCall([&] {
+            const auto table = TPath::Resolve("/MyRoot/Table", ss);
+            auto* ttl = ss->Tables.at(table.Base()->PathId)->MutableTTLSettings().MutableEnabled();
+            ttl->SetColumnName("key");
+            ttl->AddTiers()->SetApplyAfterSeconds(60);
+            ss->ClearDescribePathCaches(table.Base(), true);
+            return true;
+        });
+        AsyncExport(runtime, ++txId, "/MyRoot", storage.ExportRequest({{"/MyRoot/Table", "backup"}}));
+        TAutoPtr<IEventHandle> handle;
+        const auto& entry = runtime.GrabEdgeEvent<TEvExport::TEvCreateExportResponse>(handle)->Record.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL_C(entry.GetStatus(), Ydb::StatusIds::BAD_REQUEST, entry.GetIssues());
+        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(entry.GetIssues()), "invalid TTL settings: Undefined tier action");
+    }
+
+    Y_UNIT_TEST_QUAD(GlobalIndexCreatedAfterExportSelection, ExistingIndex, BeforeMetadata) {
+        TBackupStorage storage(true);
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+        ConfigureIndexBackup(runtime, true);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "id" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["id"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto buildIndex = [&](const char* name) {
+            Ydb::Table::TableIndex index;
+            index.set_name(name);
+            index.add_index_columns("value");
+            index.mutable_global_index();
+            TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", index);
+            env.TestWaitNotification(runtime, txId);
+            UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId)
+                .GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        };
+        if (ExistingIndex) {
+            buildIndex("z_existing");
+        }
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> mkdir(runtime, [&](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return BeforeMetadata && record.TransactionSize()
+                && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMkDir;
+        });
+        TBlockEvents<NSchemeShard::TEvPrivate::TEvExportUploadMetadataResult> metadataUploaded(runtime,
+            [&](const auto& ev) { return !BeforeMetadata && dynamic_cast<NSchemeShard::TEvPrivate::TEvExportUploadMetadataResult*>(ev->GetBase()); });
+        const auto exportId = ++txId;
+        TestExport(runtime, exportId, "/MyRoot", storage.ExportRequest({{"/MyRoot/Table", "backup"}}));
+        runtime.WaitFor("export items selected", [&] { return BeforeMetadata ? !mkdir.empty() : !metadataUploaded.empty(); });
+        buildIndex("a_late");
+        mkdir.Stop().Unblock();
+        metadataUploaded.Stop().Unblock();
+        env.TestWaitNotification(runtime, exportId);
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        const auto metadata = NBackup::TMetadata::Deserialize(storage.ReadEncrypted("backup/metadata.json.enc").first);
+        UNIT_ASSERT(metadata.GetIndexes());
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetIndexes()->size(), ExistingIndex ? 1u : 0u);
+        if (ExistingIndex) {
+            UNIT_ASSERT_VALUES_EQUAL(metadata.GetIndexes()->front().ImplTablePrefix, "z_existing/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(metadata.GetIndexes()->front().ExportPrefix, "001");
+        }
+        TestImport(runtime, ++txId, "/MyRoot", storage.ImportRequest(
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT, {"/MyRoot/Restored"}));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Restored"), {NLs::PathExist, NLs::IndexesCount(ExistingIndex ? 1 : 0)});
+    }
+
     Y_UNIT_TEST_FLAG(TtlColumnAddedAfterEncryptedTableCopy, PgTtl) {
         TBackupStorage storage(true);
         TTestBasicRuntime runtime;

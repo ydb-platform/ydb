@@ -722,43 +722,44 @@ private:
                 schemaMappingItem.SetIV(NBackup::TEncryptionIV::Combine(*iv, NBackup::EBackupFileType::Metadata, itemIndex, 0).GetBinaryString());
             }
         }
-        if (iv) {
-            // SchemeShard writes the authenticated index IVs itself. DataShards
-            // only need the existing per-item encryption settings, including
-            // when their binaries predate encrypted index materialization.
-            TMap<ui32, THashSet<TString>> indexItemsByParent;
+        if (iv && exportInfo.IncludeIndexData) {
             for (ui32 indexIdx : xrange(exportInfo.Items.size())) {
                 const auto& indexItem = exportInfo.Items[indexIdx];
                 if (indexItem.ParentIdx != Max<ui32>()) {
                     auto& parent = *metadata.MutableSchemaMapping(indexItem.ParentIdx);
                     (*parent.MutableIndexIVs()->MutableIVs())[indexItem.SourcePathName] =
                         MakeExportIndexItemIV(*iv, indexIdx).GetBinaryString();
-                    indexItemsByParent[indexItem.ParentIdx].insert(indexItem.SourcePathName);
                 }
             }
 
-            // Anonymized index prefixes depend on the position of the index in the table
-            // scheme, which can be changed during the export. Fix them once here and use
-            // the same list for index items and for the table metadata written by DataShard.
-            for (const auto& [parentIdx, implTables] : indexItemsByParent) {
+            bool hasIndexPlan = false;
+            for (ui32 parentIdx : xrange(metadata.SchemaMappingSize())) {
+                const auto& parentItem = exportInfo.Items.at(parentIdx);
+                if (parentItem.SourcePathType != NKikimrSchemeOp::EPathTypeTable) {
+                    continue;
+                }
+                // Empty also fixes the plan: an index may be added before the copy.
                 auto& mapping = *metadata.MutableSchemaMapping(parentIdx);
                 auto& prefixes = *mapping.MutableIndexExportPrefixes();
-                const auto& parentItem = exportInfo.Items.at(parentIdx);
-                const auto indexes = GetTableIndexesExportMetadata(Self, parentItem.SourcePathId, true,
-                    mapping.MutableIndexExportSnapshot());
+                hasIndexPlan = true;
+                if (!mapping.HasIndexIVs()) {
+                    continue;
+                }
+
+                const auto indexes = GetTableIndexesExportMetadata(Self, parentItem.SourcePathId, true, &mapping);
                 if (!indexes) {
                     issues = indexes.GetErrorMessage();
                     return false;
                 }
                 for (const auto& index : indexes.GetResult()) {
-                    if (implTables.contains(index.ImplTablePrefix)) {
+                    if (mapping.GetIndexIVs().GetIVs().contains(index.ImplTablePrefix)) {
                         auto& entry = *prefixes.AddIndexes();
                         entry.SetImplTablePrefix(index.ImplTablePrefix);
                         entry.SetExportPrefix(index.ExportPrefix);
                     }
                 }
             }
-            if (!indexItemsByParent.empty() && metadata.ByteSizeLong() + exportSettings.ByteSizeLong() >= metadataBudget) {
+            if (hasIndexPlan && metadata.ByteSizeLong() + exportSettings.ByteSizeLong() >= metadataBudget) {
                 issues = "Encrypted index export metadata exceeds the maximum SchemeShard commit size";
                 return false;
             }

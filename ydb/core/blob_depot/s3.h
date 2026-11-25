@@ -91,6 +91,7 @@ namespace NKikimr::NBlobDepot {
         struct TEvScanFound;
 
         TActorId ScannerActorId;
+        TBackoff ScanRetryBackoff{TDuration::Minutes(1), TDuration::Hours(1)};
 
         void RunScannerActor();
         void HandleScanner(TAutoPtr<IEventHandle> ev);

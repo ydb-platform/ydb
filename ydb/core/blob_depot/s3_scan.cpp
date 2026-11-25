@@ -89,6 +89,12 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
+        void PassAway() override {
+            // A live tablet shares this router with its agents. Drop any unresolved LIST owned by this scanner.
+            Send(WrapperId, new TEvents::TEvGone);
+            TActorBootstrapped::PassAway();
+        }
+
         void FinishWithError(TString error) {
             Send(ParentId, new TEvScanFound({}, true, std::move(error)));
             PassAway();
@@ -157,7 +163,9 @@ namespace NKikimr::NBlobDepot {
     };
 
     void TS3Manager::RunScannerActor() {
-        Y_ABORT_UNLESS(!ScannerActorId);
+        if (ScannerActorId) {
+            return;
+        }
         ScannerActorId = Self->Register(new TScannerActor(Self->SelfId(), WrapperId, BasePath, Bucket, Self->GetLogId()));
     }
 
@@ -181,7 +189,10 @@ namespace NKikimr::NBlobDepot {
                         {"marker", "BDTS14"},
                         {"id", Self->GetLogId()},
                         {"error", msg.Error});
-                    // TODO(alexvru): restart scanner in some time
+                    ScannerActorId = {};
+                    TActivationContext::Schedule(ScanRetryBackoff.Next(), new IEventHandle(TEvPrivate::EvResumeS3Scan, 0,
+                        Self->SelfId(), Self->SelfId(), nullptr, 0));
+                    return;
                 }
 
                 THashSet<TS3Locator> trash;
@@ -219,6 +230,7 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 if (msg.IsFinal) {
+                    ScanRetryBackoff.Reset();
                     ScannerActorId = {};
                 }
 

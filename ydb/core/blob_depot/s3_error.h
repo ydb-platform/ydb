@@ -24,4 +24,8 @@ namespace NKikimr::NBlobDepot {
         return error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_KEY || IsS3MissingKey(error.GetExceptionName());
     }
 
+    inline bool IsS3MissingBucket(const Aws::S3::S3Error& error) {
+        return error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_BUCKET || error.GetExceptionName() == "NoSuchBucket";
+    }
+
 } // namespace NKikimr::NBlobDepot

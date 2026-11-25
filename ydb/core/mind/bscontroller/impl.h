@@ -46,6 +46,7 @@
 #include <util/generic/hash_multi_map.h>
 
 #include <array>
+#include <list>
 #include <unordered_map>
 
 inline IOutputStream& operator <<(IOutputStream& o, NKikimr::TErasureType::EErasureSpecies p) {
@@ -1683,7 +1684,10 @@ public:
         }
     };
 
-    enum class EBlobDepotClaim { GroupName, LogicalPrefix, PhysicalPrefix, AmbiguousBucket, RetiredPrefix };
+    enum class EBlobDepotClaim {
+        GroupName, LogicalPrefix, PhysicalPrefix, AmbiguousBucket, RetiredPrefix,
+        LivePath, RetiredPath, NamespaceId,
+    };
     using TBlobDepotClaim = std::tuple<EBlobDepotClaim, TString, TString>; // kind, bucket, name or normalized prefix
     using TBlobDepotOwners = std::map<TBlobDepotClaim, std::set<TGroupId>>;
 
@@ -1693,6 +1697,8 @@ public:
         TString S3Config;
         TMaybe<TInstant> NextS3Sweep;
         Table::ESweepPhase Phase = Table::AwaitingOwnership;
+        ui32 ConsecutiveFailures = 0;
+        bool LegacyCleanupAuthorized = false;
         TActorId SchedulerId;
 
         NKikimrBlobDepot::TBlobDepotConfig GetConfig() const;
@@ -1700,9 +1706,10 @@ public:
         template<typename T>
         static void Apply(TBlobStorageController*, T&& callback) {
             static TTableAdapter<Table, TRetiredS3Namespace,
-                Table::BlobDepotId, Table::S3Config, Table::NextS3Sweep, Table::SweepPhase> adapter(
+                Table::BlobDepotId, Table::S3Config, Table::NextS3Sweep, Table::SweepPhase, Table::ConsecutiveFailures, Table::LegacyCleanupAuthorized> adapter(
                     &TRetiredS3Namespace::BlobDepotId, &TRetiredS3Namespace::S3Config,
-                    &TRetiredS3Namespace::NextS3Sweep, &TRetiredS3Namespace::Phase);
+                    &TRetiredS3Namespace::NextS3Sweep, &TRetiredS3Namespace::Phase,
+                    &TRetiredS3Namespace::ConsecutiveFailures, &TRetiredS3Namespace::LegacyCleanupAuthorized);
             callback(&adapter);
         }
     };
@@ -1757,9 +1764,13 @@ private:
     TMap<TGroupId, TBlobDepotDeleteQueueInfo> BlobDepotDeleteQueue;
     using TRetiredS3Namespaces = TMap<TGroupId, TRetiredS3Namespace>;
     TRetiredS3Namespaces RetiredS3Namespaces;
+    std::list<TActorId> RetiredS3SweepQueue;
+    ui32 ActiveRetiredS3Sweeps = 0;
 
     TBlobDepotOwners BlobDepotOwners;
     void RebuildBlobDepotOwners();
+    void RebuildS3PathClaims();
+    bool HasOtherS3NamespaceOwner(TGroupId groupId, const NKikimrBlobDepot::TBlobDepotConfig& config) const;
     ui64 NextOperationLogIndex = 1;
     TActorId StatProcessorActorId;
     bool SelfHealEnable = false;
@@ -2107,12 +2118,19 @@ private:
     void RenderGroupTable(IOutputStream& out, std::function<void()> callback);
     void RenderGroupRow(IOutputStream& out, const TGroupInfo& group);
 
+    static TString DescribeStartupEvent(const IEventHandle& ev) {
+        // Configuration requests can contain cleanup credentials. The command transaction
+        // records a redacted request when it executes.
+        return ev.GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType
+            ? TString("TEvControllerConfigRequest") : ev.ToString();
+    }
+
     void Enqueue(STFUNC_SIG) override {
         YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Enqueue",
             {"marker", "BSC04"},
             {"tabletId", TabletID()},
             {"type", ev->GetTypeRewrite()},
-            {"event", ev->ToString()});
+            {"event", DescribeStartupEvent(*ev)});
         InitQueue.push_back(ev);
     }
 
@@ -2712,7 +2730,7 @@ public:
         YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "StateInit event",
             {"marker", "BSC05"},
             {"type", ev->GetTypeRewrite()},
-            {"event", ev->ToString()});
+            {"event", DescribeStartupEvent(*ev)});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvNodeWardenStorageConfig, Handle);
@@ -2858,6 +2876,7 @@ public:
         Become(&TThis::StateWork);
 
         RebuildBlobDepotOwners();
+        RebuildS3PathClaims();
         SubscribeToFeatureFlags();
 
         ValidateInternalState();
@@ -2907,7 +2926,7 @@ public:
                 {"marker", "BSC08"},
                 {"tabletId", TabletID()},
                 {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString()});
+                {"event", DescribeStartupEvent(*ev)});
             StateWork(ev);
         }
 

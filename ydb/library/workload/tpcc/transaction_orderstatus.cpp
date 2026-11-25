@@ -39,7 +39,7 @@ TAsyncExecuteQueryResult GetOrderByCustomer(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $o_w_id AS Int32;
         DECLARE $o_d_id AS Int32;
@@ -77,7 +77,7 @@ TAsyncExecuteQueryResult GetOrderLines(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $ol_w_id AS Int32;
         DECLARE $ol_d_id AS Int32;

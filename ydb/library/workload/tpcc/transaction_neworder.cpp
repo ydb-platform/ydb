@@ -32,7 +32,7 @@ struct TSqlHelper {
             ss << Sprintf(R"(
                 --!syntax_v1
 
-                PRAGMA TablePathPrefix("%s");
+                PRAGMA RelativePathPrefix("%s");
 
             )", path.c_str());
 
@@ -58,7 +58,7 @@ struct TSqlHelper {
             ss << Sprintf(R"(
                 --!syntax_v1
 
-                PRAGMA TablePathPrefix("%s");
+                PRAGMA RelativePathPrefix("%s");
 
             )", path.c_str());
 
@@ -144,7 +144,7 @@ TAsyncExecuteQueryResult GetCustomer(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $c_w_id AS Int32;
         DECLARE $c_d_id AS Int32;
@@ -180,7 +180,7 @@ TAsyncExecuteQueryResult GetWarehouseTax(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $w_id AS Int32;
 
@@ -209,7 +209,7 @@ TAsyncExecuteQueryResult GetDistrict(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $d_w_id AS Int32;
         DECLARE $d_id AS Int32;
@@ -247,7 +247,7 @@ TAsyncExecuteQueryResult UpdateDistrict(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $d_w_id AS Int32;
         DECLARE $d_id AS Int32;
@@ -284,7 +284,7 @@ TAsyncExecuteQueryResult InsertNewOrder(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $no_o_id AS Int32;
         DECLARE $no_d_id AS Int32;
@@ -324,7 +324,7 @@ TAsyncExecuteQueryResult InsertOpenOrder(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $o_id AS Int32;
         DECLARE $o_d_id AS Int32;
@@ -429,7 +429,7 @@ TAsyncExecuteQueryResult UpdateStocks(
     const std::vector<StockUpdate>& stockUpdates) {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $values as List<Struct<p1:Int32,p2:Int32,p3:Int32,p4:Double,p5:Int32,p6:Int32>>;
         $mapper = ($row) -> (AsStruct(
@@ -471,7 +471,7 @@ TAsyncExecuteQueryResult InsertOrderLines(
     const std::vector<OrderLine>& orderLines) {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $values as List<Struct<p1:Int32,p2:Int32,p3:Int32,p4:Int32,p5:Int32,p6:Double,p7:Int32,p8:Double,p9:Utf8>>;
         $mapper = ($row) -> (AsStruct(

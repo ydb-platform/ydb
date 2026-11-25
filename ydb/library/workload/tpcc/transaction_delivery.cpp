@@ -43,7 +43,7 @@ TAsyncExecuteQueryResult GetNewOrder(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $no_d_id AS Int32;
         DECLARE $no_w_id AS Int32;
@@ -78,7 +78,7 @@ TAsyncExecuteQueryResult DeleteNewOrder(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $no_o_id AS Int32;
         DECLARE $no_d_id AS Int32;
@@ -113,7 +113,7 @@ TAsyncExecuteQueryResult GetCustomerID(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $o_id AS Int32;
         DECLARE $o_d_id AS Int32;
@@ -149,7 +149,7 @@ TAsyncExecuteQueryResult UpdateCarrierID(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $o_id AS Int32;
         DECLARE $o_d_id AS Int32;
@@ -182,7 +182,7 @@ TAsyncExecuteQueryResult UpdateDeliveryDate(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $values as List<Struct<p1:Int,p2:Int32,p3:Int32,p4:Int32,p5:Timestamp>>;
         $mapper = ($row) -> (AsStruct(
@@ -222,7 +222,7 @@ TAsyncExecuteQueryResult GetOrderLines(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $ol_o_id AS Int32;
         DECLARE $ol_d_id AS Int32;
@@ -258,7 +258,7 @@ TAsyncExecuteQueryResult GetCustomerData(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $c_w_id AS Int32;
         DECLARE $c_d_id AS Int32;
@@ -294,7 +294,7 @@ TAsyncExecuteQueryResult UpdateCustomerBalanceAndDeliveryCount(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $c_w_id AS Int32;
         DECLARE $c_d_id AS Int32;

@@ -100,7 +100,8 @@ TQueryInfo TQueryGenerator::MakeQuery(const TString& queryText, const TString& q
     TQueryInfo result;
     TStringBuilder query;
     query << "-- Query " << queryName << Endl;
-    query << "PRAGMA TablePathPrefix = \"" << Params.GetFullTableName(nullptr) << "\";" << Endl;
+    query << "PRAGMA " << (Params.DbPath == "." ? "RelativePathPrefix" : "TablePathPrefix")
+        << " = \"" << Params.GetFullTableName(nullptr) << "\";" << Endl;
     query << queryText;
     result.Query = query;
     result.QueryName = queryName;
@@ -141,7 +142,8 @@ std::string TQueryGenerator::GetDDLQueriesFromDir(const TFsPath& dir) const {
         if (!i.IsFile() || (i.GetExtension() != "sql" && i.GetExtension() != "yql")) {
             continue;
         }
-        result << "PRAGMA TablePathPrefix = \"" << Params.GetFullTableName(nullptr) << "\";" << std::endl;
+        result << "PRAGMA " << (Params.DbPath == "." ? "RelativePathPrefix" : "TablePathPrefix")
+            << " = \"" << Params.GetFullTableName(nullptr) << "\";" << std::endl;
         TFileInput fInput(i.GetPath());
         auto query = fInput.ReadAll();
         SubstGlobal(query, "{db}", Params.GetFullTableName(nullptr));

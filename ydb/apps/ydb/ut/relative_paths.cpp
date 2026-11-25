@@ -3,6 +3,7 @@
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <util/generic/hash_set.h>
@@ -80,6 +81,21 @@ class TWorkloadFixture : public TCliTestFixture {
     }
 };
 
+class TDeniedQueries : public TMockGrpcServiceBase<Ydb::Query::V1::QueryService::Service> {
+public:
+    grpc::Status CreateSession(grpc::ServerContext*, const Ydb::Query::CreateSessionRequest*, Ydb::Query::CreateSessionResponse* response) override {
+        response->set_status(Ydb::StatusIds::UNAUTHORIZED);
+        return grpc::Status::OK;
+    }
+};
+
+class TInferenceFixture : public TCliTestFixture {
+    void AddServices() override {
+        AddService<TDiscoveryImpl>("localhost", FromString<ui16>(TStringBuf(GetAddress()).RNextTok(':')));
+        AddService<TDeniedQueries>();
+    }
+};
+
 class TTpccScheme : public TSchemeImpl {
 public:
     grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) override {
@@ -131,7 +147,7 @@ class TTpccFixture : public TCliTestFixture {
             response->set_status(Ydb::StatusIds::SUCCESS);
             for (size_t i = 0; i < Paths.size(); ++i) {
                 auto* operation = response->add_operations();
-                operation->set_id("ydb://buildindex/8?id=" + ToString(i + 1));
+                operation->set_id("ydb://buildindex/7?id=" + ToString(i + 1));
                 operation->set_ready(true);
                 operation->set_status(Ydb::StatusIds::SUCCESS);
                 Ydb::Table::IndexBuildMetadata metadata;
@@ -159,14 +175,6 @@ class TTpccFixture : public TCliTestFixture {
         size_t Lists = 0;
     };
 
-    class TDeniedQueries : public TMockGrpcServiceBase<Ydb::Query::V1::QueryService::Service> {
-    public:
-        grpc::Status CreateSession(grpc::ServerContext*, const Ydb::Query::CreateSessionRequest*, Ydb::Query::CreateSessionResponse* response) override {
-            response->set_status(Ydb::StatusIds::UNAUTHORIZED);
-            return grpc::Status::OK;
-        }
-    };
-
     void AddServices() override {
         AddService<TDiscoveryImpl>("localhost", FromString<ui16>(TStringBuf(GetAddress()).RNextTok(':')));
         AddService<TTpccScheme>();
@@ -186,35 +194,94 @@ Y_UNIT_TEST_SUITE(RelativePathCompatibility) {
     Y_UNIT_TEST(DotSqlPathsUseTheDatabaseRoot) {
         NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(GetYdbEndpoint()).SetDatabase(GetYdbDatabase()));
         NYdb::NTable::TTableClient client(driver);
-        for (const bool pragma : {false, true}) {
-            const TString query = pragma
-                ? "PRAGMA TablePathPrefix(\".\"); CREATE TABLE `RelativeSqlPaths` (key Uint64, PRIMARY KEY(key));"
-                : "CREATE TABLE `./RelativeSqlPaths` (key Uint64, PRIMARY KEY(key));";
+        auto result = client.RetryOperationSync([](NYdb::NTable::TSession session) {
+            return session.ExecuteSchemeQuery("CREATE TABLE `./RelativeSqlPaths` (key Uint64, PRIMARY KEY(key));").GetValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        result = client.RetryOperationSync([](NYdb::NTable::TSession session) {
+            return session.DropTable(GetYdbDatabase() + "/RelativeSqlPaths").GetValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(RelativeSqlPrefixesUseTheDatabaseRoot) {
+        NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(GetYdbEndpoint()).SetDatabase(GetYdbDatabase()));
+        NYdb::NTable::TTableClient client(driver);
+        NYdb::NScheme::TSchemeClient scheme(driver);
+        const TString directory = GetYdbDatabase() + "/RelativeSqlPrefixPaths";
+        const auto made = scheme.MakeDirectory(directory).GetValueSync();
+        UNIT_ASSERT_C(made.IsSuccess(), made.GetIssues().ToString());
+        struct TCase {
+            TString Pragma;
+            TString Prefix;
+            TString Target;
+        };
+        for (const auto& testCase : TVector<TCase>{
+            {"RelativePathPrefix", ".", GetYdbDatabase()},
+            {"RelativePathPrefix", "RelativeSqlPrefixPaths", directory},
+            {"RelativePathPrefix", directory, directory},
+            {"TablePathPrefix", directory, directory},
+        }) {
+            const TString query = "PRAGMA " + testCase.Pragma + "(\"" + testCase.Prefix
+                + "\"); CREATE TABLE `RelativeSqlPrefixTable` (key Uint64, PRIMARY KEY(key));";
             auto result = client.RetryOperationSync([&](NYdb::NTable::TSession session) {
                 return session.ExecuteSchemeQuery(query).GetValueSync();
             });
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            result = client.RetryOperationSync([](NYdb::NTable::TSession session) {
-                return session.DropTable(GetYdbDatabase() + "/RelativeSqlPaths").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << Endl << result.GetIssues().ToString());
+            result = client.RetryOperationSync([&](NYdb::NTable::TSession session) {
+                return session.DropTable(testCase.Target + "/RelativeSqlPrefixTable").GetValueSync();
             });
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
+        const auto removed = scheme.RemoveDirectory(directory).GetValueSync();
+        UNIT_ASSERT_C(removed.IsSuccess(), removed.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_F(InferenceKeepsRelativeDirectoryNames, TCliTestFixture) {
+    Y_UNIT_TEST_F(InferenceKeepsRelativeDirectoryNames, TInferenceFixture) {
         const auto csv = EnvFile("key,name\n1,value\n", "input.csv");
         for (const TString& database : {GetDatabase(), TString("tenant"), TString{}}) {
             const auto output = RunCli({"-d", database, "tools", "infer", "csv", csv, "--header", "--path", "tenant/orders"});
             UNIT_ASSERT_STRING_CONTAINS(output, "CREATE TABLE `tenant/orders`");
         }
         const auto output = RunCli({"-d", GetDatabase(), "tools", "infer", "csv", csv, "--header", "--path", GetDatabase() + "/orders"});
-        UNIT_ASSERT_STRING_CONTAINS(output, "CREATE TABLE orders (");
+        UNIT_ASSERT_STRING_CONTAINS(output, "CREATE TABLE `" + GetDatabase() + "/orders`");
+        for (const TString& database : {GetDatabase(), TString("tenant")}) {
+            TString error;
+            ExpectFail();
+            RunCli({"-e", GetEndpoint(), "-d", database, "tools", "infer", "csv", csv,
+                "--header", "--path", "tenant/orders", "--execute"}, {}, {}, &error);
+            UNIT_ASSERT_STRING_CONTAINS(error, "CREATE TABLE `tenant/orders`");
+            UNIT_ASSERT_STRING_CONTAINS(error, "UNAUTHORIZED");
+        }
+        TString error;
+        ExpectFail();
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "tools", "infer", "csv", csv,
+            "--header", "--path", GetDatabase() + "/orders", "--execute"}, {}, {}, &error);
+        UNIT_ASSERT_STRING_CONTAINS(error, "CREATE TABLE orders (");
+        UNIT_ASSERT_STRING_CONTAINS(error, "UNAUTHORIZED");
     }
 
     Y_UNIT_TEST_F(BenchmarkKeepsExplicitAbsolutePaths, TCliTestFixture) {
-        const auto output = RunCli({"-d", "tenant", "workload", "clickbench",
+        const auto output = RunCli({"-e", GetEndpoint(), "-d", "tenant", "workload", "clickbench",
             "--path", "/test_database/bench", "run", "--dry-run"});
         UNIT_ASSERT_STRING_CONTAINS(output, "/test_database/bench");
+    }
+
+    Y_UNIT_TEST_F(BenchmarkQueriesUseTheSelectedDatabasePrefix, TCliTestFixture) {
+        for (const TString& database : {GetDatabase(), TString("tenant")}) {
+            for (const TString workload : {"query", "imdb"}) {
+                TList<TString> args = {"-e", GetEndpoint(), "-d", database, "workload", workload,
+                    "--path", "bench/nested", "run", "--dry-run"};
+                if (workload == "query") {
+                    args.insert(args.end(), {"--query", "SELECT 1;"});
+                }
+                const auto output = RunCli(args);
+                const TString prefix = database.StartsWith('/')
+                    ? "PRAGMA TablePathPrefix = \"" + database + "/bench/nested\";"
+                    : TString("PRAGMA RelativePathPrefix = \"./bench/nested\";");
+                UNIT_ASSERT_STRING_CONTAINS(output, prefix);
+            }
+        }
     }
 
     Y_UNIT_TEST_F(VectorUsesOneTablePath, TCliTestFixture) {
@@ -308,7 +375,7 @@ Y_UNIT_TEST_SUITE(RelativePathCompatibility) {
             std::lock_guard guard(operations.Mutex);
             UNIT_ASSERT_VALUES_EQUAL(operations.Lists, 1);
             UNIT_ASSERT_VALUES_EQUAL(operations.Forgotten,
-                (TVector<TString>{"ydb://buildindex/8?id=2", "ydb://buildindex/8?id=3"}));
+                (TVector<TString>{"ydb://buildindex/7?id=2", "ydb://buildindex/7?id=3"}));
         }
     }
 

@@ -133,7 +133,7 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
     try {
 
         TString warehouseSql = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             CREATE TABLE {} (
                 W_ID       Int32          NOT NULL,
@@ -153,7 +153,7 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
         CreateTable(client, warehouseSql, TABLE_WAREHOUSE, Log);
 
         TString itemSql = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             CREATE TABLE {} (
                 I_ID    Int32           NOT NULL,
@@ -169,7 +169,7 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
         CreateTable(client, itemSql, TABLE_ITEM, Log);
 
         TString stockSql = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             CREATE TABLE {} (
                 S_W_ID       Int32           NOT NULL,
@@ -197,7 +197,7 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
         CreateTable(client, stockSql, TABLE_STOCK, Log);
 
         TString districtSql = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             CREATE TABLE {} (
                 D_W_ID      Int32            NOT NULL,
@@ -219,7 +219,7 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
         CreateTable(client, districtSql, TABLE_DISTRICT, Log);
 
         TString customerSql = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             CREATE TABLE {} (
                 C_W_ID         Int32            NOT NULL,
@@ -251,7 +251,7 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
         CreateTable(client, customerSql, TABLE_CUSTOMER, Log);
 
         TString historySql = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             CREATE TABLE {} (
                 H_C_W_ID    Int32        NOT NULL,
@@ -271,7 +271,7 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
         CreateTable(client, historySql, TABLE_HISTORY, Log);
 
         TString oorderSql = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             CREATE TABLE {} (
                 O_W_ID       Int32       NOT NULL,
@@ -290,7 +290,7 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
         CreateTable(client, oorderSql, TABLE_OORDER, Log);
 
         TString newOrderSql = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             CREATE TABLE {} (
                 NO_W_ID Int32 NOT NULL,
@@ -304,7 +304,7 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
         CreateTable(client, newOrderSql, TABLE_NEW_ORDER, Log);
 
         TString orderLineSql = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             CREATE TABLE {} (
                 OL_W_ID        Int32           NOT NULL,

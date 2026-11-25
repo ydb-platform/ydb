@@ -26,7 +26,7 @@ TAsyncExecuteQueryResult GetDistrictOrderId(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $d_w_id AS Int32;
         DECLARE $d_id AS Int32;
@@ -59,7 +59,7 @@ TAsyncExecuteQueryResult GetStockCount(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $ol_w_id AS Int32;
         DECLARE $ol_d_id AS Int32;

@@ -27,7 +27,7 @@ TAsyncExecuteQueryResult UpdateWarehouse(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $w_id AS Int32;
         DECLARE $payment AS Double;
@@ -60,7 +60,7 @@ TAsyncExecuteQueryResult UpdateDistrict(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $d_w_id AS Int32;
         DECLARE $d_id AS Int32;
@@ -96,7 +96,7 @@ TAsyncExecuteQueryResult GetCustomerCData(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $c_w_id AS Int32;
         DECLARE $c_d_id AS Int32;
@@ -133,7 +133,7 @@ TAsyncExecuteQueryResult UpdateCustomerWithCData(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $c_w_id AS Int32;
         DECLARE $c_d_id AS Int32;
@@ -176,7 +176,7 @@ TAsyncExecuteQueryResult UpdateCustomer(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $c_w_id AS Int32;
         DECLARE $c_d_id AS Int32;
@@ -217,7 +217,7 @@ TAsyncExecuteQueryResult InsertHistoryRecord(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $h_c_d_id AS Int32;
         DECLARE $h_c_w_id AS Int32;

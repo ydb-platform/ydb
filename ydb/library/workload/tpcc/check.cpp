@@ -43,7 +43,7 @@ TFuture<void> WaitAllAndCheck(const std::vector<TFuture<void>>& futures) {
 TFuture<void> BaseCheckWarehouseTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // W_ID is PK, so we can take just min, max and count to check if all rows present
     TString query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         SELECT COUNT(*) as count, MAX(`W_ID`) as max, MIN(`W_ID`) as min FROM `{}`;
     )", path.c_str(), TABLE_WAREHOUSE);
@@ -86,7 +86,7 @@ TFuture<void> BaseCheckWarehouseTable(TQueryClient& client, const TString& path,
 TFuture<void> BaseCheckDistrictTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // D_W_ID, D_ID are part of PK, so we can check min/max district IDs and count
     TString query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         SELECT COUNT(*) as count,
                MAX(`D_W_ID`) as max_w_id, MIN(`D_W_ID`) as min_w_id,
@@ -142,7 +142,7 @@ TFuture<void> BaseCheckDistrictTable(TQueryClient& client, const TString& path, 
 TFuture<void> BaseCheckCustomerTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // C_W_ID, C_D_ID, C_ID are part of PK
     TString query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         SELECT COUNT(*) as count,
                MAX(`C_W_ID`) as max_w_id, MIN(`C_W_ID`) as min_w_id,
@@ -206,7 +206,7 @@ TFuture<void> BaseCheckCustomerTable(TQueryClient& client, const TString& path, 
 TFuture<void> BaseCheckItemTable(TQueryClient& client, const TString& path) {
     // I_ID is PK, fixed number of items regardless of warehouse count
     TString query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         SELECT COUNT(*) as count, MAX(`I_ID`) as max, MIN(`I_ID`) as min FROM `{}`;
     )", path.c_str(), TABLE_ITEM);
@@ -249,7 +249,7 @@ TFuture<void> BaseCheckItemTable(TQueryClient& client, const TString& path) {
 TFuture<void> BaseCheckStockTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // S_W_ID, S_I_ID are part of PK - check warehouse and item ranges
     TString query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         SELECT COUNT(*) as count,
                COUNT(DISTINCT `S_W_ID`) as warehouse_count,
@@ -312,7 +312,7 @@ TFuture<void> BaseCheckStockTable(TQueryClient& client, const TString& path, int
 TFuture<void> BaseCheckOorderTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // O_W_ID, O_D_ID, O_ID are part of PK
     TString query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         SELECT COUNT(*) as count,
                MAX(`O_W_ID`) as max_w_id, MIN(`O_W_ID`) as min_w_id,
@@ -376,7 +376,7 @@ TFuture<void> BaseCheckOorderTable(TQueryClient& client, const TString& path, in
 TFuture<void> BaseCheckNewOrderTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // NO_W_ID, NO_D_ID, NO_O_ID are part of PK
     TString query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         SELECT COUNT(*) as count,
                MAX(`NO_W_ID`) as max_w_id, MIN(`NO_W_ID`) as min_w_id,
@@ -444,7 +444,7 @@ TFuture<void> BaseCheckOrderLineTable(TQueryClient& client, const TString& path,
     // OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER are part of PK
     // Check that each district has orders for all order IDs 1-3000
     TString query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         $per_district = (
             SELECT OL_W_ID, OL_D_ID, COUNT(DISTINCT OL_O_ID) as order_count
@@ -495,7 +495,7 @@ TFuture<void> BaseCheckOrderLineTable(TQueryClient& client, const TString& path,
 TFuture<void> BaseCheckHistoryTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // H_C_W_ID, H_C_NANO_TS are part of PK
     TString query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         SELECT COUNT(*) as count,
                MAX(`H_C_W_ID`) as max_w_id, MIN(`H_C_W_ID`) as min_w_id
@@ -566,7 +566,7 @@ TFuture<void> ConsistencyCheck3321(TQueryClient& client, const TString& path) {
 	// W_YTD = sum (D_YTD)
 
     TString query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         $districtData = SELECT D_W_ID, sum(D_YTD) AS sum_d_ytd
         FROM `{}`
@@ -587,7 +587,7 @@ TFuture<void> ConsistencyCheck3322(TQueryClient& client, const TString& path) {
 	// D_NEXT_O_ID - 1 = max(O_ID) = max(NO_O_ID)
 
     TString query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         $district_data = SELECT D_W_ID, D_ID, D_NEXT_O_ID
         FROM `{}`
@@ -617,7 +617,7 @@ TFuture<void> ConsistencyCheck3323(TQueryClient& client, const TString& path) {
 	// max(NO_O_ID) - min(NO_O_ID) + 1 = # of rows in new_order for each warehouse/district
 
     TString query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         $aggregation = SELECT
             NO_W_ID, NO_D_ID, (count(*) - (max(NO_O_ID) - min(NO_O_ID) + 1)) as delta
@@ -787,7 +787,7 @@ void TPCCChecker::ConsistencyCheck3324(TQueryClient& client) {
         int endWh = std::min(startWh + WAREHOUSE_RANGE_SIZE - 1, Config.WarehouseCount);
 
         TString query = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             $order_data = SELECT O_W_ID, O_D_ID, SUM(O_OL_CNT) as sum_ol_cnt
             FROM `{}`
@@ -829,7 +829,7 @@ void TPCCChecker::ConsistencyCheck3325(TQueryClient& client) {
         int endWh = std::min(startWh + WAREHOUSE_RANGE_SIZE - 1, Config.WarehouseCount);
 
         TString query = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             $warehouse_from = {};
             $warehouse_to = {};
@@ -892,7 +892,7 @@ void TPCCChecker::ConsistencyCheck3326(TQueryClient& client) {
         int endWh = std::min(startWh + WAREHOUSE_RANGE_SIZE - 1, Config.WarehouseCount);
 
         TString query = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             $warehouse_from = {};
             $warehouse_to = {};
@@ -966,7 +966,7 @@ void TPCCChecker::ConsistencyCheck3327(TQueryClient& client) {
         int endWh = std::min(startWh + WAREHOUSE_RANGE_SIZE - 1, Config.WarehouseCount);
 
         TString query = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             $warehouse_from = {};
             $warehouse_to = {};
@@ -1014,7 +1014,7 @@ void TPCCChecker::ConsistencyCheck3327(TQueryClient& client) {
 
 void TPCCChecker::ConsistencyCheck3328(TQueryClient& client) {
     TString query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         -- Aggregate history by warehouse
         $history_sums = SELECT
@@ -1039,7 +1039,7 @@ void TPCCChecker::ConsistencyCheck3328(TQueryClient& client) {
 
 void TPCCChecker::ConsistencyCheck3329(TQueryClient& client) {
     TString query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         -- Aggregate history amounts per district
         $history_sums = SELECT
@@ -1073,7 +1073,7 @@ void TPCCChecker::ConsistencyCheck33210(TQueryClient& client) {
         int endWh = std::min(startWh + WAREHOUSE_RANGE_SIZE - 1, Config.WarehouseCount);
 
         TString query = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             $warehouse_from = {};
             $warehouse_to = {};
@@ -1143,7 +1143,7 @@ void TPCCChecker::ConsistencyCheck33211(TQueryClient& client) {
         int endWh = std::min(startWh + WAREHOUSE_RANGE_SIZE - 1, Config.WarehouseCount);
 
         TString query = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             $warehouse_from = {};
             $warehouse_to = {};
@@ -1189,7 +1189,7 @@ void TPCCChecker::ConsistencyCheck33212(TQueryClient& client) {
         int endWh = std::min(startWh + WAREHOUSE_RANGE_SIZE - 1, Config.WarehouseCount);
 
         TString query = std::format(R"(
-            PRAGMA TablePathPrefix("{}");
+            PRAGMA RelativePathPrefix("{}");
 
             $warehouse_from = {};
             $warehouse_to = {};

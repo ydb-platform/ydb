@@ -29,7 +29,7 @@ NYdb::NQuery::TAsyncExecuteQueryResult Select1(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         DECLARE $count AS Int32;
 

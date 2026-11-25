@@ -165,7 +165,7 @@ int GetWarehouseCount(TDriver& driver, const TString& path) {
     // just check the warehouse table and assume that the rest is consistent
 
     TString query = std::format(R"(
-        PRAGMA TablePathPrefix("{}");
+        PRAGMA RelativePathPrefix("{}");
 
         SELECT COUNT(*) FROM `{}`;
     )", path.c_str(), TABLE_WAREHOUSE);

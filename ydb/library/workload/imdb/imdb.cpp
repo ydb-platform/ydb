@@ -65,7 +65,8 @@ TQueryInfoList TImdbWorkloadGenerator::GetWorkload(int type) {
         query.QueryName = name;
         // JOB uses comma-separated tables with join predicates in WHERE.
         query.Query = TStringBuilder() << "--!syntax_v1\n"
-            << "PRAGMA TablePathPrefix = \"" << EscapeC(Params.GetFullTableName(nullptr)) << "\";\n"
+            << "PRAGMA " << (Params.DbPath == "." ? "RelativePathPrefix" : "TablePathPrefix")
+            << " = \"" << EscapeC(Params.GetFullTableName(nullptr)) << "\";\n"
             << "PRAGMA AnsiImplicitCrossJoin;\n"
             << NResource::Find("resfs/file/imdb/queries/" + name + ".sql");
     }

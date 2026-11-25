@@ -325,20 +325,19 @@ def create_test_issue_mapping(issues_data):
             parsed = parse_body(body)
             snapshot = build_github_issue_mapping_info_snapshot(issue)
 
+            entry = {
+                'url': url,
+                'title': issue.get('title', ''),
+                'issue_number': issue.get('issue_number', 0),
+                'state': issue.get('state', ''),
+                'state_reason': issue.get('state_reason'),
+                'created_at': issue.get('created_at', 0),
+                'branches': parsed.branches,
+                'build_type': parsed.build_type,
+                'mapping_info': snapshot,
+            }
             for test in parsed.tests:
-                if test not in test_to_issue:
-                    test_to_issue[test] = []
-                test_to_issue[test].append({
-                    'url': url,
-                    'title': issue.get('title', ''),
-                    'issue_number': issue.get('issue_number', 0),
-                    'state': issue.get('state', ''),
-                    'state_reason': issue.get('state_reason'),
-                    'created_at': issue.get('created_at', 0),
-                    'branches': parsed.branches,
-                    'build_type': parsed.build_type,
-                    'mapping_info': snapshot,
-                })
+                test_to_issue.setdefault(test, []).append(entry)
         except Exception as e:
             print(f"Warning: Could not parse issue body for issue {url}: {e}")
             continue

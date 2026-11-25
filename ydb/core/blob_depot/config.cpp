@@ -1,9 +1,6 @@
-#include "s3_put_timeout.h"
+#include "config.h"
 
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/core/protos/s3_settings.pb.h>
-
-#include <util/generic/algorithm.h>
 
 namespace NKikimr::NBlobDepot {
 

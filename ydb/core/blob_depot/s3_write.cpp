@@ -61,9 +61,10 @@ namespace NKikimr::NBlobDepot {
                     const TS3Locator locator = Self->S3Manager->AllocateS3Locator(item.GetLen());
                     locator.ToProto(responseItem->MutableS3Locator());
 
-                    // we put it here until operation is completed; if tablet restarts and operation fails, then this
-                    // key will be deleted; we also rewrite spoiled locator because Len is different
-                    db.Table<Schema::TrashS3>().Key(locator.Generation, locator.KeyId).Update<Schema::TrashS3::Len>(locator.Len);
+                    // A restart or agent disconnect can race an already dispatched PUT.
+                    using T = Schema::TrashS3;
+                    db.Table<T>().Key(locator.Generation, locator.KeyId).Update(
+                        NIceDb::TUpdate<T::Len>(locator.Len), NIceDb::TUpdate<T::UnfinishedAgentPut>(true));
 
                     const bool inserted = agent.S3WritesInFlight.insert(locator).second;
                     Y_ABORT_UNLESS(inserted);
@@ -129,6 +130,17 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TS3Manager::HandlePrepareWriteS3(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev) {
+        if (Self->IsDataCoolingEnabled()) {
+            auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev);
+            for (size_t i = 0; i < ev->Get()->Record.ItemsSize(); ++i) {
+                auto *item = record->AddItems();
+                item->SetStatus(NKikimrProto::ERROR);
+                item->SetErrorReason("Async S3 uses tablet-side uploads");
+            }
+            TActivationContext::Send(response.release());
+            return;
+        }
+
         ApplyMaxWritesInFlight();
 
         const TMonotonic now = TActivationContext::Monotonic();

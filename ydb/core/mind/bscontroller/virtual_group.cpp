@@ -7,7 +7,6 @@
 #include <ydb/core/blob_depot/config.h>
 #include <ydb/core/blob_depot/s3_route.h>
 #include <ydb/core/blob_depot/events.h>
-#include <ydb/core/blob_depot/s3_put_timeout.h>
 #include <ydb/core/blob_depot/s3_router.h>
 #include <ydb/core/blob_depot/types.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -88,6 +87,7 @@ namespace NKikimr::NBsController {
                 config.SetS3NamespaceValidated(true);
                 if (s3.HasAsyncMode() && AppData()->FeatureFlags.GetEnableBlobDepotDataCooling()) {
                     config.SetEverAuthorizedDataCooling(true);
+                    config.SetS3CoolingAuthorized(true);
                 }
             }
         }
@@ -343,6 +343,10 @@ namespace NKikimr::NBsController {
             throw TExError() << "TAllocateVirtualGroup.Name must be set and be nonempty";
         } else if (cmd.GetHiveDesignatorCase() == NKikimrBlobStorage::TAllocateVirtualGroup::HIVEDESIGNATOR_NOT_SET) {
             throw TExError() << "TAllocateVirtualGroup.HiveId/Database is not specified";
+        }
+
+        if (const auto error = NBlobDepot::ValidateDataCooling(cmd.GetS3BackendSettings())) {
+            throw TExError() << *error;
         }
 
         // make sure the operation is idempotent
@@ -632,11 +636,16 @@ namespace NKikimr::NBsController {
         // Credential rotation leaves its existing authorization intact.
         const bool validateStoredNamespace = hasNextBucket && !cmd.HasS3BackendSettings();
         const bool authorizeCooling = AppData()->FeatureFlags.GetEnableBlobDepotDataCooling() && next.HasAsyncMode() &&
-            (!previous.HasAsyncMode() || (!config.GetEverAuthorizedDataCooling() && (!cmd.HasS3BackendSettings() || coolingChanged)));
+            (!previous.HasAsyncMode() || (!config.GetS3CoolingAuthorized() && (!cmd.HasS3BackendSettings() || coolingChanged)));
         // Removing a redundant slash can enable legacy LIST even though point requests address the same keys.
         const bool patternChanged = previous.GetSettings().GetObjectKeyPattern() != next.GetSettings().GetObjectKeyPattern();
         const bool claimsChanged = namespaceChanged || storageNameChanged;
         const bool checkOwnership = patternChanged || claimsChanged || routeChanged || validateStoredNamespace || authorizeCooling;
+        if (coolingChanged || checkOwnership) {
+            if (const auto error = NBlobDepot::ValidateDataCooling(next)) {
+                throw TExError() << *error;
+            }
+        }
         if (checkOwnership) {
             // A retained owner can rotate access to the same objects. This command neither acquires
             // a new path nor establishes the exclusive ownership required for GC and cooling.
@@ -664,6 +673,7 @@ namespace NKikimr::NBsController {
         if (claimsChanged) {
             ChangeLiveBlobDepotClaims(*group, config, false);
             config.ClearS3NamespaceValidated();
+            config.ClearS3CoolingAuthorized();
         }
         if (cmd.HasMigratedS3Name()) {
             if (storageNameChanged) {

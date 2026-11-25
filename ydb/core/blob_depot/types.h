@@ -1,5 +1,6 @@
 #pragma once
 
+#include "blob_limits.h"
 #include "defs.h"
 
 namespace NKikimr::NBlobDepot {
@@ -24,14 +25,6 @@ namespace NKikimr::NBlobDepot {
         std::array<ui8, 256> ChannelToIndex;
         std::vector<std::tuple<ui8, ui32>> ChannelGroups;
     };
-
-#pragma pack(push, 1)
-    struct TVirtualGroupBlobFooter {
-        TLogoBlobID StoredBlobId;
-    };
-#pragma pack(pop)
-
-    static constexpr ui32 MaxBlobSize = 10 << 20; // 10 MB BlobStorage hard limit
 
     enum class EBlobType : ui32 {
         VG_COMPOSITE_BLOB = 0, // data + footer

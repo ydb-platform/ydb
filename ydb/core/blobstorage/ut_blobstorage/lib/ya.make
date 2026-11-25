@@ -27,6 +27,8 @@ PEERDIR(
     ydb/core/blobstorage/pdisk
     ydb/core/blobstorage/pdisk/mock
     ydb/core/blobstorage/vdisk/common
+    # Link counters used by SchemeShard and KQP runtime; a reverse PEERDIR would form a cycle.
+    ydb/core/kqp/counters
     ydb/core/load_test/nbs
     ydb/core/mind
     ydb/core/mind/bscontroller

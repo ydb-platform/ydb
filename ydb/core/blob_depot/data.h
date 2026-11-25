@@ -7,6 +7,8 @@
 
 #include <util/generic/hash_multi_map.h>
 
+#include <map>
+
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TData {
@@ -477,7 +479,41 @@ namespace NKikimr::NBlobDepot {
         std::map<TKey, TValue> Data;
         TClosedIntervalSet<TKey> LoadedKeys; // keys that are already scanned and loaded in the local database
         THashMap<TLogoBlobID, ui32> RefCountBlobs;
-        THashMap<TS3Locator, ui32> RefCountS3;
+        struct TS3PartialReferences {
+            THashMap<std::pair<ui32, ui32>, ui32> Ranges;
+            ui32 RefCount = 0;
+            ui64 LiveBytes = 0;
+        };
+
+        struct TS3References {
+            ui32 Len;
+            ui32 RefCount = 0;
+            std::unique_ptr<TS3PartialReferences> Partial;
+
+            ui64 GetLiveBytes() const {
+                if (!RefCount) {
+                    return 0;
+                }
+                return !Partial || Partial->RefCount < RefCount ? Len : Partial->LiveBytes;
+            }
+
+            TS3Locator GetLocator(const TS3ObjectKey& key) const {
+                return {.Len = Len, .Generation = key.first, .KeyId = key.second};
+            }
+        };
+
+        THashMap<TS3ObjectKey, TS3References> RefCountS3;
+        std::map<TS3ObjectKey, ui32> PendingS3RefChecks;
+        bool S3ReferencesLoaded = false;
+        void CheckPendingS3References(NTabletFlatExecutor::TTransactionContext& txc, void* cookie);
+        enum class ES3ReferenceAction { Add, Remove, Discard };
+        void UpdateS3Reference(const NKikimrBlobDepot::TValueChain& link, TS3Locator locator,
+            ES3ReferenceAction action,
+            std::vector<TS3ObjectKey>* unreferenced = nullptr);
+        template<typename TLocal>
+        bool AccountValueChain(const TValueChain& chain, ES3ReferenceAction action,
+            TLocal&& accountLocal, std::vector<TS3ObjectKey>* unreferenced = nullptr);
+        void UpdateS3Counters();
         THashMap<std::tuple<ui8, ui32>, TRecordsPerChannelGroup> RecordsPerChannelGroup;
         std::optional<TLogoBlobID> LastAssimilatedBlobId;
         THashSet<std::tuple<ui8, ui32>> AlreadyCutHistory;
@@ -485,6 +521,7 @@ namespace NKikimr::NBlobDepot {
         ui64 TotalStoredTrashSize = 0;
         ui64 InFlightTrashSize = 0;
         ui64 TotalS3DataSize = 0;
+        ui64 TotalS3LiveBytes = 0;
 
         ui64 LoadRestartTx = 0;
         ui64 LoadRunSuccessorTx = 0;
@@ -769,7 +806,6 @@ namespace NKikimr::NBlobDepot {
         void TrimChannelHistory(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted);
 
         void AddFirstMentionedBlob(TLogoBlobID id);
-        void AddFirstMentionedBlob(TS3Locator locator);
         void AccountBlob(TLogoBlobID id, bool add);
 
         bool CanBeCollected(TBlobSeqId id) const;
@@ -782,7 +818,7 @@ namespace NKikimr::NBlobDepot {
                 callback(key, value);
             }
             for (const auto& [key, value] : RefCountS3) {
-                callback(key, value);
+                callback(value.GetLocator(key), value.RefCount);
             }
         }
 
@@ -820,7 +856,7 @@ namespace NKikimr::NBlobDepot {
 
         std::optional<TString> CheckKeyAgainstBarrier(const TKey& key);
 
-        bool IsUseful(const TS3Locator& locator) const;
+        bool IsS3ObjectReferenced(const TS3Locator& locator) const;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

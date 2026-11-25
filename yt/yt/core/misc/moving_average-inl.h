@@ -20,7 +20,9 @@ void TMovingAverage<TValue>::AddValue(TValue value)
     Total_ += value;
     Values_.push_back(std::move(value));
 
-    RemoveOldValues();
+    if (std::ssize(Values_) > WindowSize_) {
+        RemoveOldestValue();
+    }
 }
 
 template <class TValue>
@@ -40,7 +42,9 @@ void TMovingAverage<TValue>::SetWindowSize(int windowSize)
 
     WindowSize_ = windowSize;
 
-    RemoveOldValues();
+    if (std::ssize(Values_) > WindowSize_) {
+        RemoveOldestValue();
+    }
 }
 
 template <class TValue>
@@ -51,12 +55,10 @@ void TMovingAverage<TValue>::Reset()
 }
 
 template <class TValue>
-void TMovingAverage<TValue>::RemoveOldValues()
+void TMovingAverage<TValue>::RemoveOldestValue()
 {
-    while (std::ssize(Values_) > WindowSize_) {
-        Total_ -= Values_.front();
-        Values_.pop_front();
-    }
+    Total_ -= Values_.front();
+    Values_.pop_front();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -26,7 +26,7 @@ private:
     std::deque<TValue> Values_;
     TValue Total_{};
 
-    void RemoveOldValues();
+    void RemoveOldestValue();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

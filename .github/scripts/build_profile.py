@@ -72,6 +72,6 @@ if __name__ == "__main__":
     output_dir = Path(options.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     if any("\n" in arg or "\r" in arg for arg in profile["args"]):
-        raise ValueError("Build profile arguments must not contain line breaks")
+        parser.error("Build profile arguments must not contain line breaks")
     (output_dir / "args").write_text("\n".join(profile["args"]) + "\n")
     (output_dir / "sanitize").write_text(profile["sanitize"] + "\n")

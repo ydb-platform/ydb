@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/scripts/build_profile.py'
+      - '.github/scripts/graph_compare.py'
       - '.github/scripts/tests/build_profiles/**'
       - 'ydb/ci/build_profiles.yaml'
       - '.github/workflows/build_profile_checks.yml'
@@ -12,6 +13,7 @@ on:
     branches: [main]
     paths:
       - '.github/scripts/build_profile.py'
+      - '.github/scripts/graph_compare.py'
       - '.github/scripts/tests/build_profiles/**'
       - 'ydb/ci/build_profiles.yaml'
       - '.github/workflows/build_profile_checks.yml'

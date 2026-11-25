@@ -126,7 +126,8 @@ class BuildProfilesTest(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(SCRIPT), 'release', '--output-dir', 'out'], cwd=root, capture_output=True, text=True
         )
-        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 2)
+        self.assertNotIn('Traceback', result.stderr)
         self.assertIn('must not contain line breaks', result.stderr)
 
     def test_graph_command_preserves_user_overrides(self):

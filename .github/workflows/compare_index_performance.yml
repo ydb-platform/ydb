@@ -170,7 +170,15 @@ jobs:
           git fetch --depth=1 origin "$BASELINE_SHA"
           git worktree add ../baseline "$BASELINE_SHA"
           cd ../baseline
-          ./ya make -DDEBUGINFO_LINES_ONLY --build "$INPUT_BUILD_PRESET" ydb/apps/ydbd
+          PROFILE_ARGS=(--build "$INPUT_BUILD_PRESET" -DDEBUGINFO_LINES_ONLY)
+          if [[ -f .github/scripts/build_profile.py && -f ydb/ci/build_profiles.yaml ]]; then
+            python3 -m pip install PyYAML
+            PROFILE_DIR=$(mktemp -d)
+            python3 .github/scripts/build_profile.py "$INPUT_BUILD_PRESET" --output-dir "$PROFILE_DIR"
+            mapfile -t PROFILE_ARGS < "$PROFILE_DIR/args"
+            rm -rf "$PROFILE_DIR"
+          fi
+          ./ya make "${PROFILE_ARGS[@]}" ydb/apps/ydbd
           BINARY=$(find . -name ydbd -path '*/ydb/apps/ydbd/ydbd' -not -path '*/ydb/apps/ydbd/ydbd/*' 2>/dev/null | head -1)
           BINARY=$(realpath "$BINARY")
           echo "binary=$BINARY" >> "$GITHUB_OUTPUT"
@@ -228,7 +236,15 @@ jobs:
             fi
           fi
 
-          ./ya make -DDEBUGINFO_LINES_ONLY --build "$INPUT_BUILD_PRESET" -tA --test-disable-timeout \
+          PROFILE_ARGS=(--build "$INPUT_BUILD_PRESET" -DDEBUGINFO_LINES_ONLY)
+          if [[ -f .github/scripts/build_profile.py && -f ydb/ci/build_profiles.yaml ]]; then
+            python3 -m pip install PyYAML
+            PROFILE_DIR=$(mktemp -d)
+            python3 .github/scripts/build_profile.py "$INPUT_BUILD_PRESET" --output-dir "$PROFILE_DIR"
+            mapfile -t PROFILE_ARGS < "$PROFILE_DIR/args"
+            rm -rf "$PROFILE_DIR"
+          fi
+          ./ya make "${PROFILE_ARGS[@]}" -tA --test-disable-timeout \
             ydb/tests/stress/compare_index_performance/tests \
             --test-param compare_duration="$INPUT_DURATION" \
             --test-param compare_build_preset="$INPUT_BUILD_PRESET" \

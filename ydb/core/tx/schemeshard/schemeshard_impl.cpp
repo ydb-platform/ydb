@@ -8475,7 +8475,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
     FillSeqNo(tx, seqNo);
     const auto& description = alterData->TableDescriptionFull;
     auto* proto = description.Defined() && description->ActivateCdcStreamsSize()
-        ? tx.MutableActivateCdcStreams()
+        ? tx.MutableAlterTableForCdcHandoff()
         : tx.MutableAlterTable();
     FillTableSchemaVersion(alterData->AlterVersion, proto);
     proto->SetName(path->Name);
@@ -8529,7 +8529,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             *patch);
     }
 
-    if (tx.HasActivateCdcStreams()) {
+    if (tx.HasAlterTableForCdcHandoff()) {
         *proto->MutableActivateCdcStreams() = description->GetActivateCdcStreams();
     }
 

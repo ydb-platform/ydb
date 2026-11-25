@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(TxOrderInternals) {
 
 Y_UNIT_TEST(CdcActivationUsesSchemeTransaction) {
     NKikimrTxDataShard::TFlatSchemeTransaction body;
-    auto* activation = body.MutableActivateCdcStreams();
+    auto* activation = body.MutableAlterTableForCdcHandoff();
     activation->MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
     activation->AddActivateCdcStreams()->SetLocalId(42);
 

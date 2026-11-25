@@ -326,18 +326,22 @@ bool TActiveTransaction::BuildSchemeTx()
     if (!res)
         return false;
 
-    if (SchemeTx->HasActivateCdcStreams()) {
-        const auto& activation = SchemeTx->GetActivateCdcStreams();
-        if (SchemeTx->HasAlterTable() || !activation.ActivateCdcStreamsSize()
-            || !activation.HasReplicationConfig()
-            || activation.GetReplicationConfig().GetMode() != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE)
+    if (SchemeTx->HasAlterTableForCdcHandoff()) {
+        if (SchemeTx->HasAlterTable()) {
+            return false;
+        }
+
+        const auto& alter = SchemeTx->GetAlterTableForCdcHandoff();
+        if (!alter.ActivateCdcStreamsSize()
+            || !alter.HasReplicationConfig()
+            || alter.GetReplicationConfig().GetMode() != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE)
         {
             return false;
         }
 
         // Execute as an ALTER. TxBody keeps the original operation for recovery.
-        SchemeTx->MutableAlterTable()->Swap(SchemeTx->MutableActivateCdcStreams());
-        SchemeTx->ClearActivateCdcStreams();
+        SchemeTx->MutableAlterTable()->Swap(SchemeTx->MutableAlterTableForCdcHandoff());
+        SchemeTx->ClearAlterTableForCdcHandoff();
     } else if (SchemeTx->GetAlterTable().ActivateCdcStreamsSize()) {
         return false;
     }

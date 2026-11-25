@@ -721,7 +721,7 @@ message TFlatSchemeTransaction {
     optional TPrepareIndexValidation PrepareIndexValidation = 26;
 
     // Sent without AlterTable so DataShards that do not know this operation reject it at prepare.
-    optional NKikimrSchemeOp.TTableDescription ActivateCdcStreams = 27;
+    optional NKikimrSchemeOp.TTableDescription AlterTableForCdcHandoff = 27;
 }
 
 message TDistributedEraseTransaction {

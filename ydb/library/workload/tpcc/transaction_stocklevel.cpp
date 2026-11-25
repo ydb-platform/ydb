@@ -26,7 +26,7 @@ TAsyncExecuteQueryResult GetDistrictOrderId(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        {}
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $d_w_id AS Int32;
         DECLARE $d_id AS Int32;
@@ -35,7 +35,7 @@ TAsyncExecuteQueryResult GetDistrictOrderId(
           FROM `{}`
          WHERE D_W_ID = $d_w_id
            AND D_ID = $d_id;
-    )", GetPathPrefixPragma(context.Path).c_str(), TABLE_DISTRICT);
+    )", context.Path.c_str(), TABLE_DISTRICT);
 
     auto params = TParamsBuilder()
         .AddParam("$d_w_id").Int32(warehouseID).Build()
@@ -59,7 +59,7 @@ TAsyncExecuteQueryResult GetStockCount(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        {}
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $ol_w_id AS Int32;
         DECLARE $ol_d_id AS Int32;
@@ -76,7 +76,7 @@ TAsyncExecuteQueryResult GetStockCount(
          AND ol.OL_O_ID >= $ol_o_id_low
          AND s.S_W_ID = $s_w_id
          AND s.S_QUANTITY < $s_quantity;
-    )", GetPathPrefixPragma(context.Path).c_str(), TABLE_ORDER_LINE, TABLE_STOCK);
+    )", context.Path.c_str(), TABLE_ORDER_LINE, TABLE_STOCK);
 
     auto params = TParamsBuilder()
         .AddParam("$ol_w_id").Int32(warehouseID).Build()

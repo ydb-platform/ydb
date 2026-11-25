@@ -1,16 +1,9 @@
 #pragma once
 
-#include <util/generic/string.h>
-
 #include <cstddef>
 #include <chrono>
 
 namespace NYdb::NTPCC {
-
-inline TString GetPathPrefixPragma(const TString& path) {
-    TString pragma = path.StartsWith('/') ? "PRAGMA TablePathPrefix(\"" : "PRAGMA RelativePathPrefix(\"";
-    return pragma + path + "\");";
-}
 
 constexpr size_t TERMINALS_PER_WAREHOUSE = 10;
 

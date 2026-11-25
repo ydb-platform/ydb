@@ -44,8 +44,7 @@ void CheckTablesExist(TDriver& driver, const TString& path, const char* what) {
 }
 
 void CheckPathExistOrCreate(TDriver& driver, const TString& database, const TString& path) {
-    const bool relativeDatabase = !database.empty() && !database.StartsWith('/');
-    if (path.empty() || (!relativeDatabase && path == database) || path == ".") {
+    if (path.empty() || path == database) {
         return;
     }
 
@@ -55,22 +54,16 @@ void CheckPathExistOrCreate(TDriver& driver, const TString& database, const TStr
         return;
     }
 
-    TString relativePath = relativeDatabase ? path : path.substr(database.size() + 1);
-    TString subPath = relativeDatabase ? TString{} : database;
-    if (relativeDatabase && relativePath.StartsWith('/')) {
-        subPath = "/";
-        relativePath.erase(0, 1);
-    }
+    // path is full path, we must ignore database part
+    TString relativePath = path.substr(database.size() + 1); // skip /DB/
     if (relativePath.empty()) {
         return;
     }
 
     TVector<TString> pathComponents = SplitString(relativePath, "/");
+    TString subPath = database;
     for (const auto& component: pathComponents) {
-        if ((!relativeDatabase || !subPath.empty()) && !subPath.EndsWith('/')) {
-            subPath += '/';
-        }
-        subPath += component;
+        subPath = subPath + "/" + component;
 
         listResult = schemeClient.ListDirectory(subPath, {}).GetValueSync();
         if (listResult.IsSuccess()) {
@@ -165,10 +158,10 @@ int GetWarehouseCount(TDriver& driver, const TString& path) {
     // just check the warehouse table and assume that the rest is consistent
 
     TString query = std::format(R"(
-        {}
+        PRAGMA TablePathPrefix("{}");
 
         SELECT COUNT(*) FROM `{}`;
-    )", GetPathPrefixPragma(path).c_str(), TABLE_WAREHOUSE);
+    )", path.c_str(), TABLE_WAREHOUSE);
 
     NQuery::TQueryClient queryClient(driver);
     auto result = queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();

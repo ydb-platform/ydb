@@ -1,16 +1,13 @@
 #include "mock_table.h"
 
-#include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
-#include <util/generic/hash_set.h>
 #include <util/string/cast.h>
 
 #include <atomic>
-#include <mutex>
 
 namespace {
 
@@ -93,98 +90,6 @@ class TInferenceFixture : public TCliTestFixture {
     void AddServices() override {
         AddService<TDiscoveryImpl>("localhost", FromString<ui16>(TStringBuf(GetAddress()).RNextTok(':')));
         AddService<TDeniedQueries>();
-    }
-};
-
-class TTpccScheme : public TSchemeImpl {
-public:
-    grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) override {
-        std::lock_guard guard(Mutex);
-        CheckClientMetadata(context, "x-ydb-database", ExpectedDatabase);
-        CHECK_EXP(Allowed.contains(request->path()), "Unexpected TPCC path: " << request->path());
-        auto* operation = response->mutable_operation();
-        operation->set_ready(true);
-        if (Existing.contains(request->path())) {
-            Ydb::Scheme::ListDirectoryResult result;
-            result.mutable_self()->set_type(Ydb::Scheme::Entry::DIRECTORY);
-            if (request->path() == Target) {
-                SawTarget = true;
-                auto* table = result.add_children();
-                table->set_name("warehouse");
-                table->set_type(Ydb::Scheme::Entry::TABLE);
-            }
-            operation->set_status(Ydb::StatusIds::SUCCESS);
-            operation->mutable_result()->PackFrom(result);
-        } else {
-            operation->set_status(Ydb::StatusIds::SCHEME_ERROR);
-        }
-        return grpc::Status::OK;
-    }
-
-    grpc::Status MakeDirectory(grpc::ServerContext*, const Ydb::Scheme::MakeDirectoryRequest* request, Ydb::Scheme::MakeDirectoryResponse* response) override {
-        std::lock_guard guard(Mutex);
-        Created.emplace_back(request->path());
-        Existing.insert(request->path());
-        response->mutable_operation()->set_ready(true);
-        response->mutable_operation()->set_status(Ydb::StatusIds::SUCCESS);
-        return grpc::Status::OK;
-    }
-
-    std::mutex Mutex;
-    THashSet<TString> Allowed;
-    THashSet<TString> Existing;
-    TVector<TString> Created;
-    TString Target;
-    bool SawTarget = false;
-};
-
-class TTpccFixture : public TCliTestFixture {
-    class TIndexOperations : public TMockGrpcServiceBase<Ydb::Operation::V1::OperationService::Service> {
-    public:
-        grpc::Status ListOperations(grpc::ServerContext*, const Ydb::Operations::ListOperationsRequest*, Ydb::Operations::ListOperationsResponse* response) override {
-            std::lock_guard guard(Mutex);
-            ++Lists;
-            response->set_status(Ydb::StatusIds::SUCCESS);
-            for (size_t i = 0; i < Paths.size(); ++i) {
-                auto* operation = response->add_operations();
-                operation->set_id("ydb://buildindex/7?id=" + ToString(i + 1));
-                operation->set_ready(true);
-                operation->set_status(Ydb::StatusIds::SUCCESS);
-                Ydb::Table::IndexBuildMetadata metadata;
-                metadata.mutable_description()->set_path(Paths[i]);
-                auto* index = metadata.mutable_description()->mutable_index();
-                index->set_name("by_name");
-                index->add_index_columns("name");
-                index->mutable_global_index();
-                metadata.set_state(Ydb::Table::IndexBuildState::STATE_DONE);
-                operation->mutable_metadata()->PackFrom(metadata);
-            }
-            return grpc::Status::OK;
-        }
-
-        grpc::Status ForgetOperation(grpc::ServerContext*, const Ydb::Operations::ForgetOperationRequest* request, Ydb::Operations::ForgetOperationResponse* response) override {
-            std::lock_guard guard(Mutex);
-            Forgotten.emplace_back(request->id());
-            response->set_status(Ydb::StatusIds::SUCCESS);
-            return grpc::Status::OK;
-        }
-
-        std::mutex Mutex;
-        TVector<TString> Paths;
-        TVector<TString> Forgotten;
-        size_t Lists = 0;
-    };
-
-    void AddServices() override {
-        AddService<TDiscoveryImpl>("localhost", FromString<ui16>(TStringBuf(GetAddress()).RNextTok(':')));
-        AddService<TTpccScheme>();
-        AddService<TIndexOperations>();
-        AddService<TDeniedQueries>();
-    }
-
-public:
-    TIndexOperations& Operations() {
-        return Service<TIndexOperations>();
     }
 };
 
@@ -332,80 +237,6 @@ Y_UNIT_TEST_SUITE(RelativePathCompatibility) {
                 const TString prefix = command == "init" ? "CREATE TABLE `" : "ALTER TABLE `";
                 UNIT_ASSERT_STRING_CONTAINS(output, prefix + testCase.Target + "`");
             }
-        }
-    }
-
-    Y_UNIT_TEST_F(TpccPreflightUsesTheSelectedDatabase, TTpccFixture) {
-        struct TCase {
-            TString Database;
-            TString Path;
-            TString Target;
-            TVector<TString> Created;
-        };
-        const TVector<TCase> cases = {
-            {"tenant", "", ".", {}},
-            {"tenant", "tenant", "tenant", {"tenant"}},
-            {"tenant", "bench/nested", "bench/nested", {"bench", "bench/nested"}},
-            {"tenant", "/test_database/tenant/bench", "/test_database/tenant/bench", {"/test_database/tenant/bench"}},
-            {GetDatabase(), "bench/nested", GetDatabase() + "/bench/nested", {GetDatabase() + "/bench", GetDatabase() + "/bench/nested"}},
-        };
-        for (const auto& testCase : cases) {
-            auto& scheme = Service<TTpccScheme>();
-            {
-                std::lock_guard guard(scheme.Mutex);
-                scheme.ExpectedDatabase = testCase.Database;
-                scheme.Existing = {".", GetDatabase(), GetDatabase() + "/tenant"};
-                scheme.Allowed = scheme.Existing;
-                scheme.Allowed.insert(testCase.Created.begin(), testCase.Created.end());
-                scheme.Allowed.insert(testCase.Target);
-                scheme.Created.clear();
-                scheme.Target = testCase.Target;
-                scheme.SawTarget = false;
-            }
-            TList<TString> args = {"-e", GetEndpoint(), "-d", testCase.Database, "workload", "tpcc"};
-            if (!testCase.Path.empty()) {
-                args.insert(args.end(), {"-p", testCase.Path});
-            }
-            args.emplace_back("init");
-            ExpectFail();
-            RunCli(args);
-            std::lock_guard guard(scheme.Mutex);
-            UNIT_ASSERT(scheme.SawTarget);
-            UNIT_ASSERT_VALUES_EQUAL(scheme.Created, testCase.Created);
-        }
-    }
-
-    Y_UNIT_TEST_F(TpccForgetsOnlySelectedIndexOperations, TTpccFixture) {
-        struct TCase {
-            TString Database;
-            TString Path;
-            TString AbsolutePath;
-        };
-        for (const auto& testCase : TVector<TCase>{
-            {"tenant", "", "/test_database/tenant"},
-            {"tenant", "bench", "/test_database/tenant/bench"},
-            {"tenant/sub", "bench", "/test_database/tenant/sub/bench"},
-            {"tenant", "/test_database/tenant/bench/", "/test_database/tenant/bench"},
-            {GetDatabase(), "bench", GetDatabase() + "/bench"},
-        }) {
-            auto& operations = Operations();
-            {
-                std::lock_guard guard(operations.Mutex);
-                operations.Paths = {testCase.AbsolutePath + "2/customer",
-                    testCase.AbsolutePath + "/customer", testCase.AbsolutePath + "/oorder"};
-                operations.Forgotten.clear();
-                operations.Lists = 0;
-            }
-            TList<TString> args = {"-e", GetEndpoint(), "-d", testCase.Database, "workload", "tpcc"};
-            if (!testCase.Path.empty()) {
-                args.insert(args.end(), {"-p", testCase.Path});
-            }
-            args.emplace_back("clean");
-            RunCli(args);
-            std::lock_guard guard(operations.Mutex);
-            UNIT_ASSERT_VALUES_EQUAL(operations.Lists, 1);
-            UNIT_ASSERT_VALUES_EQUAL(operations.Forgotten,
-                (TVector<TString>{"ydb://buildindex/7?id=2", "ydb://buildindex/7?id=3"}));
         }
     }
 

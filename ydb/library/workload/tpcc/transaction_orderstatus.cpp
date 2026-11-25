@@ -39,7 +39,7 @@ TAsyncExecuteQueryResult GetOrderByCustomer(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        {}
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $o_w_id AS Int32;
         DECLARE $o_d_id AS Int32;
@@ -52,7 +52,7 @@ TAsyncExecuteQueryResult GetOrderByCustomer(
            AND idx.O_C_ID = $o_c_id
          ORDER BY idx.O_W_ID DESC, idx.O_D_ID DESC, idx.O_C_ID DESC, idx.O_ID DESC
          LIMIT 1;
-    )", GetPathPrefixPragma(context.Path).c_str(), TABLE_OORDER, INDEX_ORDER);
+    )", context.Path.c_str(), TABLE_OORDER, INDEX_ORDER);
 
     auto params = TParamsBuilder()
         .AddParam("$o_w_id").Int32(warehouseID).Build()
@@ -77,7 +77,7 @@ TAsyncExecuteQueryResult GetOrderLines(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        {}
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $ol_w_id AS Int32;
         DECLARE $ol_d_id AS Int32;
@@ -88,7 +88,7 @@ TAsyncExecuteQueryResult GetOrderLines(
          WHERE OL_O_ID = $ol_o_id
            AND OL_D_ID = $ol_d_id
            AND OL_W_ID = $ol_w_id;
-    )", GetPathPrefixPragma(context.Path).c_str(), TABLE_ORDER_LINE);
+    )", context.Path.c_str(), TABLE_ORDER_LINE);
 
     auto params = TParamsBuilder()
         .AddParam("$ol_w_id").Int32(warehouseID).Build()

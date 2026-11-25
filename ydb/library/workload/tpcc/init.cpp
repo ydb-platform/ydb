@@ -133,7 +133,7 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
     try {
 
         TString warehouseSql = std::format(R"(
-            {}
+            PRAGMA TablePathPrefix("{}");
 
             CREATE TABLE {} (
                 W_ID       Int32          NOT NULL,
@@ -149,11 +149,11 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
                 PRIMARY KEY (W_ID)
             )
             {};
-        )", GetPathPrefixPragma(runConfig.Path).c_str(), TABLE_WAREHOUSE, smallTablePartitionClause.c_str());
+        )", runConfig.Path.c_str(), TABLE_WAREHOUSE, smallTablePartitionClause.c_str());
         CreateTable(client, warehouseSql, TABLE_WAREHOUSE, Log);
 
         TString itemSql = std::format(R"(
-            {}
+            PRAGMA TablePathPrefix("{}");
 
             CREATE TABLE {} (
                 I_ID    Int32           NOT NULL,
@@ -165,11 +165,11 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
                 PRIMARY KEY (I_ID)
             )
             {};
-        )", GetPathPrefixPragma(runConfig.Path).c_str(), TABLE_ITEM, itemPartitionClause.c_str());
+        )", runConfig.Path.c_str(), TABLE_ITEM, itemPartitionClause.c_str());
         CreateTable(client, itemSql, TABLE_ITEM, Log);
 
         TString stockSql = std::format(R"(
-            {}
+            PRAGMA TablePathPrefix("{}");
 
             CREATE TABLE {} (
                 S_W_ID       Int32           NOT NULL,
@@ -193,11 +193,11 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
                 PRIMARY KEY (S_W_ID, S_I_ID)
             )
             {};
-        )", GetPathPrefixPragma(runConfig.Path).c_str(), TABLE_STOCK, stockPartitionClause.c_str());
+        )", runConfig.Path.c_str(), TABLE_STOCK, stockPartitionClause.c_str());
         CreateTable(client, stockSql, TABLE_STOCK, Log);
 
         TString districtSql = std::format(R"(
-            {}
+            PRAGMA TablePathPrefix("{}");
 
             CREATE TABLE {} (
                 D_W_ID      Int32            NOT NULL,
@@ -215,11 +215,11 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
                 PRIMARY KEY (D_W_ID, D_ID)
             )
             {};
-        )", GetPathPrefixPragma(runConfig.Path).c_str(), TABLE_DISTRICT, smallTablePartitionClause.c_str());
+        )", runConfig.Path.c_str(), TABLE_DISTRICT, smallTablePartitionClause.c_str());
         CreateTable(client, districtSql, TABLE_DISTRICT, Log);
 
         TString customerSql = std::format(R"(
-            {}
+            PRAGMA TablePathPrefix("{}");
 
             CREATE TABLE {} (
                 C_W_ID         Int32            NOT NULL,
@@ -247,11 +247,11 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
                 PRIMARY KEY (C_W_ID, C_D_ID, C_ID)
             )
             {};
-        )", GetPathPrefixPragma(runConfig.Path).c_str(), TABLE_CUSTOMER, customerPartitionClause.c_str());
+        )", runConfig.Path.c_str(), TABLE_CUSTOMER, customerPartitionClause.c_str());
         CreateTable(client, customerSql, TABLE_CUSTOMER, Log);
 
         TString historySql = std::format(R"(
-            {}
+            PRAGMA TablePathPrefix("{}");
 
             CREATE TABLE {} (
                 H_C_W_ID    Int32        NOT NULL,
@@ -267,11 +267,11 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
                 PRIMARY KEY (H_C_W_ID, H_C_D_ID, H_C_ID, H_C_NANO_TS)
             )
             {};
-        )", GetPathPrefixPragma(runConfig.Path).c_str(), TABLE_HISTORY, historyPartitionClause.c_str());
+        )", runConfig.Path.c_str(), TABLE_HISTORY, historyPartitionClause.c_str());
         CreateTable(client, historySql, TABLE_HISTORY, Log);
 
         TString oorderSql = std::format(R"(
-            {}
+            PRAGMA TablePathPrefix("{}");
 
             CREATE TABLE {} (
                 O_W_ID       Int32       NOT NULL,
@@ -286,11 +286,11 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
                 PRIMARY KEY (O_W_ID, O_D_ID, O_ID)
             )
             {};
-        )", GetPathPrefixPragma(runConfig.Path).c_str(), TABLE_OORDER, oorderPartitionClause.c_str());
+        )", runConfig.Path.c_str(), TABLE_OORDER, oorderPartitionClause.c_str());
         CreateTable(client, oorderSql, TABLE_OORDER, Log);
 
         TString newOrderSql = std::format(R"(
-            {}
+            PRAGMA TablePathPrefix("{}");
 
             CREATE TABLE {} (
                 NO_W_ID Int32 NOT NULL,
@@ -300,11 +300,11 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
                 PRIMARY KEY (NO_W_ID, NO_D_ID, NO_O_ID)
             )
             {};
-        )", GetPathPrefixPragma(runConfig.Path).c_str(), TABLE_NEW_ORDER, smallTablePartitionClause.c_str());
+        )", runConfig.Path.c_str(), TABLE_NEW_ORDER, smallTablePartitionClause.c_str());
         CreateTable(client, newOrderSql, TABLE_NEW_ORDER, Log);
 
         TString orderLineSql = std::format(R"(
-            {}
+            PRAGMA TablePathPrefix("{}");
 
             CREATE TABLE {} (
                 OL_W_ID        Int32           NOT NULL,
@@ -321,7 +321,7 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
                 PRIMARY KEY (OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER)
             )
             {};
-        )", GetPathPrefixPragma(runConfig.Path).c_str(), TABLE_ORDER_LINE, orderLinePartitionClause.c_str());
+        )", runConfig.Path.c_str(), TABLE_ORDER_LINE, orderLinePartitionClause.c_str());
         CreateTable(client, orderLineSql, TABLE_ORDER_LINE, Log);
 
         Cout << "All TPC-C tables created successfully" << Endl;

@@ -29,12 +29,12 @@ NYdb::NQuery::TAsyncExecuteQueryResult Select1(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        {}
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $count AS Int32;
 
         SELECT $count;
-    )", GetPathPrefixPragma(context.Path).c_str());
+    )", context.Path.c_str());
 
     auto params = TParamsBuilder()
         .AddParam("$count").Int32(1).Build()

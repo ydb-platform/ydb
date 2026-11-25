@@ -302,3 +302,36 @@ table_service_config:
 - [Memory controller configuration](memory_controller_config.md)
 - [Monitoring {{ ydb-short-name }}](../../devops/observability/monitoring.md)
 - [Performance diagnostics](../../troubleshooting/performance/index.md)
+
+## Compilation cache warmup {#compile-cache-warmup}
+
+At startup, a node uses query text from the caches of other nodes in the same database for [compilation cache warmup](../../concepts/query_execution/compile-cache-warmup.md). The settings take effect when the node starts. The example shows the default values.
+
+```yaml
+table_service_config:
+  enable_compile_cache_warmup: true
+  compile_cache_warmup_config:
+    soft_deadline_seconds: 10
+    hard_deadline_seconds: 20
+    max_concurrent_compilations: 5
+    max_queries_to_load: 1000
+    max_nodes_to_request: 5
+```
+
+### enable_compile_cache_warmup
+
+**Type:** `bool`
+
+**Default:** `true`
+
+**Description:** Enables compilation cache warmup on database nodes. To retrieve queries, the node needs the [`.sys/compile_cache_queries`](../../dev/system-views.md#compile-cache-queries) system view. The `feature_flags.enable_compile_cache_view` setting enables the view and defaults to `true`.
+
+### compile_cache_warmup_config
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `soft_deadline_seconds` | `uint32` | `10` | Soft time limit in seconds for fetching and compiling queries. After this deadline, the node stops scheduling new compilations and waits for those in progress, up to the hard deadline. |
+| `hard_deadline_seconds` | `uint32` | `20` | Maximum time in seconds from the start of warmup. If set below `soft_deadline_seconds`, the soft deadline value is used. At the hard deadline, warmup ends and the node can start serving clients. |
+| `max_concurrent_compilations` | `uint32` | `5` | Maximum number of queries the node compiles concurrently during warmup. A value of `0` is treated as `1`. |
+| `max_queries_to_load` | `uint32` | `1000` | Maximum number of queries selected for warmup. A positive `compile_query_cache_size` further limits this number. With `max_queries_to_load` set to `0`, the node selects at most one query. |
+| `max_nodes_to_request` | `uint32` | `5` | Maximum number of nodes whose caches are queried during warmup. Set to `0` to remove this limit. |

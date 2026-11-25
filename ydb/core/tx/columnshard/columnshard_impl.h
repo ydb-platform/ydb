@@ -22,6 +22,7 @@
 #include "data_sharing/source/events/control.h"
 #include "data_sharing/source/events/transfer.h"
 #include "engines/reader/transaction/scan_gate.h"
+#include "loading/deferred_portion_loader.h"
 #include "local_db_backup/events.h"
 #include "maintenance/cut_history/find_empty_history_intervals.h"
 #include "normalizer/abstract/abstract.h"
@@ -199,6 +200,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;
     friend class TTxInit;
+    friend class TTxLoadPortionsBatch;
     friend class TTxCleanupSchemasWithnoData;
     friend class TTxInitSchema;
     friend class TTxUpdateSchema;
@@ -314,7 +316,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPrefetchPortionsMetadata::TPtr& ev);
-    void Handle(TEvPrivate::TEvSetLoadedKeyRanges::TPtr& ev);
 
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
@@ -392,6 +393,11 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void CleanupActors(const TActorContext& ctx);
     void BecomeBroken(const TActorContext& ctx);
     void TrySwitchToWork(const TActorContext& ctx);
+
+    void StartDeferredPortionLoading(const TActorContext& ctx);
+    void ContinueDeferredPortionLoading(const TActorContext& ctx);
+    void OnPortionsBatchLoaded(TDeferredPortionLoader::TBatch&& batch, const TActorContext& ctx);
+    void OnAllPortionsLoaded(const TActorContext& ctx);
 
     bool IsAnyChannelYellowStop() const {
         return Executor()->GetStats().IsAnyChannelYellowStop;
@@ -547,8 +553,10 @@ private:
     THashMap<ui64, TInstant> ScanTxInFlight;
     NOlap::NReader::TScanGate ScanGate;
     std::optional<TWriteGate> WriteGate;
+    TDeferredPortionLoader DeferredPortionLoader;
     TBackgroundController BackgroundController;
     std::unique_ptr<TFindEmptyHistoryIntervals> FindEmptyHistoryIntervals;
+    std::optional<ui32> FirstGCBarrierGeneration;
     TSettings Settings;
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
@@ -667,6 +675,7 @@ public:
     }
 
     void OnFirstGC(ui32 completedBarrierGeneration, const TActorContext& ctx);
+    void TryStartFindEmptyHistoryIntervals(const TActorContext& ctx);
 
     void EnqueueProgressTx(const TActorContext& ctx, const ui64 continueTxId = 0);
 

@@ -171,11 +171,23 @@ namespace NKikimr::NBlobDepot {
             const size_t a = hash % 36;
             const size_t b = hash / 36 % 36;
             static const char vec[] = "0123456789abcdefghijklmnopqrstuvwxyz";
-            return TStringBuilder() << basePath
-                << '/' << Generation
+            TStringBuilder name;
+            if (basePath) {
+                name << basePath << '/';
+            }
+            name << Generation
                 << '/' << vec[a]
                 << '/' << vec[b]
                 << '/' << KeyId;
+            return name;
+        }
+
+        static constexpr size_t MaxObjectKeyBytes = 1024;
+
+        static size_t MaxBasePathBytes() {
+            static const size_t bytes = MaxObjectKeyBytes - 1
+                - TS3Locator{.Generation = Max<ui32>(), .KeyId = Max<ui64>()}.MakeObjectName({}).size();
+            return bytes;
         }
 
         static std::optional<TS3Locator> FromObjectName(const TString& name, ui64 len, TString *error) {
@@ -193,7 +205,7 @@ namespace NKikimr::NBlobDepot {
                     .Generation = generation,
                     .KeyId = keyId,
                 };
-                if (res.MakeObjectName(TString()) != '/' + name) {
+                if (res.MakeObjectName(TString()) != name) {
                     *error = "object name does not match";
                     return std::nullopt;
                 }

@@ -68,7 +68,11 @@ namespace NProtoBuf {
         printer.SetUseUtf8StringEscaping(true);
         TProtoStringType result;
         printer.PrintToString(message, &result);
-        return TString{result};
+        if constexpr (std::is_same_v<TProtoStringType, TString>) {
+            return result;
+        } else {
+            return TString{result};
+        }
     }
 
     bool MergePartialFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage) {

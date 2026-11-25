@@ -1468,9 +1468,11 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
     }
 
-    Y_UNIT_TEST(RequestRestartServicesPartial)
+    void TestRequestRestartServicesPartial(TErasureType::EErasureSpecies erasure)
     {
-        TCmsTestEnv env(8);
+        TTestEnvOpts opts(TBlobStorageGroupType(erasure).BlobSubgroupSize());
+        opts.BlockErasure = erasure;
+        TCmsTestEnv env(opts);
 
         auto rec = env.CheckPermissionRequest
             ("user", true, false, false, true, TStatus::ALLOW_PARTIAL,
@@ -1485,6 +1487,16 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(action1.ServicesSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(action1.GetServices(0), "storage");
         UNIT_ASSERT_VALUES_EQUAL(action1.GetDuration(), 60000000);
+    }
+
+    Y_UNIT_TEST(RequestRestartServicesPartial)
+    {
+        TestRequestRestartServicesPartial(TErasureType::Erasure4Plus2Block);
+    }
+
+    Y_UNIT_TEST(RequestRestartServicesPartialBlock82)
+    {
+        TestRequestRestartServicesPartial(TErasureType::Erasure8Plus2Block);
     }
 
     Y_UNIT_TEST(RequestRestartServicesRejectSecond)
@@ -1643,9 +1655,11 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckRejectPermission("user", id + "-bad", false, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(RequestReplaceDevices)
+    void TestRequestReplaceDevices(TErasureType::EErasureSpecies erasure)
     {
-        TCmsTestEnv env(8);
+        TTestEnvOpts opts(TBlobStorageGroupType(erasure).BlobSubgroupSize());
+        opts.BlockErasure = erasure;
+        TCmsTestEnv env(opts);
 
         env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_DEVICE,
                                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, "/dev/bad/device/path"));
@@ -1719,6 +1733,16 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW,
                                    MakeAction(TAction::REPLACE_DEVICES, 1, 60000000,
                                               "vdisk-3-1-0-1-0", "vdisk-3-1-0-5-0"));
+    }
+
+    Y_UNIT_TEST(RequestReplaceDevices)
+    {
+        TestRequestReplaceDevices(TErasureType::Erasure4Plus2Block);
+    }
+
+    Y_UNIT_TEST(RequestReplaceDevicesBlock82)
+    {
+        TestRequestReplaceDevices(TErasureType::Erasure8Plus2Block);
     }
 
     Y_UNIT_TEST(RequestReplaceDevicePDisk)
@@ -2555,27 +2579,31 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
     }
 
-    void TestAvailabilityMode(EAvailabilityMode mode, bool disconnectNodes)
+    void TestAvailabilityMode(EAvailabilityMode mode, bool disconnectNodes,
+            TErasureType::EErasureSpecies erasure)
     {
         Y_ABORT_UNLESS(mode == MODE_KEEP_AVAILABLE
                  || mode == MODE_FORCE_RESTART);
 
-        TCmsTestEnv env(8);
+        const ui32 nodes = TBlobStorageGroupType(erasure).BlobSubgroupSize();
+        TTestEnvOpts opts(nodes);
+        opts.BlockErasure = erasure;
+        TCmsTestEnv env(opts);
         env.AdvanceCurrentTime(TDuration::Minutes(3));
 
         auto res1 = env.ExtractPermissions
             (env.CheckPermissionRequest("user", false, false, false,
                                         true, mode, TStatus::ALLOW,
-                                        MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)));
+                                        MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(nodes - 2), 60000000)));
         if (disconnectNodes) {
-            TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
+            TFakeNodeWhiteboardService::Info[env.GetNodeId(nodes - 2)].Connected = false;
         }
 
         env.CheckPermissionRequest("user", false, false, false,
                                    true, mode, TStatus::ALLOW,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(nodes - 1), 60000000));
         if (disconnectNodes) {
-            TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+            TFakeNodeWhiteboardService::Info[env.GetNodeId(nodes - 1)].Connected = false;
         }
 
         env.CheckPermissionRequest("user", false, false, false,
@@ -2585,6 +2613,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             return;
         }
 
+        env.RestartCms();
+        env.CheckListPermissions("user", 2);
         env.CheckDonePermission("user", res1.second[0]);
 
         env.CheckPermissionRequest("user", false, false, false,
@@ -2594,7 +2624,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             return;
         }
 
-        TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = true;
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(nodes - 2)].Connected = true;
 
         env.CheckPermissionRequest("user", false, false, false,
                                    true, mode, TStatus::ALLOW,
@@ -2603,22 +2633,71 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(TestKeepAvailableMode)
     {
-        TestAvailabilityMode(MODE_KEEP_AVAILABLE, false);
+        TestAvailabilityMode(MODE_KEEP_AVAILABLE, false, TErasureType::Erasure4Plus2Block);
     }
 
     Y_UNIT_TEST(TestForceRestartMode)
     {
-        TestAvailabilityMode(MODE_FORCE_RESTART, false);
+        TestAvailabilityMode(MODE_FORCE_RESTART, false, TErasureType::Erasure4Plus2Block);
     }
 
     Y_UNIT_TEST(TestKeepAvailableModeDisconnects)
     {
-        TestAvailabilityMode(MODE_KEEP_AVAILABLE, true);
+        TestAvailabilityMode(MODE_KEEP_AVAILABLE, true, TErasureType::Erasure4Plus2Block);
     }
 
     Y_UNIT_TEST(TestForceRestartModeDisconnects)
     {
-        TestAvailabilityMode(MODE_FORCE_RESTART, true);
+        TestAvailabilityMode(MODE_FORCE_RESTART, true, TErasureType::Erasure4Plus2Block);
+    }
+
+    Y_UNIT_TEST(TestKeepAvailableModeBlock82)
+    {
+        TestAvailabilityMode(MODE_KEEP_AVAILABLE, false, TErasureType::Erasure8Plus2Block);
+    }
+
+    Y_UNIT_TEST(TestForceRestartModeBlock82)
+    {
+        TestAvailabilityMode(MODE_FORCE_RESTART, false, TErasureType::Erasure8Plus2Block);
+    }
+
+    Y_UNIT_TEST(TestKeepAvailableModeDisconnectsBlock82)
+    {
+        TestAvailabilityMode(MODE_KEEP_AVAILABLE, true, TErasureType::Erasure8Plus2Block);
+    }
+
+    Y_UNIT_TEST(TestForceRestartModeDisconnectsBlock82)
+    {
+        TestAvailabilityMode(MODE_FORCE_RESTART, true, TErasureType::Erasure8Plus2Block);
+    }
+
+    void TestBlockParityMaxAvailability(TErasureType::EErasureSpecies erasure)
+    {
+        TTestEnvOpts opts(TBlobStorageGroupType(erasure).BlobSubgroupSize());
+        opts.BlockErasure = erasure;
+        TCmsTestEnv env(opts);
+        auto result = env.ExtractPermissions(env.CheckPermissionRequest("user", false, false, false,
+            true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(opts.NodeCount - 1), 60000000, "storage")));
+        env.RestartCms();
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY,
+            TStatus::DISALLOW_TEMP,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(opts.NodeCount - 2), 60000000, "storage"));
+        env.CheckDonePermission("user", result.second[0]);
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(opts.NodeCount - 1)].Connected = false;
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY,
+            TStatus::DISALLOW_TEMP,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(opts.NodeCount - 2), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(BlockParityMaxAvailabilityBlock42)
+    {
+        TestBlockParityMaxAvailability(TErasureType::Erasure4Plus2Block);
+    }
+
+    Y_UNIT_TEST(BlockParityMaxAvailabilityBlock82)
+    {
+        TestBlockParityMaxAvailability(TErasureType::Erasure8Plus2Block);
     }
 
     void TestKeepAvailabileModeScheduled(bool disconnectNodes)
@@ -2870,6 +2949,27 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(issue.GetType(), TAction::TIssue::TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS);
         UNIT_ASSERT_VALUES_EQUAL(issue.GetMessage(), expectedReason(MODE_KEEP_AVAILABLE, 2));
         UNIT_ASSERT_VALUES_EQUAL(issue.GetMessage(), denied.GetStatus().GetReason());
+    }
+
+    Y_UNIT_TEST(StateStorageSameRequestRingDiagnostics)
+    {
+        TTestEnvOpts opts(5, 0);
+        opts.NRings = 5;
+        opts.RingSize = 1;
+        opts.NToSelect = 5;
+        TCmsTestEnv env(opts.WithEnableCmsSmartAvailabilityMode());
+        env.AdvanceCurrentTime(TDuration::Minutes(3));
+
+        const auto denied = env.CheckPermissionRequest("user", false, true, false, true, MODE_SMART_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                                       MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+                                                       MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        const TString expected = TStringBuilder() << "Too many unavailable state storage rings. Restarting rings: 1"
+            << ". Temporarily locked rings (restart cooldown: " << TDuration::Minutes(2) << "): 0"
+            << ". Maximum allowed number of unavailable rings for this mode: 1"
+            << ". Ring group: 0. Requested ring: 1 (nodes: [" << env.GetNodeId(1)
+            << "]). Unavailable rings: [0 (nodes: [" << env.GetNodeId(0)
+            << "], state: Restart by this request)]";
+        UNIT_ASSERT_VALUES_EQUAL(denied.GetStatus().GetReason(), expected);
     }
 
     Y_UNIT_TEST(StateStorageDisabledRingsDiagnostics)

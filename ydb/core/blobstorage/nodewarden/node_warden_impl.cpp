@@ -437,6 +437,11 @@ void TNodeWarden::PassAway() {
         new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(SelfId()));
 
     NTabletPipe::CloseClient(SelfId(), PipeClientId);
+    WorkingSyncers.clear();
+    UpdateSyncerCounters();
+    if (BridgeSyncNodeCounters) {
+        BridgeSyncNodeCounters->RateLimit->Set(0);
+    }
     StopInvalidGroupProxy();
     TerminateBlobDepotS3Routers();
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, DsProxyNodeMonActor, {}, nullptr, 0));
@@ -665,6 +670,7 @@ void TNodeWarden::Bootstrap() {
     // create bridge syncer rate quoter
     SyncRateConfigLimit = Cfg->BlobStorageConfig->GetBridgeSyncRateBytesPerSecond();
     SyncRateQuoter = std::make_shared<TReplQuoter>(SyncRateConfigLimit);
+    UpdateSyncerCounters();
 
     // start compaction broker
     actorSystem->RegisterLocalService(MakeBlobStorageCompBrokerID(), Register(
@@ -1134,12 +1140,16 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
         ApplyControllerServiceSet(record.GetServiceSet(), comprehensive);
     }
 
+    bool syncersChanged = false;
     for (const auto& item : record.GetGroupMetadata()) {
         const ui32 groupId = item.GetGroupId();
         const ui32 generation = item.GetCurrentGeneration();
         if (const auto it = Groups.find(groupId); it != Groups.end() && it->second.MaxKnownGeneration < generation) {
-            ApplyGroupInfo(groupId, generation, nullptr, false, false);
+            syncersChanged |= ApplyGroupInfo(groupId, generation, nullptr, false, false);
         }
+    }
+    if (syncersChanged) {
+        UpdateSyncerCounters();
     }
 
     if (record.HasShredRequest()) {
@@ -1533,6 +1543,7 @@ void TNodeWarden::Handle(TEvPrivate::TEvRetrySaveConfig::TPtr& ev) {
 }
 
 void TNodeWarden::Handle(TEvPrivate::TEvUpdateStats::TPtr&) {
+    ExpireS3EndpointHandoffs();
     const bool useFixedVDiskSlotSize = UseFixedVDiskSlotSize;
     if (useFixedVDiskSlotSize != UseFixedVDiskSlotSizeCached) {
         UseFixedVDiskSlotSizeCached = useFixedVDiskSlotSize;

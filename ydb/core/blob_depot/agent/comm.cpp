@@ -1,4 +1,5 @@
 #include "agent_impl.h"
+#include "blob_mapping_cache.h"
 #include "blocks.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
@@ -57,7 +58,11 @@ namespace NKikimr::NBlobDepot {
             {"marker", "BDA06"},
             {"agentId", LogId},
             {"msg", msg});
-        if (BlobDepotGeneration != msg.GetGeneration()) {
+        if (!msg.HasS3BackendSettings()) {
+            ReleaseS3Wrapper();
+        }
+        const bool generationChanged = BlobDepotGeneration != msg.GetGeneration();
+        if (generationChanged) {
             // Expiry watermarks belong to one generation; the new tablet starts allocating from step 1 again.
             ExpiredSteps.clear();
         }
@@ -141,16 +146,42 @@ namespace NKikimr::NBlobDepot {
         SpaceColor = msg.GetSpaceColor();
         ApproximateFreeSpaceShare = msg.GetApproximateFreeSpaceShare();
 
+        if (S3BackendSettings && (generationChanged || !msg.HasS3BackendSettings())) {
+            // A disconnected agent may have missed removal and reassignment of the S3 namespace.
+            BlobMappingCache.InvalidateS3Mappings();
+        }
+#ifndef KIKIMR_DISABLE_S3_OPS
+        if (S3BackendSettings && !msg.HasS3BackendSettings()) {
+            RetirePendingS3Reads();
+        }
+#endif
         S3BackendSettings = msg.HasS3BackendSettings()
             ? std::make_optional(msg.GetS3BackendSettings())
             : std::nullopt;
 
-        ReleaseS3Wrapper();
-
+        IsConnected = true; // outstanding queries can now receive replies from this tablet pipe
 #ifndef KIKIMR_DISABLE_S3_OPS
-        InitS3(msg.GetName());
+        if (S3BackendSettings) {
+            InitS3(msg.GetName());
+            return;
+        }
 #endif
 
+        OnConnect();
+    }
+
+    void TBlobDepotAgent::Handle(NStorage::TEvNodeWardenBlobDepotS3RouterReady::TPtr ev) {
+        const auto& msg = *ev->Get();
+        if (!IsWaitingForS3Router() || ev->Cookie != ConnectionInstance ||
+                msg.TabletId != TabletId || msg.Generation != S3RouterGeneration) {
+            return;
+        }
+        if (!msg.Router) {
+            // The node already knows a newer tablet generation. Let the pipe reconnect to it.
+            NTabletPipe::ShutdownClient(TActivationContext::AsActorContext(), PipeId);
+            return;
+        }
+        S3WrapperId = msg.Router;
         OnConnect();
     }
 
@@ -198,8 +229,12 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::OnConnect() {
-        IsConnected = true;
         SwitchMode(EMode::Connected);
+#ifndef KIKIMR_DISABLE_S3_OPS
+        if (S3WrapperId) {
+            RunPendingS3ReadsIfPossible();
+        }
+#endif
 
         HandlePendingEvent();
     }
@@ -208,9 +243,7 @@ namespace NKikimr::NBlobDepot {
         ++ConnectionInstance;
 
         while (!TabletRequestInFlight.empty()) {
-            auto node = TabletRequestInFlight.extract(TabletRequestInFlight.begin());
-            auto& requestInFlight = node.value();
-            requestInFlight.Sender->OnRequestComplete(requestInFlight, TTabletDisconnected{}, nullptr);
+            OnRequestComplete(TabletRequestInFlight.begin()->Id, TTabletDisconnected{}, TabletRequestInFlight);
         }
 
         for (auto& [_, kind] : ChannelKinds) {
@@ -225,12 +258,30 @@ namespace NKikimr::NBlobDepot {
         IsConnected = false;
     }
 
+    void TBlobDepotAgent::TakeOverS3Preparation(ui64 requestId) {
+        if (ExtractRequest(requestId, TabletRequestInFlight)) {
+            // The tablet may have allocated a locator before the query timed out.
+            RegisterRequest(requestId, this, nullptr, {}, true);
+        }
+    }
+
     void TBlobDepotAgent::ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) {
         std::visit([&](auto&& response) {
             using T = std::decay_t<decltype(response)>;
             if constexpr (std::is_same_v<T, TEvBlobDepot::TEvRegisterAgentResult*>
                     || std::is_same_v<T, TEvBlobDepot::TEvAllocateIdsResult*>) {
                 Handle(std::move(context), response->Record);
+            } else if constexpr (std::is_same_v<T, TEvBlobDepot::TEvPrepareWriteS3Result*>) {
+                auto discard = std::make_unique<TEvBlobDepot::TEvDiscardSpoiledBlobSeq>();
+                for (const auto& item : response->Record.GetItems()) {
+                    if (item.HasS3Locator()) {
+                        discard->Record.AddS3Locators()->CopyFrom(item.GetS3Locator());
+                    }
+                }
+                if (discard->Record.S3LocatorsSize()) {
+                    discard->Record.SetS3PutMayArriveLate(false);
+                    Issue(std::move(discard), nullptr, nullptr);
+                }
             } else if constexpr (!std::is_same_v<T, TTabletDisconnected>) {
                 Y_FAIL_S("unexpected response received Type# " << TypeName<T>());
             }
@@ -261,7 +312,9 @@ namespace NKikimr::NBlobDepot {
             {"requestId", id},
             {"msg", ev->ToString()});
         NTabletPipe::SendData(SelfId(), PipeId, ev.release(), id, std::move(traceId));
-        RegisterRequest(id, sender, std::move(context), {}, true);
+        if (sender) {
+            RegisterRequest(id, sender, std::move(context), {}, true);
+        }
         return id;
     }
 

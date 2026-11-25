@@ -12,6 +12,47 @@ TChecksRequest MakeCheckRequest() {
         .LangVer = GetMaxReleasedLangVersion()};
 }
 
+#ifdef YQL_FASTCHECK_TEST_NEW_FEATURES
+void CheckStatementKindResult(const TChecksRequest& request, const TSet<EStatementKind>& expectedKinds) {
+    bool allowed = true;
+    for (const auto statementKind : expectedKinds) {
+        allowed &= !request.AllowedStatementKinds || request.AllowedStatementKinds->contains(statementKind);
+    }
+    const auto result = RunChecks(request);
+    UNIT_ASSERT_VALUES_EQUAL(result.Checks.size(), 2);
+    for (const auto& check : result.Checks) {
+        if (check.CheckName == "parser") {
+            UNIT_ASSERT_C(check.Success, request.Program << check.Issues.ToString());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(check.CheckName, "translator");
+            UNIT_ASSERT_VALUES_EQUAL_C(check.Success, allowed, request.Program << check.Issues.ToString());
+            if (!allowed) {
+                UNIT_ASSERT_STRING_CONTAINS(check.Issues.ToString(), "disallowed kind");
+            }
+        }
+    }
+}
+
+void CheckStatementKinds(const TString& program, const TSet<EStatementKind>& expectedKinds, ESyntax syntax = ESyntax::YQL) {
+    auto request = MakeCheckRequest();
+    request.Program = program;
+    request.Syntax = syntax;
+    request.ClusterMapping = {{"plato", "yt"}, {"db", "kikimr"}, {"", "kikimr"}};
+    request.Filters = ParseChecks("parser,translator");
+    CheckStatementKindResult(request, expectedKinds);
+    request.AllowedStatementKinds.ConstructInPlace();
+    CheckStatementKindResult(request, expectedKinds);
+    for (const auto statementKind : {EStatementKind::InnerDML, EStatementKind::DML,
+                                     EStatementKind::DDL, EStatementKind::TxControl}) {
+        request.AllowedStatementKinds = TSet<EStatementKind>{statementKind};
+        CheckStatementKindResult(request, expectedKinds);
+    }
+    request.AllowedStatementKinds = TSet<EStatementKind>{EStatementKind::InnerDML, EStatementKind::DML, EStatementKind::DDL, EStatementKind::TxControl};
+    CheckStatementKindResult(request, expectedKinds);
+}
+
+#endif
+
 } // namespace
 
 namespace NDeduplicateIssues {
@@ -32,6 +73,92 @@ struct TTestCase {
 } // namespace NDeduplicateIssues
 
 Y_UNIT_TEST_SUITE(TLinterTests) {
+#ifdef YQL_FASTCHECK_TEST_NEW_FEATURES
+Y_UNIT_TEST(AllowedStatementKindsAlwaysAllowed) {
+    for (const TString& program : {
+             "SELECT 1;", "VALUES (1);", "SELECT * FROM plato.Input;",
+             "PROCESS plato.Input;",
+             "$reducer = ($rows) -> { RETURN $rows; }; REDUCE plato.Input ON key USING ALL $reducer(TableRows());",
+             "$value = 1; $query = SELECT $value; SELECT * FROM $query;",
+             "DEFINE ACTION $action() AS SELECT 1; END DEFINE; DO $action();",
+             "DEFINE SUBQUERY $query() AS SELECT 1; END DEFINE; SELECT * FROM $query();",
+             "DECLARE $value AS Int32; SELECT $value;",
+             "USE plato; PRAGMA TablePathPrefix = 'prefix'; SELECT * FROM Input;"}) {
+        CheckStatementKinds(program, {});
+    }
+}
+
+Y_UNIT_TEST(AllowedStatementKindsDML) {
+    for (const TString& program : {
+             "INSERT INTO plato.Output SELECT 1 AS value;",
+             "INSERT INTO plato.Output WITH TRUNCATE SELECT 1 AS value;",
+             "UPSERT INTO db.Output SELECT 1 AS value;",
+             "REPLACE INTO db.Output SELECT 1 AS value;",
+             "UPDATE db.Output SET value = 1;",
+             "DELETE FROM db.Output;",
+             "TRUNCATE TABLE db.Output;"}) {
+        CheckStatementKinds(program, {EStatementKind::DML});
+        CheckStatementKinds("DEFINE ACTION $action() AS " + program + " END DEFINE;", {EStatementKind::DML});
+    }
+    CheckStatementKinds("$table = 'Output'; INSERT INTO plato.$table SELECT 1 AS value;", {EStatementKind::DML});
+}
+
+Y_UNIT_TEST(AllowedStatementKindsDDL) {
+    for (const TString& program : {
+             "CREATE TABLE plato.Output (value Int32);",
+             "ALTER TABLE db.Output ADD COLUMN value Int32;",
+             "DROP TABLE plato.Output;",
+             "SHOW CREATE TABLE db.Output;",
+             "CHECKSUM TABLE db.Output;"}) {
+        CheckStatementKinds(program, {EStatementKind::DDL});
+        CheckStatementKinds("DEFINE ACTION $action() AS " + program + " END DEFINE;", {EStatementKind::DDL});
+    }
+    CheckStatementKinds("$table = 'Output'; DROP TABLE plato.$table;", {EStatementKind::DDL});
+}
+
+Y_UNIT_TEST(AllowedStatementKindsInnerDML) {
+    for (const TString& program : {
+             "INSERT INTO plato.@Output SELECT 1 AS value;",
+             "INSERT INTO plato.@Output WITH TRUNCATE SELECT 1 AS value;",
+             "DROP TABLE plato.@Output;"}) {
+        CheckStatementKinds(program, {EStatementKind::InnerDML});
+        CheckStatementKinds("DEFINE ACTION $action() AS " + program + " END DEFINE;", {EStatementKind::InnerDML});
+    }
+    for (const TString& program : {
+             "$table = 'Output'; INSERT INTO plato.@$table SELECT 1 AS value;",
+             "$table = 'Output'; DROP TABLE plato.@$table;",
+             "USE plato; MATERIALIZE Input INTO $result; SELECT * FROM $result;",
+             "USE plato; DEFINE SUBQUERY $query() AS MATERIALIZE Input INTO $result; SELECT * FROM $result; END DEFINE; SELECT * FROM $query();"}) {
+        CheckStatementKinds(program, {EStatementKind::InnerDML});
+    }
+}
+
+Y_UNIT_TEST(AllowedStatementKindsTxControl) {
+    for (const TString& program : {"COMMIT;", "ROLLBACK;"}) {
+        CheckStatementKinds(program, {EStatementKind::TxControl});
+        CheckStatementKinds("DEFINE ACTION $action() AS " + program + " END DEFINE;", {EStatementKind::TxControl});
+    }
+}
+
+Y_UNIT_TEST(AllowedStatementKindsPostgres) {
+    for (const TString& program : {"SELECT 1;", "VALUES (1);", "SHOW server_version;",
+                                   "WITH cte AS (SELECT 1 AS value) SELECT * FROM cte;"}) {
+        CheckStatementKinds(program, {}, ESyntax::PG);
+    }
+    for (const TString& program : {
+             "INSERT INTO Output VALUES (1);", "UPDATE Output SET value = 1;", "DELETE FROM Output;"}) {
+        CheckStatementKinds(program, {EStatementKind::DML}, ESyntax::PG);
+    }
+    for (const TString& program : {"CREATE TABLE Output (value int);", "DROP TABLE Output;"}) {
+        CheckStatementKinds(program, {EStatementKind::DDL}, ESyntax::PG);
+    }
+    for (const TString& program : {"COMMIT;", "ROLLBACK;", "BEGIN;"}) {
+        CheckStatementKinds(program, {EStatementKind::TxControl}, ESyntax::PG);
+    }
+}
+
+#endif
+
 Y_UNIT_TEST(ListChecksResult) {
     auto res = ListChecks();
     UNIT_ASSERT(!res.empty());

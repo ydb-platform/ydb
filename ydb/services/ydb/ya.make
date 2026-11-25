@@ -42,6 +42,7 @@ END()
 
 RECURSE_FOR_TESTS(
     backup_ut
+    table_checksum_ut
     table_split_ut
     ut
 )

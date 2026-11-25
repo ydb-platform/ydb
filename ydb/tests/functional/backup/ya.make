@@ -34,4 +34,5 @@ END()
 
 RECURSE(
     s3_path_style
+    table_checksum
 )

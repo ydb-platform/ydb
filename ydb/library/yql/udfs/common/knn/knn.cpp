@@ -1,6 +1,9 @@
 #include "knn-distance.h"
 #include "knn-serializer.h"
+
+#ifndef BUILD_UDF
 #include "remote_embedder.h"
+#endif
 
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_type_printer.h>
@@ -492,6 +495,12 @@ SIMPLE_STRICT_UDF(TVectorFormatError, TOptional<TUtf8>(char*, ui8, ui32)) {
 
 // TODO IR for Distance functions?
 
+#ifdef BUILD_UDF
+#define KNN_STATIC_UDFS
+#else
+#define KNN_STATIC_UDFS NKnn::TRemoteEmbedder,
+#endif
+
 SIMPLE_MODULE(TKnnModule,
               TToBinaryStringFloat,
               TToBinaryStringFloat16,
@@ -509,7 +518,9 @@ SIMPLE_MODULE(TKnnModule,
               TCosineSimilarity,
               TCosineDistance,
               TManhattanDistance,
-              TEuclideanDistance,
-              NKnn::TRemoteEmbedder)
+              KNN_STATIC_UDFS
+              TEuclideanDistance)
+
+#undef KNN_STATIC_UDFS
 
 REGISTER_MODULES(TKnnModule)

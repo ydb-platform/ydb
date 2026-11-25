@@ -3,7 +3,8 @@
 Implements the [remote embedder RFC](https://wiki.yandex-team.ru/kikimr/developers/rfc/udf-dlja-udalennogo-jembeddera/)
 using the [OpenAI-compatible embeddings API](https://developers.openai.com/api/reference/resources/embeddings/methods/create).
 
-The SQL name `ApplyRemoteEmbedder` is an alias for `Knn::ApplyRemoteEmbedder`.
+In YDB's built-in `Knn` module, `ApplyRemoteEmbedder` is an alias for
+`Knn::ApplyRemoteEmbedder`.
 Use the qualified name in view definitions and in SQL declarations captured by
 views. Generated columns cannot call the UDF.
 The first argument selects the scalar or streaming form.
@@ -31,7 +32,7 @@ The token is read from the execution environment's UDF secure parameters using
 `AuthSecretName` and sent as `Authorization: Bearer <token>`. In KQP queries,
 `AuthSecretName` must be a non-empty String literal naming a database secret;
 KQP resolves it using the normal secret permission checks and supplies it to
-the UDF. Other UDF hosts must provide this secure parameter themselves.
+the UDF.
 Missing secrets and invalid configuration fail the query.
 KQP checks each request against the node's `QueryServiceConfig.HostnamePatterns`.
 

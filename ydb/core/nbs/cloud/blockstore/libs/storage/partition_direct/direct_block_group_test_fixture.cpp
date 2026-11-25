@@ -148,6 +148,18 @@ size_t TDBGFixture::ReplyUpdateRequests()
     return requests.size();
 }
 
+void TDBGFixture::CompleteConnectionsAndListPBuffers(
+    const std::shared_ptr<TDirectBlockGroup>& dbg)
+{
+    for (THostIndex host = 0; host < dbg->Connections.GetSlotCount(); ++host) {
+        if (!dbg->Connections.IsSlotDead(host)) {
+            dbg->Connections.GetPBuffer(host).ConnectPromise.SetValue(
+                MakeError(S_OK));
+        }
+    }
+    dbg->DoListPBuffers();
+}
+
 void TDBGFixture::WaitDirtyMapReady(
     const TExecutorPtr& executor,
     const std::shared_ptr<TVChunk>& vchunk)

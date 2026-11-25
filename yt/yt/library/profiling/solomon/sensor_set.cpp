@@ -29,6 +29,16 @@ typename TCube::TProjectionCookie& GetProjectionCookie(TState& state)
     }
 }
 
+template <class TCube, class TState>
+void AddToCube(TCube* cube, TState* state)
+{
+    state->ProjectionCookie = cube->AddAll(*state->TagSet);
+    // The tag set is needed only to rebuild projections when a dynamic tag is renamed.
+    if (state->TagSet->DynamicTags().empty()) {
+        state->TagSet.reset();
+    }
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -79,7 +89,7 @@ void TSensorSet::ValidateOptions(const TSensorOptions& options)
 void TSensorSet::AddCounter(TCounterStatePtr counter)
 {
     InitializeType(ESensorType::Counter);
-    counter->ProjectionCookie = CountersCube_.AddAll(counter->TagSet);
+    AddToCube(&CountersCube_, counter.Get());
     Counters_.emplace(std::move(counter));
     CubeSize_.Update(GetCubeSize());
 }
@@ -87,7 +97,7 @@ void TSensorSet::AddCounter(TCounterStatePtr counter)
 void TSensorSet::AddGauge(TGaugeStatePtr gauge)
 {
     InitializeType(ESensorType::Gauge);
-    gauge->ProjectionCookie = GaugesCube_.AddAll(gauge->TagSet);
+    AddToCube(&GaugesCube_, gauge.Get());
     Gauges_.emplace(std::move(gauge));
     CubeSize_.Update(GetCubeSize());
 }
@@ -95,7 +105,7 @@ void TSensorSet::AddGauge(TGaugeStatePtr gauge)
 void TSensorSet::AddSummary(TSummaryStatePtr summary)
 {
     InitializeType(ESensorType::Summary);
-    summary->ProjectionCookie = SummariesCube_.AddAll(summary->TagSet);
+    AddToCube(&SummariesCube_, summary.Get());
     Summaries_.emplace(std::move(summary));
     CubeSize_.Update(GetCubeSize());
 }
@@ -103,7 +113,7 @@ void TSensorSet::AddSummary(TSummaryStatePtr summary)
 void TSensorSet::AddTimerSummary(TTimerSummaryStatePtr timer)
 {
     InitializeType(ESensorType::Timer);
-    timer->ProjectionCookie = TimersCube_.AddAll(timer->TagSet);
+    AddToCube(&TimersCube_, timer.Get());
     Timers_.emplace(std::move(timer));
     CubeSize_.Update(GetCubeSize());
 }
@@ -111,7 +121,7 @@ void TSensorSet::AddTimerSummary(TTimerSummaryStatePtr timer)
 void TSensorSet::AddTimeCounter(TTimeCounterStatePtr counter)
 {
     InitializeType(ESensorType::TimeCounter);
-    counter->ProjectionCookie = TimeCountersCube_.AddAll(counter->TagSet);
+    AddToCube(&TimeCountersCube_, counter.Get());
     TimeCounters_.emplace(std::move(counter));
     CubeSize_.Update(GetCubeSize());
 }
@@ -119,7 +129,7 @@ void TSensorSet::AddTimeCounter(TTimeCounterStatePtr counter)
 void TSensorSet::AddTimeHistogram(THistogramStatePtr histogram)
 {
     InitializeType(ESensorType::TimeHistogram);
-    histogram->ProjectionCookie = TimeHistogramsCube_.AddAll(histogram->TagSet);
+    AddToCube(&TimeHistogramsCube_, histogram.Get());
     TimeHistograms_.emplace(std::move(histogram));
     CubeSize_.Update(GetCubeSize());
 }
@@ -127,7 +137,7 @@ void TSensorSet::AddTimeHistogram(THistogramStatePtr histogram)
 void TSensorSet::AddGaugeHistogram(THistogramStatePtr histogram)
 {
     InitializeType(ESensorType::GaugeHistogram);
-    histogram->ProjectionCookie = GaugeHistogramsCube_.AddAll(histogram->TagSet);
+    AddToCube(&GaugeHistogramsCube_, histogram.Get());
     GaugeHistograms_.emplace(std::move(histogram));
     CubeSize_.Update(GetCubeSize());
 }
@@ -135,7 +145,7 @@ void TSensorSet::AddGaugeHistogram(THistogramStatePtr histogram)
 void TSensorSet::AddRateHistogram(THistogramStatePtr histogram)
 {
     InitializeType(ESensorType::RateHistogram);
-    histogram->ProjectionCookie = RateHistogramsCube_.AddAll(histogram->TagSet);
+    AddToCube(&RateHistogramsCube_, histogram.Get());
     RateHistograms_.emplace(std::move(histogram));
     CubeSize_.Update(GetCubeSize());
 }
@@ -146,11 +156,14 @@ void TSensorSet::RenameDynamicTag(const TDynamicTagPtr& dynamicTag, TTagId newTa
         using TCube = std::remove_reference_t<decltype(cube)>;
 
         for (const auto& sensor : sensors) {
-            for (auto [tag, index] : sensor->TagSet.DynamicTags()) {
+            if (!sensor->TagSet) {
+                continue;
+            }
+            for (auto [tag, index] : sensor->TagSet->DynamicTags()) {
                 if (tag == dynamicTag) {
                     cube.RemoveAll(std::move(GetProjectionCookie<TCube>(*sensor)));
-                    sensor->TagSet.SetTagId(index, newTag);
-                    sensor->ProjectionCookie = cube.AddAll(sensor->TagSet);
+                    sensor->TagSet->SetTagId(index, newTag);
+                    sensor->ProjectionCookie = cube.AddAll(*sensor->TagSet);
                 }
             }
         }
@@ -177,12 +190,12 @@ int TSensorSet::Collect()
 
         cube.StartIteration();
         for (auto it = set.begin(); it != set.end(); ) {
-            auto current = it++;
+            auto currentIt = it++;
             if (it != set.end()) {
                 Y_PREFETCH_READ(it->Get(), 3);
             }
 
-            const auto& counter = *current;
+            const auto& counter = *currentIt;
             auto [value, ok] = doRead(counter);
             if (!ok) {
                 toRemove.push_back(counter);

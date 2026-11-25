@@ -8,6 +8,7 @@ RECURSE(
     langver
     purecalc
     result_format
+    sql_meta
     sql_format
     sql_format/abi/impl
     sql_format/impl

@@ -3,6 +3,7 @@ import logging
 import random
 import threading
 import time
+import uuid
 import ydb
 
 from enum import IntEnum, auto
@@ -99,7 +100,7 @@ class WorkloadRunner:
             else:
                 self.table_path = '/'.join([db, path])
         else:
-            self.table_path = '/'.join([db, "table", str(random.randint(100, 999))])
+            self.table_path = '/'.join([db, "table", uuid.uuid4().hex])
         ydb.interceptor.monkey_patch_event_handler()
 
     def __enter__(self):

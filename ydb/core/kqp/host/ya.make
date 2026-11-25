@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/kqp/common
     ydb/core/kqp/common/compile_cache
+    ydb/core/kqp/common/pg_policy
     ydb/core/kqp/common/simple
     ydb/core/kqp/federated_query
     ydb/core/kqp/gateway/utils

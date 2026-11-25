@@ -32,6 +32,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/docapi
     ydb/core/external_sources
+    ydb/core/kqp/common/pg_policy
     ydb/core/kqp/common/simple
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/opt/cbo

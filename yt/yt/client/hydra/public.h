@@ -50,6 +50,9 @@ DEFINE_ENUM(EPeerKind,
 YT_DEFINE_STRONG_TYPEDEF(TRevision, ui64);
 constexpr auto NullRevision = TRevision();
 
+//! Lamport time assigned to an outer mutation record.
+YT_DEFINE_STRONG_TYPEDEF(TCausalTime, ui64);
+
 struct TVersion;
 struct TReachableState;
 struct TElectionPriority;

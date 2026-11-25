@@ -20,11 +20,12 @@ bool TEngineShardingInfoReader::DoPrecharge(NTabletFlatExecutor::TTransactionCon
 bool TEngineUncommittedPortionsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     std::vector<std::pair<std::shared_ptr<TGranuleMeta>, TPortionInfo::TPtr>> portions;
+    const TVersionedIndex& versionedIndex = Self->GetVersionedIndex();
     for (const auto& portionAddress : PortionAddresses) {
         const auto granule = Self->GetGranulePtrVerified(portionAddress.GetPathId());
         if (!db.LoadPortionVerified(portionAddress,
                 [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-                    const TIndexInfo& indexInfo = portion->GetSchema(Self->GetVersionedIndex())->GetIndexInfo();
+                    const TIndexInfo& indexInfo = portion->GetSchema(versionedIndex)->GetIndexInfo();
                     YDB_LOG_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
                     portions.emplace_back(granule, portion->Build());
                 })) {
@@ -32,7 +33,7 @@ bool TEngineUncommittedPortionsReader::DoExecute(NTabletFlatExecutor::TTransacti
         }
     }
     for (auto&& [granule, portion] : portions) {
-        granule->UpsertPortionOnLoad(portion);
+        Self->AddPortionLoadedOnStart(*granule, portion);
     }
     return true;
 }
@@ -50,7 +51,7 @@ bool TEngineUncommittedPortionsReader::DoPrecharge(NTabletFlatExecutor::TTransac
 }
 
 bool TEngineLoadingFinish::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
-    Self->FinishLoading();
+    Self->FinishLoading(PortionsLoaded);
     return true;
 }
 

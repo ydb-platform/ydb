@@ -32,6 +32,7 @@ namespace NKikimr::NBlobDepot {
         void HandleResolveResult(ui64 tag, const NKikimrBlobDepot::TEvResolveResult& msg, TRequestContext::TPtr context);
         const TResolvedValue *ResolveKey(TString key, TQuery *query, TRequestContext::TPtr context, bool mustRestoreFirst,
             NKikimrBlobStorage::TDataKind::E dataKind);
+        void RefreshAfterMissing(const TString& key, const TResolvedValue& stale, const TResolvedValue& current);
 
     private:
         void ProcessResponse(ui64 tag, TRequestContext::TPtr /*context*/, TResponse response) override;

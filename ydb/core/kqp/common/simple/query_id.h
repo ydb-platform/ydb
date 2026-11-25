@@ -20,6 +20,7 @@ struct TKqpQueryId {
 
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
     TGUCSettings GUCSettings;
+    bool DisablePgCompatibility = true;
 
 public:
     TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId, const TString& userSid,
@@ -46,7 +47,7 @@ public:
     size_t GetHash() const noexcept {
         auto tuple = std::make_tuple(Cluster, Database, UserSid, Text, Settings,
             QueryParameterTypes ? QueryParameterTypes->size() : 0u,
-            GUCSettings.GetHash());
+            GUCSettings.GetHash(), DisablePgCompatibility);
         return THash<decltype(tuple)>()(tuple);
     }
 

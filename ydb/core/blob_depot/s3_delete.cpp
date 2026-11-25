@@ -1,5 +1,6 @@
 #include "s3.h"
 #include "s3_error.h"
+#include "s3_request_timer.h"
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/wrappers/abstract.h>
@@ -38,20 +39,51 @@ namespace NKikimr::NBlobDepot {
             ->GetCounter("", true) += count;
     }
 
-    class TS3Manager::TDeleterActor : public TActor<TDeleterActor> {
-        TActorId ParentId;
+    class TS3Manager::TDeleterActor : public TActorBootstrapped<TDeleterActor> {
+        const TActorId ParentId;
+        const TActorId WrapperId;
+        const TString Bucket;
         THashMap<TString, TS3Locator> Locators;
         TString LogId;
         const ui64 TabletId;
+        TS3RequestTimer Timer;
 
     public:
-        TDeleterActor(TActorId parentId, THashMap<TString, TS3Locator> locators, TString logId, ui64 tabletId)
-            : TActor(&TThis::StateFunc)
-            , ParentId(parentId)
-            , Locators(locators)
+        TDeleterActor(TActorId parentId, TActorId wrapperId, TString bucket, THashMap<TString, TS3Locator> locators,
+                TString logId, ui64 tabletId)
+            : ParentId(parentId)
+            , WrapperId(wrapperId)
+            , Bucket(std::move(bucket))
+            , Locators(std::move(locators))
             , LogId(std::move(logId))
             , TabletId(tabletId)
         {}
+
+        void Bootstrap() {
+            Become(&TThis::StateFunc);
+            if (Locators.size() == 1) {
+                const auto& [key, locator] = *Locators.begin();
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Issue_S3_delete",
+                    {"marker", "BDEV33"}, {"BDT", TabletId}, {"locator", locator});
+                Timer.SendWithTimeout(WrapperId, new TEvExternalStorage::TEvDeleteObjectRequest(
+                    Aws::S3::Model::DeleteObjectRequest().WithBucket(Bucket).WithKey(key)));
+            } else {
+                Aws::S3::Model::Delete del;
+                for (const auto& [key, locator] : Locators) {
+                    del.AddObjects(Aws::S3::Model::ObjectIdentifier().WithKey(key));
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Issue_S3_delete:multi",
+                        {"marker", "BDEV34"}, {"BDT", TabletId}, {"locator", locator});
+                }
+                Timer.SendWithTimeout(WrapperId, new TEvExternalStorage::TEvDeleteObjectsRequest(
+                    Aws::S3::Model::DeleteObjectsRequest().WithBucket(Bucket).WithDelete(std::move(del))));
+            }
+        }
+
+        void HandleTimeout() {
+            if (Timer.OnWakeup()) {
+                Finish("S3 delete deadline exceeded");
+            }
+        }
 
         void Handle(TEvExternalStorage::TEvDeleteObjectResponse::TPtr ev) {
             auto& msg = *ev->Get();
@@ -213,6 +245,7 @@ namespace NKikimr::NBlobDepot {
         STRICT_STFUNC(StateFunc,
             hFunc(TEvExternalStorage::TEvDeleteObjectResponse, Handle)
             hFunc(TEvExternalStorage::TEvDeleteObjectsResponse, Handle)
+            cFunc(TEvents::TSystem::Wakeup, HandleTimeout)
             cFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
             cFunc(TEvents::TSystem::Poison, PassAway)
         )
@@ -304,37 +337,8 @@ namespace NKikimr::NBlobDepot {
                 break;
             }
 
-            const TActorId actorId = Self->Register(new TDeleterActor(Self->SelfId(), locators, Self->GetLogId(),
-                Self->TabletID()));
-            ActiveDeleters.insert(actorId);
-
-            if (locators.size() == 1) {
-                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Issue_S3_delete",
-                    {"marker", "BDEV33"},
-                    {"BDT", Self->TabletID()},
-                    {"locator", locators.begin()->second});
-                TActivationContext::Send(new IEventHandle(WrapperId, actorId,
-                    new TEvExternalStorage::TEvDeleteObjectRequest(
-                        Aws::S3::Model::DeleteObjectRequest()
-                            .WithBucket(Bucket)
-                            .WithKey(locators.begin()->first)
-                    ),
-                    IEventHandle::FlagTrackDelivery
-                ));
-            } else {
-                auto del = Aws::S3::Model::Delete();
-                for (const auto& [key, locator] : locators) {
-                    del.AddObjects(Aws::S3::Model::ObjectIdentifier().WithKey(key));
-                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Issue_S3_delete:multi",
-                        {"marker", "BDEV34"},
-                        {"BDT", Self->TabletID()},
-                        {"locator", locator});
-                }
-
-                TActivationContext::Send(new IEventHandle(WrapperId, actorId,
-                    new TEvExternalStorage::TEvDeleteObjectsRequest(Aws::S3::Model::DeleteObjectsRequest()
-                        .WithBucket(Bucket).WithDelete(std::move(del))), IEventHandle::FlagTrackDelivery));
-            }
+            ActiveDeleters.insert(Self->Register(new TDeleterActor(Self->SelfId(), WrapperId, Bucket,
+                std::move(locators), Self->GetLogId(), Self->TabletID())));
         }
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_QUEUE_SIZE] = DeleteQueue.size();
     }
@@ -361,50 +365,48 @@ namespace NKikimr::NBlobDepot {
                     IncS3HttpErrorCounter(Self, "Deletes", httpCode, count);
                 }
 
-                if (!msg.LocatorsThrottled.empty()) {
-                    // S3 asked us to slow down: requeue, shrink concurrency, and arm exponential backoff.
+                const bool throttled = !msg.LocatorsThrottled.empty();
+                if (throttled || !msg.LocatorsError.empty()) {
+                    // Keep failed locators in durable trash and space out attempts to delete them.
                     DeleteQueue.insert(DeleteQueue.end(), msg.LocatorsThrottled.begin(), msg.LocatorsThrottled.end());
-                    CurrentMaxDeletesInFlight = 1;
-                    Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = CurrentMaxDeletesInFlight;
-                    Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_DELETE_THROTTLE_ACTIVATIONS] += 1;
+                    DeleteQueue.insert(DeleteQueue.end(), msg.LocatorsError.begin(), msg.LocatorsError.end());
                     ConsecutiveSuccessfulDeleteBatches = 0;
                     const TDuration delay = DeleteBackoff.Next();
-                    DeleteThrottleUntil = TActivationContext::Monotonic() + delay;
-                    YDB_LOG_WARN("S3 delete throttled",
-                        {"marker", "BDTS21"},
-                        {"id", Self->GetLogId()},
-                        {"delay", delay},
-                        {"throttled", msg.LocatorsThrottled.size()},
-                        {"currentMaxDeletesInFlight", CurrentMaxDeletesInFlight});
-                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "S3_delete_throttled",
-                        {"marker", "BDEV36"},
-                        {"BDT", Self->TabletID()},
-                        {"delayMs", delay.MilliSeconds()},
-                        {"throttled", msg.LocatorsThrottled.size()});
-                } else if (!msg.LocatorsOk.empty()) {
+                    DeleteThrottleUntil = Max(DeleteThrottleUntil, TActivationContext::Monotonic() + delay);
+                    if (throttled) {
+                        CurrentMaxDeletesInFlight = 1;
+                        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = CurrentMaxDeletesInFlight;
+                        Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_DELETE_THROTTLE_ACTIVATIONS] += 1;
+                        YDB_LOG_WARN("S3 delete throttled",
+                            {"marker", "BDTS21"},
+                            {"id", Self->GetLogId()},
+                            {"delay", delay},
+                            {"throttled", msg.LocatorsThrottled.size()},
+                            {"currentMaxDeletesInFlight", CurrentMaxDeletesInFlight});
+                        YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "S3_delete_throttled",
+                            {"marker", "BDEV36"},
+                            {"BDT", Self->TabletID()},
+                            {"delayMs", delay.MilliSeconds()},
+                            {"throttled", msg.LocatorsThrottled.size()});
+                    }
+                } else if (!msg.LocatorsOk.empty() && TActivationContext::Monotonic() >= DeleteThrottleUntil) {
                     // Pure success: gradually restore concurrency.
                     const ui32 maxDeletesInFlight = MaxDeletesInFlight();
                     if (CurrentMaxDeletesInFlight < maxDeletesInFlight) {
                         if (++ConsecutiveSuccessfulDeleteBatches >= SuccessesPerConcurrencyStepUp) {
                             ConsecutiveSuccessfulDeleteBatches = 0;
                             ++CurrentMaxDeletesInFlight;
-                            if (CurrentMaxDeletesInFlight >= maxDeletesInFlight) {
-                                CurrentMaxDeletesInFlight = maxDeletesInFlight;
-                                DeleteBackoff.Reset();
-                            }
-
                             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = CurrentMaxDeletesInFlight;
                         }
+                    }
+                    if (CurrentMaxDeletesInFlight == maxDeletesInFlight) {
+                        DeleteBackoff.Reset();
                     }
                 }
 
                 if (!msg.LocatorsOk.empty()) {
                     Self->Execute(std::make_unique<TTxDeleteTrashS3>(Self, std::move(msg.LocatorsOk)));
                     ++NumDeleteTxInFlight;
-                }
-
-                if (!msg.LocatorsError.empty()) {
-                    DeleteQueue.insert(DeleteQueue.end(), msg.LocatorsError.begin(), msg.LocatorsError.end());
                 }
 
                 RunDeletersIfNeeded();

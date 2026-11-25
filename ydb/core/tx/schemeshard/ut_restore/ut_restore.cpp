@@ -32,6 +32,7 @@
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -5780,8 +5781,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", EnableDataShardDirectPartImport, Ydb::StatusIds::CANCELLED);
     }
 
-    void ShouldFailOnInvalidCsv(const TString& csv, bool enableDataShardDirectPartImport) {
+    void ShouldFailOnInvalidCsv(const TString& csv, const TString& expectedError, bool enableDataShardDirectPartImport) {
+        std::vector<std::string> auditLines;
         TTestBasicRuntime runtime;
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(auditLines);
 
         const auto data = TTestDataWithScheme(R"(
             columns {
@@ -5795,7 +5798,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             primary_key: "key"
         )", {TTestData(csv, EmptyYsonStr)});
 
-        Run(runtime, ConvertTestData(data), R"(
+        const auto importId = Run(runtime, ConvertTestData(data), R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -5805,14 +5808,37 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               }
             }
         )", enableDataShardDirectPartImport, Ydb::StatusIds::CANCELLED);
+
+        const auto result = TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = result.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), expectedError);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_ERROR));
+
+        const auto list = TestListImports(runtime, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
+        const auto& listed = list.GetEntries(0);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetId(), importId);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetStatus(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(listed.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetIssues(0).message(), entry.GetIssues(0).message());
+
+        runtime.WaitFor("import end audit record", [&] {
+            return AnyOf(auditLines, [](const auto& line) { return line.find("operation=IMPORT END") != std::string::npos; });
+        }, TDuration::Seconds(10));
+        const auto line = FindAuditLine(auditLines, "operation=IMPORT END");
+        UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(line, "reason=" + entry.GetIssues(0).message());
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnFileWithoutNewLines, EnableDataShardDirectPartImport) {
-        ShouldFailOnInvalidCsv("\"a1\",\"value1\"", EnableDataShardDirectPartImport);
+        ShouldFailOnInvalidCsv("\"a1\",\"value1\"",
+            "/data_00.csv: cannot process data: reached end of file", EnableDataShardDirectPartImport);
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnEmptyToken, EnableDataShardDirectPartImport) {
-        ShouldFailOnInvalidCsv("\"a1\",\n", EnableDataShardDirectPartImport);
+        ShouldFailOnInvalidCsv("\"a1\",\n",
+            "/data_00.csv: cannot process data: Empty token on line: \"a1\",", EnableDataShardDirectPartImport);
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnInvalidValue, EnableDataShardDirectPartImport) {
@@ -6783,6 +6809,21 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).message(), "Cancelled manually");
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_ERROR));
+        const auto list = TestListImports(runtime, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
+        const auto& listed = list.GetEntries(0);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetId(), importId);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetStatus(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(listed.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetIssues(0).message(), "Cancelled manually");
+
+        runtime.WaitFor("import end audit record", [&] {
+            return AnyOf(auditLines, [](const auto& line) { return line.find("operation=IMPORT END") != std::string::npos; });
+        }, TDuration::Seconds(10));
 
         // Check audit record for import end
         //

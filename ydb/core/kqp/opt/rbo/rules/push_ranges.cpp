@@ -351,15 +351,14 @@ TVector<TString> FindConsumingTopSortColumns(const IOperator* op, TExprContext& 
             return {};
         }
 
+        // A read in the key order or in the reverse one can return the rows of the sort.
+        if (!GetKeyReadDirection(sort->GetSortElements())) {
+            return {};
+        }
         TVector<TString> sortColumns;
         const auto& sortElements = sort->GetSortElements().Items();
         sortColumns.reserve(sortElements.size());
-
-        const bool ascending = sortElements.empty() ? true : sortElements.front().second.Ascending;
         for (const auto& [id, order] : sortElements) {
-            if (order.Ascending != ascending || order.NullsFirst != ascending) {
-                return {};
-            }
             sortColumns.push_back(TString(ctx.GetIndexAsString(Substitute(id, copies))));
         }
         return sortColumns;
@@ -452,6 +451,30 @@ TExprNode::TPtr BuildTableCallable(const TKikimrTableMetadata& meta, TPositionHa
         .Version().Build(meta.SchemaVersion)
     .Done().Ptr();
     // clang-format on
+}
+
+// The metadata of a table, or nothing if it is not loaded: an index table is loaded only when the query uses it.
+TKikimrTableMetadataPtr FindTableMetadata(const NOpt::TKqpOptimizeContext& kqpCtx, const TString& path) {
+    const auto& tables = kqpCtx.Tables->GetTables();
+    const auto it = tables.find(std::make_pair(kqpCtx.Cluster, path));
+    return it != tables.end() ? it->second.Metadata : nullptr;
+}
+
+// The first index whose key starts with the sort columns and which covers the read, so reading it in the key order
+// returns the rows of the read in the order of the sort. A non-covering index would need a lookup into the main table.
+TKikimrTableMetadataPtr FindIndexInSortOrder(const TKikimrTableMetadata& mainMeta, const TVector<TString>& sortColumns, const TOpRead& read,
+                                             const NOpt::TKqpOptimizeContext& kqpCtx, const TInfoUnitRegistry& registry) {
+    for (const auto& index : mainMeta.Indexes) {
+        if (!IsSelectableIndex(index)) {
+            continue;
+        }
+        auto indexMeta = mainMeta.GetIndexMetadata(index.Name).first;
+        if (indexMeta && FindTableMetadata(kqpCtx, indexMeta->Name) && SortMatchesKeyOrder(sortColumns, indexMeta->KeyColumnNames, 0)
+            && IsCovering(read, *indexMeta, registry)) {
+            return indexMeta;
+        }
+    }
+    return nullptr;
 }
 
 } // anonymous namespace
@@ -768,5 +791,90 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         return newRead;
     }
     return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(chosen.PrunedLambda, &ctx, &props), true);
+}
+
+bool TSelectIndexForTopSortRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Sort && CastOperator<TOpSort>(input)->IsTopSort();
+}
+
+// As in the old optimizer (KqpTopSortSelectIndex), a top-N sort over a row table read without ranges reads the table
+// through an index whose key order matches the sort. Then the sorted read rules read the index in that order and stop
+// at the limit, instead of reading the whole table. A read with ranges has its index chosen by the range pushdown,
+// which takes the sort into account as well.
+TIntrusivePtr<IOperator> TSelectIndexForTopSortRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx, TPlanProps& props) {
+    const auto sort = CastOperator<TOpSort>(input);
+    const auto direction = GetKeyReadDirection(sort->GetSortElements());
+    if (!direction) {
+        return input;
+    }
+    auto& kqpCtx = rboCtx.KqpCtx;
+    // As in the old optimizer, a scan query does not read an index in the reverse order.
+    if (kqpCtx.Config->IsAutoIndexSelectionDisabled() || (!*direction && kqpCtx.IsScanQuery())) {
+        return input;
+    }
+
+    // Follow the sort keys through the maps down to the read columns. The lowest map, if any, consumes the read.
+    TVector<TInfoUnitId> keys;
+    for (const auto& [column, order] : sort->GetSortElements().Items()) {
+        keys.push_back(column);
+    }
+    TIntrusivePtr<IOperator> lowestMap;
+    auto current = sort->GetInput();
+    while (current->Kind == EOperator::Map) {
+        if (current->Parents.size() != 1) {
+            return input;
+        }
+        const auto& mapElements = CastOperator<TOpMap>(current)->GetMapElements();
+        for (auto& key : keys) {
+            if (const auto* element = mapElements.Find(key)) {
+                if (!element->IsColumnAccess()) {
+                    return input;
+                }
+                key = element->GetColumnAccess();
+            }
+        }
+        lowestMap = current;
+        current = CastOperator<IUnaryOperator>(current)->GetInput();
+    }
+    if (current->Kind != EOperator::Source || current->Parents.size() != 1) {
+        return input;
+    }
+    const auto read = CastOperator<TOpRead>(current);
+    if (read->GetTableStorageType() != NYql::EStorageType::RowStorage || read->RangeInfo || read->Limit || read->SortDir != ESortDir::None) {
+        return input;
+    }
+
+    const auto tablePath = TExprBase(read->GetTable()).Cast<TKqpTable>().Path().StringValue();
+    const auto mainMeta = FindTableMetadata(kqpCtx, tablePath);
+    if (!mainMeta || mainMeta->Kind != EKikimrTableKind::Datashard) {
+        return input;
+    }
+
+    TVector<TString> sortColumns;
+    for (const auto key : keys) {
+        if (!read->GetColumns().Contains(key)) {
+            return input;
+        }
+        sortColumns.push_back(props.InfoUnitRegistry.Get(key).GetColumnName());
+    }
+    // The main table already returns the rows in the order of the sort.
+    if (SortMatchesKeyOrder(sortColumns, mainMeta->KeyColumnNames, 0)) {
+        return input;
+    }
+
+    const auto index = FindIndexInSortOrder(*mainMeta, sortColumns, *read, kqpCtx, props.InfoUnitRegistry);
+    if (!index) {
+        return input;
+    }
+    YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Selected index " << index->Name << " for the sort of a read of " << tablePath;
+
+    auto indexRead = MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), NYql::EStorageType::RowStorage,
+                                            BuildTableCallable(*index, read->Pos, rboCtx.ExprCtx), nullptr, nullptr, std::nullopt,
+                                            std::nullopt, ESortDir::None, read->Props, read->Pos);
+    if (!lowestMap) {
+        return MakeIntrusive<TOpSort>(std::move(indexRead), sort->Pos, sort->Props, sort->GetSortElements(), sort->LimitCond, sort->GetSortPhase());
+    }
+    lowestMap->SetChild(0, std::move(indexRead));
+    return MakeIntrusive<TOpSort>(sort->GetInput(), sort->Pos, sort->Props, sort->GetSortElements(), sort->LimitCond, sort->GetSortPhase());
 }
 } // namespace NKikimr::NKqp

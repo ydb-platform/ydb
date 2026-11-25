@@ -1010,7 +1010,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> PrepareVectorIndexPropose(
     modifyScheme.SetInternal(true);
     modifyScheme.SetWorkingDir(TPath::Init(buildInfo.TablePathId, ss).PathString());
     modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
-    modifyScheme.MutablePrepareVectorIndex()->SetTableName(buildInfo.GetBuildIndexName());
+    modifyScheme.MutablePrepareVectorIndex()->SetIndexName(buildInfo.GetBuildIndexName());
 
     YDB_LOG_NOTICE("PrepareVectorIndexPropose",
         {"buildId", buildInfo.Id},

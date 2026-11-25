@@ -453,7 +453,7 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetPrepareIndexValidation().GetTableName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareVectorIndex:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetPrepareVectorIndex().GetTableName()}));
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetPrepareVectorIndex().GetIndexName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetLockConfig().GetName()}));

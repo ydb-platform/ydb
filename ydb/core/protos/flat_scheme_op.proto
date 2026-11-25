@@ -1490,9 +1490,8 @@ message TInitiateBuildIndexMainTable {
 }
 
 // Takes a snapshot of the main table and switches the vector index to WriteOnly.
-// TableName is the index name relative to WorkingDir.
 message TPrepareVectorIndex {
-    optional string TableName = 1;
+    optional string IndexName = 1;
 }
 
 message TBuildIndexOutcome {

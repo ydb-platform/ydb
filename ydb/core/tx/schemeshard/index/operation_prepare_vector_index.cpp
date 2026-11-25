@@ -245,7 +245,7 @@ public:
         auto prepareOp = Transaction.GetPrepareVectorIndex();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& indexName = prepareOp.GetTableName();
+        const TString& indexName = prepareOp.GetIndexName();
 
         YDB_LOG_NOTICE_CTX(context.Ctx, "",
             {"path", TStringBuilder() << parentPathStr << "/" << indexName},

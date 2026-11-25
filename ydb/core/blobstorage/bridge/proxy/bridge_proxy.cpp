@@ -1161,27 +1161,6 @@ namespace NKikimr {
             {}
         };
 
-        struct TEvStandbyGetTimeout : TEventLocal<TEvStandbyGetTimeout, EventSpaceBegin(TEvents::ES_PRIVATE) + 1> {
-            ui64 Cookie;
-
-            explicit TEvStandbyGetTimeout(ui64 cookie)
-                : Cookie(cookie)
-            {}
-        };
-
-        void Handle(TEvStandbyGetTimeout::TPtr ev) {
-            const ui64 cookie = ev->Get()->Cookie;
-            const auto it = RequestsInFlight.find(cookie);
-            if (it != RequestsInFlight.end()) {
-                auto request = it->second.Request;
-                Y_ABORT_UNLESS(it->second.Payload.IsStandbyGet && request->ResponsesPending == 1);
-                RequestsInFlight.erase(it);
-                request->CookiesInFlight.erase(cookie);
-                --request->ResponsesPending;
-                request->SendDeferredGets(*this, std::get<TRequest::TGetState>(request->State), false);
-            }
-        }
-
     public:
         TBridgedBlobStorageProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId innerProxyId)
             : Info(std::move(info))
@@ -1711,13 +1690,7 @@ namespace NKikimr {
             if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvGet>) {
                 std::get<TRequest::TGetState>(request->State).DeferredPiles = std::move(deferredGetPiles);
                 if (probeStandby) {
-                    // Bound the extra latency even if the local DS proxy never replies.
-                    constexpr TDuration timeout = TDuration::MilliSeconds(50);
-                    auto probe = MakeGetSubrequest(originalRequest);
-                    // VGet transmits its deadline in whole seconds. Leave the queues the entire probe interval.
-                    probe->Deadline = TInstant::Seconds((TActivationContext::Now() + timeout).Seconds() + 1);
-                    const ui64 cookie = SendQuery(request, initialGetPileId, std::move(probe), {.IsStandbyGet = true});
-                    Schedule(timeout, new TEvStandbyGetTimeout(cookie));
+                    SendQuery(request, initialGetPileId, MakeGetSubrequest(originalRequest), {.IsStandbyGet = true});
                 }
             }
 
@@ -1737,7 +1710,7 @@ namespace NKikimr {
             }
         }
 
-        ui64 SendQuery(std::shared_ptr<TRequest> request, TBridgePileId bridgePileId, std::unique_ptr<IEventBase> ev,
+        void SendQuery(std::shared_ptr<TRequest> request, TBridgePileId bridgePileId, std::unique_ptr<IEventBase> ev,
                 TRequestPayload&& payload = {}) {
             const auto *groupPileInfo = NBridge::GetGroupPile(request->Info->Group->GetBridgeGroupState(),
                 bridgePileId);
@@ -1762,7 +1735,6 @@ namespace NKikimr {
 
             DispatchSubrequest(groupId, std::move(ev), cookie, request->Span.GetTraceId());
             ++request->ResponsesPending;
-            return cookie;
         }
 
         void DispatchSubrequest(TGroupId groupId, std::unique_ptr<IEventBase> ev, ui64 cookie, NWilson::TTraceId traceId) {
@@ -2410,7 +2382,6 @@ namespace NKikimr {
             hFunc(TEvNodeWardenStorageConfig, Handle)
             hFunc(NStorage::TEvNodeWardenStandbySeal, Handle)
             hFunc(TEvCheckPendingRequests, Handle)
-            hFunc(TEvStandbyGetTimeout, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
             IgnoreFunc(TEvents::TEvWakeup) // the last tick from waiting for initial configuration
         )

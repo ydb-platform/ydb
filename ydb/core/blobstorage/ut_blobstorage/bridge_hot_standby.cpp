@@ -178,13 +178,15 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         PutToPileGroup(env, piles[0], 1, remoteId, remoteData, true);
 
         ui32 standbyReads = 0;
+        bool delayedStandbyReply = false;
         TActorId standbyGetSender;
         std::vector<TLogoBlobID> requiredQueries;
-        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet && ev->HasEvent()) {
                 const auto *get = ev->Get<TGet>();
                 if (get->ForceGroupGeneration && get->Queries[0].Id.TabletID() == localId.TabletID()) {
                     if (ev->Recipient == MakeBlobStorageProxyID(piles[1])) {
+                        UNIT_ASSERT_VALUES_EQUAL(get->Deadline, TInstant::Max());
                         ++standbyReads;
                         standbyGetSender = ev->Sender;
                     } else if (ev->Recipient == MakeBlobStorageProxyID(piles[0])) {
@@ -208,6 +210,12 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
                         item.Keep = true;
                     }
                 }
+                if (res->ResponseSz == 1 && !delayedStandbyReply) {
+                    // The bridge must wait for this local hit even when the reply takes a few seconds.
+                    delayedStandbyReply = true;
+                    env.Runtime->Schedule(TDuration::Seconds(2), ev.release(), nullptr, nodeId);
+                    return false;
+                }
             }
             return true;
         };
@@ -216,6 +224,7 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         CheckGetResult(*hit, localData);
         UNIT_ASSERT(!hit->Responses[0].Keep);
         UNIT_ASSERT(!hit->Responses[0].DoNotKeep);
+        UNIT_ASSERT(delayedStandbyReply);
         UNIT_ASSERT_VALUES_EQUAL(standbyReads, 1);
         UNIT_ASSERT(requiredQueries.empty());
 
@@ -290,7 +299,7 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         env.Sim(TDuration::MilliSeconds(100));
     }
 
-    Y_UNIT_TEST(LocalStandbyFallsBackOnFailureOrSilence) {
+    Y_UNIT_TEST(LocalStandbyFallsBackOnFailure) {
         TEnvironmentSetup env(MakeLocalPileFirstSettings());
         const ui32 groupId = PrepareStandby(env);
         const auto piles = GetPileGroups(env, groupId);
@@ -298,22 +307,17 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
         PutToPileGroup(env, piles[0], 1, id, data);
 
-        const std::optional<NKikimrProto::EReplyStatus> failures[] = {
-            NKikimrProto::ERROR, NKikimrProto::RACE, std::nullopt,
-        };
-        for (const auto failure : failures) {
+        for (const auto failure : {NKikimrProto::ERROR, NKikimrProto::RACE, NKikimrProto::DEADLINE}) {
             ui32 standbyReads = 0;
             ui32 requiredReads = 0;
             env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
                 if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet && ev->HasEvent() && ev->Get<TGet>()->Queries[0].Id == id) {
                     if (ev->Recipient == MakeBlobStorageProxyID(piles[1])) {
                         ++standbyReads;
-                        if (failure) {
-                            auto error = ev->Get<TGet>()->MakeErrorResponse(*failure, "standby failure",
-                                TGroupId::FromValue(piles[1]));
-                            error->RacingGeneration = Max<ui32>();
-                            env.Runtime->Send(new IEventHandle(ev->Sender, ev->Recipient, error.release(), 0, ev->Cookie), nodeId);
-                        }
+                        auto error = ev->Get<TGet>()->MakeErrorResponse(failure, "standby failure",
+                            TGroupId::FromValue(piles[1]));
+                        error->RacingGeneration = Max<ui32>();
+                        env.Runtime->Send(new IEventHandle(ev->Sender, ev->Recipient, error.release(), 0, ev->Cookie), nodeId);
                         return false;
                     }
                     requiredReads += ev->Recipient == MakeBlobStorageProxyID(piles[0]) && ev->Get<TGet>()->ForceGroupGeneration;

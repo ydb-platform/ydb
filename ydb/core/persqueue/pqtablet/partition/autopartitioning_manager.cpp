@@ -578,6 +578,11 @@ IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabl
         return new TSupportiveAutopartitioningManager(config, partitionId.OriginalPartitionId);
     }
 
+    // TODO: split key range CDC topics by the table keys of written records
+    if (config.PartitionKeySchemaSize() > 0) {
+        return new TNoneAutopartitioningManager(config);
+    }
+
     return new TStatefulAutopartitioningManager(config, partitionId.OriginalPartitionId);
 }
 

@@ -251,6 +251,41 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringVersions) {
 
+    Y_UNIT_TEST(SchemaChangesUseTheTierDataChannel) {
+        TEnv env;
+        env.Exec([](TTransactionContext& txc) {
+            txc.DB.Alter().AddFamily(TableId, 1, ArchiveTier)
+                .AddColumnToFamily(TableId, ValueTag, 1);
+            return true;
+        });
+        env.Enable();
+        const auto part = env.FlushPart({{1, env.NowSeconds() - TDuration::Days(30).Seconds(), "cold"}});
+        const auto level = env.Levels().at(part->Label);
+        UNIT_ASSERT_VALUES_EQUAL(env.Tier(level), ColdTier);
+        UNIT_ASSERT_VALUES_EQUAL(part->GroupsCount, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(part->GetDataChannel({}), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(part->GetDataChannel(NTable::NPage::TGroupId(1)), 2u);
+
+        const auto checkSchemaChanges = [&](bool expected) {
+            env.RawCall([&](TExecutor& executor) {
+                UNIT_ASSERT_VALUES_EQUAL(executor.HasSchemaChanges(TableId), expected);
+            });
+        };
+        checkSchemaChanges(false);
+        env.Restart();
+        checkSchemaChanges(false);
+
+        env.Exec([](TTransactionContext& txc) {
+            txc.DB.Alter().SetRoom(TableId, ColdTier, 3, {2}, 2);
+            return true;
+        });
+        checkSchemaChanges(true);
+        const auto compacted = CompactGeneration(env, level);
+        UNIT_ASSERT_VALUES_EQUAL(compacted.Outputs.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(compacted.OutputTiers.at(compacted.Outputs.front()->Label), ColdTier);
+        checkSchemaChanges(false);
+    }
+
     Y_UNIT_TEST(PageCollectionCacheModeFollowsTheDestinationTier) {
         using NTable::NPage::ECacheMode;
         TEnv env;

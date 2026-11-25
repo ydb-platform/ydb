@@ -152,7 +152,7 @@ namespace NBoot {
                             }
 
                             if (const ui32 tier = tierManaged ? schema.CompactionPolicy->GetTierForLevel(bundle.Level) : 0) {
-                                Logic->Result().PartCacheTiers.emplace(bundle.LargeGlobIds.front().Lead, tier);
+                                Logic->Result().PartTiers.emplace(bundle.LargeGlobIds.front().Lead, tier);
                             }
                             Pending += Spawn<TBundleLoadStep>(se.Table, bundle);
                         }

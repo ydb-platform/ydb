@@ -465,7 +465,7 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
     Y_ENSURE(!LogicAlter);
 
     Database = loadedState->Database;
-    PartCacheTiers = std::move(loadedState->PartCacheTiers);
+    PartTiers = std::move(loadedState->PartTiers);
     BorrowLogic = loadedState->Loans;
 
     Y_ENSURE(!CompactionLogic);
@@ -506,7 +506,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CommitManager = loadedState->CommitManager;
     Database = loadedState->Database;
-    PartCacheTiers = std::move(loadedState->PartCacheTiers);
+    PartTiers = std::move(loadedState->PartTiers);
     LogicSnap = loadedState->Snap;
     GcLogic = loadedState->GcLogic;
     LogicRedo = loadedState->Redo;
@@ -886,7 +886,7 @@ void TExecutor::AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCo
 void TExecutor::DropPartStorePageCollections(const NTable::TPart &part)
 {
     auto *partStore = CheckedCast<const NTable::TPartStore*>(&part);
-    PartCacheTiers.erase(part.Label);
+    PartTiers.erase(part.Label);
 
     {
         ui32 room = 0;
@@ -1677,14 +1677,14 @@ void TExecutor::UpdateCacheModesForPartStore(ui32 tableId, const NTable::TPartVi
 }
 
 void TExecutor::ResetMovedPartCacheModes(ui32 destinationTable, const TVector<NTable::TPartView>& parts) {
-    if (PartCacheTiers.empty()) {
+    if (PartTiers.empty()) {
         return;
     }
     const auto cacheModes = GetCacheModes(destinationTable);
     const auto stickyColumns = GetStickyColumns(destinationTable);
     for (const auto& part : parts) {
         // A moved part keeps its registered collections and enters the destination's default tier.
-        if (PartCacheTiers.erase(part->Label)) {
+        if (PartTiers.erase(part->Label)) {
             UpdateCacheModesForPartStore(destinationTable, part, cacheModes, stickyColumns);
         }
     }
@@ -1758,7 +1758,7 @@ THashSet<NTable::TTag> TExecutor::GetStickyColumns(ui32 tableId) {
 }
 
 std::optional<ECacheMode> TExecutor::GetTierCacheMode(ui32 tableId, const TLogoBlobID& label) const {
-    if (const auto* tier = PartCacheTiers.FindPtr(label)) {
+    if (const auto* tier = PartTiers.FindPtr(label)) {
         return Scheme().Tables.at(tableId).Families.at(*tier).CacheMode;
     }
     return std::nullopt;
@@ -1789,7 +1789,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
         auto* stage = bundle.GetStage<TPendingPartSwitch::TResultStage>();
         Y_ENSURE(stage && stage->PartView, "Missing bundle result in part switch");
         if (bundle.TierId) {
-            PartCacheTiers.emplace(stage->PartView->Label, bundle.TierId);
+            PartTiers.emplace(stage->PartView->Label, bundle.TierId);
         }
         AddPartStorePageCollections(partSwitch.TableId, stage->PartView, cacheModes, stickyColumns);
         if (stickyColumns) {
@@ -4071,7 +4071,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
             if (const auto& tiering = msg->Params->Tiering) {
                 if (const ui32 tier = tiering->OutputTiers.at(result.OutputId)) {
-                    PartCacheTiers.emplace(newPart->Label, tier);
+                    PartTiers.emplace(newPart->Label, tier);
                 }
             }
             AddPartStorePageCollections(tableId, newPart, cacheModes, stickyColumns);
@@ -5261,10 +5261,13 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
             return true;
         }
 
+        const auto* tierId = PartTiers.FindPtr(partView->Label);
+        const auto* tierFamily = tierId ? &tableInfo.Families.at(*tierId) : nullptr;
+        static const NTable::TScheme::TFamily defaultFamilySettings;
         for (size_t index : xrange(rowScheme.Families.size())) {
-            auto familyId = rowScheme.Families[index];
-            static const NTable::TScheme::TFamily defaultFamilySettings;
-            const auto& family = tableInfo.Families.ValueRef(familyId, defaultFamilySettings); // Workaround for KIKIMR-17222
+            // Preserve the missing-family fallback for ordinary column groups (KIKIMR-17222).
+            const auto& family = tierFamily ? *tierFamily
+                : tableInfo.Families.ValueRef(rowScheme.Families[index], defaultFamilySettings);
 
             const auto* schemeGroupRoom = tableInfo.Rooms.FindPtr(family.Room);
             Y_ENSURE(schemeGroupRoom, "Cannot find room " << family.Room << " in table " << tableInfo.Id);

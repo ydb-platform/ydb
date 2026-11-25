@@ -457,8 +457,8 @@ class TExecutor
     ui64 BootAttempt = 0;
     THolder<TExecutorBootLogic> BootLogic;
     THolder<TPrivatePageCache> PrivatePageCache;
-    // Non-default tier of each registered part that takes its cache mode from a tier family.
-    THashMap<TLogoBlobID, ui32> PartCacheTiers;
+    // Registered parts in non-default tiers, keyed by part label.
+    THashMap<TLogoBlobID, ui32> PartTiers;
 
     THolder<TExecutorCounters> Counters;
     THolder<TTabletCountersBase> AppCounters;

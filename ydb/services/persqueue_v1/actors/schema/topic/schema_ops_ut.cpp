@@ -10,6 +10,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
@@ -172,6 +173,15 @@ NKikimrPQ::TPQTabletConfig DescribeTabletConfig(
     return topic.Info->Description.GetPQTabletConfig();
 
 
+}
+
+void ExecuteDDL(TTopicSdkTestSetup& setup, const TString& query) {
+    NYdb::TDriver driver(setup.MakeDriverConfig());
+    NYdb::NQuery::TQueryClient client(driver);
+    auto session = client.GetSession().GetValueSync().GetSession();
+    auto res = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+    UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    driver.Stop(true);
 }
 
 } // namespace

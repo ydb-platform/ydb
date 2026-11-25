@@ -1062,50 +1062,51 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return std::make_shared<TPartitioning>(std::move(partitions), version);
         }
 
-        static bool HasTypedPartitionRanges(const NKikimrSchemeOp::TPersQueueGroupDescription& pqDesc) {
-            const auto& pqConfig = pqDesc.GetPQTabletConfig();
-            if (pqConfig.GetPartitionKeySchema().empty()) {
-                return false;
-            }
-
+        static TVector<NScheme::TTypeInfo> MakeTopicKeyTypes(const NKikimrPQ::TPQTabletConfig& pqConfig) {
             TVector<NScheme::TTypeInfo> keyTypes;
-            keyTypes.reserve(pqConfig.PartitionKeySchemaSize());
             for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
                 keyTypes.push_back(NScheme::TypeInfoModFromProtoColumnType(keySchema.GetTypeId(),
                     keySchema.HasTypeInfo() ? &keySchema.GetTypeInfo() : nullptr).TypeInfo);
             }
+            return keyTypes;
+        }
 
-            auto isFullKey = [&](const TString& bound) {
-                TSerializedCellVec cells;
-                if (!TSerializedCellVec::TryParse(bound, cells) || cells.GetCells().size() != keyTypes.size()) {
+        static bool IsFullTypedKey(const TString& bound, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+            TSerializedCellVec cells;
+            if (!TSerializedCellVec::TryParse(bound, cells) || cells.GetCells().size() != keyTypes.size()) {
+                return false;
+            }
+            for (size_t i = 0; i < keyTypes.size(); ++i) {
+                if (NScheme::HasUnexpectedValueSize(cells.GetCells()[i], keyTypes[i])) {
                     return false;
                 }
-                for (size_t i = 0; i < keyTypes.size(); ++i) {
-                    if (NScheme::HasUnexpectedValueSize(cells.GetCells()[i], keyTypes[i])) {
-                        return false;
-                    }
-                }
-                return true;
-            };
+            }
+            return true;
+        }
 
-            size_t unboundedCount = 0;
+        static bool IsPartitionedByTableKey(const NKikimrSchemeOp::TPersQueueGroupDescription& pqDesc) {
+            const auto keyTypes = MakeTopicKeyTypes(pqDesc.GetPQTabletConfig());
+            if (keyTypes.empty()) {
+                return false;
+            }
+
+            size_t unboundedPartitions = 0;
             for (const auto& partition : pqDesc.GetPartitions()) {
                 if (NKikimrPQ::ETopicPartitionStatus::Active != partition.GetStatus()) {
                     continue;
                 }
-
                 const auto& keyRange = partition.GetKeyRange();
-                if ((keyRange.HasFromBound() && !isFullKey(keyRange.GetFromBound()))
-                    || (keyRange.HasToBound() && !isFullKey(keyRange.GetToBound())))
-                {
+                // A partition bounded by hashes or key prefixes is not partitioned by the table key
+                if (keyRange.HasFromBound() && !IsFullTypedKey(keyRange.GetFromBound(), keyTypes)) {
                     return false;
                 }
-                if (!keyRange.HasToBound()) {
-                    ++unboundedCount;
+                if (keyRange.HasToBound() && !IsFullTypedKey(keyRange.GetToBound(), keyTypes)) {
+                    return false;
                 }
+                unboundedPartitions += !keyRange.HasToBound();
             }
-
-            return unboundedCount <= 1;
+            // Only the last active partition has no upper bound
+            return unboundedPartitions <= 1;
         }
 
         static void FillTopicPartitioning(
@@ -1114,9 +1115,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 TVector<NKikimr::TKeyDesc::TPartitionInfo>& partitioning)
         {
             const auto& pqConfig = pqDesc.GetPQTabletConfig();
-            const bool splitEnabled = ::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType();
 
-            if (splitEnabled && !HasTypedPartitionRanges(pqDesc)) {
+            // Describe a topic split by hash with hash ranges, a topic partitioned by the table key with key ranges
+            if (NPQ::SplitMergeEnabled(pqConfig) && !IsPartitionedByTableKey(pqDesc)) {
                 partitioning.reserve(pqDesc.GetPartitions().size());
                 for (const auto& partition : pqDesc.GetPartitions()) {
                     if (NKikimrPQ::ETopicPartitionStatus::Active == partition.GetStatus()) {

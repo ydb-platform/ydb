@@ -807,6 +807,7 @@ private:
     ////////////////////////////////////////////////////////////////////////
 
     struct TStatusRequestItem {
+        TVDiskID Target;
         TActorId Sender;
         ui64 Cookie;
     };
@@ -816,14 +817,15 @@ private:
     ui64 NextStatusRequestCookie = 1;
 
     void Handle(TEvBlobStorage::TEvVStatus::TPtr& ev, const TActorContext& ctx) {
+        TStatusRequestItem request{GetQueueRequestVDiskId(ev->Get()->Record), ev->Sender, ev->Cookie};
         if (IsReady()) {
             if (!StatusRequests) {
                 StatusRequestCookie = NextStatusRequestCookie++;
                 SendStatusRequest(StatusRequestCookie, ctx);
             }
-            StatusRequests.emplace_back(TStatusRequestItem{ev->Sender, ev->Cookie});
+            StatusRequests.push_back(request);
         } else {
-            SendStatusErrorResponse(ev->Sender, ev->Cookie, NKikimrProto::NOTREADY, ctx);
+            SendStatusErrorResponse(request, NKikimrProto::NOTREADY, ctx);
         }
     }
 
@@ -840,7 +842,7 @@ private:
 
     void DrainStatus(NKikimrProto::EReplyStatus status, const TActorContext& ctx) {
         for (auto& request : std::exchange(StatusRequests, {})) {
-            SendStatusErrorResponse(request.Sender, request.Cookie, status, ctx);
+            SendStatusErrorResponse(request, status, ctx);
         }
         StatusRequestCookie = 0;
     }
@@ -864,20 +866,24 @@ private:
         Pump(ctx);
     }
 
-    void SendStatusErrorResponse(const TActorId& sender, ui64 cookie, NKikimrProto::EReplyStatus status,
+    void SendStatusErrorResponse(const TStatusRequestItem& request, NKikimrProto::EReplyStatus status,
             const TActorContext& ctx) {
+        if (IsStaleQueueRequest(request.Target, VDiskId)) {
+            status = NKikimrProto::RACE;
+        }
         YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, func, status, VDiskId, cookie, marker",
             {"logPrefix", LogPrefix},
             {"func", __func__},
             {"status", status},
             {"VDiskId", VDiskId},
-            {"cookie", cookie},
+            {"cookie", request.Cookie},
             {"marker", "BSQ34"});
         auto response = std::make_unique<TEvBlobStorage::TEvVStatusResult>(status, VDiskId, false, false, false, 0);
-        ctx.Send(sender, response.release(), 0, cookie);
+        ctx.Send(request.Sender, response.release(), 0, request.Cookie);
     }
 
     struct TAssimilateRequest {
+        TVDiskID Target;
         TActorId Sender;
         ui64 Cookie;
         TInstant Deadline;
@@ -888,21 +894,30 @@ private:
     ui64 NextAssimilateRequestCookie = 1;
 
     void Handle(TEvBlobStorage::TEvVAssimilate::TPtr& ev, const TActorContext& ctx) {
+        TAssimilateRequest request{GetQueueRequestVDiskId(ev->Get()->Record), ev->Sender, ev->Cookie,
+            ctx.Now() + QueueWatchdogTimeout};
         if (IsReady()) {
             const ui64 id = NextAssimilateRequestCookie++;
             SendToVDisk(ctx, std::unique_ptr<IEventBase>(ev->Release().Release()), id, std::move(ev->TraceId));
-            AssimilateRequests.emplace(id, TAssimilateRequest{ev->Sender, ev->Cookie, ctx.Now() + QueueWatchdogTimeout});
+            AssimilateRequests.emplace(id, request);
         } else {
-            ctx.Send(ev->Sender, new TEvBlobStorage::TEvVAssimilateResult(NKikimrProto::NOTREADY, "no connection",
-                VDiskId), 0, ev->Cookie);
+            SendAssimilateErrorResponse(request, NKikimrProto::NOTREADY, "no connection", ctx);
         }
     }
 
-    void DrainAssimilate(NKikimrProto::EReplyStatus status, TString errorReason, const TActorContext& ctx) {
+    void DrainAssimilate(NKikimrProto::EReplyStatus status, const TString& errorReason, const TActorContext& ctx) {
         for (const auto& [id, request] : std::exchange(AssimilateRequests, {})) {
-            ctx.Send(request.Sender, new TEvBlobStorage::TEvVAssimilateResult(status, errorReason, VDiskId), 0,
-                request.Cookie);
+            SendAssimilateErrorResponse(request, status, errorReason, ctx);
         }
+    }
+
+    void SendAssimilateErrorResponse(const TAssimilateRequest& request, NKikimrProto::EReplyStatus status,
+            const TString& errorReason, const TActorContext& ctx) {
+        if (IsStaleQueueRequest(request.Target, VDiskId)) {
+            status = NKikimrProto::RACE;
+        }
+        ctx.Send(request.Sender, new TEvBlobStorage::TEvVAssimilateResult(status, errorReason, VDiskId), 0,
+            request.Cookie);
     }
 
     void ExpireAssimilateRequests(TInstant now, const TActorContext& ctx) {
@@ -911,8 +926,7 @@ private:
         while (!AssimilateRequests.empty() && AssimilateRequests.begin()->second.Deadline <= now) {
             const auto node = AssimilateRequests.extract(AssimilateRequests.begin());
             const TAssimilateRequest& request = node.mapped();
-            ctx.Send(request.Sender, new TEvBlobStorage::TEvVAssimilateResult(NKikimrProto::ERROR,
-                "assimilation request timed out", VDiskId), 0, request.Cookie);
+            SendAssimilateErrorResponse(request, NKikimrProto::ERROR, "assimilation request timed out", ctx);
         }
     }
 

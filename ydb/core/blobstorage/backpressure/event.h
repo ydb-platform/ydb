@@ -19,18 +19,24 @@ template<> struct TMatchingResultType<TEvBlobStorage::TEvVCollectGarbage> { usin
 template<> struct TMatchingResultType<TEvBlobStorage::TEvVGetBarrier> { using Type = TEvBlobStorage::TEvVGetBarrierResult; };
 template<typename T> using TMatchingResultTypeT = typename TMatchingResultType<T>::Type;
 
+template<typename TRecord>
+TVDiskID GetQueueRequestVDiskId(const TRecord& request) {
+    return request.HasVDiskID() ? VDiskIDFromVDiskID(request.GetVDiskID()) : TVDiskID::InvalidId;
+}
+
+inline bool IsStaleQueueRequest(const TVDiskID& target, const TVDiskID& current) {
+    return target.GroupGeneration < current.GroupGeneration && target.SameExceptGeneration(current);
+}
+
 template<typename TReply, typename TRecord>
 void MakeQueueError(TReply& reply, const TRecord& request, NKikimrProto::EReplyStatus status,
         const TString& errorReason, const TVDiskID* currentVDiskId) {
-    if (currentVDiskId && request.HasVDiskID()) {
-        TVDiskID target = VDiskIDFromVDiskID(request.GetVDiskID());
-        if (target.SameExceptGeneration(*currentVDiskId) && target.GroupGeneration < currentVDiskId->GroupGeneration) {
-            reply.MakeError(NKikimrProto::RACE, errorReason, request);
-            if constexpr (requires { reply.Record.MutableVDiskID(); }) {
-                VDiskIDFromVDiskID(*currentVDiskId, reply.Record.MutableVDiskID());
-            }
-            return;
+    if (currentVDiskId && IsStaleQueueRequest(GetQueueRequestVDiskId(request), *currentVDiskId)) {
+        reply.MakeError(NKikimrProto::RACE, errorReason, request);
+        if constexpr (requires { reply.Record.MutableVDiskID(); }) {
+            VDiskIDFromVDiskID(*currentVDiskId, reply.Record.MutableVDiskID());
         }
+        return;
     }
     reply.MakeError(status, errorReason, request);
 }

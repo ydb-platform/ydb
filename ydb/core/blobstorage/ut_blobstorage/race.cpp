@@ -265,7 +265,9 @@ void RunGroupReconfigurationRaceTest(TBlobStorageGroupType type) {
 }
 
 Y_UNIT_TEST_SUITE(GroupReconfigurationRace) {
-    Y_UNIT_TEST(InFlightPutWhenSecondRealmIsExcluded) {
+    enum class ECancelPut { Never, OnRace, AfterRestart };
+
+    void RunInFlightPutWhenSecondRealmIsExcluded(ECancelPut cancel) {
         using TState = NKikimrBlobStorage::TGroupState;
         using TRole = NKikimrBlobStorage::TDataCenterState;
         TFeatureFlags flags;
@@ -294,7 +296,10 @@ Y_UNIT_TEST_SUITE(GroupReconfigurationRace) {
         };
         configure(TState::DC_FAILURE_INV1, TRole::INCLUDED);
         env.Sim(TDuration::Seconds(30));
-        ui32 generation = env.GetGroupInfo(groupId)->GroupGeneration;
+        TIntrusivePtr<TBlobStorageGroupInfo> info = env.GetGroupInfo(groupId);
+        ui32 generation = info->GroupGeneration;
+        TMessageRelevanceOwner owner = std::make_shared<TMessageRelevanceTracker>();
+        bool sawRestart = false;
         TString data(1024, 'x');
         TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
         TActorId edge = env.Runtime->AllocateEdgeActor(1);
@@ -305,6 +310,23 @@ Y_UNIT_TEST_SUITE(GroupReconfigurationRace) {
         std::unique_ptr<IEventHandle> result;
         bool delayReplies = true;
         env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvBunchOfEvents) {
+                for (const auto& item : ev->Get<TEvBlobStorage::TEvBunchOfEvents>()->Bunch) {
+                    if (item->GetTypeRewrite() == TEvBlobStorage::EvPut && item->Get<TEvBlobStorage::TEvPut>()->Id == id) {
+                        sawRestart = true;
+                        if (cancel == ECancelPut::AfterRestart) {
+                            owner.reset();
+                        }
+                    }
+                }
+            }
+            if (!owner && ev->GetTypeRewrite() == TEvBlobStorage::EvVPut) {
+                const NKikimrBlobStorage::TEvVPut& record = ev->Get<TEvBlobStorage::TEvVPut>()->Record;
+                if (LogoBlobIDFromLogoBlobID(record.GetBlobID()).FullID() == id) {
+                    TVDiskID target = VDiskIDFromVDiskID(record.GetVDiskID());
+                    UNIT_ASSERT_C(ev->Recipient != info->GetActorId(target), "cancelled write reached VDisk");
+                }
+            }
             if (ev->GetTypeRewrite() == TEvBlobStorage::EvPutResult && ev->Recipient == edge) {
                 result = std::move(ev);
                 return false;
@@ -321,6 +343,9 @@ Y_UNIT_TEST_SUITE(GroupReconfigurationRace) {
                     if (queues.contains(ev->Sender) && r.GetStatus() == NKikimrProto::RACE) {
                         UNIT_ASSERT_VALUES_EQUAL(disk.GroupGeneration, generation + 1);
                         ++queueRaces;
+                        if (cancel == ECancelPut::OnRace) {
+                            owner.reset();
+                        }
                     }
                 }
             } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvVWindowChange && queues.contains(ev->Recipient)
@@ -332,8 +357,13 @@ Y_UNIT_TEST_SUITE(GroupReconfigurationRace) {
 
         // Keep the second realm's successful writes in flight at BSQueue while the old VDisks shut down.
         env.Runtime->WrapInActorContext(edge, [&] {
-            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max(),
-                NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticMinLatency));
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut({
+                .BlobId = id,
+                .Buffer = TRope(data),
+                .Deadline = TInstant::Max(),
+                .Tactic = TEvBlobStorage::TEvPut::TacticMinLatency,
+                .ExternalRelevanceWatcher = owner,
+            }));
         });
         env.Sim(TDuration::Seconds(1));
         UNIT_ASSERT(!held.empty());
@@ -350,11 +380,29 @@ Y_UNIT_TEST_SUITE(GroupReconfigurationRace) {
         TIntrusivePtr<TBlobStorageGroupInfo> current = env.GetGroupInfo(groupId);
         UNIT_ASSERT_VALUES_EQUAL(current->GroupGeneration, generation + 1);
         UNIT_ASSERT(current->GetMirror3dcState().State == TState::DC_SOLO_INV1);
-        env.PutBlob(groupId, TLogoBlobID(100500, 1, 2, 0, data.size(), 0), data);
         UNIT_ASSERT(result);
         const TEvBlobStorage::TEvPutResult* putResult = result->Get<TEvBlobStorage::TEvPutResult>();
-        UNIT_ASSERT_VALUES_EQUAL_C(putResult->Status, NKikimrProto::OK, putResult->ErrorReason);
         UNIT_ASSERT(queueRaces);
+        UNIT_ASSERT_VALUES_EQUAL(sawRestart, cancel != ECancelPut::OnRace);
+        if (cancel == ECancelPut::Never) {
+            UNIT_ASSERT_VALUES_EQUAL_C(putResult->Status, NKikimrProto::OK, putResult->ErrorReason);
+        } else {
+            UNIT_ASSERT(!owner);
+            UNIT_ASSERT_VALUES_EQUAL(putResult->Status, NKikimrProto::ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(putResult->ErrorReason, "external cancellation");
+        }
+    }
+
+    Y_UNIT_TEST(InFlightPutWhenSecondRealmIsExcluded) {
+        RunInFlightPutWhenSecondRealmIsExcluded(ECancelPut::Never);
+    }
+
+    Y_UNIT_TEST(CancelPutBeforeGenerationRestart) {
+        RunInFlightPutWhenSecondRealmIsExcluded(ECancelPut::OnRace);
+    }
+
+    Y_UNIT_TEST(CancelPutAfterGenerationRestart) {
+        RunInFlightPutWhenSecondRealmIsExcluded(ECancelPut::AfterRestart);
     }
 
     Y_UNIT_TEST(DisconnectedQueueRepliesRaceForStaleGeneration) {
@@ -384,6 +432,65 @@ Y_UNIT_TEST_SUITE(GroupReconfigurationRace) {
         TEvBlobStorage::TEvVPutResult::TPtr result = putThroughQueue(stale);
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::RACE);
         UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(result->Get()->Record.GetVDiskID()), disk);
+    }
+
+    template<typename TRequest, typename TResult>
+    void CheckControlRequestGeneration(NKikimrBlobStorage::EVDiskQueueId queueId, auto makeRequest) {
+        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+        });
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        TIntrusivePtr<TBlobStorageGroupInfo> info = env.GetGroupInfo(env.GetGroups().front());
+        TVDiskID disk = info->GetVDiskId(0);
+        TVDiskID next = disk;
+        ++next.GroupGeneration;
+        TActorId vdisk = info->GetActorId(0);
+        TActorId edge = env.Runtime->AllocateEdgeActor(vdisk.NodeId());
+        TActorId queue = env.CreateQueueActor(disk, queueId, 0, edge.NodeId());
+
+        // Leave the requests outstanding at the queue until the disk disconnects.
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            return !(ev->Sender == queue && ev->GetTypeRewrite() == TRequest::EventType);
+        };
+        auto send = [&](const TVDiskID& target, ui64 cookie) {
+            env.Runtime->Send(new IEventHandle(queue, edge, makeRequest(target), 0, cookie), edge.NodeId());
+        };
+        auto expect = [&](ui64 cookie, NKikimrProto::EReplyStatus status) {
+            typename TResult::TPtr reply = env.WaitForEdgeActorEvent<TResult>(edge, false,
+                env.Runtime->GetClock() + TDuration::Seconds(1));
+            UNIT_ASSERT(reply);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, cookie);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), status);
+            UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(reply->Get()->Record.GetVDiskID()), next);
+        };
+
+        send(disk, 1);
+        env.Runtime->Send(new IEventHandle(queue, edge, new TEvVGenerationChange(next,
+            MakeIntrusive<TBlobStorageGroupInfo>(info, next, vdisk))), edge.NodeId());
+        send(next, 2);
+        env.Runtime->Send(new IEventHandle(queue, vdisk, new TEvBlobStorage::TEvVWindowChange(
+            queueId, TEvBlobStorage::TEvVWindowChange::DropConnection)), edge.NodeId());
+        expect(1, NKikimrProto::RACE);
+        expect(2, NKikimrProto::VDISK_ERROR_STATE);
+        send(disk, 3);
+        expect(3, NKikimrProto::RACE);
+        send(next, 4);
+        expect(4, NKikimrProto::NOTREADY);
+        env.Runtime->FilterFunction = {};
+    }
+
+    Y_UNIT_TEST(StatusGenerationOnDisconnect) {
+        CheckControlRequestGeneration<TEvBlobStorage::TEvVStatus, TEvBlobStorage::TEvVStatusResult>(
+            NKikimrBlobStorage::GetFastRead, [](const TVDiskID& disk) { return new TEvBlobStorage::TEvVStatus(disk); });
+    }
+
+    Y_UNIT_TEST(AssimilateGenerationOnDisconnect) {
+        CheckControlRequestGeneration<TEvBlobStorage::TEvVAssimilate, TEvBlobStorage::TEvVAssimilateResult>(
+            NKikimrBlobStorage::GetAsyncRead, [](const TVDiskID& disk) {
+                return new TEvBlobStorage::TEvVAssimilate(disk, {}, {}, {}, false, false);
+            });
     }
 
     Y_UNIT_TEST(Test_block42) {

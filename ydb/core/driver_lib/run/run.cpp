@@ -1637,14 +1637,15 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->PersQueueGetReadSessionsInfoWorkerFactory = ModuleFactories ? ModuleFactories->PQReadSessionsInfoWorkerFactory.get() : nullptr;
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
     AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
-    AppData->SystemViewScanFactory = ModuleFactories ? ModuleFactories->SystemViewScanFactory.get() : nullptr;
-    if (!AppData->SystemViewScanFactory) {
-        // TODO: Remove this backward-compatible initialization once all applications
-        // explicitly configure their system-view scan factory.
-        std::shared_ptr<NSysView::ISystemViewScanFactory> factory(NSysView::CreateSystemViewScanFactory());
-        AppData->SystemViewScanFactory = factory.get();
-        AddGlobalObject(std::move(factory));
+    // TODO: Remove this backward-compatible initialization once all applications
+    // explicitly configure their system-view scan factory.
+    if (!ModuleFactories) {
+        ModuleFactories = std::make_shared<TModuleFactories>();
     }
+    if (!ModuleFactories->SystemViewScanFactory) {
+        ModuleFactories->SystemViewScanFactory.reset(NSysView::CreateSystemViewScanFactory());
+    }
+    AppData->SystemViewScanFactory = ModuleFactories->SystemViewScanFactory.get();
     AppData->ConfigSwissKnife = ModuleFactories ? ModuleFactories->ConfigSwissKnife.get() : nullptr;
 
     AppData->TransferWriterFactory = ModuleFactories && ModuleFactories->TransferWriterFactory

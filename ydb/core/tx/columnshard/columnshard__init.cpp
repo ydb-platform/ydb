@@ -12,6 +12,8 @@
 #include "tx_reader/abstract.h"
 #include "tx_reader/composite.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
@@ -297,10 +299,19 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
         {"tabletId", Self->TabletID()});
 
     const bool isFirstRun = txc.DB.GetScheme().IsEmpty();
-    NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
+    NIceDb::TNiceDb db(txc.DB);
+    db.Materialize<Schema>();
+
+    ui64 wasEnabled = 0;
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::DecimalNumericComparison, wasEnabled)) {
+        return false;
+    }
+
+    if (!wasEnabled && AppDataVerified().ColumnShardConfig.GetEnableDecimalNumericComparison()) {
+        Schema::SaveSpecialValue(db, Schema::EValueIds::DecimalNumericComparison, 1);
+    }
 
     if (!NYDBTest::TControllers::GetColumnShardController()->BuildLocalBaseModifier()) {
-        NIceDb::TNiceDb db(txc.DB);
         if (!Self->NormalizerController.InitControllerState(db)) {
             return false;
         }

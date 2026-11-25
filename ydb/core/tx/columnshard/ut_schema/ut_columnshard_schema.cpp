@@ -2,8 +2,10 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/events/configs_dispatcher.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -1358,6 +1360,45 @@ extern bool gAllowLogBatchingDefaultValue;
 }
 
 Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
+    Y_UNIT_TEST(DecimalNumericComparisonIsPersisted) {
+        auto csControllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        runtime.GetAppData().ColumnShardConfig.SetEnableDecimalNumericComparison(false);
+        Y_UNUSED(PrepareTablet(runtime, 1, testYdbSchema));
+        const auto sender = runtime.AllocateEdgeActor();
+
+        const auto checkMarker = [&](const std::optional<ui64> expected) {
+            const TString query = Sprintf(R"(
+                (
+                    (let key '('('Id (Uint32 '%u))))
+                    (let fields '('Digit))
+                    (return (AsList (SetResult 'Result (SelectRow 'Value key fields))))
+                )
+            )",
+                static_cast<ui32>(Schema::EValueIds::DecimalNumericComparison));
+            NKikimrMiniKQL::TResult result;
+            UNIT_ASSERT_VALUES_EQUAL(LocalQuery(runtime, TTestTxConfig::TxTablet0, query, result), NKikimrProto::OK);
+            const auto& row = result.GetValue().GetStruct(0).GetOptional();
+            UNIT_ASSERT_VALUES_EQUAL(row.HasOptional(), expected.has_value());
+            if (expected) {
+                const auto& digit = row.GetOptional().GetStruct(0);
+                UNIT_ASSERT(digit.HasOptional());
+                UNIT_ASSERT_VALUES_EQUAL(digit.GetOptional().GetUint64(), *expected);
+            }
+        };
+
+        checkMarker(std::nullopt);
+
+        runtime.GetAppData().ColumnShardConfig.SetEnableDecimalNumericComparison(true);
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        checkMarker(1);
+
+        runtime.GetAppData().ColumnShardConfig.SetEnableDecimalNumericComparison(false);
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        checkMarker(1);
+    }
+
     void CreateTable(bool reboots, bool generateInternalPathId, bool standalone) {
         ui64 tableId = 1;
 

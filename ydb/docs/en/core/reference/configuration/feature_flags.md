@@ -20,6 +20,7 @@ Change the `feature_flags` settings only if you are sure of the consequences. In
 | `enable_topic_autopartitioning_for_cdc`                  | [Auto-partitioning topics](../../concepts/cdc.md#topic-partitions) for row-oriented tables in CDC |
 | `enable_access_to_index_impl_tables`                     | Support for [followers (read replicas)](../../yql/reference/syntax/alter_table/indexes.md) for covered secondary indexes |
 | `enable_changefeeds_export`, `enable_changefeeds_import` | Support for changefeeds in backup and restore operations |
+| `enable_column_statistics` | [Column statistics](../../yql/reference/syntax/analyze.md) collection with `ANALYZE` for the [cost-based optimizer](../../concepts/query_execution/optimizer.md#statistics) |
 | `enable_view_export`                                     | Support for views in backup and restore operations |
 | `enable_export_auto_dropping`                            | Automatic cleanup of temporary tables and directories during export to S3 |
 | `enable_followers_stats`                                 | System views with information about [history of overloaded partitions](../../dev/system-views.md#top-overload-partitions) |

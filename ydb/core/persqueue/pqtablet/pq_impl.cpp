@@ -88,8 +88,28 @@ static bool IsDirectReadCmd(const auto& cmd) {
     return cmd.GetDirectReadId() != 0;
 }
 
+namespace {
 
-TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrapConfig& bootstrapCfg, const NKikimrPQ::TPartitions& partitionsData, const TPartitionGraph& graph, ui32 partitionId) {
+void KeepKeyRangeMessageGroups(TEvPQ::TMessageGroups& messageGroups, const NKikimrPQ::TPQTabletConfig& tabletConfig, ui32 partitionId) {
+    const auto* partition = GetPartitionConfig(tabletConfig, partitionId);
+    AFL_ENSURE(partition)("partition_id", partitionId);
+
+    const bool createdByEarlierConfig = partition->GetCreateVersion() && partition->GetCreateVersion() < tabletConfig.GetVersion();
+    if (createdByEarlierConfig) {
+        messageGroups.clear();
+        return;
+    }
+
+    const auto keyTypes = MakePartitionKeyTypes(tabletConfig);
+    const auto keyRange = TPartitionKeyRange::Parse(partition->GetKeyRange());
+    EraseNodesIf(messageGroups, [&](const auto& group) {
+        return !Intersects(group.second.KeyRange, keyRange, keyTypes);
+    });
+}
+
+} // anonymous
+
+TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrapConfig& bootstrapCfg, const NKikimrPQ::TPartitions& partitionsData, const NKikimrPQ::TPQTabletConfig& tabletConfig, const TPartitionGraph& graph, ui32 partitionId) {
     TEvPQ::TMessageGroupsPtr explicitMessageGroups = std::make_shared<TEvPQ::TMessageGroups>();
 
     for (const auto& mg : bootstrapCfg.GetExplicitMessageGroups()) {
@@ -109,9 +129,16 @@ TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrap
                 for (const auto& g : p.GetMessageGroup()) {
                     auto& group = (*explicitMessageGroups)[g.GetId()];
                     group.SeqNo = std::max(group.SeqNo, g.GetSeqNo());
+                    if (g.HasKeyRange()) {
+                        group.KeyRange = TPartitionKeyRange::Parse(g.GetKeyRange());
+                    }
                 }
             }
         }
+    }
+
+    if (tabletConfig.GetSplitByPartitionKey()) {
+        KeepKeyRangeMessageGroups(*explicitMessageGroups, tabletConfig, partitionId);
     }
 
     return explicitMessageGroups;
@@ -4582,7 +4609,7 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
 
     auto graph = MakePartitionGraph(tx.TabletConfig);
     for (const ui32 partitionId : tx.Partitions) {
-        auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData, graph, partitionId);
+        auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData, tx.TabletConfig, graph, partitionId);
         auto event = std::make_unique<TEvPQ::TEvTxCommit>(tx.Step, tx.TxId, explicitMessageGroups);
 
         event->SerializedTx = serializedTx;

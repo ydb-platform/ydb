@@ -23,6 +23,8 @@ PEERDIR(
     ydb/core/grpc_services/base
     ydb/core/grpc_services/counters
     ydb/core/grpc_streaming
+    # UDF RPC implementations declared in core/grpc_services/service_udf.h.
+    ydb/core/udf_api
     ydb/library/actors/core
     ydb/library/grpc/server
     ydb/public/api/grpc

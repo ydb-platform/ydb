@@ -3,6 +3,7 @@ import time
 from contextlib import ExitStack
 from itertools import cycle
 
+import pytest
 import ydb
 
 from ydb.tests.fq.streaming_common.common import StreamingTestBase, YdbClient, counter_nodes, get_sensors
@@ -93,10 +94,12 @@ class TestLogbroker(StreamingTestBase):
         kikimr.ydb_client.create_external_data_source("logbroker", logbroker_federation.discovery_endpoint, database)
         cleanup.callback(kikimr.ydb_client.query, "DROP EXTERNAL DATA SOURCE `logbroker`;")
 
-    def start_query(self, kikimr, cleanup):
+    def start_query(self, kikimr, cleanup, use_partition_balancing=False):
         logging.info("Starting streaming query %s", self.query_name)
+        pragma = 'PRAGMA pq.MaxPartitionReadSkew = "10s";' if use_partition_balancing else ""
         kikimr.ydb_client.query(f"""
             CREATE STREAMING QUERY `{self.query_name}` AS DO BEGIN
+                {pragma}
                 INSERT INTO `logbroker`.`{self.output_topic}`
                 SELECT Data FROM `logbroker`.`{self.input_topic}`;
             END DO;
@@ -162,11 +165,23 @@ class TestLogbroker(StreamingTestBase):
             ), f"Expected AvailableClusters={expected_count}; per-node values: {values}"
             time.sleep(1)
 
-    def test_stop_cluster(self, kikimr, logbroker_federation):
+    @pytest.mark.parametrize(
+        "logbroker_federation",
+        [("cluster_a",), ("cluster_a", "cluster_b"), ("cluster_a", "cluster_b", "cluster_c")],
+        ids=["one_cluster", "two_clusters", "three_clusters"],
+        indirect=["logbroker_federation"],
+    )
+    @pytest.mark.parametrize(
+        "use_partition_balancing", [False, True], ids=["no_partition_balancing", "partition_balancing"]
+    )
+    @pytest.mark.parametrize("kikimr", [{"pq_read_actor_retry_policy_max_time_ms": "5000"}], indirect=["kikimr"])
+    def test_stop_cluster(self, kikimr, logbroker_federation, use_partition_balancing):
         with ExitStack() as cleanup:
-            self.init(kikimr, logbroker_federation, cleanup, query_name="stop_cluster")
-            self.start_query(kikimr, cleanup)
-            self.wait_available_clusters(kikimr, 3)
+            cluster_names = list(logbroker_federation.ydb_cluster_endpoints)
+            mode = "balanced" if use_partition_balancing else "unbalanced"
+            self.init(kikimr, logbroker_federation, cleanup, query_name=f"stop_cluster_{len(cluster_names)}_{mode}")
+            self.start_query(kikimr, cleanup, use_partition_balancing=use_partition_balancing)
+            self.wait_available_clusters(kikimr, len(cluster_names))
 
             initial_state = self.get_query_state(kikimr, self.query_name)
             assert initial_state.Status == "RUNNING", initial_state
@@ -175,8 +190,6 @@ class TestLogbroker(StreamingTestBase):
                 "Query %s initial status=%s, RetryCount=%s", self.query_name, initial_state.Status, retry_count
             )
 
-            cluster_names = list(logbroker_federation.ydb_cluster_endpoints)
-            assert len(cluster_names) == 3, cluster_names
             expected_messages = []
             actual_messages = []
             read_counts = {name: 0 for name in cluster_names}
@@ -206,54 +219,53 @@ class TestLogbroker(StreamingTestBase):
                 assert state.Status == "RUNNING", state
                 assert state.RetryCount == retry_count, state
 
-            cluster2 = cluster_names[-2]
-            cleanup.callback(logbroker_federation.start_cluster, cluster2)
-            logging.info("Stopping cluster %s", cluster2)
-            logbroker_federation.stop_cluster(cluster2)
-            logging.info(
-                "Cluster %s stopped; checking that query %s stays running without retries for 20 seconds",
-                cluster2,
-                self.query_name,
-            )
+            check_read_write(cluster_names, "all clusters available")
+            available_clusters = list(cluster_names)
+            for index, cluster_name in enumerate(reversed(cluster_names[1:])):
+                cleanup.callback(logbroker_federation.start_cluster, cluster_name)
+                logging.info("Stopping cluster %s", cluster_name)
+                logbroker_federation.stop_cluster(cluster_name)
+                available_clusters.remove(cluster_name)
 
-            deadline = time.monotonic() + 20
-            while True:
-                state = self.get_query_state(kikimr, self.query_name)
-                assert state.RetryCount == retry_count, (
-                    f"Query retried after stopping {cluster2}: "
-                    f"RetryCount {retry_count} -> {state.RetryCount}; issues: {state.Issues}"
-                )
-                assert state.Status == "RUNNING", (
-                    f"Query stopped running after stopping {cluster2}: "
-                    f"status: {state.Status}; issues: {state.Issues}"
-                )
-                if time.monotonic() >= deadline:
-                    break
-                time.sleep(1)
+                if index == 0:
+                    logging.info(
+                        "Cluster %s stopped; checking that query %s stays running without retries for 20 seconds",
+                        cluster_name,
+                        self.query_name,
+                    )
+                    deadline = time.monotonic() + 20
+                    while True:
+                        state = self.get_query_state(kikimr, self.query_name)
+                        assert state.RetryCount == retry_count, (
+                            f"Query retried after stopping {cluster_name}: "
+                            f"RetryCount {retry_count} -> {state.RetryCount}; issues: {state.Issues}"
+                        )
+                        assert state.Status == "RUNNING", (
+                            f"Query stopped running after stopping {cluster_name}: "
+                            f"status: {state.Status}; issues: {state.Issues}"
+                        )
+                        if time.monotonic() >= deadline:
+                            break
+                        time.sleep(1)
 
-            self.wait_available_clusters(kikimr, 2)
-            check_read_write([name for name in cluster_names if name != cluster2], "cluster stopped")
-            logging.info("Starting cluster %s", cluster2)
-            logbroker_federation.start_cluster(cluster2)
-            logging.info("Cluster %s started; waiting for availability to recover", cluster2)
-            self.wait_available_clusters(kikimr, 3)
-            check_read_write(cluster_names, "cluster restored")
-            logging.info("Stopping cluster %s again", cluster2)
-            logbroker_federation.stop_cluster(cluster2)
-            logging.info("Cluster %s stopped", cluster2)
+                self.wait_available_clusters(kikimr, len(available_clusters))
+                check_read_write(available_clusters, f"{cluster_name} stopped")
 
-            cluster3 = cluster_names[-1]
-            cleanup.callback(logbroker_federation.start_cluster, cluster3)
-            logging.info("Stopping cluster %s while cluster %s is already stopped", cluster3, cluster2)
-            logbroker_federation.stop_cluster(cluster3)
-            self.wait_available_clusters(kikimr, 1)
-            cluster1 = cluster_names[0]
-            check_read_write([cluster1], "two clusters stopped")
+                if index == 0:
+                    logging.info("Starting cluster %s", cluster_name)
+                    logbroker_federation.start_cluster(cluster_name)
+                    self.wait_available_clusters(kikimr, len(cluster_names))
+                    check_read_write(cluster_names, f"{cluster_name} restored")
+                    logging.info("Stopping cluster %s again", cluster_name)
+                    logbroker_federation.stop_cluster(cluster_name)
+                    self.wait_available_clusters(kikimr, len(available_clusters))
+                    check_read_write(available_clusters, f"{cluster_name} stopped again")
 
-            cleanup.callback(logbroker_federation.start_cluster, cluster1)
-            logging.info("Stopping last available cluster %s", cluster1)
-            logbroker_federation.stop_cluster(cluster1)
-            logging.info("All clusters stopped; waiting for query %s to retry", self.query_name)
+            last_cluster = available_clusters[0]
+            cleanup.callback(logbroker_federation.start_cluster, last_cluster)
+            logging.info("Stopping last available cluster %s", last_cluster)
+            logbroker_federation.stop_cluster(last_cluster)
+            logging.info("All %s clusters stopped; waiting for query %s to retry", len(cluster_names), self.query_name)
 
             deadline = time.monotonic() + 120
             while True:
@@ -266,6 +278,7 @@ class TestLogbroker(StreamingTestBase):
                     state.Issues,
                 )
                 if state.RetryCount > retry_count:
+                    assert "clusters are unavailable simultaneously" in str(state.Issues), state
                     logging.info(
                         "Query %s retried: RetryCount %s -> %s; issues=%s",
                         self.query_name,
@@ -275,7 +288,7 @@ class TestLogbroker(StreamingTestBase):
                     )
                     break
                 assert time.monotonic() < deadline, (
-                    "Query did not retry after stopping all three clusters: "
+                    f"Query did not retry after stopping all {len(cluster_names)} clusters: "
                     f"RetryCount {retry_count} -> {state.RetryCount}; "
                     f"status: {state.Status}; issues: {state.Issues}"
                 )

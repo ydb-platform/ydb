@@ -282,7 +282,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(NPq::NProto::
             auto [session, sessionControl] = CreateCompositeTopicReadSession(ctx, client,
                 { .TxId = txId, .TaskId = taskId, .Cluster = name, .AmountPartitionsCount = totalPartitions, .InputIndex = inputIndex,
                     .Counters = taskCounters,
-                    .BaseSettings = read,
+                    .BaseSettings = readSettings,
                     .IdleTimeout = NProtoInterop::CastFromProto(settings.GetPartitionsBalancingIdleTimeout()),
                     .MaxPartitionReadSkew = skew,
                     .AggregatorActor = infoAggregator });

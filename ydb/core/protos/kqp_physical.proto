@@ -480,6 +480,7 @@ message TKqpFullTextSource {
                 ENDS_WITH = 3;
                 CONTAINS = 4;
                 ILIKE = 5;
+                REGEX = 6;
             }
             optional TKqpPhyValue Pattern = 1;
             optional bytes Escape = 2;

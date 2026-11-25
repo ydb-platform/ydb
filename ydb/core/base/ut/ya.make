@@ -4,6 +4,7 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 PEERDIR(
+    contrib/libs/re2
     library/cpp/getopt
     library/cpp/svnversion
     ydb/core/scheme

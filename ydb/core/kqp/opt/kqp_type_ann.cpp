@@ -2343,7 +2343,7 @@ TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) 
         }
         const auto mode = patternMode->Content();
         if (mode != "LIKE" && mode != "ILIKE" && mode != "EXACT" && mode != "STARTS_WITH"
-            && mode != "ENDS_WITH" && mode != "CONTAINS")
+            && mode != "ENDS_WITH" && mode != "CONTAINS" && mode != "REGEX")
         {
             ctx.AddError(TIssue(ctx.GetPosition(patternMode->Pos()), "Unknown string pattern mode"));
             return TStatus::Error;

@@ -27,10 +27,20 @@ struct TLikeExpression {
 // NOT and OR are not traversed and supply no hint.
 std::optional<TLikeExpression> TryParseLikeExpression(const NYql::TExprNode::TPtr& predicate);
 
+struct TRegexExpression {
+    NYql::TExprNode::TPtr Column;
+    NYql::TExprNode::TPtr Pattern;
+    bool ValidatesUtf8;
+};
+
+// SQL REGEXP/RLIKE and MATCH use Re2.Grep and Re2.Match with default options.
+std::optional<TRegexExpression> TryParseRegexExpression(const NYql::TExprNode::TPtr& predicate);
+
 bool ExtractLiteral(const NYql::TExprNode::TPtr& node, TString& value);
 // Accept only identity/string conversions of a table member, including UDF AutoMap.
 // SafeCast/ToString accept only String/Utf8 inputs; other types must not receive string index constraints.
-NYql::TExprNode::TPtr MemberColumn(NYql::TExprNode::TPtr node);
+// Set validatesUtf8 when a cast on the matched value discards malformed bytes.
+NYql::TExprNode::TPtr MemberColumn(NYql::TExprNode::TPtr node, bool* validatesUtf8 = nullptr);
 
 struct TFulltextPatternQuery {
     NYql::TExprNode::TPtr Pattern;

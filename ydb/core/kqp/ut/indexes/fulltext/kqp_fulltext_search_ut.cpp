@@ -3311,6 +3311,222 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchShorterThanMinNgram, RELEVANCE, UTF8) {
     }
 }
 
+Y_UNIT_TEST_TWIN(RegexNgramSearch, Compact) {
+    NKikimrConfig::TFeatureFlags flags;
+    flags.SetEnableFulltextIndex(true);
+    flags.SetEnableFulltextIndexPrefix(true);
+    flags.SetEnableCompactFulltextIndex(Compact);
+    flags.SetEnableFulltextRegex(true);
+    auto kikimr = Kikimr(std::move(flags));
+    auto db = kikimr.GetQueryClient();
+    const auto create = db.ExecuteQuery(R"(
+        CREATE TABLE `/Root/Texts` (Key Uint64, Text Utf8, Data Utf8, Severity Int32, PRIMARY KEY (Key));
+    )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+    const auto seed = db.ExecuteQuery(R"(
+        UPSERT INTO `/Root/Texts` (Key, Text, Data, Severity) VALUES
+            (1, "tim ime meo eou out", "a", 1), (2, "timeout", "b", 0), (3, "refused", "a", 1),
+            (4, "timeout/refused", "b", 1), (5, "x socket", "a", 0), (6, NULL, "a", 0),
+            (7, "tim out ref sed", "a", 0), (8, "éclair", "a", 0);
+    )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(seed.IsSuccess(), seed.GetIssues().ToString());
+    AddIndexNGram(db);
+
+    const auto execute = [&](TStringBuf view, TStringBuf predicate, const std::string& pattern, bool limit = false) {
+        const auto sql = TStringBuilder() << "DECLARE $p AS String; SELECT Key FROM `/Root/Texts` VIEW "
+            << view << " WHERE " << predicate << " ORDER BY Key" << (limit ? " LIMIT 1;" : ";");
+        const auto params = TParamsBuilder().AddParam("$p").String(pattern).Build().Build();
+        return db.ExecuteQuery(sql, NQuery::TTxControl::NoTx(), params,
+            NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Basic)).ExtractValueSync();
+    };
+    const TString postingTable = TStringBuilder() << "/Root/Texts/fulltext_idx/" << NTableIndex::ImplTable;
+    for (const auto predicate : {"Text REGEXP $p", "Text RLIKE $p", "Text MATCH $p",
+                                 "FulltextMatch(Text, $p, 'Regex' AS Mode)"}) {
+        const char* primary = TStringBuf(predicate) == "Text MATCH $p" ? "Text MATCH $p" : "Text REGEXP $p";
+        for (const std::string& pattern : {"timeout|refused", "timeout|x", "(timeout|x).*socket", "absent|missing",
+                                           "^timeout$", "écl", "(?i)TIMEOUT", "\\xA9clair", "", "[", "timeout|refused"}) {
+            const auto result = execute("fulltext_idx", predicate, pattern);
+            const auto expected = execute("PRIMARY KEY", primary, pattern);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expected.GetStatus(), result.GetIssues().ToString());
+            if (pattern == "[" && !expected.IsSuccess()) {
+                continue;
+            }
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(FormatResultSetYson(expected.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(0)), TString(pattern));
+            if (pattern == "timeout|refused") {
+                // The gram collision at key 1 is checked, and the overlap at key 4 is read once.
+                AssertTableStats(result, "/Root/Texts", {.ExpectedReads = 4});
+            } else if (pattern == "timeout|x") {
+                UNIT_ASSERT(TProtoAccessor::GetProto(*result.GetStats()).compilation().from_cache());
+                AssertTableStats(result, "/Root/Texts", {.ExpectedReads = 8});
+                AssertTableStats(result, postingTable, {.ExpectedReads = 0});
+            } else if (pattern == "(?i)TIMEOUT") {
+                AssertTableStats(result, "/Root/Texts", {.ExpectedReads = 3});
+            } else if (pattern == "(timeout|x).*socket" || pattern == "\\xA9clair") {
+                AssertTableStats(result, "/Root/Texts", {.ExpectedReads = 1});
+            } else if (pattern == "absent|missing") {
+                AssertTableStats(result, "/Root/Texts", {.ExpectedReads = 0});
+            }
+        }
+        const auto first = execute("fulltext_idx", predicate, "timeout|refused", true);
+        UNIT_ASSERT_C(first.IsSuccess(), first.GetIssues().ToString());
+        CompareYson("[[[2u]]]", FormatResultSetYson(first.GetResultSet(0)));
+    }
+
+    const auto invalid = execute("fulltext_idx", "FulltextMatch(Text, $p, 'Regex' AS Mode, 'Or' AS DefaultOperator)", "timeout");
+    UNIT_ASSERT(!invalid.IsSuccess());
+    UNIT_ASSERT_STRING_CONTAINS(invalid.GetIssues().ToString(), "Regex mode accepts no other named options");
+
+    for (const auto predicate : {"Text REGEXP $p AND Severity > 0", "Text LIKE '%refused%' AND Severity > 0"}) {
+        const auto positive = execute("fulltext_idx", predicate, "timeout|refused");
+        UNIT_ASSERT_C(positive.IsSuccess(), positive.GetIssues().ToString());
+        CompareYson("[[[3u]];[[4u]]]", FormatResultSetYson(positive.GetResultSet(0)));
+    }
+
+    const auto unwrap = "Unwrap(Text, 'missing text') REGEXP $p";
+    const auto primary = execute("PRIMARY KEY", unwrap, "timeout");
+    UNIT_ASSERT(!primary.IsSuccess());
+    for (const auto predicate : {unwrap, "FulltextMatch(Unwrap(Text, 'missing text'), $p, 'Regex' AS Mode)"}) {
+        const auto result = execute("fulltext_idx", predicate, "timeout");
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), primary.GetStatus(), result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "missing text");
+    }
+
+    const auto both = execute("fulltext_idx", "Text REGEXP $p AND FulltextMatch(Text, 'socket|refused', 'Regex' AS Mode)",
+        "timeout|refused");
+    UNIT_ASSERT_C(both.IsSuccess(), both.GetIssues().ToString());
+    CompareYson("[[[3u]];[[4u]]]", FormatResultSetYson(both.GetResultSet(0)));
+    AssertTableStats(both, "/Root/Texts", {.ExpectedReads = 2});
+
+    const auto add = db.ExecuteQuery(R"(
+        ALTER TABLE `/Root/Texts` ADD INDEX by_data GLOBAL USING fulltext_plain ON (Data, Text)
+        WITH (tokenizer=whitespace, use_filter_ngram=true, filter_ngram_min_length=3, filter_ngram_max_length=3);
+    )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(add.IsSuccess(), add.GetIssues().ToString());
+    const auto prefixed = execute("by_data", "Data = 'b' AND Text REGEXP $p", "timeout|refused");
+    UNIT_ASSERT_C(prefixed.IsSuccess(), prefixed.GetIssues().ToString());
+    CompareYson("[[[2u]];[[4u]]]", FormatResultSetYson(prefixed.GetResultSet(0)));
+    AssertTableStats(prefixed, "/Root/Texts", {.ExpectedReads = 2});
+}
+
+Y_UNIT_TEST_TWIN(RegexModeValidation, Enabled) {
+    NKikimrConfig::TFeatureFlags flags;
+    flags.SetEnableFulltextIndex(true);
+    flags.SetEnableCompactFulltextIndex(false);
+    flags.SetEnableFulltextRegex(Enabled);
+    auto kikimr = Kikimr(std::move(flags));
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db, true);
+    UpsertSomeTexts(db);
+    AddIndexNGram(db, 3, 3, true, true);
+
+    const auto execute = [&](TStringBuf predicate) {
+        const auto sql = TStringBuilder() << "DECLARE $p AS Utf8; SELECT Key FROM `/Root/Texts` VIEW fulltext_idx WHERE "
+            << predicate;
+        const auto params = TParamsBuilder().AddParam("$p").Utf8(" foxes").Build().Build();
+        return db.ExecuteQuery(sql, NQuery::TTxControl::NoTx(), params,
+            NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Basic)).ExtractValueSync();
+    };
+    const auto reject = [&](TStringBuf predicate, const char* issue) {
+        const auto result = execute(predicate);
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), issue);
+    };
+    const auto match = "FulltextMatch(Text, $p, 'Regex' AS Mode)";
+    if (!Enabled) {
+        reject(match, "Regex mode is disabled");
+        reject("Text REGEXP $p", "Unsupported index access");
+        return;
+    }
+
+    // The leading space guarantees a token boundary for the edge n-gram index.
+    const auto result = execute("Text REGEXP $p");
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    CompareYson("[[[200u]]]", FormatResultSetYson(result.GetResultSet(0)));
+    AssertTableStats(result, "/Root/Texts", {.ExpectedReads = 1});
+    reject("FulltextScore(Text, $p, 'Regex' AS Mode) > 0", "FulltextScore does not support Regex mode");
+
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    const auto explain = session.ExplainDataQuery(
+        "SELECT Key FROM `/Root/Texts` VIEW fulltext_idx WHERE Text REGEXP ' foxes| dogs';").ExtractValueSync();
+    UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(explain.GetPlan(), &plan, true);
+    const auto read = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
+    UNIT_ASSERT_VALUES_EQUAL(read["SearchTerms"].GetStringSafe(), "dog, fox");
+    const auto& alternatives = read["RegexPostingFilters"][0]["AnyOf"].GetArraySafe();
+    UNIT_ASSERT_VALUES_EQUAL(alternatives.size(), 2);
+    UNIT_ASSERT(alternatives[0] != alternatives[1]);
+    for (const auto& term : alternatives) {
+        UNIT_ASSERT(term.GetStringSafe() == "dog" || term.GetStringSafe() == "fox");
+    }
+
+    DropIndex(db);
+    AddIndex(db);
+    reject(match, "requires an n-gram index");
+    reject("Text REGEXP $p", "Regex index search requires an n-gram index");
+    const auto residual = execute("FulltextMatch(Text, 'love') AND Text REGEXP $p");
+    UNIT_ASSERT_C(residual.IsSuccess(), residual.GetIssues().ToString());
+    CompareYson("[[[200u]]]", FormatResultSetYson(residual.GetResultSet(0)));
+}
+
+Y_UNIT_TEST(RegexNgramBinaryString) {
+    NKikimrConfig::TFeatureFlags flags;
+    flags.SetEnableFulltextIndex(true);
+    flags.SetEnableCompactFulltextIndex(false);
+    flags.SetEnableFulltextRegex(true);
+    auto kikimr = Kikimr(std::move(flags));
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    const auto insert = [&](ui64 key, const char* text) {
+        const auto params = TParamsBuilder().AddParam("$key").Uint64(key).Build()
+            .AddParam("$text").String(text).Build().Build();
+        const auto result = db.ExecuteQuery("DECLARE $key AS Uint64; DECLARE $text AS String; "
+            "UPSERT INTO `/Root/Texts` (Key, Text) VALUES ($key, $text);",
+            NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    };
+    insert(1, "timeout\xff");
+    AddIndexNGram(db);
+    insert(2, "timeout\xff");
+    insert(3, "timeout");
+    const auto execute = [&](TStringBuf predicate, TStringBuf bindings = {}) {
+        const auto sql = TStringBuilder() << "DECLARE $p AS String; " << bindings << " SELECT Key FROM `/Root/Texts` VIEW fulltext_idx WHERE "
+            << predicate << " ORDER BY Key";
+        const auto params = TParamsBuilder().AddParam("$p").String("timeout|refused").Build().Build();
+        return db.ExecuteQuery(sql, NQuery::TTxControl::NoTx(), params,
+            NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Basic)).ExtractValueSync();
+    };
+    // A cast on the pattern or on an unused lambda argument leaves the matched bytes untouched.
+    for (const auto& raw : {execute("Text REGEXP Unwrap(CAST($p AS Utf8))"),
+            execute("$matchRaw(Text)", "$matchRaw = ($raw) -> (Coalesce(YQL::Map(Just(CAST($raw AS Utf8)), "
+                "($unused) -> ($raw REGEXP $p)), false));")}) {
+        UNIT_ASSERT_C(raw.IsSuccess(), raw.GetIssues().ToString());
+        CompareYson("[[[1u]];[[2u]];[[3u]]]", FormatResultSetYson(raw.GetResultSet(0)));
+    }
+
+    for (const auto predicate : {"CAST(Text AS Utf8) REGEXP 'timeout'",
+            "FulltextMatch(CAST(Text AS Utf8), 'timeout', 'Regex' AS Mode)"}) {
+        const auto cast = execute(predicate);
+        UNIT_ASSERT_C(cast.IsSuccess(), cast.GetIssues().ToString());
+        CompareYson("[[[3u]]]", FormatResultSetYson(cast.GetResultSet(0)));
+        AssertTableStats(cast, "/Root/Texts", {.ExpectedReads = 1});
+    }
+    const auto unwrap = execute("Unwrap(CAST(Text AS Utf8), 'invalid text') REGEXP 'timeout'");
+    UNIT_ASSERT(!unwrap.IsSuccess());
+    UNIT_ASSERT_STRING_CONTAINS(unwrap.GetIssues().ToString(), "invalid text");
+
+    const auto explain = db.ExecuteQuery(R"(
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx WHERE Text REGEXP "timeout";
+    )", NQuery::TTxControl::NoTx(), NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+    UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+    UNIT_ASSERT(explain.GetStats() && explain.GetStats()->GetPlan());
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(*explain.GetStats()->GetPlan(), &plan, true);
+    UNIT_ASSERT(FindPlanNodeByKv(plan, "IndexSelectionInfo",
+        "fulltext_idx: fallback because String values can contain invalid UTF-8 without index postings").IsDefined());
+}
+
 Y_UNIT_TEST(NgramScanFallback) {
     auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
@@ -3448,6 +3664,14 @@ Y_UNIT_TEST(NgramScanFallback) {
         UNIT_ASSERT_VALUES_EQUAL_C(limited.GetStatus(), EStatus::SUCCESS, limited.GetIssues().ToString());
         CompareYson("[[[600u]]]", FormatResultSetYson(limited.GetResultSet(0)));
         DropIndex(db);
+    }
+
+    AddIndexNGram(db, 3, 3, false, false, false, "standard", {.Lowercase = false});
+    // Only the residual matcher can enforce the case of the single-letter fragment.
+    for (const std::string& pattern : {"%C%ats%", "%C%"}) {
+        const auto result = execute("fulltext_idx", wildcard, pattern);
+        CompareYson("[[[100u]];[[300u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        AssertTableStats(result, "/Root/Texts", {.ExpectedReads = pattern == "%C%" ? 9u : 3u});
     }
 }
 

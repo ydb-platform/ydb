@@ -55,6 +55,7 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/fulltext_query.h>
+#include <ydb/core/base/fulltext_regex.h>
 #include <ydb/core/base/table_index.h>
 
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -1102,7 +1103,7 @@ public:
 template <typename TDocId>
 class TWordReadState : public TSimpleRefCount<TWordReadState<TDocId>> {
 public:
-    ui64 WordIndex;
+    const ui64 WordIndex;
     TString Word;
     bool PendingRead = false;
     TIntrusivePtr<TIndexTableImplReader> Reader;
@@ -1456,6 +1457,20 @@ public:
     }
 };
 
+using TRegexPostingExpr = NFulltext::TRegexCandidateExpr<size_t>;
+
+TRegexPostingExpr BindRegexTerms(const NFulltext::TRegexCandidates& expr, const auto& wordIndex) {
+    TRegexPostingExpr bound{.Op = expr.Op};
+    if (expr.Op == TRegexPostingExpr::EOp::Term) {
+        bound.Term = wordIndex(expr.Term);
+    }
+    bound.Children.reserve(expr.Children.size());
+    for (const auto& child : expr.Children) {
+        bound.Children.push_back(BindRegexTerms(child, wordIndex));
+    }
+    return bound;
+}
+
 /**
  * TDefaultMergeAlgorithm -- min-heap merge for OR / minimum_should_match.
  *
@@ -1487,13 +1502,35 @@ class TDefaultMergeAlgorithm : public IMergeAlgorithm<TDocId> {
     std::priority_queue<THeapEntry, TStackVec<THeapEntry, 64>, typename THeapEntry::TCompare> MergeQueue;
     std::vector<bool> RequiredTokens;
     size_t RequiredCount = 0;
+    TVector<TRegexPostingExpr> RegexPatterns;
+    std::vector<bool> Present;
+
+    // The heap groups all posting streams for a document before this check.
+    bool MatchesRegex(const std::vector<size_t>& matchedTokens) {
+        if (RegexPatterns.empty()) {
+            return true;
+        }
+        for (size_t index : matchedTokens) {
+            Present[index] = true;
+        }
+        const bool matches = AllOf(RegexPatterns, [&](const auto& pattern) {
+            return pattern.Matches([&](size_t index) { return Present[index]; });
+        });
+        for (size_t index : matchedTokens) {
+            Present[index] = false;
+        }
+        return matches;
+    }
 
 public:
     TDefaultMergeAlgorithm(std::vector<std::unique_ptr<TTokenStream<TDocId>>>&& streams,
-        std::vector<bool>&& requiredTokens, ui64 minShouldMatch,
+        std::vector<bool>&& requiredTokens, ui64 minShouldMatch, TVector<TRegexPostingExpr>&& regexPatterns,
         bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
         : TBase(std::move(streams), minShouldMatch, withFrequencies, keyColumnTypes)
-        , MergeQueue(DocIdCompare), RequiredTokens(std::move(requiredTokens))
+        , MergeQueue(DocIdCompare)
+        , RequiredTokens(std::move(requiredTokens))
+        , RegexPatterns(std::move(regexPatterns))
+        , Present(RegexPatterns.empty() ? 0 : TokenCount)
     {
         YQL_ENSURE(RequiredTokens.size() == Streams.size());
         for (bool& req: RequiredTokens) {
@@ -1549,7 +1586,7 @@ public:
                 MergeQueue.pop();
             }
 
-            if (matchedTokens.size() >= MinShouldMatch && matchedRequired >= RequiredCount) {
+            if (matchedTokens.size() >= MinShouldMatch && matchedRequired >= RequiredCount && MatchesRegex(matchedTokens)) {
                 auto match = MakeIntrusive<TDocumentInfo<TDocId>>(doc.DocId);
                 if (WithFrequencies) {
                     match->TokenFrequencies.resize(TokenCount, 0);
@@ -2560,6 +2597,7 @@ private:
     TReadsState ReadsState;                                // Tracks all in-flight reads
     TReadItemsQueue<TDocInfoPtr> DocsReadingQueue;         // Docs table + main table reads
     TVector<TWordStatePtr> Words;                          // Tokenized query terms
+    TVector<TRegexPostingExpr> RegexPatterns;
 
     // Merge algorithm.
     std::unique_ptr<TMergeAlgo> MergeAlgo;
@@ -2593,18 +2631,15 @@ private:
                 Words.emplace_back(MakeIntrusive<TWordState>(wordIndex++, token, IndexTableReader, PrefixCells));
             }
         } else {
-            THashMap<TStringBuf, TWordStatePtr> seen;
-            size_t wordIndex = 0;
+            THashMap<TString, size_t> wordIndices;
             auto addWord = [&](const TString& token, bool required) {
-                auto wordIt = seen.find(token);
-                if (wordIt != seen.end()) {
-                    wordIt->second->Required = wordIt->second->Required || required;
-                } else {
-                    auto word = MakeIntrusive<TWordState>(wordIndex++, token, IndexTableReader, PrefixCells);
-                    word->Required = required;
-                    seen[word->Word] = word;
-                    Words.emplace_back(std::move(word));
+                auto [it, inserted] = wordIndices.try_emplace(token, Words.size());
+                const size_t index = it->second;
+                if (inserted) {
+                    Words.emplace_back(MakeIntrusive<TWordState>(index, token, IndexTableReader, PrefixCells));
                 }
+                Words[index]->Required |= required;
+                return index;
             };
 
             const auto& queries = Settings->GetQuerySettings();
@@ -2616,12 +2651,28 @@ private:
             YQL_ENSURE(column.column() == queries.GetColumns(0).GetName());
             isNgram = column.analyzers().use_filter_ngram() || column.analyzers().use_filter_edge_ngram();
             for (const auto& query : queries.GetPatternQueries()) {
+                using TPatternQuery = NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TPatternQuery;
+                if (query.GetMode() == TPatternQuery::REGEX) {
+                    auto candidates = NFulltext::BuildRegexCandidates(query.GetPattern(), column.analyzers());
+                    using EOp = NFulltext::TRegexCandidates::EOp;
+                    // The extractor flattens conjunctions. Standalone terms and
+                    // simple conjunctions can use the existing intersection.
+                    const bool required = candidates.Op == EOp::Term || (candidates.Op == EOp::And &&
+                        AllOf(candidates.Children, [](const auto& child) { return child.Op == EOp::Term; }));
+                    if (required) {
+                        candidates.ForEachTerm([&](const TString& term) { addWord(term, true); });
+                    } else if (candidates.Op != EOp::Any) {
+                        RegexPatterns.push_back(BindRegexTerms(candidates, [&](const TString& term) {
+                            return addWord(term, false);
+                        }));
+                    }
+                    continue;
+                }
                 YQL_ENSURE(query.GetEscape().size() <= 1, "Expected an optional single-byte LIKE escape");
                 std::optional<char> escape;
                 if (!query.GetEscape().empty()) {
                     escape = query.GetEscape().front();
                 }
-                using TPatternQuery = NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TPatternQuery;
                 const auto terms = NFulltext::BuildStringMatchTerms(
                     query.GetPattern(), TPatternQuery::EMatchMode_Name(query.GetMode()), escape, column.analyzers());
                 for (const auto& term : terms) {
@@ -2858,19 +2909,7 @@ private:
         }
     }
 
-    // Configure merge algorithms and begin posting list reads.
-    //
-    // This is the central orchestration point called after stats reads complete.
-    // Steps:
-    //   1. Detect token frequency imbalance.  For n-gram queries, drop the
-    //      most frequent n-grams.
-    //   2. Compute MinimumShouldMatch from the query operator and settings.
-    //   3. Build TTokenStream instances and instantiate the appropriate
-    //      merge algorithm:
-    //        - AND -> TAndOptimizedMergeAlgorithm (leapfrog)
-    //        - OR  -> TDefaultMergeAlgorithm (min-heap)
-    //   4. Apply user-overridden BM25 K1/B factors.
-    //   5. Issue initial posting list reads for all tokens.
+    // Configure the merge and start one posting stream per word in index order.
     void StartWordReads() {
         TString explain;
         EDefaultOperator defaultOperator = DefaultOperatorFromString(Settings->GetDefaultOperator(), explain);
@@ -2884,21 +2923,20 @@ private:
         // applies to the remaining optional terms. Required terms drive the read as
         // a strict AND; optional terms are verified per candidate (threshold).
         // When every term is required it degenerates to a strict AND.
-        size_t requiredCount = 0;
-        for (size_t i = 0; i < Words.size(); ++i) {
-            Words[i]->WordIndex = i;
-            if (Words[i]->Required) {
-                ++requiredCount;
-            }
-        }
+        const size_t requiredCount = CountIf(Words, [](const auto& word) { return word->Required; });
 
         // minimum_should_match counts only the optional (non-required) terms.
         const size_t optionalCount = Words.size() - requiredCount;
-        ui32 minimumShouldMatch = requiredCount + MinimumShouldMatchFromString(optionalCount, defaultOperator, Settings->GetMinimumShouldMatch(), explain);
+        const ui32 optionalMinimum = MinimumShouldMatchFromString(optionalCount, defaultOperator,
+            Settings->GetMinimumShouldMatch(), explain);
         if (!explain.empty()) {
             RuntimeError(explain, NYql::NDqProto::StatusIds::BAD_REQUEST);
             return;
         }
+
+        // Branch-local grams are checked by the regex expression. Only grams
+        // required by another conjunct contribute to the global threshold.
+        const ui32 minimumShouldMatch = requiredCount + (RegexPatterns.empty() ? optionalMinimum : 0);
 
         QueryCtx = MakeIntrusive<TQueryCtx>(
             Words.size(), SumDocLength, DocCount, defaultOperator, minimumShouldMatch, ResultCellIndices, UseRowIdAsDocId);
@@ -2911,7 +2949,7 @@ private:
             required.push_back(wordInfo->Required);
         }
 
-        if (defaultOperator == EDefaultOperator::And || requiredCount >= Words.size()) {
+        if (requiredCount == Words.size() || (defaultOperator == EDefaultOperator::And && RegexPatterns.empty())) {
             MergeAlgo = std::make_unique<TAndOptimizedMergeAlgorithm<TDocId>>(
                 std::move(streams),
                 MainTableReader->GetWithRelevance(),
@@ -2922,6 +2960,7 @@ private:
                 std::move(streams),
                 std::move(required),
                 minimumShouldMatch,
+                std::move(RegexPatterns),
                 MainTableReader->GetWithRelevance(),
                 MainTableReader->GetKeyColumnTypes()
             );

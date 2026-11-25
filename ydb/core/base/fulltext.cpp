@@ -1,5 +1,6 @@
 #include "fulltext.h"
 #include "fulltext_query.h"
+#include "fulltext_regex.h"
 #include "superlemmer.h"
 
 #include <contrib/libs/snowball/include/libstemmer.h>
@@ -812,14 +813,14 @@ void BuildNgrams(const TString& token, size_t lengthMin, size_t lengthMax, bool 
     while (ngram_begin_ptr < end) {
         const unsigned char* ngram_end_ptr = ngram_begin_ptr;
         size_t ngram_length = 0;
-        while (ngram_end_ptr < end) {
+        while (ngram_end_ptr < end && ngram_length < lengthMax) {
             if (SafeReadUTF8Char(symbol, symbolBytes, ngram_end_ptr, end) != RECODE_OK) {
                 Y_ASSERT(false); // should already be validated during tokenization
                 return;
             }
             ngram_length++;
             ngram_end_ptr += symbolBytes;
-            if (lengthMin <= ngram_length && ngram_length <= lengthMax) {
+            if (lengthMin <= ngram_length) {
                 ngrams.emplace_back((const char*)ngram_begin_ptr, ngram_end_ptr - ngram_begin_ptr);
             }
         }
@@ -963,6 +964,9 @@ TVector<TString> BuildSearchTerms(const TString& query, const Ydb::Table::Fullte
 TVector<TString> BuildStringMatchTerms(TStringBuf text, TStringBuf mode, std::optional<char> escape,
     const Ydb::Table::FulltextIndexSettings::Analyzers& settings)
 {
+    if (mode == "REGEX") {
+        return BuildRegexCandidates(text, settings).UniqueTerms();
+    }
     if (mode == "ILIKE" && !settings.use_filter_lowercase()) {
         return {};
     }
@@ -1032,11 +1036,12 @@ TVector<TString> BuildStringMatchTerms(TStringBuf text, TStringBuf mode, std::op
                     : analyzers.tokenizer() != Ydb::Table::FulltextIndexSettings::KEYWORD && IsWhitespace(symbol) &&
                         (analyzers.tokenizer() != Ydb::Table::FulltextIndexSettings::STANDARD || !IsKatakanaOrSymbol(symbol));
                 if (!delimiter && analyzers.tokenizer() == Ydb::Table::FulltextIndexSettings::STANDARD &&
-                    previous != 0x200D && IsNonStandard(symbol) &&
+                    previous != 0x200D && !(previous == '"' && IsHebrew(symbol)) && IsNonStandard(symbol) &&
                     !IsExtendNumLet(symbol) && !IsExtendOrFormat(symbol) &&
                     !IsMidLetterChar(symbol) && !IsMidNumberChar(symbol) && symbol != '\"' && symbol != '\'')
                 {
-                    // Reuse the tokenizer to distinguish punctuation from script-specific tokens.
+                    // A ZWJ or Hebrew double quote can absorb punctuation into the preceding token.
+                    // Otherwise reuse the tokenizer to distinguish punctuation from script-specific tokens.
                     separatorTokens.clear();
                     TokenizeStandard(TStringBuf(reinterpret_cast<const char*>(ptr), bytes), separatorTokens, {});
                     delimiter = separatorTokens.empty();
@@ -1076,7 +1081,8 @@ TVector<TString> BuildStringMatchTerms(TStringBuf text, TStringBuf mode, std::op
                     ptr += bytes;
                     continue;
                 }
-                if (IsALetter(symbol) || IsDecdigit(symbol) || IsWhitespace(symbol) || !mayBeJoined) {
+                if (IsALetter(symbol) || IsDecdigit(symbol) ||
+                    (IsWhitespace(symbol) && !IsKatakanaOrSymbol(symbol)) || !mayBeJoined) {
                     break;
                 }
                 ptr += bytes;

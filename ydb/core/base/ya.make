@@ -36,6 +36,8 @@ SRCS(
     feature_flags_service.h
     fulltext.cpp
     fulltext.h
+    fulltext_regex.cpp
+    fulltext_regex.h
     group_stat.cpp
     group_stat.h
     hive.h
@@ -104,6 +106,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/re2
     contrib/libs/snowball
     library/cpp/deprecated/atomic
     library/cpp/deprecated/enum_codegen

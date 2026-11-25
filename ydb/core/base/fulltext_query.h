@@ -11,7 +11,9 @@
 namespace NKikimr::NFulltext {
 
 // LIKE/ILIKE follow legacy Re2::PatternFromLike wildcards and escaping;
-// the other modes treat text as a literal value.
+// REGEX returns the leaves of the candidate expression for diagnostics and the
+// scan fallback guard. The full-text source evaluates the expression itself.
+// The remaining modes treat text as a literal value.
 // ILIKE uses the index's lowercase analyzer, rather than full RE2 case folding;
 // some Unicode fold equivalents therefore have different postings.
 TVector<TString> BuildStringMatchTerms(TStringBuf text, TStringBuf mode, std::optional<char> escape,

@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/fulltext_query.h>
+#include <ydb/core/base/fulltext_regex.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_expr_helpers.h>
 #include <ydb/library/json_index/json_index.h>
@@ -70,6 +71,22 @@ TString GetNameByReadType(EPlanTableReadType readType) {
 /* remove chars, that break json plan */
 std::string RemoveForbiddenChars(std::string s) {
     return NYql::IsUtf8(s)? s: "Non-UTF8 string";
+}
+
+NJson::TJsonValue ExplainRegexCandidates(const NFulltext::TRegexCandidates& candidates) {
+    using EOp = NFulltext::TRegexCandidates::EOp;
+    if (candidates.Op == EOp::Term) {
+        return candidates.Term;
+    }
+    if (candidates.Op == EOp::Any) {
+        return true;
+    }
+    NJson::TJsonValue result;
+    auto& children = result[candidates.Op == EOp::And ? "AllOf" : "AnyOf"];
+    for (const auto& child : candidates.Children) {
+        children.AppendValue(ExplainRegexCandidates(child));
+    }
+    return result;
 }
 
 struct TTableRead: public NYql::TSortingOperator<NYql::ERequestSorting::ASC> {
@@ -904,9 +921,15 @@ private:
                 for(const auto& column: readColumns) {
                     for(const auto& analyzer: desc.settings().columns()) {
                         if (analyzer.column() == column) {
-                            const auto terms = mode.empty()
-                                ? NFulltext::BuildSearchTerms(literal, analyzer.analyzers())
-                                : NFulltext::BuildStringMatchTerms(literal, mode, escape, analyzer.analyzers());
+                            TVector<TString> terms;
+                            if (mode == "REGEX") {
+                                const auto candidates = NFulltext::BuildRegexCandidates(literal, analyzer.analyzers());
+                                op.Properties["RegexPostingFilters"].AppendValue(ExplainRegexCandidates(candidates));
+                                terms = candidates.UniqueTerms();
+                            } else {
+                                terms = mode.empty() ? NFulltext::BuildSearchTerms(literal, analyzer.analyzers())
+                                    : NFulltext::BuildStringMatchTerms(literal, mode, escape, analyzer.analyzers());
+                            }
                             for(const auto& term: terms) {
                                 searchTerms.push_back(term);
                             }

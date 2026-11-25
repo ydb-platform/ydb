@@ -1621,7 +1621,15 @@ bool FloatingPointOrParameter(const TExprBase& exprBase) {
 
 } // anonymous namespace
 
-TExprNode::TPtr BuildPostfiltersForMatch(TExprContext& ctx, TPositionHandle pos, TExprNode::TPtr pattern, TExprNode::TPtr column)  {
+TExprNode::TPtr BuildRegexPostfilter(TExprContext& ctx, TPositionHandle pos, TExprNode::TPtr pattern, TExprNode::TPtr text) {
+    auto config = ctx.NewList(pos, {pattern, ctx.NewCallable(pos, "Null", {})});
+    auto grep = ctx.NewCallable(pos, "Udf", {ctx.NewAtom(pos, "Re2.Grep"), config});
+    return ctx.NewCallable(pos, "Apply", {grep, text});
+}
+
+TExprNode::TPtr BuildWildcardPostfilter(TExprContext& ctx, TPositionHandle pos, TExprNode::TPtr pattern,
+    TExprNode::TPtr column, bool caseSensitive)
+{
     auto patternExpr = ctx.Builder(pos)
         .Callable("Apply")
             .Callable(0, "Udf")
@@ -1642,7 +1650,7 @@ TExprNode::TPtr BuildPostfiltersForMatch(TExprContext& ctx, TPositionHandle pos,
                 .List(0)
                     .Atom(0, "CaseSensitive")
                     .Callable(1, "Bool")
-                        .Atom(0, "false", TNodeFlags::Default)
+                        .Atom(0, caseSensitive ? "true" : "false", TNodeFlags::Default)
                     .Seal()
                 .Seal()
             .Seal()
@@ -1671,17 +1679,24 @@ struct TFulltextMatchContext {
     TString Column;
     const Ydb::Table::FulltextIndexSettings::Analyzers* Analyzers = nullptr;
     const TExprNode* Row = nullptr;
+    bool EnableRegex = false;
     TVector<TString> PrefixColumns;
     TVector<std::pair<TString, TExprNode::TPtr>> PrefixValues;
+
+    bool HasNgrams() const {
+        return Analyzers->use_filter_ngram() || Analyzers->use_filter_edge_ngram();
+    }
 };
 
 struct TFulltextQuery {
     TExprNode::TPtr Node;
     TExprNode::TPtr Column;
+    TExprNode::TPtr Text;
     TExprNode::TPtr Query;
     TExprNode::TPtr NamedOptions;
     std::optional<char> Escape;
     TStringBuf PatternMode;
+    bool ValidatesUtf8 = false;
 
     bool IsScoreQuery() const {
         return Node->Content() == "FulltextScore";
@@ -1698,6 +1713,21 @@ struct TFulltextQuery {
         return PatternMode.empty() ? 2 : 1;
     }
 
+    TStringBuf RegexScanReason(bool binaryColumn) const {
+        if (PatternMode != "REGEX") {
+            return {};
+        }
+        if (binaryColumn && !ValidatesUtf8) {
+            return "fallback because String values can contain invalid UTF-8 without index postings";
+        }
+        if (FindNode(Node, [](const auto& node) {
+            return node->IsCallable("Unwrap") && !IsKqpCompletePureExpr(TExprBase(node));
+        })) {
+            return "fallback to preserve Unwrap errors on NULL values";
+        }
+        return {};
+    }
+
     std::optional<TString> GetModeIfAny() const {
         if (!NamedOptions)
             return TString();
@@ -1705,15 +1735,33 @@ struct TFulltextQuery {
         for(auto& child : NamedOptions->Children()) {
             auto arg = TExprBase(child).Cast<TCoNameValueTuple>();
             if (arg.Name().StringValue() == "Mode") {
-                const auto value = arg.Value().Maybe<TCoString>();
-                if (!value) {
+                TString value;
+                if (!ExtractLiteral(arg.Value().Cast().Ptr(), value)) {
                     return std::nullopt;
                 }
-                return value.Cast().Literal().StringValue();
+                return value;
             }
         }
 
         return TString();
+    }
+
+    TStringBuf RegexModeError(const TFulltextMatchContext& context) const {
+        if (PatternMode == "REGEX" && NamedOptions) {
+            if (IsScoreQuery()) {
+                return " FulltextScore does not support Regex mode.";
+            }
+            if (!context.EnableRegex) {
+                return " FulltextMatch Regex mode is disabled.";
+            }
+            if (!context.HasNgrams()) {
+                return " FulltextMatch Regex mode requires an n-gram index.";
+            }
+            if (NamedOptions->ChildrenSize() != 1) {
+                return " FulltextMatch Regex mode accepts no other named options.";
+            }
+        }
+        return {};
     }
 
     bool IsValid(const TFulltextMatchContext* matchContext = nullptr) const {
@@ -1779,7 +1827,8 @@ struct TFulltextQuery {
                 posArgs = node->Child(0);
                 namedArg = node->Child(1);
             }
-            query = TFulltextQuery{.Node=node, .Column=posArgs->Child(0), .Query=posArgs->Child(1), .NamedOptions=namedArg};
+            query = TFulltextQuery{.Node=node, .Column=posArgs->HeadPtr(), .Text=posArgs->HeadPtr(),
+                .Query=posArgs->Child(1), .NamedOptions=namedArg};
         } else if (const auto like = TryParseLikeExpression(node)) {
             query = TFulltextQuery{.Node=node, .Column=like->Column, .Query=like->Pattern,
                 .Escape=like->Escape, .PatternMode=like->CaseSensitive ? "LIKE" : "ILIKE"};
@@ -1791,20 +1840,27 @@ struct TFulltextQuery {
             query = TFulltextQuery{.Node=node, .Column=node->HeadPtr(), .Query=node->TailPtr(), .PatternMode="CONTAINS"};
         } else if (node->Content() == "==") {
             query = TFulltextQuery{.Node=node, .Column=node->HeadPtr(), .Query=node->TailPtr(), .PatternMode="EXACT"};
+        } else if (matchContext && matchContext->EnableRegex) {
+            const auto regex = TryParseRegexExpression(node);
+            if (!regex) {
+                return {};
+            }
+            query = TFulltextQuery{.Node=node, .Column=regex->Column, .Query=regex->Pattern,
+                .PatternMode="REGEX", .ValidatesUtf8=regex->ValidatesUtf8};
         } else {
             return {};
         }
 
-        query.Column = MemberColumn(query.Column);
-        if (query.IsMatchQuery() && matchContext &&
-            (matchContext->Analyzers->use_filter_ngram() || matchContext->Analyzers->use_filter_edge_ngram()))
-        {
+        query.Column = MemberColumn(query.Column, &query.ValidatesUtf8);
+        if (query.NamedOptions && matchContext) {
             auto mode = query.GetModeIfAny();
             if (!mode) {
-                return {};
+                return query.IsMatchQuery() && matchContext->HasNgrams() ? TFulltextQuery{} : query;
             }
             mode->to_lower();
-            if (*mode == "wildcard") {
+            if (*mode == "regex") {
+                query.PatternMode = "REGEX";
+            } else if (*mode == "wildcard" && query.IsMatchQuery() && matchContext->HasNgrams()) {
                 query.PatternMode = matchContext->Analyzers->use_filter_lowercase() ? "ILIKE" : "LIKE";
             }
         }
@@ -1874,17 +1930,14 @@ struct TFullTextApplyParseResult {
 };
 
 TExprNode::TPtr FindScoreOrScoreOverMemberOfStruct(const TExprNode::TPtr& node) {
-    if (node->Content() == "FulltextScore") {
+    if (node->IsCallable("FulltextScore")) {
         return node;
     }
 
-    auto exprBase = TExprBase(node);
-    if (exprBase.Maybe<TCoMember>()) {
-        auto member = exprBase.Cast<TCoMember>();
-        for(const auto& child : member.Struct().Cast<TCoAsStruct>()) {
-            if (child.Item(1).Ptr()->Content() == "FulltextScore") {
-                return child.Item(1).Ptr();
-            }
+    if (node->IsCallable("Member") && node->Head().IsCallable("AsStruct")) {
+        const auto field = GetSetting(node->Head(), node->Tail().Content());
+        if (field && field->Tail().IsCallable("FulltextScore")) {
+            return field->TailPtr();
         }
     }
 
@@ -2032,6 +2085,7 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         return it->second ? &it->second : nullptr;
     };
 
+    bool regexWithoutNgrams = false;
     VisitExprSkipOptionalIfValue(node.Ptr(), [&] (const TExprNode::TPtr& expr) {
         bool isGreenNode = false;
         if (AllowedFulltextExprs.contains(expr->Content())) {
@@ -2046,6 +2100,11 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         TryExtractPrefixValues(expr, prefixColumnsSet, result.PrefixColumns, matchContext.Row);
 
         if (const auto* match = matchQuery(expr)) {
+            if (match->PatternMode == "REGEX" && !match->NamedOptions && !matchContext.HasNgrams()) {
+                // Another conjunct can drive the read while the SQL regex remains a row filter.
+                regexWithoutNgrams = true;
+                return false;
+            }
             if (match->IsScoreQuery()) {
                 auto newMember = Build<TCoMember>(ctx, match->Query->Pos())
                     .Name().Build(NTableIndex::NFulltext::FullTextRelevanceColumn)
@@ -2057,7 +2116,9 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
 
             if (match->IsMatchQuery()) {
                 if (!match->PatternMode.empty()) {
-                    auto postfilter = BuildPostfiltersForMatch(ctx, node.Pos(), match->Query, match->Column);
+                    auto postfilter = match->PatternMode == "REGEX"
+                        ? BuildRegexPostfilter(ctx, node.Pos(), match->Query, match->Text)
+                        : BuildWildcardPostfilter(ctx, node.Pos(), match->Query, match->Text, match->PatternMode == "LIKE");
                     result.Replaces.emplace(match->Node.Get(), postfilter);
                 } else {
                     auto newMember = Build<TCoBool>(ctx, node.Pos()).Literal().Build("true").Done();
@@ -2076,8 +2137,12 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         return true;
     }, visitedNodes, result.ScoreRestriction);
 
+    TStringBuf explain;
     VisitExpr(node.Ptr(), [&] (const TExprNode::TPtr& expr) {
         if (const auto* match = matchQuery(expr)) {
+            if (explain.empty()) {
+                explain = match->RegexModeError(matchContext);
+            }
             if (match->IsScoreQuery()) {
                 result.FulltextScore++;
             } else if (match->IsMatchQuery()) {
@@ -2108,8 +2173,9 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         }
     }
 
-    TString explain = "";
-    if (result.FulltextScore >= 1 && result.FulltextMatch >= 1) {
+    if (!explain.empty()) {
+        result.HasErrors = true;
+    } else if (result.FulltextScore >= 1 && result.FulltextMatch >= 1) {
         result.HasErrors = true;
         explain = " Multiple fulltext predicates in a single read are not supported.";
     } else if (result.FulltextScore > 1) {
@@ -2123,7 +2189,8 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         explain = " Multiple fulltext match predicates with the keyword tokenizer are not supported.";
     } else if (result.Queries.empty()) {
         result.HasErrors = true;
-        explain = " FulltextMatch/FulltextScore node is not reachable by conjunctions.";
+        explain = regexWithoutNgrams ? " Regex index search requires an n-gram index."
+            : " FulltextMatch/FulltextScore node is not reachable by conjunctions.";
     } else if (result.FulltextScore > 0 && !scoreRestrictionFound) {
         result.HasErrors = true;
         explain = " Score restriction is not found in the predicate. It's required to put FulltextScore() > 0 constraint in the where clause.";
@@ -2244,7 +2311,7 @@ TVector<std::pair<TString, TExprNode::TPtr>> ExtractSeedPrefix(TReadMatch& read,
 
 TExprBase BuildFulltextFallbackScan(const TCoFlatMap& flatMap, const TReadMatch& read,
     const TVector<TString>& prefixColumns, const TVector<std::pair<TString, TExprNode::TPtr>>& prefixBindings,
-    const TExprNode::TPtr& noSearchTerms, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+    const TExprNode::TPtr& scanCondition, TStringBuf reason, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TTypeAnnotationContext& typesCtx)
 {
     const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
@@ -2308,11 +2375,11 @@ TExprBase BuildFulltextFallbackScan(const TCoFlatMap& flatMap, const TReadMatch&
         }
     }
     auto ranges = ctx.NewCallable(flatMap.Pos(), "RangeFinalize", {
-        ctx.NewCallable(flatMap.Pos(), "If", {noSearchTerms, fullRange, ctx.NewCallable(flatMap.Pos(), "RangeEmpty", {})})});
+        ctx.NewCallable(flatMap.Pos(), "If", {scanCondition, fullRange, ctx.NewCallable(flatMap.Pos(), "RangeEmpty", {})})});
 
     TKqpReadTableSettings scanSettings;
     scanSettings.ForcePrimary = true;
-    scanSettings.IndexSelectionInfo[read.Index().StringValue()] = "fallback when analyzer extracts no search terms";
+    scanSettings.IndexSelectionInfo[read.Index().StringValue()] = reason;
     prompt.IndexSelectionInfo = scanSettings.IndexSelectionInfo;
     auto scan = Build<TKqlReadTableRanges>(ctx, read.Pos())
         .Table(read.Table())
@@ -2364,6 +2431,7 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
     const auto& textColumn = fulltextMetadataInfo.GetSettings().columns(0);
     matchContext.Column = textColumn.column();
     matchContext.Analyzers = &textColumn.analyzers();
+    matchContext.EnableRegex = kqpCtx.Config->FeatureFlags.GetEnableFulltextRegex();
 
     // Fulltext index key columns are [prefix..., text]; the text column is the last one.
     if (indexDesc->KeyColumns.size() > 1) {
@@ -2383,6 +2451,22 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
     // Only free-text Match/Score needs other predicates to remain residual for scoring/MSM.
     std::erase_if(result.Queries, [priority](const auto& query) { return priority == 2 && query.Priority() < priority; });
 
+    auto filterRows = [&](TExprBase input) {
+        auto lambda = flatMap.Lambda();
+        TExprBase body(ctx.ReplaceNodes(lambda.Body().Ptr(), result.Replaces));
+        return Build<TCoFlatMap>(ctx, read.Pos())
+            .Input(input)
+            .Lambda(NewLambdaFrom(ctx, lambda.Pos(), result.Replaces, lambda.Args().Ref(), body))
+            .Done();
+    };
+    const auto columnType = RemoveOptionalType(tableDesc.GetColumnType(matchContext.Column))->Cast<TDataExprType>();
+    for (const auto& query : result.Queries) {
+        if (const auto reason = query.RegexScanReason(columnType->GetSlot() == EDataSlot::String)) {
+            auto scan = BuildFulltextFallbackScan(flatMap, read, matchContext.PrefixColumns, result.PrefixColumns,
+                Build<TCoBool>(ctx, node.Pos()).Literal().Build("true").Done().Ptr(), reason, ctx, kqpCtx, typesCtx);
+            return filterRows(scan);
+        }
+    }
     TVector<TExprBase> queryData;
     for(const auto& query : result.Queries) {
         if (!query.PatternMode.empty()) {
@@ -2436,8 +2520,7 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
         .Done();
 
     // A scan can replace the index only when every predicate is checked again on each row.
-    const bool isNgram = textColumn.analyzers().use_filter_ngram() || textColumn.analyzers().use_filter_edge_ngram();
-    const bool canUseScanFallback = isNgram && AllOf(result.Queries, [](const TFulltextQuery& query) {
+    const bool canUseScanFallback = matchContext.HasNgrams() && AllOf(result.Queries, [](const TFulltextQuery& query) {
         return !query.PatternMode.empty();
     });
     TExprBase input = indexRead;
@@ -2460,20 +2543,13 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
             : ctx.NewCallable(node.Pos(), "And", std::move(emptyPatterns));
 
         auto scanInput = BuildFulltextFallbackScan(flatMap, read, matchContext.PrefixColumns, result.PrefixColumns,
-            noSearchTerms, ctx, kqpCtx, typesCtx);
+            noSearchTerms, "fallback when analyzer extracts no search terms", ctx, kqpCtx, typesCtx);
         // The guards select the access path, not Extend: the index returns no rows without terms,
         // and the scan has empty ranges with terms. Both use the same query and analyzer.
         input = Build<TCoExtend>(ctx, node.Pos()).Add(indexRead).Add(scanInput).Done();
     }
 
-    auto newLambdaBody = TCoLambda{ctx.NewLambda(
-        flatMap.Lambda().Pos(),
-        std::move(flatMap.Lambda().Args().Ptr()),
-        ctx.ReplaceNodes(TExprNode::TListType{flatMap.Lambda().Body().Ptr()}, result.Replaces))};
-    return Build<TCoFlatMap>(ctx, read.Pos())
-        .Input(input)
-        .Lambda(NewLambdaFrom(ctx, flatMap.Lambda().Pos(), result.Replaces, flatMap.Lambda().Args().Ref(), newLambdaBody.Body()))
-        .Done();
+    return filterRows(input);
 }
 
 TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {

@@ -1,12 +1,17 @@
 #include "fulltext.h"
 #include "fulltext_query.h"
+#include "fulltext_regex.h"
 #include "superlemmer.h"
 #include "table_index.h"
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <re2/re2.h>
+#include <util/charset/utf8.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
+#include <util/generic/is_in.h>
 #include <util/generic/xrange.h>
 
 namespace NKikimr::NFulltext {
@@ -1406,6 +1411,112 @@ namespace NKikimr::NFulltext {
                                             }
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Y_UNIT_TEST(RegexCandidates) {
+            using EOp = TRegexCandidates::EOp;
+            Ydb::Table::FulltextIndexSettings::Analyzers settings;
+            settings.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+            settings.set_use_filter_ngram(true);
+            settings.set_filter_ngram_min_length(3);
+            settings.set_filter_ngram_max_length(3);
+
+            const auto either = BuildRegexCandidates("timeout|refused", settings);
+            UNIT_ASSERT(either.Op == EOp::Or);
+            for (const TString text : {"timeout", "refused", "timeout refused"}) {
+                const auto indexed = Analyze(text, settings);
+                UNIT_ASSERT(either.Matches([&](const auto& term) { return IsIn(indexed, term); }));
+            }
+            UNIT_ASSERT(!either.Matches([](const auto& term) { return term != "tim" && term != "ref"; }));
+            const auto factored = BuildRegexCandidates("cat|car", settings);
+            UNIT_ASSERT(factored.Op == EOp::Or);
+            UNIT_ASSERT(factored.Matches([](const auto& term) { return term == "cat"; }));
+            UNIT_ASSERT(factored.Matches([](const auto& term) { return term == "car"; }));
+            UNIT_ASSERT(!factored.Matches([](const auto&) { return false; }));
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms(TString(300, 'a') + "|xyz", "REGEX", {}, settings),
+                (TVector<TString>{"aaa", "xyz"}));
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms("abcX|abcY", "REGEX", {}, settings),
+                (TVector<TString>{"abc", "bcX", "bcY"}));
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms("\\xFFabc", "REGEX", {}, settings), (TVector<TString>{"abc"}));
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms("abc\\xC3\\xA9def", "REGEX", {}, settings),
+                (TVector<TString>{"abc", "def"}));
+
+            for (const TString pattern : {"timeout|x", "(timeout)?", "[", "(?i:foo)", "ab\\xA9c", ""}) {
+                UNIT_ASSERT_C(BuildRegexCandidates(pattern, settings).Op == EOp::Any, pattern);
+                UNIT_ASSERT(BuildStringMatchTerms(pattern, "REGEX", {}, settings).empty());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms("(timeout|x).*socket", "REGEX", {}, settings),
+                (TVector<TString>{"cke", "ket", "ock", "soc"}));
+
+            settings.set_use_filter_lowercase(true);
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms("(?i)HTTP", "REGEX", {}, settings), (TVector<TString>{"htt", "ttp"}));
+            // The UTF-8 pattern also matches long s, which the lowercase analyzer leaves as ſ.
+            const TString foldedPattern = "(?i)SOW猫";
+            const auto folded = BuildRegexCandidates(foldedPattern, settings);
+            UNIT_ASSERT(folded.Op != EOp::Any);
+            const re2::RE2 foldedRe(foldedPattern);
+            for (const TString text : {"sOw猫", "ſOW猫"}) {
+                UNIT_ASSERT(re2::RE2::PartialMatch({text.data(), text.size()}, foldedRe));
+                const auto indexed = Analyze(text, settings);
+                UNIT_ASSERT(folded.Matches([&](const auto& term) { return IsIn(indexed, term); }));
+            }
+
+            settings.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+            auto checkBoundary = [&](const TString& pattern, const TString& prefix, const TString& absentGram) {
+                const TString text = prefix + pattern;
+                const re2::RE2 re(pattern);
+                UNIT_ASSERT(re2::RE2::PartialMatch({text.data(), text.size()}, re));
+                const auto indexed = Analyze(text, settings);
+                UNIT_ASSERT(!IsIn(indexed, absentGram));
+                auto hasPosting = [&](const auto& term) { return IsIn(indexed, term); };
+                UNIT_ASSERT(BuildRegexCandidates(pattern, settings).Matches(hasPosting));
+                UNIT_ASSERT(AllOf(BuildStringMatchTerms(pattern, "CONTAINS", {}, settings), hasPosting));
+                UNIT_ASSERT(AllOf(BuildStringMatchTerms("%" + pattern + "%", "LIKE", {}, settings), hasPosting));
+            };
+            // After a connector, U+3000 can continue a token and ZWJ can absorb the first Thai letter.
+            checkBoundary("\u3000\u200Dกกก", "_", "กกก");
+            // After a Hebrew letter, a double quote can absorb Hebrew punctuation (maqaf, U+05BE).
+            settings.set_use_filter_ngram(false);
+            settings.set_use_filter_edge_ngram(true);
+            checkBoundary("\"\u05BEabc", "א", "abc");
+        }
+
+        Y_UNIT_TEST(RegexCandidatesContainEveryMatch) {
+            using TSettings = Ydb::Table::FulltextIndexSettings;
+            for (const TString pattern : {"cat|car", "foo.*bar|baz", "(foo)?bar", "^cat$", "(?i:cat)|bar",
+                    "(?:tile|car)+", " the .* cat ", "猫咪|кошка", "abc\\xC3\\xA9def", "([ab]c){2}", "a[xy][xy][xy][xy][xy]z"}) {
+                re2::RE2::Options options;
+                options.set_encoding(UTF8Detect(pattern) == UTF8 ? re2::RE2::Options::EncodingUTF8 : re2::RE2::Options::EncodingLatin1);
+                re2::RE2 re({pattern.data(), pattern.size()}, options);
+                UNIT_ASSERT(re.ok());
+                for (auto tokenizer : {TSettings::WHITESPACE, TSettings::KEYWORD, TSettings::STANDARD, TSettings::ALPHANUMERIC}) {
+                    for (bool edge : {false, true}) {
+                        for (bool filter : {false, true}) {
+                            TSettings::Analyzers settings;
+                            settings.set_tokenizer(tokenizer);
+                            settings.set_use_filter_ngram(!edge);
+                            settings.set_use_filter_edge_ngram(edge);
+                            settings.set_filter_ngram_min_length(2);
+                            settings.set_filter_ngram_max_length(3);
+                            settings.set_use_filter_lowercase(filter);
+                            settings.set_use_filter_stopwords(filter);
+                            settings.set_use_filter_length(filter);
+                            settings.set_filter_length_min(3);
+                            settings.set_filter_length_max(5);
+                            const auto candidates = BuildRegexCandidates(pattern, settings);
+                            for (const TString text : {"", "cat", "scar", "Cat", "catcar", "foo bar", "foobar", "baz", "bar",
+                                    "tilecar", " the hungry cat ", "一猫咪来", "кошка", "abcédef", "acbcz", "axyxyxz"}) {
+                                if (re2::RE2::PartialMatch({text.data(), text.size()}, re)) {
+                                    const auto indexed = Analyze(text, settings);
+                                    UNIT_ASSERT_C(candidates.Matches([&](const auto& term) { return IsIn(indexed, term); }),
+                                        pattern << " matched " << text << " with tokenizer " << static_cast<ui32>(tokenizer)
+                                            << ", edge " << edge << ", filters " << filter);
                                 }
                             }
                         }

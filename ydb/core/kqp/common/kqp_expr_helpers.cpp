@@ -235,13 +235,18 @@ bool IsStringOrUtf8(const NYql::TTypeAnnotationNode* type) {
 
 // SafeCast/ToString must have String/Utf8 inputs: converting another type changes the
 // indexed value and must not attach a string bloom probe or fulltext terms to that column.
-NYql::TExprNode::TPtr StringValue(NYql::TExprNode::TPtr node) {
+NYql::TExprNode::TPtr StringValue(NYql::TExprNode::TPtr node, bool* validatesUtf8 = nullptr) {
     node = UnwrapQuotePtr(node);
     while (node && node->IsCallable({"Just", "Unwrap", "SafeCast", "ToString"})) {
         if (!node->ChildrenSize() ||
             (node->IsCallable({"SafeCast", "ToString"}) && !IsStringOrUtf8(node->Head().GetTypeAnn())))
         {
             return nullptr;
+        }
+        if (validatesUtf8 && node->IsCallable("SafeCast") && node->GetTypeAnn()) {
+            const auto* type = NYql::RemoveOptionalType(node->GetTypeAnn());
+            *validatesUtf8 |= type->GetKind() == NYql::ETypeAnnotationKind::Data &&
+                type->Cast<NYql::TDataExprType>()->GetSlot() == NYql::EDataSlot::Utf8;
         }
         node = UnwrapQuotePtr(node->ChildPtr(0));
     }
@@ -251,6 +256,7 @@ NYql::TExprNode::TPtr StringValue(NYql::TExprNode::TPtr node) {
 struct TLocatedMatch {
     NYql::TExprNode::TPtr Apply;
     NYql::TExprNode::TPtr Column;
+    bool ValidatesUtf8;
 };
 
 // The arguments of a Re2.PatternFromLike call: the pattern and an optional escape. SQL LIKE produces
@@ -290,7 +296,8 @@ std::optional<std::vector<NYql::TExprNode::TPtr>> PatternFromLikeArgs(NYql::TExp
 }
 
 std::optional<TLocatedMatch> LocateMatch(NYql::TExprNode::TPtr node,
-    const NYql::TExprNode::TPtr& boundArg = {}, const NYql::TExprNode::TPtr& boundColumn = {})
+    const NYql::TExprNode::TPtr& boundArg = {}, const NYql::TExprNode::TPtr& boundColumn = {},
+    bool boundValidatesUtf8 = false)
 {
     node = UnwrapQuotePtr(node);
     if (!node) {
@@ -299,30 +306,34 @@ std::optional<TLocatedMatch> LocateMatch(NYql::TExprNode::TPtr node,
     // Only the two-argument form: Coalesce(x, false) is true exactly when x is true. With more
     // arguments a true result may come from a later child while x is NULL.
     if (node->IsCallable("Coalesce") && node->ChildrenSize() == 2 && IsFalseBool(node->Tail())) {
-        return LocateMatch(node->ChildPtr(0), boundArg, boundColumn);
+        return LocateMatch(node->ChildPtr(0), boundArg, boundColumn, boundValidatesUtf8);
     }
     if (node->IsCallable("Just")) {
-        return LocateMatch(node->HeadPtr(), boundArg, boundColumn);
+        return LocateMatch(node->HeadPtr(), boundArg, boundColumn, boundValidatesUtf8);
     }
     if (node->IsCallable({"Map", "FlatMap"}) && node->ChildrenSize() >= 2 && node->Tail().IsLambda()) {
         const auto& lambda = node->Tail();
         if (lambda.Head().ChildrenSize() != 1) {
             return std::nullopt;
         }
-        const auto inputColumn = MemberColumn(node->ChildPtr(0));
+        bool validatesUtf8 = false;
+        const auto inputColumn = MemberColumn(node->ChildPtr(0), &validatesUtf8);
         if (!inputColumn) {
             return std::nullopt;
         }
-        return LocateMatch(lambda.TailPtr(), lambda.Head().HeadPtr(), inputColumn);
+        return LocateMatch(lambda.TailPtr(), lambda.Head().HeadPtr(), inputColumn, validatesUtf8);
     }
-    if (!node->IsCallable("Apply") || node->ChildrenSize() != 2 || !IsRe2Udf(node->Head(), "Re2.Match")) {
+    if (!node->IsCallable("Apply") || node->ChildrenSize() != 2 ||
+        !(IsRe2Udf(node->Head(), "Re2.Match") || IsRe2Udf(node->Head(), "Re2.Grep"))) {
         return std::nullopt;
     }
-    const auto column = (boundArg && StringValue(node->TailPtr()) == boundArg) ? boundColumn : MemberColumn(node->TailPtr());
+    bool validatesUtf8 = false;
+    const bool usesBoundArg = boundArg && StringValue(node->TailPtr(), &validatesUtf8) == boundArg;
+    const auto column = usesBoundArg ? boundColumn : MemberColumn(node->TailPtr(), &validatesUtf8);
     if (!column) {
         return std::nullopt;
     }
-    return TLocatedMatch{node, column};
+    return TLocatedMatch{node, column, validatesUtf8 || (usesBoundArg && boundValidatesUtf8)};
 }
 
 }   // namespace
@@ -336,12 +347,12 @@ bool ExtractLiteral(const NYql::TExprNode::TPtr& node, TString& value) {
     return true;
 }
 
-NYql::TExprNode::TPtr MemberColumn(NYql::TExprNode::TPtr node) {
-    node = StringValue(node);
+NYql::TExprNode::TPtr MemberColumn(NYql::TExprNode::TPtr node, bool* validatesUtf8) {
+    node = StringValue(node, validatesUtf8);
     if (node && node->IsCallable({"Map", "FlatMap"}) && node->ChildrenSize() == 2 && node->Tail().IsLambda()) {
         const auto& lambda = node->Tail();
-        if (lambda.Head().ChildrenSize() == 1 && StringValue(lambda.TailPtr()).Get() == &lambda.Head().Head()) {
-            return MemberColumn(node->ChildPtr(0));
+        if (lambda.Head().ChildrenSize() == 1 && StringValue(lambda.TailPtr(), validatesUtf8).Get() == &lambda.Head().Head()) {
+            return MemberColumn(node->ChildPtr(0), validatesUtf8);
         }
     }
     return node && node->IsCallable("Member") ? node : nullptr;
@@ -349,7 +360,7 @@ NYql::TExprNode::TPtr MemberColumn(NYql::TExprNode::TPtr node) {
 
 std::optional<TLikeExpression> TryParseLikeExpression(const NYql::TExprNode::TPtr& predicate) {
     const auto located = LocateMatch(predicate);
-    if (!located) {
+    if (!located || !IsRe2Udf(located->Apply->Head(), "Re2.Match")) {
         return std::nullopt;
     }
 
@@ -386,6 +397,23 @@ std::optional<TLikeExpression> TryParseLikeExpression(const NYql::TExprNode::TPt
         .Escape = escape,
         .CaseSensitive = *options.CaseSensitive,
     };
+}
+
+std::optional<TRegexExpression> TryParseRegexExpression(const NYql::TExprNode::TPtr& predicate) {
+    const auto located = LocateMatch(predicate);
+    if (!located) {
+        return std::nullopt;
+    }
+    const auto& udf = NYql::SkipCallables(located->Apply->Head(), {"AssumeStrict"});
+    if (udf.ChildrenSize() < 2) {
+        return std::nullopt;
+    }
+    const auto config = UnwrapQuotePtr(udf.ChildPtr(1));
+    if (!config || !(config->IsList() || config->IsCallable({"AsTuple", "Tuple"})) ||
+        config->ChildrenSize() != 2 || !IsAbsentOption(config->ChildPtr(1))) {
+        return std::nullopt;
+    }
+    return TRegexExpression{located->Column, config->HeadPtr(), located->ValidatesUtf8};
 }
 
 }   // namespace NKikimr::NKqp::NOpt

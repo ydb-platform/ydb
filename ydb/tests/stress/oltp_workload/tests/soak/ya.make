@@ -9,7 +9,6 @@ REQUIREMENTS(ram:32 cpu:4)
 TAG(ya:external)
 
 SIZE(LARGE)
-TAG(ya:fat)
 TIMEOUT(3600)
 
 PEERDIR(

@@ -80,7 +80,8 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
         UNIT_ASSERT_C(ast.Contains("MapJoin"), ast);
 
         const TString rows = RunQuerySortedRows(client, query);
-        UNIT_ASSERT_VALUES_EQUAL(rows, "[\"hello\"];");
+        // Pg text comes back as a YSON string. A native optional string would be ["hello"].
+        UNIT_ASSERT_VALUES_EQUAL(rows, "\"hello\";");
 
         const TString inQuery = R"(
             PRAGMA TablePathPrefix='/Root';
@@ -99,7 +100,7 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
         const TString inAst(*inExplain.GetStats()->GetAst());
         UNIT_ASSERT_C(!inAst.Contains("ScalarHashJoin"), inAst);
         UNIT_ASSERT_C(inAst.Contains("MapJoin"), inAst);
-        UNIT_ASSERT_VALUES_EQUAL(RunQuerySortedRows(client, inQuery), "[\"hello\"];");
+        UNIT_ASSERT_VALUES_EQUAL(RunQuerySortedRows(client, inQuery), "\"hello\";");
 
         result = client.ExecuteQuery(R"(
             CREATE TABLE `/Root/NestedL` (

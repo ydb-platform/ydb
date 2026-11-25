@@ -204,7 +204,7 @@ public:
                 }
                 const auto& list = event->Record;
                 RequiresDiagnostics = !HasLegacyProjection({"DiskId", "DDiskTabletIds", "PersistentBufferTabletIds",
-                        "Available", "State"})
+                        "DDiskTabletCount", "PersistentBufferTabletCount", "Available", "State"})
                     || (list.GetOnlyProblems() && list.GetIncludeComponentProblems()) || list.GetInventory() || list.GetGroupsOnly()
                     || list.HasNodeId() || list.HasPDiskId() || list.HasTabletId()
                     || list.GetGroupBy() != NKikimrCms::DDISK_DISK_GROUP_BY_NONE
@@ -288,11 +288,7 @@ private:
 
     template <typename TRecord, typename TRow>
     void ReplyList(TRecord& record, NProtoBuf::RepeatedPtrField<TRow>& rows, TStringBuf identity, const TActorContext& ctx) {
-        if (!RequiresDiagnostics && record.HasTotalCount() && !record.HasUnfilteredCount()) {
-            if (!CanInferUnfilteredCount) {
-                Reply("HTTP/1.1 503 Service Unavailable\r\n\r\nCMS does not support unfiltered DDisk counts", ctx);
-                return;
-            }
+        if (!RequiresDiagnostics && CanInferUnfilteredCount && record.HasTotalCount() && !record.HasUnfilteredCount()) {
             record.SetUnfilteredCount(record.GetTotalCount());
         }
         SelectListFields(record, rows, identity);

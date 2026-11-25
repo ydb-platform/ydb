@@ -587,13 +587,32 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT(disk["NodeId"].GetUInteger() > 0);
         UNIT_ASSERT_VALUES_EQUAL(requests, 3);
 
+        const auto countsPage = ParseHttpOkJson(SendDDiskHttpRequest(env,
+            "/api/json/ddisk/disks?include_tablet_ids=0&fields_required=DDiskTabletCount,PersistentBufferTabletCount"));
+        const auto disksWithIds = env.RequestDDiskDiskList();
+        UNIT_ASSERT(disksWithIds.DisksSize() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(countsPage["Disks"].GetArray().size(), disksWithIds.DisksSize());
+        for (size_t i = 0; i < disksWithIds.DisksSize(); ++i) {
+            const auto& row = countsPage["Disks"][i];
+            UNIT_ASSERT(row.Has("DiskId"));
+            UNIT_ASSERT(row.Has("DDiskTabletCount") && row.Has("PersistentBufferTabletCount"));
+            UNIT_ASSERT(!row.Has("DDiskTabletIds") && !row.Has("PersistentBufferTabletIds"));
+            UNIT_ASSERT_VALUES_EQUAL(row["DDiskTabletCount"].GetUInteger(), disksWithIds.GetDisks(i).DDiskTabletIdsSize());
+            UNIT_ASSERT_VALUES_EQUAL(row["PersistentBufferTabletCount"].GetUInteger(), disksWithIds.GetDisks(i).PersistentBufferTabletIdsSize());
+        }
+
         const TString filteredUri = "/api/json/ddisk/tablets?filter=1001&fields_required=TabletId";
-        const auto filtered = SendDDiskHttpRequest(env, filteredUri);
-        UNIT_ASSERT_C(filtered.StartsWith("HTTP/1.1 503"), filtered);
+        const auto filtered = ParseHttpOkJson(SendDDiskHttpRequest(env, filteredUri));
+        UNIT_ASSERT(!filtered.Has("UnfilteredCount"));
+        UNIT_ASSERT_VALUES_EQUAL(filtered["TotalCount"].GetUInteger(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(filtered["Tablets"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(filtered["Tablets"][0]["TabletId"].GetUInteger(), tabletId);
+
         const TString diskProblemsUri = "/api/json/ddisk/disks?only_problems=1&fields_required=DiskId";
-        const auto missingCount = SendDDiskHttpRequest(env, diskProblemsUri);
-        UNIT_ASSERT_C(missingCount.Contains("503 Service Unavailable"), missingCount);
-        UNIT_ASSERT_C(missingCount.Contains("unfiltered DDisk counts"), missingCount);
+        const auto diskProblemsWithoutCount = ParseHttpOkJson(SendDDiskHttpRequest(env, diskProblemsUri));
+        UNIT_ASSERT(!diskProblemsWithoutCount.Has("UnfilteredCount"));
+        UNIT_ASSERT(diskProblemsWithoutCount.Has("TotalCount"));
+        UNIT_ASSERT_VALUES_EQUAL(diskProblemsWithoutCount["TotalCount"].GetUInteger(), 0);
         oldTablets.Remove();
         oldDisks.Remove();
         const auto diskProblems = ParseHttpOkJson(SendDDiskHttpRequest(env, diskProblemsUri));

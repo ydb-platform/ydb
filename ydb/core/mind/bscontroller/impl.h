@@ -784,8 +784,14 @@ public:
         bool CalculateGroupStatus();
 
         TMirror3dcGroupConfiguration GetMirror3dcConfiguration() const {
-            return {Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL),
-                FailRealmStates.value_or(TMirror3dcFailRealmStates{})};
+            using NKikimrBlobStorage::TDataCenterState;
+            using NKikimrBlobStorage::TGroupState;
+            constexpr TMirror3dcFailRealmStates allRealmsIncluded{
+                TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED};
+            return {
+                .State = Mirror3dcState.value_or(TGroupState::NORMAL),
+                .Realms = FailRealmStates.value_or(allRealmsIncluded),
+            };
         }
 
         // group layout status: whether it is positioned correctly

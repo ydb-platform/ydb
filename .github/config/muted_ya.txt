@@ -33,6 +33,8 @@ ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/mysql py3test.sole chunk
 ydb/public/tools/local_ydb/ut test_local_ydb.py.test_deploy_stop_start_update_and_cleanup_preserve_data
+ydb/services/persqueue_v1/actors/schema/topic/ut SchemaOps_TopicAPI.DescribeReplicateOffsets
+ydb/services/persqueue_v1/actors/schema/topic/ut unittest.sole chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-True]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]

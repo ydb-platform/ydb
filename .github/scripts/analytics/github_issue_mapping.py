@@ -157,14 +157,14 @@ def merge_area_override_since(mapping_data: list, existing_by_key: dict, url_to_
         old = existing_by_key.get(key)
         new_ao = _norm_area_override_value(row.get("area_override"))
         old_ao = _norm_area_override_value(old.get("area_override")) if old else None
-        url = row.get("github_issue_url") or ""
-        since_from_issue = scan_to_utc_date(url_to_updated_at.get(url))
         if new_ao is None:
-            row["area_override_since"] = None
-        elif old is None or old_ao != new_ao:
-            row["area_override_since"] = since_from_issue or today_utc
+            since = None
+        elif old_ao == new_ao and old.get("area_override_since") is not None:
+            since = scan_to_utc_date(old.get("area_override_since"))
         else:
-            row["area_override_since"] = scan_to_utc_date(old.get("area_override_since"))
+            url = row.get("github_issue_url") or ""
+            since = scan_to_utc_date(url_to_updated_at.get(url)) or today_utc
+        row["area_override_since"] = since
 
 
 def delete_stale_github_issue_mapping_rows(

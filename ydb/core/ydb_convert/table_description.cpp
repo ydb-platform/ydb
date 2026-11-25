@@ -2753,7 +2753,8 @@ bool IsSingleIntegerPrimaryKey(const Ydb::Table::CreateTableRequest& in) {
 } // anonymous
 
 bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
-    const Ydb::Table::CreateTableRequest& in, bool enableCompactFulltext, Ydb::StatusIds::StatusCode& status, TString& error) {
+    const Ydb::Table::CreateTableRequest& in, bool enableCompactFulltext, Ydb::StatusIds::StatusCode& status, TString& error,
+    const std::function<bool(const Ydb::Table::TableIndex&)>& includeIndex) {
 
     auto returnError = [&status, &error](Ydb::StatusIds::StatusCode code, const TString& msg) -> bool {
         status = code;
@@ -2768,6 +2769,9 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
     const bool rowIdMode = !IsSingleIntegerPrimaryKey(in);
 
     for (const auto& index : in.indexes()) {
+        if (includeIndex && !includeIndex(index)) {
+            continue;
+        }
         auto indexDesc = out.MutableIndexDescription()->Add();
 
         if (index.name().empty()) {

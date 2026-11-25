@@ -372,8 +372,14 @@ static void FillIndexExportSettings(NKikimrSchemeOp::TBackupTask& task, const TE
                 *saved.MutableVectorIndexKmeansTreeDescription() = *it->second;
             }
         }
-        table.MutablePartitionConfig()->MutableByKeyFilterPrefixes()->CopyFrom(
-            copiedTable.GetPartitionConfig().GetByKeyFilterPrefixes());
+        auto& partitionConfig = *table.MutablePartitionConfig();
+        const auto& copiedConfig = copiedTable.GetPartitionConfig();
+        if (copiedConfig.HasEnableFilterByKey()) {
+            partitionConfig.SetEnableFilterByKey(copiedConfig.GetEnableFilterByKey());
+        } else {
+            partitionConfig.ClearEnableFilterByKey();
+        }
+        partitionConfig.MutableByKeyFilterPrefixes()->CopyFrom(copiedConfig.GetByKeyFilterPrefixes());
         table.MutableColumns()->CopyFrom(copiedTable.GetColumns());
         table.MutableKeyColumnNames()->CopyFrom(copiedTable.GetKeyColumnNames());
         table.MutableKeyColumnIds()->CopyFrom(copiedTable.GetKeyColumnIds());

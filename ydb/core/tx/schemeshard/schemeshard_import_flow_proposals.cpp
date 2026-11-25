@@ -102,7 +102,6 @@ bool FillRowTableIndexesForRestore(
 
     const bool named = AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject();
     const auto& anonymousPrefixes = metadata.GetAnonymousBloomPrefixes();
-    Ydb::Table::CreateTableRequest globalIndexes;
     THashMap<TStringBuf, ui32> nameCounts;
     THashSet<TStringBuf> schemeObjectNames;
     for (const auto& index : scheme.indexes()) {
@@ -121,9 +120,6 @@ bool FillRowTableIndexesForRestore(
     THashSet<ui32> bloomPrefixes;
     for (const auto& index : scheme.indexes()) {
         if (!index.has_local_bloom_filter_index()) {
-            if (!buildIndexes) {
-                *globalIndexes.add_indexes() = index;
-            }
             continue;
         }
 
@@ -175,10 +171,9 @@ bool FillRowTableIndexesForRestore(
     if (buildIndexes) {
         return true;
     }
-    // Full-text indexes derive their document ID from the primary key and its column type.
-    globalIndexes.mutable_primary_key()->CopyFrom(scheme.primary_key());
-    globalIndexes.mutable_columns()->CopyFrom(scheme.columns());
-    return FillIndexDescription(out, globalIndexes, enableCompactFulltext, status, error);
+    return FillIndexDescription(out, scheme, enableCompactFulltext, status, error, [](const auto& index) {
+        return !index.has_local_bloom_filter_index();
+    });
 }
 
 // Returns true if the materialized impl tables of `indexDesc` from the backup can be restored into

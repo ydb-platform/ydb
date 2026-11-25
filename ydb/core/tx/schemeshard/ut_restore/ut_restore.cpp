@@ -14571,6 +14571,66 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Restored"), {NLs::PathExist, NLs::IndexesCount(ExistingIndex ? 1 : 0)});
     }
 
+    Y_UNIT_TEST_FLAG(RestoreBloomPrefixWithFullKeyFilterDisabled, DisableAfterCopy) {
+        TBackupStorage storage(true);
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+        ConfigureIndexBackup(runtime, true);
+        ui64 txId = 100;
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "id" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription { Name: "by_value" Type: EIndexTypeGlobal KeyColumnNames: ["value"] }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto setFullKeyFilter = [&](bool enabled) {
+            TestAlterTable(runtime, ++txId, "/MyRoot", Sprintf(R"(Name: "Table" PartitionConfig { EnableFilterByKey: %s })",
+                enabled ? "true" : "false"));
+            env.TestWaitNotification(runtime, txId);
+        };
+        setFullKeyFilter(DisableAfterCopy);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig { ByKeyFilterPrefixes { PrefixLength: 1 } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        ui64 copyTxId = 0;
+        auto observer = ObserveTableCopy(runtime, copyTxId);
+        TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> copyComplete(runtime, [&](const auto& ev) {
+            return copyTxId && ev->Get()->Record.GetTxId() == copyTxId;
+        });
+        const auto exportId = ++txId;
+        TestExport(runtime, exportId, "/MyRoot", storage.ExportRequest({{"/MyRoot/Table", "backup"}}));
+        runtime.WaitFor("table copied", [&] { return !copyComplete.empty(); });
+        if (DisableAfterCopy) {
+            setFullKeyFilter(false);
+        }
+        copyComplete.Stop().Unblock();
+        env.TestWaitNotification(runtime, exportId);
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        Ydb::Table::CreateTableRequest scheme;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(storage.ReadEncrypted("backup/scheme.pb.enc").first, &scheme));
+        UNIT_ASSERT(scheme.key_bloom_filter() == (DisableAfterCopy ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED));
+        UNIT_ASSERT_VALUES_EQUAL(scheme.indexes_size(), 2);
+        TestImport(runtime, ++txId, "/MyRoot", storage.ImportRequest(
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO, {"/MyRoot/Restored"}));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        const auto restored = DescribePath(runtime, "/MyRoot/Restored", true /* returnPartitioning */);
+        const auto& config = restored.GetPathDescription().GetTable().GetPartitionConfig();
+        UNIT_ASSERT(config.HasEnableFilterByKey());
+        UNIT_ASSERT_VALUES_EQUAL(config.GetEnableFilterByKey(), DisableAfterCopy);
+        UNIT_ASSERT_VALUES_EQUAL(config.ByKeyFilterPrefixesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Restored/by_value"), {
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+    }
+
     Y_UNIT_TEST_FLAG(TtlColumnAddedAfterEncryptedTableCopy, PgTtl) {
         TBackupStorage storage(true);
         TTestBasicRuntime runtime;

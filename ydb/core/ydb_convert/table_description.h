@@ -11,6 +11,8 @@
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
+#include <functional>
+
 namespace NKikimrKqp {
     class TKqpAlterTableRequest;
 }
@@ -167,7 +169,8 @@ void FillIndexDescription(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
 // in
 bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
-    const Ydb::Table::CreateTableRequest& in, bool enableCompactFulltext, Ydb::StatusIds::StatusCode& status, TString& error);
+    const Ydb::Table::CreateTableRequest& in, bool enableCompactFulltext, Ydb::StatusIds::StatusCode& status, TString& error,
+    const std::function<bool(const Ydb::Table::TableIndex&)>& includeIndex = {});
 
 // out
 void FillMultiColumnStatisticsDescription(Ydb::Table::DescribeTableResult& out,

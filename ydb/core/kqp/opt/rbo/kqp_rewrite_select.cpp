@@ -1619,63 +1619,6 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
     if (kqpCtx.Config->GetEnableFallbackOnDML()) {
         Y_ENSURE(false, "Fallback due to DML fallback flag");
     }
-<<<<<<< HEAD
-=======
-    if (auto sequencer = TMaybeNode<TKqlSequencer>(node)) {
-        // Import sequencing as its own operator. The surrounding row maps are
-        // rewritten normally and can bind the columns this operator defines.
-        return Build<TKqlSequencer>(ctx, node->Pos()).InitFrom(sequencer.Cast())
-            .Input(RewriteReadOrEffectInput(sequencer.Cast().Input().Ptr(), ctx, kqpCtx, uniqueSourceIdCounter))
-            .Done().Ptr();
-    }
-    if (TKqlReadTableIndexRanges::Match(node.Get())) {
-        // Reuse index metadata/covering expansion, then import its read and
-        // optional main-table lookup into the relational plan.
-        auto expanded = NOpt::KqpRewriteIndexRead(TExprBase(node), ctx, kqpCtx).Ptr();
-        Y_ENSURE(expanded != node, "Could not expand an explicit index read");
-        return RewriteReadOrEffectInput(expanded, ctx, kqpCtx, uniqueSourceIdCounter);
-    }
-    if (TKqlStreamLookupTable::Match(node.Get())) {
-        const auto lookup = TKqlStreamLookupTable(node);
-        return Build<TKqlStreamLookupTable>(ctx, node->Pos()).InitFrom(lookup)
-            .LookupKeys(RewriteReadOrEffectInput(lookup.LookupKeys().Ptr(), ctx, kqpCtx, uniqueSourceIdCounter))
-            .Done().Ptr();
-    }
-    if (TKqlReadTableRanges::Match(node.Get())) {
-        const auto read = TKqlReadTableRanges(node);
-        Y_ENSURE(read.Ranges().Maybe<TCoVoid>(), "Unexpected ranges in a predicate write");
-        Y_ENSURE(!TKqpReadTableSettings::Parse(read).Sampling, "Sampling in a predicate write");
-        const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
-        auto sourceType = GetTableSourceType(table, ctx, node->Pos());
-        if (kqpCtx.Config->GetEnableFallbackOnRowTables() && sourceType->Content() == "Row") {
-            Y_ENSURE(false, "Fallback due to row table flag");
-        }
-        return Build<TKqpOpRead>(ctx, node->Pos())
-            .Table(read.Table())
-            .Alias().Build("")
-            .Columns(read.Columns())
-            .SourceType(sourceType)
-            .UniqueId().Value(ToString(uniqueSourceIdCounter++)).Build()
-            .Done().Ptr();
-    }
-    if (TCoFilter::Match(node.Get()) || TCoOrderedFilter::Match(node.Get())) {
-        return Build<TKqpOpFilter>(ctx, node->Pos())
-            .Input(RewriteReadOrEffectInput(node->HeadPtr(), ctx, kqpCtx, uniqueSourceIdCounter))
-            .Lambda(node->ChildPtr(1)).Done().Ptr();
-    }
-    if (TCoExtractMembers::Match(node.Get())) {
-        return Build<TKqpOpProject>(ctx, node->Pos())
-            .Input(RewriteReadOrEffectInput(node->HeadPtr(), ctx, kqpCtx, uniqueSourceIdCounter))
-            .ProjectList(node->ChildPtr(1)).Done().Ptr();
-    }
-    Y_ENSURE(TCoMap::Match(node.Get()) || TCoOrderedMap::Match(node.Get()),
-        "Unsupported input to table effect: " << node->Content());
-    const auto map = TCoMapBase(node);
-    auto newInput = RewriteReadOrEffectInput(map.Input().Ptr(), ctx, kqpCtx, uniqueSourceIdCounter);
-    auto lambda = map.Lambda();
-    auto asStruct = lambda.Body().Maybe<TCoAsStruct>();
-    Y_ENSURE(asStruct, "New RBO cannot import a table-effect Map whose body is not AsStruct");
->>>>>>> ad4728e4903 ([NEW OPTIMIZER] Added fallback flag when a single row table is present (#60691))
 
     TExprNode::TPtr tableEffectInput = node->ChildPtr(1);
     if (TKqpWriteConstraint::Match(tableEffectInput.Get())){

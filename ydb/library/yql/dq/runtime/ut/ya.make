@@ -7,6 +7,8 @@ SIZE(MEDIUM)
 REQUIREMENTS(cpu:1)
 
 SRCS(
+    dq_channel_trace_ut.cpp
+    dq_execution_wait_ut.cpp
     dq_arrow_helpers_ut.cpp
     dq_input_producer_ut.cpp
     dq_input_ready_ut.cpp

@@ -1,5 +1,8 @@
 #include "dq_tasks_counters.h"
 #include "dq_tasks_runner.h"
+#include <util/system/env.h>
+#include "dq_execution_wait.h"
+#include "dq_initial_input.h"
 
 #include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 #include <ydb/library/yql/dq/runtime/streaming/dq_watermark_generator_tracker.h>
@@ -32,7 +35,8 @@
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
 #include <util/generic/scope.h>
-
+#include <util/system/datetime.h>
+#include <exception>
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -153,6 +157,38 @@ void ValidateParamValue(std::string_view paramName, const TType* type, const NUd
 
 } // namespace
 
+// Only the first fetch has this contract. A partially consumed Take can
+// finish without pulling its input again.
+bool RequiresFirstChannelInput(TRuntimeNode root, const TNode* input) {
+    while (root.GetNode() != input) {
+        if (root.IsImmediate() || !root.GetNode()->GetType()->IsCallable()) {
+            return false;
+        }
+        const auto& op = static_cast<const TCallable&>(*root.GetNode());
+        if (op.HasResult() || !op.GetInputsCount()) {
+            return false;
+        }
+        const auto name = op.GetType()->GetName();
+        if (name == "Take" && op.GetInputsCount() == 2) {
+            const auto count = op.GetInput(1);
+            if (!count.IsImmediate() || !count.GetStaticType()->IsData()
+                || static_cast<const TDataType*>(count.GetStaticType())->GetSchemeType() != NUdf::TDataType<ui64>::Id
+                || !static_cast<const TDataLiteral*>(count.GetNode())->AsValue().Get<ui64>())
+            {
+                return false;
+            }
+        } else if (name == "ToFlow" || name == "FromFlow") {
+            if (op.GetInputsCount() != 1) {
+                return false;
+            }
+        } else if (name != "NarrowMap") {
+            return false;
+        }
+        root = op.GetInput(0);
+    }
+    return true;
+}
+
 #define LOG(...) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(__VA_ARGS__); } } while (0)
 
 NUdf::TUnboxedValue DqBuildInputValue(
@@ -166,14 +202,15 @@ NUdf::TUnboxedValue DqBuildInputValue(
     NUdf::IPgBuilder* pgBuilder,
     NKikimr::NMiniKQL::TWatermark* watermark,
     TDqComputeActorWatermarks* watermarksTracker,
-    bool useReadySet
+    bool useReadySet,
+    bool reportSchedulingWait
 ) {
     switch (inputDesc.GetTypeCase()) {
         case NYql::NDqProto::TTaskInput::kSource:
             Y_ABORT_UNLESS(inputs.size() == 1);
             return CreateInputUnionValue(type, std::move(inputs), holderFactory, stats, startTs, inputsConsumed, watermark, watermarksTracker);
         case NYql::NDqProto::TTaskInput::kUnionAll:
-            return CreateInputUnionValue(type, std::move(inputs), holderFactory, stats, startTs, inputsConsumed, watermark, watermarksTracker, useReadySet);
+            return CreateInputUnionValue(type, std::move(inputs), holderFactory, stats, startTs, inputsConsumed, watermark, watermarksTracker, useReadySet, reportSchedulingWait);
         case NYql::NDqProto::TTaskInput::kMerge: {
             const auto& protoSortCols = inputDesc.GetMerge().GetSortColumns();
             TVector<TSortColumnInfo> sortColsInfo;
@@ -415,6 +452,7 @@ public:
             bool wereChanges = false;
             programRoot = SinglePassVisitCallables(programRoot, explorer, Context.FuncProvider, patternEnv, true, wereChanges);
             if (wereChanges) {
+                RewrittenProgram = true;
                 canBeCached = false;
             }
         }
@@ -594,6 +632,7 @@ public:
         RuntimeSettings = DeserializeRuntimeSettingsFromProto(task.GetProgram().GetRuntimeSettings());
 
         auto entry = BuildTask(task);
+        DescribeTask(task);
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId);
         auto startTime = TInstant::Now();
@@ -608,10 +647,31 @@ public:
             SpillerFactory->SetTaskCounters(SpillingTaskCounters);
         }
         AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(SpillerFactory);
+        AllocatedHolder->ProgramParsed.CompGraph->GetContext().ExecutionWaitObserver = WaitObserver.get();
 
         // the input channels of a task are all v1 or all v2, and the v2 ones support TDqInputReadySet
         const bool useReadySet = task.GetDqChannelVersion() >= 2u && Context.ChannelService
             && Context.ChannelService->IsChannelNotificationsEnabled();
+
+        static const bool deferIdentityInput = GetEnv("YDB_DQ_TASK_WAIT_FIRST_INPUT") == "1";
+        if (deferIdentityInput && Scheduling && !Scheduling->ObserveOnly && useReadySet
+            && !RewrittenProgram && task.InputsSize() == 1 && task.GetInputs(0).ChannelsSize()
+            && !task.GetInputs(0).HasTransform() && !task.GetInputs(0).HasSource()
+            && task.OutputsSize() == 1 && task.GetOutputs(0).ChannelsSize() == 1
+            && !task.GetOutputs(0).HasTransform() && !task.GetOutputs(0).HasSink())
+        {
+            // Use the prepared pattern, including on cache hits. A rewritten
+            // pattern is never inserted into the shared cache.
+            const auto& program = static_cast<const TStructLiteral&>(*entry->ProgramNode.GetNode());
+            const auto index = program.GetType()->FindMemberIndex("Program");
+            if (index) {
+                const auto root = program.GetValue(*index);
+                static const bool deferPipelineInput = GetEnv("YDB_DQ_TASK_WAIT_FIRST_PIPELINE") == "1";
+                WaitForFirstInput = deferPipelineInput
+                    ? RequiresFirstChannelInput(root, entry->EntryPoints[0])
+                    : root.GetNode() == entry->EntryPoints[0];
+            }
+        }
 
         bool taskUsesWatermarks = false;
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
@@ -619,6 +679,8 @@ public:
             TDqMeteringStats::TInputStats* inputStats = nullptr;
             if (task.EnableMetering()) {
                 inputStats = &MeteringStats.AddInputs();
+            } else if (Scheduling) {
+                inputStats = &SchedulingMeteringStats.AddInputs();
             }
 
             TVector<IDqInput::TPtr> inputs{Reserve(std::max<ui64>(inputDesc.ChannelsSize(), 1))}; // 1 is for "source" type of input.
@@ -730,7 +792,8 @@ public:
                         PgBuilder_.get(),
                         &transform->Watermark,
                         transform->WatermarksTracker ? &*transform->WatermarksTracker : nullptr,
-                        useReadySet
+                        useReadySet,
+                        Scheduling != nullptr
                     );
                     inputs.clear();
                     inputs.emplace_back(transform->TransformOutput);
@@ -761,7 +824,8 @@ public:
                             PgBuilder_.get(),
                             &Watermark,
                             inputUsesWatermarks ? WatermarksTracker : nullptr,
-                            useReadySet
+                            useReadySet,
+                            Scheduling != nullptr
                         )
                     );
                 }
@@ -934,7 +998,159 @@ public:
         }
     }
 
+    void ConfigureScheduling(std::shared_ptr<TTaskSchedulingHandle> scheduling, ui64 maxRowsPerRun) override {
+        Scheduling = std::move(scheduling);
+        WaitObserver = Scheduling ? std::make_unique<TTaskExecutionWaitObserver>(Scheduling) : nullptr;
+        MaxRowsPerRun = maxRowsPerRun;
+        if (Context.ComputeCtx) {
+            Context.ComputeCtx->Scheduling = Scheduling;
+        }
+    }
+
+    void SetExecutionBudget(ui64 cpuUs, TMonotonic deadline) override {
+        SliceCpuUs = cpuUs;
+        SliceDeadline = deadline;
+    }
+
+    NJson::TJsonValue TraceChannels() const {
+        NJson::TJsonValue channels(NJson::JSON_ARRAY);
+        // The runner/endpoint lease excludes accesses to the channel wrappers.
+        // Transport buffers provide their own passive, synchronized snapshots.
+        for (const auto& [id, channel] : AllocatedHolder->InputChannels) {
+            auto snapshot = channel->GetTraceSnapshot().ToJson(id, true);
+            snapshot["local"] = channel->IsLocal();
+            snapshot["sampled_monotonic_us"] = TMonotonic::Now().GetValue();
+            channels.AppendValue(std::move(snapshot));
+        }
+        for (const auto& [id, channel] : AllocatedHolder->OutputChannels) {
+            auto snapshot = channel->GetTraceSnapshot().ToJson(id, false);
+            snapshot["local"] = channel->IsLocal();
+            snapshot["sampled_monotonic_us"] = TMonotonic::Now().GetValue();
+            channels.AppendValue(std::move(snapshot));
+        }
+        return channels;
+    }
+
+    void DescribeTask(const TDqTaskSettings& task) const {
+        if (!Scheduling || !Scheduling->Trace) { return; }
+        NJson::TJsonValue args(NJson::JSON_MAP);
+        args["stage_id"] = StageId;
+        args["execution_mode"] = Scheduling->ObserveOnly ? "endpoint" : "scheduled";
+        // Decode in a private arena for the task profile. Walking the
+        // shared pattern cache's nodes would mutate cookies and race its users.
+        {
+            TScopedAlloc traceAlloc(__LOCATION__);
+            TTypeEnvironment traceEnv(traceAlloc);
+            const auto root = DeserializeRuntimeNode(task.GetProgram().GetRaw(), traceEnv);
+            TExploringNodeVisitor explorer;
+            explorer.Walk(root.GetNode(), traceEnv);
+            NJson::TJsonValue operators(NJson::JSON_MAP);
+            THashMap<TString, ui64> counts;
+            for (auto* node : explorer.GetNodes()) {
+                if (node->GetType()->IsCallable()) {
+                    ++counts[TString(static_cast<TCallable*>(node)->GetType()->GetName())];
+                }
+            }
+            TVector<TTaskOperatorTraits> profile;
+            NJson::TJsonValue traits(NJson::JSON_ARRAY);
+            for (const auto& [name, count] : counts) {
+                operators[name] = count;
+                auto item = DescribeTaskOperator(name, count);
+                NJson::TJsonValue json(NJson::JSON_MAP);
+                json["name"] = name;
+                json["count"] = count;
+                json["known_contract"] = item.Known;
+                auto capability = [&](TStringBuf field, bool value) {
+                    json[field] = item.Known ? NJson::TJsonValue(value) : NJson::TJsonValue();
+                };
+                capability("consumes", item.Consumes);
+                capability("accumulates", item.Accumulates);
+                capability("emits_buffered", item.EmitsBuffered);
+                capability("spills", item.Spills);
+                capability("reports_waits", item.ReportsWaits);
+                traits.AppendValue(std::move(json));
+                profile.push_back(std::move(item));
+            }
+            Scheduling->SetOperatorProfile(std::move(profile));
+            args["operator_traits"] = std::move(traits);
+            args["callables"] = std::move(operators);
+        }
+        NJson::TJsonValue sources(NJson::JSON_ARRAY), sinks(NJson::JSON_ARRAY);
+        for (const auto& input : task.GetInputs()) {
+            if (input.HasSource()) { sources.AppendValue(input.GetSource().GetType()); }
+        }
+        for (const auto& output : task.GetOutputs()) {
+            if (output.HasSink()) { sinks.AppendValue(output.GetSink().GetType()); }
+        }
+        args["sources"] = std::move(sources);
+        args["sinks"] = std::move(sinks);
+        Scheduling->Trace->Event("task", TaskId, Scheduling->Actor, std::move(args));
+    }
+
+    bool TryWaitForFirstChannelInput() override {
+        if (!WaitForFirstInput || !Scheduling->ArmInitialChannelWakeup()) {
+            return false;
+        }
+        // Arm before probing: an event racing with either probe enqueues the
+        // handle, and an event predating the subscription is visible as state.
+        for (const auto& [_, output] : AllocatedHolder->OutputChannels) {
+            if (output->IsFinished() || output->IsEarlyFinished()) {
+                return false;
+            }
+        }
+        for (const auto& [_, input] : AllocatedHolder->InputChannels) {
+            if (input->IsFinished() || !input->Empty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     ERunStatus Run() final {
+        WaitForFirstInput = false;
+        const auto trace = Scheduling ? Scheduling->Trace : nullptr;
+        auto channelsBefore = trace ? TraceChannels() : NJson::TJsonValue();
+        const int exceptionsBefore = std::uncaught_exceptions();
+        static const bool cheapRun = GetEnv("YDB_DQ_TASK_CHEAP_RUN") == "1";
+        const bool measureRun = Scheduling && !cheapRun;
+        const ui64 cpuStart = measureRun ? ThreadCPUTime() : 0;
+        SliceCpuStart = cpuStart;
+        const auto wallStart = measureRun ? TMonotonic::Now() : TMonotonic();
+        ui64 inputRowsBefore = 0;
+        if (Scheduling) {
+            WaitObserver->BeginRun();
+            LastRunProgress = {};
+            LastRunProgress.RunnerInvoked = true;
+            if (measureRun) {
+                for (const auto* stats : {&MeteringStats, &SchedulingMeteringStats}) {
+                    for (const auto& input : stats->Inputs) {
+                        inputRowsBefore += input->RowsConsumed;
+                    }
+                }
+            }
+        }
+        Y_DEFER {
+            if (Scheduling) {
+                WaitObserver->EndRun();
+                if (measureRun) {
+                    ui64 inputRowsAfter = 0;
+                    for (const auto* stats : {&MeteringStats, &SchedulingMeteringStats}) {
+                        for (const auto& input : stats->Inputs) {
+                            inputRowsAfter += input->RowsConsumed;
+                        }
+                    }
+                    LastRunProgress.InputRows = inputRowsAfter - inputRowsBefore;
+                    LastRunProgress.CpuTimeUs = ThreadCPUTime() - cpuStart;
+                    LastRunProgress.ElapsedTimeUs = (TMonotonic::Now() - wallStart).MicroSeconds();
+                }
+                LastRunProgress.InputItems = InputsConsumed;
+                if (trace) {
+                    trace->Run(TaskId, Scheduling->Actor, wallStart, Scheduling->GetRunProgressForTrace(LastRunProgress),
+                        std::move(channelsBefore), TraceChannels(), std::uncaught_exceptions() > exceptionsBefore,
+                        std::uncaught_exceptions() > exceptionsBefore ? std::nullopt : std::optional(static_cast<ui32>(LastFetchStatus)));
+                }
+            }
+        };
         LOG(TStringBuilder() << "Run task: " << TaskId);
         if (!AllocatedHolder->ResultStream && !AllocatedHolder->ResultStreamFinished) {
             auto guard = BindAllocator();
@@ -951,6 +1167,9 @@ public:
         InputsConsumed = 0;
         auto runStatus = FetchAndDispatch();
         LastFetchTime = TInstant::Now();
+        if (Scheduling) {
+            LastRunProgress.Finished = runStatus == ERunStatus::Finished && LastFetchStatus != ERunStatus::Finished;
+        }
         LastFetchStatus = runStatus;
 
         if (Y_UNLIKELY(CollectFull())) {
@@ -1164,7 +1383,18 @@ private:
             wideBuffer.resize(AllocatedHolder->OutputWideType->GetElementsCount());
         }
         bool dataConsumed = false;
-        while (AllocatedHolder->Output->GetFillLevel() == NoLimit) {
+        for (;;) {
+            if (Scheduling) {
+                Scheduling->BeginProbe();
+            }
+            if (AllocatedHolder->Output->GetFillLevel() != NoLimit) {
+                break;
+            }
+            if (Scheduling) {
+                // A new Fetch may enter a different, unadapted subtree. Never
+                // reuse a phase hint from a previous successful Fetch.
+                WaitObserver->ResetWork();
+            }
             NUdf::TUnboxedValue value;
             NUdf::EFetchStatus fetchStatus = NUdf::EFetchStatus::Finish;
             if (!AllocatedHolder->ResultStreamFinished && !AllocatedHolder->Output->IsEarlyFinished()) {
@@ -1177,6 +1407,14 @@ private:
 
             switch (fetchStatus) {
                 case NUdf::EFetchStatus::Ok: {
+                    if (Scheduling) {
+                        ui64 rows = 1;
+                        if (isWide &&
+                            AnyOf(AllocatedHolder->OutputWideType->GetElements(), [](const auto* type) { return type->IsBlock(); })) {
+                            rows = TArrowBlock::From(wideBuffer.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+                        }
+                        LastRunProgress.OutputRows += rows;
+                    }
                     if (isWide) {
                         AllocatedHolder->Output->WideConsume(wideBuffer.data(), wideBuffer.size());
                     } else {
@@ -1186,6 +1424,16 @@ private:
                         ++Stats->TotalOutputsProduced;
                     }
                     dataConsumed = true;
+                    if (Scheduling && !Scheduling->ObserveOnly && MaxRowsPerRun && (LastRunProgress.OutputRows >= MaxRowsPerRun
+                        || (SliceCpuUs && ThreadCPUTime() - SliceCpuStart >= SliceCpuUs)
+                        || (SliceDeadline && TMonotonic::Now() >= SliceDeadline))) {
+                        LastRunProgress.BudgetExhausted = true;
+                        Scheduling->MakeRunnable();
+                        AllocatedHolder->Output->Flush();
+                        // Preserve the legacy runner status; the scheduling side
+                        // channel explicitly says Runnable, not an input wait.
+                        return ERunStatus::PendingInput;
+                    }
                     break;
                 }
                 case NUdf::EFetchStatus::Finish: {
@@ -1259,6 +1507,12 @@ private:
     TRuntimeSettings::TConstPtr RuntimeSettings;
 
     ui64 InputsConsumed = 0;
+    std::shared_ptr<TTaskSchedulingHandle> Scheduling;
+    std::unique_ptr<TTaskExecutionWaitObserver> WaitObserver;
+    ui64 MaxRowsPerRun = 0;
+    ui64 SliceCpuUs = 0;
+    ui64 SliceCpuStart = 0;
+    TMonotonic SliceDeadline;
 
     struct TInputTransformInfo {
         NUdf::TUnboxedValue TransformInput;
@@ -1314,10 +1568,13 @@ private:
     TDqComputeActorWatermarks* WatermarksTracker = nullptr;
     TDqWatermarkGeneratorTracker* SourceWatermarksTracker = nullptr;
 
+    bool RewrittenProgram = false;
+    bool WaitForFirstInput = false;
     bool TaskHasEffects = false;
 
     std::unique_ptr<TDqTaskRunnerStats> Stats;
     TDqMeteringStats MeteringStats;
+    TDqMeteringStats SchedulingMeteringStats;
     TDuration RunComputeTime;
 
 private:

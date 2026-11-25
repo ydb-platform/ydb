@@ -3105,7 +3105,35 @@ void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
     }
 }
 
-void RunFinalDumpSpillingIsBatchedTest() {
+class TRecordingExecutionWaitObserver : public IExecutionWaitObserver {
+public:
+    TExecutionInputWaitScope BeginInput() const override { return {}; }
+    void AwaitInput(TExecutionInputWaitScope, ui64, EExecutionInputSide) override {}
+    void AwaitFuture(ui64, const void*, EExecutionWaitKind kind, const NThreading::TFuture<void>& future) override {
+        Kind = kind;
+        Future = future;
+        ++FutureWaits;
+    }
+    void AwaitCallback(ui64, EExecutionWaitKind) override { ++OpaqueWaits; }
+    void MakeRunnable() override {}
+    void ReportWork(ui64, const char* name, EExecutionWorkKind work, const char*) override {
+        Name = name;
+        Work = work;
+        Consumed |= work == EExecutionWorkKind::Consume;
+        Joined |= TStringBuf(name) == "HashJoin";
+    }
+    void Reset() { Kind.reset(); Future.reset(); }
+
+    std::optional<EExecutionWaitKind> Kind;
+    std::optional<NThreading::TFuture<void>> Future;
+    ui64 FutureWaits = 0;
+    ui64 OpaqueWaits = 0;
+    TString Name;
+    EExecutionWorkKind Work = EExecutionWorkKind::Unknown;
+    bool Consumed = false, Joined = false;
+};
+
+void RunFinalDumpSpillingIsBatchedTest(bool reportWaits = false) {
     auto testData = FinalDumpSpillingTestData();
     auto descr = MakeJoinDescription(testData);
     descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(true);
@@ -3114,6 +3142,8 @@ void RunFinalDumpSpillingIsBatchedTest() {
     auto spillerFactory = std::make_shared<TControlledWriteSpillerFactory>(
         std::make_shared<TPreallocatedSpillerFactory>(32_MB));
     graph->GetContext().SpillerFactory = spillerFactory;
+    TRecordingExecutionWaitObserver observer;
+    graph->GetContext().ExecutionWaitObserver = reportWaits ? &observer : nullptr;
 
     const size_t tupleWidth = testData.Renames.size() + 1;
     std::vector<NUdf::TUnboxedValue> output(tupleWidth);
@@ -3124,6 +3154,7 @@ void RunFinalDumpSpillingIsBatchedTest() {
     constexpr size_t MaxPendingPuts = TestStorageSettings.SpillingPagesAtTime * MaxWritesPerPage;
 
     while (true) {
+        observer.Reset();
         const auto status = stream.WideFetch(output.data(), tupleWidth);
         if (status == NYql::NUdf::EFetchStatus::Finish) {
             break;
@@ -3139,6 +3170,10 @@ void RunFinalDumpSpillingIsBatchedTest() {
             continue;
         }
         UNIT_ASSERT_LE(pendingPuts, MaxPendingPuts);
+        if (reportWaits) {
+            UNIT_ASSERT(observer.Kind && *observer.Kind == EExecutionWaitKind::SpillWrite);
+            UNIT_ASSERT(observer.Future && !observer.Future->IsReady());
+        }
         if (!stoppedRegularSpilling) {
             // Leave enough pages in memory for the end-of-input dump. Before the batching fix that dump
             // submitted all of them at once instead of limiting the batch to SpillingPagesAtTime pages.
@@ -3146,12 +3181,20 @@ void RunFinalDumpSpillingIsBatchedTest() {
             stoppedRegularSpilling = true;
         }
         spillerFactory->CompletePendingPuts();
+        if (reportWaits) {
+            UNIT_ASSERT(observer.Future->IsReady());
+        }
     }
 
     UNIT_ASSERT(stoppedRegularSpilling);
     UNIT_ASSERT_VALUES_EQUAL(outputRows, 0);
     UNIT_ASSERT_GT(spillerFactory->TotalPuts(), static_cast<size_t>(TestStorageSettings.SpillingPagesAtTime * 2));
     UNIT_ASSERT_LE(spillerFactory->MaxPendingPuts(), MaxPendingPuts);
+    if (reportWaits) {
+        UNIT_ASSERT_GT(observer.FutureWaits, 0);
+        UNIT_ASSERT_VALUES_EQUAL(observer.OpaqueWaits, 0);
+    }
+    graph->GetContext().ExecutionWaitObserver = nullptr;
 }
 
 // The mock spiller resolves every future at once, so the states that wait for spilling are only
@@ -3344,6 +3387,42 @@ Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
 Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST(TestSerializedListKeySpilling) {
         Test(SerializedListKeySpillingTestData(), false);
+    }
+
+    Y_UNIT_TEST(JoinAndAggregationReportTheirOwnPhasesInOneGraph) {
+        for (bool hashed : {false, true}) {
+            TDqSetup<false, true> setup;
+            auto& pb = setup.GetDqProgramBuilder();
+            auto* itemType = pb.NewDataType(NYql::NUdf::EDataSlot::Uint64);
+            auto makeBlocks = [&](std::initializer_list<ui64> values) {
+                TRuntimeNode::TList items;
+                for (auto value : values) { items.push_back(pb.NewDataLiteral<ui64>(value)); }
+                auto list = pb.NewList(itemType, items);
+                auto wide = pb.ExpandMap(pb.ToFlow(list, {}), [](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; });
+                return pb.WideToBlocks(pb.FromFlow(wide));
+            };
+            auto* blockType = pb.NewBlockType(itemType, TBlockType::EShape::Many);
+            auto* lengthType = pb.LastScalarIndexBlock();
+            auto* joinType = pb.NewStreamType(pb.NewMultiType({blockType, lengthType}));
+            const TVector<ui32> keys{0}, renames{0, 0};
+            auto join = pb.DqBlockHashJoin(makeBlocks({1, 1, 2}), makeBlocks({1, 3}), EJoinKind::Inner,
+                keys, keys, renames, {}, joinType);
+            const TVector<TAggInfo> aggs{{.Name = "count_all", .ArgsColumns = {}}};
+            auto result = hashed
+                ? pb.BlockCombineHashed(join, {}, keys, aggs, pb.NewStreamType(pb.NewMultiType({blockType, blockType, lengthType})))
+                : pb.BlockCombineAll(join, {}, aggs, pb.NewStreamType(pb.NewMultiType({itemType})));
+            auto graph = setup.BuildGraph(result);
+            TRecordingExecutionWaitObserver observer;
+            graph->GetContext().ExecutionWaitObserver = &observer;
+            auto stream = graph->GetValue();
+            TVector<NUdf::TUnboxedValue> values(hashed ? 3 : 1);
+            UNIT_ASSERT(stream.WideFetch(values.data(), values.size()) == NUdf::EFetchStatus::Ok);
+            UNIT_ASSERT(observer.Consumed && observer.Joined);
+            UNIT_ASSERT(observer.Work == EExecutionWorkKind::Emit);
+            UNIT_ASSERT_VALUES_EQUAL(observer.Name, hashed ? "BlockCombineHashed" : "BlockCombineAll");
+            if (!hashed) { UNIT_ASSERT_VALUES_EQUAL(values.front().Get<ui64>(), 2); }
+            UNIT_ASSERT(stream.WideFetch(values.data(), values.size()) == NUdf::EFetchStatus::Finish);
+        }
     }
 
     Y_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {
@@ -4015,6 +4094,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     }
     Y_UNIT_TEST(TestFinalDumpSpillingIsBatched) {
         RunFinalDumpSpillingIsBatchedTest();
+    }
+
+    Y_UNIT_TEST(TestJoinReportsConcreteSpillFutureThroughContext) {
+        RunFinalDumpSpillingIsBatchedTest(true);
     }
 
     Y_UNIT_TEST(TestBlockJoinWithoutSpilling) {

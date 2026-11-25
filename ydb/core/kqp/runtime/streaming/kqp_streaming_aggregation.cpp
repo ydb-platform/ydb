@@ -1,3 +1,4 @@
+#include <ydb/library/yql/dq/task_scheduler/task_scheduler.h>
 #include "kqp_streaming_aggregation.h"
 
 #include <ydb/core/kqp/runtime/common/kqp_compute_context.h>
@@ -567,11 +568,17 @@ private:
 
         state.SelectFuture = RunStateTableQuery<TSelectStateActor>(std::move(keyBytes));
         state.Step = TState::EStep::AwaitSelect;
+        if (ComputeCtx.Scheduling) {
+            ComputeCtx.Scheduling->AwaitCallback();
+        }
         return NUdf::TUnboxedValuePod::MakeYield();
     }
 
     NUdf::TUnboxedValue FinishSelect(TState& state, TComputationContext& ctx) const {
         if (!state.SelectFuture.IsReady()) {
+            if (ComputeCtx.Scheduling) {
+                ComputeCtx.Scheduling->AwaitCallback();
+            }
             return NUdf::TUnboxedValuePod::MakeYield();
         }
 
@@ -601,6 +608,9 @@ private:
 
             state.UpsertFuture = RunStateTableQuery<TUpsertStateActor>(std::move(keyBytes), std::move(packedState));
             state.Step = TState::EStep::AwaitUpsert;
+            if (ComputeCtx.Scheduling) {
+                ComputeCtx.Scheduling->AwaitCallback();
+            }
             return NUdf::TUnboxedValuePod::MakeYield();
         }
 
@@ -612,6 +622,9 @@ private:
 
     NUdf::TUnboxedValue FinishUpsert(TState& state, TComputationContext& ctx) const {
         if (!state.UpsertFuture.IsReady()) {
+            if (ComputeCtx.Scheduling) {
+                ComputeCtx.Scheduling->AwaitCallback();
+            }
             return NUdf::TUnboxedValuePod::MakeYield();
         }
 

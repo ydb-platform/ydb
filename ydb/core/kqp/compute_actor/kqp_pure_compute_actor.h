@@ -47,6 +47,37 @@ public:
 
     void PollSources(ui64 prevFreeSpace);
 
+    // After a worker slice, pull the next source batch on the endpoint and
+    // queue another run only when the read actor actually had rows.
+    void OnWorkerSliceInputsConsumed(NYql::NDq::ERunStatus status) {
+        if (SourcesMap.empty() || !TaskScheduling || TaskScheduling->ObserveOnly) {
+            return;
+        }
+        bool polled = false;
+        if (!DqSliceCompletionOnWorker()) {
+            polled = TBase::PollSourcesForScheduledRun(status);
+        } else if (TBase::SourcesMayHaveMore) {
+            // The read actor may hold the rest of a large read. Polling it from the
+            // worker races its handlers, so hand the poll back to the endpoint.
+            TBase::SourcesMayHaveMore = false;
+            this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution{EResumeSource::CAPollAsync});
+        }
+        bool buffered = false;
+        // A run blocked on output resumes on the channel ack. Rerunning it for the
+        // rows it could not process is a busy loop.
+        if (!polled && status != NYql::NDq::ERunStatus::PendingOutput) {
+            for (const auto& [_, source] : SourcesMap) {
+                if (source.Buffer && !source.Buffer->Empty()) {
+                    buffered = true;
+                    break;
+                }
+            }
+        }
+        if (polled || buffered) {
+            TaskScheduling->RequestExecution();
+        }
+    }
+
 protected:
     ui64 CalcMkqlMemoryLimit() override;
 

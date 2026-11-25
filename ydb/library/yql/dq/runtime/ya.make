@@ -11,6 +11,7 @@ PEERDIR(
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/runtime/streaming
+    ydb/library/yql/dq/task_scheduler
     ydb/library/yql/dq/type_ann
     ydb/library/yverify_stream
     yql/essentials/minikql
@@ -24,6 +25,7 @@ PEERDIR(
 )
 
 SRCS(
+    dq_execution_wait.cpp
     dq_arrow_helpers.cpp
     dq_async_input.cpp
     dq_async_output.cpp

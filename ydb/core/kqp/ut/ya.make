@@ -26,6 +26,7 @@ RECURSE_FOR_TESTS(
     runtime
     sysview
     digest
+    task_scheduler
     tli
     topics
     tx

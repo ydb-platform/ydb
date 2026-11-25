@@ -6,6 +6,7 @@ RECURSE(
     expr_nodes
     opt
     runtime
+    task_scheduler
     tasks
     transform
     type_ann

@@ -122,6 +122,7 @@ private:
     TString GetEstimationsInfo() const;
 
     NYql::NDqProto::TDqTask* SerializeTaskForExecution(const TTask& task);
+    std::shared_ptr<const NYql::NDq::TQueryTaskGraph> GetSchedulingGraph();
     std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> SerializeRequest(const TRequestData& requestData);
     ui32 CalcSendMessageFlagsForNode(ui32 nodeId);
 
@@ -149,6 +150,8 @@ private:
     TVector<TTaskResourceEstimation> ResourceEstimations;
     TVector<TRequestData> Requests;
     TKqpTasksGraph& TasksGraph;
+    std::shared_ptr<const NYql::NDq::TQueryTaskGraph> SchedulingGraph;
+    std::shared_ptr<const NYql::NDq::TQueryGraphRegistration> SchedulingGraphRegistration;
     ui64 MkqlMemoryLimit;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 

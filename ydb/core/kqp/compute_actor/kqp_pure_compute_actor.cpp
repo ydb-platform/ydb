@@ -119,8 +119,12 @@ void TKqpComputeActor::DoBootstrap() {
     SetTaskRunner(taskRunner);
 
     auto selfId = this->SelfId();
-    auto wakeupCallback = [actorSystem, selfId]() {
-        actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+    auto wakeupCallback = [actorSystem, selfId, scheduling = this->TaskScheduling]() {
+        if (scheduling && !scheduling->ObserveOnly) {
+            scheduling->RequestExecution();
+        } else {
+            actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+        }
     };
     ComputeCtx.SetWakeupCallback(wakeupCallback);
     auto errorCallback = [actorSystem, selfId](const TString& error) {
@@ -187,6 +191,11 @@ void TKqpComputeActor::DoBootstrap() {
 }
 
 STFUNC(TKqpComputeActor::StateFunc) {
+    const auto workerExecution = WorkerExecution;
+    if (workerExecution && !EnterWorkerEndpoint(ev)) {
+        return;
+    }
+    Y_DEFER { if (workerExecution) { LeaveWorkerEndpoint(workerExecution); } };
     YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "CA StateFunc",
         {"logPrefix", this->LogPrefix},
         {"eventType", ev->GetTypeRewrite()});
@@ -269,6 +278,7 @@ void TKqpComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool 
 }
 
 void TKqpComputeActor::PassAway() {
+    RetireWorkerExecution();
     if (SysViewActorId) {
         Send(SysViewActorId, new TEvents::TEvPoison);
     }

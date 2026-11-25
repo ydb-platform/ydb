@@ -1,0 +1,54 @@
+#pragma once
+
+#include "dq_compute_memory_quota.h"
+#include "dq_schedulable.h"
+#include <ydb/library/yql/dq/task_scheduler/worker_pool.h>
+
+#include <functional>
+
+namespace NYql::NDq {
+
+// Shared by the task endpoint and workers. Compute context and channel adapters
+// remain attached to the endpoint during the first PoC; the lease protects their
+// lifetime and every access while the runner executes on a different mailbox.
+class TDqTaskExecution final : public IDqTaskExecution, public std::enable_shared_from_this<TDqTaskExecution> {
+public:
+    TDqTaskExecution(TIntrusivePtr<IDqTaskRunner> runner, TDqMemoryQuota* memoryQuota,
+        std::shared_ptr<IDqTaskScheduler> scheduler, std::shared_ptr<TTaskSchedulingHandle> task,
+        IDqSchedulableWorkFactoryPtr workFactory, NActors::TActorSystem* actorSystem, NActors::TActorId endpoint);
+    std::shared_ptr<const TTaskExecutionLease> GetAvailability() const override { return Available; }
+    bool IsAvailable() const override { return Available->IsAvailable(); }
+    bool TryAcquire() override;
+    void Release() override;
+    bool TryAcquireEndpoint();
+    void Retire(bool completed); // endpoint lease must be held
+    TTaskSliceResult RunSlice(const TTaskSliceBudget& budget) override;
+    bool CompleteOnWorker(TTaskSliceResult& result) override;
+    void OnSliceFinished(TTaskSliceResult result) override;
+    // Source reads drain channel output on the worker. The callback runs under the lease.
+    void SetWorkerCompletion(std::function<void(TTaskSliceResult)> completion);
+    // Endpoint lease must be held. Allows workers to complete the following slices
+    // without the endpoint while the output finish epoch stays at `checkedEpoch`.
+    void AllowInlineCompletion(std::shared_ptr<const std::atomic<ui64>> epoch, ui64 checkedEpoch);
+    static bool RefreshInlinePermissionEnabled();
+    void DisallowInlineCompletion() { InlineAllowed.store(false, std::memory_order_release); }
+
+private:
+    TIntrusivePtr<IDqTaskRunner> Runner;
+    TDqMemoryQuota* const MemoryQuota;
+    const std::shared_ptr<IDqTaskScheduler> Scheduler;
+    const std::shared_ptr<TTaskSchedulingHandle> Task;
+    std::unique_ptr<IDqSchedulableWork> Work;
+    bool WaitingForQuota = false;
+    NActors::TActorSystem* const ActorSystem;
+    const NActors::TActorId Endpoint;
+    const std::shared_ptr<TTaskExecutionLease> Available = std::make_shared<TTaskExecutionLease>();
+    std::atomic<bool> EndpointWaiting = false;
+    std::function<void(TTaskSliceResult)> WorkerCompletion;
+    std::atomic<bool> InlineAllowed = false;
+    std::shared_ptr<const std::atomic<ui64>> InlineEpoch; // written by the endpoint under the lease
+    ui64 InlineCheckedEpoch = 0;
+    ui32 InlineStreak = 0; // touched under the lease only
+};
+
+} // namespace NYql::NDq

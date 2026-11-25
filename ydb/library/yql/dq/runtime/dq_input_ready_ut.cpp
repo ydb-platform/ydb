@@ -1,6 +1,10 @@
+#include "dq_initial_input.h"
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_input_ready.h>
+#include <ydb/library/yql/dq/task_scheduler/task_scheduler.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node.h>
@@ -30,17 +34,26 @@ public:
     void PushRow(i32 value) {
         Items.push_back(value);
         Hook.Mark();
+        if (Scheduling) {
+            Scheduling->Signal(InputDependency(ChannelId));
+        }
     }
 
     // a chunk without rows: Pop returns false for it and the input marks itself, as it may hold more
     void PushEmptyChunk() {
         Items.push_back(std::nullopt);
         Hook.Mark();
+        if (Scheduling) {
+            Scheduling->Signal(InputDependency(ChannelId));
+        }
     }
 
     void FinishInput() {
         Finished = true;
         Hook.Mark();
+        if (Scheduling) {
+            Scheduling->Signal(InputDependency(ChannelId));
+        }
     }
 
     // IDqInput
@@ -51,6 +64,9 @@ public:
 
     bool Pop(TUnboxedValueBatch& batch, TMaybe<TInstant>&) override {
         ++PopCalls;
+        if (Scheduling) {
+            EmptyVersion = Scheduling->Observe(InputDependency(ChannelId));
+        }
         if (Paused || Items.empty()) {
             return false;
         }
@@ -83,6 +99,15 @@ public:
         return true;
     }
 
+    void BindTaskScheduling(std::shared_ptr<TTaskSchedulingHandle> scheduling) override {
+        Scheduling = std::move(scheduling);
+    }
+    void ReportSchedulingWait() const override {
+        if (Scheduling) {
+            Scheduling->Await(InputDependency(ChannelId), EmptyVersion);
+        }
+    }
+
     // IDqInputChannel
     ui64 GetChannelId() const override { return ChannelId; }
     const TDqInputChannelStats& GetPushStats() const override { return PushStats; }
@@ -95,6 +120,8 @@ public:
     ui64 PopCalls = 0;
 
 private:
+    std::shared_ptr<TTaskSchedulingHandle> Scheduling;
+    ui64 EmptyVersion = 0;
     TType* Type;
     const ui64 ChannelId;
     const bool Readiness;
@@ -118,7 +145,7 @@ struct TUnionTest {
     NUdf::TUnboxedValue Union;
 
     // `readiness` per input: true supports TDqInputReadySet; `useReadySet` is what the task runner asks for
-    explicit TUnionTest(const std::vector<bool>& readiness, bool useReadySet = true)
+    explicit TUnionTest(const std::vector<bool>& readiness, bool useReadySet = true, bool reportSchedulingWait = false)
         : Alloc(__LOCATION__)
         , TypeEnv(Alloc)
         , MemInfo("Mem")
@@ -130,7 +157,7 @@ struct TUnionTest {
             Inputs.push_back(MakeIntrusive<TFakeInput>(RowType, i + 1, readiness[i]));
             inputs.push_back(Inputs.back());
         }
-        Union = CreateInputUnionValue(RowType, std::move(inputs), HolderFactory, {}, StartTs, InputsConsumed, nullptr, nullptr, useReadySet);
+        Union = CreateInputUnionValue(RowType, std::move(inputs), HolderFactory, {}, StartTs, InputsConsumed, nullptr, nullptr, useReadySet, reportSchedulingWait);
     }
 
     ~TUnionTest() {
@@ -160,6 +187,36 @@ struct TUnionTest {
 } // namespace
 
 Y_UNIT_TEST_SUITE(DqInputReadySet) {
+
+    Y_UNIT_TEST(SchedulerWaitIncludesIdleInputsSkippedByReadySet) {
+        TUnionTest t({true, true}, true, true);
+        ui32 enqueues = 0;
+        auto task = std::make_shared<TTaskSchedulingHandle>(NActors::TActorId{}, NActors::TActorId{}, [&](auto) { ++enqueues; }, [] {});
+        for (auto& input : t.Inputs) {
+            input->BindTaskScheduling(task);
+        }
+        const auto run = [&] {
+            auto generation = task->TryDispatch();
+            UNIT_ASSERT(generation);
+            UNIT_ASSERT(task->Start(*generation));
+            task->BeginProbe();
+            auto result = t.Drain();
+            task->Complete({});
+            return result;
+        };
+        task->RequestExecution();
+        UNIT_ASSERT(run().first.empty());
+        const auto firstPops = t.PopCalls(0);
+        t.Inputs[1]->PushRow(7);
+        UNIT_ASSERT_VALUES_EQUAL(enqueues, 2);
+        UNIT_ASSERT(run().first == std::multiset<i32>{7});
+        // The first channel stays idle and is not polled again on this run.
+        UNIT_ASSERT_VALUES_EQUAL(t.PopCalls(0), firstPops);
+        t.Inputs[0]->PushRow(9);
+        UNIT_ASSERT_VALUES_EQUAL(enqueues, 3);
+        UNIT_ASSERT(run().first == std::multiset<i32>{9});
+        task->Cancel();
+    }
 
     Y_UNIT_TEST(ConsumerApi) {
         TDqInputReadySet set(4);
@@ -387,5 +444,27 @@ Y_UNIT_TEST_SUITE(DqInputUnionReadiness) {
         test.Inputs[1]->FinishInput();
         std::tie(rows, finished) = test.Drain();
         UNIT_ASSERT(finished);
+    }
+}
+
+Y_UNIT_TEST_SUITE(DqTaskInitialInput) {
+    Y_UNIT_TEST(ClassifiesTheDrivingInputOfTheFirstFetch) {
+        auto registry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment env(alloc);
+        TProgramBuilder pb(env, *registry);
+        const auto one = pb.NewDataLiteral(ui64(1));
+        const auto zero = pb.NewDataLiteral(ui64(0));
+        const auto input = pb.Arg(pb.NewStreamType(pb.NewMultiType({one.GetStaticType()})));
+        const auto flow = pb.ToFlow(input, {});
+        const auto mapped = pb.NarrowMap(flow, [](TRuntimeNode::TList fields) { return fields.front(); });
+        const auto dynamicCount = pb.Arg(one.GetStaticType());
+        UNIT_ASSERT(RequiresFirstChannelInput(input, input.GetNode()));
+        UNIT_ASSERT(RequiresFirstChannelInput(pb.FromFlow(mapped), input.GetNode()));
+        UNIT_ASSERT(RequiresFirstChannelInput(pb.FromFlow(pb.Take(mapped, one)), input.GetNode()));
+        UNIT_ASSERT(!RequiresFirstChannelInput(pb.FromFlow(pb.Take(mapped, zero)), input.GetNode()));
+        UNIT_ASSERT(!RequiresFirstChannelInput(pb.FromFlow(pb.Take(mapped, dynamicCount)), input.GetNode()));
+        UNIT_ASSERT(!RequiresFirstChannelInput(pb.FromFlow(mapped), pb.Arg(input.GetStaticType()).GetNode()));
+        UNIT_ASSERT(!RequiresFirstChannelInput(pb.FromFlow(pb.Skip(mapped, one)), input.GetNode()));
     }
 }

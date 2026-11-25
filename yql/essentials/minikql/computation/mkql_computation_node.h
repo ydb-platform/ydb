@@ -2,6 +2,7 @@
 
 #include "mkql_bridge_protocol.h"
 #include "mkql_computation_node_list.h"
+#include "mkql_execution_wait.h"
 #include "mkql_spiller_factory.h"
 
 #include <yql/essentials/minikql/defs.h>
@@ -131,6 +132,8 @@ struct TComputationContext: public TComputationContextLLVM {
     const TTypeEnvironment& TypeEnv;
     const TComputationMutables Mutables;
     std::shared_ptr<ISpillerFactory> SpillerFactory;
+    // Owned by the execution engine; valid while this graph is being executed.
+    IExecutionWaitObserver* ExecutionWaitObserver = nullptr;
     const NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
     NUdf::ICountersProvider* const CountersProvider;
     const NUdf::ISecureParamsProvider* const SecureParamsProvider;

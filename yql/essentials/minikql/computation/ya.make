@@ -40,6 +40,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/threading/future
     contrib/libs/apache/arrow
     library/cpp/string_utils/base64
     yql/essentials/public/types

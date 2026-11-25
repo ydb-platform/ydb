@@ -7,6 +7,8 @@
 #include "dq_compute_actor.h"
 #include "dq_compute_issues_buffer.h"
 #include "dq_compute_memory_quota.h"
+#include "dq_task_execution.h"
+#include <util/generic/scope.h>
 
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -118,6 +120,7 @@ private:
         enum EEv : ui32 {
             EvAsyncOutputError = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
             EvCheckIdleness,
+            EvDeferredTerminate,
             EvEnd
         };
 
@@ -139,6 +142,16 @@ private:
             {}
 
             TInstant CheckTime;
+        };
+
+        struct TEvDeferredTerminate : public NActors::TEventLocal<TEvDeferredTerminate, EvDeferredTerminate> {
+            TEvDeferredTerminate(bool success, TIssues issues)
+                : Success(success)
+                , Issues(std::move(issues))
+            {}
+
+            bool Success;
+            TIssues Issues;
         };
     };
 
@@ -173,6 +186,16 @@ public:
             }
 
             InitializeWatermarks();
+            // Checkpoint managers are installed later by coordinator messages.
+            // Check the task mode before opting into the synchronous PoC.
+            if (RuntimeSettings.TaskScheduler && !TDerived::HasAsyncTaskRunner
+                && CheckpointingMode == NDqProto::CHECKPOINTING_MODE_DISABLED
+                && !Checkpoints && Task.GetDqChannelVersion() >= 2u)
+            {
+                TaskScheduling = RuntimeSettings.TaskScheduler->Register(this->SelfId(), ExecuterId, Task.GetId());
+            } else if (RuntimeSettings.TaskTraceScheduler && !TDerived::HasAsyncTaskRunner && Task.GetDqChannelVersion() >= 2u) {
+                TaskScheduling = RuntimeSettings.TaskTraceScheduler->RegisterObserver(this->SelfId(), ExecuterId, Task.GetId());
+            }
 
             if (RuntimeSettings.Timeout) {
                 CA_LOG_D("Set execution timeout " << *RuntimeSettings.Timeout);
@@ -202,6 +225,9 @@ public:
             }
 
             static_cast<TDerived*>(this)->DoBootstrap();
+            if (!Terminated) {
+                InitializeWorkerExecution();
+            }
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
             OnMemoryLimitExceptionHandler();
         } catch (const std::exception& e) {
@@ -209,6 +235,10 @@ public:
         }
 
         ReportEventElapsedTime();
+        if (WorkerBootstrapLease) {
+            WorkerBootstrapLease = false;
+            WorkerExecution->Release();
+        }
     }
 
 protected:
@@ -347,6 +377,8 @@ protected:
         MetricsReporter.ReportEvent(ev->GetTypeRewrite(), ev);
 
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTaskRunPermit, HandleTaskRunPermit);
+            hFunc(TEvTaskSliceFinished, HandleWorkerSliceFinished);
             hFunc(TEvDqCompute::TEvResumeExecution, HandleExecuteBase);
             hFunc(TEvDqCompute::TEvChannelsInfo, HandleExecuteBase);
             hFunc(TEvDq::TEvAbortExecution, HandleExecuteBase);
@@ -366,6 +398,7 @@ protected:
             hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
             hFunc(TEvPrivate::TEvAsyncOutputError, HandleAsyncOutputError);
             hFunc(TEvPrivate::TEvCheckIdleness, HandleCheckIdleness);
+            hFunc(TEvPrivate::TEvDeferredTerminate, HandleDeferredTerminate);
             hFunc(NActors::NMon::TEvHttpInfo, OnMonitoringPage)
             default: {
                 CA_LOG_C("TDqComputeActorBase, unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
@@ -395,8 +428,118 @@ protected:
         return nullptr;
     }
 
+    virtual void InitializeWorkerExecution() {}
+    virtual bool TryWaitForFirstChannelInput() { return false; }
+    // Worker execution: the slice result must go through the endpoint (e.g. to ack scan fetchers).
+    virtual bool WorkerSliceNeedsEndpoint() const { return false; }
+    // Worker execution: new input arrives as an endpoint event that itself requests execution,
+    // so a PendingInput run with no data must not re-request execution (it would spin a worker).
+    virtual bool InputArrivalWakesTask() const { return false; }
+    virtual void CompleteWorkerSlice(TTaskSliceResult) { Y_ABORT("Worker execution is not supported"); }
+
+    bool EnterWorkerEndpoint(TAutoPtr<NActors::IEventHandle>& ev) {
+        const bool availability = ev->GetTypeRewrite() == TEvTaskExecutionAvailable::EventType;
+        if (!availability) {
+            // Any other event may change output, peer or control state: the next slice goes through here.
+            WorkerExecution->DisallowInlineCompletion();
+        }
+        if (!WorkerExecution->TryAcquireEndpoint()) {
+            // An availability notice is only a wakeup. The failed acquire above parked the
+            // endpoint again, so the next release sends a fresh one; never queue it, otherwise
+            // it is later replayed as a regular event with no handler.
+            if (availability) {
+                ev.Destroy();
+            } else {
+                DeferredWorkerEvents.emplace_back(ev.Release());
+            }
+            return false;
+        }
+        if (availability) {
+            ev.Destroy();
+        }
+        if (!DeferredWorkerEvents.empty()) {
+            if (ev) {
+                DeferredWorkerEvents.emplace_back(ev.Release());
+            }
+            ev.Reset(DeferredWorkerEvents.front().Release());
+            DeferredWorkerEvents.pop_front();
+        }
+        if (!ev) {
+            WorkerExecution->Release();
+            return false;
+        }
+        return true;
+    }
+
+    // Endpoint lease held, right after a slice was processed here. True when the endpoint
+    // would do nothing for a following non-final slice but complete its scheduling handle:
+    // local channels only, cached output summary valid, no async IO, nothing pending.
+    bool CanCompleteSlicesInline() const {
+        // CheckRunStatus treats PendingInput with every output finished as Finished; with an output still
+        // unfinished (HasDataToSend) that branch only logs, so the slice needs nothing from the endpoint.
+        if (Terminated || State != NDqProto::COMPUTE_STATE_EXECUTING || Channels || Checkpoints || WorkerSliceNeedsEndpoint()
+            || !AllOutputsFinishEpochBound || ProcessOutputsState.Inflight != 0 || !CheckedOutputFinishEpoch
+            || !OutputChannelsSummary || !OutputChannelsSummary->ChannelsReady || !OutputChannelsSummary->HasDataToSend
+            || HasEffectsOutputs || !DeferredWorkerEvents.empty() || InputChannelsMap.empty()
+            || !SourcesMap.empty() || !InputTransformsMap.empty() || !SinksMap.empty() || !OutputTransformsMap.empty())
+        {
+            return false;
+        }
+        for (const auto& [_, info] : InputChannelsMap) {
+            if (!info.HasPeer) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void MaybeAllowInlineCompletion() {
+        if (WorkerExecution && CanCompleteSlicesInline()) {
+            WorkerExecution->AllowInlineCompletion(OutputFinishEpoch, *CheckedOutputFinishEpoch);
+        }
+    }
+
+    void LeaveWorkerEndpoint(const std::shared_ptr<TDqTaskExecution>& execution) {
+        if (!Terminated && execution->RefreshInlinePermissionEnabled()) {
+            MaybeAllowInlineCompletion();
+        }
+        if (!Terminated && !DeferredWorkerEvents.empty()) {
+            this->Send(this->SelfId(), new TEvTaskExecutionAvailable());
+        }
+        execution->Release();
+    }
+
+    void RetireWorkerExecution() {
+        if (WorkerExecution) {
+            if (CompletingWorkerSlice) {
+                ScheduledRunProgress.Finished |= State == NDqProto::COMPUTE_STATE_FINISHED;
+                TaskScheduling->Complete(ScheduledRunProgress);
+            }
+            WorkerExecution->Retire(State == NDqProto::COMPUTE_STATE_FINISHED);
+        }
+    }
+
     void DoExecute() {
         Y_ASSERT(!Terminated);
+        if (TaskScheduling && !TaskScheduling->ObserveOnly && !ExecutingScheduledTask) {
+            // Source rows live in the read actor until the endpoint polls them.
+            // QueueScheduledExecution does that under the task allocator, then
+            // queues a run only when a read-only task actually has rows.
+            QueueScheduledExecution(EResumeSource::Default);
+            return;
+        }
+        const bool observing = TaskScheduling && TaskScheduling->ObserveOnly;
+        if (observing) {
+            TaskScheduling->RequestExecution();
+            const auto generation = TaskScheduling->TryDispatch();
+            Y_ABORT_UNLESS(generation && TaskScheduling->Start(*generation));
+            ScheduledRunProgress = {};
+        }
+        Y_DEFER {
+            if (observing) {
+                TaskScheduling->Complete(ScheduledRunProgress);
+            }
+        };
 
         auto guard = BindAllocator();
         // memory hungry operators reach the task memory quota through this thread-local binding
@@ -569,7 +712,10 @@ protected:
             // n.b. if c) is not satisfied we will also call ContinueExecute on branch
             // "status != ERunStatus::Finished -> !pollSent -> ProcessOutputsState.DataWasSent"
             // but idk what is the logic behind this
-            ContinueExecute(EResumeSource::CAPendingInput);
+            const bool scheduled = TaskScheduling && !TaskScheduling->ObserveOnly;
+            if (!scheduled || (!TaskScheduling->HasObservedWaits() && !InputArrivalWakesTask())) {
+                ContinueExecute(EResumeSource::CAPendingInput);
+            }
             return;
         }
 
@@ -660,7 +806,15 @@ protected:
 protected:
     void PassAway() override {
         Y_ABORT_UNLESS(Terminated);
+        if (TaskScheduling) {
+            TaskScheduling->Complete(ScheduledRunProgress);
+            TaskScheduling->Cancel(State == NDqProto::COMPUTE_STATE_FINISHED);
+        }
         NActors::TActorBootstrapped<TDerived>::PassAway();
+    }
+
+    void HandleDeferredTerminate(const TEvPrivate::TEvDeferredTerminate::TPtr& ev) {
+        Terminate(ev->Get()->Success, ev->Get()->Issues);
     }
 
     void Terminate(bool success, const TIssues& issues) {
@@ -669,6 +823,24 @@ protected:
             CA_LOG_W("Compute Actor " << this->SelfId() << " for task " << Task.GetId() << " tried to call Terminate twice: "
                 << " success: " << success
                 << " issues: " << issues.ToOneLineString());
+            return;
+        }
+        // PassAway must run on the endpoint mailbox. A worker holds the lease
+        // and only queues the destruction.
+        if (DqSliceCompletionOnWorker()) {
+            if (!DeferredTermination) {
+                DeferredTermination = true;
+                auto* event = new TEvPrivate::TEvDeferredTerminate(success, issues);
+                // Destruction has to happen on the endpoint mailbox, but on this
+                // same thread and before any other mailbox, or the session waits
+                // behind a normal queue.
+                if (NActors::TlsActivationContext) {
+                    NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
+                        new NActors::IEventHandle(this->SelfId(), NActors::TActorId{}, event));
+                } else {
+                    this->Send(this->SelfId(), event);
+                }
+            }
             return;
         }
 
@@ -861,7 +1033,62 @@ protected:
         return std::move(log);
     }
 
+    // True when the task has to run: rows arrived, or a source finished. An empty
+    // last batch returns no resume, yet only Run can observe the finish.
+    bool PollSourcesForScheduledRun(ERunStatus lastRunStatus) {
+        const auto finishedSources = [this] {
+            ui32 count = 0;
+            for (const auto& [_, source] : SourcesMap) {
+                count += source.Finished;
+            }
+            return count;
+        };
+        const ui32 finishedBefore = finishedSources();
+        const auto result = PollAsyncInput();
+        SourcesMayHaveMore = result.Defined();
+        // A full buffer needs a run only if the last one waited for input, as in
+        // DoExecuteImpl. A run blocked on output resumes on the output wake.
+        const bool polled = result
+            && (*result != EResumeSource::CAPollAsyncNoSpace || lastRunStatus == ERunStatus::PendingInput);
+        return polled || finishedSources() != finishedBefore;
+    }
+
+    // Pull source rows into the runner before the worker is queued. ContinueExecute
+    // used to queue the task immediately, so the worker ran before the batch existed.
+    void QueueScheduledExecution(EResumeSource source) {
+        bool polled = false;
+        // The worker completion calls back into here while the read actor can
+        // still be pushing the next batch. Leave that poll to the endpoint.
+        if (!SourcesMap.empty() && !DqSliceCompletionOnWorker()) {
+            auto guard = BindAllocator();
+            TDqOperatorMemoryQuotaScope operatorQuotaScope(MemoryQuota ? MemoryQuota->GetOperatorQuota() : nullptr);
+            polled = PollSourcesForScheduledRun(ProcessOutputsState.LastRunStatus);
+        }
+        if (!SourcesMap.empty() && InputChannelsMap.empty()) {
+            // A read task has nothing to execute until rows arrive. Output wakes
+            // still run: the program may have a pending result to send.
+            // After sending, a run that already drained its source until PendingInput
+            // has nothing to do until the next batch arrives.
+            const bool outputWake = source == EResumeSource::CAPendingOutput
+                || (source == EResumeSource::CADataSent && ProcessOutputsState.LastRunStatus != ERunStatus::PendingInput)
+                || source == EResumeSource::CAWakeupCallback
+                || source == EResumeSource::CAFinish
+                || source == EResumeSource::AsyncPopFinished;
+            if ((Running || Checkpoints) && (polled || outputWake)) {
+                TaskScheduling->RequestExecution();
+            }
+            return;
+        }
+        if ((Running || Checkpoints) && !TryWaitForFirstChannelInput()) {
+            TaskScheduling->RequestExecution();
+        }
+    }
+
     void ContinueExecute(EResumeSource source = EResumeSource::Default) {
+        if (TaskScheduling && !TaskScheduling->ObserveOnly) {
+            QueueScheduledExecution(source);
+            return;
+        }
         if (!ResumeEventScheduled && (Running ||
             Checkpoints // After finish graph should continue checkpoints distribution
         )) {
@@ -1253,6 +1480,29 @@ protected:
     }
 
 protected:
+    void HandleTaskRunPermit(TEvTaskRunPermit::TPtr& ev) {
+        if (ev->Get()->Task != TaskScheduling || !TaskScheduling->Start(ev->Get()->Generation)) {
+            return;
+        }
+        ExecutingScheduledTask = true;
+        ScheduledRunProgress = {};
+        Y_DEFER {
+            ExecutingScheduledTask = false;
+            TaskScheduling->Complete(ScheduledRunProgress);
+        };
+        if (Running) {
+            DoExecute();
+        }
+    }
+
+    void HandleWorkerSliceFinished(TEvTaskSliceFinished::TPtr& ev) {
+        if (ev->Get()->Execution == WorkerExecution) {
+            CompletingWorkerSlice = true;
+            Y_DEFER { CompletingWorkerSlice = false; };
+            CompleteWorkerSlice(std::move(ev->Get()->Result));
+        }
+    }
+
     void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr&) {
         ResumeEventScheduled = false;
         if (Running) {
@@ -2943,6 +3193,13 @@ protected:
     THashMap<ui64, TAsyncOutputInfoBase> SinksMap; // Output index -> Sink info
     THashMap<ui64, TAsyncOutputTransformInfo> OutputTransformsMap; // Output index -> Transforms info
     bool ResumeEventScheduled = false;
+    std::shared_ptr<TTaskSchedulingHandle> TaskScheduling;
+    std::shared_ptr<TDqTaskExecution> WorkerExecution;
+    bool WorkerBootstrapLease = false;
+    bool CompletingWorkerSlice = false;
+    std::deque<THolder<NActors::IEventHandle>> DeferredWorkerEvents;
+    bool ExecutingScheduledTask = false;
+    TTaskRunProgress ScheduledRunProgress;
     NDqProto::EComputeState State;
     ui64 ComputeActorElapsedTicks = 0;
     ui64 TaskRunnerActorElapsedTicks = 0;
@@ -2988,7 +3245,11 @@ private:
     std::optional<TMonotonic> LastSendStatsTime;
     bool PassExceptions = false;
     bool Terminated = false;
+    bool DeferredTermination = false;
 protected:
+    // The last source poll returned rows or hit back pressure. A read actor does not
+    // notify again for rows it already holds, so the endpoint has to poll once more.
+    bool SourcesMayHaveMore = false;
     ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryQuota;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputChannelSize;
     ::NMonitoring::TDynamicCounters::TCounterPtr SourceCpuTimeMs;

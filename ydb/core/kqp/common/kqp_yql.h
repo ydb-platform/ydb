@@ -191,7 +191,6 @@ public:
     static constexpr TStringBuf VectorTopKMetricSettingName = "VectorTopKMetric";
     static constexpr TStringBuf VectorTopKTargetSettingName = "VectorTopKTarget";
     static constexpr TStringBuf VectorTopKLimitSettingName = "VectorTopKLimit";
-    static constexpr TStringBuf DisableVectorTopKSettingName = "DisableVectorTopK";
 
     struct TSampling {
         double Rate = 1.0;
@@ -216,7 +215,6 @@ public:
     TString VectorTopKMetric;
     TExprNode::TPtr VectorTopKTarget;
     TExprNode::TPtr VectorTopKLimit;
-    bool DisableVectorTopK = false;
 
     void AddSkipNullKey(const TString& key);
     void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }

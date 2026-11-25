@@ -1338,8 +1338,7 @@ TExprBase ValidateHnswTarget(const TIndexDescription& index, const TCoTopBase& t
 }
 
 TExprBase ReadWithHnswTarget(const TReadMatch& match, const TKikimrTableDescription& table,
-    const TCoAtomList& columns, const TExprBase& validatedLimit, TExprContext& ctx,
-    const TMaybeNode<TCoNameValueTupleList>& settings = {})
+    const TCoAtomList& columns, const TExprBase& validatedLimit, TExprContext& ctx)
 {
     const auto pos = match.Pos();
     const auto tableNode = BuildTableMeta(*table.Metadata, pos, ctx);
@@ -1349,7 +1348,7 @@ TExprBase ReadWithHnswTarget(const TReadMatch& match, const TKikimrTableDescript
         // Preserve an existing key range. The limit is independent of the rows.
         const auto all = Build<TCoUint64>(ctx, pos).Literal().Build(ToString(Max<ui64>())).Done();
         return Build<TCoTake>(ctx, pos)
-            .Input(match.BuildRead(ctx, tableNode, columns, settings))
+            .Input(match.BuildRead(ctx, tableNode, columns))
             .Count(ctx.NewCallable(pos, "If", {usable, all.Ptr(), zero.Ptr()}))
             .Done();
     }
@@ -1368,7 +1367,7 @@ TExprBase ReadWithHnswTarget(const TReadMatch& match, const TKikimrTableDescript
         .Table(tableNode)
         .Columns(columns)
         .Ranges(ranges)
-        .Settings(settings ? settings.Cast() : match.Settings())
+        .Settings(match.Settings())
         .ExplainPrompt(TKqpReadTableExplainPrompt().BuildNode(ctx, pos))
         .Done();
 }
@@ -1444,12 +1443,9 @@ TExprBase RewriteFilteredHnswScan(const TReadMatch& match, const TMaybeNode<TCoF
         tableDesc.Metadata->KeyColumnNames, ctx);
     const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(
         indexDesc.SpecializedIndexDescription).GetSettings();
-    auto exactRead = TKqpReadTableSettings::Parse(match.Settings());
-    exactRead.DisableVectorTopK = true;
-    const auto exactSettings = exactRead.BuildNode(ctx, pos);
     auto rows = usesOriginalEmbedding && target && !HasFreeArguments(target)
-        ? ReadWithHnswTarget(match, posting, columns, ValidateHnswTarget(indexDesc, top, target, ctx, pos), ctx, exactSettings)
-        : match.BuildRead(ctx, BuildTableMeta(*posting.Metadata, pos, ctx), columns, exactSettings);
+        ? ReadWithHnswTarget(match, posting, columns, ValidateHnswTarget(indexDesc, top, target, ctx, pos), ctx)
+        : match.BuildRead(ctx, BuildTableMeta(*posting.Metadata, pos, ctx), columns);
 
     if (settings.overlap_clusters() > 1) {
         rows = DeduplicateHnswPostings(rows, tableDesc, columns, ctx, pos);

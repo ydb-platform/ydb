@@ -1087,6 +1087,18 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         )"); });
         UNIT_ASSERT_C(written.IsSuccess(), written.GetIssues().ToString());
         for (const TString index : {"plain", "covered"}) {
+            const auto posting = Navigate(runtime, runtime.AllocateEdgeActor(),
+                "/Root/HnswFiltered/" + index + "/indexImplPostingTable",
+                NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown)->ResultSet.at(0).TableId.PathId.LocalPathId;
+            ui32 postingReads = 0;
+            bool expectPushdown = true;
+            auto observer = runtime.AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+                const auto& read = ev->Get()->Record;
+                if (read.GetTableId().GetTableId() == posting) {
+                    ++postingReads;
+                    UNIT_ASSERT_VALUES_EQUAL(read.HasVectorTopK(), expectPushdown);
+                }
+            });
             auto read = [&](const TString& projection, const TString& predicate, ui32 limit, bool alias = false) {
                 const TString query = TStringBuilder() << "$q = Knn::ToBinaryStringFloat([0.0f, 0.0f]); SELECT "
                     << projection << " FROM `/Root/HnswFiltered` VIEW " << index
@@ -1099,6 +1111,8 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 return result;
             };
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(read("id", "", 1).GetResultSet(0)), "[[4u]]");
+            UNIT_ASSERT(postingReads > 0);
             if (CacheEnabled) {
                 bool ready = false;
                 for (ui32 attempt = 0; attempt < 30; ++attempt) {
@@ -1119,7 +1133,10 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
                 }
                 UNIT_ASSERT_C(ready, "HNSW graph did not become ready for " << index);
             }
+            expectPushdown = false;
+            postingReads = 0;
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(read("id", "active", 1).GetResultSet(0)), "[[2u]]");
+            UNIT_ASSERT(postingReads > 0);
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(read("id", "active", 3).GetResultSet(0)), "[[2u];[3u]]");
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(read("id", "active AND id > 10u", 1).GetResultSet(0)), "[]");
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(read("id", "active", 0).GetResultSet(0)), "[]");

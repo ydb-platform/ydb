@@ -247,6 +247,11 @@ void FillEncryptionSettings(
     }
 }
 
+void FillTableChecksumRequest(NKikimrSchemeOp::TBackupTask& task, const TString& database) {
+    auto& checksum = *task.MutableTableChecksum();
+    checksum.SetDatabase(database);
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,
@@ -293,6 +298,19 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     task.SetNeedToBill(!exportInfo.UserSID || !ss->SystemBackupSIDs.contains(*exportInfo.UserSID));
     task.SetSnapshotStep(exportInfo.SnapshotStep);
     task.SetSnapshotTxId(exportInfo.SnapshotTxId);
+    if (exportInfo.EnableBackupTableChecksum && exportInfo.Kind != TExportInfo::EKind::YT &&
+        item.SourcePathType == NKikimrSchemeOp::EPathTypeTable && item.ParentIdx == Max<ui32>()) {
+        const auto frozen = GetDescription(ss, exportPath.Child(ToString(itemIdx)).Base()->PathId);
+        // Column identities and definitions must come from the frozen copy, even if the source was altered
+        if (!task.GetTable().HasTable()) {
+            task.MutableTable()->CopyFrom(frozen);
+        }
+        task.MutableTable()->MutableSelf()->SetSchemeshardId(item.SourcePathId.OwnerId);
+        task.MutableTable()->MutableSelf()->SetPathId(item.SourcePathId.LocalPathId);
+        task.MutableTable()->MutableSelf()->SetName(SplitPath(item.SourcePathName).back());
+        *task.MutableTable()->MutableTable()->MutableColumns() = frozen.GetTable().GetColumns();
+        FillTableChecksumRequest(task, TPath::Init(exportInfo.DomainPathId, ss).PathString());
+    }
 
     switch (exportInfo.Kind) {
     case TExportInfo::EKind::YT:

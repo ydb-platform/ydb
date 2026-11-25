@@ -1,5 +1,6 @@
 #include "schemeshard__operation_backup_restore_common.h"
 #include "schemeshard_billing_helpers.h"
+#include "schemeshard_export_flow_proposals.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -73,6 +74,28 @@ struct TBackup {
         NKikimrSchemeOp::TBackupTask backup = table->BackupSettings;
         backup.SetSnapshotStep(snapshotTime.Step);
         backup.SetSnapshotTxId(snapshotTime.TxId);
+
+        const auto it = context.SS->TxIdToExport.find(opId.GetTxId());
+        if (it != context.SS->TxIdToExport.end()) {
+            const auto& info = *context.SS->Exports.at(it->second.first);
+            const auto& item = info.Items.at(it->second.second);
+            if (info.Kind != TExportInfo::EKind::YT && !backup.HasTableChecksum() && info.EnableBackupTableChecksum &&
+                item.SourcePathType == NKikimrSchemeOp::EPathTypeTable && item.ParentIdx == Max<ui32>()) {
+                // A task created while checksums were disabled may describe a newer source schema
+                NKikimrSchemeOp::TTableDescription frozen;
+                context.SS->DescribeTable(*table, AppData(context.Ctx)->TypeRegistry, true, &frozen);
+                if (!backup.GetTable().HasTable()) {
+                    *backup.MutableTable()->MutableTable() = frozen;
+                }
+                *backup.MutableTable()->MutableTable()->MutableColumns() = frozen.GetColumns();
+                backup.MutableTable()->MutableSelf()->SetSchemeshardId(item.SourcePathId.OwnerId);
+                backup.MutableTable()->MutableSelf()->SetPathId(item.SourcePathId.LocalPathId);
+                backup.MutableTable()->MutableSelf()->SetName(SplitPath(item.SourcePathName).back());
+                backup.MutableTable()->MutableDomainDescription()->MutableProcessingParams()->SetSchemeShard(
+                    context.SS->TabletID());
+                FillTableChecksumRequest(backup, TPath::Init(info.DomainPathId, context.SS).PathString());
+            }
+        }
 
         const auto seqNo = context.SS->StartRound(txState);
         for (ui32 i = 0; i < txState.Shards.size(); ++i) {

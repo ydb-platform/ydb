@@ -59,7 +59,8 @@ struct TSchemeShard::TImport::TTxForget: public TSchemeShard::TXxport::TTxBase {
                 Send(schemaMappingGetter, new TEvents::TEvPoisonPill());
                 Self->RunningImportSchemeGetters.erase(schemaMappingGetter);
             }
-            for (auto& item : importInfo->Items) {
+            for (ui32 idx = 0; idx < importInfo->Items.size(); ++idx) {
+                auto& item = importInfo->Items[idx];
                 if (auto schemeGetter = std::exchange(item.SchemeGetter, {})) {
                     Send(schemeGetter, new TEvents::TEvPoisonPill());
                     Self->RunningImportSchemeGetters.erase(schemeGetter);
@@ -74,6 +75,7 @@ struct TSchemeShard::TImport::TTxForget: public TSchemeShard::TXxport::TTxBase {
                 }
             }
 
+            StopImportChecksum(importInfo->Id);
             Self->PersistRemoveImport(db, *importInfo);
             return respond(Ydb::StatusIds::SUCCESS);
 

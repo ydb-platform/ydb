@@ -7,6 +7,8 @@
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 
+#include <type_traits>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
@@ -30,6 +32,12 @@ protected:
     template <typename TEvent>
     void Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0) {
         return Send(recipient, static_cast<IEventBase*>(ev.Release()), flags, cookie);
+    }
+
+    void StopImportChecksum(ui64 operationId) {
+        if (auto event = Self->ImportChecksum.StopOperation(operationId, Self->SelfId())) {
+            SendOnComplete.emplace_back(std::move(event));
+        }
     }
 
     TPathId DomainPathId(const TString& dbName) const {
@@ -57,6 +65,11 @@ protected:
 
     template <typename TInfoPtr>
     void SendNotificationsIfFinished(TInfoPtr info, bool force = false) {
+        if constexpr (std::is_same_v<TInfoPtr, TImportInfo::TPtr>) {
+            if (info->IsFinished()) {
+                StopImportChecksum(info->Id);
+            }
+        }
         if (!info->IsFinished() && !force) {
             return;
         }

@@ -71,6 +71,7 @@ RECURSE_FOR_TESTS(
     ut_set_column_constraint_reboots
     ut_set_column_constraint
     ut_stats
+    ut_table_checksum
     ut_streaming_query
     ut_streaming_query_reboots
     ut_subdomain
@@ -300,6 +301,7 @@ SRCS(
     schemeshard_impl.cpp
     schemeshard_impl.h
     schemeshard_import.cpp
+    schemeshard_import_checksum.cpp
     schemeshard_import_helpers.cpp
     schemeshard_import__cancel.cpp
     schemeshard_import__create.cpp

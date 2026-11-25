@@ -70,6 +70,9 @@ public:
         CHECK_EXP(settings.destination_path() == CommonDestinationPath, "Incorrect common destination path: \"" << settings.destination_path() << "\" instead of \"" << CommonDestinationPath << "\"");
         CHECK_EXP(settings.no_acl() == NoACL, "Incorrect no acl: " << settings.no_acl() << " instead of " << NoACL);
         CHECK_EXP(settings.skip_checksum_validation() == SkipChecksumValidation, "Incorrect skip checksum validation: " << settings.skip_checksum_validation() << " instead of " << SkipChecksumValidation);
+        CHECK_EXP(settings.skip_table_checksum_validation() == SkipTableChecksumValidation,
+            "Incorrect skip table checksum validation: " << settings.skip_table_checksum_validation() << " instead of "
+                                                         << SkipTableChecksumValidation);
         CHECK_EXP(settings.index_population_mode() == IndexPopulationMode, "Incorrect index population mode: \"" << Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(settings.index_population_mode()) << "\" instead of \"" << Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(IndexPopulationMode) << "\"");
     }
 
@@ -158,6 +161,7 @@ public:
         SymmetricKey.clear();
         NoACL = false;
         SkipChecksumValidation = false;
+        SkipTableChecksumValidation = false;
         IndexPopulationMode = Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD;
         ExcludeRegexps.clear();
         ExpectedImportCalls = 1;
@@ -264,6 +268,11 @@ public:
         return *this;
     }
 
+    TImportImpl& ExpectSkipTableChecksumValidation(bool skipTableChecksumValidation) {
+        SkipTableChecksumValidation = skipTableChecksumValidation;
+        return *this;
+    }
+
     TImportImpl& ExpectIndexPopulationMode(Ydb::Import::ImportFromS3Settings::IndexPopulationMode indexPopulationMode) {
         IndexPopulationMode = indexPopulationMode;
         return *this;
@@ -290,6 +299,7 @@ public:
     TString SymmetricKey;
     bool NoACL = false;
     bool SkipChecksumValidation = false;
+    bool SkipTableChecksumValidation = false;
     Ydb::Import::ImportFromS3Settings::IndexPopulationMode IndexPopulationMode = Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD;
     std::vector<TString> ExcludeRegexps;
     int ExpectedImportCalls = 1;
@@ -351,6 +361,7 @@ Y_UNIT_TEST_SUITE(ImportTest) {
             .ExpectSymmetricKey(encryptionKey)
             .ExpectNoACL(true)
             .ExpectSkipChecksumValidation(true)
+            .ExpectSkipTableChecksumValidation(true)
             .ExpectIndexPopulationMode(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT);
             // Exclude regexps are not yet passed to the server since it is a new feature that can be absent on the server.
             // .ExpectExcludeRegexp("^logs/")
@@ -375,6 +386,7 @@ Y_UNIT_TEST_SUITE(ImportTest) {
                 "--encryption-key-file", encryptionKeyFile,
                 "--no-acl",
                 "--skip-checksum-validation",
+                "--skip-table-checksum-validation",
                 "--index-population-mode", "Import",
                 "--exclude", "^logs/",
                 "--exclude", "^tmp/",

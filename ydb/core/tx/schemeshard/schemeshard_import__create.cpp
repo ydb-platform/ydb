@@ -397,6 +397,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         importInfo->CanRestoreRateLimiterMetering = request.GetCanRestoreRateLimiterMetering();
 
         NIceDb::TNiceDb db(txc.DB);
+        importInfo->EnableBackupTableChecksum = AppData()->FeatureFlags.GetEnableBackupTableChecksum();
         Self->PersistCreateImport(db, *importInfo);
 
         importInfo->State = initialState;
@@ -504,6 +505,7 @@ private:
 struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase {
     using EState = TImportInfo::EState;
     using ESubState = TImportInfo::TItem::ESubState;
+    using EChecksumState = TImportInfo::TItem::EChecksumState;
 
     static constexpr ui32 IssuesSizeLimit = 2 * 1024;
 
@@ -516,6 +518,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
     TEvIndexBuilder::TEvCreateResponse::TPtr CreateIndexResult = nullptr;
+    NBackup::TEvTableChecksum::TEvResult::TPtr ChecksumResult;
     TTxId CompletedTxId = InvalidTxId;
     TVector<std::pair<ui64, ui32>> KesusRestorersToStart;
 
@@ -575,6 +578,11 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     {
     }
 
+    explicit TTxProgress(TSelf* self, NBackup::TEvTableChecksum::TEvResult::TPtr& ev)
+        : TXxport::TTxBase(self)
+        , ChecksumResult(ev)
+    {}
+
     TTxType GetTxType() const override {
         return TXTYPE_IMPORT_PROGRESS;
     }
@@ -596,6 +604,8 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
             OnModifyResult(txc, ctx);
         } else if (CreateIndexResult) {
             OnCreateIndexResult(txc, ctx);
+        } else if (ChecksumResult) {
+            OnChecksumResult(txc, ctx);
         } else if (CompletedTxId) {
             OnNotifyResult(txc, ctx);
         } else {
@@ -689,6 +699,73 @@ private:
             Self->EraseEncryptionKey(db, *importInfo);
             AuditLogImportEnd(*importInfo.Get(), Self);
         }
+    }
+
+    void ContinueAfterData(TImportInfo& info, ui32 idx) {
+        auto& item = info.Items.at(idx);
+        if (PrepareNextBuildableIndex(Self, item)) {
+            item.State = EState::BuildIndexes;
+            AllocateTxId(info, idx);
+        } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
+                   AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
+            item.State = EState::CreateChangefeed;
+            AllocateTxId(info, idx);
+        } else {
+            FinishImportItem(info, idx);
+        }
+    }
+
+    void StartChecksumValidation(
+        TImportInfo& info, ui32 itemIdx, NIceDb::TNiceDb& db, TActorId actor, const TRowVersion& snapshot) {
+        auto& item = info.Items.at(itemIdx);
+        item.ChecksumState = EChecksumState::Validating;
+        Self->PersistImportChecksumStarted(db, info, itemIdx);
+        Send(actor, new NBackup::TEvTableChecksum::TEvRunItem(
+                        Self->ImportChecksum.GetOwner(), Self->MakeImportChecksumItem(info, itemIdx, snapshot)));
+    }
+
+    TImportInfo::TPtr FindActiveChecksumImport(ui64 operationId, ui32 itemIdx, TActorId sender) {
+        auto info = Self->Imports.Value(operationId, nullptr);
+        if (!info || info->State != EState::Waiting || itemIdx >= info->Items.size()) {
+            return nullptr;
+        }
+        const auto& item = info->Items[itemIdx];
+        if (item.ChecksumState != EChecksumState::Validating || Self->ImportChecksum.GetActor() != sender) {
+            return nullptr;
+        }
+        return info;
+    }
+
+    void OnChecksumResult(TTransactionContext& txc, const TActorContext& ctx) {
+        const auto& result = *ChecksumResult->Get();
+        auto info = FindActiveChecksumImport(result.OperationId, result.ItemIdx, ChecksumResult->Sender);
+        if (!info) {
+            return;
+        }
+        auto& item = info->Items[result.ItemIdx];
+        item.ChecksumState = EChecksumState::None;
+        const auto restoreTxId = std::exchange(item.WaitTxId, InvalidTxId);
+        NIceDb::TNiceDb db(txc.DB);
+        Send(ChecksumResult->Sender, new NBackup::TEvTableChecksum::TEvFinishItem(result.OperationId, result.ItemIdx));
+        if (result.Status != Ydb::StatusIds::SUCCESS || result.Checksum.Error) {
+            return CancelAndPersist(db, info, result.ItemIdx,
+                TStringBuilder() << item.DstPathName << ": table checksum query failed: "
+                                 << (result.Checksum.Error ? result.Checksum.ToString() : result.Error),
+                "checksum query failed");
+        }
+        if (const auto issue = GetIssues(item, restoreTxId)) {
+            return CancelAndPersist(
+                db, info, result.ItemIdx, *issue, "destination unavailable during checksum validation");
+        }
+        const auto& expected = *item.Metadata.GetTableChecksum();
+        if (expected != result.Checksum) {
+            return CancelAndPersist(db, info, result.ItemIdx,
+                TStringBuilder() << item.DstPathName << ": table checksum mismatch (version "
+                                 << NBackup::TTableChecksum::Version << "): expected " << expected.ToString()
+                                 << "; actual " << result.Checksum.ToString(), "checksum mismatch");
+        }
+        ContinueAfterData(*info, result.ItemIdx);
+        PersistImportProgressAndNotify(info, result.ItemIdx, db, ctx);
     }
 
     void GetScheme(TImportInfo::TPtr importInfo, ui32 itemIdx, const TActorContext& ctx) {
@@ -1406,6 +1483,7 @@ private:
             }
         }
 
+        StopImportChecksum(importInfo.Id);
         if (importInfo.State == EState::Cancelled) {
             importInfo.EndTime = TAppData::TimeProvider->Now();
         }
@@ -1434,12 +1512,19 @@ private:
     }
 
     TMaybe<TString> GetIssues(const TImportInfo::TItem& item, TTxId restoreTxId) {
-        if (item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
-            Y_ABORT_UNLESS(Self->ColumnTables.contains(item.DstPathId));
+        // A completed restore can be replayed after the destination was dropped or replaced
+        const auto path = TPath::Resolve(item.DstPathName, Self);
+        const bool columnTable = item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN;
+        const bool tableExists =
+            columnTable ? Self->ColumnTables.contains(item.DstPathId) : Self->Tables.contains(item.DstPathId);
+        if (!tableExists || !path.IsResolved() || path.IsDeleted() || path.IsUnderDeleting() ||
+            path.Base()->PathId != item.DstPathId) {
+            return TStringBuilder() << item.DstPathName << ": destination table is no longer available";
+        }
+        if (columnTable) {
             TColumnTableInfo::TPtr table = Self->ColumnTables.at(item.DstPathId).GetPtr();
             return GetIssues(table, restoreTxId);
         } else {
-            Y_ABORT_UNLESS(Self->Tables.contains(item.DstPathId));
             TTableInfo::TPtr table = Self->Tables.at(item.DstPathId);
             return GetIssues(table, restoreTxId);
         }
@@ -1447,7 +1532,9 @@ private:
 
     template <typename TTable>
     TMaybe<TString> GetIssues(const TTable& table, TTxId restoreTxId) {
-        Y_ABORT_UNLESS(table->RestoreHistory.contains(restoreTxId));
+        if (!table->RestoreHistory.contains(restoreTxId)) {
+            return TStringBuilder() << "Restore result is no longer available for transaction " << restoreTxId;
+        }
         const auto& result = table->RestoreHistory.at(restoreTxId);
 
         if (result.TotalShardCount == result.SuccessShardCount) {
@@ -1573,6 +1660,9 @@ private:
                 case EState::BuildIndexes:
                 case EState::CreateChangefeed:
                 case EState::FinalizeImport:
+                    if (item.ChecksumState == EChecksumState::Validating) {
+                        break;
+                    }
                     if (item.WaitTxId == InvalidTxId) {
                         if (item.State == EState::FinalizeImport) {
                             // Nothing to mark (already done by a retry) or the impl tables are still
@@ -2245,7 +2335,12 @@ private:
                 return CancelAndPersist(db, importInfo, itemIdx, record.GetReason(), "unhappy propose");
             }
 
-            Self->TxIdToImport[txId] = {importInfo->Id, itemIdx};
+            const auto associatedItem = std::pair{ importInfo->Id, itemIdx };
+            const auto [route, inserted] = Self->TxIdToImport.try_emplace(txId, associatedItem);
+            if (!inserted && route->second != associatedItem) {
+                return CancelAndPersist(
+                    db, importInfo, itemIdx, "destination belongs to another import", "create destination failed");
+            }
         }
 
         item.WaitTxId = txId;
@@ -2399,14 +2494,17 @@ private:
 
         Self->TxIdToImport.erase(txId);
 
+        NIceDb::TNiceDb db(txc.DB);
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        auto& item = importInfo->Items.at(itemIdx);
+
         if (importInfo->State != EState::Waiting) {
             return;
         }
 
-        NIceDb::TNiceDb db(txc.DB);
-
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        auto& item = importInfo->Items.at(itemIdx);
+        if (item.ChecksumState == EChecksumState::Validating) {
+            return;
+        }
 
         item.WaitTxId = InvalidTxId;
         Self->PersistImportItemState(db, *importInfo, itemIdx);
@@ -2461,21 +2559,42 @@ private:
             break;
 
         case EState::Transferring:
+            item.WaitTxId = txId;
             if (const auto issue = GetIssues(item, txId)) {
+                item.WaitTxId = InvalidTxId;
                 item.Issue = *issue;
                 Cancel(*importInfo, itemIdx, "issues during restore " + *issue);
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
-                if (PrepareNextBuildableIndex(Self, item)) {
-                    item.State = EState::BuildIndexes;
-                    AllocateTxId(*importInfo, itemIdx);
-                } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
-                           AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
-                    item.State = EState::CreateChangefeed;
-                    AllocateTxId(*importInfo, itemIdx);
-                } else {
-                    FinishImportItem(*importInfo, itemIdx);
+                const auto& checksum = item.Metadata.GetTableChecksum();
+                const bool checkTableChecksum =
+                    importInfo->ShouldValidateTableChecksum() && item.ParentIdx == Max<ui32>() && checksum.has_value();
+                if (checkTableChecksum) {
+                    TString error;
+                    if (checksum->Error) {
+                        error = "exported checksum unavailable: " + checksum->ToString();
+                    } else if (item.ChecksumState == EChecksumState::Interrupted) {
+                        error = "validation interrupted by SchemeShard restart";
+                    } else if (!item.ChecksumSnapshot.Step || item.ChecksumSnapshot.TxId != ui64(txId)) {
+                        error = "restore snapshot was not retained";
+                    } else if (!item.ChecksumRestoreReady) {
+                        error = "restore shards did not confirm the planned write version";
+                    } else if (const auto actor = Self->ImportChecksum.EnsureActor(importInfo->Id, ctx)) {
+                        StartChecksumValidation(*importInfo, itemIdx, db, actor, item.ChecksumSnapshot);
+                        break;
+                    } else {
+                        error = "import checksum actor unavailable";
+                    }
+                    item.WaitTxId = InvalidTxId;
+                    return CancelAndPersist(db, importInfo, itemIdx,
+                        TStringBuilder() << item.DstPathName << ": table checksum validation failed: " << error,
+                        "checksum validation failed");
                 }
+                if (const auto actor = Self->ImportChecksum.GetActor()) {
+                    Send(actor, new NBackup::TEvTableChecksum::TEvFinishItem(importInfo->Id, itemIdx));
+                }
+                item.WaitTxId = InvalidTxId;
+                ContinueAfterData(*importInfo, itemIdx);
             }
             break;
 
@@ -2527,7 +2646,12 @@ private:
             return SendNotificationsIfFinished(importInfo);
         }
 
-        if (item.State == EState::Done) {
+        PersistImportProgressAndNotify(importInfo, itemIdx, db, ctx);
+    }
+
+    void PersistImportProgressAndNotify(
+        const TImportInfo::TPtr& importInfo, ui32 itemIdx, NIceDb::TNiceDb& db, const TActorContext& ctx) {
+        if (importInfo->Items.at(itemIdx).State == EState::Done) {
             // The base table is marked as imported only when all its impl tables are imported.
             KickParentFinalize(*importInfo, itemIdx);
         }
@@ -2591,6 +2715,11 @@ ITransaction* TSchemeShard::CreateTxProgressImport(TEvIndexBuilder::TEvCreateRes
 ITransaction* TSchemeShard::CreateTxProgressImport(TTxId completedTxId) {
     return new TImport::TTxProgress(this, completedTxId);
 }
+
+ITransaction* TSchemeShard::CreateTxProgressImport(NBackup::TEvTableChecksum::TEvResult::TPtr& ev) {
+    return new TImport::TTxProgress(this, ev);
+}
+
 
 } // NSchemeShard
 } // NKikimr

@@ -68,6 +68,7 @@ struct TImportFromS3Settings : public TOperationRequestSettings<TImportFromS3Set
     FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
     FLUENT_SETTING_OPTIONAL(bool, NoACL);
     FLUENT_SETTING_OPTIONAL(bool, SkipChecksumValidation);
+    FLUENT_SETTING_OPTIONAL(bool, SkipTableChecksumValidation);
     FLUENT_SETTING_OPTIONAL(std::string, SourcePrefix);
     FLUENT_SETTING_OPTIONAL(std::string, DestinationPath);
     FLUENT_SETTING_OPTIONAL(std::string, SymmetricKey);
@@ -174,6 +175,7 @@ struct TImportFromFsSettings : public TOperationRequestSettings<TImportFromFsSet
     FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
     FLUENT_SETTING_OPTIONAL(bool, NoACL);
     FLUENT_SETTING_OPTIONAL(bool, SkipChecksumValidation);
+    FLUENT_SETTING_OPTIONAL(bool, SkipTableChecksumValidation);
     FLUENT_SETTING_OPTIONAL(std::string, SymmetricKey);
     FLUENT_SETTING_OPTIONAL(std::string, DestinationPath);
     FLUENT_SETTING_DEFAULT(EIndexPopulationMode, IndexPopulationMode, EIndexPopulationMode::Build);

@@ -115,6 +115,22 @@ struct TRestore {
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistCompletedRestore(db, opId.GetTxId(), txState, restoreInfo);
 
+        if (const auto route = context.SS->TxIdToImport.find(opId.GetTxId()); route != context.SS->TxIdToImport.end()) {
+            const auto info = context.SS->Imports.Value(route->second.first, nullptr);
+            if (info) {
+                auto& item = info->Items.at(route->second.second);
+                const auto version = item.ChecksumSnapshot;
+                if (item.DstPathId == txState.TargetPathId && version.Step && version.TxId == ui64(opId.GetTxId())) {
+                    // Old row-upload binaries did not report their planned restore step
+                    item.ChecksumRestoreReady =
+                        !txState.Shards.empty() && AllOf(txState.Shards, [&](const auto& shard) {
+                            const auto* status = restoreInfo.ShardStatuses.FindPtr(shard.Idx);
+                            return status && status->Success && status->RestoreStep == version.Step;
+                        });
+                }
+            }
+        }
+
         table->IsRestore = false;
         context.SS->PersistTableIsRestore(db, txState.TargetPathId, table);
     }
@@ -138,6 +154,18 @@ struct TRestore {
         table->RestoreSettings = restore;
 
         NIceDb::TNiceDb db(context.GetDB());
+        const auto restoreTxId = context.SS->PathsById.at(pathId)->LastTxId;
+        if (const auto route = context.SS->TxIdToImport.find(restoreTxId); route != context.SS->TxIdToImport.end()) {
+            const auto info = context.SS->Imports.Value(route->second.first, nullptr);
+            if (info && info->ShouldValidateTableChecksum()) {
+                auto& item = info->Items.at(route->second.second);
+                if (item.DstPathId == pathId && item.Metadata.GetTableChecksum()) {
+                    item.WaitTxId = restoreTxId;
+                    context.SS->PersistImportItemState(db, *info, route->second.second);
+                }
+            }
+        }
+
         db.Table<Schema::RestoreTasks>()
             .Key(pathId.OwnerId, pathId.LocalPathId)
             .Update(NIceDb::TUpdate<Schema::RestoreTasks::Task>(restore.SerializeAsString()));

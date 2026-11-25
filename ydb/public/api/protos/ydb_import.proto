@@ -96,7 +96,7 @@ message ImportFromS3Settings {
     // and their owner will be the user who started the import.
     bool no_acl = 11;
 
-    // Skip checksum validation during import
+    // Skip file checksum validation during import.
     bool skip_checksum_validation = 12;
 
     // A default path prefix for all items,
@@ -121,6 +121,9 @@ message ImportFromS3Settings {
     // - Patterns are matched against the database object names stored in the backup listing.
     // - Object is excluded from import operation if it matches any of the specified exclude regexps.
     repeated string exclude_regexps = 17;
+
+    // Skip table checksum validation while still validating file checksums.
+    bool skip_table_checksum_validation = 18;
 }
 
 message ImportFromS3Result {
@@ -187,7 +190,7 @@ message ImportFromFsSettings {
     // and their owner will be the user who started the import.
     bool no_acl = 5;
 
-    // Skip checksum validation during import
+    // Skip file checksum validation during import.
     bool skip_checksum_validation = 6;
 
     // Destination path to restore paths inside database
@@ -207,6 +210,9 @@ message ImportFromFsSettings {
     // Index population mode.
     // If not specified, indexes will be built.
     ImportFromS3Settings.IndexPopulationMode index_population_mode = 10;
+
+    // Skip table checksum validation while still validating file checksums.
+    bool skip_table_checksum_validation = 11;
 }
 
 message ImportFromFsResult {

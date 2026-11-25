@@ -51,6 +51,7 @@ protected:
     NImport::EIndexPopulationMode IndexPopulationMode = NImport::EIndexPopulationMode::Build;
     bool NoACL = false;
     bool SkipChecksumValidation = false;
+    bool SkipTableChecksumValidation = false;
     TString CommonSourcePrefix;
     TString CommonDestinationPath;
     bool ListObjectsInExistingExport = false;

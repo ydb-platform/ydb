@@ -12,6 +12,7 @@
 #include "schemeshard_export.h"
 #include "schemeshard_forced_compaction.h"
 #include "schemeshard_import.h"
+#include "schemeshard_import_checksum.h"
 #include "schemeshard_info_types.h"
 #include "schemeshard_db_ref_map.h"
 #include "schemeshard_path.h"
@@ -25,6 +26,7 @@
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
 
+#include <ydb/core/backup/common/table_checksum_events.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
@@ -92,6 +94,8 @@ namespace NKikimr::NTestShard {
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+class TSideEffects;
 
 extern const ui64 NEW_TABLE_ALTER_VERSION;
 extern ui64 gVectorIndexSeed; // for tests only
@@ -1798,6 +1802,10 @@ public:
 
     // namespace NImport {
     THashMap<ui64, TImportInfo::TPtr> Imports;
+    TImportChecksum ImportChecksum;
+    void PrepareImportChecksum(
+        TTxId restoreTxId, TRowVersion snapshot, TSideEffects& onComplete, const TActorContext& ctx);
+    void Handle(NBackup::TEvTableChecksum::TEvImportChecksumIdle::TPtr& ev, const TActorContext& ctx);
     THashMap<TString, TImportInfo::TPtr> ImportsByUid;
     TSet<std::pair<TInstant, ui64>> ImportsByTime;
     THashMap<TTxId, std::pair<ui64, ui32>> TxIdToImport;
@@ -1844,6 +1852,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportSchemaMappingReady::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportKesusResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(NBackup::TEvTableChecksum::TEvResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvIndexBuilder::TEvCreateResponse::TPtr& ev);
@@ -1859,6 +1868,11 @@ public:
     void Handle(TEvPrivate::TEvImportSchemaMappingReady::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvImportKesusResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NBackup::TEvTableChecksum::TEvResult::TPtr& ev, const TActorContext& ctx);
+    NBackup::TEvTableChecksum::TItem MakeImportChecksumItem(
+        const TImportInfo& info, ui32 itemIdx, TRowVersion snapshot);
+    void PersistImportChecksumStarted(NIceDb::TNiceDb& db, const TImportInfo& info, ui32 itemIdx);
+    static void RestoreImportItemMetadata(TImportInfo& info, ui32 itemIdx, const TString& metadata);
 
     void ResumeImports(const TVector<ui64>& ids, const TActorContext& ctx);
     // } // NImport

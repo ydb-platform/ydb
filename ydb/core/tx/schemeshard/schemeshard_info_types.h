@@ -3945,6 +3945,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
 
     TMaybe<TString> CancelRequestedBy;
 
+    bool EnableBackupTableChecksum = false;
     bool EnableChecksums = false;
     bool EnablePermissions = false;
     bool IncludeIndexData = false;
@@ -4064,6 +4065,13 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
             CreateConsumers,
         };
 
+        // The item stays Transferring until validation completes
+        enum class EChecksumState : ui8 {
+            None,
+            Validating,
+            Interrupted,
+        };
+
         TString DstPathName;
         TPathId DstPathId;
         TString SrcPrefix;
@@ -4083,6 +4091,9 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
         EChangefeedState ChangefeedState = EChangefeedState::CreateChangefeed;
+        EChecksumState ChecksumState = EChecksumState::None;
+        TRowVersion ChecksumSnapshot = TRowVersion::Min();
+        bool ChecksumRestoreReady = false;
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;
@@ -4129,6 +4140,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TActorId SchemaMappingGetter;
     bool CanRestoreRateLimiterMetering = false;
 
+    bool EnableBackupTableChecksum = false;
     EState State = EState::Invalid;
     TString Issue;
     TVector<TItem> Items;
@@ -4210,6 +4222,12 @@ public:
     bool GetSkipChecksumValidation() const {
         return Visit([](const auto& settings) {
             return settings.skip_checksum_validation();
+        });
+    }
+
+    bool ShouldValidateTableChecksum() const {
+        return EnableBackupTableChecksum && !Visit([](const auto& settings) {
+            return settings.skip_table_checksum_validation();
         });
     }
 

@@ -2,6 +2,7 @@
 
 #include "helpers.h"
 
+#include <ydb/core/backup/common/table_checksum_factory.h>
 #include <ydb/core/base/backtrace.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/blockstore/core/blockstore.h>
@@ -578,12 +579,9 @@ void SetupMetadataProvider(TTestActorRuntime& runtime, ui32 nodeIdx) {
     runtime.RegisterService(NMetadata::NProvider::MakeServiceId(runtime.GetNodeId(nodeIdx)), metadataServiceId, nodeIdx);
 }
 
-void SetupKqpResourceManager(TTestActorRuntime& runtime,
-    const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    ui32 nodeIdx
-) {
+void SetupKqpResourceManager(TTestActorRuntime& runtime, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    ui32 nodeIdx, const std::shared_ptr<NKqp::TKqpProxySharedResources>& kqpProxySharedResources) {
     const ui32 nodeId = runtime.GetNodeId(nodeIdx);
-    auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
     IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(
         tableServiceConfig.GetResourceManager(), nullptr, {}, kqpProxySharedResources, nodeId
@@ -596,7 +594,8 @@ void SetupKqpResourceManager(TTestActorRuntime& runtime,
 
 void SetupKqpProxy(TTestActorRuntime& runtime, ui32 nodeIdx) {
     NKikimrConfig::TTableServiceConfig tableServiceConfig;
-    SetupKqpResourceManager(runtime, tableServiceConfig, nodeIdx);
+    auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
+    SetupKqpResourceManager(runtime, tableServiceConfig, nodeIdx, kqpProxySharedResources);
 
     // Used by KqpComputeSchedulerService
     {
@@ -617,7 +616,7 @@ void SetupKqpProxy(TTestActorRuntime& runtime, ui32 nodeIdx) {
         tliConfig,
         {}, // kqp settings
         nullptr, // query replay factory
-        nullptr, // kqp proxy shared resources
+        std::move(kqpProxySharedResources),
         federatedQuerySetupFactory,
         nullptr // S3 actors factory
     );
@@ -822,6 +821,10 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         IActor* sequenceProxy = NSequenceProxy::CreateSequenceProxy();
         TActorId sequenceProxyId = runtime.Register(sequenceProxy, i);
         runtime.RegisterService(NSequenceProxy::MakeSequenceProxyServiceID(), sequenceProxyId, i);
+    }
+
+    for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+        runtime.GetAppData(node).TableChecksumFactory = &NBackup::GetTableChecksumFactory();
     }
 
     if (opts.SetupKqpProxy_) {

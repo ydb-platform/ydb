@@ -118,8 +118,12 @@ void TCommandImportBase::Config(TConfig& config) {
     config.Opts->AddLongOption("no-acl", "Prevent importing of ACL and owner")
         .RequiredArgument("BOOL").StoreTrue(&NoACL).DefaultValue("false");
 
-    config.Opts->AddLongOption("skip-checksum-validation", "Skip checksum validation during import")
+    config.Opts->AddLongOption("skip-checksum-validation", "Skip file checksum validation during import")
         .RequiredArgument("BOOL").StoreTrue(&SkipChecksumValidation).DefaultValue("false");
+    config.Opts->AddLongOption("skip-table-checksum-validation", "Skip table checksum validation during import")
+        .RequiredArgument("BOOL")
+        .StoreTrue(&SkipTableChecksumValidation)
+        .DefaultValue("false");
 
     config.Opts->AddLongOption("encryption-key-file", "File path that contains encryption key or env that contains hex encoded key value")
         .Env("YDB_ENCRYPTION_KEY_FILE", true, "encryption key file")
@@ -177,6 +181,7 @@ void TCommandImportBase::FillCommonImportSettings(TSettings& settings) {
     settings.IndexPopulationMode(IndexPopulationMode);
     settings.NoACL(NoACL);
     settings.SkipChecksumValidation(SkipChecksumValidation);
+    settings.SkipTableChecksumValidation(SkipTableChecksumValidation);
 
     const bool encryption = !EncryptionKey.empty();
     if (encryption) {

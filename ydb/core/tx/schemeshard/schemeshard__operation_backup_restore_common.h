@@ -205,6 +205,10 @@ public:
             Bill(operationId, txState.TargetPathId, shardIdx, ru, context);
         }
 
+        if (txState.TxType == TTxState::TxRestore) {
+            txState.ShardStatuses.at(shardIdx).RestoreStep = evRecord.GetStep();
+        }
+
         // TODO(ilnaz): backward compatibility, remove it
         if (result.GetSuccess()) {
             if (result.HasBytesProcessed()) {
@@ -472,6 +476,10 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         TKind::PersistDone(pathId, context);
+        if (TxType == TTxState::TxRestore) {
+            context.SS->PrepareImportChecksum(OperationId.GetTxId(),
+                TRowVersion(ui64(step), ui64(OperationId.GetTxId())), context.OnComplete, context.Ctx);
+        }
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);

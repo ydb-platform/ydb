@@ -195,6 +195,9 @@ namespace {
             if (settings.SkipChecksumValidation_) {
                 freeText << "SkipChecksumValidation: " << *settings.SkipChecksumValidation_ << Endl;
             }
+            if (settings.SkipTableChecksumValidation_) {
+                freeText << "SkipTableChecksumValidation: " << *settings.SkipTableChecksumValidation_ << Endl;
+            }
         }
 
         AppendIssues(status, freeText);

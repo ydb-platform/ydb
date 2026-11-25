@@ -47,6 +47,7 @@ struct TTxState {
         TString Error;
         ui64 BytesProcessed = 0;
         ui64 RowsProcessed = 0;
+        ui64 RestoreStep = 0;
 
         TShardStatus() = default;
 

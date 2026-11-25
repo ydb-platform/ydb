@@ -99,7 +99,8 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
         UNIT_ASSERT_C(inExplain.IsSuccess(), inExplain.GetIssues().ToString());
         const TString inAst(*inExplain.GetStats()->GetAst());
         UNIT_ASSERT_C(!inAst.Contains("ScalarHashJoin"), inAst);
-        UNIT_ASSERT_C(inAst.Contains("MapJoin"), inAst);
+        // A primary-key IN is a stream lookup. A broadcast join stays a map join.
+        UNIT_ASSERT_C(inAst.Contains("KqpCnStreamLookup") || inAst.Contains("MapJoin"), inAst);
         UNIT_ASSERT_VALUES_EQUAL(RunQuerySortedRows(client, inQuery), "\"hello\";");
 
         result = client.ExecuteQuery(R"(

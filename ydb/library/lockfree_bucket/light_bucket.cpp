@@ -3,13 +3,15 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <type_traits>
 
 namespace NKikimr {
 namespace {
 
 constexpr ui64 NsPerSecond = 1'000'000'000;
 
-static_assert(std::atomic<ui64>::is_always_lock_free && std::atomic<i64>::is_always_lock_free);
+static_assert(std::atomic<ui64>::is_always_lock_free && std::atomic<i64>::is_always_lock_free
+    && std::atomic<i32>::is_always_lock_free);
 
 struct TUpdate {
     i64 Balance;
@@ -71,11 +73,23 @@ ui32 TLockFreeLightBucket::TCompactState::ElapsedTicks(ui32 now) const {
     return elapsed;
 }
 
+i32 TLockFreeLightBucket::TCompactState::SetBalance(i64 tokens) {
+    tokens = std::clamp(tokens, std::numeric_limits<i32>::min() * Scale, std::numeric_limits<i32>::max() * Scale);
+    // Keep the sign of even a one-token balance in the pair while its residual is held by another writer.
+    const i64 bias = Scale - 1;
+    if (tokens < 0) {
+        Balance = static_cast<i32>((tokens - bias) / Scale);
+    } else {
+        Balance = static_cast<i32>((tokens + bias) / Scale);
+    }
+    return static_cast<i32>(tokens - Balance * Scale);
+}
+
 i64 TLockFreeLightBucket::CapacityLimit(ui64 capacity) {
     if constexpr (HasFullState) {
         return static_cast<i64>(std::min<ui64>(capacity, std::numeric_limits<i64>::max()));
     }
-    return static_cast<i64>(std::min<ui64>(capacity / TCompactState::Scale, std::numeric_limits<i32>::max()));
+    return static_cast<i64>(std::min<ui64>(capacity, std::numeric_limits<i32>::max() * TCompactState::Scale));
 }
 
 ui64 TLockFreeLightBucket::NowNs() const {
@@ -95,18 +109,25 @@ TLockFreeLightBucket::TLockFreeLightBucket(ui64 capacityLimit, ui64 volumePerSec
     if constexpr (HasFullState) {
         FullState = {CapacityLimit(capacityLimit), NowNs()};
     } else {
-        CompactState = {static_cast<i32>(CapacityLimit(capacityLimit)), static_cast<ui32>(NowNs() / TCompactState::Scale)};
+        CompactState = {0, static_cast<ui32>(NowNs() / TCompactState::Scale)};
+        Residual.store(CompactState.SetBalance(CapacityLimit(capacityLimit)), std::memory_order_relaxed);
     }
 }
 
 template<class TState>
 void TLockFreeLightBucket::Update(TState& storage, ui64 volume) {
     using TTimestamp = decltype(TState::Timestamp);
-    using TBalance = decltype(TState::Balance);
+    constexpr bool compact = std::is_same_v<TState, TCompactState>;
     // Reading a new setting acquires the setter's preceding Take(0).
     // The balance CAS orders withdrawals by its own modification order. The
     // additive counters publish no other data and can be sampled independently.
-    const ui64 withdrawal = volume / TState::Scale;
+    i32 claimedResidual = 0;
+    i32 nextResidual = 0;
+    if constexpr (compact) {
+        // Claim once across CAS retries. Overlapping updates may apply a correction later.
+        // This atomic transfers token counts only and does not publish the paired state.
+        claimedResidual = Residual.exchange(0, std::memory_order_relaxed);
+    }
     const std::atomic_ref<TState> state(storage);
     TState previous = state.load(std::memory_order_acquire);
     TState next;
@@ -117,11 +138,22 @@ void TLockFreeLightBucket::Update(TState& storage, ui64 volume) {
         const TTimestamp elapsed = previous.ElapsedTicks(now);
         next.Timestamp = previous.Timestamp + elapsed;
         elapsedNs = static_cast<ui64>(elapsed) * TState::Scale;
-        const double rate = static_cast<double>(Rate.load(std::memory_order_acquire)) / TState::Scale;
-        update = Calculate(previous.Balance, elapsedNs, rate, Capacity.load(std::memory_order_acquire), withdrawal, DebtLimit);
-        next.Balance = static_cast<TBalance>(std::max<i64>(update.Balance, std::numeric_limits<TBalance>::min()));
+        const double rate = static_cast<double>(Rate.load(std::memory_order_acquire));
+        const i64 previousBalance = static_cast<i64>(previous.Balance) * TState::Scale + claimedResidual;
+        update = Calculate(previousBalance, elapsedNs, rate, Capacity.load(std::memory_order_acquire), volume, DebtLimit);
+        if constexpr (compact) {
+            nextResidual = next.SetBalance(update.Balance);
+        } else {
+            next.Balance = update.Balance;
+        }
     } while (!state.compare_exchange_weak(previous, next, std::memory_order_release, std::memory_order_acquire));
 
+    if constexpr (compact) {
+        if (nextResidual != 0) {
+            // Another writer may already have returned its residual since our exchange.
+            Residual.fetch_add(nextResidual, std::memory_order_relaxed);
+        }
+    }
     if (update.RedNs > 0) {
         RedNs.fetch_add(update.RedNs, std::memory_order_relaxed);
     }

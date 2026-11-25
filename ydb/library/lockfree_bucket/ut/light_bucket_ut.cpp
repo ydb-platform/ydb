@@ -152,19 +152,54 @@ Y_UNIT_TEST_SUITE(TLockFreeLightBucketTest) {
         CheckStats(bucket, 0, Second);
     }
 
-    Y_UNIT_TEST(ChargesAndRefillAtCompactResolution) {
+    Y_UNIT_TEST(ChargesAndRefillPreserveTokenPrecision) {
         const TIntrusivePtr<TTestClock> clock = MakeIntrusive<TTestClock>();
         TLockFreeLightBucket bucket(1'999, 500, clock);
         bucket.Take(999);
         bucket.Take(1'999);
         bucket.Take(1'000);
         clock->SetTimeNs(5 * Second);
-        if constexpr (HasFullState) {
-            CheckStats(bucket, 1'002'000'000, 3'998'000'000);
-        } else {
-            // One compact unit of debt at half a unit per second.
-            CheckStats(bucket, 3 * Second, 2 * Second);
+        CheckStats(bucket, 1'002'000'000, 3'998'000'000);
+    }
+
+    Y_UNIT_TEST(SmallChargesExactlyExhaustCapacity) {
+        const TIntrusivePtr<TTestClock> clock = MakeIntrusive<TTestClock>();
+        TLockFreeLightBucket bucket(850'000, 0, clock);
+        for (ui32 write = 0; write < 1'000; ++write) {
+            bucket.Take(850);
         }
+        clock->SetTimeNs(Second);
+        CheckStats(bucket, Second, 0);
+        bucket.Take(1);
+        clock->SetTimeNs(2 * Second);
+        CheckStats(bucket, Second, Second);
+    }
+
+    Y_UNIT_TEST(ShortRefillsCoverRepeatedWrites) {
+        const TIntrusivePtr<TTestClock> clock = MakeIntrusive<TTestClock>();
+        TLockFreeLightBucket bucket(2'000, 100'000'000, clock);
+        bucket.Take(1'000);
+        ui64 nowNs = 0;
+        for (ui32 pair = 0; pair < 100; ++pair) {
+            nowNs += 5'000; // Refill 500 tokens.
+            clock->SetTimeNs(nowNs);
+            bucket.Take(1'000);
+            nowNs += 17'000; // Refill 1,700 tokens.
+            clock->SetTimeNs(nowNs);
+            bucket.Take(1'000);
+        }
+        CheckStats(bucket, nowNs, 0);
+    }
+
+    Y_UNIT_TEST(SmallCapacityAllowsBoundedDebt) {
+        const TIntrusivePtr<TTestClock> clock = MakeIntrusive<TTestClock>();
+        TLockFreeLightBucket bucket(499, 1'000, clock, TLockFreeLightBucket::EDebtLimit::TwiceCapacity);
+        bucket.Take(500); // One token of debt takes a millisecond to repay.
+        clock->SetTimeNs(Second);
+        CheckStats(bucket, Second - 1'000'000, 1'000'000);
+        bucket.Take(std::numeric_limits<ui64>::max(), 500); // New debt limit is exactly 1,000 tokens.
+        clock->SetTimeNs(3 * Second);
+        CheckStats(bucket, 2 * Second - 1'000'000, Second + 1'000'000);
     }
 
     Y_UNIT_TEST(TimestampWrapAndStaleReading) {
@@ -199,7 +234,7 @@ Y_UNIT_TEST_SUITE(TLockFreeLightBucketTest) {
                 start.arrive_and_wait();
                 for (ui64 withdrawal = 0; withdrawal < withdrawalsPerWriter; ++withdrawal) {
                     clock->TimeUs.fetch_add(1, std::memory_order_relaxed);
-                    bucket.Take(2'000);
+                    bucket.Take(1'731);
                 }
             });
         }
@@ -210,7 +245,8 @@ Y_UNIT_TEST_SUITE(TLockFreeLightBucketTest) {
         constexpr ui64 concurrentNs = 1000 * totalWithdrawals;
         CheckStats(bucket, 0, concurrentNs);
         clock->SetTimeNs(5 * concurrentNs);
-        CheckStats(bucket, 2 * concurrentNs, 3 * concurrentNs);
+        constexpr ui64 debtRepaidNs = (1'000 + 1'731) * totalWithdrawals;
+        CheckStats(bucket, 5 * concurrentNs - debtRepaidNs, debtRepaidNs);
     }
 }
 

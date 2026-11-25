@@ -10,7 +10,8 @@ namespace NKikimr {
 
 // Starts full. Negative balance is red, and zero or positive balance is green.
 // With lock-free 128-bit CAS, the balance is i64 and timestamps are in nanoseconds.
-// Otherwise the balance is i32 in units of 1,000 and timestamps are in microseconds.
+// Otherwise the pair holds an i32 balance in units of 1,000 and a microsecond timestamp.
+// A separate residual carries the rounding difference between compact updates.
 // In that case, take or poll within 2^31 - 1 microseconds (~35m47s) of the previous update.
 class TLockFreeLightBucket {
 public:
@@ -22,7 +23,7 @@ public:
     TLockFreeLightBucket(ui64 capacityLimit, ui64 volumePerSecond, TIntrusivePtr<ITimeProvider> timeProvider = {},
         EDebtLimit debtLimit = EDebtLimit::Unbounded);
 
-    // Refill and withdrawal are rounded down to whole balance units on each call.
+    // Refill is rounded down to whole tokens per elapsed interval.
     void Take(ui64 volume);
     // Apply a live capacity change before charging the request.
     void Take(ui64 volume, ui64 capacityLimit);
@@ -34,17 +35,18 @@ public:
 
 private:
     struct alignas(16) TFullState {
-        static constexpr ui64 Scale = 1;
+        static constexpr i64 Scale = 1;
         i64 Balance;
         ui64 Timestamp;
         ui64 ElapsedTicks(ui64 now) const;
     };
 
     struct alignas(8) TCompactState {
-        static constexpr ui64 Scale = 1'000;
+        static constexpr i64 Scale = 1'000;
         i32 Balance;
         ui32 Timestamp;
         ui32 ElapsedTicks(ui32 now) const;
+        i32 SetBalance(i64 tokens);
     };
 
     static_assert(sizeof(TFullState) == 2 * sizeof(ui64));
@@ -64,6 +66,7 @@ private:
     std::atomic<ui64> Rate;
     std::atomic<ui64> GreenNs{0};
     std::atomic<ui64> RedNs{0};
+    std::atomic<i32> Residual{0};
 
     // Use the same cache-line alignment as TLockFreeBucket while keeping each CAS operand its native width.
     union alignas(128) {

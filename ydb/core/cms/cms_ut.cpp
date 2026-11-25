@@ -17,6 +17,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <limits>
+#include <util/generic/algorithm.h>
 #include <util/string/printf.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
 
@@ -146,36 +147,38 @@ void SetRunningSysTablet(ui32 nodeId, bool running) {
     }
 }
 
-TString SendWalleHttpRequest(TCmsTestEnv &env, HTTP_METHOD method, const TString &uri, const TString &body = {}) {
+TString SendCmsHttpRequest(TCmsTestEnv& env, HTTP_METHOD method, const TString& uri, const TString& body,
+        auto createHandler) {
     TFakeMonHttpRequest httpRequest(method, uri, {}, body);
     const auto edge = env.AllocateEdgeActor();
     NMon::TEvHttpInfo::TPtr event = static_cast<NMon::TEvHttpInfo::THandle*>(new IEventHandle(
         TActorId(), edge, new NMon::TEvHttpInfo(httpRequest)));
-    env.Register(CreateWalleApiHandler(event));
-    TAutoPtr<IEventHandle> handle;
-    const auto *response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
-    UNIT_ASSERT(response);
-    return response->Answer;
-}
-
-TString SendDDiskHttpRequest(TCmsTestEnv& env, const TString& uri) {
-    TFakeMonHttpRequest httpRequest(HTTP_METHOD_GET, uri, {}, "");
-    const auto edge = env.AllocateEdgeActor();
-    NMon::TEvHttpInfo::TPtr event = static_cast<NMon::TEvHttpInfo::THandle*>(new IEventHandle(
-        TActorId(), edge, new NMon::TEvHttpInfo(httpRequest)));
-    env.Register(new TJsonProxyDDisk(event));
+    env.Register(createHandler(event));
     TAutoPtr<IEventHandle> handle;
     const auto* response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
     UNIT_ASSERT(response);
     return response->Answer;
 }
 
-void CheckWalleHttpTask(const TString &response, const TString &status, ui32 nodeId) {
+TString SendWalleHttpRequest(TCmsTestEnv& env, HTTP_METHOD method, const TString& uri, const TString& body = {}) {
+    return SendCmsHttpRequest(env, method, uri, body, CreateWalleApiHandler);
+}
+
+TString SendDDiskHttpRequest(TCmsTestEnv& env, const TString& uri) {
+    return SendCmsHttpRequest(env, HTTP_METHOD_GET, uri, {}, [](auto& event) { return new TJsonProxyDDisk(event); });
+}
+
+NJson::TJsonValue ParseHttpOkJson(const TString& response) {
     UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 200"), response);
     const auto bodyOffset = response.find("\r\n\r\n");
-    UNIT_ASSERT(bodyOffset != TString::npos);
+    UNIT_ASSERT_C(bodyOffset != TString::npos, response);
     NJson::TJsonValue json;
     UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(response).SubStr(bodyOffset + 4), &json, true));
+    return json;
+}
+
+void CheckWalleHttpTask(const TString &response, const TString &status, ui32 nodeId) {
+    const auto json = ParseHttpOkJson(response);
     UNIT_ASSERT_VALUES_EQUAL_C(json["status"].GetString(), status, response);
     UNIT_ASSERT_VALUES_EQUAL(json["hosts"].GetArray().size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(json["hosts"][0].GetString(), ToString(nodeId));
@@ -506,11 +509,19 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.ConfigureDDiskPool();
         constexpr ui64 tabletId = 1001;
         UNIT_ASSERT_VALUES_EQUAL(env.AllocateDDiskBlockGroup(tabletId, 1).GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(env.AllocateDDiskBlockGroup(tabletId + 1, 1).GetStatus(), NKikimrProto::OK);
+        env.WaitForDDiskInfo(tabletId + 1, 1);
         env.WaitForDDiskInfo(tabletId, 1);
 
         const TString layoutUri = "/api/json/ddisk/tablet?tablet_id=" + ToString(tabletId);
         const TVector<TString> diagnosticsUris = {
-            "/api/json/ddisk/tablets?groups_only=1",
+            "/api/json/ddisk/tablets?groups_only=1&fields_required=TabletId",
+            "/api/json/ddisk/tablets?only_problems=1&fields_required=TabletId",
+            "/api/json/ddisk/tablets?sort_by=degrade&fields_required=TabletId",
+            "/api/json/ddisk/tablets?fields_required=UnavailableDDiskCount",
+            "/api/json/ddisk/disks?inventory=1&fields_required=DiskId",
+            "/api/json/ddisk/disks?node_id=1&fields_required=DiskId",
+            "/api/json/ddisk/disks?fields_required=DDiskStatus",
             layoutUri + "&include_health=1",
             "/api/json/ddisk/disks?inventory=1&tablet_id=" + ToString(tabletId) + "&node_id=1&pdisk_id=1&group_by=state&limit=0",
         };
@@ -542,17 +553,48 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(requests, 0);
 
         version = legacyVersion.SerializeAsString();
-        const auto layout = SendDDiskHttpRequest(env, layoutUri);
-        UNIT_ASSERT_C(layout.StartsWith("HTTP/1.1 200"), layout);
-        const auto bodyOffset = layout.find("\r\n\r\n");
-        UNIT_ASSERT(bodyOffset != TString::npos);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(layout).SubStr(bodyOffset + 4), &json, true));
-        UNIT_ASSERT_VALUES_EQUAL(json["Status"].GetString(), "OK");
-        UNIT_ASSERT_VALUES_EQUAL(json["TabletId"].GetUInteger(), tabletId);
-        UNIT_ASSERT_VALUES_EQUAL(json["Groups"].GetArray().size(), 1);
-        UNIT_ASSERT(!json.Has("Slots"));
-        UNIT_ASSERT_VALUES_EQUAL(requests, 1);
+        const auto layout = ParseHttpOkJson(SendDDiskHttpRequest(env, layoutUri));
+        UNIT_ASSERT_VALUES_EQUAL(layout["Status"].GetString(), "OK");
+        UNIT_ASSERT_VALUES_EQUAL(layout["TabletId"].GetUInteger(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(layout["Groups"].GetArray().size(), 1);
+        UNIT_ASSERT(!layout.Has("Slots"));
+
+        // Older list responses contain only TotalCount. The proxy can recover
+        // UnfilteredCount for a paginated request without a row filter.
+        auto oldTablets = env.AddObserver<TEvCms::TEvDDiskTabletListResponse>([](auto& ev) {
+            ev->Get()->Record.ClearUnfilteredCount();
+        });
+        auto oldDisks = env.AddObserver<TEvCms::TEvDDiskDiskListResponse>([](auto& ev) {
+            ev->Get()->Record.ClearUnfilteredCount();
+        });
+        auto checkPage = [&](const TString& uri, const TString& rows, const TString& id) {
+            const auto page = ParseHttpOkJson(SendDDiskHttpRequest(env, uri));
+            UNIT_ASSERT_VALUES_EQUAL(page["Status"]["Code"].GetString(), "OK");
+            UNIT_ASSERT_VALUES_EQUAL(page["FieldsAvailable"].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(page["FieldsAvailable"][0].GetString(), id);
+            UNIT_ASSERT(page["TotalCount"].GetUInteger() > 1);
+            UNIT_ASSERT_VALUES_EQUAL(page["UnfilteredCount"].GetUInteger(), page["TotalCount"].GetUInteger());
+            UNIT_ASSERT_VALUES_EQUAL(page[rows].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(page[rows][0].GetMap().size(), 1);
+            UNIT_ASSERT(page[rows][0].Has(id));
+            return page[rows][0][id];
+        };
+        const auto tablet = checkPage("/api/json/ddisk/tablets?offset=1&limit=1&fields_required=TabletId",
+            "Tablets", "TabletId");
+        UNIT_ASSERT_VALUES_EQUAL(tablet.GetUInteger(), tabletId + 1);
+        const auto disk = checkPage("/api/json/ddisk/disks?offset=1&limit=1&fields_required=DiskId",
+            "Disks", "DiskId");
+        UNIT_ASSERT(disk["NodeId"].GetUInteger() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(requests, 3);
+
+        const TString filteredUri = "/api/json/ddisk/tablets?filter=1001&fields_required=TabletId";
+        const auto filtered = SendDDiskHttpRequest(env, filteredUri);
+        UNIT_ASSERT_C(filtered.StartsWith("HTTP/1.1 503"), filtered);
+        oldTablets.Remove();
+        oldDisks.Remove();
+        const auto filteredPage = ParseHttpOkJson(SendDDiskHttpRequest(env, filteredUri));
+        UNIT_ASSERT_VALUES_EQUAL(filteredPage["TotalCount"].GetUInteger(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(filteredPage["UnfilteredCount"].GetUInteger(), 2);
 
         env.SetObserverFunc(prev);
         const auto response = SendDDiskHttpRequest(env, "/api/json/ddisk/tablets");
@@ -622,12 +664,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(tablets.GetTablets(0).GetDegrade(), 1);
         const auto detail = env.RequestDDiskInfo(tabletId, true);
         UNIT_ASSERT_VALUES_EQUAL(detail.SlotsSize(), 3);
-        for (const auto& slot : detail.GetSlots()) {
-            if (slot.GetDDiskSlotId() == 101) {
-                UNIT_ASSERT(slot.GetPersistentBufferStatus() == TDDiskStateInfo::Broken);
-                UNIT_ASSERT_VALUES_EQUAL(slot.GetPersistentBufferStatusReason(), "buffer failure");
-            }
-        }
+        const auto* buffer = FindIfPtr(detail.GetSlots(), [](const auto& slot) {
+            return slot.GetDDiskSlotId() == 101;
+        });
+        UNIT_ASSERT(buffer);
+        UNIT_ASSERT(buffer->GetPersistentBufferStatus() == TDDiskStateInfo::Broken);
+        UNIT_ASSERT_VALUES_EQUAL(buffer->GetPersistentBufferStatusReason(), "buffer failure");
         NKikimrCms::TDDiskDiskListRequest disksRequest;
         disksRequest.SetTabletId(tabletId);
         disksRequest.SetOnlyProblems(true);
@@ -740,11 +782,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             auto checkHttpOrder = [&](const TString& params, std::initializer_list<ui64> expectedIds,
                     bool checkProjection = false) {
                 const auto response = SendDDiskHttpRequest(env, "/api/json/ddisk/tablets?" + params);
-                UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 200"), response);
-                NJson::TJsonValue json;
-                const size_t bodyOffset = response.find("\r\n\r\n");
-                UNIT_ASSERT(bodyOffset != TString::npos);
-                UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(response).SubStr(bodyOffset + 4), &json, true));
+                const auto json = ParseHttpOkJson(response);
                 UNIT_ASSERT_VALUES_EQUAL(json["Status"]["Code"].GetString(), "OK");
                 const auto& tablets = json["Tablets"].GetArray();
                 UNIT_ASSERT_VALUES_EQUAL(tablets.size(), expectedIds.size());

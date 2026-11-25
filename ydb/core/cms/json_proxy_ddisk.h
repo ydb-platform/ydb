@@ -10,10 +10,12 @@
 #include <ydb/library/actors/core/mon.h>
 
 #include <library/cpp/protobuf/json/proto2json.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
 #include <util/string/cast.h>
 #include <util/string/split.h>
 
+#include <initializer_list>
 #include <vector>
 
 namespace NKikimr::NCms {
@@ -114,6 +116,14 @@ public:
                     event->Record.SetGroupByDegrade(IsTrue(params.Get("group_by_degrade")));
                 }
                 event->Record.SetGroupsOnly(IsTrue(params.Get("groups_only")));
+                const auto& list = event->Record;
+                RequiresDiagnostics = !HasLegacyProjection({"TabletId", "Revision", "GroupsCount", "LastChangedAt"})
+                    || list.GetOnlyProblems() || list.GetGroupsOnly() || list.GetGroupByDegrade()
+                    || list.GetGroupBy() != NKikimrCms::DDISK_TABLET_GROUP_BY_NONE
+                    || (list.GetSortBy() != NKikimrCms::DDISK_TABLET_SORT_BY_TABLET_ID
+                        && list.GetSortBy() != NKikimrCms::DDISK_TABLET_SORT_BY_GROUPS_COUNT
+                        && list.GetSortBy() != NKikimrCms::DDISK_TABLET_SORT_BY_LAST_CHANGED_AT);
+                CanInferUnfilteredCount = list.GetFilterTabletId().empty();
                 PendingRequest.Reset(event.Release());
                 break;
             }
@@ -191,6 +201,18 @@ public:
                 if (params.contains("only_problems")) {
                     event->Record.SetOnlyProblems(IsTrue(params.Get("only_problems")));
                 }
+                const auto& list = event->Record;
+                RequiresDiagnostics = !HasLegacyProjection({"DiskId", "DDiskTabletIds", "PersistentBufferTabletIds",
+                        "Available", "State"})
+                    || list.GetOnlyProblems() || list.GetInventory() || list.GetGroupsOnly()
+                    || list.HasNodeId() || list.HasPDiskId() || list.HasTabletId()
+                    || list.GetGroupBy() != NKikimrCms::DDISK_DISK_GROUP_BY_NONE
+                    || (list.GetSortBy() != NKikimrCms::DDISK_DISK_SORT_BY_DISK_ID
+                        && list.GetSortBy() != NKikimrCms::DDISK_DISK_SORT_BY_TABLETS_COUNT)
+                    || (!list.GetIncludeTabletIds() && (FieldsRequired.contains("DDiskTabletIds")
+                        || FieldsRequired.contains("PersistentBufferTabletIds")));
+                // The tablet filter defines the scope of both counts.
+                CanInferUnfilteredCount = list.GetFilterDiskId().empty();
                 PendingRequest.Reset(event.Release());
                 break;
             }
@@ -200,6 +222,14 @@ public:
     }
 
 private:
+    // The original paginated APIs can serve explicit projections of these fields.
+    // An empty projection requests all fields, including component health.
+    bool HasLegacyProjection(std::initializer_list<TStringBuf> fields) const {
+        return !FieldsRequired.empty() && AllOf(FieldsRequired, [&](const TString& field) {
+            return Find(fields, TStringBuf(field)) != fields.end();
+        });
+    }
+
     template <typename TParams, typename TRecord>
     static void FillOffsetAndLimit(const TParams& params, TRecord& record) {
         ui32 offset = 0;
@@ -256,6 +286,19 @@ private:
     }
 
     template <typename TRecord, typename TRow>
+    void ReplyList(TRecord& record, NProtoBuf::RepeatedPtrField<TRow>& rows, TStringBuf identity, const TActorContext& ctx) {
+        if (!RequiresDiagnostics && record.HasTotalCount() && !record.HasUnfilteredCount()) {
+            if (!CanInferUnfilteredCount) {
+                Reply("HTTP/1.1 503 Service Unavailable\r\n\r\nCMS does not support unfiltered DDisk counts", ctx);
+                return;
+            }
+            record.SetUnfilteredCount(record.GetTotalCount());
+        }
+        SelectListFields(record, rows, identity);
+        ReplyRecord(record, ctx);
+    }
+
+    template <typename TRecord, typename TRow>
     void SelectListFields(TRecord& record, NProtoBuf::RepeatedPtrField<TRow>& rows, TStringBuf identity) {
         if (FieldsRequired.empty()) {
             return;
@@ -280,8 +323,7 @@ private:
 
     void Handle(TEvCms::TEvDDiskTabletListResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
-        SelectListFields(record, *record.MutableTablets(), "TabletId");
-        ReplyRecord(record, ctx);
+        ReplyList(record, *record.MutableTablets(), "TabletId", ctx);
     }
 
     void Handle(TEvCms::TEvDDiskInfoGetResponse::TPtr& ev, const TActorContext& ctx) {
@@ -290,8 +332,7 @@ private:
 
     void Handle(TEvCms::TEvDDiskDiskListResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
-        SelectListFields(record, *record.MutableDisks(), "DiskId");
-        ReplyRecord(record, ctx);
+        ReplyList(record, *record.MutableDisks(), "DiskId", ctx);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
@@ -337,6 +378,7 @@ private:
     ui64 TabletId = 0;
     EMode Mode = EMode::TabletList;
     bool RequiresDiagnostics = true;
+    bool CanInferUnfilteredCount = false;
     THashSet<TString> FieldsRequired;
 };
 

@@ -2216,6 +2216,41 @@ void FillDDiskMetadata(auto& disk, const TClusterInfo& cluster, const NKikimrBlo
     disk.SetPersistentBufferId(MakeBlobStoragePersistentBufferId(nodeId, pdiskId, slotId).ToString());
 }
 
+struct TResolvedPDiskState {
+    std::optional<EPDiskState> RawState = std::nullopt;
+    const char* NodeFailure = nullptr;
+
+    bool IsAvailable() const {
+        return !NodeFailure && (!RawState || IsPDiskStateUp(*RawState));
+    }
+
+    TString GetName() const {
+        if (RawState) {
+            return NKikimrBlobStorage::TPDiskState::E_Name(*RawState);
+        }
+        return NodeFailure ? NodeFailure : "Unknown";
+    }
+};
+
+TResolvedPDiskState ResolvePDiskState(const TClusterInfo& cluster, const NKikimrBlobStorage::NDDisk::TDDiskId& id) {
+    const auto pdisk = cluster.AllPDisks().FindPtr(TPDiskID(id.GetNodeId(), id.GetPDiskId()));
+    if (!pdisk) {
+        return {};
+    }
+    // A disconnected node can retain a stale PDisk report until it reconnects.
+    if (const auto node = cluster.AllNodes().FindPtr(id.GetNodeId())) {
+        switch ((*node)->State) {
+            case NKikimrCms::DOWN:
+                return {.NodeFailure = "NodeDown"};
+            case NKikimrCms::RESTART:
+                return {.NodeFailure = "NodeRestarting"};
+            default:
+                break;
+        }
+    }
+    return {.RawState = (*pdisk)->RawState};
+}
+
 std::optional<TDDiskComponentStatus> GetComponentStatus(const TDDiskSample* sample, bool pdiskAvailable, bool buffer) {
     if (!pdiskAvailable) {
         return TDDiskSample::Broken;
@@ -2276,8 +2311,9 @@ void TCms::Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr& ev, const TActorContext&
                     disk.SetPDiskId(pdiskId);
                     disk.SetDDiskSlotId(slotId);
                     FillDDiskMetadata(disk, *ClusterInfo, id);
-                    disk.SetPDiskState(GetDDiskStateName(id));
-                    if (!IsDDiskAvailable(id)) {
+                    const auto pdisk = ResolvePDiskState(*ClusterInfo, id);
+                    disk.SetPDiskState(pdisk.GetName());
+                    if (!pdisk.IsAvailable()) {
                         disk.SetDDiskStatus(TDDiskSample::Broken);
                         disk.SetPersistentBufferStatus(TDDiskSample::Broken);
                         disk.SetDDiskStatusReason(disk.GetPDiskState());
@@ -2294,79 +2330,13 @@ void TCms::Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr& ev, const TActorContext&
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 
-bool TCms::IsDDiskAvailable(const NKikimrBlobStorage::NDDisk::TDDiskId& id) const {
-    // We treat a DDisk as available unless the underlying PDisk is known to
-    // CMS and is definitely in a state that indicates the disk or its node is
-    // genuinely unreachable/broken (see IsPDiskStateUp() for the exact split;
-    // notably, the initial-startup states are still considered available). If
-    // CMS has no information about this PDisk, or it is registered but its
-    // state has never actually been reported by Whiteboard (e.g. because this
-    // PDisk id isn't covered by Whiteboard PDisk state collection at all), we
-    // conservatively assume it's available to avoid false-positive "problem"
-    // reports.
-    if (!ClusterInfo) {
-        return true;
-    }
-    const TPDiskID pdiskId(id.GetNodeId(), id.GetPDiskId());
-    if (!ClusterInfo->HasPDisk(pdiskId)) {
-        return true;
-    }
-    // The PDisk's own reported state (RawState) is only updated while its
-    // node is actually connected and reporting Whiteboard data; once a node
-    // disconnects, TClusterInfo::ClearNode() marks the node itself DOWN but
-    // leaves any previously reported PDisk state untouched (it may be stale,
-    // e.g. still "Initial" from before the node went down). So a disk on a
-    // known-down/restarting node must be treated as unavailable regardless of
-    // its last reported RawState.
-    if (ClusterInfo->HasNode(id.GetNodeId())) {
-        const auto& node = ClusterInfo->Node(id.GetNodeId());
-        if (node.State == NKikimrCms::DOWN || node.State == NKikimrCms::RESTART) {
-            return false;
-        }
-    }
-    const auto& pdisk = ClusterInfo->PDisk(pdiskId);
-    if (!pdisk.RawState) {
-        return true;
-    }
-    return IsPDiskStateUp(*pdisk.RawState);
-}
-
-TString TCms::GetDDiskStateName(const NKikimrBlobStorage::NDDisk::TDDiskId& id) const {
-    // Returns the full underlying PDisk state name, as opposed to the coarse
-    // available/unavailable flag from IsDDiskAvailable(). Mirrors the same
-    // node-reachability and "unknown state means available/no info" logic so
-    // the reported name is consistent with IsDDiskAvailable()'s verdict.
-    if (!ClusterInfo) {
-        return "Unknown";
-    }
-    const TPDiskID pdiskId(id.GetNodeId(), id.GetPDiskId());
-    if (!ClusterInfo->HasPDisk(pdiskId)) {
-        return "Unknown";
-    }
-    if (ClusterInfo->HasNode(id.GetNodeId())) {
-        const auto& node = ClusterInfo->Node(id.GetNodeId());
-        if (node.State == NKikimrCms::DOWN) {
-            return "NodeDown";
-        }
-        if (node.State == NKikimrCms::RESTART) {
-            return "NodeRestarting";
-        }
-    }
-    const auto& pdisk = ClusterInfo->PDisk(pdiskId);
-    if (!pdisk.RawState) {
-        return "Unknown";
-    }
-    return NKikimrBlobStorage::TPDiskState::E_Name(*pdisk.RawState);
-}
-
 void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorContext& ctx) {
     // This request is routed through EnqueueRequest (see StateWork's
     // FFunc(EvDDiskTabletListRequest, EnqueueRequest)), which triggers a
     // fresh ClusterInfo collection before ProcessRequest() calls this
     // handler -- consistent with how TEvClusterStateRequest/TEvPermissionRequest
-    // ensure up-to-date PDisk/node state for IsDDiskAvailable()/
-    // GetDDiskStateName(). If collection failed, bail out instead of
-    // reporting availability computed from stale/missing ClusterInfo.
+    // ensure up-to-date PDisk/node state. If collection failed, bail out
+    // instead of reporting availability computed from stale/missing ClusterInfo.
     if (ClusterInfo->IsOutdated()) {
         return ReplyWithError<TEvCms::TEvDDiskTabletListResponse>(
             ev, TStatus::ERROR_TEMP, "Cannot collect cluster state", ctx);
@@ -2408,7 +2378,7 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
                     }
                     const auto* sample = ClusterInfo->FindDDiskState(
                         id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId());
-                    const bool pdiskAvailable = IsDDiskAvailable(id);
+                    const bool pdiskAvailable = ResolvePDiskState(*ClusterInfo, id).IsAvailable();
                     const auto status = GetComponentStatus(sample, pdiskAvailable, buffer);
                     if (status && *status != TDDiskSample::Ready) {
                         ++unavailable;
@@ -2694,7 +2664,8 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
                 << ":" << id.GetDDiskSlotId()).Contains(diskFilter)) {
             continue;
         }
-        usage.Available = IsDDiskAvailable(id);
+        const auto pdisk = ResolvePDiskState(*ClusterInfo, id);
+        usage.Available = pdisk.IsAvailable();
         usage.Sample = ClusterInfo->FindDDiskState(id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId());
         usage.DDiskStatus = GetComponentStatus(usage.Sample, usage.Available, false);
         usage.PersistentBufferStatus = GetComponentStatus(usage.Sample, usage.Available, true);
@@ -2706,7 +2677,7 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
         if (onlyProblems && usage.Available && !unavailableRole) {
             continue;
         }
-        usage.State = GetDDiskStateName(id);
+        usage.State = pdisk.GetName();
         if (groupByState) {
             ++groupCounts[usage.State];
             if (request.HasFilterGroup() && request.GetFilterGroup() != usage.State) {

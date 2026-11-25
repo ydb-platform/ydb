@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    key_range_split.cpp
     partition_key_range.cpp
     partition_key_range_sequence.cpp
 )
@@ -8,6 +9,7 @@ SRCS(
 PEERDIR(
     ydb/core/protos
     ydb/core/scheme
+    ydb/library/kll_median
     ydb/services/lib/sharding
 )
 

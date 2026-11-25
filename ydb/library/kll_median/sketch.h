@@ -45,6 +45,17 @@ namespace NKikimr::NKll {
         return items.back().first;
     }
 
+    template <class T>
+    ui64 GetRank(const TVector<std::pair<T, ui64>>& items, const T& value) {
+        ui64 rank = 0;
+        for (const auto& [v, w] : items) {
+            if (v < value) {
+                rank += w;
+            }
+        }
+        return rank;
+    }
+
     /**
      * KLL sketch for approximate streaming quantiles.
      * k: accuracy parameter (typically hundreds/thousands). cap = 2*k.

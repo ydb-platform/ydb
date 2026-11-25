@@ -82,7 +82,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
 
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
     TEvRecompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TString& clientAddress, const TString& uid,
-        const TMaybe<TKqpQueryId>& query, bool isQueryActionPrepare, TInstant deadline,
+        TMaybe<TKqpQueryId> query, bool isQueryActionPrepare, TInstant deadline,
         TKqpDbCountersPtr dbCounters, const TGUCSettings::TPtr& gUCSettings, const TMaybe<TString>& applicationName,
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NLWTrace::TOrbit orbit = {}, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
@@ -91,7 +91,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         : UserToken(userToken)
         , ClientAddress(clientAddress)
         , Uid(uid)
-        , Query(query)
+        , Query(std::move(query))
         , IsQueryActionPrepare(isQueryActionPrepare)
         , Deadline(deadline)
         , DbCounters(dbCounters)

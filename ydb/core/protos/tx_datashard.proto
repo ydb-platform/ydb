@@ -2412,7 +2412,7 @@ message TEvCompactTable {
     optional bool CompactSinglePartedShards = 3;
     // Column tables: Cascade also rewrites every portion to the current schema before the reply. TxId is the forced
     // compaction's id in the schemeshard (the TxId of its create request): the same id again is a retry of the request
-    // being served, another id a new forced compaction, none is answered NOT_NEEDED.
+    // being served, another id a new forced compaction, none a plain compaction (pre-upgrade schemeshards).
     optional bool Cascade = 4;
     optional uint64 TxId = 5;
 }

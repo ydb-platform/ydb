@@ -82,6 +82,8 @@ namespace NKikimr::NBlobDepot {
                 const ui32 generation = Self->Executor()->Generation();
 
                 for (const auto& item : Request->Get()->Record.GetItems()) {
+                    // Older agents cannot report whether an earlier SDK attempt may still arrive.
+                    const bool s3PutMayArriveLate = !item.HasS3PutMayArriveLate() || item.GetS3PutMayArriveLate();
                     auto *responseItem = responseRecord->AddItems();
 
                     auto finishWithError = [&](NKikimrProto::EReplyStatus status, const TString& errorReason) {
@@ -89,10 +91,12 @@ namespace NKikimr::NBlobDepot {
                         responseItem->SetErrorReason(errorReason);
                         if (item.HasS3Locator()) {
                             const auto& locator = TS3Locator::FromProto(item.GetS3Locator());
-                            const size_t numErased = agent.S3WritesInFlight.erase(locator);
-                            Y_ABORT_UNLESS(numErased);
-                            Self->S3Manager->AddTrashToCollect(locator);
-                            Self->S3Manager->OnS3WriteInFlightRemoved(/*success=*/false);
+                            if (agent.S3WritesInFlight.erase(locator)) {
+                                const TInstant retireAt = s3PutMayArriveLate
+                                    ? Self->S3Manager->GetPutWatchRetireAt() : TInstant();
+                                Self->Data->AddToS3Trash(locator, txc, this, retireAt);
+                                Self->S3Manager->OnS3WriteInFlightRemoved(/*success=*/false);
+                            }
                         }
                     };
 
@@ -192,7 +196,9 @@ namespace NKikimr::NBlobDepot {
                         if (item.HasS3Locator()) {
                             auto locator = TS3Locator::FromProto(item.GetS3Locator());
 
-                            // remove written item from the trash
+                            if (s3PutMayArriveLate) {
+                                Self->Data->FinishS3Put(locator, TData::ES3PutOutcome::MayArriveLate, true, txc, this);
+                            }
                             NIceDb::TNiceDb(txc.DB).Table<Schema::TrashS3>().Key(locator.Generation, locator.KeyId).Delete();
 
                             // remove item from agent's inflight
@@ -290,16 +296,20 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
+        std::vector<TS3Locator> abandoned;
         for (const auto& item : record.GetS3Locators()) {
             const auto locator = TS3Locator::FromProto(item);
-            if (!agent.S3WritesInFlight.erase(locator)) {
-                continue;
+            if (agent.S3WritesInFlight.erase(locator)) {
+                abandoned.push_back(locator);
+                S3Manager->OnS3WriteInFlightRemoved(/*success=*/false);
             }
-            if (record.GetS3PutMayArriveLate() || !record.GetS3SlowDown()) {
-                S3Manager->AddTrashToCollect(locator);
-            }
-            S3Manager->OnS3WriteInFlightRemoved(/*success=*/false);
         }
+        // An older agent cannot tell us whether an earlier SDK attempt is still outstanding.
+        auto outcome = TData::ES3PutOutcome::MayArriveLate;
+        if (record.HasS3PutMayArriveLate() && !record.GetS3PutMayArriveLate()) {
+            outcome = record.GetS3SlowDown() ? TData::ES3PutOutcome::NotStored : TData::ES3PutOutcome::Stored;
+        }
+        Data->DiscardAgentS3Puts(std::move(abandoned), outcome);
     }
 
 } // NKikimr::NBlobDepot

@@ -46,6 +46,8 @@ message TValue {
     optional bool Public = 4;
     optional bool GoingToAssimilate = 5;
     optional uint32 ValueVersion = 6;
+    optional uint32 HotWriteGeneration = 7;
+    optional uint64 HotWriteSequence = 8;
 }
 
 message TGivenIdRange {
@@ -202,7 +204,8 @@ message TEvCommitBlobSeq {
         repeated TExtraBlockCheck ExtraBlockChecks = 7;
         optional bool IssueKeepFlag = 8;
         optional bool IgnoreBlock = 9;
-        optional bool S3PutMayArriveLate = 10; // an earlier physical attempt can finish after this successful PUT
+        // The SDK retried this S3 PUT; an earlier attempt may still complete after the mapping is collected.
+        optional bool S3PutMayArriveLate = 10;
     }
 
     repeated TItem Items = 1;

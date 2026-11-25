@@ -739,7 +739,13 @@ public:
         if (attachCdcTopic || configureManagedMirror) {
             const auto tablePath = streamPath.Parent();
             const auto checks = tablePath.Check();
-            checks.NotEmpty().IsResolved().IsAtLocalSchemeShard().NotDeleted().IsTable().NotUnderOperation();
+            checks
+                .NotEmpty()
+                .IsResolved()
+                .IsAtLocalSchemeShard()
+                .NotDeleted()
+                .IsTable()
+                .NotUnderOperation();
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;

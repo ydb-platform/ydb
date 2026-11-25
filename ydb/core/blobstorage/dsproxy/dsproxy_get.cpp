@@ -426,6 +426,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                     (HandleClass, NKikimrBlobStorage::EGetHandleClass_Name(handleClass)),
                     (RestartCounter, RestartCounter),
                     (MaxNumOfSlowDisks, AccelerationParams.MaxNumOfSlowDisks),
+                    (SlowDiskThreshold, AccelerationParams.SlowDiskThreshold),
                     (PredictedDelayMultiplier, AccelerationParams.PredictedDelayMultiplier),
                     (History, GetImpl.PrintHistory()));
         }

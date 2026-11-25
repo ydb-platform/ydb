@@ -13,6 +13,7 @@ void CheckLongRequestLog(ui64 thresholdMs, bool expectWarning) {
     TEnvironmentSetup env({
         .NodeCount = 1,
         .Erasure = TBlobStorageGroupType::ErasureNone,
+        .SlowDiskThreshold = 4,
         .VDiskPredictedDelayMultiplier = 3,
         .MaxNumOfSlowDisks = 2,
     });
@@ -79,6 +80,7 @@ void CheckLongRequestLog(ui64 thresholdMs, bool expectWarning) {
         return;
     }
     UNIT_ASSERT_C(text.Contains("MaxNumOfSlowDisks# 2"), text);
+    UNIT_ASSERT_C(text.Contains("SlowDiskThreshold# 4"), text);
     UNIT_ASSERT_C(text.Contains("PredictedDelayMultiplier# 3"), text);
     const size_t initial = text.find("Stage# Initial");
     const size_t schedule = text.find("GetAccelerationSchedule{");

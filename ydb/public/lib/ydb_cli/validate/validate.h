@@ -4,6 +4,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/generic/yexception.h>
 #include <util/random/random.h>
 #include <util/system/thread.h>
 #include <util/system/types.h>
@@ -13,6 +14,10 @@
 #include <utility>
 
 namespace NYdb::NConsoleClient {
+
+// The storage delivered the object bytes, but decoding them failed.
+// zstd errors use this type. RetryValidateIo does not retry it.
+class TBackupContentError : public yexception {};
 
 // Read-only access to a backup tree. Keys use '/' and are relative to the storage root.
 class IBackupStorage {
@@ -29,6 +34,8 @@ public:
     // after an I/O error, so the caller can reset checksum state. `onChunk` then
     // receives successive pieces. A piece is valid only until `onChunk` returns;
     // the storage does not keep the object body.
+    // `beginAttempt` and `onChunk` throw TBackupContentError when those bytes cannot
+    // be decoded, including a zstd failure. A storage retry must not repeat the read.
     virtual void ReadChunks(
         const TString& key,
         const std::function<void()>& beginAttempt,
@@ -103,13 +110,16 @@ ui64 DefaultValidateThreads();
 // RetryValidateIo adds a random extra in [0, base].
 TDuration ValidateRetryBackoff(ui32 failedAttempt);
 
-// Retries `fn` after an exception. `retries` is the number of attempts (1 means no retry).
+// Retries `fn` after an I/O exception. `retries` is the number of attempts (1 means no retry).
+// TBackupContentError means the bytes were received and decoding failed, so it is rethrown.
 template <typename TFn, typename TSleep>
 auto RetryValidateIo(ui32 retries, TFn&& fn, TSleep&& sleep) -> decltype(fn()) {
     const ui32 attempts = retries == 0 ? 1 : retries;
     for (ui32 attempt = 1;; ++attempt) {
         try {
             return fn();
+        } catch (const TBackupContentError&) {
+            throw;
         } catch (const std::exception& ex) {
             if (attempt >= attempts) {
                 throw;

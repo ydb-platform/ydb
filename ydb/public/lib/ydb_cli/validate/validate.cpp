@@ -269,7 +269,7 @@ TString HashStoredFile(
 
     std::unique_ptr<ZSTD_DCtx, decltype(&ZSTD_freeDCtx)> dctx(ZSTD_createDCtx(), &ZSTD_freeDCtx);
     if (!dctx) {
-        ythrow yexception() << "failed to create zstd context";
+        ythrow TBackupContentError() << "failed to create zstd context";
     }
     size_t lastRet = 1;
     char outBuf[1 << 16];
@@ -280,7 +280,7 @@ TString HashStoredFile(
             storedBytes = 0;
             const size_t reset = ZSTD_DCtx_reset(dctx.get(), ZSTD_reset_session_only);
             if (ZSTD_isError(reset)) {
-                ythrow yexception() << "zstd: " << ZSTD_getErrorName(reset);
+                ythrow TBackupContentError() << "zstd: " << ZSTD_getErrorName(reset);
             }
             lastRet = 1;
         },
@@ -294,7 +294,7 @@ TString HashStoredFile(
                 ZSTD_outBuffer output{outBuf, sizeof(outBuf), 0};
                 lastRet = ZSTD_decompressStream(dctx.get(), &output, &input);
                 if (ZSTD_isError(lastRet)) {
-                    ythrow yexception() << "zstd: " << ZSTD_getErrorName(lastRet);
+                    ythrow TBackupContentError() << "zstd: " << ZSTD_getErrorName(lastRet);
                 }
                 if (output.pos != 0) {
                     SHA256_Update(&ctx, outBuf, output.pos);
@@ -305,7 +305,7 @@ TString HashStoredFile(
         return FinishSha256(&ctx);
     }
     if (lastRet != 0) {
-        ythrow yexception() << "truncated zstd frame";
+        ythrow TBackupContentError() << "truncated zstd frame";
     }
     return FinishSha256(&ctx);
 }
@@ -1525,6 +1525,8 @@ private:
                             << "checksum mismatch: expected " << expected << ", got " << digest);
                     }
                 }
+            } catch (const TBackupContentError& ex) {
+                Error(file.StoredKey, TStringBuilder() << "failed to decode data file: " << ex.what());
             } catch (const std::exception& ex) {
                 Error(file.StoredKey, TStringBuilder() << "failed to read data file: " << ex.what());
             }

@@ -14,6 +14,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+#include <utility>
 
 namespace NYdb::NConsoleClient {
 namespace {
@@ -407,7 +408,9 @@ Y_UNIT_TEST(EmptyCompressedDataFileIsAnEmptyPartition) {
     UNIT_ASSERT(!broken.empty());
     broken.pop_back();
     storage.Put("t/data_01.csv.zst", broken);
-    UNIT_ASSERT(HasIssue(Run(storage, "t"), "t/data_01.csv.zst", "truncated zstd frame"));
+    const TValidationReport report = Run(storage, "t");
+    UNIT_ASSERT(HasIssue(report, "t/data_01.csv.zst", "failed to decode data file"));
+    UNIT_ASSERT(HasIssue(report, "t/data_01.csv.zst", "truncated zstd frame"));
 }
 
 Y_UNIT_TEST(FullBackupMappingAndUnexpectedObject) {
@@ -1159,6 +1162,30 @@ Y_UNIT_TEST(RetryValidateIoRetriesThenSucceeds) {
     UNIT_ASSERT_VALUES_EQUAL(ValidateIoRetryCount(), 0);
 }
 
+Y_UNIT_TEST(ContentErrorSkipsIoRetry) {
+    ResetValidateIoRetries();
+    ui32 calls = 0;
+    bool thrown = false;
+    bool slept = false;
+    try {
+        RetryValidateIo(5, [&] {
+            ++calls;
+            ythrow TBackupContentError() << "zstd: Data corruption detected";
+            return true;
+        }, [&](TDuration) {
+            slept = true;
+        });
+    } catch (const TBackupContentError& ex) {
+        thrown = true;
+        UNIT_ASSERT_STRING_CONTAINS(ex.what(), "zstd: Data corruption detected");
+    }
+    UNIT_ASSERT(thrown);
+    UNIT_ASSERT(!slept);
+    UNIT_ASSERT_VALUES_EQUAL(calls, 1);
+    UNIT_ASSERT_VALUES_EQUAL(ValidateIoRetryCount(), 0);
+    ResetValidateIoRetries();
+}
+
 TVector<TString> ProgressOf(
     const IBackupStorage& storage,
     const TString& path,
@@ -1226,6 +1253,93 @@ Y_UNIT_TEST(ReadRetryWarnsOnce) {
     UNIT_ASSERT_VALUES_EQUAL(notices, 1);
     UNIT_ASSERT_VALUES_EQUAL(ValidateIoRetryCount(), 2);
     UNIT_ASSERT_VALUES_EQUAL(storage.FailsLeft, 0);
+    ResetValidateIoRetries();
+}
+
+Y_UNIT_TEST(ZstdCorruptionIsNotRetried) {
+    class TRetryingStorage : public TMemoryStorage {
+    public:
+        mutable ui32 DataReads = 0;
+        mutable ui32 IoFailsLeft = 0;
+
+        void ReadChunks(
+            const TString& key,
+            const std::function<void()>& beginAttempt,
+            const std::function<void(TStringBuf)>& onChunk) const override
+        {
+            RetryValidateIo(5, [&] {
+                beginAttempt();
+                if (key.Contains("data_") && !key.EndsWith(".sha256")) {
+                    if (IoFailsLeft > 0) {
+                        --IoFailsLeft;
+                        ythrow yexception() << "timeout";
+                    }
+                    ++DataReads;
+                }
+                const TString data = Read(key);
+                if (data) {
+                    onChunk(data);
+                }
+            }, [](TDuration) {
+            });
+        }
+    };
+
+    auto run = [](TRetryingStorage& storage) {
+        TValidateSettings settings;
+        settings.Threads = 1;
+        settings.Verbosity = 3;
+        TVector<TString> lines;
+        settings.Progress = [&lines](TStringBuf line) {
+            lines.emplace_back(line);
+        };
+        return std::make_pair(ValidateBackup(storage, "t", settings), lines);
+    };
+
+    ResetValidateIoRetries();
+    TRetryingStorage corrupt;
+    AddTable(corrupt, "t", 1, "abcdefghijklmnopqrstuvwxyz\n", true, true);
+    corrupt.Put("t/data_00.csv.zst", "not-a-zstd-frame");
+    {
+        const auto [report, lines] = run(corrupt);
+        UNIT_ASSERT(HasIssue(report, "t/data_00.csv.zst", "failed to decode data file"));
+        UNIT_ASSERT(HasIssue(report, "t/data_00.csv.zst", "zstd:"));
+        UNIT_ASSERT(!ContainsLine(lines, "retries enabled"));
+        UNIT_ASSERT_VALUES_EQUAL(ValidateIoRetryCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(corrupt.DataReads, 1);
+    }
+
+    ResetValidateIoRetries();
+    TRetryingStorage flaky;
+    AddTable(flaky, "t", 1, "abcdefghijklmnopqrstuvwxyz\n", true, true);
+    flaky.Put("t/data_00.csv.zst", "not-a-zstd-frame");
+    flaky.IoFailsLeft = 2;
+    {
+        const auto [report, lines] = run(flaky);
+        UNIT_ASSERT(HasIssue(report, "t/data_00.csv.zst", "failed to decode data file"));
+        UNIT_ASSERT(HasIssue(report, "t/data_00.csv.zst", "zstd:"));
+        UNIT_ASSERT(ContainsLine(lines, "retries enabled"));
+        UNIT_ASSERT(ContainsLine(lines, "timeout"));
+        UNIT_ASSERT_VALUES_EQUAL(ValidateIoRetryCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(flaky.IoFailsLeft, 0);
+        UNIT_ASSERT_VALUES_EQUAL(flaky.DataReads, 1);
+    }
+
+    ResetValidateIoRetries();
+    TRetryingStorage truncated;
+    AddTable(truncated, "t", 1, "row\n", true, true);
+    TString broken = truncated.Files["t/data_00.csv.zst"];
+    UNIT_ASSERT(broken.size() > 1);
+    broken.pop_back();
+    truncated.Put("t/data_00.csv.zst", broken);
+    {
+        const auto [report, lines] = run(truncated);
+        UNIT_ASSERT(HasIssue(report, "t/data_00.csv.zst", "failed to decode data file"));
+        UNIT_ASSERT(HasIssue(report, "t/data_00.csv.zst", "truncated zstd frame"));
+        UNIT_ASSERT(!ContainsLine(lines, "retries enabled"));
+        UNIT_ASSERT_VALUES_EQUAL(ValidateIoRetryCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(truncated.DataReads, 1);
+    }
     ResetValidateIoRetries();
 }
 

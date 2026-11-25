@@ -7,6 +7,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/utility.h>
 #include <util/string/cast.h>
 
 namespace NKikimr {
@@ -62,6 +63,10 @@ EDataFormat DataFormatFromTask(const NKikimrSchemeOp::TBackupTask& task) {
         return EDataFormat::Invalid;
     }
     return EDataFormat::Invalid;
+}
+
+ui64 ParquetRowGroupBytesLimit(ui64 restoreReadBufferSizeLimit) {
+    return Max<ui64>(restoreReadBufferSizeLimit / 8, 1);
 }
 
 EDataFormat NextDataFormat(EDataFormat cur) {

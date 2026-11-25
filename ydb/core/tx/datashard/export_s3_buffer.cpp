@@ -287,7 +287,10 @@ bool TS3Buffer::IsFilled() const {
     // Some formats (e.g. Parquet) keep encoded output inside the format itself
     // until a flush, so it is not yet reflected in Buffer/Compression.
     readyOutputBytes += DataFormat->GetReadyOutputBytes();
-    if (readyOutputBytes < MinBytes) {
+    // Nothing encoded yet (Parquet keeps the rows in a pending row group): a part
+    // with no data is useless, and S3 rejects it with EntityTooSmall. So even with
+    // MinBytes = 0, a non-final part needs some output.
+    if (readyOutputBytes == 0 || readyOutputBytes < MinBytes) {
         return false;
     }
     // After MinBytes, MaxBytes caps the uncompressed size and the memory held.
@@ -474,10 +477,13 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
 
             auto maybeSettings = ParquetExportSettingsFromTask(Task);
             auto settings = maybeSettings.value_or(TParquetExportSettings{});
+            // Row groups are cut by the batch, so a scan holds about a part of pending rows, and
+            // by what restore holds at once, so a raised batch does not make unrestorable groups.
+            const ui64 rowGroupBytes = Min(maxBytes,
+                ParquetRowGroupBytesLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit()));
             settings
                 .WithColumns(Columns)
-                // Row groups are cut by the batch too, so a scan holds about a part of pending rows.
-                .WithRowGroupBytes(maxBytes);
+                .WithRowGroupBytes(rowGroupBytes);
 
             switch (CodecFromTask(Task)) {
             case ECompressionCodec::None:

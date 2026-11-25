@@ -56,6 +56,10 @@ private:
 
 static std::shared_ptr<parquet::WriterProperties> CreateWriteProperties(const TParquetExportSettings& settings) {
     auto builder = std::make_unique<parquet::WriterProperties::Builder>();
+    // No column statistics: each row group would add the min and max of every column
+    // (up to 4 KiB each) to the footer, and the importer rejects a footer above its
+    // limit. Restore does not read them.
+    builder->disable_statistics();
     if (settings.CompressionSettings) {
         switch (settings.CompressionSettings->Algorithm) {
         case TParquetExportSettings::TCompressionSettings::EAlgorithm::Zstd:

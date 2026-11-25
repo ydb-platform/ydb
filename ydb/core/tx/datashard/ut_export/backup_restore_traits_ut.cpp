@@ -10,6 +10,14 @@
 namespace NKikimr::NDataShard::NBackupRestoreTraits {
 
 Y_UNIT_TEST_SUITE(BackupRestoreTraitsTest) {
+    // The export's Parquet row-group ceiling is an eighth of the restore read buffer: 32 MiB at
+    // the default of 256 MiB, and never 0.
+    Y_UNIT_TEST(ParquetRowGroupBytesLimit) {
+        UNIT_ASSERT_VALUES_EQUAL(ParquetRowGroupBytesLimit(268435456), 33554432);
+        UNIT_ASSERT_VALUES_EQUAL(ParquetRowGroupBytesLimit(512 * 1024), 64 * 1024);
+        UNIT_ASSERT_VALUES_EQUAL(ParquetRowGroupBytesLimit(0), 1);
+    }
+
     // DataFormatFromTask: S3 settings -> data format mapping (oneof Format).
     Y_UNIT_TEST(DataFormatFromTaskS3) {
         NKikimrSchemeOp::TBackupTask task;

@@ -134,14 +134,19 @@ namespace {
     }
 
     // Builds a Parquet backup task (FS or S3), runs TS3Export::CreateBuffer(), feeds the rows
-    // and returns the produced data file bytes.
-    TString ExportRowsToParquet(EParquetExportSettings settings, const TVector<std::pair<ui32, TString>>& rows, ui32 rowGroupSize, ui64 bytesBatchSize = 0) {
+    // and returns the produced data file bytes. A restoreReadBufferSizeLimit of 0 leaves the
+    // config default.
+    TString ExportRowsToParquet(EParquetExportSettings settings, const TVector<std::pair<ui32, TString>>& rows, ui32 rowGroupSize, ui64 bytesBatchSize = 0, ui64 restoreReadBufferSizeLimit = 0) {
         TTestActorRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());
 
         TString fileData;
 
         auto produce = [&]() {
+            if (restoreReadBufferSizeLimit) {
+                AppData()->DataShardConfig.SetRestoreReadBufferSizeLimit(restoreReadBufferSizeLimit);
+            }
+
             NKikimrSchemeOp::TBackupTask task;
             ConfigureParquetBackupTask(task, settings, rowGroupSize, bytesBatchSize);
 
@@ -271,10 +276,10 @@ namespace {
         bool LastPartPrepared = false;
     };
 
-    // Runs TS3Export::CreateBuffer() with S3 settings and the batch (0 for the default) and
-    // feeds rows of a key and a value of valueSize bytes, sending a part whenever the buffer
-    // is filled as the scan does, up to the first error.
-    TWideRowsExport ExportWideRows(ui64 bytesBatchSize, ui32 rowCount, size_t valueSize) {
+    // Runs TS3Export::CreateBuffer() with S3 settings, the batch and the restore buffer limit
+    // (0 for the defaults) and feeds rows of a key and a value of valueSize bytes, sending a
+    // part whenever the buffer is filled as the scan does, up to the first error.
+    TWideRowsExport ExportWideRows(ui64 bytesBatchSize, ui32 rowCount, size_t valueSize, ui64 restoreReadBufferSizeLimit = 0) {
         TTestActorRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());
 
@@ -284,6 +289,10 @@ namespace {
         const i64 arrowBytesAtStart = arrowPool->bytes_allocated();
 
         auto produce = [&]() {
+            if (restoreReadBufferSizeLimit) {
+                AppData()->DataShardConfig.SetRestoreReadBufferSizeLimit(restoreReadBufferSizeLimit);
+            }
+
             NKikimrSchemeOp::TBackupTask task;
             ConfigureParquetBackupTask(task, EParquetExportSettings::S3, /* rowGroupSize */ 10000, bytesBatchSize);
             result.BatchBytes = bytesBatchSize ? bytesBatchSize : AppData()->DataShardConfig.GetBackupBytesBatchSize();
@@ -465,6 +474,59 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
         CheckRows(data, rows);
     }
 
+    // Restore holds a row group in a buffer of RestoreReadBufferSizeLimit, so a row group is
+    // also cut at an eighth of it: a raised export batch does not make groups restore rejects.
+    Y_UNIT_TEST(ShouldCutRowGroupsByTheRestoreBufferLimit) {
+        TVector<std::pair<ui32, TString>> rows;
+        for (ui32 i = 0; i < 9; ++i) {
+            rows.emplace_back(i, TString(24_KB, static_cast<char>('a' + i)));
+        }
+
+        // A batch of 1 MB takes the nine rows (216 KB) in one row group.
+        const TString byBatch = ExportRowsToParquet(EParquetExportSettings::S3, rows, /* rowGroupSize */ 1000, /* bytesBatchSize */ 1_MB);
+        UNIT_ASSERT_VALUES_EQUAL(RowGroupRows(byBatch), "9");
+
+        // A restore buffer of 512 KB caps a row group at 64 KB, whatever the batch.
+        const TString byRestore = ExportRowsToParquet(EParquetExportSettings::S3, rows, /* rowGroupSize */ 1000, /* bytesBatchSize */ 1_MB, /* restoreReadBufferSizeLimit */ 512_KB);
+        UNIT_ASSERT_VALUES_EQUAL(RowGroupRows(byRestore), "2,2,2,2,1");
+        CheckRows(byRestore, rows);
+    }
+
+    // A part is sent only once some output is encoded, whatever the limits say. With no
+    // minimum and a part per row, Parquet still holds the rows of an unfinished row group,
+    // and a part with no data would be rejected by S3 (EntityTooSmall).
+    Y_UNIT_TEST(ShouldNotSendAnEmptyPart) {
+        const TVector<std::pair<ui32, TString>> rows = {
+            {1, "a"},
+            {2, "b"},
+            {3, "c"},
+            {4, "d"},
+        };
+
+        TS3ExportBufferSettings bufferSettings;
+        bufferSettings
+            .WithMaxRows(1)
+            .WithMinBytes(0)
+            .WithMaxBytes(1_MB);
+        const auto buffer = CreateParquetBuffer(std::move(bufferSettings), /* rowGroupSize */ 2, /* rowGroupBytes */ 0);
+
+        TVector<TString> filledAfterRow;
+        const TVector<TString> parts = CollectParts(*buffer, rows, [&](bool filled) {
+            filledAfterRow.push_back(filled ? "1" : "0");
+        });
+
+        // Filled at the end of each row group only: a part per row group, then the footer.
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", filledAfterRow), "0,1,0,1");
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 3);
+        for (const auto& part : parts) {
+            UNIT_ASSERT_C(!part.empty(), "empty part");
+        }
+
+        const TString data = JoinSeq("", parts);
+        UNIT_ASSERT_VALUES_EQUAL(RowGroupRows(data), "2,2");
+        CheckRows(data, rows);
+    }
+
     Y_UNIT_TEST(ShouldProduceValidParquetWithIntervalUuidDyNumber, EParquetExportSettings) {
         const auto settings = Arg<0>();
 
@@ -488,15 +550,15 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
 
     // Fewer rows than the row group size, but more than 2 GiB of data in one column: arrow binary arrays
     // use 32-bit offsets, so the row group cannot be built. Collect() has to report the error (the export
-    // fails) instead of aborting the process. The export batch cuts row groups too, so the rows reach
-    // the capacity only with a batch above it.
+    // fails) instead of aborting the process. The export batch and the restore buffer limit cut row
+    // groups too, so the rows reach the capacity only with both above it.
     Y_UNIT_TEST(ShouldReportArrowCapacityErrorForLargeRowGroup) {
         if (NSan::PlainOrUnderSanitizer(false, true)) {
             return; // the arrow buffer alone takes 2 GiB
         }
 
         const ui32 rowCount = 10000;
-        const auto result = ExportWideRows(/* bytesBatchSize */ 4_GB, rowCount, /* valueSize */ 1_MB);
+        const auto result = ExportWideRows(/* bytesBatchSize */ 4_GB, rowCount, /* valueSize */ 1_MB, /* restoreReadBufferSizeLimit */ 32_GB);
 
         UNIT_ASSERT_C(!result.Error.empty(), "all " << result.Collected << " rows were collected");
         UNIT_ASSERT_GE(result.Collected, 2000u);

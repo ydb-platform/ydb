@@ -37,6 +37,7 @@
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/tx/locks/locks.h>
 
 #include <ydb/core/base/appdata.h>
@@ -320,6 +321,7 @@ class TDataShard
     friend class THnswIndexBuildUnit;
     friend class TReadTableScan;
     friend class TWaitForStreamClearanceUnit;
+    friend class TFinalizeBuildIndexUnit;
     friend class TBuildIndexScan;
     friend class TReadColumnsScan;
     friend class TCondEraseScan;
@@ -397,12 +399,20 @@ class TDataShard
             EvRebuildHnswIndex,
             EvStartHnswSnapshotScan,
             EvHnswSnapshotFinished,
+            EvRetryLegacyColumnBuildLookup,
             EvEnd
         };
 
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
 
         struct TEvProgressTransaction : public TEventLocal<TEvProgressTransaction, EvProgressTransaction> {};
+        struct TEvRetryLegacyColumnBuildLookup : public TEventLocal<TEvRetryLegacyColumnBuildLookup, EvRetryLegacyColumnBuildLookup> {
+            explicit TEvRetryLegacyColumnBuildLookup(ui64 txId)
+                : TxId(txId)
+            {}
+
+            const ui64 TxId;
+        };
         struct TEvCleanupTransaction : public TEventLocal<TEvCleanupTransaction, EvCleanupTransaction> {};
         struct TEvDelayedProposeTransaction : public TEventLocal<TEvDelayedProposeTransaction, EvDelayedProposeTransaction> {};
 
@@ -1551,6 +1561,11 @@ class TDataShard
     }
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx);
+    void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvRetryLegacyColumnBuildLookup::TPtr& ev, const TActorContext& ctx);
+    bool HandleLegacyColumnBuildPath(const NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx);
+    void SendLegacyColumnBuildLookup(const TActorContext& ctx);
+    void CompleteLegacyColumnBuildLookup(bool cancelled, const TActorContext& ctx);
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
@@ -3162,6 +3177,14 @@ private:
     TActorId SchemeShardPipe;   // For notifications about schema changes
     TActorId StateReportPipe;   // For notifications about shard state changes
     TActorId BuildIndexPipe;   // For notifications about index build
+    struct TLegacyColumnBuildLookup {
+        ui64 TxId;
+        TPathId TableId;
+        ui64 BuildId;
+        TString TablePath;
+        std::optional<bool> Cancelled;
+    };
+    std::optional<TLegacyColumnBuildLookup> LegacyColumnBuildLookup;
     ui64 PathOwnerId; // TabletID of the schmemeshard that allocated the TPathId(ownerId,localId)
     ui64 CurrentSchemeShardId; // TabletID of SchemeShard wich manages the path right now
     ui64 LastKnownMediator;
@@ -3889,6 +3912,7 @@ protected:
             HFuncTraced(TEvTxProcessing::TEvInterruptTransaction, Handle);
             HFuncTraced(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
             HFuncTraced(TEvPrivate::TEvProgressTransaction, Handle);
+            HFuncTraced(TEvPrivate::TEvRetryLegacyColumnBuildLookup, Handle);
             HFuncTraced(TEvPrivate::TEvCleanupTransaction, Handle);
             HFuncTraced(TEvPrivate::TEvDelayedProposeTransaction, Handle);
             HFuncTraced(TEvPrivate::TEvProgressResendReadSet, Handle);
@@ -3907,6 +3931,7 @@ protected:
             HFuncTraced(TEvPrivate::TEvMediatorRestoreBackup, Handle);
             HFuncTraced(TEvDataShard::TEvCancelTransactionProposal, Handle);
             HFuncTraced(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFuncTraced(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
             HFunc(TEvDataShard::TEvReturnBorrowedPart, Handle);
             HFunc(TEvDataShard::TEvReturnBorrowedPartAck, Handle);
             HFunc(TEvDataShard::TEvInitSplitMergeDestination, Handle);
@@ -4061,7 +4086,7 @@ protected:
     void Die(const TActorContext &ctx) override;
 
     template <class TEvent>
-    void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, TActorId& pipe, THolder<TEvent> event) {
+    void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, TActorId& pipe, THolder<TEvent> event, ui64 cookie = 0) {
         Y_ENSURE(tabletId);
         Y_ENSURE(CurrentSchemeShardId == tabletId);
 
@@ -4069,7 +4094,7 @@ protected:
             NTabletPipe::TClientConfig clientConfig;
             pipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
         }
-        NTabletPipe::SendData(ctx, pipe, event.Release());
+        NTabletPipe::SendData(ctx, pipe, event.Release(), cookie);
     }
 
     void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, THolder<TEvDataShard::TEvSchemaChanged> event) {

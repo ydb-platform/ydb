@@ -238,10 +238,11 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         op->SetSnapshotTxId(config.GetSnapshotTxId());
         op->SetBuildIndexId(config.GetBuildIndexId());
 
-        // IsBuildIndex()
+        // Column build cancellations have no index path.
+        auto* cancel = op->MutableOutcome()->MutableCancel();
         if (!indexName.empty()) {
             TPath index = table.Child(indexName);
-            index.Base()->PathId.ToProto(op->MutableOutcome()->MutableCancel()->MutableIndexPathId());
+            index.Base()->PathId.ToProto(cancel->MutableIndexPathId());
         }
 
         result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));

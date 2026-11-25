@@ -1160,12 +1160,17 @@ void FillColumnDescriptionImpl(TYdbProto& out,
     }
 
     for (const auto& column : in.GetColumns()) {
+        const auto key = columnIdToKeyPos.find(column.GetId());
+        if constexpr (std::is_same_v<TYdbProto, Ydb::Table::DescribeTableResult>) {
+            if (column.GetIsBuildInProgress() && key == columnIdToKeyPos.end()) {
+                continue;
+            }
+        }
         auto newColumn = out.add_columns();
         Ydb::Type* columnType = AddColumn(newColumn, column);
 
-        if (columnIdToKeyPos.count(column.GetId())) {
-            size_t keyPos = columnIdToKeyPos[column.GetId()];
-            auto tupleElement = splitKeyType.MutableTuple()->MutableElement(keyPos);
+        if (key != columnIdToKeyPos.end()) {
+            auto tupleElement = splitKeyType.MutableTuple()->MutableElement(key->second);
             tupleElement->SetKind(NKikimrMiniKQL::ETypeKind::Optional);
             ConvertYdbTypeToMiniKQLType(*columnType, *tupleElement->MutableOptional()->MutableItem());
         }

@@ -25,6 +25,7 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
+#include <algorithm>
 #include <limits>
 
 namespace NKikimr {
@@ -316,14 +317,20 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
     }
 
-    Y_ENSURE(!tableDesc.GetColumns().empty(), "Table description has no columns (table may be in an intermediate schema state)");
     Y_ENSURE(tableDesc.GetColumns().size() == createRequest.columns().size(), "Column count mismatch between table description and create request");
 
     std::map<ui32, const TColumnDescription*> columns;
 
+    const auto& keyColumnIds = tableDesc.GetKeyColumnIds();
     for (const auto& column : tableDesc.GetColumns()) {
+        if (column.GetIsBuildInProgress() &&
+            std::find(keyColumnIds.begin(), keyColumnIds.end(), column.GetId()) == keyColumnIds.end())
+        {
+            continue;
+        }
         columns[column.GetId()] = &column;
     }
+    Y_ENSURE(!columns.empty(), "Table description has no columns (table may be in an intermediate schema state)");
 
     try {
         auto it = columns.cbegin();

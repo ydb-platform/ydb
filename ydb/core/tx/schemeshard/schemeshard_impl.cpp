@@ -6296,6 +6296,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvIndexBuilder::TEvListRequest, Handle);
         HFuncTraced(TEvDataShard::TEvBuildIndexProgressResponse, Handle);
         HFuncTraced(TEvPrivate::TEvIndexBuildingMakeABill, Handle);
+        HFuncTraced(TEvPrivate::TEvIndexBuildCleanupReady, Handle);
         HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvReshuffleKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvRecomputeKMeansResponse, Handle);
@@ -6500,6 +6501,7 @@ void TSchemeShard::RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb &db, TOper
 
     PersistRemoveTx(db, opId, *txState);
     TabletCounters->Simple()[TxTypeInFlightCounter(txState->TxType)].Sub(1);
+    WakeIndexBuildCleanupWaiters(txState->TxType, ctx);
 
     if (txState->IsItActuallyMerge()) {
         TabletCounters->Cumulative()[TxTypeFinishedCounter(TTxState::TxMergeTablePartition)].Increment(1);
@@ -9166,6 +9168,7 @@ void TSchemeShard::ConfigureStatsOperations(const NKikimrConfig::TSchemeShardCon
     }
 
     for (auto it = InFlightLimits.begin(); it != InFlightLimits.end(); ++it) {
+        WakeIndexBuildCleanupWaiters(it->first, ctx);
         YDB_LOG_NOTICE_CTX(ctx, "OperationsProcessing config, in-flight limit for tx type",
             {"txType", TTxState::TypeName(it->first)},
             {"limit", it->second},

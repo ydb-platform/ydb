@@ -102,12 +102,14 @@ public:
         Y_ABORT_UNLESS(resolveNamesResult);
 
         const auto& entry = resolveNamesResult->ResultSet.front();
-        const auto requestedResultColumnNames = GetRequestedResultColumns(*GetProto());
         const bool disablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility();
 
         THashSet<TString> keyColumnNamesInSchema;
         THashMap<TString, const NKikimr::TSysTables::TTableColumnInfo*> nameToColumn;
         for (const auto& [colId, colInfo] : entry.Columns) {
+            if (colInfo.IsBuildInProgress && colInfo.KeyOrder == -1) {
+                continue;
+            }
             nameToColumn[colInfo.Name] = &colInfo;
 
             const i32 keyOrder = colInfo.KeyOrder;

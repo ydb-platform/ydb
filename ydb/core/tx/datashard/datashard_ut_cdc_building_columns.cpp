@@ -8,9 +8,14 @@
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/tx.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
+
+#include <algorithm>
 
 namespace NKikimr {
 
@@ -224,6 +229,92 @@ void CheckInitialScan(NKikimrSchemeOp::ECdcStreamMode mode, const TVector<TStrin
 } // namespace
 
 Y_UNIT_TEST_SUITE(CdcBuildingColumns) {
+    Y_UNIT_TEST(ReplaysPreparedLegacyColumnBuildCancellation) {
+        using namespace NSchemeShard;
+        using namespace NSchemeShardUT_Private;
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
+        constexpr ui64 schemeShard = TTestTxConfig::SchemeShard;
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 1, "before");
+
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> backfill(runtime);
+        Ydb::TypedValue literal;
+        literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
+        literal.mutable_value()->set_uint32_value(42);
+        const ui64 buildId = ++txId;
+        const auto sender = runtime.AllocateEdgeActor();
+        auto build = CreateBuildColumnRequest(buildId, "/MyRoot", "/MyRoot/Table", "extra", literal);
+        ForwardToTablet(runtime, schemeShard, sender, build.release());
+        const auto created = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(created->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS, created->Get()->Record.DebugString());
+        runtime.WaitFor("column build starts backfill", [&] { return !backfill.empty(); });
+
+        auto rejectCleanup = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([](auto& ev) {
+            auto& record = ev->Get()->Record;
+            for (auto& proposal : *record.MutableTransaction()) {
+                if (proposal.HasDropColumnBuild()) {
+                    // Fail cleanup before it can alter the table.
+                    proposal.MutableDropColumnBuild()->MutableSettings()->SetTable("/MyRoot/Missing");
+                }
+            }
+        });
+        ui64 finalizeTxId = 0;
+        auto prepareLegacyBody = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) {
+                return;
+            }
+            NKikimrTxDataShard::TFlatSchemeTransaction tx;
+            UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+            if (!tx.HasFinalizeBuildIndex()) {
+                return;
+            }
+            // An older SchemeShard prepared cancellation without an outcome.
+            tx.MutableFinalizeBuildIndex()->ClearOutcome();
+            tx.MutableFinalizeBuildIndex()->ClearColumnBuildSucceeded();
+            record.SetTxBody(tx.SerializeAsString());
+            finalizeTxId = record.GetTxId();
+        });
+        TBlockEvents<TEvTxProxy::TEvProposeTransaction> plan(runtime, [&](const auto& ev) {
+            return finalizeTxId && ev->Get()->Record.GetTransaction().GetTxId() == finalizeTxId;
+        });
+        TBlockEvents<TEvDataShard::TEvSchemaChanged> completed(runtime, [&](const auto& ev) {
+            return finalizeTxId && ev->Get()->Record.GetTxId() == finalizeTxId;
+        });
+
+        TestCancelBuildIndex(runtime, ++txId, schemeShard, "/MyRoot", buildId);
+        runtime.WaitFor("legacy finalization reaches the coordinator", [&] { return !plan.empty(); });
+        const ui64 shardId = backfill.front()->Get()->Record.GetTabletId();
+        RebootTablet(runtime, shardId, sender);
+        RebootTablet(runtime, schemeShard, sender);
+        plan.Stop().Unblock();
+        runtime.WaitFor("DataShard replays prepared finalization", [&] { return !completed.empty(); });
+
+        auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(completed.front()->Get()->GetSource()));
+        UNIT_ASSERT(shard);
+        UNIT_ASSERT_VALUES_EQUAL(shard->GetUserTables().size(), 1);
+        const auto table = shard->GetUserTables().begin()->second;
+        const auto extra = std::ranges::find_if(table->Columns, [](const auto& entry) {
+            return entry.second.Name == "extra";
+        });
+        UNIT_ASSERT(extra != table->Columns.end());
+        UNIT_ASSERT_C(extra->second.IsBuildInProgress, "Replaying cancellation published an unfinished column");
+
+        completed.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildId);
+        UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, schemeShard, "/MyRoot", buildId).GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_CANCELLED);
+    }
+
     Y_UNIT_TEST_TWIN(InitialScanFiltersBuildingColumns, Images) {
         if constexpr (Images) {
             CheckInitialScan(NKikimrSchemeOp::ECdcStreamModeNewAndOldImages, {

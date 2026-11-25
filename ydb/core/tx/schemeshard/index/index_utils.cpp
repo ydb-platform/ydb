@@ -73,9 +73,12 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
     return res;
 }
 
-TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription &tableDescr) {
+TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDescr, bool includeBuildInProgress) {
     TTableColumns result;
-    for (auto& column: tableDescr.GetColumns()) {
+    for (const auto& column: tableDescr.GetColumns()) {
+        if (!includeBuildInProgress && column.GetIsBuildInProgress()) {
+            continue;
+        }
         result.Columns.insert(column.GetName());
     }
     for (auto& keyName: tableDescr.GetKeyColumnNames()) {
@@ -116,15 +119,14 @@ bool IsVirtualGeneratedIndexColumn(const NSchemeShard::TTableInfo::TPtr& tableIn
     return false;
 }
 
-TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr &tableInfo) {
+TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo, bool includeBuildInProgress) {
     TTableColumns result;
-    for (auto& item: tableInfo->Columns) {
-        const auto& column = item.second;
-        if (column.IsDropped()) {
+    for (const auto& [_, column]: tableInfo->Columns) {
+        if (column.IsDropped() || (!includeBuildInProgress && column.IsBuildInProgress && !column.IsKey())) {
             continue;
         }
 
-        result.Columns.insert(item.second.Name);
+        result.Columns.insert(column.Name);
     }
 
     for (auto& keyId: tableInfo->KeyColumnIds) {

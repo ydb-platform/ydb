@@ -156,6 +156,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
                 settings.BeginAlterAttributes().Add("_ydb_replication_consumer", SrcConsumerName);
             }
             if (IsOwnedChangefeed()) {
+                settings.BeginAlterAttributes().Add("_ydb_replication_consumer", SrcConsumerName);
                 consumer.Important(ConsumerImportant).AvailabilityPeriod(ConsumerAvailabilityPeriod);
             }
             break;

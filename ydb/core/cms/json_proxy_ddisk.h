@@ -205,7 +205,7 @@ public:
                 const auto& list = event->Record;
                 RequiresDiagnostics = !HasLegacyProjection({"DiskId", "DDiskTabletIds", "PersistentBufferTabletIds",
                         "Available", "State"})
-                    || list.GetOnlyProblems() || list.GetInventory() || list.GetGroupsOnly()
+                    || (list.GetOnlyProblems() && list.GetIncludeComponentProblems()) || list.GetInventory() || list.GetGroupsOnly()
                     || list.HasNodeId() || list.HasPDiskId() || list.HasTabletId()
                     || list.GetGroupBy() != NKikimrCms::DDISK_DISK_GROUP_BY_NONE
                     || (list.GetSortBy() != NKikimrCms::DDISK_DISK_SORT_BY_DISK_ID
@@ -213,7 +213,7 @@ public:
                     || (!list.GetIncludeTabletIds() && (FieldsRequired.contains("DDiskTabletIds")
                         || FieldsRequired.contains("PersistentBufferTabletIds")));
                 // The tablet filter defines the scope of both counts.
-                CanInferUnfilteredCount = list.GetFilterDiskId().empty();
+                CanInferUnfilteredCount = list.GetFilterDiskId().empty() && !list.GetOnlyProblems();
                 PendingRequest.Reset(event.Release());
                 break;
             }

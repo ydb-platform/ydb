@@ -520,6 +520,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             "/api/json/ddisk/tablets?sort_by=degrade&fields_required=TabletId",
             "/api/json/ddisk/tablets?fields_required=UnavailableDDiskCount",
             "/api/json/ddisk/disks?inventory=1&fields_required=DiskId",
+            "/api/json/ddisk/disks?only_problems=1&include_component_problems=1&fields_required=DiskId",
             "/api/json/ddisk/disks?node_id=1&fields_required=DiskId",
             "/api/json/ddisk/disks?fields_required=DDiskStatus",
             layoutUri + "&include_health=1",
@@ -529,7 +530,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         legacyVersion.SetSupportWalleDrainData(true);
         TString version;
         ui32 requests = 0;
-        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        auto events = env.AddObserver<>([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvTabletPipe::EvClientConnected) {
                 auto* msg = ev->Get<TEvTabletPipe::TEvClientConnected>();
                 if (msg->TabletId == MakeCmsID()) {
@@ -540,7 +541,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                     || ev->GetTypeRewrite() == TEvCms::EvDDiskDiskListRequest) {
                 ++requests;
             }
-            return prev(ev);
         });
         for (const TString& unsupported : {TString(), legacyVersion.SerializeAsString(), TString("\xff")}) {
             version = unsupported;
@@ -590,13 +590,20 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         const TString filteredUri = "/api/json/ddisk/tablets?filter=1001&fields_required=TabletId";
         const auto filtered = SendDDiskHttpRequest(env, filteredUri);
         UNIT_ASSERT_C(filtered.StartsWith("HTTP/1.1 503"), filtered);
+        const TString diskProblemsUri = "/api/json/ddisk/disks?only_problems=1&fields_required=DiskId";
+        const auto missingCount = SendDDiskHttpRequest(env, diskProblemsUri);
+        UNIT_ASSERT_C(missingCount.Contains("503 Service Unavailable"), missingCount);
+        UNIT_ASSERT_C(missingCount.Contains("unfiltered DDisk counts"), missingCount);
         oldTablets.Remove();
         oldDisks.Remove();
+        const auto diskProblems = ParseHttpOkJson(SendDDiskHttpRequest(env, diskProblemsUri));
+        UNIT_ASSERT_VALUES_EQUAL(diskProblems["TotalCount"].GetUInteger(), 0);
+        UNIT_ASSERT(diskProblems["UnfilteredCount"].GetUInteger() > 0);
         const auto filteredPage = ParseHttpOkJson(SendDDiskHttpRequest(env, filteredUri));
         UNIT_ASSERT_VALUES_EQUAL(filteredPage["TotalCount"].GetUInteger(), 1);
         UNIT_ASSERT_VALUES_EQUAL(filteredPage["UnfilteredCount"].GetUInteger(), 2);
 
-        env.SetObserverFunc(prev);
+        events.Remove();
         const auto response = SendDDiskHttpRequest(env, "/api/json/ddisk/tablets");
         UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 200"), response);
     }
@@ -635,23 +642,21 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                 }
             }
         }
-        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTabletResult) {
-                auto& record = ev->Get<TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult>()->Record;
-                if (record.GetTabletId() == tabletId) {
-                    record.ClearGroups();
-                    auto* group = record.AddGroups();
-                    group->SetDirectBlockGroupId(1);
-                    for (ui32 slot = 100; slot <= 102; ++slot) {
-                        auto* id = slot == 101 ? group->AddPersistentBufferDDiskId() : group->AddDDiskId();
-                        id->SetNodeId(pdisk.NodeId);
-                        id->SetPDiskId(pdisk.DiskId);
-                        id->SetDDiskSlotId(slot);
-                    }
-                    group->AddDDiskId(); // Unallocated slots do not fail.
-                }
+        auto layout = env.AddObserver<TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (record.GetTabletId() != tabletId) {
+                return;
             }
-            return prev(ev);
+            record.ClearGroups();
+            auto* group = record.AddGroups();
+            group->SetDirectBlockGroupId(1);
+            for (ui32 slot = 100; slot <= 102; ++slot) {
+                auto* id = slot == 101 ? group->AddPersistentBufferDDiskId() : group->AddDDiskId();
+                id->SetNodeId(pdisk.NodeId);
+                id->SetPDiskId(pdisk.DiskId);
+                id->SetDDiskSlotId(slot);
+            }
+            group->AddDDiskId(); // Unallocated slots do not fail.
         });
         UNIT_ASSERT_VALUES_EQUAL(env.AllocateDDiskBlockGroup(tabletId, 1).GetStatus(), NKikimrProto::OK);
         env.WaitForDDiskInfo(tabletId, 1);

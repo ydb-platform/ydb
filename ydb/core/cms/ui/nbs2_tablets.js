@@ -219,6 +219,7 @@ const Nbs2Tablets = {
         const token = this.requestToken;
         if (this.snapshots[tabletId] === null) return;
         this.snapshots[tabletId] = null; // A request for this tablet is pending on the current page.
+        $('#nbs2-tablet-loading-' + tabletId).remove();
         const loading = $('<tr id="nbs2-tablet-loading-' + tabletId + '"><td colspan="5">Loading snapshot...</td></tr>').insertAfter(row);
         const showError = (message) => {
             if (token !== this.requestToken) return;

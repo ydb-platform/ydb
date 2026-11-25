@@ -25,4 +25,6 @@ SRCS(
     ddisk_actor_pdisk_sync_ut.cpp
 )
 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+
 END()

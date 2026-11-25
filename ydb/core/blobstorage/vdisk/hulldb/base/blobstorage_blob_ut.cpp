@@ -66,6 +66,62 @@ namespace NKikimr {
             TestCreateFromDistinctParts(10);
         }
 
+        Y_UNIT_TEST(CreateContiguous) {
+            for (EBlobHeaderMode blobHeaderMode : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER, EBlobHeaderMode::XXH3_64BIT_HEADER}) {
+                const size_t headerSize = TDiskBlob::GetBlobHeaderSize(blobHeaderMode);
+                for (size_t size = 1; size <= TDiskBlob::MaxContiguousBlobSize + 16; ++size) {
+                    for (bool withChecksum : {false, true}) {
+                        TString data = TString::Uninitialized(size);
+                        for (size_t i = 0; i < size; ++i) {
+                            data.Detach()[i] = static_cast<char>(i * 31 + size);
+                        }
+                        // the part may consist of several chunks
+                        TRope part(data.substr(0, size / 3));
+                        part.Insert(part.End(), TRope(data.substr(size / 3)));
+                        std::optional<ui64> checksum;
+                        if (withChecksum) {
+                            checksum = TDiskBlob::CalculateChecksum(part);
+                        }
+
+                        const ui8 totalParts = 3;
+                        const ui8 partId = 2;
+                        TRope buf = TDiskBlob::Create(size, partId, totalParts, std::move(part), Arena, blobHeaderMode,
+                            checksum);
+                        UNIT_ASSERT_VALUES_EQUAL(buf.GetSize(), size + headerSize);
+                        if (size + headerSize <= TDiskBlob::MaxContiguousBlobSize) {
+                            UNIT_ASSERT(buf.IsContiguous());
+                        }
+
+                        TDiskBlob blob(&buf, NMatrix::TVectorType::MakeOneHot(partId - 1, totalParts), GType,
+                            TLogoBlobID(0, 0, 0, 0, size, 0));
+                        ui32 numParts = 0;
+                        for (TDiskBlob::TPartIterator it = blob.begin(), e = blob.end(); it != e; ++it) {
+                            UNIT_ASSERT_VALUES_EQUAL(it.GetPartId(), partId);
+                            UNIT_ASSERT_VALUES_EQUAL(it.GetPart().ConvertToString(), data);
+                            ++numParts;
+                        }
+                        UNIT_ASSERT_VALUES_EQUAL(numParts, 1);
+                    }
+                }
+            }
+        }
+
+        Y_UNIT_TEST(CreateContiguousBig) {
+            for (EBlobHeaderMode blobHeaderMode : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER, EBlobHeaderMode::XXH3_64BIT_HEADER}) {
+                for (size_t size : {1000, 4096, 16379, 16384, 30000}) {
+                    TString data = TString::Uninitialized(size);
+                    for (size_t i = 0; i < size; ++i) {
+                        data.Detach()[i] = static_cast<char>(i * 31 + size);
+                    }
+                    TRope buf = TDiskBlob::CreateContiguous(size, 1, 1, TRope(data), Arena, blobHeaderMode, std::nullopt);
+                    UNIT_ASSERT_VALUES_EQUAL(buf.GetSize(), size + TDiskBlob::GetBlobHeaderSize(blobHeaderMode));
+                    UNIT_ASSERT(buf.IsContiguous());
+                    TRope same = TDiskBlob::Create(size, 1, 1, TRope(data), Arena, blobHeaderMode, std::nullopt);
+                    UNIT_ASSERT_EQUAL(buf, same);
+                }
+            }
+        }
+
         Y_UNIT_TEST(CreateIterate) {
             for (auto addHeader : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER, EBlobHeaderMode::XXH3_64BIT_HEADER}) {
                 ui8 partId = 2;

@@ -113,6 +113,8 @@ class TRope {
     using TChunkList = NRopeDetails::TChunkList<TRcBuf>;
 
 private:
+    static bool IsSpaceWasted(const TRcBuf& chunk, size_t worstRatioPer1k);
+
     // we use list here to store chain items as we have to keep valid iterators when erase/insert operations are invoked;
     // iterator uses underlying container's iterator, so we have to use container that keeps valid iterators on delete,
     // thus, the list
@@ -446,6 +448,9 @@ public:
 
     // creates a copy of rope with chunks with inefficient storage ratio being copied with arena allocator
     static TRope CopySpaceOptimized(TRope&& origin, size_t worstRatioPer1k, TRopeArena& arena);
+
+    // whether CopySpaceOptimized would copy every chunk of this rope
+    bool IsSpaceWasted(size_t worstRatioPer1k) const;
 
     TRope& operator=(const TRope& other) {
         Chain = other.Chain;
@@ -942,7 +947,29 @@ class TRopeArena {
     using TAllocateCallback = std::function<TIntrusivePtr<IContiguousChunk>()>;
 
     TAllocateCallback Allocator;
-    TRope Arena;
+    TRcBuf Arena; // the part of the last allocated chunk that is not given out yet
+
+    TRcBuf Extract(size_t len) {
+        TRcBuf res(TRcBuf::Piece, Arena.GetData(), len, Arena);
+        EraseFront(len);
+        return res;
+    }
+
+    void EraseFront(size_t len) {
+        if (len == Arena.GetSize()) {
+            Arena = TRcBuf();
+        } else {
+            Arena.TrimFront(Arena.GetSize() - len);
+        }
+    }
+
+    void Align() {
+        // align arena on 8-byte boundary
+        const size_t align = 8;
+        if (const size_t padding = Arena.GetSize() % align) {
+            EraseFront(padding);
+        }
+    }
 
 public:
     TRopeArena(TAllocateCallback&& allocator)
@@ -953,26 +980,36 @@ public:
         TRope res;
 
         while (len) {
-            if (Arena) {
-                auto iter = Arena.Begin();
-                Y_DEBUG_ABORT_UNLESS(iter.Valid());
-                char *dest = const_cast<char*>(iter.ContiguousData());
-                const size_t bytesToCopy = std::min(len, iter.ContiguousSize());
-                memcpy(dest, buffer, bytesToCopy);
-                buffer = static_cast<const char*>(buffer) + bytesToCopy;
-                len -= bytesToCopy;
-                res.Insert(res.End(), Arena.Extract(Arena.Begin(), Arena.Position(bytesToCopy)));
+            if (!Arena.GetSize()) {
+                Arena = TRcBuf(Allocator());
+            }
+            const size_t bytesToCopy = std::min(len, Arena.GetSize());
+            TRcBuf piece = Extract(bytesToCopy);
+            memcpy(piece.UnsafeGetDataMut(), buffer, bytesToCopy);
+            buffer = static_cast<const char*>(buffer) + bytesToCopy;
+            len -= bytesToCopy;
+            if (res) {
+                res.Insert(res.End(), TRope(std::move(piece)));
             } else {
-                Arena.Insert(Arena.End(), TRope(Allocator()));
+                res = TRope(std::move(piece));
             }
         }
 
-        // align arena on 8-byte boundary
-        const size_t align = 8;
-        if (const size_t padding = Arena.GetSize() % align) {
-            Arena.EraseFront(padding);
-        }
+        Align();
 
+        return res;
+    }
+
+    // Returns len contiguous bytes for the caller to fill in. The rest of the current chunk is skipped when it is too
+    // small, so len has to be much less than the size of a chunk.
+    TRcBuf AllocateContiguous(size_t len) {
+        Y_ABORT_UNLESS(len);
+        if (Arena.GetSize() < len) {
+            Arena = TRcBuf(Allocator());
+            Y_ABORT_UNLESS(len <= Arena.GetSize());
+        }
+        TRcBuf res = Extract(len);
+        Align();
         return res;
     }
 };
@@ -1135,11 +1172,24 @@ public:
     }
 };
 
+inline bool TRope::IsSpaceWasted(const TRcBuf& chunk, size_t worstRatioPer1k) {
+    const size_t ratio = chunk.GetSize() * 1024 / chunk.GetOccupiedMemorySize();
+    return ratio < 1024 - worstRatioPer1k;
+}
+
+inline bool TRope::IsSpaceWasted(size_t worstRatioPer1k) const {
+    for (const TRcBuf& chunk : Chain) {
+        if (!IsSpaceWasted(chunk, worstRatioPer1k)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 inline TRope TRope::CopySpaceOptimized(TRope&& origin, size_t worstRatioPer1k, TRopeArena& arena) {
     TRope res;
     for (TRcBuf& chunk : origin.Chain) {
-        size_t ratio = chunk.GetSize() * 1024 / chunk.GetOccupiedMemorySize();
-        if (ratio < 1024 - worstRatioPer1k) {
+        if (IsSpaceWasted(chunk, worstRatioPer1k)) {
             res.Insert(res.End(), arena.CreateRope(chunk.Begin, chunk.GetSize()));
         } else {
             res.Chain.PutToEnd(std::move(chunk));

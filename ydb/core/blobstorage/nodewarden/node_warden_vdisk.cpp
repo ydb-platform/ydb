@@ -364,12 +364,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->EnablePersistentPhantomFlagStorage = EnablePersistentPhantomFlagStorage;
             vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
             vdiskConfig->VolatilePhantomFlagStorageBlobSizeLimit = VolatilePhantomFlagStorageBlobSizeLimitBytes;
-<<<<<<< HEAD
-=======
-            vdiskConfig->EnableChecksumReadValidationOnVDisk = EnableChecksumReadValidationOnVDisk;
-            vdiskConfig->EnableChecksumWriteValidationOnVDisk = EnableChecksumWriteValidationOnVDisk;
             vdiskConfig->EnableVDiskSectorPreparation = EnableVDiskSectorPreparation;
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
             vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
 
             vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;

@@ -1683,27 +1683,6 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
                 }
             } else {
                 switch (state.CommitState) {
-<<<<<<< HEAD
-=======
-                    case TChunkState::DATA_RESERVED:
-                        Y_VERIFY_S(state.CommitsInProgress == 0, PCtx->PDiskLogPrefix
-                                << "chunkIdx# " << chunkIdx << " state# " << state.ToString());
-                        YDB_LOG_P_LOG(PRI_INFO, "Reserved chunk was forgotten",
-                            {"marker", "BPD01"},
-                            {"chunkIdx", chunkIdx},
-                            {"oldOwner", (ui32)state.OwnerId},
-                            {"newOwner", (ui32)OwnerUnallocated});
-                        Mon.UncommitedDataChunks->Dec();
-                        state.OwnerId = OwnerUnallocated;
-                        state.CommitState = TChunkState::FREE;
-                        // Drop the nonces along with the ownership: the next owner gets a
-                        // freshly allocated nonce range, so whatever this owner wrote into the
-                        // chunk stops validating and reads back as gaps.
-                        state.Nonce = 0;
-                        state.CurrentNonce = 0;
-                        ReturnChunkToFreeList(evChunkForget.Owner, chunkIdx);
-                        break;
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
                     case TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS:
                         Mon.UncommitedDataChunks->Dec();
                         state.CommitState = TChunkState::DATA_RESERVED_DELETE_IN_PROGRESS;
@@ -2112,131 +2091,6 @@ TOwner TPDisk::FindNextOwnerId() {
     return LastOwnerId;
 }
 
-<<<<<<< HEAD
-=======
-void TPDisk::EnsureSharedUringRouter(ui32 idleSpinUs, bool devNullMode) {
-    if (SharedUringCreateAttempted) {
-        return;
-    }
-    SharedUringCreateAttempted = true;
-
-#if defined(__linux__)
-    TUringRouterConfig config;
-    config.IdleSpinUs = idleSpinUs;
-    config.DevNullMode = devNullMode;
-
-    TFileHandle fd = BlockDevice->DuplicateFd();
-    if (!fd.IsOpen()) {
-        YDB_LOG_P_LOG(PRI_INFO, "Shared UringRouter not created: no duplicable disk fd",
-            {"marker", "BPD94"});
-        Mon.FallbackPDiskCount->Inc();
-        return;
-    }
-    if (!TUringRouter::Probe(config)) {
-        YDB_LOG_P_LOG(PRI_INFO, "Shared UringRouter not created: io_uring probe failed",
-            {"marker", "BPD95"});
-        Mon.FallbackPDiskCount->Inc();
-        return;
-    }
-
-    TUringCounters counters;
-    counters.CompletionThreadCPU = Mon.UringCompletionThreadCPU;
-    counters.CompletionThreadBusyTimeNs = Mon.UringCompletionThreadBusyTimeNs;
-
-    auto router = std::make_shared<TUringRouter>(
-        std::move(fd),
-        PCtx->ActorSystem,
-        config,
-        std::move(counters));
-    if (ConfigureRouterForTest) {
-        ConfigureRouterForTest(*router);
-    }
-    router->RegisterFile();
-
-    router->SetSampleSink(MakeUringSampleSink());
-    router->SetIoCompletionSink(MakeUringCompletionSink());
-
-    router->Start();
-
-    if (router->IsBroken()) {
-        YDB_LOG_P_LOG(PRI_WARN, "Shared UringRouter not created: startup failed, falling back to PDisk I/O",
-            {"marker", "BPD99"});
-        Mon.FallbackPDiskCount->Inc();
-        return;
-    }
-
-    if (!router->IsFileRegistered()) {
-        YDB_LOG_P_LOG(PRI_WARN, "failed to register fixed file for io_uring",
-            {"marker", "BPD96"},
-            {"errno", router->GetRegisterFileErrno()});
-    }
-
-    if (router->GetUringFavor() != EUringFavor::SingleIssuer) {
-        YDB_LOG_P_LOG(PRI_WARN, "io_uring mode fallback",
-            {"marker", "BPD97"},
-            {"actualFavor", "Plain"});
-        Mon.FallbackUringCount->Inc();
-    } else {
-        Mon.RegularUringCount->Inc();
-    }
-
-    YDB_LOG_P_LOG(PRI_INFO, "started shared io_uring router",
-        {"marker", "BPD98"},
-        {"config", router->GetConfig().ToString()});
-
-    SharedUringRouter = std::move(router);
-#else
-    Y_UNUSED(idleSpinUs);
-    Y_UNUSED(devNullMode);
-    Mon.FallbackPDiskCount->Inc();
-#endif
-}
-
-#if defined(__linux__)
-TDeviceIoSampleSink TPDisk::MakeUringSampleSink() const {
-    const ui64 readBps = DriveModel.Speed(TDriveModel::OP_TYPE_READ);
-    const ui64 writeBps = DriveModel.Speed(TDriveModel::OP_TYPE_WRITE);
-    auto sampleAgg = Mon.DeviceOverestimationMerged;
-    return [readBps, writeBps, sampleAgg](const TDeviceIoSample& sample) {
-        TDeviceIoSample s = sample;
-        const ui64 speed = s.IsWrite ? writeBps : readBps;
-        s.BaseCostNs = speed ? s.Size * 1'000'000'000ull / speed : 0;
-        sampleAgg->Push(s);
-    };
-}
-
-TIoCompletionSink TPDisk::MakeUringCompletionSink() const {
-    auto generation = Mon.DeviceIoCompletionGeneration;
-    return [generation] {
-        generation->fetch_add(1, std::memory_order_relaxed);
-    };
-}
-#endif
-
-void TPDisk::CheckSharedUringRouter() {
-#if defined(__linux__)
-    if (!SharedUringRouter || SharedUringFailureReported || !SharedUringRouter->IsBroken()) {
-        return;
-    }
-    SharedUringFailureReported = true;
-    PCtx->ActorSystem->Send(PCtx->PDiskActor,
-        new TEvDeviceError("shared TUringRouter entered broken state"));
-#endif
-}
-
-void TPDisk::AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitResult& result) {
-    if (!evYardInit.GetUringRouterClient) {
-        return;
-    }
-
-    EnsureSharedUringRouter(evYardInit.UringIdleSpinUs, evYardInit.UringDevNullMode);
-#if defined(__linux__)
-    result.UringRouter = SharedUringRouter;
-#else
-    Y_UNUSED(result);
-#endif
-}
-
 void TPDisk::ReturnChunkToFreeList(TOwner owner, TChunkIdx chunkIdx) {
     if (ChunkNonces) {
         ChunkNonces->Set(chunkIdx, 0);
@@ -2265,62 +2119,6 @@ void TPDisk::FillFormatContext(NPDisk::TEvYardInitResult &result) {
     result.ChunkNonces = ChunkNonces;
 }
 
-// A reservation that was never committed leaves no persistent trace: WriteSysLogRestorePoint
-// records an owner only for DATA_COMMITTED* chunks. An owner coming back on a new round has no
-// memory of such a chunk either, so nothing can legitimately reference it any more. Hand it back
-// here; otherwise it stays DATA_RESERVED and keeps consuming the owner's quota until the PDisk
-// itself restarts, and the VDisk can only report it as leaked (see VerifyOwnedChunks). Returns
-// how many chunks were released. StateMutex must be held by the caller.
-ui32 TPDisk::ReleaseUncommittedChunks(TOwner owner) {
-    ui32 released = 0;
-    bool isDirtyMarked = false;
-    for (TChunkIdx chunkIdx = 0; chunkIdx < ChunkState.size(); ++chunkIdx) {
-        TChunkState &state = ChunkState[chunkIdx];
-        if (state.OwnerId != owner || state.CommitState != TChunkState::DATA_RESERVED) {
-            continue;
-        }
-        if (state.CommitsInProgress) {
-            // A commit record for this chunk is already on its way to the log and will make it
-            // genuinely owned; the owner finds it there on recovery.
-            continue;
-        }
-        // The chunk goes back to the free pool, so from now on it must be treated as holding
-        // someone else's data. DATA_RESERVED chunks were never marked.
-        if (TPDisk::IS_SHRED_ENABLED && !state.IsDirty) {
-            state.IsDirty = true;
-            isDirtyMarked = true;
-        }
-        Mon.UncommitedDataChunks->Dec();
-        if (state.OperationsInProgress) {
-            // I/O of the previous incarnation has not drained yet. Same handling as in ChunkForget:
-            // quarantine releases the chunk through ForceDeleteChunk() once it has, and a commit
-            // still to come for it is refused, the chunk no longer being DATA_RESERVED.
-            state.CommitState = TChunkState::DATA_ON_QUARANTINE;
-            QuarantineChunks.push_back(chunkIdx);
-        } else {
-            state.OwnerId = OwnerUnallocated;
-            state.CommitState = TChunkState::FREE;
-            // Drop the nonces along with the ownership, exactly as ChunkForget does: the next owner
-            // gets a freshly allocated nonce range, so whatever was written here stops validating.
-            state.Nonce = 0;
-            state.CurrentNonce = 0;
-            ReturnChunkToFreeList(owner, chunkIdx);
-        }
-        ++released;
-    }
-    if (isDirtyMarked) {
-        WriteSysLogRestorePoint(nullptr, TReqId(TReqId::MarkDirtySysLog, 0), {});
-    }
-    if (released) {
-        YDB_LOG_P_LOG(PRI_NOTICE, "Released uncommitted reservations of a restarted owner",
-            {"marker", "BPD01"},
-            {"ownerId", (ui32)owner},
-            {"releasedChunks", released});
-    }
-    return released;
-}
-
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
 bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     // Just register cut log id and reply with starting points.
     TVDiskID vDiskId = evYardInit.VDiskIdWOGeneration();
@@ -2359,18 +2157,11 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
                 Cfg->RetrieveDeviceType(), isTinyDisk, Format.SectorSize, ""));
 
     GetStartingPoints(owner, result->StartingPoints);
-<<<<<<< HEAD
-    result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
-        delete ptr;
-    });
+    result->DiskFormat = MakeDiskFormatCopy(Format);
+    FillFormatContext(*result);
     if (evYardInit.GetDiskFd) {
         result->DiskFd = BlockDevice->DuplicateFd();
     }
-=======
-    result->DiskFormat = MakeDiskFormatCopy(Format);
-    FillFormatContext(*result);
-    AttachSharedUringRouter(evYardInit, *result);
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
     ownerData.VDiskId = vDiskId;
     ownerData.CutLogId = evYardInit.CutLogId;
     ownerData.WhiteboardProxyId = evYardInit.WhiteboardProxyId;
@@ -2539,19 +2330,11 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         Cfg->RetrieveDeviceType(), isTinyDisk, Format.SectorSize, ""));
 
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
-<<<<<<< HEAD
-    result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
-        delete ptr;
-    });
-    if (evYardInit.GetDiskFd) {
-        result->DiskFd = BlockDevice->DuplicateFd();
-
-    }
-=======
     result->DiskFormat = MakeDiskFormatCopy(Format);
     FillFormatContext(*result);
-    AttachSharedUringRouter(evYardInit, *result);
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
+    if (evYardInit.GetDiskFd) {
+        result->DiskFd = BlockDevice->DuplicateFd();
+    }
     WriteSysLogRestorePoint(new TCompletionEventSender(
         this, evYardInit.Sender, result.Release(), Mon.YardInit.Results), evYardInit.ReqId, {});
 

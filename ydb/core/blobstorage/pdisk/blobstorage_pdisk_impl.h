@@ -383,16 +383,12 @@ public:
     TOwner FindNextOwnerId();
     bool YardInitStart(TYardInit &evYardInit);
     void YardInitFinish(TYardInit &evYardInit);
-<<<<<<< HEAD
-=======
-    ui32 ReleaseUncommittedChunks(TOwner owner);
     // Format context and chunk nonces for an owner that builds and checks its sectors itself.
     // StateMutex must be held by the caller.
     void FillFormatContext(NPDisk::TEvYardInitResult &result);
     std::shared_ptr<TChunkNonces> ChunkNonces;
     void ReturnChunkToFreeList(TOwner owner, TChunkIdx chunkIdx);
     TFormatContextPtr FormatContextCache; // created on first use; the format does not change afterwards
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
     void YardResize(TYardResize &evYardResize);
     void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);

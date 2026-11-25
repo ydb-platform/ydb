@@ -46,12 +46,8 @@ namespace NKikimr {
         // threads do not touch the data (TEvChunkWrite::PreformattedSectors).
         TBufferedChunkWriter(TMemoryConsumer&& consumer, ui8 owner, ui64 ownerRound, ui8 priority, ui32 chunkSize,
                              ui32 appendBlockSize, ui32 writeBlockSize, ui32 chunkIdx,
-<<<<<<< HEAD
-                             TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue)
-=======
-                             TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue, ui32 baseOffset = 0,
+                             TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue,
                              const TPDiskCtx *pdiskCtx = nullptr)
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
             : Consumer(std::move(consumer))
             , Owner(owner)
             , OwnerRound(ownerRound)
@@ -71,7 +67,7 @@ namespace NKikimr {
             if (pdiskCtx && static_cast<i64>(pdiskCtx->EnableSectorPreparation) != 0 && pdiskCtx->FormatContext
                     && pdiskCtx->ChunkNonces && !pdiskCtx->FormatContext->IsPlainDataChunks()
                     && pdiskCtx->FormatContext->GetSectorPayloadSize() == AppendBlockSize
-                    && BaseOffset % AppendBlockSize == 0 && WriteBlockSize) {
+                    && WriteBlockSize) {
                 if (const std::optional<ui64> nonce = pdiskCtx->ChunkNonces->Get(chunkIdx)) {
                     Format = pdiskCtx->FormatContext;
                     ChunkNonce = *nonce;
@@ -180,7 +176,7 @@ namespace NKikimr {
                 return;
             }
             const ui32 sectorSize = Format->GetSectorSize();
-            const ui32 offsetInChunk = BaseOffset + SectorBufferStart;
+            const ui32 offsetInChunk = SectorBufferStart;
             Y_ABORT_UNLESS(offsetInChunk % AppendBlockSize == 0);
             const ui32 firstSectorIdx = offsetInChunk / AppendBlockSize;
             const ui32 sectors = (SectorFill + AppendBlockSize - 1) / AppendBlockSize;
@@ -253,14 +249,9 @@ namespace NKikimr {
     public:
         TBaseWriter(TMemoryConsumer&& consumer, ui8 owner, ui64 ownerRound, ui8 priority, ui32 chunkSize,
                     ui32 appendBlockSize, ui32 writeBlockSize, TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue,
-<<<<<<< HEAD
-                    TDeque<TChunkIdx>& rchunks)
-            : Consumer(std::move(consumer))
-=======
-                    TDeque<TChunkIdx>& rchunks, ui32 baseOffset = 0, const TPDiskCtx *pdiskCtx = nullptr)
+                    TDeque<TChunkIdx>& rchunks, const TPDiskCtx *pdiskCtx = nullptr)
             : PDiskCtx(pdiskCtx)
             , Consumer(std::move(consumer))
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
             , Owner(owner)
             , OwnerRound(ownerRound)
             , Priority(priority)
@@ -284,11 +275,7 @@ namespace NKikimr {
                 RChunks.pop_front();
 
                 ChunkWriter = std::make_unique<TBufferedChunkWriter>(TMemoryConsumer(Consumer), Owner, OwnerRound,
-<<<<<<< HEAD
-                    Priority, ChunkSize, AppendBlockSize, WriteBlockSize, chunkIdx, MsgQueue);
-=======
-                    Priority, ChunkSize, AppendBlockSize, WriteBlockSize, chunkIdx, MsgQueue, BaseOffset, PDiskCtx);
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
+                    Priority, ChunkSize, AppendBlockSize, WriteBlockSize, chunkIdx, MsgQueue, PDiskCtx);
 
                 UsedChunks.push_back(chunkIdx);
             }
@@ -423,11 +410,7 @@ namespace NKikimr {
     public:
         TDataWriter(TVDiskContextPtr vctx, EWriterDataType type, ui8 owner, ui64 ownerRound, ui32 chunkSize,
                     ui32 appendBlockSize, ui32 writeBlockSize, TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue,
-<<<<<<< HEAD
-                    TDeque<TChunkIdx>& rchunks)
-=======
-                    TDeque<TChunkIdx>& rchunks, ui32 baseOffset = 0, const TPDiskCtx *pdiskCtx = nullptr)
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
+                    TDeque<TChunkIdx>& rchunks, const TPDiskCtx *pdiskCtx = nullptr)
             : TBase(TMemoryConsumer(WriterDataTypeToMemConsumer(vctx, type, true)),
                     owner,
                     ownerRound,
@@ -436,13 +419,8 @@ namespace NKikimr {
                     appendBlockSize,
                     writeBlockSize,
                     msgQueue,
-<<<<<<< HEAD
-                    rchunks)
-=======
                     rchunks,
-                    baseOffset,
                     pdiskCtx)
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
             , Finished(false)
             , RChunksIndex(0)
             , Offset(0)
@@ -536,15 +514,10 @@ namespace NKikimr {
     public:
         TIndexBuilder(TVDiskContextPtr vctx, EWriterDataType type, ui8 owner, ui64 ownerRound, ui32 chunkSize,
                       ui32 appendBlockSize, ui32 writeBlockSize, ui64 sstId, bool createdByRepl,
-<<<<<<< HEAD
-                      TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue, TDeque<TChunkIdx>& rchunks)
-            : Consumer(TMemoryConsumer(WriterDataTypeToMemConsumer(vctx, type, false)))
-=======
                       TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue, TDeque<TChunkIdx>& rchunks,
-                      ui32 baseOffset = 0, const TPDiskCtx *pdiskCtx = nullptr)
+                      const TPDiskCtx *pdiskCtx = nullptr)
             : PDiskCtx(pdiskCtx)
             , Consumer(TMemoryConsumer(WriterDataTypeToMemConsumer(vctx, type, false)))
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
             , Owner(owner)
             , OwnerRound(ownerRound)
             , Priority(EWriterDataTypeToPriority(type))
@@ -851,11 +824,7 @@ namespace NKikimr {
 
             // create new writer
             Writer = std::make_unique<TBufferedChunkWriter>(TMemoryConsumer(Consumer), Owner, OwnerRound, Priority,
-<<<<<<< HEAD
-                ChunkSize, AppendBlockSize, WriteBlockSize, chunkIdx, MsgQueue);
-=======
-                ChunkSize, AppendBlockSize, WriteBlockSize, chunkIdx, MsgQueue, BaseOffset, PDiskCtx);
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
+                ChunkSize, AppendBlockSize, WriteBlockSize, chunkIdx, MsgQueue, PDiskCtx);
 
             // bookmark start of index data
             Writer->SetBookmark();
@@ -954,19 +923,12 @@ namespace NKikimr {
     public:
         TWriter(TVDiskContextPtr vctx, EWriterDataType type, ui32 chunksToUse, ui8 owner, ui64 ownerRound,
                 ui32 chunkSize, ui32 appendBlockSize, ui32 writeBlockSize, ui64 sstId, bool createdByRepl,
-<<<<<<< HEAD
-                TDeque<TChunkIdx>& rchunks, TRopeArena& arena, EBlobHeaderMode blobHeaderMode)
-            : DataWriter(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, MsgQueue, rchunks)
-            , IndexBuilder(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, sstId,
-                    createdByRepl, MsgQueue, rchunks)
-=======
-                TDeque<TChunkIdx>& rchunks, TRopeArena& arena, EBlobHeaderMode blobHeaderMode, ui32 baseOffset = 0,
+                TDeque<TChunkIdx>& rchunks, TRopeArena& arena, EBlobHeaderMode blobHeaderMode,
                 const TPDiskCtx *pdiskCtx = nullptr)
             : DataWriter(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, MsgQueue, rchunks,
-                    baseOffset, pdiskCtx)
+                    pdiskCtx)
             , IndexBuilder(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, sstId,
-                    createdByRepl, MsgQueue, rchunks, baseOffset, pdiskCtx)
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
+                    createdByRepl, MsgQueue, rchunks, pdiskCtx)
             , ChunksToUse(chunksToUse)
             , ChunkSize(chunkSize)
             , Arena(arena)

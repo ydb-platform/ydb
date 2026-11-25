@@ -159,7 +159,7 @@ namespace NKikimr {
             Writer = std::make_unique<TWriter>(ReplCtx->VCtx, EWriterDataType::Replication, 1, ReplCtx->PDiskCtx->Dsk->Owner,
                 ReplCtx->PDiskCtx->Dsk->OwnerRound, ReplCtx->PDiskCtx->Dsk->ChunkSize,
                 ReplCtx->PDiskCtx->Dsk->AppendBlockSize, ReplCtx->PDiskCtx->Dsk->BulkWriteBlockSize,
-                HullDs->LogoBlobs->AllocSstId(), true, ReservedChunks, Arena, ReplCtx->VDiskCfg->BlobHeaderMode, 0,
+                HullDs->LogoBlobs->AllocSstId(), true, ReservedChunks, Arena, ReplCtx->VDiskCfg->BlobHeaderMode,
                 ReplCtx->PDiskCtx.get());
 
             // start collecting blobs

@@ -1951,29 +1951,6 @@ message TImmediateControlsConfig {
             MaxValue: 10000000,     // 10 MB
             DefaultValue: 1000000,  // 1 MB
         }];
-<<<<<<< HEAD
-=======
-
-        optional uint64 EnableChecksumReadValidationOnVDisk = 51 [(ControlOptions) = {
-            Description: "Enable checksum calculation and validation on VDisk read path",
-            MinValue: 0,
-            MaxValue: 1,
-            DefaultValue: 0,
-        }];
-
-        optional uint64 EnableChecksumWriteValidationOnVDisk = 52 [(ControlOptions) = {
-            Description: "Enable checksum calculation and validation on VDisk write path",
-            MinValue: 0,
-            MaxValue: 1,
-            DefaultValue: 0,
-        }];
-
-        optional uint64 SpaceReportPeriodSeconds = 56 [(ControlOptions) = {
-            Description: "Period between cached VDisk space report refreshes; 0 disables periodic refreshes",
-            MinValue: 0,
-            MaxValue: 86400,
-            DefaultValue: 0,
-        }];
 
         optional uint64 EnableVDiskSectorPreparation = 57 [(ControlOptions) = {
             Description: "VDisk builds and checks PDisk data sectors itself, so PDisk threads do not copy, encrypt or hash the data; the on-disk format is unchanged, so it can be switched either way at any time",
@@ -1981,7 +1958,6 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0,
         }];
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
     }
 
     message TTabletControls {

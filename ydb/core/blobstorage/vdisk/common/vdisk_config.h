@@ -282,14 +282,9 @@ namespace NKikimr {
         TControlWrapper PhantomFlagStorageLimit;
         TControlWrapper VolatilePhantomFlagStorageBlobSizeLimit;
         TControlWrapper EnableFreshSyncDataThrottling;
-<<<<<<< HEAD
-=======
-        TControlWrapper EnableChecksumReadValidationOnVDisk;
-        TControlWrapper EnableChecksumWriteValidationOnVDisk;
         // Build and check PDisk data sectors in VDisk actors (TFormatContext) instead of the PDisk threads.
         // Read per request, so either value is safe at any moment.
         TControlWrapper EnableVDiskSectorPreparation;
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
 
         ///////////// CHUNK Keeper //////////////////
         TControlWrapper EnableChunkKeeper;

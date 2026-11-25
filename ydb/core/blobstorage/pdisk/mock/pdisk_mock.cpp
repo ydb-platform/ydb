@@ -3,11 +3,7 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/util/interval_set.h>
 
-<<<<<<< HEAD
-=======
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_compaction_arbiter.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_chunk_nonces.h>
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_format_context.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_quota_record.h>
@@ -1175,16 +1171,11 @@ public:
                 {"marker", "PDM15"},
                 {"msg", msg->ToString()},
                 {"VDiskId", owner->VDiskId});
-<<<<<<< HEAD
-            if (!msg->ChunkIdx) { // allocate chunk
-=======
             if (!msg->ChunkIdx && msg->PreformattedSectors) {
                 // as in PDisk: the owner can't know the nonce of a chunk the write itself allocates
                 res->Status = NKikimrProto::ERROR;
                 res->ErrorReason = "can't write preformatted sectors to a chunk allocated by the write";
             } else if (!msg->ChunkIdx) { // allocate chunk
-                // as in PDisk: a chunk allocated by writing to it is VDisk metadata and may spend the system reserve
->>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
                 if (!Impl.GetNumFreeChunks()) {
                     res->Status = NKikimrProto::OUT_OF_SPACE;
                     res->StatusFlags = GetStatusFlags() | ui32(NKikimrBlobStorage::StatusNotEnoughDiskSpaceForOperation);

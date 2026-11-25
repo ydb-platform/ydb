@@ -588,8 +588,7 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
 
         auto* runtime = ydb.GetRuntime();
         const auto edge = runtime->AllocateEdgeActor();
-        runtime->Register(CreateSaveScriptExecutionResultMetaActor(
-            edge, TestDatabase, executionId, R"([{}])", /* leaseGeneration */ 1));
+        runtime->Register(CreateSaveScriptExecutionResultMetaActor(edge, TestDatabase, executionId, R"([{}])", /* leaseGeneration */ 1));
         const auto saved = runtime->GrabEdgeEvent<TEvSaveScriptResultMetaFinished>(edge, TestTimeout);
         UNIT_ASSERT(saved);
         UNIT_ASSERT_VALUES_EQUAL(saved->Get()->Status, Ydb::StatusIds::SUCCESS);

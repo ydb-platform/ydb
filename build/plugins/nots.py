@@ -1128,7 +1128,7 @@ def _NOTS_TOOL_CONFIGURE(unit: ymake.Unit):
 
     # Build commands use the host resource. Recipes use the bundled archiver
     # so released yatest can launch them without additional DART fields.
-    unit.onpeerdir(["devtools/frontend_build_platform/nots/bsdtar"])
+    unit.onpeerdir(["build/platform/bun", "devtools/frontend_build_platform/nots/bsdtar"])
     unit.set(["_NOTS_BSDTAR_ENV", "NOTS_BSDTAR_PATH=$BSDTAR_RESOURCE_GLOBAL/bsdtar"])
     tool = '${tool:"' + tool_path + '"} ${hide:TS_FAKEID} ${hide;input:T0_SETTINGS_PATH}'
     tool += ' ${env:_NOTS_BSDTAR_ENV} ${hide;input:"devtools/frontend_build_platform/nots/tier0-settings/src/settings.schema.json"}'

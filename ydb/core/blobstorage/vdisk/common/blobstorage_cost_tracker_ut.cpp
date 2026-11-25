@@ -27,6 +27,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageCostTrackerTest) {
         UNIT_ASSERT(!counters->FindSubgroup("subsystem", "cost"));
         auto advancedCost = counters->FindSubgroup("subsystem", "advancedCost");
         UNIT_ASSERT(advancedCost);
+        UNIT_ASSERT(advancedCost->FindCounter("BurstDetector_resyncs"));
         auto readCounters = advancedCost->FindSubgroup("operation", "read");
         UNIT_ASSERT(readCounters);
         for (const TString& name : {"DefragDiskCost", "ScrubDiskCost", "CompactionDiskCost"}) {
@@ -45,6 +46,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageCostTrackerTest) {
 
         auto advancedCost = counters->FindSubgroup("subsystem", "advancedCost");
         UNIT_ASSERT(advancedCost);
+        UNIT_ASSERT(advancedCost->FindCounter("BurstDetector_resyncs"));
 
         auto read = advancedCost->FindSubgroup("operation", "read");
         auto write = advancedCost->FindSubgroup("operation", "write");

@@ -150,7 +150,8 @@ private:
     }
 };
 
-// Thread-safe light
+// Thread-safe light for ui16 sequence numbers within a half-range ordering window.
+// The first observation establishes the baseline; late older observations are ignored.
 class TLight : public TLightBase {
 private:
     struct TItem {
@@ -167,7 +168,7 @@ private:
     size_t HeadIdx = 0; // Index of current state
     size_t FilledCount = 0;
     ui16 Seqno = 0; // Current seqno
-    TStackVec<TItem, 32> Data; // In theory should have not more than thread count items
+    TStackVec<TItem, 32> Data;
 public:
     TLight() {
         InitData();
@@ -199,8 +200,8 @@ private:
     }
 
     void Push(bool state, ui16 seqno) {
-        FilledCount++;
-        if (FilledCount == 1) { // First event must initialize seqno
+        if (!FilledCount) { // First event must initialize seqno
+            FilledCount = 1;
             Seqno = seqno;
             InitData(state, true);
             if (state) {
@@ -208,23 +209,32 @@ private:
             }
             return;
         }
-        Y_ABORT_UNLESS(seqno != Seqno, "ordering overflow or duplicate event headSeqno# %d seqno# %d state# %d filled# %d",
-                 (int)Seqno, (int)seqno, (int)state, (int)CountFilled());
-        ui16 diff = seqno;
-        diff -= Seqno; // Underflow is fine
+        const ui16 diff = seqno - Seqno;
+        if (!diff || diff > Max<ui16>() / 2) {
+            // A producer can obtain its seqno first but enter Set after another
+            // producer initialized the light. Do not treat an old sample as a
+            // future observation. Ignore duplicates without altering FilledCount.
+            return;
+        }
         size_t size = Data.size();
         if (size <= diff) { // Buffer is full -- extend and move wrapped part
-            Data.resize(size * 2);
+            size_t newSize = size * 2;
+            while (newSize <= diff) {
+                newSize *= 2;
+            }
+            Data.resize(newSize);
             for (size_t i = 0; i < HeadIdx; i++) {
                 Data[size + i] = Data[i];
                 Data[i].Filled = false;
             }
         }
         TItem& item = Data[(HeadIdx + diff) % Data.size()];
-        Y_ABORT_UNLESS(!item.Filled, "ordering overflow or duplicate event headSeqno# %d seqno# %d state# %d filled# %d",
-                 (int)Seqno, (int)seqno, (int)state, (int)CountFilled());
+        if (item.Filled) {
+            return; // Duplicate pending observation.
+        }
         item.Filled = true;
         item.State = state;
+        ++FilledCount;
     }
 
     bool Pop(bool& state, bool& prevState) {
@@ -244,14 +254,6 @@ private:
             InitData(state, true);
         }
         return true;
-    }
-
-    size_t CountFilled() const {
-        size_t ret = 0;
-        for (const TItem& item : Data) {
-            ret += item.Filled;
-        }
-        return ret;
     }
 };
 

@@ -2649,8 +2649,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             Y_UNUSED(SetupSchema(Runtime, Sender, tx.SerializeAsString(), ++TxId));
         }
 
-        // the schemeshard's request (from Sender unless `from` says otherwise); `cascade` unset leaves the flag out of
-        // the message
+        // the schemeshard's request; `cascade` unset leaves the flag out of the message
         void SendCompact(const ui64 forcedCompactionTxId, const std::optional<bool> cascade, const std::optional<TActorId>& from = {}) {
             auto request = std::make_unique<TEvDataShard::TEvCompactTable>(/*ownerId=*/1, TableId);
             request->Record.SetTxId(forcedCompactionTxId);
@@ -2660,13 +2659,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             Send(request.release(), from);
         }
 
-        // a pre-upgrade schemeshard's request: no operation id
         void SendCompactWithoutId(const std::optional<TActorId>& from = {}) {
             Send(new TEvDataShard::TEvCompactTable(/*ownerId=*/1, TableId), from);
         }
 
         // drives the background loop (wakeup = EnqueueBackgroundActivities, sleep = async work) until the shard replies
-        // to Sender (or to `to`)
         TResult::EStatus WaitResult(const std::optional<TActorId>& to = {}) {
             const TActorId requester = to.value_or(Sender);
             TEvDataShard::TEvCompactTableResult::TPtr ev;
@@ -2679,7 +2676,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             return ev->Get()->Record.GetStatus();
         }
 
-        // a couple of background rounds without a reply to either requester: the request is held (or nobody is waiting)
+        // a couple of background rounds without a reply: the request is held (or nobody is waiting)
         void AssertNoReply(const TString& why) {
             RunBackground(2);
             for (const auto& requester : { Sender, OtherSender }) {
@@ -2824,7 +2821,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             t.DisableBackground(EBackground::Compaction);
             t.WriteOverlappingBatches(2);
 
-            t.SendCompactWithoutId();   // a pre-upgrade schemeshard: a plain request
+            t.SendCompactWithoutId();
             if (planner == "tiling++") {
                 t.AssertNoReply("held while the portions intersect");
             } else {
@@ -2925,9 +2922,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(ForcedCompactionRequestWithoutId) {
         // A pre-upgrade schemeshard sends no operation id. Its request is a plain compaction: a new operation when none
-        // is being served, a retry of the one being served otherwise (a CASCADE goes on, its rewrite is not touched).
-        // A request with an id on top of an id-less operation is another operation. As for any retry or new operation,
-        // the latest request replaces the held one and gets the reply.
+        // is being served, a retry of the one being served otherwise (a CASCADE goes on). An id on top of an id-less
+        // operation is another operation. The latest request replaces the held one and gets the reply.
         using TResult = TForcedCompactionTest::TResult;
         using EBackground = TForcedCompactionTest::EBackground;
         TForcedCompactionTest t("tiling++");
@@ -2964,9 +2960,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         t.SendCompactWithoutId();   // nothing is being served: a plain operation, the version 2 portions are left alone
         t.AssertNoReply("held while the portions intersect");
         UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), 0);
-        // the finished operation's id on top of the id-less one: another operation, this one a CASCADE (stale
-        // bookkeeping would take the id for a retry and leave the rewrite off)
-        t.SendCompact(1, true, t.OtherSender);
+        t.SendCompact(1, true, t.OtherSender);   // the finished operation's id again: not a retry, another operation
         t.AssertNoReply("held until the portions are compacted and rewritten");
         UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), t.PortionsByVersion().at(2));
         t.EnableBackground(EBackground::Compaction);

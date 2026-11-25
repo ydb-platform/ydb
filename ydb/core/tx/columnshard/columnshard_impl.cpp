@@ -1246,9 +1246,8 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-    // a pre-upgrade schemeshard sends no id: its request is a plain compaction (whatever its Cascade), a retry of the
-    // operation being served if there is one, a new operation otherwise; a request with an id on top of such an
-    // operation is a new one
+    // no id (a pre-upgrade schemeshard): a plain compaction, a retry of the operation being served if there is one, a
+    // new operation otherwise; an id on top of it is a new operation
     const std::optional<ui64> txId = record.HasTxId() ? std::optional<ui64>(record.GetTxId()) : std::nullopt;
     const bool cascade = txId && record.GetCascade();
     const bool isRetry = txId ? ForcedCompactionTxId == txId : ForcedCompactionWaiter.has_value();

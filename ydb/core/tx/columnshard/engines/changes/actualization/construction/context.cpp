@@ -22,9 +22,11 @@ TTieringProcessContext::TTieringProcessContext(const ui64 memoryUsageLimit, cons
 TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
     const std::shared_ptr<const TPortionInfo>& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait) {
     if (!UsedPortions.emplace(info->GetAddress()).second) {
+        Counters.OnActualizationSkipAlreadyConsidered();
         return EAddPortionResult::PORTION_LOCKED;
     }
     if (DataLocksManager->IsLocked(*info, NDataLocks::ELockCategory::Actualization)) {
+        Counters.OnActualizationSkipLocked();
         return EAddPortionResult::PORTION_LOCKED;
     }
 

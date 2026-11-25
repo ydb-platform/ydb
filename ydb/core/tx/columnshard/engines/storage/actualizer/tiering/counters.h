@@ -20,6 +20,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForLimit;
     NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForTooEarly;
     NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForNoLongerNeeded;
+    NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForMissingMax;
 
 public:
     TTieringGlobalCounters()
@@ -33,6 +34,7 @@ public:
         SkipEvictionForLimit = TBase::GetDeriviative("Eviction/SkipForLimit");
         SkipEvictionForTooEarly = TBase::GetDeriviative("Eviction/SkipForTooEarly");
         SkipEvictionForNoLongerNeeded = TBase::GetDeriviative("Eviction/SkipForNoLongerNeeded");
+        SkipEvictionForMissingMax = TBase::GetDeriviative("Eviction/SkipForMissingMax");
     }
 
     static NMonitoring::TDynamicCounters::TCounterPtr GetSkipEvictionForLimit() {
@@ -49,6 +51,10 @@ public:
 
     static NMonitoring::TDynamicCounters::TCounterPtr GetSkipEvictionForCompaction() {
         return Singleton<TTieringGlobalCounters>()->SkipEvictionForCompaction;
+    }
+
+    static NMonitoring::TDynamicCounters::TCounterPtr GetSkipEvictionForMissingMax() {
+        return Singleton<TTieringGlobalCounters>()->SkipEvictionForMissingMax;
     }
 
     static std::shared_ptr<NColumnShard::TValueAggregationClient> BuildQueueSizeToEvict() {
@@ -78,6 +84,8 @@ public:
     const NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForLimit;
     const NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForTooEarly;
     const NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForNoLongerNeeded;
+    // Counts evaluations with loaded metadata but no TTL-column maximum, not distinct portions.
+    const NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForMissingMax;
 
     TTieringCounters()
         : QueueSizeToEvict(TTieringGlobalCounters::BuildQueueSizeToEvict())
@@ -88,6 +96,7 @@ public:
         , SkipEvictionForLimit(TTieringGlobalCounters::GetSkipEvictionForLimit())
         , SkipEvictionForTooEarly(TTieringGlobalCounters::GetSkipEvictionForTooEarly())
         , SkipEvictionForNoLongerNeeded(TTieringGlobalCounters::GetSkipEvictionForNoLongerNeeded())
+        , SkipEvictionForMissingMax(TTieringGlobalCounters::GetSkipEvictionForMissingMax())
     {
     }
 };

@@ -162,8 +162,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def is_port_listening(self, port):
         """Check if the port is listening after node startup"""
         try:
-            logger.info("netstat path: %r", shutil.which("netstat"))
-            logger.info("PATH: %r", os.environ.get("PATH"))
             cmd = ["netstat", "-tuln"]
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             output = result.stdout.decode()

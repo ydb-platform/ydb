@@ -125,8 +125,7 @@ namespace NKikimr::NBlobDepot {
             const TResolvedValue& current) {
         if (const auto it = Cache.find(key); it != Cache.end()) {
             auto& cached = it->second.Value;
-            if (cached.Defined && cached.Version == stale.Version && cached.Chain == stale.Chain &&
-                    cached.ReliablyWritten == stale.ReliablyWritten) {
+            if (cached.Defined && cached == stale) {
                 cached = current;
             }
         }

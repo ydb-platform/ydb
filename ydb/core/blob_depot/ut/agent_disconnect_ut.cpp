@@ -1,5 +1,6 @@
 #include "../blob_depot.h"
 #include "../agent/agent.h"
+#include "../agent/agent_impl.h"
 #include "../events.h"
 #include "../s3_router_events.h"
 #include "../types.h"
@@ -602,6 +603,69 @@ void CheckGetCompletesAfterDisconnect(bool nodata) {
     }
 }
 
+struct TRegisteringAgentEnv : TTestEnv {
+    const TActorId Agent = StartAgent();
+    const TActorId Edge = Runtime.AllocateEdgeActor();
+    TBlockEvents<TEvBlobDepot::TEvRegisterAgentResult> Registrations{Runtime, [this](const auto& ev) {
+        return ev->Recipient == Agent;
+    }};
+    const NMonitoring::TDynamicCounters::TCounterPtr Queued =
+        GetServiceCounters(Runtime.GetAppData().Counters, "blob_depot_agent")
+            ->GetSubgroup("group", ToString(VirtualGroupId))->GetSubgroup("subsystem", "pendingEventQueue")
+            ->GetCounter("Items", false);
+
+    TRegisteringAgentEnv()
+        : TTestEnv(TLocalMode{})
+    {
+        Runtime.WaitFor("held registration", [&] { return !Registrations.empty(); }, TDuration::Seconds(1));
+    }
+
+    void Queue(IEventBase* request) {
+        Runtime.Send(new IEventHandle(Agent, Edge, request));
+    }
+
+    template<class TResult>
+    void ExpectStatus(NKikimrProto::EReplyStatus status) {
+        const auto result = Runtime.GrabEdgeEventRethrow<TResult>(Edge, TDuration::Seconds(1));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, status);
+    }
+};
+
+void CheckQueuedMetadataDeadlines(bool reconnectAtDeadline) {
+    TRegisteringAgentEnv env;
+    constexpr ui64 tabletId = 12345;
+    const auto deadline = env.Runtime.GetCurrentTime() + TDuration::MilliSeconds(100);
+    bool mutationIssued = false;
+    auto observer = env.Runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->Sender == env.Agent && (ev->GetTypeRewrite() == TEvBlobDepot::EvBlock ||
+                ev->GetTypeRewrite() == TEvBlobDepot::EvCollectGarbage)) {
+            mutationIssued = true;
+        }
+    });
+    env.Queue(new TEvBlobStorage::TEvBlock(tabletId, 1, deadline));
+    env.Queue(new TEvBlobStorage::TEvGetBlock(tabletId, deadline));
+    env.Queue(new TEvBlobStorage::TEvCollectGarbage(tabletId, 1, 0, 0, true, 1, 4, nullptr, nullptr, deadline,
+        false, false, true));
+    env.Queue(new TEvBlobStorage::TEvStatus(deadline));
+    UNIT_ASSERT_VALUES_EQUAL(env.Queued->Val(), 4);
+
+    if (reconnectAtDeadline) {
+        env.Runtime.AdvanceCurrentTime(TDuration::MilliSeconds(100));
+        // Deliver registration directly while the watchdog is still in the scheduler.
+        env.Runtime.Send(env.Registrations.Stop().front().Release());
+        env.Registrations.pop_front();
+    }
+    env.ExpectStatus<TEvBlobStorage::TEvBlockResult>(NKikimrProto::TIMEOUT);
+    env.ExpectStatus<TEvBlobStorage::TEvGetBlockResult>(NKikimrProto::TIMEOUT);
+    env.ExpectStatus<TEvBlobStorage::TEvCollectGarbageResult>(NKikimrProto::TIMEOUT);
+    env.ExpectStatus<TEvBlobStorage::TEvStatusResult>(NKikimrProto::TIMEOUT);
+    env.Registrations.Stop().Unblock();
+    env.Queue(new TEvBlobStorage::TEvStatus(TInstant::Max()));
+    env.ExpectStatus<TEvBlobStorage::TEvStatusResult>(NKikimrProto::OK);
+    UNIT_ASSERT(!mutationIssued);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
@@ -678,6 +742,52 @@ Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
 
     Y_UNIT_TEST(PutCompletesBeforeReconnectRegistrationResult) {
         CheckPutCompletesDuringReconnect(true);
+    }
+
+    Y_UNIT_TEST(MetadataRequestsExpireDuringRegistration) {
+        CheckQueuedMetadataDeadlines(false);
+    }
+
+    Y_UNIT_TEST(RegistrationDoesNotDispatchExpiredMetadataRequests) {
+        CheckQueuedMetadataDeadlines(true);
+    }
+
+    Y_UNIT_TEST(PendingDeadlineUsesClockSampleAtEnqueue) {
+        const auto received = TMonotonic::Seconds(10);
+        const auto wallAtReceipt = TInstant::Seconds(1000);
+        const auto elapsed = TDuration::MilliSeconds(40);
+        const auto queueLimit = received + TDuration::Seconds(60);
+        const auto calculate = [&](TDuration callerTimeout) {
+            return TPendingEventExpiration::Calculate(queueLimit, wallAtReceipt + callerTimeout,
+                wallAtReceipt + elapsed, received + elapsed);
+        };
+        const auto shortRequest = calculate(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_EQUAL(shortRequest.Time, received + TDuration::MilliSeconds(100));
+        UNIT_ASSERT(shortRequest.AtRequestDeadline);
+        const auto expired = calculate(TDuration::MilliSeconds(20));
+        UNIT_ASSERT_EQUAL(expired.Time, received + TDuration::MilliSeconds(20));
+        UNIT_ASSERT(expired.AtRequestDeadline);
+        const auto longRequest = calculate(TDuration::Seconds(60) + TDuration::MilliSeconds(20));
+        UNIT_ASSERT_EQUAL(longRequest.Time, queueLimit);
+        UNIT_ASSERT(!longRequest.AtRequestDeadline);
+    }
+
+    Y_UNIT_TEST(PendingDeadlineWatchdogYieldsBetweenBatches) {
+        TRegisteringAgentEnv env;
+        constexpr i64 count = 600;
+        const auto deadline = env.Runtime.GetCurrentTime() + TDuration::MilliSeconds(100);
+        for (i64 i = 0; i < count; ++i) {
+            env.Queue(new TEvBlobStorage::TEvStatus(deadline));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Queued->Val(), count);
+        bool sawPartialBatch = false;
+        auto observer = env.Runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == env.Agent && 0 < env.Queued->Val() && env.Queued->Val() < count) {
+                sawPartialBatch = true;
+            }
+        });
+        env.Runtime.WaitFor("queued requests to expire", [&] { return env.Queued->Val() == 0; }, TDuration::Seconds(1));
+        UNIT_ASSERT(sawPartialBatch);
     }
 
     Y_UNIT_TEST(RequestDeadlinesWhileRegistrationIsPending) {

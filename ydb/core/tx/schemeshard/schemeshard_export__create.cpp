@@ -18,7 +18,6 @@
 #include <ydb/core/backup/common/feature_flags.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 
-#include <util/folder/pathsplit.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/ptr.h>
 #include <util/generic/xrange.h>
@@ -673,18 +672,6 @@ private:
                 }
                 destinationPrefix = itemPrefix.str();
             }
-            TStringBuf firstComponent = TStringBuf(destinationPrefix).Before('/');
-            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
-                const TPathSplit path(destinationPrefix);
-                firstComponent = path.empty() ? TStringBuf() : path.front();
-            }
-            if (firstComponent.empty() || firstComponent == "SchemaMapping"
-                || firstComponent == "metadata.json" || firstComponent == "metadata.json.sha256")
-            {
-                issues = TStringBuilder() << "Item destination prefix '" << destinationPrefix << "' overlaps export metadata";
-                return false;
-            }
-
             schemaMappingItem.SetDestinationPrefix(destinationPrefix);
             if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
                 MutableItemDestination(exportItem) = destinationPrefix;
@@ -711,7 +698,7 @@ private:
     }
 
     template <typename TSettings>
-    bool UploadExportMetadata(TExportInfo& exportInfo, const TActorContext& ctx) {
+    bool UploadExportMetadata(TExportInfo& exportInfo, const TActorContext& ctx) { // returns true if we need to change state to UploadExportMetadata
         TSettings exportSettings;
         Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
 
@@ -722,7 +709,6 @@ private:
         exportInfo.ExportMetadataUploader = ctx.Register(
             CreateExportMetadataUploader(Self->SelfId(), exportInfo.Id, exportSettings, exportInfo.ExportMetadata, exportInfo.EnableChecksums));
         Self->RunningExportSchemeUploaders.emplace(exportInfo.ExportMetadataUploader);
-        Send(exportInfo.ExportMetadataUploader, new TEvents::TEvWakeup());
         return true;
     }
 
@@ -847,14 +833,11 @@ private:
     }
 
     void MaybeFinishTransfer(const TExportInfo::TPtr& exportInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
-        if (exportInfo->ExportMetadataUploader || !AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
+        if (!AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
             return;
         }
 
-        if (exportInfo->ExportMetadata.SchemaMappingSize() && UploadExportMetadata(*exportInfo, ctx)) {
-            exportInfo->State = EState::PublishExportMetadata;
-            Self->PersistExportState(db, *exportInfo);
-        } else if (exportInfo->Kind == TExportInfo::EKind::S3) {
+        if (exportInfo->Kind == TExportInfo::EKind::S3) {
             UploadCompletion(*exportInfo, Max<ui32>(), ctx);
         } else {
             CompleteTransfer(exportInfo, db);
@@ -1135,7 +1118,6 @@ private:
             break;
 
         case EState::UploadExportMetadata:
-        case EState::PublishExportMetadata:
             Y_ABORT_UNLESS(UploadExportMetadata(*exportInfo, ctx));
             break;
 
@@ -1600,9 +1582,6 @@ private:
             return;
         }
 
-        if (exportInfo->ExportMetadataUploader != UploadMetadataResult->Sender) {
-            return;
-        }
         Self->RunningExportSchemeUploaders.erase(std::exchange(exportInfo->ExportMetadataUploader, {}));
 
         if (!exportInfo->IsInProgress()) {
@@ -1622,17 +1601,6 @@ private:
             exportInfo->Issue = result.Error;
 
             return PersistExportStateAndNotify(exportInfo, db);
-        }
-
-        if (exportInfo->State == EState::PublishExportMetadata) {
-            if (exportInfo->Kind == TExportInfo::EKind::S3) {
-                exportInfo->State = EState::Transferring;
-                Self->PersistExportState(db, *exportInfo);
-                UploadCompletion(*exportInfo, Max<ui32>(), ctx);
-            } else {
-                CompleteTransfer(exportInfo, db);
-            }
-            return;
         }
 
         Y_ABORT_UNLESS(exportInfo->State == EState::UploadExportMetadata);
@@ -1709,7 +1677,18 @@ private:
             exportInfo->WaitTxId = InvalidTxId;
 
             const bool supportExportFiltering = NBackup::IsExportFilteringEnabled(*AppData());
-            if (TString issues; supportExportFiltering && !FillExportMetadata(*exportInfo, issues)) {
+            TString issues;
+            // The export's own COPY and BACKUP run after this admission check, including after recovery.
+            if (AppData()->FeatureFlags.GetDisablePgCompatibility()) {
+                for (const auto& item : exportInfo->Items) {
+                    if (auto name = FindPgColumn(*Self, item.SourcePathId)) {
+                        issues = TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << name << "'";
+                        break;
+                    }
+                }
+            }
+
+            if (issues || (supportExportFiltering && !FillExportMetadata(*exportInfo, issues))) {
                 exportInfo->State = EState::Cancelled;
                 exportInfo->EndTime = TAppData::TimeProvider->Now();
                 exportInfo->Issue = issues;
@@ -1717,11 +1696,12 @@ private:
                 break;
             }
 
-            if (supportExportFiltering && exportInfo->ExportMetadata.SchemaMappingSize()) {
-                Self->PersistExportMetadata(db, *exportInfo);
-            }
+            if (supportExportFiltering && UploadExportMetadata(*exportInfo, ctx)) {
+                exportInfo->State = EState::UploadExportMetadata;
 
-            if (AnyOf(exportInfo->Items, &IsPathTypeTable)) {
+                // Persist modified metadata and new settings
+                Self->PersistExportMetadata(db, *exportInfo);
+            } else if (AnyOf(exportInfo->Items, &IsPathTypeTable)) {
                 exportInfo->State = EState::CopyTables;
                 AllocateTxId(*exportInfo);
             } else {

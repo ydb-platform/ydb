@@ -19,6 +19,36 @@ TString GetUid(const Ydb::Operations::OperationParams& operationParams) {
     return {};
 }
 
+TString FindPgColumn(const TSchemeShard& ss, const TPathId& pathId) {
+    const auto findPgColumn = [](const auto& columns) -> TString {
+        for (const auto& [_, column] : columns) {
+            if (!column.IsDropped() && column.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                return column.Name;
+            }
+        }
+        return {};
+    };
+
+    if (const auto* table = ss.Tables.FindPtr(pathId)) {
+        if (auto name = findPgColumn((*table)->Columns)) {
+            return name;
+        }
+        return (*table)->AlterData ? findPgColumn((*table)->AlterData->Columns) : TString{};
+    }
+    if (ss.ColumnTables.contains(pathId)) {
+        const auto table = ss.ColumnTables.GetVerified(pathId);
+        for (const auto& column : table->Description.GetSchema().GetColumns()) {
+            if (column.GetTypeId() == NScheme::NTypeIds::Pg) {
+                return column.GetName();
+            }
+        }
+    }
+    if (const auto* table = ss.ExternalTables.FindPtr(pathId)) {
+        return findPgColumn((*table)->Columns);
+    }
+    return {};
+}
+
 template <class TInfo>
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> MakeModifySchemeTransactionImpl(TSchemeShard* ss, TTxId txId, const TInfo& xxportInfo) {
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());

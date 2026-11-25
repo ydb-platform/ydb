@@ -4,6 +4,7 @@
 #include "schemeshard_billing_helpers.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_types.h"
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/metering/metering.h>
@@ -754,30 +755,12 @@ public:
             return result;
         }
 
-        if (!restoreImportingReplica && AppData()->FeatureFlags.GetDisablePgCompatibility()) {
-            if (path->IsTable()) {
-                const auto* table = context.SS->Tables.FindPtr(path->PathId);
-                if (!table) {
-                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                        TStringBuilder() << "Table metadata is missing for path: " << path.PathString());
-                    return result;
-                }
-                for (const auto& [_, column] : (*table)->Columns) {
-                    if (!column.IsDropped() && column.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                        result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                            TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << column.Name << "'");
-                        return result;
-                    }
-                }
-            } else {
-                const auto table = context.SS->ColumnTables.GetVerified(path->PathId);
-                for (const auto& column : table->Description.GetSchema().GetColumns()) {
-                    if (column.GetTypeId() == NScheme::NTypeIds::Pg) {
-                        result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                            TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << column.GetName() << "'");
-                        return result;
-                    }
-                }
+        if (AppData()->FeatureFlags.GetDisablePgCompatibility() && !restoreImportingReplica
+                && !(TxType == TTxState::TxBackup && context.IsExportOperation)) {
+            if (auto name = FindPgColumn(*context.SS, path->PathId)) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << name << "'");
+                return result;
             }
         }
 

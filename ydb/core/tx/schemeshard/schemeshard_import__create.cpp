@@ -1734,6 +1734,17 @@ private:
                     "coordination node backup is too large");
             }
         } else if (item.Table) {
+            if (AppData()->FeatureFlags.GetDisablePgCompatibility()) {
+                for (const auto& column : item.Table->columns()) {
+                    const auto& type = column.type();
+                    if (type.has_pg_type() || (type.has_optional_type() && type.optional_type().item().has_pg_type())) {
+                        return CancelAndPersist(db, importInfo, msg.ItemIdx,
+                            TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << column.name() << "'",
+                            "invalid table scheme");
+                    }
+                }
+            }
+
             const auto path = TPath::Resolve(item.DstPathName, Self);
             if (path.IsResolved() && !path.IsDeleted()) {
                 TString error;

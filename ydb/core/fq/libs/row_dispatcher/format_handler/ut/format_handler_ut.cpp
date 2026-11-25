@@ -452,7 +452,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         client->Validate();
         FormatHandler->RemoveClient(client->GetClientId());
         FormatHandler.Reset();
-        NTestUtils::WaitFor(WAIT_TIMEOUT, "format handler allocator release", [&] {
+        WaitFor(WAIT_TIMEOUT, "format handler allocator release", [&] {
             return poolCounters.TotalBytesAllocatedCntr->Val() == 0;
         });
 
@@ -519,11 +519,11 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         }
 
         FormatHandler.Reset();
-        NTestUtils::WaitFor(WAIT_TIMEOUT, "format handler allocator release", [&] {
+        WaitFor(WAIT_TIMEOUT, "format handler allocator release", [&] {
             return poolCounters.TotalBytesAllocatedCntr->Val() == 0;
         });
         UNIT_ASSERT_VALUES_EQUAL(poolCounters.LostPagesBytesFreeCntr->Val(), 0);
-        NTestUtils::WaitFor(WAIT_TIMEOUT, "client quota release", [&] {
+        WaitFor(WAIT_TIMEOUT, "client quota release", [&] {
             return manager->GetCurrentQuota() == 0;
         });
         UNIT_ASSERT_VALUES_EQUAL(completed.size(), 4);
@@ -541,7 +541,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         });
         destroyBatches.join();
         UNIT_ASSERT(allocatorRestored);
-        NTestUtils::WaitFor(WAIT_TIMEOUT, "completed batches quota release", [&] {
+        WaitFor(WAIT_TIMEOUT, "completed batches quota release", [&] {
             return manager->GetCurrentQuota() == 0;
         });
     }
@@ -564,7 +564,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             RemoveClient(ClientIds.back());
         }
         FormatHandler.Reset();
-        NTestUtils::WaitFor(WAIT_TIMEOUT, "format handler quota release", [&] {
+        WaitFor(WAIT_TIMEOUT, "format handler quota release", [&] {
             return manager->GetCurrentQuota() == 0;
         });
     }

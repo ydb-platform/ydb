@@ -6,7 +6,6 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
-TAG(ya:fat)
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:4)

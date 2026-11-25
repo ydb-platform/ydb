@@ -141,7 +141,7 @@ void TWriteRequestExecutor::SendIndirectWriteRequest(THostMask hosts)
 void TWriteRequestExecutor::OnIndirectWriteResponse(
     const TDBGWriteBlocksToManyPBuffersResponse& response)
 {
-    THostMask allWritesAnswered;
+    THostMask hostsWithAllWritesAnswered;
     for (const auto& pbufferResponse: response.Responses) {
         const auto host = pbufferResponse.HostIndex;
         AnsweredIndirectWrites.Set(host);
@@ -173,11 +173,11 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
         }
 
         if (GetHostsWithAllWritesAnswered().Get(host)) {
-            allWritesAnswered.Set(host);
+            hostsWithAllWritesAnswered.Set(host);
         }
     }
 
-    MaybeReplyOrNotifyBelated(allWritesAnswered);
+    MaybeReplyOrNotifyBelated(hostsWithAllWritesAnswered);
     MaybeSendAdditionalDirectWrites();
 }
 
@@ -324,7 +324,7 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
         FormatError(response.Error).Quote().c_str());
 
     AnsweredDirectWrites.Set(host);
-    const auto allWritesAnswered =
+    const auto hostsWithAllWritesAnswered =
         GetHostsWithAllWritesAnswered().LogicalAnd(THostMask::MakeOne(host));
 
     std::optional<TEndSpanWithError> ender;
@@ -335,7 +335,7 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
         ender.emplace(std::move(span), response.Error);
     }
 
-    MaybeReplyOrNotifyBelated(allWritesAnswered);
+    MaybeReplyOrNotifyBelated(hostsWithAllWritesAnswered);
     MaybeSendReplacementDirectWrite(response.Error);
 }
 
@@ -380,10 +380,10 @@ void TWriteRequestExecutor::MaybeSendReplacementDirectWrite(
 }
 
 void TWriteRequestExecutor::MaybeReplyOrNotifyBelated(
-    THostMask allWritesAnswered)
+    THostMask hostsWithAllWritesAnswered)
 {
     if (IsReplied) {
-        NotifyBelated(allWritesAnswered);
+        NotifyBelated(hostsWithAllWritesAnswered);
         return;
     }
 
@@ -436,24 +436,27 @@ void TWriteRequestExecutor::Reply(NProto::TError error)
         GetHostsWithAllWritesAnswered());
 }
 
-void TWriteRequestExecutor::NotifyBelated(THostMask allWritesAnswered)
+void TWriteRequestExecutor::NotifyBelated(THostMask hostsWithAllWritesAnswered)
 {
     // This response completes the last outstanding write to these hosts.
-    if (allWritesAnswered.Empty()) {
+    if (hostsWithAllWritesAnswered.Empty()) {
         return;
     }
 
-    const auto completed = allWritesAnswered.LogicalAnd(CompletedWrites);
+    const auto hostsWithSuccessfulWrites =
+        hostsWithAllWritesAnswered.LogicalAnd(CompletedWrites);
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "%s NotifyBelated %s ok:%s answered:%s",
         LogTitle.GetWithTime().c_str(),
         ExtendedDebugState().c_str(),
-        completed.Print().c_str(),
-        allWritesAnswered.Print().c_str());
+        hostsWithSuccessfulWrites.Print().c_str(),
+        hostsWithAllWritesAnswered.Print().c_str());
 
-    Bundle->NotifyBelated(completed, allWritesAnswered);
+    Bundle->NotifyBelated(
+        hostsWithSuccessfulWrites,
+        hostsWithAllWritesAnswered);
 }
 
 void TWriteRequestExecutor::ScheduleHedging(TDuration hedgingDelay)

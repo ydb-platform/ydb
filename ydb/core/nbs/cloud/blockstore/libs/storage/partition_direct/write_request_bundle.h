@@ -49,7 +49,9 @@ public:
         THostMask completedWrites,
         THostMask allWritesAnswered);
     // Reports hosts whose last write request answered after the client reply.
-    void NotifyBelated(THostMask completedWrites, THostMask allWritesAnswered);
+    void NotifyBelated(
+        THostMask hostsWithSuccessfulWrites,
+        THostMask hostsWithAllWritesAnswered);
 
     // Respond via Promise to FastPathService.
     void SendFinalReply(TWriteBlocksLocalResponse response);
@@ -84,8 +86,8 @@ struct IWriteClient
 
     virtual void OnBelatedWriteBlocksResponse(
         std::shared_ptr<TWriteRequestBundle> bundle,
-        THostMask completedWrites,
-        THostMask allWritesAnswered) = 0;
+        THostMask hostsWithSuccessfulWrites,
+        THostMask hostsWithAllWritesAnswered) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

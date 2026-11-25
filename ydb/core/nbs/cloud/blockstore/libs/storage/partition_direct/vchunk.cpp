@@ -492,8 +492,8 @@ void TVChunk::OnWriteBlocksResponse(
 
 void TVChunk::OnBelatedWriteBlocksResponse(
     std::shared_ptr<TWriteRequestBundle> bundle,
-    THostMask completedWrites,
-    THostMask allWritesAnswered)
+    THostMask hostsWithSuccessfulWrites,
+    THostMask hostsWithAllWritesAnswered)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -506,8 +506,8 @@ void TVChunk::OnBelatedWriteBlocksResponse(
 
     BlocksDirtyMap->OnBelatedWrite(
         bundle->GetPBufferKey(),
-        completedWrites,
-        allWritesAnswered);
+        hostsWithSuccessfulWrites,
+        hostsWithAllWritesAnswered);
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);

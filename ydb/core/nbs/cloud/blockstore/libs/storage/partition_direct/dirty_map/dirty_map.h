@@ -86,8 +86,8 @@ public:
     // Completes outstanding writes or queues cleanup for an untracked record.
     void OnBelatedWrite(
         TPBufferKey pBufferKey,
-        THostMask completedWrites,
-        THostMask allWritesAnswered);
+        THostMask hostsWithSuccessfulWrites,
+        THostMask hostsWithAllWritesAnswered);
 
     // Sets the readable prefix of one DDisk for tests.
     void SetReadablePrefixDebugOnly(THostIndex host, ui64 bytesOffset);

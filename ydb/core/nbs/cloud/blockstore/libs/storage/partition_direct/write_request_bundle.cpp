@@ -63,14 +63,14 @@ void TWriteRequestBundle::Reply(
 }
 
 void TWriteRequestBundle::NotifyBelated(
-    THostMask completedWrites,
-    THostMask allWritesAnswered)
+    THostMask hostsWithSuccessfulWrites,
+    THostMask hostsWithAllWritesAnswered)
 {
     if (auto client = WriteClient.lock()) {
         client->OnBelatedWriteBlocksResponse(
             shared_from_this(),
-            completedWrites,
-            allWritesAnswered);
+            hostsWithSuccessfulWrites,
+            hostsWithAllWritesAnswered);
     }
 }
 

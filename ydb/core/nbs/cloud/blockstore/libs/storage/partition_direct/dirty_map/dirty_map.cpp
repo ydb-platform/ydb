@@ -465,20 +465,21 @@ void TBlocksDirtyMap::EraseFinished(
 
 void TBlocksDirtyMap::OnBelatedWrite(
     TPBufferKey pBufferKey,
-    THostMask completedWrites,
-    THostMask allWritesAnswered)
+    THostMask hostsWithSuccessfulWrites,
+    THostMask hostsWithAllWritesAnswered)
 {
-    Y_ABORT_UNLESS(completedWrites.Exclude(allWritesAnswered).Empty());
+    Y_ABORT_UNLESS(
+        hostsWithSuccessfulWrites.Exclude(hostsWithAllWritesAnswered).Empty());
 
     if (auto item = Inflight.GetValue(pBufferKey)) {
-        item->Value.MarkWritesAnswered(allWritesAnswered);
+        item->Value.MarkWritesAnswered(hostsWithAllWritesAnswered);
         return;
     }
 
-    if (!completedWrites.Empty()) {
+    if (!hostsWithSuccessfulWrites.Empty()) {
         ReadyToEraseBelated.emplace(TInfoEraseBelated{
             .PBufferKey = pBufferKey,
-            .Hosts = completedWrites});
+            .Hosts = hostsWithSuccessfulWrites});
     }
 }
 

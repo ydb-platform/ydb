@@ -21,8 +21,8 @@ struct TWriteClientMock: IWriteClient
 
     void OnBelatedWriteBlocksResponse(
         std::shared_ptr<TWriteRequestBundle> bundle,
-        THostMask completedWrites,
-        THostMask allWritesAnswered) override;
+        THostMask hostsWithSuccessfulWrites,
+        THostMask hostsWithAllWritesAnswered) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

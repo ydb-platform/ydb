@@ -57,10 +57,10 @@ private:
     void MaybeSendReplacementDirectWrite(const NProto::TError& error);
 
     // Late notifications include only hosts with all write requests answered.
-    void MaybeReplyOrNotifyBelated(THostMask allWritesAnswered);
+    void MaybeReplyOrNotifyBelated(THostMask hostsWithAllWritesAnswered);
     void Reply(NProto::TError error);
     // Hosts whose last in-flight write closed in this response.
-    void NotifyBelated(THostMask allWritesAnswered);
+    void NotifyBelated(THostMask hostsWithAllWritesAnswered);
 
     void ScheduleHedging(TDuration hedgingDelay);
     void ScheduleRequestTimeout();

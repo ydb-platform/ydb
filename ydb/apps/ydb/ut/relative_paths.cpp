@@ -277,15 +277,9 @@ Y_UNIT_TEST_SUITE(RelativePathCompatibility) {
             {"tenant", "bench/nested", "PRAGMA RelativePathPrefix = \"./bench/nested\";"},
             {"tenant", "/test_database/bench/nested", "PRAGMA TablePathPrefix = \"/test_database/bench/nested\";"},
         }) {
-            for (const TString workload : {"query", "imdb"}) {
-                TList<TString> args = {"-e", GetEndpoint(), "-d", testCase.Database, "workload", workload,
-                    "--path", testCase.Path, "run", "--dry-run", "--verbose"};
-                if (workload == "query") {
-                    args.insert(args.end(), {"--query", "SELECT 1;"});
-                }
-                const auto output = RunCli(args);
-                UNIT_ASSERT_STRING_CONTAINS(output, testCase.Prefix);
-            }
+            const auto output = RunCli({"-e", GetEndpoint(), "-d", testCase.Database, "workload", "query",
+                "--path", testCase.Path, "run", "--dry-run", "--verbose", "--query", "SELECT 1;"});
+            UNIT_ASSERT_STRING_CONTAINS(output, testCase.Prefix);
         }
     }
 

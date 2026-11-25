@@ -388,7 +388,6 @@ message TPQTabletConfig {
     // Source service-consumer id identifying the replication that created this topic.
     optional string ReplicationSourceConsumer = 50;
 
-    // Partitions split at full keys of PartitionKeySchema, and explicit sources are registered by key range
     optional bool SplitByPartitionKey = 51;
 
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet

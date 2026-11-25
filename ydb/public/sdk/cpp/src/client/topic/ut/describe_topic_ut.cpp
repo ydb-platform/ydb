@@ -16,6 +16,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
             result.set_partition_write_speed_messages_per_second(100);
             result.set_partition_write_burst_messages(200);
             result.set_partition_total_read_speed_bytes_per_second(300);
+            result.set_partition_consumer_read_speed_bytes_per_second(150);
             result.set_partition_total_read_speed_messages_per_second(400);
             result.set_partition_read_without_consumer_speed_bytes_per_second(500);
             result.set_partition_read_without_consumer_speed_messages_per_second(600);
@@ -27,7 +28,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
 
             UNIT_ASSERT_VALUES_EQUAL(request.partition_write_speed_messages_per_second(), 100);
             UNIT_ASSERT_VALUES_EQUAL(request.partition_write_burst_messages(), 200);
-            UNIT_ASSERT_VALUES_EQUAL(request.partition_total_read_speed_bytes_per_second(), 300);
+            UNIT_ASSERT_VALUES_EQUAL(request.partition_total_read_speed_bytes_per_second(), 0);
             UNIT_ASSERT_VALUES_EQUAL(request.partition_total_read_speed_messages_per_second(), 400);
             UNIT_ASSERT_VALUES_EQUAL(request.partition_read_without_consumer_speed_bytes_per_second(), 500);
             UNIT_ASSERT_VALUES_EQUAL(request.partition_read_without_consumer_speed_messages_per_second(), 600);

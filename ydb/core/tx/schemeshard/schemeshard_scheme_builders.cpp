@@ -83,9 +83,10 @@ bool BuildTopicScheme(
     Ydb::Topic::CreateTopicRequest request;
     NYdb::NTopic::TTopicDescription(std::move(descTopicResult)).SerializeTo(request);
 
-    // Describe reports the effective byte read quota. An inherited quota must remain unset on restore.
-    if (!topic.GetPQTabletConfig().GetPartitionConfig().HasReadSpeedInBytesPerSecond()) {
-        request.clear_partition_total_read_speed_bytes_per_second();
+    // Describe reports an effective total byte rate. Its other read rates come from stored quotas.
+    const auto& partitionConfig = topic.GetPQTabletConfig().GetPartitionConfig();
+    if (partitionConfig.HasReadSpeedInBytesPerSecond()) {
+        request.set_partition_total_read_speed_bytes_per_second(partitionConfig.GetReadSpeedInBytesPerSecond());
     }
 
     return NYdb::NBackup::PrintProto(request, scheme);

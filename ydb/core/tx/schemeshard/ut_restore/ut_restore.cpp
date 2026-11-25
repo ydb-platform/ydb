@@ -12,6 +12,8 @@
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
@@ -8653,6 +8655,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         partition->SetBurstSize(1024);
         if (ExplicitReadQuota) {
             partition->SetReadSpeedInBytesPerSecond(4096);
+            partition->SetReadSpeedInMessagesPerSecond(100);
+            auto* readQuota = NPQ::GetOrAddReadQuota(*source.MutablePQTabletConfig(), NPQ::CLIENTID_WITHOUT_CONSUMER);
+            readQuota->SetSpeedInBytesPerSecond(2048);
+            readQuota->SetSpeedInMessagesPerSecond(50);
         }
 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot", source.DebugString());
@@ -8681,6 +8687,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             TString error;
             UNIT_ASSERT_C(FillTopicDescription(description, restored, path.GetSelf(), Nothing(), status, error), error);
             UNIT_ASSERT_VALUES_EQUAL(description.partition_total_read_speed_bytes_per_second(), expected);
+            UNIT_ASSERT_VALUES_EQUAL(description.partition_total_read_speed_messages_per_second(), ExplicitReadQuota ? 100 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(description.partition_read_without_consumer_speed_bytes_per_second(), ExplicitReadQuota ? 2048 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(description.partition_read_without_consumer_speed_messages_per_second(), ExplicitReadQuota ? 50 : 0);
         };
 
         const auto restored = DescribePath(runtime, restoredPath);

@@ -777,6 +777,11 @@ public:
     }
 
     void Bootstrap() {
+        this->Become(&TExportMetadataUploader::StateWait);
+    }
+
+private:
+    void Upload() {
         if (ExportMetadata.HasIV()) {
             IV = NBackup::TEncryptionIV::FromBinaryString(ExportMetadata.GetIV());
         }
@@ -788,7 +793,13 @@ public:
         this->UploadFiles();
     }
 
-private:
+    STATEFN(StateWait) {
+        switch (ev->GetTypeRewrite()) {
+            sFunc(TEvents::TEvWakeup, Upload);
+            sFunc(TEvents::TEvPoisonPill, this->PassAway);
+        }
+    }
+
     bool AddBackupMetadata() {
         TString content;
         TStringOutput ss(content);

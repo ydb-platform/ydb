@@ -1,4 +1,5 @@
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
@@ -51,10 +52,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
         env.TestWaitNotification(runtime, txId);
 
         updatePgCompatibility(true);
+        bool published = false;
+        auto partitioning = runtime.AddObserver<NSysView::TEvSysView::TEvSetPartitioning>([&](auto& ev) {
+            published |= ev->Get()->Path == "/MyRoot/CopyWithSequence";
+        });
         AsyncCopyTable(runtime, ++txId, "/MyRoot", "CopyWithSequence", "/MyRoot/TableWithSequence");
         TestModificationResults(runtime, txId, {
             {NKikimrScheme::StatusInvalidParameter, "PostgreSQL compatibility is disabled for the source sequence"}});
         env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT(!published);
 
         AsyncCopyTable(runtime, ++txId, "/MyRoot", "Copy", "/MyRoot/Table1");
         TestModificationResults(runtime, txId, {

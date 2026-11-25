@@ -55,13 +55,24 @@ public:
     }
 
     void Bootstrap() {
+        this->Become(&TExportMetadataUploaderFallback::StateWait);
+    }
+
+private:
+    void Fail() {
         this->Send(SchemeShard, new TEvPrivate::TEvExportUploadMetadataResult(ExportId, false,
             GetExportDisabledMessage<TSettings>()
         ));
         this->PassAway();
     }
 
-private:
+    STATEFN(StateWait) {
+        switch (ev->GetTypeRewrite()) {
+            sFunc(TEvents::TEvWakeup, Fail);
+            sFunc(TEvents::TEvPoisonPill, this->PassAway);
+        }
+    }
+
     TActorId SchemeShard;
     ui64 ExportId;
 };

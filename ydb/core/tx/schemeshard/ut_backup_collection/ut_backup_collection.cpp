@@ -1660,7 +1660,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                 runtime.GetAppData(node).FeatureFlags.SetDisablePgCompatibility(true);
             }
             TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot", request,
-                {{NKikimrScheme::StatusSchemeError, "PostgreSQL compatibility is disabled for column 'key'"}});
+                {NKikimrScheme::StatusSchemeError, "PostgreSQL compatibility is disabled for column 'key'"});
             for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
                 runtime.GetAppData(node).FeatureFlags.SetDisablePgCompatibility(false);
             }
@@ -4299,7 +4299,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         if (PgSchema) {
             updatePgCompatibility(true);
             TestBackupBackupCollection(runtime, ++txId, "/MyRoot", request,
-                {{NKikimrScheme::StatusSchemeError, "PostgreSQL compatibility is disabled for column 'pg_value'"}});
+                {NKikimrScheme::StatusSchemeError, "PostgreSQL compatibility is disabled for column 'pg_value'"});
             updatePgCompatibility(false);
         }
         TestBackupBackupCollection(runtime, ++txId, "/MyRoot", request);

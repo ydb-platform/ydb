@@ -2304,6 +2304,7 @@ value {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true).DisablePgCompatibility(false));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
         ui64 txId = 100;
         const auto updatePgCompatibility = [&](bool disabled) {
             for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
@@ -2330,26 +2331,42 @@ value {
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        const auto exportTable = [&](const char* prefix) {
+        const auto exportTable = [&](const char* itemPrefix) {
             TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
                 ExportToS3Settings {
                   endpoint: "localhost:%d"
                   scheme: HTTP
+                  source_path: "/MyRoot"
+                  destination_prefix: "Backup1"
                   items {
                     source_path: "/MyRoot/Table"
                     destination_prefix: "%s"
                   }
                 }
-            )", port, prefix));
+            )", port, itemPrefix));
             env.TestWaitNotification(runtime, txId);
         };
-        exportTable("Backup1");
+        exportTable("SavedTable");
         TestGetExport(runtime, txId, "/MyRoot");
+        const TString mappingPath = "/Backup1/SchemaMapping/mapping.json";
+        const TString mapping = s3Mock.GetData().at(mappingPath);
 
         updatePgCompatibility(true);
         TestBackup(runtime, ++txId, "/MyRoot", R"(TableName: "Table")",
             {{NKikimrScheme::StatusPreconditionFailed, "PostgreSQL compatibility is disabled for column 'value'"}});
-        exportTable("RejectedBackup");
+        updatePgCompatibility(false);
+        {
+            auto backupObserver = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+                for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                    if (tx.GetOperationType() == ESchemeOpBackup) {
+                        updatePgCompatibility(true);
+                    }
+                }
+            });
+            exportTable("Replacement");
+        }
+        UNIT_ASSERT(runtime.GetAppData().FeatureFlags.GetDisablePgCompatibility());
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().at(mappingPath), mapping);
         const auto exportIssues = TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED)
             .GetResponse().GetEntry().GetIssues();
         UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(exportIssues),
@@ -2364,7 +2381,7 @@ value {
             S3Settings {
                 Endpoint: "localhost:%d"
                 Scheme: HTTP
-                ObjectKeyPattern: "Backup1"
+                ObjectKeyPattern: "Backup1/SavedTable"
             }
         )", GenerateTableDescription(desc).data(), port),
             {{NKikimrScheme::StatusPreconditionFailed, "PostgreSQL compatibility is disabled for column 'value'"}});
@@ -2374,8 +2391,9 @@ value {
                 ImportFromS3Settings {
                   endpoint: "localhost:%d"
                   scheme: HTTP
+                  source_prefix: "Backup1"
                   items {
-                    source_prefix: "Backup1"
+                    source_path: "Table"
                     destination_path: "%s"
                   }
                 }

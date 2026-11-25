@@ -103,6 +103,7 @@ struct TIncrementalRestoreState;
 struct TIndexBuildInfo;
 struct TSetColumnConstraintOperationInfo;
 struct TIndexBuildShardStatus;
+class TSideEffects;
 
 class TSchemeShard
     : public TActor<TSchemeShard>
@@ -831,7 +832,7 @@ public:
     void SetPartitioning(TPathId pathId, const std::vector<TShardIdx>& partitioning);
     void SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo);
     void SetPartitioning(TPathId pathId, TColumnTableInfo::TPtr tableInfo);
-    void SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning);
+    void SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning, TSideEffects* onComplete = nullptr);
     // MoveTable: same physical shards, new path — preserves Stats, enqueues compaction.
     void MovePartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning);
     // CopyTable: all-new shard IDs — calls OnShardRemoved for old shards, rebuilds Stats.

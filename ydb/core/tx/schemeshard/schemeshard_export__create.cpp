@@ -698,7 +698,7 @@ private:
     }
 
     template <typename TSettings>
-    bool UploadExportMetadata(TExportInfo& exportInfo, const TActorContext& ctx) { // returns true if we need to change state to UploadExportMetadata
+    bool UploadExportMetadata(TExportInfo& exportInfo, const TActorContext& ctx) {
         TSettings exportSettings;
         Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
 
@@ -709,6 +709,7 @@ private:
         exportInfo.ExportMetadataUploader = ctx.Register(
             CreateExportMetadataUploader(Self->SelfId(), exportInfo.Id, exportSettings, exportInfo.ExportMetadata, exportInfo.EnableChecksums));
         Self->RunningExportSchemeUploaders.emplace(exportInfo.ExportMetadataUploader);
+        Send(exportInfo.ExportMetadataUploader, new TEvents::TEvWakeup());
         return true;
     }
 
@@ -838,7 +839,10 @@ private:
         }
 
         if (exportInfo->Kind == TExportInfo::EKind::S3) {
-            UploadCompletion(*exportInfo, Max<ui32>(), ctx);
+            if (!exportInfo->ExportMetadataUploader
+                    && (!exportInfo->ExportMetadata.SchemaMappingSize() || !UploadExportMetadata(*exportInfo, ctx))) {
+                UploadCompletion(*exportInfo, Max<ui32>(), ctx);
+            }
         } else {
             CompleteTransfer(exportInfo, db);
         }
@@ -1124,7 +1128,7 @@ private:
         case EState::Transferring: {
             const bool allItemsDone = AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone);
             if (exportInfo->Kind == TExportInfo::EKind::S3 && allItemsDone) {
-                UploadCompletion(*exportInfo, Max<ui32>(), ctx);
+                MaybeFinishTransfer(exportInfo, db, ctx);
                 break;
             }
             TDeque<ui32> pendingTables;
@@ -1582,6 +1586,9 @@ private:
             return;
         }
 
+        if (exportInfo->ExportMetadataUploader != UploadMetadataResult->Sender) {
+            return;
+        }
         Self->RunningExportSchemeUploaders.erase(std::exchange(exportInfo->ExportMetadataUploader, {}));
 
         if (!exportInfo->IsInProgress()) {
@@ -1601,6 +1608,11 @@ private:
             exportInfo->Issue = result.Error;
 
             return PersistExportStateAndNotify(exportInfo, db);
+        }
+
+        if (exportInfo->State == EState::Transferring) {
+            UploadCompletion(*exportInfo, Max<ui32>(), ctx);
+            return;
         }
 
         Y_ABORT_UNLESS(exportInfo->State == EState::UploadExportMetadata);
@@ -1685,7 +1697,12 @@ private:
                 break;
             }
 
-            if (supportExportFiltering && UploadExportMetadata(*exportInfo, ctx)) {
+            if (supportExportFiltering && exportInfo->Kind == TExportInfo::EKind::S3 && exportInfo->ExportMetadata.SchemaMappingSize()) {
+                // Transfer uses the prepared paths and IVs. Publish the S3 manifest only after the items succeed.
+                Self->PersistExportMetadata(db, *exportInfo);
+            }
+
+            if (supportExportFiltering && exportInfo->Kind != TExportInfo::EKind::S3 && UploadExportMetadata(*exportInfo, ctx)) {
                 exportInfo->State = EState::UploadExportMetadata;
 
                 // Persist modified metadata and new settings

@@ -828,7 +828,7 @@ public:
             context.DbChanges.PersistShard(part.ShardIdx);
             newShardsIdx.push_back(part.ShardIdx);
         }
-        context.SS->SetPartitioning(newTable->PathId, tableInfo, std::move(newPartition));
+        context.SS->SetPartitioning(newTable->PathId, tableInfo, std::move(newPartition), &context.OnComplete);
         if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
             context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
         }

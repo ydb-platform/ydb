@@ -18,9 +18,9 @@ namespace {
 
 void DropTable(NQuery::TQueryClient& client, const TString& tableName, const TString& path, TLog* Log) {
     TString sql = std::format(R"(
-        PRAGMA RelativePathPrefix("{}");
+        {}
         DROP TABLE `{}`;
-    )", path.c_str(), tableName.c_str());
+    )", GetPathPrefixPragma(path).c_str(), tableName.c_str());
 
     LOG_T("Dropping table " << tableName << ":\n" << sql);
 

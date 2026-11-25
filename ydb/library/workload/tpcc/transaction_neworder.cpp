@@ -32,9 +32,9 @@ struct TSqlHelper {
             ss << Sprintf(R"(
                 --!syntax_v1
 
-                PRAGMA RelativePathPrefix("%s");
+                %s
 
-            )", path.c_str());
+            )", GetPathPrefixPragma(path).c_str());
 
             for (int j = 1; j <= i; ++j) {
                 ss << Sprintf("DECLARE $item%d AS Int32;\n", j);
@@ -58,9 +58,9 @@ struct TSqlHelper {
             ss << Sprintf(R"(
                 --!syntax_v1
 
-                PRAGMA RelativePathPrefix("%s");
+                %s
 
-            )", path.c_str());
+            )", GetPathPrefixPragma(path).c_str());
 
             for (int j = 1; j <= i; ++j) {
                 ss << Sprintf("DECLARE $w%d AS Int32;\n", j);
@@ -144,7 +144,7 @@ TAsyncExecuteQueryResult GetCustomer(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA RelativePathPrefix("{}");
+        {}
 
         DECLARE $c_w_id AS Int32;
         DECLARE $c_d_id AS Int32;
@@ -155,7 +155,7 @@ TAsyncExecuteQueryResult GetCustomer(
          WHERE C_W_ID = $c_w_id
            AND C_D_ID = $c_d_id
            AND C_ID = $c_id;
-    )", context.Path.c_str(), TABLE_CUSTOMER);
+    )", GetPathPrefixPragma(context.Path).c_str(), TABLE_CUSTOMER);
 
     auto params = TParamsBuilder()
         .AddParam("$c_w_id").Int32(warehouseID).Build()
@@ -180,14 +180,14 @@ TAsyncExecuteQueryResult GetWarehouseTax(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA RelativePathPrefix("{}");
+        {}
 
         DECLARE $w_id AS Int32;
 
         SELECT W_TAX
           FROM `{}`
          WHERE W_ID = $w_id;
-    )", context.Path.c_str(), TABLE_WAREHOUSE);
+    )", GetPathPrefixPragma(context.Path).c_str(), TABLE_WAREHOUSE);
 
     auto params = TParamsBuilder()
         .AddParam("$w_id").Int32(warehouseID).Build()
@@ -209,7 +209,7 @@ TAsyncExecuteQueryResult GetDistrict(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA RelativePathPrefix("{}");
+        {}
 
         DECLARE $d_w_id AS Int32;
         DECLARE $d_id AS Int32;
@@ -218,7 +218,7 @@ TAsyncExecuteQueryResult GetDistrict(
           FROM `{}`
          WHERE D_W_ID = $d_w_id
            AND D_ID = $d_id;
-    )", context.Path.c_str(), TABLE_DISTRICT);
+    )", GetPathPrefixPragma(context.Path).c_str(), TABLE_DISTRICT);
 
     auto params = TParamsBuilder()
         .AddParam("$d_w_id").Int32(warehouseID).Build()
@@ -247,7 +247,7 @@ TAsyncExecuteQueryResult UpdateDistrict(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA RelativePathPrefix("{}");
+        {}
 
         DECLARE $d_w_id AS Int32;
         DECLARE $d_id AS Int32;
@@ -255,7 +255,7 @@ TAsyncExecuteQueryResult UpdateDistrict(
 
         UPSERT INTO `{}` (D_W_ID, D_ID, D_NEXT_O_ID)
         VALUES ($d_w_id, $d_id, $d_next_o_id);
-    )", context.Path.c_str(), TABLE_DISTRICT);
+    )", GetPathPrefixPragma(context.Path).c_str(), TABLE_DISTRICT);
 
     auto params = TParamsBuilder()
         .AddParam("$d_w_id").Int32(warehouseID).Build()
@@ -284,7 +284,7 @@ TAsyncExecuteQueryResult InsertNewOrder(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA RelativePathPrefix("{}");
+        {}
 
         DECLARE $no_o_id AS Int32;
         DECLARE $no_d_id AS Int32;
@@ -292,7 +292,7 @@ TAsyncExecuteQueryResult InsertNewOrder(
 
         UPSERT INTO `{}` (NO_O_ID, NO_D_ID, NO_W_ID)
         VALUES ($no_o_id, $no_d_id, $no_w_id);
-    )", context.Path.c_str(), TABLE_NEW_ORDER);
+    )", GetPathPrefixPragma(context.Path).c_str(), TABLE_NEW_ORDER);
 
     auto params = TParamsBuilder()
         .AddParam("$no_o_id").Int32(orderID).Build()
@@ -324,7 +324,7 @@ TAsyncExecuteQueryResult InsertOpenOrder(
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA RelativePathPrefix("{}");
+        {}
 
         DECLARE $o_id AS Int32;
         DECLARE $o_d_id AS Int32;
@@ -336,7 +336,7 @@ TAsyncExecuteQueryResult InsertOpenOrder(
 
         UPSERT INTO `{}` (O_ID, O_D_ID, O_W_ID, O_C_ID, O_ENTRY_D, O_OL_CNT, O_ALL_LOCAL)
         VALUES ($o_id, $o_d_id, $o_w_id, $o_c_id, $o_entry_d, $o_ol_cnt, $o_all_local);
-    )", context.Path.c_str(), TABLE_OORDER);
+    )", GetPathPrefixPragma(context.Path).c_str(), TABLE_OORDER);
 
     auto params = TParamsBuilder()
         .AddParam("$o_id").Int32(orderID).Build()
@@ -429,7 +429,7 @@ TAsyncExecuteQueryResult UpdateStocks(
     const std::vector<StockUpdate>& stockUpdates) {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA RelativePathPrefix("{}");
+        {}
 
         DECLARE $values as List<Struct<p1:Int32,p2:Int32,p3:Int32,p4:Double,p5:Int32,p6:Int32>>;
         $mapper = ($row) -> (AsStruct(
@@ -438,7 +438,7 @@ TAsyncExecuteQueryResult UpdateStocks(
             $row.p6 as S_REMOTE_CNT));
 
         UPSERT INTO `{}` SELECT * FROM AS_TABLE(ListMap($values, $mapper));
-    )", context.Path.c_str(), TABLE_STOCK);
+    )", GetPathPrefixPragma(context.Path).c_str(), TABLE_STOCK);
 
     auto paramsBuilder = TParamsBuilder();
     auto& listBuilder = paramsBuilder.AddParam("$values").BeginList();
@@ -471,7 +471,7 @@ TAsyncExecuteQueryResult InsertOrderLines(
     const std::vector<OrderLine>& orderLines) {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
-        PRAGMA RelativePathPrefix("{}");
+        {}
 
         DECLARE $values as List<Struct<p1:Int32,p2:Int32,p3:Int32,p4:Int32,p5:Int32,p6:Double,p7:Int32,p8:Double,p9:Utf8>>;
         $mapper = ($row) -> (AsStruct(
@@ -480,7 +480,7 @@ TAsyncExecuteQueryResult InsertOrderLines(
             $row.p9 as OL_DIST_INFO));
 
         UPSERT INTO `{}` SELECT * FROM AS_TABLE(ListMap($values, $mapper));
-    )", context.Path.c_str(), TABLE_ORDER_LINE);
+    )", GetPathPrefixPragma(context.Path).c_str(), TABLE_ORDER_LINE);
 
     auto paramsBuilder = TParamsBuilder();
     auto& listBuilder = paramsBuilder.AddParam("$values").BeginList();

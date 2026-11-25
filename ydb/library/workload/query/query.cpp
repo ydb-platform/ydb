@@ -100,8 +100,9 @@ TQueryInfo TQueryGenerator::MakeQuery(const TString& queryText, const TString& q
     TQueryInfo result;
     TStringBuilder query;
     query << "-- Query " << queryName << Endl;
-    query << "PRAGMA " << (Params.DbPath == "." ? "RelativePathPrefix" : "TablePathPrefix")
-        << " = \"" << Params.GetFullTableName(nullptr) << "\";" << Endl;
+    const auto path = Params.GetFullTableName(nullptr);
+    query << "PRAGMA " << (Params.DbPath == "." && !path.StartsWith('/') ? "RelativePathPrefix" : "TablePathPrefix")
+        << " = \"" << path << "\";" << Endl;
     query << queryText;
     result.Query = query;
     result.QueryName = queryName;
@@ -142,8 +143,10 @@ std::string TQueryGenerator::GetDDLQueriesFromDir(const TFsPath& dir) const {
         if (!i.IsFile() || (i.GetExtension() != "sql" && i.GetExtension() != "yql")) {
             continue;
         }
-        result << "PRAGMA " << (Params.DbPath == "." ? "RelativePathPrefix" : "TablePathPrefix")
-            << " = \"" << Params.GetFullTableName(nullptr) << "\";" << std::endl;
+        const auto path = Params.GetFullTableName(nullptr);
+        if (Params.DbPath != "." || path.StartsWith('/')) {
+            result << "PRAGMA TablePathPrefix = \"" << path << "\";" << std::endl;
+        }
         TFileInput fInput(i.GetPath());
         auto query = fInput.ReadAll();
         SubstGlobal(query, "{db}", Params.GetFullTableName(nullptr));
@@ -174,6 +177,10 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TQueryGenerator::GetSupportedWor
 
 std::string TQueryGenerator::GetDDLQueries() const {
     std::stringstream result;
+    const auto path = Params.GetFullTableName(nullptr);
+    if (Params.DbPath == "." && !path.StartsWith('/')) {
+        result << "PRAGMA RelativePathPrefix = \"" << path << "\";" << std::endl;
+    }
     for (const auto& cq: Params.GetCustomQueries()) {
         result << cq.c_str() << ";" << std::endl;
     }

@@ -165,10 +165,10 @@ int GetWarehouseCount(TDriver& driver, const TString& path) {
     // just check the warehouse table and assume that the rest is consistent
 
     TString query = std::format(R"(
-        PRAGMA RelativePathPrefix("{}");
+        {}
 
         SELECT COUNT(*) FROM `{}`;
-    )", path.c_str(), TABLE_WAREHOUSE);
+    )", GetPathPrefixPragma(path).c_str(), TABLE_WAREHOUSE);
 
     NQuery::TQueryClient queryClient(driver);
     auto result = queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();

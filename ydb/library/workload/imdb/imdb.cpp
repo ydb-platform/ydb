@@ -60,13 +60,14 @@ TQueryInfoList TImdbWorkloadGenerator::GetWorkload(int type) {
         throw yexception() << "Canonical results are not available for the IMDb workload.";
     }
     const auto names = StringSplitter(NResource::Find("imdb/queries.list")).Split('\n').SkipEmpty().ToList<TString>();
+    const auto path = Params.GetFullTableName(nullptr);
     for (const auto& name: names) {
         auto& query = result.emplace_back();
         query.QueryName = name;
         // JOB uses comma-separated tables with join predicates in WHERE.
         query.Query = TStringBuilder() << "--!syntax_v1\n"
-            << "PRAGMA " << (Params.DbPath == "." ? "RelativePathPrefix" : "TablePathPrefix")
-            << " = \"" << EscapeC(Params.GetFullTableName(nullptr)) << "\";\n"
+            << "PRAGMA " << (Params.DbPath == "." && !path.StartsWith('/') ? "RelativePathPrefix" : "TablePathPrefix")
+            << " = \"" << EscapeC(path) << "\";\n"
             << "PRAGMA AnsiImplicitCrossJoin;\n"
             << NResource::Find("resfs/file/imdb/queries/" + name + ".sql");
     }

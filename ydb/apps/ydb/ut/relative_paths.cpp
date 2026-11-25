@@ -219,7 +219,6 @@ Y_UNIT_TEST_SUITE(RelativePathCompatibility) {
         for (const auto& testCase : TVector<TCase>{
             {"RelativePathPrefix", ".", GetYdbDatabase()},
             {"RelativePathPrefix", "RelativeSqlPrefixPaths", directory},
-            {"RelativePathPrefix", directory, directory},
             {"TablePathPrefix", directory, directory},
         }) {
             const TString query = "PRAGMA " + testCase.Pragma + "(\"" + testCase.Prefix
@@ -268,20 +267,57 @@ Y_UNIT_TEST_SUITE(RelativePathCompatibility) {
     }
 
     Y_UNIT_TEST_F(BenchmarkQueriesUseTheSelectedDatabasePrefix, TCliTestFixture) {
-        for (const TString& database : {GetDatabase(), TString("tenant")}) {
+        struct TCase {
+            TString Database;
+            TString Path;
+            TString Prefix;
+        };
+        for (const auto& testCase : TVector<TCase>{
+            {GetDatabase(), "bench/nested", "PRAGMA TablePathPrefix = \"" + GetDatabase() + "/bench/nested\";"},
+            {"tenant", "bench/nested", "PRAGMA RelativePathPrefix = \"./bench/nested\";"},
+            {"tenant", "/test_database/bench/nested", "PRAGMA TablePathPrefix = \"/test_database/bench/nested\";"},
+        }) {
             for (const TString workload : {"query", "imdb"}) {
-                TList<TString> args = {"-e", GetEndpoint(), "-d", database, "workload", workload,
-                    "--path", "bench/nested", "run", "--dry-run"};
+                TList<TString> args = {"-e", GetEndpoint(), "-d", testCase.Database, "workload", workload,
+                    "--path", testCase.Path, "run", "--dry-run"};
                 if (workload == "query") {
                     args.insert(args.end(), {"--query", "SELECT 1;"});
                 }
                 const auto output = RunCli(args);
-                const TString prefix = database.StartsWith('/')
-                    ? "PRAGMA TablePathPrefix = \"" + database + "/bench/nested\";"
-                    : TString("PRAGMA RelativePathPrefix = \"./bench/nested\";");
-                UNIT_ASSERT_STRING_CONTAINS(output, prefix);
+                UNIT_ASSERT_STRING_CONTAINS(output, testCase.Prefix);
             }
         }
+    }
+
+    Y_UNIT_TEST_F(QueryInitComposesOnePrefixBeforeAllStatements, TCliTestFixture) {
+        const TString columns = " (key Uint64, PRIMARY KEY(key));";
+        const auto first = EnvHomeFile("suite/init/first.sql", "CREATE TABLE `RelativeInitFirst`" + columns);
+        EnvHomeFile("suite/init/nested/second.sql", "CREATE TABLE `RelativeInitSecond`" + columns);
+        const auto output = RunCli({"-e", GetEndpoint(), "-d", "tenant", "workload", "query",
+            "--path", "RelativeQueryInitPaths", "init", "--suite-path", TFsPath(first).Parent().Parent().GetPath(),
+            "--query", "CREATE TABLE `RelativeInitCustom`" + columns, "--dry-run"});
+        const auto begin = output.find("PRAGMA ");
+        const auto end = output.rfind(';');
+        UNIT_ASSERT(begin != TString::npos && end != TString::npos && end > begin);
+        const auto query = output.substr(begin, end - begin + 1);
+        NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(GetYdbEndpoint()).SetDatabase(GetYdbDatabase()));
+        NYdb::NTable::TTableClient client(driver);
+        NYdb::NScheme::TSchemeClient scheme(driver);
+        const TString directory = GetYdbDatabase() + "/RelativeQueryInitPaths";
+        const auto made = scheme.MakeDirectory(directory).GetValueSync();
+        UNIT_ASSERT_C(made.IsSuccess(), made.GetIssues().ToString());
+        auto result = client.RetryOperationSync([&](NYdb::NTable::TSession session) {
+            return session.ExecuteSchemeQuery(query).GetValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), query << Endl << result.GetIssues().ToString());
+        for (const TString table : {"RelativeInitCustom", "RelativeInitFirst", "RelativeInitSecond"}) {
+            result = client.RetryOperationSync([&](NYdb::NTable::TSession session) {
+                return session.DropTable(directory + "/" + table).GetValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        const auto removed = scheme.RemoveDirectory(directory).GetValueSync();
+        UNIT_ASSERT_C(removed.IsSuccess(), removed.GetIssues().ToString());
     }
 
     Y_UNIT_TEST_F(VectorUsesOneTablePath, TCliTestFixture) {

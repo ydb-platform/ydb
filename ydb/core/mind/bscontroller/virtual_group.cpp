@@ -7,7 +7,6 @@
 #include <ydb/core/blob_depot/config.h>
 #include <ydb/core/blob_depot/s3_route.h>
 #include <ydb/core/blob_depot/events.h>
-#include <ydb/core/blob_depot/s3_put_timeout.h>
 #include <ydb/core/blob_depot/s3_router.h>
 #include <ydb/core/blob_depot/types.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -20,6 +19,10 @@
 namespace NKikimr::NBsController {
 
     namespace {
+        template<typename TCallback>
+        void ForEachS3NamespaceId(TStringBuf path, TCallback&& visit);
+        bool HasGeneratedS3Namespace(const NKikimrBlobDepot::TBlobDepotConfig& config);
+
         struct TS3Namespace {
             TString Bucket;
             TString Prefix;
@@ -55,6 +58,10 @@ namespace NKikimr::NBsController {
                 visit(TClaim{EClaim::GroupName, {}, *group.VirtualGroupName});
             }
             const auto ns = GetS3Namespace(config);
+            // Reserve generated IDs even for local-only groups that may attach S3 later.
+            if (!ns.Bucket.empty() || HasGeneratedS3Namespace(config)) {
+                ForEachS3NamespaceId(ns.Prefix, visit);
+            }
             if (!ns.Bucket.empty()) {
                 ForEachPhysicalS3Claim(ns, EClaim::PhysicalPrefix, visit);
                 const auto logical = GetS3Namespace(config.GetS3BackendSettings(), group.VirtualGroupName.GetOrElse(config.GetName()));
@@ -80,6 +87,7 @@ namespace NKikimr::NBsController {
                 config.SetS3NamespaceValidated(true);
                 if (s3.HasAsyncMode() && AppData()->FeatureFlags.GetEnableBlobDepotDataCooling()) {
                     config.SetEverAuthorizedDataCooling(true);
+                    config.SetS3CoolingAuthorized(true);
                 }
             }
         }
@@ -105,18 +113,104 @@ namespace NKikimr::NBsController {
         }
     }
 
-    void TBlobStorageController::TConfigState::ChangeBlobDepotClaim(const TClaim& key, TGroupId id, bool add) {
-        auto [it, inserted] = ChangedBlobDepotOwners.try_emplace(key);
-        if (inserted) {
-            if (auto base = Self.BlobDepotOwners.find(key); base != Self.BlobDepotOwners.end()) {
-                it->second = base->second;
+    namespace {
+        // An S3 access point and its bucket can identify the very same keys. Check generated
+        // suffixes independently of either the bucket name or a configurable path prefix.
+        template<typename TCallback>
+        void ForEachS3NamespaceId(TStringBuf path, TCallback&& visit) {
+            TGUID guid;
+            if (!NBlobDepot::ValidateS3BasePath(path)) {
+                const auto suffix = path.RAfter('/');
+                if (GetGuid(suffix, guid)) {
+                    visit(TClaim{EClaim::NamespaceId, {}, TString(suffix)});
+                }
+                return;
+            }
+            // A legacy server may normalize dot segments. Any GUID segment left as the
+            // final path component must remain reserved until the legacy owner is fenced.
+            std::set<TStringBuf> seen;
+            for (TStringBuf segment : StringSplitter(path).Split('/').SkipEmpty()) {
+                if (GetGuid(segment, guid) && seen.insert(segment).second) {
+                    visit(TClaim{EClaim::NamespaceId, {}, TString(segment)});
+                }
             }
         }
-        if (add) {
-            Y_ABORT_UNLESS(it->second.insert(id).second);
-        } else {
-            Y_ABORT_UNLESS(it->second.erase(id));
+
+        template<typename TCallback>
+        void ForEachS3PathClaim(const TClaim& claim, TCallback&& visit) {
+            const auto& [kind, bucket, prefix] = claim;
+            if (kind == EClaim::PhysicalPrefix) {
+                visit(TClaim{EClaim::LivePath, {}, prefix});
+            } else if (kind == EClaim::RetiredPrefix) {
+                visit(TClaim{EClaim::RetiredPath, {}, prefix});
+                ForEachS3NamespaceId(prefix, visit);
+            }
         }
+
+        bool HasGeneratedS3Namespace(const NKikimrBlobDepot::TBlobDepotConfig& config) {
+            const auto suffix = TStringBuf(config.GetName()).RAfter('/');
+            TGUID guid;
+            return suffix == config.GetGeneratedS3NamespaceId() && GetGuid(suffix, guid);
+        }
+
+        TString MakeRetiredS3Reservation(const NKikimrBlobDepot::TBlobDepotConfig& config) {
+            const auto ns = GetS3Namespace(config);
+            NKikimrBlobDepot::TBlobDepotConfig reservation;
+            // The canonical path retains the ID used by the claim index after the work stops.
+            reservation.SetName(ns.Prefix);
+            reservation.MutableS3BackendSettings()->MutableSettings()->SetBucket(ns.Bucket);
+            return reservation.SerializeAsString();
+        }
+
+    }
+
+    void TBlobStorageController::RebuildS3PathClaims() {
+        for (const auto& [claim, owners] : BlobDepotOwners) {
+            ForEachS3PathClaim(claim, [&](const TClaim& path) {
+                BlobDepotOwners[path].insert(owners.begin(), owners.end());
+            });
+        }
+    }
+
+    bool TBlobStorageController::HasOtherS3NamespaceOwner(TGroupId groupId,
+            const NKikimrBlobDepot::TBlobDepotConfig& config) const {
+        const auto ns = GetS3Namespace(config);
+        if (BlobDepotOwners.contains({EClaim::LivePath, {}, ns.Prefix})) {
+            return true;
+        }
+        auto hasOwner = [&](const TClaim& claim, auto isOwner) {
+            const auto it = BlobDepotOwners.find(claim);
+            return it != BlobDepotOwners.end() && std::ranges::any_of(it->second, [&](TGroupId other) {
+                return other != groupId && isOwner(other);
+            });
+        };
+        // A removed group keeps serving its last applied config until Hive actually ejects it.
+        auto awaitingHive = [&](TGroupId other) { return BlobDepotDeleteQueue.contains(other); };
+        // A completed malformed tombstone still fences new claims. Its stopped tablet
+        // cannot own a live object. The same distinction applies to a reused GUID suffix.
+        auto liveOrAwaitingHive = [&](TGroupId other) { return !RetiredS3Namespaces.contains(other) || awaitingHive(other); };
+        return hasOwner({EClaim::RetiredPath, {}, ns.Prefix}, awaitingHive) ||
+            hasOwner({EClaim::AmbiguousBucket, ns.Bucket, {}}, liveOrAwaitingHive) ||
+            (HasGeneratedS3Namespace(config) &&
+                hasOwner({EClaim::NamespaceId, {}, config.GetGeneratedS3NamespaceId()}, liveOrAwaitingHive));
+    }
+
+    void TBlobStorageController::TConfigState::ChangeBlobDepotClaim(const TClaim& key, TGroupId id, bool add) {
+        auto change = [&](const TClaim& claim) {
+            auto [it, inserted] = ChangedBlobDepotOwners.try_emplace(claim);
+            if (inserted) {
+                if (auto base = Self.BlobDepotOwners.find(claim); base != Self.BlobDepotOwners.end()) {
+                    it->second = base->second;
+                }
+            }
+            if (add) {
+                Y_ABORT_UNLESS(it->second.insert(id).second);
+            } else {
+                Y_ABORT_UNLESS(it->second.erase(id));
+            }
+        };
+        change(key);
+        ForEachS3PathClaim(key, change);
     }
 
     void TBlobStorageController::TConfigState::ChangeLiveBlobDepotClaims(const TGroupInfo& group,
@@ -163,6 +257,9 @@ namespace NKikimr::NBsController {
             NKikimrBlobDepot::TBlobDepotConfig retired;
             retired.SetName(config.GetName());
             retired.SetEverAuthorizedDataCooling(config.GetEverAuthorizedDataCooling());
+            if (HasGeneratedS3Namespace(config)) {
+                retired.SetGeneratedS3NamespaceId(config.GetGeneratedS3NamespaceId());
+            }
             retired.MutableS3BackendSettings()->CopyFrom(config.GetS3BackendSettings());
             auto [it, inserted] = NewRetiredS3Namespaces.try_emplace(groupId);
             Y_ABORT_UNLESS(inserted);
@@ -175,11 +272,25 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::CheckBlobDepotS3Prefix(const NKikimrBlobDepot::TS3BackendSettings& settings,
             TStringBuf groupName, TStringBuf storageName, std::optional<TGroupId> ownGroup) const {
-        if (settings.GetSettings().GetBucket().empty()) {
+        const auto requested = GetS3Namespace(settings, storageName);
+        if (!requested.Bucket.empty()) {
+            const auto& retired = FindBlobDepotOwners({EClaim::RetiredPath, {}, requested.Prefix});
+            if (!retired.empty()) {
+                throw TExError() << "S3 namespace is reserved for retired BlobDepot cleanup"
+                    << TErrorParams::GroupId(retired.begin()->GetRawId());
+            }
+        }
+        ForEachS3NamespaceId(requested.Prefix, [&](const TClaim& key) {
+            for (TGroupId id : FindBlobDepotOwners(key)) {
+                if (id != ownGroup) {
+                    throw TExError() << "S3 namespace identifier is already used by another BlobDepot"
+                        << TErrorParams::GroupId(id.GetRawId());
+                }
+            }
+        });
+        if (requested.Bucket.empty()) {
             return;
         }
-
-        const auto requested = GetS3Namespace(settings, storageName);
         const auto groupNamespace = GetS3Namespace(settings, groupName);
         if (const auto error = NBlobDepot::ValidateS3BasePath(requested.Prefix)) {
             throw TExError() << *error;
@@ -213,11 +324,29 @@ namespace NKikimr::NBsController {
         }
     }
 
+    bool TBlobStorageController::TConfigState::KeepsRetiredS3Namespace(TGroupId id,
+            const NKikimrBlobDepot::TS3BackendSettings& settings, TStringBuf storageName) const {
+        const auto ns = GetS3Namespace(settings, storageName);
+        if (NBlobDepot::ValidateS3BasePath(ns.Prefix) || FindBlobDepotOwners({EClaim::RetiredPath, {}, ns.Prefix}).empty() ||
+                !FindBlobDepotOwners({EClaim::PhysicalPrefix, ns.Bucket, ns.Prefix}).contains(id)) {
+            return false;
+        }
+        const auto& live = FindBlobDepotOwners({EClaim::LivePath, {}, ns.Prefix});
+        const auto& ambiguous = FindBlobDepotOwners({EClaim::AmbiguousBucket, ns.Bucket, {}});
+        return live.size() == 1 && live.contains(id) && std::ranges::none_of(ambiguous, [&](TGroupId other) {
+            return !Self.RetiredS3Namespaces.contains(other) && !NewRetiredS3Namespaces.contains(other);
+        });
+    }
+
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TAllocateVirtualGroup& cmd, TStatus& status) {
         if (!cmd.GetName()) {
             throw TExError() << "TAllocateVirtualGroup.Name must be set and be nonempty";
         } else if (cmd.GetHiveDesignatorCase() == NKikimrBlobStorage::TAllocateVirtualGroup::HIVEDESIGNATOR_NOT_SET) {
             throw TExError() << "TAllocateVirtualGroup.HiveId/Database is not specified";
+        }
+
+        if (const auto error = NBlobDepot::ValidateDataCooling(cmd.GetS3BackendSettings())) {
+            throw TExError() << *error;
         }
 
         // make sure the operation is idempotent
@@ -230,8 +359,8 @@ namespace NKikimr::NBsController {
 
         // Persist the suffix in Name so all tablet and agent versions use the same physical keys.
         // Attaching a pre-existing test tablet retains its original layout.
-        const TString storageName = cmd.GetBlobDepotId() ? cmd.GetName()
-            : TStringBuilder() << cmd.GetName() << '/' << CreateGuidAsString();
+        const TString namespaceId = cmd.GetBlobDepotId() ? TString() : CreateGuidAsString();
+        const TString storageName = namespaceId ? TStringBuilder() << cmd.GetName() << '/' << namespaceId : cmd.GetName();
         CheckS3ObjectKeyLength(cmd.GetS3BackendSettings(), storageName);
         CheckBlobDepotS3Prefix(cmd.GetS3BackendSettings(), cmd.GetName(), storageName);
 
@@ -319,6 +448,9 @@ namespace NKikimr::NBsController {
             RecordS3NamespaceValidation(config);
         }
         config.SetName(storageName);
+        if (namespaceId) {
+            config.SetGeneratedS3NamespaceId(namespaceId);
+        }
         ChangeLiveBlobDepotClaims(*group, config, true);
 
         const bool success = config.SerializeToString(&group->BlobDepotConfig.ConstructInPlace());
@@ -460,6 +592,7 @@ namespace NKikimr::NBsController {
         }
 
         // parse current config
+        bool validatedExclusiveClaim = false;
         NKikimrBlobDepot::TBlobDepotConfig config;
         bool success = config.ParseFromString(*group->BlobDepotConfig);
         if (!success) {
@@ -503,13 +636,25 @@ namespace NKikimr::NBsController {
         // Credential rotation leaves its existing authorization intact.
         const bool validateStoredNamespace = hasNextBucket && !cmd.HasS3BackendSettings();
         const bool authorizeCooling = AppData()->FeatureFlags.GetEnableBlobDepotDataCooling() && next.HasAsyncMode() &&
-            (!previous.HasAsyncMode() || (!config.GetEverAuthorizedDataCooling() && (!cmd.HasS3BackendSettings() || coolingChanged)));
+            (!previous.HasAsyncMode() || (!config.GetS3CoolingAuthorized() && (!cmd.HasS3BackendSettings() || coolingChanged)));
         // Removing a redundant slash can enable legacy LIST even though point requests address the same keys.
         const bool patternChanged = previous.GetSettings().GetObjectKeyPattern() != next.GetSettings().GetObjectKeyPattern();
         const bool claimsChanged = namespaceChanged || storageNameChanged;
         const bool checkOwnership = patternChanged || claimsChanged || routeChanged || validateStoredNamespace || authorizeCooling;
+        if (coolingChanged || checkOwnership) {
+            if (const auto error = NBlobDepot::ValidateDataCooling(next)) {
+                throw TExError() << *error;
+            }
+        }
         if (checkOwnership) {
-            CheckBlobDepotS3Prefix(next, cmd.GetName(), storageName, groupId);
+            // A retained owner can rotate access to the same objects. This command neither acquires
+            // a new path nor establishes the exclusive ownership required for GC and cooling.
+            const bool keepRetiredRoute = routeChanged && cmd.GetConfirmS3RouteChange() &&
+                !claimsChanged && !patternChanged && !coolingChanged && KeepsRetiredS3Namespace(groupId, next, storageName);
+            if (!keepRetiredRoute) {
+                CheckBlobDepotS3Prefix(next, cmd.GetName(), storageName, groupId);
+                validatedExclusiveClaim = true;
+            }
             if (hasExistingBucket && hasNextBucket && namespaceChanged && !cmd.GetConfirmS3NamespaceMigration()) {
                 throw TExError() << "Changing the S3 bucket or key prefix requires migrating existing BlobDepot objects"
                     << " and setting ConfirmS3NamespaceMigration";
@@ -528,8 +673,12 @@ namespace NKikimr::NBsController {
         if (claimsChanged) {
             ChangeLiveBlobDepotClaims(*group, config, false);
             config.ClearS3NamespaceValidated();
+            config.ClearS3CoolingAuthorized();
         }
         if (cmd.HasMigratedS3Name()) {
+            if (storageNameChanged) {
+                config.ClearGeneratedS3NamespaceId();
+            }
             config.SetName(storageName);
         }
         if (cmd.HasS3BackendSettings() && !hasNextBucket) {
@@ -537,7 +686,7 @@ namespace NKikimr::NBsController {
         } else if (cmd.HasS3BackendSettings()) {
             config.MutableS3BackendSettings()->CopyFrom(next);
         }
-        if (checkOwnership) {
+        if (validatedExclusiveClaim) {
             RecordS3NamespaceValidation(config);
         }
         if (claimsChanged) {
@@ -1313,59 +1462,158 @@ namespace NKikimr::NBsController {
         }
     };
 
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TManageRetiredS3Namespace& cmd,
+            TStatus&) {
+        using TCmd = NKikimrBlobStorage::TManageRetiredS3Namespace;
+        using TTable = Schema::RetiredS3Namespaces;
+        const TGroupId groupId = TGroupId::FromProto(&cmd, &TCmd::GetGroupId);
+        const auto it = Self.RetiredS3Namespaces.find(groupId);
+        if (it == Self.RetiredS3Namespaces.end()) {
+            throw TExError() << "No retired S3 namespace for group " << groupId;
+        }
+        auto& info = UpdatedRetiredS3Namespaces.try_emplace(groupId, it->second).first->second;
+        if (info.Phase == TTable::Reserved) {
+            if (cmd.GetConfirmCleanupComplete()) {
+                return;
+            }
+            throw TExError() << "Cleanup already finished for group " << groupId;
+        }
+        auto config = info.GetConfig();
+        switch (cmd.GetActionCase()) {
+        case TCmd::kCredentials: {
+            const auto& keys = cmd.GetCredentials();
+            if (keys.GetAccessKey().empty() || keys.GetSecretKey().empty()) {
+                throw TExError() << "Both S3 cleanup credentials are required";
+            }
+            auto* settings = config.MutableS3BackendSettings()->MutableSettings();
+            settings->SetAccessKey(keys.GetAccessKey());
+            settings->SetSecretKey(keys.GetSecretKey());
+            settings->ClearSecretableAccessKey();
+            settings->ClearSecretableSecretKey();
+            info.S3Config = config.SerializeAsString();
+            break;
+        }
+        case TCmd::kConfirmExclusiveOwnership:
+            if (!cmd.GetConfirmExclusiveOwnership() || NBlobDepot::ValidateS3BasePath(GetS3Namespace(config).Prefix)) {
+                throw TExError() << "Automatic cleanup requires a valid physical prefix and confirmed exclusive ownership";
+            }
+            if (Self.HasOtherS3NamespaceOwner(groupId, config)) {
+                throw TExError() << "Another BlobDepot still owns this S3 namespace or awaits Hive deletion";
+            }
+            info.LegacyCleanupAuthorized = true;
+            break;
+        case TCmd::kConfirmCleanupComplete:
+            if (!cmd.GetConfirmCleanupComplete() || BlobDepotDeleteQueue.Get().contains(groupId)) {
+                throw TExError() << "External cleanup must be confirmed after Hive has deleted the tablet";
+            }
+            info.S3Config = MakeRetiredS3Reservation(config);
+            info.Phase = TTable::Reserved;
+            info.NextS3Sweep.Clear();
+            break;
+        case TCmd::ACTION_NOT_SET:
+            throw TExError() << "Choose a retired S3 cleanup action";
+        }
+        // Retry a failed request with the new credentials immediately. A pending final grace
+        // period was set by a successful sweep and must survive every operator update.
+        if (std::exchange(info.ConsecutiveFailures, 0u)) {
+            info.NextS3Sweep.Clear();
+        }
+    }
+
     class TBlobStorageController::TRetiredS3Cleanup : public TActorBootstrapped<TRetiredS3Cleanup> {
         using TTable = Schema::RetiredS3Namespaces;
         TBlobStorageController* const Self;
         const TActorId ControllerId;
         const TGroupId GroupId;
         TActorId SweepActor;
-        bool OwnershipChecked = false;
+        bool Updating = false;
+        bool StartCommitted = false;
+        bool HasSlot = false;
+        std::optional<std::list<TActorId>::iterator> QueueEntry;
+        static constexpr ui32 MaxConcurrentSweeps = 4;
 
         class TTxUpdateSweep : public TTransactionBase<TBlobStorageController> {
             const TActorId SchedulerId;
             const TGroupId GroupId;
             const TTable::ESweepPhase Phase;
-            const TMaybe<TInstant> NextSweep;
+            const TInstant NextSweep;
+            const ui32 Failures;
 
         public:
-            TTxUpdateSweep(TRetiredS3Cleanup* scheduler, TTable::ESweepPhase phase, TMaybe<TInstant> nextSweep = {})
+            TTxUpdateSweep(TRetiredS3Cleanup* scheduler, TTable::ESweepPhase phase, TInstant nextSweep, ui32 failures)
                 : TTransactionBase(scheduler->Self)
                 , SchedulerId(scheduler->SelfId())
                 , GroupId(scheduler->GroupId)
                 , Phase(phase)
                 , NextSweep(nextSweep)
+                , Failures(failures)
             {}
 
             TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_SCHEDULE_RETIRED_S3_SWEEP; }
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
                 auto& info = Self->RetiredS3Namespaces.at(GroupId);
+                if (info.SchedulerId != SchedulerId) {
+                    return true; // an operator replaced the scheduler and its credentials
+                }
                 NIceDb::TNiceDb db(txc.DB);
                 auto row = db.Table<TTable>().Key(GroupId.GetRawId());
-                row.Update<TTable::SweepPhase>(Phase);
-                if (NextSweep) {
-                    row.Update<TTable::NextS3Sweep>(*NextSweep);
-                } else {
-                    Y_ABORT_UNLESS(Phase == TTable::Reserved);
-                    // A new owner must still be unable to claim this physical path. Only its
-                    // bucket and canonical prefix are needed to rebuild the reservation.
-                    const auto ns = GetS3Namespace(info.GetConfig());
-                    NKikimrBlobDepot::TBlobDepotConfig reservation;
-                    reservation.SetName(ns.Prefix);
-                    reservation.MutableS3BackendSettings()->MutableSettings()->SetBucket(ns.Bucket);
-                    info.S3Config = reservation.SerializeAsString();
+                row.Update<TTable::SweepPhase>(info.Phase = Phase);
+                row.Update<TTable::ConsecutiveFailures>(info.ConsecutiveFailures = Failures);
+                if (Phase == TTable::Reserved) {
+                    info.S3Config = MakeRetiredS3Reservation(info.GetConfig());
                     row.Update<TTable::S3Config>(info.S3Config);
                     row.UpdateToNull<TTable::NextS3Sweep>();
+                    info.NextS3Sweep.Clear();
+                } else {
+                    row.Update<TTable::NextS3Sweep>(NextSweep);
+                    info.NextS3Sweep = NextSweep;
                 }
-                info.Phase = Phase;
-                info.NextS3Sweep = NextSweep;
                 return true;
             }
 
             void Complete(const TActorContext& ctx) override {
-                ctx.Send(SchedulerId, new TEvents::TEvWakeup);
+                ctx.Send(SchedulerId, new TEvents::TEvBootstrap);
             }
         };
+
+        void Persist(TTable::ESweepPhase phase, TInstant next = {}, ui32 failures = 0) {
+            Updating = true;
+            Self->Execute(std::make_unique<TTxUpdateSweep>(this, phase, next, failures));
+        }
+
+        void WakeNext() {
+            if (Self->ActiveRetiredS3Sweeps < MaxConcurrentSweeps && !Self->RetiredS3SweepQueue.empty()) {
+                Send(Self->RetiredS3SweepQueue.front(), new TEvents::TEvWakeup);
+            }
+        }
+
+        bool AcquireSlot() {
+            auto& queue = Self->RetiredS3SweepQueue;
+            if (!QueueEntry) {
+                QueueEntry = queue.insert(queue.end(), SelfId());
+            }
+            if (*QueueEntry != queue.begin() || Self->ActiveRetiredS3Sweeps >= MaxConcurrentSweeps) {
+                return false;
+            }
+            queue.erase(*QueueEntry);
+            QueueEntry.reset();
+            ++Self->ActiveRetiredS3Sweeps;
+            HasSlot = true;
+            WakeNext();
+            return true;
+        }
+
+        void ReleaseSlot() {
+            if (QueueEntry) {
+                Self->RetiredS3SweepQueue.erase(*QueueEntry);
+                QueueEntry.reset();
+            }
+            if (std::exchange(HasSlot, false)) {
+                --Self->ActiveRetiredS3Sweeps;
+            }
+            WakeNext();
+        }
 
     public:
         TRetiredS3Cleanup(TBlobStorageController* self, TGroupId groupId)
@@ -1374,22 +1622,25 @@ namespace NKikimr::NBsController {
             , GroupId(groupId)
         {}
 
+        bool IsCurrent() const {
+            return TlsActivationContext->Mailbox.FindActor(ControllerId.LocalId()) &&
+                Self->RetiredS3Namespaces.at(GroupId).SchedulerId == SelfId();
+        }
+
         void Bootstrap() {
+            if (!IsCurrent()) {
+                return PassAway();
+            }
             Become(&TThis::StateWork);
             Run();
         }
 
-        bool Expired() const {
-            return !TlsActivationContext->Mailbox.FindActor(ControllerId.LocalId());
-        }
-
         void Run() {
-            if (Expired()) {
-                return PassAway();
+            if (Updating || SweepActor) {
+                return;
             }
             auto& info = Self->RetiredS3Namespaces.at(GroupId);
             if (info.Phase == TTable::Reserved) {
-                info.SchedulerId = {};
                 return PassAway();
             }
             const auto now = TActivationContext::Now();
@@ -1397,31 +1648,42 @@ namespace NKikimr::NBsController {
                 return Schedule(*info.NextS3Sweep - now, new TEvents::TEvWakeup);
             }
             const auto config = info.GetConfig();
-            if (!OwnershipChecked) {
-                const auto phase = info.Phase;
-                const auto retired = GetS3Namespace(config);
-                if (NBlobDepot::ValidateS3BasePath(retired.Prefix)) {
-                    // No safe listing can be made from this path. Preserve its reservation
-                    // and discard the credentials without issuing physical cleanup requests.
-                    Self->Execute(std::make_unique<TTxUpdateSweep>(this, TTable::Reserved));
-                    return;
-                }
-                if (phase == TTable::AwaitingOwnership && !config.GetEverAuthorizedDataCooling() &&
-                        !AppData()->FeatureFlags.GetEnableBlobDepotDataCooling()) {
-                    return Schedule(TDuration::Hours(1), new TEvents::TEvWakeup);
-                }
-                if (Self->BlobDepotOwners.contains({EClaim::PhysicalPrefix, retired.Bucket, retired.Prefix}) ||
-                        Self->BlobDepotOwners.contains({EClaim::AmbiguousBucket, retired.Bucket, {}})) {
-                    return Schedule(TDuration::Days(1), new TEvents::TEvWakeup);
-                }
-                // The reservation fences new claims for this controller incarnation. Establish
-                // commit ordering with any just-removed legacy owner before starting DELETE.
-                OwnershipChecked = true;
-                Self->Execute(std::make_unique<TTxUpdateSweep>(this,
-                    phase == TTable::AwaitingOwnership ? TTable::FirstSweep : phase, now));
-            } else if (auto* actor = NBlobDepot::CreateRetiredS3Sweep(SelfId(), info.BlobDepotId, config)) {
+            if (const auto error = NBlobDepot::ValidateS3BasePath(GetS3Namespace(config).Prefix)) {
+                YDB_LOG_WARN("Cannot list malformed retired S3 namespace",
+                    {"marker", "BSCVG20"}, {"groupId", GroupId.GetRawId()}, {"error", error});
+                return Persist(TTable::Reserved);
+            }
+            if (!HasGeneratedS3Namespace(config) && !info.LegacyCleanupAuthorized) {
+                // An older configuration does not establish ownership across bucket aliases or
+                // outstanding migrations. The management command restarts us after confirmation.
+                YDB_LOG_INFO("Retired S3 namespace awaits operator confirmation",
+                    {"marker", "BSCVG21"}, {"groupId", GroupId.GetRawId()});
+                return PassAway();
+            }
+            if (info.Phase == TTable::AwaitingOwnership && !config.GetEverAuthorizedDataCooling() &&
+                    !AppData()->FeatureFlags.GetEnableBlobDepotDataCooling()) {
+                return Schedule(TDuration::Hours(1), new TEvents::TEvWakeup);
+            }
+            if (Self->HasOtherS3NamespaceOwner(GroupId, config)) {
+                ReleaseSlot();
+                StartCommitted = false;
+                return Persist(info.Phase, now + TDuration::Days(1));
+            }
+            if (!StartCommitted) {
+                // Order a physical sweep after any just-committed changes to ownership.
+                StartCommitted = true;
+                return Persist(info.Phase == TTable::AwaitingOwnership ? TTable::FirstSweep : info.Phase, now,
+                    info.ConsecutiveFailures);
+            }
+            if (!AcquireSlot()) {
+                return;
+            }
+            StartCommitted = false;
+            if (auto* actor = NBlobDepot::CreateRetiredS3Sweep(SelfId(), info.BlobDepotId, config)) {
                 SweepActor = Register(actor);
             } else {
+                // S3 support is unavailable on this build.
+                ReleaseSlot();
                 Schedule(TDuration::Days(1), new TEvents::TEvWakeup);
             }
         }
@@ -1429,24 +1691,22 @@ namespace NKikimr::NBsController {
         void Handle(TEvBlobDepot::TEvRetiredS3SweepComplete::TPtr ev) {
             Y_ABORT_UNLESS(SweepActor == ev->Sender);
             SweepActor = {};
-            if (Expired()) {
-                return PassAway();
-            }
+            ReleaseSlot();
             const auto& info = Self->RetiredS3Namespaces.at(GroupId);
-            const TInstant now = TActivationContext::Now();
+            const auto now = TActivationContext::Now();
             if (!ev->Get()->Success) {
-                Self->Execute(std::make_unique<TTxUpdateSweep>(this, info.Phase, now + TDuration::Minutes(1)));
-            } else if (info.Phase == TTable::FirstSweep) {
-                Self->Execute(std::make_unique<TTxUpdateSweep>(this, TTable::Periodic, now + TDuration::Minutes(2)));
-            } else if (info.Phase == TTable::Periodic) {
-                // Hive deletion precedes the first sweep. Delay the start of the final LIST
-                // so PUTs queued or in flight at ejection have had time to reach storage.
-                // An earlier route may have allowed a longer transfer than the final configuration.
-                const auto grace = NBlobDepot::MaxS3PutTimeout + TDuration::Minutes(2);
-                Self->Execute(std::make_unique<TTxUpdateSweep>(this, TTable::FinalSweep, now + grace));
+                Self->TabletCounters->Cumulative()[NBlobStorageController::COUNTER_RETIRED_S3_SWEEP_FAILURES].Increment(1);
+                const ui32 failures = Min(info.ConsecutiveFailures, Max<ui32>() - 1) + 1;
+                const auto delay = Min(TDuration::Days(1), TDuration::Minutes(1u << Min(failures - 1, 11u)));
+                return Persist(info.Phase, now + delay, failures);
+            }
+            if (info.Phase == TTable::FirstSweep) {
+                Persist(TTable::SecondSweep, now + TDuration::Minutes(2));
+            } else if (info.Phase == TTable::SecondSweep) {
+                Persist(TTable::FinalSweep, now + NBlobDepot::MaxS3PutTimeout + TDuration::Minutes(2));
             } else {
                 Y_ABORT_UNLESS(info.Phase == TTable::FinalSweep);
-                Self->Execute(std::make_unique<TTxUpdateSweep>(this, TTable::Reserved));
+                Persist(TTable::Reserved);
             }
         }
 
@@ -1454,14 +1714,30 @@ namespace NKikimr::NBsController {
             if (SweepActor) {
                 Send(SweepActor, new TEvents::TEvPoison);
             }
+            if (TlsActivationContext->Mailbox.FindActor(ControllerId.LocalId())) {
+                ReleaseSlot();
+                auto& info = Self->RetiredS3Namespaces.at(GroupId);
+                if (info.SchedulerId == SelfId()) {
+                    info.SchedulerId = {};
+                }
+            }
             TActorBootstrapped::PassAway();
         }
 
-        STRICT_STFUNC(StateWork,
-            cFunc(TEvents::TSystem::Wakeup, Run)
-            hFunc(TEvBlobDepot::TEvRetiredS3SweepComplete, Handle)
-            cFunc(TEvents::TSystem::Poison, PassAway)
-        )
+        STATEFN(StateWork) {
+            if (!IsCurrent()) {
+                return PassAway();
+            }
+            switch (ev->GetTypeRewrite()) {
+                cFunc(TEvents::TSystem::Wakeup, Run);
+                case TEvents::TSystem::Bootstrap:
+                    Updating = false;
+                    Run();
+                    break;
+                hFunc(TEvBlobDepot::TEvRetiredS3SweepComplete, Handle);
+                cFunc(TEvents::TSystem::Poison, PassAway);
+            }
+        }
     };
 
     void TBlobStorageController::CommitVirtualGroupUpdates(TConfigState& state) {
@@ -1510,8 +1786,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::StartRetiredS3Cleanup(TGroupId groupId, TRetiredS3Namespace& info) {
-        Y_ABORT_UNLESS(!info.SchedulerId);
-        if (info.Phase != Schema::RetiredS3Namespaces::Reserved) {
+        if (!info.SchedulerId && info.Phase != Schema::RetiredS3Namespaces::Reserved) {
             info.SchedulerId = RegisterWithSameMailbox(new TRetiredS3Cleanup(this, groupId));
         }
     }

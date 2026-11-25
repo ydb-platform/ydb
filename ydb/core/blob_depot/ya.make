@@ -27,9 +27,8 @@ LIBRARY()
         blob_depot.cpp
         blob_depot.h
         config.cpp
-        s3_put_timeout.h
-        defs.h
         config.h
+        defs.h
         types.h
         wakeup_timer.h
         events.h
@@ -41,6 +40,8 @@ LIBRARY()
         blob_depot_tablet.h
         blocks.cpp
         blocks.h
+        cooling_index.cpp
+        cooling_index.h
         coro_tx.cpp
         coro_tx.h
         data.cpp

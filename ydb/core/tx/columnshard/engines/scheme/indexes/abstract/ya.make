@@ -4,7 +4,6 @@ SRCS(
     constructor.cpp
     collection.cpp
     header.cpp
-    fetcher.cpp
     abstract.cpp
     meta.cpp
     checker.cpp
@@ -14,10 +13,10 @@ SRCS(
 PEERDIR(
     ydb/core/formats/arrow
     ydb/core/formats/arrow/accessor/sub_columns
+    ydb/core/formats/arrow/program/index_check
     ydb/core/tx/columnshard/engines/protos  # stopgap: proper edge (-> skip_index/portions) cycles
     ydb/library/formats/arrow/protos
     yql/essentials/core/arrow_kernels/request
-    ydb/core/formats/arrow/program
 )
 
 GENERATE_ENUM_SERIALIZATION(common.h)

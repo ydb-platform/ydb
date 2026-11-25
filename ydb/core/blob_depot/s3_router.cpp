@@ -1,5 +1,5 @@
 #include "s3_router.h"
-#include "s3_put_timeout.h"
+#include "config.h"
 #include "s3_request_timer.h"
 #include "s3_router_events.h"
 #include "types.h"
@@ -13,6 +13,7 @@
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/events/abstract.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/unavailable_storage.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -343,7 +344,8 @@ namespace NKikimr::NBlobDepot {
             auto root = GetServiceCounters(AppData()->Counters, "tablets")
                 ->GetSubgroup("subsystem", "blob_depot")
                 ->GetSubgroup("module_id", "s3_router");
-            auto group = root->GetSubgroup("tablet", ToString(TabletId));
+            auto group = !TabletId ? root->GetSubgroup("component", "RetiredNamespaces")
+                : root->GetSubgroup("tablet", ToString(TabletId));
 
             Mon.Balancer = MakeRouteMonCounters(group->GetSubgroup("route", "Balancer"));
             Mon.NonBalancer = MakeRouteMonCounters(group->GetSubgroup("route", "NonBalancer"));
@@ -359,7 +361,9 @@ namespace NKikimr::NBlobDepot {
             Mon.PendingRejects = group->GetSubgroup("component", "Pending")->GetCounter("Rejects", true);
             Mon.PendingLatency = group->GetSubgroup("component", "Pending")->GetHistogram("LatencyMs", MakeLatencyHistogram());
             Mon.RetiringWrappersAborted = group->GetCounter("RetiringWrappersAborted", true);
-            Mon.IsUsingProxy = group->GetCounter("IsUsingProxy", false);
+            if (TabletId) {
+                Mon.IsUsingProxy = group->GetCounter("IsUsingProxy", false);
+            }
 
             auto hostBuckets = root->GetSubgroup("component", "BalancerResolveByHostBucket");
             for (size_t i = 0; i < Mon.BalancerHostBuckets.size(); ++i) {
@@ -463,6 +467,11 @@ namespace NKikimr::NBlobDepot {
                 TIntrusivePtr<TRouteCounters> routeCounters) {
             RetireInnerWrapper();
 
+            if (!TabletId) {
+                if (auto* config = dynamic_cast<NWrappers::NExternalStorage::TS3ExternalStorageConfig*>(externalStorageConfig.get())) {
+                    config->UseSharedCleanupExecutor();
+                }
+            }
             auto inFlight = MakeIntrusive<TWrapperInFlight>();
             auto storageOperator = externalStorageConfig->ConstructStorageOperator();
             storageOperator->InitReplyAdapter(std::make_shared<TRouterReplyAdapter>(
@@ -926,6 +935,12 @@ namespace NKikimr::NBlobDepot {
             }
             switch (type) {
                 hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+                hFunc(TEvents::TEvGone, [&](TEvents::TEvGone::TPtr ev) {
+                    std::erase_if(PendingRequests, [&](const TPendingRequest& pending) {
+                        return pending.Ev->Sender == ev->Sender &&
+                            pending.Ev->GetTypeRewrite() == NWrappers::TEvExternalStorage::TEvListObjectsRequest::EventType;
+                    });
+                });
                 cFunc(TEvPrivate::EvBalancerTick, HandleBalancerTick);
                 cFunc(TEvPrivate::EvRefreshNow, HandleRefreshNow);
                 cFunc(TEvPrivate::EvSweepRetiring, HandleSweepRetiring);

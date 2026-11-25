@@ -466,20 +466,22 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     library/cpp/monlib/service/pages
+    library/cpp/streams/zstd
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
-    library/cpp/streams/zstd
     ydb/core/actorlib_impl
     ydb/core/backup/common
     ydb/core/base
-    ydb/library/json_index
     ydb/core/change_exchange
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
+    ydb/core/io_formats/cell_maker
+    ydb/core/io_formats/json
     ydb/core/io_formats/ydb_dump
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
+    ydb/core/kqp/runtime/scheduler
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
@@ -487,10 +489,10 @@ PEERDIR(
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/cdc_aggregator/public
-    ydb/core/tx/datashard/snapshot_retention
-    ydb/core/tx/long_tx_service/public
-    ydb/core/tx/locks
     ydb/core/tx/datashard/hnsw_index
+    ydb/core/tx/datashard/snapshot_retention
+    ydb/core/tx/locks
+    ydb/core/tx/long_tx_service/public
     ydb/core/tx/sequenceproxy/public
     ydb/core/util
     ydb/core/wrappers
@@ -501,18 +503,17 @@ PEERDIR(
     ydb/library/actors/http
     ydb/library/backup/proto
     ydb/library/chunks_limiter
+    ydb/library/json_index
     ydb/library/protobuf_printer
     ydb/library/yql/dq/actors/compute
-    yql/essentials/types/binary_json
-    yql/essentials/types/dynumber
+    ydb/public/api/protos
+    ydb/services/lib/sharding
     yql/essentials/core/minsketch
     yql/essentials/parser/pg_wrapper/interface
-    ydb/public/api/protos
     yql/essentials/parser/pg_wrapper/interface
-    ydb/services/lib/sharding
+    yql/essentials/types/binary_json
+    yql/essentials/types/dynumber
     yql/essentials/types/uuid
-    ydb/core/io_formats/cell_maker
-    ydb/core/io_formats/json
 )
 
 IF (OS_WINDOWS)

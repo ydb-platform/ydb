@@ -1,8 +1,10 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
-#include "../s3_put_timeout.h"
+#include "../config.h"
 #include "../s3_router.h"
 #include "../s3_router_events.h"
+#include "../events.h"
+#include "../s3_request_timer.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -12,6 +14,7 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/wrappers/abstract.h>
+#include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -109,6 +112,18 @@ public:
         ++Replies;
     }
 };
+
+void SetStallingEndpoint(NKikimrSchemeOp::TS3Settings& settings, ui16 port) {
+    settings.SetEndpoint(TStringBuilder() << "127.0.0.1:" << port);
+    settings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+    settings.SetBucket("test-bucket");
+    settings.SetAccessKey("access-key");
+    settings.SetSecretKey("secret-key");
+    settings.SetRegion("ru-central1");
+    settings.SetUseVirtualAddressing(false);
+    settings.SetHttpRequestTimeoutMs(0);
+    settings.SetRequestTimeoutMs(0);
+}
 
 class TStallingS3Server {
     TInetStreamSocket Listener;
@@ -322,15 +337,7 @@ void WaitReal(TTestActorRuntime& runtime, TCondition condition, TDuration timeou
 TActorId MakeStallingRouter(TTestActorRuntime& runtime, TStallingS3Server& server, ui16 balancerPort = 0) {
     NKikimrBlobDepot::TS3BackendSettings settings;
     auto* s3 = settings.MutableSettings();
-    s3->SetEndpoint(TStringBuilder() << "127.0.0.1:" << server.GetPort());
-    s3->SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
-    s3->SetBucket("test-bucket");
-    s3->SetAccessKey("access-key");
-    s3->SetSecretKey("secret-key");
-    s3->SetRegion("ru-central1");
-    s3->SetUseVirtualAddressing(false);
-    s3->SetHttpRequestTimeoutMs(0);
-    s3->SetRequestTimeoutMs(0);
+    SetStallingEndpoint(*s3, server.GetPort());
     s3->SetExecutorThreadsCount(1);
     if (balancerPort) {
         s3->SetEndpoint("s3.example.com");
@@ -448,6 +455,87 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
             latencySamples += snapshot->Value(i);
         }
         UNIT_ASSERT(latencySamples > 0);
+    }
+
+    Y_UNIT_TEST(RetiredListCancelsIdleSdkRequestAndUsesAggregateCounters) {
+        TStallingS3Server server(1, TDuration::Seconds(30));
+        TTestActorRuntime runtime;
+        runtime.SetUseRealInterconnect();
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        NKikimrBlobDepot::TBlobDepotConfig config;
+        config.SetName("retired-list");
+        auto* settings = config.MutableS3BackendSettings()->MutableSettings();
+        SetStallingEndpoint(*settings, server.GetPort());
+        settings->SetExecutorThreadsCount(1);
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto sweep = runtime.Register(CreateRetiredS3Sweep(edge, 12345, config));
+        runtime.EnableScheduleForActor(sweep);
+        WaitReal(runtime, [&] { return server.GetRequestsReceived() == 1; });
+
+        auto module = GetServiceCounters(runtime.GetAppData(0).Counters, "tablets")->FindSubgroup("subsystem", "blob_depot")
+            ->FindSubgroup("module_id", "s3_router");
+        UNIT_ASSERT(!module->FindSubgroup("tablet", "12345"));
+        auto retired = module->FindSubgroup("component", "RetiredNamespaces");
+        UNIT_ASSERT(retired);
+        auto errors = retired->FindSubgroup("route", "Balancer")->FindCounter("Errors");
+        UNIT_ASSERT(errors);
+
+        const auto started = TInstant::Now();
+        runtime.SimulateSleep(TS3RequestTimer::Timeout);
+        const auto result = runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvRetiredS3SweepComplete>(edge, TDuration::Seconds(1));
+        UNIT_ASSERT(result && !result->Get()->Success);
+        WaitReal(runtime, [&] { return *errors == 1; }, TDuration::Seconds(15));
+        // A blocked SDK worker would wait for the server's delayed response before wrapper teardown could finish.
+        UNIT_ASSERT(TInstant::Now() - started < TDuration::Seconds(20));
+    }
+
+    Y_UNIT_TEST(RetiredEndpointsShareSdkWorkers) {
+        using NWrappers::NExternalStorage::TS3ExternalStorageConfig;
+        auto make = [](const TString& endpoint) {
+            NKikimrSchemeOp::TS3Settings settings;
+            settings.SetEndpoint(endpoint);
+            settings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+            settings.SetExecutorThreadsCount(1);
+            return std::make_shared<TS3ExternalStorageConfig>(NKikimrConfig::TAwsClientConfig(), settings, nullptr);
+        };
+        const auto first = make("retired-a.example");
+        const auto second = make("retired-b.example");
+        const auto live = first->GetConfig().executor;
+        first->UseSharedCleanupExecutor();
+        second->UseSharedCleanupExecutor();
+        UNIT_ASSERT(first->GetConfig().executor == second->GetConfig().executor);
+        UNIT_ASSERT(first->GetConfig().executor != live);
+    }
+
+    Y_UNIT_TEST(StoppedScannerReleasesOnlyItsQueuedLists) {
+        using namespace NWrappers::NExternalStorage;
+        TTestActorRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        NKikimrBlobDepot::TS3BackendSettings settings;
+        settings.MutableSettings()->SetBucket("test-bucket");
+        settings.SetBalancerHost(TStringBuilder() << "127.0.0.1:" << PickFreePort());
+        const auto router = runtime.Register(CreateBlobDepotS3Router(std::move(settings), 12345));
+        const auto stopped = runtime.AllocateEdgeActor();
+        const auto live = runtime.AllocateEdgeActor();
+        auto list = [&](TActorId sender) {
+            runtime.Send(new IEventHandle(router, sender, new TEvListObjectsRequest(Aws::S3::Model::ListObjectsRequest()
+                .WithBucket("test-bucket").WithPrefix("vg/"))), 0, true);
+        };
+
+        list(live);
+        for (size_t i = 0; i < 255; ++i) {
+            list(stopped);
+        }
+        runtime.Send(new IEventHandle(router, stopped, new TEvents::TEvGone), 0, true);
+        for (size_t i = 0; i < 256; ++i) {
+            list(live);
+        }
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        auto replies = runtime.CaptureMailboxEvents(live.Hint(), live.NodeId());
+        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(replies.front()->GetTypeRewrite(), TEvListObjectsResponse::EventType);
+        UNIT_ASSERT(!replies.front()->Get<TEvListObjectsResponse>()->IsSuccess());
     }
 
     Y_UNIT_TEST(FiveXxTriggersRefresh) {

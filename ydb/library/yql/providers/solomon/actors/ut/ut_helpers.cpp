@@ -39,7 +39,9 @@ void InitAsyncOutput(TFakeCASetup& caSetup, NSo::NProto::TDqSolomonShard&& setti
 
     caSetup.Execute([&](TFakeActor& actor) {
         auto [dqAsyncOutput, dqAsyncOutputAsActor] = CreateDqSolomonWriteActor(std::move(settings), 0, NYql::NDq::TCollectStatsLevel::None,
-            "TxId-42", 777, secureParams, &actor.GetAsyncOutputCallbacks(), counters, CreateStructuredTokenCredentialsFactory(), freeSpace);
+            "TxId-42", 777, secureParams, &actor.GetAsyncOutputCallbacks(), counters, CreateStructuredTokenCredentialsFactory(),
+            std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {
+            }), freeSpace);
 
         actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);
     });

@@ -1,5 +1,6 @@
 #include "blob_depot.h"
 #include "blob_depot_tablet.h"
+#include "config.h"
 #include "blocks.h"
 #include "garbage_collection.h"
 #include "data.h"
@@ -184,9 +185,14 @@ namespace NKikimr::NBlobDepot {
                 cFunc(TEvPrivate::EvJsonUpdate, JsonHandler.HandleUpdate);
 
                 fFunc(TEvPrivate::EvUploadResult, S3Manager->Handle);
+                fFunc(TEvPrivate::EvRunCooling, S3Manager->Handle);
+                fFunc(TEvPrivate::EvCoolingTimer, S3Manager->Handle);
+                fFunc(TEvPrivate::EvS3ProbeWakeup, S3Manager->Handle);
+                fFunc(TEvPrivate::EvS3ProbeFinished, S3Manager->Handle);
                 fFunc(TEvPrivate::EvDeleteResult, S3Manager->Handle);
                 fFunc(TEvBlobStorage::EvNodeWardenBlobDepotS3RouterReady, S3Manager->Handle);
                 fFunc(TEvPrivate::EvScanFound, S3Manager->Handle);
+                fFunc(TEvPrivate::EvResumeS3Scan, S3Manager->Handle);
                 fFunc(TEvPrivate::EvDeleteThrottleWakeup, S3Manager->Handle);
                 fFunc(TEvPrivate::EvPutThrottleWakeup, S3Manager->Handle);
 
@@ -213,6 +219,23 @@ namespace NKikimr::NBlobDepot {
         S3Manager->TerminateAllActors();
 
         TActor::PassAway();
+    }
+
+    void TBlobDepot::InitDataCooling() {
+        const auto& s3 = Config.GetS3BackendSettings();
+        if (AppData()->FeatureFlags.GetEnableBlobDepotDataCooling() && s3.HasAsyncMode()) {
+            if (!Config.GetS3NamespaceValidated() || !Config.GetS3CoolingAuthorized()) {
+                YDB_LOG_WARN_COMP(BLOB_DEPOT, "Data cooling requires BSC to validate the stored S3 namespace",
+                    {"id", GetLogId()});
+            } else if (const auto error = ValidateDataCooling(s3)) {
+                YDB_LOG_WARN_COMP(BLOB_DEPOT, "Invalid stored data cooling settings",
+                    {"id", GetLogId()}, {"error", *error});
+            } else {
+                const auto& async = s3.GetAsyncMode();
+                CoolingIndex = std::make_unique<TCoolingIndex>(*Data, TabletID(), async.GetHotTargetBytes(),
+                    async.GetTargetObjectBytes());
+            }
+        }
     }
 
     void TBlobDepot::InitChannelKinds() {

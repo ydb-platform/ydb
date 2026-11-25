@@ -1,6 +1,6 @@
 #include "bootstrapper.h"
 #include "bootstrapper_impl.h"
-#include <ydb/core/mind/configured_tablet_bootstrapper.h>
+#include <ydb/core/mind/bootstrapper/configured_tablet_bootstrapper.h>
 #include <ydb/core/tablet/simple_tablet.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>

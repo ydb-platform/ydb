@@ -20,25 +20,23 @@ message TChannelProfile {
 
 message TS3BackendSettings {
     optional NKikimrSchemeOp.TS3Settings Settings = 1; // how to connect to S3 (mandatory field)
+    // BlobDepot PUTs have an end-to-end budget of at least 10 minutes. For slower transfers, increase
+    // Settings.HttpRequestTimeoutMs (up to one day). The budget includes balancer and SDK queue time.
 
     message TAsyncMode {
-        // data (when written) is first stored in ordinary data channel and then asynchronously transferred to S3 storage by
-        // BlobDepot tablet; amount of stored data can be controlled by following settings
-        //
-        // future operation may include modes when data is uploaded by agents directly to the storage
-
-        // when do we fully stop processing new queries until some data is uploaded
+        // Acknowledged data starts on Data channels. The tablet then packs eligible data into S3 objects.
+        // Foreground write limits are reserved for hot-write admission.
         optional uint64 MaxPendingBytes = 2;
-
-        // when do we start throttling (if set, this must be strictly less than MaxPendingBytes, which also must be set)
         optional uint64 ThrottleStartBytes = 3;
-
-        // upload rate (bytes per second) at ThrottleStartBytes amount of data (which linearly drops to 0 as amount increases
-        // up to MaxPendingBytes)
         optional uint64 ThrottleMaxBytesPerSecond = 4;
 
-        // number of concurrent puts
+        // Number of concurrent background uploads (1..32).
         optional uint32 UploadPutsInFlight = 5 [default = 1];
+        // Retain up to this many bytes of recent committed data on Data channels.
+        optional uint64 HotTargetBytes = 6 [default = 0];
+        // Target pack size (1 byte..64 MiB). Each upload can hold at least one maximum-size blob.
+        // UploadPutsInFlight * max(TargetObjectBytes, 10 MiB) must fit within 512 MiB per depot.
+        optional uint32 TargetObjectBytes = 7 [default = 16777216];
     }
 
     message TSyncMode {
@@ -50,11 +48,9 @@ message TS3BackendSettings {
         TSyncMode SyncMode = 3;
     }
 
-    // When set, the actual S3 endpoint is fetched periodically from this URL
-    // (HTTP GET to http://<BalancerHost>/, body is plain-text hostname).
-    // Existing Settings.Endpoint is used only as a fallback before the first
-    // balancer reply. S3 requests get re-routed through a per-node, per-tablet
-    // router actor managed by Node Warden.
+    // When set, the per-node BlobDepot router periodically fetches the S3 proxy
+    // host from this URL. Requests wait for the first successful balancer reply.
+    // The SDK uses Settings.Endpoint as the S3 endpoint through the selected proxy.
     optional string BalancerHost = 4;
     optional uint32 BalancerRefreshSecMin = 5 [default = 10];
     optional uint32 BalancerRefreshSecMax = 6 [default = 15];
@@ -86,4 +82,8 @@ message TBlobDepotConfig {
     optional bool S3NamespaceValidated = 11;
     // Once BSC has authorized async cooling, shared objects can survive subsequent mode changes.
     optional bool EverAuthorizedDataCooling = 12;
+    // BSC authorized cooling into the current physical namespace after the rollout gate opened.
+    optional bool S3CoolingAuthorized = 15;
+    // Issued by BSC at allocation. A name resembling a GUID does not prove its origin.
+    optional string GeneratedS3NamespaceId = 16;
 }

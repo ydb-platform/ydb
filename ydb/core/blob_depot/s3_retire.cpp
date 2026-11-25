@@ -24,7 +24,7 @@ namespace NKikimr::NBlobDepot {
             NKikimrBlobDepot::TS3BackendSettings Settings;
             TActorId Router;
             bool MorePages = false;
-            bool Incomplete = false;
+            TString FirstDeleteError;
             THashSet<TString> PendingDeletes;
             TS3RequestTimer Timer;
             TBackoff PageBackoff{TDuration::MilliSeconds(100), TDuration::Minutes(1)};
@@ -39,7 +39,7 @@ namespace NKikimr::NBlobDepot {
             {}
 
             void Bootstrap() {
-                Router = Register(CreateBlobDepotS3Router(std::move(Settings), TabletId));
+                Router = Register(CreateRetiredS3Router(std::move(Settings)));
                 Become(&TThis::StateWork);
                 ListPage();
             }
@@ -52,7 +52,7 @@ namespace NKikimr::NBlobDepot {
                 Timer.Clear();
                 const auto& msg = *ev->Get();
                 if (!msg.IsSuccess()) {
-                    return Finish(msg.GetError().GetMessage().c_str());
+                    return FinishRequestError("LIST", msg.GetError());
                 }
                 const auto& result = msg.Result.GetResult();
                 MorePages = result.GetIsTruncated();
@@ -79,27 +79,45 @@ namespace NKikimr::NBlobDepot {
                 Timer.Clear();
                 const auto& msg = *ev->Get();
                 if (!msg.IsSuccess()) {
-                    return Finish(msg.GetError().GetMessage().c_str());
+                    return FinishRequestError("DELETE", msg.GetError());
                 }
                 bool throttled = false;
-                VisitS3DeleteResults(msg.Result.GetResult(), [&](const auto& key, ES3DeleteStatus status, TStringBuf) {
-                    if (status == ES3DeleteStatus::Deleted || status == ES3DeleteStatus::Missing) {
-                        PendingDeletes.erase(TString(key.data(), key.size()));
-                    } else if (status == ES3DeleteStatus::SlowDown) {
-                        throttled = true;
+                VisitS3DeleteResults(msg.Result.GetResult(), [&](const TString& key, ES3DeleteStatus status, TStringBuf code, TStringBuf message) {
+                    if (status == ES3DeleteStatus::SlowDown || status == ES3DeleteStatus::Failed) {
+                        RecordDeleteError(key, code, message);
+                        throttled |= status == ES3DeleteStatus::SlowDown;
+                    }
+                    if (!PendingDeletes.erase(key)) {
+                        RecordDeleteError(key, "UnexpectedResult", "duplicate or unrequested key in DELETE response");
                     }
                 });
                 if (!PendingDeletes.empty()) {
-                    // Complete the scan even when a subset of keys cannot be deleted.
-                    Incomplete = true;
+                    RecordDeleteError(*PendingDeletes.begin(), "MissingResult", "requested key missing from DELETE response");
                     PendingDeletes.clear();
                 }
                 Advance(throttled);
             }
 
+            void RecordDeleteError(TStringBuf key, TStringBuf code, TStringBuf message) {
+                if (FirstDeleteError.empty()) {
+                    // Retain one representative failure while allowing later pages to make progress.
+                    FirstDeleteError = TStringBuilder() << "DELETE key " << key.SubStr(0, 1024) << ", code " << code.SubStr(0, 128)
+                        << ", message " << message.SubStr(0, 512);
+                }
+            }
+
+            void FinishRequestError(const char* operation, const Aws::S3::S3Error& error) {
+                if (IsS3MissingBucket(error)) {
+                    return Finish();
+                }
+                const TString message = TStringBuilder() << operation << " failed, code " << TStringBuf(error.GetExceptionName()).SubStr(0, 128)
+                    << ", HTTP " << static_cast<int>(error.GetResponseCode()) << ", message " << TStringBuf(error.GetMessage()).SubStr(0, 512);
+                Finish(message.c_str());
+            }
+
             void Advance(bool throttled = false) {
                 if (!MorePages) {
-                    Finish(Incomplete ? "incomplete DELETE response for retired namespace" : nullptr);
+                    Finish(FirstDeleteError ? FirstDeleteError.c_str() : nullptr);
                 } else if (throttled) {
                     // Leave failed keys for the next sweep and pace subsequent pages.
                     Schedule(PageBackoff.Next(), new TEvNextPage);
@@ -111,7 +129,7 @@ namespace NKikimr::NBlobDepot {
 
             void Finish(const char* error = nullptr) {
                 if (error) {
-                    YDB_LOG_WARN("Retired BlobDepot S3 cleanup failed", {"tabletId", TabletId}, {"error", error});
+                    YDB_LOG_WARN("Retired BlobDepot S3 cleanup failed", {"marker", "BDTS60"}, {"id", TabletId}, {"error", error});
                 }
                 Send(Parent, new TEvBlobDepot::TEvRetiredS3SweepComplete(!error));
                 PassAway();

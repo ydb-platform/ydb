@@ -2,6 +2,7 @@
 #include <ydb/core/driver_lib/run/main.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/token_manager/token_manager.h>
+#include <ydb/core/sys_view/factory.h>
 #include <ydb/core/transfer/transfer_writer.h>
 #include <ydb/core/tx/schemeshard/schemeshard_operation_factory.h>
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
@@ -25,6 +26,7 @@ int main(int argc, char **argv) {
     factories->SqsAuthFactory = std::make_shared<NKikimr::NSQS::TMultiAuthFactory>();
     factories->SqsEventsWriterFactory = std::make_shared<TSqsEventsWriterFactory>();
     factories->SchemeOperationFactory.reset(NKikimr::NSchemeShard::DefaultOperationFactory());
+    factories->SystemViewScanFactory.reset(NKikimr::NSysView::CreateSystemViewScanFactory());
     factories->ConfigSwissKnife = NKikimr::NYamlConfig::CreateDefaultConfigSwissKnife();
     factories->TransferWriterFactory = std::make_shared<NKikimr::NReplication::NTransfer::TTransferWriterFactory>();
 

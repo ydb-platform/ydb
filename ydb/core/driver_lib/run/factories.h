@@ -30,6 +30,10 @@
 
 namespace NKikimr {
 
+namespace NSysView {
+    class ISystemViewScanFactory;
+}
+
 struct TTicketParserSettings;
 struct TTokenManagerSettings;
 
@@ -45,6 +49,7 @@ struct TModuleFactories {
     std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory;
     // Factory for Simple queue services implementation details
     std::shared_ptr<NSQS::IEventsWriterFactory> SqsEventsWriterFactory;
+    std::shared_ptr<const NSysView::ISystemViewScanFactory> SystemViewScanFactory;
     // Scheme operations
     std::shared_ptr<NSchemeShard::IOperationFactory> SchemeOperationFactory;
 

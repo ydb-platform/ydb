@@ -2,7 +2,7 @@
 
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/registry.h>
-#include <ydb/core/sys_view/common/scan_actor_base_impl.h>
+#include <ydb/core/sys_view/scan/scan_actor_base_impl.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/mind/hive/tablet_info.h>

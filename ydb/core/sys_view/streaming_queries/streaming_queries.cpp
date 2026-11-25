@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/common/utils.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/sys_view/common/registry.h>
-#include <ydb/core/sys_view/common/scan_actor_base_impl.h>
+#include <ydb/core/sys_view/scan/scan_actor_base_impl.h>
 
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/services/workload_manager/actors/actors.h>

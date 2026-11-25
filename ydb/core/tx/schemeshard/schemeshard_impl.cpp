@@ -30,7 +30,7 @@
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/sys_view/common/path.h>
 #include <ydb/core/sys_view/common/resolver.h>
-#include <ydb/core/sys_view/partition_stats/partition_stats.h>
+#include <ydb/core/sys_view/partition_stats/collector/collector.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/base/bloom_filter_defaults.h>

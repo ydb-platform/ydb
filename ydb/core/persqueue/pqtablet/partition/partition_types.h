@@ -23,7 +23,6 @@ struct TWriteMsg {
     std::optional<ui64> InitialSeqNo;
     bool Internal = false;
     bool DeduplicatedByMessageId = false;
-    TActorId MirrorerActor = {};
 };
 
 struct TOwnershipMsg {

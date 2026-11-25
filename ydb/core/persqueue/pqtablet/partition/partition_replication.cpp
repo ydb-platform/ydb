@@ -11,10 +11,6 @@ ui64 GetEffectiveReplicationOffset(ui64 offset, ui64 startOffset, const TUserInf
 } // namespace
 
 void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
-    if (IsCdcReplicationTopic() && !IsCurrentMirrorer(ev->Sender)) {
-        return;
-    }
-
     if (AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled()) {
         LOG_W("Replication is disabled for topic");
 
@@ -53,17 +49,12 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
     }
 
     ReplicationDataNeedsApply = false;
-    if (IsCdcReplicationTopic() && !IsCurrentMirrorer((*PendingReplicationData)->Sender)) {
-        PendingReplicationData.reset();
-        return;
-    }
-
+    const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
     const auto mirroredOffset = (*PendingReplicationData)->Get()->MirroredOffset;
     if (mirroredOffset.Defined()) {
         BlobEncoder.MirroredOffset = Max(BlobEncoder.MirroredOffset, *mirroredOffset);
     }
 
-    const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
     for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
         auto* consumerConfig = GetConsumer(config, consumer);
         if (!consumerConfig || !consumerConfig->GetReplicateOffsets() || offset > static_cast<ui64>(Max<i64>())) {

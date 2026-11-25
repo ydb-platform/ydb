@@ -4358,7 +4358,10 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
             CreateMirrorerActor();
         }
     } else {
-        DestroyMirrorer();
+        if (Mirrorer) {
+            ctx.Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
+            Mirrorer.Reset();
+        }
     }
 
     if (SendChangeConfigReply) {
@@ -5329,16 +5332,6 @@ void TPartition::Handle(NQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const 
     }
 }
 
-bool TPartition::IsCdcReplicationTopic() const {
-    return Config.HasCdcReplication()
-        || (ChangeConfig && ChangeConfig->Config.HasCdcReplication());
-}
-
-bool TPartition::IsCurrentMirrorer(const TActorId& sender) const {
-    return Mirrorer && sender == Mirrorer->Actor
-        && (!ChangeConfig || MirroringEnabled(ChangeConfig->Config));
-}
-
 void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
         RegisterWithSameMailbox(CreateMirrorer(TabletId, TabletActorId, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, GetEndOffset(), Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters))
@@ -5347,10 +5340,6 @@ void TPartition::CreateMirrorerActor() {
 
 void TPartition::DestroyMirrorer() {
     if (Mirrorer) {
-        if (IsCdcReplicationTopic()) {
-            PendingReplicationData.reset();
-            ReplicationDataNeedsApply = false;
-        }
         Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
         Mirrorer.Reset();
     }

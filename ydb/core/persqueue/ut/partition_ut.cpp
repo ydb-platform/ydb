@@ -895,7 +895,7 @@ void TPartitionFixture::SendWrite
     msgs.push_back(msg);
 
     auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), isDirectWrite, std::nullopt, TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked);
-    event->MirrorerActor = fromMirrorer ? Ctx->Edge : TActorId{};
+    event->FromMirrorer = fromMirrorer;
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -3416,42 +3416,6 @@ Y_UNIT_TEST_F(DisabledReplicationRejectsMirrorerButAllowsClientWrites, TPartitio
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProxyResponse({.Cookie=102, .Status=NMsgBusProxy::MSTATUS_OK, .SeqNo=2});
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 11);
-}
-
-Y_UNIT_TEST_F(DisabledCdcReplicationDiscardsBufferedOffsets, TPartitionFixture)
-{
-    const TConfigParams initialConfig{.Version = 1, .Consumers = {{.Consumer = "reader"}}};
-    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
-        .Config = initialConfig, .FillHead = true}, initialConfig);
-
-    TActorId mirrorer;
-    auto observer = Ctx->Runtime->AddObserver<TEvPQ::TEvInitCredentials>([&](auto& ev) {
-        mirrorer = ev->Sender;
-        ev.Reset();
-    });
-    Config.SetVersion(2);
-    Config.MutableCdcReplication();
-    Config.MutablePartitionConfig()->MutableMirrorFrom()->SetMirrorConsumerOffsets(true);
-    SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
-    WaitCmdWrite();
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitPartitionConfigChanged();
-
-    SendSetOffset(1, "reader", 7, "");
-    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "reader", .Offset = 7}}}});
-    UNIT_ASSERT(mirrorer);
-    auto update = MakeHolder<TEvPQ::TEvReplicationData>();
-    update->OffsetsByConsumers = {{"reader", 2}};
-    Ctx->Runtime->Send(ActorId, mirrorer, update.Release());
-    UNIT_ASSERT(TPartitionTestWrapper::HasPendingReplicationData(*partition));
-
-    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableDstTopicReplicationDisabled(true);
-    Ctx->Runtime->Send(ActorId, mirrorer, new TEvPQ::TEvReplicationData());
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProxyResponse({.Cookie = 1});
-    UNIT_ASSERT(!TPartitionTestWrapper::HasPendingReplicationData(*partition));
-    SendGetOffset(2, "reader");
-    WaitProxyResponse({.Cookie = 2, .Offset = 7});
 }
 
 Y_UNIT_TEST_F(DisabledReplicationAllowsMirroringWithoutConsumerOffsets, TPartitionFixture)

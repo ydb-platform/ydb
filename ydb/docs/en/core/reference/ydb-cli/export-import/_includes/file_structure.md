@@ -39,7 +39,7 @@ A database corresponds to a directory in the file structure, which contains:
 
 ## Schema mapping {#schema-mapping}
 
-When exporting data to a file system or S3-compatible object storage without `--item`, a `SchemaMapping/mapping.json` file is generated. This file contains the list of schema objects and maps them to their paths in the export.
+A full backup in a file system or S3-compatible object storage contains a `SchemaMapping/mapping.json` file. This file contains the list of schema objects and maps them to their paths in the export.
 
 For encrypted exports, this mapping serves two purposes: it anonymizes the original object names and stores additional metadata required for decryption.
 

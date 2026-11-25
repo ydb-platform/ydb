@@ -126,12 +126,7 @@ private:
             .Sources = GetRegisteredSources(),
             .Keys = WrittenKeys->GetKeys(now),
         };
-        const auto partitionKeyRange = GetPartitionKeyRange();
-        // Keep the partition if its bounds are not table keys
-        if (!partitionKeyRange) {
-            return std::nullopt;
-        }
-        const auto plan = PlanKeyRangeSplit(*partitionKeyRange, KeyTypes, stats);
+        const auto plan = PlanKeyRangeSplit(GetPartitionKeyRange(), KeyTypes, stats);
         // Keep the partition if the plan finds no boundary
         if (plan.empty()) {
             return std::nullopt;
@@ -145,10 +140,10 @@ private:
         return plan[1].Range.FromBound->GetBuffer();
     }
 
-    std::optional<TPartitionKeyRange> GetPartitionKeyRange() const {
+    TPartitionKeyRange GetPartitionKeyRange() const {
         const auto* partition = GetPartitionConfig(Config, PartitionId);
         AFL_ENSURE(partition)("partition_id", PartitionId);
-        return ParseTypedKeyRange(partition->GetKeyRange(), KeyTypes);
+        return TPartitionKeyRange::Parse(partition->GetKeyRange());
     }
 
     TVector<TKeyRangeSource> GetRegisteredSources() const {

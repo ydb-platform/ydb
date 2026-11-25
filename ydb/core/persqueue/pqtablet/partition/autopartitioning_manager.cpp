@@ -579,7 +579,7 @@ std::unique_ptr<IAutopartitioningManager> CreateAutopartitioningManager(const NK
         return std::make_unique<TSupportiveAutopartitioningManager>(config, partitionId.OriginalPartitionId);
     }
 
-    if (config.PartitionKeySchemaSize() > 0) {
+    if (config.GetSplitByPartitionKey()) {
         return CreateKeyRangeAutopartitioningManager(config, partitionId.OriginalPartitionId, sourceIds);
     }
 

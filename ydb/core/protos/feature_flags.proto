@@ -507,4 +507,6 @@ message TFeatureFlags {
     // Enable after all nodes support packed S3 mappings and the rollback window has closed.
     // Then reconfigure existing async groups through BSC to validate their S3 namespaces.
     optional bool EnableBlobDepotDataCooling = 403 [default = false];
+    // Logical table checksums for server-side S3 and FS export/import
+    optional bool EnableBackupTableChecksum = 404 [default = false];
 }

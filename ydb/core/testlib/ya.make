@@ -28,6 +28,7 @@ PEERDIR(
     library/cpp/testing/unittest
     ydb/apps/version
     ydb/core/audit/audit_config
+    ydb/core/backup/query
     ydb/core/base
     ydb/core/blob_depot
     ydb/core/blobstorage/base

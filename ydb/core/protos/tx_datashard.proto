@@ -2576,6 +2576,9 @@ message TEvRead {
         // will attempt to use low-priority reads when possible, minimizing
         // effects on concurrent OLTP queries.
         HINT_LOW_PRIORITY = 2;
+
+        // Internal KQP reads of a private export copy.
+        HINT_READ_BACKUP_COPY = 16;
     }
 
     // Optional bit flags with hints

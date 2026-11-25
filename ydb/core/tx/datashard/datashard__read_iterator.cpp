@@ -2439,25 +2439,25 @@ public:
                 return EExecutionStatus::DelayComplete;
             }
 
-            // User may want us to start a batch scan, do so when possible
-            if ((request->Record.GetHints() & TEvDataShard::TEvRead::HINT_BATCH) && scanPossible()) {
-                if (state.IsHeadRead) {
+            // Backup copies contain cold parts and must be read with a scan
+            if ((state.ReadBackupCopy || (request->Record.GetHints() & TEvDataShard::TEvRead::HINT_BATCH)) && scanPossible()) {
+                if (!state.ReadBackupCopy && state.IsHeadRead) {
                     if (auto status = upgradeToRepeatableRead()) {
                         return *status;
                     }
                 }
 
                 // Scan cannot resolve specific volatile dependencies, so we need to wait for everything
-                if (Self->VolatileTxManager.HasVolatileTxsAtSnapshot(state.ReadVersion)) {
+                if (!state.ReadBackupCopy && Self->VolatileTxManager.HasVolatileTxsAtSnapshot(state.ReadVersion)) {
                     Self->VolatileTxManager.AttachWaitingSnapshotEvent(
                         state.ReadVersion,
                         std::unique_ptr<IEventHandle>(state.Ev.Release()));
                     return abortRescheduled();
                 }
 
-                // Repeatbale reads need to be protected from future immediate writes
-                auto promoted = Self->PromoteImmediatePostExecuteEdges(state.ReadVersion,
-                    TDataShard::EPromotePostExecuteEdges::RepeatableRead, txc);
+                // Repeatable reads need to be protected from future immediate writes
+                const bool promoted = !state.ReadBackupCopy && Self->PromoteImmediatePostExecuteEdges(state.ReadVersion,
+                    TDataShard::EPromotePostExecuteEdges::RepeatableRead, txc).HadWrites;
 
                 // Finally, we can start the scan
                 bool lowPriority = request->Record.GetHints() & TEvDataShard::TEvRead::HINT_LOW_PRIORITY;
@@ -2480,11 +2480,16 @@ public:
                 // This unit will remove current operation from the pipeline when we return
                 Abort(EExecutionUnitKind::CompletedOperations);
 
-                if (promoted.HadWrites) {
+                if (promoted) {
                     return EExecutionStatus::ExecutedNoMoreRestarts;
                 }
 
                 return EExecutionStatus::Executed;
+            }
+
+            if (state.ReadBackupCopy) {
+                SetStatusError(Result->Record, Ydb::StatusIds::UNSUPPORTED, "Backup copy read requires a batch scan");
+                return EExecutionStatus::DelayComplete;
             }
         }
 
@@ -2596,7 +2601,7 @@ public:
 
         TDataShard::EPromotePostExecuteEdges readType = TDataShard::EPromotePostExecuteEdges::RepeatableRead;
 
-        if (state.IsHeadRead) {
+        if (state.IsHeadRead && !state.ReadBackupCopy) {
             bool hasError = !Result || Result->Record.HasStatus();
             if (!hasError && Reader->HasUnreadQueries()) {
                 // We failed to read everything in a single transaction
@@ -2642,7 +2647,7 @@ public:
             }
         }
 
-        if (!Self->IsFollower()) {
+        if (!Self->IsFollower() && !state.ReadBackupCopy) {
             auto res = Self->PromoteImmediatePostExecuteEdges(state.ReadVersion, readType, txc);
             hadWrites |= res.HadWrites;
         }
@@ -2650,9 +2655,9 @@ public:
         if (hadWrites)
             return EExecutionStatus::DelayCompleteNoMoreRestarts;
 
-        if (Reader && Reader->NeedVolatileWaitForCommit() ||
-            Self->Pipeline.HasCommittingOpsBelow(state.ReadVersion) ||
-            Self->GetVolatileTxManager().HasUnstableVolatileTxsAtSnapshot(state.ReadVersion))
+        if (!state.ReadBackupCopy &&
+            (Reader && Reader->NeedVolatileWaitForCommit() || Self->Pipeline.HasCommittingOpsBelow(state.ReadVersion) ||
+                Self->GetVolatileTxManager().HasUnstableVolatileTxsAtSnapshot(state.ReadVersion)))
         {
             return EExecutionStatus::DelayComplete;
         }
@@ -2741,7 +2746,7 @@ public:
             auto& userTableInfo = it->second;
             TableInfo = TShortTableInfo(userTableInfo, record.HasVectorTopK());
 
-            Y_ENSURE(!userTableInfo->IsBackup);
+            Y_ENSURE(!userTableInfo->IsBackup || state.ReadBackupCopy);
 
             state.SchemaVersion = userTableInfo->GetTableSchemaVersion();
             if (record.GetTableId().HasSchemaVersion()) {
@@ -3630,7 +3635,15 @@ public:
                 }
 
                 auto& userTableInfo = it->second;
-                if (userTableInfo->IsBackup) {
+                const bool backupRead = record.GetHints() & NKikimrTxDataShard::TEvRead::HINT_READ_BACKUP_COPY;
+                if (backupRead && !userTableInfo->IsBackup) {
+                    ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, "Export checksum requires a private backup table",
+                        ctx.SelfID.NodeId(), state);
+                    return true;
+                }
+                state.ReadBackupCopy = backupRead;
+
+                if (userTableInfo->IsBackup && !state.ReadBackupCopy) {
                     ReplyError(
                         Ydb::StatusIds::BAD_REQUEST,
                         TStringBuilder() << "Can't read from a backup table"
@@ -3640,7 +3653,12 @@ public:
                     return true;
                 }
 
-                if (state.IsHeadRead) {
+                if (backupRead) {
+                    // The copy is immutable. The checksum must read its head without waiting for the upload to finish.
+                    state.ReadVersion = TRowVersion::Max();
+                    state.IsHeadRead = true;
+                    setUsingSnapshotFlag = true;
+                } else if (state.IsHeadRead) {
                     // We want to try and choose a more specific non-repeatable snapshot
                     if (Self->IsFollower()) {
                         auto [followerEdge, followerRepeatable] = Self->GetSnapshotManager().GetFollowerReadEdge();

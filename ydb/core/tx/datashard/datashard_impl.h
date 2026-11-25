@@ -219,6 +219,7 @@ class TDataShard
     class TTxMigrateSchemeShard;
     class TTxGetS3Upload;
     class TTxStoreS3UploadId;
+    class TTxStoreBackupChecksum;
     class TTxChangeS3UploadStatus;
     class TTxGetS3DownloadInfo;
     class TTxStoreS3DownloadInfo;
@@ -1493,6 +1494,7 @@ class TDataShard
     void Handle(TEvDataShard::TEvMigrateSchemeShardRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetS3Upload::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvStoreS3UploadId::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvStoreBackupChecksumRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvChangeS3UploadStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
@@ -1500,7 +1502,7 @@ class TDataShard
     void Handle(TEvDataShard::TEvS3DirectWriteBegin::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3DirectWriteFinish::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3DirectWriteAbort::TPtr& ev, const TActorContext& ctx);
-    bool IsActiveDirectImport(ui64 txId, ui64 tableId, const TActorId& sender);
+    bool IsActiveImport(ui64 txId, ui64 tableId, const TActorId& sender);
     TString CheckDirectImportSpace();
     void AbortDirectImportsForSpace();
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
@@ -1694,6 +1696,10 @@ public:
     ~TDataShard();
 
     void CancelS3DirectWrite(ui64 txId);
+
+    const TS3Download* FindS3Download(ui64 txId) const {
+        return S3Downloads.Find(txId);
+    }
 
     void PrepareAndSaveOutReadSets(ui64 step,
                                    ui64 txId,
@@ -3872,6 +3878,7 @@ protected:
             HFuncTraced(TEvDataShard::TEvCancelRestore, Handle);
             HFuncTraced(TEvDataShard::TEvGetS3Upload, Handle);
             HFuncTraced(TEvDataShard::TEvStoreS3UploadId, Handle);
+            HFuncTraced(TEvDataShard::TEvStoreBackupChecksumRequest, Handle);
             HFuncTraced(TEvDataShard::TEvChangeS3UploadStatus, Handle);
             HFuncTraced(TEvDataShard::TEvGetS3DownloadInfo, Handle);
             HFuncTraced(TEvDataShard::TEvStoreS3DownloadInfo, Handle);

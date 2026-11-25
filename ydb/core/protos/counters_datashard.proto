@@ -536,4 +536,5 @@ enum ETxTypes {
     TXTYPE_PERSIST_SUBDOMAIN_TABLES_METRICS_LEVEL = 89    [(TxTypeOpts) = {Name: "TxPersistSubDomainTablesMetricsLevel"}];
     TXTYPE_SYNC_SCHEME_ON_FOLLOWER = 90                   [(TxTypeOpts) = {Name: "TxSyncSchemeOnFollower"}];
     TXTYPE_DATABASE_FREEZE = 91                           [(TxTypeOpts) = {Name: "TxDatabaseFreeze"}];
+    TXTYPE_STORE_BACKUP_CHECKSUM = 92                     [(TxTypeOpts) = {Name: "TxStoreBackupChecksum"}];
 }

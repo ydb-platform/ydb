@@ -29,6 +29,10 @@ protected:
         absl::flat_hash_set<ui64>* volatileReadDependencies);
     void GetResult(TDataShard* self, TActorId& target, THolder<IEventBase>& event, ui64& cookie);
     const TEvRequest* GetRequest() const;
+
+    const TActorId& GetSender() const {
+        return Ev->Sender;
+    }
     TEvResponse* GetResult();
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const;
 

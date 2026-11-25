@@ -15,7 +15,7 @@ public:
 public:
     virtual ~IExport() = default;
 
-    virtual IActor* CreateUploader(const TActorId& dataShard, ui64 txId) const = 0;
+    virtual IActor* CreateUploader(const TActorId& dataShard, ui64 txId, TStringBuf tablePath = {}) const = 0;
     virtual IBuffer* CreateBuffer() const = 0;
 
     virtual void Shutdown() const = 0;

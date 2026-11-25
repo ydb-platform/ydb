@@ -1616,6 +1616,19 @@ message TBackupTask {
     }
 
     optional TEncryptionSettings EncryptionSettings = 19;
+    message TTableChecksum {
+        optional string Database = 1;
+        optional uint32 Version = 3;
+        optional uint64 Count = 4;
+        optional string Hash = 5;
+        optional string ErrorCode = 6;
+        optional string ErrorMessage = 7;
+        optional string Algorithm = 9;
+        optional bool Started = 10;
+        optional bool RetentionUnsupported = 11;
+        optional string FailureReason = 12;
+    }
+    optional TTableChecksum TableChecksum = 22;
 }
 
 message TRestoreTask {

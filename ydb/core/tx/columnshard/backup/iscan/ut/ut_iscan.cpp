@@ -334,8 +334,8 @@ public:
     {
     }
 
-    IActor* CreateUploader(const TActorId& dataShard, ui64 txId) const override {
-        return Inner->CreateUploader(dataShard, txId);
+    IActor* CreateUploader(const TActorId& dataShard, ui64 txId, TStringBuf tablePath) const override {
+        return Inner->CreateUploader(dataShard, txId, tablePath);
     }
 
     IBuffer* CreateBuffer() const override {

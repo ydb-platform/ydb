@@ -41,7 +41,8 @@ protected:
         const ui64 tableId = backup.GetTableId();
         Y_ENSURE(DataShard.GetUserTables().contains(tableId));
 
-        const ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
+        const auto& table = DataShard.GetUserTables().at(tableId);
+        const ui32 localTableId = table->LocalTid;
         Y_ENSURE(txc.DB.GetScheme().GetTableInfo(localTableId));
 
         auto* appData = AppData(ctx);
@@ -99,8 +100,8 @@ protected:
             return false;
         }
 
-        auto createUploader = [self = DataShard.SelfId(), txId = op->GetTxId(), exp]() {
-            return exp->CreateUploader(self, txId);
+        auto createUploader = [self = DataShard.SelfId(), txId = op->GetTxId(), exp, path = table->Path]() {
+            return exp->CreateUploader(self, txId, path);
         };
 
         THolder<IBuffer> buffer{exp->CreateBuffer()};

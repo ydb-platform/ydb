@@ -675,7 +675,7 @@ private:
 
 }; // TYtBuffer
 
-IActor* TYtExport::CreateUploader(const TActorId&, ui64) const {
+IActor* TYtExport::CreateUploader(const TActorId&, ui64, TStringBuf) const {
     const auto& settings = Task.GetYTSettings();
     return new TYtUploader(
         Columns,

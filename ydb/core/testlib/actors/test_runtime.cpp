@@ -193,6 +193,7 @@ namespace NActors {
                 nodeAppData->MonotonicTimeProvider = MonotonicTimeProvider;
             }
             nodeAppData->DataShardExportFactory = app0->DataShardExportFactory;
+            nodeAppData->TableChecksumFactory = app0->TableChecksumFactory;
             nodeAppData->DomainsInfo = app0->DomainsInfo;
             nodeAppData->ChannelProfiles = app0->ChannelProfiles;
             nodeAppData->Counters = node->DynamicCounters;

@@ -1,3 +1,4 @@
+import "ydb/core/protos/base.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrBackup;
@@ -31,6 +32,13 @@ message TS3DownloadState {
         optional bool ChecksumComplete = 3;
     }
     optional TParquet Parquet = 2;
+
+    // The committed rows covered by the restore transaction's write version.
+    message TRestoreWriteProgress {
+        optional NKikimrProto.TRowVersion Version = 1;
+        optional uint64 WrittenRows = 2;
+    }
+    optional TRestoreWriteProgress RestoreWriteProgress = 3;
 }
 
 message TChangeMetadata {

@@ -16,7 +16,7 @@ public:
         Y_ABORT_UNLESS(task.HasYTSettings());
     }
 
-    IActor* CreateUploader(const TActorId& dataShard, ui64 txId) const override;
+    IActor* CreateUploader(const TActorId& dataShard, ui64 txId, TStringBuf tablePath) const override;
     IBuffer* CreateBuffer() const override;
 
     void Shutdown() const override;

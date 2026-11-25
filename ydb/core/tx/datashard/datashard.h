@@ -3,6 +3,8 @@
 #include "datashard_s3_download.h"
 #include "datashard_s3_upload.h"
 
+#include <ydb/core/backup/common/table_checksum.h>
+
 #include <ydb/core/tablet_flat/util_basics.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/data_events/events.h>
@@ -415,6 +417,9 @@ namespace TEvDataShard {
 
         EvDeltaKMeansRequest,
         EvDeltaKMeansResponse,
+
+        EvStoreBackupChecksumRequest,
+        EvStoreBackupChecksumResponse,
 
         EvEnd
     };
@@ -1356,6 +1361,33 @@ namespace TEvDataShard {
             , TxId(txId)
         {
         }
+    };
+
+    struct TBackupChecksumOutcome {
+        std::optional<NBackup::TTableChecksum> Checksum;
+        TString Error;
+    };
+
+    struct TEvStoreBackupChecksumRequest
+        : public TEventLocal<TEvStoreBackupChecksumRequest, EvStoreBackupChecksumRequest> {
+        ui64 TxId;
+        // An empty outcome requests a committed launch permit
+        std::optional<TBackupChecksumOutcome> Outcome;
+
+        explicit TEvStoreBackupChecksumRequest(ui64 txId, std::optional<TBackupChecksumOutcome> outcome = std::nullopt)
+            : TxId(txId)
+            , Outcome(std::move(outcome))
+        {}
+    };
+
+    struct TEvStoreBackupChecksumResponse
+        : public TEventLocal<TEvStoreBackupChecksumResponse, EvStoreBackupChecksumResponse> {
+        // An empty outcome grants launch. A terminal outcome without a checksum or error skips validation.
+        std::optional<TBackupChecksumOutcome> Outcome;
+
+        explicit TEvStoreBackupChecksumResponse(std::optional<TBackupChecksumOutcome> outcome)
+            : Outcome(std::move(outcome))
+        {}
     };
 
     struct TEvStoreS3UploadId

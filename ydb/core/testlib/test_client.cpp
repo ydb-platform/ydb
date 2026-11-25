@@ -1,5 +1,6 @@
 #include "test_client.h"
 
+#include <ydb/core/backup/common/table_checksum_factory.h>
 #include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags_service.h>
@@ -634,6 +635,7 @@ namespace Tests {
             appData.DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
             appData.TransferWriterFactory = Settings->TransferWriterFactory;
+            appData.TableChecksumFactory = &NBackup::GetTableChecksumFactory();
             appData.DataShardExportFactory = Settings->DataShardExportFactory.get();
             if (appData.BridgeConfig.PilesSize() > 0) {
                 appData.BridgeModeEnabled = true;

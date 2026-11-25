@@ -14,6 +14,7 @@
 #include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/backup/common/omit_backup.h>
+#include <ydb/core/backup/common/table_checksum_factory.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
@@ -61,6 +62,115 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     using THttpResolverConfig = NKikimrConfig::TS3ProxyResolverConfig::THttpResolverConfig;
     using TEvExternalStorage = NWrappers::TEvExternalStorage;
     using TEvBuffer = TEvExportScan::TEvBuffer<TBuffer>;
+
+    enum class EMetadataState {
+        Initial,
+        ChecksumStarting,
+        ChecksumCalculating,
+        Persisting,
+        Prepared,
+        Uploading,
+    };
+
+    struct TTableChecksumContext {
+        NBackup::TEvTableChecksum::TItem Item;
+        std::unique_ptr<NBackup::ITableChecksumJob> Job;
+        EMetadataState State = EMetadataState::Initial;
+        bool DataUploaded = false;
+        TString Error;
+    };
+
+    void StopTableChecksum() {
+        if (TableChecksum && TableChecksum->Job) {
+            TableChecksum->Job->Stop();
+            TableChecksum->Job.reset();
+        }
+    }
+
+    void StoreTableChecksumOutcome(TEvDataShard::TBackupChecksumOutcome outcome) {
+        TableChecksum->State = EMetadataState::Persisting;
+        this->Send(DataShard, new TEvDataShard::TEvStoreBackupChecksumRequest(TxId, std::move(outcome)));
+    }
+
+    void Handle(TEvDataShard::TEvStoreBackupChecksumResponse::TPtr& ev) {
+        if (!TableChecksum || Error || ev->Sender != DataShard) {
+            return;
+        }
+        auto& state = TableChecksum->State;
+        if (state != EMetadataState::ChecksumStarting && state != EMetadataState::Persisting) {
+            return;
+        }
+        auto& response = *ev->Get();
+        if (!response.Outcome) {
+            if (state != EMetadataState::ChecksumStarting) {
+                return;
+            }
+            const auto* factory = AppData()->TableChecksumFactory;
+            if (!factory) {
+                return StoreTableChecksumOutcome({ .Error = "table checksum executor unavailable" });
+            }
+            state = EMetadataState::ChecksumCalculating;
+            TableChecksum->Job =
+                factory->StartExport(std::move(TableChecksum->Item), {
+                                                                         [this] {
+                                                                             return this->RegisterAlias();
+                                                                         },
+                                                                         [this](TActorId alias) {
+                                                                             this->UnregisterAlias(alias);
+                                                                         },
+                                                                     });
+            return;
+        }
+        auto& outcome = *response.Outcome;
+        TableChecksum->Error = std::move(outcome.Error);
+        if (outcome.Checksum) {
+            Metadata = TMetadata::WithTableChecksum(Metadata, *outcome.Checksum);
+        }
+        state = EMetadataState::Prepared;
+        TryFinishTable();
+    }
+
+    void Handle(NBackup::TEvTableChecksum::TEvResult::TPtr& ev) {
+        const auto& result = *ev->Get();
+        if (!TableChecksum || Error || TableChecksum->State != EMetadataState::ChecksumCalculating ||
+            ev->Sender != this->SelfId() || result.OperationId != TxId || result.ItemIdx != 0) {
+            return;
+        }
+
+        TEvDataShard::TBackupChecksumOutcome outcome;
+        if (result.Status != Ydb::StatusIds::SUCCESS) {
+            outcome.Error = TStringBuilder() << "table checksum query failed: " << result.Error;
+        } else if (result.Checksum.Error) {
+            outcome.Error = TStringBuilder() << "table checksum query failed: " << result.Checksum.ToString();
+        } else {
+            outcome.Checksum = std::move(ev->Get()->Checksum);
+        }
+        StoreTableChecksumOutcome(std::move(outcome));
+    }
+
+    void DataUploadComplete() {
+        if (!TableChecksum) {
+            return PassAway();
+        }
+        TableChecksum->DataUploaded = true;
+        TryFinishTable();
+    }
+
+    void TryFinishTable() {
+        if (!TableChecksum->DataUploaded) {
+            return;
+        }
+        if (TableChecksum->State == EMetadataState::Prepared) {
+            if (!TableChecksum->Error.empty()) {
+                Error = std::move(TableChecksum->Error);
+                return PassAway();
+            }
+            TableChecksum->State = EMetadataState::Uploading;
+            UploadMetadata();
+        } else if (TableChecksum->State != EMetadataState::Uploading) {
+            this->Become(&TThis::StateBase);
+        }
+    }
 
     static TMaybe<THttpResolverConfig> GetHttpResolverConfig(TStringBuf endpoint) {
         for (const auto& entry : AppData()->S3ProxyResolverConfig.GetEndpoints()) {
@@ -174,6 +284,18 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Restart() {
         Y_ENSURE(ProxyResolved);
 
+        if (TableChecksum && TableChecksum->DataUploaded) {
+            if (Client) {
+                this->Send(Client, new TEvents::TEvPoisonPill());
+            }
+            Client = this->RegisterWithSameMailbox(
+                NWrappers::CreateStorageWrapper(ExternalStorageConfig->ConstructStorageOperator()));
+            if (TableChecksum->State == EMetadataState::Uploading) {
+                TableChecksum->State = EMetadataState::Prepared;
+            }
+            return TryFinishTable();
+        }
+
         MultiPart = false;
         Last = false;
         Parts.clear();
@@ -186,7 +308,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         auto storageOperator = ExternalStorageConfig->ConstructStorageOperator();
         Client = this->RegisterWithSameMailbox(NWrappers::CreateStorageWrapper(std::move(storageOperator)));
 
-        if (!MetadataUploaded) {
+        if (!MetadataUploaded && !TableChecksum) {
             UploadMetadata();
         } else if (EnablePermissions && !PermissionsUploaded) {
             UploadPermissions();
@@ -304,7 +426,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void UploadMetadata() {
         Y_ENSURE(!MetadataUploaded);
 
-        Buffer = std::move(Metadata);
+        Buffer = Metadata;
         PutDataWithChecksum(std::move(Buffer), Settings.GetMetadataKey(), MetadataChecksum, &TThis::StateUploadMetadata, Settings.EncryptionSettings.GetMetadataIV());
     }
 
@@ -420,6 +542,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
         auto nextStep = [this]() {
             MetadataUploaded = true;
+            if (TableChecksum) {
+                return PassAway();
+            }
             if (EnablePermissions) {
                 UploadPermissions();
             } else {
@@ -459,7 +584,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         const bool permissionsDone = !EnablePermissions || PermissionsUploaded;
-        if (ProxyResolved && SchemeUploaded && MetadataUploaded && permissionsDone && ChangefeedsUploaded) {
+        if (ProxyResolved && SchemeUploaded && (MetadataUploaded || TableChecksum) && permissionsDone &&
+            ChangefeedsUploaded) {
             this->Send(Scanner, new TEvExportScan::TEvFeed());
         }
     }
@@ -663,7 +789,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             {"result", result});
 
         if (result.IsSuccess()) {
-            return PassAway();
+            return DataUploadComplete();
         }
 
         const auto& error = result.GetError();
@@ -703,7 +829,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             for (const auto& object : result.GetResult().GetContents()) {
                 const auto& key = object.GetKey();
                 if (TStringBuf(key.data(), key.size()) == expectedKey) {
-                    return PassAway();
+                    return DataUploadComplete();
                 }
             }
 
@@ -833,6 +959,10 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
         if (!success) {
             Error = error;
+            StopTableChecksum();
+            if (TableChecksum && TableChecksum->DataUploaded) {
+                return PassAway();
+            }
         }
 
         if (!MultiPart || !UploadId) {
@@ -840,6 +970,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
                 return;
             }
 
+            if (success) {
+                return DataUploadComplete();
+            }
             PassAway();
         } else {
             if (success) {
@@ -854,6 +987,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     }
 
     void PassAway() override {
+        StopTableChecksum();
         if (HttpProxy) {
             this->Send(HttpProxy, new TEvents::TEvPoisonPill());
         }
@@ -892,14 +1026,12 @@ public:
         return GetHttpResolverConfig(*s3Config);
     }
 
-    explicit TS3Uploader(
-            const TActorId& dataShard, ui64 txId,
-            const NKikimrSchemeOp::TBackupTask& task,
-            TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
-            TVector<TChangefeedExportDescriptions> changefeeds,
-            TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
-            TString&& metadata)
-        : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, NBackup::NFieldsWrappers::GetSettings<TSettings>(task)))
+    explicit TS3Uploader(const TActorId& dataShard, ui64 txId, TStringBuf tablePath,
+        const NKikimrSchemeOp::TBackupTask& task, TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
+        TVector<TChangefeedExportDescriptions> changefeeds, TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
+        TString&& metadata)
+        : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(
+              AppData()->AwsClientConfig, NBackup::NFieldsWrappers::GetSettings<TSettings>(task)))
         , Settings(TStorageSettings::FromBackupTask<TSettings>(task))
         , DataFormat(DataFormatFromTask(task))
         , CompressionCodec(CodecFromTask(task))
@@ -921,12 +1053,27 @@ public:
         , EnableChecksums(task.GetEnableChecksums())
         , EnablePermissions(task.GetEnablePermissions())
     {
+        if (ShardNum == 0 && task.HasTableChecksum()) {
+            TableChecksum.ConstructInPlace();
+            const auto& checksum = task.GetTableChecksum();
+            auto& item = TableChecksum->Item;
+            item.OperationId = TxId;
+            item.ItemIdx = 0;
+            item.Database = checksum.GetDatabase();
+            item.TablePath = tablePath;
+            item.Importing = false;
+        }
     }
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix());
         YDB_LOG_DEBUG("[Export] Bootstrap",
             {"attempt", Attempt});
+
+        if (TableChecksum && TableChecksum->State == EMetadataState::Initial) {
+            TableChecksum->State = EMetadataState::ChecksumStarting;
+            this->Send(DataShard, new TEvDataShard::TEvStoreBackupChecksumRequest(TxId));
+        }
 
         if constexpr (!RequiresHttpResolver<TSettings>) {
             ProxyResolved = true;
@@ -942,10 +1089,15 @@ public:
     }
 
     STATEFN(StateBase) {
+        if (TableChecksum && TableChecksum->Job && TableChecksum->Job->Handle(ev)) {
+            return;
+        }
         YDB_LOG_CREATE_CONTEXT(LogPrefix(),
             {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExportScan::TEvReady, Handle);
+            hFunc(TEvDataShard::TEvStoreBackupChecksumResponse, Handle);
+            hFunc(NBackup::TEvTableChecksum::TEvResult, Handle);
 
             sFunc(TEvents::TEvWakeup, Bootstrap);
             sFunc(TEvents::TEvPoisonPill, PassAway);
@@ -1055,7 +1207,7 @@ private:
     const EDataFormat DataFormat;
     const ECompressionCodec CompressionCodec;
     const ui32 ShardNum;
-    bool ProxyResolved;
+    bool ProxyResolved = false;
 
     TMaybe<THttpResolverConfig> HttpResolverConfig;
     TActorId HttpProxy;
@@ -1064,7 +1216,8 @@ private:
     const ui64 TxId;
     const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
     const TVector<TChangefeedExportDescriptions> Changefeeds;
-    const TString Metadata;
+    TString Metadata;
+    TMaybe<TTableChecksumContext> TableChecksum;
     const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
 
     const ui32 Retries;
@@ -1079,7 +1232,7 @@ private:
     bool ChangefeedsUploaded;
     bool MetadataUploaded;
     bool PermissionsUploaded;
-    bool MultiPart;
+    bool MultiPart = false;
     bool Last;
 
     TActorId Scanner;
@@ -1105,31 +1258,23 @@ private:
 
 }; // TS3Uploader
 
-IActor* CreateUploaderBySettingsType(
-    const TActorId& dataShard,
-    ui64 txId,
-    const NKikimrSchemeOp::TBackupTask& task,
-    TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
-    TVector<TChangefeedExportDescriptions>&& changefeeds,
-    TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
+IActor* CreateUploaderBySettingsType(const TActorId& dataShard, ui64 txId, TStringBuf tablePath,
+    const NKikimrSchemeOp::TBackupTask& task, TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
+    TVector<TChangefeedExportDescriptions>&& changefeeds, TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
     TString&& metadata)
 {
     if (task.HasS3Settings()) {
-        return new TS3Uploader<NKikimrSchemeOp::TS3Settings>(
-            dataShard, txId, task,
-            std::move(scheme), std::move(changefeeds),
-            std::move(permissions), std::move(metadata));
+        return new TS3Uploader<NKikimrSchemeOp::TS3Settings>(dataShard, txId, tablePath, task, std::move(scheme),
+            std::move(changefeeds), std::move(permissions), std::move(metadata));
     } else if (task.HasFSSettings()) {
-        return new TS3Uploader<NKikimrSchemeOp::TFSSettings>(
-            dataShard, txId, task,
-            std::move(scheme), std::move(changefeeds),
-            std::move(permissions), std::move(metadata));
+        return new TS3Uploader<NKikimrSchemeOp::TFSSettings>(dataShard, txId, tablePath, task, std::move(scheme),
+            std::move(changefeeds), std::move(permissions), std::move(metadata));
     }
 
     Y_ABORT("Unsupported storage type in backup task");
 }
 
-IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
+IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId, TStringBuf tablePath) const {
     auto scheme = (Task.GetShardNum() == 0)
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
@@ -1230,9 +1375,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     };
     metadata.AddFullBackup(backup);
 
-    return CreateUploaderBySettingsType(
-        dataShard, txId, Task,
-        std::move(scheme), std::move(changefeeds),
+    return CreateUploaderBySettingsType(dataShard, txId, tablePath, Task, std::move(scheme), std::move(changefeeds),
         std::move(permissions), metadata.Serialize());
 }
 

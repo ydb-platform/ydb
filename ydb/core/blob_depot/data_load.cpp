@@ -31,14 +31,18 @@ namespace NKikimr::NBlobDepot {
         accounting.Account(LoadFinishTxCycles);
     }
 
+    void TData::RunLoadSuccessorTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx) {
+        tx.RunSuccessorTx();
+        accounting.Account(LoadRunSuccessorTxCycles);
+        ++LoadRunSuccessorTx;
+    }
+
     void TData::RestartLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx, bool progress) {
         if (progress) {
             // we have already processed something, so start the next transaction to prevent keeping already
             // processed data in memory
             FinishLoadTx(accounting, tx);
-            tx.RunSuccessorTx();
-            accounting.Account(LoadRunSuccessorTxCycles);
-            ++LoadRunSuccessorTx;
+            RunLoadSuccessorTx(accounting, tx);
         } else {
             // we haven't read anything at all, so we restart the transaction with the request to read some
             // data
@@ -113,14 +117,18 @@ namespace NKikimr::NBlobDepot {
                 RestartLoadTx(accounting, tx, std::exchange(progress, false));
             }
 
-            while (!PendingS3RefChecks.empty()) {
+            // The complete key index now accounts for every owner. Foreground releases can
+            // go straight to trash while we finish checking candidates from the partial load.
+            S3ReferencesLoaded = true;
+            for (;;) {
                 CheckPendingS3References(*tx, &tx);
                 FinishLoadTx(accounting, tx);
                 CommitTrash(&tx);
-                tx.RunSuccessorTx();
+                if (PendingS3RefChecks.empty()) {
+                    break;
+                }
+                RunLoadSuccessorTx(accounting, tx);
             }
-            S3ReferencesLoaded = true;
-            FinishLoadTx(accounting, tx);
             Self->Data->OnLoadComplete();
         }));
     }
@@ -208,8 +216,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::CheckPendingS3References(NTabletFlatExecutor::TTransactionContext& txc, void* cookie) {
+        constexpr size_t MaxChecksPerTx = 1'000;
         NIceDb::TNiceDb db(txc.DB);
-        for (size_t n = 0; n < 1000 && !PendingS3RefChecks.empty(); ++n) {
+        for (size_t n = 0; n < MaxChecksPerTx && !PendingS3RefChecks.empty(); ++n) {
             const auto it = PendingS3RefChecks.begin();
             const auto [generation, keyId] = it->first;
             if (RefCountS3.contains(it->first)) {

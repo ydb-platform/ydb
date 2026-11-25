@@ -273,6 +273,8 @@ namespace NKikimr::NBlobDepot {
                     {"BDT", Self->TabletID()},
                     {"key", key},
                     {"locator", locator});
+                // A confirmed last release supersedes any outstanding startup check for the pack.
+                PendingS3RefChecks.erase(objectKey);
                 AddToS3Trash(locator, txc, cookie);
                 return false; // keep this blob in deletion queue
             };
@@ -983,10 +985,10 @@ namespace NKikimr::NBlobDepot {
             --object.RefCount;
         }
 
-        const ui64 begin = link.GetSubrangeBegin();
-        const ui64 end = link.HasSubrangeEnd() ? link.GetSubrangeEnd() : object.Len;
-        if (action != ES3ReferenceAction::Discard && begin < end && end <= object.Len && (begin || end < object.Len)) {
-            const std::pair<ui32, ui32> range{static_cast<ui32>(begin), static_cast<ui32>(end)};
+        const auto range = GetValueChainRange(link, object.Len);
+        if (action != ES3ReferenceAction::Discard && range && range->first != range->second &&
+                (range->first || range->second < object.Len)) {
+            const auto [begin, end] = *range;
             if (action == ES3ReferenceAction::Add) {
                 if (!object.Partial) {
                     object.Partial = std::make_unique<TS3PartialReferences>();
@@ -994,13 +996,13 @@ namespace NKikimr::NBlobDepot {
                 auto& partial = *object.Partial;
                 ++partial.RefCount;
                 // Pack ranges are disjoint. Identical references share the same bytes.
-                if (!partial.Ranges[range]++) {
+                if (!partial.Ranges[*range]++) {
                     partial.LiveBytes += end - begin;
                 }
             } else {
                 Y_ABORT_UNLESS(object.Partial);
                 auto& partial = *object.Partial;
-                const auto rangeIt = partial.Ranges.find(range);
+                const auto rangeIt = partial.Ranges.find(*range);
                 Y_ABORT_UNLESS(rangeIt != partial.Ranges.end());
                 if (!--rangeIt->second) {
                     partial.Ranges.erase(rangeIt);
@@ -1028,6 +1030,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     bool TData::IsS3ObjectReferenced(const TS3Locator& locator) const {
+        Y_DEBUG_ABORT_UNLESS(IsLoaded());
         return RefCountS3.contains(locator.GetObjectKey());
     }
 

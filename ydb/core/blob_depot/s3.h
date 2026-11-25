@@ -75,6 +75,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void HandlePrepareWriteS3(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev);
+        void StartPrepareWriteS3(TAgent& agent, TEvBlobDepot::TEvPrepareWriteS3::TPtr ev);
         void NotifyPutSlowDown();
         void HandlePutThrottleWakeup();
         void RunPendingPrepareWritesIfPossible();

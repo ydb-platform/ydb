@@ -829,6 +829,27 @@ Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
         CheckS3PutTimeout(true);
     }
 
+    Y_UNIT_TEST(GetRejectsValueChainShorterThanLogicalBlob) {
+        TS3ReadEnv env;
+        TBlockEvents<TEvBlobDepot::TEvResolveResult> resolves(env.Runtime);
+        env.Runtime.SendAsync(new IEventHandle(env.AgentId, env.Edge, new TEvBlobStorage::TEvGet(env.Id, 1, 0,
+            TInstant::Max(), NKikimrBlobStorage::FastRead)));
+        env.Runtime.WaitFor("S3 blob mapping", [&] { return !resolves.empty(); }, TDuration::Seconds(1));
+        auto& record = resolves.front()->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.ResolvedKeysSize(), 1);
+        auto& key = *record.MutableResolvedKeys(0);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetKey(), env.Id.AsBinaryString());
+        UNIT_ASSERT_VALUES_EQUAL(key.ValueChainSize(), 1);
+        key.MutableValueChain(0)->SetSubrangeEnd(2);
+        resolves.Stop().Unblock();
+
+        const auto result = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(env.Edge, TDuration::Seconds(1));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->ErrorReason, "value chain is shorter");
+        UNIT_ASSERT(env.Reads.empty());
+    }
+
     Y_UNIT_TEST(S3ReadReplyAfterAgentEjection) {
         TS3ReadEnv env;
         env.Get(env.AgentId, 0, TInstant::Max());
@@ -1178,6 +1199,55 @@ Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
             env.SendQueryBlocks(agent, 12345);
             UNIT_ASSERT_VALUES_EQUAL(env.ExpectQueryBlocks(agent), server);
         }
+    }
+
+    Y_UNIT_TEST(CommitReleasesOnlyOneS3WriteSlot) {
+        TS3WriteEnv env; // tablet limit is one
+        ui32 prepares = 0;
+        auto observer = env.Runtime.AddObserver<TEvBlobDepot::TEvPrepareWriteS3>(
+            [&](TEvBlobDepot::TEvPrepareWriteS3::TPtr&) { ++prepares; });
+        const auto blobId = [](ui32 step) { return TLogoBlobID(12345, 1, step, 0, 3, 0); };
+        for (ui32 step = 1; step <= 4; ++step) {
+            env.Put(blobId(step), TInstant::Max());
+        }
+        env.Runtime.WaitFor("four S3 prepares", [&] { return prepares == 4; }, TDuration::Seconds(1));
+
+        for (ui32 step = 1; step <= 4; ++step) {
+            env.Runtime.WaitFor("next physical PUT", [&] { return !env.Writes.empty(); }, TDuration::Seconds(1));
+            // Hold its reply while the executor runs any prepare transactions scheduled by the last commit.
+            env.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            UNIT_ASSERT_VALUES_EQUAL(env.Writes.size(), 1);
+            env.FinishPut();
+            env.ExpectPut(blobId(step), NKikimrProto::OK);
+        }
+    }
+
+    Y_UNIT_TEST(S3PrepareBatchCanRetryItemsAboveTheLimit) {
+        TTestEnv env;
+        const auto agent = env.Connect(1);
+        auto batch = std::make_unique<TEvBlobDepot::TEvPrepareWriteS3>();
+        for (ui32 cookie = 1; cookie <= 2; ++cookie) {
+            auto* item = batch->Record.AddItems();
+            item->SetKey(TStringBuilder() << "key-" << cookie);
+            item->SetLen(100);
+        }
+        env.Send(agent, batch.release());
+        const auto prepared = env.Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvPrepareWriteS3Result>(
+            agent.Edge, TDuration::Seconds(1));
+        UNIT_ASSERT(prepared);
+        const auto& result = prepared->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(result.ItemsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetItems(0).GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT(result.GetItems(0).HasS3Locator());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetItems(1).GetStatus(), NKikimrProto::TRYLATER);
+        UNIT_ASSERT(!result.GetItems(1).HasS3Locator());
+
+        env.Prepare(agent, 2);
+        env.ExpectPending(2);
+        auto discard = std::make_unique<TEvBlobDepot::TEvDiscardSpoiledBlobSeq>();
+        discard->Record.AddS3Locators()->CopyFrom(result.GetItems(0).GetS3Locator());
+        env.Send(agent, discard.release());
+        env.ExpectPrepared(agent, 2);
     }
 
     Y_UNIT_TEST(DisconnectReleasesS3WriteSlots) {

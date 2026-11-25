@@ -940,6 +940,7 @@ namespace NKikimr::NBlobDepot {
         void LoadS3Table(TCoroTx::TContextBase& tx, TLoadCycleAccounting& accounting, F&& process);
 
         void FinishLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx);
+        void RunLoadSuccessorTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx);
         void RestartLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx, bool progress);
         ELoadTrashResult RunLoadTrashLoop(TCoroTx::TContextBase& tx, TLoadCycleAccounting& accounting, TString& from);
     };

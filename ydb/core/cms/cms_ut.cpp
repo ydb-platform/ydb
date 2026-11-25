@@ -503,6 +503,17 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     Y_UNIT_TEST(DDiskHttpRequiresCmsSupport)
     {
         TCmsTestEnv env(8);
+        env.ConfigureDDiskPool();
+        constexpr ui64 tabletId = 1001;
+        UNIT_ASSERT_VALUES_EQUAL(env.AllocateDDiskBlockGroup(tabletId, 1).GetStatus(), NKikimrProto::OK);
+        env.WaitForDDiskInfo(tabletId, 1);
+
+        const TString layoutUri = "/api/json/ddisk/tablet?tablet_id=" + ToString(tabletId);
+        const TVector<TString> diagnosticsUris = {
+            "/api/json/ddisk/tablets?groups_only=1",
+            layoutUri + "&include_health=1",
+            "/api/json/ddisk/disks?inventory=1&tablet_id=" + ToString(tabletId) + "&node_id=1&pdisk_id=1&group_by=state&limit=0",
+        };
         NKikimrCms::TVersionInfo legacyVersion;
         legacyVersion.SetSupportWalleDrainData(true);
         TString version;
@@ -522,16 +533,27 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         });
         for (const TString& unsupported : {TString(), legacyVersion.SerializeAsString(), TString("\xff")}) {
             version = unsupported;
-            for (const TString uri : {
-                    "/api/json/ddisk/tablets?groups_only=1",
-                    "/api/json/ddisk/tablet?tablet_id=1001&include_health=1",
-                    "/api/json/ddisk/disks?inventory=1&tablet_id=1001&node_id=1&pdisk_id=1&group_by=state&limit=0"}) {
+            for (const auto& uri : diagnosticsUris) {
                 const auto response = SendDDiskHttpRequest(env, uri);
                 UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 503"), response);
                 UNIT_ASSERT_C(response.Contains("CMS does not support DDisk diagnostics"), response);
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(requests, 0);
+
+        version = legacyVersion.SerializeAsString();
+        const auto layout = SendDDiskHttpRequest(env, layoutUri);
+        UNIT_ASSERT_C(layout.StartsWith("HTTP/1.1 200"), layout);
+        const auto bodyOffset = layout.find("\r\n\r\n");
+        UNIT_ASSERT(bodyOffset != TString::npos);
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(layout).SubStr(bodyOffset + 4), &json, true));
+        UNIT_ASSERT_VALUES_EQUAL(json["Status"].GetString(), "OK");
+        UNIT_ASSERT_VALUES_EQUAL(json["TabletId"].GetUInteger(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(json["Groups"].GetArray().size(), 1);
+        UNIT_ASSERT(!json.Has("Slots"));
+        UNIT_ASSERT_VALUES_EQUAL(requests, 1);
+
         env.SetObserverFunc(prev);
         const auto response = SendDDiskHttpRequest(env, "/api/json/ddisk/tablets");
         UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 200"), response);
@@ -627,6 +649,13 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Missing component reports retain the existing unknown-is-available policy.
         UNIT_ASSERT_VALUES_EQUAL(env.RequestDDiskTabletList(tabletsRequest).GetTotalCount(), 0);
         UNIT_ASSERT_VALUES_EQUAL(env.RequestDDiskDiskList(disksRequest).GetTotalCount(), 0);
+        const auto detailWithoutSamples = env.RequestDDiskInfo(tabletId, true);
+        UNIT_ASSERT_VALUES_EQUAL(detailWithoutSamples.SlotsSize(), 3);
+        for (const auto& slot : detailWithoutSamples.GetSlots()) {
+            UNIT_ASSERT(!slot.HasDDiskStatus());
+            UNIT_ASSERT(!slot.HasPersistentBufferStatus());
+            UNIT_ASSERT_VALUES_EQUAL(slot.GetPDiskState(), "Normal");
+        }
     }
 
     Y_UNIT_TEST(DDiskTabletListDegrade)

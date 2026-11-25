@@ -186,7 +186,7 @@ const Nbs2Tablets = {
         const id = this.field(disk, 'DiskId', 'diskId') || disk;
         health[this.ddiskKey(id)] = {
             available: this.field(disk, 'Available', 'available'),
-            state: this.field(disk, 'State', 'state'),
+            state: this.field(disk, 'PDiskState', 'pDiskState', 'pdiskState', 'State', 'state'),
             DDisk: {
                 status: this.field(disk, 'DDiskStatus', 'dDiskStatus', 'ddiskStatus'),
                 reason: this.field(disk, 'DDiskStatusReason', 'dDiskStatusReason', 'ddiskStatusReason'),

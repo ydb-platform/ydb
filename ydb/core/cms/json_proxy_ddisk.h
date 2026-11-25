@@ -53,7 +53,7 @@ public:
         if (params.contains("timeout")) {
             if (!TryFromString(params.Get("timeout"), timeout) || timeout == 0 || timeout > MaxTimeoutMs) {
                 Reply("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\n"
-                    "Invalid field 'timeout': expected milliseconds in [1, 30000]", ctx);
+                    "Invalid field 'timeout': expected milliseconds in [1, " + ToString(MaxTimeoutMs) + "]", ctx);
                 return;
             }
         }
@@ -124,7 +124,8 @@ public:
                 }
                 auto event = MakeHolder<TEvCms::TEvDDiskInfoGetRequest>();
                 event->Record.SetTabletId(TabletId);
-                event->Record.SetIncludeHealth(IsTrue(params.Get("include_health")));
+                RequiresDiagnostics = IsTrue(params.Get("include_health"));
+                event->Record.SetIncludeHealth(RequiresDiagnostics);
                 PendingRequest.Reset(event.Release());
                 break;
             }
@@ -302,10 +303,12 @@ private:
             Reply("HTTP/1.1 503 Service Unavailable\r\n\r\nCMS is unavailable", ctx);
             return;
         }
-        NKikimrCms::TVersionInfo versionInfo;
-        if (!versionInfo.ParseFromString(msg->VersionInfo) || !versionInfo.GetSupportDDiskDiagnostics()) {
-            Reply("HTTP/1.1 503 Service Unavailable\r\n\r\nCMS does not support DDisk diagnostics", ctx);
-            return;
+        if (RequiresDiagnostics) {
+            NKikimrCms::TVersionInfo versionInfo;
+            if (!versionInfo.ParseFromString(msg->VersionInfo) || !versionInfo.GetSupportDDiskDiagnostics()) {
+                Reply("HTTP/1.1 503 Service Unavailable\r\n\r\nCMS does not support DDisk diagnostics", ctx);
+                return;
+            }
         }
         NTabletPipe::SendData(ctx, Pipe, PendingRequest.Release());
     }
@@ -333,6 +336,7 @@ private:
     TActorId Pipe;
     ui64 TabletId = 0;
     EMode Mode = EMode::TabletList;
+    bool RequiresDiagnostics = true;
     THashSet<TString> FieldsRequired;
 };
 

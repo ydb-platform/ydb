@@ -2276,12 +2276,12 @@ void TCms::Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr& ev, const TActorContext&
                     disk.SetPDiskId(pdiskId);
                     disk.SetDDiskSlotId(slotId);
                     FillDDiskMetadata(disk, *ClusterInfo, id);
+                    disk.SetPDiskState(GetDDiskStateName(id));
                     if (!IsDDiskAvailable(id)) {
-                        const auto pdiskFailure = GetDDiskStateName(id);
                         disk.SetDDiskStatus(TDDiskSample::Broken);
                         disk.SetPersistentBufferStatus(TDDiskSample::Broken);
-                        disk.SetDDiskStatusReason(pdiskFailure);
-                        disk.SetPersistentBufferStatusReason(pdiskFailure);
+                        disk.SetDDiskStatusReason(disk.GetPDiskState());
+                        disk.SetPersistentBufferStatusReason(disk.GetPDiskState());
                     }
                 }
             };

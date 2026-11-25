@@ -27,6 +27,11 @@
     ))))
     '('set_ops '('push))
 )))
+(let result (MatchType (TypeOf (YqlSubLink 'any '() (StructType)
+    (lambda '(row value) (Just (InstanceOf (UniversalType))))
+    (lambda '() (Apply query rows)))) 'Universal
+    (lambda '() result)
+    (lambda '() (Ensure result (Bool 'false) (String '"Expected Universal sublink result")))))
 (let sink (DataSink 'result))
 (let world (Write! world sink (Key) result '('('type))))
 (let keys (YqlSelect '(

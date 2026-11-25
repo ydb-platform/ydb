@@ -12,7 +12,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/providers/common/message_stream/async_io
     library/cpp/containers/disjoint_interval_tree
     library/cpp/protobuf/interop
     library/cpp/retry
@@ -21,9 +20,11 @@ PEERDIR(
     ydb/core/fq/libs/row_dispatcher/events
     ydb/library/accessor
     ydb/library/services
+    ydb/library/yql/dq/actors/common
     ydb/library/yql/dq/actors/compute
-    ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/abstract
+    ydb/library/yql/providers/common/message_stream/async_io
+    ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/pq/common
     ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/gateway/clients/composite

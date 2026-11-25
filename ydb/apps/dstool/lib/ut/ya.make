@@ -9,6 +9,7 @@ TEST_SRCS(
     test_nbs_dbg_like_load.py
     test_cluster_balance.py
     test_group_slots_balance.py
+    test_group_virtual_reconfigure.py
     test_cluster_reanimate.py
     test_cluster_workload_config.py
     test_cluster_workload_runtime.py

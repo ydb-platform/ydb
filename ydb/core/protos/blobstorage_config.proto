@@ -706,7 +706,22 @@ message TUpdateBridgeGroupInfo {
 
 message TReconfigureVirtualGroup {
     string Name = 1;
+    // Omit settings to validate ownership of the stored S3 namespace. An explicitly empty message
+    // requests removal of the S3 configuration and requires ConfirmS3Empty for an assigned bucket.
     optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 2;
+    // Confirm the new route accesses the same S3 objects, including writes already in flight, in any mode.
+    bool ConfirmS3RouteChange = 3;
+    // Offline namespace migration. Quiesce the depot, fence old S3 mutations and drain outstanding
+    // requests. Copy its referenced objects with the same locator suffixes into a dedicated empty
+    // destination. Keep writers quiescent and the source readable until the tablet and agents
+    // use the new configuration.
+    bool ConfirmS3NamespaceMigration = 4;
+    // Physical suffix to use on first S3 assignment or to replace a malformed legacy storage name.
+    // Requires ConfirmS3NamespaceMigration. The virtual group keeps its original name.
+    optional string MigratedS3Name = 5;
+    // Remove the S3 route. The operator has quiesced writers and verified that no values reference
+    // S3, outstanding writes have been fenced and drained, and pending S3 deletes have completed.
+    bool ConfirmS3Empty = 6;
 }
 
 message TRecommissionGroups {
@@ -964,6 +979,7 @@ message TBaseConfig {
         // Effective mirror-3-dc realms in physical order (0/1/2); empty for other erasure species.
         repeated TFailRealmInfo FailRealms = 14;
         optional TGroupState.EState Mirror3dcState = 15;
+        optional bool DDisk = 16;
     }
     message TNode {
         uint32 NodeId = 1;
@@ -994,6 +1010,8 @@ message TBaseConfig {
     repeated TDevice Device = 5;
     TUpdateSettings Settings = 6;
     TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 7;
+    // Present when the controller supplies typed DDisk pool groups.
+    optional bool HasDDiskPools = 8;
 }
 
 message TMoveCommand {

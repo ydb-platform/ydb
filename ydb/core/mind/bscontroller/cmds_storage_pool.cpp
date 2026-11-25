@@ -270,7 +270,8 @@ namespace NKikimr::NBsController {
             if (cur.DDisk) {
                 throw TExError() << "can't invoke DefineStoragePool against DDisk pool";
             }
-            if (cur.SchemeshardId != storagePool.SchemeshardId || cur.PathItemId != storagePool.PathItemId) {
+            if (cur.Name != storagePool.Name || cur.SchemeshardId != storagePool.SchemeshardId ||
+                    cur.PathItemId != storagePool.PathItemId) {
                 for (auto it = spToGroups.lower_bound({id, Min<TGroupId>()}); it != spToGroups.end() && it->first == id; ++it) {
                     GroupContentChanged.insert(it->second);
                 }
@@ -932,6 +933,9 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& cmd, TStatus& status) {
         NKikimrBlobStorage::TBaseConfig *pb = status.MutableBaseConfig();
+        pb->SetHasDDiskPools(std::ranges::any_of(StoragePools.Get(), [](const auto& entry) {
+            return entry.second.DDisk;
+        }));
 
         if (cmd.GetRetrieveDevices()) {
             DrivesSerials.ForEach([&](const auto& serial, const auto& driveInfo) {

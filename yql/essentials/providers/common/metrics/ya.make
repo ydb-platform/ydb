@@ -12,4 +12,9 @@ PEERDIR(
     yql/essentials/providers/common/metrics/protos
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    market/robotics/cv/cpp_inventory_app/bin
+)
+
 END()

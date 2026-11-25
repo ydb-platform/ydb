@@ -81,7 +81,7 @@ EExecutionStatus TStoreSchemeTxUnit::Execute(TOperation::TPtr op,
                              0, op->IsReadOnly(), false, TString(), 0, 0);
     Pipeline.ProposeSchemeTx(schemeOp, txc);
 
-    Pipeline.ProposeTx(op, tx->GetTxBody(), txc, ctx);
+    Pipeline.ProposeTx(*tx, txc, ctx);
     tx->ClearTxBody();
     // TODO: make cache for scheme tx similar to data tx.
     tx->ClearSchemeTx();

@@ -190,8 +190,8 @@ public:
 
     virtual bool HasDataInPathId(const TInternalPathId pathId) const = 0;
     virtual bool ErasePathId(const TInternalPathId pathId) = 0;
-    virtual std::shared_ptr<ITxReader> BuildLoader(
-        const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, std::vector<TPortionAddress>&& uncommittedPortions) = 0;
+    virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector,
+        std::vector<TPortionAddress>&& uncommittedPortions, const bool loadPortions) = 0;
 
     // a new table: there is nothing on disk to load
     void RegisterTable(const TInternalPathId pathId) {

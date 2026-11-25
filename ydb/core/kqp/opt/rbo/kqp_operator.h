@@ -688,6 +688,10 @@ public:
     std::optional<TExpression> OriginalPredicate;
     ESortDir SortDir{ESortDir::None};
     bool RequireSortedRead = false;
+    // VIEW PRIMARY KEY, or automatic index selection disabled: the read stays on the main table, rules do not
+    // redirect it to an index. Indexes are chosen before other rules rebuild the read, so the import, the copy and
+    // the range pushdown keep it.
+    bool ForcePrimary = false;
     std::optional<TRangeInfo> RangeInfo;
 
 protected:

@@ -9,9 +9,13 @@ LIBRARY()
             s3_router_stub.cpp
         )
     ELSE()
+        PEERDIR(
+            ydb/library/aws_init
+        )
         SRCS(
             s3.cpp
             s3_delete.cpp
+            s3_retire.cpp
             s3_scan.cpp
             s3_upload.cpp
             s3_write.cpp
@@ -22,8 +26,12 @@ LIBRARY()
     SRCS(
         blob_depot.cpp
         blob_depot.h
+        config.cpp
+        s3_put_timeout.h
         defs.h
+        config.h
         types.h
+        wakeup_timer.h
         events.h
         schema.h
 
@@ -54,7 +62,9 @@ LIBRARY()
         mon_main.h
         move_data.cpp
         s3.h
+        s3_collection.h
         s3_error.h
+        s3_request_timer.h
         s3_router.h
         s3_router_events.h
         space_monitor.cpp

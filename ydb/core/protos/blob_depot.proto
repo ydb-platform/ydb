@@ -125,6 +125,8 @@ message TEvBlock {
     optional uint64 IssuerGuid = 3;
     optional uint32 Version = 4;
     optional uint32 WriteSourceOp = 5;
+    // Backing blocks inherit the initiating query's bridge accounting.
+    optional bool SkipBridgeAccountingForSubrequests = 6;
 }
 
 message TEvBlockResult {
@@ -200,6 +202,7 @@ message TEvCommitBlobSeq {
         repeated TExtraBlockCheck ExtraBlockChecks = 7;
         optional bool IssueKeepFlag = 8;
         optional bool IgnoreBlock = 9;
+        optional bool S3PutMayArriveLate = 10; // an earlier physical attempt can finish after this successful PUT
     }
 
     repeated TItem Items = 1;
@@ -218,6 +221,8 @@ message TEvDiscardSpoiledBlobSeq {
     repeated TBlobSeqId Items = 1;
     repeated TS3Locator S3Locators = 2;
     optional bool S3SlowDown = 3; // set when at least one S3Locator is being discarded due to S3 SlowDown response
+    // A dispatched PUT can still reach S3 after the tablet releases its logical write slot.
+    optional bool S3PutMayArriveLate = 4;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -255,6 +260,9 @@ message TEvResolve {
     // Wall clock time after which the requesting query no longer waits for the result; work done on its behalf in
     // decommission mode (reads of the decommitted group, copying blobs) is bounded by it. Unset means no deadline.
     optional uint64 DeadlineUs = 3;
+
+    // Set when the initiating query's backing reads and writes are excluded from logical bridge request counters.
+    optional bool SkipBridgeAccountingForSubrequests = 4;
 }
 
 message TEvResolveResult {

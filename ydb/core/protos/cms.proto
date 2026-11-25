@@ -1,6 +1,7 @@
 import "ydb/core/protos/blobstorage_base3.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_ddisk.proto";
+import "ydb/core/protos/node_whiteboard.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 
@@ -800,6 +801,8 @@ message TDDiskTabletListRequest {
     optional EDDiskTabletGroupBy GroupBy = 8 [default = DDISK_TABLET_GROUP_BY_NONE];
     // Group name: degrade count, usage range lower bound (0, 10, ..., 100), or "unknown".
     optional string FilterGroup = 9;
+    // Return summary counts without returning or sorting tablet rows.
+    optional bool GroupsOnly = 10 [default = false];
 }
 
 message TDDiskTabletListResponse {
@@ -830,6 +833,8 @@ message TDDiskTabletListResponse {
     // Total number of items matching the filter (before paging), used by the UI
     // to compute the number of pages.
     optional uint32 TotalCount = 4;
+    optional uint32 UnfilteredCount = 6;
+    repeated string FieldsAvailable = 7;
 }
 
 enum EDDiskDiskSortBy {
@@ -837,6 +842,11 @@ enum EDDiskDiskSortBy {
     DDISK_DISK_SORT_BY_TABLETS_COUNT = 1;
     DDISK_DISK_SORT_BY_DDISK_OCCUPANCY = 2;
     DDISK_DISK_SORT_BY_PERSISTENT_BUFFER_OCCUPANCY = 3;
+}
+
+enum EDDiskDiskGroupBy {
+    DDISK_DISK_GROUP_BY_NONE = 0;
+    DDISK_DISK_GROUP_BY_STATE = 1;
 }
 
 message TDDiskDiskListRequest {
@@ -853,6 +863,14 @@ message TDDiskDiskListRequest {
     optional bool OnlyProblems = 7 [default = false];
     // Preserve tablet lists for legacy clients; overview clients can request counts only.
     optional bool IncludeTabletIds = 8 [default = true];
+    // Include all configured slots, including slots without tablet references.
+    optional bool Inventory = 9 [default = false];
+    optional uint32 NodeId = 10;
+    optional uint32 PDiskId = 11;
+    optional uint64 TabletId = 12; // exact filter, independent of FilterTabletId
+    optional EDDiskDiskGroupBy GroupBy = 13 [default = DDISK_DISK_GROUP_BY_NONE];
+    optional string FilterGroup = 14;
+    optional bool GroupsOnly = 15 [default = false];
 }
 
 message TDDiskDiskListResponse {
@@ -872,8 +890,15 @@ message TDDiskDiskListResponse {
         optional uint32 DDiskTabletCount = 8;
         optional uint32 PersistentBufferTabletCount = 9;
         optional string StoragePoolName = 10;
-        optional string DDiskPath = 11; // node-relative actor monitoring path
+        optional string DDiskPath = 11; // legacy field, omitted by CMS
         optional string PersistentBufferId = 12; // stable service actor ID
+        optional NKikimrWhiteboard.TDDiskStateInfo.EComponentStatus DDiskStatus = 13;
+        optional NKikimrWhiteboard.TDDiskStateInfo.EComponentStatus PersistentBufferStatus = 14;
+        optional string DDiskStatusReason = 15;
+        optional string PersistentBufferStatusReason = 16;
+        optional uint64 AllocatedSize = 17; // shared PDisk owner, bytes
+        optional uint64 AvailableSize = 18;
+        optional uint64 TotalSize = 19;
 
     }
 
@@ -881,4 +906,12 @@ message TDDiskDiskListResponse {
     optional TStatus Status = 1;
     repeated TDiskUsage Disks = 3;
     optional uint32 TotalCount = 4;
+    message TGroup {
+        optional string Name = 1;
+        optional uint32 Count = 2;
+    }
+    repeated TGroup Groups = 5;
+    // Count within the requested location and tablet scope, before other filters.
+    optional uint32 UnfilteredCount = 6;
+    repeated string FieldsAvailable = 7;
 }

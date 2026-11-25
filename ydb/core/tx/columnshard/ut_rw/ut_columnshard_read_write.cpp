@@ -2798,9 +2798,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(ForcedCompactionCascadeRewritesPortionsToCurrentSchema) {
         // A plain request is answered once the planner has nothing to do: tiling++ holds it until compaction has
-        // settled every portion into the last level (OK), the other planners answer NOT_NEEDED at once. No operation
-        // id: NOT_NEEDED whatever the state. Older portions are left alone by a plain request and rewritten by CASCADE
-        // (OK once no live portion is older, NOT_NEEDED when there was nothing to rewrite).
+        // settled every portion into the last level (OK), the other planners answer NOT_NEEDED at once; a request
+        // without an operation id is a plain one. Older portions are left alone by a plain request and rewritten by
+        // CASCADE (OK once no live portion is older, NOT_NEEDED when there was nothing to rewrite).
         using TResult = TForcedCompactionTest::TResult;
         using EBackground = TForcedCompactionTest::EBackground;
         for (const TString planner : { "tiling++", "lc-buckets" }) {
@@ -2809,14 +2809,19 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             t.DisableBackground(EBackground::Compaction);
             t.WriteOverlappingBatches(2);
 
-            t.SendCompactWithoutId();
-            UNIT_ASSERT_VALUES_EQUAL_C(t.WaitResult(), TResult::NOT_NEEDED, planner);
+            t.SendCompactWithoutId();   // a pre-upgrade schemeshard: a plain request
+            if (planner == "tiling++") {
+                t.AssertNoReply("held while the portions intersect");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::NOT_NEEDED);
+            }
 
-            t.SendCompact(1, false);
+            t.SendCompact(1, false);   // an id on top of the id-less operation: another one, which supersedes it
             if (planner == "tiling++") {
                 t.AssertNoReply("held while the portions intersect");
                 t.EnableBackground(EBackground::Compaction);
                 UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+                t.AssertNoReply("the superseded request is not answered");
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::NOT_NEEDED);
             }
@@ -2901,6 +2906,56 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         t.SendCompact(4, true);   // the schemeshard's retry
         UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
         t.AssertVersionsOnReply({ 2 });
+    }
+
+    Y_UNIT_TEST(ForcedCompactionRequestWithoutId) {
+        // A pre-upgrade schemeshard sends no operation id. Its request is a plain compaction: a new operation when none
+        // is being served, a retry of the one being served otherwise (a CASCADE goes on, its rewrite is not touched).
+        // A request with an id on top of an id-less operation is another operation.
+        using TResult = TForcedCompactionTest::TResult;
+        using EBackground = TForcedCompactionTest::EBackground;
+        TForcedCompactionTest t("tiling++");
+        t.DisableBackground(EBackground::Compaction);
+        t.WriteOverlappingBatches(2);
+
+        t.SendCompactWithoutId();   // nothing is being served: a plain operation starts
+        t.AssertNoReply("held while the portions intersect");
+        t.SendCompactWithoutId();   // the operation being served: a retry
+        t.AssertNoReply("a retry is held like the request it repeats");
+        t.EnableBackground(EBackground::Compaction);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+        t.AssertVersionsOnReply({ 1 });
+        t.AssertNoReply("the superseded request is not answered");
+
+        t.AlterSchema();   // version 2
+        t.DisableBackground(EBackground::TTL);   // the rewrite tasks: the queue stays as it is
+        t.SendCompact(1, true);
+        t.AssertNoReply("held until the portions are rewritten");
+        const i64 queued = t.QueuedForActualization();
+        UNIT_ASSERT_VALUES_EQUAL(queued, t.PortionsByVersion().at(1));
+        t.SendCompactWithoutId();   // on top of the CASCADE being served: its retry, the rewrite goes on
+        t.AssertNoReply("a retry is held like the request it repeats");
+        UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), queued);
+        t.EnableBackground(EBackground::TTL);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+        t.AssertVersionsOnReply({ 2 });
+        t.AssertNoReply("the superseded request is not answered");
+
+        t.AlterSchema();   // version 3
+        t.DisableBackground(EBackground::Compaction);
+        t.DisableBackground(EBackground::TTL);
+        t.WriteOverlappingBatches(2);
+        t.SendCompactWithoutId();   // nothing is being served: a plain operation, the version 2 portions are left alone
+        t.AssertNoReply("held while the portions intersect");
+        UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), 0);
+        t.SendCompact(2, true);   // an id on top of the id-less operation: another operation, this one a CASCADE
+        t.AssertNoReply("held until the portions are compacted and rewritten");
+        UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), t.PortionsByVersion().at(2));
+        t.EnableBackground(EBackground::Compaction);
+        t.EnableBackground(EBackground::TTL);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+        t.AssertVersionsOnReply({ 3 });
+        t.AssertNoReply("the superseded request is not answered");
     }
 
     Y_UNIT_TEST(ForcedCompactionCascadeThresholdIsSchemaAtRequest) {

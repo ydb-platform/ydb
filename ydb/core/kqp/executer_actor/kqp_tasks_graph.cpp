@@ -1352,6 +1352,11 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
         structuredToken = ReplaceStructuredTokenReferences(compiledSource.GetAuthInfo());
     }
 
+    const auto& poolId = GetMeta().UserRequestContext->PoolId;
+    if (!poolId.empty() && poolId != NResourcePool::DEFAULT_POOL_ID) {
+        settings->SetPoolId(poolId);
+    }
+
     TTransform dqSourceStreamLookupTransform = {
         .Type = "StreamLookupInputTransform",
         .InputType = dqSourceStreamLookup.GetInputStageRowType(),

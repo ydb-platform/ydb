@@ -213,6 +213,7 @@ public:
         , ColumnDestinations(CreateColumnDestination())
         , MaxKeysInRequest(args.MaxKeysInRequest)
         , IsMultiMatches(args.IsMultiMatches)
+        , PoolId(std::move(args.PoolId))
         , SelectBody(MakeSelect())
         , SelectWithKeys(MakeSelectWithKeys())
     {
@@ -1009,7 +1010,9 @@ private:
         request.mutable_arrow_format_settings()->mutable_compression_codec()->set_type(
             Ydb::Formats::ArrowFormatSettings::CompressionCodec::TYPE_NONE);   // local RPC, avoid compression
         request.set_response_part_limit_bytes(ChannelBufferSize);
-        // request.set_pool_id(...); // TODO: pass workload manager pool from caller
+        if (PoolId) {
+            request.set_pool_id(*PoolId);
+        }
         request.set_schema_inclusion_mode(Ydb::Query::SCHEMA_INCLUSION_MODE_FIRST_ONLY);
         {
             auto& tx_control = *request.mutable_tx_control();
@@ -1042,6 +1045,7 @@ private:
     const std::vector<std::pair<EColumnDestination, size_t>> ColumnDestinations;
     const size_t MaxKeysInRequest;
     const bool IsMultiMatches;
+    TMaybe<TString> PoolId;
     TMaybe<TString> Token;
     Ydb::Query::StatsMode StatsMode;
     static inline constexpr std::string_view KeyTupleListName = "$keyTupleList"sv;

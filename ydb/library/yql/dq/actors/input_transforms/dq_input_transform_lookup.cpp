@@ -198,6 +198,7 @@ private:   //IDqComputeActorAsyncInput
                 .MaxKeysInRequest = 1000,   // TODO configure me
                 .IsMultiMatches = IsMultiMatches,
                 .StatsLevel = StatsLevel,
+                .PoolId = Settings.HasPoolId() ? MakeMaybe(Settings.GetPoolId()) : Nothing(),
             };
             auto [lookupSource, lookupSourceActor] =
                 Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));

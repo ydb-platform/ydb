@@ -93,6 +93,7 @@ private:
     void InitializeDetailedMetrics();
 
     size_t RequiredToFetchMessageCount() const;
+    size_t FifoUnlockedGroupDeficit() const;
     void SendToPQTablet(std::unique_ptr<IEventBase> ev);
 
     void UpdateMetrics();

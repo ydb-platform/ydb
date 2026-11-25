@@ -8,7 +8,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
-#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
+#include <ydb/core/tablet_flat/base/bloom_filter_defaults.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/engine/mkql_proto.h>

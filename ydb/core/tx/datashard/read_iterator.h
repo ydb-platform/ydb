@@ -5,7 +5,7 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/kqp/runtime/scheduler/fwd.h>
 #include <ydb/core/tablet_flat/flat_part_slice.h>
-#include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include <ydb/core/tx/locks/locks.h>
 
 #include <util/digest/multi.h>

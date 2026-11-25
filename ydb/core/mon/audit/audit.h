@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/audit/audit_log.h>
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
@@ -7,13 +8,12 @@
 #include <ydb/library/actors/http/http_proxy.h>
 
 #include <util/generic/string.h>
-#include <util/generic/hash.h>
 
 namespace NMonitoring::NAudit {
 
 TString ExtractRemoteAddress(const NHttp::THttpIncomingRequest* request);
 
-using TAuditParts = THashMap<TString, TString>;
+using TAuditParts = NKikimr::NAudit::TAuditLogFields;
 
 enum ERequestStatus {
     Success,

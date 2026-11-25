@@ -3,6 +3,7 @@
 #include <utility>
 #include <atomic>
 
+#include <util/generic/hash.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -37,6 +38,7 @@ namespace NActors {
 namespace NKikimr::NAudit {
 
 using TAuditLogParts = TVector<std::pair<TString, TString>>;
+using TAuditLogFields = THashMap<TString, TString>;
 
 inline constexpr TStringBuf RequiredFields[] = {
     "component", "subject", "sanitized_token", "remote_address", "operation", "status",

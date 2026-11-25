@@ -250,7 +250,7 @@ private:
     void FinishRequest() override {}
 
     void AddAuditLogPart(const TStringBuf& name, const TString& value) override {
-        AuditLogParts.emplace(name, value);
+        AuditLogParts[name] = value;
     }
 
     const TAuditLogParts& GetAuditLogParts() const override {

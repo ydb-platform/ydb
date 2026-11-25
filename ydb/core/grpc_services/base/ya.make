@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/audit
     ydb/core/path_aliasing
     ydb/library/grpc/server
     library/cpp/string_utils/quote

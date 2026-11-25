@@ -1166,7 +1166,7 @@ public:
     // IRequestCtxBase
     //
     void AddAuditLogPart(const TStringBuf& name, const TString& value) override {
-        AuditLogParts.emplace(name, value);
+        AuditLogParts[name] = value;
     }
     const TAuditLogParts& GetAuditLogParts() const override {
         return AuditLogParts;
@@ -1603,7 +1603,7 @@ public:
     // IRequestCtxBase
     //
     void AddAuditLogPart(const TStringBuf& name, const TString& value) override {
-        AuditLogParts.emplace(name, value);
+        AuditLogParts[name] = value;
     }
     const TAuditLogParts& GetAuditLogParts() const override {
         return AuditLogParts;
@@ -2101,7 +2101,7 @@ public:
     }
 
     void AddAuditLogPart(const TStringBuf& name, const TString& value) override {
-        AuditLogParts.emplace(name, value);
+        AuditLogParts[name] = value;
     }
 
     const TAuditLogParts& GetAuditLogParts() const override {

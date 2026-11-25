@@ -182,6 +182,14 @@ namespace NKikimr::NBlobDepot {
             return name;
         }
 
+        static constexpr size_t MaxObjectKeyBytes = 1024;
+
+        static size_t MaxBasePathBytes() {
+            static const size_t bytes = MaxObjectKeyBytes - 1
+                - TS3Locator{.Generation = Max<ui32>(), .KeyId = Max<ui64>()}.MakeObjectName({}).size();
+            return bytes;
+        }
+
         static std::optional<TS3Locator> FromObjectName(const TString& name, ui64 len, TString *error) {
             try {
                 if (len > Max<ui32>()) {

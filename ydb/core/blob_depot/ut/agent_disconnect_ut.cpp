@@ -1,6 +1,7 @@
 #include "../blob_depot.h"
 #include "../agent/agent.h"
 #include "../agent/agent_impl.h"
+#include "../config.h"
 #include "../events.h"
 #include "../s3_request_timer.h"
 #include "../s3_router.h"
@@ -20,6 +21,8 @@
 #include <google/protobuf/unknown_field_set.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <algorithm>
+
 namespace NKikimr::NBlobDepot {
 namespace {
 
@@ -30,12 +33,16 @@ struct TAgent {
 };
 
 struct TLocalMode {};
-struct TSyncMode { bool VirtualGroup = false; };
+struct TSyncMode {
+    bool VirtualGroup = false;
+    bool NamespaceValidated = true;
+};
 struct TTestEnv {
     static constexpr ui64 TabletId = 72075186224000000;
     static constexpr ui32 VirtualGroupId = 0x80000000;
     TTestBasicRuntime Runtime{3};
     ui32 DataGroupId = 0;
+    NKikimrBlobDepot::TBlobDepotConfig Config;
     THashSet<ui64> PrepareResults;
     THashMap<TActorId, ui64> RequestIds;
     THashMap<std::pair<TActorId, ui64>, ui64> PrepareCookies;
@@ -48,10 +55,17 @@ struct TTestEnv {
 
         // Only locator allocation is under test. Park external S3 requests in an edge actor;
         // no HTTP server, S3 credentials or successful object uploads are needed.
-        Runtime.RegisterService(MakeBlobDepotS3RouterID(TabletId), Runtime.AllocateEdgeActor());
-        Observer = Runtime.AddObserver([this](TAutoPtr<IEventHandle>& ev) {
+        const auto router = Runtime.AllocateEdgeActor();
+        Runtime.RegisterService(MakeBlobDepotS3RouterID(TabletId), router);
+        Observer = Runtime.AddObserver([this, router](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case NStorage::TEvNodeWardenAcquireBlobDepotS3Router::EventType:
+                case NStorage::TEvNodeWardenAcquireBlobDepotS3Router::EventType: {
+                    const auto& msg = *ev->Get<NStorage::TEvNodeWardenAcquireBlobDepotS3Router>();
+                    Runtime.SendAsync(new IEventHandle(ev->Sender, ev->Recipient,
+                        new NStorage::TEvNodeWardenBlobDepotS3RouterReady(msg.TabletId, msg.Generation, router), 0, ev->Cookie));
+                    ev.Reset();
+                    break;
+                }
                 case NStorage::TEvNodeWardenReleaseBlobDepotS3Router::EventType:
                     ev.Reset();
                     break;
@@ -68,27 +82,35 @@ struct TTestEnv {
         DataGroupId = info->GroupFor(2, 1);
         const auto bootstrapper = CreateTestBootstrapper(Runtime, info, CreateBlobDepot);
         Runtime.EnableScheduleForActor(bootstrapper);
-        const auto edge = Runtime.AllocateEdgeActor();
-        auto config = std::make_unique<TEvBlobDepot::TEvApplyConfig>();
-        auto* proto = config->Record.MutableConfig();
-        proto->SetName("disconnect-test");
-        auto* system = proto->AddChannelProfiles();
+        Config.SetName("disconnect-test");
+        auto* system = Config.AddChannelProfiles();
         system->SetCount(2);
         system->SetChannelKind(NKikimrBlobDepot::TChannelKind::System);
-        proto->AddChannelProfiles()->SetChannelKind(NKikimrBlobDepot::TChannelKind::Data);
+        Config.AddChannelProfiles()->SetChannelKind(NKikimrBlobDepot::TChannelKind::Data);
         if (const auto* sync = std::get_if<TSyncMode>(&mode)) {
             if (sync->VirtualGroup) {
-                proto->SetVirtualGroupId(VirtualGroupId);
+                Config.SetVirtualGroupId(VirtualGroupId);
             }
-            auto* s3 = proto->MutableS3BackendSettings();
+            Config.SetS3NamespaceValidated(sync->NamespaceValidated);
+            auto* s3 = Config.MutableS3BackendSettings();
             s3->MutableSyncMode();
             s3->MutableSettings()->SetBucket("test-bucket");
         } else {
-            proto->SetVirtualGroupId(VirtualGroupId);
+            Config.SetVirtualGroupId(VirtualGroupId);
         }
-        Runtime.SendToPipe(TabletId, edge, config.release(), 0, GetPipeConfigWithRetries());
-        UNIT_ASSERT_C(Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvApplyConfigResult>(edge, TDuration::Seconds(5)),
-            "BlobDepot did not apply the test configuration");
+        ApplyConfig(1);
+    }
+
+    void ApplyConfig(ui64 txId) {
+        const auto edge = Runtime.AllocateEdgeActor();
+        auto request = std::make_unique<TEvBlobDepot::TEvApplyConfig>();
+        request->Record.SetTxId(txId);
+        *request->Record.MutableConfig() = Config;
+        Runtime.SendToPipe(TabletId, edge, request.release(), 0, GetPipeConfigWithRetries());
+        const auto reply = Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvApplyConfigResult>(edge, TDuration::Seconds(5));
+        UNIT_ASSERT_C(reply, "BlobDepot did not acknowledge config transaction " << txId);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetTabletId(), TabletId);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetTxId(), txId);
     }
 
     TActorId StartAgent() {
@@ -197,7 +219,7 @@ struct TTestEnv {
         UNIT_ASSERT_C(!PrepareResults.contains(cookie), "write must wait for the occupied S3 slot");
     }
 
-    void ExpectPrepared(const TAgent& agent, ui64 cookie) {
+    TS3Locator ExpectPrepared(const TAgent& agent, ui64 cookie) {
         const auto response = Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvPrepareWriteS3Result>(
             agent.Edge, TDuration::Seconds(1));
         UNIT_ASSERT_C(response, "S3 write queue did not resume after agent disconnect/reconnect");
@@ -206,6 +228,7 @@ struct TTestEnv {
         UNIT_ASSERT_VALUES_EQUAL(record.ItemsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(record.GetItems(0).GetStatus(), NKikimrProto::OK);
         UNIT_ASSERT(record.GetItems(0).HasS3Locator());
+        return TS3Locator::FromProto(record.GetItems(0).GetS3Locator());
     }
 
     void SendQueryBlocks(const TAgent& agent, ui64 tabletId) {
@@ -214,12 +237,13 @@ struct TTestEnv {
         Send(agent, request.release());
     }
 
-    void ExpectQueryBlocks(const TAgent& agent, ui32 expectedGeneration = 0) {
+    TActorId ExpectQueryBlocks(const TAgent& agent, ui32 expectedGeneration = 0) {
         const auto response = Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvQueryBlocksResult>(
             agent.Edge, TDuration::Seconds(1));
         UNIT_ASSERT(response);
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.BlockedGenerationsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetBlockedGenerations(0), expectedGeneration);
+        return response->Sender;
     }
 
     void QueryBlocks(const TAgent& agent, ui64 tabletId) {
@@ -1078,6 +1102,82 @@ Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
 
     Y_UNIT_TEST(QueryBlocksWaitForCommit) {
         CheckQueryBlocksCommit(false);
+    }
+
+    Y_UNIT_TEST(S3TrashWaitsForValidatedNamespaceAcrossRestart) {
+        using TStorage = NWrappers::TEvExternalStorage;
+        TTestEnv env(TSyncMode{.NamespaceValidated = false});
+        TControlBoard::SetValue(3, env.Runtime.GetAppData().Icb->BlobDepotControls.S3MaxDeletesInFlight);
+        TBlockEvents<TStorage::TEvListObjectsRequest> lists(env.Runtime);
+        TBlockEvents<TStorage::TEvDeleteObjectRequest> deletes(env.Runtime);
+        TBlockEvents<TStorage::TEvDeleteObjectsRequest> batches(env.Runtime);
+        const auto writer = env.Connect(1);
+        const auto& settings = env.Config.GetS3BackendSettings().GetSettings();
+        const TString prefix = MakeS3BasePath(settings, env.Config.GetName());
+        THashSet<TString> expected;
+        for (ui64 cookie = 1; cookie <= 3; ++cookie) {
+            env.Prepare(writer, cookie);
+            const auto locator = env.ExpectPrepared(writer, cookie);
+            UNIT_ASSERT(expected.insert(locator.MakeObjectName(prefix)).second);
+            auto discard = std::make_unique<TEvBlobDepot::TEvDiscardSpoiledBlobSeq>();
+            locator.ToProto(discard->Record.AddS3Locators());
+            env.Send(writer, discard.release());
+        }
+        env.QueryBlocks(writer, 12345);
+        UNIT_ASSERT(lists.empty() && deletes.empty() && batches.empty());
+
+        const auto edge = env.Runtime.AllocateEdgeActor();
+        RebootTablet(env.Runtime, TTestEnv::TabletId, edge);
+        const auto deadline = env.Runtime.GetCurrentTime() + TDuration::Seconds(5);
+        for (;;) {
+            env.Runtime.SendToPipe(TTestEnv::TabletId, edge, new TEvTablet::TEvGetCounters, 0, GetPipeConfigWithRetries());
+            const auto reply = env.Runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(edge, TDuration::Seconds(1));
+            UNIT_ASSERT(reply);
+            const auto& counters = reply->Get()->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters();
+            if (std::ranges::any_of(counters, [&](const auto& entry) {
+                return entry.GetName() == "BlobDepot/TotalS3TrashObjects" && entry.GetValue() == expected.size();
+            })) {
+                break;
+            }
+            UNIT_ASSERT_C(env.Runtime.GetCurrentTime() < deadline, "the tablet did not reload its staged S3 trash");
+            env.Runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        }
+        env.QueryBlocks(env.Connect(1, 2), 12345);
+        UNIT_ASSERT(lists.empty() && deletes.empty() && batches.empty());
+
+        env.Config.SetS3NamespaceValidated(true);
+        env.ApplyConfig(2);
+        auto sent = [&] {
+            THashSet<TString> keys;
+            for (const auto& ev : deletes) {
+                const auto& request = ev->Get()->GetRequest();
+                UNIT_ASSERT_VALUES_EQUAL(TString(request.GetBucket()), settings.GetBucket());
+                keys.insert(TString(request.GetKey()));
+            }
+            for (const auto& ev : batches) {
+                const auto& request = ev->Get()->GetRequest();
+                UNIT_ASSERT_VALUES_EQUAL(TString(request.GetBucket()), settings.GetBucket());
+                for (const auto& object : request.GetDelete().GetObjects()) {
+                    keys.insert(TString(object.GetKey()));
+                }
+            }
+            return keys;
+        };
+        env.Runtime.WaitFor("deletion of staged S3 keys in the validated namespace",
+            [&] { return sent().size() >= expected.size(); }, TDuration::Seconds(5));
+        UNIT_ASSERT(sent() == expected);
+    }
+
+    Y_UNIT_TEST(IdenticalConfigAcknowledgesEachTransactionOnTheSamePipe) {
+        TTestEnv env;
+        const auto agent = env.Connect(1);
+        env.SendQueryBlocks(agent, 12345);
+        const auto server = env.ExpectQueryBlocks(agent);
+        for (ui64 txId : {41, 42}) {
+            env.ApplyConfig(txId);
+            env.SendQueryBlocks(agent, 12345);
+            UNIT_ASSERT_VALUES_EQUAL(env.ExpectQueryBlocks(agent), server);
+        }
     }
 
     Y_UNIT_TEST(DisconnectReleasesS3WriteSlots) {

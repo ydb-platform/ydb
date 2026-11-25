@@ -120,6 +120,7 @@ class TStallingS3Server {
     THolder<TThread> AcceptThread;
     TMutex ConnectionsMutex;
     TVector<THolder<TThread>> ConnectionThreads;
+    TString LastRequestHeaders;
 
 public:
     TStallingS3Server(size_t bodySize, TDuration holdDuration)
@@ -144,6 +145,10 @@ public:
 
     ui16 GetPort() const { return Port; }
     size_t GetRequestsReceived() const { return RequestsReceived.load(); }
+    TString GetLastRequestHeaders() {
+        TGuard guard(ConnectionsMutex);
+        return LastRequestHeaders;
+    }
 
     void Stop() {
         if (Stopped.exchange(true)) {
@@ -194,6 +199,9 @@ private:
             request.append(buffer, received);
         }
 
+        with_lock (ConnectionsMutex) {
+            LastRequestHeaders = std::move(request);
+        }
         ++RequestsReceived;
 
         const TInstant deadline = TInstant::Now() + HoldDuration;
@@ -352,6 +360,47 @@ void SendRouterPut(TTestActorRuntime& runtime, TActorId router, TActorId sender,
 }  // namespace
 
 Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
+
+    Y_UNIT_TEST(ReplacementUsesConfirmedBalancerEndpointAndNewCredentials) {
+        TStallingS3Server storage(4, TDuration::Zero());
+        TTestActorRuntime runtime;
+        runtime.SetUseRealInterconnect();
+        runtime.Initialize(TAppPrepare().Unwrap());
+        const ui16 balancerPort = PickFreePort();
+        auto* balancer = new TFakeBalancer({}, TStringBuilder() << "127.0.0.1:" << storage.GetPort());
+        RegisterBalancer(runtime, balancerPort, balancer);
+
+        NKikimrBlobDepot::TS3BackendSettings settings;
+        auto* s3 = settings.MutableSettings();
+        s3->SetEndpoint("s3.example.com");
+        s3->SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+        s3->SetBucket("test-bucket");
+        s3->SetAccessKey("initial-access");
+        s3->SetSecretKey("secret");
+        s3->SetRegion("ru-central1");
+        s3->SetUseVirtualAddressing(false);
+        settings.SetBalancerHost(TStringBuilder() << "127.0.0.1:" << balancerPort << '/');
+        const auto endpoint = std::make_shared<TS3BalancerEndpoint>();
+        const auto old = runtime.Register(CreateBlobDepotS3Router(settings, 12345, endpoint));
+        WaitReal(runtime, [&] { return !endpoint->Get().first.empty(); });
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(old, edge, new TEvents::TEvPoison));
+
+        balancer->SetStatusCode(503);
+        const auto replies = balancer->GetReplies();
+        settings.SetMetricsPushIntervalMs(100);
+        s3->SetAccessKey("rotated-access");
+        const auto router = runtime.Register(CreateBlobDepotS3Router(std::move(settings), 12345, endpoint));
+        WaitReal(runtime, [&] { return balancer->GetReplies() > replies; });
+        const auto result = MakeIntrusive<TGetResult>();
+        const auto collector = runtime.Register(new TGetCollector(result));
+        auto request = Aws::S3::Model::GetObjectRequest().WithBucket("test-bucket").WithKey("value").WithRange("bytes=0-3");
+        runtime.Send(new IEventHandle(router, collector, new NWrappers::NExternalStorage::TEvGetObjectRequest(request)), 0, true);
+        WaitReal(runtime, [&] { return result->Done.load(); });
+        UNIT_ASSERT_C(result->Ok.load(), result->Error);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetRequestsReceived(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(storage.GetLastRequestHeaders(), "Credential=rotated-access/");
+    }
 
     Y_UNIT_TEST(BalancerPollHappyPath) {
         TTestActorRuntime runtime;

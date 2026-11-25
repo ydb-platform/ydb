@@ -57,10 +57,7 @@ namespace NKikimr::NStorage {
     // S3 router actor. NodeWarden creates one on first acquire, replaces it when a newer
     // tablet generation supplies changed settings, and stops it on the last release.
     //
-    // Fire-and-forget: NodeWarden registers the router under the well-known service id
-    // MakeBlobDepotS3RouterID(TabletId) synchronously while handling this event, before
-    // any subsequent event from the same sender can be delivered. There is no result
-    // event; callers simply talk to the service id afterwards.
+    // The reply binds the consumer and its workers to this concrete router incarnation.
     struct TEvNodeWardenAcquireBlobDepotS3Router
         : TEventLocal<TEvNodeWardenAcquireBlobDepotS3Router, TEvBlobStorage::EvNodeWardenAcquireBlobDepotS3Router>
     {
@@ -75,15 +72,31 @@ namespace NKikimr::NStorage {
         {}
     };
 
+    struct TEvNodeWardenBlobDepotS3RouterReady
+        : TEventLocal<TEvNodeWardenBlobDepotS3RouterReady, TEvBlobStorage::EvNodeWardenBlobDepotS3RouterReady>
+    {
+        const ui64 TabletId;
+        const ui32 Generation;
+        const TActorId Router;
+
+        TEvNodeWardenBlobDepotS3RouterReady(ui64 tabletId, ui32 generation, TActorId router)
+            : TabletId(tabletId)
+            , Generation(generation)
+            , Router(router)
+        {}
+    };
+
     struct TEvNodeWardenReleaseBlobDepotS3Router
         : TEventLocal<TEvNodeWardenReleaseBlobDepotS3Router, TEvBlobStorage::EvNodeWardenReleaseBlobDepotS3Router>
     {
         ui64 TabletId;
         ui32 Generation;
+        bool RestartingForConfigChange;
 
-        TEvNodeWardenReleaseBlobDepotS3Router(ui64 tabletId, ui32 generation)
+        TEvNodeWardenReleaseBlobDepotS3Router(ui64 tabletId, ui32 generation, bool restartingForConfigChange = false)
             : TabletId(tabletId)
             , Generation(generation)
+            , RestartingForConfigChange(restartingForConfigChange)
         {}
     };
 

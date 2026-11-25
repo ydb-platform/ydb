@@ -23,12 +23,11 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::InitS3(const TString& name) {
         if (S3BackendSettings) {
             auto& settings = S3BackendSettings->GetSettings();
-            // Fire-and-forget acquire: NodeWarden registers the per-node router under its
-            // well-known service id before any later event we send can be processed, so
-            // we can use the service id immediately.
+            S3RouterGeneration = BlobDepotGeneration;
+            S3WrapperId = {};
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
-                new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(TabletId, BlobDepotGeneration, *S3BackendSettings));
-            S3WrapperId = MakeBlobDepotS3RouterID(TabletId);
+                new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(TabletId, S3RouterGeneration, *S3BackendSettings),
+                0, ConnectionInstance);
             S3BasePath = MakeS3BasePath(settings, name);
         }
     }
@@ -83,6 +82,7 @@ namespace NKikimr::NBlobDepot {
         auto read = std::make_shared<TS3Read>();
         read->RequestId = Agent.NextOtherRequestId++;
         read->Deadline = DeadlineMonotonic;
+        read->ConnectionInstance = Agent.ConnectionInstance;
         read->Key = key;
         read->Offset = offset;
         read->Len = len;
@@ -112,7 +112,7 @@ namespace NKikimr::NBlobDepot {
         const bool timeThrottled = now < S3GetThrottleUntil;
         const bool concurrencyThrottled = S3GetsInFlight >= CurrentMaxS3GetsInFlight;
 
-        if (timeThrottled || concurrencyThrottled) {
+        if (IsWaitingForS3Router() || timeThrottled || concurrencyThrottled) {
             YDB_LOG_DEBUG_COMP(BLOB_DEPOT_AGENT, "S3 read queued",
                 {"marker", "BDA65"},
                 {"agentId", LogId},
@@ -139,6 +139,12 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::DispatchS3Read(TS3Read& read) {
         if (TActivationContext::Monotonic() >= read.Deadline) {
             return; // The watchdog will complete the query with TIMEOUT.
+        }
+        if (Mode != EMode::Connected || !S3BackendSettings || !S3WrapperId || read.ConnectionInstance != ConnectionInstance) {
+            ++*S3GetsError;
+            auto request = ExtractRequest(read.RequestId, OtherRequestInFlight);
+            request.value().Context->Obtain<TS3Read>().Complete(NKikimrProto::ERROR, {}, "S3 route changed before read");
+            return;
         }
         ++S3GetsInFlight;
         *S3GetsInFlightCounter = S3GetsInFlight;
@@ -204,7 +210,9 @@ namespace NKikimr::NBlobDepot {
         } else {
             const auto& error = msg->GetError();
             IncS3HttpErrorCounter("Gets", static_cast<int>(error.GetResponseCode()));
-            if (IsS3SlowDown(error)) {
+            if (read->ConnectionInstance != ConnectionInstance || !S3BackendSettings) {
+                reason = "S3 route changed during read";
+            } else if (IsS3SlowDown(error)) {
                 ++*S3GetsSlowDown;
                 NotifyS3GetSlowDown();
                 if (read->SlowDownRetries < MaxS3GetSlowDownRetries) {
@@ -277,6 +285,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::RunPendingS3ReadsIfPossible() {
+        if (IsWaitingForS3Router()) {
+            return;
+        }
         const TMonotonic now = TActivationContext::Monotonic();
         if (now < S3GetThrottleUntil) {
             if (!S3GetWakeupScheduled && !PendingS3Reads.empty()) {
@@ -303,6 +314,19 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::HandleS3GetThrottleWakeup() {
         S3GetWakeupScheduled = false;
         RunPendingS3ReadsIfPossible();
+    }
+
+    void TBlobDepotAgent::RetirePendingS3Reads() {
+        while (!PendingS3Reads.empty()) {
+            auto request = ExtractRequest(PendingS3Reads.front(), OtherRequestInFlight);
+            PendingS3Reads.pop_front();
+            auto& read = request.value().Context->Obtain<TS3Read>();
+            read.Queued.reset();
+            if (TActivationContext::Monotonic() < read.Deadline) {
+                read.Complete(NKikimrProto::ERROR, {}, "S3 route removed during read");
+            }
+        }
+        *S3GetsPendingQueueSizeCounter = 0;
     }
 
     void TBlobDepotAgent::HandleS3WriteResult(ui64 id, IEventHandle& result) {

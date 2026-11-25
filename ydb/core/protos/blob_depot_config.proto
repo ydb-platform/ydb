@@ -81,7 +81,8 @@ message TBlobDepotConfig {
     optional string Name = 9;
     // Async packs can survive later mode changes. Their locators use the configured bucket and key prefix.
     optional bool S3NamespacePinned = 10;
-    // BSC checked that no other group owns this physical S3 namespace.
+    // BSC checked exclusive ownership of this physical S3 namespace. Absent on legacy depots
+    // until an explicit namespace validation. Independent of the cooling flag and mode.
     optional bool S3NamespaceValidated = 11;
     // Once BSC has authorized async cooling, shared objects can survive subsequent mode changes.
     optional bool EverAuthorizedDataCooling = 12;

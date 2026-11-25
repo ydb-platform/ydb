@@ -32,6 +32,11 @@ namespace NKikimr::NBlobDepot {
     TBlobDepot::~TBlobDepot()
     {}
 
+    bool TBlobDepot::ReadyForAgentQueries() const {
+        return Configured && (!Config.GetIsDecommittingGroup() || DecommitState >= EDecommitState::BlocksFinished) &&
+            (!Config.HasS3BackendSettings() || S3Manager->GetWrapperId());
+    }
+
     void TBlobDepot::HandleFromAgent(STATEFN_SIG) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobDepot::TEvRegisterAgent, Handle);
@@ -180,6 +185,7 @@ namespace NKikimr::NBlobDepot {
 
                 fFunc(TEvPrivate::EvUploadResult, S3Manager->Handle);
                 fFunc(TEvPrivate::EvDeleteResult, S3Manager->Handle);
+                fFunc(TEvBlobStorage::EvNodeWardenBlobDepotS3RouterReady, S3Manager->Handle);
                 fFunc(TEvPrivate::EvScanFound, S3Manager->Handle);
                 fFunc(TEvPrivate::EvDeleteThrottleWakeup, S3Manager->Handle);
                 fFunc(TEvPrivate::EvPutThrottleWakeup, S3Manager->Handle);

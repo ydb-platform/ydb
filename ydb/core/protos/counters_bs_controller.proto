@@ -102,6 +102,8 @@ enum ECumulativeCounters {
     COUNTER_CONFIGCMD_DELETE_DDISK_POOL_USEC = 53 [(CounterOpts) = {Name: "DeleteDDiskPool"}];
     COUNTER_CONFIGCMD_MOVE_DDISK_USEC = 54 [(CounterOpts) = {Name: "MoveDDisk"}];
     COUNTER_CONFIGCMD_DELETE_SPECIFIC_GROUPS_USEC = 55 [(CounterOpts) = {Name: "DeleteSpecificGroup"}];
+    COUNTER_CONFIGCMD_MANAGE_RETIRED_S3_NAMESPACE_USEC = 56 [(CounterOpts) = {Name: "ManageRetiredS3Namespace"}];
+    COUNTER_RETIRED_S3_SWEEP_FAILURES = 57 [(CounterOpts) = {Name: "RetiredS3SweepFailures"}];
 }
 
 enum EPercentileCounters {

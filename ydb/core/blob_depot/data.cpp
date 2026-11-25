@@ -88,6 +88,22 @@ namespace NKikimr::NBlobDepot {
         return true;
     }
 
+    template<typename TLocal>
+    bool TData::AccountValueChain(const TValueChain& chain, ES3ReferenceAction action,
+            TLocal&& accountLocal, std::vector<TS3ObjectKey>* unreferenced) {
+        bool hasS3References = false;
+        for (const auto& link : chain) {
+            EnumerateBlobsForValueChainItem(link, Self->TabletID(), TOverloaded{
+                accountLocal,
+                [&](TS3Locator locator) {
+                    hasS3References = true;
+                    UpdateS3Reference(link, locator, action, unreferenced);
+                }
+            });
+        }
+        return hasS3References;
+    }
+
     template<typename T, typename... TArgs>
     bool TData::UpdateKey(TKey key, NTabletFlatExecutor::TTransactionContext& txc, void *cookie, const char *reason,
             T&& callback, TArgs&&... args) {
@@ -114,7 +130,8 @@ namespace NKikimr::NBlobDepot {
             auto& [key, value] = *it;
 
             std::vector<TLogoBlobID> deleteBlobs;
-            std::vector<TS3Locator> deleteS3;
+            std::vector<TS3ObjectKey> deleteS3;
+            bool hasS3References = false;
 
             const bool uncertainWriteBefore = value.UncertainWrite;
             const bool wasUncertain = value.IsWrittenUncertainly();
@@ -135,10 +152,8 @@ namespace NKikimr::NBlobDepot {
                         Y_ABORT_UNLESS(rc != Max<ui32>());
                     }
                 };
-                EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), TOverloaded{
-                    [&](TLogoBlobID id, ui32, ui32) { dropRefCount(RefCountBlobs, id, deleteBlobs); },
-                    [&](TS3Locator locator) { dropRefCount(RefCountS3, locator, deleteS3); }
-                });
+                hasS3References = AccountValueChain(value.ValueChain, ES3ReferenceAction::Remove,
+                    [&](TLogoBlobID id, ui32, ui32) { dropRefCount(RefCountBlobs, id, deleteBlobs); }, &deleteS3);
             }
 
             EUpdateOutcome outcome = callback(value, inserted);
@@ -183,31 +198,28 @@ namespace NKikimr::NBlobDepot {
                 return inserted;
             };
 
-            EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), TOverloaded{
-                [&](TLogoBlobID id, ui32, ui32) {
-                    if (returnRefCount(RefCountBlobs, id, deleteBlobs)) {
-                        auto makeValueChain = [&] {
-                            TStringStream s;
-                            s << '{';
-                            for (bool first = true; const auto& item : value.ValueChain) {
-                                s << (std::exchange(first, false) ? "" : " ") << SingleLineProto(item);
-                            }
-                            s << '}';
-                            return s.Str();
-                        };
-                        Y_VERIFY_S(!CanBeCollected(TBlobSeqId::FromLogoBlobId(id)), "BlobId# " << id
-                            << " ValueChain# " << makeValueChain());
-                        Y_VERIFY_DEBUG_S(id.Generation() == generation, "BlobId# " << id << " Generation# " << generation);
-                        Y_VERIFY_DEBUG_S(Self->Channels[id.Channel()].GetLeastExpectedBlobId(generation) <= TBlobSeqId::FromLogoBlobId(id),
-                            "LeastExpectedBlobId# " << Self->Channels[id.Channel()].GetLeastExpectedBlobId(generation)
-                            << " Id# " << id
-                            << " Generation# " << generation);
-                    }
-                },
-                [&](TS3Locator locator) {
-                    returnRefCount(RefCountS3, locator, deleteS3);
+            const auto accountLocalBlob = [&](TLogoBlobID id, ui32, ui32) {
+                if (returnRefCount(RefCountBlobs, id, deleteBlobs)) {
+                    auto makeValueChain = [&] {
+                        TStringStream s;
+                        s << '{';
+                        for (bool first = true; const auto& item : value.ValueChain) {
+                            s << (std::exchange(first, false) ? "" : " ") << SingleLineProto(item);
+                        }
+                        s << '}';
+                        return s.Str();
+                    };
+                    Y_VERIFY_S(!CanBeCollected(TBlobSeqId::FromLogoBlobId(id)), "BlobId# " << id
+                        << " ValueChain# " << makeValueChain());
+                    Y_VERIFY_DEBUG_S(id.Generation() == generation, "BlobId# " << id << " Generation# " << generation);
+                    Y_VERIFY_DEBUG_S(Self->Channels[id.Channel()].GetLeastExpectedBlobId(generation) <= TBlobSeqId::FromLogoBlobId(id),
+                        "LeastExpectedBlobId# " << Self->Channels[id.Channel()].GetLeastExpectedBlobId(generation)
+                        << " Id# " << id
+                        << " Generation# " << generation);
                 }
-            });
+            };
+            const auto s3Action = outcome != EUpdateOutcome::DROP ? ES3ReferenceAction::Add : ES3ReferenceAction::Discard;
+            hasS3References |= AccountValueChain(value.ValueChain, s3Action, accountLocalBlob, &deleteS3);
 
             NIceDb::TNiceDb db(txc.DB);
 
@@ -232,15 +244,26 @@ namespace NKikimr::NBlobDepot {
                 return false; // keep this blob in deletion queue
             };
 
-            auto filterS3 = [&](TS3Locator locator) {
-                const auto it = RefCountS3.find(locator);
+            auto filterS3 = [&](const TS3ObjectKey& objectKey) {
+                const auto it = RefCountS3.find(objectKey);
                 Y_ABORT_UNLESS(it != RefCountS3.end());
-                if (it->second) {
+                if (it->second.RefCount) {
                     return true;
                 }
 
+                const auto locator = it->second.GetLocator(objectKey);
                 RefCountS3.erase(it);
                 TotalS3DataSize -= locator.Len;
+                if (!S3ReferencesLoaded && Self->Config.GetEverAuthorizedDataCooling()) {
+                    // Unloaded rows may still own this pack. Record the candidate atomically with
+                    // the mapping change, so a restart before final accounting retains the check.
+                    if (PendingS3RefChecks.emplace(objectKey, locator.Len).second) {
+                        db.Table<Schema::TrashS3>().Key(objectKey.first, objectKey.second).Update(
+                            NIceDb::TUpdate<Schema::TrashS3::Len>(locator.Len),
+                            NIceDb::TUpdate<Schema::TrashS3::CheckReferences>(true));
+                    }
+                    return true;
+                }
 
                 YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Delete_S3",
                     {"marker", "BDEV27"},
@@ -268,10 +291,9 @@ namespace NKikimr::NBlobDepot {
                 UncertaintyResolver->DropBlobs(deleteBlobs);
             }
 
-            auto& counters = Self->TabletCounters->Simple();
-            counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_OBJECTS] = RefCountS3.size();
-            counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_SIZE] = TotalS3DataSize;
-
+            if (hasS3References) {
+                UpdateS3Counters();
+            }
             if (outcome != EUpdateOutcome::NO_CHANGE &&
                     Self->MoveData.IsBlobMovingInProgress() &&
                     !Self->MoveData.ApplyingIndexUpdate) {
@@ -484,8 +506,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::AddToS3Trash(TS3Locator locator, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        NIceDb::TNiceDb(txc.DB).Table<Schema::TrashS3>().Key(locator.Generation, locator.KeyId)
-            .Update<Schema::TrashS3::Len>(locator.Len);
+        NIceDb::TNiceDb(txc.DB).Table<Schema::TrashS3>().Key(locator.Generation, locator.KeyId).Update(
+            NIceDb::TUpdate<Schema::TrashS3::Len>(locator.Len),
+            NIceDb::TUpdate<Schema::TrashS3::CheckReferences>(false));
         InFlightTrashSize += locator.Len;
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_IN_FLIGHT_TRASH_SIZE] = InFlightTrashSize;
         InFlightTrashS3.emplace(cookie, locator);
@@ -580,10 +603,10 @@ namespace NKikimr::NBlobDepot {
                 AddFirstMentionedBlob(key);
             }
         };
-        EnumerateBlobsForValueChain(it->second.ValueChain, Self->TabletID(), TOverloaded{
-            [&](TLogoBlobID id, ui32, ui32) { addRefCount(RefCountBlobs, id); },
-            [&](TS3Locator locator) { addRefCount(RefCountS3, locator); }
-        });
+        if (AccountValueChain(it->second.ValueChain, ES3ReferenceAction::Add,
+                [&](TLogoBlobID id, ui32, ui32) { addRefCount(RefCountBlobs, id); })) {
+            UpdateS3Counters();
+        }
         if (it->second.GoingToAssimilate) {
             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_BYTES_TO_DECOMMIT] += it->first.GetBlobId().BlobSize();
         }
@@ -831,10 +854,71 @@ namespace NKikimr::NBlobDepot {
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_DATA_SIZE] = TotalStoredDataSize;
     }
 
-    void TData::AddFirstMentionedBlob(TS3Locator locator) {
+    void TData::UpdateS3Reference(const NKikimrBlobDepot::TValueChain& link, TS3Locator locator,
+            ES3ReferenceAction action, std::vector<TS3ObjectKey>* unreferenced) {
+        const auto objectKey = locator.GetObjectKey();
+        const auto [it, inserted] = RefCountS3.try_emplace(objectKey, TS3References{.Len = locator.Len});
+        auto& object = it->second;
+        Y_ABORT_UNLESS(object.Len == locator.Len);
+        if (inserted) {
+            Y_ABORT_UNLESS(action != ES3ReferenceAction::Remove);
+            TotalS3DataSize += locator.Len;
+        }
+
+        const ui64 previousLiveBytes = object.GetLiveBytes();
+        if (action == ES3ReferenceAction::Add) {
+            ++object.RefCount;
+        } else if (action == ES3ReferenceAction::Remove) {
+            Y_ABORT_UNLESS(object.RefCount);
+            --object.RefCount;
+        }
+
+        const ui64 begin = link.GetSubrangeBegin();
+        const ui64 end = link.HasSubrangeEnd() ? link.GetSubrangeEnd() : object.Len;
+        if (action != ES3ReferenceAction::Discard && begin < end && end <= object.Len && (begin || end < object.Len)) {
+            const std::pair<ui32, ui32> range{static_cast<ui32>(begin), static_cast<ui32>(end)};
+            if (action == ES3ReferenceAction::Add) {
+                if (!object.Partial) {
+                    object.Partial = std::make_unique<TS3PartialReferences>();
+                }
+                auto& partial = *object.Partial;
+                ++partial.RefCount;
+                // Pack ranges are disjoint. Identical references share the same bytes.
+                if (!partial.Ranges[range]++) {
+                    partial.LiveBytes += end - begin;
+                }
+            } else {
+                Y_ABORT_UNLESS(object.Partial);
+                auto& partial = *object.Partial;
+                const auto rangeIt = partial.Ranges.find(range);
+                Y_ABORT_UNLESS(rangeIt != partial.Ranges.end());
+                if (!--rangeIt->second) {
+                    partial.Ranges.erase(rangeIt);
+                    partial.LiveBytes -= end - begin;
+                }
+                if (!--partial.RefCount) {
+                    object.Partial.reset();
+                }
+            }
+        }
+
+        const ui64 liveBytes = object.GetLiveBytes();
+        TotalS3LiveBytes = TotalS3LiveBytes - previousLiveBytes + liveBytes;
+        if (!object.RefCount) {
+            Y_ABORT_UNLESS(unreferenced);
+            unreferenced->push_back(objectKey);
+        }
+    }
+
+    void TData::UpdateS3Counters() {
         auto& counters = Self->TabletCounters->Simple();
         counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_OBJECTS] = RefCountS3.size();
-        counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_SIZE] = TotalS3DataSize += locator.Len;
+        counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_SIZE] = TotalS3DataSize;
+        counters[NKikimrBlobDepot::COUNTER_S3_LIVE_RANGE_BYTES] = TotalS3LiveBytes;
+    }
+
+    bool TData::IsS3ObjectReferenced(const TS3Locator& locator) const {
+        return RefCountS3.contains(locator.GetObjectKey());
     }
 
     void TData::AccountBlob(TLogoBlobID id, bool add) {
@@ -1005,19 +1089,22 @@ namespace NKikimr::NBlobDepot {
 
         TTabletStorageInfo *info = Self->Info();
         THashMap<TLogoBlobID, ui32> refcountBlobs;
-        THashMap<TS3Locator, ui32> refcountS3;
+        THashMap<TS3ObjectKey, ui32> refcountS3;
         for (const auto& [key, value] : Data) {
             EnumerateBlobsForValueChain(value.ValueChain, info->TabletID, TOverloaded{
                 [&](TLogoBlobID id, ui32, ui32) {
                     ++refcountBlobs[id];
                 },
                 [&](TS3Locator locator) {
-                    ++refcountS3[locator];
+                    ++refcountS3[locator.GetObjectKey()];
                 }
             });
         }
         Y_ABORT_UNLESS(RefCountBlobs == refcountBlobs);
-        Y_ABORT_UNLESS(RefCountS3 == refcountS3);
+        Y_ABORT_UNLESS(RefCountS3.size() == refcountS3.size());
+        for (const auto& [key, count] : refcountS3) {
+            Y_ABORT_UNLESS(RefCountS3.at(key).RefCount == count);
+        }
 
         for (const auto& [cookie, id] : InFlightTrashBlobs) {
             const bool inserted = refcountBlobs.try_emplace(id).second;
@@ -1026,7 +1113,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         for (const auto& [cookie, locator] : InFlightTrashS3) {
-            const bool inserted = refcountS3.try_emplace(locator).second;
+            const bool inserted = refcountS3.try_emplace(locator.GetObjectKey()).second;
             Y_ABORT_UNLESS(inserted);
         }
 
@@ -1044,11 +1131,6 @@ namespace NKikimr::NBlobDepot {
         }
         Y_ABORT_UNLESS(used.empty());
 #endif
-    }
-
-    bool TData::IsUseful(const TS3Locator& locator) const {
-        Y_DEBUG_ABORT_UNLESS(IsLoaded());
-        return RefCountS3.contains(locator);
     }
 
 } // NKikimr::NBlobDepot

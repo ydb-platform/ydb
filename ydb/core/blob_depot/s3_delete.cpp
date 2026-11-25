@@ -119,8 +119,8 @@ namespace NKikimr::NBlobDepot {
             THashMap<int, size_t> httpErrorCounts;
 
             if (msg.IsSuccess()) {
-                VisitS3DeleteResults(msg.Result.GetResult(), [&](const auto& key, ES3DeleteStatus status, TStringBuf error) {
-                    const auto it = Locators.find(TString(key.data(), key.size()));
+                VisitS3DeleteResults(msg.Result.GetResult(), [&](const TString& key, ES3DeleteStatus status, TStringBuf code, TStringBuf error) {
+                    const auto it = Locators.find(key);
                     if (it == Locators.end()) {
                         YDB_LOG_WARN("Key not found in batch delete request",
                             {"marker", "BDTS09"}, {"id", LogId}, {"key", key.c_str()});
@@ -139,14 +139,14 @@ namespace NKikimr::NBlobDepot {
                             break;
                         case ES3DeleteStatus::SlowDown:
                             YDB_LOG_WARN("S3 SlowDown for object", {"marker", "BDTS19"}, {"id", LogId},
-                                {"locator", it->second}, {"error", error});
+                                {"locator", it->second}, {"code", code}, {"error", error});
                             YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Deleted_from_S3:SlowDown",
                                 {"marker", "BDEV39"}, {"BDT", TabletId}, {"locator", it->second});
                             locatorsThrottled.push_back(it->second);
                             break;
                         case ES3DeleteStatus::Failed:
                             YDB_LOG_WARN("Failed to delete object from S3", {"marker", "BDTS11"},
-                                {"id", LogId}, {"key", key.c_str()}, {"error", error});
+                                {"id", LogId}, {"key", key.c_str()}, {"code", code}, {"error", error});
                             return; // failures and omitted keys are handled below
                     }
                     Locators.erase(it);

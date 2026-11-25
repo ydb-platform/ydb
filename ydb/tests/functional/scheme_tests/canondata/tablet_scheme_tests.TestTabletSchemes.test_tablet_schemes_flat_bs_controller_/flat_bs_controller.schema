@@ -2328,6 +2328,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "LegacyCleanupAuthorized",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "GroupId",
                 "ColumnType": "Uint32"
@@ -2351,17 +2356,24 @@
                 "ColumnId": 5,
                 "ColumnName": "SweepPhase",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "ConsecutiveFailures",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

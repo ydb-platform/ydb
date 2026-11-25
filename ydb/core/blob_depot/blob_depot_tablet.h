@@ -44,6 +44,7 @@ namespace NKikimr::NBlobDepot {
                 EvPutThrottleWakeup,
                 EvMoveDataContinue,
                 EvMoveDataBlobCopied,
+                EvResumeS3Scan,
             };
         };
 

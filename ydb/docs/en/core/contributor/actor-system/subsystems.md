@@ -1,29 +1,23 @@
 # Actor System Subsystems
 
-A subsystem is an `ISubSystem` object owned by a `TActorSystem`. It acts as a singleton within that actor system: each registration type has at most one registered instance. All actors looking up that type in the same system obtain the same object. Different `TActorSystem` instances own separate subsystem instances, even within the same process.
+When several actors need statistics for the same cgroup, each can request a snapshot from a shared subsystem. The subsystem reads the files and caches the result. Actors look it up with `GetSubSystem<T>()`, so they need no knowledge of the reader actor or the pool it runs in.
 
-A subsystem exposes a typed C++ API and participates in system startup and shutdown. Calling that API is a normal synchronous C++ call: the registry does not provide a mailbox, serialization, or an actor activation context. Sharing an instance does not make its methods thread-safe. A subsystem can create actors to handle asynchronous work internally.
+A subsystem implements `ISubSystem` and belongs to a `TActorSystem`. You choose the implementation when configuring the system and can substitute a mock in a test. All actors in that system get the same object when they look up the same type. A second actor system in the same process owns its own instance. The actor system runs startup and shutdown hooks in dependency order.
+
+A subsystem method runs on the caller's thread like any other C++ method. The implementation is responsible for synchronization if several actors call it concurrently. For example, `ReadStats` forwards the request to an internal actor so the caller can finish handling its event without waiting for file I/O.
 
 ## Available implementations
 
-The public subsystem classes are abstract interfaces. Create the supplied implementations with their factories, or implement the same interface in a mock.
-
-| Interface | Installation and purpose |
-|---|---|
-| `TActorSystemStatsSubSystem` | Installed by the `TActorSystem` constructor unless already registered under this type. Provides executor pool, thread, and harmonizer statistics. Factory: `MakeActorSystemStatsSubSystem`. |
-| `TCGroupV1StatsSubSystem` | Explicit registration with `MakeCGroupV1StatsSubSystem(config)`. Reads Linux cgroup v1 CPU, memory, I/O, and PID statistics. |
-| `TCGroupV2StatsSubSystem` | Explicit registration with `MakeCGroupV2StatsSubSystem(config)`. Reads Linux cgroup v2 statistics, including pressure information. |
-| `TCGroupOomSubSystem` | Explicit registration with `MakeCGroupOomSubSystem(config)`. Uses cgroup memory providers for threshold alerts and configured OOM trend windows. |
-
-Only actor-system statistics are installed automatically. The cgroup implementations belong to the `ydb/library/actors/subsystems` build target. `ICGroupMemoryStatsProvider` is their version-neutral memory interface, not an additional automatically installed subsystem.
-
-Cgroup readers perform filesystem I/O in `config.ExecutorPoolId`; select an existing I/O executor pool explicitly. The default pool ID is zero, which need not be an I/O pool in your setup. Readers cache immutable snapshots for one second by default; a zero `RefreshPeriod` disables caching. Replies preserve the request cookie, and a null snapshot means the provider is unavailable or the read failed. Calls require a running subsystem and a local recipient actor.
-
-The supplied OOM implementation prefers both providers, then v2 alone, then v1 alone. If neither is registered, dependency resolution removes OOM at startup. With both providers, it can fall back when the first hierarchy has no memory controller. Its cgroup identity and trend-window configuration are fixed for the running instance; changing the process's cgroup stops monitoring. See the [configuration and API](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/subsystems/cgroup/cgroup_oom.h) for thresholds, subscription semantics, and trend requests.
+| Interface | Use it to | How to install |
+|---|---|---|
+| `TActorSystemStatsSubSystem` | Retrieve executor pool, thread, and harmonizer statistics. | The `TActorSystem` constructor calls `MakeActorSystemStatsSubSystem` unless this type is already registered. |
+| `TCGroupV1StatsSubSystem` | Read Linux cgroup v1 CPU, memory, I/O, and PID statistics. | Register the result of `MakeCGroupV1StatsSubSystem(config)`. |
+| `TCGroupV2StatsSubSystem` | Read Linux cgroup v2 statistics, including resource pressure. | Register the result of `MakeCGroupV2StatsSubSystem(config)`. |
+| `TCGroupOomSubSystem` | Receive alerts as cgroup memory usage approaches its limit and request forecasts of time to OOM. | Register the result of `MakeCGroupOomSubSystem(config)` and at least one cgroup statistics subsystem. |
 
 ## Registration and lookup
 
-Register subsystems while configuring `TActorSystemSetup`, or on a constructed `TActorSystem` before calling `Start()`. For example, after configuring the executor pools and scheduler:
+Register subsystems in `TActorSystemSetup` or on a constructed `TActorSystem` before calling `Start()`. For example, to monitor a process's memory usage under cgroup v2, link the `ydb/library/actors/subsystems` target and register the two subsystems below. Select an existing I/O pool for file reads (`ioPoolId` in the example). The default is pool 0, whose role depends on your configuration. The monitor actor runs in `systemPoolId`.
 
 ```cpp
 #include <ydb/library/actors/subsystems/cgroup/cgroup_v2.h>
@@ -38,7 +32,7 @@ oomConfig.ExecutorPoolId = systemPoolId;
 setup->RegisterSubSystem(NActors::MakeCGroupOomSubSystem(oomConfig));
 ```
 
-The factory's return type determines the registry key. Lookup uses the exact same type:
+Once the actor system has started, request a snapshot through the interface returned by the factory. Pass the ID of the local actor that should receive the reply.
 
 ```cpp
 auto* stats = actorSystem.GetSubSystem<NActors::TCGroupV2StatsSubSystem>();
@@ -47,13 +41,19 @@ if (stats) {
 }
 ```
 
+The `TEvCGroupV2Stats` reply carries the same `cookie` so the recipient can match it to the request. If cgroup v2 is unavailable or the read fails, the `Stats` field is null. By default, requests within one second share an immutable snapshot. Set `statsConfig.RefreshPeriod` to zero if each request needs fresh data.
+
+For memory alerts, an actor subscribes once with `TCGroupOomSubSystem::Subscribe`. The monitor periodically requests memory statistics through `ICGroupMemoryStatsProvider`, the interface shared by the v1 and v2 subsystems. For example, when the fraction of memory in use reaches the configured threshold, subscribers receive a `TEvCGroupOomAlert` event.
+
+If both statistics subsystems are registered, the monitor queries v2 first and tries v1 if v2 returns no memory data. If only one is registered, it uses that one. With neither registered, the actor system removes the monitor subsystem from the registry at startup. The monitor tracks one cgroup and stops polling if it detects that the process has moved to a different cgroup. Alert thresholds and forecast windows are set during configuration. See the [monitor configuration and subscription API](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/subsystems/cgroup/cgroup_oom.h).
+
 `GetSubSystem<T>()` returns a borrowed pointer, or null if the slot is absent. The named convenience getters, such as `GetActorSystemStats(actorSystem)` and `GetCGroupV2StatsSubSystem(actorSystem)`, abort if the subsystem is absent. Their no-argument forms require a current actor activation; use the explicit system form from other threads.
 
 There is one owned object per type key. Registering the same key replaces and destroys its previous object. Lookup does not search the inheritance hierarchy or create aliases for base classes. Runtime type IDs are process-local indices; do not persist them or use them as wire identifiers.
 
 ## Creating a subsystem and a mock
 
-Define the API separately from the implementation. Use public, unambiguous, non-virtual inheritance from `ISubSystem`, because typed lookup uses a static downcast. For example:
+Suppose several actors enforce a shared request limit. To change that limit in tests without changing the actors, give them an interface with a `GetLimit()` method. Use public, unambiguous, non-virtual inheritance from `ISubSystem`, because typed lookup uses a static downcast. For example:
 
 ```cpp
 #include <ydb/library/actors/core/actorsystem.h>
@@ -106,13 +106,14 @@ Implement every pure virtual API method in a mock. Lifecycle hooks inherited fro
 
 ## Dependencies and lifecycle
 
-Override `GetDependencies()` to declare prerequisites using their registry keys. An empty result means no dependencies. For example:
+Override `GetDependencies()` to declare prerequisites using their registry keys. An empty result means no dependencies. For example, the memory monitor declares which statistics subsystems it can use. The first alternative lets it fall back to v1 when v2 has no data.
 
 ```cpp
 NActors::TSubSystemDependencies GetDependencies() const override {
-    return NActors::DependsOn<TRequestLimitSubSystem>() &&
-        (NActors::DependsOn<NActors::TCGroupV2StatsSubSystem>() ||
-         NActors::DependsOn<NActors::TCGroupV1StatsSubSystem>());
+    using namespace NActors;
+    return (DependsOn<TCGroupV2StatsSubSystem>() && DependsOn<TCGroupV1StatsSubSystem>()) ||
+        DependsOn<TCGroupV2StatsSubSystem>() ||
+        DependsOn<TCGroupV1StatsSubSystem>();
 }
 ```
 

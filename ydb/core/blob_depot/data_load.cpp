@@ -94,6 +94,13 @@ namespace NKikimr::NBlobDepot {
                 RestartLoadTx(accounting, tx, std::exchange(progress, false));
             }
 
+            while (!PendingS3RefChecks.empty()) {
+                CheckPendingS3References(*tx, &tx);
+                FinishLoadTx(accounting, tx);
+                CommitTrash(&tx);
+                tx.RunSuccessorTx();
+            }
+            S3ReferencesLoaded = true;
             FinishLoadTx(accounting, tx);
             Self->Data->OnLoadComplete();
         }));
@@ -155,7 +162,11 @@ namespace NKikimr::NBlobDepot {
                 return true; // we don't want to read newly added items by this tablet's generation
             }
             if (item != from) {
-                Self->S3Manager->AddTrashToCollect(item);
+                if (rows.GetValueOrDefault<Schema::TrashS3::CheckReferences>()) {
+                    PendingS3RefChecks.emplace(item.GetObjectKey(), item.Len);
+                } else {
+                    Self->S3Manager->AddTrashToCollect(item);
+                }
                 from = item;
                 progress = true;
             }
@@ -164,6 +175,20 @@ namespace NKikimr::NBlobDepot {
             }
         }
         return true;
+    }
+
+    void TData::CheckPendingS3References(NTabletFlatExecutor::TTransactionContext& txc, void* cookie) {
+        NIceDb::TNiceDb db(txc.DB);
+        for (size_t n = 0; n < 1000 && !PendingS3RefChecks.empty(); ++n) {
+            const auto it = PendingS3RefChecks.begin();
+            const auto [generation, keyId] = it->first;
+            if (RefCountS3.contains(it->first)) {
+                db.Table<Schema::TrashS3>().Key(generation, keyId).Delete();
+            } else {
+                AddToS3Trash({.Len = it->second, .Generation = generation, .KeyId = keyId}, txc, cookie);
+            }
+            PendingS3RefChecks.erase(it);
+        }
     }
 
     void TData::OnLoadComplete() {

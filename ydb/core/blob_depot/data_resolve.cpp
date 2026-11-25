@@ -225,25 +225,30 @@ namespace NKikimr::NBlobDepot {
                 LogoBlobIDFromLogoBlobID(key.GetBlobId(), out->MutableBlobId());
                 item.SetReliablyWritten(reliablyWritten);
             } else {
-                EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), TOverloaded {
+                auto addRange = [&](ui32 begin, ui32 end, ui32 size) {
+                    auto *out = item.AddValueChain();
+                    if (begin) {
+                        out->SetSubrangeBegin(begin);
+                    }
+                    if (end != size) {
+                        out->SetSubrangeEnd(end);
+                    }
+                    return out;
+                };
+                const bool valid = EnumerateValueChainPayload(value.ValueChain, Self->TabletID(), TOverloaded {
                     [&](TLogoBlobID id, ui32 begin, ui32 end) {
-                        if (begin != end) {
-                            auto *out = item.AddValueChain();
-                            out->SetGroupId(Self->Info()->GroupFor(id.Channel(), id.Generation()));
-                            LogoBlobIDFromLogoBlobID(id, out->MutableBlobId());
-                            if (begin) {
-                                out->SetSubrangeBegin(begin);
-                            }
-                            if (end != id.BlobSize()) {
-                                out->SetSubrangeEnd(end);
-                            }
-                        }
+                        auto *out = addRange(begin, end, id.BlobSize());
+                        out->SetGroupId(Self->Info()->GroupFor(id.Channel(), id.Generation()));
+                        LogoBlobIDFromLogoBlobID(id, out->MutableBlobId());
                     },
-                    [&](TS3Locator locator) {
-                        auto *out = item.AddValueChain();
+                    [&](TS3Locator locator, ui32 begin, ui32 end) {
+                        auto *out = addRange(begin, end, locator.Len);
                         locator.ToProto(out->MutableS3Locator());
                     }
                 });
+                if (!valid) {
+                    item.SetErrorReason("invalid value chain range");
+                }
                 item.SetReliablyWritten(true);
             }
             if (value.Meta) {
@@ -252,6 +257,8 @@ namespace NKikimr::NBlobDepot {
 
             if (!ResolutionErrors.empty() && ResolutionErrors.contains(key.GetBlobId())) {
                 item.SetErrorReason("item resolution error");
+            }
+            if (item.HasErrorReason()) {
                 item.ClearValueChain();
             } else {
                 if (!item.ValueChainSize()) {

@@ -114,9 +114,10 @@ namespace NKikimr::NBlobDepot {
             struct Generation : Column<1, NScheme::NTypeIds::Uint32> {};
             struct KeyId : Column<2, NScheme::NTypeIds::Uint64> {};
             struct Len : Column<3, NScheme::NTypeIds::Uint32> {};
+            struct CheckReferences : Column<4, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
 
             using TKey = TableKey<Generation, KeyId>;
-            using TColumns = TableColumns<Generation, KeyId, Len>;
+            using TColumns = TableColumns<Generation, KeyId, Len, CheckReferences>;
 
             using Precharge = NoAutoPrecharge;
         };

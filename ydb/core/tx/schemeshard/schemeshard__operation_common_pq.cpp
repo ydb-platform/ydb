@@ -172,6 +172,16 @@ void AppendPQTabletConfigDelta(
     }
 }
 
+bool IsKeyRangeHeartbeatsStream(const TPathId& streamPathId, const TOperationContext& context) {
+    const auto it = context.SS->CdcStreams.find(streamPathId);
+    if (it == context.SS->CdcStreams.end()) {
+        return false;
+    }
+
+    const auto& stream = it->second->AlterData ? it->second->AlterData : it->second;
+    return stream->HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
+}
+
 }  // anonymous namespace
 
 // Serializes the cdc bootstrap as a TEvProposeTransaction prefix
@@ -441,14 +451,26 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
-        for (const auto* p : table->GetPartitions()) {
-            const auto* shardInfo = context.SS->ShardInfos.FindPtr(p->ShardIdx);
+        const bool keyRangeHeartbeats = IsKeyRangeHeartbeatsStream(topicPath.Parent().Base()->PathId, context);
+        const auto& partitions = table->GetPartitions();
+        for (size_t i = 0; i < partitions.size(); ++i) {
+            const auto* shardInfo = context.SS->ShardInfos.FindPtr(partitions[i]->ShardIdx);
             Y_ABORT_UNLESS(shardInfo != nullptr);
 
             auto& mg = *bootstrapConfig.AddExplicitMessageGroups();
             mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shardInfo->TabletID)));
 
-            //NOTE: No KeyRange on the group: nothing consumes the key ranges on the pqtablet side.
+            // Pass the DataShard key range to a key range CDC topic: PQ registers the source only in its partitions
+            if (keyRangeHeartbeats) {
+                if (i > 0) {
+                    mg.MutableKeyRange()->SetFromBound(partitions[i - 1]->EndOfRange);
+                }
+                if (i + 1 < partitions.size()) {
+                    mg.MutableKeyRange()->SetToBound(partitions[i]->EndOfRange);
+                }
+            }
+
+            //NOTE: Other CDC topics get no KeyRange on the group: nothing consumes the key ranges on the pqtablet side.
             // Routing is datashard-side over the topic partitioning, split continuity is
             // the change-exchange re-registration, and the table split/merge re-registration
             // produces rangeless ids anyway.

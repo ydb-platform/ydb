@@ -8008,6 +8008,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         return {{"__omit_backup", "true"}};
     }
 
+    TAttrs KeyRangeReplicationFeedAttrs() {
+        return {{"__async_replication", R"({"id":"1","path":"/MyRoot/Replication","supports_key_range_autopartitioning":true})"}};
+    }
+
     TString ChangefeedAttrsProto(const TAttrs& attrs) {
         TStringBuilder out;
         for (const auto& [key, value] : attrs) {
@@ -8165,7 +8169,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ImportSkipsChangefeed(ReplicationFeedWithOmitBackupAttrs(), EnableDataShardDirectPartImport, true);
     }
 
-    void ExportSkipsChangefeed(const TAttrs& attrs, bool enableDataShardDirectPartImport, bool removeOmitBackup = false) {
+    void ExportSkipsChangefeed(const TAttrs& attrs, bool enableDataShardDirectPartImport, bool removeOmitBackup = false, bool keyRangeHeartbeats = false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -8177,6 +8181,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableCdcKeyRangeHeartbeats(keyRangeHeartbeats);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
@@ -8201,10 +8206,18 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               Mode: ECdcStreamModeUpdate
               Format: ECdcStreamFormatJson
               %s
+              %s
             }
             RetentionPeriodSeconds: 1
-        )", AsyncReplicationChangefeedName.data(), CdcStreamAttrsProto(attrs).c_str()));
+        )", AsyncReplicationChangefeedName.data(), CdcStreamAttrsProto(attrs).c_str(),
+            keyRangeHeartbeats ? "VirtualTimestamps: true ResolvedTimestampsIntervalMs: 1000" : ""));
         env.TestWaitNotification(runtime, txId);
+
+        if (keyRangeHeartbeats) {
+            TestDescribeResult(DescribePrivatePath(runtime, TStringBuilder() << "/MyRoot/Original/" << AsyncReplicationChangefeedName), {
+                NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange),
+            });
+        }
 
         AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterPQGroupRequest(++txId,
             TStringBuilder() << "/MyRoot/Original/" << AsyncReplicationChangefeedName, R"(
@@ -8290,6 +8303,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST_FLAG(ExportSkipsLegacyAsyncReplicationChangefeed, EnableDataShardDirectPartImport) {
         ExportSkipsChangefeed(LegacyReplicationFeedAttrs(), EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST(ExportSkipsKeyRangeReplicationChangefeed) {
+        ExportSkipsChangefeed(KeyRangeReplicationFeedAttrs(), false, false, true);
     }
 
     // An explicitly requested object marked with __omit_backup is refused with

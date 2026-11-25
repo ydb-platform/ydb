@@ -307,7 +307,7 @@ void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const T
             NIceDb::TUpdate<Schema::ImportItems::SrcPrefix>(item.SrcPrefix),
             NIceDb::TUpdate<Schema::ImportItems::SrcPath>(item.SrcPath)
         );
-        if (item.ExportIndexIVs.IVsSize()) {
+        if (item.ExportIndexIVs.IVsSize() || item.ExportIndexIVs.ExportPrefixesSize()) {
             db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
                 NIceDb::TUpdate<Schema::ImportItems::IndexIVs>(item.ExportIndexIVs)
             );

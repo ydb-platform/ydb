@@ -145,6 +145,7 @@ public:
         TString ObjectPath;
         TMaybe<NBackup::TEncryptionIV> IV;
         TMap<TString, TEncryptionIV> IndexIVs = {};
+        TMap<TString, TString> IndexExportPrefixes = {};
     };
 
     TSchemaMapping() = default;

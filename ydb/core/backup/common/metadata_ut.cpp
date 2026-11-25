@@ -42,6 +42,16 @@ Y_UNIT_TEST_SUITE(IndexMetadataTest) {
         }
     }
 
+    Y_UNIT_TEST(InvalidIndexExportPrefixes) {
+        for (const TString value : {"null", "123", R"({"idx/indexImplTable":"../001"})", R"({"idx/indexImplTable":""})"}) {
+            TSchemaMapping mapping;
+            TString error;
+            UNIT_ASSERT(!mapping.Deserialize(TString(R"({"exportedObjects":{"Table":{
+                "exportPrefix":"001", "iv":"000102030405060708090A0B", "indexExportPrefixes":)") + value + "}}}", error));
+            UNIT_ASSERT_C(!error.empty(), value);
+        }
+    }
+
     Y_UNIT_TEST(InvalidSchemaMappingIndexIV) {
         for (const TString iv : {"null", "123", "\"\"", "\"00\"", "\"000102030405060708090A0B0C\"", "\"GG0102030405060708090A0B\""}) {
             TSchemaMapping mapping;

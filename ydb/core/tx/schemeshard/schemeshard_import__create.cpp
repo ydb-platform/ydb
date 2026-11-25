@@ -1923,7 +1923,9 @@ private:
         // Reserve 1 MiB for the final state update and executor bookkeeping.
         const ui64 limitBytes = (ui64(Self->MaxCommitRedoMB) - 1) << 20;
         const ui64 redoBytes = txc.DB.GetCommitRedoBytes();
-        if (redoBytes >= limitBytes && AnyOf(mapping.Items, [](const auto& item) { return item.ExportIndexIVs.IVsSize() != 0; })) {
+        if (redoBytes >= limitBytes && AnyOf(mapping.Items, [](const auto& item) {
+                return item.ExportIndexIVs.IVsSize() || item.ExportIndexIVs.ExportPrefixesSize();
+            })) {
             txc.DB.RollbackChanges();
             return CancelAndPersist(db, importInfo, -1,
                 TStringBuilder() << "Index IVs in the import schema mapping exceed the maximum SchemeShard commit size: "

@@ -1193,6 +1193,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             IndexImplTablePrefixes.reserve(indexes->size());
             for (const auto& index : *indexes) {
                 auto& indexMetadata = IndexImplTablePrefixes.emplace_back(index);
+                // An older DataShard numbers directories using its own changefeed flag.
+                // SchemeShard records the actual destination of each separate backup item.
+                const auto& prefixes = item.ExportIndexIVs.GetExportPrefixes();
+                if (const auto it = prefixes.find(index.ImplTablePrefix); it != prefixes.end()) {
+                    indexMetadata.ExportPrefix = it->second;
+                }
                 // The IV of a separate index impl-table item is stored only in the
                 // authenticated schema mapping of its parent table
                 const auto& indexIVs = item.ExportIndexIVs.GetIVs();

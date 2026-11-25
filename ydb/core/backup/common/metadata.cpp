@@ -266,6 +266,14 @@ TString TSchemaMapping::Serialize() const {
             }
             writer.CloseMap();
         }
+        if (!item.IndexExportPrefixes.empty()) {
+            writer.WriteKey("indexExportPrefixes");
+            writer.OpenMap();
+            for (const auto& [path, prefix] : item.IndexExportPrefixes) {
+                writer.Write(path, prefix);
+            }
+            writer.CloseMap();
+        }
         writer.CloseMap();
     }
     writer.CloseMap();
@@ -334,6 +342,21 @@ bool TSchemaMapping::Deserialize(const TString& jsonContent, TString& error) {
                     return false;
                 }
                 item.IndexIVs.emplace(path, std::move(parsedIV));
+            }
+        }
+        if (info.Has("indexExportPrefixes")) {
+            const auto& prefixes = info["indexExportPrefixes"];
+            if (!encrypted || !prefixes.IsMap()) {
+                error = "Incorrect indexExportPrefixes in schema mapping json";
+                return false;
+            }
+            for (const auto& [path, prefix] : prefixes.GetMap()) {
+                // Encrypted implementation tables are stored in numbered subdirectories.
+                if (!prefix.IsString() || prefix.GetString().empty() || prefix.GetString().find_first_not_of("0123456789") != TString::npos) {
+                    error = "Invalid index export prefix in schema mapping json";
+                    return false;
+                }
+                item.IndexExportPrefixes.emplace(path, prefix.GetString());
             }
         }
     }

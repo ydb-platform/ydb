@@ -2674,6 +2674,8 @@ message TChangefeedUnderlyingTopics {
 message TExportIndexIVs {
     // Relative index impl-table path -> IV of its separate backup item.
     map<string, bytes> IVs = 1;
+    // Physical directories from the authenticated schema mapping, persisted on import.
+    map<string, string> ExportPrefixes = 2;
 }
 
 message TExportMetadata {

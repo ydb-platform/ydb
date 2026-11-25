@@ -13429,6 +13429,7 @@ enum class EIndexExportEvent {
     RebootAfterChangefeedBeforeCopy,
     ChangefeedDuringExport,
     RebootBeforeBackupPropose,
+    DisableChangefeedsOnLegacyDataShard,
 };
 
 enum class EIndexImportScenario {
@@ -13439,6 +13440,7 @@ enum class EIndexImportScenario {
     RebootBeforeScheme,
     NoIndexIVsInMapping,
     OneIndexIVMissing,
+    LegacyMappingWithoutIndexPrefixes,
 };
 
 struct TIndexBackupOptions {
@@ -13586,13 +13588,13 @@ public:
 
     void CreateTables();
     NBackup::TMetadata ExportTables(EIndexExportEvent event, bool legacyDataShard);
-    void RemoveIndexIVs(bool onlyOne);
+    void EditIndexMapping(EIndexImportScenario scenario);
     void SwapIndexFiles(const NBackup::TMetadata& metadata, const TString& file);
     void RestoreTables(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, EIndexImportScenario scenario);
 
 private:
     void AddChangefeed(const char* name);
-    NBackup::TMetadata CheckBackup(bool changefeedBeforeBackup);
+    NBackup::TMetadata CheckBackup(bool changefeedBeforeBackup, bool legacyChangefeedsDisabled);
 
     TBackupStorage Storage;
     TTestBasicRuntime Runtime;
@@ -13698,6 +13700,7 @@ NBackup::TMetadata TMaterializedIndexBackup::ExportTables(EIndexExportEvent even
             && schemeTx.HasBackup()
             && !schemeTx.GetBackup().GetTableName().StartsWith("indexImpl");
     });
+    const bool legacyChangefeedsDisabled = event == EIndexExportEvent::DisableChangefeedsOnLegacyDataShard;
     ui32 proposalsWithoutIndexPrefixes = 0;
     auto legacyProposalObserver = Runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
         auto& record = ev->Get()->Record;
@@ -13708,6 +13711,9 @@ NBackup::TMetadata TMaterializedIndexBackup::ExportTables(EIndexExportEvent even
         if (schemeTx.ParseFromString(record.GetTxBody()) && schemeTx.GetBackup().HasIndexExportPrefixes()) {
             // Exercise the legacy metadata calculation, as when the receiver
             // does not know the new optional protobuf field.
+            if (legacyChangefeedsDisabled) {
+                Runtime.GetAppData().FeatureFlags.SetEnableChangefeedsExport(false);
+            }
             schemeTx.MutableBackup()->ClearIndexExportPrefixes();
             record.SetTxBody(schemeTx.SerializeAsString());
             ++proposalsWithoutIndexPrefixes;
@@ -13742,10 +13748,10 @@ NBackup::TMetadata TMaterializedIndexBackup::ExportTables(EIndexExportEvent even
     if (legacyDataShard) {
         UNIT_ASSERT(proposalsWithoutIndexPrefixes > 0);
     }
-    return CheckBackup(changefeedBeforeBackup);
+    return CheckBackup(changefeedBeforeBackup, legacyChangefeedsDisabled);
 }
 
-NBackup::TMetadata TMaterializedIndexBackup::CheckBackup(bool changefeedBeforeBackup) {
+NBackup::TMetadata TMaterializedIndexBackup::CheckBackup(bool changefeedBeforeBackup, bool legacyChangefeedsDisabled) {
     THashSet<TString> fileIVs;
     THashMap<TString, NBackup::TEncryptionIV> metadataIVs;
     const auto readBackupFile = [&](const TString& path) {
@@ -13782,12 +13788,16 @@ NBackup::TMetadata TMaterializedIndexBackup::CheckBackup(bool changefeedBeforeBa
     checkSchema("backup");
     ui32 expectedIndexPrefixNumber = ChangefeedsExport.value_or(false) ? 2 : 1;
     THashSet<TString> tablePrefixes;
+    THashMap<TString, TString> physicalPrefixes;
     for (const auto& index : *metadata.GetIndexes()) {
-        const TString prefix = TString("backup/") + index.ExportPrefix;
+        const TString physicalPrefix = Encrypted ? Sprintf("%03u", expectedIndexPrefixNumber) : index.ImplTablePrefix;
+        physicalPrefixes.emplace(index.ImplTablePrefix, physicalPrefix);
+        const TString prefix = TString("backup/") + physicalPrefix;
         checkSchema(prefix);
         readMetadata(prefix);
         if (Encrypted) {
-            UNIT_ASSERT_VALUES_EQUAL(index.ExportPrefix, Sprintf("%03u", expectedIndexPrefixNumber++));
+            UNIT_ASSERT_VALUES_EQUAL(index.ExportPrefix, Sprintf("%03u", expectedIndexPrefixNumber - (legacyChangefeedsDisabled ? 1 : 0)));
+            ++expectedIndexPrefixNumber;
         }
         UNIT_ASSERT_C(tablePrefixes.insert(index.ExportPrefix).second, index.ExportPrefix);
     }
@@ -13813,8 +13823,10 @@ NBackup::TMetadata TMaterializedIndexBackup::CheckBackup(bool changefeedBeforeBa
             if (item.ObjectPath == "Table") {
                 UNIT_ASSERT_VALUES_EQUAL(item.IndexIVs.size(), IndexNames.size());
                 for (const auto& index : *metadata.GetIndexes()) {
+                    const auto& prefix = physicalPrefixes.at(index.ImplTablePrefix);
+                    UNIT_ASSERT_VALUES_EQUAL(item.IndexExportPrefixes.at(index.ImplTablePrefix), prefix);
                     UNIT_ASSERT(item.IndexIVs.at(index.ImplTablePrefix)
-                        == metadataIVs.at(TString("backup/") + index.ExportPrefix + "/metadata.json"));
+                        == metadataIVs.at(TString("backup/") + prefix + "/metadata.json"));
                 }
             } else {
                 UNIT_ASSERT(item.IndexIVs.empty());
@@ -13828,17 +13840,25 @@ NBackup::TMetadata TMaterializedIndexBackup::CheckBackup(bool changefeedBeforeBa
     return metadata;
 }
 
-void TMaterializedIndexBackup::RemoveIndexIVs(bool onlyOne) {
+void TMaterializedIndexBackup::EditIndexMapping(EIndexImportScenario scenario) {
     const TString path = "SchemaMapping/mapping.json.enc";
     const auto [plain, iv] = Storage.ReadEncrypted(path);
     NBackup::TSchemaMapping mapping;
     TString error;
     UNIT_ASSERT_C(mapping.Deserialize(plain, error), error);
     for (auto& item : mapping.Items) {
-        if (onlyOne) {
+        switch (scenario) {
+        case EIndexImportScenario::OneIndexIVMissing:
             item.IndexIVs.erase("by_value/indexImplTable");
-        } else {
+            break;
+        case EIndexImportScenario::NoIndexIVsInMapping:
             item.IndexIVs.clear();
+            break;
+        case EIndexImportScenario::LegacyMappingWithoutIndexPrefixes:
+            item.IndexExportPrefixes.clear();
+            break;
+        default:
+            UNIT_FAIL("Unexpected schema mapping edit");
         }
     }
     Storage.WriteEncrypted(path, mapping.Serialize(), iv);
@@ -13932,8 +13952,10 @@ void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
     TMaterializedIndexBackup backup(isFs, encrypted, options.Algorithm, options.ChangefeedsExport);
     backup.CreateTables();
     const auto metadata = backup.ExportTables(options.ExportEvent, options.LegacyDataShard);
-    if (options.ImportScenario == EIndexImportScenario::NoIndexIVsInMapping || options.ImportScenario == EIndexImportScenario::OneIndexIVMissing) {
-        backup.RemoveIndexIVs(options.ImportScenario == EIndexImportScenario::OneIndexIVMissing);
+    if (options.ImportScenario == EIndexImportScenario::NoIndexIVsInMapping
+            || options.ImportScenario == EIndexImportScenario::OneIndexIVMissing
+            || options.ImportScenario == EIndexImportScenario::LegacyMappingWithoutIndexPrefixes) {
+        backup.EditIndexMapping(options.ImportScenario);
     } else if (options.ImportScenario == EIndexImportScenario::SwapScheme) {
         backup.SwapIndexFiles(metadata, "scheme.pb.enc");
     } else if (options.ImportScenario == EIndexImportScenario::SwapData) {
@@ -14889,6 +14911,18 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         ExportImportMaterializedIndexes(IsFs, true, Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
             {.Algorithm = "AES-128-GCM", .ChangefeedsExport = true, .LegacyDataShard = true,
              .ExportEvent = ChangefeedBeforeBackup ? EIndexExportEvent::ChangefeedBeforeCopy : EIndexExportEvent::None});
+    }
+
+    Y_UNIT_TEST_QUAD(LegacyDataShardWithChangefeedsDisabled, IsFs, Auto) {
+        using TSettings = Ydb::Import::ImportFromS3Settings;
+        ExportImportMaterializedIndexes(IsFs, true, Auto ? TSettings::INDEX_POPULATION_MODE_AUTO : TSettings::INDEX_POPULATION_MODE_IMPORT,
+            {.ChangefeedsExport = true, .LegacyDataShard = true, .ExportEvent = EIndexExportEvent::DisableChangefeedsOnLegacyDataShard,
+             .ImportScenario = EIndexImportScenario::RebootBeforeScheme});
+    }
+
+    Y_UNIT_TEST(LegacyMappingWithoutIndexPrefixes) {
+        ExportImportMaterializedIndexes(true, true, Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
+            {.ChangefeedsExport = true, .ImportScenario = EIndexImportScenario::LegacyMappingWithoutIndexPrefixes});
     }
 
     Y_UNIT_TEST_FLAG(DataShardWithoutIndexPrefixesWithChangefeedAndReboot, IsFs) {

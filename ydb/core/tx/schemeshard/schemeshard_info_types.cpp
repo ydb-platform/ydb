@@ -3734,6 +3734,9 @@ TImportInfo::TResolveItemsFromSchemaMappingResult TImportInfo::ResolveItemsFromS
         for (const auto& [path, indexIV] : schemaMappingItem.IndexIVs) {
             (*item.ExportIndexIVs.MutableIVs())[path] = indexIV.GetBinaryString();
         }
+        for (const auto& [path, prefix] : schemaMappingItem.IndexExportPrefixes) {
+            (*item.ExportIndexIVs.MutableExportPrefixes())[path] = prefix;
+        }
     };
 
     if (Items.empty()) { // Fill the whole list from schema mapping

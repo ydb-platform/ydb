@@ -2,7 +2,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/blob_depot/config.h>
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
@@ -224,9 +223,6 @@ namespace NKikimr::NSchemeShard {
                     return "too many channels specified in channel profile";
                 }
 
-                if (const auto error = NBlobDepot::ValidateDataCooling(desc.GetConfig().GetS3BackendSettings())) {
-                    return TString(*error);
-                }
                 return std::nullopt;
             }
 

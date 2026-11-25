@@ -12,6 +12,7 @@ Y_UNIT_TEST_SUITE(KqpRboCompatibility) {
     Y_UNIT_TEST_TWIN(SafeCastOptionalResults, PhysicalStagePeephole) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(PhysicalStagePeephole);
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
@@ -90,6 +91,7 @@ Y_UNIT_TEST_SUITE(KqpRboCompatibility) {
     Y_UNIT_TEST(ManyJoinsWithDecimalRanges) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));

@@ -119,6 +119,8 @@ void TestFallbackToYql(bool fallbackToYqlEnabled, const std::vector<std::string>
                        NQuery::EExecMode execMode) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+    appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
+    appConfig.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
     appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(fallbackToYqlEnabled);
 
     TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
@@ -178,6 +180,7 @@ std::vector<std::pair<ui32, ui32>> GetCompileCountersToTestFallbackToYql() {
 void TestLegacyOptimizerWithStats(const TString& query, bool fallbackEnabled, bool profile) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+    appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
     appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(fallbackEnabled);
     appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
     TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
@@ -226,6 +229,7 @@ void TestLegacyOptimizerWithStats(const TString& query, bool fallbackEnabled, bo
 ui32 CountNewRBOCompilations(bool enableNewRbo, double newRboRolloutRatio, ui32 queryCount) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableNewRBO(enableNewRbo);
+    appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
     appConfig.MutableTableServiceConfig()->SetNewRBORolloutRatio(newRboRolloutRatio);
     appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
     TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
@@ -258,6 +262,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(FallbackOnRowTables);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         CreateSimpleTable(kikimr);
 
@@ -377,6 +382,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(QualifiedStarSubqueryFallsBackToYqlOptimizer) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
 
@@ -439,6 +445,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(ReqJsonLogsActualOptimizer) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
 
@@ -541,6 +548,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST_TWIN(SysViewNodes, NewRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false).SetNodeCount(3));
         auto client = kikimr.GetQueryClient();

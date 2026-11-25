@@ -166,6 +166,7 @@ inline NJson::TJsonValue GetSimplifiedPlan(const TString& plan) {
 inline NKikimrConfig::TAppConfig CreateExplainPlanTestAppConfig(bool inlineJoinFiltersAfterCBO = false) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+    appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
     appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
     appConfig.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
     appConfig.MutableTableServiceConfig()->SetEnableFallbackOnMultipleStatements(false);

@@ -223,6 +223,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
     Y_UNIT_TEST_TWIN(LookupJoinByIndexWithConstPrefix, AllPointPrefixes) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
         appConfig.MutableTableServiceConfig()->SetDefaultEnableShuffleElimination(false);
@@ -449,6 +450,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
     Y_UNIT_TEST_QUAD(LookupJoinByNonCoveringIndexWithConstPrefix, AllPointPrefixes, CoveringPredicateIndex) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
         appConfig.MutableTableServiceConfig()->SetDefaultEnableShuffleElimination(false);
@@ -584,6 +586,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
     Y_UNIT_TEST_TWIN(LookupJoinBackToMainTable, AllPointPrefixes) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
         appConfig.MutableTableServiceConfig()->SetDefaultEnableShuffleElimination(false);
@@ -685,6 +688,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
     Y_UNIT_TEST(LookupJoinByNonCoveringIndexNullablePk) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
         appConfig.MutableTableServiceConfig()->SetDefaultEnableShuffleElimination(false);
@@ -801,6 +805,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
     Y_UNIT_TEST(ReviewLookupJoinIndexVsPrimaryKey) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
         appConfig.MutableTableServiceConfig()->SetDefaultEnableShuffleElimination(false);
@@ -893,6 +898,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
     Y_UNIT_TEST(LookupJoins_newRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
         appConfig.MutableTableServiceConfig()->SetDefaultEnableShuffleElimination(false);
@@ -1401,6 +1407,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
         auto runQueries = [&](bool newRbo) {
             NKikimrConfig::TAppConfig appConfig;
             appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+            appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
             if (!PhysicalStagePeephole) {
                 appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);
             }

@@ -317,6 +317,7 @@ Y_UNIT_TEST_SUITE(KqpRboGlobalIUs) {
             const bool spilling = serviceSpilling && querySpilling;
             NKikimrConfig::TAppConfig config;
             config.MutableTableServiceConfig()->SetEnableNewRBO(true);
+            config.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
             config.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
             config.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
             config.MutableTableServiceConfig()->SetEnableQueryServiceSpilling(serviceSpilling);

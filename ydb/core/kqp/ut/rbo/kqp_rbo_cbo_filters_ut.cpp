@@ -11,6 +11,8 @@ Y_UNIT_TEST_SUITE(KqpRboCboFilters) {
         for (bool newRbo : {false, true}) {
             NKikimrConfig::TAppConfig config;
             config.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+            config.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
+            config.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
             config.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
             config.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
             TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false));

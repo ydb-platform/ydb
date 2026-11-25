@@ -26,4 +26,6 @@ PEERDIR(
 
 FORK_SUBTESTS()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+
 END()

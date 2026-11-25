@@ -15,6 +15,9 @@ struct TEvDiscovery {
     enum EEv {
         EvError = EventSpaceBegin(TKikimrEvents::ES_DISCOVERY),
         EvDiscoveryData,
+        EvWatch,
+        EvUnwatch,
+        EvChanged,
         EvEnd
     };
 
@@ -36,7 +39,27 @@ struct TEvDiscovery {
         }
     };
 
+    // A one-shot wait for a change since the lookup at Revision. Re-register
+    // after obtaining a new authorized snapshot.
+    struct TEvWatch : public TEventLocal<TEvWatch, EvWatch> {
+        TString Path;
+        ui64 Revision;
+
+        TEvWatch(TString path, ui64 revision)
+            : Path(std::move(path)), Revision(revision)
+        {}
+    };
+
+    struct TEvUnwatch : public TEventLocal<TEvUnwatch, EvUnwatch> {
+        TString Path;
+        explicit TEvUnwatch(TString path) : Path(std::move(path)) {}
+    };
+
+    struct TEvChanged : public TEventLocal<TEvChanged, EvChanged> {};
+
     struct TEvDiscoveryData : public TEventLocal<TEvDiscoveryData, EvDiscoveryData> {
+        TString BoardPath;
+        ui64 Revision = 0;
         TString CachedMessage;
         TString CachedMessageSsl;
 
@@ -50,6 +73,7 @@ namespace NDiscovery {
 
 class TCachedMessageData {
 public:
+    ui64 Revision = 0;
     TString CachedMessage;
     TString CachedMessageSsl;
 

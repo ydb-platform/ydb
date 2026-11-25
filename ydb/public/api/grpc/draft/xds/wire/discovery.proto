@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package Ydb.Xds;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/wrappers.proto";
+
+// Wire projection of the Envoy v3 EDS messages used by YDB. Keep field numbers
+// aligned with envoy/service/discovery/v3 and envoy/config/{core,endpoint}/v3.
+// The private package avoids registering partial Envoy message descriptors.
+message Node {
+    string id = 1;
+    string cluster = 2;
+}
+
+message Status {
+    int32 code = 1;
+    string message = 2;
+}
+
+message DiscoveryRequest {
+    string version_info = 1;
+    Node node = 2;
+    repeated string resource_names = 3;
+    string type_url = 4;
+    string response_nonce = 5;
+    Status error_detail = 6;
+}
+
+message DiscoveryResponse {
+    string version_info = 1;
+    repeated google.protobuf.Any resources = 2;
+    string type_url = 4;
+    string nonce = 5;
+}
+
+message Metadata {
+    map<string, google.protobuf.Any> typed_filter_metadata = 2;
+}
+
+message SocketAddress {
+    uint32 protocol = 1;
+    string address = 2;
+    oneof port_specifier {
+        uint32 port_value = 3;
+        string named_port = 4;
+    }
+}
+
+message Address {
+    SocketAddress socket_address = 1;
+}
+
+message Endpoint {
+    Address address = 1;
+}
+
+message LbEndpoint {
+    Endpoint endpoint = 1;
+}
+
+message Locality {
+    string region = 1;
+}
+
+message LocalityLbEndpoints {
+    Locality locality = 1;
+    repeated LbEndpoint lb_endpoints = 2;
+    google.protobuf.UInt32Value load_balancing_weight = 3;
+    Metadata metadata = 9;
+}
+
+message ClusterLoadAssignment {
+    string cluster_name = 1;
+    repeated LocalityLbEndpoints endpoints = 2;
+}

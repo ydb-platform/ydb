@@ -1,0 +1,1181 @@
+diff --git a/packages/core/README.md b/packages/core/README.md
+index d7cbf8fbfc3e7af62f33a37b305f82bad3b32a34..0caa590341a3798f137e72fcd0f39ab37452ec2b 100644
+--- a/packages/core/README.md
++++ b/packages/core/README.md
+@@ -55,6 +55,10 @@ console.log(endpoints)
+ driver.close()
+ ```
+ 
++### Stream endpoint discovery
++
++Set `'ydb.sdk.enable_eds': true` to subscribe to endpoint changes over the driver's bootstrap connection. The driver uses periodic discovery when a server reports that EDS is unimplemented and periodically probes for support. Bridge pile preferences apply to streamed assignments.
++
+ ### Closing the driver
+ 
+ `using driver = new Driver(...)` and `driver.close()` immediately cancel active RPCs and close all connections, with or without discovery. The driver has no asynchronous disposal or shutdown grace period.
+diff --git a/packages/core/src/driver.discovery.test.ts b/packages/core/src/driver.discovery.test.ts
+index d87f684b3ae110ec4994068e76412bf7f45fc1b7..b95f6f2aaba828557bb8e9b111dca96ac94b718f 100644
+--- a/packages/core/src/driver.discovery.test.ts
++++ b/packages/core/src/driver.discovery.test.ts
+@@ -7,13 +7,18 @@ import {
+ import { channel } from 'node:diagnostics_channel'
+ import { setTimeout as delay } from 'node:timers/promises'
+ 
+-import { create } from '@bufbuild/protobuf'
++import { create, fromBinary, toBinary } from '@bufbuild/protobuf'
+ import { anyPack } from '@bufbuild/protobuf/wkt'
+ import { StatusIds_StatusCode } from '@ydbjs/api/operation'
+-import { Server } from '@ydbjs/grpc'
++import { ProtocolError, Server, Status } from '@ydbjs/grpc'
+ import { expect, test } from 'vitest'
+ 
+ import { Driver } from './driver.ts'
++import {
++	ClusterLoadAssignmentSchema,
++	DiscoveryRequestSchema,
++	DiscoveryResponseSchema,
++} from './endpoints/wire/eds_pb.js'
+ 
+ // Controlled discovery can remove a node while its real RPC remains live.
+ test.for([false, true])(
+@@ -111,3 +116,141 @@ test.for([false, true])(
+ 		await shutdown
+ 	}
+ )
++
++let eds = {
++	streamEndpoints: {
++		path: '/envoy.service.endpoint.v3.EndpointDiscoveryService/StreamEndpoints',
++		requestStream: true,
++		responseStream: true,
++		requestSerialize: (bytes: Uint8Array) => bytes,
++		requestDeserialize: (bytes: Uint8Array) => bytes,
++		responseDeserialize: (bytes: Uint8Array) => bytes,
++		responseSerialize: (bytes: Uint8Array) => bytes,
++	},
++} as const
++
++test('EDS access denial does not select endpoints from unary discovery', async (tc) => {
++	let server = new Server()
++	let calls = 0
++	server.add(DiscoveryServiceDefinition, {
++		async listEndpoints() {
++			calls++
++			return create(ListEndpointsResponseSchema, {
++				operation: {
++					status: StatusIds_StatusCode.SUCCESS,
++					ready: true,
++					result: anyPack(
++						ListEndpointsResultSchema,
++						create(ListEndpointsResultSchema, {
++							endpoints: [{ nodeId: 1, address: '127.0.0.1', port: 2135 }],
++						})
++					),
++				},
++			})
++		},
++	})
++	server.add(eds, {
++		// oxlint-disable-next-line require-yield -- A denied RPC returns a status before its first response.
++		async *streamEndpoints() {
++			throw new ProtocolError(Status.PERMISSION_DENIED, 'denied')
++		},
++	})
++	let port = await server.listen('127.0.0.1:0')
++	try {
++		using driver = new Driver(`grpc://127.0.0.1:${port}/local`, {
++			'ydb.sdk.enable_eds': true,
++			'ydb.sdk.prefer_primary_pile': true,
++		})
++		await expect(driver.ready(tc.signal)).rejects.toThrow('denied')
++		expect(calls).toBe(0)
++	} finally {
++		await server.close()
++	}
++})
++
++test('EDS NACKs a wrong database and ACKs only the installed membership', async (tc) => {
++	let server = new Server()
++	let port = 0
++	let requestsSeen = Promise.withResolvers<void>()
++	let typeUrl = 'type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment'
++	let response = (database: string, nonce: string) => {
++		let result = create(ListEndpointsResultSchema, {
++			endpoints: [{ nodeId: 1, address: '127.0.0.1', port }],
++		})
++		let assignment = create(ClusterLoadAssignmentSchema, {
++			clusterName: database,
++			endpoints: [
++				{
++					metadata: {
++						typedFilterMetadata: {
++							'ydb.discovery': anyPack(ListEndpointsResultSchema, result),
++						},
++					},
++					lbEndpoints: [
++						{
++							endpoint: {
++								address: {
++									socketAddress: {
++										address: '127.0.0.1',
++										portSpecifier: { case: 'portValue', value: port },
++									},
++								},
++							},
++						},
++					],
++				},
++			],
++		})
++		return toBinary(
++			DiscoveryResponseSchema,
++			create(DiscoveryResponseSchema, {
++				typeUrl,
++				versionInfo: 'v' + nonce,
++				nonce,
++				resources: [{ typeUrl, value: toBinary(ClusterLoadAssignmentSchema, assignment) }],
++			})
++		)
++	}
++	server.add(DiscoveryServiceDefinition, {
++		async whoAmI() {
++			return create(WhoAmIResponseSchema, { operation: { id: 'chosen' } })
++		},
++	})
++	server.add(eds, {
++		async *streamEndpoints(stream) {
++			try {
++				for await (let bytes of stream) {
++					let req = fromBinary(DiscoveryRequestSchema, bytes)
++					if (!req.responseNonce) {
++						expect(req.resourceNames).toEqual(['/local'])
++						expect(req.node?.id).toBeTruthy()
++						yield response('/other', '1')
++					} else if (req.responseNonce === '1') {
++						expect(req.errorDetail?.code).toBe(Status.INVALID_ARGUMENT)
++						expect(req.versionInfo).toBe('')
++						yield response('/local', '2')
++					} else {
++						expect(req.versionInfo).toBe('v2')
++						expect(req.errorDetail).toBeUndefined()
++						requestsSeen.resolve()
++					}
++				}
++			} catch (err) {
++				requestsSeen.reject(err)
++				throw err
++			}
++		},
++	})
++	port = await server.listen('127.0.0.1:0')
++	try {
++		using driver = new Driver(`grpc://127.0.0.1:${port}/local`, { 'ydb.sdk.enable_eds': true })
++		await driver.ready(tc.signal)
++		await requestsSeen.promise
++		let who = await driver
++			.createClient(DiscoveryServiceDefinition)
++			.whoAmI({}, { signal: tc.signal })
++		expect(who.operation?.id).toBe('chosen')
++	} finally {
++		await server.close()
++	}
++})
+diff --git a/packages/core/src/driver.ts b/packages/core/src/driver.ts
+index 79cfd840bad49d4c89eb4e4e9c842fcf7e161e43..7261712a33d45410216dcfdc4e29811678e7f9a0 100644
+--- a/packages/core/src/driver.ts
++++ b/packages/core/src/driver.ts
+@@ -1,3 +1,5 @@
++import type { CallOptions } from '@ydbjs/grpc'
++import { EdsDiscovery } from './endpoints/eds.js'
+ import * as assert from 'node:assert/strict'
+ import * as tls from 'node:tls'
+ 
+@@ -33,7 +35,6 @@ import type { DriverIdentity } from './driver-identity.js'
+ import {
+ 	type DiscoveryResult,
+ 	type EndpointsRuntime,
+-	type ListEndpoints,
+ 	createEndpointsRuntime,
+ 	mapDiscoveryResult,
+ } from './endpoints/endpoints-runtime.js'
+@@ -92,6 +93,8 @@ export type DriverOptions = {
+ 	/** Maximum token acquisition time before an RPC, in milliseconds. Defaults to 10000. */
+ 	'ydb.sdk.token_timeout_ms'?: number
+ 	'ydb.sdk.enable_discovery'?: boolean
++	/** Experimental EDS watch over the authenticated bootstrap transport. */
++	'ydb.sdk.enable_eds'?: boolean
+ 	'ydb.sdk.discovery_timeout_ms'?: number
+ 	'ydb.sdk.discovery_interval_ms'?: number
+ 	'ydb.sdk.connection_idle_timeout_ms'?: number
+@@ -224,9 +227,15 @@ export class Driver implements Disposable {
+ 		} else {
+ 			// The endpoints runtime kicks the first discovery round itself and owns
+ 			// the rediscovery loop + all ydb:driver.* diagnostics.
++			let eds = this.options['ydb.sdk.enable_eds']
++				? new EdsDiscovery(this.database, this.#bootstrapTransport(), (opts) =>
++						this.#listEndpoints(opts)
++					)
++				: undefined
+ 			this.#endpoints = createEndpointsRuntime({
+ 				identity: this.identity,
+-				listEndpoints: this.#fetchEndpoints,
++				listEndpoints: (signal) => this.#listEndpoints({ signal }),
++				watchEndpoints: eds?.watch.bind(eds),
+ 				secure: this.isSecure || this.options.secureOptions !== undefined,
+ 				transportOptions: this.options.transportOptions,
+ 				hooks: this.options.hooks,
+@@ -541,17 +550,23 @@ export class Driver implements Disposable {
+ 	// The listEndpoints seam handed to the endpoints runtime. One plain RPC — the
+ 	// FSM owns retry/backoff, and the run_discovery_round effect owns the
+ 	// tracing:ydb:driver.discovery span; this closure must not add either.
+-	#fetchEndpoints: ListEndpoints = async (signal: AbortSignal): Promise<DiscoveryResult> => {
++	#bootstrapTransport() {
++		return createRoutingTransport(this.#connection, this.#prepareMetadata, {
++			signal: this.#closedController.signal,
++		})
++	}
++
++	async #listEndpoints(options: CallOptions): Promise<DiscoveryResult> {
+ 		if (!this.#discoveryClient) {
+-			let transport = createRoutingTransport(this.#connection, this.#prepareMetadata, {
+-				signal: this.#closedController.signal,
+-			})
+-			this.#discoveryClient = createServiceClient(DiscoveryServiceDefinition, transport)
++			this.#discoveryClient = createServiceClient(
++				DiscoveryServiceDefinition,
++				this.#bootstrapTransport()
++			)
+ 		}
+ 
+ 		let response = await this.#discoveryClient.listEndpoints(
+ 			{ database: this.database },
+-			{ signal }
++			options
+ 		)
+ 		assert.ok(response.operation, new DriverResponseError('Missing operation data.'))
+ 
+diff --git a/packages/core/src/endpoints/eds.ts b/packages/core/src/endpoints/eds.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..b4fc07983081d7e4b04c959c6dd33935219dc1d8
+--- /dev/null
++++ b/packages/core/src/endpoints/eds.ts
+@@ -0,0 +1,193 @@
++import { randomUUID } from 'node:crypto'
++import { create, fromBinary, toBinary } from '@bufbuild/protobuf'
++import { anyUnpack } from '@bufbuild/protobuf/wkt'
++import { ListEndpointsResultSchema } from '@ydbjs/api/discovery'
++import { AsyncQueue } from '@ydbjs/fsm/queue'
++import { type CallOptions, type Metadata, RpcError, Status, type Transport } from '@ydbjs/grpc'
++
++import {
++	ClusterLoadAssignmentSchema,
++	type DiscoveryRequest,
++	DiscoveryRequestSchema,
++	DiscoveryResponseSchema,
++} from './wire/eds_pb.js'
++import { type DiscoveryResult, mapDiscoveryResult } from './endpoints-runtime.js'
++
++let typeUrl = 'type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment'
++let method = {
++	path: '/envoy.service.endpoint.v3.EndpointDiscoveryService/StreamEndpoints',
++	requestStream: true,
++	responseStream: true,
++	requestSerialize: (msg: DiscoveryRequest) => toBinary(DiscoveryRequestSchema, msg),
++	responseDeserialize: (bytes: Uint8Array) => fromBinary(DiscoveryResponseSchema, bytes),
++}
++type Response = ReturnType<typeof method.responseDeserialize>
++
++function decode(database: string, response: Response): DiscoveryResult {
++	let resource = response.resources[0]
++	if (
++		!response.versionInfo ||
++		!response.nonce ||
++		response.typeUrl !== typeUrl ||
++		response.resources.length !== 1 ||
++		resource?.typeUrl !== typeUrl
++	) {
++		throw new Error('Expected one versioned EDS resource')
++	}
++	let assignment = fromBinary(ClusterLoadAssignmentSchema, resource.value)
++	let group = assignment.endpoints[0]
++	let extension = group?.metadata?.typedFilterMetadata['ydb.discovery']
++	let result = extension && anyUnpack(extension, ListEndpointsResultSchema)
++	if (
++		assignment.clusterName !== database ||
++		assignment.endpoints.length !== 1 ||
++		!group ||
++		!result ||
++		result.endpoints.length !== group.lbEndpoints.length
++	) {
++		throw new Error('Invalid database or YDB discovery attributes')
++	}
++	for (let [index, endpoint] of result.endpoints.entries()) {
++		let socket = group.lbEndpoints[index]?.endpoint?.address?.socketAddress
++		if (
++			!socket ||
++			socket.protocol !== 0 ||
++			!socket.address ||
++			endpoint.address !== socket.address ||
++			socket.portSpecifier.case !== 'portValue' ||
++			endpoint.port < 1 ||
++			endpoint.port > 65535 ||
++			endpoint.port !== socket.portSpecifier.value
++		) {
++			throw new Error('Invalid EDS socket address')
++		}
++	}
++	return mapDiscoveryResult(result)
++}
++
++function generation(metadata: Metadata): bigint | undefined {
++	let value = metadata['x-ydb-route-generation']
++	if (typeof value !== 'string' || !/^\d{1,20}$/.test(value)) return undefined
++	let parsed = BigInt(value)
++	return parsed <= 0xffff_ffff_ffff_ffffn ? parsed : undefined
++}
++
++export class EdsDiscovery {
++	#database: string
++	#transport: Transport
++	#listEndpoints: (options: CallOptions) => Promise<DiscoveryResult>
++	#id = randomUUID()
++	#floor: bigint | undefined
++	#current = false
++	#unsupportedUntil = 0
++
++	constructor(
++		database: string,
++		transport: Transport,
++		listEndpoints: (options: CallOptions) => Promise<DiscoveryResult>
++	) {
++		this.#database = database
++		this.#transport = transport
++		this.#listEndpoints = listEndpoints
++	}
++
++	#accept(headers: Metadata): void {
++		let value = generation(headers)
++		if (
++			this.#floor === undefined &&
++			!('x-ydb-route-generation' in headers) &&
++			!('x-ydb-route-mode' in headers)
++		)
++			return
++		if (
++			headers['x-ydb-route-mode'] !== 'managed' ||
++			value === undefined ||
++			(this.#floor !== undefined && value < this.#floor)
++		) {
++			throw new RpcError(Status.UNAVAILABLE, 'Stale or missing discovery route generation')
++		}
++		this.#floor = value
++	}
++
++	#options(signal: AbortSignal, onHeader: (headers: Metadata) => void): CallOptions {
++		let metadata: Record<string, string> = {}
++		if (this.#floor !== undefined)
++			metadata['x-ydb-min-route-generation'] = this.#floor.toString()
++		if (this.#current) metadata['x-ydb-require-current-route'] = '1'
++		return { signal, metadata, onHeader }
++	}
++
++	async *watch(signal: AbortSignal): AsyncGenerator<DiscoveryResult> {
++		let initial: Metadata = {}
++		let onHeader = (headers: Metadata) => {
++			initial = headers
++		}
++		if (performance.now() >= this.#unsupportedUntil) {
++			using requests = new AsyncQueue<DiscoveryRequest>()
++			let base = { typeUrl, resourceNames: [this.#database] }
++			requests.push(create(DiscoveryRequestSchema, { ...base, node: { id: this.#id } }))
++			let version = ''
++			let received = false
++			try {
++				for await (let response of this.#transport.call(
++					method,
++					requests,
++					this.#options(signal, onHeader)
++				)) {
++					received = true
++					let result: DiscoveryResult
++					try {
++						result = decode(this.#database, response)
++					} catch (error) {
++						requests.push(
++							create(DiscoveryRequestSchema, {
++								...base,
++								versionInfo: version,
++								responseNonce: response.nonce,
++								errorDetail: {
++									code: Status.INVALID_ARGUMENT,
++									message: String(error),
++								},
++							})
++						)
++						continue
++					}
++					this.#accept(initial)
++					this.#current = false
++					yield result
++					version = response.versionInfo
++					requests.push(
++						create(DiscoveryRequestSchema, {
++							...base,
++							versionInfo: version,
++							responseNonce: response.nonce,
++						})
++					)
++				}
++				throw new RpcError(Status.UNAVAILABLE, 'EDS stream ended')
++			} catch (err) {
++				if (signal.aborted) throw err
++				if (received || !(err instanceof RpcError) || err.code !== Status.UNIMPLEMENTED) {
++					let cut =
++						err instanceof RpcError && err.code === Status.UNAVAILABLE
++							? generation(err.metadata)
++							: undefined
++					if (this.#floor !== undefined && cut !== undefined && cut > this.#floor) {
++						this.#floor = cut
++						this.#current = false
++					} else if (received || this.#floor !== undefined) {
++						this.#current = true
++					}
++					throw err
++				}
++				this.#accept(initial)
++				this.#unsupportedUntil = performance.now() + 5 * 60_000
++			}
++		}
++		initial = {}
++		let result = await this.#listEndpoints(this.#options(signal, onHeader))
++		this.#accept(initial)
++		this.#current = false
++		yield result
++	}
++}
+diff --git a/packages/core/src/endpoints/endpoints-runtime.ts b/packages/core/src/endpoints/endpoints-runtime.ts
+index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..8dc412c8db9f3f6734a5f4a1184705d0b4ecdb56 100644
+--- a/packages/core/src/endpoints/endpoints-runtime.ts
++++ b/packages/core/src/endpoints/endpoints-runtime.ts
+@@ -62,6 +62,8 @@ export type DiscoveryResult = {
+ 
+ // The single injectable discovery dependency (idempotent, one round per call —
+ // retry/backoff is the FSM's job, not this seam's).
++type WatchEndpoints = (signal: AbortSignal) => AsyncIterable<DiscoveryResult>
++
+ export type ListEndpoints = (signal: AbortSignal) => Promise<DiscoveryResult>
+ 
+ // The injectable channel seam (default = GrpcConnection). This is what makes the
+@@ -84,6 +86,8 @@ type EndpointsEnv = {
+ 	identity: DriverIdentity
+ 	hooks: DriverHooks | undefined
+ 	listEndpoints: ListEndpoints
++	watchEndpoints?: WatchEndpoints | undefined
++	watching: boolean
+ 	connectionFactory: ConnectionFactory
+ 
+ 	// I/O-owned channel state — NEVER touched by the transition.
+@@ -270,7 +274,7 @@ let effects = {
+ 	// them to the discovery span — the async #consume loop has no active span, so
+ 	// publishing them there would silently drop them from traces.
+ 	'endpoints.effect.run_discovery_round': (ctx: FullCtx, _effect, runtime) => {
+-		if (ctx.isFinalized) return
++		if (ctx.isFinalized || ctx.watching) return
+ 		ctx.roundStart = Date.now()
+ 		// Bound each round independently: a single hung listEndpoints must not
+ 		// wedge the single-flight discovery forever (a timeout is retryable). A
+@@ -281,12 +285,30 @@ let effects = {
+ 			() => timeoutAc.abort(new Error('discovery round timed out')),
+ 			ctx.discoveryTimeoutMs
+ 		)
+-		timer.unref?.()
++		if (!ctx.watchEndpoints) timer.unref?.()
+ 		// linkSignals (not AbortSignal.any) so the listeners are removed on dispose
+ 		// — a churn of short-lived pools must not accumulate signal listeners.
+ 		let link = linkSignals(ctx.ac.signal, timeoutAc.signal)
+ 		void (async () => {
+ 			try {
++				if (ctx.watchEndpoints) {
++					ctx.watching = true
++					for await (let update of ctx.watchEndpoints(link.signal)) {
++						if (ctx.ac.signal.aborted) return
++						clearTimeout(timer)
++						if (update.endpoints.length) {
++							publishRoundDiagnostics(ctx, update)
++							runtime.dispatch({
++								type: 'endpoints.discovery.round_succeeded',
++								...update,
++								authoritative: true,
++							})
++						} else {
++							runtime.dispatch({ type: 'endpoints.discovery.watch_lost' })
++						}
++					}
++					return
++				}
+ 				let result = await discoveryCh.tracePromise(
+ 					async () => {
+ 						let r = await ctx.listEndpoints(link.signal)
+@@ -311,6 +333,7 @@ let effects = {
+ 				if (ctx.ac.signal.aborted) return
+ 				// A per-round timeout (not the pool abort) is retryable — keep the
+ 				// interval/backoff cadence rather than treating it as terminal.
++				if (ctx.watching) runtime.dispatch({ type: 'endpoints.discovery.watch_lost' })
+ 				let timedOut = timeoutAc.signal.aborted
+ 				runtime.dispatch({
+ 					type: 'endpoints.discovery.round_failed',
+@@ -318,6 +341,7 @@ let effects = {
+ 					retryable: timedOut || isRetryableError(error, true),
+ 				})
+ 			} finally {
++				ctx.watching = false
+ 				clearTimeout(timer)
+ 				link[Symbol.dispose]()
+ 			}
+@@ -350,7 +374,9 @@ let effects = {
+ 					ctx.timers.delete(key)
+ 					runtime.dispatch(event)
+ 				}, delay)
+-		handle.unref?.()
++		// While a lost watch reconnects, idle Topic streams may have no other
++		// referenced handles. Keep the recovery alive until admission reopens.
++		if (!ctx.watchEndpoints || repeating) handle.unref?.()
+ 		ctx.timers.set(key, handle)
+ 	},
+ 
+@@ -436,6 +462,10 @@ export class EndpointPool implements Disposable {
+ 		return this.#snapshot
+ 	}
+ 
++	get watchPending(): boolean {
++		return !!this.#env.watchEndpoints && this.#snapshot === EMPTY_SNAPSHOT
++	}
++
+ 	get closed(): boolean {
+ 		return (
+ 			this.#machine.signal.aborted ||
+@@ -540,7 +570,7 @@ export class EndpointPool implements Disposable {
+ 		signal?.throwIfAborted()
+ 		this.#machine.signal.throwIfAborted()
+ 		if (this.#env.isFinalized) throw new Error('Endpoints closed')
+-		if (this.#env.readyAt === undefined) {
++		if (this.#env.readyAt === undefined || this.watchPending) {
+ 			let waiter = Promise.withResolvers<void>()
+ 			let onAbort = () => {
+ 				this.#env.readyWaiters.delete(waiter)
+@@ -819,6 +849,7 @@ let toEndpointInfo = function toEndpointInfo(e: {
+ export type EndpointsRuntimeConfig = {
+ 	identity: DriverIdentity
+ 	listEndpoints: ListEndpoints
++	watchEndpoints?: WatchEndpoints | undefined
+ 	secure?: boolean
+ 	transportOptions?: ClientOptions | undefined
+ 	connectionFactory?: ConnectionFactory | undefined
+@@ -845,6 +876,8 @@ export let createEndpointsRuntime = function createEndpointsRuntime(
+ 		identity: config.identity,
+ 		hooks: config.hooks,
+ 		listEndpoints: config.listEndpoints,
++		watchEndpoints: config.watchEndpoints,
++		watching: false,
+ 		connectionFactory: config.connectionFactory ?? defaultFactory,
+ 		channels: new Map(),
+ 		pinnedChannels: new Map(),
+diff --git a/packages/core/src/endpoints/endpoints-state.test.ts b/packages/core/src/endpoints/endpoints-state.test.ts
+index e1ceb66d9328912cc1463a19dc1aab9e935b76e5..3357006937b7f8b3f000eeb5939bf33852fb3367 100644
+--- a/packages/core/src/endpoints/endpoints-state.test.ts
++++ b/packages/core/src/endpoints/endpoints-state.test.ts
+@@ -170,6 +170,49 @@ test('a node dropped from discovery is retired, keeping its channel', () => {
+ 	expect(h.ctx.byNodeId.get(2n)!.subState).toBe('retired')
+ })
+ 
++test('a watched assignment closes removed endpoints while preserving those still advertised', () => {
++	let h = toReady([ep(1), ep(2)])
++	step(h, {
++		type: 'endpoints.discovery.round_succeeded',
++		endpoints: [ep(2), ep(3)],
++		selfLocation: 'A',
++		pileStates: [],
++		authoritative: true,
++	})
++	expect(h.ctx.byNodeId.has(1n)).toBe(false)
++	expect(h.effects.filter((effect) => effect.type === 'endpoints.effect.close_channel')).toEqual([
++		{ type: 'endpoints.effect.close_channel', nodeId: 1n, store: 'discovered' },
++	])
++})
++
++test('replacement of the whole watched assignment closes direct pins from the previous cluster', () => {
++	let h = toReady([ep(1)])
++	step(h, {
++		type: 'endpoints.pin',
++		nodeId: 99n,
++		host: 'direct-source',
++		port: 2136,
++		location: '',
++		sslTargetNameOverride: '',
++		ipV4: [],
++		ipV6: [],
++		generation: 0,
++	})
++	step(h, {
++		type: 'endpoints.discovery.round_succeeded',
++		endpoints: [ep(1, { host: 'target' })],
++		selfLocation: 'A',
++		pileStates: [],
++		authoritative: true,
++	})
++	expect(h.ctx.pinned.size).toBe(0)
++	expect(h.effects).toContainEqual({
++		type: 'endpoints.effect.close_channel',
++		nodeId: 99n,
++		store: 'pinned',
++	})
++})
++
+ test('a reappearing retired node is revived in place, never closed', () => {
+ 	let h = toReady([ep(1), ep(2)])
+ 	step(h, round([ep(1)])) // node 2 retired
+diff --git a/packages/core/src/endpoints/endpoints-state.ts b/packages/core/src/endpoints/endpoints-state.ts
+index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4ccc64b6c32 100644
+--- a/packages/core/src/endpoints/endpoints-state.ts
++++ b/packages/core/src/endpoints/endpoints-state.ts
+@@ -154,8 +154,10 @@ export type TimerRef = { which: TimerName }
+ export type EndpointsEvent =
+ 	| { type: 'endpoints.discovery.start' }
+ 	| { type: 'endpoints.discovery.force' }
++	| { type: 'endpoints.discovery.watch_lost' }
+ 	| {
+ 			type: 'endpoints.discovery.round_succeeded'
++			authoritative?: true
+ 			endpoints: DiscoveredEndpoint[]
+ 			selfLocation: string
+ 			pileStates: PileState[]
+@@ -384,14 +386,35 @@ let rejectEmptyRound = function rejectEmptyRound(
+ // from `computeRoundDiff`; the loop below only mutates the registry.
+ let applyRound = function applyRound(
+ 	ctx: EndpointsCtx,
+-	endpoints: DiscoveredEndpoint[],
+-	selfLocation: string,
+-	pileStates: PileState[],
++	{
++		endpoints,
++		selfLocation,
++		pileStates,
++		authoritative,
++	}: Extract<EndpointsEvent, { type: 'endpoints.discovery.round_succeeded' }>,
+ 	runtime: EndpointsTransitionRuntime
+ ): EndpointsEffect[] {
+ 	let { added, retired } = computeRoundDiff(ctx.byNodeId, endpoints)
+ 	let effects: EndpointsEffect[] = []
+ 
++	if (authoritative && ctx.pinned.size && ctx.byNodeId.size) {
++		let addresses = new Map(endpoints.map((ep) => [ep.nodeId, `${ep.host}:${ep.port}`]))
++		let overlaps = endpoints.some(
++			(ep) => ctx.byNodeId.get(ep.nodeId)?.address === addresses.get(ep.nodeId)
++		)
++		for (let id of ctx.pinned.keys()) {
++			let previous = ctx.byNodeId.get(id)
++			if (!overlaps || (previous && previous.address !== addresses.get(id))) {
++				ctx.pinned.delete(id)
++				effects.push({
++					type: 'endpoints.effect.close_channel',
++					nodeId: id,
++					store: 'pinned',
++				})
++			}
++		}
++	}
++
+ 	// Mutate: add new entries, revive retired, un-ban pessimized, refresh dial info.
+ 	for (let ep of endpoints) {
+ 		let existing = ctx.byNodeId.get(ep.nodeId)
+@@ -441,10 +464,18 @@ let applyRound = function applyRound(
+ 		}
+ 	}
+ 
+-	// Retire the vanished endpoints from the diff. Channel stays open to drain.
+ 	for (let r of retired) {
+-		ctx.byNodeId.get(r.nodeId)!.subState = 'retired'
+-		effects.push({ type: 'endpoints.effect.retire_channel', nodeId: r.nodeId })
++		if (authoritative) {
++			ctx.byNodeId.delete(r.nodeId)
++			effects.push({
++				type: 'endpoints.effect.close_channel',
++				nodeId: r.nodeId,
++				store: 'discovered',
++			})
++		} else {
++			ctx.byNodeId.get(r.nodeId)!.subState = 'retired'
++			effects.push({ type: 'endpoints.effect.retire_channel', nodeId: r.nodeId })
++		}
+ 	}
+ 
+ 	// Emit the add/retire outputs from the single-sourced diff.
+@@ -614,6 +645,18 @@ export let endpointsTransition = function endpointsTransition(
+ 		return terminate(ctx, new Error('Endpoints closed'), runtime)
+ 	}
+ 
++	if (state !== 'closed' && event.type === 'endpoints.discovery.watch_lost') {
++		let effects: EndpointsEffect[] = []
++		for (let nodeId of new Set([...ctx.byNodeId.keys(), ...ctx.pinned.keys()])) {
++			effects.push({ type: 'endpoints.effect.close_channel', nodeId })
++		}
++		ctx.byNodeId.clear()
++		ctx.pinned.clear()
++		ctx.roundInFlight = false
++		runtime.emit({ type: 'endpoints.snapshot', snapshot: EMPTY_SNAPSHOT })
++		return { state: 'discovering', effects }
++	}
++
+ 	if (state !== 'closed' && event.type === 'endpoints.invalidate') {
+ 		return applyInvalidate(ctx, event.nodeId, runtime)
+ 	}
+@@ -637,13 +680,7 @@ export let endpointsTransition = function endpointsTransition(
+ 			switch (event.type) {
+ 				case 'endpoints.discovery.round_succeeded': {
+ 					if (event.endpoints.length === 0) return rejectEmptyRound(ctx, runtime)
+-					let effects = applyRound(
+-						ctx,
+-						event.endpoints,
+-						event.selfLocation,
+-						event.pileStates,
+-						runtime
+-					)
++					let effects = applyRound(ctx, event, runtime)
+ 					effects.push({
+ 						type: 'endpoints.effect.timer.schedule',
+ 						which: 'discovery_interval',
+@@ -687,13 +724,7 @@ export let endpointsTransition = function endpointsTransition(
+ 					// would retire every node and black-hole balanced RPCs until the
+ 					// next interval while the state still reads 'ready'.
+ 					if (event.endpoints.length === 0) return rejectEmptyRound(ctx, runtime)
+-					let effects = applyRound(
+-						ctx,
+-						event.endpoints,
+-						event.selfLocation,
+-						event.pileStates,
+-						runtime
+-					)
++					let effects = applyRound(ctx, event, runtime)
+ 					effects.push({
+ 						type: 'endpoints.effect.timer.schedule',
+ 						which: 'discovery_interval',
+diff --git a/packages/core/src/endpoints/wire/eds.proto b/packages/core/src/endpoints/wire/eds.proto
+new file mode 100644
+index 0000000000000000000000000000000000000000..e175e7ded8c906a1aeab340a9f9282329d8d80df
+--- /dev/null
++++ b/packages/core/src/endpoints/wire/eds.proto
+@@ -0,0 +1,76 @@
++syntax = "proto3";
++
++package Ydb.Xds;
++
++import "google/protobuf/any.proto";
++import "google/protobuf/wrappers.proto";
++
++// Wire projection of the Envoy v3 EDS messages used by YDB. Keep field numbers
++// aligned with envoy/service/discovery/v3 and envoy/config/{core,endpoint}/v3.
++// The private package avoids registering partial Envoy message descriptors.
++message Node {
++    string id = 1;
++    string cluster = 2;
++}
++
++message Status {
++    int32 code = 1;
++    string message = 2;
++}
++
++message DiscoveryRequest {
++    string version_info = 1;
++    Node node = 2;
++    repeated string resource_names = 3;
++    string type_url = 4;
++    string response_nonce = 5;
++    Status error_detail = 6;
++}
++
++message DiscoveryResponse {
++    string version_info = 1;
++    repeated google.protobuf.Any resources = 2;
++    string type_url = 4;
++    string nonce = 5;
++}
++
++message Metadata {
++    map<string, google.protobuf.Any> typed_filter_metadata = 2;
++}
++
++message SocketAddress {
++    uint32 protocol = 1;
++    string address = 2;
++    oneof port_specifier {
++        uint32 port_value = 3;
++        string named_port = 4;
++    }
++}
++
++message Address {
++    SocketAddress socket_address = 1;
++}
++
++message Endpoint {
++    Address address = 1;
++}
++
++message LbEndpoint {
++    Endpoint endpoint = 1;
++}
++
++message Locality {
++    string region = 1;
++}
++
++message LocalityLbEndpoints {
++    Locality locality = 1;
++    repeated LbEndpoint lb_endpoints = 2;
++    google.protobuf.UInt32Value load_balancing_weight = 3;
++    Metadata metadata = 9;
++}
++
++message ClusterLoadAssignment {
++    string cluster_name = 1;
++    repeated LocalityLbEndpoints endpoints = 2;
++}
+diff --git a/packages/core/src/endpoints/wire/eds_pb.ts b/packages/core/src/endpoints/wire/eds_pb.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..08bc462cfa7edce963ed412ab7467e078af8d16a
+--- /dev/null
++++ b/packages/core/src/endpoints/wire/eds_pb.ts
+@@ -0,0 +1,315 @@
++// @generated by protoc-gen-es v2.16.0 with parameter "target=ts"
++// @generated from file eds.proto (package Ydb.Xds, syntax proto3)
++/* eslint-disable */
++
++import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
++import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
++import type { Any } from "@bufbuild/protobuf/wkt";
++import { file_google_protobuf_any, file_google_protobuf_wrappers } from "@bufbuild/protobuf/wkt";
++import type { Message } from "@bufbuild/protobuf";
++
++/**
++ * Describes the file eds.proto.
++ */
++export const file_eds: GenFile = /*@__PURE__*/
++  fileDesc("CgllZHMucHJvdG8SB1lkYi5YZHMiIwoETm9kZRIKCgJpZBgBIAEoCRIPCgdjbHVzdGVyGAIgASgJIicKBlN0YXR1cxIMCgRjb2RlGAEgASgFEg8KB21lc3NhZ2UYAiABKAkirgEKEERpc2NvdmVyeVJlcXVlc3QSFAoMdmVyc2lvbl9pbmZvGAEgASgJEhsKBG5vZGUYAiABKAsyDS5ZZGIuWGRzLk5vZGUSFgoOcmVzb3VyY2VfbmFtZXMYAyADKAkSEAoIdHlwZV91cmwYBCABKAkSFgoOcmVzcG9uc2Vfbm9uY2UYBSABKAkSJQoMZXJyb3JfZGV0YWlsGAYgASgLMg8uWWRiLlhkcy5TdGF0dXMicwoRRGlzY292ZXJ5UmVzcG9uc2USFAoMdmVyc2lvbl9pbmZvGAEgASgJEicKCXJlc291cmNlcxgCIAMoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSEAoIdHlwZV91cmwYBCABKAkSDQoFbm9uY2UYBSABKAkipwEKCE1ldGFkYXRhEkkKFXR5cGVkX2ZpbHRlcl9tZXRhZGF0YRgCIAMoCzIqLllkYi5YZHMuTWV0YWRhdGEuVHlwZWRGaWx0ZXJNZXRhZGF0YUVudHJ5GlAKGFR5cGVkRmlsdGVyTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSIwoFdmFsdWUYAiABKAsyFC5nb29nbGUucHJvdG9idWYuQW55OgI4ASJwCg1Tb2NrZXRBZGRyZXNzEhAKCHByb3RvY29sGAEgASgNEg8KB2FkZHJlc3MYAiABKAkSFAoKcG9ydF92YWx1ZRgDIAEoDUgAEhQKCm5hbWVkX3BvcnQYBCABKAlIAEIQCg5wb3J0X3NwZWNpZmllciI5CgdBZGRyZXNzEi4KDnNvY2tldF9hZGRyZXNzGAEgASgLMhYuWWRiLlhkcy5Tb2NrZXRBZGRyZXNzIi0KCEVuZHBvaW50EiEKB2FkZHJlc3MYASABKAsyEC5ZZGIuWGRzLkFkZHJlc3MiMQoKTGJFbmRwb2ludBIjCghlbmRwb2ludBgBIAEoCzIRLllkYi5YZHMuRW5kcG9pbnQiGgoITG9jYWxpdHkSDgoGcmVnaW9uGAEgASgJIscBChNMb2NhbGl0eUxiRW5kcG9pbnRzEiMKCGxvY2FsaXR5GAEgASgLMhEuWWRiLlhkcy5Mb2NhbGl0eRIpCgxsYl9lbmRwb2ludHMYAiADKAsyEy5ZZGIuWGRzLkxiRW5kcG9pbnQSOwoVbG9hZF9iYWxhbmNpbmdfd2VpZ2h0GAMgASgLMhwuZ29vZ2xlLnByb3RvYnVmLlVJbnQzMlZhbHVlEiMKCG1ldGFkYXRhGAkgASgLMhEuWWRiLlhkcy5NZXRhZGF0YSJeChVDbHVzdGVyTG9hZEFzc2lnbm1lbnQSFAoMY2x1c3Rlcl9uYW1lGAEgASgJEi8KCWVuZHBvaW50cxgCIAMoCzIcLllkYi5YZHMuTG9jYWxpdHlMYkVuZHBvaW50c2IGcHJvdG8z", [file_google_protobuf_any, file_google_protobuf_wrappers]);
++
++/**
++ * Wire projection of the Envoy v3 EDS messages used by YDB. Keep field numbers
++ * aligned with envoy/service/discovery/v3 and envoy/config/{core,endpoint}/v3.
++ * The private package avoids registering partial Envoy message descriptors.
++ *
++ * @generated from message Ydb.Xds.Node
++ */
++export type Node = Message<"Ydb.Xds.Node"> & {
++  /**
++   * @generated from field: string id = 1;
++   */
++  id: string;
++
++  /**
++   * @generated from field: string cluster = 2;
++   */
++  cluster: string;
++};
++
++/**
++ * Describes the message Ydb.Xds.Node.
++ * Use `create(NodeSchema)` to create a new message.
++ */
++export const NodeSchema: GenMessage<Node> = /*@__PURE__*/
++  messageDesc(file_eds, 0);
++
++/**
++ * @generated from message Ydb.Xds.Status
++ */
++export type Status = Message<"Ydb.Xds.Status"> & {
++  /**
++   * @generated from field: int32 code = 1;
++   */
++  code: number;
++
++  /**
++   * @generated from field: string message = 2;
++   */
++  message: string;
++};
++
++/**
++ * Describes the message Ydb.Xds.Status.
++ * Use `create(StatusSchema)` to create a new message.
++ */
++export const StatusSchema: GenMessage<Status> = /*@__PURE__*/
++  messageDesc(file_eds, 1);
++
++/**
++ * @generated from message Ydb.Xds.DiscoveryRequest
++ */
++export type DiscoveryRequest = Message<"Ydb.Xds.DiscoveryRequest"> & {
++  /**
++   * @generated from field: string version_info = 1;
++   */
++  versionInfo: string;
++
++  /**
++   * @generated from field: Ydb.Xds.Node node = 2;
++   */
++  node?: Node | undefined;
++
++  /**
++   * @generated from field: repeated string resource_names = 3;
++   */
++  resourceNames: string[];
++
++  /**
++   * @generated from field: string type_url = 4;
++   */
++  typeUrl: string;
++
++  /**
++   * @generated from field: string response_nonce = 5;
++   */
++  responseNonce: string;
++
++  /**
++   * @generated from field: Ydb.Xds.Status error_detail = 6;
++   */
++  errorDetail?: Status | undefined;
++};
++
++/**
++ * Describes the message Ydb.Xds.DiscoveryRequest.
++ * Use `create(DiscoveryRequestSchema)` to create a new message.
++ */
++export const DiscoveryRequestSchema: GenMessage<DiscoveryRequest> = /*@__PURE__*/
++  messageDesc(file_eds, 2);
++
++/**
++ * @generated from message Ydb.Xds.DiscoveryResponse
++ */
++export type DiscoveryResponse = Message<"Ydb.Xds.DiscoveryResponse"> & {
++  /**
++   * @generated from field: string version_info = 1;
++   */
++  versionInfo: string;
++
++  /**
++   * @generated from field: repeated google.protobuf.Any resources = 2;
++   */
++  resources: Any[];
++
++  /**
++   * @generated from field: string type_url = 4;
++   */
++  typeUrl: string;
++
++  /**
++   * @generated from field: string nonce = 5;
++   */
++  nonce: string;
++};
++
++/**
++ * Describes the message Ydb.Xds.DiscoveryResponse.
++ * Use `create(DiscoveryResponseSchema)` to create a new message.
++ */
++export const DiscoveryResponseSchema: GenMessage<DiscoveryResponse> = /*@__PURE__*/
++  messageDesc(file_eds, 3);
++
++/**
++ * @generated from message Ydb.Xds.Metadata
++ */
++export type Metadata = Message<"Ydb.Xds.Metadata"> & {
++  /**
++   * @generated from field: map<string, google.protobuf.Any> typed_filter_metadata = 2;
++   */
++  typedFilterMetadata: { [key: string]: Any };
++};
++
++/**
++ * Describes the message Ydb.Xds.Metadata.
++ * Use `create(MetadataSchema)` to create a new message.
++ */
++export const MetadataSchema: GenMessage<Metadata> = /*@__PURE__*/
++  messageDesc(file_eds, 4);
++
++/**
++ * @generated from message Ydb.Xds.SocketAddress
++ */
++export type SocketAddress = Message<"Ydb.Xds.SocketAddress"> & {
++  /**
++   * @generated from field: uint32 protocol = 1;
++   */
++  protocol: number;
++
++  /**
++   * @generated from field: string address = 2;
++   */
++  address: string;
++
++  /**
++   * @generated from oneof Ydb.Xds.SocketAddress.port_specifier
++   */
++  portSpecifier: {
++    /**
++     * @generated from field: uint32 port_value = 3;
++     */
++    value: number;
++    case: "portValue";
++  } | {
++    /**
++     * @generated from field: string named_port = 4;
++     */
++    value: string;
++    case: "namedPort";
++  } | { case: undefined; value?: undefined };
++};
++
++/**
++ * Describes the message Ydb.Xds.SocketAddress.
++ * Use `create(SocketAddressSchema)` to create a new message.
++ */
++export const SocketAddressSchema: GenMessage<SocketAddress> = /*@__PURE__*/
++  messageDesc(file_eds, 5);
++
++/**
++ * @generated from message Ydb.Xds.Address
++ */
++export type Address = Message<"Ydb.Xds.Address"> & {
++  /**
++   * @generated from field: Ydb.Xds.SocketAddress socket_address = 1;
++   */
++  socketAddress?: SocketAddress | undefined;
++};
++
++/**
++ * Describes the message Ydb.Xds.Address.
++ * Use `create(AddressSchema)` to create a new message.
++ */
++export const AddressSchema: GenMessage<Address> = /*@__PURE__*/
++  messageDesc(file_eds, 6);
++
++/**
++ * @generated from message Ydb.Xds.Endpoint
++ */
++export type Endpoint = Message<"Ydb.Xds.Endpoint"> & {
++  /**
++   * @generated from field: Ydb.Xds.Address address = 1;
++   */
++  address?: Address | undefined;
++};
++
++/**
++ * Describes the message Ydb.Xds.Endpoint.
++ * Use `create(EndpointSchema)` to create a new message.
++ */
++export const EndpointSchema: GenMessage<Endpoint> = /*@__PURE__*/
++  messageDesc(file_eds, 7);
++
++/**
++ * @generated from message Ydb.Xds.LbEndpoint
++ */
++export type LbEndpoint = Message<"Ydb.Xds.LbEndpoint"> & {
++  /**
++   * @generated from field: Ydb.Xds.Endpoint endpoint = 1;
++   */
++  endpoint?: Endpoint | undefined;
++};
++
++/**
++ * Describes the message Ydb.Xds.LbEndpoint.
++ * Use `create(LbEndpointSchema)` to create a new message.
++ */
++export const LbEndpointSchema: GenMessage<LbEndpoint> = /*@__PURE__*/
++  messageDesc(file_eds, 8);
++
++/**
++ * @generated from message Ydb.Xds.Locality
++ */
++export type Locality = Message<"Ydb.Xds.Locality"> & {
++  /**
++   * @generated from field: string region = 1;
++   */
++  region: string;
++};
++
++/**
++ * Describes the message Ydb.Xds.Locality.
++ * Use `create(LocalitySchema)` to create a new message.
++ */
++export const LocalitySchema: GenMessage<Locality> = /*@__PURE__*/
++  messageDesc(file_eds, 9);
++
++/**
++ * @generated from message Ydb.Xds.LocalityLbEndpoints
++ */
++export type LocalityLbEndpoints = Message<"Ydb.Xds.LocalityLbEndpoints"> & {
++  /**
++   * @generated from field: Ydb.Xds.Locality locality = 1;
++   */
++  locality?: Locality | undefined;
++
++  /**
++   * @generated from field: repeated Ydb.Xds.LbEndpoint lb_endpoints = 2;
++   */
++  lbEndpoints: LbEndpoint[];
++
++  /**
++   * @generated from field: google.protobuf.UInt32Value load_balancing_weight = 3;
++   */
++  loadBalancingWeight?: number | undefined;
++
++  /**
++   * @generated from field: Ydb.Xds.Metadata metadata = 9;
++   */
++  metadata?: Metadata | undefined;
++};
++
++/**
++ * Describes the message Ydb.Xds.LocalityLbEndpoints.
++ * Use `create(LocalityLbEndpointsSchema)` to create a new message.
++ */
++export const LocalityLbEndpointsSchema: GenMessage<LocalityLbEndpoints> = /*@__PURE__*/
++  messageDesc(file_eds, 10);
++
++/**
++ * @generated from message Ydb.Xds.ClusterLoadAssignment
++ */
++export type ClusterLoadAssignment = Message<"Ydb.Xds.ClusterLoadAssignment"> & {
++  /**
++   * @generated from field: string cluster_name = 1;
++   */
++  clusterName: string;
++
++  /**
++   * @generated from field: repeated Ydb.Xds.LocalityLbEndpoints endpoints = 2;
++   */
++  endpoints: LocalityLbEndpoints[];
++};
++
++/**
++ * Describes the message Ydb.Xds.ClusterLoadAssignment.
++ * Use `create(ClusterLoadAssignmentSchema)` to create a new message.
++ */
++export const ClusterLoadAssignmentSchema: GenMessage<ClusterLoadAssignment> = /*@__PURE__*/
++  messageDesc(file_eds, 11);
+diff --git a/packages/core/src/routing.ts b/packages/core/src/routing.ts
+index 4529cdd18bb38f6b12036d5c6060b7a8b9c8385a..8f4fb3cdf65d5dbc032bcb13a56e2aa504ba29dd 100644
+--- a/packages/core/src/routing.ts
++++ b/packages/core/src/routing.ts
+@@ -99,6 +99,12 @@ export function createRoutingTransport(
+ 						options.metadata,
+ 						auth?.signal ?? linked.signal
+ 					)
++					for (;;) {
++						if (!pool?.watchPending) break
++						// A second cut can arrive while the caller resumes from the first one.
++						// oxlint-disable-next-line no-await-in-loop
++						await pool.ready(auth?.signal ?? linked.signal)
++					}
+ 				}
+ 				linked.signal.throwIfAborted()
+ 				if (closed || pool?.closed) {

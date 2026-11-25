@@ -38,9 +38,15 @@ public:
         IInternalClient* client
     );
 
+    ~TDbDriverState();
+    std::weak_ptr<NYdbGrpc::IQueueClientContext> EndpointWatchContext;
+    std::mutex BootstrapPinMutex;
+    std::shared_ptr<void> BootstrapPin;
+
     NThreading::TFuture<void> DiscoveryCompleted() const;
 
     void SignalDiscoveryCompleted();
+    NThreading::TFuture<TEndpointUpdateResult> UpdateEndpoints(TEndpointPool::EUpdateReason reason);
     void InitCredentials(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory);
     std::shared_ptr<ICredentialsProvider> GetCredentialsProvider() const;
 

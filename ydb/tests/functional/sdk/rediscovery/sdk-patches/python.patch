@@ -1,0 +1,1330 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 89b1dcb04237311103d78f5ed7a19fc0edb7cffc..0a7f67f1d911d3062c3861434ab0ba5b6649b518 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,3 +1,4 @@
++* Add opt-in EDS endpoint discovery to synchronous and asyncio drivers and close connections to retired endpoints
+ * Fix automatic refresh of short-lived login tokens by using their JWT expiration time.
+ 
+ ## 3.35.0 ##
+diff --git a/docs/driver.rst b/docs/driver.rst
+index d587624005d2a63f9f069a61d3e9452901895f2f..2bdfc9ad25823422c113afa9c277a38b42128965 100644
+--- a/docs/driver.rst
++++ b/docs/driver.rst
+@@ -27,6 +27,12 @@ DriverConfig
+    * - ``database``
+      - ``None``
+      - Full database path, e.g. ``/local`` or ``/ru-central1/b1g.../etn...``.
++   * - ``use_eds``
++     - ``False``
++     - Subscribe to Endpoint Discovery Service updates on the bootstrap channel. Install
++       ``ydb[eds]`` and pass ``DriverConfig(endpoint, database, use_eds=True)`` to
++       either driver. Removing a watched endpoint closes its connection and cancels its active RPCs.
++       Servers returning gRPC UNIMPLEMENTED use unary discovery.
+    * - ``credentials``
+      - ``None``
+      - Credentials instance. Falls back to :class:`~ydb.AnonymousCredentials` if ``None``.
+diff --git a/setup.py b/setup.py
+index b6d8105163bfbbebec1f9569713298eae9ef9c7c..6a89a91c46762cd7e341ef736ad236d0f50e1a97 100644
+--- a/setup.py
++++ b/setup.py
+@@ -37,6 +37,7 @@ setuptools.setup(
+     python_requires=">=3.10",
+     install_requires=requirements,  # requirements.txt
+     extras_require={
++        "eds": ["xds-protos>=1.75.0"],
+         "yc": ["yandexcloud", ],
+         "opentelemetry": ["opentelemetry-api>=1.0.0"],
+     }
+diff --git a/tox.ini b/tox.ini
+index 064ff46ef3855ff2eb296e1ba6ed67ee6c5a8e7b..22d1ccf1b9b664c33830ead2d68d2c7e78d39dac 100644
+--- a/tox.ini
++++ b/tox.ini
+@@ -1,5 +1,5 @@
+ [tox]
+-envlist = py,py-proto6,py-proto5,py-proto4,py-proto3,style,pylint,black,black-format,mypy
++envlist = eds,py,py-proto6,py-proto5,py-proto4,py-proto3,style,pylint,black,black-format,mypy
+ minversion = 4.2.6
+ skipsdist = True
+ ignore_basepython_conflict = true
+@@ -95,3 +95,7 @@ per-file-ignores = ydb/table.py:F401
+ 
+ [pytest]
+ asyncio_mode = auto
++
++[testenv:eds]
++extras = eds
++commands = pytest -v ydb/eds_test.py
+diff --git a/ydb/_eds.py b/ydb/_eds.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..81e5a23b79360fdb8ea7d0bed7bb9916cfdb57b3
+--- /dev/null
++++ b/ydb/_eds.py
+@@ -0,0 +1,229 @@
++"""State-of-the-world endpoint discovery on the driver's bootstrap channel."""
++
++from __future__ import annotations
++
++import queue
++
++import grpc
++from envoy.config.endpoint.v3 import endpoint_pb2
++from envoy.service.discovery.v3 import discovery_pb2
++from envoy.service.endpoint.v3 import eds_pb2_grpc
++
++from . import _apis, connection, resolver
++from .aio import connection as aio_connection
++
++TYPE_URL = "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment"
++GENERATION = "x-ydb-route-generation"
++MODE = "x-ydb-route-mode"
++
++
++class InvalidAssignment(ValueError):
++    pass
++
++
++class Route:
++    def __init__(self, config):
++        self.config = config
++        self.floor = None
++        self.require_current = False
++
++    def headers(self):
++        result = []
++        if self.floor is not None:
++            result.append(("x-ydb-min-route-generation", str(self.floor)))
++        if self.require_current:
++            result.append(("x-ydb-require-current-route", "1"))
++        return result
++
++    def verify(self, metadata):
++        headers = dict(tuple(metadata or ()))
++        mode = headers.get(MODE)
++        if mode is None and GENERATION not in headers and self.floor is None:
++            return
++        value = headers.get(GENERATION, "")
++        if mode not in ("managed", "legacy") or not value.isascii() or not value.isdecimal():
++            raise InvalidAssignment("Missing or invalid managed route metadata")
++        generation = int(value)
++        if self.floor is not None and generation < self.floor:
++            raise InvalidAssignment("Worker is behind the accepted route generation")
++        self.floor = generation
++
++    def lost(self, code, trailers):
++        value = dict(tuple(trailers or ())).get(GENERATION, "")
++        if (
++            self.floor is not None
++            and code == grpc.StatusCode.UNAVAILABLE
++            and value.isascii()
++            and value.isdecimal()
++            and int(value) >= self.floor
++        ):
++            self.floor = int(value)
++            self.require_current = False
++        else:
++            self.require_current = True
++
++    def request(self, version="", nonce="", error=""):
++        request = discovery_pb2.DiscoveryRequest(
++            version_info=version, response_nonce=nonce, type_url=TYPE_URL, resource_names=[self.config.database]
++        )
++        if not nonce:
++            request.node.id = "ydb-python-sdk"
++        if error:
++            request.error_detail.code = 3
++            request.error_detail.message = error
++        return request
++
++    def assignment(self, response):
++        if (
++            response.type_url != TYPE_URL
++            or not response.version_info
++            or not response.nonce
++            or len(response.resources) != 1
++            or response.resources[0].type_url != TYPE_URL
++        ):
++            raise InvalidAssignment("Expected one versioned ClusterLoadAssignment")
++        assignment = endpoint_pb2.ClusterLoadAssignment()
++        if (
++            not response.resources[0].Unpack(assignment)
++            or assignment.cluster_name != self.config.database
++            or len(assignment.endpoints) != 1
++        ):
++            raise InvalidAssignment("Assignment does not match the requested database")
++        group = assignment.endpoints[0]
++        result = _apis.ydb_discovery.ListEndpointsResult()
++        typed = group.metadata.typed_filter_metadata
++        if (
++            "ydb.discovery" not in typed
++            or not typed["ydb.discovery"].Unpack(result)
++            or len(group.lb_endpoints) != len(result.endpoints)
++        ):
++            raise InvalidAssignment("Invalid YDB endpoint metadata")
++        for lb, ep in zip(group.lb_endpoints, result.endpoints):
++            socket = lb.endpoint.address.socket_address
++            if (
++                socket.protocol
++                or not socket.address
++                or socket.address != ep.address
++                or socket.port_value != ep.port
++                or not 0 < ep.port <= 65535
++            ):
++                raise InvalidAssignment("EDS address disagrees with the YDB endpoint")
++        self.require_current = False
++        return resolver.DiscoveryResult.from_result(result, self.config.use_all_nodes)
++
++    def unary_result(self, response, headers):
++        self.verify(headers)
++        result = resolver.DiscoveryResult.from_response(None, response, self.config.use_all_nodes)
++        self.require_current = False
++        return result
++
++
++class SyncWatch:
++    def __init__(self, route, channel):
++        self.route = route
++        self.channel = channel
++        self.active = None
++        self.received = False
++
++    def cancel(self):
++        active = self.active
++        if active is not None:
++            active.cancel()
++
++    def subscribe(self, apply, stopped):
++        route = self.route
++        requests = queue.Queue()
++        requests.put(route.request())
++        metadata = connection._construct_metadata(route.config, None) + route.headers()
++        call = eds_pb2_grpc.EndpointDiscoveryServiceStub(self.channel).StreamEndpoints(
++            iter(requests.get, None), metadata=metadata
++        )
++        self.active = call
++        self.received = False
++        try:
++            if stopped():
++                return False
++            route.verify(call.initial_metadata())
++            version = ""
++            for response in call:
++                try:
++                    resolved = route.assignment(response)
++                except InvalidAssignment as error:
++                    requests.put(route.request(version, response.nonce, str(error)))
++                    continue
++                apply(resolved)
++                self.received = True
++                version = response.version_info
++                requests.put(route.request(version, response.nonce))
++            route.lost(call.code(), call.trailing_metadata())
++        except grpc.RpcError as error:
++            if error.code() == grpc.StatusCode.UNIMPLEMENTED:
++                route.verify(error.initial_metadata())
++                metadata = connection._construct_metadata(route.config, None) + route.headers()
++                unary = _apis.DiscoveryService.Stub(self.channel).ListEndpoints
++                response, rpc = unary.with_call(
++                    resolver._list_endpoints_request_factory(route.config),
++                    metadata=metadata,
++                    timeout=route.config.discovery_request_timeout,
++                )
++                return apply(route.unary_result(response, rpc.initial_metadata()))
++            route.lost(error.code(), error.trailing_metadata())
++            raise
++        finally:
++            call.cancel()
++            requests.put(None)
++            self.active = None
++        return False
++
++
++class AsyncWatch:
++    def __init__(self, route, channel):
++        self.route = route
++        self.channel = channel
++        self.active = None
++        self.received = False
++
++    def cancel(self):
++        if self.active is not None:
++            self.active.cancel()
++
++    async def subscribe(self, apply, stopped):
++        route = self.route
++        metadata = await aio_connection._construct_metadata(route.config, None) + route.headers()
++        call = eds_pb2_grpc.EndpointDiscoveryServiceStub(self.channel).StreamEndpoints(metadata=metadata)
++        self.active = call
++        self.received = False
++        try:
++            if stopped():
++                return False
++            await call.write(route.request())
++            route.verify(await call.initial_metadata())
++            version = ""
++            async for response in call:
++                try:
++                    resolved = route.assignment(response)
++                except InvalidAssignment as error:
++                    await call.write(route.request(version, response.nonce, str(error)))
++                    continue
++                await apply(resolved)
++                self.received = True
++                version = response.version_info
++                await call.write(route.request(version, response.nonce))
++            route.lost(await call.code(), await call.trailing_metadata())
++        except grpc.aio.AioRpcError as error:
++            if error.code() == grpc.StatusCode.UNIMPLEMENTED:
++                route.verify(error.initial_metadata())
++                metadata = await aio_connection._construct_metadata(route.config, None) + route.headers()
++                unary = _apis.DiscoveryService.Stub(self.channel).ListEndpoints(
++                    resolver._list_endpoints_request_factory(route.config),
++                    metadata=metadata,
++                    timeout=route.config.discovery_request_timeout,
++                )
++                response = await unary
++                return await apply(route.unary_result(response, await unary.initial_metadata()))
++            route.lost(error.code(), error.trailing_metadata())
++            raise
++        finally:
++            call.cancel()
++            self.active = None
++        return False
+diff --git a/ydb/_topic_reader/topic_reader_asyncio.py b/ydb/_topic_reader/topic_reader_asyncio.py
+index 74e9bca7fddc0bb7c471106a260856a937e7d871..310162bbdeb794b8f0c262cf1c058c371e27af7a 100644
+--- a/ydb/_topic_reader/topic_reader_asyncio.py
++++ b/ydb/_topic_reader/topic_reader_asyncio.py
+@@ -548,6 +548,7 @@ class ReaderStream:
+             self._session_id,
+         )
+         self._stream = None
++        self._eds_route = None
+         self._started = False
+         self._background_tasks = set()
+         self._partition_sessions = dict()
+@@ -583,6 +584,9 @@ class ReaderStream:
+         stream = GrpcWrapperAsyncIO(StreamReadMessage.FromServer.from_proto)
+         reader = None
+         try:
++            # A prepared source batch can outlive cancellation of its network stream.
++            store = getattr(driver, "_store", None)
++            epoch = getattr(store, "eds_epoch", None)
+             await stream.start(driver, _apis.TopicService.Stub, _apis.TopicService.StreamRead)
+ 
+             creds = driver._credentials
+@@ -591,6 +595,8 @@ class ReaderStream:
+                 settings,
+                 get_token_function=creds.get_auth_token if creds else None,
+             )
++            if isinstance(epoch, int):
++                reader._eds_route = (store, epoch)
+             await reader._start(stream, settings._init_message())
+         except BaseException:
+             # If create() is interrupted (e.g. reader.close() cancels the connection loop
+@@ -1053,6 +1059,10 @@ class ReaderStream:
+             pass
+ 
+     def _get_first_error(self) -> Optional[YdbError]:
++        if self._eds_route is not None:
++            store, epoch = self._eds_route
++            if store.eds_epoch != epoch:
++                return issues.ConnectionLost("Topic reader route has changed")
+         if self._first_error.done():
+             return self._first_error.result()
+         return None
+diff --git a/ydb/aio/connection.py b/ydb/aio/connection.py
+index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..01406f6a7364502e4e4659e69c9a708bae794b09 100644
+--- a/ydb/aio/connection.py
++++ b/ydb/aio/connection.py
+@@ -2,6 +2,7 @@ from __future__ import annotations
+ 
+ import logging
+ import asyncio
++from weakref import WeakSet
+ from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
+ import collections
+ import grpc
+@@ -115,27 +116,47 @@ class _RpcState(RpcState):
+ 
+ 
+ class _SafeAsyncIterator:
+-    def __init__(self, resp, rpc_state, on_disconnected_callback):
++    def __init__(self, resp, rpc_state, on_disconnected_callback, tracked=False):
+         self.resp = resp
+-        self.it = resp.__aiter__()
++        # grpc.aio caches its async generator on the call. Use read() on watched
++        # streams so a paused iterator cannot keep its retired transport alive.
++        self.it = None if tracked and hasattr(resp, "read") else resp.__aiter__()
+         self.rpc_state = rpc_state
+         self.on_disconnected_callback = on_disconnected_callback
+ 
+     def cancel(self):
+-        self.resp.cancel()
++        if self.resp is not None:
++            self.resp.cancel()
+         return self
+ 
++    def retire(self):
++        self.cancel()
++        self.resp = self.it = None
++
+     def __aiter__(self):
+         return self
+ 
+     async def __anext__(self):
++        if self.resp is None:
++            raise asyncio.CancelledError("Endpoint was retired")
++        stream_error: BaseException
+         try:
+-            return await self.it.__anext__()
++            if self.it is not None:
++                return await self.it.__anext__()
++            message = await self.resp.read()
++            if message is grpc.aio.EOF:
++                raise StopAsyncIteration
++            return message
++        except asyncio.CancelledError as error:
++            if self.it is not None:
++                raise
++            # A saved exception from read() keeps the native call and its socket.
++            stream_error = asyncio.CancelledError(*error.args)
+         except grpc.RpcError as rpc_error:
+-            ydb_error = _rpc_error_handler(self.rpc_state, rpc_error, use_unavailable=True)
+-            if _is_disconnect_needed(ydb_error):
++            stream_error = _rpc_error_handler(self.rpc_state, rpc_error, use_unavailable=True)
++            if _is_disconnect_needed(stream_error):
+                 await self.on_disconnected_callback()
+-            raise ydb_error
++        raise stream_error
+ 
+     def __getattr__(self, item):
+         return getattr(self.resp, item)
+@@ -149,6 +170,7 @@ class Connection:
+         "_stub_instances",
+         "_driver_config",
+         "_cleanup_callbacks",
++        "_eds_streams",
+         "__weakref__",
+         "lock",
+         "calls",
+@@ -175,6 +197,9 @@ class Connection:
+         self._channel = channel_factory(self.endpoint, driver_config, grpc.aio, endpoint_options=endpoint_options)
+         self._driver_config = driver_config
+ 
++        self._eds_streams: Optional[WeakSet[_SafeAsyncIterator]] = (
++            WeakSet() if getattr(driver_config, "use_eds", False) else None
++        )
+         self._stub_instances: Dict[Any, Any] = {}
+         self._cleanup_callbacks: List[Callable[["Connection"], None]] = []
+         for stub in _stubs_list:
+@@ -192,13 +217,12 @@ class Connection:
+     ) -> Tuple[_RpcState, float, List[Tuple[str, str]]]:
+         timeout, metadata = _get_request_timeout(settings), await _construct_metadata(self._driver_config, settings)  # type: ignore[arg-type]
+         _set_server_timeouts(request, settings, timeout)
++        if self.closing:
++            raise issues.ConnectionLost("Couldn't start call")
+         self._prepare_stub_instance(stub)
+         rpc_state = _RpcState(self._stub_instances[stub], rpc_name, self.endpoint, self.endpoint_key)
+         logger.debug("%s: creating call state", rpc_state)
+ 
+-        if self.closing:
+-            raise issues.ConnectionLost("Couldn't start call")
+-
+         # Call successfully prepared and registered
+         _log_request(rpc_state, request)
+         return rpc_state, timeout, metadata
+@@ -226,6 +250,7 @@ class Connection:
+         :return: A result of computation
+         """
+         rpc_state, timeout, metadata = await self._prepare_call(stub, rpc_name, request, settings)
++        call_error: BaseException
+         try:
+             feature = asyncio.ensure_future(rpc_state(request, timeout=timeout, metadata=metadata))
+ 
+@@ -237,22 +262,50 @@ class Connection:
+ 
+             if hasattr(response, "__aiter__"):
+                 # NOTE(vgvoleg): for stream results we should also be able to handle disconnects
+-                response = _SafeAsyncIterator(response, rpc_state, on_disconnected)
++                response = _SafeAsyncIterator(
++                    response, rpc_state, on_disconnected, tracked=self._eds_streams is not None
++                )
++                if self._eds_streams is not None:
++                    if self.closing:
++                        response.cancel()
++                        raise issues.ConnectionLost("Endpoint route changed while opening the stream")
++                    self._eds_streams.add(response)
+ 
+             return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
++        except asyncio.CancelledError as error:
++            if self._eds_streams is None:
++                raise
++            call_error = (
++                issues.ConnectionLost("Endpoint was retired") if self.closing else asyncio.CancelledError(*error.args)
++            )
++        except grpc.aio.UsageError:
++            if not self.closing or self._eds_streams is None:
++                raise
++            call_error = issues.ConnectionLost("Endpoint was retired")
+         except grpc.RpcError as rpc_error:
+             if on_disconnected:
+                 coro = on_disconnected()
+                 if asyncio.iscoroutine(coro):
+                     await coro
+                 on_disconnected = None
+-            raise _rpc_error_handler(rpc_state, rpc_error, on_disconnected)
++            call_error = _rpc_error_handler(rpc_state, rpc_error, on_disconnected)
++            if self._eds_streams is None:
++                raise call_error
+         finally:
+             self._finish_call(rpc_state)
++        # Stored exceptions must not retain the task that owns the native call.
++        del feature
++        raise call_error
+ 
+     def _finish_call(self, call_state: _RpcState) -> None:
+         self.calls.pop(call_state.request_id, None)
+ 
++    async def retire_eds(self):
++        self.closing = True
++        for stream in list(self._eds_streams):
++            stream.retire()
++        await self.close(grace=0)
++
+     async def destroy(self, grace: float = 0) -> None:
+         """
+         Destroys the underlying gRPC channel
+diff --git a/ydb/aio/coordination/reconnector.py b/ydb/aio/coordination/reconnector.py
+index e5875f2dbc002b13cab509926005a0d604d17bec..a75233cc2cc21745627c0f507593416241ddaf9e 100644
+--- a/ydb/aio/coordination/reconnector.py
++++ b/ydb/aio/coordination/reconnector.py
+@@ -73,8 +73,8 @@ class CoordinationReconnector:
+ 
+     async def _connection_loop(self):
+         while not self._closed:
++            stream = CoordinationStream(self._driver)
+             try:
+-                stream = CoordinationStream(self._driver)
+                 await stream.start_session(
+                     self._node_path,
+                     self._timeout_millis,
+@@ -94,9 +94,8 @@ class CoordinationReconnector:
+             except Exception as exc:
+                 logger.debug("Coordination stream error: %r", exc)
+             finally:
+-                if self._stream:
+-                    await self._stream.close()
+-                    self._stream = None
++                await stream.close()
++                self._stream = None
+ 
+     async def _dispatch_loop(self, stream):
+         while not self._closed and self._stream is stream:
+diff --git a/ydb/aio/pool.py b/ydb/aio/pool.py
+index 150274368d9238a9969df34306c6142c6b40f4e4..a3be7f4dc90351c5d57df5fdf28f7ea41e39361e 100644
+--- a/ydb/aio/pool.py
++++ b/ydb/aio/pool.py
+@@ -81,7 +81,10 @@ class ConnectionsCache(_ConnectionsCache):
+         self._fast_fail_event.set()
+ 
+     def remove(self, connection: Connection) -> None:  # type: ignore[override]  # async Connection type
+-        self.connections_by_node_id.pop(connection.node_id, None)
++        if self.connections_by_node_id.get(connection.node_id) is connection:
++            self.connections_by_node_id.pop(connection.node_id, None)
++        if self.connections.get(connection.endpoint) is not connection:
++            return
+         self.preferred.pop(connection.endpoint, None)
+         self.connections.pop(connection.endpoint, None)
+         self.outdated.pop(connection.endpoint, None)
+@@ -108,6 +111,7 @@ class Discovery:
+         self._cache = store
+         self._driver_config = driver_config
+         self._resolver = resolver.DiscoveryEndpointsResolver(self._driver_config)
++        self._watch = None
+         self._base_discovery_interval = 60
+         self._ready_timeout = 4
+         self._discovery_request_timeout = 2
+@@ -123,6 +127,8 @@ class Discovery:
+         return self._resolver.debug_details()
+ 
+     def notify_disconnected(self) -> None:
++        if self._watch:
++            self._watch.cancel()
+         self._wake_up_event.set()
+ 
+     def _emergency_retry_interval(self) -> float:
+@@ -137,14 +143,22 @@ class Discovery:
+         if resolve_details is None:
+             return False
+ 
++        return await self._apply_endpoints(resolve_details)
++
++    async def _apply_endpoints(self, resolve_details) -> bool:
+         resolved_endpoints = set(
+             endpoint
+             for resolved_endpoint in resolve_details.endpoints
+             for endpoint, endpoint_options in resolved_endpoint.endpoints_with_options()
+         )
+-        for cached_endpoint in self._cache.values():
+-            if cached_endpoint.endpoint not in resolved_endpoints:
+-                self._cache.make_outdated(cached_endpoint)
++        removed = [conn for conn in self._cache.values() if conn.endpoint not in resolved_endpoints]
++        if self._watch:
++            self._cache.remove_eds(removed)
++            for conn in removed:
++                await conn.retire_eds()
++        else:
++            for conn in removed:
++                self._cache.make_outdated(conn)
+ 
+         local_dc = resolve_details.self_location
+ 
+@@ -213,9 +227,47 @@ class Discovery:
+ 
+     def stop(self) -> None:
+         self._should_stop = True
++        if self._watch:
++            self._watch.cancel()
+         self._wake_up_event.set()
+ 
++    async def _run_eds(self):
++        failures = 0
++        while not self._should_stop:
++            try:
++                legacy_ready = await self._watch.subscribe(self._apply_endpoints, lambda: self._should_stop)
++            except asyncio.CancelledError:
++                self._watch.route.require_current = True
++                legacy_ready = False
++            except Exception as error:
++                self._resolver._add_debug_details("EDS subscription failed: %s", error)
++                legacy_ready = False
++            if self._watch.received:
++                failures = 0
++            if legacy_ready:
++                failures = 0
++                delay = self._discovery_interval()
++            else:
++                retired = self._cache.values()
++                self._cache.remove_eds(retired)
++                for conn in retired:
++                    await conn.retire_eds()
++                self._cache.complete_discovery(issues.ConnectionFailure(self.discovery_debug_details()))
++                delay = 0 if failures == 0 else min(20, 2 ** min(failures - 1, 4)) * self._emergency_retry_interval()
++                failures += 1
++            if self._should_stop:
++                break
++            try:
++                await asyncio.wait_for(self._wake_up_event.wait(), timeout=delay)
++            except asyncio.TimeoutError:
++                pass
++            self._wake_up_event.clear()
++        await self._cache.cleanup()
++
+     async def run(self) -> None:
++        if self._watch:
++            await self._run_eds()
++            return
+         while True:
+             try:
+                 successful = await self.execute_discovery()
+@@ -284,6 +336,10 @@ class ConnectionPool(IConnectionPool):
+         else:
+             # Start discovery as usual
+             self._discovery = Discovery(self._store, self._driver_config)
++            if driver_config.use_eds:
++                from ydb._eds import AsyncWatch, Route
++
++                self._discovery._watch = AsyncWatch(Route(driver_config), self._grpc_init._channel)
+             self._discovery_task = asyncio.get_event_loop().create_task(self._discovery.run())
+ 
+     async def stop(self, timeout: int = 10) -> None:  # type: ignore[override]  # async override of sync method
+@@ -305,7 +361,13 @@ class ConnectionPool(IConnectionPool):
+ 
+     def _on_disconnected(self, connection: Connection) -> Callable[[], Any]:
+         async def __wrapper__() -> None:
+-            await connection.close()
++            if self._driver_config.use_eds:
++                if connection not in self._store.values():
++                    return
++                self._store.remove_eds([connection])
++                await connection.retire_eds()
++            else:
++                await connection.close()
+             if self._discovery:
+                 self._discovery.notify_disconnected()
+ 
+@@ -352,7 +414,7 @@ class ConnectionPool(IConnectionPool):
+         try:
+             connection = await self._store.get(preferred_endpoint, fast_fail=fast_fail, wait_timeout=wait_timeout)
+         except BaseException:
+-            if self._discovery:
++            if self._discovery and not self._driver_config.use_eds:
+                 self._discovery.notify_disconnected()
+             raise
+ 
+diff --git a/ydb/aio/query/session.py b/ydb/aio/query/session.py
+index d369ad72621f16853f586538ccbfa8a702161212..70852c153fbd17c75b578ea9706cdbd2f0120533 100644
+--- a/ydb/aio/query/session.py
++++ b/ydb/aio/query/session.py
+@@ -84,6 +84,9 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
+                     return
+             logger.debug("Attach stream closed, session_id: %s", self._session_id)
+             self._close_session(invalidate=True, reason="attach_closed")
++        except asyncio.CancelledError:
++            self._close_session(invalidate=True, reason="transport_error")
++            raise
+         except Exception as e:
+             logger.debug("Attach stream transport error: %s, session_id: %s", e, self._session_id)
+             self._close_session(invalidate=True, reason="transport_error")
+diff --git a/ydb/connection.py b/ydb/connection.py
+index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..44c8ed4dd83ce7453d4351a9e4e0b860469172c5 100644
+--- a/ydb/connection.py
++++ b/ydb/connection.py
+@@ -459,12 +459,12 @@ class Connection(object):
+     def _prepare_call(self, stub, rpc_name, request, settings):
+         timeout, metadata = _get_request_timeout(settings), _construct_metadata(self._driver_config, settings)
+         _set_server_timeouts(request, settings, timeout)
+-        self._prepare_stub_instance(stub)
+-        rpc_state = _RpcState(self._stub_instances[stub], rpc_name, self.endpoint, self.endpoint_key)
+-        logger.debug("%s: creating call state", rpc_state)
+         with self.lock:
+             if self.closing:
+                 raise issues.ConnectionLost("Couldn't start call")
++            self._prepare_stub_instance(stub)
++            rpc_state = _RpcState(self._stub_instances[stub], rpc_name, self.endpoint, self.endpoint_key)
++            logger.debug("%s: creating call state", rpc_state)
+             self.calls += 1
+             self._call_states[rpc_state.request_id] = rpc_state
+         # Call successfully prepared and registered
+@@ -503,12 +503,18 @@ class Connection(object):
+         :return: A future of computation
+         """
+         rpc_state, timeout, metadata = self._prepare_call(stub, rpc_name, request, settings)
+-        rendezvous, result_future = rpc_state.future(
+-            request,
+-            timeout,
+-            metadata,
+-            compression=getattr(settings, "compression", None),
+-        )
++        try:
++            rendezvous, result_future = rpc_state.future(
++                request,
++                timeout,
++                metadata,
++                compression=getattr(settings, "compression", None),
++            )
++        except ValueError:
++            self._finish_call(rpc_state)
++            if self.closing:
++                raise issues.ConnectionLost("Endpoint was retired")
++            raise
+         rendezvous.add_done_callback(
+             lambda resp_future: _on_response_callback(
+                 rpc_state,
+@@ -557,6 +563,10 @@ class Connection(object):
+                 response = _SafeSyncIterator(response, rpc_state, on_disconnected)
+ 
+             return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
++        except ValueError:
++            if self.closing:
++                raise issues.ConnectionLost("Endpoint was retired")
++            raise
+         except grpc.RpcError as rpc_error:
+             raise _rpc_error_handler(rpc_state, rpc_error, on_disconnected)
+         finally:
+@@ -603,14 +613,17 @@ class Connection(object):
+                 # everything is cancelled/completed and channel can be destroyed
+                 self.destroy()
+ 
++    def retire_eds(self):
++        self.close()
++        self.destroy()
++
+     def destroy(self):
+-        channel = getattr(self, "_channel", None)
++        with self.lock:
++            channel, self._channel = self._channel, None
++            self._stub_instances.clear()
+         if channel is not None and hasattr(channel, "close"):
+             channel.close()
+ 
+-        self._stub_instances.clear()
+-        self._channel = None
+-
+     def ready_future(self):
+         """
+         Creates a future that tracks underlying gRPC channel is ready
+diff --git a/ydb/driver.py b/ydb/driver.py
+index 988649804fa1645dc459c7d450c0a7728a4c26d6..ac4c26fb4d461473a082a0b113938a00db0cc2e6 100644
+--- a/ydb/driver.py
++++ b/ydb/driver.py
+@@ -113,6 +113,7 @@ class DriverConfig(object):
+         "compression",
+         "disable_discovery",
+         "detect_local_dc",
++        "use_eds",
+         "_additional_sdk_headers",
+     )
+ 
+@@ -141,6 +142,7 @@ class DriverConfig(object):
+         disable_discovery: bool = False,
+         detect_local_dc: bool = False,
+         *,
++        use_eds: bool = False,
+         _additional_sdk_headers: Tuple[str, ...] = (),
+     ) -> None:
+         """
+@@ -162,6 +164,7 @@ class DriverConfig(object):
+         If tracing aio ScopeManager must be ContextVarsScopeManager
+         :param grpc_lb_policy_name: A load balancing policy to be used for discovery channel construction. Default value is `round_robin`
+         :param discovery_request_timeout: A default timeout to complete the discovery. The default value is 10 seconds.
++        :param use_eds: Subscribe to gRPC Endpoint Discovery Service updates (requires the eds extra).
+         :param disable_discovery: If True, endpoint discovery is disabled and only the start endpoint is used for all requests.
+         :param detect_local_dc: If True, detect nearest datacenter using TCP latency measurement instead of using\
+         server-provided self_location. **Note**: This option only affects endpoint selection when use_all_nodes=False.\
+@@ -196,6 +199,9 @@ class DriverConfig(object):
+         self.compression = compression
+         self.disable_discovery = disable_discovery
+         self.detect_local_dc = detect_local_dc
++        if use_eds and (disable_discovery or not database):
++            raise ValueError("EDS requires discovery and a database name")
++        self.use_eds = use_eds
+         self._additional_sdk_headers = _additional_sdk_headers
+ 
+     def set_database(self, database: str) -> "DriverConfig":
+diff --git a/ydb/eds_test.py b/ydb/eds_test.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..2c9f0b5e73cd6db2af3c85f3a2ca975e4fbb2ca7
+--- /dev/null
++++ b/ydb/eds_test.py
+@@ -0,0 +1,232 @@
++"""Exercise both driver discovery owners with real gRPC channels."""
++
++import asyncio
++from concurrent.futures import ThreadPoolExecutor
++from contextlib import contextmanager
++import threading
++
++import grpc
++import pytest
++
++import ydb
++from ydb import _apis
++from ydb._grpc.common import ydb_discovery_v1_pb2_grpc as unary
++
++pytest.importorskip("envoy.service.discovery.v3.discovery_pb2")
++from envoy.service.discovery.v3 import discovery_pb2  # noqa: E402
++from envoy.service.endpoint.v3 import eds_pb2_grpc  # noqa: E402
++from envoy.config.endpoint.v3 import endpoint_pb2  # noqa: E402
++
++DATABASE = "/database"
++TYPE = "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment"
++
++
++class Replicas(eds_pb2_grpc.EndpointDiscoveryServiceServicer, unary.DiscoveryServiceServicer):
++    def __init__(self):
++        self.generation = 1
++        self.replace_snapshot = False
++        self.switch = threading.Event()
++        self.requests = []
++        self.unary_requests = []
++
++    def topology(self):
++        topology = _apis.ydb_discovery.ListEndpointsResult()
++        topology.endpoints.add(address="localhost", port=self.ports[self.generation - 1], node_id=1)
++        return topology
++
++    def StreamEndpoints(self, requests, context):
++        generation = self.generation
++        first = next(requests)
++        headers = dict(context.invocation_metadata())
++        self.requests.append((first, headers))
++        context.send_initial_metadata((("x-ydb-route-generation", str(generation)), ("x-ydb-route-mode", "managed")))
++        if self.legacy:
++            context.abort(grpc.StatusCode.UNIMPLEMENTED, "old server")
++        while context.is_active():
++            generation = self.generation
++            assignment = endpoint_pb2.ClusterLoadAssignment(cluster_name=DATABASE)
++            locality = assignment.endpoints.add()
++            topology = self.topology()
++            locality.metadata.typed_filter_metadata["ydb.discovery"].Pack(topology)
++            sock = locality.lb_endpoints.add().endpoint.address.socket_address
++            sock.address, sock.port_value = "localhost", self.ports[generation - 1]
++            response = discovery_pb2.DiscoveryResponse(type_url=TYPE, version_info="opaque", nonce="one")
++            response.resources.add().Pack(assignment)
++            yield response
++            ack = next(requests)
++            assert ack.version_info == "opaque" and ack.response_nonce == "one"
++            while context.is_active():
++                if generation == 1 and self.switch.wait(0.02):
++                    if self.replace_snapshot:
++                        break
++                    context.set_trailing_metadata((("x-ydb-route-generation", "2"),))
++                    context.abort(grpc.StatusCode.UNAVAILABLE, "cutover")
++                elif generation != 1:
++                    threading.Event().wait(0.02)
++
++    def ListEndpoints(self, request, context):
++        self.unary_requests.append(dict(context.invocation_metadata()))
++        context.send_initial_metadata(
++            (("x-ydb-route-generation", str(self.generation)), ("x-ydb-route-mode", "managed"))
++        )
++        response = _apis.ydb_discovery.ListEndpointsResponse()
++        response.operation.ready = True
++        response.operation.status = 400000
++        response.operation.result.Pack(self.topology())
++        return response
++
++
++@contextmanager
++def services(legacy, source_handlers=()):
++    replicas = Replicas()
++    replicas.legacy = legacy
++    servers = [grpc.server(ThreadPoolExecutor(max_workers=4)) for _ in range(3)]
++    unary.add_DiscoveryServiceServicer_to_server(replicas, servers[0])
++    eds_pb2_grpc.add_EndpointDiscoveryServiceServicer_to_server(replicas, servers[0])
++    servers[1].add_generic_rpc_handlers(source_handlers)
++    ports = [s.add_insecure_port("localhost:0") for s in servers]
++    replicas.ports = ports[1:]
++    try:
++        for s in servers:
++            s.start()
++        yield replicas, f"localhost:{ports[0]}"
++    finally:
++        for s in servers:
++            s.stop(0).wait()
++
++
++@pytest.mark.parametrize("async_driver", [False, True])
++@pytest.mark.parametrize("legacy", [False, True])
++def test_eds_discovery(async_driver, legacy):
++    async def run():
++        with services(legacy) as (replicas, endpoint):
++            config = ydb.DriverConfig(endpoint, DATABASE, use_eds=True, credentials=ydb.AnonymousCredentials())
++            driver = (ydb.aio.Driver if async_driver else ydb.Driver)(config)
++            try:
++                if async_driver:
++                    await driver.wait(timeout=5)
++                else:
++                    await asyncio.to_thread(driver.wait, 5)
++                assert len(replicas.requests) == 1
++                first, headers = replicas.requests[0]
++                assert first.type_url == TYPE and list(first.resource_names) == [DATABASE]
++                assert headers["x-ydb-database"] == DATABASE
++                assert list(driver._store.connections) == [f"localhost:{replicas.ports[0]}"]
++                if legacy:
++                    assert replicas.unary_requests[0]["x-ydb-min-route-generation"] == "1"
++                    return
++                replicas.generation = 2
++                replicas.switch.set()
++                for _ in range(150):
++                    if list(driver._store.connections) == [f"localhost:{replicas.ports[1]}"]:
++                        break
++                    await asyncio.sleep(0.02)
++                assert list(driver._store.connections) == [f"localhost:{replicas.ports[1]}"]
++                assert replicas.requests[1][1]["x-ydb-min-route-generation"] == "2"
++                assert not replicas.unary_requests
++            finally:
++                if async_driver:
++                    await driver.stop()
++                else:
++                    await asyncio.to_thread(driver.stop)
++
++    asyncio.run(run())
++
++
++@pytest.mark.parametrize("async_driver", [False, True])
++@pytest.mark.parametrize("replace_snapshot", [False, True])
++def test_cutover_closes_data_socket_with_active_calls(async_driver, replace_snapshot):
++    unary_started = threading.Event()
++    unary_closed = threading.Event()
++
++    def hold(request, context):
++        context.add_callback(unary_closed.set)
++        unary_started.set()
++        unary_closed.wait(10)
++        return b""
++
++    def attach(request, context):
++        yield b""
++        unary_closed.wait(10)
++
++    handler = grpc.method_handlers_generic_handler(
++        "Ydb.Query.V1.QueryService",
++        {
++            "CreateSession": grpc.unary_unary_rpc_method_handler(hold),
++            "AttachSession": grpc.unary_stream_rpc_method_handler(attach),
++        },
++    )
++
++    async def run():
++        with services(False, (handler,)) as (replicas, endpoint):
++            replicas.replace_snapshot = replace_snapshot
++            source = replicas.ports[0]
++            source_eof = asyncio.Event()
++            clients = []
++
++            async def proxy(reader, writer):
++                clients.append(writer)
++                upstream, peer = await asyncio.open_connection("localhost", source)
++
++                async def relay(stream, out):
++                    try:
++                        while data := await stream.read(65536):
++                            out.write(data)
++                            await out.drain()
++                    finally:
++                        out.close()
++
++                try:
++                    await asyncio.gather(relay(reader, peer), relay(upstream, writer))
++                finally:
++                    source_eof.set()
++
++            async def call(fn, *args):
++                return await fn(*args) if async_driver else await asyncio.to_thread(fn, *args)
++
++            async with await asyncio.start_server(proxy, "127.0.0.1", 0) as listener:
++                replicas.ports[0] = listener.sockets[0].getsockname()[1]
++                config = ydb.DriverConfig(endpoint, DATABASE, use_eds=True, credentials=ydb.AnonymousCredentials())
++                driver = (ydb.aio.Driver if async_driver else ydb.Driver)(config)
++                try:
++                    await call(driver.wait, 5)
++                    stream = await call(
++                        driver, _apis.ydb_query.AttachSessionRequest(), _apis.QueryService.Stub, "AttachSession"
++                    )
++                    await call(anext if async_driver else next, stream)
++                    if async_driver:
++                        stopped_stream = await driver(
++                            _apis.ydb_query.AttachSessionRequest(), _apis.QueryService.Stub, "AttachSession"
++                        )
++                        await anext(stopped_stream)
++                        pending_read = asyncio.create_task(anext(stopped_stream))
++                        await asyncio.sleep(0)
++                        stopped_stream.cancel()
++                        with pytest.raises(asyncio.CancelledError) as saved_error:
++                            await pending_read
++                    unary = asyncio.create_task(
++                        call(driver, _apis.ydb_query.CreateSessionRequest(), _apis.QueryService.Stub, "CreateSession")
++                    )
++                    assert await asyncio.to_thread(unary_started.wait, 3)
++                    replicas.generation = 2
++                    replicas.switch.set()
++                    try:
++                        assert await asyncio.to_thread(unary_closed.wait, 3), "old unary survived cutover"
++                        with pytest.raises(ydb.Error):
++                            await unary
++                        with pytest.raises((ydb.Error, asyncio.CancelledError)):
++                            await call(anext if async_driver else next, stream)
++                        await asyncio.wait_for(source_eof.wait(), 3)
++                        if async_driver:
++                            assert isinstance(saved_error.value, asyncio.CancelledError)
++                        await call(driver.wait, 5)
++                        assert list(driver._store.connections) == [f"localhost:{replicas.ports[1]}"]
++                    finally:
++                        unary_closed.set()
++                        await asyncio.gather(unary, return_exceptions=True)
++                finally:
++                    await call(driver.stop)
++                    for client in clients:
++                        client.close()
++
++    asyncio.run(run())
+diff --git a/ydb/pool.py b/ydb/pool.py
+index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..ad0eba9a7ed47f18c5f706f67d2df079b670d995 100644
+--- a/ydb/pool.py
++++ b/ydb/pool.py
+@@ -34,6 +34,7 @@ class ConnectionsCache:
+         self.subscriptions: Set["futures.Future[None]"] = set()
+         self.preferred: collections.OrderedDict[str, Connection] = collections.OrderedDict()
+         self.logger = logging.getLogger(__name__)
++        self.eds_epoch = 0
+         self.use_all_nodes = use_all_nodes
+         self.conn_lst_order = (self.connections,) if self.use_all_nodes else (self.preferred, self.connections)
+         self.fast_fail_subscriptions: Set["futures.Future[None]"] = set()
+@@ -155,11 +156,21 @@ class ConnectionsCache:
+ 
+     def remove(self, connection: Connection) -> None:
+         with self.lock:
+-            self.connections_by_node_id.pop(connection.node_id, None)
++            if self.connections_by_node_id.get(connection.node_id) is connection:
++                self.connections_by_node_id.pop(connection.node_id, None)
++            if self.connections.get(connection.endpoint) is not connection:
++                return
+             self.preferred.pop(connection.endpoint, None)
+             self.connections.pop(connection.endpoint, None)
+             self.outdated.pop(connection.endpoint, None)
+ 
++    def remove_eds(self, connections) -> None:
++        with self.lock:
++            for connection in connections:
++                self.remove(connection)
++            if connections and not self.connections:
++                self.eds_epoch += 1
++
+     def get_connection_by_node_id(self, node_id: Optional[int]) -> Optional[Connection]:
+         with self.lock:
+             return self.connections_by_node_id.get(node_id)
+@@ -179,6 +190,7 @@ class Discovery(threading.Thread):
+         self._cache = store
+         self._driver_config = driver_config
+         self._resolver = resolver.DiscoveryEndpointsResolver(self._driver_config)
++        self._watch = None
+         self._base_discovery_interval = 60
+         self._ready_timeout = 4
+         self._discovery_request_timeout = 2
+@@ -199,6 +211,8 @@ class Discovery(threading.Thread):
+         return (1 + random.random()) * self._base_discovery_interval
+ 
+     def notify_disconnected(self) -> None:
++        if self._watch:
++            self._watch.cancel()
+         self._send_wake_up()
+ 
+     def _send_wake_up(self) -> None:
+@@ -228,79 +242,87 @@ class Discovery(threading.Thread):
+             if resolve_details is None:
+                 return False
+ 
+-            resolved_endpoints = set(
++            return self._apply_endpoints(resolve_details)
++
++    def _apply_endpoints(self, resolve_details) -> bool:
++        resolved_endpoints = set(
++            endpoint
++            for resolved_endpoint in resolve_details.endpoints
++            for endpoint, endpoint_options in resolved_endpoint.endpoints_with_options()
++        )
++        removed = [conn for conn in self._cache.values() if conn.endpoint not in resolved_endpoints]
++        if self._watch:
++            self._cache.remove_eds(removed)
++            for conn in removed:
++                conn.retire_eds()
++        else:
++            for conn in removed:
++                self._cache.make_outdated(conn)
++
++        local_dc = resolve_details.self_location
++
++        # Detect local DC using TCP latency if enabled and preferred is meaningful
++        if self._driver_config.detect_local_dc and not self._driver_config.use_all_nodes:
++            # Use only endpoints that match the SSL requirements for detection
++            ssl_filtered_endpoints = [
+                 endpoint
+-                for resolved_endpoint in resolve_details.endpoints
+-                for endpoint, endpoint_options in resolved_endpoint.endpoints_with_options()
+-            )
+-            for cached_endpoint in self._cache.values():
+-                if cached_endpoint.endpoint not in resolved_endpoints:
+-                    self._cache.make_outdated(cached_endpoint)
+-
+-            local_dc = resolve_details.self_location
+-
+-            # Detect local DC using TCP latency if enabled and preferred is meaningful
+-            if self._driver_config.detect_local_dc and not self._driver_config.use_all_nodes:
+-                # Use only endpoints that match the SSL requirements for detection
+-                ssl_filtered_endpoints = [
+-                    endpoint
+-                    for endpoint in resolve_details.endpoints
+-                    if (self._ssl_required and endpoint.ssl) or (not self._ssl_required and not endpoint.ssl)
+-                ]
+-
+-                if ssl_filtered_endpoints:
+-                    try:
+-                        detected_location = _utilities.detect_local_dc(
+-                            ssl_filtered_endpoints, max_per_location=3, timeout=self._ready_timeout
++                for endpoint in resolve_details.endpoints
++                if (self._ssl_required and endpoint.ssl) or (not self._ssl_required and not endpoint.ssl)
++            ]
++
++            if ssl_filtered_endpoints:
++                try:
++                    detected_location = _utilities.detect_local_dc(
++                        ssl_filtered_endpoints, max_per_location=3, timeout=self._ready_timeout
++                    )
++                    if detected_location:
++                        local_dc = detected_location
++                        self.logger.info(
++                            "Detected local DC via TCP latency: %s (server reported: %s)",
++                            local_dc,
++                            resolve_details.self_location,
+                         )
+-                        if detected_location:
+-                            local_dc = detected_location
+-                            self.logger.info(
+-                                "Detected local DC via TCP latency: %s (server reported: %s)",
+-                                local_dc,
+-                                resolve_details.self_location,
+-                            )
+-                        else:
+-                            self.logger.warning(
+-                                "Failed to detect local DC via TCP latency, using server location: %s",
+-                                resolve_details.self_location,
+-                            )
+-                    except Exception as e:
++                    else:
+                         self.logger.warning(
+-                            "Failed to detect local DC via TCP latency, using server location: %s. Error: %s",
++                            "Failed to detect local DC via TCP latency, using server location: %s",
+                             resolve_details.self_location,
+-                            e,
+-                            exc_info=True,
+                         )
+-                else:
++                except Exception as e:
+                     self.logger.warning(
+-                        "No SSL-compatible endpoints for local DC detection, using server location: %s",
++                        "Failed to detect local DC via TCP latency, using server location: %s. Error: %s",
+                         resolve_details.self_location,
++                        e,
++                        exc_info=True,
+                     )
++            else:
++                self.logger.warning(
++                    "No SSL-compatible endpoints for local DC detection, using server location: %s",
++                    resolve_details.self_location,
++                )
+ 
+-            for resolved_endpoint in resolve_details.endpoints:
+-                if self._ssl_required and not resolved_endpoint.ssl:
+-                    continue
++        for resolved_endpoint in resolve_details.endpoints:
++            if self._ssl_required and not resolved_endpoint.ssl:
++                continue
+ 
+-                if not self._ssl_required and resolved_endpoint.ssl:
+-                    continue
++            if not self._ssl_required and resolved_endpoint.ssl:
++                continue
+ 
+-                preferred = local_dc == resolved_endpoint.location
++            preferred = local_dc == resolved_endpoint.location
++
++            for (
++                endpoint,
++                endpoint_options,
++            ) in resolved_endpoint.endpoints_with_options():
++                if self._cache.size >= self._max_size or self._cache.already_exists(endpoint):
++                    continue
+ 
+-                for (
++                ready_connection = connection_impl.Connection.ready_factory(
+                     endpoint,
+-                    endpoint_options,
+-                ) in resolved_endpoint.endpoints_with_options():
+-                    if self._cache.size >= self._max_size or self._cache.already_exists(endpoint):
+-                        continue
+-
+-                    ready_connection = connection_impl.Connection.ready_factory(
+-                        endpoint,
+-                        self._driver_config,
+-                        self._ready_timeout,
+-                        endpoint_options=endpoint_options,
+-                    )
+-                    self._cache.add(ready_connection, preferred)
++                    self._driver_config,
++                    self._ready_timeout,
++                    endpoint_options=endpoint_options,
++                )
++                self._cache.add(ready_connection, preferred)
+ 
+         self._cache.cleanup_outdated()
+ 
+@@ -308,9 +330,38 @@ class Discovery(threading.Thread):
+ 
+     def stop(self) -> None:
+         self._should_stop.set()
++        if self._watch:
++            self._watch.cancel()
+         self._send_wake_up()
+ 
++    def _run_eds(self):
++        failures = 0
++        while not self._should_stop.is_set():
++            try:
++                legacy_ready = self._watch.subscribe(self._apply_endpoints, self._should_stop.is_set)
++            except Exception as error:
++                self._resolver._add_debug_details("EDS subscription failed: %s", error)
++                legacy_ready = False
++            if self._watch.received:
++                failures = 0
++            if legacy_ready:
++                failures = 0
++                delay = self._discovery_interval()
++            else:
++                retired = self._cache.values()
++                self._cache.remove_eds(retired)
++                for conn in retired:
++                    conn.retire_eds()
++                self._cache.complete_discovery(issues.ConnectionFailure(self.discovery_debug_details()))
++                delay = 0 if failures == 0 else min(20, 2 ** min(failures - 1, 4)) * self._emergency_retry_interval()
++                failures += 1
++            self._should_stop.wait(delay)
++        self._cache.cleanup()
++
+     def run(self) -> None:
++        if self._watch:
++            self._run_eds()
++            return
+         with self.condition:
+             while True:
+                 if self._should_stop.is_set():
+@@ -425,6 +476,10 @@ class ConnectionPool(IConnectionPool):
+         else:
+             # Start discovery thread as usual
+             self._discovery_thread = Discovery(self._store, self._driver_config)
++            if driver_config.use_eds:
++                from ._eds import SyncWatch, Route
++
++                self._discovery_thread._watch = SyncWatch(Route(driver_config), self._grpc_init._channel)
+             self._discovery_thread.start()
+ 
+     def _init_connection(self) -> None:
+@@ -494,7 +549,13 @@ class ConnectionPool(IConnectionPool):
+         :param connection: A disconnected connection
+         :return: None
+         """
+-        connection.close()
++        if self._driver_config.use_eds:
++            if connection not in self._store.values():
++                return
++            self._store.remove_eds([connection])
++            connection.retire_eds()
++        else:
++            connection.close()
+         if self._discovery_thread:
+             self._discovery_thread.notify_disconnected()
+ 
+@@ -547,7 +608,7 @@ class ConnectionPool(IConnectionPool):
+         try:
+             connection = self._store.get(preferred_endpoint)
+         except Exception:
+-            if self._discovery_thread:
++            if self._discovery_thread and not self._driver_config.use_eds:
+                 self._discovery_thread.notify_disconnected()
+             raise
+ 
+@@ -592,7 +653,7 @@ class ConnectionPool(IConnectionPool):
+         try:
+             connection = self._store.get(preferred_endpoint)
+         except Exception:
+-            if self._discovery_thread:
++            if self._discovery_thread and not self._driver_config.use_eds:
+                 self._discovery_thread.notify_disconnected()
+             raise
+ 
+diff --git a/ydb/resolver.py b/ydb/resolver.py
+index 40a04980748334a180e11514bfdbd0e07c0edee6..4354cd5d6b678bc3da7a1604333793a2b8a1b27b 100644
+--- a/ydb/resolver.py
++++ b/ydb/resolver.py
+@@ -118,6 +118,10 @@ class DiscoveryResult(object):
+         issues._process_response(response.operation)
+         message = _apis.ydb_discovery.ListEndpointsResult()
+         response.operation.result.Unpack(message)
++        return cls.from_result(message, use_all_nodes)
++
++    @classmethod
++    def from_result(cls, message, use_all_nodes=False):
+         unique_local_set: set[EndpointInfo] = set()
+         unique_different_set: set[EndpointInfo] = set()
+         for info in message.endpoints:

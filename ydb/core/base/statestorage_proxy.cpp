@@ -1185,22 +1185,15 @@ public:
         GroupAcks.assign(Info->RingGroups.size(), 0);
         for (ui32 idx : xrange(Info->RingGroups.size())) {
             const auto& ringGroup = Info->RingGroups[idx];
-            THashSet<TActorId> quorumReplicas;
-            if (RequiresQuorum(ringGroup)) {
-                TStateStorageInfo::TSelection selection;
-                Info->SelectReplicas(TabletID, &selection, idx);
-                quorumReplicas.insert(selection.begin(), selection.end());
-            }
-            // Any replica can retain an entry after reconfiguration. Even groups marked DISCONNECTED
-            // can be reachable, for example in Bridge HOT_STANDBY or SUSPENDED.
-            for (const auto& ring : ringGroup.Rings) {
-                for (const TActorId& replica : ring.Replicas) {
-                    const TActorIdentity replyTo(RegisterAlias());
-                    PendingTargets.emplace(replyTo, TTarget{idx, quorumReplicas.contains(replica)});
-                    replyTo.Send(replica,
-                        new TEvStateStorage::TEvReplicaDelete(TabletID, Info->ClusterStateGeneration, Info->ClusterStateGuid),
-                        IEventHandle::FlagTrackDelivery);
-                }
+            TStateStorageInfo::TSelection selection;
+            Info->SelectReplicas(TabletID, &selection, idx);
+            // Clean up the selected replicas even in groups that do not require a quorum.
+            for (const TActorId& replica : selection) {
+                const TActorIdentity replyTo(RegisterAlias());
+                PendingTargets.emplace(replyTo, TTarget{idx, RequiresQuorum(ringGroup)});
+                replyTo.Send(replica,
+                    new TEvStateStorage::TEvReplicaDelete(TabletID, Info->ClusterStateGeneration, Info->ClusterStateGuid),
+                    IEventHandle::FlagTrackDelivery);
             }
         }
         if (!PendingTargets.empty()) {

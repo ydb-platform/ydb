@@ -884,7 +884,18 @@ public:
             unavailable.insert(selection.SelectedReplicas[index]);
         }
 
+        THashSet<TActorId> selected;
+        for (ui32 groupIndex = 0; groupIndex < info->RingGroups.size(); ++groupIndex) {
+            info->SelectReplicas(TabletId, &selection, groupIndex);
+            selected.insert(selection.begin(), selection.end());
+        }
         RegisterReplicas(info, unavailable);
+        THashSet<TActorId> recipients;
+        auto requests = Runtime.AddObserver<TEvStateStorage::TEvReplicaDelete>([&](auto& ev) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTabletID(), TabletId);
+            UNIT_ASSERT_C(selected.contains(ev->Recipient), ev->Recipient);
+            recipients.insert(ev->Recipient);
+        });
         THashSet<TActorId> replies;
         auto responses = Runtime.AddObserver<TEvStateStorage::TEvReplicaInfo>([&](auto& ev) {
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTabletID(), TabletId);
@@ -893,6 +904,11 @@ public:
         const TActorId proxy = Runtime.Register(CreateStateStorageProxy(info, nullptr, nullptr));
         Delete(proxy, Runtime.AllocateEdgeActor(), expectedStatus);
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), expectedReplies);
+        for (const auto& replica : selected) {
+            if (!unavailable.contains(replica)) {
+                UNIT_ASSERT_C(recipients.contains(replica), replica);
+            }
+        }
     }
 
     auto ObserveCookieLessReplies() {
@@ -1035,8 +1051,28 @@ Y_UNIT_TEST_SUITE(TStateStorageProxyDelete) {
     Y_UNIT_TEST(DeleteQuorumCountsSelectedReplicasOnly) {
         TDeleteFixture f(8);
         f.AddGroup(0, 4, 3, 2);
-        // One selected replica and all five unselected replicas answer.
-        f.CheckDelete(NKikimrProto::ERROR, 6, 0, 2);
+        // Two selected replicas are unavailable; the five unselected replicas cannot help.
+        f.CheckDelete(NKikimrProto::ERROR, 1, 0, 2);
+    }
+
+    Y_UNIT_TEST(DeleteTargetsOnlySelectedReplicas) {
+        TDeleteFixture f(8);
+        f.AddGroup(0, 4, 3, 2);
+        f.CheckDelete(NKikimrProto::OK, 3);
+    }
+
+    Y_UNIT_TEST(DeleteTargetsSelectedReplicasInWriteOnlyGroup) {
+        TDeleteFixture f(16);
+        f.AddGroup(0, 4, 3, 2);
+        f.AddGroup(8, 4, 3, 2).SetWriteOnly(true);
+        f.CheckDelete(NKikimrProto::OK, 6);
+    }
+
+    Y_UNIT_TEST(WriteOnlyRepliesDoNotReplacePrimaryQuorum) {
+        TDeleteFixture f(16);
+        f.AddGroup(0, 4, 3, 2);
+        f.AddGroup(8, 4, 3, 2).SetWriteOnly(true);
+        f.CheckDelete(NKikimrProto::ERROR, 4, 0, 2);
     }
 
     Y_UNIT_TEST(DeleteSucceedsWithoutRepliesFromDisconnectedGroup) {

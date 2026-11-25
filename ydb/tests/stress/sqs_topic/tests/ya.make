@@ -29,4 +29,6 @@ PEERDIR(
     contrib/python/botocore
 )
 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+
 END()

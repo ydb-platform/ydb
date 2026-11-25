@@ -2589,6 +2589,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     public:
         NKikimr::NYDBTest::TControllers::TGuard<TDefaultTestsController> Controller;
         TActorId Sender;
+        TActorId OtherSender;   // a second requester: tells a replaced held request from a kept one
         // the live portions' schema versions at the shard's last reply (background compaction may go on afterwards)
         std::optional<std::set<ui64>> VersionsOnReply;
 
@@ -2600,6 +2601,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             Controller->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
             Controller->SetOverrideTasksActualizationLag(TDuration::Zero());
             Sender = Runtime.AllocateEdgeActor();
+            OtherSender = Runtime.AllocateEdgeActor();
             CreateTestBootstrapper(Runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
             TDispatchOptions options;
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
@@ -2647,38 +2649,42 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             Y_UNUSED(SetupSchema(Runtime, Sender, tx.SerializeAsString(), ++TxId));
         }
 
-        // the schemeshard's request; `cascade` unset leaves the flag out of the message
-        void SendCompact(const ui64 forcedCompactionTxId, const std::optional<bool> cascade) {
+        // the schemeshard's request (from Sender unless `from` says otherwise); `cascade` unset leaves the flag out of
+        // the message
+        void SendCompact(const ui64 forcedCompactionTxId, const std::optional<bool> cascade, const std::optional<TActorId>& from = {}) {
             auto request = std::make_unique<TEvDataShard::TEvCompactTable>(/*ownerId=*/1, TableId);
             request->Record.SetTxId(forcedCompactionTxId);
             if (cascade) {
                 request->Record.SetCascade(*cascade);
             }
-            VersionsOnReply.reset();
-            ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, request.release());
+            Send(request.release(), from);
         }
 
-        void SendCompactWithoutId() {
-            VersionsOnReply.reset();
-            ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, TableId));
+        // a pre-upgrade schemeshard's request: no operation id
+        void SendCompactWithoutId(const std::optional<TActorId>& from = {}) {
+            Send(new TEvDataShard::TEvCompactTable(/*ownerId=*/1, TableId), from);
         }
 
         // drives the background loop (wakeup = EnqueueBackgroundActivities, sleep = async work) until the shard replies
-        TResult::EStatus WaitResult() {
+        // to Sender (or to `to`)
+        TResult::EStatus WaitResult(const std::optional<TActorId>& to = {}) {
+            const TActorId requester = to.value_or(Sender);
             TEvDataShard::TEvCompactTableResult::TPtr ev;
             for (ui32 i = 0; i < 120 && !ev; ++i) {
                 RunBackground(1);
-                ev = Runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(Sender, TDuration::MilliSeconds(1));
+                ev = GrabReply(requester);
             }
             UNIT_ASSERT_C(ev, "no reply");
             UNIT_ASSERT(VersionsOnReply);
             return ev->Get()->Record.GetStatus();
         }
 
-        // a couple of background rounds without a reply: the request is held (or nobody is waiting)
+        // a couple of background rounds without a reply to either requester: the request is held (or nobody is waiting)
         void AssertNoReply(const TString& why) {
             RunBackground(2);
-            UNIT_ASSERT_C(!Runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(Sender, TDuration::MilliSeconds(1)), why);
+            for (const auto& requester : { Sender, OtherSender }) {
+                UNIT_ASSERT_C(!GrabReply(requester), why);
+            }
         }
 
         // tiling++: drives the background loop until every portion has settled into the last level
@@ -2748,6 +2754,15 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
 
     private:
+        void Send(TEvDataShard::TEvCompactTable* request, const std::optional<TActorId>& from) {
+            VersionsOnReply.reset();
+            ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, from.value_or(Sender), request);
+        }
+
+        TEvDataShard::TEvCompactTableResult::TPtr GrabReply(const TActorId& requester) {
+            return Runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(requester, TDuration::MilliSeconds(1));
+        }
+
         void RunBackground(const ui32 rounds) {
             for (ui32 i = 0; i < rounds; ++i) {
                 ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true));
@@ -2816,14 +2831,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::NOT_NEEDED);
             }
 
-            t.SendCompact(1, false);   // an id on top of the id-less operation: another one, which supersedes it
+            t.SendCompact(1, false, t.OtherSender);   // an id on top of the id-less operation: another one
             if (planner == "tiling++") {
                 t.AssertNoReply("held while the portions intersect");
                 t.EnableBackground(EBackground::Compaction);
-                UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+                UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(t.OtherSender), TResult::OK);
                 t.AssertNoReply("the superseded request is not answered");
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::NOT_NEEDED);
+                UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(t.OtherSender), TResult::NOT_NEEDED);
             }
             t.AssertVersionsOnReply({ 1 });
 
@@ -2911,7 +2926,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     Y_UNIT_TEST(ForcedCompactionRequestWithoutId) {
         // A pre-upgrade schemeshard sends no operation id. Its request is a plain compaction: a new operation when none
         // is being served, a retry of the one being served otherwise (a CASCADE goes on, its rewrite is not touched).
-        // A request with an id on top of an id-less operation is another operation.
+        // A request with an id on top of an id-less operation is another operation. As for any retry or new operation,
+        // the latest request replaces the held one and gets the reply.
         using TResult = TForcedCompactionTest::TResult;
         using EBackground = TForcedCompactionTest::EBackground;
         TForcedCompactionTest t("tiling++");
@@ -2920,10 +2936,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         t.SendCompactWithoutId();   // nothing is being served: a plain operation starts
         t.AssertNoReply("held while the portions intersect");
-        t.SendCompactWithoutId();   // the operation being served: a retry
+        t.SendCompactWithoutId(t.OtherSender);   // the operation being served: a retry
         t.AssertNoReply("a retry is held like the request it repeats");
         t.EnableBackground(EBackground::Compaction);
-        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(t.OtherSender), TResult::OK);
         t.AssertVersionsOnReply({ 1 });
         t.AssertNoReply("the superseded request is not answered");
 
@@ -2933,11 +2949,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         t.AssertNoReply("held until the portions are rewritten");
         const i64 queued = t.QueuedForActualization();
         UNIT_ASSERT_VALUES_EQUAL(queued, t.PortionsByVersion().at(1));
-        t.SendCompactWithoutId();   // on top of the CASCADE being served: its retry, the rewrite goes on
+        t.SendCompactWithoutId(t.OtherSender);   // on top of the CASCADE being served: its retry, the rewrite goes on
         t.AssertNoReply("a retry is held like the request it repeats");
         UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), queued);
         t.EnableBackground(EBackground::TTL);
-        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(t.OtherSender), TResult::OK);
         t.AssertVersionsOnReply({ 2 });
         t.AssertNoReply("the superseded request is not answered");
 
@@ -2948,12 +2964,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         t.SendCompactWithoutId();   // nothing is being served: a plain operation, the version 2 portions are left alone
         t.AssertNoReply("held while the portions intersect");
         UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), 0);
-        t.SendCompact(2, true);   // an id on top of the id-less operation: another operation, this one a CASCADE
+        // the finished operation's id on top of the id-less one: another operation, this one a CASCADE (stale
+        // bookkeeping would take the id for a retry and leave the rewrite off)
+        t.SendCompact(1, true, t.OtherSender);
         t.AssertNoReply("held until the portions are compacted and rewritten");
         UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), t.PortionsByVersion().at(2));
         t.EnableBackground(EBackground::Compaction);
         t.EnableBackground(EBackground::TTL);
-        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(t.OtherSender), TResult::OK);
         t.AssertVersionsOnReply({ 3 });
         t.AssertNoReply("the superseded request is not answered");
     }

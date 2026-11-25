@@ -1246,20 +1246,22 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-    // a pre-upgrade schemeshard sends no id: its request is a plain compaction, a retry of the operation being served
-    // if there is one, a new operation otherwise; a request with an id on top of such an operation is a new one
+    // a pre-upgrade schemeshard sends no id: its request is a plain compaction (whatever its Cascade), a retry of the
+    // operation being served if there is one, a new operation otherwise; a request with an id on top of such an
+    // operation is a new one
     const std::optional<ui64> txId = record.HasTxId() ? std::optional<ui64>(record.GetTxId()) : std::nullopt;
+    const bool cascade = txId && record.GetCascade();
     const bool isRetry = txId ? ForcedCompactionTxId == txId : ForcedCompactionWaiter.has_value();
     if (!isRetry) {
         // a new operation, not a retry (the schemeshard repeats the request until answered; a retry must not touch the
         // rewrite): CASCADE targets the current schema, a plain operation turns off the rewrite of a cancelled CASCADE
         ForcedCompactionTxId = txId;
-        if (record.GetCascade()) {
+        if (cascade) {
             engine.SetSchemeNeedActualization(true);
         } else if (ForcedCompactionActualizeSchema) {
             engine.SetSchemeNeedActualization(false);
         }
-        ForcedCompactionActualizeSchema = record.GetCascade();
+        ForcedCompactionActualizeSchema = cascade;
     }
 
     // the latest request supersedes the held one: a cancelled operation's waiter must not answer for the next

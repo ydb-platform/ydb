@@ -581,7 +581,8 @@ private:
 
     std::optional<TForcedCompactionWaiter> ForcedCompactionWaiter;
     // the forced compaction served (TEvCompactTable::TxId): the same id again is a retry, another one a new forced
-    // compaction; none for a pre-upgrade schemeshard's request, which has no id (a plain compaction)
+    // compaction; none for an operation started by a pre-upgrade schemeshard's request, which has no id (a plain
+    // compaction)
     std::optional<ui64> ForcedCompactionTxId;
     bool ForcedCompactionActualizeSchema = false;   // its Cascade: the reply also waits for the rewrite
     void FinishForcedCompactionActualization();

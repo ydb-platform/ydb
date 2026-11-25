@@ -1,0 +1,1676 @@
+diff --git a/README.md b/README.md
+index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..63bfd4fe4951841bd10882c42b2c62172964d74c 100644
+--- a/README.md
++++ b/README.md
+@@ -651,3 +651,34 @@ $config = [
+ ];
+ $ydb = new \YdbPlatform\Ydb\Ydb($config);
+ ```
++
++### Managed discovery long polling
++
++Enable both `discovery` and `discoveryLongPoll` to keep one conditional
++`ListEndpoints` request on the bootstrap connection. The synchronous driver
++processes completed polls before dispatch and while consuming streaming results.
++A new route closes the previous data channel shared by the driver's service
++clients. For idle workers, pass the running ReactPHP `LoopInterface` as
++`discoveryLoop` (requires PHP 7.4+). The loop checks for a completed poll every
++100 ms using the same bootstrap connection. A synchronous process without a
++running loop processes the update on its next SDK call or stream read. A
++blocking native gRPC receive also pauses the loop until a message, error, or
++RPC deadline arrives. During that pause the old socket stays open. On return the SDK checks for an
++available discovery response before yielding data. Once a response has started
++it waits for its generation trailers within the discovery timeout.
++After a switch, acquire a fresh session with `Table::session()`. A retained
++session raises `BadSessionException`. A file pool can reuse idle sessions after
++restart when the bootstrap, database, selected endpoint and managed generation
++match. Concurrent processes use independent sessions while one process holds the
++cache file. An opt-in driver with an unstamped server keeps its sessions in
++memory. Ordinary discovery keeps its existing file format. When an opaque
++custom pool is shared or returns an unrecognized ID, the driver uses its own
++memory pool for subsequent sessions.
++
++Legacy servers use the configured discovery interval. The opt-in requires a
++host:port endpoint, HTTP/2 support in libcurl, and default gRPC channel options.
++TLS uses `root_cert_file`, `GRPC_DEFAULT_SSL_ROOTS_FILE_PATH`, or the gRPC PHP
++package's bundled roots. If the process has already installed an in-memory gRPC
++root bundle, provide its file explicitly. Bootstrap honors gRPC's HTTP CONNECT
++proxy and bypass environment variables. Address-based gRPC proxy mapping
++requires native periodic discovery.
+diff --git a/src/AuthService.php b/src/AuthService.php
+index 40964713da3a74efc682ecf472a590ca86515183..0518db18494f7b9392983f146f56a3f34bc49ebd 100644
+--- a/src/AuthService.php
++++ b/src/AuthService.php
+@@ -28,7 +28,7 @@ class AuthService{
+     {
+         $this->ydb = $ydb;
+         $this->logger = $logger;
+-        $this->client = new ServiceClient($ydb->endpoint(), $ydb->grpcOpts());
++        $this->client = $ydb->serviceClient(ServiceClient::class);
+         $this->credentials = $ydb->iam();
+         $this->meta = [
+             'x-ydb-database' => [$ydb->database()],
+diff --git a/src/Discovery.php b/src/Discovery.php
+index 34c6cee3b3695364d191a45ba6c4aa0fe8c5b628..8714649fa75de7c8d06a0e341ce6032f59d7ba4d 100644
+--- a/src/Discovery.php
++++ b/src/Discovery.php
+@@ -43,7 +43,7 @@ class Discovery
+     {
+         $this->ydb = $ydb;
+ 
+-        $this->client = new ServiceClient($ydb->endpoint(), $ydb->grpcOpts());
++        $this->client = $ydb->serviceClient(ServiceClient::class);
+ 
+         $this->meta = $ydb->meta();
+ 
+diff --git a/src/Internal/LongPoll.php b/src/Internal/LongPoll.php
+new file mode 100644
+index 0000000000000000000000000000000000000000..07e6e95d16bc97bf3c01526fec07f9c10cd84c26
+--- /dev/null
++++ b/src/Internal/LongPoll.php
+@@ -0,0 +1,294 @@
++<?php
++
++namespace YdbPlatform\Ydb\Internal;
++
++use Ydb\Discovery\ListEndpointsRequest;
++use Ydb\Discovery\ListEndpointsResponse;
++use Ydb\Discovery\ListEndpointsResult;
++use Ydb\StatusIds\StatusCode;
++use YdbPlatform\Ydb\Ydb;
++
++/** @internal One conditional ListEndpoints call on a reusable bootstrap connection. */
++final class LongPoll
++{
++    private $ydb;
++    private $url;
++    private $multi;
++    private $call;
++    private $tlsRoot;
++    private $proxy;
++    private $generation;
++    private $snapshot;
++    private $nextPoll = 0;
++    private $retryDelay = 0.1;
++    private $generations;
++    private $status;
++    private $body;
++    private $receivingReply = false;
++
++    public function __construct(Ydb $ydb, string $bootstrap, array $options)
++    {
++        if (!(curl_version()['features'] & CURL_VERSION_HTTP2)) {
++            throw new \RuntimeException('Long polling requires HTTP/2 support in the PHP curl extension');
++        }
++        if ($options || !preg_match('/^(?:[a-zA-Z0-9._-]+|\[[0-9a-fA-F:]+\]):[0-9]+$/D', $bootstrap)) {
++            throw new \InvalidArgumentException('Long polling requires host:port bootstrap and default gRPC channel options');
++        }
++        $this->ydb = $ydb;
++        $this->url = ($ydb->iam()->config('insecure') ? 'http://' : 'https://') . $bootstrap
++            . '/Ydb.Discovery.V1.DiscoveryService/ListEndpoints';
++        $this->proxy = self::proxyFor(trim(parse_url($this->url, PHP_URL_HOST), '[]'));
++        if (!$ydb->iam()->config('insecure')) {
++            $this->tlsRoot = self::rootFile($ydb->iam()->config('root_cert_file'));
++        }
++        $this->multi = curl_multi_init();
++    }
++
++    /** Match the trust anchor selection of the native gRPC bootstrap stub. */
++    public static function rootFile(?string $configured): string
++    {
++        $path = $configured ?: getenv('GRPC_DEFAULT_SSL_ROOTS_FILE_PATH');
++        if (!$path) {
++            if (\Grpc\ChannelCredentials::isDefaultRootsPemSet()) {
++                // The extension exposes no getter for an application-installed PEM.
++                throw new \InvalidArgumentException('Set root_cert_file for discovery with process-wide gRPC roots');
++            }
++            $stub = new \ReflectionClass(\Grpc\BaseStub::class);
++            $path = dirname($stub->getFileName(), 3) . '/etc/roots.pem';
++        }
++        if (!is_file($path) || !is_readable($path)) {
++            throw new \InvalidArgumentException('Cannot read the gRPC discovery trust roots');
++        }
++        return $path;
++    }
++
++    public static function proxyFor(string $host): string
++    {
++        if (getenv('GRPC_ADDRESS_HTTP_PROXY') && getenv('GRPC_ADDRESS_HTTP_PROXY_ENABLED_ADDRESSES')) {
++            throw new \InvalidArgumentException('Address-based gRPC proxy mapping requires native discovery');
++        }
++        $proxy = false;
++        foreach (['grpc_proxy', 'https_proxy', 'http_proxy'] as $key) {
++            $proxy = getenv($key);
++            if ($proxy !== false) {
++                break;
++            }
++        }
++        if (!$proxy) {
++            return '';
++        }
++        $bypass = getenv('no_grpc_proxy');
++        if ($bypass === false) {
++            $bypass = getenv('no_proxy');
++        }
++        foreach (explode(',', (string)$bypass) as $entry) {
++            $entry = trim($entry);
++            if ($entry !== '' && (strcasecmp(substr($host, -strlen($entry)), $entry) === 0
++                || self::inSubnet($host, $entry))) {
++                return '';
++            }
++        }
++        if (parse_url($proxy, PHP_URL_SCHEME) !== 'http' || !parse_url($proxy, PHP_URL_HOST)) {
++            throw new \InvalidArgumentException('Invalid gRPC HTTP CONNECT proxy');
++        }
++        return $proxy;
++    }
++
++    private static function inSubnet(string $host, string $entry): bool
++    {
++        $parts = explode('/', $entry, 2);
++        if (count($parts) !== 2 || !ctype_digit($parts[1])) {
++            return false;
++        }
++        $ip = inet_pton($host);
++        $network = inet_pton($parts[0]);
++        $bits = (int)$parts[1];
++        if ($ip === false || $network === false || strlen($ip) !== strlen($network) || $bits > strlen($ip) * 8) {
++            return false;
++        }
++        $bytes = intdiv($bits, 8);
++        $tail = $bits % 8;
++        return substr($ip, 0, $bytes) === substr($network, 0, $bytes) &&
++            ($tail === 0 || ((ord($ip[$bytes]) ^ ord($network[$bytes])) >> (8 - $tail)) === 0);
++    }
++
++    public static function generation(array $values, ?string $previous): ?string
++    {
++        if (!$values && $previous === null) {
++            return null;
++        }
++        if (count($values) !== 1 || !ctype_digit($values[0])
++            || bccomp($values[0], '18446744073709551615', 0) > 0
++            || ($previous !== null && bccomp($values[0], $previous, 0) < 0)) {
++            throw new \UnexpectedValueException('Invalid or stale managed route generation');
++        }
++        return ltrim($values[0], '0') ?: '0';
++    }
++
++    private function start()
++    {
++        $headers = ['content-type: application/grpc', 'te: trailers', 'expect:', 'x-ydb-discovery-long-poll: 1'];
++        foreach ($this->ydb->meta() as $key => $values) {
++            foreach ($values as $value) {
++                if (preg_match('/[\r\n]/', $value)) {
++                    throw new \InvalidArgumentException('Invalid discovery metadata');
++                }
++                $headers[] = "$key: $value";
++            }
++        }
++        if ($this->generation !== null) {
++            $headers[] = 'x-ydb-if-route-generation: ' . $this->generation;
++        }
++        $request = (new ListEndpointsRequest(['database' => $this->ydb->database()]))->serializeToString();
++        $this->body = '';
++        $this->receivingReply = false;
++        $this->generations = [];
++        $this->status = null;
++        $this->call = curl_init($this->url);
++        $options = [
++            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_2_PRIOR_KNOWLEDGE,
++            CURLOPT_HTTPHEADER => $headers, CURLOPT_NOSIGNAL => true,
++            CURLOPT_PROXY => $this->proxy, CURLOPT_HTTPPROXYTUNNEL => true,
++            CURLOPT_NOPROXY => '', CURLOPT_HEADEROPT => CURLHEADER_SEPARATE,
++            CURLOPT_TIMEOUT_MS => 45000,
++            CURLOPT_POSTFIELDS => pack('CN', 0, strlen($request)) . $request,
++            CURLOPT_HEADERFUNCTION => function ($curl, $line) {
++                if (strncmp($line, 'HTTP/', 5) === 0) {
++                    // HTTP CONNECT uses a separate response before the HTTP/2 RPC.
++                    $this->receivingReply = strncmp($line, 'HTTP/2 ', 7) === 0;
++                    $this->generations = [];
++                    $this->status = null;
++                } elseif ($this->receivingReply && ($pos = strpos($line, ':')) !== false) {
++                    $key = strtolower(substr($line, 0, $pos));
++                    $value = trim(substr($line, $pos + 1));
++                    if ($key === 'x-ydb-route-generation') {
++                        $this->generations[] = $value;
++                    } elseif ($key === 'grpc-status') {
++                        $this->status = $value;
++                    }
++                }
++                return strlen($line);
++            },
++            CURLOPT_WRITEFUNCTION => function ($curl, $chunk) {
++                if (strlen($this->body) + strlen($chunk) > 4194309) {
++                    return 0;
++                }
++                $this->body .= $chunk;
++                return strlen($chunk);
++            }
++        ];
++        if ($this->tlsRoot) {
++            $options[CURLOPT_CAINFO] = $this->tlsRoot;
++            // libcurl also loads hashed roots from its system CA directory.
++            // Our installed PHP source directory contains no hashed CAs.
++            $options[CURLOPT_CAPATH] = __DIR__;
++        }
++        curl_setopt_array($this->call, $options);
++        curl_multi_add_handle($this->multi, $this->call);
++    }
++
++    private function accept()
++    {
++        $frame = strlen($this->body) >= 5 ? unpack('Ccompressed/Nlength', substr($this->body, 0, 5)) : null;
++        if ($this->status !== '0' || !$frame || $frame['compressed'] || $frame['length'] !== strlen($this->body) - 5) {
++            throw new \RuntimeException('ListEndpoints long poll failed');
++        }
++        $generation = self::generation($this->generations, $this->generation);
++        $response = new ListEndpointsResponse();
++        $response->mergeFromString(substr($this->body, 5));
++        $op = $response->getOperation();
++        if (!$op || !$op->getReady() || $op->getStatus() !== StatusCode::SUCCESS || !$op->getResult()
++            || $op->getResult()->getTypeUrl() !== 'type.googleapis.com/Ydb.Discovery.ListEndpointsResult') {
++            throw new \RuntimeException('Unsuccessful ListEndpoints operation');
++        }
++        $result = new ListEndpointsResult();
++        $result->mergeFromString($op->getResult()->getValue());
++        $this->snapshot = json_decode($result->serializeToJsonString(), true)['endpoints'] ?? [];
++        $this->generation = $generation;
++        $this->retryDelay = 0.1;
++        $this->nextPoll = $generation === null ? microtime(true) + $this->ydb->discoveryInterval() : 0;
++    }
++
++    private function closeCall()
++    {
++        if ($this->call) {
++            curl_multi_remove_handle($this->multi, $this->call);
++            curl_close($this->call);
++            $this->call = null;
++        }
++    }
++
++    private function advance()
++    {
++        if (!$this->call && microtime(true) >= $this->nextPoll) {
++            $this->start();
++        }
++        if (!$this->call) {
++            return;
++        }
++        do {
++            $code = curl_multi_exec($this->multi, $running);
++            $finished = curl_multi_info_read($this->multi);
++        } while (!$finished && ($code === CURLM_CALL_MULTI_PERFORM
++            || ($code === CURLM_OK && curl_multi_select($this->multi, 0) > 0)));
++        if (!$finished && $code === CURLM_OK) {
++            return;
++        }
++        $this->closeCall();
++        if ($code !== CURLM_OK || $finished['result'] !== CURLE_OK) {
++            throw new \RuntimeException('Discovery bootstrap unavailable');
++        }
++        $this->accept();
++        // Start the next held call before returning to the application.
++        if ($this->generation !== null) {
++            $this->start();
++            curl_multi_exec($this->multi, $running);
++        }
++    }
++
++    public function poll(int $timeoutMs): array
++    {
++        $deadline = microtime(true) + $timeoutMs / 1000;
++        do {
++            try {
++                $this->advance();
++            } catch (\Throwable $error) {
++                $this->closeCall();
++                $this->nextPoll = microtime(true) + $this->retryDelay;
++                $this->retryDelay = min(5, 2 * $this->retryDelay);
++                if ($this->generation === null && $this->snapshot) {
++                    return [null, $this->snapshot];
++                }
++                $this->snapshot = null;
++                throw $error;
++            }
++            // gRPC trailers can carry the generation in a separate HTTP/2 frame.
++            // Once a managed reply has started, data dispatch must wait for its
++            // trailers. The event loop's nonblocking tick can finish it later.
++            $receiving = $this->call && $this->generation !== null && $this->receivingReply;
++            if ($this->snapshot !== null && (!$receiving || $timeoutMs === 0)) {
++                return [$this->generation, $this->snapshot];
++            }
++            if (microtime(true) >= $deadline) {
++                if ($receiving && $timeoutMs > 0) {
++                    $this->snapshot = null;
++                }
++                break;
++            }
++            if ($this->call) {
++                curl_multi_select($this->multi, min(0.05, max(0, $deadline - microtime(true))));
++            } else {
++                usleep(10000);
++            }
++        } while (microtime(true) < $deadline);
++        throw new \RuntimeException('Timed out waiting for endpoint discovery');
++    }
++
++    public function __destruct()
++    {
++        $this->closeCall();
++        if ($this->multi) {
++            curl_multi_close($this->multi);
++        }
++    }
++}
+diff --git a/src/Operations.php b/src/Operations.php
+index dcd243bc5dd6f32a1dc4b30abf62a41d2f67d5c7..9929a0fb07f4137c437f2cdcec0703a1b398bce1 100644
+--- a/src/Operations.php
++++ b/src/Operations.php
+@@ -38,7 +38,7 @@ class Operations
+     {
+         $this->ydb = $ydb;
+ 
+-        $this->client = new ServiceClient($ydb->endpoint(), $ydb->grpcOpts());
++        $this->client = $ydb->serviceClient(ServiceClient::class);
+ 
+         $this->meta = $ydb->meta();
+ 
+diff --git a/src/Scheme.php b/src/Scheme.php
+index df0f2a78e1981c4ac47d2fc342da794e7d4d87fb..8b880289ee5d8a915aee8607fd1ab6ea94aaa6f2 100644
+--- a/src/Scheme.php
++++ b/src/Scheme.php
+@@ -41,7 +41,7 @@ class Scheme
+     {
+         $this->ydb = $ydb;
+ 
+-        $this->client = new ServiceClient($ydb->endpoint(), $ydb->grpcOpts());
++        $this->client = $ydb->serviceClient(ServiceClient::class);
+ 
+         $this->meta = $ydb->meta();
+ 
+diff --git a/src/Scripting.php b/src/Scripting.php
+index 850b4fccae9b79d1bc205a14f97255ec8e314744..e25e8a21e0807a814626ed9cba4feb7d3cabb5ce 100644
+--- a/src/Scripting.php
++++ b/src/Scripting.php
+@@ -38,7 +38,7 @@ class Scripting
+     {
+         $this->ydb = $ydb;
+ 
+-        $this->client = new ServiceClient($ydb->endpoint(), $ydb->grpcOpts());
++        $this->client = $ydb->serviceClient(ServiceClient::class);
+ 
+         $this->meta = $ydb->meta();
+ 
+diff --git a/src/Session.php b/src/Session.php
+index ac63399cd2e7ab3a7351fddd3bfe90c47da2bb90..05beea6cd9d0d1baeeca665d118ffc87ace9c23a 100644
+--- a/src/Session.php
++++ b/src/Session.php
+@@ -77,9 +77,10 @@ class Session
+      * @param Table $table
+      * @param string $session_id
+      */
+-    public function __construct(Table $table, $session_id)
++    public function __construct(Table $table, $session_id, ?int $routeEpoch = null)
+     {
+         $this->ydb = $table->ydb();
++        $this->routeEpoch = $routeEpoch;
+ 
+         $this->table = $table;
+ 
+@@ -102,6 +103,18 @@ class Session
+         return $this->session_id;
+     }
+ 
++    /** @internal A shared custom pool can contain both legacy and managed entries. */
++    public function isRouteBound(): bool
++    {
++        return $this->routeEpoch !== null;
++    }
++
++    /** @internal A pool entry may have been created by another database driver. */
++    public function belongsTo(Table $table): bool
++    {
++        return $this->table === $table;
++    }
++
+     /**
+      * @return bool
+      */
+diff --git a/src/Sessions/FileSessionPool.php b/src/Sessions/FileSessionPool.php
+index 33fc786404eb48417c67c85de437dc151d75dba3..103de5f322803f23200a569a5c5391035fe71738 100644
+--- a/src/Sessions/FileSessionPool.php
++++ b/src/Sessions/FileSessionPool.php
+@@ -4,6 +4,7 @@ namespace YdbPlatform\Ydb\Sessions;
+ 
+ use YdbPlatform\Ydb\Retry\Retry;
+ use YdbPlatform\Ydb\Session;
++use YdbPlatform\Ydb\Table;
+ use YdbPlatform\Ydb\Contracts\SessionPoolContract;
+ 
+ class FileSessionPool implements SessionPoolContract
+@@ -27,16 +28,98 @@ class FileSessionPool implements SessionPoolContract
+      */
+     protected static $retry;
+ 
++    private $entries = [];
++    private $owner;
++    private $file;
++    private $poolRetry;
++    private $managed;
++    private $baseFile;
++    private $routeFile;
++    private $routeEpoch;
++
+     /**
+      * @param array $config
+      */
+     public function __construct(array $config, Retry &$retry)
+     {
+-        static::$table = $config['table'];
+-        static::$filepath = $config['filepath'];
+-        static::$retry = $retry;
++        $this->managed = $config['table']->ydb()->currentRouteEpoch() !== null;
++        if (!$this->managed) {
++            // Preserve the process-wide legacy pool and its original file format.
++            $this->entries =& static::$sessions;
++            $this->owner =& static::$table;
++            $this->file =& static::$filepath;
++            $this->poolRetry =& static::$retry;
++        }
++        $this->owner = $config['table'];
++        $this->baseFile = $this->file = $config['filepath'];
++        $this->poolRetry = $retry;
++        if ($this->managed) {
++            $namespace = [$this->owner->path(), $this->owner->ydb()->endpoint()];
++            $this->file .= '.' . hash('sha256', serialize($namespace));
++        } else {
++            $this->load();
++        }
++    }
+ 
+-        $this->load();
++    /** @internal Only the bound Table may import sessions from this pool. */
++    public function belongsTo(Table $table): bool
++    {
++        return $this->owner === $table;
++    }
++
++    /** @internal Bind this pool to the assignment already checked for the next request. */
++    public function selectRoute(int $epoch)
++    {
++        if ($this->routeEpoch === $epoch) {
++            return;
++        }
++        $this->retireRoute();
++        $this->routeEpoch = $epoch;
++        $partition = $this->owner->ydb()->fileSessionPartition();
++        if ($partition === null) {
++            return;
++        }
++
++        // Keep the sidecar exclusively while this process can issue requests with its IDs.
++        // A concurrent driver can still create sessions in its own memory.
++        $file = fopen($this->baseFile . '.route-' . $partition, 'c+b');
++        if (!$file) {
++            return;
++        }
++        if (!flock($file, LOCK_EX | LOCK_NB)) {
++            fclose($file);
++            return;
++        }
++        $this->routeFile = $file;
++        $records = json_decode(stream_get_contents($file));
++        foreach (is_array($records) ? $records : [] as $record) {
++            if (isset($record->id, $record->taken) && is_string($record->id) && $record->taken === false) {
++                $this->entries[$record->id] = new Session($this->owner, $record->id, $epoch);
++            }
++        }
++    }
++
++    /** @internal Retained handles stay bound to the outgoing epoch. */
++    public function retireRoute()
++    {
++        $this->entries = [];
++        $this->routeEpoch = null;
++        if ($this->routeFile) {
++            fclose($this->routeFile);
++            $this->routeFile = null;
++        }
++    }
++
++    /** @internal A late callback may carry an old handle with a reused ID. */
++    public function ownsSession(Session $session): bool
++    {
++        return ($this->entries[$session->id()] ?? null) === $session;
++    }
++
++    /** @internal The same backing file may be configured on different pool objects. */
++    public function cacheKey(): string
++    {
++        return 'file:' . (realpath(dirname($this->file)) ?: dirname($this->file)) . '/' . basename($this->file);
+     }
+ 
+     /**
+@@ -44,8 +127,10 @@ class FileSessionPool implements SessionPoolContract
+      */
+     public function __destruct()
+     {
+-        $this->load();
+-        $this->save();
++        if (!$this->managed) {
++            $this->load();
++            $this->save();
++        }
+     }
+ 
+     /**
+@@ -53,18 +138,18 @@ class FileSessionPool implements SessionPoolContract
+      */
+     protected function load()
+     {
+-        if (is_file(static::$filepath))
++        if (is_file($this->file))
+         {
+-            $contents = file_get_contents(static::$filepath);
++            $contents = file_get_contents($this->file);
+             $sessions = json_decode($contents);
+             foreach ($sessions as $session_info)
+             {
+-                $session = new Session(static::$table, $session_info->id);
++                $session = new Session($this->owner, $session_info->id);
+                 if ($session_info->taken)
+                 {
+                     $session->take();
+                 }
+-                static::$sessions[$session->id()] = $session;
++                $this->entries[$session->id()] = $session;
+             }
+         }
+     }
+@@ -74,15 +159,26 @@ class FileSessionPool implements SessionPoolContract
+      */
+     protected function save()
+     {
++        if ($this->routeEpoch !== null && !$this->routeFile) {
++            return;
++        }
+         $sessions = [];
+-        foreach (static::$sessions as $session_id => $session)
++        foreach ($this->entries as $session_id => $session)
+         {
+             $sessions[] = (object)[
+                 'id' => $session->id(),
+                 'taken' => $session->isBusy(),
+             ];
+         }
+-        file_put_contents(static::$filepath, json_encode($sessions));
++        $data = json_encode($sessions);
++        if ($this->routeFile) {
++            if (!rewind($this->routeFile) || !ftruncate($this->routeFile, 0)
++                || fwrite($this->routeFile, $data) !== strlen($data) || !fflush($this->routeFile)) {
++                throw new \RuntimeException('Unable to update the Table session cache');
++            }
++            return;
++        }
++        file_put_contents($this->file, $data);
+     }
+ 
+     /**
+@@ -90,11 +186,19 @@ class FileSessionPool implements SessionPoolContract
+      */
+     public function getIdleSession()
+     {
+-        $this->load();
++        return $this->getMatchingIdleSession();
++    }
+ 
+-        foreach (static::$sessions as $session_id => $session)
++    /** @internal Skip persisted IDs that the current driver has not acquired. */
++    public function getMatchingIdleSession(?callable $accept = null)
++    {
++        if ($this->routeEpoch === null) {
++            $this->load();
++        }
++
++        foreach ($this->entries as $session_id => $session)
+         {
+-            if ($session->isIdle())
++            if ($session->isIdle() && ($accept === null || $accept($session)))
+             {
+                 $this->syncSession($session_id);
+                 return $session;
+@@ -110,7 +214,7 @@ class FileSessionPool implements SessionPoolContract
+      */
+     public function addSession(Session $session)
+     {
+-        static::$sessions[$session->id()] = $session;
++        $this->entries[$session->id()] = $session;
+ 
+         $this->save();
+     }
+@@ -121,22 +225,27 @@ class FileSessionPool implements SessionPoolContract
+      */
+     public function dropSession($session_id)
+     {
+-        $session = static::$sessions[$session_id] ?? null;
++        $session = $this->entries[$session_id] ?? null;
+ 
+         if ($session)
+         {
++            if ($this->routeEpoch !== null) {
++                // A failed DeleteSession must not leave a reusable ID in durable storage.
++                unset($this->entries[$session_id]);
++                $this->save();
++            }
+             if ($session->isAlive())
+             {
+-                if (static::$retry==null){
+-                    static::$retry = new Retry();
++                if ($this->poolRetry==null){
++                    $this->poolRetry = new Retry();
+                 }
+-                static::$retry->retry(function () use ($session) {
++                $this->poolRetry->retry(function () use ($session) {
+                     $session->delete();
+                 },true);
+             }
+             else
+             {
+-                unset(static::$sessions[$session_id]);
++                unset($this->entries[$session_id]);
+             }
+ 
+             $this->save();
+@@ -149,12 +258,12 @@ class FileSessionPool implements SessionPoolContract
+      */
+     public function syncSession($session_id)
+     {
+-        $session = static::$sessions[$session_id] ?? null;
++        $session = $this->entries[$session_id] ?? null;
+ 
+         if ($session && $session->id() !== $session_id)
+         {
+-            unset(static::$sessions[$session_id]);
+-            static::$sessions[$session->id()] = $session;
++            unset($this->entries[$session_id]);
++            $this->entries[$session->id()] = $session;
+ 
+             $this->save();
+         }
+@@ -166,6 +275,14 @@ class FileSessionPool implements SessionPoolContract
+      */
+     public function sessionTaken(Session $session)
+     {
++        $this->saveSession($session);
++    }
++
++    private function saveSession(Session $session)
++    {
++        if ($this->managed && $session->belongsTo($this->owner)) {
++            $this->entries[$session->id()] = $session;
++        }
+         $this->save();
+     }
+ 
+@@ -175,6 +292,6 @@ class FileSessionPool implements SessionPoolContract
+      */
+     public function sessionReleased(Session $session)
+     {
+-        $this->save();
++        $this->saveSession($session);
+     }
+ }
+diff --git a/src/Sessions/MemorySessionPool.php b/src/Sessions/MemorySessionPool.php
+index f59612ae14b9bf87d74d7177a425c3db7e232a2c..e06852d6c2b7c29ef374c2c9c52041c41e1c0a69 100644
+--- a/src/Sessions/MemorySessionPool.php
++++ b/src/Sessions/MemorySessionPool.php
+@@ -12,11 +12,19 @@ class MemorySessionPool implements SessionPoolContract
+      * @var array
+      */
+     protected static $sessions = [];
+-    protected static $retry = null;
++    protected static $retry;
++    private $entries;
++    private $poolRetry;
+ 
+-    public function __construct(Retry &$retry)
++    public function __construct(Retry &$retry, ?array &$entries = null)
+     {
+-        self::$retry = $retry;
++        if ($entries === null) {
++            $this->entries =& static::$sessions;
++            $this->poolRetry =& static::$retry;
++        } else {
++            $this->entries =& $entries;
++        }
++        $this->poolRetry = $retry;
+     }
+ 
+     /**
+@@ -25,9 +33,9 @@ class MemorySessionPool implements SessionPoolContract
+      */
+     public function __destruct()
+     {
+-        foreach (static::$sessions as $session_id => $session) {
++        foreach ($this->entries as $session_id => $session) {
+             try {
+-                static::$retry->retry(function () use ($session) {
++                $this->poolRetry->retry(function () use ($session) {
+                     $session->delete();
+                 }, true);
+             } catch (\Exception $e) {
+@@ -40,7 +48,7 @@ class MemorySessionPool implements SessionPoolContract
+      */
+     public function getIdleSession()
+     {
+-        foreach (static::$sessions as $session_id => $session)
++        foreach ($this->entries as $session_id => $session)
+         {
+             if ($session->isIdle())
+             {
+@@ -56,7 +64,7 @@ class MemorySessionPool implements SessionPoolContract
+      */
+     public function addSession(Session $session)
+     {
+-        static::$sessions[$session->id()] = $session;
++        $this->entries[$session->id()] = $session;
+     }
+ 
+     /**
+@@ -65,7 +73,7 @@ class MemorySessionPool implements SessionPoolContract
+      */
+     public function dropSession($session_id)
+     {
+-        $session = static::$sessions[$session_id] ?? null;
++        $session = $this->entries[$session_id] ?? null;
+ 
+         if ($session)
+         {
+@@ -75,7 +83,7 @@ class MemorySessionPool implements SessionPoolContract
+             }
+             else
+             {
+-                unset(static::$sessions[$session_id]);
++                unset($this->entries[$session_id]);
+             }
+         }
+     }
+@@ -86,12 +94,12 @@ class MemorySessionPool implements SessionPoolContract
+      */
+     public function syncSession($session_id)
+     {
+-        $session = static::$sessions[$session_id] ?? null;
++        $session = $this->entries[$session_id] ?? null;
+ 
+         if ($session && $session->id() !== $session_id)
+         {
+-            unset(static::$sessions[$session_id]);
+-            static::$sessions[$session->id()] = $session;
++            unset($this->entries[$session_id]);
++            $this->entries[$session->id()] = $session;
+         }
+     }
+ 
+diff --git a/src/Table.php b/src/Table.php
+index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..26fb5d55c30567055d151a83f8ef99265e6bbe7b 100644
+--- a/src/Table.php
++++ b/src/Table.php
+@@ -47,6 +47,15 @@ class  Table
+      * @var SessionPoolContract
+      */
+     protected static $session_pool;
++    private $pool;
++    private $routePool;
++    private $filePool;
++    private $customPoolKey;
++    private $configuredPool;
++    private static $customPoolOwners = [];
++    private $poolEpoch;
++    // Only IDs issued by CreateSession on this driver's current route can be reused.
++    private $routeSessions = [];
+ 
+     /**
+      * @var LoggerInterface
+@@ -75,7 +84,7 @@ class  Table
+     {
+         $this->ydb = $ydb;
+ 
+-        $this->client = new ServiceClient($ydb->endpoint(), $ydb->grpcOpts());
++        $this->client = $ydb->serviceClient(ServiceClient::class);
+ 
+         $this->meta = $ydb->meta();
+ 
+@@ -87,9 +96,14 @@ class  Table
+ 
+         $this->retry = $retry;
+ 
+-        if (empty(static::$session_pool))
+-        {
+-            static::$session_pool = new Sessions\MemorySessionPool($retry);
++        $this->poolEpoch = $ydb->currentRouteEpoch();
++        if ($this->poolEpoch !== null) {
++            $this->pool = $this->routePool = new Sessions\MemorySessionPool($retry, $this->routeSessions);
++        } else {
++            if (empty(static::$session_pool)) {
++                static::$session_pool = new Sessions\MemorySessionPool($retry);
++            }
++            $this->pool =& static::$session_pool;
+         }
+     }
+ 
+@@ -98,7 +112,43 @@ class  Table
+      */
+     public function sessionPool(SessionPoolContract $manager)
+     {
+-        static::$session_pool = $manager;
++        $this->filePool = null;
++        if ($this->routePool !== null) {
++            // Dropping the last reference to a custom pool can delete all of its sessions.
++            $this->configuredPool = $manager;
++            $this->releaseCustomPool();
++            if (get_class($manager) === Sessions\FileSessionPool::class) {
++                if ($manager->belongsTo($this)) {
++                    $this->pool = $this->filePool = $manager;
++                    $manager->selectRoute($this->poolEpoch);
++                } else {
++                    $this->pool = $this->routePool;
++                }
++                return;
++            }
++            $key = $manager instanceof Sessions\FileSessionPool ? $manager->cacheKey() : spl_object_hash($manager);
++            // Pool contracts expose raw IDs; two drivers must not write the same cache.
++            if (get_class($manager) === Sessions\MemorySessionPool::class || $manager === static::$session_pool || isset(self::$customPoolOwners[$key])) {
++                $this->pool = $this->routePool;
++                return;
++            }
++            $this->customPoolKey = $key;
++            self::$customPoolOwners[$key] = true;
++        }
++        $this->pool = $manager;
++    }
++
++    private function releaseCustomPool()
++    {
++        if ($this->customPoolKey !== null) {
++            unset(self::$customPoolOwners[$this->customPoolKey]);
++            $this->customPoolKey = null;
++        }
++    }
++
++    public function __destruct()
++    {
++        $this->releaseCustomPool();
+     }
+ 
+     /**
+@@ -161,14 +211,45 @@ class  Table
+      */
+     public function takeSession()
+     {
+-        $session = static::$session_pool->getIdleSession();
++        $epoch = $this->ydb->refreshLongPoll();
++        $this->updatePoolEpoch($epoch);
++        if ($epoch === null) {
++            $session = $this->pool->getIdleSession();
++            return $session && !$session->isRouteBound() ? $session->take() : null;
++        }
++        if ($this->filePool || $this->pool === $this->routePool) {
++            $session = $this->pool->getIdleSession();
++        } else {
++            $candidate = $this->pool->getIdleSession();
++            $session = $candidate ? ($this->routeSessions[$candidate->id()] ?? null) : null;
++            if ($candidate && (!$candidate->belongsTo($this) || !$session)) {
++                // Opaque custom pools cannot skip foreign or retired IDs. Preserve their entries.
++                $this->releaseCustomPool();
++                $this->pool = $this->routePool;
++                $session = $this->pool->getIdleSession();
++            }
++        }
++        return $session && $session->isAlive() && $session->isIdle() ? $session->take() : null;
++    }
+ 
+-        if ($session)
+-        {
+-            return $session->take();
++    /** @internal Forget local IDs without sending DeleteSession to the replacement replica. */
++    public function retireSessions()
++    {
++        $this->routeSessions = [];
++        if ($this->filePool) {
++            $this->filePool->retireRoute();
+         }
++    }
+ 
+-        return null;
++    private function updatePoolEpoch($epoch)
++    {
++        if ($this->poolEpoch !== $epoch) {
++            $this->retireSessions();
++            $this->poolEpoch = $epoch;
++        }
++        if ($this->filePool) {
++            $this->filePool->selectRoute($epoch);
++        }
+     }
+ 
+     /**
+@@ -180,8 +261,12 @@ class  Table
+         $session_id = $result->getSessionId();
+         $this->logger()->info('YDB: New session created [...' . substr($session_id, -6) . '].');
+ 
+-        $session = new Session($this, $session_id);
+-        static::$session_pool->addSession($session);
++        $this->updatePoolEpoch($this->routeEpoch);
++        $session = new Session($this, $session_id, $this->routeEpoch);
++        if ($this->routeEpoch !== null && !$this->filePool) {
++            $this->routeSessions[$session_id] = $session;
++        }
++        $this->pool->addSession($session);
+         return $session->take();
+     }
+ 
+@@ -191,7 +276,12 @@ class  Table
+      */
+     public function dropSession($session_id)
+     {
+-        static::$session_pool->dropSession($session_id);
++        if ($this->poolEpoch === null || $this->filePool) {
++            $this->pool->dropSession($session_id);
++            return;
++        }
++        // A custom pool indexes by raw ID and may currently hold a sibling's session.
++        $this->routePool->dropSession($session_id);
+     }
+ 
+     /**
+@@ -200,7 +290,11 @@ class  Table
+      */
+     public function syncSession($session_id)
+     {
+-        static::$session_pool->syncSession($session_id);
++        if ($this->routePool && !$this->filePool) {
++            $this->routePool->syncSession($session_id);
++        } else {
++            $this->pool->syncSession($session_id);
++        }
+     }
+ 
+     /**
+@@ -209,7 +303,9 @@ class  Table
+      */
+     public function sessionTaken($session)
+     {
+-        static::$session_pool->sessionTaken($session);
++        if ($this->ownsSession($session)) {
++            $this->pool->sessionTaken($session);
++        }
+     }
+ 
+     /**
+@@ -218,7 +314,17 @@ class  Table
+      */
+     public function sessionReleased($session)
+     {
+-        static::$session_pool->sessionReleased($session);
++        if ($this->ownsSession($session)) {
++            $this->pool->sessionReleased($session);
++        }
++    }
++
++    private function ownsSession(Session $session): bool
++    {
++        if ($this->filePool) {
++            return $this->filePool->ownsSession($session);
++        }
++        return $this->routePool === null || ($this->routeSessions[$session->id()] ?? null) === $session;
+     }
+ 
+     /**
+@@ -479,7 +585,7 @@ class  Table
+                 $session = $this->session();
+                 return $userFunc($session);
+             } catch (Exception $exception){
+-                if ($session != null && $this->deleteSession(get_class($exception))){
++                if ($session != null && $this->ownsSession($session) && $this->deleteSession(get_class($exception))){
+                     $this->dropSession($session->id());
+                 }
+                 throw $exception;
+diff --git a/src/Traits/RequestTrait.php b/src/Traits/RequestTrait.php
+index 500b3c3e6d3c9938eced88caeac997ba00376db8..0ba63c037fcf789387aa8266dc680e11ac342e10 100644
+--- a/src/Traits/RequestTrait.php
++++ b/src/Traits/RequestTrait.php
+@@ -49,6 +49,7 @@ trait RequestTrait
+      *          until discovery recovers.
+      */
+     protected $lastDiscoveryAttempt = 0;
++    private $routeEpoch;
+ 
+ 
+ 
+@@ -143,40 +144,44 @@ trait RequestTrait
+             $this->take();
+         }
+ 
+-        $requestClass = '\\Ydb\\' . $service . '\\' . $method . 'Request';
++        try {
++            $requestClass = '\\Ydb\\' . $service . '\\' . $method . 'Request';
+ 
+-        switch ($method) {
+-            case 'StreamReadTable':
+-                $requestClass = '\\Ydb\\' . $service . '\\ReadTableRequest';
+-                $resultClass = '\\Ydb\\' . $service . '\\ReadTableResult';
+-                break;
++            switch ($method) {
++                case 'StreamReadTable':
++                    $requestClass = '\\Ydb\\' . $service . '\\ReadTableRequest';
++                    $resultClass = '\\Ydb\\' . $service . '\\ReadTableResult';
++                    break;
+ 
+-            case 'StreamExecuteScanQuery':
+-                $requestClass = '\\Ydb\\' . $service . '\\ExecuteScanQueryRequest';
+-                $resultClass = '\\Ydb\\' . $service . '\\ExecuteScanQueryPartialResult';
+-                break;
++                case 'StreamExecuteScanQuery':
++                    $requestClass = '\\Ydb\\' . $service . '\\ExecuteScanQueryRequest';
++                    $resultClass = '\\Ydb\\' . $service . '\\ExecuteScanQueryPartialResult';
++                    break;
+ 
+-            default:
+-                $resultClass = '\\Ydb\\' . $service . '\\' . $method . 'Result';
+-        }
++                default:
++                    $resultClass = '\\Ydb\\' . $service . '\\' . $method . 'Result';
++            }
+ 
+-        $request = new $requestClass($data);
++            $request = new $requestClass($data);
+ 
+-        $options = $this->buildGrpcOptions();
+-        $call = $this->client->$method($request, $this->meta, $options);
++            $options = $this->buildGrpcOptions();
++            $call = $this->client->$method($request, $this->meta, $options);
+ 
+-        if (method_exists($call, 'responses')) {
+-            // $status = $call->getStatus();
+-            // $this->checkStatus($service, $method, $status);
++            if (method_exists($call, 'responses')) {
++                // $status = $call->getStatus();
++                // $this->checkStatus($service, $method, $status);
+ 
+-            foreach ($call->responses() as $response) {
+-                $result = $this->processResponse($service, $method, $response, $resultClass);
+-                yield $result ? new QueryResult($result) : true;
++                $responses = $this->routeEpoch === null ? $call->responses() : $this->ydb->dataResponses($call);
++                unset($call);
++                foreach ($responses as $response) {
++                    $result = $this->processResponse($service, $method, $response, $resultClass);
++                    yield $result ? new QueryResult($result) : true;
++                }
++            }
++        } finally {
++            if (method_exists($this, 'release')) {
++                $this->release();
+             }
+-        }
+-
+-        if (method_exists($this, 'release')) {
+-            $this->release();
+         }
+     }
+ 
+@@ -204,7 +209,7 @@ trait RequestTrait
+             if ($this->ydb->needDiscovery() && count($this->ydb->cluster()->all()) > 0){
+                 $endpoint = $this->ydb->cluster()->all()[array_rand($this->ydb->cluster()->all())]->endpoint();
+             }
+-            $this->client = new $this->client($endpoint, $this->ydb->grpcOpts());
++            $this->client = $this->ydb->serviceClient(get_class($this->client), $endpoint);
+             if (isset(self::$grpcExceptions[$status->code])) {
+                 throw new self::$grpcExceptions[$status->code]($message);
+             } else {
+@@ -327,6 +332,18 @@ trait RequestTrait
+         if (!$this->ydb->needDiscovery()) {
+             return;
+         }
++        $epoch = $this->ydb->refreshLongPoll();
++        if ($epoch !== null) {
++            if ($this->routeEpoch !== $epoch) {
++                if ($this instanceof \YdbPlatform\Ydb\Session) {
++                    throw new \YdbPlatform\Ydb\Exceptions\Ydb\BadSessionException('Table session belongs to a retired replica');
++                }
++                $class = get_class($this->client);
++                $this->client = $this->ydb->serviceClient($class);
++                $this->routeEpoch = $epoch;
++            }
++            return;
++        }
+         $now = time();
+         $interval = $this->ydb->discoveryInterval();
+ 
+diff --git a/src/Ydb.php b/src/Ydb.php
+index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..76853b12da0088a961d02ca2b50809b384e335fd 100644
+--- a/src/Ydb.php
++++ b/src/Ydb.php
+@@ -115,6 +115,15 @@ class Ydb
+      * @var \YdbPlatform\Ydb\Internal\Discovery
+      */
+     protected $internalDiscovery;
++    private $longPoll;
++    private $bootstrapEndpoint;
++    private $routeEpoch = 0;
++    private $routeSnapshot;
++    private $pollTimeoutMs;
++    private $routeDataChannel;
++    private $routeStreams;
++    private $discoveryLoop;
++    private $discoveryTimer;
+ 
+     /**
+      * @param array $config
+@@ -123,7 +132,7 @@ class Ydb
+      */
+     public function __construct($config = [], LoggerInterface $logger = null)
+     {
+-        $this->endpoint = $config['endpoint'] ?? null;
++        $this->bootstrapEndpoint = $this->endpoint = $config['endpoint'] ?? null;
+         $this->database = $config['database'] ?? null;
+         $this->iam_config = $config['iam_config'] ?? [];
+         $this->grpc_config = (array) ($config['grpc'] ?? []);
+@@ -165,7 +174,17 @@ class Ydb
+                 $this->discoveryInterval = $config['discoveryInterval'];
+             }
+ 
+-            $this->applyDiscoveryResult($this->internalDiscovery->initialListEndpoints());
++            if (!empty($config['discoveryLongPoll'])) {
++                $this->pollTimeoutMs = $config['discoveryTimeoutMs'] ?? Internal\Discovery::DEFAULT_TIMEOUT_MS;
++                $this->routeStreams = new \SplObjectStorage();
++                $this->longPoll = new Internal\LongPoll($this, $this->endpoint, $this->grpc_config['opts'] ?? []);
++                $this->refreshLongPoll($config['discoveryInitialTimeoutMs'] ?? Internal\Discovery::DEFAULT_INITIAL_TIMEOUT_MS);
++                if (isset($config['discoveryLoop'])) {
++                    $this->attachDiscoveryLoop($config['discoveryLoop']);
++                }
++            } else {
++                $this->applyDiscoveryResult($this->internalDiscovery->initialListEndpoints());
++            }
+         }
+ 
+         $this->logger()->info('YDB: Initialized');
+@@ -233,7 +252,143 @@ class Ydb
+      */
+     public function discover()
+     {
+-        $this->applyDiscoveryResult($this->internalDiscovery->listEndpoints());
++        if ($this->refreshLongPoll() === null) {
++            $this->applyDiscoveryResult($this->internalDiscovery->listEndpoints());
++        }
++    }
++
++    /** @internal Check discovery immediately before starting a data RPC. */
++    public function refreshLongPoll(?int $timeoutMs = null)
++    {
++        if (!$this->longPoll) {
++            return null;
++        }
++        try {
++            list($generation, $snapshot) = $this->longPoll->poll($timeoutMs ?? $this->pollTimeoutMs);
++            if (!$snapshot) {
++                throw new \RuntimeException('Current endpoint assignment has no endpoints');
++            }
++        } catch (\Throwable $error) {
++            $this->closeRouteChannel();
++            $this->routeSnapshot = null;
++            $this->cluster()->sync([]);
++            throw $error;
++        }
++        $state = [$generation, $snapshot];
++        if ($state !== $this->routeSnapshot) {
++            $previous = $this->endpoint;
++            $this->applyDiscoveryResult($snapshot);
++            if ($this->routeSnapshot === null || $this->routeSnapshot[0] !== $generation || $this->endpoint !== $previous) {
++                $this->closeRouteChannel();
++                ++$this->routeEpoch;
++            }
++            $this->routeSnapshot = $state;
++        }
++        return $this->routeEpoch;
++    }
++
++    /** @internal Epoch of the assignment already installed by discovery. */
++    public function currentRouteEpoch()
++    {
++        return $this->longPoll ? $this->routeEpoch : null;
++    }
++
++    /** @internal An unstamped discovery result cannot identify a replica across process restarts. */
++    public function fileSessionPartition(): ?string
++    {
++        $generation = $this->routeSnapshot[0] ?? null;
++        if ($generation === null) {
++            return null;
++        }
++        return hash('sha256', serialize([$this->bootstrapEndpoint, (bool)$this->iam()->config('insecure'),
++            $this->database, $generation, $this->endpoint]));
++    }
++
++    /** @internal Share the current route's data transport between service stubs. */
++    public function serviceClient(string $class, ?string $legacyEndpoint = null)
++    {
++        $opts = $this->grpcOpts();
++        if (!$this->longPoll) {
++            return new $class($legacyEndpoint ?? $this->endpoint, $opts);
++        }
++        if ($this->routeSnapshot === null) {
++            throw new \RuntimeException('No current endpoint assignment');
++        }
++        if (!$this->routeDataChannel) {
++            // Own the closeable channel handle. gRPC shares its data socket with compatible channels.
++            $opts['force_new'] = true;
++            $this->routeDataChannel = \Grpc\BaseStub::getDefaultChannel($this->endpoint, $opts);
++        }
++        return new $class($this->endpoint, $opts, $this->routeDataChannel);
++    }
++
++    private function attachDiscoveryLoop($loop)
++    {
++        if (!class_exists(\WeakReference::class) || !($loop instanceof \React\EventLoop\LoopInterface)) {
++            throw new \InvalidArgumentException('discoveryLoop requires ReactPHP EventLoop and PHP 7.4 or later');
++        }
++        $this->discoveryLoop = $loop;
++        $driver = \WeakReference::create($this);
++        $this->discoveryTimer = $loop->addPeriodicTimer(0.1, static function () use ($driver) {
++            $owner = $driver->get();
++            if ($owner) {
++                try {
++                    $owner->refreshLongPoll(0);
++                } catch (\Throwable $error) {
++                    $owner->logger()->debug('Background ListEndpoints failed: ' . $error->getMessage());
++                }
++            }
++        });
++    }
++
++    /** @internal Release the native gRPC call even while the application holds its generator. */
++    public function dataResponses($call)
++    {
++        $stream = (object)['call' => $call, 'responses' => $call->responses()];
++        unset($call);
++        $this->routeStreams->attach($stream);
++        try {
++            while ($stream->responses && $stream->responses->valid()) {
++                $this->refreshLongPoll();
++                if (!$stream->responses) {
++                    break;
++                }
++                yield $stream->responses->current();
++                $this->refreshLongPoll();
++                if ($stream->responses) {
++                    $stream->responses->next();
++                }
++            }
++            if (!$stream->responses) {
++                throw new \RuntimeException('Data stream belongs to a retired replica');
++            }
++        } finally {
++            $this->routeStreams->detach($stream);
++        }
++    }
++
++    public function __destruct()
++    {
++        if ($this->discoveryTimer) {
++            $this->discoveryLoop->cancelTimer($this->discoveryTimer);
++        }
++    }
++
++    private function closeRouteChannel()
++    {
++        if ($this->table) {
++            $this->table->retireSessions();
++        }
++        foreach ($this->routeStreams as $stream) {
++            if ($stream->call) {
++                $stream->call->cancel();
++                $stream->call = $stream->responses = null;
++            }
++        }
++        if ($this->routeDataChannel) {
++            $this->routeDataChannel->close();
++            $this->routeDataChannel = null;
++        }
+     }
+ 
+     /**
+diff --git a/tests/Internal/LongPollTest.php b/tests/Internal/LongPollTest.php
+new file mode 100644
+index 0000000000000000000000000000000000000000..83b1564b5d3d899ce43a81ce53cd5c18d6eaf877
+--- /dev/null
++++ b/tests/Internal/LongPollTest.php
+@@ -0,0 +1,328 @@
++<?php
++
++namespace YdbPlatform\Ydb\Test\Internal;
++
++use PHPUnit\Framework\TestCase;
++use YdbPlatform\Ydb\Internal\LongPoll;
++
++class LongPollTest extends TestCase
++{
++    public function testSupportsLegacyAtStartup()
++    {
++        self::assertNull(LongPoll::generation([], null));
++    }
++
++    public function testFullUnsignedRange()
++    {
++        self::assertSame('18446744073709551615', LongPoll::generation(['18446744073709551615'], '1'));
++        self::assertSame('0', LongPoll::generation(['0'], null));
++    }
++
++    public function testReleasesNativeCallWhileGeneratorIsHeld()
++    {
++        $driver = new class extends \YdbPlatform\Ydb\Ydb {
++            public function __construct() {}
++            public function refreshLongPoll(?int $timeoutMs = null) { return 1; }
++        };
++        $streams = new \ReflectionProperty(\YdbPlatform\Ydb\Ydb::class, 'routeStreams');
++        $streams->setAccessible(true);
++        $streams->setValue($driver, new \SplObjectStorage());
++        $call = new class {
++            public $cancelled = false;
++            public function responses() { yield 1; yield 2; }
++            public function cancel() { $this->cancelled = true; }
++        };
++        $held = $driver->dataResponses($call);
++        self::assertSame(1, $held->current());
++        $close = new \ReflectionMethod(\YdbPlatform\Ydb\Ydb::class, 'closeRouteChannel');
++        $close->setAccessible(true);
++        $close->invoke($driver);
++        self::assertTrue($call->cancelled);
++        $this->expectException(\RuntimeException::class);
++        $held->next();
++    }
++
++    public function testSessionReleasedOnInterruptedStream()
++    {
++        $service = new class {
++            use \YdbPlatform\Ydb\Traits\RequestTrait;
++            public $busy = false;
++            public $meta = [];
++            public function checkDiscovery() {}
++            public function take() { $this->busy = true; }
++            public function release() { $this->busy = false; }
++            public function buildGrpcOptions() { return []; }
++            public function read() { return $this->doStreamRequest('Table', 'StreamReadTable', ['skip_get_token'=>true]); }
++            public function __construct() {
++                $this->client = new class {
++                    public function StreamReadTable($request, $meta, $opts) {
++                        return new class {
++                            public function responses() { throw new \RuntimeException('stream retired'); yield; }
++                        };
++                    }
++                };
++            }
++        };
++        try {
++            $service->read()->current();
++            self::fail('Expected stream retirement');
++        } catch (\RuntimeException $error) {
++            self::assertSame('stream retired', $error->getMessage());
++        }
++        self::assertFalse($service->busy);
++    }
++
++    public function sessionPoolBackends()
++    {
++        return [['memory'], ['custom'], ['file']];
++    }
++
++    /** @dataProvider sessionPoolBackends */
++    public function testManagedTableSessionsAreScopedToTheirOwnerAndGeneration($backend)
++    {
++        $driver = function ($database) {
++            return new class(['database' => $database, 'endpoint' => '127.0.0.1:1', 'grpc' => ['timeout' => 10000],
++                'iam_config' => ['anonymous' => true, 'insecure' => true]]) extends \YdbPlatform\Ydb\Ydb {
++                public $epoch = 1;
++                public function currentRouteEpoch() { return $this->epoch; }
++                public function refreshLongPoll(?int $timeoutMs = null) { return $this->epoch; }
++                public function needDiscovery(): bool { return true; }
++            };
++        };
++        $table = function ($driver) {
++            $retry = new \YdbPlatform\Ydb\Retry\Retry($driver->getLogger());
++            return new class($driver, $driver->getLogger(), $retry) extends \YdbPlatform\Ydb\Table {
++                protected function request($method, array $data = []) {
++                    $this->checkDiscovery();
++                    // Independent replicas and databases may issue identical session IDs.
++                    return new \Ydb\Table\CreateSessionResult(['session_id' => 'same-id']);
++                }
++            };
++        };
++        $one = $driver('/one');
++        $first = $table($one);
++        $two = $driver('/two');
++        $second = $table($two);
++        $file = tempnam(sys_get_temp_dir(), 'ydb-route-session');
++        $retry = new \YdbPlatform\Ydb\Retry\Retry($one->getLogger());
++        if ($backend === 'file') {
++            foreach ([$first, $second] as $owner) {
++                $owner->sessionPool(new \YdbPlatform\Ydb\Sessions\FileSessionPool(['table' => $owner, 'filepath' => $file], $retry));
++            }
++        } elseif ($backend === 'custom') {
++            $shared = new class($retry) extends \YdbPlatform\Ydb\Sessions\MemorySessionPool {
++                public function __destruct() {}
++            };
++            $first->sessionPool($shared);
++            $second->sessionPool($shared);
++        }
++        $old = $first->session()->release();
++        $sibling = $second->session()->release();
++        self::assertNotSame($old, $sibling);
++        self::assertSame($old, $first->session()->release());
++        ++$one->epoch;
++        $fresh = $first->session()->release();
++        self::assertNotSame($old, $fresh);
++        self::assertSame($sibling, $second->session()->release());
++        try {
++            $old->keepAlive();
++            self::fail('A retired session cannot be used on its replacement route');
++        } catch (\YdbPlatform\Ydb\Exceptions\Ydb\BadSessionException $e) {
++            self::assertSame($fresh, $first->session()->release());
++        } finally {
++            $first->retireSessions();
++            $second->retireSessions();
++            foreach (glob($file . '*') as $path) {
++                unlink($path);
++            }
++        }
++    }
++
++    public function testFilePoolRestoresOnlyIdleSessionsFromTheSameConfirmedRoute()
++    {
++        $base = tempnam(sys_get_temp_dir(), 'ydb-qualified-session');
++        file_put_contents($base, '[{"id":"legacy","taken":false}]');
++        $open = function ($generation) use ($base) {
++            $driver = new class(['database' => '/one', 'endpoint' => 'localhost:1',
++                'iam_config' => ['anonymous' => true, 'insecure' => true]]) extends \YdbPlatform\Ydb\Ydb {
++                public function currentRouteEpoch() { return 1; }
++                public function refreshLongPoll(?int $timeoutMs = null) { return 1; }
++                public function needDiscovery(): bool { return true; }
++            };
++            $snapshot = new \ReflectionProperty(\YdbPlatform\Ydb\Ydb::class, 'routeSnapshot');
++            $snapshot->setAccessible(true);
++            $snapshot->setValue($driver, [$generation, []]);
++            $retry = new \YdbPlatform\Ydb\Retry\Retry($driver->getLogger());
++            $table = new class($driver, $driver->getLogger(), $retry) extends \YdbPlatform\Ydb\Table {
++                protected function request($method, array $data = []) {
++                    $this->checkDiscovery();
++                    return new \Ydb\Table\CreateSessionResult(['session_id' => uniqid('issued-')]);
++                }
++            };
++            $table->sessionPool(new \YdbPlatform\Ydb\Sessions\FileSessionPool(['table' => $table, 'filepath' => $base], $retry));
++            return $table;
++        };
++        try {
++            $first = $open('1');
++            $idle = $first->session()->release()->id();
++            self::assertNotSame('legacy', $idle);
++            unset($first);
++            gc_collect_cycles();
++            $again = $open('1');
++            self::assertSame($idle, $again->session()->release()->id());
++            $concurrent = $open('1');
++            self::assertNotSame($idle, $concurrent->session()->id());
++            unset($concurrent);
++            gc_collect_cycles();
++            unset($again);
++            gc_collect_cycles();
++            $after = $open('2');
++            self::assertNotSame($idle, $after->session()->release()->id());
++            self::assertSame('[{"id":"legacy","taken":false}]', file_get_contents($base));
++        } finally {
++            unset($first, $again, $after);
++            gc_collect_cycles();
++            foreach (glob($base . '*') as $file) {
++                unlink($file);
++            }
++        }
++    }
++
++    public function testTwoDriversShareDataSocketUntilLastRouteRetires()
++    {
++        $listener = stream_socket_server('tcp://127.0.0.1:0');
++        $endpoint = stream_socket_get_name($listener, false);
++        $drivers = $clients = [];
++        for ($i = 0; $i < 2; ++$i) {
++            $driver = new \YdbPlatform\Ydb\Ydb([
++                'endpoint' => $endpoint,
++                'database' => '/db' . $i,
++                'iam_config' => ['anonymous' => true, 'insecure' => true],
++            ]);
++            // Both drivers have received an assignment for this node.
++            foreach (['longPoll' => true, 'routeSnapshot' => ['1', []], 'routeStreams' => new \SplObjectStorage()] as $key => $value) {
++                $field = new \ReflectionProperty($driver, $key);
++                $field->setAccessible(true);
++                $field->setValue($driver, $value);
++            }
++            $drivers[] = $driver;
++            $clients[] = $driver->serviceClient(\Ydb\Table\V1\TableServiceClient::class);
++        }
++
++        $clients[0]->getConnectivityState(true);
++        $peer = stream_socket_accept($listener, 3);
++        self::assertTrue(is_resource($peer));
++        // HTTP/2 SETTINGS. Only this socket gets a handshake.
++        fwrite($peer, "\x00\x00\x00\x04\x00\x00\x00\x00\x00");
++        try {
++            self::assertTrue($clients[0]->waitForReady(3000000));
++            self::assertTrue($clients[1]->waitForReady(3000000), 'Sibling should reuse the established data socket');
++            $close = new \ReflectionMethod($driver, 'closeRouteChannel');
++            $close->setAccessible(true);
++            $close->invoke($drivers[0]);
++            self::assertSame(\Grpc\CHANNEL_READY, $clients[1]->getConnectivityState());
++            $close->invoke($drivers[1]);
++            stream_set_timeout($peer, 3);
++            stream_get_contents($peer);
++            self::assertTrue(feof($peer), 'Last route retirement should close the TCP socket');
++        } finally {
++            fclose($peer);
++            fclose($listener);
++        }
++    }
++
++    public function testUsesGrpcRootsAndProxyPrecedence()
++    {
++        $env = ['GRPC_DEFAULT_SSL_ROOTS_FILE_PATH','grpc_proxy','https_proxy','http_proxy','no_grpc_proxy','no_proxy'];
++        $saved = [];
++        foreach ($env as $key) {
++            $saved[$key] = getenv($key);
++            putenv($key);
++        }
++        try {
++            putenv('GRPC_DEFAULT_SSL_ROOTS_FILE_PATH=' . __FILE__);
++            putenv('grpc_proxy=http://127.0.0.1:1234');
++            putenv('https_proxy=http://127.0.0.1:2345');
++            putenv('no_grpc_proxy=cluster.example,127.0.0.0/8');
++            putenv('no_proxy=unrelated.example');
++            self::assertSame(__FILE__, LongPoll::rootFile(null));
++            self::assertSame('', LongPoll::proxyFor('node.cluster.example'));
++            self::assertSame('', LongPoll::proxyFor('127.0.0.42'));
++            self::assertSame('http://127.0.0.1:1234', LongPoll::proxyFor('unrelated.example'));
++            putenv('grpc_proxy=');
++            self::assertSame('', LongPoll::proxyFor('unrelated.example'));
++        } finally {
++            foreach ($saved as $key=>$value) {
++                putenv($value === false ? $key : $key.'='.$value);
++            }
++        }
++    }
++
++    public function testDataDispatchWaitsForGenerationTrailers()
++    {
++        $driver = new \YdbPlatform\Ydb\Ydb(['database'=>'/db', 'iam_config'=>['anonymous'=>true, 'insecure'=>true]]);
++        // Hold a real transport open so the queued reply cannot complete.
++        $listener = stream_socket_server('tcp://127.0.0.1:0');
++        try {
++            $poll = new LongPoll($driver, stream_socket_get_name($listener, false), []);
++            $start = new \ReflectionMethod($poll, 'start');
++            $start->setAccessible(true);
++            $start->invoke($poll);
++            foreach (['generation'=>'1', 'snapshot'=>[['address'=>'source']], 'receivingReply'=>true] as $key=>$value) {
++                $field = new \ReflectionProperty($poll, $key);
++                $field->setAccessible(true);
++                $field->setValue($poll, $value);
++            }
++            $this->expectException(\RuntimeException::class);
++            $poll->poll(30);
++        } finally {
++            fclose($listener);
++        }
++    }
++
++    /** @dataProvider routeBeforeRefresh */
++    public function testFailedRefreshPreservesOnlyInstalledLegacyAssignment($generation, $snapshot, $keep)
++    {
++        $driver = new \YdbPlatform\Ydb\Ydb(['database'=>'/db', 'iam_config'=>['anonymous'=>true, 'insecure'=>true]]);
++        $listener = stream_socket_server('tcp://127.0.0.1:0');
++        $endpoint = stream_socket_get_name($listener, false);
++        fclose($listener);
++        $poll = new LongPoll($driver, $endpoint, []);
++        foreach (['generation'=>$generation, 'snapshot'=>$snapshot] as $name=>$value) {
++            $property = new \ReflectionProperty($poll, $name);
++            $property->setAccessible(true);
++            $property->setValue($poll, $value);
++        }
++
++        // Drive a native curl refresh until the failed connection is observed.
++        $backoff = new \ReflectionProperty($poll, 'nextPoll');
++        $backoff->setAccessible(true);
++        if (!$keep) {
++            $this->expectException(\RuntimeException::class);
++        }
++        $deadline = microtime(true) + 2;
++        do {
++            $result = $poll->poll(100);
++        } while ($backoff->getValue($poll) == 0 && microtime(true) < $deadline);
++        self::assertGreaterThan(0, $backoff->getValue($poll));
++        self::assertSame([null, $snapshot], $result);
++    }
++
++    public function routeBeforeRefresh()
++    {
++        $snapshot = [['address'=>'127.0.0.1', 'port'=>2135]];
++        return [[null, $snapshot, true], ['1', $snapshot, false], [null, null, false]];
++    }
++
++    /** @dataProvider invalidGenerations */
++    public function testRejectsInvalidManagedReplies($values)
++    {
++        $this->expectException(\UnexpectedValueException::class);
++        LongPoll::generation($values, '10');
++    }
++
++    public function invalidGenerations()
++    {
++        return [[[]], [['9']], [['10', '10']], [['2.5']], [['18446744073709551616']]];
++    }
++}

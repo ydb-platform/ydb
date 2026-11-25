@@ -1,0 +1,611 @@
+diff --git a/core/src/main/java/tech/ydb/core/grpc/GrpcReadWriteStream.java b/core/src/main/java/tech/ydb/core/grpc/GrpcReadWriteStream.java
+index 1db63b33807c277a9a184fe86dea4d5edd535547..369afe3fc08e350af09004b16f6d21f5651cdbf3 100644
+--- a/core/src/main/java/tech/ydb/core/grpc/GrpcReadWriteStream.java
++++ b/core/src/main/java/tech/ydb/core/grpc/GrpcReadWriteStream.java
+@@ -10,6 +10,11 @@ package tech.ydb.core.grpc;
+ public interface GrpcReadWriteStream<R, W> extends GrpcReadStream<R> {
+     String authToken();
+ 
++    /** Whether messages buffered by this stream still belong to the current discovery route. */
++    default boolean isRouteCurrent() {
++        return true;
++    }
++
+     /**
+      * Send a request message to the server.
+      * @param message message to be sent to the server.
+diff --git a/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java b/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java
+index a014bf782fac172ded2388d7c72017928fbb5a41..07228aa711e3660a0f28e4ae45239e26d7f8e76a 100644
+--- a/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java
++++ b/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java
+@@ -66,6 +66,7 @@ public class GrpcTransportBuilder {
+         ASYNC_FALLBACK
+     }
+ 
++    private boolean longPollDiscovery;
+     private final String endpoint;
+     private final HostAndPort host;
+     private final String database;
+@@ -187,6 +188,16 @@ public class GrpcTransportBuilder {
+         return readTimeoutMillis;
+     }
+ 
++    public boolean isLongPollDiscoveryEnabled() {
++        return longPollDiscovery;
++    }
++
++    /** Subscribe to endpoint discovery on a retained bootstrap channel. */
++    public GrpcTransportBuilder withLongPollDiscovery() {
++        longPollDiscovery = true;
++        return this;
++    }
++
+     public long getDiscoveryTimeoutMillis() {
+         return discoveryTimeoutMillis;
+     }
+diff --git a/core/src/main/java/tech/ydb/core/impl/BaseGrpcTransport.java b/core/src/main/java/tech/ydb/core/impl/BaseGrpcTransport.java
+index e15eb5c5a2b8a1b0fac906342bae44e64b108af8..ff7427aafe2ea291c64f3f39d0ee5302bb1e92d9 100644
+--- a/core/src/main/java/tech/ydb/core/impl/BaseGrpcTransport.java
++++ b/core/src/main/java/tech/ydb/core/impl/BaseGrpcTransport.java
+@@ -247,7 +247,7 @@ public abstract class BaseGrpcTransport implements GrpcTransport {
+         return Status.of(StatusCode.CLIENT_DEADLINE_EXPIRED, Issue.of(message, Issue.Severity.ERROR));
+     }
+ 
+-    private Metadata makeMetadataFromSettings(GrpcRequestSettings settings, EndpointRecord endpoint) {
++    final Metadata makeMetadataFromSettings(GrpcRequestSettings settings, EndpointRecord endpoint) {
+         Metadata metadata = new Metadata();
+         metadata.put(YdbHeaders.BUILD_INFO, buildInfo);
+         String token = getAuthCallOptions().getToken();
+@@ -333,6 +333,11 @@ public abstract class BaseGrpcTransport implements GrpcTransport {
+             }
+         }
+ 
++        @Override
++        public boolean isRouteCurrent() {
++            return channel.isRouteCurrent();
++        }
++
+         @Override
+         public void postComplete() {
+             BooleanSupplier hook = settings.getPessimizationHook();
+diff --git a/core/src/main/java/tech/ydb/core/impl/LongPollDiscovery.java b/core/src/main/java/tech/ydb/core/impl/LongPollDiscovery.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..d827e95fb6db98696dd97304d91d216ce874c4e7
+--- /dev/null
++++ b/core/src/main/java/tech/ydb/core/impl/LongPollDiscovery.java
+@@ -0,0 +1,183 @@
++package tech.ydb.core.impl;
++
++import java.time.Duration;
++import java.util.concurrent.Future;
++import java.util.concurrent.ThreadLocalRandom;
++import java.util.concurrent.TimeUnit;
++
++import com.google.protobuf.InvalidProtocolBufferException;
++import io.grpc.CallOptions;
++import io.grpc.ClientCall;
++import io.grpc.Metadata;
++import io.grpc.Status;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++
++import tech.ydb.core.grpc.GrpcRequestSettings;
++import tech.ydb.proto.StatusCodesProtos.StatusIds;
++import tech.ydb.proto.discovery.DiscoveryProtos.ListEndpointsRequest;
++import tech.ydb.proto.discovery.DiscoveryProtos.ListEndpointsResponse;
++import tech.ydb.proto.discovery.DiscoveryProtos.ListEndpointsResult;
++import tech.ydb.proto.discovery.v1.DiscoveryServiceGrpc;
++
++/** Long-poll the authenticated discovery endpoint on one retained bootstrap transport. */
++final class LongPollDiscovery implements AutoCloseable {
++    private static final Logger LOG = LoggerFactory.getLogger(LongPollDiscovery.class);
++    private static final Metadata.Key<String> GENERATION = key("x-ydb-route-generation");
++    private static final Metadata.Key<String> POLL = key("x-ydb-discovery-long-poll");
++    private static final Metadata.Key<String> SINCE = key("x-ydb-if-route-generation");
++    private static final GrpcRequestSettings SETTINGS = GrpcRequestSettings.newBuilder().build();
++
++    private final FixedCallOptionsTransport bootstrap;
++    private final YdbDiscovery discovery;
++    private final Duration timeout;
++    private final String database;
++    private Long floor;
++    private boolean closed;
++    private int delayMs;
++    private ClientCall<?, ?> active;
++    private Future<?> scheduled;
++
++    LongPollDiscovery(FixedCallOptionsTransport transport, YdbDiscovery discovery, Duration timeout) {
++        this.bootstrap = transport;
++        this.discovery = discovery;
++        this.timeout = timeout;
++        this.database = transport.getDatabase();
++    }
++
++    private static Metadata.Key<String> key(String name) {
++        return Metadata.Key.of(name, Metadata.ASCII_STRING_MARSHALLER);
++    }
++
++    static Long generation(Long previous, Metadata headers) {
++        Iterable<String> all = headers.getAll(GENERATION);
++        if (all == null && previous == null) {
++            return null;
++        }
++        if (all != null) {
++            java.util.Iterator<String> values = all.iterator();
++            String value = values.next();
++            if (!values.hasNext() && value.matches("[0-9]{1,20}")) {
++                long current = Long.parseUnsignedLong(value);
++                if (previous == null || Long.compareUnsigned(current, previous) >= 0) {
++                    return current;
++                }
++            }
++        }
++        throw new IllegalArgumentException("Missing or stale discovery route generation");
++    }
++
++    private Metadata headers() {
++        Metadata headers = bootstrap.makeMetadataFromSettings(SETTINGS, bootstrap.serverEndpoint);
++        headers.put(POLL, "1");
++        if (floor != null) {
++            headers.put(SINCE, Long.toUnsignedString(floor));
++        }
++        return headers;
++    }
++
++    synchronized void start() {
++        schedule(this::poll, 0);
++    }
++
++    private void schedule(Runnable next, long millis) {
++        if (!closed) {
++            scheduled = bootstrap.getScheduler().schedule(() -> {
++                synchronized (LongPollDiscovery.this) {
++                    if (!closed) {
++                        try {
++                            next.run();
++                        } catch (RuntimeException e) {
++                            LOG.warn("Discovery attempt failed", e);
++                            if (active != null) {
++                                active.cancel("Discovery attempt failed", e);
++                                active = null;
++                            }
++                            retry();
++                        }
++                    }
++                }
++            }, millis, TimeUnit.MILLISECONDS);
++        }
++    }
++
++    private void retry() {
++        if (floor != null) {
++            discovery.invalidate();
++        }
++        int wait = ThreadLocalRandom.current().nextInt(delayMs / 2, delayMs + 1);
++        delayMs = Math.min(2000, Math.max(100, delayMs * 2));
++        schedule(this::poll, wait);
++    }
++
++    private void poll() {
++        long deadlineMs = floor == null ? timeout.toMillis() : Math.max(45000, timeout.toMillis());
++        CallOptions options = bootstrap.getAuthCallOptions().getGrpcCallOptions()
++                .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS);
++        ClientCall<ListEndpointsRequest, ListEndpointsResponse> call = bootstrap.getChannel(SETTINGS).getReadyChannel()
++                .newCall(DiscoveryServiceGrpc.getListEndpointsMethod(), options);
++        active = call;
++        call.start(new ClientCall.Listener<ListEndpointsResponse>() {
++            private Metadata initial = new Metadata();
++            private ListEndpointsResponse response;
++
++            @Override
++            public void onHeaders(Metadata value) {
++                initial = value;
++            }
++
++            @Override
++            public void onMessage(ListEndpointsResponse value) {
++                response = value;
++            }
++
++            @Override
++            public void onClose(Status status, Metadata trailers) {
++                synchronized (LongPollDiscovery.this) {
++                    if (active != call || closed) {
++                        return;
++                    }
++                    active = null;
++                    if (status.isOk() && response != null
++                            && response.getOperation().getStatus() == StatusIds.StatusCode.SUCCESS) {
++                        try {
++                            initial.merge(trailers);
++                            Long generation = generation(floor, initial);
++                            ListEndpointsResult endpoints = response.getOperation().getResult()
++                                    .unpack(ListEndpointsResult.class);
++                            if (generation != null && !generation.equals(floor)) {
++                                discovery.invalidate();
++                            }
++                            discovery.acceptSnapshot(endpoints);
++                            floor = generation;
++                            delayMs = 0;
++                            schedule(LongPollDiscovery.this::poll, floor == null ? TimeUnit.MINUTES.toMillis(1) : 0);
++                            return;
++                        } catch (IllegalArgumentException | InvalidProtocolBufferException e) {
++                            LOG.warn("Invalid ListEndpoints result", e);
++                        }
++                    }
++                    retry();
++                }
++            }
++        }, headers());
++        call.request(1);
++        call.sendMessage(ListEndpointsRequest.newBuilder().setDatabase(database).build());
++        call.halfClose();
++    }
++
++    @Override
++    public void close() {
++        synchronized (this) {
++            closed = true;
++            if (scheduled != null) {
++                scheduled.cancel(false);
++            }
++            if (active != null) {
++                active.cancel("Driver closed", null);
++                active = null;
++            }
++        }
++        bootstrap.close();
++    }
++}
+diff --git a/core/src/main/java/tech/ydb/core/impl/YdbDiscovery.java b/core/src/main/java/tech/ydb/core/impl/YdbDiscovery.java
+index c8673f7e0a95dcd49d41d5e7b6e7ce7a75f37b5c..9429cc257bcf0c2d2450982c23e1d5aa46b23139 100644
+--- a/core/src/main/java/tech/ydb/core/impl/YdbDiscovery.java
++++ b/core/src/main/java/tech/ydb/core/impl/YdbDiscovery.java
+@@ -59,6 +59,7 @@ public class YdbDiscovery {
+     private final ReentrantLock readyLock = new ReentrantLock();
+     private final Condition readyCondition = readyLock.newCondition();
+ 
++    private boolean endpointWatch;
+     private volatile Instant lastUpdateTime;
+     private volatile Future<?> currentSchedule = null;
+     private volatile boolean isStarted = false;
+@@ -73,6 +74,29 @@ public class YdbDiscovery {
+         this.discoveryTimeout = timeout;
+     }
+ 
++    void enableEndpointWatch() {
++        endpointWatch = true;
++    }
++
++    void acceptSnapshot(DiscoveryProtos.ListEndpointsResult result) {
++        if (result.getEndpointsCount() == 0) {
++            invalidate();
++            return;
++        }
++        handleDiscoveryResult(Result.success(result), null);
++    }
++
++    void invalidate() {
++        readyLock.lock();
++        try {
++            isStarted = false;
++            lastException = null;
++            handler.handleEndpoints(java.util.Collections.emptyList(), Piles.EMPTY, null);
++        } finally {
++            readyLock.unlock();
++        }
++    }
++
+     public void start() {
+         logger.debug("start periodic discovery task");
+         currentSchedule = scheduler.submit(() -> {
+@@ -121,7 +145,7 @@ public class YdbDiscovery {
+     }
+ 
+     private void scheduleNextTick() {
+-        if (!isStopped) {
++        if (!isStopped && !endpointWatch) {
+             logger.trace("schedule next discovery in {} seconds", DISCOVERY_PERIOD_MIN_SECONDS);
+             currentSchedule = scheduler.schedule(this::tick, DISCOVERY_PERIOD_MIN_SECONDS, TimeUnit.SECONDS);
+         }
+diff --git a/core/src/main/java/tech/ydb/core/impl/YdbTransportImpl.java b/core/src/main/java/tech/ydb/core/impl/YdbTransportImpl.java
+index dd6410b6f752cafb5d9bb02c16df96230ec82c76..0ceaddf8262c7ab65f026a96de3d6062770f5c47 100644
+--- a/core/src/main/java/tech/ydb/core/impl/YdbTransportImpl.java
++++ b/core/src/main/java/tech/ydb/core/impl/YdbTransportImpl.java
+@@ -39,6 +39,8 @@ public class YdbTransportImpl extends BaseGrpcTransport {
+     private final GrpcChannelPool channelPool;
+     private final YdbDiscovery discovery;
+     private final Tracer tracer;
++    private final LongPollDiscovery watch;
++    private final Object routeLock = new Object();
+ 
+     public YdbTransportImpl(GrpcTransportBuilder builder) {
+         super(builder);
+@@ -59,17 +61,35 @@ public class YdbTransportImpl extends BaseGrpcTransport {
+         this.endpointPool = new EndpointPool(balancingSettings);
+         DiscoveryHandler handler = new DiscoveryHandler(builder.getBuildInfo());
+         this.discovery = new YdbDiscovery(handler, scheduler, database, discoveryTimeout);
++        if (builder.isLongPollDiscoveryEnabled()) {
++            this.discovery.enableEndpointWatch();
++            this.watch = new LongPollDiscovery((FixedCallOptionsTransport) handler.createDiscoveryTransport(),
++                    discovery, discoveryTimeout);
++        } else {
++            this.watch = null;
++        }
+     }
+ 
+     public void start(GrpcTransportBuilder.InitMode mode) {
+-        if (mode == GrpcTransportBuilder.InitMode.ASYNC_FALLBACK) {
++        if (watch == null && mode == GrpcTransportBuilder.InitMode.ASYNC_FALLBACK) {
+             endpointPool.setNewState(null, Piles.EMPTY, Collections.singletonList(serverEndpoint));
+         }
+ 
+-        discovery.start();
++        if (watch == null) {
++            discovery.start();
++        } else {
++            watch.start();
++        }
+ 
+         if (mode == GrpcTransportBuilder.InitMode.SYNC) {
+-            discovery.waitReady(-1);
++            try {
++                discovery.waitReady(-1);
++            } catch (RuntimeException failure) {
++                if (watch != null) {
++                    close();
++                }
++                throw failure;
++            }
+         }
+     }
+ 
+@@ -80,6 +100,9 @@ public class YdbTransportImpl extends BaseGrpcTransport {
+ 
+     @Override
+     protected void shutdown() {
++        if (watch != null) {
++            watch.close();
++        }
+         discovery.stop();
+         channelPool.shutdown();
+         callOptions.close();
+@@ -109,7 +132,16 @@ public class YdbTransportImpl extends BaseGrpcTransport {
+ 
+     @Override
+     protected GrpcChannel getChannel(GrpcRequestSettings settings) {
+-        EndpointRecord endpoint = endpointPool.getEndpoint(channelPool.getReadyEndpoints(), settings);
++        if (watch != null) {
++            synchronized (routeLock) {
++                EndpointRecord current = endpointPool.getEndpoint(channelPool.getReadyEndpoints(), settings);
++                if (current != null) {
++                    return channelPool.getChannel(current);
++                }
++            }
++        }
++        EndpointRecord endpoint = watch == null
++                ? endpointPool.getEndpoint(channelPool.getReadyEndpoints(), settings) : null;
+         if (endpoint == null) {
+             // negative value tells waitReady to use the default discovery timeout
+             long timeoutMs = -1;
+@@ -119,7 +151,13 @@ public class YdbTransportImpl extends BaseGrpcTransport {
+                 timeoutMs = Math.max(TimeUnit.NANOSECONDS.toMillis(leftNanos), 1);
+             }
+             discovery.waitReady(timeoutMs);
+-            endpoint = endpointPool.getEndpoint(Collections.emptySet(), settings);
++            synchronized (routeLock) {
++                endpoint = endpointPool.getEndpoint(Collections.emptySet(), settings);
++                if (endpoint == null) {
++                    throw new IllegalStateException("Endpoint discovery is awaiting a current route");
++                }
++                return channelPool.getChannel(endpoint);
++            }
+         }
+         return channelPool.getChannel(endpoint);
+     }
+@@ -148,8 +186,14 @@ public class YdbTransportImpl extends BaseGrpcTransport {
+ 
+         @Override
+         public CompletableFuture<Boolean> handleEndpoints(List<EndpointRecord> endpoints, Piles piles, String selfLoc) {
+-            List<EndpointRecord> removed = endpointPool.setNewState(selfLoc, piles, endpoints);
+-            return channelPool.removeChannels(removed);
++            synchronized (routeLock) {
++                List<EndpointRecord> removed = endpointPool.setNewState(selfLoc, piles, endpoints);
++                if (watch != null) {
++                    channelPool.retireChannels(removed);
++                    return CompletableFuture.completedFuture(true);
++                }
++                return channelPool.removeChannels(removed);
++            }
+         }
+ 
+         @Override
+diff --git a/core/src/main/java/tech/ydb/core/impl/call/GrpcStatusHandler.java b/core/src/main/java/tech/ydb/core/impl/call/GrpcStatusHandler.java
+index 83ab1f1999042c7555255b625c5f36958562c95e..585ef8674512c282fff3a3875308ff08029eda2b 100644
+--- a/core/src/main/java/tech/ydb/core/impl/call/GrpcStatusHandler.java
++++ b/core/src/main/java/tech/ydb/core/impl/call/GrpcStatusHandler.java
+@@ -11,4 +11,8 @@ public interface GrpcStatusHandler {
+     void accept(Status status, Metadata trailers);
+ 
+     void postComplete();
++
++    default boolean isRouteCurrent() {
++        return true;
++    }
+ }
+diff --git a/core/src/main/java/tech/ydb/core/impl/call/ReadWriteStreamCall.java b/core/src/main/java/tech/ydb/core/impl/call/ReadWriteStreamCall.java
+index 013522b011f9b14d1bb5bfe69d8b438d828ed3cd..810c8f1705372536431520551ba8930fee596391 100644
+--- a/core/src/main/java/tech/ydb/core/impl/call/ReadWriteStreamCall.java
++++ b/core/src/main/java/tech/ydb/core/impl/call/ReadWriteStreamCall.java
+@@ -59,6 +59,11 @@ public class ReadWriteStreamCall<R, W> extends ClientCall.Listener<R> implements
+         this.flow = flowCtrl.newCall(this::nextRequest);
+     }
+ 
++    @Override
++    public boolean isRouteCurrent() {
++        return statusConsumer.isRouteCurrent();
++    }
++
+     @Override
+     public String authToken() {
+         return callOptions.getToken();
+diff --git a/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannel.java b/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannel.java
+index 2e9a1135d38e4ed4e28895f8c76e52801f4c0bb6..ce3f31da6e3c35cd3c13cc997e6231c6bc616200 100644
+--- a/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannel.java
++++ b/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannel.java
+@@ -19,6 +19,7 @@ public final class GrpcChannel implements Runnable {
+ 
+     private final EndpointRecord endpoint;
+     private final ManagedChannel channel;
++    private volatile boolean routeCurrent = true;
+ 
+     public GrpcChannel(EndpointRecord endpoint, ManagedChannelFactory factory) {
+         try {
+@@ -39,6 +40,15 @@ public final class GrpcChannel implements Runnable {
+         return channel;
+     }
+ 
++    public boolean isRouteCurrent() {
++        return routeCurrent;
++    }
++
++    void retire() {
++        routeCurrent = false;
++        shutdownNow();
++    }
++
+     public boolean isShutdown() {
+         return channel.isShutdown();
+     }
+diff --git a/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannelPool.java b/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannelPool.java
+index f36a8b1b9ccd8aa80ffcfa3e23988de32787242c..24a1b84b5b8f0b6b5986cc40eab89aa4866127f8 100644
+--- a/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannelPool.java
++++ b/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannelPool.java
+@@ -78,6 +78,15 @@ public class GrpcChannelPool {
+         }, executor);
+     }
+ 
++    public void retireChannels(Collection<EndpointRecord> removed) {
++        for (EndpointRecord record : removed) {
++            GrpcChannel channel = channels.remove(record.getHostAndPort());
++            if (channel != null) {
++                channel.retire();
++            }
++        }
++    }
++
+     public CompletableFuture<Boolean> removeChannels(Collection<EndpointRecord> endpointsToRemove) {
+         if (endpointsToRemove == null || endpointsToRemove.isEmpty()) {
+             return CompletableFuture.completedFuture(Boolean.TRUE);
+diff --git a/core/src/test/java/tech/ydb/core/impl/LongPollDiscoveryTest.java b/core/src/test/java/tech/ydb/core/impl/LongPollDiscoveryTest.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..8c85009516a490f0976f08f8b1246ffd3ed7629e
+--- /dev/null
++++ b/core/src/test/java/tech/ydb/core/impl/LongPollDiscoveryTest.java
+@@ -0,0 +1,24 @@
++package tech.ydb.core.impl;
++
++import io.grpc.Metadata;
++import org.junit.Assert;
++import org.junit.Test;
++
++public class LongPollDiscoveryTest {
++    private static final Metadata.Key<String> GENERATION = Metadata.Key.of("x-ydb-route-generation",
++            Metadata.ASCII_STRING_MARSHALLER);
++
++    @Test
++    public void checkManagedLeaseAndLegacyFallback() {
++        Metadata headers = new Metadata();
++        Assert.assertNull(LongPollDiscovery.generation(null, headers));
++        Assert.assertThrows(IllegalArgumentException.class, () -> LongPollDiscovery.generation(1L, headers));
++        headers.put(GENERATION, "18446744073709551615");
++        Assert.assertEquals(Long.valueOf(-1), LongPollDiscovery.generation(1L, headers));
++        headers.removeAll(GENERATION);
++        headers.put(GENERATION, "1");
++        Assert.assertThrows(IllegalArgumentException.class, () -> LongPollDiscovery.generation(-1L, headers));
++        headers.put(GENERATION, "2");
++        Assert.assertThrows(IllegalArgumentException.class, () -> LongPollDiscovery.generation(null, headers));
++    }
++}
+diff --git a/topic/src/main/java/tech/ydb/topic/impl/TopicStreamBase.java b/topic/src/main/java/tech/ydb/topic/impl/TopicStreamBase.java
+index 9a36605cd23b84b6086dd6a56d3c956573b4c66b..854d1473d6b88a2380e672b55e09c5157d80a879 100644
+--- a/topic/src/main/java/tech/ydb/topic/impl/TopicStreamBase.java
++++ b/topic/src/main/java/tech/ydb/topic/impl/TopicStreamBase.java
+@@ -28,6 +28,11 @@ public abstract class TopicStreamBase<R extends Message, W extends Message> impl
+         this.token = stream.authToken();
+     }
+ 
++    public boolean isRouteCurrent() {
++        GrpcReadWriteStream<R, W> stream = ref.get();
++        return stream != null && stream.isRouteCurrent();
++    }
++
+     protected abstract W updateTokenMessage(String token);
+     protected abstract Status parseMessageStatus(R message);
+ 
+diff --git a/topic/src/main/java/tech/ydb/topic/read/impl/ReadPartition.java b/topic/src/main/java/tech/ydb/topic/read/impl/ReadPartition.java
+index ec4c7c8d3c986544e2aca178f57750e01a160b38..a904a1e607ddc2f2e54a66b794ef0cae6022924c 100644
+--- a/topic/src/main/java/tech/ydb/topic/read/impl/ReadPartition.java
++++ b/topic/src/main/java/tech/ydb/topic/read/impl/ReadPartition.java
+@@ -85,7 +85,7 @@ public class ReadPartition implements PartitionControl {
+ 
+     @Override
+     public boolean isActive() {
+-        return State.IS_ACTIVE.contains(state.get());
++        return session.isRouteCurrent() && State.IS_ACTIVE.contains(state.get());
+     }
+ 
+     @Override
+@@ -162,7 +162,7 @@ public class ReadPartition implements PartitionControl {
+                 return;
+             }
+ 
+-            while (state.get() == State.STARTED || state.get() == State.PRE_STOPPED) {
++            while (session.isRouteCurrent() && (state.get() == State.STARTED || state.get() == State.PRE_STOPPED)) {
+                 List<Message> list = queue.getNextBatch();
+                 if (list == null) {
+                     break;
+diff --git a/topic/src/test/java/tech/ydb/topic/read/impl/SyncReaderImplTest.java b/topic/src/test/java/tech/ydb/topic/read/impl/SyncReaderImplTest.java
+index f901546033db59961fb0c11de34aad802d9ab5ca..1cd5cb53b593cc8b69c2e827775f4a6fd722a1b6 100644
+--- a/topic/src/test/java/tech/ydb/topic/read/impl/SyncReaderImplTest.java
++++ b/topic/src/test/java/tech/ydb/topic/read/impl/SyncReaderImplTest.java
+@@ -3,6 +3,7 @@ package tech.ydb.topic.read.impl;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.ScheduledExecutorService;
+ import java.util.concurrent.TimeUnit;
++import java.util.concurrent.atomic.AtomicBoolean;
+ 
+ import org.junit.Assert;
+ import org.junit.Rule;
+@@ -146,6 +147,31 @@ public class SyncReaderImplTest {
+                 ex2.getMessage());
+     }
+ 
++    @Test
++    public void prefetchedMessageFromRetiredRouteIsDiscarded() throws InterruptedException {
++        AtomicBoolean current = new AtomicBoolean(true);
++        ReadStreamMock stream = new ReadStreamMock(true) {
++            @Override
++            public boolean isRouteCurrent() {
++                return current.get();
++            }
++        };
++        ReaderSettings settings = ReaderSettings.newBuilder()
++                .addTopic(TopicReadSettings.newBuilder().setPath("/topic").build())
++                .setConsumerName("consumer")
++                .build();
++        SyncReader reader = new SyncReaderImpl(mockRpc(stream), settings, REGISTRY);
++        reader.init();
++        stream.responseInit("source");
++        stream.responseStartPartition("/topic", 1, 0);
++        stream.responseData(100).partition(1, 0).batch(Codec.RAW, MSG1, MSG2).and().send();
++
++        Assert.assertArrayEquals(MSG1, reader.receive().getData());
++        current.set(false);
++        Assert.assertNull(reader.receive(0, TimeUnit.MILLISECONDS));
++        reader.shutdown();
++    }
++
+     @Test
+     public void readClosedPartitionTest() throws InterruptedException {
+         ReadStreamMock mock = new ReadStreamMock(true);

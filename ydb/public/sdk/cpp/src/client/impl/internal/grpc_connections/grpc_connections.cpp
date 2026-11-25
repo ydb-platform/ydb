@@ -552,6 +552,10 @@ void TGRpcConnectionsImpl::SetGrpcCompressionAlgorithm(NYdbGrpc::TGRpcClientConf
 }
 
 TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr dbState) {
+    return ListEndpoints(std::move(dbState), {});
+}
+
+TAsyncListEndpointsResult TGRpcConnectionsImpl::ListEndpoints(TDbDriverStatePtr dbState, TRpcRequestSettings rpcSettings, IQueueClientContextPtr context) {
     Ydb::Discovery::ListEndpointsRequest request;
     request.set_database(TStringType{dbState->Database});
 
@@ -567,8 +571,9 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
             promise.SetValue(std::move(val));
         };
 
-    TRpcRequestSettings rpcSettings;
-    rpcSettings.Deadline = TDeadline::AfterDuration(GET_ENDPOINTS_TIMEOUT);
+    if (rpcSettings.Deadline == TDeadline::Max()) {
+        rpcSettings.Deadline = TDeadline::AfterDuration(GET_ENDPOINTS_TIMEOUT);
+    }
     rpcSettings.IncludeObservabilityInBuildInfo = true;
 
     RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::ListEndpointsRequest, Ydb::Discovery::ListEndpointsResponse>(
@@ -577,7 +582,7 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
         &Ydb::Discovery::V1::DiscoveryService::Stub::AsyncListEndpoints,
         dbState->shared_from_this(),
         INITIAL_DEFERRED_CALL_DELAY,
-        rpcSettings);
+        rpcSettings, std::move(context));
 
     std::weak_ptr<TDbDriverState> weakState = dbState;
 
@@ -603,6 +608,7 @@ TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult 
     }
 
     auto endpoint = result.DiscoveryStatus.Endpoint;
+    auto metadata = result.DiscoveryStatus.Metadata;
     auto ydbStatus = NYdb::TStatus(std::move(result.DiscoveryStatus));
 
     auto aux = IDiscoveryMutatorApi::TAuxInfo {
@@ -614,7 +620,7 @@ TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult 
 
     auto issues = ydbStatus.GetIssues();
 
-    auto plainStatus = TPlainStatus(ydbStatus.GetStatus(), std::move(issues), endpoint, {});
+    auto plainStatus = TPlainStatus(ydbStatus.GetStatus(), std::move(issues), endpoint, std::move(metadata));
     result.DiscoveryStatus = plainStatus;
     return result;
 }

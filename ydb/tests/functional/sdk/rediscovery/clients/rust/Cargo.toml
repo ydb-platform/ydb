@@ -1,0 +1,9 @@
+[package]
+name = "ydb-rediscovery-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+tokio = { version = "=1.54.1", features = ["macros", "rt-multi-thread", "time"] }
+ydb = "=0.18.2"

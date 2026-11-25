@@ -24,7 +24,9 @@ enum class EDiscoveryMode {
     Async,
     //! Do not perform discovery.
     //! This option disables database discovery and allow to use user provided endpoint for grpc connections
-    Off
+    Off,
+    //! Use conditional ListEndpoints calls on the bootstrap channel. Older servers use periodic discovery.
+    LongPoll
 };
 
 //! @deprecated Use TBalancingPolicy instead

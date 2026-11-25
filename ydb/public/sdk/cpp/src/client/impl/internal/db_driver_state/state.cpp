@@ -55,6 +55,11 @@ TDbDriverState::TDbDriverState(
     , Log(Client->GetLog())
     , DiscoveryCompletedPromise(NThreading::NewPromise<void>())
 {
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+    if (DiscoveryMode == EDiscoveryMode::LongPoll && !Database.empty()) {
+        EndpointPool.EnableWatch();
+    }
+#endif
     EndpointPool.SetStatCollector(StatCollector);
     Log.SetFormatter(GetPrefixLogFormatter(GetDatabaseLogPrefix(Database)));
 }
@@ -147,7 +152,7 @@ TPeriodicCb CreatePeriodicDiscoveryTask(TDbDriverState::TPtr driverState) {
                     auto cb = [strong](const NThreading::TFuture<TEndpointUpdateResult>& future) {
                         const auto& updateResult = future.GetValue();
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-                        strong->Client->DeleteChannels(updateResult.Removed);
+                        strong->Client->DeleteChannels(updateResult.Removed, strong->EndpointPool);
 #endif
                         if (strong->DiscoveryMode == EDiscoveryMode::Sync) {
                             std::unique_lock guard(strong->LastDiscoveryStatusRWLock);
@@ -216,6 +221,10 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                     Notify_.notify_all();
                 }
                 delete p;
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+                // Destroying this state may release the final owner or bootstrap pin.
+                DiscoveryClient_->CollectRetiredChannels();
+#endif
             };
 
             auto [it, inserted] = States_.try_emplace(key); // creates empty weak_ptr
@@ -238,7 +247,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                         ? std::move(credentialsProviderFactory)
                         : CreateInsecureCredentialsProviderFactory());
 
-                if (discoveryMode != EDiscoveryMode::Off) {
+                if (discoveryMode != EDiscoveryMode::Off && !strongState->EndpointPool.UsesWatch()) {
                     DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
                 }
             } catch (...) {
@@ -251,12 +260,26 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
 
             lock.lock(); // re-acquire lock
             Y_ABORT_UNLESS(weakState.expired());
+            if (strongState->EndpointPool.UsesWatch()) {
+                // A discovery RPC uses shared_from_this() internally. Only application owners
+                // keep this separate reference alive, so the last client cancels its idle poll.
+                auto* state = strongState.get();
+                strongState = TDbDriverStatePtr(state, [resource = std::move(strongState)](TDbDriverState*) mutable {
+                    if (auto context = resource->EndpointWatchContext.lock()) {
+                        context->Cancel();
+                    }
+                    // The tracker keeps a weak reference to this control block.
+                    resource.reset();
+                });
+            }
             weakState = strongState; // reference remains valid
             Notify_.notify_all();
         }
     }
 
-    if (strongState->DiscoveryMode != EDiscoveryMode::Off) {
+    if (strongState->EndpointPool.UsesWatch()) {
+        DiscoveryClient_->StartEndpointWatch(strongState);
+    } else if (strongState->DiscoveryMode != EDiscoveryMode::Off) {
         auto updateResult = strongState->EndpointPool.UpdateAsync();
         if (updateResult.second) {
             auto cb = [strongState](const NThreading::TFuture<TEndpointUpdateResult>&) {

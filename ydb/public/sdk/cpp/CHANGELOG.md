@@ -1,3 +1,5 @@
+* Added experimental `EDiscoveryMode::LongPoll` for managed replica switches. The driver reuses its bootstrap channel and retires data connections removed by discovery.
+
 * Fixed endpoint pessimization percentages so unhealthy endpoint pools trigger discovery correctly, including pools with more than 100 endpoints.
 
 * Added draft `TTabletClient::ReassignTablets()` and `TReassignTabletsOperation`, with progress available through `TOperationClient::Get()`.

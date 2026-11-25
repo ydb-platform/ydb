@@ -5,7 +5,6 @@ IF (SANITIZER_TYPE)
 ENDIF()
 
 SRCS(
-    audit_log_ut.cpp
     rpc_calls_ut.cpp
     rpc_bridge_ut.cpp
     rpc_load_rows_ut.cpp
@@ -19,7 +18,6 @@ PEERDIR(
     ydb/core/client/scheme_cache_lib
     ydb/core/formats/arrow
     ydb/core/scheme
-    ydb/core/testlib/audit_helpers
     ydb/core/testlib/default
     ydb/core/tx/scheme_board
 )

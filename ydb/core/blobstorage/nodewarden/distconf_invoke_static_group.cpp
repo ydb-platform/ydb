@@ -70,7 +70,6 @@ namespace NKikimr::NStorage {
         result.Generation = info->GroupGeneration;
         result.Topology = info->PickTopology();
         result.GroupState = state.State;
-        result.TargetInvariant = state.TargetInvariant;
         result.States = state.FailRealmStates;
         for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
             result.VDisks.push_back({info->GetVDiskId(i), info->GetActorId(i)});

@@ -33,7 +33,6 @@ void TBlobStorageController::UpdateGroupStateActor(TGroupId groupId) {
         message->Info->Topology = group->Topology;
         message->Info->States = group->FailRealmStates.value_or(NGroupSyncer::TFailRealmStates{});
         message->Info->GroupState = group->Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL);
-        message->Info->TargetInvariant = group->TargetInvariant.value_or(NKikimrBlobStorage::TGroupState::NO_INVARIANT);
         if (HasDataCenterPolicy) {
             message->Info->TargetExcluded = GetTargetExcludedRealms(*group);
             if (!message->Info->TargetExcluded) {

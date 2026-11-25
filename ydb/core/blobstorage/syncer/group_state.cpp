@@ -175,7 +175,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             return !TMirror3dcWriteQuorumChecker::CanHideEnsuredLayout(group.Next, uncertain);
         }
         TBlobStorageGroupInfo::TDynamicInfo dynamic(TGroupId::FromValue(groupId), group.Info.Generation);
-        dynamic.Mirror3dcState = {*group.Info.GroupState, group.Info.States, group.Info.TargetInvariant};
+        dynamic.Mirror3dcState = {*group.Info.GroupState, group.Info.States};
         dynamic.ServiceIdForOrderNumber.resize(topology->GetTotalVDisksNum());
         TBlobStorageGroupInfo info(group.Info.Topology, std::move(dynamic), TString(), {}, NPDisk::DEVICE_TYPE_UNKNOWN);
         return TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(info, uncertain);

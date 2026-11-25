@@ -1306,34 +1306,36 @@ namespace NKikimr::NBsController {
                 throw TExGroupGenerationMismatch(definition.GetGroupId(),
                     definition.GetExpectedGroupGeneration(), group->Generation);
             }
-            TGroupInfo* updated = Groups.FindForUpdate(groupId);
-            if (definition.HasGroupState()) {
-                if (definition.FailRealmStatesSize() != 3) {
-                    throw TExError() << "GroupId# " << groupId << " must define exactly three fail realm states";
-                }
-                TMirror3dcFailRealmStates states;
-                for (ui32 realm = 0; realm < states.size(); ++realm) {
-                    NKikimrBlobStorage::TDataCenterState::EState state = definition.GetFailRealmStates(realm);
-                    if (!NKikimrBlobStorage::TDataCenterState::EState_IsValid(state)) {
-                        throw TExError() << "unknown state for GroupId# " << groupId << " realm# " << realm;
-                    }
-                    states[realm] = state;
-                }
-                EMirror3dcGroupState groupState = definition.GetGroupState();
-                if (!IsValidMirror3dcGroupConfiguration({groupState, states})) {
-                    throw TExError() << "invalid mirror-3-dc group state or realm roles for GroupId# " << groupId;
-                }
-                updated->FailRealmStates = states;
-                updated->Mirror3dcState = groupState;
-            } else if (!definition.HasTargetInvariant() || definition.FailRealmStatesSize()) {
-                throw TExError() << "GroupId# " << groupId << " must define the group state";
-            }
             if (definition.HasTargetInvariant()) {
                 if (!NKikimrBlobStorage::TGroupState::ETargetInvariant_IsValid(definition.GetTargetInvariant())) {
                     throw TExError() << "unknown target invariant for GroupId# " << groupId;
                 }
-                updated->TargetInvariant = definition.GetTargetInvariant();
+                Groups.FindForUpdate(groupId)->TargetInvariant = definition.GetTargetInvariant();
+                if (!definition.HasGroupState() && !definition.FailRealmStatesSize()) {
+                    continue; // A controller-only target update keeps the published group generation.
+                }
             }
+            if (!definition.HasGroupState()) {
+                throw TExError() << "GroupId# " << groupId << " must define the group state";
+            }
+            if (definition.FailRealmStatesSize() != 3) {
+                throw TExError() << "GroupId# " << groupId << " must define exactly three fail realm states";
+            }
+            TMirror3dcFailRealmStates states;
+            for (ui32 realm = 0; realm < states.size(); ++realm) {
+                NKikimrBlobStorage::TDataCenterState::EState state = definition.GetFailRealmStates(realm);
+                if (!NKikimrBlobStorage::TDataCenterState::EState_IsValid(state)) {
+                    throw TExError() << "unknown state for GroupId# " << groupId << " realm# " << realm;
+                }
+                states[realm] = state;
+            }
+            EMirror3dcGroupState groupState = definition.GetGroupState();
+            if (!IsValidMirror3dcGroupConfiguration({groupState, states})) {
+                throw TExError() << "invalid mirror-3-dc group state or realm roles for GroupId# " << groupId;
+            }
+            TGroupInfo* updated = Groups.FindForUpdate(groupId);
+            updated->FailRealmStates = states;
+            updated->Mirror3dcState = groupState;
             // Every requested transition, including an idempotent one, publishes a new generation.
             GroupContentChanged.insert(groupId);
         }

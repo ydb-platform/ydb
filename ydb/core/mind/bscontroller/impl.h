@@ -735,7 +735,7 @@ public:
         // Persisted with the group generation by CommitConfigUpdates.
         std::optional<std::array<NKikimrBlobStorage::TDataCenterState::EState, 3>> FailRealmStates;
         std::optional<EMirror3dcGroupState> Mirror3dcState;
-        std::optional<EMirror3dcTargetInvariant> TargetInvariant;
+        std::optional<NKikimrBlobStorage::TGroupState::ETargetInvariant> TargetInvariant;
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
 

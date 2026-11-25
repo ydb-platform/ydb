@@ -145,8 +145,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
 
     Y_UNIT_TEST(FailRealmStatesFromProtoAndGenerationUpdate) {
         using TDataCenterState = NKikimrBlobStorage::TDataCenterState;
-        using TGroupState = NKikimrBlobStorage::TGroupState;
-        constexpr EMirror3dcTargetInvariant targets[] = {TGroupState::INVARIANT_1, TGroupState::INVARIANT_2, TGroupState::NO_INVARIANT};
         constexpr TDataCenterState::EState states[] = {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::RECOVERING};
         NKikimrBlobStorage::TGroupInfo group;
         group.SetGroupID(1);
@@ -163,13 +161,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         }
         auto previous = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
         UNIT_ASSERT(previous);
-        UNIT_ASSERT(previous->GetMirror3dcState().TargetInvariant == TGroupState::NO_INVARIANT);
         for (ui32 realm = 0; realm < 3; ++realm) {
             UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(previous->GetFailRealmState(realm)), static_cast<ui32>(TDataCenterState::INCLUDED));
         }
         for (ui32 offset = 0; offset < 3; ++offset) {
             group.SetGroupGeneration(offset + 2);
-            group.SetTargetInvariant(targets[offset]);
             for (ui32 realm = 0; realm < 3; ++realm) {
                 group.MutableRings(realm)->SetState(states[(realm + offset) % 3]);
             }
@@ -178,7 +174,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
             UNIT_ASSERT(received.ParseFromString(group.SerializeAsString()));
             auto current = TBlobStorageGroupInfo::Parse(received, nullptr, nullptr);
             UNIT_ASSERT(current);
-            UNIT_ASSERT(current->GetMirror3dcState().TargetInvariant == targets[offset]);
             // States can change without changing the topology cached by DSProxy/VDisk.
             UNIT_ASSERT(previous->PickTopology()->EqualityCheck(current->GetTopology()));
             auto localVDisk = MakeIntrusive<TBlobStorageGroupInfo>(current, current->GetVDiskId(0),

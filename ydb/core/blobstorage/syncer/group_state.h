@@ -36,7 +36,6 @@ struct TGroupReplicationInfo {
     std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
     TFailRealmStates States;
     std::optional<EMirror3dcGroupState> GroupState;
-    EMirror3dcTargetInvariant TargetInvariant = NKikimrBlobStorage::TGroupState::NO_INVARIANT;
     std::optional<TExcludedRealms> TargetExcluded;
     struct TVDisk {
         TVDiskID Id;

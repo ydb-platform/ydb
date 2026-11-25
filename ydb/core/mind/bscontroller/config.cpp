@@ -1794,9 +1794,6 @@ namespace NKikimr::NBsController {
             if (groupInfo.Mirror3dcState) {
                 group->SetMirror3dcState(*groupInfo.Mirror3dcState);
             }
-            if (groupInfo.TargetInvariant) {
-                group->SetTargetInvariant(*groupInfo.TargetInvariant);
-            }
             if (groupInfo.VDisksInGroup) {
                 group->SetErasureSpecies(groupInfo.ErasureSpecies);
                 group->SetDeviceType(PDiskTypeToPDiskType(groupInfo.GetCommonDeviceType()));

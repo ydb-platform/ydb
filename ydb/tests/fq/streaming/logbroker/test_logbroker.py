@@ -279,7 +279,9 @@ class TestLogbroker(StreamingTestBase):
                 )
                 if state.RetryCount > retry_count:
                     expected_issue = (
-                        "Read session to topic" if len(cluster_names) == 1 else "clusters are unavailable simultaneously"
+                        "Read session to topic"
+                        if len(cluster_names) == 1
+                        else "clusters are unavailable simultaneously"
                     )
                     assert expected_issue in str(state.Issues), state
                     logging.info(

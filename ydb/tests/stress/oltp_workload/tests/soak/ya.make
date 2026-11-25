@@ -20,4 +20,6 @@ PEERDIR(
     ydb/tests/stress/common
 )
 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+
 END()

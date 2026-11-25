@@ -29,11 +29,11 @@ void AssertAnsiIdentifiers(const TString& prefix, const TSymbolSettings& setting
     )", settings);
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Module, (TVector<TString>{"module"}));
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Name, "foo");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Name, "$foo");
     UNIT_ASSERT_VALUES_EQUAL(symbols.Exports.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[0].Name, "foo");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[0].Name, "$foo");
     UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters[0].Name, "foo");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters[0].Name, "$foo");
 }
 
 } // namespace
@@ -42,13 +42,13 @@ Y_UNIT_TEST_SUITE(SqlInspect) {
 Y_UNIT_TEST(ImportsAndExports) {
     const auto symbols = Inspect("IMPORT foo.bar SYMBOLS $original AS $alias, $other; EXPORT $out, $next;");
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports.size(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Name, "original");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Name, "$original");
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Module, (TVector<TString>{"foo", "bar"}));
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[1].Name, "other");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[1].Name, "$other");
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[1].Module, (TVector<TString>{"foo", "bar"}));
     UNIT_ASSERT_VALUES_EQUAL(symbols.Exports.size(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[0].Name, "next");
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[1].Name, "out");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[0].Name, "$next");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[1].Name, "$out");
 }
 
 Y_UNIT_TEST(Filters) {
@@ -93,17 +93,17 @@ Y_UNIT_TEST(OrderDuplicatesAndNestedImports) {
         "IMPORT first SYMBOLS $y, $x; EXPORT $z, $z; EXPORT $next, $z, $Z, $`next`;");
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports.size(), 4);
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Module, (TVector<TString>{"first"}));
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Name, "x");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Name, "$x");
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[1].Module, (TVector<TString>{"first"}));
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[1].Name, "y");
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[2].Name, "y");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[1].Name, "$y");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[2].Name, "$y");
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[2].Module, (TVector<TString>{"second"}));
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[3].Name, "x");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[3].Name, "$x");
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[3].Module, (TVector<TString>{"third"}));
     UNIT_ASSERT_VALUES_EQUAL(symbols.Exports.size(), 3);
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[0].Name, "Z");
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[1].Name, "next");
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[2].Name, "z");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[0].Name, "$Z");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[1].Name, "$next");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[2].Name, "$z");
 }
 
 Y_UNIT_TEST(QuotedNames) {
@@ -111,10 +111,10 @@ Y_UNIT_TEST(QuotedNames) {
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Module, (TVector<TString>{"my module", "file.sql"}));
     UNIT_ASSERT(symbols.Imports[0].IsAbsolute);
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Name, "a`b");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Name, "$a`b");
     UNIT_ASSERT_VALUES_EQUAL(symbols.Exports.size(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[0].Name, "");
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[1].Name, "ab");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[0].Name, "$");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[1].Name, "$ab");
 }
 
 Y_UNIT_TEST(DistinctModulePaths) {
@@ -122,8 +122,16 @@ Y_UNIT_TEST(DistinctModulePaths) {
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports.size(), 2);
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Module, (TVector<TString>{"foo", "bar"}));
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[1].Module, (TVector<TString>{"foo.bar"}));
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Name, "x");
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[1].Name, "x");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Name, "$x");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[1].Name, "$x");
+}
+
+Y_UNIT_TEST(DollarInQuotedNames) {
+    const auto symbols = Inspect("IMPORT `$module` SYMBOLS $`$name`; EXPORT $`$name`; DECLARE $`$name` AS Int32;");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Module, (TVector<TString>{"$module"}));
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Name, "$$name");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[0].Name, "$$name");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters[0].Name, "$$name");
 }
 
 Y_UNIT_TEST(ModuleComponentsAndDeduplication) {
@@ -141,7 +149,7 @@ Y_UNIT_TEST(ModuleComponentsAndDeduplication) {
     UNIT_ASSERT(!symbols.Imports[2].IsAbsolute);
     UNIT_ASSERT(symbols.Imports[3].IsAbsolute);
     for (const auto& imported : symbols.Imports) {
-        UNIT_ASSERT_VALUES_EQUAL(imported.Name, "x");
+        UNIT_ASSERT_VALUES_EQUAL(imported.Name, "$x");
     }
 }
 
@@ -175,10 +183,10 @@ Y_UNIT_TEST(AnsiFlagAndInference) {
     for (const bool explicitAnsi : {false, true}) {
         const auto symbols = Inspect(explicitAnsi ? sql : "--!ansi_lexer\n" + sql, {.Ansi = explicitAnsi});
         UNIT_ASSERT_VALUES_EQUAL(symbols.Imports.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Name, "na\"me");
+        UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Name, "$na\"me");
         UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Module, (TVector<TString>{"my\"module"}));
         UNIT_ASSERT_VALUES_EQUAL(symbols.Exports.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[0].Name, "out");
+        UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[0].Name, "$out");
     }
     AssertFailure(sql);
 }
@@ -219,7 +227,7 @@ Y_UNIT_TEST(RejectStringSuffixesInIdentifiers) {
 Y_UNIT_TEST(EmptyAnsiIdentifier) {
     const auto symbols = Inspect("EXPORT $\"\";", {.Ansi = true});
     UNIT_ASSERT_VALUES_EQUAL(symbols.Exports.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[0].Name, "");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[0].Name, "$");
 }
 
 Y_UNIT_TEST(RejectSingleQuotedIdentifier) {
@@ -252,7 +260,7 @@ Y_UNIT_TEST(StringLiteralsRemainValidValues) {
         UNIT_ASSERT(symbols.Imports.empty());
         UNIT_ASSERT(symbols.Exports.empty());
         UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters[0].Name, "foo");
+        UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters[0].Name, "$foo");
     }
 }
 
@@ -260,12 +268,12 @@ Y_UNIT_TEST(EmptyNamesAndNormalizedDuplicates) {
     const auto symbols = Inspect("IMPORT `` SYMBOLS $``, $``, $x; IMPORT `` SYMBOLS $`x`; EXPORT $``, $``, $x, $`x`;");
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports.size(), 2);
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Module, (TVector<TString>{""}));
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Name, "");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[0].Name, "$");
     UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[1].Module, (TVector<TString>{""}));
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[1].Name, "x");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Imports[1].Name, "$x");
     UNIT_ASSERT_VALUES_EQUAL(symbols.Exports.size(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[0].Name, "");
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[1].Name, "x");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[0].Name, "$");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Exports[1].Name, "$x");
 }
 
 Y_UNIT_TEST(InvalidIdentifierEscape) {
@@ -303,10 +311,10 @@ Y_UNIT_TEST(DeclaredParameters) {
     UNIT_ASSERT(symbols.Imports.empty());
     UNIT_ASSERT(symbols.Exports.empty());
     UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters.size(), 4);
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters[0].Name, "");
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters[1].Name, "A");
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters[2].Name, "ab");
-    UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters[3].Name, "z");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters[0].Name, "$");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters[1].Name, "$A");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters[2].Name, "$ab");
+    UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters[3].Name, "$z");
 }
 
 Y_UNIT_TEST(InternalVariablesAreNotParameters) {
@@ -322,7 +330,7 @@ Y_UNIT_TEST(LanguageVersionSettings) {
         const TSymbolSettings settings{.LangVer = version};
         const auto symbols = Inspect("DECLARE $foo AS Int32;", settings);
         UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters[0].Name, "foo");
+        UNIT_ASSERT_VALUES_EQUAL(symbols.Parameters[0].Name, "$foo");
     }
 }
 

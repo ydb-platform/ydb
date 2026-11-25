@@ -90,7 +90,7 @@ TString Identifier(const NSQLv1Generated::TToken& token, bool ansi, TIssues& iss
 TString SymbolName(const NSQLv1Generated::TRule_bind_parameter& symbol, bool ansi, TIssues& issues) {
     const auto tokens = Tokens(symbol);
     YQL_ENSURE(tokens.size() == 2 && tokens.front().GetValue() == "$", "Invalid bind parameter AST");
-    return Identifier(tokens.back(), ansi, issues);
+    return "$" + Identifier(tokens.back(), ansi, issues);
 }
 
 TVector<TString> ModulePath(const NSQLv1Generated::TRule_module_path& path, bool ansi, TIssues& issues) {

@@ -49,7 +49,7 @@ struct TSymbols {
 
 using TSymbolsResult = std::variant<TIssues, TSymbols>;
 
-// Names are unquoted and exclude '$'. Imports contain original names, never aliases.
+// Names are unquoted and include the leading '$'. Imports contain original names, never aliases.
 // Parameters come only from DECLARE statements, not variable definitions or references.
 // Imports (including nested imports) are unique and sorted by (IsAbsolute, Module, Name).
 // Exports and parameters are unique and sorted by Name (case-sensitive).

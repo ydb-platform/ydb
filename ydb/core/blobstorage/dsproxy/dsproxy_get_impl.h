@@ -296,6 +296,8 @@ public:
     ui64 GetTimeToAccelerateGetNs(TLogContext &logCtx);
     ui64 GetTimeToAcceleratePutNs(TLogContext &logCtx);
 
+    void RecordPredictions(bool isPut, bool isFinal);
+
     TString DumpFullState() const;
 
     TString PrintHistory() const {

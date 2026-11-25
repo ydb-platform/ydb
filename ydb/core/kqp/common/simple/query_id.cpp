@@ -127,11 +127,12 @@ void TKqpQueryId::BuildKey(TStringBuf cluster, TStringBuf database, TStringBuf d
 }
 
 const TKqpEncodedGUC& TKqpEncodedGUCSettings::Get(const TGUCSettings& gUCSettings) {
-    if (!Source_ || !(*Source_ == gUCSettings)) {
-        Source_ = gUCSettings;
-        Encoded_ = TKqpEncodedGUC::Encode(gUCSettings);
+    if (!Cache_ || !(Cache_->first == gUCSettings)) {
+        // Replaced as a whole only once encoding succeeded.
+        auto encoded = std::make_pair(gUCSettings, TKqpEncodedGUC::Encode(gUCSettings));
+        Cache_ = std::move(encoded);
     }
-    return *Encoded_;
+    return Cache_->second;
 }
 
 TStringBuf TKqpQueryId::Field(EField field) const {

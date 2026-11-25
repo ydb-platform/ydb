@@ -147,8 +147,7 @@ public:
     const TKqpEncodedGUC& Get(const TGUCSettings& gUCSettings);
 
 private:
-    std::optional<TGUCSettings> Source_;
-    std::optional<TKqpEncodedGUC> Encoded_;
+    std::optional<std::pair<TGUCSettings, TKqpEncodedGUC>> Cache_;
 };
 
 } // namespace NKikimr::NKqp

@@ -19,10 +19,14 @@ void TKqpCompileResult::SerializeTo(NKikimrKqp::TCompileCacheQueryInfo* to, std:
     }
     SetDuration(CompilationDuration, *to->MutableCompilationDuration());
     if (Query.Defined()) {
-        const TStringBuf text = Query->Text();
-        const TStringBuf prefix = text.Head(QUERY_TEXT_LIMIT);
-        to->SetQuery(prefix.data(), prefix.size());
-        to->SetIsTruncated(prefix.size() < text.size());
+        const TString& text = Query->Text();
+        if (text.size() > QUERY_TEXT_LIMIT) {
+            to->SetQuery(text.data(), QUERY_TEXT_LIMIT);
+            to->SetIsTruncated(true);
+        } else {
+            to->SetQuery(text);
+            to->SetIsTruncated(false);
+        }
 
         to->SetUserSID(TString(Query->UserSid()));
         to->SetDatabase(TString(Query->Database()));

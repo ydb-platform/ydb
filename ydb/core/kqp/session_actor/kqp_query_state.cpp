@@ -295,7 +295,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
         false, nullptr, nullptr, IsWarmupCompilation_, UsePessimisticLocks(txCtx), GetDisablePgCompatibility());
 }
 
-std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, const TKqpEncodedGUC& encodedGUCSettings, TKqpTransactionContext* txCtx) {
+std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TMaybe<TKqpQueryId> query, TKqpTransactionContext* txCtx) {
     YQL_ENSURE(CompileResult);
     YQL_ENSURE(!QueryPhysicalGraph);
     switch (GetAction()) {
@@ -308,8 +308,6 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
         default:
             YQL_ENSURE(false, "Unexpected query action: " << NKikimrKqp::EQueryAction_Name(GetAction()));
     }
-
-    auto query = BuildQueryId(encodedGUCSettings, txCtx);
 
     auto compileDeadline = QueryDeadlines.TimeoutAt;
     bool isQueryActionPrepare = GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE;

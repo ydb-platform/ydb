@@ -911,10 +911,7 @@ public:
 
         auto txCtx = GetTxContextForCompilation();
 
-        TMaybe<TKqpQueryId> query;
-        if (QueryState->NeedQueryId()) {
-            query = QueryState->BuildQueryId(GetEncodedGUCSettings(), txCtx);
-        }
+        auto query = BuildQueryId(txCtx);
 
         // quick path
         if (QueryState->TryGetFromCache(*QueryCache, query, Counters, SelfId(), QuickPathWarmupAttribution()) && !QueryState->CompileResult->NeedToSplit) {
@@ -984,7 +981,7 @@ public:
             }
 
             auto txCtx = GetTxContextForCompilation();
-            auto ev = QueryState->BuildReCompileRequest(CompilationCookie, GUCSettings, GetEncodedGUCSettings(), txCtx);
+            auto ev = QueryState->BuildReCompileRequest(CompilationCookie, GUCSettings, BuildQueryId(txCtx), txCtx);
             Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
                 QueryState->KqpSessionSpan.GetTraceId());
             return;
@@ -2669,6 +2666,14 @@ public:
 
     const TKqpEncodedGUC& GetEncodedGUCSettings() {
         return EncodedGUCSettings.Get(*GUCSettings);
+    }
+
+    // Encodes GUC settings only when the query needs a key.
+    TMaybe<TKqpQueryId> BuildQueryId(TKqpTransactionContext* txCtx) {
+        if (!QueryState->NeedQueryId()) {
+            return {};
+        }
+        return QueryState->BuildQueryId(GetEncodedGUCSettings(), txCtx);
     }
 
     void InvalidateQuery() {

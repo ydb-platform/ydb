@@ -22,6 +22,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr ReadyBorders;
     NMonitoring::THistogramPtr BordersPerRequest;
 
+    NMonitoring::TDynamicCounters::TCounterPtr RequestCacheHits;
     NMonitoring::TDynamicCounters::TCounterPtr RequestCacheMisses;
     NMonitoring::TDynamicCounters::TCounterPtr RequestInflight;
 
@@ -54,6 +55,10 @@ public:
 
     void OnBordersPerRequest(const i64 count = 1) const {
         BordersPerRequest->Collect(count);
+    }
+
+    void OnRequestCacheHit(const ui64 count = 1) const {
+        RequestCacheHits->Add(count);
     }
 
     void OnRequestCacheMiss(const ui64 count = 1) const {

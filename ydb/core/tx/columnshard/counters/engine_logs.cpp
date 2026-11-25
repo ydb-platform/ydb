@@ -61,6 +61,8 @@ TEngineLogsCounters::TEngineLogsCounters()
     ActualizationTaskSizeRemove = TBase::GetHistogram("Actualization/RemoveTasks/Size", NMonitoring::ExponentialHistogram(18, 2));
     ActualizationTaskSizeEvict = TBase::GetHistogram("Actualization/EvictTasks/Size", NMonitoring::ExponentialHistogram(18, 2));
 
+    ActualizationSkipRWProgressCount = TBase::GetDeriviative("Actualization/Skip/RWProgress/Count");
+
     IndexMetadataUsageBytes = TBase::GetValue("IndexMetadata/Usage/Bytes");
 
     BadPortionsCount = TBase::GetValue("BadPortions/Count");

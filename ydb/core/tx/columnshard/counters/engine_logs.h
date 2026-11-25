@@ -220,6 +220,8 @@ private:
     NMonitoring::THistogramPtr ActualizationTaskSizeRemove;
     NMonitoring::THistogramPtr ActualizationTaskSizeEvict;
 
+    NMonitoring::TDynamicCounters::TCounterPtr ActualizationSkipRWProgressCount;
+
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataUsageBytes;
 
     NMonitoring::TDynamicCounters::TCounterPtr BadPortionsCount;
@@ -274,6 +276,10 @@ public:
 
     TGranuleDataCounters RegisterGranuleDataCounters() const {
         return GranuleDataAgent.RegisterClient();
+    }
+
+    void OnActualizationSkipRWProgress() const {
+        ActualizationSkipRWProgressCount->Add(1);
     }
 
     void OnSkipDeleteWithProcessMemory(const TDuration lag) const {

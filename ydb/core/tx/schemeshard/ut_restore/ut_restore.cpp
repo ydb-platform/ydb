@@ -12,7 +12,6 @@
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/metering/metering.h>
-#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
@@ -2304,16 +2303,7 @@ value {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true).DisablePgCompatibility(false));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
-        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
         ui64 txId = 100;
-        const auto updatePgCompatibility = [&](bool disabled) {
-            for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
-                auto& appData = runtime.GetAppData(node);
-                NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
-                flags.SetDisablePgCompatibility(disabled);
-                appData.UpdateRuntimeFlags(flags);
-            }
-        };
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
@@ -2331,120 +2321,31 @@ value {
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        const auto exportTable = [&](const char* itemPrefix) {
-            TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-                ExportToS3Settings {
-                  endpoint: "localhost:%d"
-                  scheme: HTTP
-                  source_path: "/MyRoot"
-                  destination_prefix: "Backup1"
-                  items {
-                    source_path: "/MyRoot/Table"
-                    destination_prefix: "%s"
-                  }
-                }
-            )", port, itemPrefix));
-            env.TestWaitNotification(runtime, txId);
-        };
-        {
-            auto backupObserver = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
-                for (const auto& tx : ev->Get()->Record.GetTransaction()) {
-                    if (tx.GetOperationType() == ESchemeOpBackup) {
-                        updatePgCompatibility(true);
-                    }
-                }
-            });
-            exportTable("SavedTable");
-        }
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: "Backup1"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
         TestGetExport(runtime, txId, "/MyRoot");
-        UNIT_ASSERT(runtime.GetAppData().FeatureFlags.GetDisablePgCompatibility());
-        const TString mappingPath = "/Backup1/SchemaMapping/mapping.json";
-        const TString mapping = s3Mock.GetData().at(mappingPath);
 
-        TestBackup(runtime, ++txId, "/MyRoot", R"(TableName: "Table")",
-            {{NKikimrScheme::StatusPreconditionFailed, "PostgreSQL compatibility is disabled for column 'value'"}});
-        exportTable("Replacement");
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().at(mappingPath), mapping);
-        const auto exportIssues = TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED)
-            .GetResponse().GetEntry().GetIssues();
-        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(exportIssues),
-            "PostgreSQL compatibility is disabled for column 'value'");
-
-        const auto desc = DescribePath(runtime, "/MyRoot/Table", true, true);
-        TestRestore(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            TableName: "Table"
-            TableDescription {
-                %s
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "Backup1"
+                destination_path: "/MyRoot/Restored"
+              }
             }
-            S3Settings {
-                Endpoint: "localhost:%d"
-                Scheme: HTTP
-                ObjectKeyPattern: "Backup1/SavedTable"
-            }
-        )", GenerateTableDescription(desc).data(), port),
-            {{NKikimrScheme::StatusPreconditionFailed, "PostgreSQL compatibility is disabled for column 'value'"}});
-
-        const auto importTable = [&](const char* path) {
-            TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-                ImportFromS3Settings {
-                  endpoint: "localhost:%d"
-                  scheme: HTTP
-                  source_prefix: "Backup1"
-                  items {
-                    source_path: "Table"
-                    destination_path: "%s"
-                  }
-                }
-            )", port, path));
-            env.TestWaitNotification(runtime, txId);
-        };
-
-        importTable("/MyRoot/Rejected");
-        const auto issues = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED)
-            .GetResponse().GetEntry().GetIssues();
-        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(issues),
-            "PostgreSQL compatibility is disabled for column 'value'");
-
-        updatePgCompatibility(false);
-        importTable("/MyRoot/Restored");
+        )", port));
+        env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
-
-        if (!EnableDataShardDirectPartImport) {
-            TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-                Name: "Replica"
-                Columns { Name: "key" Type: "Uint32" }
-                Columns { Name: "value" Type: "pgint4" }
-                KeyColumnNames: ["key"]
-                ReplicationConfig {
-                    Mode: REPLICATION_MODE_READ_ONLY
-                    ConsistencyLevel: CONSISTENCY_LEVEL_GLOBAL
-                    ImportState: WAITING_IMPORT
-                }
-            )");
-            env.TestWaitNotification(runtime, txId);
-
-            updatePgCompatibility(true);
-            importTable("/MyRoot/Replica");
-            TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-            UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Replica").GetPathDescription()
-                .GetTable().GetReplicationConfig().GetImportState(), TTableReplicationConfig::WAITING_IMPORT);
-            updatePgCompatibility(false);
-
-            auto restoreObserver = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
-                for (const auto& tx : ev->Get()->Record.GetTransaction()) {
-                    if (tx.GetOperationType() == ESchemeOpRestore && tx.GetRestore().GetTableName() == "Replica") {
-                        UNIT_ASSERT(tx.GetInternal());
-                        updatePgCompatibility(true);
-                    }
-                }
-            });
-
-            importTable("/MyRoot/Replica");
-            TestGetImport(runtime, txId, "/MyRoot");
-            UNIT_ASSERT(runtime.GetAppData().FeatureFlags.GetDisablePgCompatibility());
-            UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Replica").GetPathDescription()
-                .GetTable().GetReplicationConfig().GetImportState(), TTableReplicationConfig::IMPORTED);
-        }
     }
 
     Y_UNIT_TEST_FLAG(ShouldRestoreTableWithMultiColumnStatistics, EnableDataShardDirectPartImport) {

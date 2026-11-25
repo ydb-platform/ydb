@@ -1,4 +1,3 @@
-#include "schemeshard__operation_backup_restore_common.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -6,9 +5,6 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
-
-#include <yql/essentials/minikql/mkql_type_ops.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -550,13 +546,6 @@ public:
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(srcPath.Base()->PathId));
         TSequenceInfo::TPtr srcSequence = context.SS->Sequences.at(srcPath.Base()->PathId);
-        if (AppData()->FeatureFlags.GetDisablePgCompatibility()
-                && !(parentPath.IsBackupTable()
-                    && IsExportTransaction(*context.SS, OperationId.GetTxId(), parentPath, TExportInfo::EState::CopyTables))
-                && NPg::TypeDescFromPgTypeName(NMiniKQL::AdaptLegacyYqlType(srcSequence->Description.GetDataType()))) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "PostgreSQL compatibility is disabled for the source sequence");
-            return result;
-        }
         Y_ABORT_UNLESS(!srcSequence->Sharding.GetSequenceShards().empty());
 
         const auto& protoSequenceShard = *srcSequence->Sharding.GetSequenceShards().rbegin();

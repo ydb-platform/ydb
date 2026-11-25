@@ -15,9 +15,6 @@
 
 namespace NKikimr::NSchemeShard {
 
-bool IsExportTransaction(TSchemeShard& ss, TTxId txId, const TPath& destination, TExportInfo::EState state);
-TString FindPgColumn(const TSchemeShard& ss, const TPathId& pathId);
-
 template <typename TKind>
 class TConfigurePart: public TSubOperationState {
     const TTxState::ETxType TxType;
@@ -706,7 +703,6 @@ public:
         }
 
         TPath path = TPath::Resolve(parentPath, context.SS).Dive(name);
-        bool restoreImportingReplica = false;
         {
             TPath::TChecker checks = path.Check();
             checks
@@ -718,8 +714,7 @@ public:
                 .NotDeleted()
                 .NotUnderOperation();
 
-            restoreImportingReplica = checks && TxType == TTxState::TxRestore && internal && path.IsImportingReplica();
-            if (checks && !restoreImportingReplica) {
+            if (checks && (!internal || !Transaction.HasRestore() || !path.IsImportingReplica())) {
                 checks.NotAsyncReplicaTable();
             }
 
@@ -755,16 +750,6 @@ public:
         if (!context.SS->CheckLocks(path.Base()->PathId, Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
             return result;
-        }
-
-        if (AppData()->FeatureFlags.GetDisablePgCompatibility() && !restoreImportingReplica
-                && !(TxType == TTxState::TxBackup && internal
-                    && IsExportTransaction(*context.SS, OperationId.GetTxId(), path, TExportInfo::EState::Transferring))) {
-            if (auto name = FindPgColumn(*context.SS, path->PathId)) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << name << "'");
-                return result;
-            }
         }
 
         PrepareChanges(path.Base(), context);

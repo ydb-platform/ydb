@@ -1,5 +1,4 @@
 #include <ydb/core/protos/feature_flags.pb.h>
-#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
@@ -38,35 +37,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
         TestCreateTable(runtime, ++txId, "/MyRoot", schema);
         env.TestWaitNotification(runtime, txId);
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "TableWithSequence"
-            Columns { Name: "key" Type: "Uint64" }
-            KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestCreateSequence(runtime, ++txId, "/MyRoot/TableWithSequence", R"(
-            Name: "seq"
-            DataType: "pgint8"
-        )");
-        env.TestWaitNotification(runtime, txId);
-
         updatePgCompatibility(true);
-        bool published = false;
-        auto partitioning = runtime.AddObserver<NSysView::TEvSysView::TEvSetPartitioning>([&](auto& ev) {
-            published |= ev->Get()->Path == "/MyRoot/CopyWithSequence";
-        });
-        AsyncCopyTable(runtime, ++txId, "/MyRoot", "CopyWithSequence", "/MyRoot/TableWithSequence");
-        TestModificationResults(runtime, txId, {
-            {NKikimrScheme::StatusInvalidParameter, "PostgreSQL compatibility is disabled for the source sequence"}});
-        env.TestWaitNotification(runtime, txId);
-        UNIT_ASSERT(!published);
-
-        AsyncCopyTable(runtime, ++txId, "/MyRoot", "Copy", "/MyRoot/Table1");
-        TestModificationResults(runtime, txId, {
-            {NKikimrScheme::StatusSchemeError, "PostgreSQL compatibility is disabled"}});
-        env.TestWaitNotification(runtime, txId);
-
         AsyncAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
             Columns { Name: "another" Type: "pgint4" }

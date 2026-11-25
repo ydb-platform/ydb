@@ -1,4 +1,3 @@
-#include "schemeshard__operation_backup_restore_common.h"
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
@@ -9,7 +8,6 @@
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
-#include <ydb/core/sys_view/common/events.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -722,11 +720,9 @@ public:
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
 
-        const bool disablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility()
-            && !(isBackup && IsExportTransaction(*context.SS, OperationId.GetTxId(), dstPath, TExportInfo::EState::CopyTables));
         const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
             .EnableTablePgTypes = true,
-            .DisablePgCompatibility = disablePgCompatibility,
+            .DisablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility(),
             .EnableTableDatetime64 = true,
             .EnableParameterizedDecimal = true,
             .EnableDetailedMetrics = true,
@@ -832,20 +828,7 @@ public:
             context.DbChanges.PersistShard(part.ShardIdx);
             newShardsIdx.push_back(part.ShardIdx);
         }
-        if (disablePgCompatibility) {
-            auto event = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(
-                context.SS->GetDomainKey(newTable->PathId), newTable->PathId, dstPath.PathString());
-            event->ShardIndices.reserve(newShardsIdx.size());
-            for (const auto& shardIdx : newShardsIdx) {
-                event->ShardIndices.emplace_back(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()));
-            }
-            context.OnComplete.Send(context.SS->SysPartitionStatsCollector, std::move(event));
-            tableInfo->SetPartitioning(std::move(newPartition));
-            context.SS->TabletCounters->Cumulative()[COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS]
-                .Increment(tableInfo->LastVerifyConsistencyTime);
-        } else {
-            context.SS->SetPartitioning(newTable->PathId, tableInfo, std::move(newPartition));
-        }
+        context.SS->SetPartitioning(newTable->PathId, tableInfo, std::move(newPartition));
         if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
             context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
         }

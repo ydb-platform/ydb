@@ -113,6 +113,9 @@ private:
 public:
     NCommon::TConfSetting<ui64, Static> _LongWorkersAllocationWarnTimeout;
     NCommon::TConfSetting<ui64, Static> _LongWorkersAllocationFailTimeout;
+    // Time waiting for insufficient usable slots; requires a confirmed fallback path.
+    // Zero or a value not below _LongWorkersAllocationFailTimeout disables it.
+    NCommon::TConfSetting<ui64, Static> WorkersAllocationTimeout;
     NCommon::TConfSetting<bool, Static> EnableInsert;
     NCommon::TConfSetting<ui64, Static> _AllResultsBytesLimit;
     NCommon::TConfSetting<ui64, Static> _RowsLimitPerWrite;
@@ -198,6 +201,7 @@ public:
         SAVE_SETTING(QueryTimeout);
         SAVE_SETTING(_LongWorkersAllocationWarnTimeout);
         SAVE_SETTING(_LongWorkersAllocationFailTimeout);
+        SAVE_SETTING(WorkersAllocationTimeout);
         SAVE_SETTING(_AllResultsBytesLimit);
         SAVE_SETTING(_RowsLimitPerWrite);
         SAVE_SETTING(EnableComputeActor);
@@ -238,6 +242,10 @@ public:
 
         return copy;
     }
+
+    static TDqSettings::TPtr WithEffectiveWorkersAllocationTimeout(
+        const TDqSettings::TPtr& settings,
+        bool canFallback);
 
     NDqProto::EDataTransportVersion GetDataTransportVersion() const {
         const bool fastPickle = UseFastPickleTransport.Get().GetOrElse(TDqSettings::TDefault::UseFastPickleTransport);

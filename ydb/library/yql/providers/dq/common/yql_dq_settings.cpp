@@ -1,10 +1,36 @@
 #include "yql_dq_settings.h"
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <util/string/split.h>
 
 namespace NYql {
+
+TDqSettings::TPtr TDqSettings::WithEffectiveWorkersAllocationTimeout(
+    const TDqSettings::TPtr& settings,
+    bool canFallback)
+{
+    const auto allocationTimeout = settings->WorkersAllocationTimeout.Get().GetOrElse(0);
+    if (allocationTimeout == 0) {
+        return settings;
+    }
+    if (canFallback) {
+        const auto allocationFailTimeout = settings->_LongWorkersAllocationFailTimeout.Get().GetOrElse(
+            TDqSettings::TDefault::LongWorkersAllocationFailTimeout);
+        if (allocationTimeout < allocationFailTimeout) {
+            return settings;
+        }
+        YQL_CLOG(INFO, ProviderDq)
+            << "WorkersAllocationTimeout is disabled because it is not below "
+            << "_LongWorkersAllocationFailTimeout: allocation=" << allocationTimeout
+            << "ms, broad=" << allocationFailTimeout << "ms";
+    }
+
+    auto copy = std::make_shared<TDqSettings>(*settings);
+    copy->WorkersAllocationTimeout.Clear();
+    return copy;
+}
 
 TDqConfiguration::TDqConfiguration(bool strictConfigValidation)
     : NCommon::TDispatcherAndSettings<TDqSettings>(DqProviderName, TQContext(), strictConfigValidation)
@@ -40,6 +66,7 @@ TDqConfiguration::TDqConfiguration(bool strictConfigValidation)
 
     REGISTER_SETTING(*this, _LongWorkersAllocationWarnTimeout);
     REGISTER_SETTING(*this, _LongWorkersAllocationFailTimeout);
+    REGISTER_SETTING(*this, WorkersAllocationTimeout);
 
     REGISTER_SETTING(*this, _AllResultsBytesLimit);
     REGISTER_SETTING(*this, _RowsLimitPerWrite);

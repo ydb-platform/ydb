@@ -42,6 +42,9 @@ message TAllocateWorkersRequest {
     string Scheduler = 18;
     string UploadPrefix = 19;
     string UploadClusterAddress = 20;
+    // Waits for sufficient free slots overall and in required clusters; ignores file loading.
+    // Set only when the caller can fall back; zero disables the timeout.
+    uint64 AllocationTimeoutMs = 21;
 }
 
 message TWorkerGroup {
@@ -62,6 +65,12 @@ message TDqError {
     string Message = 1;
     EErrorCode DeprecatedErrorCode = 2; // deprecated
     NYql.NDqProto.StatusIds.StatusCode StatusCode = 3;
+    EAllocationErrorReason AllocationErrorReason = 4;
+}
+
+enum EAllocationErrorReason {
+    ALLOCATION_ERROR_REASON_UNSPECIFIED = 0;
+    ALLOCATION_TIMEOUT = 1;
 }
 
 message TAllocateWorkersResponse {

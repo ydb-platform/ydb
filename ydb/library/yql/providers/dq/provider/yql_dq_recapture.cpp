@@ -94,6 +94,12 @@ public:
                     State_->AbortHidden();
                     return TStatus::Ok;
                 }
+
+                // Confirm whole-query provider support before DqWrapIO and the first submission.
+                // A later planner may discover a veto not yet reflected in the shared fallback policy.
+                State_->WholeQueryFallbackConfirmed =
+                    !State_->TypeCtx->EvaluationInProgress &&
+                    State_->Settings->WorkersAllocationTimeout.Get().GetOrElse(0) && WholeQueryProvidersSupportFallback(input);
             }
         }
 
@@ -119,9 +125,49 @@ public:
     }
 
     void Rewind() final {
+        State_->WholeQueryFallbackConfirmed = false;
     }
 
 private:
+    // Requires explicit fallback support from sources and sinks of the original query.
+    // Providers without DQ integration do not confirm support; result sinks and Configure-only
+    // references are excluded. Recovery ownership and fallback policy are not checked here.
+    bool WholeQueryProvidersSupportFallback(const TExprNode::TPtr& queryRoot) const {
+        TVector<const TExprNode*> pending{queryRoot.Get()};
+        TNodeSet visited;
+        while (!pending.empty()) {
+            const auto* node = pending.back();
+            pending.pop_back();
+            if (!visited.insert(node).second) {
+                continue;
+            }
+            if (node->IsCallable(ConfigureName)) {
+                pending.push_back(node->Child(0));
+                continue;
+            }
+
+            const bool isSource = TCoDataSource::Match(node);
+            if (isSource || TCoDataSink::Match(node)) {
+                const auto name = node->Head().Content();
+                if (!isSource && name == ResultProviderName) {
+                    continue;
+                }
+
+                const auto& providers = isSource ? State_->TypeCtx->DataSourceMap : State_->TypeCtx->DataSinkMap;
+                const auto* provider = providers.FindPtr(name);
+                auto* integration = provider ? (*provider)->GetDqIntegration() : nullptr;
+                if (!integration || !integration->CanFallback()) {
+                    return false;
+                }
+                continue;
+            }
+            for (const auto& child : node->Children()) {
+                pending.push_back(child.Get());
+            }
+        }
+        return true;
+    }
+
     void AddInfo(TExprContext& ctx, const TString& message) const {
         YQL_CLOG(DEBUG, ProviderDq) << message;
         TIssue info("DQ cannot execute the query. Cause: " + message);

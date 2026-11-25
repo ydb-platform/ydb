@@ -1559,8 +1559,12 @@ private:
 
         IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(publicIds);
 
+        // This permission belongs to the main Pull, not its precomputes.
+        const bool canFallbackLocally =
+            pullSettings.Value("dq_can_fallback_locally", TString()) == "true";
         auto future = State->ExecutePlan(State->SessionId, executionPlanner->GetPlan(), columns, secureParams, graphParams,
-            settings, progressWriter, UploadCache_->ModulesMapping, fillSettings.Discard, executionTimeout);
+            settings, progressWriter, UploadCache_->ModulesMapping, fillSettings.Discard, executionTimeout,
+            canFallbackLocally);
 
         future.Subscribe([publicIds, progressWriter = State->ProgressWriter](const NThreading::TFuture<IDqGateway::TResult>& completedFuture) {
             const auto& res = completedFuture.GetValueSync();
@@ -1749,7 +1753,7 @@ private:
     }
 
     IDqGateway::TDqProgressWriter MakeDqProgressWriter(const TPublicIds::TPtr& publicIds) const {
-        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds, current = std::make_shared<IDqGateway::TProgressWriterState>()](IDqGateway::TProgressWriterState state) 
+        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds, current = std::make_shared<IDqGateway::TProgressWriterState>()](IDqGateway::TProgressWriterState state)
         {
             if (*current != state) {
                 for (const auto& publicId : publicIds->AllPublicIds) {

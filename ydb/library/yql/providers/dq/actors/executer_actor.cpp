@@ -209,6 +209,9 @@ private:
         allocateRequest->Record.SetComputeActorType(computeActorType);
         allocateRequest->Record.SetStatsMode(StatsMode);
         allocateRequest->Record.SetScheduler(scheduler);
+        if (const auto allocationTimeoutMs = Settings->WorkersAllocationTimeout.Get().GetOrElse(0)) {
+            allocateRequest->Record.SetAllocationTimeoutMs(allocationTimeoutMs);
+        }
         if (enableComputeActor) {
             ActorIdToProto(ControlId, allocateRequest->Record.MutableResultActorId());
         }
@@ -374,7 +377,9 @@ private:
                     << ev->Get()->Record.GetError().GetMessage() << ":"
                     << NYql::NDqProto::StatusIds_StatusCode_Name(ev->Get()->Record.GetError().GetStatusCode());
                 Issues.AddIssue(TIssue(ev->Get()->Record.GetError().GetMessage()).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR));
-                Finish(ev->Get()->Record.GetError().GetStatusCode());
+                const bool allocationTimeout = ev->Get()->Record.GetError().GetAllocationErrorReason()
+                    == NYql::NDqProto::ALLOCATION_TIMEOUT;
+                Finish(ev->Get()->Record.GetError().GetStatusCode(), allocationTimeout);
                 return;
             }
             case TAllocateWorkersResponse::kNodes:

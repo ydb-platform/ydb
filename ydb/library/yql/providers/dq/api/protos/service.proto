@@ -305,6 +305,8 @@ message ClusterStatusResponse {
         string OperationId = 3;
         string UserName = 4;
         string EnqueueTime = 5;
+        string WaitState = 6;
+        uint64 AllocationTimeoutElapsedMs = 7;
     }
     repeated WaitInfo WaitList = 4;
 

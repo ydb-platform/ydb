@@ -69,8 +69,25 @@ GROUP BY
 
 Текущий набор статистик по таблицам:
 
+<<<<<<< HEAD
+<<<<<<< HEAD
 * Количество записей таблицы;
 * Размер таблицы в байтах.
+=======
+{% if feature_flags.enable_column_statistics == false %}
+{% note warning "Экспериментальная функциональность" %}
+
+Функциональность находится в разработке и по умолчанию выключена флагом [`enable_column_statistics`](../../reference/configuration/feature_flags.md). Её поведение может измениться без сохранения обратной совместимости, а сама функциональность может так и не стать общедоступной. Включение флага может привести к ошибкам, нестабильной работе кластера или невозможности сменить версию YDB. Не включайте флаг в production-кластерах. [Подробнее](../../reference/configuration/feature_flags.md#experimental).
+
+{% endnote %}
+{% endif %}
+
+=======
+>>>>>>> 125f02365b3 (Remove unnecessary notes)
+Для более точных оценок нужно собирать статистику по столбцам: какие значения в них встречаются и как часто. Например, по ней оптимизатор может оценить, сколько строк соответствует условию `WHERE`.
+
+Сбор статистики по столбцам можно запускать вручную командой [ANALYZE](../../yql/reference/syntax/analyze.md) или настроить [сбор в фоновом режиме](../../reference/configuration/statistics_config.md#enable-background-column-stats-collection).
+>>>>>>> 6f22a4d5a17 (add description about feature flag enable_column_statistics)
 
 ### Текущие уровни стоимостной оптимизации
 

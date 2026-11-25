@@ -198,6 +198,9 @@ private:
     void StopWorker(ui32 nodeId, const TWorkerId& id);
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
+    void RemoveEndedWorkers(const TActorContext& ctx);
+    bool IsRemovingTargetWorkers(ui64 replicationId, ui64 targetId) const;
+    void DeleteExitedWorkers(ui64 replicationId, ui64 targetId, NIceDb::TNiceDb& db);
     TReplication::ITarget* FindTarget(const TWorkerId& id) const;
     bool IsHeartbeatParticipant(const TWorkerId& id) const;
     size_t CountHeartbeatParticipants() const;
@@ -353,6 +356,8 @@ private:
     THashSet<TWorkerId> BootQueue;
     THashSet<std::pair<TWorkerId, ui32>> StopQueue;
     THashSet<TWorkerId> RemoveQueue;
+    THashSet<TWorkerId> ExitingWorkers;
+    THashSet<TWorkerId> ExitedWorkers;
 
     bool ProcessQueuesScheduled = false;
     static constexpr ui32 ProcessBatchLimit = 100;
@@ -378,7 +383,14 @@ private:
     THashMap<std::pair<ui64, ui64>, TActorId> IndexReadyActors;
     bool IndexBuildTxInFlight = false;
     TMap<ui64, TRowVersion> CommittedVersions; // Completed global frontier per replication.
-    TMap<TRowVersion, ui64> AssignedTxIds; // tx ids assigned to version
+    struct TAssignedTxId {
+        ui64 WriteTxId;
+        ui64 FirstEndStep;
+    };
+    TMap<TRowVersion, TAssignedTxId> AssignedTxIds;
+    void SaveAssignment(NIceDb::TNiceDb& db, const TRowVersion& end, TAssignedTxId assignment);
+    ui64 ExtendLastAssignment(NIceDb::TNiceDb& db, const TRowVersion& end);
+    ui64 CoverEarlierInterval(NIceDb::TNiceDb& db, const TRowVersion& end, const TRowVersion& requested);
     TMap<TRowVersion, THashSet<ui32>> PendingTxId;
     bool AssignTxIdInFlight = false;
 

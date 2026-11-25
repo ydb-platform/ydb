@@ -1,10 +1,37 @@
 #include "controller_impl.h"
 
+#include <iterator>
 #include <variant>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
+
+void TController::SaveAssignment(NIceDb::TNiceDb& db, const TRowVersion& end, TAssignedTxId assignment) {
+    AssignedTxIds[end] = assignment;
+    db.Table<Schema::TxIds>().Key(end.Step, end.TxId).Update(
+        NIceDb::TUpdate<Schema::TxIds::WriteTxId>(assignment.WriteTxId),
+        NIceDb::TUpdate<Schema::TxIds::FirstEndStep>(assignment.FirstEndStep));
+}
+
+ui64 TController::ExtendLastAssignment(NIceDb::TNiceDb& db, const TRowVersion& end) {
+    const auto last = std::prev(AssignedTxIds.end());
+    const auto assignment = last->second;
+    db.Table<Schema::TxIds>().Key(last->first.Step, last->first.TxId).Delete();
+    AssignedTxIds.erase(last);
+    SaveAssignment(db, end, assignment);
+    return assignment.WriteTxId;
+}
+
+ui64 TController::CoverEarlierInterval(NIceDb::TNiceDb& db, const TRowVersion& end, const TRowVersion& requested) {
+    auto& assignment = AssignedTxIds.at(end);
+    if (requested.Step < assignment.FirstEndStep) {
+        assignment.FirstEndStep = requested.Step;
+        db.Table<Schema::TxIds>().Key(end.Step, end.TxId).Update(
+            NIceDb::TUpdate<Schema::TxIds::FirstEndStep>(requested.Step));
+    }
+    return assignment.WriteTxId;
+}
 
 class TController::TTxAssignTxId: public TTxBase {
     THashMap<ui32, THolder<TEvService::TEvTxIdResult>> Result;
@@ -83,10 +110,10 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         auto result = Process([&](const TRowVersion& version) -> TAssignResult {
-            auto it = Self->IndexBuilds.empty()
-                ? Self->AssignedTxIds.find(version) : Self->AssignedTxIds.lower_bound(version);
-            if (it != Self->AssignedTxIds.end()) {
-                return it->second;
+            const auto it = Self->AssignedTxIds.lower_bound(version);
+            if (it != Self->AssignedTxIds.end()
+                    && (!Self->IndexBuilds.empty() || it->second.FirstEndStep <= version.Step)) {
+                return Self->CoverEarlierInterval(db, it->first, version);
             }
 
             if (Self->AssignedTxIds.size() >= MaxOpenTxIds) {
@@ -102,10 +129,7 @@ public:
             const ui64 txId = Self->AllocatedTxIds.front();
             Self->AllocatedTxIds.pop_front();
 
-            db.Table<Schema::TxIds>().Key(version.Step, version.TxId).Update(
-                NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
-            );
-            it = Self->AssignedTxIds.emplace(version, txId).first;
+            Self->SaveAssignment(db, version, {txId, version.Step});
 
             return txId;
         });
@@ -138,26 +162,16 @@ public:
 
                 const auto txId = Self->AllocatedTxIds.front();
                 Self->AllocatedTxIds.pop_front();
-                Self->AssignedTxIds.emplace(it->first, txId);
-                db.Table<Schema::TxIds>().Key(it->first.Step, it->first.TxId).Update(
-                    NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
-                );
+                Self->SaveAssignment(db, it->first, {txId, it->first.Step});
             } else {
-                auto nh = Self->AssignedTxIds.extract(Self->AssignedTxIds.rbegin()->first);
-                db.Table<Schema::TxIds>().Key(nh.key().Step, nh.key().TxId).Delete();
-
-                nh.key() = it->first;
-                db.Table<Schema::TxIds>().Key(nh.key().Step, nh.key().TxId).Update(
-                    NIceDb::TUpdate<Schema::TxIds::WriteTxId>(nh.mapped())
-                );
-                Self->AssignedTxIds.insert(std::move(nh));
+                Self->ExtendLastAssignment(db, it->first);
             }
         }
 
         result = Process([&](const TRowVersion& version) -> TAssignResult {
             auto it = Self->AssignedTxIds.lower_bound(version);
             Y_ABORT_UNLESS(it != Self->AssignedTxIds.end());
-            return it->second;
+            return Self->CoverEarlierInterval(db, it->first, version);
         });
 
         Y_ABORT_UNLESS(std::holds_alternative<TTxId>(result));

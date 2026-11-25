@@ -49,35 +49,21 @@ static THolder<IChangeRecordSerializer> CreateCdcStreamSerializer(const TUserTab
 
 namespace {
 
-template <typename TItem, typename TCallback>
-void ForEachPairwise(const TVector<TItem>& items, TCallback&& callback) {
-    const TItem* prev = nullptr;
-    for (const auto& item : items) {
-        callback(prev, item);
-        prev = &item;
-    }
-}
-
-TPartitionKeyRange MakeTopicPartitionKeyRange(const TKeyDesc::TPartitionInfo* prev, const TKeyDesc::TPartitionInfo& partition) {
-    TPartitionKeyRange range;
-    if (prev && prev->Range && !prev->Range->EndKeyPrefix.GetCells().empty()) {
-        range.FromBound = prev->Range->EndKeyPrefix;
-    }
-    if (partition.Range && !partition.Range->EndKeyPrefix.GetCells().empty()) {
-        range.ToBound = partition.Range->EndKeyPrefix;
-    }
-    return range;
-}
-
 TVector<ui64> MakeIntersectingPartitionIds(const TVector<TKeyDesc::TPartitionInfo>& partitions,
         const TSerializedTableRange& shardKeyRange, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
     const auto shardRange = MakeKeyRange(shardKeyRange.From, shardKeyRange.To);
     TVector<ui64> partitionIds;
-    ForEachPairwise(partitions, [&](const TKeyDesc::TPartitionInfo* prev, const TKeyDesc::TPartitionInfo& partition) {
-        if (KeyRangesIntersect(MakeTopicPartitionKeyRange(prev, partition), shardRange, keyTypes)) {
+    TPartitionKeyRange partitionRange;
+    for (const auto& partition : partitions) {
+        partitionRange.ToBound.Clear();
+        if (partition.Range && !partition.Range->EndKeyPrefix.GetCells().empty()) {
+            partitionRange.ToBound = partition.Range->EndKeyPrefix;
+        }
+        if (KeyRangesIntersect(partitionRange, shardRange, keyTypes)) {
             partitionIds.push_back(partition.ShardId);
         }
-    });
+        partitionRange.FromBound = partitionRange.ToBound;
+    }
     return partitionIds;
 }
 

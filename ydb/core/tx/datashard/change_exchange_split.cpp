@@ -21,7 +21,6 @@
 #include <util/string/builder.h>
 
 #include <optional>
-#include <tuple>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
 
@@ -66,31 +65,15 @@ std::optional<TSplitKeyRanges> ParseSplitKeyRanges(ui64 srcTabletId, const TVect
     return keyRanges;
 }
 
-struct TKeyRangeHeartbeatsData {
-    TVector<NScheme::TTypeInfo> KeyTypes;
-    TPartitionKeyRange SrcKeyRange;
-    THashMap<ui64, TPartitionKeyRange> DstTabletIdToKeyRange;
-};
-
-std::tuple<bool, TKeyRangeHeartbeatsData> PrepareKeyRangeHeartbeatsData(NKikimrSchemeOp::ECdcStreamHeartbeatMode heartbeatMode,
-        const TVector<NScheme::TTypeInfo>& topicKeySchema, const std::optional<TSplitKeyRanges>& splitKeyRanges)
-{
-    if (!ShouldUseKeyRangeHeartbeats(heartbeatMode, topicKeySchema)) {
-        return {false, {}};
-    }
-
-    Y_ENSURE(splitKeyRanges);
-    return {true, {topicKeySchema, splitKeyRanges->SrcKeyRange, splitKeyRanges->DstTabletIdToKeyRange}};
-}
-
-TVector<ui64> CalcPartitionDstTabletIds(const TPartitionKeyRange& partitionKeyRange, const TKeyRangeHeartbeatsData& data) {
-    if (!KeyRangesIntersect(partitionKeyRange, data.SrcKeyRange, data.KeyTypes)) {
+TVector<ui64> CalcPartitionDstTabletIds(const TPartitionKeyRange& partitionKeyRange, const TSplitKeyRanges& splitKeyRanges,
+        TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    if (!KeyRangesIntersect(partitionKeyRange, splitKeyRanges.SrcKeyRange, keyTypes)) {
         return {};
     }
 
     TVector<ui64> dstTabletIds;
-    for (const auto& [dstTabletId, dstKeyRange] : data.DstTabletIdToKeyRange) {
-        if (KeyRangesIntersect(partitionKeyRange, dstKeyRange, data.KeyTypes)) {
+    for (const auto& [dstTabletId, dstKeyRange] : splitKeyRanges.DstTabletIdToKeyRange) {
+        if (KeyRangesIntersect(partitionKeyRange, dstKeyRange, keyTypes)) {
             dstTabletIds.push_back(dstTabletId);
         }
     }
@@ -446,8 +429,9 @@ class TCdcWorker
         }
 
         THashMap<ui32, TActorId> workers;
-        const auto [shouldUseKeyRangeHeartbeats, keyRangeHeartbeatsData] = PrepareKeyRangeHeartbeatsData(
-            HeartbeatMode, entry.PQGroupInfo->Schema, SplitKeyRanges);
+        const bool keyRangeHeartbeats = ShouldUseKeyRangeHeartbeats(HeartbeatMode, entry.PQGroupInfo->Schema);
+        Y_ENSURE(!keyRangeHeartbeats || SplitKeyRanges);
+        const auto dstTabletIdToKeyRange = keyRangeHeartbeats ? SplitKeyRanges->DstTabletIdToKeyRange : THashMap<ui64, TPartitionKeyRange>();
 
         for (const auto& partition : entry.PQGroupInfo->Description.GetPartitions()) {
             const auto partitionId = partition.GetPartitionId();
@@ -457,10 +441,9 @@ class TCdcWorker
                 continue;
             }
 
-            TVector<ui64> dstTabletIds = DstTabletIds;
-            if (shouldUseKeyRangeHeartbeats) {
-                dstTabletIds = CalcPartitionDstTabletIds(TPartitionKeyRange::Parse(partition.GetKeyRange()), keyRangeHeartbeatsData);
-            }
+            const auto dstTabletIds = keyRangeHeartbeats
+                ? CalcPartitionDstTabletIds(TPartitionKeyRange::Parse(partition.GetKeyRange()), *SplitKeyRanges, entry.PQGroupInfo->Schema)
+                : DstTabletIds;
             if (dstTabletIds.empty()) {
                 continue;
             }
@@ -474,7 +457,7 @@ class TCdcWorker
                     {"partitionId", partitionId});
 
                 const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId, SrcTabletId, dstTabletIds,
-                    keyRangeHeartbeatsData.DstTabletIdToKeyRange));
+                    dstTabletIdToKeyRange));
                 workers.emplace(partitionId, worker);
                 Pending.emplace(worker, partitionId);
             }

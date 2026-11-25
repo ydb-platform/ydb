@@ -6,7 +6,8 @@
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/move/move.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/ro_controller.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
@@ -31,17 +32,18 @@ static NOlap::TInternalPathId TestPathId() {
     return NOlap::TInternalPathId::FromRawValue(1);
 }
 
-// Builds a TIndexInfo with a MAX index; inheritPortionStorage controls where the index blob lives.
-static NOlap::TIndexInfo MakeMaxIndexInfo(const bool inheritPortionStorage) {
+// Builds a TIndexInfo with a MIN_MAX index; inheritPortionStorage controls where the index blob lives.
+static NOlap::TIndexInfo MakeMinMaxIndexInfo(const bool inheritPortionStorage) {
     static constexpr ui32 kPkColId = 1;
-    static constexpr ui32 kMaxIndexId = 100;
+    static constexpr ui32 kMinMaxIndexId = 100;
     NKikimrSchemeOp::TColumnTableSchema proto;
     *proto.MutableColumns()->Add() = NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)).CreateColumn(kPkColId);
     proto.AddKeyColumnNames("pk");
     proto.SetVersion(1);
-    *proto.AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(kMaxIndexId, "pk_max",
-                                                                   NOlap::IStoragesManager::DefaultStorageId, inheritPortionStorage, kPkColId))
-                              .SerializeToProto();
+    const auto index = std::make_shared<NOlap::NIndexes::NMinMax::TIndexMeta>(kMinMaxIndexId, "pk_min_max",
+        NOlap::IStoragesManager::DefaultStorageId, inheritPortionStorage, kPkColId,
+        NOlap::NIndexes::TReadDataExtractorContainer(std::make_shared<NOlap::NIndexes::TDefaultDataExtractor>()));
+    *proto.AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(index).SerializeToProto();
     auto cache = std::make_shared<NOlap::TSchemaObjectsCache>();
     auto result = NOlap::TIndexInfo::BuildFromProto(1, proto, NOlap::TTestStoragesManager::GetInstance(), cache);
     AFL_VERIFY(result);
@@ -539,7 +541,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
         // InheritPortionStorage=false: the index blob stays in BlobStorage, so the portion is admitted.
         {
-            TActualizerSchema schema(MakeMaxIndexInfo(false));
+            TActualizerSchema schema(MakeMinMaxIndexInfo(false));
             NOlap::NActualizer::TMoveDataActualizer actualizer(targetGroups, schema.Index);
             const THashMap<ui64, NOlap::TPortionInfo::TPtr> portions = { { 1, MakeTieredPortion(1, "tier1", schema.GetIndexInfo()) } };
             actualizer.Seed(NOlap::NActualizer::TAddExternalContext(start, portions), {});
@@ -549,7 +551,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
         // InheritPortionStorage=true: every entity is in tier storage, so the portion is skipped.
         {
-            TActualizerSchema schema(MakeMaxIndexInfo(true));
+            TActualizerSchema schema(MakeMinMaxIndexInfo(true));
             NOlap::NActualizer::TMoveDataActualizer actualizer(targetGroups, schema.Index);
             const THashMap<ui64, NOlap::TPortionInfo::TPtr> portions = { { 2, MakeTieredPortion(2, "tier1", schema.GetIndexInfo()) } };
             actualizer.Seed(NOlap::NActualizer::TAddExternalContext(start, portions), {});

@@ -10,7 +10,8 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/maintenance/move_data/move_data.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
@@ -271,7 +272,7 @@ private:
     }
 };
 
-// InitShard with tier "warm" and a MAX index kept in __DEFAULT storage, so the index blob stays in BlobStorage after tiering.
+// InitShard with tier "warm" and a MIN_MAX index kept in __DEFAULT storage, so the index blob stays in BlobStorage after tiering.
 TString TieredSchemaTxBody(const TTestSchema::TTableSpecials& specials) {
     static constexpr ui32 kBsIndexId = 3000;
     NKikimrTxColumnShard::TSchemaTxBody tx;
@@ -282,11 +283,11 @@ TString TieredSchemaTxBody(const TTestSchema::TTableSpecials& specials) {
     TSchemeShardLocalPathId::FromRawValue(TableId).ToProto(*tableProto);
     auto* schemaProto = tableProto->MutableSchema();
     TTestSchema::InitSchema(TTestSchema::YdbSchema(), TTestSchema::YdbPkSchema(), specials, schemaProto);
-    // MAX index on timestamp (column 1), __DEFAULT storage, InheritPortionStorage=false.
-    *schemaProto->AddIndexes() =
-        NOlap::NIndexes::TIndexMetaContainer(std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(kBsIndexId, "ts_max_bs",
-                                                 NOlap::IStoragesManager::DefaultStorageId, /*inheritPortionStorage=*/false, /*columnId=*/1))
-            .SerializeToProto();
+    // MIN_MAX index on timestamp (column 1), __DEFAULT storage, InheritPortionStorage=false.
+    const auto index = std::make_shared<NOlap::NIndexes::NMinMax::TIndexMeta>(kBsIndexId, "ts_min_max_bs",
+        NOlap::IStoragesManager::DefaultStorageId, /*inheritPortionStorage=*/false, /*columnId=*/1,
+        NOlap::NIndexes::TReadDataExtractorContainer(std::make_shared<NOlap::NIndexes::TDefaultDataExtractor>()));
+    *schemaProto->AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(index).SerializeToProto();
     TTestSchema::InitTiersAndTtl(specials, tableProto->MutableTtlSettings());
     TString txBody;
     Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
@@ -782,7 +783,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.Runtime.SimulateSleep(TDuration::Seconds(3));
         csController->WaitCompactions(TDuration::Seconds(5));
 
-        // Column blobs are in S3; the MAX index blob (DefaultStorage) remains live in OldGroup.
+        // Column blobs are in S3; the MIN_MAX index blob (DefaultStorage) remains live in OldGroup.
         UNIT_ASSERT_C(
             LivePortionBlobs(*f.OldGroupProxy, TabletId).size(), "expected index blobs to remain in OldGroup after tiering, but found none");
         f.ReassignPastWrittenData();

@@ -27,6 +27,7 @@ namespace NKikimr::NGroupSyncer {
         bool Finished = false;
         ui32 Step = 0;
         std::deque<TLogoBlobID> RestoreQueue;
+        size_t UnverifiedTargetBlobs = 0;
         std::deque<TLogoBlobID> AbsenceQueue; // target blobs with keep flag, to be released if the synced piles lack them
         struct TSourceBlobFlags {
             bool Keep = false;

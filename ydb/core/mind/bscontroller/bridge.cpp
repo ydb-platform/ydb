@@ -1156,8 +1156,8 @@ std::optional<TBlobStorageController::TBridgeSyncRemaining> TBlobStorageControll
             base = syncerState.KnownRemaining;
         }
     }
-    if (progress && progress->ScanFinished) {
-        return TBridgeSyncRemaining{.Bytes = left(progress->BytesToCopy, progress->BytesCopied), .Complete = true};
+    if (progress && (progress->ScanFinished || progress->BlobsTotal)) {
+        return TBridgeSyncRemaining{.Bytes = left(progress->BytesToCopy, progress->BytesCopied), .Complete = progress->ScanFinished};
     }
     if (!base) { // no scan of this stage has finished yet, the one of the previous stage is the best guess
         if (const auto it = BridgeSyncState.find(targetGroupId);

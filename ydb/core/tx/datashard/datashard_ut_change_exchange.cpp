@@ -4226,11 +4226,40 @@ Y_UNIT_TEST_SUITE(Cdc) {
         IndexStream(NKikimrSchemeOp::EIndexTypeGlobalUnique, InitialScan);
     }
 
-    void InitialScanTopicSplitRecovery(bool topicAutoPartitioning, bool rebootPq, bool pauseAutoPartitioning = false, bool delayedPrepared = false) {
+    TCdcStream WithKeyRangeHeartbeats(TCdcStream streamDesc) {
+        streamDesc.UserAttributes["__async_replication"] =
+            R"({"id":"1","path":"/Root/replica","supports_key_range_autopartitioning":true})";
+        return streamDesc;
+    }
+
+    bool HasResolvedAfterUpdate(const TVector<std::pair<TString, TString>>& records, const TString& expected = {}) {
+        bool update = false;
+        for (const auto& [_, data] : records) {
+            if (expected.empty() ? data.Contains("\"update\"") : AreJsonsEqual(data, expected)) {
+                update = true;
+            } else if (update && data.Contains("\"resolved\"")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool HasKey(const TVector<std::pair<TString, TString>>& records, const TString& key) {
+        return AnyOf(records, [&](const auto& record) {
+            return record.second.Contains("\"key\":[" + key + "]");
+        });
+    }
+
+    enum class EScanTopicMode { Fixed, Auto, KeyRange, KeyRangeWithFlagDisabledDuringScan };
+
+    void InitialScanTopicSplitRecovery(EScanTopicMode mode, bool rebootPq, bool pauseAutoPartitioning = false, bool delayedPrepared = false) {
+        const bool keyRange = mode == EScanTopicMode::KeyRange || mode == EScanTopicMode::KeyRangeWithFlagDisabledDuringScan;
+        const bool topicAutoPartitioning = mode != EScanTopicMode::Fixed;
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
             .SetDomainName("Root")
+            .SetEnableCdcKeyRangeHeartbeats(keyRange)
             .SetEnableChangefeedInitialScan(true)
         );
         auto& runtime = *server->GetRuntime();
@@ -4245,10 +4274,17 @@ Y_UNIT_TEST_SUITE(Cdc) {
         auto blockScans = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanRequest>([&](auto& ev) {
             scans.emplace_back(ev.Release());
         });
-        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
-            WithTopicAutoPartitioning(topicAutoPartitioning,
-                WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson)))));
+        auto stream = WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson));
+        if (keyRange) {
+            stream = WithKeyRangeHeartbeats(WithResolvedTimestamps(TDuration::Seconds(3), std::move(stream)));
+        } else {
+            stream = WithTopicAutoPartitioning(topicAutoPartitioning, std::move(stream));
+        }
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table", stream));
         WaitFor(runtime, [&]{ return !scans.empty(); }, "initial scan request");
+        if (mode == EScanTopicMode::KeyRangeWithFlagDisabledDuringScan) {
+            runtime.GetAppData().FeatureFlags.SetEnableCdcKeyRangeHeartbeats(false);
+        }
         const auto schemeShard = scans.front()->Get<TEvDataShard::TEvCdcStreamScanRequest>()
             ->Record.GetTablePathId().GetOwnerId();
 
@@ -4322,13 +4358,19 @@ Y_UNIT_TEST_SUITE(Cdc) {
             }
         });
 
-        AsyncSend(runtime, schemeShard, InternalTransaction(AlterPQGroupRequest(splitTxId, "/Root/Table/Stream", R"(
+        auto* request = InternalTransaction(AlterPQGroupRequest(splitTxId, "/Root/Table/Stream", R"(
             Name: "streamImpl"
-            Split {
-                Partition: 0
-                SplitBoundary: 'a'
-            }
-        )")));
+            Split { Partition: 0 SplitBoundary: 'a' }
+        )"));
+        if (keyRange) {
+            const auto desc = DescribePrivatePath(runtime, schemeShard, "/Root/Table/Stream");
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetCdcStreamDescription().GetHeartbeatMode(),
+                NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange);
+            const ui32 bound = 4;
+            request->Record.MutableTransaction(0)->MutableAlterPersQueueGroup()->MutableSplit(0)
+                ->SetSplitBoundary(TSerializedCellVec::Serialize({TCell::Make(bound)}));
+        }
+        AsyncSend(runtime, schemeShard, request);
         TestModificationResults(runtime, splitTxId, {topicAutoPartitioning
             ? NKikimrScheme::StatusAccepted : NKikimrScheme::StatusInvalidParameter});
 
@@ -4417,7 +4459,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 const auto topic = GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream");
                 for (const auto& partition : topic.GetPartitions()) {
                     for (const auto& record : GetRecords(runtime, edgeActor, "/Root/Table/Stream", partition.GetPartitionId())) {
-                        actual.push_back(record.second);
+                        if (!keyRange || !record.second.Contains("\"resolved\"")) {
+                            actual.push_back(record.second);
+                        }
                     }
                 }
                 UNIT_ASSERT_C(actual.size() <= expected.size(), "Unexpected or duplicated CDC records");
@@ -4462,6 +4506,15 @@ Y_UNIT_TEST_SUITE(Cdc) {
             UNIT_ASSERT_C(!GetRecords(runtime, edgeActor, "/Root/Table/Stream", 1).empty(), "Left child must serve CDC records");
             UNIT_ASSERT_C(!GetRecords(runtime, edgeActor, "/Root/Table/Stream", 2).empty(), "Right child must serve CDC records");
         }
+        if (keyRange) {
+            auto read = [&](ui32 id) { return GetRecords(runtime, edgeActor, "/Root/Table/Stream", id); };
+            WaitFor(runtime, [&] {
+                return HasResolvedAfterUpdate(read(1), R"({"update":{"value":11},"key":[1]})")
+                    && HasResolvedAfterUpdate(read(2), R"({"update":{"value":80},"key":[8]})");
+            }, "resolved after updates in both KeyRange children");
+            UNIT_ASSERT(HasKey(read(1), "1") && !HasKey(read(1), "8"));
+            UNIT_ASSERT(HasKey(read(2), "8") && !HasKey(read(2), "1"));
+        }
         if (!topicAutoPartitioning) {
             checkDisabledScaling();
         }
@@ -4470,6 +4523,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
             UNIT_ASSERT_VALUES_EQUAL(describe.GetStatus(), NKikimrScheme::StatusSuccess);
             UNIT_ASSERT(describe.GetPathDescription().HasCdcStreamDescription());
             if (describe.GetPathDescription().GetCdcStreamDescription().GetState() == NKikimrSchemeOp::ECdcStreamStateReady) {
+                if (keyRange) {
+                    UNIT_ASSERT_VALUES_EQUAL(describe.GetPathDescription().GetCdcStreamDescription().GetHeartbeatMode(),
+                        NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange);
+                }
                 return;
             }
             runtime.SimulateSleep(TDuration::MilliSeconds(100));
@@ -4478,23 +4535,31 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     Y_UNIT_TEST(InitialScanTopicSplitAfterSchemeShardRecovery) {
-        InitialScanTopicSplitRecovery(true, false);
+        InitialScanTopicSplitRecovery(EScanTopicMode::Auto, false);
+    }
+
+    Y_UNIT_TEST(InitialScanKeyRangeTopicSplitAfterParticipantRecovery) {
+        InitialScanTopicSplitRecovery(EScanTopicMode::KeyRange, true);
+    }
+
+    Y_UNIT_TEST(InitialScanKeyRangeSurvivesFlagDisableAndSplitRecovery) {
+        InitialScanTopicSplitRecovery(EScanTopicMode::KeyRangeWithFlagDisabledDuringScan, true);
     }
 
     Y_UNIT_TEST(InitialScanTopicSplitAfterParticipantRecovery) {
-        InitialScanTopicSplitRecovery(true, true);
+        InitialScanTopicSplitRecovery(EScanTopicMode::Auto, true);
     }
 
     Y_UNIT_TEST(InitialScanTopicSplitDisabledAfterRecovery) {
-        InitialScanTopicSplitRecovery(false, false);
+        InitialScanTopicSplitRecovery(EScanTopicMode::Fixed, false);
     }
 
     Y_UNIT_TEST(InitialScanTopicSplitPausedAfterRecovery) {
-        InitialScanTopicSplitRecovery(true, true, true);
+        InitialScanTopicSplitRecovery(EScanTopicMode::Auto, true, true);
     }
 
     Y_UNIT_TEST(InitialScanTopicSplitDelayedPreparedBeforePropose) {
-        InitialScanTopicSplitRecovery(true, false, false, true);
+        InitialScanTopicSplitRecovery(EScanTopicMode::Auto, false, false, true);
     }
 
     Y_UNIT_TEST(InitialScanDebezium) {
@@ -6566,12 +6631,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 info->Description.SetHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange);
                 entry.CdcStreamInfo = info;
             }
-        });
-    }
-
-    bool HasKey(const TVector<std::pair<TString, TString>>& records, const TString& key) {
-        return AnyOf(records, [&](const auto& record) {
-            return record.second.Contains("\"key\":[" + key + "]");
         });
     }
 

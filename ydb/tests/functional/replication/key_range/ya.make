@@ -1,0 +1,32 @@
+UNITTEST()
+
+ENV(YDB_USE_IN_MEMORY_PDISKS=true)
+
+ENV(YDB_ERASURE=block_4-2)
+
+ENV(YDB_FEATURE_FLAGS="enable_topic_transfer,enable_topic_autopartitioning_for_cdc,enable_topic_autopartitioning_for_replication,enable_cdc_key_range_heartbeats")
+ENV(YDB_GRPC_SERVICES="replication")
+
+PEERDIR(
+    library/cpp/threading/local_executor
+    ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/client/draft
+)
+
+SRCS(
+    key_range.cpp
+)
+
+INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
+
+SIZE(MEDIUM)
+
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:24 cpu:4)
+ELSE()
+    REQUIREMENTS(ram:16 cpu:1)
+ENDIF()
+
+END()

@@ -8,6 +8,11 @@
 
 namespace NYql::NSo::NConstants {
 
+constexpr ui32 MaxSensorsPerRow = 50;
+constexpr ui64 DefaultWriteMaxRequestsInflight = 3;
+constexpr ui64 DefaultWriteMaxPointsPerRequest = 1000;
+constexpr ui64 MaxWritePointsPerRequest = 10000;
+
 // ── HTTP request / response size limits ──────────────────────────────────────
 
 // Maximum byte length of a single HTTP GET request URL.

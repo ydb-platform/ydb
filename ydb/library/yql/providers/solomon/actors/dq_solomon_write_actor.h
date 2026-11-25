@@ -18,6 +18,7 @@ namespace NYql::NDq {
 
 constexpr i64 DqSolomonDefaultFreeSpace = 16_MB;
 
+<<<<<<< HEAD
 std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(
     NYql::NSo::NProto::TDqSolomonShard&& settings,
     ui64 outputIndex,
@@ -29,6 +30,16 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
     const ::NMonitoring::TDynamicCounterPtr& counters,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     i64 freeSpace = DqSolomonDefaultFreeSpace,
+=======
+std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(NYql::NSo::NProto::TDqSolomonShard&& settings,
+    ui64 outputIndex, TCollectStatsLevel statsLevel, const TTxId& txId, ui64 taskId, const THashMap<TString, TString>& secureParams,
+    NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks, const ::NMonitoring::TDynamicCounterPtr& counters,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+    i64 freeSpace = DqSolomonDefaultFreeSpace, bool enableStreamingQueriesCounters = false, bool enableCountersPerTask = false);
+
+void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(),
+>>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
     bool enableStreamingQueriesCounters = false);
 
 void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(), bool enableStreamingQueriesCounters = false);

@@ -88,6 +88,7 @@ feature_flags:
 | `enable_topic_compactification_by_key`                   | Включение компактификации топиков в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
 | `enable_kafka_transactions`                              | Включение транзакций в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
 | `enable_external_data_sources`                           | Включение [внешних источников данных](../../concepts/datamodel/external_data_source.md)|
+| `enable_resource_pools`                                  | Включение [пулов ресурсов](../../dev/resource-consumption-management.md) в Workload Manager |
 | `enable_grpc_audit`                                      | Включение [аудита](../../security/audit-log.md#grpc-connection) изменений состояния gRPC-соединения |
 | `enable_fs_backups`                                      | Включение операций [резервного копирования и восстановления на сетевую файловую систему](../../concepts/backup.md#nfs) |
 | `switch_to_config_v2`                                    | Переход с конфигурации V1 на [конфигурацию V2](../../devops/configuration-management/migration/migration-to-v2.md) |

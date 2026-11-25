@@ -149,7 +149,7 @@ std::string TQueryGenerator::GetDDLQueriesFromDir(const TFsPath& dir) const {
         }
         TFileInput fInput(i.GetPath());
         auto query = fInput.ReadAll();
-        SubstGlobal(query, "{db}", Params.GetFullTableName(nullptr));
+        SubstGlobal(query, "{db}", Params.DbPath == "." && !path.StartsWith('/') ? TString(".") : path);
         result << query << std::endl;
     }
     return result.str();

@@ -291,7 +291,7 @@ Y_UNIT_TEST_SUITE(RelativePathCompatibility) {
 
     Y_UNIT_TEST_F(QueryInitComposesOnePrefixBeforeAllStatements, TCliTestFixture) {
         const TString columns = " (key Uint64, PRIMARY KEY(key));";
-        const auto first = EnvHomeFile("suite/init/first.sql", "CREATE TABLE `RelativeInitFirst`" + columns);
+        const auto first = EnvHomeFile("suite/init/first.sql", "CREATE TABLE `{db}/RelativeInitFirst`" + columns);
         EnvHomeFile("suite/init/nested/second.sql", "CREATE TABLE `RelativeInitSecond`" + columns);
         const auto output = RunCli({"-e", GetEndpoint(), "-d", "tenant", "workload", "query",
             "--path", "RelativeQueryInitPaths", "init", "--suite-path", TFsPath(first).Parent().Parent().GetPath(),

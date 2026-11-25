@@ -270,13 +270,17 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
             const auto& tableInfo = *it->second;
             for (const auto& columnRecord : record.GetColumns()) {
                 const auto* column = tableInfo.Columns.FindPtr(columnRecord.GetId());
-                if (column && !column->IsBuildInProgress) {
-                    // TODO: column types don't change when bound by id, but we may want to check anyway
-                } else {
+                if (!column) {
                     schemaChangedError = TStringBuilder() << "ReadTable cannot find column "
                         << columnRecord.GetName() << " (" << columnRecord.GetId() << ")";
                     break;
                 }
+                if (column->IsBuildInProgress) {
+                    schemaChangedError = TStringBuilder() << "ReadTable cannot read column '"
+                        << column->Name << "' (" << columnRecord.GetId() << "): column build is in progress";
+                    break;
+                }
+                // TODO: column types don't change when bound by id, but we may want to check anyway
             }
             // TODO: validate key ranges?
         } else {

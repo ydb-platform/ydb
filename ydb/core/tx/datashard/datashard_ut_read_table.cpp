@@ -755,7 +755,7 @@ using TProjection = TVector<TString>;
 using TRow = TVector<ui32>;
 using TRows = TVector<TRow>;
 
-enum class ERead { Iterator, PointIterator, Columns, KqpScan, ReadTable, MiniKQL };
+enum class ERead { Iterator, HeadIterator, PointIterator, Columns, KqpScan, ReadTable, MiniKQL };
 enum class EColumnState { Building, Ready, Absent };
 
 // The fixture only uses Nullable(UInt32) columns in ClickHouse native blocks.
@@ -972,15 +972,18 @@ public:
         TRows rows;
         switch (read) {
         case ERead::Iterator:
+        case ERead::HeadIterator:
         case ERead::PointIterator: {
             auto request = GetBaseReadRequest(TableId, schema, ++ReadId,
                 NKikimrDataEvents::FORMAT_CELLVEC, snapshot);
             request->Record.ClearColumns();
             for (const auto& name : projection) { request->Record.AddColumns(ColumnIds.at(name)); }
-            if (read == ERead::PointIterator) {
-                // Match ReadRows: individual keys without a schema version or snapshot.
+            if (read == ERead::HeadIterator || read == ERead::PointIterator) {
+                // Cover Head reads without a schema version, including ReadRows point reads.
                 request->Record.MutableTableId()->ClearSchemaVersion();
                 request->Record.ClearSnapshot();
+            }
+            if (read == ERead::PointIterator) {
                 for (const auto key : KeysInShard(schema)) { AddKeyQuery(*request, {key}); }
             } else {
                 AddFullRangeQuery(*request);
@@ -995,8 +998,12 @@ public:
                 UNIT_ASSERT_VALUES_EQUAL(result.Record.GetStatus().IssuesSize(), 1);
                 const auto& issue = result.Record.GetStatus().GetIssues(0);
                 UNIT_ASSERT_VALUES_EQUAL(issue.severity(), ui32(NYql::TSeverityIds::S_ERROR));
+                const TString reason = state == EColumnState::Building
+                    ? TString(TStringBuilder() << "Cannot read column '" << badColumn << "' ("
+                        << ColumnIds.at(badColumn) << "): column build is in progress")
+                    : TString(TStringBuilder() << "Unknown column: " << ColumnIds.at(badColumn));
                 UNIT_ASSERT_VALUES_EQUAL(issue.message(), TStringBuilder()
-                    << "Unknown column: " << ColumnIds.at(badColumn) << " (shard# " << shard
+                    << reason << " (shard# " << shard
                     << " node# " << ResolveTablet(runtime, shard).NodeId()
                     << " state# " << DatashardStateName(TShardState::Ready) << ")");
             } else {
@@ -1116,8 +1123,12 @@ public:
                 UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
                 UNIT_ASSERT_VALUES_EQUAL(result->Record.ErrorSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(result->Record.GetError(0).GetKind(), NKikimrTxDataShard::TError::SCHEME_CHANGED);
-                UNIT_ASSERT_VALUES_EQUAL(result->Record.GetError(0).GetReason(), TStringBuilder()
-                    << "ReadTable cannot find column " << badColumn << " (" << ColumnIds.at(badColumn) << ")");
+                const TString reason = state == EColumnState::Building
+                    ? TString(TStringBuilder() << "ReadTable cannot read column '" << badColumn << "' ("
+                        << ColumnIds.at(badColumn) << "): column build is in progress")
+                    : TString(TStringBuilder() << "ReadTable cannot find column " << badColumn << " ("
+                        << ColumnIds.at(badColumn) << ")");
+                UNIT_ASSERT_VALUES_EQUAL(result->Record.GetError(0).GetReason(), reason);
                 UNIT_ASSERT(result->Record.GetTxResult().empty());
                 break;
             }
@@ -1406,7 +1417,7 @@ public:
     }
 
     void CheckInvariants(EColumnState state) {
-        CheckInvariants({ERead::Iterator, ERead::PointIterator, ERead::Columns,
+        CheckInvariants({ERead::Iterator, ERead::HeadIterator, ERead::PointIterator, ERead::Columns,
             ERead::KqpScan, ERead::ReadTable, ERead::MiniKQL}, state);
     }
 
@@ -1755,6 +1766,7 @@ Y_UNIT_TEST_SUITE(DataShardBuildingColumns) {
     }
 
     Y_UNIT_TEST(ReadIterator) { TestBuildingColumn(ERead::Iterator); }
+    Y_UNIT_TEST(HeadReadIterator) { TestBuildingColumn(ERead::HeadIterator); }
     Y_UNIT_TEST(PointReadIterator) { TestBuildingColumn(ERead::PointIterator); }
     Y_UNIT_TEST(ReadIteratorAfterReboot) { TestBuildingColumn(ERead::Iterator, true); }
     Y_UNIT_TEST(ReadColumns) { TestBuildingColumn(ERead::Columns); }

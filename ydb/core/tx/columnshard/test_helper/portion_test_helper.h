@@ -31,19 +31,17 @@ inline std::shared_ptr<arrow::RecordBatch> MakePortionTestPKBatch(const ui64 sta
     return arrow::RecordBatch::Make(schema, 2, { array });
 }
 
-inline std::shared_ptr<TPortionInfo> MakeTestCompactedPortion(const TInternalPathId pathId, const ui64 portionId, const ui64 startKey,
-    const ui64 endKey, const ui32 recordsCount, const TSnapshot& appearanceSnapshot, const std::optional<TSnapshot>& removeSnapshot,
-    const TString& tierName = {}) {
+inline TPortionMetaConstructor MakeTestPortionMeta(
+    const ui64 startKey, const ui64 endKey, const ui32 recordsCount, const TSnapshot& snapshot, const TString& tierName) {
     TString serialized = NArrow::SerializeBatchNoCompression(MakePortionTestPKBatch(startKey, endKey));
     TIndexInfo indexInfo = MakePortionTestIndexInfo();
 
     NKikimrTxColumnShard::TIndexPortionMeta metaProto;
-    metaProto.SetIsCompacted(true);
     metaProto.SetPrimaryKeyBorders(serialized);
-    metaProto.MutableRecordSnapshotMin()->SetPlanStep(appearanceSnapshot.GetPlanStep());
-    metaProto.MutableRecordSnapshotMin()->SetTxId(appearanceSnapshot.GetTxId());
-    metaProto.MutableRecordSnapshotMax()->SetPlanStep(appearanceSnapshot.GetPlanStep());
-    metaProto.MutableRecordSnapshotMax()->SetTxId(appearanceSnapshot.GetTxId());
+    metaProto.MutableRecordSnapshotMin()->SetPlanStep(snapshot.GetPlanStep());
+    metaProto.MutableRecordSnapshotMin()->SetTxId(snapshot.GetTxId());
+    metaProto.MutableRecordSnapshotMax()->SetPlanStep(snapshot.GetPlanStep());
+    metaProto.MutableRecordSnapshotMax()->SetTxId(snapshot.GetTxId());
     metaProto.SetDeletionsCount(0);
     metaProto.SetCompactionLevel(0);
     metaProto.SetRecordsCount(recordsCount);
@@ -53,21 +51,34 @@ inline std::shared_ptr<TPortionInfo> MakeTestCompactedPortion(const TInternalPat
     metaProto.SetIndexBlobBytes(0);
     metaProto.SetNumSlices(1);
     metaProto.SetTierName(tierName);
-    metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetPlanStep(appearanceSnapshot.GetPlanStep());
-    metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetTxId(appearanceSnapshot.GetTxId());
 
     TPortionMetaConstructor metaConstructor;
     TFakeGroupSelector groupSelector;
     YDB_LOG_VERIFY(metaConstructor.LoadMetadata(metaProto, indexInfo, groupSelector));
+    return metaConstructor;
+}
 
+inline std::shared_ptr<TPortionInfo> MakeTestCompactedPortion(const TInternalPathId pathId, const ui64 portionId, const ui64 startKey,
+    const ui64 endKey, const ui32 recordsCount, const TSnapshot& appearanceSnapshot, const std::optional<TSnapshot>& removeSnapshot,
+    const TString& tierName = {}) {
     TCompactedPortionInfoConstructor constructor(pathId, portionId);
     constructor.SetSchemaVersion(1);
     constructor.SetAppearanceSnapshot(appearanceSnapshot);
-    constructor.MutableMeta() = metaConstructor;
+    constructor.MutableMeta() = MakeTestPortionMeta(startKey, endKey, recordsCount, appearanceSnapshot, tierName);
     if (removeSnapshot) {
         constructor.SetRemoveSnapshot(*removeSnapshot);
     }
 
+    return constructor.Build();
+}
+
+inline std::shared_ptr<TPortionInfo> MakeTestWrittenPortion(
+    const TInternalPathId pathId, const ui64 portionId, const ui32 recordsCount, const TSnapshot& commitSnapshot, const TString& tierName = {}) {
+    TWrittenPortionInfoConstructor constructor(pathId, portionId);
+    constructor.SetSchemaVersion(1);
+    constructor.SetInsertWriteId(TInsertWriteId(portionId));
+    constructor.SetCommitSnapshot(commitSnapshot);
+    constructor.MutableMeta() = MakeTestPortionMeta(1, 2, recordsCount, commitSnapshot, tierName);
     return constructor.Build();
 }
 

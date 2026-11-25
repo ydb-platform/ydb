@@ -497,6 +497,7 @@ private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     std::shared_ptr<NOlap::NBackground::TSessionsManager> BackgroundSessionsManager;
     std::shared_ptr<NOlap::NDataLocks::TManager> DataLocksManager;
+    std::shared_ptr<TShardDataStats> DataStats;
 
     ui64 PrioritizationClientId = 0;
 
@@ -656,12 +657,6 @@ private:
 
     void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);
     void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);
-
-    // We assume that all the blob storage groups for a database have the same layout (erasure, etc.)
-    std::optional<NKikimr::TBlobStorageGroupType> BlobStorageLayout;
-    const std::optional<NKikimr::TBlobStorageGroupType>& GetBlobStorageLayout();
-
-    ui64 NormalizeSmallBlobsCount(const ui64 rawCount);
 
 public:
     ui64 TabletTxCounter = 0;

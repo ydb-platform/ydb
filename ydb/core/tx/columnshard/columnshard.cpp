@@ -2,7 +2,6 @@
 
 #include "bg_tasks/manager/manager.h"
 #include "blobs_reader/actor.h"
-#include "counters/aggregation/table_stats.h"
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor2.h"
 #include "hooks/abstract/abstract.h"
@@ -415,62 +414,7 @@ void TColumnShard::UpdateIndexCounters() {
     if (!TablesManager.HasPrimaryIndex()) {
         return;
     }
-
-    const std::shared_ptr<const TTabletCountersHandle>& counters = Counters.GetTabletCounters();
-    counters->SetCounter(COUNTER_INDEX_TABLES, Counters.GetPortionIndexCounters()->GetTablesCount());
-
-    auto diskUsedStats = Counters.GetPortionIndexCounters()->GetTotalStats(TPortionIndexStats::TDiskUsedPortions());
-    counters->SetCounter(COUNTER_DATA_BYTES, diskUsedStats.GetDataBlobBytes());
-    counters->SetCounter(COUNTER_INDEX_BYTES, diskUsedStats.GetIndexBlobBytes());
-
-    auto insertedStats =
-        Counters.GetPortionIndexCounters()->GetTotalStats(TPortionIndexStats::TPortionsByType<NOlap::NPortion::EProduced::INSERTED>());
-    counters->SetCounter(COUNTER_INSERTED_PORTIONS, insertedStats.GetCount());
-    //    counters->SetCounter(COUNTER_INSERTED_BLOBS, insertedStats.GetBlobs());
-    counters->SetCounter(COUNTER_INSERTED_ROWS, insertedStats.GetRecordsCount());
-    counters->SetCounter(COUNTER_INSERTED_BYTES, insertedStats.GetBlobBytes());
-    counters->SetCounter(COUNTER_INSERTED_RAW_BYTES, insertedStats.GetRawBytes());
-
-    auto compactedStats =
-        Counters.GetPortionIndexCounters()->GetTotalStats(TPortionIndexStats::TPortionsByType<NOlap::NPortion::EProduced::COMPACTED>());
-    counters->SetCounter(COUNTER_COMPACTED_PORTIONS, compactedStats.GetCount());
-    //    counters->SetCounter(COUNTER_COMPACTED_BLOBS, compactedStats.GetBlobs());
-    counters->SetCounter(COUNTER_COMPACTED_ROWS, compactedStats.GetRecordsCount());
-    counters->SetCounter(COUNTER_COMPACTED_BYTES, compactedStats.GetBlobBytes());
-    counters->SetCounter(COUNTER_COMPACTED_RAW_BYTES, compactedStats.GetRawBytes());
-
-    auto splitCompactedStats =
-        Counters.GetPortionIndexCounters()->GetTotalStats(TPortionIndexStats::TPortionsByType<NOlap::NPortion::EProduced::SPLIT_COMPACTED>());
-    counters->SetCounter(COUNTER_SPLIT_COMPACTED_PORTIONS, splitCompactedStats.GetCount());
-    //    counters->SetCounter(COUNTER_SPLIT_COMPACTED_BLOBS, splitCompactedStats.GetBlobs());
-    counters->SetCounter(COUNTER_SPLIT_COMPACTED_ROWS, splitCompactedStats.GetRecordsCount());
-    counters->SetCounter(COUNTER_SPLIT_COMPACTED_BYTES, splitCompactedStats.GetBlobBytes());
-    counters->SetCounter(COUNTER_SPLIT_COMPACTED_RAW_BYTES, splitCompactedStats.GetRawBytes());
-
-    auto inactiveStats =
-        Counters.GetPortionIndexCounters()->GetTotalStats(TPortionIndexStats::TPortionsByType<NOlap::NPortion::EProduced::INACTIVE>());
-    counters->SetCounter(COUNTER_INACTIVE_PORTIONS, inactiveStats.GetCount());
-    //    counters->SetCounter(COUNTER_INACTIVE_BLOBS, inactiveStats.GetBlobs());
-    counters->SetCounter(COUNTER_INACTIVE_ROWS, inactiveStats.GetRecordsCount());
-    counters->SetCounter(COUNTER_INACTIVE_BYTES, inactiveStats.GetBlobBytes());
-    counters->SetCounter(COUNTER_INACTIVE_RAW_BYTES, inactiveStats.GetRawBytes());
-
-    auto evictedStats =
-        Counters.GetPortionIndexCounters()->GetTotalStats(TPortionIndexStats::TPortionsByType<NOlap::NPortion::EProduced::EVICTED>());
-    counters->SetCounter(COUNTER_EVICTED_PORTIONS, evictedStats.GetCount());
-    //    counters->SetCounter(COUNTER_EVICTED_BLOBS, evictedStats.GetBlobs());
-    counters->SetCounter(COUNTER_EVICTED_ROWS, evictedStats.GetRecordsCount());
-    counters->SetCounter(COUNTER_EVICTED_BYTES, evictedStats.GetBlobBytes());
-    counters->SetCounter(COUNTER_EVICTED_RAW_BYTES, evictedStats.GetRawBytes());
-
-    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Index",
-        {"tablesCount", Counters.GetPortionIndexCounters()->GetTablesCount()},
-        {"insertedStats", insertedStats.DebugString()},
-        {"compactedStats", compactedStats.DebugString()},
-        {"splitCompactedStats", splitCompactedStats.DebugString()},
-        {"inactiveStats", inactiveStats.DebugString()},
-        {"evictedStats", evictedStats.DebugString()},
-        {"tabletId", TabletID()});
+    DataStats->UpdateTabletCounters(*Counters.GetTabletCounters());
 }
 
 ui64 TColumnShard::MemoryUsage() const {
@@ -486,9 +430,7 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
         return;
     }
 
-    ui64 storageBytes =
-        Counters.GetTabletCounters()->GetValue(COUNTER_INSERTED_BYTES) + Counters.GetTabletCounters()->GetValue(COUNTER_COMPACTED_BYTES) +
-        Counters.GetTabletCounters()->GetValue(COUNTER_SPLIT_COMPACTED_BYTES) + Counters.GetTabletCounters()->GetValue(COUNTER_INACTIVE_BYTES);
+    ui64 storageBytes = DataStats->GetStorageBytes();
 
     ui64 memory = MemoryUsage();
 
@@ -522,56 +464,17 @@ void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDa
     }
 
     auto* tableStats = ev->Record.MutableTableStats();
-    TTableStatsBuilder statsBuilder(Counters, executor);
-    statsBuilder.FillTotalTableStats(*tableStats);
-
-    NOlap::TSmallBlobsStat toDelete;
-    for (auto&& i : StoragesManager->GetStorages()) {
-        const auto stat = i.second->CalcSmallBlobsToDelete();
-        toDelete.VolumeBytes += stat.VolumeBytes;
-        toDelete.Count += stat.Count;
+    Counters.FillTotalTableStats(*tableStats);
+    if (executor) {
+        tableStats->SetInFlightTxCount(executor->GetStats().TxInFly);
+        tableStats->SetHasLoanedParts(executor->HasLoanedParts());
     }
-    tableStats->SetSmallBlobsVolumeBytes(tableStats->GetSmallBlobsVolumeBytes() + toDelete.VolumeBytes);
-    tableStats->SetSmallBlobsCount(NormalizeSmallBlobsCount(tableStats->GetSmallBlobsCount() + toDelete.Count));
-}
-
-const std::optional<NKikimr::TBlobStorageGroupType>& TColumnShard::GetBlobStorageLayout() {
-    if (!BlobStorageLayout) {
-        BlobStorageLayout = StoragesManager->GetDefaultOperator()->GetBlobStorageLayout();
-    }
-    return BlobStorageLayout;
-}
-
-ui64 TColumnShard::NormalizeSmallBlobsCount(const ui64 rawCount) {
-    const auto& layout = GetBlobStorageLayout();
-    if (!layout) {
-        return rawCount;
-    }
-    const auto& quota = AppDataVerified().SmallBlobsQuotaConfig;
-    ui32 coef = 1;
-    switch (layout->GetErasure()) {
-        case NKikimr::TErasureType::ErasureMirror3dc:
-            coef = quota.GetMirror3dcStorageHardQuotaCoef();
-            break;
-        case NKikimr::TErasureType::Erasure4Plus2Block:
-            coef = quota.GetBlock42StorageHardQuotaCoef();
-            break;
-        default:
-            break;
-    }
-    coef = std::max<ui32>(1, coef);
-    const ui32 vdisks = std::max<ui32>(1, layout->BlobSubgroupSize());
-    // 1. Every vdisk in a group keeps a record for a blob in the index in RAM, so we multiply by the number of vdisks.
-    // 2. Hard storage quota is set in term of "user data", not "actual blob storage consumption".
-    // When the quota is set, it is usually "actual blobs storage allowance" / some coefficient (depending on the erasure).
-    // So, here we take that coefficient into account too.
-    return rawCount * vdisks / coef;
+    DataStats->FillTotalTableStats(*tableStats);
 }
 
 void TColumnShard::FillColumnTableStats(
     const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor) {
     auto tables = TablesManager.GetTables();
-    TTableStatsBuilder tableStatsBuilder(Counters);
 
     YDB_LOG_DEBUG("There are stats for tables",
         {"tables", tables.size()});
@@ -597,7 +500,8 @@ void TColumnShard::FillColumnTableStats(
                 }
             }
 
-            tableStatsBuilder.FillTableStats(internalPathId, *(periodicTableStats->MutableTableStats()));
+            Counters.FillTableStats(internalPathId, *periodicTableStats->MutableTableStats());
+            DataStats->FillTableStats(internalPathId, *periodicTableStats->MutableTableStats());
             YDB_LOG_DEBUG("",
                 {"event", "Add stats for table"},
                 {"tableLocalID", schemeShardLocalPathId});

@@ -62,6 +62,7 @@ SRCS(
     ut_index_key_order.cpp
     ut_index_portions_by_last_key.cpp
     ut_insert_write_id.cpp
+    ut_granule_data_stats.cpp
     helper.cpp
 )
 

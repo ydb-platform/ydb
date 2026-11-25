@@ -70,12 +70,12 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
     return true;
 }
 
-void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, const bool passToOptimizer) {
+void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, const bool onLoad) {
     if (portionAfter) {
-        PortionInfoGuard.OnNewPortion(portionAfter);
+        DataStats->AddPortion(portionAfter);
         if (!portionAfter->HasRemoveSnapshot()) {
             PortionsIndex.AddPortion(portionAfter);
-            if (passToOptimizer) {
+            if (!onLoad) {
                 OptimizerPlanner->StartModificationGuard().AddPortion(portionAfter);
             }
             if (ActualizationIndex->IsStarted()) {
@@ -83,35 +83,31 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
                 ActualizationIndex->AddPortion(portionAfter, context);
             }
         }
-        Stats->OnAddPortion(*portionAfter);
     }
-    if (!!AdditiveSummaryCache) {
-        if (portionAfter && !portionAfter->HasRemoveSnapshot()) {
-            auto g = AdditiveSummaryCache->StartEdit(Counters);
-            g.AddPortion(*portionAfter);
-        }
+    if (!onLoad) {
+        RefreshDataCounters();
     }
-
     ModificationLastTime = TMonotonic::Now();
-    Stats->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore) {
     if (portionBefore) {
-        PortionInfoGuard.OnDropPortion(portionBefore);
+        DataStats->RemovePortion(portionBefore);
         if (!portionBefore->HasRemoveSnapshot()) {
             PortionsIndex.RemovePortion(portionBefore);
             OptimizerPlanner->StartModificationGuard().RemovePortion(portionBefore);
             ActualizationIndex->RemovePortion(portionBefore);
         }
-        Stats->OnRemovePortion(*portionBefore);
     }
-    if (!!AdditiveSummaryCache) {
-        if (portionBefore && !portionBefore->HasRemoveSnapshot()) {
-            auto g = AdditiveSummaryCache->StartEdit(Counters);
-            g.RemovePortion(*portionBefore);
-        }
-    }
+}
+
+void TGranuleMeta::RefreshDataCounters() const {
+    const NColumnShard::TGranuleDataStats& stats = GetDataStats();
+    Counters.OnPortionsDataRefresh(stats.GetActiveWritten(), stats.GetActiveCompacted());
+}
+
+const NColumnShard::TGranuleDataStats& TGranuleMeta::GetDataStats() const {
+    return DataStats->GetGranule(PathId);
 }
 
 void TGranuleMeta::OnCompactionFinished() {
@@ -119,7 +115,6 @@ void TGranuleMeta::OnCompactionFinished() {
     YDB_LOG_DEBUG("",
         {"event", "OnCompactionFinished"},
         {"info", DebugString()});
-    Stats->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnCompactionFailed(const TString& reason) {
@@ -128,32 +123,10 @@ void TGranuleMeta::OnCompactionFailed(const TString& reason) {
         {"event", "OnCompactionFailed"},
         {"reason", reason},
         {"info", DebugString()});
-    Stats->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnCompactionStarted() {
     AllowInsertionFlag = false;
-}
-
-void TGranuleMeta::RebuildAdditiveMetrics() const {
-    TGranuleAdditiveSummary result;
-    {
-        auto g = result.StartEdit(Counters);
-        for (auto&& i : Portions) {
-            if (i.second->HasRemoveSnapshot()) {
-                continue;
-            }
-            g.AddPortion(*i.second);
-        }
-    }
-    AdditiveSummaryCache = result;
-}
-
-const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary() const {
-    if (!AdditiveSummaryCache) {
-        RebuildAdditiveMetrics();
-    }
-    return *AdditiveSummaryCache;
 }
 
 TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters,
@@ -161,8 +134,7 @@ TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage&
     : PathId(pathId)
     , DataAccessorsManager(owner.GetDataAccessorsManager())
     , Counters(counters)
-    , PortionInfoGuard(owner.GetCounters().BuildPortionBlobsGuard())
-    , Stats(owner.GetStats())
+    , DataStats(owner.GetDataStats())
     , StoragesManager(owner.GetStoragesManager())
     , PortionsIndex(*this, Counters.GetPortionsIndexCounters())
 {
@@ -194,7 +166,7 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
                     true, PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(portion), true), portion);
         }
         // the granule tracks only committed portions
-        OnAfterChangePortion(portion, /*passToOptimizer=*/false);
+        OnAfterChangePortion(portion, /*onLoad=*/true);
     }
 }
 
@@ -227,6 +199,7 @@ std::vector<std::shared_ptr<TPortionInfo>> TGranuleMeta::AddPortionsLoadedInBatc
     }
     AddPortionsToOptimizer(active);
     LoadedKeyRanges = std::move(loadedKeyRanges);
+    RefreshDataCounters();
     return loaded;
 }
 

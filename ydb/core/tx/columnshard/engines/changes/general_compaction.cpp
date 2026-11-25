@@ -169,7 +169,7 @@ void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& sel
     TBase::DoStart(self);
     auto& g = *GranuleMeta;
     self.Counters.GetCSCounters().OnSplitCompactionInfo(
-        g.GetAdditiveSummary().GetCompacted().GetTotalPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
+        g.GetDataStats().GetActiveCompacted().GetBlobBytes(), g.GetDataStats().GetActiveCompacted().GetCount());
 }
 
 NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

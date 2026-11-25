@@ -61,6 +61,7 @@ jobs:
         increment: false
         run_tests: false
         put_build_results_to_cache: false
+        additional_ya_make_args: ${{ hashFiles('ydb/ci/build_profiles.yaml') == '' && '-DDEBUGINFO_LINES_ONLY' || '' }}
         add_vcs_info: true
         custom_branch_name: ${{ matrix.branch }}
         secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',

@@ -10,6 +10,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import build_profile
+import graph_compare
 
 ROOT = Path(__file__).resolve().parents[4]
 SCRIPT = ROOT / '.github/scripts/build_profile.py'
@@ -110,6 +111,16 @@ class BuildProfilesTest(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('must not contain line breaks', result.stderr)
+
+    def test_graph_command_preserves_user_overrides(self):
+        profiles = {'release': {'build_type': 'release', 'definition_flags': {'HARDENING': 'yes'}}}
+        with patch.object(graph_compare, 'load_profiles', return_value=profiles), patch.object(
+            graph_compare, 'resolve_profile', return_value={'args': ['--build=release', '-DHARDENING=yes']}
+        ), patch.object(graph_compare, 'exec') as execute:
+            graph_compare.main('./ya make -DHARDENING=no', 'graph.json', 'context.json', 'base', 'head', 'release')
+        for call in (execute.call_args_list[1], execute.call_args_list[3]):
+            args = call.args[0]
+            self.assertLess(args.index('-DHARDENING=yes'), args.index('-DHARDENING=no'))
 
     def test_debug_keeps_full_debug_information(self):
         profiles = yaml.safe_load(PROFILES.read_text())

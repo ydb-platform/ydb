@@ -38,7 +38,7 @@ def main(
     fallback = load_profiles() if build_profile else None
 
     def graph_command():
-        return command + (resolve_profile(build_profile, fallback)["args"] if build_profile else [])
+        return command[:2] + (resolve_profile(build_profile, fallback)["args"] if build_profile else []) + command[2:]
 
     workdir = os.getenv('workdir')
     if not workdir:

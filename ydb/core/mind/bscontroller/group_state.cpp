@@ -2,20 +2,47 @@
 
 namespace NKikimr::NBsController {
 
-std::optional<NGroupSyncer::TExcludedRealms> TBlobStorageController::GetTargetExcludedRealms(const TGroupInfo& group) const {
-    NGroupSyncer::TExcludedRealms excluded{};
-    if (!DataCenterStates.empty()) {
-        for (const TVSlotInfo* slot : group.VDisksInGroup) {
-            if (!HostRecords->GetHostId(slot->VSlotId.NodeId)) {
-                return std::nullopt;
+std::expected<std::optional<TMirror3dcGroupConfiguration>, TString> TBlobStorageController::GetGroupPolicyStep(
+        const TGroupInfo& group, const TMirror3dcGroupConfiguration& current) const {
+    if (HasDataCenterPolicy) {
+        std::array<bool, 3> excluded{};
+        if (!DataCenterStates.empty()) {
+            for (const TVSlotInfo* slot : group.VDisksInGroup) {
+                if (!HostRecords->GetHostId(slot->VSlotId.NodeId)) {
+                    return std::unexpected<TString>("Missing host location for group state transition");
+                }
+                NActorsInterconnect::TNodeLocation location;
+                HostRecords->GetLocation(slot->VSlotId.NodeId).Serialize(&location, false);
+                auto it = DataCenterStates.find(location.GetDataCenter());
+                excluded[slot->RingIdx] |= it != DataCenterStates.end() && IsExcluded(it->second);
             }
-            NActorsInterconnect::TNodeLocation location;
-            HostRecords->GetLocation(slot->VSlotId.NodeId).Serialize(&location, false);
-            auto it = DataCenterStates.find(location.GetDataCenter());
-            excluded[slot->RingIdx] |= it != DataCenterStates.end() && IsExcluded(it->second);
+        }
+        // Return available realms first when the target swaps two data centers.
+        bool pendingAvailabilityChange = false;
+        for (bool takeDown : {false, true}) {
+            for (ui32 realm = 0; realm < excluded.size(); ++realm) {
+                if (excluded[realm] == takeDown && IsDown(current.Realms[realm]) != takeDown) {
+                    pendingAvailabilityChange = true;
+                    if (auto next = ChangeMirror3dcRealmAvailability(current, realm, takeDown)) {
+                        return next;
+                    }
+                }
+            }
+        }
+        if (pendingAvailabilityChange) {
+            return {}; // Wait for recovery to make the next DC transition possible.
         }
     }
-    return excluded;
+    using S = NKikimrBlobStorage::TGroupState;
+    if (group.TargetInvariant == S::INVARIANT_2) {
+        if (current.State == S::DC_FAILURE_INV1) {
+            return MakeMirror3dcGroupConfiguration(S::DC_FAILURE_INV2_PENDING, current.Realms);
+        }
+        if (current.State == S::DC_SOLO_INV1) {
+            return MakeMirror3dcGroupConfiguration(S::DC_SOLO_INV2_PENDING, current.Realms);
+        }
+    }
+    return {};
 }
 
 void TBlobStorageController::UpdateGroupStateActor(TGroupId groupId) {
@@ -33,14 +60,13 @@ void TBlobStorageController::UpdateGroupStateActor(TGroupId groupId) {
         message->Info->Topology = group->Topology;
         message->Info->States = group->FailRealmStates.value_or(NGroupSyncer::TFailRealmStates{});
         message->Info->GroupState = group->Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL);
-        if (HasDataCenterPolicy) {
-            message->Info->TargetExcluded = GetTargetExcludedRealms(*group);
-            if (!message->Info->TargetExcluded) {
-                message->Info.reset();
-                Send(GroupStateActorId, message.release());
-                return;
-            }
+        auto step = GetGroupPolicyStep(*group, {*message->Info->GroupState, message->Info->States});
+        if (!step) {
+            message->Info.reset();
+            Send(GroupStateActorId, message.release());
+            return;
         }
+        message->Info->PolicyStep = *step;
         for (const TIndirectReferable<TVSlotInfo>::TPtr& slot : group->VDisksInGroup) {
             message->Info->VDisks.push_back({slot->GetVDiskId(),
                 MakeBlobStorageVDiskID(slot->VSlotId.NodeId, slot->VSlotId.PDiskId, slot->VSlotId.VSlotId)});

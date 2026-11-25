@@ -476,6 +476,14 @@ namespace {
             return request;
         }
 
+        NKikimrBlobStorage::TConfigRequest SetTargetInvariant(ui32 groupId, NKikimrBlobStorage::TGroupState::ETargetInvariant target) {
+            NKikimrBlobStorage::TConfigRequest request;
+            auto* group = request.AddCommand()->MutableDefineGroupState()->AddGroups();
+            group->SetGroupId(groupId);
+            group->SetTargetInvariant(target);
+            return request;
+        }
+
         NKikimrBlobStorage::TConfigRequest SetGroupStates(ui32 groupId,
                 const std::array<TFailRealm::EState, 3>& states,
                 EMirror3dcGroupState groupState) {
@@ -811,16 +819,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(promoted.GetMirror3dcState()), static_cast<ui32>(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1));
         UNIT_ASSERT_VALUES_EQUAL(promoted.GetGroupGeneration(), initialGeneration + 1);
         UNIT_ASSERT_VALUES_EQUAL(probes, 9 + 6); // I/I/L confirmed the config, then I/I/X confirmed promotion.
-        // Enabling the second invariant changes the group state while I/I/X stays unchanged.
-        NKikimrBlobStorage::TConfigRequest enable;
-        auto* definition = enable.AddCommand()->MutableDefineGroupState()->AddGroups();
-        definition->SetGroupId(groupId);
-        definition->SetExpectedGroupGeneration(promoted.GetGroupGeneration());
-        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING);
-        for (const auto& realm : promoted.GetRings()) {
-            definition->AddFailRealmStates(realm.GetState());
-        }
-        UNIT_ASSERT(env.Invoke(enable).GetSuccess());
+        UNIT_ASSERT(env.Invoke(env.SetTargetInvariant(groupId, NKikimrBlobStorage::TGroupState::INVARIANT_2)).GetSuccess());
         completeRepair(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING);
         for (ui32 attempt = 0; attempt < 10; ++attempt) {
             env.Runtime->SimulateSleep(TDuration::Seconds(6));
@@ -869,13 +868,8 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         };
         const auto initial = env.ReadGroups().at(id);
         UNIT_ASSERT(readTarget() == S::NO_INVARIANT);
-        NKikimrBlobStorage::TConfigRequest setTarget;
-        auto* target = setTarget.AddCommand()->MutableDefineGroupState()->AddGroups();
-        target->SetGroupId(id);
-        target->SetTargetInvariant(static_cast<S::ETargetInvariant>(77));
-        UNIT_ASSERT(!env.Invoke(setTarget).GetSuccess());
-        target->SetTargetInvariant(S::INVARIANT_2);
-        UNIT_ASSERT(env.Invoke(setTarget).GetSuccess());
+        UNIT_ASSERT(!env.Invoke(env.SetTargetInvariant(id, static_cast<S::ETargetInvariant>(77))).GetSuccess());
+        UNIT_ASSERT(env.Invoke(env.SetTargetInvariant(id, S::INVARIANT_2)).GetSuccess());
         UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(id).SerializeAsString(), initial.SerializeAsString());
         UNIT_ASSERT(readTarget() == S::INVARIANT_2);
         auto request = env.SetGroupStates(id, {R::INCLUDED, R::INCLUDED, R::EXCLUDED}, S::DC_FAILURE_INV2_PENDING);
@@ -890,8 +884,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
         UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(id).SerializeAsString(), pending.SerializeAsString());
         UNIT_ASSERT(readTarget() == S::INVARIANT_2);
-        target->SetTargetInvariant(S::NO_INVARIANT);
-        UNIT_ASSERT(env.Invoke(setTarget).GetSuccess());
+        UNIT_ASSERT(env.Invoke(env.SetTargetInvariant(id, S::NO_INVARIANT)).GetSuccess());
         UNIT_ASSERT(readTarget() == S::NO_INVARIANT);
         UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(id).SerializeAsString(), pending.SerializeAsString());
     }
@@ -1016,6 +1009,24 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         using S = NKikimrBlobStorage::TGroupState;
         TDataCenterStatesEnv env;
         auto before = env.ReadGroups();
+        ui32 targetGroup = 0;
+        for (const auto& [id, group] : before) {
+            if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
+                targetGroup = id;
+                break;
+            }
+        }
+        UNIT_ASSERT(targetGroup);
+        UNIT_ASSERT(env.Invoke(env.SetTargetInvariant(targetGroup, S::INVARIANT_2)).GetSuccess());
+        TVector<EMirror3dcGroupState> proposals;
+        using TEvPropose = NGroupSyncer::TEvGroupState::TEvPropose;
+        TTestActorRuntimeBase::TEventFilter previous;
+        previous = env.Runtime->SetEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvPropose::EventType && event->Get<TEvPropose>()->GroupId == targetGroup) {
+                proposals.push_back(event->Get<TEvPropose>()->Next.State);
+            }
+            return previous(runtime, event);
+        });
         auto request = env.Define({{"1", DC::EXCLUDED}, {"2", DC::EXCLUDED}});
         UNIT_ASSERT(env.Invoke(request).GetSuccess());
         for (const auto& [id, group] : env.ReadGroups()) {
@@ -1027,9 +1038,54 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(env.Invoke(env.SetCopyGuarantee(1)).GetSuccess());
         for (const auto& [id, group] : env.ReadGroups()) {
             if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
-                UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetMirror3dcState()), ui32(S::DC_SOLO_INV1));
+                const auto expected = id == targetGroup ? S::DC_SOLO_INV2_PENDING : S::DC_SOLO_INV1;
+                UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetMirror3dcState()), ui32(expected));
             }
         }
+        env.Runtime->SetEventFilter(previous);
+        const TVector<EMirror3dcGroupState> expected = {S::DC_FAILURE, S::DC_SOLO_INV1, S::DC_SOLO_INV2_PENDING};
+        UNIT_ASSERT_VALUES_EQUAL(proposals, expected);
+    }
+
+    Y_UNIT_TEST(DataCenterReturnSupersedesDelayedInvariantPromotion) {
+        using S = NKikimrBlobStorage::TGroupState;
+        using DC = TDataCenterStatesEnv::TDataCenter;
+        using TEvPropose = NGroupSyncer::TEvGroupState::TEvPropose;
+        TDataCenterStatesEnv env;
+        UNIT_ASSERT(env.Invoke(env.Define({{"2", DC::EXCLUDED}})).GetSuccess());
+        UNIT_ASSERT(env.Invoke(env.SetCopyGuarantee(1)).GetSuccess());
+        const auto groups = env.ReadGroups();
+        const auto* entry = FindIfPtr(groups, [](const auto& item) {
+            return item.second.GetMirror3dcState() == S::DC_FAILURE_INV1;
+        });
+        UNIT_ASSERT(entry);
+        const ui32 id = entry->first;
+        const auto& initial = entry->second;
+        TVector<THolder<IEventHandle>> delayed;
+        TTestActorRuntimeBase::TEventFilter previous;
+        previous = env.Runtime->SetEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvPropose::EventType && event->Get<TEvPropose>()->GroupId == id) {
+                delayed.emplace_back(event.Release());
+                return true;
+            }
+            return previous(runtime, event);
+        });
+        UNIT_ASSERT(env.Invoke(env.SetTargetInvariant(id, S::INVARIANT_2)).GetSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(id).GetGroupGeneration(), initial.GetGroupGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(delayed.size(), 1);
+        UNIT_ASSERT(env.Invoke(env.Define({})).GetSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(id).GetGroupGeneration(), initial.GetGroupGeneration());
+        env.Runtime->SetEventFilter(previous);
+        UNIT_ASSERT_VALUES_EQUAL(delayed.size(), 2);
+        UNIT_ASSERT(delayed[0]->Get<TEvPropose>()->Next.State == S::DC_FAILURE_INV2_PENDING);
+        UNIT_ASSERT(delayed[1]->Get<TEvPropose>()->Next.State == S::DC_RECOVERY_INV1);
+        // Both proposals refer to the same generation. Revalidate the target at commit.
+        env.Runtime->Send(delayed[0].Release(), 0, true);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(id).SerializeAsString(), initial.SerializeAsString());
+        env.Runtime->Send(delayed[1].Release(), 0, true);
+        const auto returning = env.ReadGroups().at(id);
+        UNIT_ASSERT(returning.GetMirror3dcState() == S::DC_RECOVERY_INV1);
+        UNIT_ASSERT_VALUES_EQUAL(returning.GetGroupGeneration(), initial.GetGroupGeneration() + 1);
     }
 
     Y_UNIT_TEST(DataCenterTargetDrivesSoloTransition) {

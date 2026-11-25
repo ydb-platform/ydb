@@ -126,7 +126,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         const TEvGroupState::TEvUpdate& message = *ev->Get();
         if (auto it = Groups.find(message.GroupId); it != Groups.end() && message.Info
                 && it->second.Info.Generation == message.Info->Generation
-                && it->second.Info.TargetExcluded == message.Info->TargetExcluded) {
+                && it->second.Info.PolicyStep == message.Info->PolicyStep) {
             return;
         }
         EraseQueries(message.GroupId);
@@ -139,7 +139,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         }
         std::optional<TMirror3dcGroupConfiguration> config = message.Info ? GetConfiguration(*message.Info) : std::nullopt;
         if (config && message.Info->Topology && !message.Info->VDisks.empty()) {
-            auto policyStep = message.Info->TargetExcluded ? NextDataCenterTransition(*config, *message.Info->TargetExcluded) : std::nullopt;
+            const auto& policyStep = message.Info->PolicyStep;
             auto next = policyStep ? policyStep : RecoveringComplete(*config);
             if (!next) {
                 return;

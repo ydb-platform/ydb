@@ -1373,19 +1373,13 @@ namespace NKikimr::NBsController {
             TMirror3dcGroupConfiguration current{
                 group->Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL), group->FailRealmStates.value_or(normal)};
             if (parameters.FromGroupStateActor && previous != current) {
-                std::optional<TMirror3dcGroupConfiguration> next;
-                if (Self.HasDataCenterPolicy) {
-                    auto target = Self.GetTargetExcludedRealms(*group);
-                    if (!target) {
-                        return std::unexpected<TString>("Missing host location for group state transition");
-                    }
-                    next = NGroupSyncer::NextDataCenterTransition(previous, *target);
+                const auto step = Self.GetGroupPolicyStep(*group, previous);
+                if (!step) {
+                    return std::unexpected<TString>(step.error());
                 }
-                if (!next) {
-                    next = RecoveringComplete(previous);
-                }
+                const auto next = *step ? *step : RecoveringComplete(previous);
                 if (next != current) {
-                    return std::unexpected<TString>("Group state proposal no longer matches the DC target");
+                    return std::unexpected<TString>("Group state proposal no longer matches the controller target");
                 }
             }
             if (previous.State != current.State) {

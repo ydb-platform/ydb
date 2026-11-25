@@ -46,6 +46,7 @@
 #include <util/generic/hash_multi_map.h>
 
 #include <array>
+#include <expected>
 #include <unordered_map>
 
 inline IOutputStream& operator <<(IOutputStream& o, NKikimr::TErasureType::EErasureSpecies p) {
@@ -2104,7 +2105,8 @@ public:
     IActor *CreateSelfHealActor();
     TActorId SelfHealId;
     TActorId GroupStateActorId;
-    std::optional<NGroupSyncer::TExcludedRealms> GetTargetExcludedRealms(const TGroupInfo& group) const;
+    std::expected<std::optional<TMirror3dcGroupConfiguration>, TString> GetGroupPolicyStep(
+        const TGroupInfo& group, const TMirror3dcGroupConfiguration& current) const;
     void UpdateGroupStateActor(TGroupId groupId);
 
     TActorId ClusterBalanceActorId;

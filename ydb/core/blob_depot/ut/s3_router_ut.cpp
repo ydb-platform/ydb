@@ -1,6 +1,6 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
-#include "../s3_put_timeout.h"
+#include "../config.h"
 #include "../s3_router.h"
 #include "../s3_router_events.h"
 #include "../events.h"

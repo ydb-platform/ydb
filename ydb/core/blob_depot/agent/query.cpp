@@ -1,7 +1,7 @@
 #include "agent_impl.h"
 #include "blocks.h"
 
-#include <ydb/core/blob_depot/s3_put_timeout.h>
+#include <ydb/core/blob_depot/config.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 

@@ -1,5 +1,5 @@
 #include "s3_router.h"
-#include "s3_put_timeout.h"
+#include "config.h"
 #include "s3_request_timer.h"
 #include "s3_router_events.h"
 #include "types.h"

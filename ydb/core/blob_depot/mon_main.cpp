@@ -428,7 +428,7 @@ namespace NKikimr::NBlobDepot {
         do { \
             TABLER() { \
                 TABLED() { Stream << key ;} \
-                TABLED() { Stream << value ;} \
+                TABLED() { Stream << (value); } \
             } \
         } while(false)
 
@@ -470,8 +470,10 @@ namespace NKikimr::NBlobDepot {
                                     BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, MaxPendingBytes, FormatByteSize);
                                     BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, ThrottleStartBytes, FormatByteSize);
                                     BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, ThrottleMaxBytesPerSecond, formatBytePerSecond);
-                                    BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, UploadPutsInFlight, id_formatter);
-
+                                    BD_MON_TABLE_ROW("Cooling enabled", Self->IsDataCoolingEnabled() ? "yes" : "no");
+                                    BD_MON_TABLE_ROW("HotTargetBytes", FormatByteSize(asyncMode.GetHotTargetBytes()));
+                                    BD_MON_TABLE_ROW("TargetObjectBytes", FormatByteSize(asyncMode.GetTargetObjectBytes()));
+                                    BD_MON_TABLE_ROW("UploadPutsInFlight", asyncMode.GetUploadPutsInFlight());
                                 }
 
                                 BD_MON_TABLE_ROW("Endpoint", s3Settings.GetEndpoint());
@@ -650,6 +652,11 @@ document.addEventListener("DOMContentLoaded", ready);
                     KEYVALUE_TABLE({
                         KEYVALUE_UP("Data, bytes", "data", FormatByteSize(Data->GetTotalStoredDataSize()));
                         KEYVALUE_UP("Data in S3, bytes", "data_s3", FormatByteSize(Data->GetTotalS3DataSize()));
+                        KEYVALUE_UP("Live S3 ranges, bytes", "s3_live_range_bytes", FormatByteSize(Data->GetTotalS3LiveBytes()));
+                        KEYVALUE_UP("Cooling uploads in flight", "cooling_uploads_in_flight",
+                            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_COOLING_UPLOADS_IN_FLIGHT].Get());
+                        KEYVALUE_UP("Cooling upload failures", "cooling_upload_failures",
+                            TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_COOLING_UPLOAD_FAILURES].Get());
                         KEYVALUE_UP("Trash in flight, bytes", "trash_in_flight", FormatByteSize(Data->GetInFlightTrashSize()));
                         KEYVALUE_UP("Loaded trash pending, bytes", "trash_pending", FormatByteSize(Data->GetTotalStoredTrashSize()));
 
@@ -934,6 +941,9 @@ document.addEventListener("DOMContentLoaded", ready);
         NJson::TJsonMap data{
             {"data", formatSize(Data->GetTotalStoredDataSize())},
             {"data_s3", formatSize(Data->GetTotalS3DataSize())},
+            {"s3_live_range_bytes", formatSize(Data->GetTotalS3LiveBytes())},
+            {"cooling_uploads_in_flight", TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_COOLING_UPLOADS_IN_FLIGHT].Get()},
+            {"cooling_upload_failures", TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_COOLING_UPLOAD_FAILURES].Get()},
             {"trash_in_flight", formatSize(Data->GetInFlightTrashSize())},
             {"trash_pending", formatSize(Data->GetTotalStoredTrashSize())},
             {"trash_load_state", trashLoadState},

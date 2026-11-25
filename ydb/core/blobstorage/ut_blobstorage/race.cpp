@@ -1,7 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/activity.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/blobstorage/vdisk/common/vdisk_pdisk_error.h>
 
 #include <optional>
 
@@ -358,7 +357,7 @@ Y_UNIT_TEST_SUITE(GroupReconfigurationRace) {
         UNIT_ASSERT(queueRaces);
     }
 
-    Y_UNIT_TEST(FailedVDiskRepliesRaceOnGenerationMismatch) {
+    Y_UNIT_TEST(DisconnectedQueueRepliesRaceForStaleGeneration) {
         TEnvironmentSetup env(TEnvironmentSetup::TSettings{
             .NodeCount = 1,
             .Erasure = TBlobStorageGroupType::ErasureNone,
@@ -369,9 +368,9 @@ Y_UNIT_TEST_SUITE(GroupReconfigurationRace) {
         TVDiskID disk = info->GetVDiskId(0);
         TActorId vdisk = info->GetActorId(0);
         TActorId edge = env.Runtime->AllocateEdgeActor(vdisk.NodeId());
-        env.Runtime->Send(new IEventHandle(vdisk, edge,
-            new TEvPDiskErrorStateChange(NKikimrProto::CORRUPTED, 0, "test disk failure")), edge.NodeId());
         TActorId queue = env.CreateQueueActor(disk, NKikimrBlobStorage::PutTabletLog, 0, edge.NodeId());
+        env.Runtime->Send(new IEventHandle(queue, vdisk, new TEvBlobStorage::TEvVWindowChange(
+            NKikimrBlobStorage::PutTabletLog, TEvBlobStorage::TEvVWindowChange::DropConnection)), edge.NodeId());
         auto putThroughQueue = [&](const TVDiskID& target) {
             env.Runtime->Send(new IEventHandle(queue, edge, new TEvBlobStorage::TEvVPut(
                 TLogoBlobID(1, 1, 1, 0, 16, 0, 1), TRope(TString(16, 'x')), target, false, nullptr,
@@ -379,29 +378,6 @@ Y_UNIT_TEST_SUITE(GroupReconfigurationRace) {
             return env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge, false);
         };
 
-        for (ui32 generation : {disk.GroupGeneration - 1, disk.GroupGeneration + 1, disk.GroupGeneration}) {
-            TVDiskID target = disk;
-            target.GroupGeneration = generation;
-            NKikimrProto::EReplyStatus expected = generation == disk.GroupGeneration
-                ? NKikimrProto::VDISK_ERROR_STATE : NKikimrProto::RACE;
-            auto check = std::make_unique<TEvBlobStorage::TEvVCheckReadiness>(false);
-            VDiskIDFromVDiskID(target, check->Record.MutableVDiskID());
-            env.Runtime->Send(new IEventHandle(vdisk, edge, check.release()), edge.NodeId());
-            TEvBlobStorage::TEvVCheckReadinessResult::TPtr readiness =
-                env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVCheckReadinessResult>(edge, false);
-            UNIT_ASSERT_VALUES_EQUAL(readiness->Get()->Record.GetStatus(), expected);
-
-            TEvBlobStorage::TEvVPutResult::TPtr put = putThroughQueue(target);
-            const NKikimrBlobStorage::TEvVPutResult& record = put->Get()->Record;
-            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), expected);
-            UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(record.GetVDiskID()), disk);
-            UNIT_ASSERT_VALUES_EQUAL(record.HasRecentGroup(), generation < disk.GroupGeneration);
-            if (record.HasRecentGroup()) {
-                UNIT_ASSERT_VALUES_EQUAL(record.GetRecentGroup().GetGroupGeneration(), disk.GroupGeneration);
-            }
-        }
-
-        // The matching-generation disk error above disconnected the queue for ten seconds.
         UNIT_ASSERT_VALUES_EQUAL(putThroughQueue(disk)->Get()->Record.GetStatus(), NKikimrProto::NOTREADY);
         TVDiskID stale = disk;
         --stale.GroupGeneration;

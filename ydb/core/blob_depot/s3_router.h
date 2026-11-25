@@ -10,9 +10,8 @@ namespace NKikimr::NBlobDepot {
     // Per-node, per-tablet S3 router actor.
     //
     // Forwards every TEvExternalStorage::TEv*Request received from BlobDepot tablet/agents
-    // to an internally managed S3 wrapper. The actual S3 endpoint is fetched periodically
-    // from the BalancerHost specified in TS3BackendSettings. Endpoint is also refreshed
-    // immediately when the inner wrapper returns an HTTP 5xx response.
+    // to an internally managed S3 wrapper for the configured endpoint. When BalancerHost
+    // is set, the router refreshes the HTTP proxy periodically and after a 5xx response.
     //
     // Created/destroyed by Node Warden based on TEvNodeWardenAcquire/ReleaseBlobDepotS3Router
     // messages from clients (tablet + agents that talk to that tablet on this node).

@@ -108,6 +108,15 @@ void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operati
                                    NKikimrScheme::EStatus status, const TString& reason, TSchemeShard* SS,
                                    const TString& peerName, const TString& userSID, const TString& sanitizedToken,
                                    ui64 txId, const TParts& additionalParts) {
+    const auto generalStatus = GeneralStatus(status);
+    if (generalStatus == "ERROR" && reason.empty()) {
+        YDB_LOG_CRIT("Scheme operation failed without a reason",
+            {"operation", NKikimrSchemeOp::EOperationType_Name(operation.GetOperationType())},
+            {"status", NKikimrScheme::EStatus_Name(status)},
+            {"txId", txId},
+        );
+    }
+
     auto logEntry = MakeAuditLogFragment(operation);
 
     TPath databasePath = DatabasePathFromModifySchemeOperation(SS, operation);
@@ -123,7 +132,7 @@ void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operati
         AUDIT_PART("database", (!databasePath.IsEmpty() ? databasePath.GetDomainPathString() : EmptyValue))
         AUDIT_PART("operation", logEntry.Operation)
         AUDIT_PART("paths", RenderList(logEntry.Paths), !logEntry.Paths.empty())
-        AUDIT_PART("status", GeneralStatus(status))
+        AUDIT_PART("status", generalStatus)
         AUDIT_PART("detailed_status", NKikimrScheme::EStatus_Name(status))
         AUDIT_PART("reason", reason, !reason.empty())
 

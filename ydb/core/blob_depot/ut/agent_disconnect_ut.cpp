@@ -1,15 +1,18 @@
 #include "../blob_depot.h"
 #include "../agent/agent.h"
+#include "../agent/agent_impl.h"
 #include "../events.h"
 #include "../s3_router_events.h"
 #include "../types.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/wrappers/abstract.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -22,6 +25,8 @@ struct TAgent {
     ui32 NodeIndex;
 };
 
+struct TLocalMode {};
+struct TSyncMode { bool VirtualGroup = false; };
 struct TTestEnv {
     static constexpr ui64 TabletId = 72075186224000000;
     static constexpr ui32 VirtualGroupId = 0x80000000;
@@ -32,7 +37,7 @@ struct TTestEnv {
     THashMap<std::pair<TActorId, ui64>, ui64> PrepareCookies;
     TTestActorRuntime::TEventObserverHolder Observer;
 
-    TTestEnv(bool useS3 = true) {
+    explicit TTestEnv(std::variant<TLocalMode, TSyncMode> mode = TSyncMode{}) {
         SetupTabletServices(Runtime, nullptr, true);
         Runtime.GetAppData().Icb->CreateConfigControls(true);
         TControlBoard::SetValue(1, Runtime.GetAppData().Icb->BlobDepotControls.S3MaxWritesInFlight);
@@ -47,7 +52,9 @@ struct TTestEnv {
                     ev.Reset();
                     break;
                 case TEvBlobDepot::TEvPrepareWriteS3Result::EventType:
-                    PrepareResults.insert(PrepareCookies.at(std::make_pair(ev->Recipient, ev->Cookie)));
+                    if (const auto it = PrepareCookies.find(std::make_pair(ev->Recipient, ev->Cookie)); it != PrepareCookies.end()) {
+                        PrepareResults.insert(it->second);
+                    }
                     break;
             }
         });
@@ -65,7 +72,10 @@ struct TTestEnv {
         system->SetCount(2);
         system->SetChannelKind(NKikimrBlobDepot::TChannelKind::System);
         proto->AddChannelProfiles()->SetChannelKind(NKikimrBlobDepot::TChannelKind::Data);
-        if (useS3) {
+        if (const auto* sync = std::get_if<TSyncMode>(&mode)) {
+            if (sync->VirtualGroup) {
+                proto->SetVirtualGroupId(VirtualGroupId);
+            }
             auto* s3 = proto->MutableS3BackendSettings();
             s3->MutableSyncMode();
             s3->MutableSettings()->SetBucket("test-bucket");
@@ -77,10 +87,18 @@ struct TTestEnv {
             "BlobDepot did not apply the test configuration");
     }
 
+    TActorId StartAgent() {
+        auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
+        info->BlobDepotId = TabletId;
+        const TActorId id = Runtime.Register(CreateBlobDepotAgent(VirtualGroupId, info, {}));
+        Runtime.EnableScheduleForActor(id);
+        return id;
+    }
+
     TAgent Connect(ui32 nodeIndex, ui64 instanceId = 1, bool supportsIdRangeExpiry = false) {
         const auto edge = Runtime.AllocateEdgeActor(nodeIndex);
         const auto pipe = Runtime.ConnectToPipe(TabletId, edge, nodeIndex, GetPipeConfigWithRetries());
-        const TAgent agent{edge, pipe, nodeIndex};
+        TAgent agent{edge, pipe, nodeIndex};
         auto request = std::make_unique<TEvBlobDepot::TEvRegisterAgent>();
         request->Record.SetAgentInstanceId(instanceId);
         request->Record.SetSupportsIdRangeExpiry(supportsIdRangeExpiry);
@@ -247,7 +265,7 @@ void CheckReconnectReleasesWrites(ui64 newInstanceId) {
 }
 
 void CheckSupersededInitialRegistration(bool disconnectReplacement) {
-    TTestEnv env(false);
+    TTestEnv env(TLocalMode{});
     const auto edge = env.Runtime.AllocateEdgeActor(1);
     const auto pipe = env.Runtime.ConnectToPipe(TTestEnv::TabletId, edge, 1, GetPipeConfigWithRetries());
     const TAgent oldAgent{edge, pipe, 1};
@@ -342,7 +360,7 @@ void CheckQueryBlocksCommit(bool reboot) {
 }
 
 void CheckExpiredCommit(bool pinGarbageCollection) {
-    TTestEnv env(false);
+    TTestEnv env(TLocalMode{});
     const auto otherAgent = env.Connect(1);
     const auto otherId = pinGarbageCollection ? std::make_optional(env.AllocateBlobSeqId(otherAgent)) : std::nullopt;
     const auto agent = env.Connect(0, 1, true);
@@ -410,11 +428,8 @@ void CheckExpiredCommit(bool pinGarbageCollection) {
 }
 
 void CheckPutCompletesDuringReconnect(bool holdRegistrationResult) {
-    TTestEnv env(false);
-    auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
-    info->BlobDepotId = TTestEnv::TabletId;
-    const auto agentId = env.Runtime.Register(CreateBlobDepotAgent(TTestEnv::VirtualGroupId, info, {}));
-    env.Runtime.EnableScheduleForActor(agentId);
+    TTestEnv env(TLocalMode{});
+    const auto agentId = env.StartAgent();
     const auto edge = env.Runtime.AllocateEdgeActor();
 
     TActorId pipeId;
@@ -468,12 +483,66 @@ void CheckPutCompletesDuringReconnect(bool holdRegistrationResult) {
     UNIT_ASSERT_VALUES_EQUAL(nextResult->Get()->Status, NKikimrProto::OK);
 }
 
+struct TS3ReadEnv : TTestEnv {
+    using TStorage = NWrappers::TEvExternalStorage;
+    const TActorId Edge = Runtime.AllocateEdgeActor();
+    const TLogoBlobID Id{12345, 1, 1, 0, 3, 0};
+    const TActorId AgentId;
+    TBlockEvents<TStorage::TEvGetObjectRequest> Reads{Runtime};
+
+    TS3ReadEnv()
+        : TTestEnv(TSyncMode{.VirtualGroup = true})
+        , AgentId(StartAgent())
+    {
+        TControlBoard::SetValue(1, Runtime.GetAppData().Icb->BlobDepotControls.S3MaxGetsInFlight);
+        TBlockEvents<TStorage::TEvPutObjectRequest> writes(Runtime);
+        Runtime.SendAsync(new IEventHandle(AgentId, Edge, new TEvBlobStorage::TEvPut(Id, "abc", TInstant::Max())));
+        Runtime.WaitFor("S3 PUT", [&] { return !writes.empty(); }, TDuration::Seconds(2));
+        const auto& put = writes.front();
+        Runtime.SendAsync(new IEventHandle(put->Sender, Edge, new TStorage::TEvPutObjectResponse(
+            TString(put->Get()->GetRequest().GetKey()), Aws::S3::Model::PutObjectResult{})));
+        const auto result = Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvPutResult>(Edge, TDuration::Seconds(1));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK, result->Get()->ErrorReason);
+    }
+
+    void Get(TActorId agent, ui32 offset, TInstant deadline) {
+        Runtime.SendAsync(new IEventHandle(agent, Edge, new TEvBlobStorage::TEvGet(Id, offset, 1, deadline,
+            NKikimrBlobStorage::FastRead)));
+    }
+
+    void Reply(ui32 expectedOffset, bool slowDown = false) {
+        Runtime.WaitFor("S3 range GET", [&] { return !Reads.empty(); }, TDuration::Seconds(1));
+        auto request = std::move(Reads.front());
+        Reads.pop_front();
+        const auto& get = request->Get()->GetRequest();
+        UNIT_ASSERT_VALUES_EQUAL(TString(get.GetRange()), TStringBuilder() << "bytes=" << expectedOffset << '-' << expectedOffset);
+        const std::pair<ui64, ui64> range{expectedOffset, expectedOffset};
+        if (slowDown) {
+            Aws::S3::S3Error error(Aws::Client::AWSError<Aws::S3::S3Errors>(
+                Aws::S3::S3Errors::SLOW_DOWN, "SlowDown", "slow down", true));
+            Runtime.SendAsync(new IEventHandle(request->Sender, Edge,
+                new TStorage::TEvGetObjectResponse(TString(get.GetKey()), range, error)));
+        } else {
+            Aws::S3::Model::GetObjectResult result;
+            Runtime.SendAsync(new IEventHandle(request->Sender, Edge, new TStorage::TEvGetObjectResponse(
+                TString(get.GetKey()), range, std::move(result), TString(1, "abc"[expectedOffset]))));
+        }
+    }
+
+    void ExpectRead(char value) {
+        const auto result = Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(Edge, TDuration::Seconds(1));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK, result->Get()->ErrorReason);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Buffer.ConvertToString(), TString(1, value));
+    }
+};
+
 void CheckGetCompletesAfterDisconnect(bool nodata) {
-    TTestEnv env(false);
-    auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
-    info->BlobDepotId = TTestEnv::TabletId;
-    const auto agentId = env.Runtime.Register(CreateBlobDepotAgent(TTestEnv::VirtualGroupId, info, {}));
-    env.Runtime.EnableScheduleForActor(agentId);
+    TTestEnv env(TLocalMode{});
+    const auto agentId = env.StartAgent();
     const auto edge = env.Runtime.AllocateEdgeActor();
 
     TActorId pipeId;
@@ -534,9 +603,123 @@ void CheckGetCompletesAfterDisconnect(bool nodata) {
     }
 }
 
+struct TRegisteringAgentEnv : TTestEnv {
+    const TActorId Agent = StartAgent();
+    const TActorId Edge = Runtime.AllocateEdgeActor();
+    TBlockEvents<TEvBlobDepot::TEvRegisterAgentResult> Registrations{Runtime, [this](const auto& ev) {
+        return ev->Recipient == Agent;
+    }};
+    const NMonitoring::TDynamicCounters::TCounterPtr Queued =
+        GetServiceCounters(Runtime.GetAppData().Counters, "blob_depot_agent")
+            ->GetSubgroup("group", ToString(VirtualGroupId))->GetSubgroup("subsystem", "pendingEventQueue")
+            ->GetCounter("Items", false);
+
+    TRegisteringAgentEnv()
+        : TTestEnv(TLocalMode{})
+    {
+        Runtime.WaitFor("held registration", [&] { return !Registrations.empty(); }, TDuration::Seconds(1));
+    }
+
+    void Queue(IEventBase* request) {
+        Runtime.Send(new IEventHandle(Agent, Edge, request));
+    }
+
+    template<class TResult>
+    void ExpectStatus(NKikimrProto::EReplyStatus status) {
+        const auto result = Runtime.GrabEdgeEventRethrow<TResult>(Edge, TDuration::Seconds(1));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, status);
+    }
+};
+
+void CheckQueuedMetadataDeadlines(bool reconnectAtDeadline) {
+    TRegisteringAgentEnv env;
+    constexpr ui64 tabletId = 12345;
+    const auto deadline = env.Runtime.GetCurrentTime() + TDuration::MilliSeconds(100);
+    bool mutationIssued = false;
+    auto observer = env.Runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->Sender == env.Agent && (ev->GetTypeRewrite() == TEvBlobDepot::EvBlock ||
+                ev->GetTypeRewrite() == TEvBlobDepot::EvCollectGarbage)) {
+            mutationIssued = true;
+        }
+    });
+    env.Queue(new TEvBlobStorage::TEvBlock(tabletId, 1, deadline));
+    env.Queue(new TEvBlobStorage::TEvGetBlock(tabletId, deadline));
+    env.Queue(new TEvBlobStorage::TEvCollectGarbage(tabletId, 1, 0, 0, true, 1, 4, nullptr, nullptr, deadline,
+        false, false, true));
+    env.Queue(new TEvBlobStorage::TEvStatus(deadline));
+    UNIT_ASSERT_VALUES_EQUAL(env.Queued->Val(), 4);
+
+    if (reconnectAtDeadline) {
+        env.Runtime.AdvanceCurrentTime(TDuration::MilliSeconds(100));
+        // Deliver registration directly while the watchdog is still in the scheduler.
+        env.Runtime.Send(env.Registrations.Stop().front().Release());
+        env.Registrations.pop_front();
+    }
+    env.ExpectStatus<TEvBlobStorage::TEvBlockResult>(NKikimrProto::TIMEOUT);
+    env.ExpectStatus<TEvBlobStorage::TEvGetBlockResult>(NKikimrProto::TIMEOUT);
+    env.ExpectStatus<TEvBlobStorage::TEvCollectGarbageResult>(NKikimrProto::TIMEOUT);
+    env.ExpectStatus<TEvBlobStorage::TEvStatusResult>(NKikimrProto::TIMEOUT);
+    env.Registrations.Stop().Unblock();
+    env.Queue(new TEvBlobStorage::TEvStatus(TInstant::Max()));
+    env.ExpectStatus<TEvBlobStorage::TEvStatusResult>(NKikimrProto::OK);
+    UNIT_ASSERT(!mutationIssued);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
+    Y_UNIT_TEST(S3ReadReplyAfterAgentEjection) {
+        TS3ReadEnv env;
+        env.Get(env.AgentId, 0, TInstant::Max());
+        env.Runtime.WaitFor("old agent's S3 GET", [&] { return !env.Reads.empty(); }, TDuration::Seconds(1));
+        env.Runtime.SendAsync(new IEventHandle(env.AgentId, env.Edge, new TEvents::TEvPoison));
+        env.Runtime.WaitFor("old agent destroyed", [&] { return !env.Runtime.FindActor(env.AgentId); }, TDuration::Seconds(1));
+
+        const auto oldRead = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(env.Edge, TDuration::Seconds(1));
+        UNIT_ASSERT(oldRead);
+        UNIT_ASSERT_VALUES_EQUAL(oldRead->Get()->Status, NKikimrProto::ERROR);
+
+        const TActorId replacement = env.StartAgent();
+        env.Get(replacement, 1, TInstant::Max());
+        env.Runtime.WaitFor("replacement agent's S3 GET", [&] { return env.Reads.size() == 2; }, TDuration::Seconds(1));
+        env.Reply(0);
+        env.Reply(1);
+        env.ExpectRead('b');
+    }
+
+    Y_UNIT_TEST(ExpiredS3ReadsLeaveQueueAndDoNotRetrySlowDown) {
+        TS3ReadEnv env;
+        const auto pending = GetServiceCounters(env.Runtime.GetAppData().Counters, "blob_depot_agent")
+            ->GetSubgroup("group", ToString(TTestEnv::VirtualGroupId))->GetSubgroup("subsystem", "s3")
+            ->GetCounter("GetsPendingQueueSize", false);
+        const auto deadline = env.Runtime.GetCurrentTime() + TDuration::MilliSeconds(300);
+        env.Get(env.AgentId, 0, deadline);
+        env.Runtime.WaitFor("in-flight S3 GET", [&] { return !env.Reads.empty(); }, TDuration::Seconds(1));
+        env.Get(env.AgentId, 1, deadline);
+        const auto checkEdge = env.Runtime.AllocateEdgeActor();
+        env.Runtime.SendAsync(new IEventHandle(env.AgentId, checkEdge,
+            new TEvBlobStorage::TEvCheckIntegrity(env.Id, deadline, NKikimrBlobStorage::FastRead)));
+        env.Get(env.AgentId, 2, TInstant::Max());
+        env.Runtime.WaitFor("three queued reads", [&] { return pending->Val() == 3; }, TDuration::MilliSeconds(200));
+
+        for (ui32 i = 0; i < 2; ++i) {
+            const auto result = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(env.Edge, TDuration::Seconds(2));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::TIMEOUT);
+        }
+        const auto integrity = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvCheckIntegrityResult>(checkEdge, TDuration::Seconds(1));
+        UNIT_ASSERT(integrity);
+        UNIT_ASSERT_VALUES_EQUAL(integrity->Get()->Status, NKikimrProto::TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL(pending->Val(), 1);
+        env.Reply(0, true);
+        env.Reply(2);
+        env.ExpectRead('c');
+        env.Runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(env.Reads.empty());
+        UNIT_ASSERT_VALUES_EQUAL(pending->Val(), 0);
+    }
+
     Y_UNIT_TEST(GetPhysicalReadCompletesAfterDisconnect) {
         CheckGetCompletesAfterDisconnect(false);
     }
@@ -561,12 +744,125 @@ Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
         CheckPutCompletesDuringReconnect(true);
     }
 
+    Y_UNIT_TEST(MetadataRequestsExpireDuringRegistration) {
+        CheckQueuedMetadataDeadlines(false);
+    }
+
+    Y_UNIT_TEST(RegistrationDoesNotDispatchExpiredMetadataRequests) {
+        CheckQueuedMetadataDeadlines(true);
+    }
+
+    Y_UNIT_TEST(PendingDeadlineUsesClockSampleAtEnqueue) {
+        const auto received = TMonotonic::Seconds(10);
+        const auto wallAtReceipt = TInstant::Seconds(1000);
+        const auto elapsed = TDuration::MilliSeconds(40);
+        const auto queueLimit = received + TDuration::Seconds(60);
+        const auto calculate = [&](TDuration callerTimeout) {
+            return TPendingEventExpiration::Calculate(queueLimit, wallAtReceipt + callerTimeout,
+                wallAtReceipt + elapsed, received + elapsed);
+        };
+        const auto shortRequest = calculate(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_EQUAL(shortRequest.Time, received + TDuration::MilliSeconds(100));
+        UNIT_ASSERT(shortRequest.AtRequestDeadline);
+        const auto expired = calculate(TDuration::MilliSeconds(20));
+        UNIT_ASSERT_EQUAL(expired.Time, received + TDuration::MilliSeconds(20));
+        UNIT_ASSERT(expired.AtRequestDeadline);
+        const auto longRequest = calculate(TDuration::Seconds(60) + TDuration::MilliSeconds(20));
+        UNIT_ASSERT_EQUAL(longRequest.Time, queueLimit);
+        UNIT_ASSERT(!longRequest.AtRequestDeadline);
+    }
+
+    Y_UNIT_TEST(PendingDeadlineWatchdogYieldsBetweenBatches) {
+        TRegisteringAgentEnv env;
+        constexpr i64 count = 600;
+        const auto deadline = env.Runtime.GetCurrentTime() + TDuration::MilliSeconds(100);
+        for (i64 i = 0; i < count; ++i) {
+            env.Queue(new TEvBlobStorage::TEvStatus(deadline));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Queued->Val(), count);
+        bool sawPartialBatch = false;
+        auto observer = env.Runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == env.Agent && 0 < env.Queued->Val() && env.Queued->Val() < count) {
+                sawPartialBatch = true;
+            }
+        });
+        env.Runtime.WaitFor("queued requests to expire", [&] { return env.Queued->Val() == 0; }, TDuration::Seconds(1));
+        UNIT_ASSERT(sawPartialBatch);
+    }
+
+    Y_UNIT_TEST(RequestDeadlinesWhileRegistrationIsPending) {
+        TTestEnv env(TLocalMode{});
+        const auto agent = env.StartAgent();
+        TBlockEvents<TEvBlobDepot::TEvRegisterAgentResult> registrations(env.Runtime, [&](const auto& ev) {
+            return ev->Recipient == agent;
+        });
+        env.Runtime.WaitFor("agent registration response", [&] { return !registrations.empty(); }, TDuration::Seconds(1));
+
+        const auto edge = env.Runtime.AllocateEdgeActor();
+        const TString data = "test-data";
+        const TLogoBlobID first(12345, 1, 1, 0, data.size(), 0);
+        const TLogoBlobID second(12345, 1, 2, 0, data.size(), 0);
+        const auto start = env.Runtime.GetCurrentTime();
+        const auto getDeadline = start + TDuration::MilliSeconds(1200);
+        const auto putDeadline = start + TDuration::MilliSeconds(1600);
+        env.Runtime.SendAsync(new IEventHandle(agent, edge, new TEvBlobStorage::TEvPut(first, data, TInstant::Max())));
+        const auto longWrites = env.Runtime.AllocateEdgeActor();
+        const TString large(7'500'000, 'a');
+        for (ui32 step = 3; step < 7; ++step) {
+            const TLogoBlobID id(12345, 1, step, 0, large.size(), 0);
+            env.Runtime.SendAsync(new IEventHandle(agent, longWrites,
+                new TEvBlobStorage::TEvPut(id, large, start + TDuration::Minutes(10))));
+        }
+        const auto probe = env.Runtime.AllocateEdgeActor();
+        const TString probeData(2'100'000, 'b');
+        const TLogoBlobID probeId(12345, 1, 7, 0, probeData.size(), 0);
+        auto sendProbe = [&] {
+            env.Runtime.SendAsync(new IEventHandle(agent, probe, new TEvBlobStorage::TEvPut(probeId, probeData, TInstant::Max())));
+        };
+        sendProbe();
+        const auto overflow = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvPutResult>(probe, TDuration::Seconds(1));
+        UNIT_ASSERT(overflow);
+        UNIT_ASSERT_VALUES_EQUAL(overflow->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(overflow->Get()->ErrorReason, "pending event queue overflow");
+        env.Runtime.SendAsync(new IEventHandle(agent, edge, new TEvBlobStorage::TEvPut(second, data, putDeadline)));
+        env.Runtime.SendAsync(new IEventHandle(agent, edge, new TEvBlobStorage::TEvGet(first, 0, 0, getDeadline,
+            NKikimrBlobStorage::EGetHandleClass::FastRead)));
+
+        const auto get = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(edge, TDuration::MilliSeconds(1500));
+        UNIT_ASSERT(get);
+        UNIT_ASSERT_VALUES_EQUAL(get->Get()->Status, NKikimrProto::TIMEOUT);
+        UNIT_ASSERT(env.Runtime.GetCurrentTime() >= getDeadline);
+        const auto put = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvPutResult>(edge, TDuration::MilliSeconds(600));
+        UNIT_ASSERT(put);
+        UNIT_ASSERT_VALUES_EQUAL(put->Get()->Id, second);
+        UNIT_ASSERT_VALUES_EQUAL_C(put->Get()->Status, NKikimrProto::TIMEOUT, put->Get()->ErrorReason);
+        UNIT_ASSERT(env.Runtime.GetCurrentTime() >= putDeadline);
+
+        const auto queueLimit = start + TDuration::Seconds(60);
+        const auto unbounded = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvPutResult>(edge,
+            queueLimit + TDuration::Seconds(1) - env.Runtime.GetCurrentTime());
+        UNIT_ASSERT(unbounded);
+        UNIT_ASSERT_VALUES_EQUAL(unbounded->Get()->Id, first);
+        UNIT_ASSERT_VALUES_EQUAL(unbounded->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(unbounded->Get()->ErrorReason, "pending event queue timeout");
+        for (ui32 step = 3; step < 7; ++step) {
+            const auto result = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvPutResult>(longWrites, TDuration::Seconds(1));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Id.Step(), step);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->ErrorReason, "pending event queue timeout");
+        }
+        UNIT_ASSERT(env.Runtime.GetCurrentTime() >= queueLimit && env.Runtime.GetCurrentTime() < queueLimit + TDuration::Seconds(1));
+        sendProbe();
+        registrations.Stop().Unblock();
+        const auto admitted = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvPutResult>(probe, TDuration::Seconds(1));
+        UNIT_ASSERT(admitted);
+        UNIT_ASSERT_VALUES_EQUAL_C(admitted->Get()->Status, NKikimrProto::OK, admitted->Get()->ErrorReason);
+    }
+
     Y_UNIT_TEST(ExpiredStepsResetAfterTabletReboot) {
-        TTestEnv env(false);
-        auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
-        info->BlobDepotId = TTestEnv::TabletId;
-        const auto agentId = env.Runtime.Register(CreateBlobDepotAgent(TTestEnv::VirtualGroupId, info, {}));
-        env.Runtime.EnableScheduleForActor(agentId);
+        TTestEnv env(TLocalMode{});
+        const auto agentId = env.StartAgent();
         const auto edge = env.Runtime.AllocateEdgeActor();
 
         TActorId pipeId;

@@ -49,6 +49,7 @@
 #include <util/folder/path.h>
 #include <util/folder/pathsplit.h>
 #include <util/generic/ptr.h>
+#include <util/generic/scope.h>
 #include <util/generic/yexception.h>
 #include <util/stream/file.h>
 #include <util/stream/format.h>
@@ -407,7 +408,47 @@ void ReadTable(TDriver driver, const NTable::TTableDescription& desc, const TStr
             << READ_TABLE_RETRIES << " retries");
 }
 
+bool IsUnknownOlapSortedReadPragma(TStringBuf issues) {
+    TString lower(issues);
+    lower.to_lower();
+    return lower.Contains("optenableolapsortedread") && lower.Contains("unknown setting");
+}
+
 namespace {
+
+// Asks the server once whether column-table reads can use OptEnableOlapSortedRead.
+// The answer is cached for the whole folder dump: one probe covers every column table.
+bool EnableOlapSortedRead(const TDriver& driver, TMaybe<bool>& cached) {
+    if (cached.Defined()) {
+        return *cached;
+    }
+
+    NQuery::TQueryClient client(driver);
+    const TString query = TString(OlapSortedReadPragmaSql) + "SELECT 1;";
+    const auto tx = NQuery::TTxControl::BeginTx(NQuery::TTxSettings::SerializableRW()).CommitTx();
+    const auto result = client.ExecuteQuery(
+        query,
+        tx,
+        NQuery::TExecuteQuerySettings().Syntax(NQuery::ESyntax::YqlV1)
+    ).GetValueSync();
+    if (result.IsSuccess()) {
+        LOG_I("Server supports PRAGMA kikimr.OptEnableOlapSortedRead; column tables will be read in primary key order");
+        cached = true;
+        return true;
+    }
+
+    const auto issues = result.GetIssues().ToOneLineString();
+    if (IsUnknownOlapSortedReadPragma(TStringBuf(issues.data(), issues.size()))) {
+        LOG_W("Server does not support PRAGMA kikimr.OptEnableOlapSortedRead; "
+            "column table dump will order rows in memory and may fail on large tables");
+        cached = false;
+        return false;
+    }
+
+    VerifyStatus(result, "Check PRAGMA kikimr.OptEnableOlapSortedRead support");
+    cached = false;
+    return false;
+}
 
 // Column names come from DescribeTable, i.e. from the real schema, not from user input.
 // SchemeShard's IsValidColumnName restricts them to [A-Za-z0-9_-], so they can never contain
@@ -472,10 +513,16 @@ TString BuildResumeCondition(const std::vector<std::string>& pkColumns, const st
 } // anonymous namespace
 
 std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescription& desc,
-        const TString& fullTablePath, TMaybe<TValue> lastWrittenPK)
+        const TString& fullTablePath, TMaybe<TValue> lastWrittenPK, bool enableOlapSortedRead)
 {
     TParamsBuilder paramsBuilder;
     TStringStream query;
+
+    // Sorted OLAP reads merge per-shard streams in PK order instead of buffering a full sort.
+    const bool orderByPk = !desc.GetPrimaryKeyColumns().empty();
+    if (enableOlapSortedRead && orderByPk) {
+        query << OlapSortedReadPragmaSql;
+    }
 
     if (lastWrittenPK) {
         query << "DECLARE $pk AS " << FormatType(lastWrittenPK->GetType()) << ";\n";
@@ -518,9 +565,10 @@ std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescri
 namespace {
 
 TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::TTableDescription& desc,
-        const TString& fullTablePath, const TFsPath& folderPath, TMaybe<TValue> lastWrittenPK, ui32* fileCounter)
+        const TString& fullTablePath, const TFsPath& folderPath, TMaybe<TValue> lastWrittenPK, ui32* fileCounter,
+        bool enableOlapSortedRead)
 {
-    const auto [query, params] = BuildSelectQueryAndParams(desc, fullTablePath, lastWrittenPK);
+    const auto [query, params] = BuildSelectQueryAndParams(desc, fullTablePath, lastWrittenPK, enableOlapSortedRead);
     LOG_D("Execute query for column table " << fullTablePath.Quote() << ": " << query.Quote());
 
     const auto tx = NQuery::TTxControl::BeginTx(NQuery::TTxSettings::SerializableRW()).CommitTx();
@@ -530,6 +578,9 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
 
     auto iter = client.StreamExecuteQuery(query, tx, params, settings).GetValueSync();
     VerifyStatus(iter, TStringBuilder() << "ExecuteQuery for column table " << fullTablePath.Quote() << " failed");
+    Y_DEFER {
+        iter.Cancel();
+    };
 
     // Deferred until the first result set arrives, so that a table with no (more) rows
     // to read never creates an IncompleteData file, mirroring TryReadTable's behavior.
@@ -540,8 +591,9 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
     TMaybe<TValue> lastReadPK;
     bool hasRows = false;
 
+    auto nextPart = iter.ReadNext();
     while (true) {
-        auto part = iter.ReadNext().GetValueSync();
+        auto part = nextPart.GetValueSync();
         if (!part.IsSuccess()) {
             if (part.EOS()) {
                 break;
@@ -561,6 +613,10 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
             }
             return lastWrittenPK;
         }
+
+        // Overlap receiving the next part with serializing this one, as in TryReadTable.
+        // Keep only one read in flight and handle its status after writing the current part.
+        nextPart = iter.ReadNext();
 
         if (!part.HasResultSet()) {
             continue;
@@ -598,8 +654,9 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
 } // anonymous namespace
 
 void ReadColumnTable(TDriver driver, const NTable::TTableDescription& desc, const TString& fullTablePath,
-        const TFsPath& folderPath) {
-    LOG_D("Read column table via ExecuteQuery " << fullTablePath.Quote());
+        const TFsPath& folderPath, bool enableOlapSortedRead) {
+    LOG_D("Read column table via ExecuteQuery " << fullTablePath.Quote()
+        << (enableOlapSortedRead ? " with OptEnableOlapSortedRead" : ""));
 
     NQuery::TQueryClient client(driver);
     TMaybe<TValue> lastWrittenPK;
@@ -607,7 +664,8 @@ void ReadColumnTable(TDriver driver, const NTable::TTableDescription& desc, cons
     i64 retries = READ_TABLE_RETRIES;
     ui32 fileCounter = 0;
     do {
-        lastWrittenPK = TryExecuteQueryRead(client, desc, fullTablePath, folderPath, lastWrittenPK, &fileCounter);
+        lastWrittenPK = TryExecuteQueryRead(client, desc, fullTablePath, folderPath, lastWrittenPK, &fileCounter,
+            enableOlapSortedRead);
         if (lastWrittenPK && retries) {
             LOG_D("Retry ExecuteQuery read from key: " << TString{FormatValueYson(*lastWrittenPK)}.Quote());
         }
@@ -843,7 +901,7 @@ void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& 
 
 void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, const TString& path,
         const TFsPath& folderPath, bool schemaOnly, bool preservePoolKinds, bool ordered, bool isColumnTable,
-        TMaybe<NTable::TTableDescription> originalTableDesc = {}) {
+        TMaybe<bool>& olapSortedRead, TMaybe<NTable::TTableDescription> originalTableDesc = {}) {
     Y_ENSURE(!path.empty());
     Y_ENSURE(path.back() != '/', path.Quote() << " path contains / in the end");
 
@@ -885,7 +943,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
 
     if (!schemaOnly) {
         if (isColumnTable) {
-            ReadColumnTable(driver, desc, fullPath, folderPath);
+            ReadColumnTable(driver, desc, fullPath, folderPath, EnableOlapSortedRead(driver, olapSortedRead));
         } else {
             ReadTable(driver, desc, fullPath, folderPath, ordered);
         }
@@ -1207,6 +1265,8 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     THashSet<TString> columnTablePaths;
     // Column tables that could not be copied — fall back to pre-ColumnTable dump behavior (skip them).
     THashSet<TString> skippedColumnTables;
+    // Probed on the first column-table read and reused for the rest of this dump.
+    TMaybe<bool> olapSortedRead;
 
     auto skipColumnTable = [&](const TString& path, const TString& reason) {
         LOG_W("Skipping column table " << path.Quote() << ": " << reason
@@ -1238,7 +1298,8 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             if (schemaOnly) {
                 if (dbIt.IsTable()) {
                     BackupTable(driver, dbIt.GetTraverseRoot(), backupPrefix, dbIt.GetRelPath(),
-                            childFolderPath, schemaOnly, preservePoolKinds, ordered, dbIt.IsColumnTable(), std::move(tableDesc));
+                            childFolderPath, schemaOnly, preservePoolKinds, ordered, dbIt.IsColumnTable(),
+                            olapSortedRead, std::move(tableDesc));
                     childFolderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
                 }
             } else if (!avoidCopy) {
@@ -1371,7 +1432,8 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                     }
                 }
                 BackupTable(driver, dbIt.GetTraverseRoot(), avoidCopy ? dbIt.GetTraverseRoot() : backupPrefix, dbIt.GetRelPath(),
-                        childFolderPath, schemaOnly, preservePoolKinds, ordered, dbIt.IsColumnTable());
+                        childFolderPath, schemaOnly, preservePoolKinds, ordered, dbIt.IsColumnTable(),
+                        olapSortedRead);
                 if (tableWasCopied) {
                     DropTable(driver, tmpTablePath);
                 }

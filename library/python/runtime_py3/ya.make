@@ -56,6 +56,8 @@ RUN_PROGRAM(
 ARCHIVE(NAME __res.pyc.inc DONTCOMPRESS __res.pyc)
 ARCHIVE(NAME sitecustomize.pyc.inc DONTCOMPRESS sitecustomize.pyc)
 
+INCLUDE(${ARCADIA_ROOT}/library/python/runtime_py3/peerdir_policy.inc)
+
 END()
 
 RECURSE(

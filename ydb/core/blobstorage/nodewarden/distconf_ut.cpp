@@ -11,6 +11,8 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_http_request.h>
+#include <ydb/core/blobstorage/syncer/group_state.h>
+#include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -419,22 +421,38 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         const auto& group = serviceSet.GetGroups(0);
         UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), 2);
         UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetMirror3dcState()), ui32(NKikimrBlobStorage::TGroupState::DC_FAILURE));
-        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(2).GetState()), ui32(NKikimrBlobStorage::TDataCenterState::EXCLUDED));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(2).GetState()), ui32(NKikimrBlobStorage::TDataCenterState::LEAVING));
         for (const auto& disk : serviceSet.GetVDisks()) {
             UNIT_ASSERT_VALUES_EQUAL(disk.GetVDiskID().GetGroupGeneration(), 2);
         }
         UNIT_ASSERT(!NStorage::ApplyStaticDataCenterStates(&config, command));
+        auto secondConfig = config;
+        auto secondExclusion = command;
+        auto *second = secondExclusion.AddDataCenter();
+        second->SetName("dc-2");
+        second->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        const auto beforeSecondExclusion = secondConfig.SerializeAsString();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(NStorage::ApplyStaticDataCenterStates(&secondConfig, secondExclusion),
+            yexception, "Invalid static mirror-3-dc transition");
+        UNIT_ASSERT_VALUES_EQUAL(secondConfig.SerializeAsString(), beforeSecondExclusion);
+        auto* repaired = secondConfig.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0);
+        repaired->SetMirror3dcState(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1);
+        repaired->MutableRings(2)->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&secondConfig, secondExclusion));
+        UNIT_ASSERT(repaired->GetMirror3dcState() == NKikimrBlobStorage::TGroupState::DC_SOLO_INV1);
+        UNIT_ASSERT(repaired->GetRings(1).GetState() == NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        UNIT_ASSERT(repaired->GetRings(2).GetState() == NKikimrBlobStorage::TDataCenterState::EXCLUDED);
         auto conflicting = config;
         conflicting.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0)->MutableRings(2)->SetState(
             NKikimrBlobStorage::TDataCenterState::RECOVERING);
         conflicting.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0)->SetMirror3dcState(
-            NKikimrBlobStorage::TGroupState::DC_RECOVERY);
+            NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1);
         UNIT_ASSERT(NStorage::ValidateConfig(conflicting));
         dc->SetState(NKikimrBlobStorage::TDataCenterState::INCLUDED);
         UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&config, command));
         UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetMirror3dcState()), ui32(NKikimrBlobStorage::TGroupState::DC_RECOVERY));
-        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(2).GetState()), ui32(NKikimrBlobStorage::TDataCenterState::RECOVERING));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetMirror3dcState()), ui32(NKikimrBlobStorage::TGroupState::NORMAL));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(2).GetState()), ui32(NKikimrBlobStorage::TDataCenterState::INCLUDED));
         UNIT_ASSERT(!NStorage::ApplyStaticDataCenterStates(&config, command));
     }
 
@@ -4414,6 +4432,109 @@ selector_config: []
         }
     }
 
+    void RegisterStaticTestVDisks(TTestActorSystem& runtime, const NKikimrBlobStorage::TStorageConfig& config) {
+        for (const auto& disk : config.GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
+            const auto& slot = disk.GetVDiskLocation();
+            runtime.RegisterService(MakeBlobStorageVDiskID(slot.GetNodeID(), slot.GetPDiskID(), slot.GetVDiskSlotID()),
+                runtime.Register(new TIgnoreActor, slot.GetNodeID()));
+        }
+    }
+
+    Y_UNIT_TEST(StaticGroupResumesRepairFromCommittedConfigAndPromotesOnce) {
+        using TState = NKikimrBlobStorage::TGroupState;
+        using TRole = NKikimrBlobStorage::TDataCenterState;
+        using TRepair = NGroupSyncer::TEvRunMirror3dcRepair;
+        using TPropose = NGroupSyncer::TEvGroupState::TEvPropose;
+
+        TCommitConfirmationFixture fixture;
+        fixture.UseMirror3dcGroup();
+        auto committed = MakeNextConfig(fixture.Config);
+        NKikimrBlobStorage::TDataCenterStates policy;
+        auto *dc = policy.AddDataCenter();
+        dc->SetName("dc-3");
+        dc->SetState(TRole::EXCLUDED);
+        UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&committed, policy));
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&committed);
+        for (const auto& node : committed.GetAllNodes()) {
+            *fixture.Metadata(node.GetNodeId()).MutableCommittedStorageConfig() = committed;
+        }
+        const auto& source = committed.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+        UNIT_ASSERT(source.GetMirror3dcState() == TState::DC_FAILURE);
+        const ui32 generation = source.GetGroupGeneration();
+
+        auto& runtime = fixture.Runtime;
+        std::unique_ptr<IEventHandle> repair;
+        std::unique_ptr<IEventHandle> replay;
+        bool replicated = true;
+        ui32 healthQueries = 0;
+        ui32 proposals = 0;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVStatus::EventType) {
+                TVDiskID disk = VDiskIDFromVDiskID(ev->Get<TEvBlobStorage::TEvVStatus>()->Record.GetVDiskID());
+                UNIT_ASSERT_VALUES_EQUAL(disk.GroupGeneration, generation);
+                if (repair) {
+                    ++healthQueries;
+                }
+                auto result = std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::OK, disk, true, replicated, false, 1);
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, result.release(), 0, ev->Cookie), nodeId);
+                return false;
+            }
+            if (ev->GetTypeRewrite() == TRepair::EventType) {
+                UNIT_ASSERT(!repair);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get<TRepair>()->Record.GetGroupId(), source.GetGroupID());
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get<TRepair>()->Record.GetGeneration(), generation);
+                repair = std::move(ev);
+                return false;
+            }
+            if (ev->GetTypeRewrite() == TPropose::EventType && ++proposals == 1) {
+                const auto *msg = ev->Get<TPropose>();
+                replay = std::make_unique<IEventHandle>(ev->Recipient, ev->Sender,
+                    new TPropose(msg->GroupId, msg->Generation, msg->Next), 0, ev->Cookie);
+            }
+            return true;
+        };
+        Y_DEFER { runtime.FilterFunction = nullptr; };
+        fixture.Start(true);
+        RegisterStaticTestVDisks(runtime, committed);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return bool(repair); }));
+        auto replyRepair = [&](ui32 replyGeneration) {
+            auto result = std::make_unique<NGroupSyncer::TEvRunMirror3dcRepairResult>();
+            result->Record.SetGroupId(source.GetGroupID());
+            result->Record.SetGeneration(replyGeneration);
+            result->Record.SetStatus(NKikimrProto::OK);
+            runtime.Send(new IEventHandle(repair->Sender, repair->Recipient, result.release(), 0, repair->Cookie),
+                repair->Recipient.NodeId());
+        };
+
+        replyRepair(generation - 1);
+        UNIT_ASSERT(!SimUntil(runtime, [&] { return healthQueries || proposals; }, TDuration::Seconds(15)));
+        replicated = false;
+        replyRepair(generation);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return healthQueries >= 12; })); // two rounds on six Included VDisks
+        UNIT_ASSERT_VALUES_EQUAL(proposals, 0);
+        replicated = true;
+        auto currentGeneration = [&] { return fixture.Metadata(1).GetCommittedStorageConfig().GetGeneration(); };
+        UNIT_ASSERT(SimUntil(runtime, [&] { return currentGeneration() > committed.GetGeneration(); }));
+        const auto promoted = fixture.Metadata(1).GetCommittedStorageConfig();
+        CheckDurableConfigConverges(fixture, promoted);
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(runtime, fixture.Root()).GetQueryConfig().GetConfig().GetFingerprint(),
+            promoted.GetFingerprint());
+        UNIT_ASSERT_VALUES_EQUAL(promoted.GetGeneration(), committed.GetGeneration() + 1);
+        const auto& serviceSet = promoted.GetBlobStorageConfig().GetServiceSet();
+        const auto& group = serviceSet.GetGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), generation + 1);
+        UNIT_ASSERT(group.GetMirror3dcState() == TState::DC_FAILURE_INV1);
+        UNIT_ASSERT(group.GetRings(2).GetState() == TRole::EXCLUDED);
+        for (const auto& disk : serviceSet.GetVDisks()) {
+            UNIT_ASSERT_VALUES_EQUAL(disk.GetVDiskID().GetGroupGeneration(), generation + 1);
+        }
+        UNIT_ASSERT(replay);
+        runtime.Send(replay.release(), fixture.Root().NodeId());
+        replyRepair(generation);
+        UNIT_ASSERT(!SimUntil(runtime, [&] { return currentGeneration() != promoted.GetGeneration(); }, TDuration::Seconds(15)));
+    }
+
     Y_UNIT_TEST(StaticDataCenterOperationWaitsForBscSnapshotAck) {
         TCommitConfirmationFixture fixture;
         fixture.UseMirror3dcGroup();
@@ -4479,7 +4600,7 @@ selector_config: []
         response.reset();
         TString previousSnapshot = snapshot.SerializeAsString();
         request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        request->Record.MutableApplyDataCenterStates(); // return the DC through RECOVERING
+        request->Record.MutableApplyDataCenterStates(); // return the pending DC
         runtime.Send(new IEventHandle(fixture.Root(), client, request.release()), 1);
         UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 3; }));
         UNIT_ASSERT_VALUES_EQUAL(snapshot.SerializeAsString(), previousSnapshot); // first acknowledge the prior snapshot
@@ -4494,6 +4615,61 @@ selector_config: []
         UNIT_ASSERT_VALUES_EQUAL(ui32(response->GetStatus()), ui32(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK));
         UNIT_ASSERT(response->HasAppliedDataCenterStates());
         UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().DataCenterSize(), 0);
+    }
+
+    Y_UNIT_TEST(UpdateConfigCannotPromoteStaticMirror3dcGroup) {
+        using TState = NKikimrBlobStorage::TGroupState;
+        using TRole = NKikimrBlobStorage::TDataCenterState;
+        TCommitConfirmationFixture fixture;
+        fixture.UseMirror3dcGroup();
+        NKikimrBlobStorage::TDataCenterStates policy;
+        auto *dc = policy.AddDataCenter();
+        dc->SetName("dc-3");
+        dc->SetState(TRole::EXCLUDED);
+        UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&fixture.Config, policy));
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (const auto& node : fixture.Config.GetAllNodes()) {
+            *fixture.Metadata(node.GetNodeId()).MutableCommittedStorageConfig() = fixture.Config;
+        }
+        fixture.Runtime.FilterFunction = [](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            return ev->GetTypeRewrite() != TEvBlobStorage::TEvVStatus::EventType;
+        };
+        fixture.Start();
+        const TActorId root = fixture.Root();
+        const auto current = QueryKeeper(fixture.Runtime, root).GetQueryConfig().GetConfig();
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *config = request->Record.MutableUpdateConfig()->MutableConfig();
+        *config = current;
+        auto *group = config->MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0);
+        UNIT_ASSERT(group->GetMirror3dcState() == TState::DC_FAILURE);
+        group->SetMirror3dcState(TState::DC_FAILURE_INV1);
+        group->MutableRings(2)->SetState(TRole::EXCLUDED);
+        const TActorId client = fixture.Runtime.AllocateEdgeActor(root.NodeId());
+        fixture.Runtime.Send(new IEventHandle(root, client, request.release()), root.NodeId());
+        auto result = fixture.Runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(client);
+        UNIT_ASSERT(result->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Record.GetErrorReason(), "UpdateConfig cannot change mirror-3-dc");
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, root).GetQueryConfig().GetConfig().GetFingerprint(), current.GetFingerprint());
+
+        // A VDisk can still move slots while the group is waiting for repair.
+        request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        config = request->Record.MutableUpdateConfig()->MutableConfig();
+        *config = current;
+        auto *ss = config->MutableBlobStorageConfig()->MutableServiceSet();
+        group = ss->MutableGroups(0);
+        ui32 generation = group->GetGroupGeneration() + 1;
+        group->SetGroupGeneration(generation);
+        group->MutableRings(0)->MutableFailDomains(0)->MutableVDiskLocations(0)->SetVDiskSlotID(9);
+        ss->MutableVDisks(0)->MutableVDiskLocation()->SetVDiskSlotID(9);
+        NStorage::UpdateStaticVDiskGenerations(ss, {{TGroupId::FromValue(group->GetGroupID()), generation}});
+        InvokeKeeper(fixture.Runtime, root, std::move(request));
+        const auto stored = QueryKeeper(fixture.Runtime, root).GetQueryConfig().GetConfig();
+        const auto& saved = stored.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(saved.GetGroupGeneration(), generation);
+        UNIT_ASSERT(saved.GetMirror3dcState() == TState::DC_FAILURE);
+        UNIT_ASSERT(saved.GetRings(2).GetState() == TRole::LEAVING);
+        UNIT_ASSERT_VALUES_EQUAL(saved.GetRings(0).GetFailDomains(0).GetVDiskLocations(0).GetVDiskSlotID(), 9);
     }
 
     Y_UNIT_TEST(StateStorageSelectionRejectedBeforePropose) {
@@ -8686,6 +8862,91 @@ selector_config: []
             UNIT_ASSERT(reassign.GetStateStorage());
             UNIT_ASSERT_C(!reassign.GetStateStorageBoard(), reassign.ShortDebugString());
         }
+    }
+
+    // Self-heal replaces the single bad node 3 of state storage with node 4, sending a command to reassign it. The
+    // command is gone once sent: here its event is freed at once, as it may be by the receiver running in another
+    // mailbox. The self-heal must not read the command after that (a sanitizer build catches the read).
+    Y_UNIT_TEST(SelfHealDoesNotReadSentCommand) {
+        TCommitConfirmationFixture fixture(false, 4);
+        fixture.Config = MakeStorageConfig(4, 1, {1});
+        fixture.Config.MutableSelfManagementConfig()->SetEnabled(true);
+        fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageManagement(true);
+        fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageBoardManagement(false);
+        fixture.Config.MutableSelfManagementConfig()->SetAutomaticSchemeBoardManagement(false);
+        for (auto& node : *fixture.Config.MutableAllNodes()) {
+            node.MutableLocation()->SetDataCenter("dc-1");
+        }
+        auto makeConfig = [](auto *config) {
+            config->SetSSId(1);
+            auto *group = config->MutableRing();
+            group->SetNToSelect(3);
+            for (ui32 nodeId : {1, 2, 3}) {
+                group->AddRing()->AddNode(nodeId);
+            }
+        };
+        makeConfig(fixture.Config.MutableStateStorageConfig());
+        makeConfig(fixture.Config.MutableStateStorageBoardConfig());
+        makeConfig(fixture.Config.MutableSchemeBoardConfig());
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        const auto& policy = fixture.Config.GetSelfManagementConfig();
+
+        auto& runtime = fixture.Runtime;
+        ui32 numReplaced = 0;
+        // the event of the command sent is replaced with a copy, and the original one is freed right away
+        runtime.FilterEnqueue = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev, ISchedulerCookie*, TInstant) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType && ev->HasEvent()
+                    && ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasReassignStateStorageNode()) {
+                auto copy = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+                copy->Record.CopyFrom(ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record);
+                ev.reset(new IEventHandle(ev->Recipient, ev->Sender, copy.release(), ev->Flags, ev->Cookie));
+                ++numReplaced;
+            }
+            return true;
+        };
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType
+                    && ev->Recipient == MakeBlobStorageNodeWardenID(1) && !fixture.Keepers.empty()) {
+                ev->Rewrite(NStorage::TEvNodeConfigInvokeOnRoot::EventType, fixture.Keepers.front());
+            }
+            return true;
+        };
+        runtime.Start();
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            fixture.Keepers.push_back(RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State, {}, nullptr,
+                &policy));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, fixture.Keepers) == 1; }));
+
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *command = request->Record.MutableSelfHealNodesStateUpdate();
+        command->SetEnableSelfHealStateStorage(true);
+        command->SetWaitForConfigStep(1);
+        // the current three one-node rings are what is recommended, so only node 3 is to be replaced
+        command->SetPileupReplicas(true);
+        command->SetOverrideRingsCount(3);
+        command->SetOverrideReplicasInRingCount(1);
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            auto *nodeState = command->AddNodesState();
+            nodeState->SetNodeId(nodeId);
+            nodeState->SetState(nodeId == 3 ? NKikimr::BAD : NKikimr::GOOD); // node 3 is bad
+        }
+        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        // the root accepts the self-heal command first and reassigns the node after that
+        const std::unique_ptr<TEventHandle<NStorage::TEvNodeConfigInvokeOnRootResult>> response =
+            runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge, false);
+        UNIT_ASSERT_C(response->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            response->Get()->Record.DebugString());
+        const auto completed = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        UNIT_ASSERT_C(completed->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            completed->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(numReplaced, 2);
+        runtime.FilterEnqueue = {};
     }
 
     Y_UNIT_TEST(SelfHealRejectsEmptyGeneratedStateStorageConfig) {

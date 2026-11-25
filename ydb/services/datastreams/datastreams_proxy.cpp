@@ -797,7 +797,8 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TDescribeStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-        AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size()); // describe only one topic
+        YDB_LOG_ENSURE(result->ResultSet.size() == 1,
+            {"resultSetSize", result->ResultSet.size()}); // describe only one topic
         const auto& response = result->ResultSet.front();
         const TString path = JoinSeq("/", response.Path);
 
@@ -805,7 +806,8 @@ namespace NKikimr::NDataStreams::V1 {
             return;
         }
 
-        AFL_ENSURE(response.PQGroupInfo)("path", path);
+        YDB_LOG_ENSURE(response.PQGroupInfo,
+            {"path", path});
 
         PQGroup = response.PQGroupInfo->Description;
         SelfInfo = response.Self->Info;
@@ -1076,7 +1078,8 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TListStreamConsumersActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-        AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size()); // describe only one topic
+        YDB_LOG_ENSURE(result->ResultSet.size() == 1,
+            {"resultSetSize", result->ResultSet.size()}); // describe only one topic
 
         if (ReplyIfNotTopic(ev)) {
             return;
@@ -1575,7 +1578,7 @@ namespace NKikimr::NDataStreams::V1 {
                         Result.set_millis_behind_latest(0);
 
                         if (IsQuotaRequired()) {
-                            AFL_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlAllowed, ctx));
+                            YDB_LOG_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlAllowed, ctx));
                         } else {
                             SendResponse(ctx);
                         }
@@ -1647,7 +1650,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         if (IsQuotaRequired()) {
             const auto ru = 1 + CalcRuConsumption(GetPayloadSize());
-            AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
+            YDB_LOG_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
         } else {
             SendResponse(ctx);
         }
@@ -2023,9 +2026,11 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-        AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size()); // describe only one topic
+        YDB_LOG_ENSURE(result->ResultSet.size() == 1,
+            {"resultSetSize", result->ResultSet.size()}); // describe only one topic
         const auto& response = result->ResultSet.front();
-        AFL_ENSURE(response.PQGroupInfo)("path", JoinSeq("/", response.Path));
+        YDB_LOG_ENSURE(response.PQGroupInfo,
+            {"path", JoinSeq("/", response.Path)});
         const TString path = JoinSeq("/", response.Path);
 
         PQGroup = response.PQGroupInfo->Description;
@@ -2136,7 +2141,8 @@ DECLARE_RPC_NI(StopStreamEncryption);
 
 void DoDataStreamsDecreaseStreamRetentionPeriodRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     auto* req = dynamic_cast<TEvDataStreamsDecreaseStreamRetentionPeriodRequest*>(p.release());
-    AFL_ENSURE(req != nullptr)("reason", "Wrong using of TGRpcRequestWrapper");
+    YDB_LOG_ENSURE(req != nullptr,
+        {"reason", "Wrong using of TGRpcRequestWrapper"});
     TActivationContext::AsActorContext().Register(new TSetStreamRetentionPeriodActor<TEvDataStreamsDecreaseStreamRetentionPeriodRequest>(req, false));
 }
 template<>
@@ -2146,7 +2152,8 @@ IActor* TEvDataStreamsDecreaseStreamRetentionPeriodRequest::CreateRpcActor(NKiki
 
 void DoDataStreamsIncreaseStreamRetentionPeriodRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     auto* req = dynamic_cast<TEvDataStreamsIncreaseStreamRetentionPeriodRequest*>(p.release());
-    AFL_ENSURE(req != nullptr)("reason", "Wrong using of TGRpcRequestWrapper");
+    YDB_LOG_ENSURE(req != nullptr,
+        {"reason", "Wrong using of TGRpcRequestWrapper"});
     TActivationContext::AsActorContext().Register(new TSetStreamRetentionPeriodActor<TEvDataStreamsIncreaseStreamRetentionPeriodRequest>(req, true));
 }
 template<>

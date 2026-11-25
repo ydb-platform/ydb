@@ -574,4 +574,6 @@ message TPersQueuePartitionResponse {
     optional TCmdEmitHeartbeatResult CmdEmitHeartbeatResult = 12;
 
     optional uint64 Cookie = 6;
+    // Close the client session on this error instead of retrying inside the proxy.
+    optional bool CloseSession = 13 [default = false];
 }

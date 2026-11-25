@@ -65,6 +65,66 @@ void TSqlQuery::AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node) {
 
 namespace {
 
+const TRule_simple_table_ref* ModifiedTable(const TRule_sql_stmt_core& statement) {
+    switch (statement.Alt_case()) {
+        case TRule_sql_stmt_core::kAltSqlStmtCore5:
+            return &statement.GetAlt_sql_stmt_core5().GetRule_drop_table_stmt1().GetRule_simple_table_ref4();
+        case TRule_sql_stmt_core::kAltSqlStmtCore7:
+            return &statement.GetAlt_sql_stmt_core7().GetRule_into_table_stmt1().GetRule_into_simple_table_ref3().GetRule_simple_table_ref1();
+        case TRule_sql_stmt_core::kAltSqlStmtCore9:
+            return &statement.GetAlt_sql_stmt_core9().GetRule_update_stmt1().GetRule_simple_table_ref3();
+        case TRule_sql_stmt_core::kAltSqlStmtCore10:
+            return &statement.GetAlt_sql_stmt_core10().GetRule_delete_stmt1().GetRule_simple_table_ref4();
+        case TRule_sql_stmt_core::kAltSqlStmtCore69:
+            return &statement.GetAlt_sql_stmt_core69().GetRule_truncate_table_stmt1().GetRule_simple_table_ref3();
+        default:
+            return nullptr;
+    }
+}
+
+bool IsAnonymousTable(const TRule_simple_table_ref& table) {
+    const auto& core = table.GetRule_simple_table_ref_core1();
+    if (core.Alt_case() == TRule_simple_table_ref_core::kAltSimpleTableRefCore1) {
+        return core.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2().HasBlock1();
+    }
+    return core.GetAlt_simple_table_ref_core2().HasBlock2();
+}
+
+EStatementKind GetTableStatementKind(const TRule_simple_table_ref& table, bool isDrop) {
+    if (IsAnonymousTable(table)) {
+        return EStatementKind::InnerDML;
+    }
+    return isDrop ? EStatementKind::DDL : EStatementKind::DML;
+}
+
+TMaybe<EStatementKind> GetStatementKind(const TRule_sql_stmt_core& statement) {
+    if (const auto* table = ModifiedTable(statement)) {
+        return GetTableStatementKind(*table, statement.Alt_case() == TRule_sql_stmt_core::kAltSqlStmtCore5);
+    }
+    switch (statement.Alt_case()) {
+        case TRule_sql_stmt_core::kAltSqlStmtCore1:  // pragma
+        case TRule_sql_stmt_core::kAltSqlStmtCore2:  // select, process, reduce
+        case TRule_sql_stmt_core::kAltSqlStmtCore3:  // named nodes
+        case TRule_sql_stmt_core::kAltSqlStmtCore6:  // use
+        case TRule_sql_stmt_core::kAltSqlStmtCore12: // declare
+        case TRule_sql_stmt_core::kAltSqlStmtCore13: // import
+        case TRule_sql_stmt_core::kAltSqlStmtCore14: // export
+        case TRule_sql_stmt_core::kAltSqlStmtCore17: // do
+        case TRule_sql_stmt_core::kAltSqlStmtCore18: // define action or subquery
+        case TRule_sql_stmt_core::kAltSqlStmtCore19: // if
+        case TRule_sql_stmt_core::kAltSqlStmtCore20: // for
+        case TRule_sql_stmt_core::kAltSqlStmtCore21: // values
+            return Nothing();
+        case TRule_sql_stmt_core::kAltSqlStmtCore8:  // commit
+        case TRule_sql_stmt_core::kAltSqlStmtCore11: // rollback
+            return EStatementKind::TxControl;
+        case TRule_sql_stmt_core::kAltSqlStmtCore70: // materialize
+            return EStatementKind::InnerDML;
+        default:
+            return EStatementKind::DDL;
+    }
+}
+
 TMaybe<TIssue> ParseProjectPragmaName(const TString& fullName, TString& prefix, TString& name) {
     const auto dot = fullName.find('.');
     prefix = dot == TString::npos ? TString() : to_lower(fullName.substr(0, dot));
@@ -209,6 +269,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
     const size_t blocksBeforeStatement = blocks.size();
 
     const auto& altCase = core.Alt_case();
+    const auto statementKind = GetStatementKind(core);
+    if (statementKind && Ctx_.Settings.AllowedStatementKinds && !Ctx_.Settings.AllowedStatementKinds->contains(*statementKind)) {
+        Error() << statementName.Human << " statement belongs to disallowed kind " << *statementKind;
+        return false;
+    }
     if (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW && (altCase >= TRule_sql_stmt_core::kAltSqlStmtCore4 &&
                                                              altCase != TRule_sql_stmt_core::kAltSqlStmtCore13 &&  // import
                                                              altCase != TRule_sql_stmt_core::kAltSqlStmtCore18 &&  // define_action_or_subquery

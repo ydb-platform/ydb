@@ -375,14 +375,12 @@ namespace NKikimr::NStorage {
             throw TExError() << "Cluster is already bridged one";
         }
 
-        // nodes running without BridgeConfig won't be able to work in bridged cluster, as well as the ones of versions
-        // not supporting the features the converted cluster requires
-        THashSet<ui32> requiredNodeIds;
-        for (const auto& node : Self->StorageConfig->GetAllNodes()) {
-            requiredNodeIds.insert(node.GetNodeId());
-        }
+        // every connected node gets the converted config, so it must run with BridgeConfig and support the features
+        // the converted cluster requires; nodes being down or partitioned are not waited for: the ones returning with
+        // compatible settings catch up through the config exchange, while the connectivity checker refuses the ones
+        // running without BridgeConfig or of older versions until the admin restarts them properly
         const bool skipStoragePoolConversion = cmd.GetSkipStoragePoolConversion();
-        RequireBridgeCapability(BridgeFeatureLevel, std::move(requiredNodeIds), {}, [this, skipStoragePoolConversion] {
+        RequireBridgeCapability(BridgeFeatureLevel, {}, {}, [this, skipStoragePoolConversion] {
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
             if (auto error = ConvertStorageConfigToBridge(&config, *Self->Cfg->BridgeConfig,
                     skipStoragePoolConversion)) {
@@ -553,7 +551,7 @@ namespace NKikimr::NStorage {
         } else if (cmd.GetBscConversionId() != details.GetBscConversionId()) {
             // late notification of the conversion the cluster has been rolled back from, BSC performs the current one
             // afterwards; BSC of older version reports no identity, but it can't take part in the conversion started by
-            // this version (which requires every node to support it), as it has 0 then
+            // this version (which requires every connected node to support it, and fences the others), as it has 0 then
             return Finish(TResult::OK, std::nullopt);
         }
 

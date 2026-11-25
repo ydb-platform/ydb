@@ -22,12 +22,12 @@ TEST_SRCS(
 
 FORK_TEST_FILES()
 
-REQUIREMENTS(ram:16 cpu:1)
-
 IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:80 cpu:1)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
+    REQUIREMENTS(ram:16 cpu:1)
     SIZE(MEDIUM)
 ENDIF()
 

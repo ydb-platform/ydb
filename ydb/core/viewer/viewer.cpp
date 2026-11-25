@@ -352,6 +352,7 @@ public:
                     {"/viewer/netinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/topicinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/storage_usage", {EViewerEndpointAccessType::Viewer}},
+                    {"/storage/nbs", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/pqconsumerinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/tabletcounters", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/labeledcounters", {EViewerEndpointAccessType::Viewer}},

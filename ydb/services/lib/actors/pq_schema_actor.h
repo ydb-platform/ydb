@@ -260,7 +260,9 @@ namespace NKikimr::NGRpcProxy::V1 {
                 YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "Unhandled",
                     {"eventType", ev->GetTypeRewrite()},
                     {"event", ev->GetTypeName()});
-                AFL_VERIFY_DEBUG(false)("eventType", ev->GetTypeRewrite())("event", ev->GetTypeName());
+                YDB_LOG_VERIFY_DEBUG(false,
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"event", ev->GetTypeName()});
             }
         }
 

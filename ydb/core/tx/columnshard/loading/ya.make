@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    deferred_portion_loader.cpp
     stages.cpp
 )
 

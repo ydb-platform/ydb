@@ -577,6 +577,9 @@ public:
             case Locked:
                 return "Locked";
                 break;
+            case Disabled:
+                return "Disabled";
+                break;
             case Restart:
                 return "Restart";
                 break;
@@ -955,6 +958,22 @@ public:
         return BSGroups;
     }
 
+    void SetHasDDiskPools(bool value) {
+        HasDDiskPools = value;
+    }
+
+    std::optional<bool> GetHasDDiskPools() const {
+        return HasDDiskPools;
+    }
+
+    void AddDDiskSlot(const NKikimrBlobStorage::TVSlotId& slot) {
+        DDiskSlots.push_back(slot);
+    }
+
+    const auto& GetDDiskSlots() const {
+        return DDiskSlots;
+    }
+
     void SetDDiskPoolName(ui32 nodeId, ui32 pdiskId, ui32 slotId, const TString& name) {
         DDiskPoolNames[nodeId][(ui64(pdiskId) << 32) | slotId] = name;
     }
@@ -1141,6 +1160,8 @@ private:
     TBSGroups BSGroups;
     THashMap<ui32, THashMap<ui64, NKikimrWhiteboard::TDDiskStateInfo>> DDiskStateInfo;
     THashMap<ui32, THashMap<ui64, TString>> DDiskPoolNames;
+    TVector<NKikimrBlobStorage::TVSlotId> DDiskSlots;
+    std::optional<bool> HasDDiskPools;
     TInstant Timestamp;
     ui64 RollbackPoint = 0;
     bool HasTenantsInfo = false;

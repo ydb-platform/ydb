@@ -427,6 +427,7 @@ private:
         Gateway->SetClientAddress(ClientAddress);
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
+        Config->FeatureFlags.SetDisablePgCompatibility(QueryId.DisablePgCompatibility);
 
         KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
             FederatedQuerySetup, UserToken, GUCSettings, QueryServiceConfig, ApplicationName, AppData(ctx)->FunctionRegistry,

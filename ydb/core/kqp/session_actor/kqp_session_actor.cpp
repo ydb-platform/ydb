@@ -85,35 +85,6 @@ void FillColumnsMeta(const NKqpProto::TKqpPhyQuery& phyQuery, NKikimrKqp::TQuery
     }
 }
 
-template<typename TSinkProto>
-bool FillTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const TSinkProto& sink) {
-    if (sink.GetTypeCase() == TSinkProto::kInternalSink
-        && sink.GetInternalSink().GetSettings().template Is<NKikimrKqp::TKqpTableSinkSettings>())
-    {
-        return sink.GetInternalSink().GetSettings().UnpackTo(&settings);
-    }
-    return false;
-}
-
-bool IsBatchQuery(const NKqpProto::TKqpPhyQuery& physicalQuery) {
-    NKikimrKqp::TKqpTableSinkSettings sinkSettings;
-    for (const auto& tx : physicalQuery.GetTransactions()) {
-        for (const auto& stage : tx.GetStages()) {
-            for (auto& sink : stage.GetSinks()) {
-                if (FillTableSinkSettings(sinkSettings, sink) && sinkSettings.HasIsBatch() && sinkSettings.GetIsBatch()) {
-                    return true;
-                }
-            }
-            for (auto& transform : stage.GetOutputTransforms()) {
-                if (FillTableSinkSettings(sinkSettings, transform) && sinkSettings.HasIsBatch() && sinkSettings.GetIsBatch()) {
-                    YDB_LOG_ENSURE(false);
-                }
-            }
-        }
-    }
-    return false;
-}
-
 class TRequestFail : public yexception {
 public:
     Ydb::StatusIds::StatusCode Status;
@@ -377,6 +348,7 @@ public:
                 FederatedQuerySetup, ModuleResolverState, Counters, Settings.QueryService, GUCSettings));
             WorkerId = RegisterWithSameMailbox(workerActor.release());
         }
+        QueryState->RequestEv->DisablePgCompatibility = QueryState->GetDisablePgCompatibility();
         WorkerStatsMode = QueryState->GetStatsMode();
         TlsActivationContext->Send(new IEventHandle(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
                     nullptr, QueryState->KqpSessionSpan.GetTraceId()));
@@ -608,6 +580,14 @@ public:
 
             case NKikimrKqp::QUERY_ACTION_TOPIC:
                 return AddOffsetsToTransaction();
+        }
+
+        if (QueryState->GetDisablePgCompatibility()) {
+            try {
+                TQueryData::ValidateNoPgParameters(QueryState->GetYdbParameters());
+            } catch (const yexception& e) {
+                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << e.what();
+            }
         }
 
         QueryState->UpdateTempTablesState(TempTablesState);
@@ -1761,14 +1741,11 @@ public:
             }
         }
 
-        const bool hasOlapWrite = ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
-        const bool hasOltpWrite = ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
-        const bool hasOlapRead = ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery);
-        const bool hasOltpRead = ::NKikimr::NKqp::HasOltpTableReadInTx(phyQuery);
-        QueryState->TxCtx->HasOlapTable |= hasOlapWrite || hasOlapRead;
-        QueryState->TxCtx->HasOltpTable |= hasOltpWrite || hasOltpRead;
-        QueryState->TxCtx->HasTableWrite |= hasOlapWrite || hasOltpWrite;
-        QueryState->TxCtx->HasTableRead |= hasOlapRead || hasOltpRead;
+        const auto& access = QueryState->PreparedQuery->GetTableAccess();
+        QueryState->TxCtx->HasOlapTable |= access.HasOlapWrite || access.HasOlapRead;
+        QueryState->TxCtx->HasOltpTable |= access.HasOltpWrite || access.HasOltpRead;
+        QueryState->TxCtx->HasTableWrite |= access.HasOlapWrite || access.HasOltpWrite;
+        QueryState->TxCtx->HasTableRead |= access.HasOlapRead || access.HasOltpRead;
 
         if (QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE
                 && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE
@@ -2026,7 +2003,7 @@ public:
         }
 
         const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
-        if (IsBatchQuery(phyQuery)) {
+        if (QueryState->PreparedQuery->IsBatchQuery()) {
             ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for batch queries");
             return false;
         }
@@ -2154,7 +2131,7 @@ public:
             return;
         }
 
-        const bool isBatchQuery = IsBatchQuery(QueryState->PreparedQuery->GetPhysicalQuery());
+        const bool isBatchQuery = QueryState->PreparedQuery->IsBatchQuery();
         if (isBatchQuery && (!tx || !tx->IsLiteralTx())) {
             ExecutePartitioned(tx);
         } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects()) {
@@ -2511,6 +2488,7 @@ public:
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
         request.SaveQueryPhysicalGraph = allowSaveState && QueryState->SaveQueryPhysicalGraph;
+        request.CompiledWithPgCompatibilityDisabled = request.SaveQueryPhysicalGraph && QueryState->GetDisablePgCompatibility();
         request.QueryPhysicalGraph = allowSaveState ? QueryState->QueryPhysicalGraph : nullptr;
         YDB_LOG_DEBUG("Sending to Executer",
             {"marker", "KQPSA"},
@@ -2687,7 +2665,7 @@ public:
     void InvalidateQuery() {
         if (QueryState->CompileResult) {
             auto invalidateEv = MakeHolder<TEvKqp::TEvCompileInvalidateRequest>(
-                QueryState->CompileResult->Uid, Settings.DbCounters);
+                QueryState->CompileResult, Settings.DbCounters);
 
             Send(MakeKqpCompileServiceID(SelfId().NodeId()), invalidateEv.Release());
         }

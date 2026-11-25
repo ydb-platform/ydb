@@ -1064,6 +1064,7 @@ void TBlobStorageController::CheckUnsyncedBridgePiles() {
 
 void TBlobStorageController::UpdateBridgeSyncCounters() {
     if (!BridgeInfo || BridgeInfo->IsImplicit) {
+        BridgeSyncCounters->Update({}, {}, {});
         return;
     }
 
@@ -1076,7 +1077,9 @@ void TBlobStorageController::UpdateBridgeSyncCounters() {
     });
 
     std::map<TBridgeSyncCounters::TKey, TBridgeSyncCounters::TValues> values;
+    std::map<TString, ui64> logicalGroupsAssigned;
     auto scan = [&](const NKikimrBridge::TGroupState& state, const TString& pool) {
+        bool assigned = false;
         NBridge::ForEachGroupPile(state, [&](TBridgePileId pileId, const NKikimrBridge::TGroupState::TPile& pile) {
             const auto *bridgePile = BridgeInfo->FindPile(pileId);
             if (!bridgePile) {
@@ -1092,6 +1095,7 @@ void TBlobStorageController::UpdateBridgeSyncCounters() {
                 value.BytesPerSecond += it->second.CopyRate;
             }
             if (it != TargetGroupToSyncerState.end() && it->second.NodeIds) {
+                assigned = true;
                 ++value.SyncersRunning;
                 for (const auto& [nodeId, perNodeInfo] : it->second.NodeIds) {
                     value.BytesDone += perNodeInfo.Progress.BytesDone;
@@ -1104,6 +1108,7 @@ void TBlobStorageController::UpdateBridgeSyncCounters() {
                 value.GroupsNotEstimated += !remaining || !remaining->Complete;
             }
         });
+        logicalGroupsAssigned[pool] += assigned;
     };
     for (const auto& [groupId, group] : GroupMap) {
         if (group->BridgeGroupInfo && group->BridgeGroupInfo->HasBridgeGroupState()) {
@@ -1116,7 +1121,7 @@ void TBlobStorageController::UpdateBridgeSyncCounters() {
         }
     }
 
-    BridgeSyncCounters->Update(piles, values);
+    BridgeSyncCounters->Update(piles, values, logicalGroupsAssigned);
 }
 
 std::optional<TBlobStorageController::TBridgeSyncRemaining> TBlobStorageController::GetBridgeSyncRemaining(

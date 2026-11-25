@@ -2,7 +2,7 @@
 
 namespace NKikimr::NBsController {
 
-std::expected<std::optional<TMirror3dcGroupConfiguration>, TString> TBlobStorageController::GetGroupPolicyStep(
+TBlobStorageController::TGroupPolicyStepResult TBlobStorageController::GetGroupPolicyStep(
         const TGroupInfo& group, const TMirror3dcGroupConfiguration& current) const {
     if (HasDataCenterPolicy) {
         std::array<bool, 3> excluded{};
@@ -56,22 +56,19 @@ void TBlobStorageController::UpdateGroupStateActor(TGroupId groupId) {
             && group->Topology->GetTotalFailRealmsNum() == 3
             && group->VDisksInGroup.size() == group->Topology->GetTotalVDisksNum()
             && !StoragePools.at(group->StoragePoolId).BridgeMode) {
-        message->Info.emplace();
-        message->Info->Generation = group->Generation;
-        message->Info->Topology = group->Topology;
-        message->Info->States = group->FailRealmStates.value_or(NGroupSyncer::TFailRealmStates{});
-        message->Info->GroupState = group->Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL);
-        std::expected<std::optional<TMirror3dcGroupConfiguration>, TString> step = GetGroupPolicyStep(
-            *group, {*message->Info->GroupState, message->Info->States});
-        if (!step) {
-            message->Info.reset();
-            Send(GroupStateActorId, message.release());
-            return;
-        }
-        message->Info->PolicyStep = *step;
-        for (const TIndirectReferable<TVSlotInfo>::TPtr& slot : group->VDisksInGroup) {
-            message->Info->VDisks.push_back({slot->GetVDiskId(),
-                MakeBlobStorageVDiskID(slot->VSlotId.NodeId, slot->VSlotId.PDiskId, slot->VSlotId.VSlotId)});
+        TMirror3dcGroupConfiguration current = group->GetMirror3dcConfiguration();
+        TGroupPolicyStepResult step = GetGroupPolicyStep(*group, current);
+        if (step) {
+            NGroupSyncer::TGroupReplicationInfo& info = message->Info.emplace();
+            info.Generation = group->Generation;
+            info.Topology = group->Topology;
+            info.States = current.Realms;
+            info.GroupState = current.State;
+            info.PolicyStep = step.value();
+            for (const TIndirectReferable<TVSlotInfo>::TPtr& slot : group->VDisksInGroup) {
+                info.VDisks.push_back({slot->GetVDiskId(),
+                    MakeBlobStorageVDiskID(slot->VSlotId.NodeId, slot->VSlotId.PDiskId, slot->VSlotId.VSlotId)});
+            }
         }
     }
     Send(GroupStateActorId, message.release());

@@ -1365,19 +1365,18 @@ namespace NKikimr::NBsController {
             }
             TGroups::iterator existing = Self.GroupMap.find(groupId);
             bool isNew = existing == Self.GroupMap.end();
-            TMirror3dcGroupConfiguration previous{NKikimrBlobStorage::TGroupState::NORMAL, normal};
-            if (!isNew) {
-                previous = {existing->second->Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL),
-                    existing->second->FailRealmStates.value_or(normal)};
-            }
-            TMirror3dcGroupConfiguration current{
-                group->Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL), group->FailRealmStates.value_or(normal)};
+            TMirror3dcGroupConfiguration previous = isNew
+                ? TMirror3dcGroupConfiguration{} : existing->second->GetMirror3dcConfiguration();
+            TMirror3dcGroupConfiguration current = group->GetMirror3dcConfiguration();
             if (parameters.FromGroupStateActor && previous != current) {
-                std::expected<std::optional<TMirror3dcGroupConfiguration>, TString> step = Self.GetGroupPolicyStep(*group, previous);
+                TGroupPolicyStepResult step = Self.GetGroupPolicyStep(*group, previous);
                 if (!step) {
                     return std::unexpected<TString>(step.error());
                 }
-                std::optional<TMirror3dcGroupConfiguration> next = *step ? *step : RecoveringComplete(previous);
+                std::optional<TMirror3dcGroupConfiguration> next = step.value();
+                if (!next) {
+                    next = RecoveringComplete(previous);
+                }
                 if (next != current) {
                     return std::unexpected<TString>("Group state proposal no longer matches the controller target");
                 }

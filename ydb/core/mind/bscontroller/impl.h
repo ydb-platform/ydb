@@ -783,6 +783,11 @@ public:
         // be recalculated too
         bool CalculateGroupStatus();
 
+        TMirror3dcGroupConfiguration GetMirror3dcConfiguration() const {
+            return {Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL),
+                FailRealmStates.value_or(TMirror3dcFailRealmStates{})};
+        }
+
         // group layout status: whether it is positioned correctly
         bool LayoutCorrect = false;
 
@@ -2105,8 +2110,8 @@ public:
     IActor *CreateSelfHealActor();
     TActorId SelfHealId;
     TActorId GroupStateActorId;
-    std::expected<std::optional<TMirror3dcGroupConfiguration>, TString> GetGroupPolicyStep(
-        const TGroupInfo& group, const TMirror3dcGroupConfiguration& current) const;
+    using TGroupPolicyStepResult = std::expected<std::optional<TMirror3dcGroupConfiguration>, TString>;
+    TGroupPolicyStepResult GetGroupPolicyStep(const TGroupInfo& group, const TMirror3dcGroupConfiguration& current) const;
     void UpdateGroupStateActor(TGroupId groupId);
 
     TActorId ClusterBalanceActorId;

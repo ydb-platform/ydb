@@ -22,6 +22,7 @@ public:
         TDomainsInfo* domainsInfo = appData->DomainsInfo.Get();
         TTabletId rootHiveId = domainsInfo->GetHive();
         bool isRootHive = (rootHiveId == Self->TabletID());
+        const bool bridgeMode = IsBridgeMode(TActivationContext::AsActorContext());
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -29,6 +30,7 @@ public:
         Self->NodeSegments.clear();
         Self->TabletCategories.clear();
         Self->Tablets.clear();
+        Self->BootAttempts.clear();
         Self->OwnerToTablet.clear();
         Self->ObjectToTabletMetrics.clear();
         Self->TabletTypeToTabletMetrics.clear();
@@ -199,7 +201,7 @@ public:
         if (Self->CurrentConfig.HasWarmUpEnabled()) {
             Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled();
         } else {
-            if (IsBridgeMode(TActivationContext::AsActorContext())) {
+            if (bridgeMode) {
                 Self->WarmUp = false;
             } else {
                 Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled() && !Self->AreWeRootHive();
@@ -341,12 +343,21 @@ public:
                 return false;
             }
             while (!bridgePileRowset.EndOfSet()) {
-                ++numPiles;
                 TBridgePileId pileId = TBridgePileId::FromLocalDb(bridgePileRowset.GetValue<Schema::BridgePile::Id>());
+                if (!bridgeMode) {
+                    // left from the time the cluster was prepared for bridge mode, before it was rolled back
+                    db.Table<Schema::BridgePile>().Key(pileId.GetLocalDb()).Delete();
+                    if (!bridgePileRowset.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
+                ++numPiles;
                 auto& pileInfo = Self->GetPile(pileId);
                 pileInfo.State = bridgePileRowset.GetValue<Schema::BridgePile::State>();
                 pileInfo.IsPrimary = bridgePileRowset.GetValue<Schema::BridgePile::IsPrimary>();
                 pileInfo.IsPromoted = bridgePileRowset.GetValue<Schema::BridgePile::IsPromoted>();
+                pileInfo.Drain = bridgePileRowset.GetValueOrDefault<Schema::BridgePile::Drain>();
                 if (!bridgePileRowset.Next()) {
                     return false;
                 }
@@ -392,6 +403,19 @@ public:
                     node.ServicedDomains = { Self->RootDomainKey };
                 }
                 node.LastSeenServicedDomains = node.ServicedDomains; // to keep Down and Freeze flags on restarts
+                if (node.BridgePileId && !bridgeMode) {
+                    // the cluster has been prepared for bridge mode and rolled back; piles are not used without bridge
+                    // mode, and the ones nodes had then would split balancing segments with nodes registered later
+                    node.BridgePileId = {};
+                    db.Table<Schema::Node>().Key(nodeId).UpdateToNull<Schema::Node::BridgePileId>();
+                } else if (const auto implicitPileId = NBridge::GetImplicitPileId(Self->BridgeInfo.get());
+                        !node.BridgePileId && implicitPileId) {
+                    // node was registered before the cluster got its single-pile bridge config (it is being converted into
+                    // bridged one), so it implicitly belongs to the only pile; its Local may survive Hive restart and
+                    // register again without the change of actor id, so the pile is assigned here
+                    node.BridgePileId = implicitPileId;
+                    db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::BridgePileId>(node.BridgePileId.GetLocalDb());
+                }
                 if (!(bool)node.Local) {
                     // it's safe to call here, because there is no any tablets in the node yet
                     node.BecomeDisconnected();
@@ -667,7 +691,7 @@ public:
                     followerGroup.NodeFilter.AllowedNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowedNodes>();
                     followerGroup.NodeFilter.AllowedDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::NewAllowedDataCenterIds>();
 
-                    followerGroup.RequireAllDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>();
+                    followerGroup.SetRequireAllDataCenters(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>());
                     followerGroup.LocalNodeOnly = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::LocalNodeOnly>();
                     followerGroup.FollowerCountPerDataCenter = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>();
                     followerGroup.RequireDifferentNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireDifferentNodes>();

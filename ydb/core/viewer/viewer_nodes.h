@@ -2233,14 +2233,18 @@ public:
         }
         if (FilterStorageStage == EFilterStorageStage::VSlots && VSlotsResponse && VSlotsResponse->IsDone()) {
             if (VSlotsResponse->IsOk()) {
-                std::unordered_set<TNodeId> prevFilterNodeIds = std::move(FilterNodeIds);
-                std::unordered_map<std::pair<TNodeId, ui32>, std::size_t> slotsPerDisk;
-                for (const auto& slotEntry : VSlotsResponse->Get()->Record.GetEntries()) {
-                    if (FilterGroupIds.count(slotEntry.GetInfo().GetGroupId()) > 0) {
-                        if (prevFilterNodeIds.empty() || prevFilterNodeIds.count(slotEntry.GetKey().GetNodeId()) > 0) {
-                            FilterNodeIds.insert(slotEntry.GetKey().GetNodeId());
+                if (!FilterGroupIds.empty()) {
+                    std::unordered_set<TNodeId> prevFilterNodeIds = std::move(FilterNodeIds);
+                    for (const auto& slotEntry : VSlotsResponse->Get()->Record.GetEntries()) {
+                        if (FilterGroupIds.count(slotEntry.GetInfo().GetGroupId()) > 0) {
+                            if (prevFilterNodeIds.empty() || prevFilterNodeIds.count(slotEntry.GetKey().GetNodeId()) > 0) {
+                                FilterNodeIds.insert(slotEntry.GetKey().GetNodeId());
+                            }
                         }
                     }
+                }
+                std::unordered_map<std::pair<TNodeId, ui32>, std::size_t> slotsPerDisk;
+                for (const auto& slotEntry : VSlotsResponse->Get()->Record.GetEntries()) {
                     TNode* node = FindNode(slotEntry.GetKey().GetNodeId());
                     if (node) {
                         node->SysViewVDisks.emplace_back(slotEntry);
@@ -3438,13 +3442,15 @@ public:
                 if (FieldsAvailable.test(+ENodeFields::ReceiveThroughput) && FieldsRequested.test(+ENodeFields::ReceiveThroughput)) {
                     jsonNode.SetReceiveThroughput(node->ReceiveThroughput);
                 }
+                if (FieldsAvailable.test(+ENodeFields::PileName) && FieldsRequested.test(+ENodeFields::PileName)) {
+                    // GetPileName reads SystemState; capture it before SystemState is moved into jsonNode below.
+                    const TString pileName = node->GetPileName();
+                    if (pileName) {
+                        jsonNode.SetPileName(pileName);
+                    }
+                }
                 if ((FieldsAvailable.test(+ENodeFields::NodeInfo) || FieldsAvailable.test(+ENodeFields::SystemState)) && (FieldsRequested & FieldsSystemState).any()) {
                     *jsonNode.MutableSystemState() = std::move(node->SystemState);
-                }
-                if (FieldsAvailable.test(+ENodeFields::PileName) && FieldsRequested.test(+ENodeFields::PileName)) {
-                    if (node->GetPileName()) {
-                        jsonNode.SetPileName(node->GetPileName());
-                    }
                 }
                 if (FieldsAvailable.test(+ENodeFields::PDisks) && FieldsRequested.test(+ENodeFields::PDisks)) {
                     std::unordered_map<ui32, const NKikimrSysView::TPDiskInfo*> sysViewPDisks;

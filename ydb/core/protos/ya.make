@@ -34,6 +34,7 @@ SRCS(
     bootstrap.proto
     bootstrapper.proto
     bridge.proto
+    bridge_storage.proto
     change_exchange.proto
     channel_purpose.proto
     cms.proto

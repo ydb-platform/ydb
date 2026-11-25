@@ -67,17 +67,21 @@ public:
                     TEvNodeBroker::TEvRegistrationRequest::TPtr request,
                     NActors::TScopeId scopeId,
                     TSubDomainKey servicedSubDomain,
-                    TString error)
+                    TString error,
+                    std::optional<TString> implicitPileName = std::nullopt)
                 : Request(request)
                 , ScopeId(scopeId)
                 , ServicedSubDomain(servicedSubDomain)
                 , Error(std::move(error))
+                , ImplicitPileName(std::move(implicitPileName))
             {}
 
             TEvNodeBroker::TEvRegistrationRequest::TPtr Request;
             NActors::TScopeId ScopeId;
             TSubDomainKey ServicedSubDomain;
             TString Error;
+            // name of the pile of nodes without pile name (in bridged cluster converted from non-bridged one), if any
+            std::optional<TString> ImplicitPileName;
         };
 
         struct TEvProcessSubscribersQueue : public TEventLocal<TEvProcessSubscribersQueue, EvProcessSubscribersQueue> {};
@@ -88,6 +92,8 @@ private:
 
     static constexpr TDuration MIN_LEASE_DURATION = TDuration::Minutes(5);
 
+    // the location with the pile name set, or dropped for nullopt
+    static TNodeLocation WithBridgePileName(const TNodeLocation& location, const std::optional<TString>& pileName);
 
     struct TNodeInfo : public TEvInterconnect::TNodeInfo {
         TNodeInfo() = delete;

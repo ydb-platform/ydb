@@ -1,6 +1,7 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy_blackboard.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_strategy_restore.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_m3dc_restore.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_bold.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/stream/null.h>
 #include <util/generic/overloaded.h>
@@ -309,7 +310,70 @@ void RunTestLevel(const TBlobStorageGroupInfo& info, TBlackboard& blackboard,
     stock.resize(stockSizeOnEntry);
 }
 
+// block-4-2 blob read when more disks are not replicated yet (answer NOT_YET) than the group has handoff ones, which is
+// beyond its failure model; the blob is restored from the parts read, if they are enough, and it is reported absent
+// otherwise, as disks being replicated rely on that to get rid of phantom blobs
+template<typename T>
+void RunLostDisksTest(bool restorable, T&& strategy) {
+    const TBlobStorageGroupType type(TBlobStorageGroupType::Erasure4Plus2Block);
+    TBlobStorageGroupInfo info(type);
+    info.Ref();
+    TGroupQueues groupQueues(info.GetTopology());
+    groupQueues.Ref();
+
+    TString data(1000, 'x');
+    const TLogoBlobID id(1'000'000'000, 1, 1, 0, data.size(), 0);
+    std::vector<TRope> parts(type.TotalPartCount());
+    ErasureSplit(TBlobStorageGroupType::CrcModeNone, type, TRope(data), parts, nullptr, GetDefaultRcBufAllocator());
+
+    TBlackboard blackboard(&info, &groupQueues, NKikimrBlobStorage::UserData, NKikimrBlobStorage::FastRead);
+    blackboard.AddNeeded(id, 0, id.BlobSize());
+    auto& state = blackboard[id];
+
+    // disks 0-2 are not replicated yet, disks 3-5 have their parts 4-6, the first handoff disk has part 3 when the blob
+    // is restorable, and the rest answer NODATA
+    for (ui32 idxInSubgroup = 0; idxInSubgroup < type.BlobSubgroupSize(); ++idxInSubgroup) {
+        const ui32 orderNumber = state.Disks[idxInSubgroup].OrderNumber;
+        for (ui32 partIdx = 0; partIdx < type.TotalPartCount(); ++partIdx) {
+            if (!type.PartFits(partIdx + 1, idxInSubgroup)) {
+                continue;
+            }
+            const TLogoBlobID partId(id, partIdx + 1);
+            if (idxInSubgroup < 3) {
+                blackboard.AddNotYetResponse(partId, orderNumber);
+            } else if (idxInSubgroup < 6 || (restorable && idxInSubgroup == 6 && partIdx == 2)) {
+                blackboard.AddResponseData(partId, orderNumber, 0, TRope(parts[partIdx]));
+            } else {
+                blackboard.AddNoDataResponse(partId, orderNumber);
+            }
+        }
+    }
+
+    TLogContext logCtx(NKikimrServices::BS_PROXY, false);
+    logCtx.SuppressLog = true;
+    const auto outcome = blackboard.RunStrategy(logCtx, strategy, TAccelerationParams{});
+    UNIT_ASSERT_C(outcome == EStrategyOutcome::DONE, outcome.ErrorReason);
+    if (restorable) {
+        UNIT_ASSERT_EQUAL_C(state.WholeSituation, TBlobState::ESituation::Present, state.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(state.Whole.Data.Read(0, data.size()).ConvertToString(), data);
+    } else {
+        UNIT_ASSERT_EQUAL_C(state.WholeSituation, TBlobState::ESituation::Absent, state.ToString());
+    }
+}
+
 Y_UNIT_TEST_SUITE(DSProxyStrategyTest) {
+
+    Y_UNIT_TEST(LostDisksBeyondHandoffRestorable_Bold) {
+        RunLostDisksTest(true, TBoldStrategy(false));
+    }
+
+    Y_UNIT_TEST(LostDisksBeyondHandoffRestorable_PhantomCheck) {
+        RunLostDisksTest(true, TBoldStrategy(true));
+    }
+
+    Y_UNIT_TEST(LostDisksBeyondHandoffUnrecoverable_PhantomCheck) {
+        RunLostDisksTest(false, TBoldStrategy(true));
+    }
 
     Y_UNIT_TEST(Restore_block42) {
         RunStrategyTest<TRestoreStrategy>(TBlobStorageGroupType::Erasure4Plus2Block);

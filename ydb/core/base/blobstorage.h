@@ -551,6 +551,8 @@ struct TEvBlobStorage {
         EvControllerUpdateSyncerState               = 0x1003162f,
         EvControllerAllocateDDiskBlockGroup         = 0x10031630,
         EvControllerAllocateDDiskBlockGroupResult   = 0x10031631,
+        EvControllerQueryBridgeStorage             = 0x10031638,
+        EvControllerQueryBridgeStorageResult       = 0x10031639,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -772,7 +774,7 @@ struct TEvBlobStorage {
             std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
         };
 
-        TEvPut(TCloneEventPolicy, const TEvPut& origin)
+        TEvPut(TCloneEventPolicy, const TEvPut& origin, std::optional<bool> reduceInterpileTraffic = std::nullopt)
             : Id(origin.Id)
             , Buffer(origin.Buffer)
             , Deadline(origin.Deadline)
@@ -782,7 +784,7 @@ struct TEvBlobStorage {
             , IssueKeepFlag(origin.IssueKeepFlag)
             , IgnoreBlock(origin.IgnoreBlock)
             , AlreadyEncrypted(origin.AlreadyEncrypted)
-            , ReduceInterpileTraffic(origin.ReduceInterpileTraffic)
+            , ReduceInterpileTraffic(reduceInterpileTraffic.value_or(origin.ReduceInterpileTraffic))
             , IsZeroEntry(origin.IsZeroEntry)
             , FailOnSlowDown(origin.FailOnSlowDown)
             , ExtraBlockChecks(origin.ExtraBlockChecks)
@@ -1452,6 +1454,7 @@ struct TEvBlobStorage {
         const ui64 IssuerGuid = RandomNumber<ui64>() | 1;
         const TWriteSource WriteSource;
         bool IsMonitored = true;
+        bool IsIdempotent = false;
 
         TEvBlock(TCloneEventPolicy, const TEvBlock& origin)
             : TabletId(origin.TabletId)
@@ -1460,6 +1463,7 @@ struct TEvBlobStorage {
             , IssuerGuid(origin.IssuerGuid)
             , WriteSource(origin.WriteSource)
             , IsMonitored(origin.IsMonitored)
+            , IsIdempotent(origin.IsIdempotent)
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline,
@@ -1486,6 +1490,7 @@ struct TEvBlobStorage {
                 << " Generation# " << Generation
                 << " Deadline# " << Deadline.MilliSeconds()
                 << " IsMonitored# " << IsMonitored
+                << " IsIdempotent# " << IsIdempotent
                 << "}";
             return str.Str();
         }
@@ -2496,6 +2501,9 @@ struct TEvBlobStorage {
             TLogoBlobID Id;
             bool Keep = false;
             bool DoNotKeep = false;
+            // some disk has a part of the blob; a disk may have a record of the blob with flags only, e.g. a Keep flag
+            // that has come before the data
+            bool HasData = true;
 
             TString ToString() const {
                 TStringStream str;
@@ -2511,6 +2519,9 @@ struct TEvBlobStorage {
                 if (DoNotKeep) {
                     s << "d";
                 }
+                if (!HasData) {
+                    s << "n";
+                }
             }
 
             auto GetKey() const {
@@ -2521,6 +2532,7 @@ struct TEvBlobStorage {
         std::deque<TBlock> Blocks;
         std::deque<TBarrier> Barriers;
         std::deque<TBlob> Blobs;
+        ui64 ReplyBytes = 0; // total size of the VDisk replies the proxy has got for this result
 
         TEvAssimilateResult(NKikimrProto::EReplyStatus status, TString errorReason = {})
             : TEvResultCommon(status)
@@ -2663,6 +2675,8 @@ struct TEvBlobStorage {
     struct TEvControllerDistconfRequest;
     struct TEvControllerDistconfResponse;
     struct TEvControllerUpdateSyncerState;
+    struct TEvControllerQueryBridgeStorage;
+    struct TEvControllerQueryBridgeStorageResult;
 
     struct TEvControllerAllocateDDiskBlockGroup;
     struct TEvControllerAllocateDDiskBlockGroupResult;

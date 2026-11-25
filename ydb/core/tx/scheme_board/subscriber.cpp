@@ -512,6 +512,11 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
         YDB_LOG_TRACE("Sleep",
             {"delay", Delay});
 
+        if (CurrentSyncRequest) {
+            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, CurrentSyncRequest);
+            CurrentSyncRequest = 0;
+        }
+
         ReplicaSubscriber = TActorId();
         this->Send(Parent, new NInternalEvents::TEvNotifyBuilder(Path, true));
         this->Become(&TDerived::StateSleep, Delay, new TEvents::TEvWakeup());
@@ -588,11 +593,6 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
     void Handle(TEvents::TEvGone::TPtr& ev) {
         if (ev->Sender != ReplicaSubscriber) {
             return;
-        }
-
-        if (CurrentSyncRequest) {
-            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, CurrentSyncRequest);
-            CurrentSyncRequest = 0;
         }
 
         Sleep();

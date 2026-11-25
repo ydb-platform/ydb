@@ -368,6 +368,9 @@ message TFeatureFlags {
     optional bool EnableColumnTableImportDependencyRetry = 375 [default = false];
     optional bool EnableSourceTopicMutateRestricted = 376 [default = false];
     optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
+    // Show REPLICATING VDisks with only phantom-like blobs remaining as READY ones in node whiteboard and system views
+    // (and thus in health check, viewer and CMS); BS_CONTROLLER logic still treats them as replicating ones
+    optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
     // (LOGBROKER-10680). Default false is
     // the legacy zeroing behaviour that undercounted the consumed
@@ -375,4 +378,5 @@ message TFeatureFlags {
     optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
     optional bool EnableTopicReplication = 396 [default = false];
     optional bool ShareShardedMkqlProgram = 399 [default = false];
+    optional bool EnableBridgeProxyLocalPileFirstGet = 401 [default = false];
 }

@@ -4,6 +4,15 @@
 
 namespace NKikimr::NStorage {
 
+    // Bump generation of the bridge proxy group after the groups of its piles got their generations bumped; inline pile
+    // is its own pile, so it is not bumped twice. bumpedAsPile tells whether the group was bumped as the pile.
+    inline void BumpBridgeProxyGeneration(NKikimrBlobStorage::TGroupInfo *proxyGroup,
+            const std::function<bool(TGroupId)>& bumpedAsPile) {
+        if (!bumpedAsPile(TGroupId::FromProto(proxyGroup, &NKikimrBlobStorage::TGroupInfo::GetGroupID))) {
+            proxyGroup->SetGroupGeneration(proxyGroup->GetGroupGeneration() + 1);
+        }
+    }
+
     class TDistributedConfigKeeper::TInvokeRequestHandlerActor : public TActor<TInvokeRequestHandlerActor> {
         friend class TDistributedConfigKeeper;
 
@@ -42,6 +51,10 @@ namespace NKikimr::NStorage {
 
         struct TExRace : TExError {
             TExRace() { Status = TResult::RACE; }
+        };
+
+        struct TExGenerationMismatch : TExError {
+            TExGenerationMismatch() { Status = TResult::GENERATION_MISMATCH; }
         };
 
         struct TExNoQuorum : TExError {
@@ -101,6 +114,8 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeWardenBaseConfig::TPtr ev);
         void CheckReassignGroupDisk();
         void ReassignGroupDiskExecute();
+        void CheckBridgedPartDataRestorable(const NKikimrBlobStorage::TStorageConfig& config,
+            const NKikimrBlobStorage::TGroupInfo& group, TVDiskID vdiskId);
         void UpdateBridgeGroupInfo(const TQuery::TUpdateBridgeGroupInfo& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -151,7 +166,16 @@ namespace NKikimr::NStorage {
             ENABLE_DISTCONF,
             DISABLE_DISTCONF,
             OTHER,
+            ADD_BRIDGE_PILE, // BSC validates addition of the pile, then ProposedStorageConfig gets proposed
+            REMOVE_BRIDGE_PILE, // BSC validates removal of the pile, then ProposedStorageConfig gets proposed
+            BRIDGE_ROLLBACK, // BSC validates the rollback of the bridged cluster, then ProposedStorageConfig gets proposed
         } ControllerOp = EControllerOp::UNSET;
+
+        // for the operations BSC validates before ProposedStorageConfig gets proposed: the interface version BSC needs,
+        // the validation request, and what is being done (for the error message)
+        using TBridgePileControllerOp = std::tuple<ui32, NKikimrBlobStorage::TEvControllerDistconfRequest::EOperation,
+            const char*>;
+        std::optional<TBridgePileControllerOp> GetBridgePileControllerOp() const;
 
         void FetchStorageConfig(const TQuery::TFetchStorageConfig& request);
         void Handle(TEvNodeWardenStorageConfig::TPtr ev);
@@ -180,11 +204,36 @@ namespace NKikimr::NStorage {
         // Bridge mode
 
         void NeedBridgeMode();
+        void CheckPileNotification(TBridgePileId bridgePileId, ui64 generation);
 
         void SwitchBridgeClusterState(const TQuery::TSwitchBridgeClusterState& cmd);
 
         void NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd);
         void NotifyBridgeSuspended(const TQuery::TNotifyBridgeSuspended& cmd);
+
+        void ConvertToBridge(const TQuery::TConvertToBridge& cmd);
+        void RollbackBridge(const TQuery::TRollbackBridge& cmd);
+
+        // check that every node runs with BridgeConfig (and supports bridge features of minFeatureLevel, when it is set),
+        // then invoke the callback; every static node listed in requiredNodeIds must report it, while nodes listed in
+        // ignoredNodeIds may not report anything (they are leaving the cluster)
+        void RequireBridgeCapability(ui32 minFeatureLevel, THashSet<ui32> requiredNodeIds,
+            THashSet<ui32> ignoredNodeIds, std::function<void()> callback);
+        void NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& cmd);
+
+        TBridgePileId BridgePileOpPileId; // the pile being added or removed, see ControllerOp
+
+        // common checks of the operations changing the set of piles: the pile is listed in BridgeConfig and it is in the
+        // expected state, no other operation is in progress; returns the id of the pile
+        TBridgePileId CheckPileOperation(const TString& pileName, NKikimrBridge::TClusterState::EPileState expectedState,
+            bool adding);
+        // every node remaining in the cluster has to support pile operations (see RequireBridgeCapability)
+        void RequirePileOperationCapability(TBridgePileId leavingPileId, std::function<void()> callback);
+
+        void AddBridgePile(const TQuery::TAddBridgePile& cmd);
+        void AddBridgePileWithBaseConfig();
+        void RemoveBridgePile(const TQuery::TRemoveBridgePile& cmd);
+        void NotifyBridgePileOperation(const TQuery::TNotifyBridgePileOperation& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Retro trace collection

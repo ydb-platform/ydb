@@ -357,6 +357,135 @@ std::vector<TStepCounters> TConcreteScanCounters::GetStepStats() const {
     return std::vector<TStepCounters>(lock.Value.begin(), lock.Value.end());
 }
 
+namespace {
+
+template <class TProto>
+void FillStepColumns(TProto& proto, const std::vector<TStepColumn>& columns) {
+    for (const auto& column : columns) {
+        auto* result = proto.AddColumns();
+        result->SetId(column.Id);
+        result->SetName(column.Name);
+    }
+}
+
+void FillStepDetails(::NColumnShard::TStepCounters&, const std::monostate&) {
+}
+
+void FillStepDetails(::NColumnShard::TStepCounters& step, const TReserveMemoryStepDetails& details) {
+    auto* proto = step.MutableReserveMemory();
+    for (const auto& stage : details.Stages) {
+        auto* result = proto->AddStages();
+        result->SetStage(stage.Stage);
+        for (const auto& type : stage.MemoryTypes) {
+            result->AddMemoryTypes(type);
+        }
+    }
+    if (details.RequestedBytes) {
+        proto->SetRequestedBytes(*details.RequestedBytes);
+    }
+}
+
+void FillStepDetails(::NColumnShard::TStepCounters& step, const TFetchColumnsStepDetails& details) {
+    FillStepColumns(*step.MutableFetchColumns(), details.Columns);
+}
+
+void FillStepDetails(::NColumnShard::TStepCounters& step, const TAssembleStepDetails& details) {
+    FillStepColumns(*step.MutableAssemble(), details.Columns);
+}
+
+void FillStepDetails(::NColumnShard::TStepCounters& step, const TPKFilterDetails& details) {
+    auto* proto = step.MutablePKFilter();
+    FillStepColumns(*proto, details.Columns);
+    for (const auto& predicate : details.Predicates) {
+        proto->AddPredicates(predicate);
+    }
+}
+
+void FillStepDetails(::NColumnShard::TStepCounters& step, const TShardingFilterStepDetails& details) {
+    FillStepColumns(*step.MutableShardingFilter(), details.Columns);
+}
+
+void FillStepDetails(::NColumnShard::TStepCounters& step, const TDeletionFilterStepDetails& details) {
+    FillStepColumns(*step.MutableDeletionFilter(), details.Columns);
+}
+
+void FillStepDetails(::NColumnShard::TStepCounters& step, const TSnapshotFilterStepDetails& details) {
+    auto* proto = step.MutableSnapshotFilter();
+    for (const auto& snapshot : details.Snapshots) {
+        auto* result = proto->AddSnapshots();
+        result->SetPlanStep(snapshot.PlanStep);
+        result->SetTxId(snapshot.TxId);
+    }
+}
+
+void FillStepDetails(::NColumnShard::TStepCounters& step, const TLimitStepDetails& details) {
+    auto* proto = step.MutableLimit();
+    for (const auto& limit : details.Limits) {
+        auto* result = proto->AddLimits();
+        result->SetLimit(limit.Limit);
+        result->SetReverse(limit.Reverse);
+    }
+}
+
+void FillStepDetails(::NColumnShard::TStepCounters& step, const TPrepareResultStepDetails& details) {
+    auto* proto = step.MutablePrepareResult();
+    for (const bool inplace : details.StartResultBuildingInplace) {
+        proto->AddStartResultBuildingInplace(inplace);
+    }
+}
+
+void FillStepDetails(::NColumnShard::TStepCounters& step, const TBuildResultStepDetails& details) {
+    auto* proto = step.MutableBuildResult();
+    if (const auto& bounds = details.PageBounds) {
+        auto* result = proto->MutablePageBounds();
+        result->SetMinStartIndex(bounds->MinStartIndex);
+        result->SetMaxStartIndex(bounds->MaxStartIndex);
+        result->SetMinRecordsCount(bounds->MinRecordsCount);
+        result->SetMaxRecordsCount(bounds->MaxRecordsCount);
+    }
+}
+
+void FillMeasurement(::NColumnShard::TStepMeasurementCounters& proto, const TStepMeasurementCounters& measurement) {
+    proto.SetSum(measurement.Sum);
+    proto.SetCount(measurement.Count);
+}
+
+void FillStepStatistics(::NColumnShard::TStepStatisticsCounters& proto, const TStepStatisticsCounters& stats) {
+    proto.SetCalls(stats.Calls);
+    proto.SetActiveTimeUs(stats.ActiveTime.MicroSeconds());
+    proto.SetWaitTimeUs(stats.WaitTime.MicroSeconds());
+    if (stats.InputRows.Count) {
+        FillMeasurement(*proto.MutableInputRows(), stats.InputRows);
+    }
+    if (stats.OutputRows.Count) {
+        FillMeasurement(*proto.MutableOutputRows(), stats.OutputRows);
+    }
+    if (stats.InputBytes.Count) {
+        FillMeasurement(*proto.MutableInputBytes(), stats.InputBytes);
+    }
+    if (stats.OutputBytes.Count) {
+        FillMeasurement(*proto.MutableOutputBytes(), stats.OutputBytes);
+    }
+    if (stats.ReadBytes.Count) {
+        FillMeasurement(*proto.MutableReadBytes(), stats.ReadBytes);
+    }
+}
+
+}   // namespace
+
+::NColumnShard::TScanStats TConcreteScanCounters::TakeScanStatsSnapshot() const {
+    ::NColumnShard::TScanStats snapshot;
+    for (const auto& step : GetStepStats()) {
+        auto* proto = snapshot.AddSteps();
+        proto->SetName(step.Name);
+        FillStepStatistics(*proto->MutableStatistics(), step.Statistics);
+        std::visit([proto](const auto& details) {
+            FillStepDetails(*proto, details);
+        }, step.Details);
+    }
+    return snapshot;
+}
+
 TConcreteScanCounters::TPerStepAtomicCounters TConcreteScanCounters::CountersForStep(TStringBuf stepName) const {
     {
         auto lock = AtomicStepCounters.ReadGuard();

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/protos/cs_scan_stats.pb.h>
+
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
 #include "events.h"
@@ -64,6 +66,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
     bool PageFault = false; // page fault was the reason for sending this message
     mutable THolder<TEvRemoteScanData> Remote;
     std::shared_ptr<IShardScanStats> StatsOnFinished;
+    std::unique_ptr<::NColumnShard::TScanStats> CsStats;
     TLocksInfo LocksInfo;
 
     template <class T>
@@ -127,6 +130,10 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
         if (pbEv->Record.HasAvailablePacks()) {
             ev->AvailablePacks = pbEv->Record.GetAvailablePacks();
         }
+        if (pbEv->Record.HasCsStats()) {
+            ev->CsStats = std::make_unique<::NColumnShard::TScanStats>();
+            ev->CsStats->Swap(pbEv->Record.MutableCsStats());
+        }
 
         auto rows = pbEv->Record.GetRows();
         ev->Rows.reserve(rows.size());
@@ -160,6 +167,9 @@ private:
             if (AvailablePacks) {
                 Remote->Record.SetAvailablePacks(*AvailablePacks);
             }
+        if (CsStats) {
+            Remote->Record.MutableCsStats()->CopyFrom(*CsStats);
+        }
 
             switch (GetDataFormat()) {
                 case NKikimrDataEvents::FORMAT_UNSPECIFIED:

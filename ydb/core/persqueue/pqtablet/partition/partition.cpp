@@ -4329,7 +4329,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     PQ_ENSURE(Config.GetPartitionConfig().GetTotalPartitions() > 0);
 
     if (autopartitioningChanged) {
-        AutopartitioningManager.reset(CreateAutopartitioningManager(Config, Partition, SourceIdStorage));
+        AutopartitioningManager = CreateAutopartitioningManager(Config, Partition, SourceIdStorage);
     } else {
         AutopartitioningManager->UpdateConfig(Config);
     }

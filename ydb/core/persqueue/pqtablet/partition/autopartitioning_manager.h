@@ -47,6 +47,6 @@ public:
     virtual void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) = 0;
 };
 
-IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId, const TSourceIdStorage& sourceIds);
+std::unique_ptr<IAutopartitioningManager> CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId, const TSourceIdStorage& sourceIds);
 
 }

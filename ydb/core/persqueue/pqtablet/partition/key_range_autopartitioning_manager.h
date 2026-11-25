@@ -6,7 +6,7 @@ namespace NKikimr::NPQ {
 
 class TSourceIdStorage;
 
-IAutopartitioningManager* CreateKeyRangeAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId,
+std::unique_ptr<IAutopartitioningManager> CreateKeyRangeAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId,
     const TSourceIdStorage& sourceIds);
 
 }

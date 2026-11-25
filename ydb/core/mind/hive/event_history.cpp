@@ -65,7 +65,6 @@ TStringBuf EHiveEventReasonName(EHiveEventReason value) {
     case EHiveEventReason::ExpediencyCheckDisabled: return "move expediency check disabled";
     case EHiveEventReason::ResourceStDevImproved: return "resource stdev improves";
     case EHiveEventReason::NamedResourceImproved: return "named resource usage improves";
-    case EHiveEventReason::DataCenterImbalance: return "data center tablet counts are imbalanced";
     case EHiveEventReason::LeaderNotRunning: return "leader not running";
     case EHiveEventReason::AllNodesDead: return "all nodes are dead";
     case EHiveEventReason::AllNodesDeadOrDown: return "all nodes are dead or down";

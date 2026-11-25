@@ -490,7 +490,7 @@ protected:
                 {"logPrefix", GetLogPrefix()},
                 {"tablet", tablet->ToString()});
             CountTablet(tablet, &TTabletCounters::TabletsExamined, ETabletCounter::TabletsExamined);
-            THive::TBestNodeResult result = Hive->FindBestNode(*tablet, 0, Settings.TargetNodeIds);
+            THive::TBestNodeResult result = Hive->FindBestNode(*tablet, 0, Settings.TargetNodeFilter ? &*Settings.TargetNodeFilter : nullptr);
             if (std::holds_alternative<THive::TNotEnoughResources>(result)) {
                 CountTablet(tablet, &TTabletCounters::RejectedNotEnoughResources, ETabletCounter::RejectedNotEnoughResources);
             } else if (std::holds_alternative<THive::TTooManyTabletsStarting>(result)) {
@@ -502,9 +502,7 @@ protected:
                 TNodeInfo* node = std::get<TNodeInfo*>(result);
                 THive::TMoveExpediency expediency; // not expedient
                 if (node != tablet->Node) {
-                    expediency = IsDataCenterBalancer()
-                        ? Hive->CheckDataCenterMoveExpediency(*tablet, *node)
-                        : Hive->CheckTabletMoveExpediency(*tablet, *node);
+                    expediency = Hive->CheckTabletMoveExpediency(*tablet, *node);
                     if (!expediency.Expedient) {
                         CountTablet(tablet, &TTabletCounters::RejectedNotExpedient, ETabletCounter::RejectedNotExpedient);
                     }

@@ -33,7 +33,7 @@ struct TDataCenterBalanceStats {
     double GetImbalance(const TDataCenterId& from = {}, const TDataCenterId& to = {}, i64 moved = 0) const;
     // the data centers with the most and the fewest tablets per node
     std::pair<TDataCenterId, TDataCenterId> GetHeaviestAndLightest() const;
-    // number of moves from the heaviest data center to the lightest one which keep reducing the imbalance,
+    // number of moves from the heaviest data center to the lightest one which evens out the two,
     // at most maxMovements (0 means unlimited)
     i64 GetMovementsToBalance(i64 maxMovements) const;
 };

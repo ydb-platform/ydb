@@ -1,7 +1,6 @@
 #pragma once
 #include <bitset>
 #include <deque>
-#include <span>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/reassign_tablets.h>
@@ -767,8 +766,8 @@ protected:
     struct TNotEnoughResources {};
     using TBestNodeResult = std::variant<TNodeInfo*, TNoNodeFound, TTooManyTabletsStarting, TNotEnoughResources>;
 
-    // When targetNodeIds is not empty (and sorted), only these nodes are considered
-    TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0, std::span<const TNodeId> targetNodeIds = {});
+    // When targetNodeFilter is set, only the nodes matching it are considered
+    TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0, const TNodeFilter* targetNodeFilter = nullptr);
 
     struct TSelectedNode {
         double Usage;
@@ -1195,10 +1194,6 @@ public:
         return CurrentConfig.GetLessSystemTabletsMoves();
     }
 
-    bool GetEnableDataCenterBalancer() const {
-        return CurrentConfig.GetEnableDataCenterBalancer();
-    }
-
     double GetDataCenterImbalanceToBalance() const {
         return CurrentConfig.GetDataCenterImbalanceToBalance();
     }
@@ -1346,10 +1341,6 @@ protected:
     // If tablet counts in data centers of the segment need balancing, returns settings of the balancer
     template<std::forward_iterator TIter>
     std::optional<TBalancerSettings> CheckDataCenterBalance(const TSegmentId& segmentId, TIter begin, TIter end) const;
-    // Whether the data center balancer should move the tablet to the node
-    TMoveExpediency CheckDataCenterMoveExpediency(const TTabletInfo& tablet, const TNodeInfo& node) const;
-    // Whether moving the tablet to the node makes the data centers imbalance of the segment exceed the threshold
-    bool DoesMoveBreakDataCenterBalance(const TTabletInfo& tablet, const TNodeInfo& node) const;
     // Max data center imbalance over the segments, for counters
     double GetMaxDataCenterImbalance() const;
     void RemoveNodeFromSegments(TNodeInfo* node);

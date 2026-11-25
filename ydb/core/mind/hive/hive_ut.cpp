@@ -5603,6 +5603,17 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         return TNodeLocation(location); // DC = [1,1,2,2,3,3]
     }
 
+    // All nodes in one data center: by default each test node gets its own data center,
+    // so the data center balancer would balance tablet counts between nodes
+    TNodeLocation GetSingleDataCenterLocation(ui32 nodeId) {
+        NActorsInterconnect::TNodeLocation location;
+        location.SetDataCenter("1");
+        location.SetModule(ToString(nodeId + 1));
+        location.SetRack(ToString(nodeId + 1));
+        location.SetUnit(ToString(nodeId + 1));
+        return TNodeLocation(location);
+    }
+
     Y_UNIT_TEST(TestHiveBalancerWithPrefferedDC1) {
         static const int NUM_NODES = 6;
         static const int NUM_TABLETS = NUM_NODES * 3;
@@ -5805,7 +5816,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             app.HiveConfig.SetTabletKickCooldownPeriod(0);
             app.HiveConfig.SetResourceChangeReactionPeriod(0);
             app.HiveConfig.SetMetricsWindowSize(1);
-            app.HiveConfig.SetEnableDataCenterBalancer(enabled);
+            if (!enabled) {
+                app.HiveConfig.SetDataCenterImbalanceToBalance(1); // the imbalance never exceeds 1
+            }
             app.HiveConfig.SetMaxMovementsOnDataCenterBalancer(0);
         });
         const int nodeBase = runtime.GetNodeId(0);
@@ -5865,6 +5878,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             TAutoPtr<IEventHandle> handle;
             TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
             for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
+                if (tablet.GetNodeID() == 0) {
+                    continue; // the tablet is being moved, it is counted on the next check
+                }
+                UNIT_ASSERT_C(((int)tablet.GetNodeID() - nodeBase >= 0) && (tablet.GetNodeID() - nodeBase < NUM_NODES),
+                        "nodeId# " << tablet.GetNodeID() << " nodeBase# " << nodeBase);
                 TString dataCenter = GetLocation(tablet.GetNodeID() - nodeBase).GetDataCenterId();
                 dataCenterTablets[dataCenter].push_back(tablet.GetTabletID());
             }
@@ -7394,6 +7412,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT(opts.SecondNode.size() <= TABLETS_PER_NODE);
         const TString resource = NResourceBroker::MakeQueueResourceName("queue_cdc_initial_scan");
         TTestBasicRuntime runtime(2, false);
+        runtime.LocationCallback = GetSingleDataCenterLocation;
         Setup(runtime, true, 1, [&](TAppPrepare& app) {
             app.HiveConfig.SetTabletKickCooldownPeriod(0);
             app.HiveConfig.SetResourceChangeReactionPeriod(0);
@@ -8416,6 +8435,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     Y_UNIT_TEST(TestHiveBalancerWithImmovableTablets) {
         static constexpr ui64 TABLETS_PER_NODE = 10;
         TTestBasicRuntime runtime(3, false);
+        runtime.LocationCallback = GetSingleDataCenterLocation;
         Setup(runtime, true, 1, [](TAppPrepare& app) {
             app.HiveConfig.SetTabletKickCooldownPeriod(0);
             app.HiveConfig.SetResourceChangeReactionPeriod(0);
@@ -8635,6 +8655,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         static constexpr ui64 NUM_NODES = 4;
         static constexpr ui64 NUM_TABLETS = NUM_NODES * NUM_NODES;
         TTestBasicRuntime runtime(NUM_NODES, false);
+        runtime.LocationCallback = GetSingleDataCenterLocation;
         Setup(runtime, true, 1, [](TAppPrepare& app) {
             app.HiveConfig.SetTabletKickCooldownPeriod(3);
             app.HiveConfig.SetResourceChangeReactionPeriod(0);
@@ -8766,6 +8787,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         static constexpr ui64 NUM_NODES = 4;
         static constexpr ui64 NUM_TABLETS = NUM_NODES * NUM_NODES;
         TTestBasicRuntime runtime(NUM_NODES, false);
+        runtime.LocationCallback = GetSingleDataCenterLocation;
         Setup(runtime, true, 1, [](TAppPrepare& app) {
             app.HiveConfig.SetTabletKickCooldownPeriod(3);
             app.HiveConfig.SetResourceChangeReactionPeriod(0);

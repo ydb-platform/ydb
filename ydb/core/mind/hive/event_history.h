@@ -115,7 +115,6 @@ enum class EHiveEventReason : ui64 {
     ExpediencyCheckDisabled,
     ResourceStDevImproved,
     NamedResourceImproved,
-    DataCenterImbalance,
     // boot queue failures, mirror THive::BootState* strings
     LeaderNotRunning,
     AllNodesDead,

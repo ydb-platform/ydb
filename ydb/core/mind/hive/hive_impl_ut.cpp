@@ -255,10 +255,16 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             auto [heaviest, lightest] = stats.GetHeaviestAndLightest();
             UNIT_ASSERT_VALUES_EQUAL(heaviest, "1");
             UNIT_ASSERT_VALUES_EQUAL(lightest, "3");
-            // after 6 moves per node counts are 3, 6, 3 - one more move would make the first data center the lightest
+            // after 6 moves per node counts are 3, 6, 3 - the first and the third data centers are even
             UNIT_ASSERT_DOUBLES_EQUAL(stats.GetImbalance("1", "3", 6), 0.5, 1e-9);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetMovementsToBalance(0), 6);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetMovementsToBalance(4), 4);
+        }
+        {
+            // data centers of different sizes: 9 tablets on 3 nodes and 1 tablet on 1 node,
+            // one move gives 8/3 and 2 per node, the second one would give 7/3 and 3
+            auto stats = makeStats({{"1", 9, 3}, {"2", 1, 1}});
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetMovementsToBalance(0), 1);
         }
         {
             // a move would only overshoot

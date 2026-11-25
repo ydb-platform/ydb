@@ -1556,7 +1556,7 @@ TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNod
     return selectedNodes;
 }
 
-THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId, std::span<const TNodeId> targetNodeIds) {
+THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId, const TNodeFilter* targetNodeFilter) {
     YDB_LOG_DEBUG("[FBN] finding best node for tablet",
         {"logPrefix", GetLogPrefix()},
         {"tablet", tablet});
@@ -1679,7 +1679,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
     bool thereAreNodesWithManyStarts = false;
 
     for (auto& [_, nodeInfo] : Nodes) {
-        if (!targetNodeIds.empty() && !std::binary_search(targetNodeIds.begin(), targetNodeIds.end(), nodeInfo.Id)) {
+        if (targetNodeFilter != nullptr && !nodeInfo.MatchesFilter(*targetNodeFilter)) {
             continue;
         }
         if (nodeInfo.IsAlive()) {
@@ -2336,14 +2336,6 @@ THive::TMoveExpediency THive::CheckTabletMoveExpediency(const TTabletInfo& table
             {"tabletNodeId", tablet.NodeId},
             {"nodeId", node.Id});
         return {.Expedient = true, .Reason = EHiveEventReason::SourceNodeOverloaded};
-    }
-    if (DoesMoveBreakDataCenterBalance(tablet, node)) {
-        YDB_LOG_TRACE("[TME] move is not expedient because it would imbalance data centers",
-            {"logPrefix", GetLogPrefix()},
-            {"tablet", tablet},
-            {"tabletNodeId", tablet.NodeId},
-            {"nodeId", node.Id});
-        return {.Expedient = false};
     }
     if (GetSpreadNeighbours() && tablet.Node->GetTabletNeighboursCount(tablet) > node.GetTabletNeighboursCount(tablet)) {
         YDB_LOG_TRACE("[TME] move is expedient because it spreads neighbours",
@@ -3213,16 +3205,12 @@ i64 TDataCenterBalanceStats::GetMovementsToBalance(i64 maxMovements) const {
         return 0;
     }
     const auto [heaviest, lightest] = GetHeaviestAndLightest();
-    const i64 available = DataCenters.at(heaviest).Tablets;
-    i64 movements = 0;
-    double imbalance = GetImbalance();
-    while ((maxMovements == 0 || movements < maxMovements) && movements < available) {
-        double next = GetImbalance(heaviest, lightest, movements + 1);
-        if (next >= imbalance) {
-            break;
-        }
-        imbalance = next;
-        ++movements;
+    const TDataCenterStat& heavy = DataCenters.at(heaviest);
+    const TDataCenterStat& light = DataCenters.at(lightest);
+    // moves which make tablets per node of the two data centers equal, rounded down so they never swap places
+    i64 movements = (heavy.Tablets * light.Nodes - light.Tablets * heavy.Nodes) / (heavy.Nodes + light.Nodes);
+    if (maxMovements != 0) {
+        movements = std::min(movements, maxMovements);
     }
     return movements;
 }
@@ -3273,9 +3261,6 @@ bool THive::IsTabletCountedForDataCenterBalance(const TTabletInfo& tablet) const
 
 template<std::forward_iterator TIter>
 std::optional<TBalancerSettings> THive::CheckDataCenterBalance(const TSegmentId& segmentId, TIter begin, TIter end) const {
-    if (!GetEnableDataCenterBalancer()) {
-        return std::nullopt;
-    }
     TDataCenterBalanceStats stats = GetDataCenterBalanceStats(begin, end);
     const double imbalance = stats.GetImbalance();
     const double threshold = GetDataCenterImbalanceToBalance();
@@ -3295,8 +3280,11 @@ std::optional<TBalancerSettings> THive::CheckDataCenterBalance(const TSegmentId&
     }
     const double imbalanceAfter = stats.GetImbalance(heaviest, lightest, movements);
 
-    std::vector<TNodeId> targetNodeIds = lightStat.NodeIds;
-    std::sort(targetNodeIds.begin(), targetNodeIds.end());
+    // the nodes of the lightest data center in this segment
+    TNodeFilter targetNodeFilter(*this);
+    targetNodeFilter.AllowedDomains = {std::get<TSubDomainKey>(segmentId)};
+    targetNodeFilter.AllowedDataCenters.AddDataCenter(lightest);
+    targetNodeFilter.MustBePrimaryPile = false; // the tablets' own filters decide on piles
     YDB_LOG_DEBUG("ProcessTabletBalancer: data center imbalance triggered balancer",
         {"logPrefix", GetLogPrefix()},
         {"segmentId", segmentId},
@@ -3312,7 +3300,7 @@ std::optional<TBalancerSettings> THive::CheckDataCenterBalance(const TSegmentId&
         .MaxInFlight = GetBalancerInflight(),
         .FilterNodeIds = heavyStat.NodeIds,
         .ResourceToBalance = EResourceToBalance::ComputeResources,
-        .TargetNodeIds = std::move(targetNodeIds),
+        .TargetNodeFilter = std::move(targetNodeFilter),
         .Trigger = "data center imbalance",
         .TriggerDetails = TStringBuilder() << "segment=" << segmentId
             << " imbalance=" << Sprintf("%.3f", imbalance)
@@ -3321,74 +3309,6 @@ std::optional<TBalancerSettings> THive::CheckDataCenterBalance(const TSegmentId&
             << " to=" << lightest << " (" << lightStat.Tablets << " tablets on " << lightStat.Nodes << " nodes)"
             << " expectedImbalance=" << Sprintf("%.3f", imbalanceAfter),
     };
-}
-
-THive::TMoveExpediency THive::CheckDataCenterMoveExpediency(const TTabletInfo& tablet, const TNodeInfo& node) const {
-    const TNodeInfo* source = tablet.Node;
-    if (source == nullptr || source->Id == node.Id || source->Freeze || node.Freeze || node.IsOverloaded()) {
-        return {.Expedient = false};
-    }
-    const TDataCenterId sourceDataCenter = source->GetDataCenter();
-    const TDataCenterId targetDataCenter = node.GetDataCenter();
-    if (sourceDataCenter == targetDataCenter || source->GetSegment() != node.GetSegment()) {
-        return {.Expedient = false};
-    }
-    // The target should not end up busier than the source, otherwise resource balancers would want to move
-    // the tablet back. Usage below MinNodeUsageToBalance is not balanced by them, so it counts as equal.
-    const double floor = CurrentConfig.GetMinNodeUsageToBalance();
-    const double targetUsage = node.GetNodeUsageForTablet(tablet, false);
-    const double sourceUsage = source->GetNodeUsage();
-    if (targetUsage > std::max(sourceUsage, floor)) {
-        YDB_LOG_TRACE("[TME] data center move is not expedient because target node would be busier",
-            {"logPrefix", GetLogPrefix()},
-            {"tablet", tablet},
-            {"tabletNodeId", source->Id},
-            {"nodeId", node.Id},
-            {"targetUsage", targetUsage},
-            {"sourceUsage", sourceUsage});
-        return {.Expedient = false};
-    }
-    auto itSegment = NodeSegments.find(source->GetSegment());
-    if (itSegment == NodeSegments.end()) {
-        return {.Expedient = false};
-    }
-    const TDataCenterBalanceStats stats = GetDataCenterBalanceStats(itSegment->second.begin(), itSegment->second.end());
-    if (!stats.DataCenters.contains(sourceDataCenter) || !stats.DataCenters.contains(targetDataCenter)) {
-        return {.Expedient = false};
-    }
-    const double before = stats.GetImbalance();
-    const double after = stats.GetImbalance(sourceDataCenter, targetDataCenter, 1);
-    YDB_LOG_TRACE("[TME] data center move expediency",
-        {"logPrefix", GetLogPrefix()},
-        {"tablet", tablet},
-        {"tabletNodeId", source->Id},
-        {"nodeId", node.Id},
-        {"imbalanceBefore", before},
-        {"imbalanceAfter", after});
-    return {.Expedient = after < before, .Reason = EHiveEventReason::DataCenterImbalance};
-}
-
-bool THive::DoesMoveBreakDataCenterBalance(const TTabletInfo& tablet, const TNodeInfo& node) const {
-    const TNodeInfo* source = tablet.Node;
-    if (!GetEnableDataCenterBalancer() || !tablet.CountedForDataCenterBalance || source == nullptr) {
-        return false;
-    }
-    const TDataCenterId sourceDataCenter = source->GetDataCenter();
-    const TDataCenterId targetDataCenter = node.GetDataCenter();
-    if (sourceDataCenter == targetDataCenter || source->GetSegment() != node.GetSegment()) {
-        return false;
-    }
-    auto itSegment = NodeSegments.find(source->GetSegment());
-    if (itSegment == NodeSegments.end()) {
-        return false;
-    }
-    const TDataCenterBalanceStats stats = GetDataCenterBalanceStats(itSegment->second.begin(), itSegment->second.end());
-    if (!stats.DataCenters.contains(sourceDataCenter) || !stats.DataCenters.contains(targetDataCenter)) {
-        return false;
-    }
-    const double before = stats.GetImbalance();
-    const double after = stats.GetImbalance(sourceDataCenter, targetDataCenter, 1);
-    return after > before && after > GetDataCenterImbalanceToBalance();
 }
 
 double THive::GetMaxDataCenterImbalance() const {

@@ -220,9 +220,12 @@ bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debu
         return false;
     }
 
-    ui64 maxCount = GetMaxCountForTabletType(filter.TabletType);
-    if (maxCount == 0) {
-        return false;
+    // a filter not bound to a tablet type (e.g. a balancer's target filter) does not check the tablet limits
+    if (filter.TabletType != TTabletTypes::TypeInvalid) {
+        ui64 maxCount = GetMaxCountForTabletType(filter.TabletType);
+        if (maxCount == 0) {
+            return false;
+        }
     }
 
     if (Hive.BridgeInfo) {

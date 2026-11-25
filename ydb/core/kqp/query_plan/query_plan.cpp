@@ -904,7 +904,6 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     auto addStatsToPlanNode = [&](NJson::TJsonValue& node) {
         if (auto stageGuid = node.GetMapSafe().FindPtr("StageGuid")) {
             if (auto stat = stages.FindPtr(stageGuid->GetStringSafe())) {
-                // TODO: When attaching CS scan steps, fill PKFilter columns and predicates from this stage's read operator.
                 auto& stats = node["Stats"];
                 if ((*stat)->HasUseLlvm()) {
                     stats["UseLlvm"] = (*stat)->GetUseLlvm();

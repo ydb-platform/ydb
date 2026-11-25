@@ -182,7 +182,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
 
     TInstant startTime = TActivationContext::Now();
     if (ev->Get()->Finished) {
-        // TODO: Include the final ColumnShard scan snapshot in the query profile.
+        // TODO: Forward ScanStats from TEvScanData when the KQP consumer is ready.
         state->State = EShardState::PostRunning;
     }
 

@@ -4,7 +4,6 @@
 #include "sub_columns.h"
 
 #include <ydb/core/kqp/common/events/scan_stats.h>
-#include <ydb/core/protos/cs_scan_stats.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/counters/thread_safe_value.h>
@@ -447,6 +446,10 @@ struct TStepCounters {
     TStepDetails Details;
 };
 
+struct TCsScanStats {
+    std::vector<TStepCounters> Steps;
+};
+
 class TConcreteScanCounters: public TScanCounters {
     using TStepList = std::list<TStepCounters>;
 
@@ -470,8 +473,6 @@ public:
     void AddStepWait(TStepHandle handle, TDuration waitTime) const;
     void AddStepReadBytes(TStepHandle handle, ui64 readBytes) const;
     std::vector<TStepCounters> GetStepStats() const;
-
-    ::NColumnShard::TScanStats TakeScanStatsSnapshot() const;
 
     template <class TDetails, class TCallback>
     void UpdateStepDetails(TStepHandle handle, TCallback&& callback) const {

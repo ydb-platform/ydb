@@ -1,6 +1,4 @@
 package NKikimrKqp;
-
-import "ydb/core/protos/cs_scan_stats.proto";
 option java_package = "ru.yandex.kikimr.proto";
 option cc_enable_arenas = true;
 
@@ -933,7 +931,6 @@ message TEvRemoteScanData {
     optional bool RequestedBytesLimitReached = 11 [default = false];
     optional uint32 AvailablePacks = 12;
     optional TEvKqpScanCursor LastCursor = 13;
-    optional NColumnShard.TScanStats CsStats = 14;
 }
 
 message TEvRemoteScanDataAck {

@@ -103,6 +103,7 @@ private:
     void AddRow(const TConstArrayRef<TCell>& row) override;
 
     NKqp::TScanStatistics GetScanStats();
+    NColumnShard::TCsScanStats GetCsScanStats() const;
 
     TOwnedCellVec ConvertLastKey(const std::shared_ptr<arrow::RecordBatch>& lastReadKey);
 

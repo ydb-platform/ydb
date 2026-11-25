@@ -109,7 +109,6 @@ SRCS(
     kqp_tablemetadata.proto
     kqp.proto
     kqp_physical.proto
-    cs_scan_stats.proto
     kqp_stats.proto
     kqp_lookup_source.proto
     labeled_counters.proto

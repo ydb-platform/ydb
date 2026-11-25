@@ -295,74 +295,40 @@ Y_UNIT_TEST_SUITE(TestScanStatsSnapshot) {
         using namespace NKikimr::NColumnShard;
         const TConcreteScanCounters counters(TScanCounters("TestScript"), nullptr);
         const auto copy = counters;
-        UNIT_ASSERT_VALUES_EQUAL(counters.TakeScanStatsSnapshot().StepsSize(), 0);
+        UNIT_ASSERT(counters.GetStepStats().empty());
 
-        const auto handle = copy.RegisterSteps({ { "reserve", TReserveMemoryStepDetails{} } }).front();
-        UNIT_ASSERT_VALUES_EQUAL(counters.GetStepStats().size(), 1);
-        const auto registered = counters.TakeScanStatsSnapshot();
-        UNIT_ASSERT_VALUES_EQUAL(registered.StepsSize(), 1);
-        UNIT_ASSERT(registered.GetSteps(0).HasReserveMemory());
-        UNIT_ASSERT(!registered.GetSteps(0).GetReserveMemory().HasRequestedBytes());
+        const auto handles = copy.RegisterSteps({ { "reserve", TReserveMemoryStepDetails{} }, { "PREDICATE" } });
+        const auto registered = counters.GetStepStats();
+        UNIT_ASSERT_VALUES_EQUAL(registered.size(), 2);
+        UNIT_ASSERT(!std::get<TReserveMemoryStepDetails>(registered[0].Details).RequestedBytes);
 
-        copy.UpdateStepDetails<TReserveMemoryStepDetails>(handle, [](auto& details) {
+        copy.UpdateStepDetails<TReserveMemoryStepDetails>(handles[0], [](auto& details) {
             details.RequestedBytes = 0;
         });
-        copy.RecordStepExecution(handle, TDuration::MicroSeconds(7), 0, std::nullopt, 13, 17);
-        copy.AddStepWait(handle, TDuration::MicroSeconds(11));
-        copy.AddStepReadBytes(handle, 19);
-        const auto snapshot = counters.TakeScanStatsSnapshot();
-        const auto& step = snapshot.GetSteps(0);
-        UNIT_ASSERT_VALUES_EQUAL(step.GetName(), "reserve");
-        UNIT_ASSERT(step.GetReserveMemory().HasRequestedBytes());
-        UNIT_ASSERT_VALUES_EQUAL(step.GetReserveMemory().GetRequestedBytes(), 0);
-        const auto& stats = step.GetStatistics();
-        UNIT_ASSERT_VALUES_EQUAL(stats.GetCalls(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.GetActiveTimeUs(), 7);
-        UNIT_ASSERT_VALUES_EQUAL(stats.GetWaitTimeUs(), 11);
-        UNIT_ASSERT(stats.HasInputRows());
-        UNIT_ASSERT_VALUES_EQUAL(stats.GetInputRows().GetCount(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.GetInputRows().GetSum(), 0);
-        UNIT_ASSERT(!stats.HasOutputRows());
-        UNIT_ASSERT_VALUES_EQUAL(stats.GetInputBytes().GetSum(), 13);
-        UNIT_ASSERT_VALUES_EQUAL(stats.GetOutputBytes().GetSum(), 17);
-        UNIT_ASSERT_VALUES_EQUAL(stats.GetReadBytes().GetSum(), 19);
-        UNIT_ASSERT_VALUES_EQUAL(copy.TakeScanStatsSnapshot().SerializeAsString(), snapshot.SerializeAsString());
-    }
-
-    Y_UNIT_TEST(DetailVariants) {
-        using namespace NKikimr::NColumnShard;
-        const TConcreteScanCounters counters(TScanCounters("TestScript"), nullptr);
-        counters.RegisterSteps({ { "plain" }, { "fetch", TFetchColumnsStepDetails{ .Columns = { { 7, "column" } } } },
-            { "assemble", TAssembleStepDetails{} }, { "pk", TPKFilterDetails{} }, { "sharding", TShardingFilterStepDetails{} },
-            { "deletion", TDeletionFilterStepDetails{} }, { "snapshot", TSnapshotFilterStepDetails{ .Snapshots = { { 11, 13 } } } },
-            { "limit", TLimitStepDetails{ .Limits = { { 17, true } } } }, { "prepare", TPrepareResultStepDetails{} },
-            { "build", TBuildResultStepDetails{ .PageBounds = TBuildResultStepDetails::TPageBounds{ 1, 2, 3, 4 } } } });
-
-        const auto snapshot = counters.TakeScanStatsSnapshot();
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.StepsSize(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetSteps(0).GetName(), "plain");
-        UNIT_ASSERT(snapshot.GetSteps(1).HasFetchColumns());
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetSteps(1).GetFetchColumns().GetColumns(0).GetId(), 7);
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetSteps(1).GetFetchColumns().GetColumns(0).GetName(), "column");
-        UNIT_ASSERT(snapshot.GetSteps(2).HasAssemble());
-        UNIT_ASSERT(snapshot.GetSteps(3).HasPKFilter());
-        UNIT_ASSERT(snapshot.GetSteps(4).HasShardingFilter());
-        UNIT_ASSERT(snapshot.GetSteps(5).HasDeletionFilter());
-        UNIT_ASSERT(snapshot.GetSteps(6).HasSnapshotFilter());
-        const auto& filter = snapshot.GetSteps(6).GetSnapshotFilter().GetSnapshots(0);
-        UNIT_ASSERT_VALUES_EQUAL(filter.GetPlanStep(), 11);
-        UNIT_ASSERT_VALUES_EQUAL(filter.GetTxId(), 13);
-        UNIT_ASSERT(snapshot.GetSteps(7).HasLimit());
-        const auto& limit = snapshot.GetSteps(7).GetLimit().GetLimits(0);
-        UNIT_ASSERT_VALUES_EQUAL(limit.GetLimit(), 17);
-        UNIT_ASSERT(limit.GetReverse());
-        UNIT_ASSERT(snapshot.GetSteps(8).HasPrepareResult());
-        UNIT_ASSERT(snapshot.GetSteps(9).HasBuildResult());
-        const auto& bounds = snapshot.GetSteps(9).GetBuildResult().GetPageBounds();
-        UNIT_ASSERT_VALUES_EQUAL(bounds.GetMinStartIndex(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(bounds.GetMaxStartIndex(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(bounds.GetMinRecordsCount(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(bounds.GetMaxRecordsCount(), 4);
+        copy.RecordStepExecution(handles[0], TDuration::MicroSeconds(7), 0, std::nullopt, 13, 17);
+        copy.AddStepWait(handles[0], TDuration::MicroSeconds(11));
+        copy.AddStepReadBytes(handles[0], 19);
+        copy.RecordStepExecution(handles[1], TDuration::MicroSeconds(1), 2, 1, std::nullopt, std::nullopt);
+        const auto snapshot = counters.GetStepStats();
+        const auto& step = snapshot[0];
+        UNIT_ASSERT_VALUES_EQUAL(step.Name, "reserve");
+        const auto& requestedBytes = std::get<TReserveMemoryStepDetails>(step.Details).RequestedBytes;
+        UNIT_ASSERT(requestedBytes);
+        UNIT_ASSERT_VALUES_EQUAL(*requestedBytes, 0);
+        const auto& stats = step.Statistics;
+        UNIT_ASSERT_VALUES_EQUAL(stats.Calls, 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.ActiveTime.MicroSeconds(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(stats.WaitTime.MicroSeconds(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(stats.InputRows.Count, 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.InputRows.Sum, 0);
+        UNIT_ASSERT_VALUES_EQUAL(stats.OutputRows.Count, 0);
+        UNIT_ASSERT_VALUES_EQUAL(stats.InputBytes.Sum, 13);
+        UNIT_ASSERT_VALUES_EQUAL(stats.OutputBytes.Sum, 17);
+        UNIT_ASSERT_VALUES_EQUAL(stats.ReadBytes.Sum, 19);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot[1].Name, "PREDICATE");
+        UNIT_ASSERT(std::holds_alternative<std::monostate>(snapshot[1].Details));
+        UNIT_ASSERT_VALUES_EQUAL(snapshot[1].Statistics.Calls, 1);
+        UNIT_ASSERT_VALUES_EQUAL(registered[0].Statistics.Calls, 0);
     }
 
     Y_UNIT_TEST(ConcurrentWritesAppearInCumulativeSnapshots) {
@@ -384,10 +350,10 @@ Y_UNIT_TEST_SUITE(TestScanStatsSnapshot) {
         ui64 observedCalls = 0;
         bool consistent = true;
         const auto take = [&] {
-            const auto snapshot = counters.TakeScanStatsSnapshot();
-            const auto& stats = snapshot.GetSteps(0).GetStatistics();
-            const auto calls = stats.GetCalls();
-            consistent &= calls >= observedCalls && calls == stats.GetInputRows().GetCount();
+            const auto snapshot = counters.GetStepStats();
+            const auto& stats = snapshot[0].Statistics;
+            const auto calls = stats.Calls;
+            consistent &= calls >= observedCalls && calls == stats.InputRows.Count;
             observedCalls = calls;
         };
         for (ui64 i = 0; i < Iterations; ++i) {
@@ -411,17 +377,23 @@ Y_UNIT_TEST_SUITE(TestScanStatsTransport) {
         return decoded;
     }
 
-    Y_UNIT_TEST(TerminalScanData) {
+    Y_UNIT_TEST(TerminalScanDataKeepsStatsLocal) {
+        using namespace NKikimr::NColumnShard;
+        const TConcreteScanCounters counters(TScanCounters("TestScript"), nullptr);
+        counters.RegisterSteps({ { "fetch", TFetchColumnsStepDetails{} } });
+
         NKqp::TEvKqpCompute::TEvScanData final(7, 11);
         final.Finished = true;
-        final.CsStats = std::make_unique<::NColumnShard::TScanStats>();
-        final.CsStats->AddSteps()->SetName("fetch");
+        final.ScanStats = std::make_shared<const TCsScanStats>(TCsScanStats{
+            .Steps = counters.GetStepStats(),
+        });
+        UNIT_ASSERT_VALUES_EQUAL(final.ScanStats->Steps.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(final.ScanStats->Steps.front().Name, "fetch");
 
         const auto decoded = RoundTrip(final);
         UNIT_ASSERT(decoded->Finished);
         UNIT_ASSERT_VALUES_EQUAL(decoded->ScanId, 7);
         UNIT_ASSERT_VALUES_EQUAL(decoded->Generation, 11);
-        UNIT_ASSERT(decoded->CsStats);
-        UNIT_ASSERT_VALUES_EQUAL(decoded->CsStats->GetSteps(0).GetName(), "fetch");
+        UNIT_ASSERT(!decoded->ScanStats);
     }
 }

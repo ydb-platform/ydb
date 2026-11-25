@@ -42,6 +42,11 @@ NKqp::TScanStatistics TColumnShardScan::GetScanStats() {
     return stats;
 }
 
+// TODO: Merge with GetScanStats.
+NColumnShard::TCsScanStats TColumnShardScan::GetCsScanStats() const {
+    return {.Steps = ScanCountersPool.GetStepStats()};
+}
+
 LWTRACE_USING(YDB_CS_SCAN);
 
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(60);
@@ -552,11 +557,7 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch, ui64 sourceId)
             {"iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO")});
         Result->StatsOnFinished = std::make_shared<TScanStatsOwner>(ScanIterator->GetStats());
         if (CsStatsEnabled) {
-            auto stats = std::make_unique<::NColumnShard::TScanStats>(ScanCountersPool.TakeScanStatsSnapshot());
-            stats->SetTabletId(TabletId);
-            stats->SetScanId(ScanId);
-            stats->SetGeneration(ScanGen);
-            Result->CsStats = std::move(stats);
+            Result->ScanStats = std::make_shared<const NColumnShard::TCsScanStats>(GetCsScanStats());
         }
     } else {
         YDB_LOG_VERIFY(ChunksLimiter.Take(Bytes));

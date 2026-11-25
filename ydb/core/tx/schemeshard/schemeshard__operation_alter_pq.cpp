@@ -189,16 +189,12 @@ public:
             return nullptr;
         }
 
-        if (splitByPartitionKey && alter.RootPartitionBoundariesSize()) {
-            errStr = "Changing root partition bounds is not supported for topics split by partition key";
-            return nullptr;
-        }
-
-        if (splitByPartitionKey && alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy()
-            && alter.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType()
-                != tabletConfig->GetPartitionStrategy().GetPartitionStrategyType())
-        {
-            errStr = "Changing the autopartitioning strategy is not supported for topics split by partition key";
+        const bool changesRootBounds = alter.RootPartitionBoundariesSize() > 0;
+        const auto& alterStrategy = alter.GetPQTabletConfig().GetPartitionStrategy();
+        const bool changesStrategy = alterStrategy.HasPartitionStrategyType()
+            && alterStrategy.GetPartitionStrategyType() != tabletConfig->GetPartitionStrategy().GetPartitionStrategyType();
+        if (splitByPartitionKey && (changesRootBounds || changesStrategy)) {
+            errStr = "Root partition bounds and the strategy of a topic split by partition key cannot change";
             return nullptr;
         }
 

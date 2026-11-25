@@ -25,10 +25,6 @@ const Nbs2Tablets = {
     totalCount: 0,
     offset: 0,
 
-    // Per-tablet DDisk layout snapshots, only kept for tablets on the current page
-    // (fetched lazily when a row is expanded).
-    snapshots: {},
-
     requestToken: 0,
 
     init: function() {
@@ -100,7 +96,7 @@ const Nbs2Tablets = {
             sort.val(diskView ? 'disk' : 'degrade');
         }
         $('#nbs2-tablets-error').text('Loading...');
-        this.snapshots = {};
+        $('#nbs2-tablets-body').empty();
         if (this.isDDisksView()) {
             this.loadDisksPage();
         } else {
@@ -217,13 +213,13 @@ const Nbs2Tablets = {
 
     loadSnapshot: function(tabletId, row) {
         const token = this.requestToken;
-        if (this.snapshots[tabletId] === null) return;
-        this.snapshots[tabletId] = null; // A request for this tablet is pending on the current page.
+        if (row.data('loading-snapshot')) return;
+        row.data('loading-snapshot', true);
         $('#nbs2-tablet-loading-' + tabletId).remove();
         const loading = $('<tr id="nbs2-tablet-loading-' + tabletId + '"><td colspan="5">Loading snapshot...</td></tr>').insertAfter(row);
         const showError = (message) => {
             if (token !== this.requestToken) return;
-            delete this.snapshots[tabletId];
+            row.removeData('loading-snapshot');
             loading.children('td').addClass('text-danger').text('Failed to load snapshot: ' + message);
         };
         $.getJSON('cms/api/json/ddisk/tablet', {
@@ -237,10 +233,8 @@ const Nbs2Tablets = {
                 showError(error.message);
                 return;
             }
-            this.snapshots[tabletId] = snapshot;
-            loading.remove();
-            this.render();
-            $('#nbs2-tablet-details-' + tabletId).show();
+            row.removeData('loading-snapshot');
+            loading.replaceWith(this.detailsHtml(tabletId, snapshot));
         }).fail((xhr) => showError(xhr.statusText));
     },
 
@@ -326,7 +320,6 @@ const Nbs2Tablets = {
             const unavailableDDisk = Number(this.field(tablet, 'UnavailableDDiskCount', 'unavailableDDiskCount')) || 0;
             const unavailablePersistentBuffer = Number(this.field(tablet, 'UnavailablePersistentBufferCount', 'unavailablePersistentBufferCount')) || 0;
             body.append('<tr class="nbs2-tablet-row" data-tablet-id="' + id + '"><td><a href="#">' + id + '</a></td><td>' + (groupsCount || '-') + '</td><td class="' + (unavailableDDisk ? 'nbs2-count-unavailable' : '') + '">' + unavailableDDisk + '</td><td class="' + (unavailablePersistentBuffer ? 'nbs2-count-unavailable' : '') + '">' + unavailablePersistentBuffer + '</td><td>' + this.date(lastChangedAt) + '</td></tr>');
-            if (this.snapshots[id]) this.renderDetails(body, id);
         });
     },
 
@@ -384,8 +377,7 @@ const Nbs2Tablets = {
         return Math.max(countUnavailable(ddisks, 'DDisk'), countUnavailable(buffers, 'PersistentBuffer'));
     },
 
-    renderDetails: function(body, id) {
-        const snapshot = this.snapshots[id];
+    detailsHtml: function(id, snapshot) {
         const health = {};
         for (const slot of this.field(snapshot, 'Slots', 'slots') || []) {
             if (this.diskId(slot) !== '0:0') {
@@ -404,7 +396,7 @@ const Nbs2Tablets = {
             const persistentBufferIds = this.field(group, 'PersistentBufferDDiskId', 'persistentBufferDDiskId') || [];
             html += '<tr><td>' + (groupId || 0) + '</td><td>' + degrade + '</td><td>' + formatLayout(ddiskIds, 'DDisk') + '</td><td>' + formatLayout(persistentBufferIds, 'PersistentBuffer') + '</td></tr>';
         });
-        body.append(html + '</tbody></table></td></tr>').find('#nbs2-tablet-details-' + id).hide();
+        return html + '</tbody></table></td></tr>';
     },
 
     date: function(micros) {

@@ -7,6 +7,9 @@
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/client/minikql_compile/yql_expr_minikql.h>
 #include <ydb/core/client/minikql_compile/compile_context.h>
+#include <ydb/core/client/minikql_compile/local_sql.h>
+
+#include <util/generic/hash.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/core/base/appdata.h>
@@ -71,6 +74,39 @@ private:
     const NTable::TScheme& Scheme;
     const ui64 TabletId;
 };
+
+inline NYql::TLocalSqlSchema MakeLocalSqlSchema(const NTable::TScheme& scheme) {
+    NYql::TLocalSqlSchema schema;
+    for (const auto& [name, tableId] : scheme.TableNames) {
+        const auto* info = scheme.Tables.FindPtr(tableId);
+        if (!info) {
+            continue;
+        }
+
+        NYql::TLocalSqlTable table;
+        table.Name = name;
+        THashMap<ui32, i32> keyOrder;
+        for (i32 index = 0; index < static_cast<i32>(info->KeyColumns.size()); ++index) {
+            keyOrder[info->KeyColumns[index]] = index;
+        }
+        for (const auto& [columnName, columnId] : info->ColumnNames) {
+            const auto* column = info->Columns.FindPtr(columnId);
+            if (!column) {
+                continue;
+            }
+            NYql::TLocalSqlColumn out;
+            out.Name = columnName;
+            out.Type = column->PType;
+            out.NotNull = column->NotNull;
+            if (const auto* order = keyOrder.FindPtr(columnId)) {
+                out.KeyOrder = *order;
+            }
+            table.Columns.push_back(std::move(out));
+        }
+        schema.Tables.emplace(name, std::move(table));
+    }
+    return schema;
+}
 
 class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     ui64 TabletId = Max<ui64>();
@@ -148,9 +184,19 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
         // so we must prepare program
         ProgramCompileResult = new NYql::TMiniKQLCompileResult();
 
+        TString programText = SourceProgram.Program.Text;
+        if (!NYql::IsLocalMiniKqlSExpr(programText)) {
+            const auto translated = NYql::TranslateLocalSql(programText, MakeLocalSqlSchema(txc.DB.GetScheme()));
+            if (!translated.IsOk()) {
+                ProgramCompileResult->Errors.AddIssue(NYql::TIssue(translated.Error));
+                return false;
+            }
+            programText = translated.Program;
+        }
+
         NYql::TExprContainer::TPtr expr  = new NYql::TExprContainer();
         NYql::TMiniKQLCompileResult parseResult;
-        if (!ParseProgram(SourceProgram.Program.Text, parseResult.Errors, *expr)) {
+        if (!ParseProgram(programText, parseResult.Errors, *expr)) {
             ProgramCompileResult->Errors.AddIssues(parseResult.Errors);
             return false;
         }

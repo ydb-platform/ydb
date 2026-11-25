@@ -7,6 +7,8 @@ SRCS(
     compile_result.h
     db_key_resolver.cpp
     db_key_resolver.h
+    local_sql.cpp
+    local_sql.h
     mkql_compile_service.cpp
     yql_expr_minikql.cpp
     yql_expr_minikql.h

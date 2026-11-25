@@ -80,6 +80,7 @@ RESOURCE(
 )
 
 PEERDIR(
+    ydb/core/tablet_flat/ut/minikql_env
     yql/essentials/types/binary_json
     library/cpp/resource
     ydb/core/scheme

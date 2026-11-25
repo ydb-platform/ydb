@@ -363,12 +363,7 @@ private:
 
             if (isPathA) {
                 const auto& tableOp = tableOpIt->second;
-                const size_t recordedShards =
-                    tableOp.CompletedShards.size() + tableOp.FailedShards.size();
-                const bool allShardsReported = recordedShards >= tableOp.ExpectedShards.size()
-                    && !tableOp.ExpectedShards.empty();
-
-                if (!allShardsReported) {
+                if (!tableOp.AllShardsComplete()) {
                     stillInProgress.insert(opId);
                     continue;
                 }
@@ -395,8 +390,7 @@ private:
                     const ui32 itemSeq = seqIt->second;
                     state.WaitTxIdToItemSeq.erase(seqIt);
                     state.InFlightItems.erase(itemSeq);
-                    db.Table<Schema::IncrementalRestoreItem>()
-                        .Key(OperationId, itemSeq).Delete();
+                    Self->PersistRemoveIncrementalRestoreItem(db, OperationId, itemSeq);
                 }
                 // Keep dispatch state alive for failed sub-ops so retry can re-issue requests.
                 if (!failed) {
@@ -416,7 +410,7 @@ private:
                             const auto& tableOp = tableOpIt->second;
                             const size_t recordedShards =
                                 tableOp.CompletedShards.size() + tableOp.FailedShards.size();
-                            if (recordedShards < tableOp.ExpectedShards.size()) {
+                            if (!tableOp.ExpectedShards.empty() && !tableOp.AllShardsComplete()) {
                                 LOG_W("[IncrementalRestore] Sub-op " << opId
                                       << " exited Operations with " << recordedShards
                                       << "/" << tableOp.ExpectedShards.size()
@@ -443,8 +437,7 @@ private:
                         const ui32 itemSeq = seqIt->second;
                         state.WaitTxIdToItemSeq.erase(seqIt);
                         state.InFlightItems.erase(itemSeq);
-                        db.Table<Schema::IncrementalRestoreItem>()
-                            .Key(OperationId, itemSeq).Delete();
+                        Self->PersistRemoveIncrementalRestoreItem(db, OperationId, itemSeq);
                     }
                     Self->TxIdToIncrementalRestore.erase(txId);
                 }
@@ -520,7 +513,7 @@ private:
         finalize.SetBackupCollectionPathId(state.BackupCollectionPathId.LocalPathId);
 
         CollectTargetTablePaths(state, finalize);
-        CollectBackupTablePaths(state, finalize);
+        CollectBackupTablePaths(state, finalize, ctx);
 
         NIceDb::TNiceDb db(txc.DB);
         Self->EnqueueIncrementalRestoreItem(
@@ -566,27 +559,36 @@ private:
     }
 
     void CollectBackupTablePaths(TIncrementalRestoreState& state,
-                               NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize) {
+                               NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize,
+                               const TActorContext& ctx) {
         auto opIt = Self->LongIncrementalRestoreOps.find(TOperationId(OperationId, 0));
         if (opIt != Self->LongIncrementalRestoreOps.end()) {
             const auto& op = opIt->second;
 
-            TString bcPathString = TPath::Init(state.BackupCollectionPathId, Self).PathString();
+            const auto bcPath = TPath::Init(state.BackupCollectionPathId, Self);
+            TString bcPathString = bcPath.PathString();
 
-            TString fullBackupPath = JoinPath({bcPathString, op.GetFullBackupTrimmedName()});
+            TVector<TString> relativeTablePaths;
             for (const auto& tablePath : op.GetTablePathList()) {
-                TPath fullPath = TPath::Resolve(tablePath, Self);
-                TString tableName = fullPath.LeafName();
-                TString sourceTablePath = JoinPath({fullBackupPath, tableName});
+                std::pair<TString, TString> paths;
+                TString err;
+                if (!TrySplitPathByDb(tablePath, bcPath.GetDomainPathString(), paths, err)) {
+                    LOG_E("Failed to split backup table path: " << err);
+                    continue;
+                }
+                relativeTablePaths.push_back(std::move(paths.second));
+            }
+
+            TString fullBackupPath = JoinPath({bcPathString, NBackup::FullBackupDirName(op.GetFullBackupTrimmedName())});
+            for (const auto& relativeTablePath : relativeTablePaths) {
+                TString sourceTablePath = JoinPath({fullBackupPath, relativeTablePath});
                 finalize.AddBackupTablePaths(sourceTablePath);
             }
 
             for (const auto& incrBackupName : op.GetIncrementalBackupTrimmedNames()) {
-                TString incrBackupPath = JoinPath({bcPathString, incrBackupName});
-                for (const auto& tablePath : op.GetTablePathList()) {
-                    TPath fullPath = TPath::Resolve(tablePath, Self);
-                    TString tableName = fullPath.LeafName();
-                    TString sourceTablePath = JoinPath({incrBackupPath, tableName});
+                TString incrBackupPath = JoinPath({bcPathString, NBackup::IncrementalBackupDirName(incrBackupName)});
+                for (const auto& relativeTablePath : relativeTablePaths) {
+                    TString sourceTablePath = JoinPath({incrBackupPath, relativeTablePath});
                     finalize.AddBackupTablePaths(sourceTablePath);
                 }
             }
@@ -1333,13 +1335,7 @@ void TSchemeShard::EnqueueIncrementalRestoreItem(
     item.WaitTxId = ui64(InvalidTxId);
     item.PendingRequest = request.Release();
 
-    db.Table<Schema::IncrementalRestoreItem>()
-        .Key(originalOpId, item.ItemSeq)
-        .Update(
-            NIceDb::TUpdate<Schema::IncrementalRestoreItem::ItemKind>(static_cast<ui32>(kind)),
-            NIceDb::TUpdate<Schema::IncrementalRestoreItem::TablePathId>(tablePathId.LocalPathId),
-            NIceDb::TUpdate<Schema::IncrementalRestoreItem::WaitTxId>(ui64(InvalidTxId)),
-            NIceDb::TUpdate<Schema::IncrementalRestoreItem::SrcTablePathId>(srcTablePathId.LocalPathId));
+    PersistIncrementalRestoreItem(db, originalOpId, item);
 
     state.PendingItems.push_back(std::move(item));
 
@@ -1354,24 +1350,42 @@ void TSchemeShard::EnqueueIncrementalRestoreItem(
         originalOpId);
 }
 
+void TSchemeShard::PersistIncrementalRestoreItem(
+    NIceDb::TNiceDb& db, ui64 operationId, const TIncrementalRestoreState::TItem& item)
+{
+    db.Table<Schema::IncrementalRestoreItem>()
+        .Key(operationId, item.ItemSeq)
+        .Update(
+            NIceDb::TUpdate<Schema::IncrementalRestoreItem::ItemKind>(static_cast<ui32>(item.Kind)),
+            NIceDb::TUpdate<Schema::IncrementalRestoreItem::TablePathId>(item.TablePathId.LocalPathId),
+            NIceDb::TUpdate<Schema::IncrementalRestoreItem::WaitTxId>(item.WaitTxId),
+            NIceDb::TUpdate<Schema::IncrementalRestoreItem::SrcTablePathId>(item.SrcTablePathId.LocalPathId));
+    PersistedIncrementalRestoreItems[operationId].insert(item.ItemSeq);
+}
+
+void TSchemeShard::PersistRemoveIncrementalRestoreItem(NIceDb::TNiceDb& db, ui64 operationId, ui32 itemSeq) {
+    db.Table<Schema::IncrementalRestoreItem>().Key(operationId, itemSeq).Delete();
+    auto it = PersistedIncrementalRestoreItems.find(operationId);
+    if (it != PersistedIncrementalRestoreItems.end()) {
+        it->second.erase(itemSeq);
+        if (it->second.empty()) {
+            PersistedIncrementalRestoreItems.erase(it);
+        }
+    }
+}
+
 void TSchemeShard::CleanupIncrementalRestoreItems(
     ui64 originalOpId,
     NIceDb::TNiceDb& db,
     TIncrementalRestoreState* state)
 {
-    THashSet<ui32> knownSeqs;
-    if (state) {
-        for (const auto& item : state->PendingItems) {
-            knownSeqs.insert(item.ItemSeq);
+    // Include rows that are not in PendingItems/InFlightItems (legacy orphans).
+    auto it = PersistedIncrementalRestoreItems.find(originalOpId);
+    if (it != PersistedIncrementalRestoreItems.end()) {
+        for (ui32 seq : it->second) {
+            db.Table<Schema::IncrementalRestoreItem>().Key(originalOpId, seq).Delete();
         }
-        for (const auto& [seq, _] : state->InFlightItems) {
-            knownSeqs.insert(seq);
-        }
-    }
-    for (ui32 seq : knownSeqs) {
-        db.Table<Schema::IncrementalRestoreItem>()
-            .Key(originalOpId, seq)
-            .Delete();
+        PersistedIncrementalRestoreItems.erase(it);
     }
 
     TVector<TTxId> toErase;
@@ -1439,9 +1453,7 @@ public:
         state.WaitTxIdToItemSeq[ui64(allocatedTxId)] = item.ItemSeq;
 
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::IncrementalRestoreItem>()
-            .Key(originalOpId, item.ItemSeq)
-            .Update(NIceDb::TUpdate<Schema::IncrementalRestoreItem::WaitTxId>(item.WaitTxId));
+        Self->PersistIncrementalRestoreItem(db, originalOpId, item);
 
         Self->TxIdToIncrementalRestore[allocatedTxId] = originalOpId;
 

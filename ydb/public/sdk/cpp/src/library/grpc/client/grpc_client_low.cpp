@@ -122,27 +122,53 @@ grpc_socket_mutator_vtable TGRpcSocketMutator::VTable =
     };
 #endif
 
+std::shared_lock<std::shared_mutex> TEndpointAdmission::Acquire() {
+    std::shared_lock lock(Mutex_);
+    if (!Open_) {
+        return {};
+    }
+    return lock;
+}
+
+void TEndpointAdmission::Retire() {
+    std::unique_lock lock(Mutex_);
+    Open_ = false;
+}
+
 void TGRpcRequestProcessorCommon::ApplyMeta(const TCallMeta& meta) {
     for (const auto& rec : meta.Aux) {
-        Context.AddMetadata(NYdb::TStringType{rec.first}, NYdb::TStringType{rec.second});
+        Context->AddMetadata(NYdb::TStringType{rec.first}, NYdb::TStringType{rec.second});
     }
     if (meta.CallCredentials) {
-        Context.set_credentials(meta.CallCredentials);
+        Context->set_credentials(meta.CallCredentials);
     }
     if (const NYdb::TDeadline::Duration* timeout = std::get_if<NYdb::TDeadline::Duration>(&meta.Timeout)) {
-        Context.set_deadline(NYdb::TDeadline::AfterDuration(*timeout));
+        Context->set_deadline(NYdb::TDeadline::AfterDuration(*timeout));
     } else if (const NYdb::TDeadline* deadline = std::get_if<NYdb::TDeadline>(&meta.Timeout)) {
-        Context.set_deadline(*deadline);
+        Context->set_deadline(*deadline);
     }
 }
 
-void TGRpcRequestProcessorCommon::GetInitialMetadata(std::unordered_multimap<std::string, std::string>* metadata) {
-    for (const auto& [key, value] : Context.GetServerInitialMetadata()) {
+void TGRpcStreamRequestProcessorCommon::GetInitialMetadata(std::unordered_multimap<std::string, std::string>* metadata) {
+    if (!Context) {
+        metadata->insert(SavedInitialMetadata_.begin(), SavedInitialMetadata_.end());
+        return;
+    }
+    for (const auto& [key, value] : Context->GetServerInitialMetadata()) {
         metadata->emplace(
             std::string(key.begin(), key.end()),
             std::string(value.begin(), value.end())
         );
     }
+}
+
+void TGRpcStreamRequestProcessorCommon::ReleaseContext(bool hasInitialMetadata) {
+    // A caller may keep its finished stream handle and read headers again.
+    // grpc::ClientContext owns the channel until its destructor runs.
+    if (hasInitialMetadata) {
+        GetInitialMetadata(&SavedInitialMetadata_);
+    }
+    Context.reset();
 }
 
 TChannelPool::TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, const TDuration& expireTime, bool tcpNoDelay)
@@ -155,7 +181,8 @@ TChannelPool::TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, co
 void TChannelPool::GetStubsHolderLocked(
     const std::string& channelId,
     const TGRpcClientConfig& config,
-    std::function<void(TStubsHolder&)> cb)
+    std::function<void(TStubsHolder&)> cb,
+    std::function<void(TStubsHolder&)> onBroken)
 {
     {
         std::shared_lock readGuard(RWMutex_);
@@ -178,6 +205,9 @@ void TChannelPool::GetStubsHolderLocked(
                     it->second.SetLastUseTime(now);
                     return cb(it->second);
                 } else {
+                    if (onBroken) {
+                        onBroken(it->second);
+                    }
                     // This channel can't be used. Remove from pool to create new one
                     EraseFromQueueByTime(it->second.GetLastUseTime(), channelId);
                     Pool_.erase(it);
@@ -191,22 +221,35 @@ void TChannelPool::GetStubsHolderLocked(
     }
 }
 
-void TChannelPool::DeleteChannel(const std::string& channelId) {
+void TChannelPool::DeleteChannel(const std::string& channelId, std::function<bool(TStubsHolder&)> canRemove) {
     std::unique_lock writeLock(RWMutex_);
     auto poolIt = Pool_.find(channelId);
-    if (poolIt != Pool_.end()) {
+    if (poolIt != Pool_.end() && (!canRemove || canRemove(poolIt->second)) && !poolIt->second.IsPinned()) {
         EraseFromQueueByTime(poolIt->second.GetLastUseTime(), channelId);
         Pool_.erase(poolIt);
     }
 }
 
+void TChannelPool::Clear() {
+    std::unique_lock guard(RWMutex_);
+    Pool_.clear();
+    LastUsedQueue_.clear();
+}
+
 void TChannelPool::DeleteExpiredStubsHolders() {
     std::unique_lock writeLock(RWMutex_);
-    auto lastExpired = LastUsedQueue_.lower_bound(Now() - ExpireTime_);
-    for (auto i = LastUsedQueue_.begin(); i != lastExpired; ++i){
-        Pool_.erase(i->second);
+    const auto now = Now();
+    while (!LastUsedQueue_.empty() && LastUsedQueue_.begin()->first < now - ExpireTime_) {
+        auto entry = LastUsedQueue_.extract(LastUsedQueue_.begin());
+        auto channel = Pool_.find(entry.mapped());
+        if (channel->second.IsPinned()) {
+            channel->second.SetLastUseTime(now);
+            entry.key() = now;
+            LastUsedQueue_.insert(std::move(entry));
+        } else {
+            Pool_.erase(channel);
+        }
     }
-    LastUsedQueue_.erase(LastUsedQueue_.begin(), lastExpired);
 }
 
 void TChannelPool::EraseFromQueueByTime(const TInstant& lastUseTime, const std::string& channelId) {

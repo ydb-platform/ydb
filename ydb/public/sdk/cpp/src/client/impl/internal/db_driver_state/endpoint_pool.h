@@ -29,9 +29,16 @@ struct TEndpointUpdateResult {
 
 class TEndpointPool {
 public:
-    TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client);
+    enum class EUpdateReason { Regular, TransportFailure };
+
+    TEndpointPool(TListEndpointsResultProvider&& provider, IInternalClient* client);
     ~TEndpointPool();
-    std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync();
+    void EnableWatch(const std::string& bootstrap, const std::string& database);
+    void PauseWatch();
+    void PublishWatchResult(TListEndpointsResult result, std::optional<uint64_t> routeGeneration = {});
+    bool UsesWatch() const { return UsesWatch_; }
+    std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync(EUpdateReason reason = EUpdateReason::Regular);
+    NThreading::TFuture<TEndpointUpdateResult> GetPendingTransportUpdate();
     TEndpointRecord GetEndpoint(const TEndpointKey& preferredEndpoint, bool onlyPreferred = false) const;
     TDuration TimeSinceLastUpdate() const;
     void BanEndpoint(const std::string& endpoint);
@@ -47,6 +54,8 @@ public:
     static constexpr std::int32_t GetLocalityShift();
 
 private:
+    NThreading::TFuture<void> RunUpdates();
+    std::vector<std::string> Install(const Ydb::Discovery::ListEndpointsResult& result, TEndpointElectorSafe::EPenalties penalties);
     bool IsPreferredEndpoint(const Ydb::Discovery::EndpointInfo& endpoint,
                              const std::string& selfLocation,
                              const std::unordered_map<std::string, Ydb::Bridge::PileState>& pileStates) const;
@@ -54,9 +63,18 @@ private:
 
 private:
     TListEndpointsResultProvider Provider_;
+    IInternalClient* const Client_;
     std::mutex Mutex_;
     TEndpointElectorSafe Elector_;
+    bool UsesWatch_ = false; // Set before publishing the driver state.
+    TPlainStatus WatchStatus_;
+    std::string WatchScope_;
+    std::string WatchChannelSuffix_;
+    std::unordered_map<std::string, std::shared_ptr<NYdbGrpc::TEndpointAdmission>> WatchAdmissions_;
     NThreading::TPromise<TEndpointUpdateResult> DiscoveryPromise_;
+    std::atomic_bool TransportUpdatePending_ = false;
+    std::uint64_t TransportGeneration_ = 0;
+    TDeadline NextTransportUpdate_;
     std::atomic_uint64_t LastUpdateTime_;
     const TBalancingPolicy::TImpl BalancingPolicy_;
 

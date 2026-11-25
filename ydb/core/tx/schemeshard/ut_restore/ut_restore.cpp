@@ -2330,19 +2330,30 @@ value {
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        updatePgCompatibility(true);
-        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
-                destination_prefix: "Backup1"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
+        const auto exportTable = [&](const char* prefix) {
+            TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                ExportToS3Settings {
+                  endpoint: "localhost:%d"
+                  scheme: HTTP
+                  items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: "%s"
+                  }
+                }
+            )", port, prefix));
+            env.TestWaitNotification(runtime, txId);
+        };
+        exportTable("Backup1");
         TestGetExport(runtime, txId, "/MyRoot");
+
+        updatePgCompatibility(true);
+        TestBackup(runtime, ++txId, "/MyRoot", R"(TableName: "Table")",
+            {{NKikimrScheme::StatusPreconditionFailed, "PostgreSQL compatibility is disabled for column 'value'"}});
+        exportTable("RejectedBackup");
+        const auto exportIssues = TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED)
+            .GetResponse().GetEntry().GetIssues();
+        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(exportIssues),
+            "PostgreSQL compatibility is disabled for column 'value'");
 
         const auto desc = DescribePath(runtime, "/MyRoot/Table", true, true);
         TestRestore(runtime, ++txId, "/MyRoot", Sprintf(R"(

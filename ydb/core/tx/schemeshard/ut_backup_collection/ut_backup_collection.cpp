@@ -1648,18 +1648,24 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         )", PgSchema ? "pgint8" : "Utf8"));
         env.TestWaitNotification(runtime, txId);
 
-        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
-            runtime.GetAppData(node).FeatureFlags.SetDisablePgCompatibility(true);
-        }
-
         TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
         env.TestWaitNotification(runtime, txId);
 
         runtime.AdvanceCurrentTime(TDuration::Seconds(1));
 
-        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
-            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        const TString request = R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")";
+        if (PgSchema) {
+            for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+                runtime.GetAppData(node).FeatureFlags.SetDisablePgCompatibility(true);
+            }
+            TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot", request,
+                {{NKikimrScheme::StatusSchemeError, "PostgreSQL compatibility is disabled for column 'key'"}});
+            for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+                runtime.GetAppData(node).FeatureFlags.SetDisablePgCompatibility(false);
+            }
+        }
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot", request);
         const auto backupId = txId;
         env.TestWaitNotification(runtime, backupId);
 
@@ -4284,19 +4290,32 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
 
-        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
-            R"(Name: ".backups/collections/MyCollection1")");
+        const TString request = R"(Name: ".backups/collections/MyCollection1")";
+        const auto updatePgCompatibility = [&](bool disabled) {
+            for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+                runtime.GetAppData(node).FeatureFlags.SetDisablePgCompatibility(disabled);
+            }
+        };
+        if (PgSchema) {
+            updatePgCompatibility(true);
+            TestBackupBackupCollection(runtime, ++txId, "/MyRoot", request,
+                {{NKikimrScheme::StatusSchemeError, "PostgreSQL compatibility is disabled for column 'pg_value'"}});
+            updatePgCompatibility(false);
+        }
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot", request);
         env.TestWaitNotification(runtime, txId);
 
         TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
         env.TestWaitNotification(runtime, txId);
 
-        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
-            runtime.GetAppData(node).FeatureFlags.SetDisablePgCompatibility(true);
+        if (PgSchema) {
+            updatePgCompatibility(true);
+            TestRestoreBackupCollection(runtime, ++txId, "/MyRoot", request,
+                {{NKikimrScheme::StatusSchemeError, "PostgreSQL compatibility is disabled for column 'pg_value'"}});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {NLs::PathNotExist});
+            updatePgCompatibility(false);
         }
-
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
-            R"(Name: ".backups/collections/MyCollection1")");
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot", request);
         env.TestWaitNotification(runtime, txId);
 
         Ydb::StatusIds::StatusCode finalStatus = PollRestoreUntilDone(runtime, env, "/MyRoot");

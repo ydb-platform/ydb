@@ -408,6 +408,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         } else {
             InFlightData.Reset();
             TerminateWriter.Reset();
+            ForwardPendingDataEnd();
             if (Reader) {
                 PollSource();
             }
@@ -436,6 +437,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
         InFlightData.Reset();
         TerminateWriter.Reset();
+        ForwardPendingDataEnd();
         if (Reader) {
             PollSource(ev->Get()->SkipCommit);
         }
@@ -764,6 +766,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
         if (records.empty()) {
             InFlightData.Reset();
+            ForwardPendingDataEnd();
             PollSource();
         } else {
             Send(Writer, new TEvWorker::TEvData(InFlightData->PartitionId, InFlightData->Source, InFlightData->Records));
@@ -952,6 +955,27 @@ class TWorker: public TActorBootstrapped<TWorker> {
         Send(ev->Forward(Parent));
     }
 
+    bool IsWriterIdle() const {
+        return !InFlightData && !TerminateWriter && !PendingSchemaChange;
+    }
+
+    void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
+        if (IsWriterIdle()) {
+            return Forward(ev);
+        }
+
+        YDB_LOG_DEBUG("Delay data end until the writer applies the in-flight data",
+            {"ev", ev->Get()->ToString()});
+        PendingDataEnd = ev;
+    }
+
+    void ForwardPendingDataEnd() {
+        if (PendingDataEnd && IsWriterIdle()) {
+            Forward(PendingDataEnd);
+            PendingDataEnd.Reset();
+        }
+    }
+
     void ScheduleLagReport() {
         const auto random = TDuration::MicroSeconds(TAppData::RandomProvider->GenRand64() % LagReportInterval.MicroSeconds());
         Schedule(LagReportInterval + random, new TEvents::TEvWakeup(LagReportWakeupTag));
@@ -1085,7 +1109,7 @@ public:
             hFunc(TEvWorker::TEvSchemaChange, Handle);
             hFunc(TEvWorker::TEvSchemaChangeApplied, Handle);
             hFunc(TEvWorker::TEvData, Handle);
-            hFunc(TEvWorker::TEvDataEnd, Forward);
+            hFunc(TEvWorker::TEvDataEnd, Handle);
             hFunc(TEvWorker::TEvGone, Handle);
             hFunc(TEvWorker::TEvTerminateWriter, Handle);
             hFunc(TEvWorker::TEvStatus, Handle);
@@ -1112,6 +1136,7 @@ private:
     THolder<TEvWorker::TEvData> InFlightData;
     THolder<TEvWorker::TEvTerminateWriter> TerminateWriter;
     THolder<TEvWorker::TEvSchemaChange> PendingSchemaChange;
+    TEvWorker::TEvDataEnd::TPtr PendingDataEnd;
     THolder<NKikimrReplication::TIndexBuildProgress> PendingBuildProgress;
     THolder<NKikimrReplication::TIndexBuildProgress> LastBuildProgress;
     bool SchemaReportCommitted = false;

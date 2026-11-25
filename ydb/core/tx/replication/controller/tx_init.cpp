@@ -248,6 +248,23 @@ class TController::TTxInit: public TTxBase {
         return true;
     }
 
+    bool LoadExitedWorkers(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<Schema::ExitedWorkers>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            Self->ExitedWorkers.insert(TWorkerId(
+                rowset.GetValue<Schema::ExitedWorkers::ReplicationId>(),
+                rowset.GetValue<Schema::ExitedWorkers::TargetId>(),
+                rowset.GetValue<Schema::ExitedWorkers::WorkerId>()));
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool LoadWorkers(NIceDb::TNiceDb& db) {
         auto rowset = db.Table<Schema::Workers>().Select();
         if (!rowset.IsReady()) {
@@ -346,6 +363,7 @@ class TController::TTxInit: public TTxBase {
             && LoadSrcStreams(db)
             && LoadTxIds(db)
             && LoadWorkers(db)
+            && LoadExitedWorkers(db)
             && LoadSchemaBarrierWorkers(db)
             && LoadIndexBuildWorkers(db)
             && LoadProcessedSourceOffsets(db);

@@ -5,6 +5,7 @@
 
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
+#include <util/generic/vector.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -36,6 +37,9 @@ public:
     bool IsDataEnded() const;
     void SetDataEnded(bool value);
 
+    void SetChildPartitionIds(TVector<ui64>&& value);
+    const TVector<ui64>& GetChildPartitionIds() const;
+
     void SetHeartbeat(const TRowVersion& value);
     void ClearHeartbeat();
     bool HasHeartbeat() const;
@@ -44,6 +48,7 @@ public:
 private:
     TMaybe<ui32> Session;
     bool DataEnded = false;
+    TVector<ui64> ChildPartitionIds;
     TMaybe<TRowVersion> Heartbeat;
 };
 

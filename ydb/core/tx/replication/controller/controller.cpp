@@ -226,6 +226,7 @@ void TController::Reset() {
     AssignedTxIds.clear();
     CommittedVersions.clear();
     Workers.clear();
+    ExitedWorkers.clear();
     LagExpiryQueue.Clear();
     LagExpiryScheduled = false;
     StoppingWorkers.clear();
@@ -786,6 +787,7 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
 
     auto* worker = GetOrCreateWorker(id);
     worker->SetDataEnded(true);
+    worker->SetChildPartitionIds(TVector<ui64>(record.GetChildPartitionsIds().begin(), record.GetChildPartitionsIds().end()));
 
     auto allParentsEnded = AllOf(record.GetAdjacentPartitionsIds(), [&](auto partitionId) {
         auto it = Workers.find(TWorkerId{id.ReplicationId(), id.TargetId(), partitionId});
@@ -807,10 +809,64 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
             return;
         }
         for (auto partitionId : record.GetChildPartitionsIds()) {
+            const TWorkerId child(id.ReplicationId(), id.TargetId(), partitionId);
+            if (ExitedWorkers.contains(child) || ExitingWorkers.contains(child)) {
+                continue;
+            }
+
             auto ev = MakeHolder<TEvService::TEvRunWorker>();
-            TWorkerId(id.ReplicationId(), id.TargetId(), partitionId).Serialize(*ev->Record.MutableWorker());
+            child.Serialize(*ev->Record.MutableWorker());
             Send(SelfId(), std::move(ev));
         }
+    }
+
+    RemoveEndedWorkers(ctx);
+}
+
+void TController::RemoveEndedWorkers(const TActorContext& ctx) {
+    for (const auto& [id, worker] : Workers) {
+        const auto& children = worker.GetChildPartitionIds();
+        if (!worker.IsDataEnded() || children.empty() || ExitingWorkers.contains(id) || RemoveQueue.contains(id)
+            || ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId())
+            || IsRemovingTargetWorkers(id.ReplicationId(), id.TargetId()))
+        {
+            continue;
+        }
+
+        const bool childrenReady = AllOf(children, [&](ui64 partitionId) {
+            const TWorkerId child(id.ReplicationId(), id.TargetId(), partitionId);
+            const auto it = Workers.find(child);
+            return (it != Workers.end() && it->second.HasHeartbeat()) || ExitedWorkers.contains(child);
+        });
+        if (!childrenReady) {
+            continue;
+        }
+
+        YDB_LOG_NOTICE_CTX(ctx, "Remove ended worker after its children reported heartbeats",
+            {"workerId", id});
+        ExitingWorkers.insert(id);
+        Send(SelfId(), new TEvPrivate::TEvRemoveWorker(id.ReplicationId(), id.TargetId(), id.WorkerId()));
+    }
+}
+
+bool TController::IsRemovingTargetWorkers(ui64 replicationId, ui64 targetId) const {
+    return AnyOf(RemoveQueue, [&](const TWorkerId& id) {
+        return id.ReplicationId() == replicationId && id.TargetId() == targetId && !ExitingWorkers.contains(id);
+    });
+}
+
+void TController::DeleteExitedWorkers(ui64 replicationId, ui64 targetId, NIceDb::TNiceDb& db) {
+    auto isTargetWorker = [&](const TWorkerId& id) {
+        return id.ReplicationId() == replicationId && id.TargetId() == targetId;
+    };
+    for (auto* workers : {&ExitedWorkers, &ExitingWorkers}) {
+        EraseNodesIf(*workers, [&](const TWorkerId& id) {
+            if (!isTargetWorker(id)) {
+                return false;
+            }
+            db.Table<Schema::ExitedWorkers>().Key(replicationId, targetId, id.WorkerId()).Delete();
+            return true;
+        });
     }
 }
 

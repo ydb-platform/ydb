@@ -26,7 +26,6 @@ struct TEvModifySchemeTransaction;
 }
 
 TString GetUid(const Ydb::Operations::OperationParams& operationParams);
-TString FindPgColumn(const TSchemeShard& ss, const TPathId& pathId);
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> MakeModifySchemeTransaction(TSchemeShard* ss, TTxId txId, const TExportInfo& exportInfo);
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> MakeModifySchemeTransaction(TSchemeShard* ss, TTxId txId, const TImportInfo& importInfo);

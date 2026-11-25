@@ -3,7 +3,6 @@
 #include "schemeshard__local_index_migration.h"
 #include "schemeshard_svp_migration.h"
 #include "schemeshard_operation_registry.h"
-#include "schemeshard__operation_side_effects.h"
 
 #include "olap/bg_tasks/adapter/adapter.h"
 #include "olap/bg_tasks/events/global.h"
@@ -8832,7 +8831,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TColumnTableInfo::TPtr tableI
     SetPartitioning(pathId, tableInfo->BuildOwnedColumnShardsVerified());
 }
 
-void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning, TSideEffects* onComplete) {
+void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning) {
     TVector<std::pair<ui64, ui64>> shardIndices;
     shardIndices.reserve(newPartitioning.size());
     for (auto& info : newPartitioning) {
@@ -8844,11 +8843,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
     auto path = TPath::Init(pathId, this);
     auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
     ev->ShardIndices.swap(shardIndices);
-    if (onComplete) {
-        onComplete->Send(SysPartitionStatsCollector, std::move(ev));
-    } else {
-        Send(SysPartitionStatsCollector, ev.Release());
-    }
+    Send(SysPartitionStatsCollector, ev.Release());
 
     tableInfo->SetPartitioning(std::move(newPartitioning));
 

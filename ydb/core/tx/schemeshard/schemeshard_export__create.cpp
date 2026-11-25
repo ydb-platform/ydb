@@ -1,3 +1,4 @@
+#include "schemeshard__operation_backup_restore_common.h"
 #include "schemeshard_audit_log.h"
 #include "schemeshard_export.h"
 #include "schemeshard_export_flow_proposals.h"
@@ -69,6 +70,48 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 using namespace NBackup::NFieldsWrappers;
+
+bool IsExportTransaction(TSchemeShard& ss, TTxId txId, const TPath& destination, TExportInfo::EState state) {
+    const auto* entry = ss.TxIdToExport.FindPtr(txId);
+    if (!entry) {
+        return false;
+    }
+    const auto* exportInfo = ss.Exports.FindPtr(entry->first);
+    if (!exportInfo || (*exportInfo)->State != state) {
+        return false;
+    }
+    const auto exportPath = TPath::Init((*exportInfo)->ExportPathId, &ss);
+    return exportPath.IsResolved() && destination.PathString().StartsWith(exportPath.PathString() + "/");
+}
+
+TString FindPgColumn(const TSchemeShard& ss, const TPathId& pathId) {
+    const auto findPgColumn = [](const auto& columns) -> TString {
+        const auto* pg = FindIfPtr(columns, [](const auto& entry) {
+            const auto& column = entry.second;
+            return !column.IsDropped() && column.PType.GetTypeId() == NScheme::NTypeIds::Pg;
+        });
+        return pg ? pg->second.Name : TString{};
+    };
+
+    if (const auto* table = ss.Tables.FindPtr(pathId)) {
+        if (auto name = findPgColumn((*table)->Columns)) {
+            return name;
+        }
+        return (*table)->AlterData ? findPgColumn((*table)->AlterData->Columns) : TString{};
+    }
+    if (ss.ColumnTables.contains(pathId)) {
+        const auto table = ss.ColumnTables.GetVerified(pathId);
+        const auto* pg = FindIfPtr(table->Description.GetSchema().GetColumns(), [](const auto& column) {
+            return column.GetTypeId() == NScheme::NTypeIds::Pg;
+        });
+        return pg ? TString(pg->GetName()) : TString{};
+    }
+    if (const auto* table = ss.ExternalTables.FindPtr(pathId)) {
+        return findPgColumn((*table)->Columns);
+    }
+    return {};
+}
+
 // Erases encryption key from settings, if settings type supports it
 // Returns true if settings changed
 template <class TSettings, class = decltype(std::declval<TSettings>().encryption_settings())> // Function for TSettings that have encryption_settings()

@@ -187,7 +187,6 @@ public:
 // of the base context makes such improper uses a compilation error.
 struct TProposeContext : TOperationContext {
     TMemoryChanges& MemChanges;
-    bool IsExportOperation = false;
 
     TProposeContext(
             TSchemeShard* ss,

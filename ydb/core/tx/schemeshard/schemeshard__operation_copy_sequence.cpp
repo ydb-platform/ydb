@@ -1,3 +1,4 @@
+#include "schemeshard__operation_backup_restore_common.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -549,7 +550,9 @@ public:
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(srcPath.Base()->PathId));
         TSequenceInfo::TPtr srcSequence = context.SS->Sequences.at(srcPath.Base()->PathId);
-        if (!context.IsExportOperation && AppData()->FeatureFlags.GetDisablePgCompatibility()
+        if (AppData()->FeatureFlags.GetDisablePgCompatibility()
+                && !(parentPath.IsBackupTable()
+                    && IsExportTransaction(*context.SS, OperationId.GetTxId(), parentPath, TExportInfo::EState::CopyTables))
                 && NPg::TypeDescFromPgTypeName(NMiniKQL::AdaptLegacyYqlType(srcSequence->Description.GetDataType()))) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "PostgreSQL compatibility is disabled for the source sequence");
             return result;

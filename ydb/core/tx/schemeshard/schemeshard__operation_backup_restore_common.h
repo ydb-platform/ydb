@@ -4,7 +4,6 @@
 #include "schemeshard_billing_helpers.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_types.h"
-#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/metering/metering.h>
@@ -15,6 +14,9 @@
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
+
+bool IsExportTransaction(TSchemeShard& ss, TTxId txId, const TPath& destination, TExportInfo::EState state);
+TString FindPgColumn(const TSchemeShard& ss, const TPathId& pathId);
 
 template <typename TKind>
 class TConfigurePart: public TSubOperationState {
@@ -756,7 +758,8 @@ public:
         }
 
         if (AppData()->FeatureFlags.GetDisablePgCompatibility() && !restoreImportingReplica
-                && !(TxType == TTxState::TxBackup && context.IsExportOperation)) {
+                && !(TxType == TTxState::TxBackup && internal
+                    && IsExportTransaction(*context.SS, OperationId.GetTxId(), path, TExportInfo::EState::Transferring))) {
             if (auto name = FindPgColumn(*context.SS, path->PathId)) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed,
                     TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << name << "'");

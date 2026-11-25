@@ -22,10 +22,12 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptio
 IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(
     TDuration maxTime, size_t maxRetries = std::numeric_limits<size_t>::max());   // Zero means default maxTime
 
-IHTTPGateway::TRetryPolicy::TPtr GetFqHTTPRetryPolicy();
+enum class ERewindRetry {
+    Disabled,
+    Enabled,
+};
 
-// Preserve the supplied policy except for upload rewind failures, whose outcome
-// may be ambiguous for operations such as S3 CompleteMultipartUpload.
-IHTTPGateway::TRetryPolicy::TPtr GetHTTPRetryPolicyWithoutRewind(IHTTPGateway::TRetryPolicy::TPtr policy);
+// Enable only for operations that can replay their saved body after a lost response.
+IHTTPGateway::TRetryPolicy::TPtr GetFqHTTPRetryPolicy(ERewindRetry rewindRetry = ERewindRetry::Disabled);
 
 }   // namespace NYql

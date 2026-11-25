@@ -25,6 +25,7 @@ IF (CLANG AND NOT WITH_VALGRIND)
         yql_s3_read_actor_ut.cpp
         yql_s3_read_actor_retry_ut.cpp
         yql_s3_source_queue_ut.cpp
+        yql_s3_write_actor_ut.cpp
     )
 
     PEERDIR(

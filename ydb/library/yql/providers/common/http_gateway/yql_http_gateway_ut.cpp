@@ -97,7 +97,8 @@ private:
     const EFailure Failure;
 };
 
-void CheckUploadRetry(bool put, bool allowRewind = true) {
+void CheckUploadRetry(bool put, ERewindRetry rewindRetry = ERewindRetry::Enabled) {
+    const bool allowRewind = rewindRetry == ERewindRetry::Enabled;
     NLog::YqlLoggerScope logger(&Cerr);
     auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     const auto gateway = IHTTPGateway::Make(nullptr, counters);
@@ -129,7 +130,7 @@ void CheckUploadRetry(bool put, bool allowRewind = true) {
     auto upload = NThreading::NewPromise<IHTTPGateway::TResult>();
     gateway->Upload(url, headers, body, [upload](IHTTPGateway::TResult&& result) mutable {
         upload.SetValue(std::move(result));
-    }, put, allowRewind ? GetFqHTTPRetryPolicy() : GetHTTPRetryPolicyWithoutRewind(GetFqHTTPRetryPolicy()));
+    }, put, GetFqHTTPRetryPolicy(rewindRetry));
     UNIT_ASSERT(upload.GetFuture().Wait(TDuration::Seconds(10)));
     const auto& result = upload.GetFuture().GetValue();
     if (allowRewind) {
@@ -168,7 +169,7 @@ Y_UNIT_TEST_SUITE(THttpGatewayRetryTest) {
     }
 
     Y_UNIT_TEST(PostWithRewindDisabledDoesNotReplay) {
-        CheckUploadRetry(false, false);
+        CheckUploadRetry(false, ERewindRetry::Disabled);
     }
 
     Y_UNIT_TEST(LateExpectationFailureIsNotRetried) {
@@ -191,15 +192,17 @@ Y_UNIT_TEST_SUITE(THttpGatewayRetryTest) {
         auto upload = NThreading::NewPromise<IHTTPGateway::TResult>();
         gateway->Upload(url, {}, TString(8_MB, 'x'), [upload](IHTTPGateway::TResult&& result) mutable {
             upload.SetValue(std::move(result));
-        }, true, GetFqHTTPRetryPolicy());
+        }, true, GetFqHTTPRetryPolicy(ERewindRetry::Enabled));
         UNIT_ASSERT(upload.GetFuture().Wait(TDuration::Seconds(10)));
         const auto& result = upload.GetFuture().GetValue();
         UNIT_ASSERT(!result.Issues.Empty());
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(result.CurlResponseCode), static_cast<int>(CURLE_SEND_FAIL_REWIND));
         UNIT_ASSERT_VALUES_EQUAL(result.Content.HttpResponseCode, 417);
         // An outer retry layer must also see the permanent HTTP failure.
-        UNIT_ASSERT(
-            !GetFqHTTPRetryPolicy()->CreateRetryState()->GetNextRetryDelay(result.CurlResponseCode, result.Content.HttpResponseCode).Defined());
+        UNIT_ASSERT(!GetFqHTTPRetryPolicy(ERewindRetry::Enabled)
+                         ->CreateRetryState()
+                         ->GetNextRetryDelay(result.CurlResponseCode, result.Content.HttpResponseCode)
+                         .Defined());
 
         server.Stop();
         const auto requests = serverImpl.GetRequests();

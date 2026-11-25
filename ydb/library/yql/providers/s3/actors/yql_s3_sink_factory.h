@@ -5,8 +5,9 @@
 namespace NYql::NDq {
 
 void RegisterS3WriteActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-    IHTTPGateway::TPtr gateway, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy = GetHTTPDefaultRetryPolicy()) {
-    CreateS3ActorsFactory()->RegisterS3WriteActorFactory(factory, credentialsFactory, gateway, retryPolicy);
+    IHTTPGateway::TPtr gateway,
+    const TS3WriteRetryPolicies& retryPolicies = { .Default = GetHTTPDefaultRetryPolicy(), .DataUpload = GetHTTPDefaultRetryPolicy() }) {
+    CreateS3ActorsFactory()->RegisterS3WriteActorFactory(factory, credentialsFactory, gateway, retryPolicies);
 }
 
 }   // namespace NYql::NDq

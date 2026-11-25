@@ -15,6 +15,7 @@
 #include <library/cpp/protobuf/json/util.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/hash.h>
 #include <util/generic/xrange.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
@@ -604,11 +605,11 @@ TString ValidateStateStorageConfig(
         TIntrusivePtr<TStateStorageInfo> oldSSInfo;
         newSSInfo = BuildStateStorageInfo(newSSConfig);
         oldSSInfo = BuildStateStorageInfo(oldSSConfig);
-        THashSet<TActorId> replicas;
+        THashMap<TActorId, ui32> newNToSelectByReplica;
         for (auto& ringGroup : newSSInfo->RingGroups) {
             for (auto& ring : ringGroup.Rings) {
                 for (auto& node : ring.Replicas) {
-                    if (!replicas.insert(node).second) {
+                    if (!newNToSelectByReplica.emplace(node, ringGroup.NToSelect).second) {
                         return TStringBuilder() << name << " replicas ActorId intersection, specify"
                             " RingGroupActorIdOffset if you run multiple replicas on one node";
                     }
@@ -668,6 +669,17 @@ TString ValidateStateStorageConfig(
         }
         for (auto& oldGroup : oldSSInfo->RingGroups) {
             if (oldGroup.WriteOnly) {
+                // Reusing a live replica with a different selection can leave records outside the new selection.
+                for (const auto& ring : oldGroup.Rings) {
+                    for (const auto& replica : ring.Replicas) {
+                        const ui32* nToSelect = newNToSelectByReplica.FindPtr(replica);
+                        if (nToSelect && *nToSelect != oldGroup.NToSelect) {
+                            return TStringBuilder() << name << " cannot change NToSelect from " << oldGroup.NToSelect
+                                << " to " << *nToSelect << " for replica " << replica
+                                << "; add a WriteOnly ring group with a distinct RingGroupActorIdOffset";
+                        }
+                    }
+                }
                 continue;
             }
             bool found = false;

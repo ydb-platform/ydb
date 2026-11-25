@@ -666,6 +666,28 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         UNIT_ASSERT(res.StartsWith("StateStorage ring #0differs from# Ring"));
     }
 
+    Y_UNIT_TEST(ChangeNToSelectRequiresNewReplicaIds) {
+        NKikimrConfig::TStateStorageConfig primary;
+        FillRing(primary.AddRingGroups(), 3, 3);
+
+        auto target = primary;
+        auto* group = target.AddRingGroups();
+        FillRing(group, 3, 1);
+        group->SetWriteOnly(true);
+        group->SetRingGroupActorIdOffset(100);
+        auto res = ValidateStateStorageConfig("StateStorage", primary, target);
+        UNIT_ASSERT_C(res.empty(), res);
+
+        auto current = target;
+        current.MutableRingGroups(1)->SetNToSelect(3);
+        res = ValidateStateStorageConfig("StateStorage", current, target);
+        UNIT_ASSERT_STRING_CONTAINS(res, "cannot change NToSelect from 3 to 1");
+
+        target.MutableRingGroups(1)->SetRingGroupActorIdOffset(200);
+        res = ValidateStateStorageConfig("StateStorage", current, target);
+        UNIT_ASSERT_C(res.empty(), res);
+    }
+
     Y_UNIT_TEST(CanReassignNodeInMultiGroupConfig) {
         NKikimrConfig::TStateStorageConfig current;
         FillRing(current.AddRingGroups());

@@ -1,43 +1,8 @@
+#include <ydb/core/fq/libs/checkpointing/events/events.h>
 #include <ydb/core/kqp/executer_actor/kqp_planner.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 namespace NKikimr::NKqp {
-namespace {
-
-struct TTestStreamingQueryController : IKqpStreamingQueryController {
-    bool NeedsPrepare() const override {
-        return false;
-    }
-
-    void StartPrepare(TVector<TPqTopicResolverSource>, THashMap<TString, TString>) override {}
-
-    std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> GetGraphToRestore(
-        const TVector<NKikimrKqp::TKqpNodeResources>&, ui32) override {
-        return nullptr;
-    }
-
-    TStartedActors Start(std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph>, const TKqpTasksGraph&) override {
-        return {};
-    }
-
-    void OnComputeActorsStarted(TVector<TTaskInfo> tasks, bool) override {
-        ReadyTasks = std::move(tasks);
-        ++ReadyCalls;
-    }
-
-    bool IsOwnEvent(const NActors::IEventHandle&) const override {
-        return false;
-    }
-
-    void Handle(TAutoPtr<NActors::IEventHandle>&) override {}
-
-    void Terminate() override {}
-
-    TVector<TTaskInfo> ReadyTasks;
-    ui32 ReadyCalls = 0;
-};
-
-} // namespace
 
 Y_UNIT_TEST_SUITE(KqpPlanner) {
     Y_UNIT_TEST_TWIN(NoStreamingReadinessDuringShutdown, ComputeStateFirst) {
@@ -49,8 +14,9 @@ Y_UNIT_TEST_SUITE(KqpPlanner) {
         const TString database = "/Root";
         const NKikimrConfig::TTableServiceConfig config;
 
-        runtime.RunCall([&] {
-            for (const bool shuttingDown : {false, true}) {
+        for (const bool shuttingDown : {false, true}) {
+            const auto nodesManager = runtime.AllocateEdgeActor();
+            runtime.RunCall([&] {
                 NKqpProto::TKqpPhyTx txProto;
                 txProto.AddStages();
                 auto txHolder = std::make_shared<TKqpPhyTxHolder>(nullptr, &txProto, nullptr, nullptr);
@@ -71,7 +37,6 @@ Y_UNIT_TEST_SUITE(KqpPlanner) {
                 const auto firstTaskId = addTask();
                 const auto lastTaskId = addTask();
 
-                TTestStreamingQueryController controller;
                 NWilson::TSpan span;
                 TKqpPlanner planner({
                     .TasksGraph = graph,
@@ -94,14 +59,13 @@ Y_UNIT_TEST_SUITE(KqpPlanner) {
                     .BlockTrackingMode = {},
                     .ArrayBufferMinFillPercentage = {},
                     .BufferPageAllocSize = {},
-                    .EnableCheckpoints = false,
+                    .CheckpointCoordinator = {},
                     .EnableWatermarks = false,
-                    .StreamingQuery = &controller,
+                    .StreamingQueryNodesManager = nodesManager,
                 });
                 UNIT_ASSERT(!planner.PlanExecution());
                 UNIT_ASSERT_VALUES_EQUAL(planner.GetPendingComputeTasks().size(), 2);
                 UNIT_ASSERT(planner.AcknowledgeCA(firstTaskId, firstActor, nullptr));
-                UNIT_ASSERT_VALUES_EQUAL(controller.ReadyCalls, 0);
 
                 if (shuttingDown) {
                     planner.BeginShutdown();
@@ -112,16 +76,22 @@ Y_UNIT_TEST_SUITE(KqpPlanner) {
                 UNIT_ASSERT(planner.AcknowledgeCA(lastTaskId, lastActor, ComputeStateFirst ? &state : nullptr));
                 UNIT_ASSERT(!planner.AcknowledgeCA(lastTaskId, lastActor, ComputeStateFirst ? nullptr : &state));
 
-                UNIT_ASSERT_VALUES_EQUAL(controller.ReadyCalls, shuttingDown ? 0 : 1);
-                UNIT_ASSERT_VALUES_EQUAL(controller.ReadyTasks.size(), shuttingDown ? 0 : 2);
                 UNIT_ASSERT(planner.GetPendingComputeTasks().empty());
                 UNIT_ASSERT(planner.GetPendingComputeActors().contains(lastActor));
                 UNIT_ASSERT(planner.CompletedCA(lastTaskId, lastActor));
                 UNIT_ASSERT(planner.CompletedCA(firstTaskId, firstActor));
                 UNIT_ASSERT(planner.GetPendingComputeActors().empty());
+                return true;
+            });
+
+            using TEvReadyState = NFq::TEvCheckpointCoordinator::TEvReadyState;
+            if (!shuttingDown) {
+                auto ready = runtime.GrabEdgeEventRethrow<TEvReadyState>(nodesManager, TDuration::Seconds(1));
+                UNIT_ASSERT(ready);
+                UNIT_ASSERT_VALUES_EQUAL(ready->Get()->Tasks.size(), 2);
             }
-            return true;
-        });
+            UNIT_ASSERT(!runtime.GrabEdgeEventRethrow<TEvReadyState>(nodesManager, TDuration::MilliSeconds(100)));
+        }
     }
 }
 

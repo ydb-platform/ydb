@@ -15,6 +15,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/fq/libs/checkpointing/events
     ydb/core/kqp/common
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy

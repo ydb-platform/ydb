@@ -29,15 +29,32 @@ namespace NKikimr {
             const TActorIDPtr &skeletonFrontIDPtr, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
             const NVDiskMon::TLtcHistoPtr &histoPtr, const ui64 bufferSizeBytes,
             ui64 incarnationGuid, const TString& errorReason)
+        : TEvVPutResult(status, logoBlobId, vdisk, cookie, oosStatus, now, recByteSize, record, skeletonFrontIDPtr,
+                counterPtr, histoPtr, bufferSizeBytes, incarnationGuid, errorReason, false)
+    {}
+
+    std::unique_ptr<TEvBlobStorage::TEvVPutResult> TEvBlobStorage::TEvVPutResult::CreateOkConsumingRequest(
+            const TLogoBlobID &logoBlobId, const TVDiskID &vdisk, const ui64 *cookie, TOutOfSpaceStatus oosStatus,
+            const TInstant &now, ui32 recByteSize, NKikimrBlobStorage::TEvVPut &request,
+            const TActorIDPtr &skeletonFrontIDPtr, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
+            const NVDiskMon::TLtcHistoPtr &histoPtr, const ui64 bufferSizeBytes, ui64 incarnationGuid) {
+        return std::unique_ptr<TEvVPutResult>(new TEvVPutResult(NKikimrProto::OK, logoBlobId, vdisk, cookie, oosStatus,
+                now, recByteSize, &request, skeletonFrontIDPtr, counterPtr, histoPtr, bufferSizeBytes, incarnationGuid,
+                TString(), true));
+    }
+
+    TEvBlobStorage::TEvVPutResult::TEvVPutResult(const NKikimrProto::EReplyStatus status,
+            const TLogoBlobID &logoBlobId, const TVDiskID &vdisk, const ui64 *cookie, TOutOfSpaceStatus oosStatus,
+            const TInstant &now, ui32 recByteSize, NKikimrBlobStorage::TEvVPut *record,
+            const TActorIDPtr &skeletonFrontIDPtr, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
+            const NVDiskMon::TLtcHistoPtr &histoPtr, const ui64 bufferSizeBytes,
+            ui64 incarnationGuid, const TString& errorReason, bool consumeRequest)
         : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG,
-                recByteSize, record, skeletonFrontIDPtr, status == NKikimrProto::OK)
+                recByteSize, record, skeletonFrontIDPtr, consumeRequest)
     {
         IncrementSize(bufferSizeBytes);
         Record.SetStatus(status);
-        // A request answered with OK is not looked at any more, so its submessages are moved to the result instead of
-        // being allocated anew; on errors the request stays intact, as it may be inspected after the result is created.
-        const bool takeSubmessages = record && status == NKikimrProto::OK;
-        if (takeSubmessages) {
+        if (consumeRequest) {
             if (record->HasBlobID()) {
                 Record.set_allocated_blobid(record->release_blobid());
             }
@@ -53,7 +70,7 @@ namespace NKikimr {
         Record.SetStatusFlags(oosStatus.Flags);
         Record.SetApproximateFreeSpaceShare(oosStatus.ApproximateFreeSpaceShare);
         if (record && record->HasTimestamps()) {
-            if (takeSubmessages) {
+            if (consumeRequest) {
                 Record.set_allocated_timestamps(record->release_timestamps());
             } else {
                 Record.MutableTimestamps()->CopyFrom(record->GetTimestamps());

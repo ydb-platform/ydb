@@ -1142,14 +1142,10 @@ namespace NKikimr {
             }
 
             // no more errors (at least for for log writes)
-            std::unique_ptr<TEvBlobStorage::TEvVPutResult> result;
-            if (ev->Get()->IsInternal) {
-                result = CreateInternalResult(VCtx, NKikimrProto::OK, TString(), ev, now,
-                        SelfVDiskId, Db->GetVDiskIncarnationGuid());
-            } else {
-                result = CreateResult(VCtx, NKikimrProto::OK, TString(), ev, now,
-                        SkeletonFrontIDPtr, SelfVDiskId, Db->GetVDiskIncarnationGuid());
-            }
+            // BlobID, VDiskID, MsgQoS and Timestamps of the request are not available after this
+            const NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
+            std::unique_ptr<TEvBlobStorage::TEvVPutResult> result = CreateOkResultConsumingRequest(VCtx, ev, now,
+                SkeletonFrontIDPtr, SelfVDiskId, Db->GetVDiskIncarnationGuid());
             if (info.WrittenBeyondBarrier) {
                 result->Record.SetWrittenBeyondBarrier(true);
             }
@@ -1157,7 +1153,6 @@ namespace NKikimr {
             // Manage PDisk scheduler weights
             OverloadHandler->ActualizeWeights(ctx, Mask(EHullDbType::LogoBlobs));
 
-            NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
             if (!info.IsHugeBlob) {
                 auto [logMsg, traceId] = CreatePutLogEvent(ctx, "TEvVPut", ev->Sender, ev->Cookie,
                     std::move(ev->Get()->Orbit), handleClass, info, std::move(result));

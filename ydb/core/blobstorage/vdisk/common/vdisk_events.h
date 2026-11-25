@@ -513,14 +513,15 @@ namespace NKikimr {
         TEvVResultBaseWithQoSPB(TInstant now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
                 const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel,
                 ui32 recByteSize, TQueryRecord *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
-                bool takeMsgQoS = false)
+                bool consumeMsgQoS = false)
             : TBase(GetReceivedTimestamp(queryRecord, now), counterPtr, histoPtr, channel)
             , MsgCtx(queryRecord ? TVMsgContext(recByteSize, queryRecord->GetMsgQoS()) : TVMsgContext())
             , SkeletonFrontIDPtr(skeletonFrontIDPtr)
         {
+            // the received timestamp and MsgCtx are already taken from MsgQoS of the request
             if (queryRecord) {
                 Y_ABORT_UNLESS(queryRecord->HasMsgQoS());
-                if (takeMsgQoS) {
+                if (consumeMsgQoS) {
                     // the request is left without MsgQoS
                     TBase::Record.set_allocated_msgqos(queryRecord->release_msgqos());
                 } else {
@@ -809,6 +810,16 @@ namespace NKikimr {
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
                 const ui64 bufferSizeBytes, ui64 incarnationGuid, const TString& errorReason);
 
+        // Creates a result with status OK out of submessages of the request instead of allocating new ones. The request
+        // loses MsgQoS, BlobID, VDiskID and Timestamps; all other fields stay. The caller must not read these fields or
+        // use the request as a whole (for a retry, an error reply, a log message) after the call. The result does not
+        // refer to the request, so its status can be changed later, when the request does not exist any more.
+        static std::unique_ptr<TEvVPutResult> CreateOkConsumingRequest(const TLogoBlobID &logoBlobId, const TVDiskID &vdisk,
+                const ui64 *cookie, TOutOfSpaceStatus oosStatus, const TInstant &now, ui32 recByteSize,
+                NKikimrBlobStorage::TEvVPut &request, const TActorIDPtr &skeletonFrontIDPtr,
+                const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
+                const ui64 bufferSizeBytes, ui64 incarnationGuid);
+
         TString ToString() const override {
             return ToString(Record);
         }
@@ -860,6 +871,13 @@ namespace NKikimr {
                 Record.MutableTimestamps()->CopyFrom(request.GetTimestamps());
             }
         }
+
+    private:
+        TEvVPutResult(const NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, const TVDiskID &vdisk,
+                const ui64 *cookie, TOutOfSpaceStatus oosStatus, const TInstant &now, ui32 recByteSize,
+                NKikimrBlobStorage::TEvVPut *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
+                const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
+                const ui64 bufferSizeBytes, ui64 incarnationGuid, const TString& errorReason, bool consumeRequest);
     };
 
     struct TEvBlobStorage::TEvVMultiPut

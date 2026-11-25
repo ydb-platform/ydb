@@ -11,6 +11,8 @@
 #include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/cms/cms.h>
+
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
@@ -38,8 +40,41 @@ public:
         AddCommand(std::make_unique<TCommandDatabaseDump>());
         AddCommand(std::make_unique<TCommandDatabaseRestore>());
         AddCommand(std::make_unique<TCommandDatabaseAttribute>());
+        AddCommand(std::make_unique<TCommandDatabaseFreeze>(true));
+        AddCommand(std::make_unique<TCommandDatabaseFreeze>(false));
     }
 };
+
+TCommandDatabaseFreeze::TCommandDatabaseFreeze(bool freeze)
+    : TYdbSimpleCommand(freeze ? "freeze" : "unfreeze", {},
+        freeze ? "Freeze database schema changes and writes, and wait for CDC delivery to topics"
+               : "Unfreeze database schema changes and writes")
+    , Freeze(freeze)
+{}
+
+void TCommandDatabaseFreeze::Config(TConfig& config) {
+    TYdbSimpleCommand::Config(config);
+    config.SetFreeArgsNum(0);
+    config.Opts->AddLongOption("schema", "Change only the schema target; combine with --datashards for both")
+        .NoArgument().StoreTrue(&Schema);
+    config.Opts->AddLongOption("datashards", "Change only the data target; combine with --schema for both")
+        .NoArgument().StoreTrue(&DataShards);
+}
+
+int TCommandDatabaseFreeze::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    NCms::TCmsClient client(driver);
+    auto settings = NCms::TAlterDatabaseSettings();
+    if (Schema || !DataShards) {
+        settings.FreezeSchema(Freeze);
+    }
+    if (DataShards || !Schema) {
+        settings.FreezeDataShards(Freeze);
+    }
+    auto status = client.AlterDatabase(config.Database, FillSettings(settings)).GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
+    return EXIT_SUCCESS;
+}
 
 TCommandDatabaseDump::TCommandDatabaseDump()
     : TYdbReadOnlyCommand("dump", {}, "Dump database into local directory")

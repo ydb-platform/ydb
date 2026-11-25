@@ -388,7 +388,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         table = Self->Tables.at(pathId);
         table->UpdateShardStatsForFollower(followerId, shardIdx, newStats);
 
-        if (Self->IsDatabaseFreezeBlocking(pathId)) {
+        if (Self->IsDatabaseTopologyBlocked(pathId)) {
             return true;
         }
 
@@ -607,7 +607,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }
 
     // Keep statistics and quota accounting current while automatic partitioning is paused.
-    if (Self->IsDatabaseFreezeBlocking(pathId)) {
+    if (Self->IsDatabaseTopologyBlocked(pathId)) {
         return true;
     }
 
@@ -1341,7 +1341,7 @@ public:
                 continue;
             }
 
-            if (Self->IsDatabaseFreezeBlocking(pathId)) {
+            if (Self->IsDatabaseTopologyBlocked(pathId)) {
                 // Preserve the candidate for thaw without blocking other databases.
                 Self->SplitMergeRevisitQueue.push_back(pathId);
                 continue;

@@ -4,6 +4,8 @@ option cc_enable_arenas = true;
 package Ydb.Cms;
 option java_package = "com.yandex.ydb.cms";
 
+import "google/protobuf/timestamp.proto";
+
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
@@ -218,6 +220,8 @@ message GetDatabaseStatusResult {
     repeated Ydb.Issue.IssueMessage issues = 12;
     // Current database attributes
     map<string, string> attributes = 13;
+    // Desired state and latest operation; pending/failed targets are not proof of application.
+    DatabaseFreezeStatus freeze_status = 14;
 }
 
 // Change resources allocated for database.
@@ -250,10 +254,50 @@ message AlterDatabaseRequest {
     ScaleRecommenderPolicies scale_recommender_policies = 13;
     // Storage units to deallocate
     repeated StorageUnits storage_units_to_remove = 14;
+
+    // Independently freeze user schema changes or row-table writes with CDC drain.
+    // false removes only the corresponding control. Do not combine with other changes.
+    // ASYNC returns an operation id; SUCCESS confirms both requested targets.
+    // Confirm cluster support before freeze or thaw; the SDK version is insufficient.
+    // Do not probe support with this call: an old Console may increment generation
+    // before UNSUPPORTED is returned.
+    // Before freezing a database served by a shared SchemeShard, wait until
+    // GetDatabaseStatus reports RUNNING after all prior quota changes.
+    // Prevent concurrent administrative changes during this check and freeze.
+    // With a dedicated SchemeShard, RUNNING does not confirm quota propagation.
+    // Independent controls. Missing fields preserve the last accepted target.
+    // false/true (data-only) is supported; incompatible DDL and topology changes
+    // remain fenced while DataShards are frozen. Do not combine with other changes.
+    // Schema freeze uses the EnableClientModifications exemptions: administrators,
+    // system/tokenless callers and asynchronous-replication CDC maintenance.
+    // These exemptions do not bypass the technical protection of data freeze.
+    optional bool freeze_schema = 15;
+    optional bool freeze_datashards = 16;
 }
 
 message AlterDatabaseResponse {
     Ydb.Operations.Operation operation = 1;
+}
+
+// Latest desired state; only ready SUCCESS confirms its application.
+message DatabaseFreezeStatus {
+    bool desired_schema = 1;
+    bool desired_datashards = 2;
+    string operation_id = 3;
+    bool ready = 4;
+    Ydb.StatusIds.StatusCode status = 5;
+}
+
+// Operation.metadata: durable targets and best-effort progress, rebuilt after recovery.
+message DatabaseFreezeMetadata {
+    // Latest diagnostic from SchemeShard: current stage and reasons for waiting.
+    // This is informational text, not the final operation status or an error.
+    string progress = 1;
+    // Time Console last received this diagnostic. Progress is not persisted.
+    google.protobuf.Timestamp update_time = 2;
+    bool desired_schema = 3;
+    bool desired_datashards = 4;
+    string phase = 5;
 }
 
 // List all databases known by CMS.

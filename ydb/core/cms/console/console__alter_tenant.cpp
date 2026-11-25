@@ -71,6 +71,16 @@ public:
             return true;
         }
 
+        if (Self->IsDatabaseFreezePending(Tenant)) {
+            return Error(Ydb::StatusIds::UNAVAILABLE, "Database freeze operation is in progress", ctx);
+        }
+        if (Tenant->FreezeEpoch) {
+            const auto& freeze = Self->DatabaseFreezeOperations.at(Tenant->FreezeEpoch);
+            if (freeze.GetFreezeSchema() || freeze.GetFreezeDataShards() || freeze.GetStatus() != Ydb::StatusIds::SUCCESS) {
+                return Error(Ydb::StatusIds::PRECONDITION_FAILED, "Unfreeze the database before altering it", ctx);
+            }
+        }
+
         // Check generation.
         if (rec.generation() && rec.generation() != Tenant->Generation)
             return Error(Ydb::StatusIds::BAD_REQUEST,

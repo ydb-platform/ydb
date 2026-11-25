@@ -158,7 +158,8 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         }
 
         const TPath domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
-        if (domainPath.IsResolved() && Self->IsDatabaseFreezeBlocking(domainPath.Base()->PathId)) {
+        if (domainPath.IsResolved() && Self->IsDatabaseFreezeBlocking(domainPath.Base()->PathId,
+                request.HasUserSID() ? &request.GetUserSID() : nullptr, request.GetUserGroupSIDs())) {
             return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED, "Database is frozen for exports");
         }
         {

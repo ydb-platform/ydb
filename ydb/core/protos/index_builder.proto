@@ -84,6 +84,8 @@ message TEvCreateRequest {
     // Internal flag is true for system-generated operations and is false for those initiated directly by the user.
     optional bool Internal = 5 [default = false];
     optional string UserSID = 6;
+    // Group membership from the authenticated caller; not public request settings.
+    repeated string UserGroupSIDs = 7;
 }
 
 message TEvCreateResponse {

@@ -206,6 +206,17 @@ TGetDatabaseStatusResult::TGetDatabaseStatusResult(TStatus&& status, const Ydb::
     , ScaleRecommenderPolicies_(proto.scale_recommender_policies())
     , Attributes_(proto.attributes().begin(), proto.attributes().end())
 {
+    if (proto.has_freeze_status()) {
+        const auto& freeze = proto.freeze_status();
+        FreezeStatus_.emplace();
+        FreezeStatus_->DesiredSchema = freeze.desired_schema();
+        FreezeStatus_->DesiredDataShards = freeze.desired_datashards();
+        FreezeStatus_->OperationId = freeze.operation_id();
+        FreezeStatus_->Ready = freeze.ready();
+        if (freeze.ready()) {
+            FreezeStatus_->Status = static_cast<EStatus>(freeze.status());
+        }
+    }
     switch (proto.resources_kind_case()) {
         case Ydb::Cms::GetDatabaseStatusResult::kRequiredResources:
             ResourcesKind_ = TResources(proto.required_resources());
@@ -262,12 +273,22 @@ const TAttributes& TGetDatabaseStatusResult::GetAttributes() const {
     return Attributes_;
 }
 
+const std::optional<TDatabaseFreezeStatus>& TGetDatabaseStatusResult::GetFreezeStatus() const {
+    return FreezeStatus_;
+}
+
 void TGetDatabaseStatusResult::SerializeTo(Ydb::Cms::CreateDatabaseRequest& request) const {
     request.set_path(Path_);
     SerializeToImpl(ResourcesKind_, SchemaOperationQuotas_, DatabaseQuotas_, ScaleRecommenderPolicies_, request);
 }
 
 void TAlterDatabaseSettings::SerializeTo(Ydb::Cms::AlterDatabaseRequest& request) const {
+    if (FreezeSchema_.has_value()) {
+        request.set_freeze_schema(*FreezeSchema_);
+    }
+    if (FreezeDataShards_.has_value()) {
+        request.set_freeze_datashards(*FreezeDataShards_);
+    }
     for (const auto& [name, value] : AlterAttributes_) {
         (*request.mutable_alter_attributes())[name] = value;
     }
@@ -373,10 +394,49 @@ public:
         request.set_path(path);
         settings.SerializeTo(request);
 
-        return RunSimple<Ydb::Cms::V1::CmsService, Ydb::Cms::AlterDatabaseRequest, Ydb::Cms::AlterDatabaseResponse>(
-            std::move(request),
+        if (!request.has_freeze_schema() && !request.has_freeze_datashards()) {
+            return RunSimple<Ydb::Cms::V1::CmsService, Ydb::Cms::AlterDatabaseRequest, Ydb::Cms::AlterDatabaseResponse>(
+                std::move(request),
+                &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase,
+                TRpcRequestSettings::Make(settings));
+        }
+
+        if (!request.alter_attributes().empty()) {
+            return NThreading::MakeFuture(TStatus(EStatus::BAD_REQUEST,
+                NYdb::NIssue::TIssues{NYdb::NIssue::TIssue("freeze cannot be combined with other database changes")}));
+        }
+        if (request.operation_params().has_cancel_after() || request.operation_params().has_forget_after()) {
+            return NThreading::MakeFuture(TStatus(EStatus::UNSUPPORTED,
+                NYdb::NIssue::TIssues{NYdb::NIssue::TIssue("cancel_after and forget_after are not supported for database freeze")}));
+        }
+
+        auto rpcSettings = TRpcRequestSettings::Make(settings);
+        if (settings.OperationTimeout_) {
+            // Leave time for the server's TIMEOUT response before the client deadline.
+            const auto responseMargin = TDeadline::SafeDurationCast(TDuration::MilliSeconds(200));
+            rpcSettings.TryUpdateDeadline(TDeadline::AfterDuration(settings.OperationTimeout_) + responseMargin);
+        }
+        // Prefer server-side waiting. The same deadline also bounds polling
+        // if an endpoint returns a pending operation despite SYNC.
+        request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
+        auto promise = NThreading::NewPromise<TStatus>();
+        auto extractor = [promise](Ydb::Operations::Operation* operation, TPlainStatus status) mutable {
+            if (operation) {
+                status.SetCostInfo(std::move(*operation->mutable_cost_info()));
+                // Old endpoints may silently ignore an unknown freeze field.
+                // A successful freeze always has a durable operation id.
+                if (status.Ok() && operation->id().empty()) {
+                    status.Status = EStatus::UNSUPPORTED;
+                    status.Issues.AddIssue(NYdb::NIssue::TIssue("Server does not support database freeze operations"));
+                }
+            }
+            promise.SetValue(TStatus(std::move(status)));
+        };
+        Connections_->RunDeferred<Ydb::Cms::V1::CmsService, Ydb::Cms::AlterDatabaseRequest, Ydb::Cms::AlterDatabaseResponse>(
+            std::move(request), std::move(extractor),
             &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase,
-            TRpcRequestSettings::Make(settings));
+            DbDriverState_, INITIAL_DEFERRED_CALL_DELAY, rpcSettings, true);
+        return promise.GetFuture();
     }
 };
 

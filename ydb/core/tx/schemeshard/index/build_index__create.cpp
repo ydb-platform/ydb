@@ -69,7 +69,8 @@ public:
         }
 
         auto subDomainPathId = domainPath.GetPathIdForDomain();
-        if (Self->IsDatabaseFreezeBlocking(subDomainPathId) && !IsImportContinuation(request, subDomainPathId)) {
+        if (Self->IsDatabaseFreezeBlocking(subDomainPathId, request.HasUserSID() ? &request.GetUserSID() : nullptr,
+                request.GetUserGroupSIDs()) && !IsImportContinuation(request, subDomainPathId)) {
             return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Database is frozen for index builds");
         }
         auto subDomainInfo = domainPath.DomainInfo();
@@ -415,7 +416,11 @@ private:
             return false;
         }
         const auto freeze = Self->DatabaseFreezeStates.find(domainId);
-        if (freeze == Self->DatabaseFreezeStates.end() || freeze->second.GetParticipantsFixed()) {
+        using TFreeze = NKikimrScheme::TDatabaseFreezeState;
+        if (freeze == Self->DatabaseFreezeStates.end()
+            || !(freeze->second.GetDataPhase() == TFreeze::DATA_PREPARING
+                || (freeze->second.GetSchemaPhase() == TFreeze::SCHEMA_DRAINING
+                    && freeze->second.GetDataPhase() == TFreeze::DATA_OPEN))) {
             return false;
         }
         const auto importTx = Self->TxIdToImport.find(TTxId(request.GetTxId()));

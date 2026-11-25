@@ -359,6 +359,11 @@ private:
         auto ev = createEventFn();
         if (UserToken) {
             ev->Record.SetUserSID(UserToken->GetUserSID());
+            if constexpr (requires { ev->Record.MutableUserGroupSIDs(); }) {
+                for (const auto& sid : UserToken->GetGroupSIDs()) {
+                    ev->Record.AddUserGroupSIDs(sid);
+                }
+            }
         }
         ForwardToSchemeShard(ctx, std::move(ev));
     }

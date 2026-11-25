@@ -49,6 +49,8 @@ message TEvCreateRequest {
     optional string DatabaseName = 3;
     optional TSetColumnConstraintSettings Settings = 4;
     optional string UserSID = 5;
+    // Group membership from the authenticated caller; not public request settings.
+    repeated string UserGroupSIDs = 6;
 }
 
 message TEvCreateResponse {

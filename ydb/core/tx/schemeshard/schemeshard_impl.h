@@ -353,10 +353,18 @@ public:
     THashMap<TPathId, TActorId> DatabaseFreezeWorkers;
     // Pending progress is rebuilt by the worker after a restart, unlike the
     // durable result in DatabaseFreezeStates.
-    THashMap<TPathId, TString> DatabaseFreezeProgress;
-    bool IsDatabaseFreezeBlocking(const NKikimrSchemeOp::TModifyScheme& transaction);
-    bool IsDatabaseFreezeBlocking(const TPathId& pathId) const;
+    THashMap<TPathId, NKikimrScheme::TEvDatabaseFreezeResult> DatabaseFreezeProgress;
+    bool IsClientSchemaModificationExempt(const NACLib::TUserToken* userToken) const;
+    bool IsDatabaseFreezeBlocking(const NKikimrSchemeOp::TModifyScheme& transaction,
+        bool schemaExempt = false);
+    bool IsDatabaseFreezeBlocking(const TPathId& pathId, bool schemaExempt = false) const;
+    bool IsDatabaseFreezeBlocking(const TPathId& pathId, const TString* userSID,
+        const NProtoBuf::RepeatedPtrField<TString>& userGroupSIDs) const;
+    const NKikimrScheme::TDatabaseFreezeState* FindDatabaseFreeze(const TPathId& pathId) const;
+    bool IsDatabaseTopologyBlocked(const TPathId& pathId) const;
+    bool IsDatabaseBackgroundWriteBlocked(const TPathId& pathId) const;
     bool HasDatabaseFreezeSchemaWork(const TPathId& domainId) const;
+    void AdvanceDatabaseFreeze(const TPathId& domainId, NKikimrScheme::TDatabaseFreezeState& state);
     void Handle(TEvSchemeShard::TEvDatabaseFreeze::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDatabaseFreezeResult::TPtr& ev, const TActorContext& ctx);
     struct TTxDatabaseFreeze;

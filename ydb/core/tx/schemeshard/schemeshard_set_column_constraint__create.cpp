@@ -70,7 +70,8 @@ public:
         }
 
         auto subDomainPathId = domainPath.GetPathIdForDomain();
-        if (Self->IsDatabaseFreezeBlocking(subDomainPathId)) {
+        if (Self->IsDatabaseFreezeBlocking(subDomainPathId, request.HasUserSID() ? &request.GetUserSID() : nullptr,
+                request.GetUserGroupSIDs())) {
             return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Database is frozen for schema changes");
         }
         auto subDomainInfo = domainPath.DomainInfo();

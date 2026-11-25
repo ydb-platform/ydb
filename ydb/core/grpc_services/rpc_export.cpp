@@ -221,6 +221,9 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         ev->Record.SetDatabaseName(this->GetDatabaseName());
         if (this->UserToken) {
             ev->Record.SetUserSID(this->UserToken->GetUserSID());
+            for (const auto& sid : this->UserToken->GetGroupSIDs()) {
+                ev->Record.AddUserGroupSIDs(sid);
+            }
             ev->Record.SetSanitizedToken(this->UserToken->GetSanitizedToken());
         }
         ev->Record.SetPeerName(this->Request->GetPeerName());

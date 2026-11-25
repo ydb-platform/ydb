@@ -4668,7 +4668,7 @@ THolder<TScanSnapshot> TExecutor::ResolveScanSnapshot(ui32 tableId, const TScanO
 
 ui64 TExecutor::QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cookie, const TScanOptions& options)
 {
-    TScans::ValidateOptions(options);
+    Scans->ValidateOptions(options);
     THolder<TScanSnapshot> snapshot;
     if (!options.Factory || std::holds_alternative<TScanOptions::TSnapshotById>(options.Snapshot)) {
         snapshot = ResolveScanSnapshot(tableId, options);

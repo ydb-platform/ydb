@@ -61,6 +61,7 @@
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/base/resource_profile.h>
+#include <ydb/core/base/scan_reservation_runtime.h>
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/library/services/services.pb.h>
@@ -1987,6 +1988,7 @@ void TKikimrRunner::InitializeActorSystem(
 
     ApplyLogSettings(runConfig);
 
+    TScanReservationRuntime::Install(*setup);
     ActorSystem.Reset(new TActorSystem(setup, AppData.Get(), LogSettings));
 
     if (Monitoring) {

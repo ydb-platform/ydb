@@ -1364,6 +1364,31 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<ui64>("overrunBytes").value_or(0), 2_KB);
     }
 
+    Y_UNIT_TEST(RetainedScanPayloadsCanOutliveActorSystem) {
+        TRetainedScanPayloads payloads;
+        {
+            TMyEnvScans env;
+            bool releasedCpu = false;
+            auto updates = env->AddObserver<TEvResourceBroker::TEvUpdateTask>([&](auto& ev) {
+                const auto& resources = ev->Get()->RequiredResources;
+                releasedCpu |= ev->Get()->Type == "build_index" && resources[CPU] == 0 && resources[MEMORY] == 10_KB;
+            });
+            env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+                TScanOptions options;
+                options.SetResourceBroker("build_index", 10, 8_KB);
+                options.Factory = [&](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                    return new TRetainedPayloadOverrunScan(payloads);
+                };
+                executor->QueueScan(TRowsModel::TableId, {}, 12345, options);
+            }));
+            env->WaitFor("scan finishes and leaves payload reservations", [&] { return releasedCpu; });
+        }
+        UNIT_ASSERT(payloads.Finished);
+        UNIT_ASSERT(payloads.Upload && payloads.CompletedUpload && payloads.Response);
+        // The first release would update the broker and the final one would finish its task.
+        payloads = {};
+    }
+
     class TAdmissionReadyScan : public NTable::IScan {
     public:
         explicit TAdmissionReadyScan(bool& finished)

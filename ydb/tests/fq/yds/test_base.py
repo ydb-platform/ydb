@@ -13,9 +13,10 @@ class YdbTopics(StreamingTestBase):
         self.kikimr = kikimr
         self.name = name
         self.queries = []
-        self.input, self.output, self.endpoint = self.get_io_names(
+        self.input, self.output, _ = self.get_io_names(
             kikimr, name, False, lambda value: value, partitions_count=partitions, shared=shared
         )
+        self.endpoint = self.get_endpoint(kikimr, local_topics=False)
 
     def write(self, data, topic_path=None, partition_key=None):
         self.write_stream(data, topic_path=topic_path, partition_key=partition_key, endpoint=self.endpoint)

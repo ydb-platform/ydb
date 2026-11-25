@@ -1219,6 +1219,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
         local: bool,
         column_tables: bool,
     ):
+        topic_ydb_client = kikimr.ydb_client
         title = f"slj_{partitions_count}{str(streamlookup)[:1]}{testcase}"
         query_name = f"q_{title}"
         endpoint = self.get_endpoint(kikimr, local_topics=True)
@@ -1266,10 +1267,13 @@ class TestJoinYdbStreaming(StreamingTestBase):
         self.wait_completed_checkpoints(kikimr, query_name)
 
         for offset in range(0, len(messages), MAX_WRITE_STREAM_SIZE):
-            self.write_stream(map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]), endpoint=endpoint)
+            topic_ydb_client.topic_write(
+                self.input_topic,
+                list(map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE])),
+            )
 
         expected_len = sum(map(len, messages)) - len(messages)
-        read_data = self.read_stream(expected_len, topic_path=self.output_topic, endpoint=endpoint)
+        read_data = topic_ydb_client.topic_read(self.output_topic, self.consumer_name, expected_len)
         read_data_ctr = Counter(map(freeze, map(json.loads, read_data)))
         messages_ctr = Counter(map(freeze, map(json.loads, chain(*map(lambda row: islice(row, 1, None), messages)))))
         assert read_data_ctr == messages_ctr
@@ -1321,6 +1325,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
         local: bool,
         column_tables: bool,
     ):
+        topic_ydb_client = kikimr.ydb_client
         title = f"slj_wm_{partitions_count}{streamlookup!s:.1}{tasks}{local!s:.1}"
         query_name = f"q_{title}"
         endpoint = self.get_endpoint(kikimr, local_topics=True)
@@ -1418,16 +1423,12 @@ class TestJoinYdbStreaming(StreamingTestBase):
             time.sleep(5.0)
 
         for pair in messages:
-            self.write_stream(
-                [pair[0]],
-                partition_key=b'1',
-                endpoint=endpoint,
-            )
+            topic_ydb_client.topic_write(self.input_topic, [pair[0]], producer_id='1')
             expected = pair[1:]
-            read_data = self.read_stream(
+            read_data = topic_ydb_client.topic_read(
+                self.output_topic,
+                self.consumer_name,
                 len(expected),
-                topic_path=self.output_topic,
-                endpoint=endpoint,
                 timeout=None if len(expected) > 0 else 10,
             )
             read_data_ctr = Counter(map(freeze, map(json.loads, read_data)))

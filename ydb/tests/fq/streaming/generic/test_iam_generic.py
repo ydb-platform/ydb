@@ -135,13 +135,6 @@ class TestIamAuthGeneric(StreamingTestBase):
         kikimr.ydb_client.query(f"DROP EXTERNAL DATA SOURCE `{source_name}`;")
 
     @pytest.mark.parametrize(
-        "kikimr",
-        [
-            {"enable_dq_source_stream_lookup_join": True},
-        ],
-        indirect=["kikimr"],
-    )
-    @pytest.mark.parametrize(
         "service_account_id", [FAKE_SERVICE_ACCOUNT_ID, "bad", "bad-token", "bad-skip-1", "bad-token-skip-1"]
     )
     def test_generic_lookup_iam_auth(
@@ -152,6 +145,8 @@ class TestIamAuthGeneric(StreamingTestBase):
     ) -> None:
         """Creates and populates local table, and read it from query
         via an IAM-auth external data source."""
+        topic_ydb_client = kikimr.ydb_client
+        kikimr.set_config({"table_service_config": {"enable_dq_source_stream_lookup_join": True}})
 
         endpoint = self.get_endpoint(kikimr, local_topics=True)
         source_name = entity_name("iam_source")
@@ -178,7 +173,7 @@ class TestIamAuthGeneric(StreamingTestBase):
         if service_account_id != FAKE_SERVICE_ACCOUNT_ID:
             try:
                 messages = ['1', '2', '1', '2', '3']
-                self.write_stream(messages, endpoint=endpoint)
+                topic_ydb_client.topic_write(self.input_topic, messages)
                 kikimr.ydb_client.query(Rf"""
                     SELECT Data, a, b, c, CAST(d AS String) AS d
                       FROM {inp} AS i
@@ -214,14 +209,14 @@ class TestIamAuthGeneric(StreamingTestBase):
 
         self.wait_completed_checkpoints(kikimr, query_name)
         messages = ['1', '2', '1', '2', '3']
-        self.write_stream(messages, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, messages)
         expected = [
             '{"Data":"1","a":1,"b":"abc","c":false,"d":"2025-08-21T11:22:33.456789Z"}',
             '{"Data":"2","a":2,"b":"abcdefghijklmnoprstuvwxyz","c":true,"d":"2025-08-21T22:33:44.567000Z"}',
         ] * 2 + [
             '{"Data":"3","a":null,"b":null,"c":null,"d":null}',
         ]
-        result = self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint)
+        result = topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected))
         logger.debug([*map(json.loads, sorted(result))])
         assert sorted(result) == sorted(expected)
 
@@ -234,8 +229,8 @@ class TestIamAuthGeneric(StreamingTestBase):
         ] * 2 + [
             '{"Data":"3","a":null,"b":null,"c":null,"d":null}',
         ]
-        self.write_stream(messages, endpoint=endpoint)
-        result = self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, messages)
+        result = topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected))
         logger.debug([*map(json.loads, sorted(result))])
         assert sorted(result) == sorted(expected)
         logger.debug(kikimr.ydb_client.query("SELECT * FROM `.sys/streaming_queries`")[0].rows)

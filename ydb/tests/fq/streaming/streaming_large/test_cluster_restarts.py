@@ -11,13 +11,19 @@ logger = logging.getLogger(__name__)
 
 class TestStreamingLarge(StreamingTestBase):
 
-    def do_write_read(self, input, expected_output, endpoint):
+    def do_write_read(self, topic_ydb_client, input, expected_output):
         logger.debug("do_write_read")
         time.sleep(2)
         logger.debug("write data to stream")
-        self.write_stream(input, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, input)
         logger.debug("read data from stream")
-        read_data = self.read_stream(len(expected_output), topic_path=self.output_topic, endpoint=endpoint, timeout=60)
+        read_data = topic_ydb_client.topic_read(
+            self.output_topic,
+            self.consumer_name,
+            len(expected_output),
+            timeout=60,
+            allow_partial=True,
+        )
         if len(read_data) != len(expected_output):
             read_data = sorted(read_data)
             read_data = read_data[-len(expected_output) :]  # deduplication disabled
@@ -27,7 +33,7 @@ class TestStreamingLarge(StreamingTestBase):
     def test_rolling_restart(self, kikimr, entity_name):
 
         # local_topics over EDS
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr, "test_rolling_restart", local_topics=False, entity_name=entity_name, shared=True, partitions_count=1
         )
 
@@ -56,13 +62,17 @@ class TestStreamingLarge(StreamingTestBase):
             expected_data = [
                 f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}'
             ] * query_count
-            self.do_write_read(input, expected_data, endpoint)
+            self.do_write_read(topic_ydb_client, input, expected_data)
             time.sleep(10)
+
+        for i in range(query_count):
+            name = f"test_shared_reading_{i}"
+            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
     @pytest.mark.parametrize("kikimr", [{"rebalancing_timeout_ms": "20000"}], indirect=["kikimr"])
     def test_restart_nodes(self, kikimr, entity_name):
 
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr, "test_restart_nodes", local_topics=False, entity_name=entity_name, shared=True, partitions_count=9
         )
 
@@ -87,11 +97,13 @@ class TestStreamingLarge(StreamingTestBase):
 
         message_count = 9
         for i in range(message_count):
-            self.write_stream(
-                ['{"value": "value0"}'], partition_key=(''.join(random.choices(string.digits, k=8))), endpoint=endpoint
+            topic_ydb_client.topic_write(
+                self.input_topic,
+                ['{"value": "value0"}'],
+                producer_id=''.join(random.choices(string.digits, k=8)),
             )
         expected_data = ['value0'] * message_count * 2
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name1)
         self.wait_completed_checkpoints(kikimr, query_name2)
 
@@ -104,17 +116,17 @@ class TestStreamingLarge(StreamingTestBase):
             kikimr.recreate_driver()
             value = f"value{i}"
             for i in range(message_count):
-                self.write_stream(
+                topic_ydb_client.topic_write(
+                    self.input_topic,
                     [f'{{"value": "{value}"}}'],
-                    partition_key=(''.join(random.choices(string.digits, k=8))),
-                    endpoint=endpoint,
+                    producer_id=''.join(random.choices(string.digits, k=8)),
                 )
 
             expected_data = [value] * message_count * 2
             self.wait_completed_checkpoints(kikimr, query_name1)
             self.wait_completed_checkpoints(kikimr, query_name2)
             assert (
-                self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+                topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
             )
             self.wait_completed_checkpoints(kikimr, query_name1)
             self.wait_completed_checkpoints(kikimr, query_name2)
@@ -130,7 +142,7 @@ class TestStreamingLarge(StreamingTestBase):
     @pytest.mark.parametrize("kikimr", [{"rebalancing_timeout_ms": "5000"}], indirect=["kikimr"])
     def test_replace_node(self, kikimr, entity_name):
 
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr, "test_replace_node", local_topics=False, entity_name=entity_name, shared=True, partitions_count=9
         )
         node1_id = len(kikimr.cluster.slots)
@@ -159,11 +171,13 @@ class TestStreamingLarge(StreamingTestBase):
 
         message_count = 9
         for i in range(message_count):
-            self.write_stream(
-                ['{"value": "value0"}'], partition_key=(''.join(random.choices(string.digits, k=8))), endpoint=endpoint
+            topic_ydb_client.topic_write(
+                self.input_topic,
+                ['{"value": "value0"}'],
+                producer_id=''.join(random.choices(string.digits, k=8)),
             )
         expected_data = ['value0'] * message_count * 2
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
         time.sleep(2)
 
         stop_node_id = random.randint(1, len(kikimr.cluster.slots) - 1)
@@ -176,14 +190,19 @@ class TestStreamingLarge(StreamingTestBase):
         def write_read(i):
             value = f"value {i}"
             for i in range(message_count):
-                self.write_stream(
+                topic_ydb_client.topic_write(
+                    self.input_topic,
                     [f'{{"value": "{value}"}}'],
-                    partition_key=(''.join(random.choices(string.digits, k=8))),
-                    endpoint=endpoint,
+                    producer_id=''.join(random.choices(string.digits, k=8)),
                 )
             expected_data = [value] * message_count * 2
             assert (
-                self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint, timeout=180)
+                topic_ydb_client.topic_read(
+                    self.output_topic,
+                    self.consumer_name,
+                    len(expected_data),
+                    timeout=180,
+                )
                 == expected_data
             )
             time.sleep(2)

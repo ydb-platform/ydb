@@ -12,7 +12,7 @@ class TestEarlyFinish(StreamingTestBase):
         )
         resource.Bucket('early-finish').put_object(Key='c.txt', Body='C')
         source = client.create_external_data_source(unique_prefix + 'source', 'early-finish').name
-        topic, endpoint = self.get_input_name(kikimr, unique_prefix + 'early_finish', True, lambda name: name)
+        topic, topic_ydb_client = self.get_input_name(kikimr, unique_prefix + 'early_finish', True, lambda name: name)
         sql = f'''
             SELECT input_rows.Data AS Data1, dictionary.Data AS Data2
             FROM {topic} WITH (STREAMING='TRUE', FORMAT=raw, SCHEMA=(Data String NOT NULL)) AS input_rows
@@ -27,7 +27,7 @@ class TestEarlyFinish(StreamingTestBase):
             future = client.start_topic_query(
                 sql, kikimr.get_database_name() + '/' + self.input_topic, self.consumer_name
             )
-            self.write_stream(['A', 'B', 'C'], endpoint=endpoint)
+            topic_ydb_client.topic_write(self.input_topic, ['A', 'B', 'C'])
             result = future.result(timeout=70)[0]
             assert [(row['Data1'], row['Data2']) for row in result.rows] == [(b'A', b'A'), (b'C', b'C')]
         finally:

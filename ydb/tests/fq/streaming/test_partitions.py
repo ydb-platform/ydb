@@ -37,7 +37,7 @@ class TestStreamingPartitions(StreamingTestBase):
         entity_name: Callable[[str], str],
         local_topics: bool,
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             f"test_restart_after_part_inc{local_topics!s:.1}",
             local_topics,
@@ -66,26 +66,23 @@ class TestStreamingPartitions(StreamingTestBase):
         time.sleep(0.5)
 
         logger.debug(f"altering topic {self.input_topic} partition count to 20")
-        self.get_ydb_client(kikimr, local_topics).driver.topic_client.alter_topic(
-            self.input_topic, set_min_active_partitions=20
-        )
+        topic_ydb_client.driver.topic_client.alter_topic(self.input_topic, set_min_active_partitions=20)
 
         logger.debug(f"restarting query {name} without recompilation")
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
         self.wait_completed_checkpoints(kikimr, name, timeout=30)
 
-        # Write data with random partition keys so messages land on different partitions
+        # Use random producer IDs so messages land on different partitions
         message_count = 20
         for _ in range(message_count):
-            self.write_stream(
+            topic_ydb_client.topic_write(
+                self.input_topic,
                 ['{"value": "my_data"}'],
-                topic_path=None,
-                partition_key=''.join(random.choices(string.digits, k=8)),
-                endpoint=endpoint,
+                producer_id=''.join(random.choices(string.digits, k=8)),
             )
 
         expected_data = ["my_data" for _ in range(message_count)]
-        assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, message_count) == expected_data
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 

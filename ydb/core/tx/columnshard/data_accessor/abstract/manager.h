@@ -22,6 +22,11 @@ public:
         return false;
     }
 
+    // true: BuildLoader reads the column chunks of every portion at the start
+    virtual bool LoadsChunksAtStart() const {
+        return false;
+    }
+
     std::shared_ptr<ITxReader> BuildLoader(
         const TVersionedIndex& versionedIndex, TGranuleMeta* granule, const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) {
         return DoBuildLoader(versionedIndex, granule, dsGroupSelector);

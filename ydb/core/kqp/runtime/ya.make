@@ -77,6 +77,7 @@ PEERDIR(
     ydb/library/mkql_proto
     ydb/library/query_actor
     ydb/library/yql/dq/actors
+    ydb/library/yql/dq/actors/common
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/actors/spilling

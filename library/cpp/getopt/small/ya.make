@@ -23,4 +23,9 @@ SRCS(
     ygetopt.cpp
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    contrib/libs/fastops
+)
+
 END()

@@ -291,10 +291,11 @@ namespace NKikimr::NBlobDepot {
         }
 
         for (const auto& item : record.GetS3Locators()) {
-            const auto& locator = TS3Locator::FromProto(item);
-            const size_t numErased = agent.S3WritesInFlight.erase(locator);
-            Y_ABORT_UNLESS(numErased == 1);
-            if (!record.GetS3SlowDown()) { // in case of SlowDown these items never had the chance of being written
+            const auto locator = TS3Locator::FromProto(item);
+            if (!agent.S3WritesInFlight.erase(locator)) {
+                continue;
+            }
+            if (record.GetS3PutMayArriveLate() || !record.GetS3SlowDown()) {
                 S3Manager->AddTrashToCollect(locator);
             }
             S3Manager->OnS3WriteInFlightRemoved(/*success=*/false);

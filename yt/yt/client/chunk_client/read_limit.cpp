@@ -4,6 +4,8 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <yt/yt/core/phoenix/type_def.h>
+
 #include <yt/yt/core/yson/protobuf_interop.h>
 
 #include <yt/yt/core/ytree/convert.h>
@@ -665,6 +667,15 @@ TReadLimit TReadLimit::Invert() const
     return result;
 }
 
+void TReadLimit::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, KeyBound_);
+    PHOENIX_REGISTER_FIELD(2, RowIndex_);
+    PHOENIX_REGISTER_FIELD(3, Offset_);
+    PHOENIX_REGISTER_FIELD(4, ChunkIndex_);
+    PHOENIX_REGISTER_FIELD(5, TabletIndex_);
+}
+
 bool TReadLimit::operator==(const TReadLimit& other) const
 {
     return
@@ -674,6 +685,8 @@ bool TReadLimit::operator==(const TReadLimit& other) const
         ChunkIndex_ == other.ChunkIndex_ &&
         TabletIndex_ == other.TabletIndex_;
 }
+
+PHOENIX_DEFINE_TYPE(TReadLimit);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -13,4 +13,6 @@ PY_SRCS(
     mod/__init__.py
 )
 
+INCLUDE(${ARCADIA_ROOT}/library/python/runtime_py3/peerdir_policy.inc)
+
 END()

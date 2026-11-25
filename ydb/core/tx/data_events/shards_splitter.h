@@ -65,10 +65,10 @@ public:
 
     TYdbConclusionStatus SplitData(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) {
         TableId = schemeEntry.TableId.PathId.LocalPathId;
-        AFL_VERIFY(schemeEntry.ColumnTableInfo);
-        AFL_VERIFY(schemeEntry.ColumnTableInfo->Description.HasSchema());
+        YDB_LOG_VERIFY(schemeEntry.ColumnTableInfo);
+        YDB_LOG_VERIFY(schemeEntry.ColumnTableInfo->Description.HasSchema());
         SchemaVersion = schemeEntry.ColumnTableInfo->Description.GetSchema().GetVersion();
-        AFL_VERIFY(SchemaVersion);
+        YDB_LOG_VERIFY(SchemaVersion);
         return DoSplitData(schemeEntry, data);
     }
 

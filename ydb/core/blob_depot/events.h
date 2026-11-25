@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/event.h>
+#include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/protos/blob_depot.pb.h>
 
@@ -30,6 +31,12 @@ namespace NKikimr {
             EvPushMetrics,
             EvPrepareWriteS3,
             EvPrepareWriteS3Result,
+            EvRetiredS3SweepComplete = EvPrepareWriteS3Result + 3,
+        };
+
+        struct TEvRetiredS3SweepComplete : TEventLocal<TEvRetiredS3SweepComplete, EvRetiredS3SweepComplete> {
+            const bool Success;
+            explicit TEvRetiredS3SweepComplete(bool success) : Success(success) {}
         };
 
 #define BLOBDEPOT_PARAM_ARG(ARG) std::optional<std::decay_t<decltype(Record.Get##ARG())>> param##ARG,

@@ -776,6 +776,16 @@ public:
             }
         }
 
+        std::optional<bool> disablePgCompatibility;
+        if (ev.QueryPhysicalGraph) {
+            disablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility();
+            if (*disablePgCompatibility && !ev.QueryPhysicalGraph->GetCompiledWithPgCompatibilityDisabled()) {
+                SendFailResponse(
+                    Ydb::StatusIds::UNSUPPORTED, "PostgreSQL compatibility is disabled and the saved plan was not compiled in that mode");
+                return;
+            }
+        }
+
         auto meta = GetOperationMeta();
 
         // Start request.
@@ -794,6 +804,7 @@ public:
                 .Counters = Counters,
                 .SaveQueryPhysicalGraph = ev.SaveQueryPhysicalGraph,
                 .PhysicalGraph = ev.QueryPhysicalGraph,
+                .DisablePgCompatibility = disablePgCompatibility,
                 .DisableDefaultTimeout = ev.DisableDefaultTimeout,
                 .CheckpointId = ev.CheckpointId,
                 .StreamingQueryPath = ev.StreamingQueryPath,
@@ -1232,6 +1243,9 @@ private:
         request.SetPoolId(meta.GetResourcePoolId());
 
         const bool hasPhysicalGraph = physicalGraph.has_value();
+        // A retry of the same execution retains the policy of its saved graph.
+        const auto disablePgCompatibility =
+            physicalGraph ? std::optional{ physicalGraph->GetCompiledWithPgCompatibilityDisabled() } : std::nullopt;
         RunScriptActorId = Register(CreateRunScriptActor(queryRequest,
             {
                 .Database = request.GetDatabase(),
@@ -1245,6 +1259,7 @@ private:
                 .Counters = Counters,
                 .SaveQueryPhysicalGraph = meta.GetSaveQueryPhysicalGraph(),
                 .PhysicalGraph = std::move(physicalGraph),
+                .DisablePgCompatibility = disablePgCompatibility,
                 .DisableDefaultTimeout = meta.GetDisableDefaultTimeout(),
                 .CheckpointId = meta.GetCheckpointId(),
                 .StreamingQueryPath = meta.GetStreamingQueryPath(),

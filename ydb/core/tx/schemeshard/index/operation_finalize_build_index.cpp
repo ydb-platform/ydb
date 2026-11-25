@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -12,6 +13,14 @@ namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
+
+bool IsLegacyColumnBuildCancellation(const TSchemeShard& schemeShard, const TTxState& txState) {
+    // Older SchemeShards left the outcome empty even for column build cancellations.
+    const auto* build = schemeShard.IndexBuilds.FindPtr(TIndexBuildId(ui64(txState.BuildIndexId)));
+    return build && (*build)->IsBuildColumns() &&
+        ((*build)->State == TIndexBuildInfo::EState::Cancellation_Applying ||
+         (*build)->State == TIndexBuildInfo::EState::Rejection_Applying);
+}
 
 class TConfigureParts: public TSubOperationState {
     virtual const char* Name() const override final { return "TConfigureParts"; }
@@ -47,6 +56,7 @@ public:
 
         const TTxId snapshotTxId = context.SS->GetSingleTableSnapshot(pathId);
         const TStepId snapshotStepId = context.SS->SnapshotsStepIds.at(snapshotTxId);
+        const bool legacyCancellation = !txState->BuildIndexOutcome && IsLegacyColumnBuildCancellation(*context.SS, *txState);
 
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             TShardIdx shardIdx = txState->Shards[i].Idx;
@@ -64,6 +74,10 @@ public:
             op->SetBuildIndexId(ui64(txState->BuildIndexId));
             if (txState->BuildIndexOutcome) {
                 op->MutableOutcome()->CopyFrom(*txState->BuildIndexOutcome);
+            } else if (legacyCancellation) {
+                op->MutableOutcome()->MutableCancel();
+            } else {
+                op->SetColumnBuildSucceeded(true);
             }
 
             context.SS->FillSeqNo(tx, seqNo);
@@ -125,19 +139,20 @@ public:
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
 
-        for(auto& column: tableInfo->Columns) {
-            if (column.second.IsDropped())
-                continue;
+        // Successful column builds carry no outcome.
+        if (!txState->BuildIndexOutcome && !IsLegacyColumnBuildCancellation(*context.SS, *txState)) {
+            for (auto& [columnId, column] : tableInfo->Columns) {
+                if (column.IsDropped() || !column.IsBuildInProgress) {
+                    continue;
+                }
 
-            if (!column.second.IsBuildInProgress)
-                continue;
+                YDB_LOG_INFO_CTX(context.Ctx, "Terminating build column process",
+                    {"column", column.Name},
+                );
 
-            YDB_LOG_INFO_CTX(context.Ctx, "Terminating build column process",
-                {"column", column.second.Name},
-            );
-
-            column.second.IsBuildInProgress = false;
-            context.SS->PersistTableFinishColumnBuilding(db, txState->TargetPathId, tableInfo, column.first);
+                column.IsBuildInProgress = false;
+                context.SS->PersistTableFinishColumnBuilding(db, txState->TargetPathId, tableInfo, columnId);
+            }
         }
         tableInfo->ResetDescriptionCache();
 

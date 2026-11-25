@@ -1,10 +1,13 @@
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/protos/counters_schemeshard.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/actors/wait_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/sequenceshard/public/events.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/public/lib/value/value.h>
 
@@ -65,9 +68,305 @@ public:
     ui64 TxId = 100;
 };
 
+enum class ECleanupFailure {
+    ResourceExhausted,
+    ResourceExhaustedWithReboot,
+    ResourceExhaustedWithTwoAlters,
+    ResourceExhaustedWithQuotaIncrease,
+    Permanent,
+};
+
+void TestFailedColumnBuildCleanup(bool rejectBuild, ECleanupFailure failure) {
+    TColumnBuildFixture fixture;
+    auto& runtime = fixture.Runtime;
+    const auto schemeShard = TTestTxConfig::SchemeShard;
+    const bool twoAlters = failure == ECleanupFailure::ResourceExhaustedWithTwoAlters;
+    auto* limit = runtime.GetAppData().SchemeShardConfig.AddInFlightCounterConfig();
+    limit->SetType(COUNTER_IN_FLIGHT_OPS_TxAlterTable);
+    limit->SetInFlightLimit(twoAlters ? 2 : 1);
+    RebootTablet(runtime, schemeShard, runtime.AllocateEdgeActor());
+
+    TestCreateTable(runtime, ++fixture.TxId, "/MyRoot", R"(
+        Name: "Blocker"
+        Columns { Name: "key" Type: "Uint32" }
+        KeyColumnNames: ["key"]
+    )");
+    fixture.Env.TestWaitNotification(runtime, fixture.TxId);
+    if (twoAlters) {
+        TestCreateTable(runtime, ++fixture.TxId, "/MyRoot", R"(
+            Name: "SecondBlocker"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        fixture.Env.TestWaitNotification(runtime, fixture.TxId);
+    }
+    WriteRow(runtime, ++fixture.TxId, "/MyRoot/Table", 0, 1, "first");
+    WriteRow(runtime, ++fixture.TxId, "/MyRoot/Table", 1, 101, "second");
+
+    TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> backfill(runtime);
+    const TString columnName = "extra";
+    Ydb::TypedValue literal;
+    literal.mutable_type()->set_type_id(Ydb::Type::INT32);
+    literal.mutable_value()->set_int32_value(42);
+    const auto created = fixture.CreateBuild(columnName, literal, true);
+    UNIT_ASSERT_VALUES_EQUAL_C(created.GetStatus(), Ydb::StatusIds::SUCCESS, created.DebugString());
+    const ui64 buildId = fixture.TxId;
+    runtime.WaitFor("column backfill request", [&] { return !backfill.empty(); });
+
+    const auto checkColumnIsHidden = [&] {
+        const auto description = DescribePath(runtime, "/MyRoot/Table");
+        TestDescribeResult(description, {NLs::PathExist});
+        for (const auto& column : description.GetPathDescription().GetTable().GetColumns()) {
+            if (column.GetName() == columnName) {
+                UNIT_ASSERT_C(column.GetIsBuildInProgress(), column.DebugString());
+                return;
+            }
+        }
+        UNIT_FAIL("The column build has not installed the column");
+    };
+    checkColumnIsHidden();
+
+    const ui64 blockerTxId = ++fixture.TxId;
+    const ui64 secondBlockerTxId = twoAlters ? ++fixture.TxId : 0;
+    TBlockEvents<TEvDataShard::TEvProposeTransaction> alter(runtime, [=](const auto& ev) {
+        const ui64 id = ev->Get()->Record.GetTxId();
+        return id == blockerTxId || (twoAlters && id == secondBlockerTxId);
+    });
+    TestAlterTable(runtime, blockerTxId, "/MyRoot", R"(
+        Name: "Blocker"
+        Columns { Name: "value" Type: "Utf8" }
+    )");
+    if (twoAlters) {
+        TestAlterTable(runtime, secondBlockerTxId, "/MyRoot", R"(
+            Name: "SecondBlocker"
+            Columns { Name: "value" Type: "Utf8" }
+        )");
+    }
+    runtime.WaitFor("blocking ALTERs to reach DataShard", [&] { return alter.size() >= (twoAlters ? 2 : 1); });
+
+    TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> cleanup(runtime, [](const auto& ev) {
+        const auto& request = ev->Get()->Record;
+        return request.TransactionSize() == 1 &&
+            request.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild;
+    });
+    if (rejectBuild) {
+        // DataShard rejects a build request without a target, as in Filling_Failed.
+        backfill.front()->Get()->Record.SetTargetName("");
+        backfill.Unblock(1);
+    } else {
+        TestCancelBuildIndex(runtime, ++fixture.TxId, schemeShard, "/MyRoot", buildId);
+    }
+    runtime.WaitFor("column cleanup proposal", [&] { return !cleanup.empty(); });
+
+    const ui64 cleanupTxId = cleanup.front()->Get()->Record.GetTxId();
+    TBlockEvents<TEvSchemeShard::TEvModifySchemeTransactionResult> cleanupResult(runtime, [cleanupTxId](const auto& ev) {
+        return ev->Get()->Record.GetTxId() == cleanupTxId;
+    });
+    cleanup.Stop().Unblock();
+
+    runtime.WaitFor("column cleanup result", [&] { return !cleanupResult.empty(); });
+    auto& result = cleanupResult.front()->Get()->Record;
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NKikimrScheme::StatusResourceExhausted, result.DebugString());
+    if (failure == ECleanupFailure::Permanent) {
+        result.SetStatus(NKikimrScheme::StatusInvalidParameter);
+    }
+    ui64 subscribedAlter = 0;
+    auto waitObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletion>([&](auto& ev) {
+        const ui64 id = ev->Get()->Record.GetTxId();
+        if (id == blockerTxId || (twoAlters && id == secondBlockerTxId)) {
+            subscribedAlter = id;
+        }
+    });
+    cleanupResult.Stop().Unblock();
+    WaitScheduledEvents(runtime, TDuration::MilliSeconds(50), runtime.AllocateEdgeActor());
+    checkColumnIsHidden();
+    if (failure == ECleanupFailure::ResourceExhaustedWithReboot) {
+        RebootTablet(runtime, schemeShard, runtime.AllocateEdgeActor());
+        checkColumnIsHidden();
+    }
+    waitObserver.Remove();
+
+    const bool quotaIncrease = failure == ECleanupFailure::ResourceExhaustedWithQuotaIncrease;
+    if (twoAlters || quotaIncrease) {
+        const auto sender = runtime.AllocateEdgeActor();
+        TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> completed(runtime, [buildId](const auto& ev) {
+            return ev->Get()->Record.GetTxId() == buildId;
+        });
+        ForwardToTablet(runtime, schemeShard, sender, new TEvSchemeShard::TEvNotifyTxCompletion(buildId));
+
+        if (quotaIncrease) {
+            auto update = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            auto* newLimit = update->Record.MutableConfig()->MutableSchemeShardConfig()->AddInFlightCounterConfig();
+            newLimit->SetType(COUNTER_IN_FLIGHT_OPS_TxAlterTable);
+            newLimit->SetInFlightLimit(2);
+            ForwardToTablet(runtime, schemeShard, sender, update.Release());
+        } else {
+            // Release the other ALTER if cleanup subscribed to one of them.
+            if (alter.front()->Get()->Record.GetTxId() == subscribedAlter) {
+                std::swap(alter.front(), alter.back());
+            }
+            alter.Unblock(1);
+        }
+        runtime.WaitFor("cleanup after the first ALTER slot opens", [&] { return !completed.empty(); }, TDuration::Seconds(10));
+        completed.Stop().clear();
+    }
+
+    alter.Stop().Unblock();
+    fixture.Env.TestWaitNotification(runtime, blockerTxId);
+    if (twoAlters) {
+        fixture.Env.TestWaitNotification(runtime, secondBlockerTxId);
+    }
+    const auto finished = fixture.FinishBuild(buildId);
+    const auto expectedState = rejectBuild ? Ydb::Table::IndexBuildState::STATE_REJECTED : Ydb::Table::IndexBuildState::STATE_CANCELLED;
+    UNIT_ASSERT_VALUES_EQUAL_C(finished.GetIndexBuild().GetState(), expectedState, finished.DebugString());
+
+    if (failure == ECleanupFailure::Permanent) {
+        checkColumnIsHidden();
+
+        const auto next = fixture.CreateBuild("next", literal, true);
+        UNIT_ASSERT_VALUES_EQUAL_C(next.GetStatus(), Ydb::StatusIds::SUCCESS, next.DebugString());
+        const auto rejected = fixture.FinishBuild(fixture.TxId);
+        UNIT_ASSERT_VALUES_EQUAL_C(rejected.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED,
+            rejected.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.DebugString(), "Drop the unfinished columns");
+        checkColumnIsHidden();
+
+        TestAlterTable(runtime, ++fixture.TxId, "/MyRoot", R"(
+            Name: "Table"
+            DropColumns { Name: "extra" }
+        )");
+        fixture.Env.TestWaitNotification(runtime, fixture.TxId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::CheckColumns("Table", {"key", "value"}, {}, {"key"}, true),
+        });
+        return;
+    }
+
+    const auto description = DescribePath(runtime, "/MyRoot/Table");
+    for (const auto& column : description.GetPathDescription().GetTable().GetColumns()) {
+        UNIT_ASSERT_C(column.GetName() != columnName || column.GetIsBuildInProgress(),
+            "Failed cleanup published the unfinished column: " << column.DebugString());
+    }
+    TestDescribeResult(description, {NLs::CheckColumns("Table", {"key", "value"}, {}, {"key"}, true)});
+}
+
 }
 
 Y_UNIT_TEST_SUITE(ColumnBuildTest) {
+    Y_UNIT_TEST(CancelledBuildWithRejectedCleanup) {
+        TestFailedColumnBuildCleanup(false, ECleanupFailure::ResourceExhausted);
+    }
+
+    Y_UNIT_TEST(RejectedBuildWithRejectedCleanup) {
+        TestFailedColumnBuildCleanup(true, ECleanupFailure::ResourceExhausted);
+    }
+
+    Y_UNIT_TEST(CancelledBuildRebootWithRejectedCleanup) {
+        TestFailedColumnBuildCleanup(false, ECleanupFailure::ResourceExhaustedWithReboot);
+    }
+
+    Y_UNIT_TEST(CancelledBuildRetriesWhenEitherAlterFinishes) {
+        TestFailedColumnBuildCleanup(false, ECleanupFailure::ResourceExhaustedWithTwoAlters);
+    }
+
+    Y_UNIT_TEST(CancelledBuildRetriesWhenAlterQuotaIncreases) {
+        TestFailedColumnBuildCleanup(false, ECleanupFailure::ResourceExhaustedWithQuotaIncrease);
+    }
+
+    Y_UNIT_TEST(CancelledBuildWithPermanentCleanupFailure) {
+        TestFailedColumnBuildCleanup(false, ECleanupFailure::Permanent);
+    }
+
+    Y_UNIT_TEST_FLAG(CancelledBuildDropsSequencesUnderInFlightLimit, ReplaceOriginal) {
+        TColumnBuildFixture fixture;
+        auto& runtime = fixture.Runtime;
+        const auto schemeShard = TTestTxConfig::SchemeShard;
+        auto* limit = runtime.GetAppData().SchemeShardConfig.AddInFlightCounterConfig();
+        limit->SetType(COUNTER_IN_FLIGHT_OPS_TxDropSequence);
+        limit->SetInFlightLimit(1);
+        RebootTablet(runtime, schemeShard, runtime.AllocateEdgeActor());
+        TestCreateSequence(runtime, ++fixture.TxId, "/MyRoot", R"(Name: "blocker_sequence")");
+        fixture.Env.TestWaitNotification(runtime, fixture.TxId);
+        WriteRow(runtime, ++fixture.TxId, "/MyRoot/Table", 0, 1, "first");
+
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> backfill(runtime);
+        const ui64 buildId = ++fixture.TxId;
+        NKikimrIndexBuilder::TIndexBuildSettings settings;
+        settings.set_source_path("/MyRoot/Table");
+        settings.set_max_shards_in_flight(2);
+        for (const auto* name : {"first_sequence", "second_sequence"}) {
+            auto* column = settings.mutable_column_build_operation()->add_column();
+            column->SetColumnName(name);
+            column->set_default_from_sequence(name);
+            column->mutable_default_from_literal()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+        }
+        const auto sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, schemeShard, sender, new TEvIndexBuilder::TEvCreateRequest(buildId, "/MyRoot", std::move(settings)));
+        const auto response = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS, response->Get()->Record.DebugString());
+        runtime.WaitFor("column backfill request", [&] { return !backfill.empty(); });
+        for (const auto* name : {"first_sequence", "second_sequence"}) {
+            TestDescribeResult(DescribePrivatePath(runtime, TStringBuilder() << "/MyRoot/Table/" << name), {NLs::PathExist});
+        }
+
+        if (ReplaceOriginal) {
+            TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> sequenceCleanup(runtime, [](const auto& ev) {
+                const auto& request = ev->Get()->Record;
+                return request.TransactionSize() == 1 && request.GetTransaction(0).GetInternal() &&
+                    request.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpDropSequence;
+            });
+            TestCancelBuildIndex(runtime, ++fixture.TxId, schemeShard, "/MyRoot", buildId);
+            runtime.WaitFor("cleanup to submit the first sequence drop", [&] { return !sequenceCleanup.empty(); });
+            TestDropSequence(runtime, ++fixture.TxId, "/MyRoot/Table", "first_sequence");
+            fixture.Env.TestWaitNotification(runtime, fixture.TxId);
+            TestCreateSequence(runtime, ++fixture.TxId, "/MyRoot/Table", R"(Name: "first_sequence")");
+            fixture.Env.TestWaitNotification(runtime, fixture.TxId);
+            sequenceCleanup.Stop().Unblock();
+        } else {
+            const auto blocker = DescribePath(runtime, "/MyRoot/blocker_sequence");
+            const auto& self = blocker.GetPathDescription().GetSelf();
+            const TPathId blockerPathId(self.GetSchemeshardId(), self.GetPathId());
+            TBlockEvents<NSequenceShard::TEvSequenceShard::TEvDropSequence> blockedDrop(runtime, [&](const auto& ev) {
+                return ev->Get()->GetPathId() == blockerPathId;
+            });
+            const ui64 dropTxId = ++fixture.TxId;
+            TestDropSequence(runtime, dropTxId, "/MyRoot", "blocker_sequence");
+            runtime.WaitFor("unrelated sequence drop to reach SequenceShard", [&] { return !blockedDrop.empty(); });
+
+            ui64 sequenceCleanupTxId = 0;
+            auto observeCleanup = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+                const auto& request = ev->Get()->Record;
+                if (request.TransactionSize() == 1 && request.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpDropSequence) {
+                    sequenceCleanupTxId = request.GetTxId();
+                }
+            });
+            bool sequenceDropLimited = false;
+            auto observeResult = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>([&](auto& ev) {
+                const auto& result = ev->Get()->Record;
+                if (result.GetTxId() == sequenceCleanupTxId && result.GetStatus() == NKikimrScheme::StatusResourceExhausted) {
+                    sequenceDropLimited = true;
+                }
+            });
+            TestCancelBuildIndex(runtime, ++fixture.TxId, schemeShard, "/MyRoot", buildId);
+            runtime.WaitFor("sequence cleanup to hit the drop limit", [&] { return sequenceDropLimited; }, TDuration::Seconds(10));
+            observeResult.Remove();
+            observeCleanup.Remove();
+
+            RebootTablet(runtime, schemeShard, runtime.AllocateEdgeActor());
+            blockedDrop.Stop().Unblock();
+            fixture.Env.TestWaitNotification(runtime, dropTxId);
+        }
+        const auto finished = fixture.FinishBuild(buildId);
+        UNIT_ASSERT_VALUES_EQUAL_C(finished.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLED, finished.DebugString());
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::CheckColumns("Table", {"key", "value"}, {}, {"key"}, true),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/first_sequence"), {
+            ReplaceOriginal ? NLs::PathExist : NLs::PathNotExist,
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/second_sequence"), {NLs::PathNotExist});
+    }
+
     Y_UNIT_TEST(InitialScanBlocksColumnBuild) {
         TColumnBuildFixture fixture(TTestEnvOptions()
             .EnableProtoSourceIdInfo(true)

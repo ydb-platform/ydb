@@ -4566,6 +4566,10 @@ void TDataShard::SerializeKeySample(const TUserTable &tinfo,
 
 
 void TDataShard::Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx) {
+    if (HandleLegacyColumnBuildPath(ev, ctx)) {
+        return;
+    }
+
     const auto &rec = ev->Get()->GetRecord();
 
     YDB_LOG_DEBUG_CTX(ctx, "Got scheme resolve result",

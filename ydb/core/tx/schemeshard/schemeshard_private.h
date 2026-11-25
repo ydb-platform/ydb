@@ -66,10 +66,19 @@ namespace TEvPrivate {
         EvKesusResourcesDescribeResult,
         EvKesusSemaphoresDescribeResult,
         EvImportKesusResult,
+        EvIndexBuildCleanupReady,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+
+    struct TEvIndexBuildCleanupReady: TEventLocal<TEvIndexBuildCleanupReady, EvIndexBuildCleanupReady> {
+        const TIndexBuildId BuildId;
+
+        explicit TEvIndexBuildCleanupReady(TIndexBuildId buildId)
+            : BuildId(buildId)
+        {}
+    };
 
     // This event is sent by a schemeshard to itself to signal that some tx state has changed
     // and it should run all the actions associated with this state

@@ -1513,6 +1513,7 @@ struct Schema : NIceDb::Schema {
         struct ParentBuildId : Column<58, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct IsRebuild : Column<59, NScheme::NTypeIds::Bool> {};
         struct RebuildIndexName : Column<60, NScheme::NTypeIds::Utf8> {};
+        struct DropBuildSequenceId : Column<61, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1575,7 +1576,8 @@ struct Schema : NIceDb::Schema {
             RowIdUniqueBuildId,
             ParentBuildId,
             IsRebuild,
-            RebuildIndexName
+            RebuildIndexName,
+            DropBuildSequenceId
         >;
     };
 
@@ -2110,6 +2112,7 @@ struct Schema : NIceDb::Schema {
         struct FamilyName : Column<6, NScheme::NTypeIds::String> {};
         struct DefaultFromSequence : Column<7, NScheme::NTypeIds::Utf8> {};
         struct BitReverseSequenceValue : Column<8, NScheme::NTypeIds::Bool> {};
+        struct CleanupSequenceId : Column<9, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
 
         using TKey = TableKey<Id, ColumnNo>;
         using TColumns = TableColumns<
@@ -2120,7 +2123,8 @@ struct Schema : NIceDb::Schema {
             NotNull,
             FamilyName,
             DefaultFromSequence,
-            BitReverseSequenceValue
+            BitReverseSequenceValue,
+            CleanupSequenceId
         >;
     };
 

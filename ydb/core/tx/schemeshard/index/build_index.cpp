@@ -23,6 +23,30 @@ void TSchemeShard::Handle(TEvIndexBuilder::TEvForgetRequest::TPtr& ev, const TAc
     Execute(CreateTxForget(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvPrivate::TEvIndexBuildCleanupReady::TPtr& ev, const TActorContext& ctx) {
+    const auto id = ev->Get()->BuildId;
+    if (const auto* build = IndexBuilds.FindPtr(id); build && !(*build)->IsBroken && !(*build)->DropColumnsTxId) {
+        const auto state = (*build)->State;
+        if (state == TIndexBuildInfo::EState::Cancellation_DroppingColumns ||
+            state == TIndexBuildInfo::EState::Rejection_DroppingColumns) {
+            Execute(CreateTxProgress(id), ctx);
+        }
+    }
+}
+
+void TSchemeShard::WakeIndexBuildCleanupWaiters(TTxState::ETxType txType, const TActorContext& ctx) {
+    auto it = IndexBuildCleanupWaiters.find(txType);
+    TString error;
+    if (it == IndexBuildCleanupWaiters.end() || !CheckInFlightLimit(txType, error)) {
+        return;
+    }
+
+    for (const auto buildId : it->second) {
+        ctx.Send(SelfId(), new TEvPrivate::TEvIndexBuildCleanupReady(buildId));
+    }
+    IndexBuildCleanupWaiters.erase(it);
+}
+
 void TSchemeShard::Handle(TEvIndexBuilder::TEvListRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxList(ev), ctx);
 }
@@ -292,7 +316,8 @@ void TSchemeShard::PersistBuildIndexDropColumnsTx(NIceDb::TNiceDb& db, const TIn
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
         NIceDb::TUpdate<Schema::IndexBuild::DropColumnsTxId>(indexInfo.DropColumnsTxId),
         NIceDb::TUpdate<Schema::IndexBuild::DropColumnsTxStatus>(indexInfo.DropColumnsTxStatus),
-        NIceDb::TUpdate<Schema::IndexBuild::DropColumnsTxDone>(indexInfo.DropColumnsTxDone));
+        NIceDb::TUpdate<Schema::IndexBuild::DropColumnsTxDone>(indexInfo.DropColumnsTxDone),
+        NIceDb::TUpdate<Schema::IndexBuild::DropBuildSequenceId>(indexInfo.DropBuildSequenceId));
 }
 
 void TSchemeShard::PersistBuildIndexProcessed(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {

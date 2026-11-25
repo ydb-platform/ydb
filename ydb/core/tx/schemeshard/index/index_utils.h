@@ -181,8 +181,8 @@ TVector<NKikimrSchemeOp::TTableDescription> CalcIndexImplTables(
     const NKikimrSchemeOp::TTableDescription& baseTable,
     const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 
-TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
-TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
+TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo, bool includeBuildInProgress = true);
+TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc, bool includeBuildInProgress = true);
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 
 bool IsVirtualGeneratedIndexColumn(const NSchemeShard::TTableInfo::TPtr& tableInfo, const TString& columnName);
@@ -273,7 +273,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         const NSchemeShard::TSchemeLimits& schemeLimits, bool uniformTable,
         TTableColumns& implTableColumns, NKikimrScheme::EStatus& status, TString& error)
 {
-    const TTableColumns baseTableColumns = ExtractInfo(tableDesc);
+    const TTableColumns baseTableColumns = ExtractInfo(tableDesc, /*includeBuildInProgress=*/false);
     const TIndexColumns indexKeys = ExtractInfo(indexDesc);
 
     if (indexKeys.KeyColumns.empty()) {

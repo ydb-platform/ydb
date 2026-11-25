@@ -138,6 +138,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         TString FamilyName;
         TString DefaultFromSequence;
         bool BitReverseSequenceValue = false;
+        TLocalPathId CleanupSequenceId = InvalidLocalPathId;
 
         TColumnBuildInfo(const TString& name, const TString& serializedLiteral, bool notNull, const TString& familyName)
             : ColumnName(name)
@@ -396,6 +397,8 @@ public:
     NKikimrScheme::EStatus UnlockTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus DropColumnsTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus CreateBuildSequenceTxStatus = NKikimrScheme::StatusSuccess;
+    // The sequence targeted by DropColumnsTxId after the column ALTER has completed.
+    TLocalPathId DropBuildSequenceId = InvalidLocalPathId;
 
     // Fulltext rowid auto-provisioning (parent fulltext build): when a fulltext index is built on a
     // custom-PK table without the rowid infrastructure, the parent build first spawns child builds -
@@ -559,6 +562,7 @@ public:
         auto& back = BuildColumns.emplace_back(columnName, defaultFromLiteral, notNull, familyName);
         back.DefaultFromSequence = defaultFromSequence;
         back.BitReverseSequenceValue = bitReverseSequenceValue;
+        back.CleanupSequenceId = row.template GetValueOrDefault<Schema::BuildColumnOperationSettings::CleanupSequenceId>(InvalidLocalPathId);
     }
 
     template<class TRowSetType>
@@ -719,6 +723,8 @@ public:
         indexInfo->DropColumnsTxDone =
             row.template GetValueOrDefault<Schema::IndexBuild::DropColumnsTxDone>(
                 indexInfo->DropColumnsTxDone);
+        indexInfo->DropBuildSequenceId =
+            row.template GetValueOrDefault<Schema::IndexBuild::DropBuildSequenceId>(InvalidLocalPathId);
 
         indexInfo->CreateBuildSequenceTxId =
             row.template GetValueOrDefault<Schema::IndexBuild::CreateBuildSequenceTxId>(

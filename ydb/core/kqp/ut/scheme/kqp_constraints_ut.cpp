@@ -8,6 +8,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -1327,6 +1328,111 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         auto result = execute("SELECT * FROM TestTable ORDER BY Key;");
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).GetColumnsMeta().size(), 2);
         CompareYson("[[1u;[42u]]]", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(UnfinishedDefaultColumnIsNotReadableOrIndexable) {
+        TKikimrRunner kikimr(DefaultsSettings(true).SetUseRealThreads(false));
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto querySession = kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().GetSession(); });
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = kikimr.RunCall([&] { return tableClient.CreateSession().GetValueSync().GetSession(); });
+        const auto execute = [&](const TString& query) {
+            return kikimr.RunCall([&] { return querySession.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync(); });
+        };
+        const auto success = [&](const TString& query) {
+            auto result = execute(query);
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return result;
+        };
+
+        success("CREATE TABLE TestTable (Key Uint32 NOT NULL, Value Uint32, PRIMARY KEY (Key));");
+        success("UPSERT INTO TestTable (Key, Value) VALUES (1, 42);");
+
+        // Fail the scan and reject the cleanup proposal, leaving the column write-only.
+        auto scan = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([](auto& ev) {
+            ev->Get()->Record.SetTargetName("");
+        });
+        auto cleanup = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>([](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (record.TransactionSize() == 1 && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild) {
+                record.MutableTransaction(0)->MutableDropColumnBuild()->MutableSettings()->SetTable("/Root/MissingTable");
+            }
+        });
+        const auto added = execute("ALTER TABLE TestTable ADD COLUMN Pending Uint32 DEFAULT 10;");
+        UNIT_ASSERT_C(!added.IsSuccess(), added.GetIssues().ToString());
+        scan.Remove();
+        cleanup.Remove();
+
+        const auto internalDescription = kikimr.RunCall([&] { return kikimr.GetTestClient().Ls("/Root/TestTable"); });
+        const auto& schema = internalDescription->Record.GetPathDescription().GetTable();
+        const auto pending = FindIf(schema.GetColumns(), [](const auto& column) { return column.GetName() == "Pending"; });
+        UNIT_ASSERT_C(pending != schema.GetColumns().end() && pending->GetIsBuildInProgress(), schema.DebugString());
+
+        const auto describe = kikimr.RunCall([&] { return tableSession.DescribeTable("/Root/TestTable").GetValueSync(); });
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        const auto& description = describe.GetTableDescription();
+        UNIT_ASSERT_VALUES_EQUAL(description.GetTableColumns().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(description.GetPrimaryKeyColumns().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(description.GetPrimaryKeyColumns().front(), "Key");
+
+        const auto showCreate = success("SHOW CREATE TABLE `/Root/TestTable`;");
+        TResultSetParser showCreateParser(showCreate.GetResultSet(0));
+        UNIT_ASSERT(showCreateParser.TryNextRow());
+        const auto createQuery = showCreateParser.ColumnParser("CreateQuery").GetOptionalUtf8();
+        UNIT_ASSERT(createQuery);
+        UNIT_ASSERT_STRING_CONTAINS(*createQuery, "Value");
+        UNIT_ASSERT(createQuery->find("Pending") == std::string::npos);
+
+        const auto readTable = [&](const NYdb::NTable::TReadTableSettings& settings) {
+            return kikimr.RunCall([&] {
+                auto iterator = tableSession.ReadTable("/Root/TestTable", settings).ExtractValueSync();
+                UNIT_ASSERT_C(iterator.IsSuccess(), iterator.GetIssues().ToString());
+                return iterator.ReadNext().ExtractValueSync();
+            });
+        };
+        auto allTable = readTable(NYdb::NTable::TReadTableSettings().ReturnNotNullAsOptional(false));
+        UNIT_ASSERT_C(allTable.IsSuccess(), allTable.GetIssues().ToString());
+        auto tableResultSet = allTable.ExtractPart();
+        UNIT_ASSERT_VALUES_EQUAL(tableResultSet.GetColumnsMeta().size(), 2);
+        TResultSetParser tableParser(tableResultSet);
+        UNIT_ASSERT(tableParser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(tableParser.ColumnParser("Key").GetUint32(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tableParser.ColumnParser("Value").GetOptionalUint32().value(), 42);
+        auto selectedTable = readTable(NYdb::NTable::TReadTableSettings().AppendColumns("Pending"));
+        UNIT_ASSERT_VALUES_EQUAL_C(selectedTable.GetStatus(), EStatus::SCHEME_ERROR, selectedTable.GetIssues().ToString());
+
+        const auto readRows = [&](const std::vector<std::string>& columns) {
+            return kikimr.RunCall([&] {
+                auto keys = TValueBuilder().BeginList().AddListItem().BeginStruct()
+                    .AddMember("Key").Uint32(1).EndStruct().EndList().Build();
+                return tableClient.ReadRows("/Root/TestTable", std::move(keys), columns).ExtractValueSync();
+            });
+        };
+        auto allRows = readRows({});
+        UNIT_ASSERT_C(allRows.IsSuccess(), allRows.GetIssues().ToString());
+        CompareYson("[[1u;[42u]]]", FormatResultSetYson(allRows.GetResultSet()));
+        const auto selectedRows = readRows({"Pending"});
+        UNIT_ASSERT_VALUES_EQUAL_C(selectedRows.GetStatus(), EStatus::SCHEME_ERROR, selectedRows.GetIssues().ToString());
+
+        const auto addIndex = [&](const NYdb::NTable::TIndexDescription& index) {
+            return kikimr.RunCall([&] {
+                return tableSession.AlterTable("/Root/TestTable", NYdb::NTable::TAlterTableSettings()
+                    .AppendAddIndexes(index)).GetValueSync();
+            });
+        };
+        for (const auto& index : {
+            NYdb::NTable::TIndexDescription::CreateGlobalIndex("PendingKey", {"Pending"}),
+            NYdb::NTable::TIndexDescription::CreateGlobalIndex("PendingCover", {"Value"}, {"Pending"}),
+        }) {
+            const auto result = addIndex(index);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Pending");
+        }
+        const auto indexed = addIndex(NYdb::NTable::TIndexDescription::CreateGlobalIndex("ByValue", {"Value"}));
+        UNIT_ASSERT_C(indexed.IsSuccess(), indexed.GetIssues().ToString());
+        const auto indexedDescription = kikimr.RunCall([&] { return tableSession.DescribeTable("/Root/TestTable").GetValueSync(); });
+        UNIT_ASSERT_C(indexedDescription.IsSuccess(), indexedDescription.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(indexedDescription.GetTableDescription().GetTableColumns().size(), 2);
     }
 
     Y_UNIT_TEST_TWIN(AlterTableViaTableClient, WithData) {

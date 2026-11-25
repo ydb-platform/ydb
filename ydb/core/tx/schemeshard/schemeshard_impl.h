@@ -1970,6 +1970,7 @@ public:
     THashMap<TString, std::shared_ptr<TIndexBuildInfo>> IndexBuildsByUid;
     TSet<std::pair<TInstant, TIndexBuildId>> IndexBuildsByTime;
     THashMap<TTxId, TIndexBuildId> TxIdToIndexBuilds;
+    THashMap<TTxState::ETxType, THashSet<TIndexBuildId>> IndexBuildCleanupWaiters;
 
     // do not share pipes with operations
     // also do not share pipes between IndexBuilds
@@ -2102,6 +2103,8 @@ public:
     void Handle(TEvIndexBuilder::TEvGetIndexStatsResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvIndexBuildCleanupReady::TPtr& ev, const TActorContext& ctx);
+    void WakeIndexBuildCleanupWaiters(TTxState::ETxType txType, const TActorContext& ctx);
 
     void Resume(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx);
     void SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx);

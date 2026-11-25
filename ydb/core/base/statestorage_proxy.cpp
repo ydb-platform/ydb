@@ -1133,16 +1133,17 @@ protected:
     const ui64 Cookie;
     TIntrusivePtr<TStateStorageInfo> Info;
     ui64 TabletID;
-    // the delete goes to every replica of each ring group but the disconnected ones, so that no copy of the record is
-    // left; it succeeds with the majority of the replicas selected for the tablet in each group taking part in quorums,
-    // as only they hold the record, and the others reply ALREADY anyway
     struct TTarget {
         ui32 GroupIdx;
-        bool Selected;
+        bool CountsForQuorum;
     };
-    // Each delete has its own reply address, including for replicas that do not echo a cookie.
+    // Each target gets its own reply address because legacy replicas reply with a zero cookie.
     THashMap<TActorId, TTarget> PendingTargets;
     TVector<ui32> GroupAcks;
+
+    static bool RequiresQuorum(const TStateStorageInfo::TRingGroup& group) {
+        return group.State != ERingGroupState::DISCONNECTED && !group.WriteOnly;
+    }
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1160,7 +1161,7 @@ public:
         bool anyGroup = false;
         for (ui32 idx : xrange(Info->RingGroups.size())) {
             const auto& ringGroup = Info->RingGroups[idx];
-            if (ringGroup.State == ERingGroupState::DISCONNECTED || ringGroup.WriteOnly) {
+            if (!RequiresQuorum(ringGroup)) {
                 continue;
             }
             anyGroup = true;
@@ -1184,20 +1185,21 @@ public:
         GroupAcks.assign(Info->RingGroups.size(), 0);
         for (ui32 idx : xrange(Info->RingGroups.size())) {
             const auto& ringGroup = Info->RingGroups[idx];
-            if (ringGroup.State == ERingGroupState::DISCONNECTED) {
-                continue;
+            THashSet<TActorId> quorumReplicas;
+            if (RequiresQuorum(ringGroup)) {
+                TStateStorageInfo::TSelection selection;
+                Info->SelectReplicas(TabletID, &selection, idx);
+                quorumReplicas.insert(selection.begin(), selection.end());
             }
-            TStateStorageInfo::TSelection selection;
-            Info->SelectReplicas(TabletID, &selection, idx);
-            const TActorId* selectedBegin = selection.SelectedReplicas.Get();
-            const TActorId* selectedEnd = selectedBegin + selection.Sz;
+            // Any replica can retain an entry after reconfiguration. Even groups marked DISCONNECTED
+            // can be reachable, for example in Bridge HOT_STANDBY or SUSPENDED.
             for (const auto& ring : ringGroup.Rings) {
                 for (const TActorId& replica : ring.Replicas) {
-                    const TActorId replyTo = RegisterAlias();
-                    PendingTargets.emplace(replyTo, TTarget{idx, std::find(selectedBegin, selectedEnd, replica) != selectedEnd});
-                    TActivationContext::Send(new IEventHandle(replica, replyTo,
+                    const TActorIdentity replyTo(RegisterAlias());
+                    PendingTargets.emplace(replyTo, TTarget{idx, quorumReplicas.contains(replica)});
+                    replyTo.Send(replica,
                         new TEvStateStorage::TEvReplicaDelete(TabletID, Info->ClusterStateGeneration, Info->ClusterStateGuid),
-                        IEventHandle::FlagTrackDelivery));
+                        IEventHandle::FlagTrackDelivery);
                 }
             }
         }
@@ -1244,7 +1246,7 @@ public:
             SendResponse(NKikimrProto::ERROR);
             return;
         }
-        if (target->second.Selected) {
+        if (target->second.CountsForQuorum) {
             ++GroupAcks[target->second.GroupIdx];
         }
         PendingTargets.erase(target);

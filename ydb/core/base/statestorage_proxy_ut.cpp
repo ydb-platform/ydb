@@ -816,6 +816,26 @@ class TDeleteFixture {
     TTestActorRuntimeBase Runtime;
     NKikimrConfig::TStateStorageConfig Config;
 
+    void RegisterReplicas(const TIntrusivePtr<TStateStorageInfo>& info, const THashSet<TActorId>& unavailable = {}) {
+        ui32 replicaIndex = 0;
+        for (const auto& replica : info->SelectAllReplicas()) {
+            if (!unavailable.contains(replica)) {
+                const ui32 nodeIndex = replica.NodeId() - Runtime.GetNodeId();
+                const TActorId actor = Runtime.Register(CreateStateStorageReplica(info, replicaIndex), nodeIndex);
+                Runtime.RegisterService(replica, actor, nodeIndex);
+            }
+            ++replicaIndex;
+        }
+    }
+
+    void Delete(const TActorId& proxy, const TActorId& edge, NKikimrProto::EReplyStatus expectedStatus) {
+        Runtime.SendAsync(new IEventHandle(proxy, edge, new TEvStateStorage::TEvDelete(TabletId)));
+        auto result = Runtime.GrabEdgeEvent<TEvStateStorage::TEvDeleteResult>(edge, TDuration::Seconds(5));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->TabletID, TabletId);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, expectedStatus);
+    }
+
 public:
     explicit TDeleteFixture(ui32 nodeCount)
         : Runtime(nodeCount)
@@ -864,44 +884,69 @@ public:
             unavailable.insert(selection.SelectedReplicas[index]);
         }
 
-        THashSet<TActorId> disconnected;
-        ui32 replicaIndex = 0;
-        for (const auto& group : info->RingGroups) {
-            for (const auto& ring : group.Rings) {
-                for (const auto& replica : ring.Replicas) {
-                    if (group.State == ERingGroupState::DISCONNECTED) {
-                        disconnected.insert(replica);
-                    }
-                    if (!unavailable.contains(replica)) {
-                        const ui32 nodeIndex = replica.NodeId() - Runtime.GetNodeId();
-                        const TActorId actor = Runtime.Register(CreateStateStorageReplica(info, replicaIndex), nodeIndex);
-                        Runtime.RegisterService(replica, actor, nodeIndex);
-                    }
-                    ++replicaIndex;
-                }
-            }
-        }
-
-        auto requests = Runtime.AddObserver<TEvStateStorage::TEvReplicaDelete>([&](auto& ev) {
-            UNIT_ASSERT_C(!disconnected.contains(ev->Recipient), ev->Recipient);
-        });
+        RegisterReplicas(info, unavailable);
         THashSet<TActorId> replies;
         auto responses = Runtime.AddObserver<TEvStateStorage::TEvReplicaInfo>([&](auto& ev) {
-            const auto& record = ev->Get()->Record;
-            UNIT_ASSERT_VALUES_EQUAL(record.GetTabletID(), TabletId);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 0);
-            UNIT_ASSERT_VALUES_EQUAL(record.GetCookie(), 0);
-            UNIT_ASSERT(!ev->Sender.IsService());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTabletID(), TabletId);
             UNIT_ASSERT_C(replies.insert(ev->Sender).second, ev->Sender);
         });
         const TActorId proxy = Runtime.Register(CreateStateStorageProxy(info, nullptr, nullptr));
-        const TActorId edge = Runtime.AllocateEdgeActor();
-        Runtime.SendAsync(new IEventHandle(proxy, edge, new TEvStateStorage::TEvDelete(TabletId)));
-        auto result = Runtime.GrabEdgeEvent<TEvStateStorage::TEvDeleteResult>(edge, TDuration::Seconds(5));
-        UNIT_ASSERT(result);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->TabletID, TabletId);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, expectedStatus);
+        Delete(proxy, Runtime.AllocateEdgeActor(), expectedStatus);
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), expectedReplies);
+    }
+
+    auto ObserveCookieLessReplies() {
+        return Runtime.AddObserver<TEvStateStorage::TEvReplicaInfo>([](auto& ev) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 0);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetCookie(), 0);
+            UNIT_ASSERT(!ev->Sender.IsService());
+        });
+    }
+
+    void CheckDeleteBeforeRejoin() {
+        using TConfig = NKikimrConfig::TStateStorageConfig;
+        AddGroup(0, 1, 1);
+        AddGroup(1, 1, 1).SetPileState(TConfig::SYNCHRONIZED);
+        auto info = BuildStateStorageInfo(Config);
+        RegisterReplicas(info);
+        const TActorId proxy = Runtime.Register(CreateStateStorageProxy(info, nullptr, nullptr));
+        const TActorId edge = Runtime.AllocateEdgeActor();
+        auto expectInfo = [&](NKikimrProto::EReplyStatus status) {
+            auto result = Runtime.GrabEdgeEvent<TEvStateStorage::TEvInfo>(edge, TDuration::Seconds(5));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, status);
+            return result;
+        };
+        auto lookup = [&](NKikimrProto::EReplyStatus status) {
+            Runtime.SendAsync(new IEventHandle(proxy, edge, new TEvStateStorage::TEvLookup(
+                TabletId, 0, TEvStateStorage::TProxyOptions::SigSync)));
+            return expectInfo(status);
+        };
+        auto reconfigure = [&](TConfig::EPileState state) {
+            Config.MutableRingGroups(1)->SetPileState(state);
+            Config.SetClusterStateGeneration(Config.GetClusterStateGeneration() + 1);
+            auto updated = BuildStateStorageInfo(Config);
+            for (const auto& replica : updated->SelectAllReplicas()) {
+                const ui32 nodeIndex = replica.NodeId() - Runtime.GetNodeId();
+                Runtime.SendAsync(new IEventHandle(replica, {},
+                    new TEvStateStorage::TEvUpdateGroupConfig(updated, nullptr, nullptr)), nodeIndex);
+            }
+            Runtime.SendAsync(new IEventHandle(proxy, {},
+                new TEvStateStorage::TEvUpdateGroupConfig(updated, nullptr, nullptr)));
+        };
+
+        auto missing = lookup(NKikimrProto::NODATA);
+        Runtime.SendAsync(new IEventHandle(proxy, edge, new TEvStateStorage::TEvUpdate(
+            TabletId, 0, edge, edge, 1, 0, missing->Get()->Signature)));
+        expectInfo(NKikimrProto::OK);
+
+        // Bridge HOT_STANDBY maps to DISCONNECTED in StateStorage while the replicas stay reachable.
+        reconfigure(TConfig::DISCONNECTED);
+        Delete(proxy, edge, NKikimrProto::OK);
+
+        reconfigure(TConfig::NOT_SYNCHRONIZED);
+        reconfigure(TConfig::SYNCHRONIZED);
+        lookup(NKikimrProto::NODATA);
     }
 };
 
@@ -969,7 +1014,15 @@ Y_UNIT_TEST_SUITE(TStateStorageProxyDelete) {
         TDeleteFixture f(3);
         f.AddGroup(0, 3, 3);
         f.AddGroup(0, 3, 3);
+        auto responses = f.ObserveCookieLessReplies();
         f.CheckDelete(NKikimrProto::OK, 6);
+    }
+
+    Y_UNIT_TEST(DeleteSucceedsWithPartialQuorum) {
+        TDeleteFixture f(6);
+        f.AddGroup(0, 3, 3);
+        f.AddGroup(3, 3, 3);
+        f.CheckDelete(NKikimrProto::OK, 5, 1, 1);
     }
 
     Y_UNIT_TEST(DeleteRequiresBothQuorumsOnSharedNodes) {
@@ -986,11 +1039,16 @@ Y_UNIT_TEST_SUITE(TStateStorageProxyDelete) {
         f.CheckDelete(NKikimrProto::ERROR, 6, 0, 2);
     }
 
-    Y_UNIT_TEST(DeleteSkipsDisconnectedRingGroup) {
+    Y_UNIT_TEST(DeleteSucceedsWithoutRepliesFromDisconnectedGroup) {
         TDeleteFixture f(2);
         f.AddGroup(0, 1, 1);
         f.AddGroup(1, 1, 1).SetPileState(NKikimrConfig::TStateStorageConfig::DISCONNECTED);
-        f.CheckDelete(NKikimrProto::OK, 1);
+        f.CheckDelete(NKikimrProto::OK, 1, 1, 1);
+    }
+
+    Y_UNIT_TEST(DeleteClearsReachableReplicaBeforeRejoin) {
+        TDeleteFixture f(2);
+        f.CheckDeleteBeforeRejoin();
     }
 
     Y_UNIT_TEST(DeleteFailsOnNewerGeneration) {

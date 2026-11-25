@@ -19,6 +19,22 @@ template<> struct TMatchingResultType<TEvBlobStorage::TEvVCollectGarbage> { usin
 template<> struct TMatchingResultType<TEvBlobStorage::TEvVGetBarrier> { using Type = TEvBlobStorage::TEvVGetBarrierResult; };
 template<typename T> using TMatchingResultTypeT = typename TMatchingResultType<T>::Type;
 
+template<typename TReply, typename TRecord>
+void MakeQueueError(TReply& reply, const TRecord& request, NKikimrProto::EReplyStatus status,
+        const TString& errorReason, const TVDiskID* currentVDiskId) {
+    if (currentVDiskId && request.HasVDiskID()) {
+        TVDiskID target = VDiskIDFromVDiskID(request.GetVDiskID());
+        if (target.SameExceptGeneration(*currentVDiskId) && target.GroupGeneration < currentVDiskId->GroupGeneration) {
+            reply.MakeError(NKikimrProto::RACE, errorReason, request);
+            if constexpr (requires { reply.Record.MutableVDiskID(); }) {
+                VDiskIDFromVDiskID(*currentVDiskId, reply.Record.MutableVDiskID());
+            }
+            return;
+        }
+    }
+    reply.MakeError(status, errorReason, request);
+}
+
 template<typename TPtr>
 inline NLWTrace::TOrbit MoveOrbit(TPtr&) {
     return {};
@@ -123,7 +139,8 @@ public:
         }
     }
 
-    IEventBase *MakeErrorReply(NKikimrProto::EReplyStatus status, const TString& errorReason,
+    std::pair<std::unique_ptr<IEventBase>, NKikimrProto::EReplyStatus> MakeErrorReply(
+            NKikimrProto::EReplyStatus status, const TString& errorReason, const TVDiskID* currentVDiskId,
             const ::NMonitoring::TDynamicCounters::TCounterPtr& deserItems,
             const ::NMonitoring::TDynamicCounters::TCounterPtr& deserBytes);
 

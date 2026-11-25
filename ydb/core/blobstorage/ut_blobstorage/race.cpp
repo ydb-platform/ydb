@@ -1,6 +1,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/activity.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_pdisk_error.h>
 
 #include <optional>
 
@@ -265,6 +266,150 @@ void RunGroupReconfigurationRaceTest(TBlobStorageGroupType type) {
 }
 
 Y_UNIT_TEST_SUITE(GroupReconfigurationRace) {
+    Y_UNIT_TEST(InFlightPutWhenSecondRealmIsExcluded) {
+        using TState = NKikimrBlobStorage::TGroupState;
+        using TRole = NKikimrBlobStorage::TDataCenterState;
+        TFeatureFlags flags;
+        flags.SetEnablePutBatchingForBlobStorage(false);
+        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+            .NodeCount = 9,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+            .FeatureFlags = flags,
+        });
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        ui32 groupId = env.GetGroups().front();
+        auto configure = [&](TState::EState state, TRole::EState secondRealm) {
+            NKikimrBlobStorage::TConfigRequest request;
+            request.SetIgnoreGroupFailModelChecks(true);
+            request.SetIgnoreDegradedGroupsChecks(state == TState::DC_SOLO_INV1);
+            NKikimrBlobStorage::TDefineGroupState::TGroupDefinition* group =
+                request.AddCommand()->MutableDefineGroupState()->AddGroups();
+            group->SetGroupId(groupId);
+            group->SetGroupState(state);
+            group->AddFailRealmStates(TRole::EXCLUDED);
+            group->AddFailRealmStates(secondRealm);
+            group->AddFailRealmStates(TRole::INCLUDED);
+            NKikimrBlobStorage::TConfigResponse result = env.Invoke(request);
+            UNIT_ASSERT_C(result.GetSuccess(), result.GetErrorDescription());
+        };
+        configure(TState::DC_FAILURE_INV1, TRole::INCLUDED);
+        env.Sim(TDuration::Seconds(30));
+        ui32 generation = env.GetGroupInfo(groupId)->GroupGeneration;
+        TString data(1024, 'x');
+        TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        TActorId edge = env.Runtime->AllocateEdgeActor(1);
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> held;
+        std::set<TActorId> queues;
+        ui32 drops = 0;
+        ui32 queueRaces = 0;
+        std::unique_ptr<IEventHandle> result;
+        bool delayReplies = true;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvPutResult && ev->Recipient == edge) {
+                result = std::move(ev);
+                return false;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvVPutResult) {
+                const NKikimrBlobStorage::TEvVPutResult& r = ev->Get<TEvBlobStorage::TEvVPutResult>()->Record;
+                if (LogoBlobIDFromLogoBlobID(r.GetBlobID()).FullID() == id) {
+                    TVDiskID disk = VDiskIDFromVDiskID(r.GetVDiskID());
+                    if (delayReplies && disk.FailRealm == 1 && disk.GroupGeneration == generation
+                            && r.GetStatus() == NKikimrProto::OK) {
+                        queues.insert(ev->Recipient);
+                        held.emplace_back(nodeId, std::move(ev));
+                        return false;
+                    }
+                    if (queues.contains(ev->Sender) && r.GetStatus() == NKikimrProto::RACE) {
+                        UNIT_ASSERT_VALUES_EQUAL(disk.GroupGeneration, generation + 1);
+                        ++queueRaces;
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvVWindowChange && queues.contains(ev->Recipient)
+                    && ev->Get<TEvBlobStorage::TEvVWindowChange>()->Record.GetDropConnection()) {
+                ++drops;
+            }
+            return true;
+        };
+
+        // Keep the second realm's successful writes in flight at BSQueue while the old VDisks shut down.
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max(),
+                NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticMinLatency));
+        });
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(!held.empty());
+        UNIT_ASSERT(!result);
+        configure(TState::DC_SOLO_INV1, TRole::EXCLUDED);
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(drops);
+        delayReplies = false;
+        for (auto& [nodeId, ev] : held) {
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        env.Sim(TDuration::Seconds(30));
+        env.Runtime->FilterFunction = {};
+        TIntrusivePtr<TBlobStorageGroupInfo> current = env.GetGroupInfo(groupId);
+        UNIT_ASSERT_VALUES_EQUAL(current->GroupGeneration, generation + 1);
+        UNIT_ASSERT(current->GetMirror3dcState().State == TState::DC_SOLO_INV1);
+        env.PutBlob(groupId, TLogoBlobID(100500, 1, 2, 0, data.size(), 0), data);
+        UNIT_ASSERT(result);
+        const TEvBlobStorage::TEvPutResult* putResult = result->Get<TEvBlobStorage::TEvPutResult>();
+        UNIT_ASSERT_VALUES_EQUAL_C(putResult->Status, NKikimrProto::OK, putResult->ErrorReason);
+        UNIT_ASSERT(queueRaces);
+    }
+
+    Y_UNIT_TEST(FailedVDiskRepliesRaceOnGenerationMismatch) {
+        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+        });
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        TIntrusivePtr<TBlobStorageGroupInfo> info = env.GetGroupInfo(env.GetGroups().front());
+        TVDiskID disk = info->GetVDiskId(0);
+        TActorId vdisk = info->GetActorId(0);
+        TActorId edge = env.Runtime->AllocateEdgeActor(vdisk.NodeId());
+        env.Runtime->Send(new IEventHandle(vdisk, edge,
+            new TEvPDiskErrorStateChange(NKikimrProto::CORRUPTED, 0, "test disk failure")), edge.NodeId());
+        TActorId queue = env.CreateQueueActor(disk, NKikimrBlobStorage::PutTabletLog, 0, edge.NodeId());
+        auto putThroughQueue = [&](const TVDiskID& target) {
+            env.Runtime->Send(new IEventHandle(queue, edge, new TEvBlobStorage::TEvVPut(
+                TLogoBlobID(1, 1, 1, 0, 16, 0, 1), TRope(TString(16, 'x')), target, false, nullptr,
+                TInstant::Max(), NKikimrBlobStorage::TabletLog, false)), edge.NodeId());
+            return env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge, false);
+        };
+
+        for (ui32 generation : {disk.GroupGeneration - 1, disk.GroupGeneration + 1, disk.GroupGeneration}) {
+            TVDiskID target = disk;
+            target.GroupGeneration = generation;
+            NKikimrProto::EReplyStatus expected = generation == disk.GroupGeneration
+                ? NKikimrProto::VDISK_ERROR_STATE : NKikimrProto::RACE;
+            auto check = std::make_unique<TEvBlobStorage::TEvVCheckReadiness>(false);
+            VDiskIDFromVDiskID(target, check->Record.MutableVDiskID());
+            env.Runtime->Send(new IEventHandle(vdisk, edge, check.release()), edge.NodeId());
+            TEvBlobStorage::TEvVCheckReadinessResult::TPtr readiness =
+                env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVCheckReadinessResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL(readiness->Get()->Record.GetStatus(), expected);
+
+            TEvBlobStorage::TEvVPutResult::TPtr put = putThroughQueue(target);
+            const NKikimrBlobStorage::TEvVPutResult& record = put->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), expected);
+            UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(record.GetVDiskID()), disk);
+            UNIT_ASSERT_VALUES_EQUAL(record.HasRecentGroup(), generation < disk.GroupGeneration);
+            if (record.HasRecentGroup()) {
+                UNIT_ASSERT_VALUES_EQUAL(record.GetRecentGroup().GetGroupGeneration(), disk.GroupGeneration);
+            }
+        }
+
+        // The matching-generation disk error above disconnected the queue for ten seconds.
+        UNIT_ASSERT_VALUES_EQUAL(putThroughQueue(disk)->Get()->Record.GetStatus(), NKikimrProto::NOTREADY);
+        TVDiskID stale = disk;
+        --stale.GroupGeneration;
+        TEvBlobStorage::TEvVPutResult::TPtr result = putThroughQueue(stale);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::RACE);
+        UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(result->Get()->Record.GetVDiskID()), disk);
+    }
+
     Y_UNIT_TEST(Test_block42) {
         RunGroupReconfigurationRaceTest(TBlobStorageGroupType::Erasure4Plus2Block);
     }

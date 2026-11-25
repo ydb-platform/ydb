@@ -1294,26 +1294,37 @@ namespace NKikimr {
         }
 
         template <class TEventPtr>
+        void ReplyInErrorState(TEventPtr& ev, const TActorContext& ctx, NKikimrProto::EReplyStatus status,
+                const TString& errorReason, TInstant now) {
+            const auto& record = ev->Get()->Record;
+            const NKikimrBlobStorage::TVDiskID* targetId = nullptr;
+            if constexpr (requires { record.GetVDiskID(); }) {
+                if (record.HasVDiskID()) {
+                    targetId = &record.GetVDiskID();
+                }
+            } else if constexpr (requires { record.GetTargetVDiskID(); }) {
+                if (record.HasTargetVDiskID()) {
+                    targetId = &record.GetTargetVDiskID();
+                }
+            }
+            if (targetId) {
+                TVDiskID target = VDiskIDFromVDiskID(*targetId);
+                if (target.SameExceptGeneration(SelfVDiskId) && target.GroupGeneration != SelfVDiskId.GroupGeneration) {
+                    return Reply(ev, ctx, NKikimrProto::RACE, "group generation mismatch", now);
+                }
+            }
+            Reply(ev, ctx, status, errorReason, now);
+        }
+
+        template <class TEventPtr>
         void DatabaseErrorHandle(TEventPtr &ev, const TActorContext &ctx) {
             SetReceivedTime(ev);
             TInstant now = TAppData::TimeProvider->Now();
             FillInCostSettingsAndTimestampIfApplicable(ev->Get()->Record, now);
             if (GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)) {
-                const NKikimrBlobStorage::TVDiskID* targetId = nullptr;
-                if constexpr (requires { ev->Get()->Record.GetVDiskID(); }) {
-                    targetId = &ev->Get()->Record.GetVDiskID();
-                } else if constexpr (requires { ev->Get()->Record.GetTargetVDiskID(); }) {
-                    targetId = &ev->Get()->Record.GetTargetVDiskID();
-                }
-                if (targetId) {
-                    const TVDiskID target = VDiskIDFromVDiskID(*targetId);
-                    if (target.SameExceptGeneration(SelfVDiskId) && target.GroupGeneration != SelfVDiskId.GroupGeneration) {
-                        return Reply(ev, ctx, NKikimrProto::RACE, "group generation mismatch", now);
-                    }
-                }
-                Reply(ev, ctx, NKikimrProto::ERROR, "VDisk fail realm is excluded", now);
+                ReplyInErrorState(ev, ctx, NKikimrProto::ERROR, "VDisk fail realm is excluded", now);
             } else {
-                Reply(ev, ctx, NKikimrProto::VDISK_ERROR_STATE, "VDisk is in error state", now);
+                ReplyInErrorState(ev, ctx, NKikimrProto::VDISK_ERROR_STATE, "VDisk is in error state", now);
             }
         }
 
@@ -1336,7 +1347,7 @@ namespace NKikimr {
             if (GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)) {
                 HandleCheckReadiness(ev, ctx);
             } else {
-                Reply(ev, ctx, NKikimrProto::VDISK_ERROR_STATE, "VDisk is in error state", TAppData::TimeProvider->Now());
+                ReplyInErrorState(ev, ctx, NKikimrProto::VDISK_ERROR_STATE, "VDisk is in error state", TAppData::TimeProvider->Now());
             }
         }
 
@@ -1915,6 +1926,10 @@ namespace NKikimr {
             Reply(ev, ctx, NKikimrProto::NOTREADY, "VDisk is not ready for VRestorePart", TAppData::TimeProvider->Now());
         }
 
+        void DatabaseErrorHandle(TEvVRestorePart::TPtr& ev, const TActorContext& ctx) {
+            ReplyInErrorState(ev, ctx, NKikimrProto::NOTREADY, "VDisk is not ready for VRestorePart", TAppData::TimeProvider->Now());
+        }
+
 
         void Handle(TEvVDiskRequestCompleted::TPtr &ev, const TActorContext &ctx) {
             const TVMsgContext &msgCtx = ev->Get()->Ctx;
@@ -2232,7 +2247,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvVDiskStatRequest, Handle)
             hFunc(TEvGetLogoBlobRequest, Handle)
-            HFunc(TEvVRestorePart, HandleVRestorePartNotReady)
+            HFunc(TEvVRestorePart, DatabaseErrorHandle)
             CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
             HFunc(TEvents::TEvGone, Handle)

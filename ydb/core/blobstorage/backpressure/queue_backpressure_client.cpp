@@ -264,7 +264,7 @@ private:
             UpdateRequestTrackingStats(ctx);
         } else {
             auto reply = std::make_unique<R>();
-            reply->MakeError(NKikimrProto::NOTREADY, "BS_QUEUE is not ready", record);
+            MakeQueueError(*reply, record, NKikimrProto::NOTREADY, "BS_QUEUE is not ready", &VDiskId);
             ctx.Send(ev->Sender, reply.release(), 0, ev->Cookie);
         }
     }
@@ -638,7 +638,7 @@ private:
     }
 
     void Drain(const TActorContext& ctx, NKikimrProto::EReplyStatus status, const TString& errorReason) {
-        Queue.DrainQueue(status, TStringBuilder() << "BS_QUEUE: " << errorReason, ctx);
+        Queue.DrainQueue(status, TStringBuilder() << "BS_QUEUE: " << errorReason, VDiskId, ctx);
         DrainStatus(status, ctx);
         DrainAssimilate(status, errorReason, ctx);
     }

@@ -121,12 +121,11 @@ void StartWritingPreparedBatch(
                 auto conclusion = context.GetActualSchema()->BuildDefaultBatch(context.GetActualSchema()->GetIndexInfo().ArrowSchema(), 1, true);
                 AFL_VERIFY(!conclusion.IsFail())("error", conclusion.GetErrorMessage());
                 auto batchDefault = conclusion.DetachResult();
-                std::vector<NArrow::TComparisonType> defaultTypes;
+                std::vector<NScheme::TTypeInfo> defaultTypes;
                 defaultTypes.reserve(batchDefault->num_columns());
                 const auto& indexInfo = context.GetActualSchema()->GetIndexInfo();
                 for (const auto& field : batchDefault->schema()->fields()) {
-                    defaultTypes.emplace_back(
-                        indexInfo.GetColumnFeaturesVerified(indexInfo.GetColumnIdVerified(field->name())).GetComparisonType());
+                    defaultTypes.emplace_back(indexInfo.GetColumnFeaturesVerified(indexInfo.GetColumnIdVerified(field->name())).GetTypeInfo());
                 }
 
                 NArrow::NMerger::TSortableBatchPosition pos(

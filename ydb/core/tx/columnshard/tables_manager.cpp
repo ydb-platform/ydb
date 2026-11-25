@@ -173,8 +173,7 @@ void TTablesManager::Init(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId tab
     } else {
         TabletPathId.emplace(tabletPathId);
         AFL_VERIFY(!SchemaObjectsCache);
-        SchemaObjectsCache =
-            NOlap::TSchemaCachesManager::GetCache(tabletSchemeShardLocalPathId, info->TenantPathId, EnableDecimalNumericComparison);
+        SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(tabletSchemeShardLocalPathId, info->TenantPathId);
         Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, tabletSchemeShardLocalPathId.GetRawValue());
         Schema::SaveSpecialValue(db, Schema::EValueIds::InternalOwnerPathId, tabletInternalPathId.GetRawValue());
         if (GenerateInternalPathId) {
@@ -194,12 +193,6 @@ void TTablesManager::AddTableInfo(const TUnifiedPathId unifiedPathId, TTableInfo
 }
 
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info, TTablesLoadDurations* durations) {
-    ui64 decimalNumericComparison = 0;
-    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::DecimalNumericComparison, decimalNumericComparison)) {
-        return false;
-    }
-    EnableDecimalNumericComparison = decimalNumericComparison != 0;
-
     TTablesLoadDurations ignoredDurations;
     TTablesLoadDurations& loadDurations = durations ? *durations : ignoredDurations;
     {
@@ -219,10 +212,9 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             TabletPathId.emplace(TUnifiedPathId::BuildValid(TInternalPathId::FromRawValue(*tabletInternalPathIdValue),
                 TSchemeShardLocalPathId::FromRawValue(*tabletSchemeShardLocalPathIdValue)));
             if (info) {
-                SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(
-                    TabletPathId->SchemeShardLocalPathId, info->TenantPathId, EnableDecimalNumericComparison);
+                SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(TabletPathId->SchemeShardLocalPathId, info->TenantPathId);
             } else {
-                SchemaObjectsCache = std::make_shared<NOlap::TSchemaObjectsCache>(EnableDecimalNumericComparison);
+                SchemaObjectsCache = std::make_shared<NOlap::TSchemaObjectsCache>();
             }
         }
 

@@ -141,40 +141,8 @@ std::vector<std::string> ColumnNames(const std::vector<std::pair<TString, NSchem
     return result;
 }
 
-std::vector<TComparisonType> ColumnTypes(
-    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema, const bool enableDecimalNumericComparison) {
-    std::vector<TComparisonType> result;
-    result.reserve(schema.size());
-    for (const auto& column : schema) {
-        result.emplace_back(column.second, enableDecimalNumericComparison);
-    }
-
-    return result;
-}
-
-TComparisonSchema ComparisonSchema(
-    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema, const bool enableDecimalNumericComparison) {
-    TComparisonSchema result;
-    result.reserve(schema.size());
-    for (const auto& [name, type] : schema) {
-        result.emplace_back(name, TComparisonType(type, enableDecimalNumericComparison));
-    }
-
-    return result;
-}
-
-std::vector<std::string> ColumnNames(const TComparisonSchema& schema) {
-    std::vector<std::string> result;
-    result.reserve(schema.size());
-    for (const auto& column : schema) {
-        result.emplace_back(column.first.data(), column.first.size());
-    }
-
-    return result;
-}
-
-std::vector<TComparisonType> ColumnTypes(const TComparisonSchema& schema) {
-    std::vector<TComparisonType> result;
+std::vector<NScheme::TTypeInfo> ColumnTypes(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema) {
+    std::vector<NScheme::TTypeInfo> result;
     result.reserve(schema.size());
     for (const auto& column : schema) {
         result.emplace_back(column.second);
@@ -219,7 +187,7 @@ std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const 
 }
 
 void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
-    const std::vector<TComparisonType>& logicalTypes, std::vector<std::shared_ptr<arrow::RecordBatch>>& out) {
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, std::vector<std::shared_ptr<arrow::RecordBatch>>& out) {
     if (batch->num_rows() < 2) {
         out.push_back(batch);
         return;
@@ -255,7 +223,7 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const st
 }
 
 bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
-    const std::vector<TComparisonType>& logicalTypes, bool desc) {
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, bool desc) {
     auto keyBatch = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
     if (desc) {
         return IsSelfSorted<true, false>(keyBatch, logicalTypes);
@@ -265,7 +233,7 @@ bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const std::share
 }
 
 bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
-    const std::vector<TComparisonType>& logicalTypes, bool desc) {
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, bool desc) {
     auto keyBatch = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
     if (desc) {
         return IsSelfSorted<true, true>(keyBatch, logicalTypes);
@@ -275,7 +243,7 @@ bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch, const s
 }
 
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::vector<std::shared_ptr<arrow::Array>>& sortingKey, const std::vector<TComparisonType>& logicalTypes, const bool andUnique) {
+    const std::vector<std::shared_ptr<arrow::Array>>& sortingKey, const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool andUnique) {
     auto sortPermutation = MakeSortPermutation(sortingKey, logicalTypes, andUnique);
     if (sortPermutation) {
         return Reorder(batch, sortPermutation, andUnique);
@@ -285,7 +253,7 @@ std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::Recor
 }
 
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
-    const std::vector<TComparisonType>& logicalTypes, const bool andUnique) {
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool andUnique) {
     auto sortPermutation = MakeSortPermutation(batch, sortingKey, logicalTypes, andUnique);
     if (sortPermutation) {
         return Reorder(batch, sortPermutation, andUnique);
@@ -295,14 +263,14 @@ std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::Recor
 }
 
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const TComparisonSchema& sortingSchema, const bool andUnique) {
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& sortingSchema, const bool andUnique) {
     const auto keyBatch = TColumnOperator().Extract(batch, ColumnNames(sortingSchema));
     AFL_VERIFY(keyBatch);
     return SortBatch(batch, keyBatch->columns(), ColumnTypes(sortingSchema), andUnique);
 }
 
 bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const TComparisonSchema& sortingSchema, const bool desc) {
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& sortingSchema, const bool desc) {
     const auto keyBatch = TColumnOperator().Extract(batch, ColumnNames(sortingSchema));
     AFL_VERIFY(keyBatch);
     return desc ? IsSelfSorted<true, true>(keyBatch, ColumnTypes(sortingSchema))

@@ -115,7 +115,6 @@ private:
 
     TPresetId PresetId;
     ui64 Version = 0;
-    YDB_READONLY(bool, EnableDecimalNumericComparison, false);
     std::vector<ui32> SchemaColumnIdsWithSpecials;
     std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> PrimaryKey;
@@ -479,12 +478,8 @@ public:
         return PKColumns;
     }
 
-    NArrow::TComparisonSchema GetPrimaryKeyComparisonColumns() const {
-        return NArrow::ComparisonSchema(PKColumns, EnableDecimalNumericComparison);
-    }
-
-    std::vector<NArrow::TComparisonType> GetPrimaryKeyTypes() const {
-        return NArrow::ColumnTypes(PKColumns, EnableDecimalNumericComparison);
+    std::vector<NScheme::TTypeInfo> GetPrimaryKeyTypes() const {
+        return NArrow::ColumnTypes(PKColumns);
     }
 
     const THashMap<ui32, TNameTypeInfo>& GetColumns() const {

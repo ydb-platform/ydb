@@ -1,12 +1,8 @@
 #include "column_type_scenarios.h"
 #include "column_type_test_base.h"
 
-#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/ut/olap/combinatory/compaction.h>
-#include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
-
-#include <util/system/event.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -350,21 +346,6 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         RunScenario<TTraits>(scenario, scan, table, load);
     }
 
-    class TDecimalRestartController: public NOlap::TWaitCompactionController {
-        TManualEvent TabletInitialized;
-
-        void DoOnTabletInitCompleted(const NColumnShard::TColumnShard& shard) override {
-            TWaitCompactionController::DoOnTabletInitCompleted(shard);
-            TabletInitialized.Signal();
-        }
-
-    public:
-        void WaitForInitialization() {
-            UNIT_ASSERT_C(TabletInitialized.WaitT(TDuration::Seconds(30)), "ColumnShard initialization timed out");
-            TabletInitialized.Reset();
-        }
-    };
-
     }   // namespace
 
     Y_UNIT_TEST(TestSimpleQueries, EQueryMode, ETableKind, ELoadKind) {
@@ -464,13 +445,13 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         const auto UseIntervalTree = Arg<1>() == EIntervalTreeMode::INTERVAL_TREE_ENABLED;
         using TDecimal = TDecimalTraits<22, 0>;
 
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TDecimalRestartController>();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
 
         auto settings = TDecimal::CreateSettings();
         settings.SetColumnShardReaderClassName("TRIVIAL");
         auto* config = settings.AppConfig.MutableColumnShardConfig();
-        config->SetEnableDecimalNumericComparison(false);
+        config->SetEnableDecimalNumericComparison(true);
         config->SetEnableIntervalTreeForMetadataSelect(UseIntervalTree);
         config->SetWritingBufferVolumeBytes(0);
         config->SetAlterObjectEnabled(true);
@@ -487,18 +468,6 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
                 TTestHelper::TColumnSchema().SetName("val").SetType(NScheme::NTypeIds::Int64),
             });
         helper.CreateTable(table);
-        csController->WaitForInitialization();
-
-        const auto restart = [&] {
-            const auto shards = csController->GetShardActualIds();
-            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
-            helper.GetRuntime().Send(MakePipePerNodeCacheID(false), NActors::TActorId(),
-                new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), shards.front(), false));
-            csController->WaitForInitialization();
-        };
-
-        helper.GetRuntime().GetAppData().ColumnShardConfig.SetEnableDecimalNumericComparison(true);
-        restart();
 
         const auto alter = helper.GetSession().ExecuteSchemeQuery(
             "ALTER OBJECT `" + tableName + "` (TYPE TABLE) SET "
@@ -562,15 +531,6 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         UNIT_ASSERT(TOneCompactionCommand().Execute(helper.GetKikimr()).IsSuccess());
         UNIT_ASSERT_C(csController->GetCompactionFinishedCounter().Val() > compactions, "Decimal portions were not compacted");
 
-        check();
-        helper.GetRuntime().GetAppData().ColumnShardConfig.SetEnableDecimalNumericComparison(false);
-        NOlap::TSchemaCachesManager::DropCaches();
-        restart();
-        check();
-        write({ { "1", 11 }, { "256", 31 }, { "-256", 51 } });
-        check();
-        NOlap::TSchemaCachesManager::DropCaches();
-        restart();
         check();
     }
 

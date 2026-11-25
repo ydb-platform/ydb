@@ -91,7 +91,6 @@ struct Schema: NIceDb::Schema {
         LastCleanupSnapshotStep = 23,
         LastCleanupSnapshotTxId = 24,
         SubDomainSmallBlobsQuotaExceeded = 25,
-        DecimalNumericComparison = 26,
     };
 
     enum class EInsertTableIds: ui8 {

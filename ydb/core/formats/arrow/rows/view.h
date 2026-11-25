@@ -1,10 +1,11 @@
 #pragma once
 #include "view_v0.h"
 
+#include <ydb/core/scheme_types/scheme_type_info.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/conclusion/result.h>
-#include <ydb/library/formats/arrow/switch/compare.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
@@ -24,7 +25,7 @@ public:
         : Data(data) {
     }
 
-    TSimpleRow Build(const std::shared_ptr<arrow::Schema>& schema, const std::vector<TComparisonType>& logicalTypes) const;
+    TSimpleRow Build(const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes) const;
     ui64 GetMemorySize() const {
         return Data.capacity();
     }
@@ -40,7 +41,7 @@ class TSimpleRow {
 private:
     YDB_READONLY_DEF(TString, Data);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
-    YDB_READONLY_DEF(std::vector<TComparisonType>, LogicalTypes);
+    YDB_READONLY_DEF(std::vector<NScheme::TTypeInfo>, LogicalTypes);
 
 public:
     TSimpleRowContent GetContent() const {
@@ -48,7 +49,7 @@ public:
     }
 
     ui32 GetMemorySize() const {
-        return Data.capacity() + LogicalTypes.capacity() * sizeof(TComparisonType);
+        return Data.capacity() + LogicalTypes.capacity() * sizeof(NScheme::TTypeInfo);
     }
 
     ui32 GetDataSize() const {
@@ -59,7 +60,7 @@ public:
 
     explicit TSimpleRow(const NMerger::TSortableBatchPosition& position);
 
-    TSimpleRow(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 recordIndex, const std::vector<TComparisonType>& logicalTypes)
+    TSimpleRow(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 recordIndex, const std::vector<NScheme::TTypeInfo>& logicalTypes)
         : LogicalTypes(logicalTypes) {
         AFL_VERIFY(batch);
         AFL_VERIFY(logicalTypes.size() == (size_t)batch->num_columns());
@@ -107,7 +108,7 @@ public:
         return *result;
     }
 
-    TSimpleRow(const TString& data, const std::shared_ptr<arrow::Schema>& schema, const std::vector<TComparisonType>& logicalTypes)
+    TSimpleRow(const TString& data, const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes)
         : Data(data)
         , Schema(schema)
         , LogicalTypes(logicalTypes) {
@@ -132,17 +133,17 @@ class TSimpleRowRef {
 private:
     TSimpleRowViewV0 Row;
     const arrow::Schema& Schema;
-    const std::vector<TComparisonType>& LogicalTypes;
+    const std::vector<NScheme::TTypeInfo>& LogicalTypes;
 
 public:
-    TSimpleRowRef(const TSimpleRowViewV0 row, const arrow::Schema& schema, const std::vector<TComparisonType>& logicalTypes)
+    TSimpleRowRef(const TSimpleRowViewV0 row, const arrow::Schema& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes)
         : Row(row)
         , Schema(schema)
         , LogicalTypes(logicalTypes) {
         AFL_VERIFY(logicalTypes.size() == (size_t)schema.num_fields());
     }
 
-    TSimpleRowRef(TSimpleRowViewV0, const arrow::Schema&, const std::vector<TComparisonType>&&) = delete;
+    TSimpleRowRef(TSimpleRowViewV0, const arrow::Schema&, const std::vector<NScheme::TTypeInfo>&&) = delete;
 
     std::partial_ordering operator<=>(const TSimpleRowRef& item) const {
         AFL_VERIFY_DEBUG(Schema.Equals(item.Schema));

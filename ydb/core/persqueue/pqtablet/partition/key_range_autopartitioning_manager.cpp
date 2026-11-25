@@ -56,23 +56,14 @@ public:
 
     NKikimrPQ::EScaleStatus GetScaleStatus(NKikimrPQ::EScaleStatus currentState) override {
         Y_UNUSED(currentState);
-        // Keep the partition if the topic cannot split it
-        if (!CanSplit()) {
-            return NKikimrPQ::EScaleStatus::NORMAL;
-        }
         const auto now = TAppData::TimeProvider->Now();
-        // Keep the partition while its write load is below the split threshold
         const auto writeLoadPercent = GetWriteLoadPercent(now);
-        if (writeLoadPercent < Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
-            return NKikimrPQ::EScaleStatus::NORMAL;
+        const bool overloaded = writeLoadPercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent();
+        if (CanSplit() && overloaded && GetSplitBoundary(now)) {
+            LOG_D("TKeyRangeAutopartitioningManager::GetScaleStatus NEED_SPLIT", {"writeLoadPercent", writeLoadPercent});
+            return NKikimrPQ::EScaleStatus::NEED_SPLIT;
         }
-        // Keep the partition if no boundary splits its load, like when all writes go to one key
-        if (!GetSplitBoundary(now)) {
-            return NKikimrPQ::EScaleStatus::NORMAL;
-        }
-
-        LOG_D("TKeyRangeAutopartitioningManager::GetScaleStatus NEED_SPLIT", {"writeLoadPercent", writeLoadPercent});
-        return NKikimrPQ::EScaleStatus::NEED_SPLIT;
+        return NKikimrPQ::EScaleStatus::NORMAL;
     }
 
     std::optional<TString> SplitBoundary() override {
@@ -127,7 +118,6 @@ private:
             .Keys = WrittenKeys->GetKeys(now),
         };
         const auto plan = PlanKeyRangeSplit(GetPartitionKeyRange(), KeyTypes, stats);
-        // Keep the partition if the plan finds no boundary
         if (plan.empty()) {
             return std::nullopt;
         }

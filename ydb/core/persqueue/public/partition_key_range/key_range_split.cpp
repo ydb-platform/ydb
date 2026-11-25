@@ -90,7 +90,6 @@ ui64 GetBytesBefore(const TWeightedKeys& keys, const TSerializedCellVec& boundar
 TVector<TCandidate> GetCandidates(TWeightedKeys& keys, TConstArrayRef<TKeyRangeSource> sources, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
     TVector<TCandidate> candidates;
 
-    // The median key goes to the right part, the next key keeps the median key in the left part
     const auto median = NKll::GetQuantile(keys, 0.5);
     candidates.push_back({median.Key, false});
     for (const auto& [key, _] : keys) {
@@ -120,16 +119,13 @@ std::optional<TSerializedCellVec> ChooseBoundary(const TPartitionKeyRange& paren
     std::optional<TCandidate> best;
     ui64 bestHeavierPart = 0;
     for (auto& candidate : GetCandidates(keys, sources, keyTypes)) {
-        // Skip a boundary that does not split the partition
         if (!IsStrictlyInside(candidate.Boundary, parent, keyTypes)) {
             continue;
         }
-        // Skip a boundary that leaves one part without writes
         const ui64 leftBytes = GetBytesBefore(keys, candidate.Boundary, keyTypes);
         if (!leftBytes || leftBytes == totalBytes) {
             continue;
         }
-        // Prefer the lighter heavier part, then a DataShard boundary
         const ui64 heavierPart = Max(leftBytes, totalBytes - leftBytes);
         if (!best || heavierPart < bestHeavierPart
             || (heavierPart == bestHeavierPart && candidate.SourceBoundary && !best->SourceBoundary))
@@ -151,13 +147,11 @@ TVector<TPlannedPartition> PlanKeyRangeSplit(
     TConstArrayRef<NScheme::TTypeInfo> keyTypes,
     const TKeyRangeWriteStats& stats)
 {
-    // Plan nothing if the partition bounds do not match the key schema
     if (!IsValidKeyRange(parent, keyTypes)) {
         return {};
     }
 
     auto keys = GetPartitionKeys(parent, keyTypes, stats.Keys);
-    // Plan nothing without writes to the partition
     if (keys.empty()) {
         return {};
     }
@@ -167,7 +161,6 @@ TVector<TPlannedPartition> PlanKeyRangeSplit(
         totalBytes += bytes;
     }
     const auto boundary = ChooseBoundary(parent, keyTypes, stats.Sources, keys, totalBytes);
-    // Plan nothing if every boundary leaves one part without writes
     if (!boundary) {
         return {};
     }

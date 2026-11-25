@@ -39,8 +39,6 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/strbuf.h>
 
-#include <optional>
-
 //TODO: move this code to vieiwer
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
@@ -92,35 +90,20 @@ static bool IsDirectReadCmd(const auto& cmd) {
 
 namespace {
 
-struct TKeyRangePartition {
-    TVector<NScheme::TTypeInfo> KeyTypes;
-    TPartitionKeyRange KeyRange;
-    ui64 CreateVersion = 0;
-};
-
-std::optional<TKeyRangePartition> MakeKeyRangePartition(const NKikimrPQ::TPQTabletConfig& tabletConfig, ui32 partitionId) {
-    // Register every source in every partition unless the topic splits by partition key
-    if (!tabletConfig.GetSplitByPartitionKey()) {
-        return std::nullopt;
-    }
+void KeepKeyRangeMessageGroups(TEvPQ::TMessageGroups& messageGroups, const NKikimrPQ::TPQTabletConfig& tabletConfig, ui32 partitionId) {
     const auto* partition = GetPartitionConfig(tabletConfig, partitionId);
     AFL_ENSURE(partition)("partition_id", partitionId);
-    return TKeyRangePartition{
-        .KeyTypes = MakePartitionKeyTypes(tabletConfig),
-        .KeyRange = TPartitionKeyRange::Parse(partition->GetKeyRange()),
-        .CreateVersion = partition->GetCreateVersion(),
-    };
-}
 
-void KeepKeyRangeMessageGroups(TEvPQ::TMessageGroups& messageGroups, const TKeyRangePartition& partition, ui64 configVersion) {
-    // Take the parent sources only when the partition is created: a later config would bring back sources that have left it
-    if (partition.CreateVersion && partition.CreateVersion < configVersion) {
+    const bool createdByEarlierConfig = partition->GetCreateVersion() && partition->GetCreateVersion() < tabletConfig.GetVersion();
+    if (createdByEarlierConfig) {
         messageGroups.clear();
         return;
     }
-    // Keep only the sources whose key range intersects the partition
+
+    const auto keyTypes = MakePartitionKeyTypes(tabletConfig);
+    const auto keyRange = TPartitionKeyRange::Parse(partition->GetKeyRange());
     EraseNodesIf(messageGroups, [&](const auto& group) {
-        return !Intersects(group.second.KeyRange, partition.KeyRange, partition.KeyTypes);
+        return !Intersects(group.second.KeyRange, keyRange, keyTypes);
     });
 }
 
@@ -154,8 +137,8 @@ TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrap
         }
     }
 
-    if (const auto keyRangePartition = MakeKeyRangePartition(tabletConfig, partitionId)) {
-        KeepKeyRangeMessageGroups(*explicitMessageGroups, *keyRangePartition, tabletConfig.GetVersion());
+    if (tabletConfig.GetSplitByPartitionKey()) {
+        KeepKeyRangeMessageGroups(*explicitMessageGroups, tabletConfig, partitionId);
     }
 
     return explicitMessageGroups;

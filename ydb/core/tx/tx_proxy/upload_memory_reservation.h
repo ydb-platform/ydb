@@ -8,6 +8,7 @@
 
 namespace NKikimr::NSchemeCache {
 struct TSchemeCacheNavigate;
+struct TSchemeCacheRequest;
 }
 
 namespace NKikimr::NTxProxy {
@@ -50,8 +51,11 @@ public:
     }
 
     void AccountNavigateRequest(NSchemeCache::TSchemeCacheNavigate& request) const;
+    void AccountResolveRequest(NSchemeCache::TSchemeCacheRequest& request) const;
 
 private:
+    TRetainer MakeRequestRetainer(ui64 requestBytes) const;
+
     struct TRequestReservation {
         std::shared_ptr<void> Attempt;
         std::shared_ptr<void> Payload;

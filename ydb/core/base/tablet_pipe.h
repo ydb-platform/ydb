@@ -103,6 +103,8 @@ namespace NKikimr {
             void SetSeqNo(ui64 seqNo) {
                 Record.SetSeqNo(seqNo);
             }
+
+            bool SerializeToArcadiaStream(NActors::TChunkSerializer* serializer) const override;
         };
 
         struct TEvPeerClosed : public TEventPB<TEvPeerClosed, NKikimrTabletPipe::TEvPeerClosed, EvPeerClosed> {

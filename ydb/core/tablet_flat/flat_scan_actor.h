@@ -49,11 +49,13 @@ namespace NOps {
             return NKikimrServices::TActivity::TABLET_OPS_HOST_A;
         }
 
-        TDriver(ui64 serial, TAutoPtr<IScan>& scan, TConf args, THolder<TScanSnapshot>& snapshot)
+        TDriver(ui64 serial, TAutoPtr<IScan>& scan, TConf args, THolder<TScanSnapshot>& snapshot,
+                std::function<void()> onStopped = {})
             : TActor(&TDriver::StateBoot)
             , NTable::TFeed(scan.Get(), *snapshot->Subset, snapshot->Snapshot)
             , Serial(serial)
             , Args(args)
+            , OnStopped(std::move(onStopped))
             , MaxCyclesPerIteration(/* 10ms */ (NHPTimer::GetCyclesPerSecond() + 99) / 100)
             , ScanMemoryTag(NProfiling::MakeTag(TypeName(*Scan).c_str()))
         {
@@ -85,6 +87,9 @@ namespace NOps {
 
             if (Scan && Spent == nullptr)
                 delete DetachScan();
+            if (OnStopped) {
+                OnStopped();
+            }
         }
 
         void Describe(IOutputStream &out) const override
@@ -757,6 +762,7 @@ namespace NOps {
     private:
         const ui64 Serial = 0;
         const NOps::TConf Args;
+        const std::function<void()> OnStopped;
         TAutoPtr<NUtil::ILogger> Logger;
         TActorId Owner;
 

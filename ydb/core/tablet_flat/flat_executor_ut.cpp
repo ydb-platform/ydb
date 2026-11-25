@@ -1368,6 +1368,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         TRetainedScanPayloads payloads;
         {
             TMyEnvScans env;
+            TBlockEvents<NOps::TEvResult> results(env.Env, [](const auto& event) {
+                return bool(event->Get()->ResourceReservation);
+            });
             bool releasedCpu = false;
             auto updates = env->AddObserver<TEvResourceBroker::TEvUpdateTask>([&](auto& ev) {
                 const auto& resources = ev->Get()->RequiredResources;
@@ -1381,7 +1384,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
                 };
                 executor->QueueScan(TRowsModel::TableId, {}, 12345, options);
             }));
-            env->WaitFor("scan finishes and leaves payload reservations", [&] { return releasedCpu; });
+            env->WaitFor("driver releases CPU with its result held", [&] { return releasedCpu && !results.empty(); });
+            UNIT_ASSERT(payloads.Finished);
+            results.Stop().Unblock();
         }
         UNIT_ASSERT(payloads.Finished);
         UNIT_ASSERT(payloads.Upload && payloads.CompletedUpload && payloads.Response);
@@ -2003,6 +2008,30 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         }));
         env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         UNIT_ASSERT(!constructed);
+    }
+
+    Y_UNIT_TEST(AdmittedEagerStartupFailureNotifiesCaller) {
+        TMyEnvScans env;
+        bool destroyed = false;
+        bool queued = false;
+        size_t failures = 0;
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            TScanOptions options;
+            options.SetSnapshotId(executor->MakeScanSnapshot(TRowsModel::TableId));
+            options.SetResourceBroker("build_index", 10, 1_MB);
+            options.OnAdmissionFailure = [&](const TString& reason, bool retry) {
+                UNIT_ASSERT(queued && retry);
+                UNIT_ASSERT_STRING_CONTAINS(reason, "Cannot describe test scan");
+                ++failures;
+                TActivationContext::Send(new IEventHandle(env.Edge, {}, new TEvents::TEvWakeup));
+            };
+            queued = executor->QueueScan(TRowsModel::TableId, new TThrowingDescriptionScan(destroyed), 0, options) != 0;
+        }));
+        env.WaitForWakeUp();
+        UNIT_ASSERT_VALUES_EQUAL(failures, 1);
+        UNIT_ASSERT(destroyed);
+        env.SendAsync(new NFake::TEvExecute([](auto* executor, const auto&) { executor->StartVacuum(123ull); }));
+        env.WaitFor<NFake::TEvDataCleaned>();
     }
 
     Y_UNIT_TEST_TWIN(ScanStartFailureReleasesPreparedSnapshot, Deferred) {

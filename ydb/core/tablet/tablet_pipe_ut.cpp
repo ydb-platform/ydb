@@ -397,6 +397,40 @@ namespace NKikimr {
     };
 
 Y_UNIT_TEST_SUITE(TTabletPipeTest) {
+    Y_UNIT_TEST(PreserializedPushKeepsReservationWithWireBytes) {
+        for (bool dataInPayload : {false, true}) {
+            auto reservation = std::make_shared<int>();
+            const std::weak_ptr<void> lifetime = reservation;
+            TRope wire;
+            {
+                const auto buffer = MakeIntrusive<TEventSerializedData>(TString(16 * 1024, 'p'), TEventSerializationInfo{});
+                auto push = MakeHolder<TEvTabletPipe::TEvPush>(1, 2, TActorId(), buffer, 0, TEventSerializationInfo{}, dataInPayload);
+                push->MemoryReservation = std::move(reservation);
+                IEventHandle handle(TActorId(), TActorId(), push.Release());
+                handle.Preserialize(dataInPayload);
+                UNIT_ASSERT(!handle.HasEvent());
+                wire = handle.ReleaseChainBuffer()->GetRope();
+            }
+            UNIT_ASSERT(!lifetime.expired());
+            if (dataInPayload) {
+                auto payload = wire.Begin();
+                while (payload.Valid() && payload.ContiguousData()[0] != 'p') {
+                    payload.AdvanceToNextContiguousBlock();
+                }
+                UNIT_ASSERT(payload.Valid());
+                auto end = payload;
+                end.AdvanceToNextContiguousBlock();
+                wire = wire.Extract(payload, end);
+            }
+            auto copy = wire;
+            copy.Begin().ContiguousDataMut()[0] = 'q';
+            wire = {};
+            UNIT_ASSERT(!lifetime.expired());
+            copy = {};
+            UNIT_ASSERT(lifetime.expired());
+        }
+    }
+
     Y_UNIT_TEST(TestOpen) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);

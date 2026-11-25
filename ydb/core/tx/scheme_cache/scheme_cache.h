@@ -487,6 +487,7 @@ struct TSchemeCacheRequest {
 
     using TResultSet = TVector<TEntry>;
 
+    std::function<std::shared_ptr<void>(ui64)> RetainPartitioningMemory;
     TResultSet ResultSet;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString DatabaseName;

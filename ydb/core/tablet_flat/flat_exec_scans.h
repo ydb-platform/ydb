@@ -76,6 +76,7 @@ namespace NTabletFlatExecutor {
                 ui64 ChargedMemory;
                 ui64 ChargedCpu = 1;
                 bool Running = true;
+                bool HoldsWorkingSet = true;
                 bool SubmitRejected = false;
                 bool WasAcquired = false;
                 bool OverrunReported = false;
@@ -100,7 +101,7 @@ namespace NTabletFlatExecutor {
                 }
 
                 void UpdateRetained() {
-                    const ui64 memory = Running ? Max(Memory, Retained) : Retained;
+                    const ui64 memory = HoldsWorkingSet ? Max(Memory, Retained) : Retained;
                     const ui64 cpu = Running ? 1 : 0;
                     if ((WasAcquired || !SubmitRejected) && memory && (memory != ChargedMemory || cpu != ChargedCpu)) {
                         SendToBroker(new TEvResourceBroker::TEvUpdateTask(TaskId, {{cpu, memory}}, Type, Priority));
@@ -138,6 +139,14 @@ namespace NTabletFlatExecutor {
             {}
 
             ~TTaskLease() {
+                with_lock(State->Lock) {
+                    State->Running = false;
+                    State->HoldsWorkingSet = false;
+                    State->UpdateRetained();
+                }
+            }
+
+            void StopExecution() {
                 with_lock(State->Lock) {
                     State->Running = false;
                     State->UpdateRetained();
@@ -749,14 +758,16 @@ namespace NTabletFlatExecutor {
             }
 
             Y_ENSURE(one.Snapshot);
+            std::function<void()> onStopped;
             if (one.Lease) {
+                onStopped = [lease = one.Lease] { lease->StopExecution(); };
                 one.Scan->HoldResourceReservation(one.Lease, [state = std::weak_ptr<TTaskLease::TState>(one.Lease->State)](ui64 bytes) {
                     const auto owner = state.lock();
                     Y_ENSURE(owner, "Scan reservation has already been released");
                     return TTaskLease::Retain(owner, bytes);
                 });
             }
-            auto actor = MakeHolder<NOps::TDriver>(one.Serial, one.Scan, conf, one.Snapshot);
+            auto actor = MakeHolder<NOps::TDriver>(one.Serial, one.Scan, conf, one.Snapshot, std::move(onStopped));
 
             try {
                 if (auto logl = Logger->Log(NUtil::ELnLev::Info))

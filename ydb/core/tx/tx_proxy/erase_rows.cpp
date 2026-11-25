@@ -263,6 +263,7 @@ namespace {
             TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
             request->DatabaseName = Database;
             request->ResultSet.emplace_back(std::move(keyRange));
+            MemoryReservation.AccountResolveRequest(*request);
 
             ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvResolveKeySet(request));
 

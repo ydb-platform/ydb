@@ -294,6 +294,51 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         FinishTask(runtime, broker, sender, 3);
     }
 
+    Y_UNIT_TEST(UnmeteredIndexScanRequiresHeadroomAtEveryLimit) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        const auto sender = runtime.AllocateEdgeActor();
+        auto config = MakeTestConfig();
+        auto* type = config.AddTasks();
+        type->SetName("build_index");
+        type->SetQueueName("queue_scan");
+        const auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        const auto broker = runtime.Register(CreateResourceBrokerActor(config, counters));
+        WaitForBootstrap(runtime);
+
+        auto setLimits = [&](ui64 global, ui64 queue, ui64 index) {
+            auto configure = MakeHolder<TEvResourceBroker::TEvConfigure>();
+            configure->Merge = true;
+            configure->Record.MutableResourceLimit()->SetMemory(global);
+            auto* scan = configure->Record.AddQueues();
+            scan->SetName("queue_scan");
+            scan->MutableLimit()->SetMemory(queue);
+            configure->IndexBuildMemoryLimit = index;
+            runtime.Send(new IEventHandle(broker, sender, configure.Release()));
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigureResult>(sender)->Get()->Record.GetSuccess());
+        };
+
+        setLimits(100, 100, 0);
+        SubmitTask(runtime, broker, sender, 1, 1, 0, "build_index", 5);
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 0, 1, 0);
+        setLimits(100, 0, 100);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 0, 1, 0);
+        setLimits(0, 100, 100);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 0, 1, 0);
+        setLimits(1, 1, 1);
+        WaitForResourceAllocation(runtime, 1);
+        FinishTask(runtime, broker, sender, 1);
+
+        SubmitTask(runtime, broker, sender, 2, 1, 1, "build_index", 5);
+        WaitForResourceAllocation(runtime, 2);
+        SubmitTask(runtime, broker, sender, 3, 1, 0, "build_index", 5);
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 1, 1, 1, 1, 1);
+        FinishTask(runtime, broker, sender, 2);
+        WaitForResourceAllocation(runtime, 3);
+    }
+
     Y_UNIT_TEST(ParkedTaskAllowsIdleBrokerOvercommit) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);

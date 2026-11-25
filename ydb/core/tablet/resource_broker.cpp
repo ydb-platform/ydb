@@ -710,18 +710,21 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
         pending.erase(pending.begin());
 
         auto task = queue->FrontTask();
-        if (task->TypeLimit && (task->TypeLimit->IsMemoryOvercommitted() ||
-                !task->TypeLimit->HasResources({{0, task->RequiredResources[NKikimrResourceBroker::MEMORY]}}))) {
-            // The index budget is independent of other work in this queue.
-            task = queue->FrontTaskWithoutTypeMemoryLimit();
-            if (!task) {
-                continue;
+        if (task->TypeLimit) {
+            const ui64 bytes = task->RequiredResources[NKikimrResourceBroker::MEMORY];
+            const TResourceValues memory{{0, Max<ui64>(1, bytes)}};
+            // Legacy index scans declare zero bytes but still need memory headroom.
+            if (!task->TypeLimit->HasResources(memory) ||
+                    (!bytes && (!queue->QueueLimit.HasResources(memory) || !ResourceLimit->HasResources(memory)))) {
+                task = queue->FrontTaskWithoutTypeMemoryLimit();
+                if (!task) {
+                    continue;
+                }
             }
         }
         bool blocked = task->GetRequiredResourcesMask() & blockedResources;
         const ui64 bytes = task->RequiredResources[NKikimrResourceBroker::MEMORY];
         if (task->TypeLimit || (queue->StrictMemoryLimit && bytes)) {
-            // Legacy index builds can consume memory even without a broker claim.
             const TResourceValues memory{{0, bytes}};
             if (queue->QueueLimit.IsMemoryOvercommitted() || !queue->QueueLimit.HasResources(memory)) {
                 blocked = true;

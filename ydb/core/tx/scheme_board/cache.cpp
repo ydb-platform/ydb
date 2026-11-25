@@ -1006,7 +1006,27 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             ptr->Description = std::move(desc);
         }
 
-        std::shared_ptr<const TPartitioning> FillRangePartitioning(const TTableRange& range) const {
+        static std::shared_ptr<const TPartitioning> CopyPartitionRange(
+                TPartitioning::const_iterator first, TPartitioning::const_iterator end, ui64 version,
+                const std::function<std::shared_ptr<void>(ui64)>& retainMemory)
+        {
+            std::shared_ptr<void> reservation;
+            if (retainMemory) {
+                ui64 bytes = sizeof(TPartitioning) + (end - first) * sizeof(TKeyDesc::TPartitionInfo);
+                for (auto it = first; it != end; ++it) {
+                    if (it->Range) {
+                        const auto& key = it->Range->EndKeyPrefix;
+                        bytes += key.GetCells().size() * sizeof(TCell) + key.GetBuffer().capacity();
+                    }
+                }
+                reservation = retainMemory(bytes);
+            }
+            return std::make_shared<TPartitioning>(TVector<TKeyDesc::TPartitionInfo>(first, end), version, std::move(reservation));
+        }
+
+        std::shared_ptr<const TPartitioning> FillRangePartitioning(const TTableRange& range,
+                const std::function<std::shared_ptr<void>(ui64)>& retainMemory) const
+        {
             Y_ABORT_UNLESS(Partitioning);
             Y_ABORT_UNLESS(!Partitioning->Empty());
             const auto version = Partitioning->GetVersion();
@@ -1015,13 +1035,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return Partitioning;
             }
 
-            TVector<TKeyDesc::TPartitionInfo> partitions;
-
             // Temporary fix: for an empty range we need to return some datashard
             // so that it can handle readset logic (send empty result to other tx participants etc.)
             if (range.IsEmptyRange(KeyColumnTypes)) {
-                partitions.push_back(*Partitioning->begin());
-                return std::make_shared<TPartitioning>(std::move(partitions), version);
+                return CopyPartitionRange(Partitioning->begin(), Partitioning->begin() + 1, version, retainMemory);
             }
 
             TVector<TKeyDesc::TPartitionInfo>::const_iterator low = LowerBound(
@@ -1039,26 +1056,14 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             Y_ABORT_UNLESS(low != Partitioning->end(), "last key must be (inf)");
 
-            do {
-                partitions.push_back(*low);
-
-                if (range.Point) {
-                    return std::make_shared<TPartitioning>(std::move(partitions), version);
-                }
-
-                const int prevComp = CompareBorders<true, true>(
-                    low->Range->EndKeyPrefix.GetCells(), range.To,
-                    low->Range->IsPoint || low->Range->IsInclusive,
-                    range.InclusiveTo, KeyColumnTypes
-                );
-
-                if (prevComp >= 0) {
-                    return std::make_shared<TPartitioning>(std::move(partitions), version);
-                }
-
-            } while (++low != Partitioning->end());
-
-            return std::make_shared<TPartitioning>(std::move(partitions), version);
+            if (range.Point) {
+                return CopyPartitionRange(low, low + 1, version, retainMemory);
+            }
+            const auto last = std::lower_bound(low, Partitioning->end(), range.To, [&](const auto& partition, const auto& to) {
+                return CompareBorders<true, true>(partition.Range->EndKeyPrefix.GetCells(), to,
+                    partition.Range->IsPoint || partition.Range->IsInclusive, range.InclusiveTo, KeyColumnTypes) < 0;
+            });
+            return CopyPartitionRange(low, last == Partitioning->end() ? last : last + 1, version, retainMemory);
         }
 
         static void FillTopicPartitioning(
@@ -2303,7 +2308,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 keyDesc.Partitioning = std::make_shared<TPartitioning>(std::move(partitions), 0);
             } else {
                 if (Partitioning && !Partitioning->Empty()) {
-                    keyDesc.Partitioning = FillRangePartitioning(keyDesc.Range);
+                    keyDesc.Partitioning = FillRangePartitioning(keyDesc.Range, context->Request->RetainPartitioningMemory);
                 }
             }
 

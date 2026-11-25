@@ -3758,10 +3758,15 @@ void TExecutor::StartScan(ui64 serial, ui32 table)
 {
     const auto options = Scans->HoldOptions(serial);
     if (!options->Factory) {
-        // Legacy scan failures must still propagate to their caller.
         try {
             Scans->Start(serial);
         } catch (...) {
+            if (const auto* broker = std::get_if<TScanOptions::TResourceBrokerOptions>(&options->ResourceBroker);
+                    broker && broker->Memory) {
+                Scans->AdmissionFailed(serial, TStringBuilder() << "Cannot start admitted scan: " << CurrentExceptionMessage());
+                return;
+            }
+            // Preserve exception propagation for legacy callers.
             CancelScan(table, serial);
             throw;
         }

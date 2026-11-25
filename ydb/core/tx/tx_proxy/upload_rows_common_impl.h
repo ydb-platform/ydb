@@ -1144,6 +1144,7 @@ private:
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
         request->DatabaseName = GetDatabase();
         request->ResultSet.emplace_back(std::move(keyRange));
+        MemoryReservation.AccountResolveRequest(*request);
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
         ctx.Send(SchemeCache, resolveReq.Release(), 0, 0, Span.GetTraceId());

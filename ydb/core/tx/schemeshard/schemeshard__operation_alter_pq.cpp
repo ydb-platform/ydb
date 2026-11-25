@@ -17,8 +17,6 @@
 
 #include <ydb/services/lib/sharding/sharding.h>
 
-#include <optional>
-
 #include <format>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
@@ -28,32 +26,26 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-// Checks a split boundary of a topic split by partition key: keys are compared by their column types, not by bytes
-std::optional<TString> CheckTypedSplitBoundary(const TTopicTabletInfo::TKeySchema& keyTypes,
-        const TMaybe<TTopicTabletInfo::TKeyRange>& keyRange, const TString& splitBoundary)
+bool IsTableKeyStrictlyInsidePartition(const TString& key, const TMaybe<TTopicTabletInfo::TKeyRange>& partition,
+        const TTopicTabletInfo::TKeySchema& keyTypes)
 {
-    // Reject a boundary that is not a full table key of the topic
-    TSerializedCellVec boundary;
-    if (!TSerializedCellVec::TryParse(splitBoundary, boundary) || boundary.GetCells().size() != keyTypes.size()) {
-        return "Split boundary is not a full key of the topic key schema";
+    TSerializedCellVec cells;
+    if (!TSerializedCellVec::TryParse(key, cells) || cells.GetCells().size() != keyTypes.size()) {
+        return false;
     }
     for (size_t i = 0; i < keyTypes.size(); ++i) {
-        if (NScheme::HasUnexpectedValueSize(boundary.GetCells()[i], keyTypes[i])) {
-            return "Split boundary is not a full key of the topic key schema";
+        if (NScheme::HasUnexpectedValueSize(cells.GetCells()[i], keyTypes[i])) {
+            return false;
         }
     }
 
     auto compareWith = [&](const TString& bound) {
-        const TSerializedCellVec cells(bound);
-        return CompareTypedCellVectors(boundary.GetCells().data(), cells.GetCells().data(), keyTypes.data(), keyTypes.size());
+        const TSerializedCellVec boundCells(bound);
+        return CompareTypedCellVectors(cells.GetCells().data(), boundCells.GetCells().data(), keyTypes.data(), keyTypes.size());
     };
-    // Accept a boundary strictly inside the partition
-    const bool afterStart = !keyRange || !keyRange->FromBound || compareWith(*keyRange->FromBound) > 0;
-    const bool beforeEnd = !keyRange || !keyRange->ToBound || compareWith(*keyRange->ToBound) < 0;
-    if (afterStart && beforeEnd) {
-        return std::nullopt;
-    }
-    return "Split boundary is not strictly inside the partition";
+    const bool afterStart = !partition || !partition->FromBound || compareWith(*partition->FromBound) > 0;
+    const bool beforeEnd = !partition || !partition->ToBound || compareWith(*partition->ToBound) < 0;
+    return afterStart && beforeEnd;
 }
 
 bool ShouldCreateSiblingAtRootLevel(const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit& split, const TTopicInfo::TPtr& topic) {
@@ -901,8 +893,9 @@ public:
                 }
                 const auto keyRange = splittedPartition->KeyRange;
                 if (tabletConfig.GetSplitByPartitionKey()) {
-                    if (const auto error = CheckTypedSplitBoundary(topic->KeySchema, keyRange, splitBoundary)) {
-                        result->SetError(NKikimrScheme::StatusInvalidParameter, *error);
+                    if (!IsTableKeyStrictlyInsidePartition(splitBoundary, keyRange, topic->KeySchema)) {
+                        result->SetError(NKikimrScheme::StatusInvalidParameter,
+                            "Split boundary must be a table key strictly inside the partition");
                         return result;
                     }
                 } else if (keyRange) {

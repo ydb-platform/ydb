@@ -2261,7 +2261,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         // when
         SplitStreamTopicPartition(runtime, txId, 0, "\x7f",
-            {{NKikimrScheme::StatusInvalidParameter, "Split boundary is not a full key"}});
+            {{NKikimrScheme::StatusInvalidParameter, "Split boundary must be a table key strictly inside the partition"}});
 
         // then
         const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
@@ -2279,7 +2279,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         // when
         SplitStreamTopicPartition(runtime, txId, 0, SerializeUint64Key(Max<ui64>() - 5),
-            {{NKikimrScheme::StatusInvalidParameter, "Split boundary is not strictly inside the partition"}});
+            {{NKikimrScheme::StatusInvalidParameter, "Split boundary must be a table key strictly inside the partition"}});
 
         // then
         const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");

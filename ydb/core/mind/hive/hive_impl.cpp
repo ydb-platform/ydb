@@ -3200,7 +3200,7 @@ std::pair<TDataCenterId, TDataCenterId> TDataCenterBalanceStats::GetHeaviestAndL
     return result;
 }
 
-i64 TDataCenterBalanceStats::GetMovementsToBalance(i64 maxMovements) const {
+int TDataCenterBalanceStats::GetMovementsToBalance(int maxMovements) const {
     if (DataCenters.size() < 2) {
         return 0;
     }
@@ -3208,11 +3208,11 @@ i64 TDataCenterBalanceStats::GetMovementsToBalance(i64 maxMovements) const {
     const TDataCenterStat& heavy = DataCenters.at(heaviest);
     const TDataCenterStat& light = DataCenters.at(lightest);
     // moves which make tablets per node of the two data centers equal, rounded down so they never swap places
-    i64 movements = (heavy.Tablets * light.Nodes - light.Tablets * heavy.Nodes) / (heavy.Nodes + light.Nodes);
-    if (maxMovements != 0) {
-        movements = std::min(movements, maxMovements);
+    const i64 movements = (heavy.Tablets * light.Nodes - light.Tablets * heavy.Nodes) / (heavy.Nodes + light.Nodes);
+    if (maxMovements != 0 && movements > maxMovements) {
+        return maxMovements;
     }
-    return movements;
+    return static_cast<int>(std::min<i64>(movements, std::numeric_limits<int>::max()));
 }
 
 template<std::forward_iterator TIter>
@@ -3259,9 +3259,28 @@ bool THive::IsTabletCountedForDataCenterBalance(const TTabletInfo& tablet) const
     return true;
 }
 
+void THive::UpdateTabletCountedForDataCenterBalance(TTabletInfo& tablet) {
+    // only the tablets alive on a node are counted, see TNodeInfo::OnTabletChangeVolatileState
+    if (tablet.Node == nullptr || !IsAliveState(tablet.GetVolatileState())) {
+        return;
+    }
+    const bool counted = IsTabletCountedForDataCenterBalance(tablet);
+    if (std::exchange(tablet.CountedForDataCenterBalance, counted) != counted) {
+        if (counted) {
+            ++tablet.Node->DataCenterBalanceTablets;
+        } else {
+            --tablet.Node->DataCenterBalanceTablets;
+        }
+    }
+}
+
 template<std::forward_iterator TIter>
 std::optional<TBalancerSettings> THive::CheckDataCenterBalance(const TSegmentId& segmentId, TIter begin, TIter end) const {
     TDataCenterBalanceStats stats = GetDataCenterBalanceStats(begin, end);
+    // with a single node in every data center the node balancers already do the job
+    if (std::ranges::all_of(stats.DataCenters, [](const auto& item) { return item.second.Nodes <= 1; })) {
+        return std::nullopt;
+    }
     const double imbalance = stats.GetImbalance();
     const double threshold = GetDataCenterImbalanceToBalance();
     if (imbalance <= threshold) {
@@ -3274,7 +3293,7 @@ std::optional<TBalancerSettings> THive::CheckDataCenterBalance(const TSegmentId&
     const auto& lightStat = stats.DataCenters.at(lightest);
 
     // when even a single move would only overshoot, the balancer is not started
-    const i64 movements = stats.GetMovementsToBalance(GetMaxMovementsOnDataCenterBalancer());
+    const int movements = stats.GetMovementsToBalance(GetMaxMovementsOnDataCenterBalancer());
     if (movements == 0) {
         return std::nullopt;
     }
@@ -3295,7 +3314,7 @@ std::optional<TBalancerSettings> THive::CheckDataCenterBalance(const TSegmentId&
         {"movements", movements});
     return TBalancerSettings{
         .Type = EBalancerType::ScatterDataCenter,
-        .MaxMovements = static_cast<int>(movements),
+        .MaxMovements = movements,
         .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
         .MaxInFlight = GetBalancerInflight(),
         .FilterNodeIds = heavyStat.NodeIds,

@@ -35,7 +35,7 @@ struct TDataCenterBalanceStats {
     std::pair<TDataCenterId, TDataCenterId> GetHeaviestAndLightest() const;
     // number of moves from the heaviest data center to the lightest one which evens out the two,
     // at most maxMovements (0 means unlimited)
-    i64 GetMovementsToBalance(i64 maxMovements) const;
+    int GetMovementsToBalance(int maxMovements) const;
 };
 
 } // NHive

@@ -295,6 +295,8 @@ public:
                         tablet->IsBackup = IsBackup;
                         db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::IsBackup>(IsBackup);
                     }
+                    // allowed nodes and balancer policy decide whether the tablet is balanced between data centers
+                    Self->UpdateTabletCountedForDataCenterBalance(*tablet);
 
                     UpdateChannelsBinding(*tablet, db);
 

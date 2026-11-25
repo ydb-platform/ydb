@@ -1195,11 +1195,11 @@ public:
     }
 
     double GetDataCenterImbalanceToBalance() const {
-        return CurrentConfig.GetDataCenterImbalanceToBalance();
+        return std::max(0.0, CurrentConfig.GetDataCenterImbalanceToBalance());
     }
 
-    ui64 GetMaxMovementsOnDataCenterBalancer() const {
-        return CurrentConfig.GetMaxMovementsOnDataCenterBalancer();
+    int GetMaxMovementsOnDataCenterBalancer() const {
+        return static_cast<int>(std::min<ui64>(CurrentConfig.GetMaxMovementsOnDataCenterBalancer(), std::numeric_limits<int>::max()));
     }
 
     ui64 GetMaxPingsInFlight() const {
@@ -1338,6 +1338,8 @@ protected:
     TDataCenterBalanceStats GetDataCenterBalanceStats(TIter begin, TIter end) const;
     // Leaders not tied to particular data centers: without data center preferences and not sticking together in one
     bool IsTabletCountedForDataCenterBalance(const TTabletInfo& tablet) const;
+    // Recounts a running tablet in its node's DataCenterBalanceTablets after its settings changed
+    void UpdateTabletCountedForDataCenterBalance(TTabletInfo& tablet);
     // If tablet counts in data centers of the segment need balancing, returns settings of the balancer
     template<std::forward_iterator TIter>
     std::optional<TBalancerSettings> CheckDataCenterBalance(const TSegmentId& segmentId, TIter begin, TIter end) const;

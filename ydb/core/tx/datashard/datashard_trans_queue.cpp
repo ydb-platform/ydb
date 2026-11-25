@@ -77,7 +77,7 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
             ui64 maxStep = rowset.GetValue<Schema::TxMain::MaxStep>();
             EOperationKind kind = rowset.GetValue<Schema::TxMain::Kind>();
             ui64 received = rowset.GetValueOrDefault<Schema::TxMain::ReceivedAt>(now.GetValue());
-            if (kind == EOperationKind::SchemeTx || kind == EOperationKind::CdcHandoff)
+            if (kind == EOperationKind::SchemeTx)
                 schemaTxs.insert(txId);
 
             if (flags & TTxFlags::Immediate) {

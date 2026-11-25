@@ -256,9 +256,9 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
                 stopped->SetTableSchemaVersion(version);
                 for (const auto& id : alterTableTx.GetActivateCdcStreams()) {
                     const auto streamId = TPathId::FromProto(id);
-                    const auto stream = stopped->CdcStreams.find(streamId);
-                    Y_ENSURE(stream != stopped->CdcStreams.end());
-                    Y_ENSURE(stream->second.State == NKikimrSchemeOp::ECdcStreamStateDisabled);
+                    const auto* stream = stopped->CdcStreams.FindPtr(streamId);
+                    Y_ENSURE(stream);
+                    Y_ENSURE(stream->State == NKikimrSchemeOp::ECdcStreamStateDisabled);
                     stopped->SwitchCdcStreamState(streamId, NKikimrSchemeOp::ECdcStreamStateReady);
                 }
             }

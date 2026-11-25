@@ -900,6 +900,8 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         test.Runtime.WaitFor("prepared detach", [&] { return !prepared.empty(); });
 
         test.Runtime.GetAppData().FeatureFlags.SetEnableCdcHandoff(false);
+        const auto shardId = prepared.front()->Get()->Record.GetOrigin();
+        RebootTablet(test.Runtime, shardId, test.Runtime.AllocateEdgeActor());
         prepared.Stop().Unblock();
         test.Env.TestWaitNotification(test.Runtime, test.TxId);
         TestDescribeResult(DescribePath(test.Runtime, "/MyRoot/Table"), {NLs::ReplicationMode(TConfig::REPLICATION_MODE_NONE)});

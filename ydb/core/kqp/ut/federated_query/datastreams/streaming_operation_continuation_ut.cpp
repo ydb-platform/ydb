@@ -351,15 +351,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
                 SubstGlobal(query, "RUN = FALSE", TStringBuilder() << "RUN = FALSE, STATS_COLLECTION_MODE = '" << value << "'");
             }
             f.Exec(query);
-            auto description = f.Describe();
-            UNIT_ASSERT_VALUES_EQUAL(description->ResultSet.at(0).StreamingQueryInfo->Description.GetProperties().GetProperties()
-                                         .at("stats_collection_mode"), expected);
+            auto getStatsCollectionMode = [](auto& f) {
+                return f.Describe()->ResultSet.at(0).StreamingQueryInfo->Description.GetProperties().GetProperties().at("stats_collection_mode");
+            };
+            UNIT_ASSERT_VALUES_EQUAL(getStatsCollectionMode(f), expected);
 
             // An unrelated ALTER must retain the normalized stored mode.
             f.Exec("ALTER STREAMING QUERY ContinuedQuery SET (RUN = FALSE);");
-            description = f.Describe();
-            UNIT_ASSERT_VALUES_EQUAL(description->ResultSet.at(0).StreamingQueryInfo->Description.GetProperties().GetProperties()
-                                         .at("stats_collection_mode"), expected);
+            UNIT_ASSERT_VALUES_EQUAL(getStatsCollectionMode(f), expected);
             if constexpr (!Alter) {
                 f.Exec("DROP STREAMING QUERY ContinuedQuery;");
             }
@@ -387,10 +386,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         });
         // Omit the mode on restart to exercise the stored setting and the default.
         f.Exec("ALTER STREAMING QUERY ContinuedQuery SET (RUN = TRUE);");
-        f.WaitFor("streaming query script request", [&] { return observed.has_value(); });
-        const auto expected = Profile ? Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE
-                                      : Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(*observed), static_cast<int>(expected));
+        f.WaitFor("streaming query script request", [&] {
+            return observed.has_value();
+        });
+        const auto expected =
+            Profile ? Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE : Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
+        UNIT_ASSERT_VALUES_EQUAL(ToUnderlying(*observed), ToUnderlying(expected));
         f.Exec("ALTER STREAMING QUERY ContinuedQuery SET (RUN = FALSE);");
         f.Exec("DROP STREAMING QUERY ContinuedQuery;");
     }

@@ -111,7 +111,8 @@ def do(args):
         row['Guid'] = pdisk.Guid
         row['NumStaticSlots'] = pdisk.NumStaticSlots
         row['NumActiveSlots'] = num_active_slots_map.get((pdisk.NodeId, pdisk.PDiskId), 0) if num_active_slots_map else None
-        row['NumDonorSlots'] = donors_per_pdisk_map.get((pdisk.NodeId, pdisk.PDiskId), 0) if donors_per_pdisk_map else None
+        if donors_per_pdisk_map is not None:
+            row['NumDonorSlots'] = donors_per_pdisk_map.get((pdisk.NodeId, pdisk.PDiskId), 0)
         if args.check_leaked_slots:
             wb_info = pdisk_whiteboard_info.get((pdisk.NodeId, pdisk.PDiskId), {})
             pdisk_reported = wb_info.get('NumActiveSlots')

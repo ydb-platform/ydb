@@ -1,4 +1,10 @@
+import argparse
+import json
+
+import pytest
+
 import ydb.apps.dstool.lib.common as common
+from ydb.apps.dstool.lib import dstool_cmd_pdisk_list as pdisk_list
 from ydb.apps.dstool.lib import dstool_cmd_vdisk_list as vdisk_list
 
 GROUP_ID = 0x82000299
@@ -80,6 +86,36 @@ def test_vdisk_list_with_donors():
     assert donor_row['PDiskDecommitStatus'] == 'DECOMMIT_NONE'
 
 
-def test_build_donors_per_pdisk_map():
-    donors = common.build_donors_per_pdisk_map(make_base_config())
-    assert donors == {(2, 1): 1}
+@pytest.mark.parametrize('column', ['VSlotStatus', 'VDiskKind', 'ReadOnly'])
+@pytest.mark.parametrize('reverse', [False, True])
+def test_sort_donors_with_missing_values(column, reverse, monkeypatch, capsys):
+    config = {'BaseConfig': make_base_config(), 'StoragePools': make_storage_pools()}
+    monkeypatch.setattr(common, 'fetch_base_config_and_storage_pools', lambda: config)
+    parser = argparse.ArgumentParser()
+    vdisk_list.add_options(parser)
+    options = ['--show-donors', '--sort-by', column, '--columns', 'IsDonor', column, '--format', 'json']
+    if reverse:
+        options.append('--reverse')
+    vdisk_list.do(parser.parse_args(options))
+
+    rows = json.loads(capsys.readouterr().out)
+    assert [row['IsDonor'] for row in rows] == [reverse, not reverse]
+    assert next(row[column] for row in rows if row['IsDonor']) is None
+
+
+def test_pdisk_donor_count_after_last_donor_is_removed(monkeypatch, capsys):
+    config = make_base_config()
+    monkeypatch.setattr(common, 'fetch_base_config', lambda: config)
+    parser = argparse.ArgumentParser()
+    pdisk_list.add_options(parser)
+    args = parser.parse_args(['--columns', 'NodeId', 'NumDonorSlots', '--format', 'json', '--sort-by', 'NodeId'])
+
+    pdisk_list.do(args)
+    assert json.loads(capsys.readouterr().out) == [
+        {'NodeId': 1, 'NumDonorSlots': 0}, {'NodeId': 2, 'NumDonorSlots': 1},
+    ]
+    config.VSlot[0].ClearField('Donors')
+    pdisk_list.do(args)
+    assert json.loads(capsys.readouterr().out) == [
+        {'NodeId': 1, 'NumDonorSlots': 0}, {'NodeId': 2, 'NumDonorSlots': 0},
+    ]

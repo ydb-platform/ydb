@@ -68,6 +68,11 @@ class TestHive(object):
 
         response = self.kv_client.kv_write(table_path, 0, 'persistent-key', self.value)
         assert response.operation.status == StatusIds.SUCCESS
+        volume = self.client.describe(table_path, token='').PathDescription.SolomonDescription
+        tablet_ids = [
+            partition.TabletId
+            for partition in sorted(volume.Partitions, key=lambda partition: partition.PartitionId)
+        ]
         channels = self.tablet_info(tablet_ids[0])['TabletStorageInfo']['Channels']
         history = channel_history(channels)
         groups = {group.GroupId: group.ErasureSpecies for group in self.client.query_base_config().BaseConfig.Group}

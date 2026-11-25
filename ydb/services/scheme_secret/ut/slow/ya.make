@@ -19,4 +19,6 @@ SRCS(
 
 YQL_LAST_ABI_VERSION()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+
 END()

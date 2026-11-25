@@ -13,7 +13,7 @@ std::expected<std::optional<TMirror3dcGroupConfiguration>, TString> TBlobStorage
                 }
                 NActorsInterconnect::TNodeLocation location;
                 HostRecords->GetLocation(slot->VSlotId.NodeId).Serialize(&location, false);
-                auto it = DataCenterStates.find(location.GetDataCenter());
+                TDataCenterStates::const_iterator it = DataCenterStates.find(location.GetDataCenter());
                 excluded[slot->RingIdx] |= it != DataCenterStates.end() && IsExcluded(it->second);
             }
         }
@@ -23,7 +23,7 @@ std::expected<std::optional<TMirror3dcGroupConfiguration>, TString> TBlobStorage
             for (ui32 realm = 0; realm < excluded.size(); ++realm) {
                 if (excluded[realm] == takeDown && IsDown(current.Realms[realm]) != takeDown) {
                     pendingAvailabilityChange = true;
-                    if (auto next = ChangeMirror3dcRealmAvailability(current, realm, takeDown)) {
+                    if (std::optional<TMirror3dcGroupConfiguration> next = ChangeMirror3dcRealmAvailability(current, realm, takeDown)) {
                         return next;
                     }
                 }
@@ -49,7 +49,8 @@ void TBlobStorageController::UpdateGroupStateActor(TGroupId groupId) {
     if (!GroupStateActorId) {
         return;
     }
-    auto message = std::make_unique<NGroupSyncer::TEvGroupState::TEvUpdate>(groupId.GetRawId());
+    using TEvUpdate = NGroupSyncer::TEvGroupState::TEvUpdate;
+    std::unique_ptr<TEvUpdate> message = std::make_unique<TEvUpdate>(groupId.GetRawId());
     if (const TGroupInfo* group = FindGroup(groupId); group
             && group->ErasureSpecies == TErasureType::ErasureMirror3dc
             && group->Topology->GetTotalFailRealmsNum() == 3
@@ -60,7 +61,8 @@ void TBlobStorageController::UpdateGroupStateActor(TGroupId groupId) {
         message->Info->Topology = group->Topology;
         message->Info->States = group->FailRealmStates.value_or(NGroupSyncer::TFailRealmStates{});
         message->Info->GroupState = group->Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL);
-        auto step = GetGroupPolicyStep(*group, {*message->Info->GroupState, message->Info->States});
+        std::expected<std::optional<TMirror3dcGroupConfiguration>, TString> step = GetGroupPolicyStep(
+            *group, {*message->Info->GroupState, message->Info->States});
         if (!step) {
             message->Info.reset();
             Send(GroupStateActorId, message.release());

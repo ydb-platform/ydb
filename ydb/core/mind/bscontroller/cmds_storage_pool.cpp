@@ -1373,11 +1373,11 @@ namespace NKikimr::NBsController {
             TMirror3dcGroupConfiguration current{
                 group->Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL), group->FailRealmStates.value_or(normal)};
             if (parameters.FromGroupStateActor && previous != current) {
-                const auto step = Self.GetGroupPolicyStep(*group, previous);
+                std::expected<std::optional<TMirror3dcGroupConfiguration>, TString> step = Self.GetGroupPolicyStep(*group, previous);
                 if (!step) {
                     return std::unexpected<TString>(step.error());
                 }
-                const auto next = *step ? *step : RecoveringComplete(previous);
+                std::optional<TMirror3dcGroupConfiguration> next = *step ? *step : RecoveringComplete(previous);
                 if (next != current) {
                     return std::unexpected<TString>("Group state proposal no longer matches the controller target");
                 }

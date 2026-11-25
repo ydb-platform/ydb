@@ -1488,6 +1488,8 @@ message TIndexedTableCreationConfig {
     optional TTableDescription TableDescription = 1;
     repeated TIndexCreationConfig IndexDescription = 2;
     repeated TSequenceDescription SequenceDescription = 3;
+    // Internal CDC preparation holds only the base table in IMPORTING.
+    optional bool PrepareCdc = 4 [default = false];
 }
 
 message TInitiateBuildIndexMainTable {

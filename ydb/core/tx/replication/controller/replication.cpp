@@ -153,7 +153,10 @@ public:
         const auto previousLag = GetLag();
         const auto res = Targets.emplace(id, CreateTarget(self, id, kind, std::forward<Args>(args)...));
         Y_VERIFY_S(res.second, "Duplicate target: " << id);
-        TLagProvider::AddPendingLag(id);
+        // CDC mirrors have no replication workers reporting lag.
+        if (kind != ETargetKind::CdcTopic) {
+            TLagProvider::AddPendingLag(id);
+        }
         NotifyLagChanged(previousLag);
         return id;
     }
@@ -378,7 +381,7 @@ public:
 
     void UpdateLag(ui64 targetId, std::optional<TDuration> lag) {
         auto it = Targets.find(targetId);
-        if (it == Targets.end()) {
+        if (it == Targets.end() || it->second->GetKind() == ETargetKind::CdcTopic) {
             return;
         }
 

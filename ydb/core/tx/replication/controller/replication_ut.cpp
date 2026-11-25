@@ -180,6 +180,23 @@ Y_UNIT_TEST_SUITE(Replication) {
         }
     };
 
+    Y_UNIT_TEST(CdcTargetsDoNotInvalidateWorkerLag) {
+        TLagSetup s;
+        const auto child = s.Replication->AddTarget(TReplication::ETargetKind::CdcTopic,
+            std::make_shared<TTargetCdc::TConfig>("/Root/table/feed", "/Root/table_replica/feed"));
+        auto* target = s.Replication->FindTarget(child);
+        s.Replication->RegisterCdcChild(s.Target->GetId(), *GetCdcTarget(target));
+
+        UNIT_ASSERT(!target->GetLag());
+        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(5));
+        s.Target->InvalidateLag(1);
+        UNIT_ASSERT(!s.Replication->GetLag());
+        s.Target->UpdateLag(1, TDuration::Seconds(7));
+        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(7));
+        s.Replication->RemoveTarget(child);
+        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(7));
+    }
+
     Y_UNIT_TEST(WorkerLagPropagatesMaximumChanges) {
         TLagSetup s;
         UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(5));

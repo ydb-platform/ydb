@@ -1068,8 +1068,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         {
             const auto& pqConfig = pqDesc.GetPQTabletConfig();
 
-            // Fill only partition ids for a topic split by hash
-            if (NPQ::SplitMergeEnabled(pqConfig) && !pqConfig.GetSplitByPartitionKey()) {
+            const bool splitByHash = NPQ::SplitMergeEnabled(pqConfig) && !pqConfig.GetSplitByPartitionKey();
+            if (splitByHash) {
                 partitioning.reserve(pqDesc.GetPartitions().size());
                 for (const auto& partition : pqDesc.GetPartitions()) {
                     if (NKikimrPQ::ETopicPartitionStatus::Active == partition.GetStatus()) {
@@ -1093,7 +1093,6 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             partitioning.reserve(pqDesc.PartitionsSize());
             for (const auto& partition : pqDesc.GetPartitions()) {
-                // Skip a partition closed by a split
                 if (NKikimrPQ::ETopicPartitionStatus::Active != partition.GetStatus()) {
                     continue;
                 }

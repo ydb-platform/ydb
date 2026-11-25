@@ -433,7 +433,7 @@ namespace NKikimr::NBsController {
                 return;
             }
             const auto id = TGroupId::FromProto(copy.Part, &NKikimrBridge::TGroupState::TPile::GetGroupId);
-            const auto remaining = GetBridgeSyncRemaining(id, copy.Part->GetStage());
+            const auto remaining = GetBridgeSyncRemaining(*copy.Part);
             if (remaining) {
                 summary.RemainingBytes = summary.RemainingBytes.value_or(0) + remaining->Bytes;
             }

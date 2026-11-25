@@ -696,9 +696,12 @@ public:
                     .LastErrorTimestamp = bridgeSyncState.GetValue<Table::LastErrorTimestamp>(),
                     .FirstErrorTimestamp = bridgeSyncState.GetValue<Table::FirstErrorTimestamp>(),
                     .ErrorCount = bridgeSyncState.GetValue<Table::ErrorCount>(),
-                    .EstimatedBytesToCopy = bridgeSyncState.HaveValue<Table::EstimatedBytesToCopy>()
+                    // Estimates saved before the round was recorded cannot be attributed to the current rejoin.
+                    .EstimatedBytesToCopy = bridgeSyncState.HaveValue<Table::EstimateRound>() &&
+                            bridgeSyncState.HaveValue<Table::EstimatedBytesToCopy>()
                         ? std::make_optional(bridgeSyncState.GetValue<Table::EstimatedBytesToCopy>())
                         : std::nullopt,
+                    .EstimateRound = bridgeSyncState.GetValueOrDefault<Table::EstimateRound>(),
                 };
                 if (!bridgeSyncState.Next()) {
                     return false;

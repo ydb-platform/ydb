@@ -117,6 +117,35 @@ inline std::optional<THashMap<TString, const NKikimrSysView::TStoragePoolEntry*>
     return entries;
 }
 
+class TBridgePoolModeIndex {
+    THashMap<TString, std::optional<bool>> Modes;
+
+public:
+    TBridgePoolModeIndex() = default;
+
+    explicit TBridgePoolModeIndex(const NKikimrSysView::TEvGetStoragePoolsResponse& pools) {
+        for (const auto& entry : pools.GetEntries()) {
+            const auto& info = entry.GetInfo();
+            const auto [it, inserted] = Modes.emplace(info.GetName(), info.GetBridgeMode());
+            if (!inserted || !info.HasBridgeMode()) {
+                it->second.reset();
+            }
+        }
+    }
+
+    std::optional<bool> GetDatabaseMode(const THashSet<TString>& poolNames) const {
+        std::optional<bool> mode;
+        for (const auto& name : poolNames) {
+            const auto it = Modes.find(name);
+            if (it == Modes.end() || !it->second || (mode && mode != it->second)) {
+                return std::nullopt;
+            }
+            mode = it->second;
+        }
+        return mode;
+    }
+};
+
 class TBridgeStorageSnapshot {
     using TPoolId = std::pair<ui64, ui64>;
 

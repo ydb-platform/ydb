@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/blobstorage/base/bridge_events.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/sys_view/common/events.h>
@@ -444,6 +445,18 @@ namespace NBridgeTest {
         }
         UNIT_FAIL("group not found GroupId# " << groupId);
         Y_UNREACHABLE();
+    }
+
+    inline NKikimrBridge::TStorageState QueryStorageDiagnostics(TEnvironmentSetup& env, const NKikimrBridge::TStorageQuery& query) {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorage>();
+        request->Record.CopyFrom(query);
+        env.Runtime->SendToPipe(env.TabletId, edge, request.release(), 0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>(edge, true,
+            env.Runtime->GetClock() + TDuration::Minutes(1));
+        UNIT_ASSERT_C(response, query.ShortDebugString());
+        return response->Get()->Record;
     }
 
     inline NKikimrSysView::TGroupInfo QueryGroupSystemView(TEnvironmentSetup& env, ui32 groupId,

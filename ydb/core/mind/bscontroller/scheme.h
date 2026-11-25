@@ -488,10 +488,11 @@ struct Schema : NIceDb::Schema {
         struct FirstErrorTimestamp : Column<5, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
         struct ErrorCount : Column<6, NScheme::NTypeIds::Uint32> {};
         struct EstimatedBytesToCopy : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct EstimateRound : Column<8, NScheme::NTypeIds::Uint64> {}; // BecameUnsyncedGeneration of the scan
 
         using TKey = TableKey<TargetGroupId>;
         using TColumns = TableColumns<TargetGroupId, Stage, LastError, LastErrorTimestamp, FirstErrorTimestamp,
-            ErrorCount, EstimatedBytesToCopy>;
+            ErrorCount, EstimatedBytesToCopy, EstimateRound>;
     };
 
     struct DirectBlockGroupTabletState : Table<133> {

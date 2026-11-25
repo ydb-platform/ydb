@@ -429,7 +429,7 @@ message TBridgeDatabaseSyncInfo {
     map<string, uint64> GroupCountsBySyncStatus = 1; // SYNCED, SYNCING, PENDING, UNKNOWN
     optional uint64 BytesRemaining = 2; // known blob bytes left to copy
     optional bool BytesRemainingComplete = 3; // false when BytesRemaining is a lower bound
-    optional uint64 BytesPerSecond = 4; // total one-minute copy rate, when known
+    optional uint64 BytesPerSecond = 4; // sum of the one-minute rates of unfinished required copies, when known
     optional uint64 SecondsLeft = 5; // complete BytesRemaining / positive BytesPerSecond
 }
 

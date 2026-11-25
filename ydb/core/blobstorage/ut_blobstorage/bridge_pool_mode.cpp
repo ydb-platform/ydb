@@ -289,19 +289,6 @@ namespace {
 
 }
 
-namespace {
-    NKikimrBridge::TStorageState QueryStorageDiagnostics(TEnvironmentSetup& env, const NKikimrBridge::TStorageQuery& query) {
-        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-        auto request = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorage>();
-        request->Record.CopyFrom(query);
-        env.Runtime->SendToPipe(env.TabletId, edge, request.release(), 0,
-            TTestActorSystem::GetPipeConfigWithRetries());
-        auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>(edge, false);
-        return response->Get()->Record;
-    }
-
-}
-
 Y_UNIT_TEST_SUITE(BridgePoolMode) {
 
     Y_UNIT_TEST(RequestCountersFollowPoolRename) {
@@ -971,11 +958,15 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
             UNIT_ASSERT(owner.GetRowIndex() < static_cast<ui32>(byPool.GetDatabases().databases_size()));
         }
         for (const auto view : {NKikimrBridge::TStorageQuery::PILES, NKikimrBridge::TStorageQuery::GROUPS}) {
-            auto invalidView = query;
-            invalidView.SetView(view);
-            const auto invalid = QueryStorageDiagnostics(env, invalidView);
-            UNIT_ASSERT(invalid.GetStatus() == Ydb::StatusIds::BAD_REQUEST);
-            UNIT_ASSERT(!invalid.HasPiles() && !invalid.HasGroups() && !invalid.HasDatabases());
+            for (bool groupByPool : {true, false}) {
+                NKikimrBridge::TStorageQuery invalidView;
+                invalidView.SetView(view);
+                invalidView.SetGroupByStoragePool(groupByPool);
+                invalidView.SetIncludeSyncMetrics(!groupByPool);
+                const auto invalid = QueryStorageDiagnostics(env, invalidView);
+                UNIT_ASSERT_C(invalid.GetStatus() == Ydb::StatusIds::BAD_REQUEST, invalidView.ShortDebugString());
+                UNIT_ASSERT(!invalid.HasPiles() && !invalid.HasGroups() && !invalid.HasDatabases());
+            }
         }
         query.SetGroupByStoragePool(false);
         query.SetIncludeSyncMetrics(false);

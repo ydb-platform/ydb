@@ -147,7 +147,7 @@ message TDatabaseSynchronization {
     optional uint64 remaining_bytes = 6;
     // False if an unfinished copy has no full scan; in that case remaining_bytes is a lower bound.
     optional bool remaining_bytes_complete = 7;
-    // Sum of the per-copy rates over the last minute. Omitted for unknown copies or while syncers re-register after restart.
+    // Sum of the one-minute rates of unfinished required copies. Omitted for unknown copies or while syncers re-register after restart.
     optional uint64 copy_bytes_per_second = 8;
 }
 

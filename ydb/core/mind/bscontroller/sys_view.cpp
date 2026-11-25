@@ -775,10 +775,11 @@ void TBlobStorageController::UpdateSystemViews() {
                 g.SetBridgeSyncFirstErrorTimestamp(state.FirstErrorTimestamp.GetValue());
                 g.SetBridgeSyncErrorCount(state.ErrorCount);
             }
-            if (const auto stage = GetBridgeSyncStage(groupId)) {
-                g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(*stage));
-                if (*stage != NKikimrBridge::TGroupState::SYNCED) {
-                    if (const auto remaining = GetBridgeSyncRemaining(groupId, *stage)) {
+            ui64 currentRound = 0;
+            if (const auto* pile = FindBridgeSyncPile(groupId, &currentRound)) {
+                g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile->GetStage()));
+                if (pile->GetStage() != NKikimrBridge::TGroupState::SYNCED && pile->GetBecameUnsyncedGeneration() == currentRound) {
+                    if (const auto remaining = GetBridgeSyncRemaining(*pile)) {
                         g.SetBridgeSyncRemainingBytes(remaining->Bytes);
                         g.SetBridgeSyncRemainingBytesComplete(remaining->Complete);
                     }

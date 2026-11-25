@@ -364,6 +364,7 @@ class TCreateTable: public TSubOperation {
     virtual const char* Name() const override final { return "TCreateTable"; }
 
     bool AllowShadowData = false;
+    bool AllowPgForBackup = false;
     THashSet<TString> LocalSequences;
 
     static TTxState::ETxState NextState() {
@@ -409,6 +410,10 @@ public:
 
     void SetAllowShadowDataForBuildIndex() {
         AllowShadowData = true;
+    }
+
+    void SetAllowPgForBackup(bool allowPgForBackup) {
+        AllowPgForBackup = allowPgForBackup;
     }
 
     void SetLocalSequences(const THashSet<TString>& localSequences) {
@@ -610,7 +615,7 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
-        const bool disablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility();
+        const bool disablePgCompatibility = !AllowPgForBackup && AppData()->FeatureFlags.GetDisablePgCompatibility();
         const bool checkIndexPgCompatibility = disablePgCompatibility && parentPath.Base()->IsTableIndex()
             && (Transaction.GetInternal() || (context.IsAllowedPrivateTables
                 && Transaction.GetOperationType() == NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable));
@@ -855,10 +860,11 @@ bool SetName<TTag>(
 
 } // namespace NOperation
 
-ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
+ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences, bool allowPgForBackup) {
     auto obj = MakeSubOperation<TCreateTable>(id, tx);
     auto* table = static_cast<TCreateTable*>(obj.Get());
     table->SetLocalSequences(localSequences);
+    table->SetAllowPgForBackup(allowPgForBackup);
     return obj;
 }
 

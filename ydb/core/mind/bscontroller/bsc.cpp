@@ -1449,6 +1449,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kGetInterfaceVersion:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMovePDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateBridgeGroupInfo:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kManageRetiredS3Namespace:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReconfigureVirtualGroup:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kRecommissionGroups:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineDDiskPool:

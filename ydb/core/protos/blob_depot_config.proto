@@ -86,4 +86,6 @@ message TBlobDepotConfig {
     optional bool S3NamespaceValidated = 11;
     // Once BSC has authorized async cooling, shared objects can survive subsequent mode changes.
     optional bool EverAuthorizedDataCooling = 12;
+    // Issued by BSC at allocation. A name resembling a GUID does not prove its origin.
+    optional string GeneratedS3NamespaceId = 16;
 }

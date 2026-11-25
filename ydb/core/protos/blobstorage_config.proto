@@ -9,6 +9,7 @@ import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 import "google/protobuf/any.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrBlobStorage;
 
@@ -724,6 +725,24 @@ message TReconfigureVirtualGroup {
     bool ConfirmS3Empty = 6;
 }
 
+// Manage cleanup after the group is retired. The object namespace and route are immutable.
+message TManageRetiredS3Namespace {
+    uint32 GroupId = 1;
+    message TCredentials {
+        string AccessKey = 1 [(Ydb.sensitive) = true];
+        string SecretKey = 2 [(Ydb.sensitive) = true];
+    }
+    oneof Action {
+        TCredentials Credentials = 2;
+        // All users of this physical namespace, including via other bucket aliases and old
+        // migration routes, are drained. Authorize automatic cleanup of a legacy namespace.
+        bool ConfirmExclusiveOwnership = 3;
+        // All objects and outstanding mutations have been cleaned up externally. Release
+        // the cleanup credentials and retain the permanent namespace reservation.
+        bool ConfirmCleanupComplete = 4;
+    }
+}
+
 message TRecommissionGroups {
     repeated uint32 GroupIds = 1;
 }
@@ -835,6 +854,7 @@ message TConfigRequest {
             TDeleteSpecificGroups DeleteSpecificGroups = 62;
             TUpdateStoragePoolSettings UpdateStoragePoolSettings = 63;
             TChangeStoragePoolBridgeMode ChangeStoragePoolBridgeMode = 64;
+            TManageRetiredS3Namespace ManageRetiredS3Namespace = 68;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

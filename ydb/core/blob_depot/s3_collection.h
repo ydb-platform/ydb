@@ -3,12 +3,17 @@
 #include "s3_error.h"
 
 #include <ydb/core/wrappers/abstract.h>
+#include <ydb/library/aws_init/cancellable_request.h>
 
+#include <memory>
 #include <optional>
 
 namespace NKikimr::NBlobDepot {
 
     class TS3Listing {
+        struct TLifetime {};
+        const std::shared_ptr<TLifetime> Lifetime = std::make_shared<TLifetime>();
+        static constexpr int MaxKeysPerPage = 1000; // amortize LISTs over large depots
         const TString Prefix;
         TString Marker;
 
@@ -22,7 +27,11 @@ namespace NKikimr::NBlobDepot {
         const TString& GetMarker() const { return Marker; }
 
         Aws::S3::Model::ListObjectsRequest MakeRequest(const TString& bucket) const {
-            auto request = Aws::S3::Model::ListObjectsRequest().WithBucket(bucket).WithPrefix(Prefix).WithMaxKeys(1000);
+            auto request = Aws::S3::Model::ListObjectsRequest().WithBucket(bucket).WithPrefix(Prefix).WithMaxKeys(MaxKeysPerPage);
+            // An abandoned page may still be in the SDK queue or waiting for a response on an idle connection.
+            request.SetContinueRequestHandler(TCancellableAwsRequest{[lifetime = std::weak_ptr(Lifetime)](const auto*) {
+                return !lifetime.expired();
+            }});
             if (Marker) {
                 request.SetMarker(Marker);
             }
@@ -51,19 +60,20 @@ namespace NKikimr::NBlobDepot {
 
     enum class ES3DeleteStatus { Deleted, Missing, SlowDown, Failed };
 
-    // Missing entries are left to the caller, which knows which keys were submitted.
+    // The caller tracks omitted and duplicate entries against the submitted keys.
     template<typename TCallback>
     void VisitS3DeleteResults(const Aws::S3::Model::DeleteObjectsResult& result, TCallback&& visit) {
         for (const auto& item : result.GetDeleted()) {
             if (item.KeyHasBeenSet()) {
-                visit(item.GetKey(), ES3DeleteStatus::Deleted, TStringBuf());
+                visit(TString(item.GetKey().data(), item.GetKey().size()), ES3DeleteStatus::Deleted, TStringBuf(), TStringBuf());
             }
         }
         for (const auto& item : result.GetErrors()) {
             if (item.KeyHasBeenSet()) {
                 const auto status = IsS3MissingKey(item.GetCode()) ? ES3DeleteStatus::Missing
                     : IsS3SlowDownCode(item.GetCode()) ? ES3DeleteStatus::SlowDown : ES3DeleteStatus::Failed;
-                visit(item.GetKey(), status, TStringBuf(item.GetMessage().data(), item.GetMessage().size()));
+                visit(TString(item.GetKey().data(), item.GetKey().size()), status, TStringBuf(item.GetCode().data(), item.GetCode().size()),
+                    TStringBuf(item.GetMessage().data(), item.GetMessage().size()));
             }
         }
     }

@@ -10,6 +10,7 @@
 #include <util/string/builder.h>
 #include <util/string/printf.h>
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
@@ -223,6 +224,99 @@ Y_UNIT_TEST(DataFilesAreHashedInChunks) {
     TChunkStorage compressed;
     AddTable(compressed, "t", 1, "row\n", true, true);
     UNIT_ASSERT_C(Run(compressed, "t").Ok(), Issues(Run(compressed, "t")));
+}
+
+Y_UNIT_TEST(BytesReadCountsEveryStorageRead) {
+    class TCountingStorage : public TMemoryStorage {
+    public:
+        mutable std::atomic<ui64> Bytes{0};
+
+        TString Read(const TString& key) const override {
+            const TString data = TMemoryStorage::Read(key);
+            Bytes.fetch_add(data.size(), std::memory_order_relaxed);
+            return data;
+        }
+
+        void ReadChunks(
+            const TString& key,
+            const std::function<void()>& beginAttempt,
+            const std::function<void(TStringBuf)>& onChunk) const override
+        {
+            beginAttempt();
+            const TString data = TMemoryStorage::Read(key);
+            if (data) {
+                Bytes.fetch_add(data.size(), std::memory_order_relaxed);
+                onChunk(data);
+            }
+        }
+    };
+
+    TCountingStorage storage;
+    AddTable(storage, "t", 1, "row\n", true, true);
+    const TValidationReport report = Run(storage, "t");
+    UNIT_ASSERT_C(report.Ok(), Issues(report));
+    UNIT_ASSERT_VALUES_EQUAL(report.BytesRead, storage.Bytes.load());
+    UNIT_ASSERT(report.BytesRead > storage.Files.at("t/data_00.csv.zst").size());
+}
+
+Y_UNIT_TEST(BytesReadOmitsRetriedChunks) {
+    class TCountingStorage : public TMemoryStorage {
+    public:
+        mutable std::atomic<ui64> Bytes{0};
+        mutable ui32 FailsLeft = 1;
+
+        TString Read(const TString& key) const override {
+            const TString data = TMemoryStorage::Read(key);
+            Bytes.fetch_add(data.size(), std::memory_order_relaxed);
+            return data;
+        }
+
+        void ReadChunks(
+            const TString& key,
+            const std::function<void()>& beginAttempt,
+            const std::function<void(TStringBuf)>& onChunk) const override
+        {
+            RetryValidateIo(3, [&] {
+                beginAttempt();
+                const TString data = TMemoryStorage::Read(key);
+                if (data) {
+                    Bytes.fetch_add(data.size(), std::memory_order_relaxed);
+                    onChunk(data);
+                }
+                if (key.Contains("data_") && !key.EndsWith(".sha256") && FailsLeft > 0) {
+                    --FailsLeft;
+                    ythrow yexception() << "timeout";
+                }
+            }, [](TDuration) {
+            });
+        }
+    };
+
+    ResetValidateIoRetries();
+    TCountingStorage storage;
+    AddTable(storage, "t", 1, "row\n", true);
+    TValidateSettings settings;
+    settings.Threads = 1;
+    settings.Verbosity = 0;
+    TVector<TString> lines;
+    settings.Progress = [&lines](TStringBuf line) {
+        lines.emplace_back(line);
+    };
+    const TValidationReport report = ValidateBackup(storage, "t", settings);
+    UNIT_ASSERT_C(report.Ok(), Issues(report));
+    UNIT_ASSERT_VALUES_EQUAL(storage.FailsLeft, 0);
+    const ui64 dataBytes = storage.Files.at("t/data_00.csv").size();
+    UNIT_ASSERT(storage.Bytes.load() > report.BytesRead);
+    UNIT_ASSERT_VALUES_EQUAL(report.BytesRead, storage.Bytes.load() - dataBytes);
+    bool sawFinal = false;
+    for (const TString& line : lines) {
+        UNIT_ASSERT(!line.Contains("8 bytes read"));
+        if (line.Contains("4 bytes read")) {
+            sawFinal = true;
+        }
+    }
+    UNIT_ASSERT(sawFinal);
+    ResetValidateIoRetries();
 }
 
 Y_UNIT_TEST(DefaultThreadsMatchImportFileCsv) {

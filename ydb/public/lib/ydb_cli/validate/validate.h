@@ -151,6 +151,9 @@ struct TValidationReport {
     TVector<TValidationIssue> Issues;
     // Present in the backup, absent from ExpectedObjects. Does not fail Ok().
     TVector<TValidationIssue> Warnings;
+    // Bytes delivered by Read and ReadChunks. An attempt that is started again
+    // is removed, so a retried read is counted once.
+    ui64 BytesRead = 0;
 
     bool Ok() const {
         return Issues.empty();

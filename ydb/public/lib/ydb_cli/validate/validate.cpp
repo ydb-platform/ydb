@@ -231,6 +231,7 @@ TString FinishSha256(SHA256_CTX* ctx) {
 // Compressed objects are decompressed in the same pass, because export checksums
 // are computed from uncompressed plaintext. Neither form is buffered whole.
 // onStoredBytes receives the size of each stored chunk, including compressed bytes.
+// A negative value removes bytes of an attempt that is being read again.
 // An empty compressed object is an empty partition: export writes no zstd frame
 // for a shard with no rows, and import finishes that object without decompressing it.
 // The same read path serves S3 and NFS.
@@ -238,25 +239,36 @@ TString HashStoredFile(
     const IBackupStorage& storage,
     const TString& key,
     bool compressed,
-    const std::function<void(ui64)>& onStoredBytes)
+    const std::function<void(i64)>& onStoredBytes)
 {
     ui64 storedBytes = 0;
+    ui64 reportedBytes = 0;
     auto note = [&](TStringBuf chunk) {
         if (!chunk) {
             return;
         }
         storedBytes += chunk.size();
+        reportedBytes += chunk.size();
         if (onStoredBytes) {
-            onStoredBytes(chunk.size());
+            onStoredBytes(static_cast<i64>(chunk.size()));
         }
+    };
+    // beginAttempt runs again after an I/O retry. Drop the discarded attempt
+    // from the progress total; the bytes are delivered once more.
+    auto discardAttempt = [&] {
+        if (reportedBytes != 0 && onStoredBytes) {
+            onStoredBytes(-static_cast<i64>(reportedBytes));
+        }
+        reportedBytes = 0;
+        storedBytes = 0;
     };
     SHA256_CTX ctx;
     if (!compressed) {
         storage.ReadChunks(
             key,
             [&] {
+                discardAttempt();
                 SHA256_Init(&ctx);
-                storedBytes = 0;
             },
             [&](TStringBuf chunk) {
                 note(chunk);
@@ -276,8 +288,8 @@ TString HashStoredFile(
     storage.ReadChunks(
         key,
         [&] {
+            discardAttempt();
             SHA256_Init(&ctx);
-            storedBytes = 0;
             const size_t reset = ZSTD_DCtx_reset(dctx.get(), ZSTD_reset_session_only);
             if (ZSTD_isError(reset)) {
                 ythrow TBackupContentError() << "zstd: " << ZSTD_getErrorName(reset);
@@ -496,6 +508,10 @@ public:
     {
     }
 
+    ui64 BytesRead() const {
+        return Bytes.load(std::memory_order_relaxed);
+    }
+
     bool Exists(const TString& key) const override {
         const bool found = Inner.Exists(key);
         Log.Trace(TStringBuilder() << "exists " << key << (found ? " yes" : " no"));
@@ -512,6 +528,7 @@ public:
     TString Read(const TString& key) const override {
         Log.File(TStringBuilder() << "read " << key);
         TString data = Inner.Read(key);
+        Bytes.fetch_add(data.size(), std::memory_order_relaxed);
         Log.Trace(TStringBuilder() << "read " << key << " " << data.size() << " bytes");
         return data;
     }
@@ -523,14 +540,21 @@ public:
     {
         Log.File(TStringBuilder() << "read " << key);
         ui64 bytes = 0;
+        ui64 attemptBytes = 0;
         Inner.ReadChunks(
             key,
             [&] {
+                if (attemptBytes != 0) {
+                    Bytes.fetch_sub(attemptBytes, std::memory_order_relaxed);
+                    attemptBytes = 0;
+                }
                 bytes = 0;
                 beginAttempt();
             },
             [&](TStringBuf chunk) {
                 bytes += chunk.size();
+                attemptBytes += chunk.size();
+                Bytes.fetch_add(chunk.size(), std::memory_order_relaxed);
                 onChunk(chunk);
             });
         Log.Trace(TStringBuilder() << "read " << key << " " << bytes << " bytes");
@@ -539,6 +563,7 @@ public:
 private:
     const IBackupStorage& Inner;
     const TValidateLog& Log;
+    mutable std::atomic<ui64> Bytes{0};
 };
 
 class TValidator {
@@ -1510,8 +1535,12 @@ private:
                 Log.Object(TStringBuilder() << ShownPath(file.Dir) << ": checking data");
             }
             try {
-                const TString digest = HashStoredFile(Storage, file.StoredKey, file.Compressed, [&](ui64 n) {
-                    bytesRead.fetch_add(n, std::memory_order_relaxed);
+                const TString digest = HashStoredFile(Storage, file.StoredKey, file.Compressed, [&](i64 delta) {
+                    if (delta >= 0) {
+                        bytesRead.fetch_add(static_cast<ui64>(delta), std::memory_order_relaxed);
+                    } else {
+                        bytesRead.fetch_sub(static_cast<ui64>(-delta), std::memory_order_relaxed);
+                    }
                 });
                 const TString sidecar = file.PlainKey + ".sha256";
                 if (!Exists(sidecar)) {
@@ -1796,7 +1825,9 @@ TValidationReport ValidateBackup(const IBackupStorage& storage, const TString& p
     const TValidateLog log(settings);
     const TLogScope scope(&log);
     const TLoggingStorage logged(storage, log);
-    return TValidator(logged, settings, log).Run(path);
+    TValidationReport report = TValidator(logged, settings, log).Run(path);
+    report.BytesRead = logged.BytesRead();
+    return report;
 }
 
 } // namespace NYdb::NConsoleClient

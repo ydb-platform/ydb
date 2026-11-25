@@ -6,7 +6,10 @@
 
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/log.h>
+#include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/validate/validate.h>
+
+#include <util/datetime/base.h>
 
 #include <library/cpp/logger/log.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
@@ -177,12 +180,15 @@ private:
 
 int PrintReport(const IBackupStorage& storage, const TVector<TString>& paths, const TValidateSettings& settings) {
     ResetValidateIoRetries();
+    const TInstant started = TInstant::Now();
     size_t issues = 0;
     size_t warnings = 0;
     size_t checked = 0;
+    ui64 bytesRead = 0;
     for (const TString& path : paths) {
         const TValidationReport report = ValidateBackup(storage, path, settings);
         checked += report.Checked.size();
+        bytesRead += report.BytesRead;
         for (const TValidationIssue& warning : report.Warnings) {
             ++warnings;
             Cerr << "warning: " << warning.Path << ": " << warning.Message << Endl;
@@ -200,12 +206,20 @@ int PrintReport(const IBackupStorage& storage, const TVector<TString>& paths, co
         Cerr << "warning: " << retries << (retries == 1 ? " read retry" : " read retries") << Endl;
         warnings += 2;
     }
+    const TDuration elapsed = TInstant::Now() - started;
+    const double seconds = elapsed.SecondsFloat();
+    const TString throughput = TStringBuilder()
+        << "Elapsed: " << FormatDuration(elapsed)
+        << ". Total read size: " << FormatBytes(bytesRead)
+        << ". Average speed: " << FormatSpeed(seconds > 0 ? static_cast<double>(bytesRead) / seconds : 0)
+        << ".";
     if (issues != 0) {
         Cerr << "Backup validation failed: " << issues << " issue(s), checked " << checked << " object(s)";
         if (warnings != 0) {
             Cerr << ", " << warnings << " warning(s)";
         }
         Cerr << Endl;
+        Cerr << throughput << Endl;
         return EXIT_FAILURE;
     }
     Cout << "Backup validation succeeded: checked " << checked << " object(s)";
@@ -213,6 +227,7 @@ int PrintReport(const IBackupStorage& storage, const TVector<TString>& paths, co
         Cout << ", " << warnings << " warning(s)";
     }
     Cout << Endl;
+    Cout << throughput << Endl;
     return EXIT_SUCCESS;
 }
 

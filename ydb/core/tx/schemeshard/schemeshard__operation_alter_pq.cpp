@@ -222,22 +222,23 @@ public:
 
         TTopicInfo::TPtr params = new TTopicInfo();
         const bool hasKeySchema = tabletConfig->PartitionKeySchemaSize();
+        const bool splitByPartitionKey = tabletConfig->GetSplitByPartitionKey();
 
         if (!splitMergeEnabled && (alter.MergeSize() || alter.SplitSize() || alter.RootPartitionBoundariesSize())) {
             errStr = "Split and merge operations disabled";
             return nullptr;
         }
 
-        if (hasKeySchema && alter.RootPartitionBoundariesSize()) {
-            errStr = "Changing root partition bounds is not supported for topics with a key schema";
+        if (splitByPartitionKey && alter.RootPartitionBoundariesSize()) {
+            errStr = "Changing root partition bounds is not supported for topics split by partition key";
             return nullptr;
         }
 
-        if (hasKeySchema && alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy()
+        if (splitByPartitionKey && alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy()
             && alter.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType()
                 != tabletConfig->GetPartitionStrategy().GetPartitionStrategyType())
         {
-            errStr = "Changing the autopartitioning strategy is not supported for topics with a key schema";
+            errStr = "Changing the autopartitioning strategy is not supported for topics split by partition key";
             return nullptr;
         }
 
@@ -268,8 +269,8 @@ public:
                     errStr = "SplitBoundary must be specified for split operation";
                     return nullptr;
                 }
-                if (hasKeySchema && split.GetCreateRootLevelSibling()) {
-                    errStr = "Root level siblings are not supported for topics with a key schema";
+                if (splitByPartitionKey && split.GetCreateRootLevelSibling()) {
+                    errStr = "Root level siblings are not supported for topics split by partition key";
                     return nullptr;
                 }
             }
@@ -425,6 +426,10 @@ public:
             }
 
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
+            alterConfig.ClearSplitByPartitionKey();
+            if (splitByPartitionKey) {
+                alterConfig.SetSplitByPartitionKey(true);
+            }
             Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig);
             alterConfig.Swap(tabletConfig);
         }
@@ -927,7 +932,7 @@ public:
                     return result;
                 }
                 const auto keyRange = splittedPartition->KeyRange;
-                if (!topic->KeySchema.empty()) {
+                if (tabletConfig.GetSplitByPartitionKey()) {
                     if (!CheckTypedSplitBoundary(topic->KeySchema, keyRange, splitBoundary, errStr)) {
                         result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                         return result;
@@ -1077,8 +1082,8 @@ public:
                 size_t activePartitionCount = CountTopicActivePartitions(topic);
                 auto requestedMinPartitionCount = alter.GetPQTabletConfig().GetPartitionStrategy().GetMinPartitionCount();
                 if (requestedMinPartitionCount > activePartitionCount) {
-                    if (!topic->KeySchema.empty()) {
-                        errStr = "Increasing the minimum partition count is not supported for topics with a key schema";
+                    if (tabletConfig.GetSplitByPartitionKey()) {
+                        errStr = "Increasing the minimum partition count is not supported for topics split by partition key";
                         result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                         return result;
                     }

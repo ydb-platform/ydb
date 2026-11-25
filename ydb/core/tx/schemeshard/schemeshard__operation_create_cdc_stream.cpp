@@ -867,6 +867,10 @@ void DoCreatePqPart(
         ps->SetScaleThresholdSeconds(30);
     }
 
+    if (pqParams.KeyRangeAutoPartitioning) {
+        pqConfig.SetSplitByPartitionKey(true);
+    }
+
     if (!pqParams.ReplicationAutoPartitioning && !op.GetTopicAutoPartitioning()) {
         for (const auto& tag : table->KeyColumnIds) {
             Y_ABORT_UNLESS(table->Columns.contains(tag));

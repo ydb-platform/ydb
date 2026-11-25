@@ -12,6 +12,8 @@ using TEvReadSecretRequest = TGrpcRequestOperationCall<::Ydb::Secret::ReadSecret
 class TReadSecretRPC : public TRpcSchemeRequestActor<TReadSecretRPC, TEvReadSecretRequest> {
     using TBase = TRpcSchemeRequestActor<TReadSecretRPC, TEvReadSecretRequest>;
 
+    TPathId AuthorizedDomainKey;
+
 public:
     using TBase::TBase;
 
@@ -75,13 +77,13 @@ private:
         }
 
         const auto& token = Request_->GetInternalToken();
-        if (!token || !root.SecurityObject || !root.SecurityObject->CheckAccess(NACLib::GenericUse, *token)) {
-            Request_->RaiseIssue(NYql::TIssue("ReadSecret requires USE on the database root"));
+        if (!token || !root.SecurityObject || !root.SecurityObject->CheckAccess(NACLib::GenericFull, *token)) {
+            Request_->RaiseIssue(NYql::TIssue("ReadSecret requires FULL on the database root"));
             return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
         }
 
+        AuthorizedDomainKey = root.DomainInfo->DomainKey;
         auto navigateRequest = std::make_unique<TEvTxUserProxy::TEvNavigate>();
-        SetAuthToken(navigateRequest, *Request_);
         SetDatabase(navigateRequest.get(), *Request_);
         auto* describePath = navigateRequest->Record.MutableDescribePath();
         describePath->SetPath(Request_->NormalizePath(GetProtoRequest()->path()));
@@ -112,6 +114,11 @@ private:
                 if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeSecret) {
                     Request_->RaiseIssue(NYql::TIssue(
                         TStringBuilder() << "Unexpected path type: " << pathDescription.GetSelf().GetPathType()));
+                    return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                }
+                const auto& domain = pathDescription.GetDomainDescription();
+                if (!domain.HasDomainKey() || TPathId::FromDomainKey(domain.GetDomainKey()) != AuthorizedDomainKey) {
+                    Request_->RaiseIssue(NYql::TIssue("Secret path does not belong to the authorized database"));
                     return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
                 }
                 if (!pathDescription.HasSecretDescription()) {

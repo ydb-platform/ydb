@@ -90,6 +90,7 @@ def get_settings():
 # before_request overlaps on startup; without the lock each request builds its own checker.
 _initialize_lock = threading.Lock()
 _shutdown_coordinator = None
+_cluster_discovery = None
 
 
 def initialize_app():
@@ -106,9 +107,28 @@ def initialize_app():
 def _initialize_app_body():
     settings = get_settings()
 
-    process_specs = load_process_specs(settings.local_process_config) if settings.local_process_config else None
-    definitions = (local_definitions(NEMESIS_TYPES, ProcessController(process_specs))
+    process_specs = (load_process_specs(settings.local_process_config, discovery=bool(getattr(settings, "cluster_endpoint", "")))
+                     if settings.local_process_config else None)
+    discovery = None
+    snapshot = None
+    if getattr(settings, "cluster_endpoint", ""):
+        from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.discovery import ClusterDiscovery
+        if process_specs is None:
+            raise ValueError("Endpoint discovery currently requires local_process_config for process ownership")
+        discovery = ClusterDiscovery(settings.cluster_endpoint, max_age=settings.topology_max_age_sec)
+        snapshot = discovery.fetch(process_specs)
+        process_specs = snapshot.specs
+        discovery.publish(snapshot)
+    controller = ProcessController(process_specs) if process_specs is not None else None
+    definitions = (local_definitions(NEMESIS_TYPES, controller)
                    if process_specs is not None else NEMESIS_TYPES)
+    if discovery is not None:
+        from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.discovery import DiscoveredTabletRunner
+        from ydb.tests.stability.nemesis.internal.nemesis.cluster_entries import _KILL_TABLET_SPECS
+        for name, actor, _ in _KILL_TABLET_SPECS:
+            definitions[name] = {**NEMESIS_TYPES[name], "runner": DiscoveredTabletRunner(discovery, actor._tablet_type)}
+    global _cluster_discovery
+    _cluster_discovery = discovery
     execution_service = AgentExecutionService(NemesisManager(), definitions)
     agent_router.execution_service = execution_service
     global _shutdown_coordinator
@@ -137,7 +157,10 @@ def _initialize_app_body():
                     response.raise_for_status()
                 except requests.RequestException:
                     logger.exception("Could not resume agent %s; injections there remain unavailable", host)
-        orchestrator_router.healthcheck_reporter = HealthCheckReporter(loaded_hosts, store_results=True)
+        orchestrator_router.healthcheck_reporter = HealthCheckReporter(
+            loaded_hosts, store_results=True,
+            **({"endpoints_source": lambda: discovery.grpc[:2]} if discovery else {}),
+        )
         orchestrator_router.healthcheck_reporter.start_healthchecks()
 
         # Surfaced to the stability test report via GET /api/problems.
@@ -146,11 +169,11 @@ def _initialize_app_body():
 
         # Normally validated at startup by require_failure_model_or_die(); parsed here too for
         # embedded/test use. Either way the guard is live past this line.
-        topology = current_app.config.get("NEMESIS_TOPOLOGY")
+        topology = snapshot.topology if snapshot else current_app.config.get("NEMESIS_TOPOLOGY")
         if topology is None:
             topology = ClusterTopologyModel(cluster_yaml_path())
             current_app.config["NEMESIS_TOPOLOGY"] = topology
-        inventory = ClusterInventory(topology, agent_hosts=loaded_hosts, process_specs=process_specs)
+        inventory = snapshot.inventory if snapshot else ClusterInventory(topology, agent_hosts=loaded_hosts, process_specs=process_specs)
         metrics = NemesisMetrics()
         failure_guard = FailureModelGuard(
             topology, total_slots=len(inventory.slots), inventory=inventory, metrics=metrics
@@ -190,10 +213,10 @@ def _initialize_app_body():
         probe = RecoveryProbe(
             guard=failure_guard,
             hc_source=orchestrator_router.healthcheck_reporter,
-            node_piles_source=(RuntimeNodePiles(
+            node_piles_source=(discovery.fresh_node_piles if discovery else (RuntimeNodePiles(
                 [f"http://{orchestrator_router.agent_http_host(h)}:{orchestrator_router.mon_port}"
                  for h in loaded_hosts[:2]], topology.pile_names,
-            ) if topology.pile_names else None),
+            ) if topology.pile_names else None)),
             on_stuck=problems.record_stuck_fault,  # a never-recovering fault holds budget forever
             on_blind=problems.record_probe_blind,
             on_sighted=lambda: problems.resolve_kind(KIND_PROBE_BLIND),
@@ -218,6 +241,8 @@ def _initialize_app_body():
                 if plan.nemesis_type not in definitions:
                     from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.fault_engine import FaultRejected
                     raise FaultRejected("Fault is not supported in local process mode")
+                if plan.target.kind.value in ("node", "slot"):
+                    controller.spec_for(plan.target)
 
         engine = FaultEngine(
             guard=failure_guard, inventory=inventory,
@@ -228,6 +253,12 @@ def _initialize_app_body():
             recovery_probe=probe,
         )
         orchestrator_router.fault_engine = engine
+        if discovery is not None:
+            engine.check_topology = discovery.check
+            discovery.start(engine=engine, guard=failure_guard, inventory=inventory,
+                            controller=controller, service=execution_service, probe=probe,
+                            interval=settings.topology_refresh_sec,
+                            specs_source=lambda: load_process_specs(settings.local_process_config, discovery=True))
         # Boundary scheduler, started on demand via /api/scheduler/start.
         orchestrator_router.nemesis_scheduler = BoundaryNemesisScheduler(
             engine=engine,
@@ -242,6 +273,8 @@ def _initialize_app_body():
 
 
 def _begin_shutdown():
+    if _cluster_discovery is not None:
+        _cluster_discovery.stop()
     if orchestrator_router.fault_engine:
         orchestrator_router.fault_engine.begin_shutdown()
     if agent_router.execution_service:
@@ -296,7 +329,7 @@ def require_failure_model_or_die(flask_app) -> None:
     """Parse ``cluster.yaml`` before serving, or exit: chaos without a fault-tolerance ceiling is
     worse than no chaos. Called from the ``run`` entry point so importing this module stays free of
     side effects; agents plan nothing and need no model."""
-    if get_settings().nemesis_type == "agent":
+    if get_settings().nemesis_type == "agent" or getattr(get_settings(), "cluster_endpoint", ""):
         return
     try:
         flask_app.config["NEMESIS_TOPOLOGY"] = ClusterTopologyModel(cluster_yaml_path())

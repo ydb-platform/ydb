@@ -26,11 +26,12 @@ class HealthCheckReporter():
     _KILL_GRACE_SECONDS = 2
     _OUTPUT_LOG_LIMIT = 2000
 
-    def __init__(self, hosts: list[str], store_results: bool = False):
+    def __init__(self, hosts: list[str], store_results: bool = False, *, endpoints_source=None):
         self.stop = False
         self.healthcheck_thread: threading.Thread = None
         self.ydb_path = os.path.join(os.getcwd(), 'ydb_cli_hc')
         self.hosts = hosts
+        self._endpoints_source = endpoints_source
         self.hc_request_timeout_seconds = 45
         self.hc_period_seconds = 15
         self.store_results = store_results
@@ -162,8 +163,8 @@ class HealthCheckReporter():
 
         cmd = [
             self.ydb_path,
-            '--endpoint', f'grpc://{host}:2135',
-            'monitoring', 'healthcheck',
+            '--endpoint', host if '://' in host else f'grpc://{host}:2135',
+            'monitoring', 'healthcheck', '--verbose', '--no-cache',
             '--format', 'json',
         ]
         proc = None
@@ -227,12 +228,13 @@ class HealthCheckReporter():
 
     def __execute_healthcheck(self):
         results = {}
-        if self._executor is None or not self.hosts:
+        hosts = tuple(self._endpoints_source()) if self._endpoints_source else self.hosts
+        if self._executor is None or not hosts:
             return results
 
         future_to_host = {
             self._executor.submit(self.__run_one_healthcheck, host): host
-            for host in self.hosts
+            for host in hosts
         }
 
         # Use as_completed with a single overall timeout so total latency stays
@@ -261,6 +263,8 @@ class HealthCheckReporter():
         return results
 
     def __publish_healthcheck_results(self, results):
+        if self._endpoints_source is not None:
+            return  # Discovered service URLs are not per-host metric agent addresses.
         for host, host_result in results.items():
             target_url = f"http://{host}:3124/write"
             self_check_result = host_result.get('self_check_result', 'UNSPECIFIED')

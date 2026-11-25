@@ -670,3 +670,9 @@ def restore_operation(operation_id):
         return jsonify({"status": "error", "message": "Unknown operation"}), 404
     except Exception as error:
         return jsonify({"status": "error", "message": str(error)}), getattr(error, "status_code", 409)
+
+
+@blueprint.route("/api/discovery", methods=["GET"])
+def discovery_status():
+    from ydb.tests.stability.nemesis.app import _cluster_discovery
+    return jsonify(_cluster_discovery.status() if _cluster_discovery else {"enabled": False})

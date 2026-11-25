@@ -41,7 +41,7 @@ class ProcessSpec:
     restart: dict
 
 
-def load_process_specs(path):
+def load_process_specs(path, *, discovery=False):
     with open(path) as stream:
         rows = yaml.safe_load(stream).get("processes", [])
     specs = []
@@ -54,7 +54,7 @@ def load_process_specs(path):
             raise ValueError("Local process needs a node/slot kind and valid ic_port")
         node_id = int(row["node_id"]) if row.get("node_id") is not None else None
         slot_idx = int(row["slot_idx"]) if row.get("slot_idx") is not None else None
-        if (kind == "node" and node_id is None) or (kind == "slot" and slot_idx is None):
+        if not discovery and ((kind == "node" and node_id is None) or (kind == "slot" and slot_idx is None)):
             raise ValueError("Local node_id / slot_idx is required")
         unit = restart.get("unit")
         if unit:
@@ -76,15 +76,16 @@ def load_process_specs(path):
             ):
                 raise ValueError("Restart environment must contain valid string keys/values")
         specs.append(ProcessSpec(
-            host=row["host"], kind=kind, node_id=node_id, slot_idx=slot_idx,
-            ic_port=port, executable=executable, rack=str(row["rack"]),
-            datacenter=str(row["datacenter"]), bridge_pile_id=row.get("bridge_pile_id"),
+            host=row.get("host", "localhost") if discovery else row["host"], kind=kind, node_id=node_id, slot_idx=slot_idx,
+            ic_port=port, executable=executable, rack=str(row.get("rack", "")) if discovery else str(row["rack"]),
+            datacenter=str(row.get("datacenter", "")) if discovery else str(row["datacenter"]), bridge_pile_id=row.get("bridge_pile_id"),
             uid=int(row.get("uid", os.geteuid())), restart=restart,
         ))
     if not specs or len({s.ic_port for s in specs}) != len(specs):
         raise ValueError("Local process ports must be non-empty and unique")
     for kind in ("node", "slot"):
         ids = [s.node_id if kind == "node" else s.slot_idx for s in specs if s.kind == kind]
+        ids = [value for value in ids if value is not None]
         if len(ids) != len(set(ids)):
             raise ValueError("Duplicate local resource identity")
     if len({s.host for s in specs}) != 1:

@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     app_port: int = 31434
     mon_port: int = 8765
     nemesis_mon_port: int = 8666
+    cluster_endpoint: str = ''
+    topology_refresh_sec: int = 15
+    topology_max_age_sec: int = 90
     yaml_config_location: str = ''
     database_config_location: str = ''
     # Remote install layout (rsync targets, systemd ExecStart); override via NEMESIS_INSTALL_ROOT.

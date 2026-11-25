@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from typing import Callable
+from urllib.parse import urlsplit
 
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import (
     ChaosTarget,
@@ -106,6 +107,7 @@ def build_snapshot(
             continue
         if entry.get("self_check_result") in HC_ERROR_RESULTS:
             continue
+        host = urlsplit(host).hostname if "://" in host else host
         answering.add(host)
         host_alive: set[int] = set()
         seen_skew = False

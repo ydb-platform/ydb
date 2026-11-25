@@ -17,6 +17,7 @@ TEST_SRCS(
     test_metrics.py
     test_local_kikimr.py
     test_local_process.py
+    test_discovery.py
 )
 
 PEERDIR(

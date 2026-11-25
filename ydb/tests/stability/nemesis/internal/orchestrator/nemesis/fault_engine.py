@@ -82,6 +82,7 @@ class FaultEngine:
         self._confirm_timeout_for = confirm_timeout_for
         self._predicate_for = predicate_for
         self._admission = admission
+        self.check_topology = lambda: None
         self._lock = threading.RLock()
         self._stopping = threading.Event()
         self._operations_lock = threading.Lock()
@@ -152,6 +153,7 @@ class FaultEngine:
         with self._lock:
             if self._stopping.is_set():
                 raise FaultRejected("Nemesis is stopping")
+            self.check_topology()
             scope, kind = self._scope_for(nemesis_type), self._kind_for(nemesis_type)
             full = self._mode_for(nemesis_type) is not GuardMode.BYPASS
             by_extract = self._recovery_mode_for(nemesis_type) == "extract"

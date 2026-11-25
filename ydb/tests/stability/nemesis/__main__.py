@@ -81,6 +81,7 @@ def parse_args():
 
     # ---- Cluster configuration ----
     cfg = parser.add_argument_group("cluster configuration")
+    cfg.add_argument("--cluster-endpoint", help="Bootstrap viewer URL; discover and refresh cluster topology")
     cfg.add_argument(
         '--yaml-config-location',
         metavar='PATH',
@@ -263,6 +264,8 @@ def main():
 
     # Build kwargs from argv (only include non-None values)
     argv_kwargs = {}
+    if args.cluster_endpoint:
+        os.environ["CLUSTER_ENDPOINT"] = args.cluster_endpoint
     if args.nemesis_type is not None:
         argv_kwargs['nemesis_type'] = args.nemesis_type
     if args.app_host is not None:

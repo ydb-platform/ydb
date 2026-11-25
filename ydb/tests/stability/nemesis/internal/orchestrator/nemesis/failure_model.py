@@ -167,19 +167,19 @@ class ClusterTopologyModel:
     fail-domain keys via ``domain_of`` / ``domains_in_dc`` / ``dc_of_domain``.
     """
 
-    def __init__(self, yaml_path: str | None) -> None:
+    def __init__(self, yaml_path: str | None = None, *, document=None) -> None:
         self.yaml_path = yaml_path or ""
         self.hosts: dict[str, HostTopology] = {}
         self.pile_names: dict[int, str] = {}
         # fail-domain key ("<dc>/<rack>") -> datacenter
         self._domain_to_dc: dict[str, str | None] = {}
         self.tolerance = FailureTolerance.from_erasure("")
-        self._parse()
+        self._parse(document)
 
     # -- parsing ------------------------------------------------------------
 
-    def _parse(self) -> None:
-        doc = self._load_doc(self.yaml_path)
+    def _parse(self, document=None) -> None:
+        doc = self._load_doc(self.yaml_path) if document is None else document
         erasure, erasure_key = _find_erasure(doc)
         self.tolerance = FailureTolerance.from_erasure(erasure)
         if not self.tolerance.guards:
@@ -384,6 +384,16 @@ class FailureModelGuard:
     def enabled(self) -> bool:
         """Always True — an unusable topology raises at construction. Reported in :meth:`snapshot`."""
         return self._topology.guards
+
+    def reconfigure(self, replacement):
+        """Replace budget placement only after all leases have recovered."""
+        with self._lock:
+            if self._impairments:
+                raise RuntimeError("Cannot refresh topology with active leases")
+            for name in ("_topology", "_placement", "_pile_totals", "_pile_limits", "_total_slots", "_max_slots"):
+                setattr(self, name, getattr(replacement, name))
+            if self._metrics:
+                self._metrics.sync_budget_gauges(replacement.snapshot())
 
     def set_metrics(self, metrics) -> None:
         """Attach orchestrator metrics emitter (late bind from app init)."""

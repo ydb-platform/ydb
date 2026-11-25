@@ -613,3 +613,35 @@ Tests cover real isolated child processes, precise targeting, PID-generation
 checks, kill/stop/restart, suspend/resume, full local app wiring without harness,
 SIGTERM during an accepted injection, duplicate restore, timeout and failure
 reporting. They do not deploy a real YDB cluster or stop an installed systemd unit.
+
+
+### Local cluster discovery
+
+For ydbd processes on the orchestrator host, start with one reachable viewer URL:
+
+```sh
+nemesis run --cluster-endpoint http://localhost:8765 --local-process-config /path/processes.yaml
+```
+
+`CLUSTER_ENDPOINT` is also supported. This mode requires no cluster YAML and does
+not use the deployment harness. Viewer configuration and node state supply
+placement, erasure, pile membership and IC/gRPC/HTTP endpoints. The local process
+file retains executable/UID, kind, IC port and restart recipes. Node ID, slot ID,
+rack, datacenter and pile may be omitted in discovery mode; they come from the
+cluster. Host defaults to localhost. The file is reread on refresh so new process recipes can
+be added without restarting Nemesis. Tablet kill actions use discovered gRPC
+endpoints. Other host/network/disk actions remain disabled in local process mode.
+
+`TOPOLOGY_REFRESH_SEC` defaults to 15 and `TOPOLOGY_MAX_AGE_SEC` to 90. Inspect
+`GET /api/discovery` for endpoints, generation, age, errors and deferred updates.
+Topology/budget changes wait until existing effects and recovery leases finish;
+endpoint failover continues during recovery. Each pile retains its own storage
+and slot budget. A missing response does not remove a previously known resource
+or free its budget. Dynamic node IDs are reconciled by host and IC port. Automatic
+removal of retired dynamic slots is deliberately not inferred from disappearance.
+Stale discovery rejects new injections but does not prevent restoration.
+
+The bootstrap must expose `/viewer/config` and `/viewer/json/nodes`, including
+SystemState endpoints and location. An incomplete response or unsupported erasure
+is rejected. This initial discovery mode supports local process control; existing
+YAML-based multi-host installation and stability test API remain supported.

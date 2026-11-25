@@ -175,10 +175,10 @@ private:
 
 } // anonymous
 
-IAutopartitioningManager* CreateKeyRangeAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId,
+std::unique_ptr<IAutopartitioningManager> CreateKeyRangeAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId,
     const TSourceIdStorage& sourceIds)
 {
-    return new TKeyRangeAutopartitioningManager(config, partitionId, sourceIds);
+    return std::make_unique<TKeyRangeAutopartitioningManager>(config, partitionId, sourceIds);
 }
 
 }

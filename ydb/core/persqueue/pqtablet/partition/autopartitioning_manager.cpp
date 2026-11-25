@@ -569,21 +569,21 @@ private:
     TStatefulAutopartitioningManager AutopartitioningManager;
 };
 
-IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId, const TSourceIdStorage& sourceIds) {
+std::unique_ptr<IAutopartitioningManager> CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId, const TSourceIdStorage& sourceIds) {
     auto withAutopartitioning = SplitMergeEnabled(config) && !MirroringEnabled(config);
     if (!withAutopartitioning) {
-        return new TNoneAutopartitioningManager(config);
+        return std::make_unique<TNoneAutopartitioningManager>(config);
     }
 
     if (partitionId.IsSupportivePartition()) {
-        return new TSupportiveAutopartitioningManager(config, partitionId.OriginalPartitionId);
+        return std::make_unique<TSupportiveAutopartitioningManager>(config, partitionId.OriginalPartitionId);
     }
 
     if (config.PartitionKeySchemaSize() > 0) {
         return CreateKeyRangeAutopartitioningManager(config, partitionId.OriginalPartitionId, sourceIds);
     }
 
-    return new TStatefulAutopartitioningManager(config, partitionId.OriginalPartitionId);
+    return std::make_unique<TStatefulAutopartitioningManager>(config, partitionId.OriginalPartitionId);
 }
 
 }

@@ -49,7 +49,7 @@ struct TModuleFactories {
     std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory;
     // Factory for Simple queue services implementation details
     std::shared_ptr<NSQS::IEventsWriterFactory> SqsEventsWriterFactory;
-    std::shared_ptr<const NSysView::ISystemViewScanFactory> SystemViewScanFactory;
+    std::shared_ptr<NSysView::ISystemViewScanFactory> SystemViewScanFactory;
     // Scheme operations
     std::shared_ptr<NSchemeShard::IOperationFactory> SchemeOperationFactory;
 

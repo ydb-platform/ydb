@@ -90,6 +90,7 @@
 
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/security/login_page.h>
+#include <ydb/core/sys_view/factory.h>
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
@@ -1637,6 +1638,13 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
     AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
     AppData->SystemViewScanFactory = ModuleFactories ? ModuleFactories->SystemViewScanFactory.get() : nullptr;
+    if (!AppData->SystemViewScanFactory) {
+        // TODO: Remove this backward-compatible initialization once all applications
+        // explicitly configure their system-view scan factory.
+        std::shared_ptr<NSysView::ISystemViewScanFactory> factory(NSysView::CreateSystemViewScanFactory());
+        AppData->SystemViewScanFactory = factory.get();
+        AddGlobalObject(std::move(factory));
+    }
     AppData->ConfigSwissKnife = ModuleFactories ? ModuleFactories->ConfigSwissKnife.get() : nullptr;
 
     AppData->TransferWriterFactory = ModuleFactories && ModuleFactories->TransferWriterFactory

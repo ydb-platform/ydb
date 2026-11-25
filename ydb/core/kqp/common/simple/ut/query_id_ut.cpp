@@ -91,6 +91,12 @@ Y_UNIT_TEST_SUITE(KqpQueryId) {
             }
         }
 
+        // A moved-from key reads as empty instead of past its buffer.
+        auto moved = MakeId("SELECT 1", types);
+        const auto taken = std::move(moved);
+        UNIT_ASSERT_VALUES_EQUAL(moved.Database(), "");
+        UNIT_ASSERT_VALUES_EQUAL(taken.Database(), "/Root");
+
         // The PG compatibility flag is set after the key is built and takes part in equality and the hash.
         auto pg = MakeId("SELECT 1", types);
         UNIT_ASSERT(pg.DisablePgCompatibility());

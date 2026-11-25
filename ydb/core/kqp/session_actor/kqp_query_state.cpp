@@ -216,9 +216,11 @@ TMaybe<TKqpQueryId> TKqpQueryState::BuildQueryId(const TKqpEncodedGUC& encodedGU
 TKqpQueryState::TCacheLookup TKqpQueryState::GetCacheLookup(const TMaybe<TKqpQueryId>& query) const {
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
+            YQL_ENSURE(query);
             return {.KeepInCache = GetQueryKeepInCache() && query->IsSql()};
 
         case NKikimrKqp::QUERY_ACTION_PREPARE:
+            YQL_ENSURE(query);
             return {.KeepInCache = query->IsSql()};
 
         case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
@@ -327,6 +329,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildSplitRequest(std
 }
 
 std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, const TKqpEncodedGUC& encodedGUCSettings, TKqpTransactionContext* txCtx) {
+    YQL_ENSURE(!QueryPhysicalGraph);
     YQL_ENSURE(GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE || GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN);
     auto query = BuildQueryId(encodedGUCSettings, txCtx);
 

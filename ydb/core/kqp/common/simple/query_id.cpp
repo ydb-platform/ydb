@@ -137,6 +137,10 @@ const TKqpEncodedGUC& TKqpEncodedGUCSettings::Get(const TGUCSettings& gUCSetting
 
 TStringBuf TKqpQueryId::Field(EField field) const {
     ui32 ends[FieldCount];
+    // A moved-from key has no buffer: its fields read as empty.
+    if (Key_.size() < sizeof(ends)) {
+        return {};
+    }
     memcpy(ends, Key_.data(), sizeof(ends));
     const ui32 begin = field == 0 ? sizeof(ends) : ends[field - 1];
     return TStringBuf(Key_.data() + begin, ends[field] - begin);

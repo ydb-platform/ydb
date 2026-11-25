@@ -73,7 +73,8 @@ struct TParquetExportSettings {
     IExport::TTableColumns Columns;
     ui64 RowGroupSize = 10000;
     // The limit on the cell bytes of a row group, 0 for no limit. A row wider than the
-    // limit is a row group of its own. The export sets it to its batch size.
+    // limit is a row group of its own. The export sets it to the smaller of its batch size
+    // and a share of the restore read buffer (see ParquetRowGroupBytesLimit).
     ui64 RowGroupBytes = 32ull << 20;
     TMaybe<TCompressionSettings> CompressionSettings;
 };

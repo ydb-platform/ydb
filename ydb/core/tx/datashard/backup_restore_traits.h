@@ -34,9 +34,9 @@ std::optional<TParquetExportSettings> ParquetExportSettingsFromTask(const NKikim
 
 // Restore reads a Parquet file a row group at a time into a buffer of RestoreReadBufferSizeLimit
 // bytes, next to the parsed footer, and rejects a row group that does not fit. Export cuts row
-// groups at an eighth of the limit (the share restore gives the footer), so a backup made with
-// the default settings restores with them whatever the upload batch is. Never 0, which would
-// disable the cut.
+// groups by their cell bytes at an eighth of the limit (the share restore gives the serialized
+// footer), which leaves room for the encoding overhead and the footer in a restore with the same
+// setting. Never 0, which would disable the cut.
 ui64 ParquetRowGroupBytesLimit(ui64 restoreReadBufferSizeLimit);
 
 EDataFormat NextDataFormat(EDataFormat cur);

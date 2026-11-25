@@ -32,6 +32,8 @@
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
+#include <parquet/file_reader.h>
+
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/types/binary_json/write.h>
@@ -2208,6 +2210,150 @@ value {
     // A Parquet backup holds DyNumber and JsonDocument in binary, a CSV one as text.
     Y_UNIT_TEST_FLAG(ExportImportOnSupportedDatatypesParquet, EnableDataShardDirectPartImport) {
         ExportImportOnSupportedDatatypesImpl(false, false, EnableDataShardDirectPartImport, false, EBackupTestDataFormat::Parquet);
+    }
+
+    // Exports /MyRoot/Table in Parquet to the mock under Backup1.
+    void ExportTableToParquet(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, ui16 port) {
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: "Backup1"
+              }
+              parquet {}
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+    }
+
+    // Imports the backup of ExportTableToParquet as /MyRoot/Restored, expecting success, and
+    // checks that the restored table has the keys of the original one.
+    void ImportParquetAndCheckKeys(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, ui16 port) {
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "Backup1"
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        const auto original = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key"});
+        const auto restored = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, "Restored", {"key"}, {"key"});
+        NKqp::CompareYson(original, restored);
+    }
+
+    std::shared_ptr<parquet::FileMetaData> ParquetMetadata(const TString& data) {
+        return parquet::ReadMetaData(std::make_shared<arrow::io::BufferReader>(
+            reinterpret_cast<const uint8_t*>(data.data()), static_cast<int64_t>(data.size())));
+    }
+
+    // The export cuts row groups by bytes, so a wide table of long values gives many row groups
+    // where there was one. With column statistics each would add the min and max of every
+    // column (up to 4 KB each) to the footer: 6 row groups of 32 columns are 1.5 MB of footer,
+    // over the eighth of the restore read buffer that restore allows a footer, where one row
+    // group was 258 KB. Statistics are off, so the footer stays small and the backup restores.
+    Y_UNIT_TEST(ExportImportParquetWideTableWithManyRowGroups) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+        // Restore allows a footer of an eighth of this, 1 MB; export cuts row groups at 1 MB too.
+        runtime.GetAppData().DataShardConfig.SetRestoreReadBufferSizeLimit(8_MB);
+        ui64 txId = 100;
+
+        const ui32 columnCount = 32;
+        const ui32 rowCount = 48; // rows of 128 KB: 8 per row group, 6 row groups
+        const TString value(4000, 'v');
+
+        TStringBuilder scheme;
+        scheme << "Name: \"Table\"\n";
+        scheme << "Columns { Name: \"key\" Type: \"Uint32\" }\n";
+        for (ui32 i = 0; i < columnCount; ++i) {
+            scheme << "Columns { Name: \"value" << i << "\" Type: \"Utf8\" }\n";
+        }
+        scheme << "KeyColumnNames: [\"key\"]\n";
+        TestCreateTable(runtime, ++txId, "/MyRoot", scheme);
+        env.TestWaitNotification(runtime, txId);
+
+        TVector<ui32> valueTags(columnCount);
+        std::iota(valueTags.begin(), valueTags.end(), 2);
+        const TVector<TCell> values(columnCount, TCell(value.data(), value.size()));
+        for (ui32 key = 1; key <= rowCount; ++key) {
+            UploadRow(runtime, "/MyRoot/Table", 0, {1}, valueTags, {TCell::Make(key)}, values);
+        }
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        ExportTableToParquet(runtime, env, txId, port);
+
+        const auto* data = s3Mock.GetData().FindPtr("/Backup1/data_00.parquet");
+        UNIT_ASSERT(data);
+        const auto metadata = ParquetMetadata(*data);
+        UNIT_ASSERT_VALUES_EQUAL(metadata->num_row_groups(), 6);
+        // With statistics the footer would be 1.5 MB.
+        UNIT_ASSERT_LT(metadata->size(), 128_KB);
+
+        ImportParquetAndCheckKeys(runtime, env, txId, port);
+    }
+
+    // A raised upload batch makes larger S3 parts, not larger row groups: those are also cut
+    // at an eighth of the restore read buffer, so a restore with the same buffer reads the
+    // backup. Otherwise the 12 MB of rows below would be one row group, which restore rejects
+    // against an 8 MB buffer.
+    Y_UNIT_TEST(ExportImportParquetWithRaisedBackupBatch) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+        runtime.GetAppData().DataShardConfig.SetBackupBytesBatchSize(64_MB);
+        runtime.GetAppData().DataShardConfig.SetRestoreReadBufferSizeLimit(8_MB);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Distinct values encode about as they are, so a row group is about its cell bytes.
+        const ui32 rowCount = 96;
+        TString value(128_KB, 'x');
+        for (ui32 key = 1; key <= rowCount; ++key) {
+            const TString keyText = TStringBuilder() << key;
+            memcpy(value.begin(), keyText.data(), keyText.size());
+            UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(key)}, {TCell(value.data(), value.size())});
+        }
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        ExportTableToParquet(runtime, env, txId, port);
+
+        const auto* data = s3Mock.GetData().FindPtr("/Backup1/data_00.parquet");
+        UNIT_ASSERT(data);
+        const auto metadata = ParquetMetadata(*data);
+        // Row groups of 1 MB are 7 rows: 14 of them.
+        UNIT_ASSERT_GE(metadata->num_row_groups(), 12);
+        for (int i = 0; i < metadata->num_row_groups(); ++i) {
+            UNIT_ASSERT_LE_C(static_cast<ui64>(metadata->RowGroup(i)->total_byte_size()), 1_MB + 64_KB, "row group " << i);
+        }
+
+        ImportParquetAndCheckKeys(runtime, env, txId, port);
     }
 
     Y_UNIT_TEST_FLAG(ZeroLengthEncryptedFileTreatedAsCorrupted, EnableDataShardDirectPartImport) {

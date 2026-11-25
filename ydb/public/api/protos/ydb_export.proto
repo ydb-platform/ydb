@@ -76,7 +76,9 @@ message YdbDumpFormat {
 
 message ParquetFormat {
     // The maximum number of rows in a row group. A row group is also closed when its data
-    // would exceed the export batch size of the server (32 MB by default).
+    // would exceed the server's limit (32 MB by default: the export batch size, or an eighth
+    // of the restore read buffer if that is smaller, so that a restore with the same settings
+    // can hold the group).
     uint32 row_group_size = 1 [(value) = "[1; 10000000]"];
 }
 

@@ -478,9 +478,11 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
             auto maybeSettings = ParquetExportSettingsFromTask(Task);
             auto settings = maybeSettings.value_or(TParquetExportSettings{});
             // Row groups are cut by the batch, so a scan holds about a part of pending rows, and
-            // by what restore holds at once, so a raised batch does not make unrestorable groups.
-            const ui64 rowGroupBytes = Min(maxBytes,
-                ParquetRowGroupBytesLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit()));
+            // by a share of this node's restore read buffer, so a raised batch does not make
+            // groups a restore with the same settings cannot hold. A batch of 0 cuts nothing.
+            const ui64 restoreRowGroupBytes = ParquetRowGroupBytesLimit(
+                AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit());
+            const ui64 rowGroupBytes = maxBytes ? Min(maxBytes, restoreRowGroupBytes) : restoreRowGroupBytes;
             settings
                 .WithColumns(Columns)
                 .WithRowGroupBytes(rowGroupBytes);

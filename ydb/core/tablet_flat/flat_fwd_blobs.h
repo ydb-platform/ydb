@@ -41,17 +41,22 @@ namespace NFwd {
         {
             auto pageId = offset.AsPageIndex(); // blob pages are always page-index-addressed
 
-            Y_ENSURE(pageId >= Lower, "Cannot handle backward blob reads");
+            Y_ENSURE(pageId >= RowBegin, "Cannot handle backward blob reads across rows");
 
             auto again = (std::exchange(Tags.at(FrameTo(pageId)), 1) == 0);
 
-            Grow = again ? Lower : Max(Lower, Grow);
+            Rewind(RowBegin).Shrink(false); /* keep every frame of the current row */
+            Propagate(Lower);
 
-            Rewind(Lower).Shrink(false); /* points Position to current frame */
+            auto &page = Lookup(pageId);
+            // An older frame may not have been loaded when entering this row at
+            // a historical version. Already loaded shared blobs need no rewind.
+            Grow = again || (page.Fetch == EFetch::None && page.Size < Edge[page.Tag])
+                ? Lower : Max(Lower, Grow);
 
             bool more = Grow < Max<TPageId>() && (OnHold + OnFetch < lower);
 
-            auto &page = Preload(head, 0).Lookup(pageId);
+            Preload(head, 0);
 
             return { page.Touch(offset, Stat), more, page.Size < Edge[page.Tag] };
         }
@@ -59,6 +64,17 @@ namespace NFwd {
         void Forward(IPageLoadingQueue *head, ui64 upper) override
         {
             Preload(head, upper);
+        }
+
+        void ReleaseRowHistory()
+        {
+            if (Row != Max<TRowId>()) {
+                RowBegin = Frames->Lower(Row + 1, RowBegin, Frames->Stats().Items);
+                Lower = Upper = RowBegin;
+                Grow = Max(Grow, RowBegin);
+                Rewind(RowBegin).Shrink(false);
+                Row = Max<TRowId>();
+            }
         }
 
         void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage) override
@@ -102,7 +118,7 @@ namespace NFwd {
             const auto end = Pages.begin() + Position;
             auto offset = TPageOffset::FromPageIndex(id);
 
-            if (offset >= end->Offset) {
+            if (Position < Pages.size() && offset >= end->Offset) {
                 return Pages.at(Position + (id - end->Offset.AsPageIndex()));
             } else {
                 auto it = std::lower_bound(Pages.begin(), end, offset);
@@ -117,22 +133,17 @@ namespace NFwd {
         {
             if (ref >= Lower && ref < Upper) {
                 return Lookup(ref).Tag;
-            } else if (!Pages || Pages.back().Offset < TPageOffset::FromPageIndex(ref)) {
-                return FrameTo(ref, Frames->Relation(ref));
-            } else {
-                const auto &page = Lookup(ref);
-                Y_ENSURE(page.Size < Max<ui32>(), "Unexpected huge page");
-
-                i16 refer = ref - page.Refer; /* back to relative refer */
-
-                return FrameTo(ref, { 0, page.Tag, refer, static_cast<ui32>(page.Size) });
             }
-        }
 
-        ui32 FrameTo(TPageId ref, NPage::TFrames::TEntry rel)
-        {
+            const auto &rel = Frames->Relation(ref);
+            Y_ENSURE(rel, "Invalid blob reference");
             Lower = Min(ref, rel.AbsRef(ref));
-            Upper = ref + 1; /* will be extended eventually */
+            Upper = Frames->Relation(Lower).AbsRef(Lower);
+
+            if (Row != rel.Row) {
+                Row = rel.Row;
+                RowBegin = Frames->Lower(Row, RowBegin, Lower);
+            }
 
             return rel.Tag;
         }
@@ -172,14 +183,15 @@ namespace NFwd {
         {
             if (Pages && TPageOffset::FromPageIndex(base) <= Pages.back().Offset) {
                 return Lookup(base).Refer;
-            } else if (Pages && base != Lower && base - Pages.back().Offset.AsPageIndex() != 1) {
-                Y_TABLET_ERROR("Cannot do so long jumps around of frames");
             } else {
                 const auto end = Frames->Relation(base).AbsRef(base);
+                // Keep a contiguous descriptor range for this row, but let
+                // Preload fetch only the requested frame and read-ahead window.
+                const auto begin = Pages
+                    ? Max(RowBegin, Pages.back().Offset.AsPageIndex() + 1) : RowBegin;
+                Y_ENSURE(begin <= base, "Invalid blob frame order");
 
-                Upper = (base == Lower ? end : Lower);
-
-                for (auto page = base; page < end; page++) {
+                for (auto page = begin; page < end; page++) {
                     const auto rel = Frames->Relation(page);
                     const auto ref = rel.AbsRef(page);
                     const auto crc32 = PageCollection
@@ -240,8 +252,10 @@ namespace NFwd {
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         const TSlicesRowFilter Filter;
         TVector<ui8> Tags;              /* Ever used col tags on env    */
-        TPageId Lower = 0;              /* Pinned frame lower bound ref */
-        TPageId Upper = 0;              /* Pinned frame upper bound ref */
+        TRowId Row = Max<TRowId>();     /* Logical row across MVCC frames */
+        TPageId RowBegin = 0;           /* Retained row lower bound ref */
+        TPageId Lower = 0;              /* Requested frame lower bound */
+        TPageId Upper = 0;              /* Requested frame upper bound */
         TPageId Grow = Max<TPageId>();  /* Edge page of loading process */
         TAutoPtr<THoles> Trace;
 

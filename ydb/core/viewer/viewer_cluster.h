@@ -394,6 +394,8 @@ private:
                     return Ydb::Bridge::PileState::SYNCHRONIZED;
                 case NKikimrBridge::TClusterState::INACTIVE:
                     return Ydb::Bridge::PileState::INACTIVE;
+                case NKikimrBridge::TClusterState::HOT_STANDBY:
+                    return Ydb::Bridge::PileState::HOT_STANDBY;
                 default:
                     return Ydb::Bridge::PileState::UNSPECIFIED;
             }
@@ -1323,28 +1325,17 @@ private:
         }
         const auto& snapshot = response.GetPiles();
         bridgeInfo.SetBridgeDatabases(snapshot.bridge_databases());
-        bool complete = snapshot.unattributed_storage_pools() == 0;
-        THashMap<TStringBuf, const NKikimrBridge::TDatabaseSyncCounts*> byPile;
-        for (const auto& pile : snapshot.piles()) {
-            if (pile.has_pile_name() && pile.has_bridge_databases()) {
-                byPile.emplace(pile.pile_name(), &pile.bridge_databases());
-            }
+        if (!snapshot.has_bridge_databases_by_sync_status()) {
+            return;
         }
-        for (auto& pile : *bridgeInfo.MutablePiles()) {
-            const auto it = byPile.find(pile.GetName());
-            if (it == byPile.end()) {
-                complete = false;
-                continue;
-            }
-            const auto& counts = *it->second;
-            auto& target = *pile.MutableDatabaseCountsBySyncStatus();
-            target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::SYNCED)] = counts.synced();
-            target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::SYNCING)] = counts.syncing();
-            target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::PENDING)] = counts.pending();
-            target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::UNKNOWN)] = counts.unknown();
-            target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::NOT_REQUIRED)] = counts.not_required();
-        }
-        bridgeInfo.SetBridgeDatabasesComplete(complete);
+        const auto& counts = snapshot.bridge_databases_by_sync_status();
+        auto& target = *bridgeInfo.MutableDatabaseCountsBySyncStatus();
+        target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::SYNCED)] = counts.synced();
+        target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::SYNCING)] = counts.syncing();
+        target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::PENDING)] = counts.pending();
+        target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::UNKNOWN)] = counts.unknown();
+        target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::NOT_REQUIRED)] = counts.not_required();
+        bridgeInfo.SetBridgeDatabasesComplete(snapshot.unattributed_storage_pools() == 0);
     }
 
     void FillBridgeInfo(const std::unordered_map<ui32, std::unordered_map<TString, ui32>>& pileToGroupStatus) {

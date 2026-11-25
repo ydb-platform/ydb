@@ -7,5 +7,5 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/sqs/migration/suites/multinode.inc)
 FORK_SUBTESTS()
 SPLIT_FACTOR(20)
 
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:3)
 END()

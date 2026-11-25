@@ -62,8 +62,17 @@ int32_t Base2ExponentialHistogramIndexer::ComputeIndex(double value) const
   }
   // For scale zero, compute the exact index by extracting the exponent.
   // For negative scales, compute the exact index by extracting the exponent and shifting it to
-  // the right by -scale
-  return MapToIndexScaleZero(abs_value) >> -scale_;
+  // the right by -scale.
+  const int32_t index = MapToIndexScaleZero(abs_value);
+  // Every finite double has an exponent in [-1075, 1023], so shifting by 11 or more already
+  // collapses the index to -1 or 0. Returning that directly keeps the shift well inside the width
+  // of int32_t, and testing the scale rather than its negation keeps INT32_MIN from overflowing.
+  constexpr int32_t kCollapsedShift = 11;
+  if (scale_ < -kCollapsedShift)
+  {
+    return index < 0 ? -1 : 0;
+  }
+  return index >> -scale_;
 }
 
 }  // namespace metrics

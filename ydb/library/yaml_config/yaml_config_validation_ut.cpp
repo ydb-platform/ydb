@@ -762,16 +762,35 @@ allowed_labels:
   deployment: {type: string}
   test: {type: string}
 selector_config:
-- description: legacy state storage is invalid when self-management is off
+- description: omitted state storage requires self-management
   selector: {deployment: selected}
   config:
     domains_config: !inherit
-      state_storage: [{ssid: 1, ring: {node: [1], nto_select: 2}}]
-- description: self-management supersedes legacy state storage
+      state_storage: []
+- description: self-management can generate omitted state storage
   selector: {)" << (correlated ? "deployment" : "test") << R"(: selected}
   config:
     self_management_config: {enabled: true, erasure_species: none}
 )", !correlated);
+        }
+    }
+
+    Y_UNIT_TEST(SelfManagementDoesNotIgnoreConfiguredLegacyStateStorage) {
+        const auto validator = CreateDefaultConfigSwissKnife();
+        for (bool selfManagement : {false, true}) {
+            for (ui32 nToSelect : {0u, 2u}) {
+                auto doc = NFyaml::TDocument::Parse(TStringBuilder() << R"(
+config:
+  domains_config:
+    domain: [{name: sample}]
+    state_storage: [{ssid: 1, ring: {node: [1], nto_select: )" << nToSelect << R"(}}]
+  self_management_config: {enabled: )" << (selfManagement ? "true" : "false") << R"(, erasure_species: none}
+  default_disk_type: SSD
+)");
+                const TString error = CheckValidation(doc, true, validator.get());
+                UNIT_ASSERT_STRING_CONTAINS(error,
+                    TStringBuilder() << "NToSelect# " << nToSelect << " must be in [1, 1]");
+            }
         }
     }
 

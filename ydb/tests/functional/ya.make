@@ -19,6 +19,7 @@ RECURSE(
     kafka
     kqp
     large_serializable
+    lbr
     limits
     minidumps
     mirror3dc
@@ -38,6 +39,8 @@ RECURSE(
     security
     serializable
     serverless
+    snapshot_retention
+    snapshot_retention_with_load
     split_merge
     sqs
     sqs_topic

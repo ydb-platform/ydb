@@ -16,13 +16,25 @@ any time without prior notice.
 | Audience                    | End users                       | YDB developers, contributors      |
 | Distribution                | Official releases, packages     | Built locally from source         |
 | Stability of commands       | Backwards-compatible guarantees | No guarantees                     |
-| Experimental commands       | Hidden / unavailable            | Available under `experimental`    |
+| Experimental commands       | Hidden / unavailable            | Additional commands and features  |
 
 The experimental client is built on top of the same client infrastructure as
 the official `ydb` client ([`ydb/public/lib/ydb_cli`](../../../../public/lib/ydb_cli))
 and adds the `experimental` (alias `exp`) command tree on top of it. The rest
 of the behaviour (authentication options, profiles, output formats, etc.)
 largely matches the official `ydb` client.
+
+### Tablet channel reassignment
+
+```bash
+./ydb/apps/ydb/experimental/ydb/ydb -e grpc://localhost:2135 -d /Root/db \
+  experimental reassign-tablets --storage-pool /Root/db:rot
+```
+
+The database selects the Hive; the storage pool and group filters select the
+affected tablets. Use `ydb operation get <id>` to check progress and
+`ydb operation cancel <id>` to stop scheduling new work. Run
+`ydb experimental reassign-tablets --help` for all options.
 
 ### Deferred topic publication
 
@@ -56,12 +68,25 @@ The resulting binary is placed at `ydb/apps/ydb/experimental/ydb/ydb`.
 
 ## Running
 
-The invocation mirrors the official `ydb` client; the only difference is the
-extra `experimental` command tree:
+The invocation mirrors the official `ydb` client, with additional commands
+including the `experimental` command tree:
 
 ```bash
 ./ydb/apps/ydb/experimental/ydb/ydb experimental --help
 ```
+
+### IMDb workload
+
+The experimental client provides `workload imdb` with the 21-table IMDb schema,
+file import with automatic column statistics collection, and all 113 Join Order
+Benchmark queries:
+
+```bash
+./ydb/apps/ydb/experimental/ydb/ydb workload imdb --help
+```
+
+See the [IMDb workload documentation](../../../../library/workload/imdb/README.md)
+for initialization, import, and benchmark commands.
 
 ### Interactive transactions (draft)
 

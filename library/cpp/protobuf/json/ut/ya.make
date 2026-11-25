@@ -3,6 +3,7 @@ UNITTEST_FOR(library/cpp/protobuf/json)
 SRCS(
     filter_ut.cpp
     json2proto_ut.cpp
+    json2proto_strict_ut.cpp
     json2proto_ordered_ut.cpp
     proto2json_ut.cpp
     inline_ut.proto

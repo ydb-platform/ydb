@@ -1,6 +1,5 @@
 #include <yql/essentials/tools/purebench/gbenchmark/register.h>
 
-#include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/gbenchmark/benchmark.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -12,9 +11,7 @@
 namespace {
 
 TTempDir MakeSuiteDirectory() {
-    const TFsPath temporaryRoot = TFsPath(GetWorkPath()) / "tmp";
-    temporaryRoot.MkDirs();
-    auto directory = TTempDir::NewTempDir(temporaryRoot);
+    TTempDir directory;
     TFileOutput(directory.Path() / "selected.yql").Write("SELECT missing_column FROM Input");
     TFileOutput(directory.Path() / "selected.prepare.yql").Write("SELECT missing_column FROM Input");
     TFileOutput(directory.Path() / "unselected.yql").Write("SELECT missing_column FROM Input");

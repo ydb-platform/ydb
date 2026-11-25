@@ -469,7 +469,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
             .SetDatabase("/" + serverSettings.DomainName);
         auto driver = NYdb::TDriver(driverConfig);
 
-        auto client = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(driver, NYdb::NPersQueue::TPersQueueClientSettings().Database(databaseName));
+        auto client = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(driver, NYdb::NPersQueue::TPersQueueClientSettings().Database("/" + databaseName));
 
         // add consumer
         const TString consumerName{"user"};
@@ -567,6 +567,9 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableTableDatetime64(enableDatetime64);
         featureFlags.SetEnableTablePgTypes(true);
+        if (ttlColType.StartsWith("pg")) {
+            featureFlags.SetDisablePgCompatibility(false);
+        }
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

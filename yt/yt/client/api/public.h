@@ -259,10 +259,11 @@ DEFINE_ENUM(EMaintenanceType,
 );
 
 DEFINE_ENUM(EMaintenanceComponent,
-    ((ClusterNode) (1))
-    ((HttpProxy)   (2))
-    ((RpcProxy)    (3))
-    ((Host)        (4))
+    ((ClusterNode)   (1))
+    ((HttpProxy)     (2))
+    ((RpcProxy)      (3))
+    ((Host)          (4))
+    ((ChunkLocation) (5))
 );
 
 using TMaintenanceId = TGuid;

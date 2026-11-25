@@ -39,7 +39,7 @@ public:
     }
 
     ui32 GetIntervalId() const {
-        AFL_VERIFY(IntervalGroupGuard);
+        YDB_LOG_VERIFY(IntervalGroupGuard);
         return IntervalGroupGuard->GetGroupId();
     }
 

@@ -83,10 +83,9 @@ static void add_to_write_list(grpc_chttp2_write_cb** list,
   *list = cb;
 }
 
-static void finish_write_cb(grpc_chttp2_transport* t, grpc_chttp2_stream* s,
-                            grpc_chttp2_write_cb* cb, grpc_error_handle error) {
-  grpc_chttp2_complete_closure_step(t, s, &cb->closure, error,
-                                    "finish_write_cb");
+static void finish_write_cb(grpc_chttp2_transport* t, grpc_chttp2_write_cb* cb,
+                            grpc_error_handle error) {
+  grpc_chttp2_complete_closure_step(t, &cb->closure, error, "finish_write_cb");
   cb->next = t->write_cb_pool;
   t->write_cb_pool = cb;
 }
@@ -187,9 +186,9 @@ static void maybe_initiate_ping(grpc_chttp2_transport* t) {
       });
 }
 
-static bool update_list(grpc_chttp2_transport* t, grpc_chttp2_stream* s,
-                        int64_t send_bytes, grpc_chttp2_write_cb** list,
-                        int64_t* ctr, grpc_error_handle error) {
+static bool update_list(grpc_chttp2_transport* t, int64_t send_bytes,
+                        grpc_chttp2_write_cb** list, int64_t* ctr,
+                        grpc_error_handle error) {
   bool sched_any = false;
   grpc_chttp2_write_cb* cb = *list;
   *list = nullptr;
@@ -198,7 +197,7 @@ static bool update_list(grpc_chttp2_transport* t, grpc_chttp2_stream* s,
     grpc_chttp2_write_cb* next = cb->next;
     if (cb->call_at_byte <= *ctr) {
       sched_any = true;
-      finish_write_cb(t, s, cb, error);
+      finish_write_cb(t, cb, error);
     } else {
       add_to_write_list(list, cb);
     }
@@ -369,9 +368,7 @@ class WriteContext {
 
  private:
   grpc_chttp2_transport* const t_;
-  size_t target_write_size_ = grpc_core::IsWriteSizePolicyEnabled()
-                                  ? t_->write_size_policy.WriteTargetSize()
-                                  : 1024 * 1024;
+  size_t target_write_size_ = t_->write_size_policy.WriteTargetSize();
 
   // stats histogram counters: we increment these throughout this function,
   // and at the end publish to the central stats histograms
@@ -403,9 +400,7 @@ class DataSendContext {
         std::min<int64_t>(
             {t_->settings.peer().max_frame_size(), stream_remote_window(),
              t_->flow_control.remote_window(),
-             grpc_core::IsWriteSizeCapEnabled()
-                 ? static_cast<int64_t>(write_context_->target_write_size())
-                 : std::numeric_limits<uint32_t>::max()}),
+             static_cast<int64_t>(write_context_->target_write_size())}),
         0, std::numeric_limits<uint32_t>::max());
   }
 
@@ -429,8 +424,7 @@ class DataSendContext {
 
   void CallCallbacks() {
     if (update_list(
-            t_, s_,
-            static_cast<int64_t>(s_->sending_bytes - sending_bytes_before_),
+            t_, static_cast<int64_t>(s_->sending_bytes - sending_bytes_before_),
             &s_->on_flow_controlled_cbs, &s_->flow_controlled_bytes_flowed,
             y_absl::OkStatus())) {
       write_context_->NoteScheduledResults();
@@ -489,14 +483,19 @@ class StreamWriteContext {
     s_->send_initial_metadata = nullptr;
     s_->sent_initial_metadata = true;
     write_context_->NoteScheduledResults();
-    grpc_chttp2_complete_closure_step(
-        t_, s_, &s_->send_initial_metadata_finished, y_absl::OkStatus(),
-        "send_initial_metadata_finished");
+    grpc_chttp2_complete_closure_step(t_, &s_->send_initial_metadata_finished,
+                                      y_absl::OkStatus(),
+                                      "send_initial_metadata_finished");
     if (s_->call_tracer) {
-      s_->call_tracer->RecordAnnotation(grpc_core::HttpAnnotation(
-          grpc_core::HttpAnnotation::Type::kHeadWritten,
-          gpr_now(GPR_CLOCK_REALTIME), s_->t->flow_control.stats(),
-          s_->flow_control.stats()));
+      grpc_core::HttpAnnotation::WriteStats write_stats;
+      write_stats.target_write_size = write_context_->target_write_size();
+      s_->call_tracer->RecordAnnotation(
+          grpc_core::HttpAnnotation(
+              grpc_core::HttpAnnotation::Type::kHeadWritten,
+              gpr_now(GPR_CLOCK_REALTIME))
+              .Add(s_->t->flow_control.stats())
+              .Add(s_->flow_control.stats())
+              .Add(write_stats));
     }
   }
 
@@ -583,9 +582,9 @@ class StreamWriteContext {
     SentLastFrame();
 
     write_context_->NoteScheduledResults();
-    grpc_chttp2_complete_closure_step(
-        t_, s_, &s_->send_trailing_metadata_finished, y_absl::OkStatus(),
-        "send_trailing_metadata_finished");
+    grpc_chttp2_complete_closure_step(t_, &s_->send_trailing_metadata_finished,
+                                      y_absl::OkStatus(),
+                                      "send_trailing_metadata_finished");
   }
 
   bool stream_became_writable() { return stream_became_writable_; }
@@ -620,9 +619,11 @@ class StreamWriteContext {
     grpc_chttp2_mark_stream_closed(t_, s_, !t_->is_client, true,
                                    y_absl::OkStatus());
     if (s_->call_tracer) {
-      s_->call_tracer->RecordAnnotation(grpc_core::HttpAnnotation(
-          grpc_core::HttpAnnotation::Type::kEnd, gpr_now(GPR_CLOCK_REALTIME),
-          s_->t->flow_control.stats(), s_->flow_control.stats()));
+      s_->call_tracer->RecordAnnotation(
+          grpc_core::HttpAnnotation(grpc_core::HttpAnnotation::Type::kEnd,
+                                    gpr_now(GPR_CLOCK_REALTIME))
+              .Add(s_->t->flow_control.stats())
+              .Add(s_->flow_control.stats()));
     }
   }
 
@@ -663,6 +664,7 @@ grpc_chttp2_begin_write_result grpc_chttp2_begin_write(
       // Add this stream to the list of the contexts to be traced at TCP
       num_stream_bytes = t->outbuf.c_slice_buffer()->length - orig_len;
       s->byte_counter += static_cast<size_t>(num_stream_bytes);
+      ++s->write_counter;
       if (s->traced && grpc_endpoint_can_track_err(t->ep)) {
         grpc_core::CopyContextFn copy_context_fn =
             grpc_core::GrpcHttp2GetCopyContextFn();
@@ -670,7 +672,8 @@ grpc_chttp2_begin_write_result grpc_chttp2_begin_write(
             grpc_core::GrpcHttp2GetWriteTimestampsCallback() != nullptr) {
           t->cl->emplace_back(copy_context_fn(s->context),
                               outbuf_relative_start_pos, num_stream_bytes,
-                              s->byte_counter, s->tcp_tracer);
+                              s->byte_counter, s->write_counter - 1,
+                              s->tcp_tracer);
         }
       }
       outbuf_relative_start_pos += num_stream_bytes;
@@ -742,7 +745,7 @@ void grpc_chttp2_end_write(grpc_chttp2_transport* t, grpc_error_handle error) {
 
   while (grpc_chttp2_list_pop_writing_stream(t, &s)) {
     if (s->sending_bytes != 0) {
-      update_list(t, s, static_cast<int64_t>(s->sending_bytes),
+      update_list(t, static_cast<int64_t>(s->sending_bytes),
                   &s->on_write_finished_cbs, &s->flow_controlled_bytes_written,
                   error);
       s->sending_bytes = 0;

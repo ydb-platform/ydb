@@ -36,6 +36,7 @@ namespace NActors {
                 logMsg += str;
             }
             YDB_LOG_TRACE(logMsg,
+                {"logPrefix", LogPrefix},
                 {"marker", "ICN01"});
         }
 
@@ -44,6 +45,7 @@ namespace NActors {
             auto it = NodeTable.find(nodeId);
             if (it == NodeTable.end()) {
                 YDB_LOG_TRACE("New node",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICN02"},
                     {"nodeId", nodeId},
                     {"address", address},
@@ -51,6 +53,7 @@ namespace NActors {
                 printInfo = true;
             } else if (it->second.Address != address || it->second.Port != port) {
                 YDB_LOG_TRACE("Updated node",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICN03"},
                     {"nodeId", nodeId},
                     {"address", address},
@@ -70,6 +73,7 @@ namespace NActors {
             for (auto& pending : PendingRequests) {
                 if (pending.Request && pending.Deadline <= now) {
                     YDB_LOG_ERROR("Unknown",
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICN06"},
                         {"nodeId", pending.Request->Get()->NodeId});
                     auto reply = new TEvLocalNodeInfo;
@@ -123,6 +127,7 @@ namespace NActors {
                 }
             } catch (...) {
                 YDB_LOG_ERROR("Catch exception",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICN09"},
                     {"exception", CurrentExceptionMessage()});
             }
@@ -138,6 +143,7 @@ namespace NActors {
                 PendingRequests.emplace_back(std::move(ev), Min(deadline, ctx.Monotonic() + PendingPeriod));
             } else {
                 YDB_LOG_ERROR("Unknown",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICN07"},
                     {"nodeId", ev->Get()->NodeId});
                 TInterconnectNameserverBase::HandleMissedNodeId(ev, ctx, deadline);
@@ -149,6 +155,7 @@ namespace NActors {
 
             auto request = ev->Get();
             YDB_LOG_TRACE("Update TEvNodesInfo with",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICN04"},
                 {"sz", request->Nodes.size()});
 
@@ -165,6 +172,7 @@ namespace NActors {
                     if (pending.Request && pending.Request->Get()->NodeId == node.NodeId
                             && pending.Deadline > ctx.Monotonic()) {
                         YDB_LOG_TRACE("Pending discovered",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICN05"},
                             {"nodeId", node.NodeId});
                         RegisterWithSameMailbox(

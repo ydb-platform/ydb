@@ -1304,6 +1304,7 @@ struct Schema : NIceDb::Schema {
         struct EnableChecksums : Column<17, NScheme::NTypeIds::Bool> {};
         struct EnablePermissions : Column<18, NScheme::NTypeIds::Bool> {};
         struct IncludeIndexData : Column<21, NScheme::NTypeIds::Bool> {};
+        struct CancelRequestedBy : Column<22, NScheme::NTypeIds::Utf8> {};
 
         struct ExportMetadata : Column<19, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TExportMetadata; };
 
@@ -1329,7 +1330,8 @@ struct Schema : NIceDb::Schema {
             EnablePermissions,
             ExportMetadata,
             SanitizedToken,
-            IncludeIndexData
+            IncludeIndexData,
+            CancelRequestedBy
         >;
     };
 
@@ -2748,7 +2750,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, TestShards, CmdInitialize>;
     };
 
+    struct DatabaseFreezes : Table<141> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct State : Column<2, NScheme::NTypeIds::String> {};
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, State>;
+    };
+
     using TTables = SchemaTables<
+        DatabaseFreezes,
         Paths,
         TxInFlight,
         TxDependencies,

@@ -142,6 +142,16 @@ protected:
         return Hive->GetLogPrefix();
     }
 
+    using TCountersByBalancerType = std::array<THive::TBalanceCounters::TCounterPtr, EBalancerTypeSize>;
+
+    void IncrementByType(TCountersByBalancerType THive::TBalanceCounters::* byType) const {
+        if (Hive->BalanceCounters) {
+            if (const auto& counter = (*Hive->BalanceCounters.*byType)[static_cast<size_t>(Settings.Type)]) {
+                counter->Inc();
+            }
+        }
+    }
+
     void PassAway() override {
         RunStats.EndTime = TActivationContext::Now();
         RunStats.Movements = Movements;
@@ -193,6 +203,7 @@ protected:
         Hive->RemoveSubActor(this);
         if (Movements == 0) {
             Hive->TabletCounters->Cumulative()[NHive::COUNTER_BALANCER_FAILED].Increment(1);
+            IncrementByType(&THive::TBalanceCounters::BalancerFailed);
             // we failed to balance specific nodes
             for (TNodeId nodeId : Settings.FilterNodeIds) {
                 TNodeInfo* node = Hive->FindNode(nodeId);
@@ -524,7 +535,8 @@ protected:
                     if (Settings.MaxMovements != 0) {
                         details << "/" << Settings.MaxMovements;
                     }
-                    Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, node->Id), expediency.Reason, std::move(details));
+                    IncrementByType(&THive::TBalanceCounters::TabletsMoved);
+                    Hive->RecordTabletMove(now, *tablet, *tablet->Node, *node, expediency.Reason, std::move(details));
                     Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id));
                     UpdateProgress();
                 }
@@ -573,6 +585,7 @@ public:
         UpdateProgress();
         RunStats.StartTime = TActivationContext::Now();
         Hive->TabletCounters->Cumulative()[NHive::COUNTER_BALANCER_EXECUTED].Increment(1);
+        IncrementByType(&THive::TBalanceCounters::BalancerExecuted);
         YDB_LOG_INFO("Balancer started",
             {"logPrefix", GetLogPrefix()},
             {"balancerType", EBalancerTypeName(Settings.Type)},

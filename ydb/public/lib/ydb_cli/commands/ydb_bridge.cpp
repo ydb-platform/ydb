@@ -36,8 +36,11 @@ namespace {
         if (stateStrUpper == "SUSPENDED") {
             return NYdb::NBridge::EPileState::SUSPENDED;
         }
+        if (stateStrUpper == "HOT_STANDBY") {
+            return NYdb::NBridge::EPileState::HOT_STANDBY;
+        }
         ythrow yexception() << "Invalid pile state: \"" << stateStr
-            << "\". Please use one of: DISCONNECTED, NOT_SYNCHRONIZED, SYNCHRONIZED, PROMOTED, PRIMARY, SUSPENDED.";
+            << "\". Please use one of: DISCONNECTED, NOT_SYNCHRONIZED, SYNCHRONIZED, PROMOTED, PRIMARY, SUSPENDED, HOT_STANDBY.";
     }
 }
 

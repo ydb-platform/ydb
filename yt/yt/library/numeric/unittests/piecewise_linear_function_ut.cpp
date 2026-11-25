@@ -53,7 +53,7 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TPiecewiseLinearFunctionTest, TestInterpolationProperties)
+TEST_F(TPiecewiseLinearFunctionTest, InterpolationProperties)
 {
     const std::vector<TPiecewiseSegment<double>> segments = {
         {{0, 0}, {1, 1}},
@@ -159,7 +159,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestInterpolationProperties)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
+TEST_F(TPiecewiseLinearFunctionTest, SortOrMergeImpl)
 {
     struct TTestCase {
         std::string Name;
@@ -310,7 +310,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TPiecewiseLinearFunctionTest, TestSum)
+TEST_F(TPiecewiseLinearFunctionTest, Sum)
 {
     struct TTestCase {
         std::string Name;
@@ -503,7 +503,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSum)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TPiecewiseLinearFunctionTest, TestPointwiseMin)
+TEST_F(TPiecewiseLinearFunctionTest, PointwiseMin)
 {
     struct TTestCase {
         std::string Name;
@@ -752,7 +752,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPointwiseMin)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TPiecewiseLinearFunctionTest, TestCompose)
+TEST_F(TPiecewiseLinearFunctionTest, Compose)
 {
     struct TTestCase {
         std::string Name;
@@ -1012,7 +1012,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestCompose)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TPiecewiseLinearFunctionTest, TestTransformations)
+TEST_F(TPiecewiseLinearFunctionTest, Transformations)
 {
     struct TTestCase {
         std::string Name;
@@ -1053,7 +1053,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestTransformations)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentScalar)
+TEST_F(TPiecewiseLinearFunctionTest, PiecewiseSegmentScalar)
 {
     struct TDefinedOnInterval {
         double LeftBound;
@@ -1227,7 +1227,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentScalar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentTransformationsScalar)
+TEST_F(TPiecewiseLinearFunctionTest, PiecewiseSegmentTransformationsScalar)
 {
     struct TScaledSegment {
         double Scale;

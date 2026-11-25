@@ -2,6 +2,7 @@ PY3_LIBRARY()
 
     PY_SRCS (
         column_table_helper.py
+        cut_history.py
         range_allocator.py
         s3_client.py
         thread_helper.py
@@ -17,6 +18,7 @@ PY3_LIBRARY()
         library/python/port_manager
         library/recipes/common
         ydb/public/sdk/python
+        ydb/tests/library
     )
 
 END()

@@ -363,7 +363,7 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
         }
     }
 
-    AFL_ENSURE(!hasUniqIndex || !usedIndexes.empty());
+    YDB_LOG_ENSURE(!hasUniqIndex || !usedIndexes.empty());
 
     if (!hasUniqIndex) {
         missedKeyInput.clear();

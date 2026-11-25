@@ -358,6 +358,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse) {
         Partition()->EndWriteTimestamp = TInstant::MilliSeconds(meta.GetEndWriteTimestamp());
         Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
         Partition()->MessageIdDeduplicator.NextMessageIdDeduplicatorWAL = meta.GetNextMessageIdDeduplicatorWAL();
+        Partition()->LastEmittedHeartbeat = TRowVersion::FromProto(meta.GetLastEmittedHeartbeat());
         if (Partition()->IsSupportive()) {
             const auto& counterData = meta.GetCounterData();
             Partition()->BytesWrittenGrpc.SetSavedValue(counterData.GetBytesWrittenGrpc());
@@ -1143,6 +1144,21 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     Partition()->InitFirstCompactionPart();
 
     Done(ctx);
+}
+
+void TPartition::InitFirstCompactionPart()
+{
+    auto& head = CompactionBlobEncoder.Head;
+    head.TrailingOffsetDelta = 0;
+    if (CompactionBlobEncoder.HeadKeys.empty()) {
+        return;
+    }
+
+    TBatch batch = head.GetLastBatch();
+    batch.Unpack();
+    const auto& lastBlob = batch.Blobs.back();
+    head.TrailingOffsetDelta = lastBlob.IsLastPart() ? 0 : lastBlob.LogicalMessageCount;
+    FirstCompactionPart = std::make_pair(batch.GetOffset(), lastBlob.GetPartNo());
 }
 
 

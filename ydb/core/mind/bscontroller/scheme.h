@@ -124,7 +124,7 @@ struct Schema : NIceDb::Schema {
         struct GroupReserveMin : Column<14, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         struct GroupReservePart : Column<15, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; }; // parts per million
         struct MaxScrubbedDisksAtOnce : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = Max<ui32>(); }; // no limit
-        struct PDiskSpaceColorBorder : Column<17, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
+        struct PDiskSpaceColorBorder : Column<17, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::CYAN; };
         struct GroupLayoutSanitizer : Column<18, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
         struct NextVirtualGroupId : Column<19, Group::ID::ColumnType> { static constexpr Type Default = 0; };
         struct AllowMultipleRealmsOccupation : Column<20, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
@@ -139,7 +139,7 @@ struct Schema : NIceDb::Schema {
         struct EnableConfigV2 : Column<29, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct DatabaseSpaceBlockColor : Column<30, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
         struct DatabaseSpaceUnblockColor : Column<31, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
-        struct DataCenterStates : Column<32, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TDefineDataCenterStates; };
+        struct DataCenterStates : Column<32, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TDataCenterStates; };
         struct BridgeSyncTotalRate : Column<33, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         struct BridgeSyncMaxSyncers : Column<34, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 64; };
         struct AppliedPileOverrides : Column<35, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TStoragePoolPileOverrides; };
@@ -534,6 +534,20 @@ struct Schema : NIceDb::Schema {
     };
 
 
+    // Hive completion (including on an older controller during rollback) must not
+    // erase the durable intent to remove retired S3 objects and late PUTs.
+    struct RetiredS3Namespaces : Table<137> {
+        struct GroupId : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct BlobDepotId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct S3Config : Column<3, NScheme::NTypeIds::String> {};
+        struct NextS3Sweep : Column<4, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
+        enum ESweepPhase : ui32 { AwaitingOwnership, FirstSweep, Periodic, FinalSweep, Reserved };
+        struct SweepPhase : Column<5, NScheme::NTypeIds::Uint32> { using Type = ESweepPhase; };
+
+        using TKey = TableKey<GroupId>;
+        using TColumns = TableColumns<GroupId, BlobDepotId, S3Config, NextS3Sweep, SweepPhase>;
+    };
+
     using TTables = SchemaTables<
         Node,
         PDisk,
@@ -558,6 +572,7 @@ struct Schema : NIceDb::Schema {
         ScrubState,
         DriveSerial,
         BlobDepotDeleteQueue,
+        RetiredS3Namespaces,
         BridgeSyncState,
         DirectBlockGroupTabletState,
         DirectBlockGroupClaims,

@@ -79,7 +79,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
             {"reason", "db_reading_not_finished"});
         return;
     }
-    AFL_VERIFY(!WriteGate);
+    YDB_LOG_VERIFY(!WriteGate);
     WriteGate.emplace(*Executor(), TablesManager, *OperationsManager, *SpaceWatcher, Counters, TabletID());
     ProgressTxController->OnTabletInit();
     AbortNotProposedTransactions();
@@ -100,8 +100,6 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
         EnqueueProgressTx(ctx);
         OnTieringModified();
     }
-    // the request for every portion takes long to build, so it is not part of the start
-    ctx.Send(SelfId(), new TEvPrivate::TEvPrefetchPortionsMetadata());
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
     BackgroundSessionsManager->Start();
@@ -119,8 +117,14 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
             portionsCount += granule->GetPortions().size();
         }
     }
-    StartupTimeline.OnSwitchedToWork(portionsCount);
+    StartupTimeline.OnSwitchedToWork(portionsCount, !DeferredPortionLoader.IsEnabled());
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*this);
+    if (DeferredPortionLoader.IsEnabled()) {
+        StartDeferredPortionLoading(ctx);
+    } else {
+        // the request for every portion takes long to build, so it is not part of the start
+        ctx.Send(SelfId(), new TEvPrivate::TEvPrefetchPortionsMetadata());
+    }
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
@@ -332,19 +336,13 @@ void TColumnShard::Handle(TEvPrivate::TEvPrefetchPortionsMetadata::TPtr& /*ev*/)
     }
 }
 
-void TColumnShard::Handle(TEvPrivate::TEvSetLoadedKeyRanges::TPtr& ev) {
-    auto& engine = TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
-    engine.GetGranulePtrVerified(ev->Get()->PathId)->SetLoadedKeyRanges(std::move(ev->Get()->LoadedKeyRanges));
-    ScanGate.ReleaseLoadedPortions();
-    DrainWriteQueue(ActorContext());
-}
-
 void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const TActorContext& ctx) {
     const TDuration stalenessLivetime = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness();
     const TDuration stalenessInMem = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStalenessInMem();
     const TDuration usedLivetime = NYDBTest::TControllers::GetColumnShardController()->GetUsedSnapshotLivetime();
-    AFL_VERIFY(usedLivetime < stalenessInMem || (stalenessInMem == usedLivetime && usedLivetime == TDuration::Zero()))("used", usedLivetime)(
-                                                "staleness", stalenessInMem);
+    YDB_LOG_VERIFY(usedLivetime < stalenessInMem || (stalenessInMem == usedLivetime && usedLivetime == TDuration::Zero()),
+        {"used", usedLivetime},
+        {"staleness", stalenessInMem});
     const TDuration ping = 0.3 * std::min(stalenessInMem - usedLivetime, stalenessLivetime - stalenessInMem);
     if (auto writeTx = InFlightReadsTracker.Ping(this, stalenessInMem, usedLivetime, TInstant::Now())) {
         Execute(writeTx.release(), ctx);

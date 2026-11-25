@@ -35,6 +35,7 @@ class PileStateContractTest(unittest.TestCase):
             "SUSPENDED": 5,
             "DISCONNECTED": 6,
             "INACTIVE": 7,
+            "HOT_STANDBY": 8,
         }
         self.assertEqual(actual, expected)
 

@@ -121,12 +121,13 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , ScanGate(Counters.GetTabletCounters(), TablesManager)
+    , DeferredPortionLoader(TablesManager)
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
     , SysLocks(this)
     , SpaceWatcher(std::unique_ptr<TSpaceWatcher>(new TSpaceWatcher(this), std::default_delete<TSpaceWatcher>()))
 {
-    AFL_VERIFY(TabletActivityImpl->Inc() == 1);
+    YDB_LOG_VERIFY(TabletActivityImpl->Inc() == 1);
     RegisterProbes();
 }
 
@@ -329,7 +330,7 @@ void TColumnShard::RunSchemaTx(
 void TColumnShard::RunInit(
     const NKikimrTxColumnShard::TInitShard& proto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
-    AFL_VERIFY(proto.HasOwnerPathId());
+    YDB_LOG_VERIFY(proto.HasOwnerPathId());
     const auto& tabletSchemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(proto);
     TablesManager.Init(db, tabletSchemeShardLocalPathId, Info());
     if (proto.HasOwnerPath()) {
@@ -502,11 +503,12 @@ void TColumnShard::RunAlterStore(
     const NKikimrTxColumnShard::TAlterStore& proto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
-    AFL_VERIFY(proto.HasStorePathId());
+    YDB_LOG_VERIFY(proto.HasStorePathId());
     const auto& storeSchemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(proto);
     const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId;
-    AFL_VERIFY(tabletSchemeShardLocalPathId == storeSchemeShardLocalPathId)("tablet_path_id", tabletSchemeShardLocalPathId)(
-        "store_path_id", storeSchemeShardLocalPathId);
+    YDB_LOG_VERIFY(tabletSchemeShardLocalPathId == storeSchemeShardLocalPathId,
+        {"tabletPathId", tabletSchemeShardLocalPathId},
+        {"storePathId", storeSchemeShardLocalPathId});
 
     for (ui32 id : proto.GetDroppedSchemaPresets()) {
         if (!TablesManager.HasPreset(id)) {
@@ -542,6 +544,8 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     //  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
     SharingSessionsManager->Start(*this);
 
+    // only for tests: the loading chains batch after batch by itself, this resumes it after the test brake
+    ContinueDeferredPortionLoading(ActorContext());
     SetupCompaction({});
     SetupCleanupSchemas();
     auto snapshotHolders = GetSnapshotHolders();
@@ -659,9 +663,9 @@ private:
             {"tabletId", TabletId},
             {"parentId", ParentActorId});
         if (NeedBlobs) {
-            AFL_VERIFY(context.GetResourceGuards().size() == 3);
+            YDB_LOG_VERIFY(context.GetResourceGuards().size() == 3);
         } else {
-            AFL_VERIFY(context.GetResourceGuards().size() == 2);
+            YDB_LOG_VERIFY(context.GetResourceGuards().size() == 2);
         }
         if (NeedBlobs) {
             Changes->Blobs = context.ExtractBlobs();
@@ -685,7 +689,7 @@ private:
 
     virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<NOlap::NReader::NCommon::TColumnsSetIds>& columnIds,
         const std::vector<std::shared_ptr<NOlap::TPortionDataAccessor>>& acc) const override {
-        AFL_VERIFY(!columnIds);
+        YDB_LOG_VERIFY(!columnIds);
         THashMap<ui32, ui64> memoryByColumns;
         for (auto&& a : acc) {
             THashMap<ui32, ui64> memoryByPortionColumns;
@@ -729,8 +733,8 @@ public:
 
 void TColumnShard::StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
     const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
-    AFL_VERIFY(indexChanges);
-    AFL_VERIFY(guard);
+    YDB_LOG_VERIFY(indexChanges);
+    YDB_LOG_VERIFY(guard);
     indexChanges->SetActivityFlag(GetTabletActivity());
     indexChanges->SetQueueGuard(guard);
     indexChanges->Start(*this);
@@ -809,7 +813,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
     const ui64 compactionStageMemoryLimit =
         HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionStageMemoryLimit() : NOlap::TGlobalLimits::GeneralCompactionMemoryLimit;
     for (const auto& indexChanges : indexChangesList) {
-        AFL_VERIFY(indexChanges);
+        YDB_LOG_VERIFY(indexChanges);
         auto& compaction = *VerifyDynamicCast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges*>(indexChanges.get());
         compaction.SetActivityFlag(GetTabletActivity());
         compaction.SetQueueGuard(guard);
@@ -837,7 +841,7 @@ private:
     }
 
     virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result) override final {
-        AFL_VERIFY(ResourcesGuard);
+        YDB_LOG_VERIFY(ResourcesGuard);
         DoOnRequestsFinished(std::move(result), std::move(ResourcesGuard));
     }
 
@@ -847,8 +851,8 @@ protected:
 
 public:
     void SetResourcesGuard(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
-        AFL_VERIFY(!ResourcesGuard);
-        AFL_VERIFY(guard);
+        YDB_LOG_VERIFY(!ResourcesGuard);
+        YDB_LOG_VERIFY(guard);
         ResourcesGuard = guard;
     }
 };
@@ -1065,7 +1069,7 @@ private:
 
     TSchemaPreset::TSchemaPresetVersionInfo ExtractFetched(const TTablesManager::TSchemaAddress addr) {
         auto it = Fetched.find(addr);
-        AFL_VERIFY(it != Fetched.end());
+        YDB_LOG_VERIFY(it != Fetched.end());
         auto result = std::move(it->second);
         Fetched.erase(it);
         return result;
@@ -1090,7 +1094,8 @@ public:
                 db.Table<SchemaPresetVersionInfo>().Key(i.GetPresetId(), i.GetSnapshot().GetPlanStep(), i.GetSnapshot().GetTxId()).Select();
             if (rowset.IsReady()) {
                 toRemove.emplace_back(i);
-                AFL_VERIFY(!rowset.EndOfSet())("address", i.DebugString());
+                YDB_LOG_VERIFY(!rowset.EndOfSet(),
+                    {"address", i.DebugString()});
                 TSchemaPreset::TSchemaPresetVersionInfo info;
                 Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
                 Fetched.emplace(i, std::move(info));
@@ -1109,7 +1114,7 @@ public:
             }
             schemasProto.emplace_back(ExtractFetched(i.GetFinish()));
             auto finalProto = NOlap::TSchemaDiffView::Merge(schemasProto);
-            AFL_VERIFY(schemasProto.back().HasSchema());
+            YDB_LOG_VERIFY(schemasProto.back().HasSchema());
             *finalProto.MutableSchema() = schemasProto.back().GetSchema();
 
             ui32 idx = 0;
@@ -1220,6 +1225,16 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
+    if (!record.HasTxId()) {
+        // not a forced compaction of this protocol (an older schemeshard): NOT_NEEDED, FAILED would be retried forever
+        YDB_LOG_WARN("Forced compaction request without an id",
+            {"tablet", TabletID()},
+            {"pathId", pathId},
+            {"requestedFrom", ev->Sender});
+        reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
+        return;
+    }
+
     if (!TablesManager.HasPrimaryIndex()) {
         YDB_LOG_WARN("Forced compaction failed, no primary index",
             {"tablet", TabletID()},
@@ -1230,7 +1245,7 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
     }
 
     const auto internalPathId = TablesManager.ResolveInternalPathIdOptional(TSchemeShardLocalPathId::FromRawValue(pathId.LocalPathId), true);
-    auto& engine = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+    auto& engine = TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
     auto granule = internalPathId ? engine.GetGranuleOptional(*internalPathId) : nullptr;
     if (!granule) {
         YDB_LOG_WARN("Forced compaction of unknown path",
@@ -1241,81 +1256,84 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-    const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
-    if (noIntersections.IsFail()) {
-        // The optimizer does not support forced compaction (i.e. it is not tiling++).
-        YDB_LOG_WARN("Forced compaction is not supported",
+    if (ForcedCompactionTxId != record.GetTxId()) {
+        // a new operation, not a retry (the schemeshard repeats the request until answered; a retry must not touch the
+        // rewrite): CASCADE targets the current schema, a plain operation turns off the rewrite of a cancelled CASCADE
+        ForcedCompactionTxId = record.GetTxId();
+        if (record.GetCascade()) {
+            engine.SetSchemeNeedActualization(true);
+        } else if (ForcedCompactionActualizeSchema) {
+            engine.SetSchemeNeedActualization(false);
+        }
+        ForcedCompactionActualizeSchema = record.GetCascade();
+    }
+
+    // the latest request supersedes the held one: a cancelled operation's waiter must not answer for the next
+    ForcedCompactionWaiter.reset();
+
+    if (!granule->GetOptimizerPlanner().NeedCompaction() && (!ForcedCompactionActualizeSchema || granule->IsSchemeActualizationFinished())) {
+        // nothing to do: NOT_NEEDED at once; OK is for a request that waited for some work
+        YDB_LOG_DEBUG("Forced compaction not needed",
             {"tablet", TabletID()},
             {"pathId", pathId},
-            {"reason", noIntersections.GetErrorMessage()},
             {"requestedFrom", ev->Sender});
+        FinishForcedCompactionActualization();
         reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
 
-    if (*noIntersections) {
-        YDB_LOG_DEBUG("Forced compaction already done",
-            {"tablet", TabletID()},
-            {"pathId", pathId},
-            {"requestedFrom", ev->Sender});
-        reply(NKikimrTxDataShard::TEvCompactTableResult::OK);
-        return;
-    }
-
-    // Portions still intersect: hold the request and reply once the table settles. Background
-    // compaction is kicked for this path; RecheckForcedCompactions() answers the waiter later.
+    // work left: hold the request, RecheckForcedCompactions() answers OK once it is done
     YDB_LOG_DEBUG("Forced compaction registered",
         {"tablet", TabletID()},
         {"pathId", pathId},
         {"requestedFrom", ev->Sender});
-    ForcedCompactionWaiters[*internalPathId].push_back({ ev->Sender, ev->Cookie, pathId });
+    ForcedCompactionWaiter = TForcedCompactionWaiter{ *internalPathId, ev->Sender, ev->Cookie, pathId };
     SetupCompaction({ *internalPathId });
 }
 
 void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
-    if (ForcedCompactionWaiters.empty()) {
+    if (!ForcedCompactionWaiter) {
         return;
     }
     if (!TablesManager.HasPrimaryIndex()) {
         return;
     }
+    const auto& waiter = *ForcedCompactionWaiter;
     auto& engine = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
-    std::vector<TInternalPathId> finished;
-    for (const auto& [internalPathId, waiters] : ForcedCompactionWaiters) {
-        auto granule = engine.GetGranuleOptional(internalPathId);
-        std::optional<NKikimrTxDataShard::TEvCompactTableResult::EStatus> status;
-        if (!granule) {
-            // The table has gone away (e.g. dropped): fail the pending requests.
-            status = NKikimrTxDataShard::TEvCompactTableResult::FAILED;
-        } else {
-            const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
-            if (noIntersections.IsFail()) {
-                status = NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED;
-            } else if (*noIntersections) {
-                status = NKikimrTxDataShard::TEvCompactTableResult::OK;
-            }
-        }
-        if (!status) {
-            continue;
-        }
-        for (const auto& waiter : waiters) {
-            YDB_LOG_DEBUG("Forced compaction finished",
-                {"tablet", TabletID()},
-                {"pathId", waiter.SchemePathId},
-                {"status", (int)*status},
-                {"replyTo", waiter.Sender});
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), waiter.SchemePathId, *status);
-            ctx.Send(waiter.Sender, response.Release(), 0, waiter.Cookie);
-        }
-        finished.push_back(internalPathId);
+    auto granule = engine.GetGranuleOptional(waiter.InternalPathId);
+    std::optional<NKikimrTxDataShard::TEvCompactTableResult::EStatus> status;
+    if (!granule) {
+        // The table has gone away (e.g. dropped): fail the pending request.
+        status = NKikimrTxDataShard::TEvCompactTableResult::FAILED;
+    } else if (!granule->GetOptimizerPlanner().NeedCompaction() &&
+               (!ForcedCompactionActualizeSchema || granule->IsSchemeActualizationFinished())) {
+        status = NKikimrTxDataShard::TEvCompactTableResult::OK;
     }
-    for (const auto& internalPathId : finished) {
-        ForcedCompactionWaiters.erase(internalPathId);
+    if (!status) {
+        return;
+    }
+    YDB_LOG_DEBUG("Forced compaction finished",
+        {"tablet", TabletID()},
+        {"pathId", waiter.SchemePathId},
+        {"status", (int)*status},
+        {"replyTo", waiter.Sender});
+    auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), waiter.SchemePathId, *status);
+    ctx.Send(waiter.Sender, response.Release(), 0, waiter.Cookie);
+    FinishForcedCompactionActualization();   // the request is over whatever the answer
+    ForcedCompactionWaiter.reset();
+}
+
+void TColumnShard::FinishForcedCompactionActualization() {
+    if (ForcedCompactionActualizeSchema) {
+        ForcedCompactionActualizeSchema = false;
+        TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().SetSchemeNeedActualization(false);
     }
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& /*ctx*/) {
-    AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
+    YDB_LOG_VERIFY(ev->Get()->GetGeneration() == Generation(),
+        {"ev", ev->Get()->GetGeneration()},
+        {"tablet", Generation()});
     ev->Get()->GetProcessor()->ApplyResult(
         ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
     SetupMetadata();
@@ -1328,7 +1346,7 @@ void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, co
 void TColumnShard::Die(const TActorContext& ctx) {
     YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"event", "tablet_die"});
-    AFL_VERIFY(TabletActivityImpl->Dec() == 0);
+    YDB_LOG_VERIFY(TabletActivityImpl->Dec() == 0);
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();
@@ -1383,7 +1401,7 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorCon
         {"lockId", op->GetLockId()});
 
     NKikimrTx::TReadSetData data;
-    AFL_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
+    YDB_LOG_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
     auto tx = op->CreateReceiveBrokenFlagTx(*this, tabletDest, seqNo, data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
     Execute(tx.release(), ctx);
 }
@@ -1465,8 +1483,9 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvStartToSource::TPtr& 
 
     auto currentSession = SharingSessionsManager->GetSourceSession(reqSession->GetSessionId());
     if (currentSession) {
-        AFL_VERIFY(currentSession->IsEqualTo(*reqSession))("session_current", currentSession->DebugString())(
-            "session_new", reqSession->DebugString());
+        YDB_LOG_VERIFY(currentSession->IsEqualTo(*reqSession),
+            {"sessionCurrent", currentSession->DebugString()},
+            {"sessionNew", reqSession->DebugString()});
         return;
     }
 
@@ -1487,16 +1506,17 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvSendDataFromSource::T
     }
 
     // in current implementation the next loop will crash if schemas will be sent in the same package with the data, so adding this verify to ensure consistent behaviour
-    AFL_VERIFY(ev->Get()->Record.GetPathIdData().empty() || ev->Get()->Record.GetSchemeHistory().empty())(
-                                                              "reason", "can not send schemas and data in the same package");
+    YDB_LOG_VERIFY(ev->Get()->Record.GetPathIdData().empty() || ev->Get()->Record.GetSchemeHistory().empty(),
+        {"reason", "can not send schemas and data in the same package"});
 
     THashMap<TInternalPathId, NOlap::NDataSharing::NEvents::TPathIdData> dataByPathId;
     TBlobGroupSelector dsGroupSelector(Info());
     for (auto&& i : ev->Get()->Record.GetPathIdData()) {
         auto data = NOlap::NDataSharing::NEvents::TPathIdData::BuildFromProto(
             i, TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetVersionedIndex(), dsGroupSelector);
-        AFL_VERIFY(data.IsSuccess())("error", data.GetErrorMessage());
-        AFL_VERIFY(dataByPathId.emplace(TInternalPathId::FromProto(i), data.DetachResult()).second);
+        YDB_LOG_VERIFY(data.IsSuccess(),
+            {"error", data.GetErrorMessage()});
+        YDB_LOG_VERIFY(dataByPathId.emplace(TInternalPathId::FromProto(i), data.DetachResult()).second);
     }
 
     const auto& schemeHistoryProto = ev->Get()->Record.GetSchemeHistory();
@@ -1599,7 +1619,7 @@ public:
     TPortionConstructorV2(const NOlap::TPortionInfo::TConstPtr& portionInfo)
         : PortionInfo(portionInfo)
     {
-        AFL_VERIFY(PortionInfo);
+        YDB_LOG_VERIFY(PortionInfo);
     }
 
     bool IsReady() const {
@@ -1615,19 +1635,23 @@ public:
     }
 
     void SetRecords(NOlap::TColumnChunkLoadContextV2&& records) {
-        AFL_VERIFY(!Records);
+        YDB_LOG_VERIFY(!Records);
         Records = std::move(records);
     }
 
     void SetIndexes(std::vector<NOlap::TIndexChunkLoadContext>&& indexes) {
-        AFL_VERIFY(!Indexes);
+        YDB_LOG_VERIFY(!Indexes);
         Indexes = std::move(indexes);
     }
 
     std::shared_ptr<NOlap::TPortionDataAccessor> BuildAccessor() {
-        AFL_VERIFY(PortionInfo);
-        AFL_VERIFY(Records)("portion_id", PortionInfo->GetPortionId())("path_id", PortionInfo->GetPathId());
-        AFL_VERIFY(Indexes)("portion_id", PortionInfo->GetPortionId())("path_id", PortionInfo->GetPathId());
+        YDB_LOG_VERIFY(PortionInfo);
+        YDB_LOG_VERIFY(Records,
+            {"portionId", PortionInfo->GetPortionId()},
+            {"pathId", PortionInfo->GetPathId()});
+        YDB_LOG_VERIFY(Indexes,
+            {"portionId", PortionInfo->GetPortionId()},
+            {"pathId", PortionInfo->GetPathId()});
         return NOlap::TPortionAccessorConstructor::BuildForLoading(std::move(PortionInfo), Records->CreateBuildInfo(), std::move(*Indexes));
     }
 };
@@ -1648,7 +1672,8 @@ private:
     }
 
     virtual void DoOnCannotExecute(const TString& reason) override {
-        AFL_VERIFY(false)("cannot parse metadata", reason);
+        YDB_LOG_VERIFY(false,
+            {"cannotParseMetadataReason", reason});
     }
 
 public:
@@ -1714,8 +1739,10 @@ public:
                         if (!rowset.IsReady()) {
                             reask = true;
                         } else {
-                            AFL_VERIFY(!rowset.EndOfSet())("path_id", i.first)("portion_id", p)(
-                                "debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true));
+                            YDB_LOG_VERIFY(!rowset.EndOfSet(),
+                                {"pathId", i.first},
+                                {"portionId", p},
+                                {"debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true)});
                             NOlap::TColumnChunkLoadContextV2 info(rowset, selector);
                             itPortionConstructor->second.SetRecords(std::move(info));
                         }
@@ -1796,15 +1823,16 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
             THashMap<NOlap::NGeneralCache::TGlobalColumnAddress, NOlap::NGeneralCache::TColumnDataCachePolicy::TObject> result;
 
             auto portionsData = context.ExtractAssembledData();
-            AFL_VERIFY(portionsData.size() == 1);
+            YDB_LOG_VERIFY(portionsData.size() == 1);
             std::shared_ptr<NArrow::TGeneralContainer> container = std::make_shared<NArrow::TGeneralContainer>(std::move(portionsData.front()));
             {
                 for (const ui32 columnId : Schema->GetColumnIds()) {
                     auto address = NOlap::NGeneralCache::TGlobalColumnAddress(Owner, Portion, columnId);
                     auto columnData = container->GetAccessorByNameVerified(Schema->GetFieldByColumnIdVerified(columnId)->name());
-                    AFL_VERIFY(Schema->GetFieldByColumnIdVerified(columnId)->type()->Equals(columnData->GetDataType()))(
-                        "schema", Schema->GetFieldByColumnIdVerified(columnId)->ToString())("data", columnData->GetDataType()->ToString());
-                    AFL_VERIFY(result.emplace(address, columnData).second);
+                    YDB_LOG_VERIFY(Schema->GetFieldByColumnIdVerified(columnId)->type()->Equals(columnData->GetDataType()),
+                        {"schema", Schema->GetFieldByColumnIdVerified(columnId)->ToString()},
+                        {"data", columnData->GetDataType()->ToString()});
+                    YDB_LOG_VERIFY(result.emplace(address, columnData).second);
                 }
             }
 
@@ -1894,12 +1922,14 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModificatio
 
     auto task = std::make_shared<NOlap::NDataSharing::TTaskForTablet>((NOlap::TTabletId)TabletID());
     auto parsed = task->DeserializeFromProto(ev->Get()->Record.GetTask());
-    AFL_VERIFY(!!parsed)("error", parsed.GetErrorMessage());
+    YDB_LOG_VERIFY(!!parsed,
+        {"error", parsed.GetErrorMessage()});
 
-    AFL_VERIFY(task->GetTabletId() == (NOlap::TTabletId)TabletID());
+    YDB_LOG_VERIFY(task->GetTabletId() == (NOlap::TTabletId)TabletID());
     auto txConclusion = task->BuildModificationTransaction(this, (NOlap::TTabletId)ev->Get()->Record.GetInitiatorTabletId(),
         ev->Get()->Record.GetSessionId(), ev->Get()->Record.GetPackIdx(), task);
-    AFL_VERIFY(!!txConclusion)("error", txConclusion.GetErrorMessage());
+    YDB_LOG_VERIFY(!!txConclusion,
+        {"error", txConclusion.GetErrorMessage()});
     Execute(txConclusion->release(), ctx);
 }
 
@@ -1936,7 +1966,7 @@ void TColumnShard::Handle(TAutoPtr<TEventHandle<NOlap::NBackground::TEvExecuteGe
 
 void TColumnShard::Handle(NOlap::NBackground::TEvRemoveSession::TPtr& ev, const TActorContext& ctx) {
     auto txRemove = BackgroundSessionsManager->TxRemove(ev->Get()->GetClassName(), ev->Get()->GetIdentifier());
-    AFL_VERIFY(!!txRemove);
+    YDB_LOG_VERIFY(!!txRemove);
     Execute(txRemove.release(), ctx);
 }
 
@@ -1964,15 +1994,16 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
     NOlap::TTabletsByBlob blobs;
     for (auto&& i : ev->Get()->Record.GetBlobIds()) {
         auto blobId = NOlap::TUnifiedBlobId::BuildFromString(i, nullptr);
-        AFL_VERIFY(!!blobId)("problem", blobId.GetErrorMessage());
-        AFL_VERIFY(blobs.Add((NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), blobId.DetachResult()));
+        YDB_LOG_VERIFY(!!blobId,
+            {"problem", blobId.GetErrorMessage()});
+        YDB_LOG_VERIFY(blobs.Add((NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), blobId.DetachResult()));
     }
     Execute(new TTxRemoveSharedBlobs(
                 this, blobs, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()), ev->Get()->Record.GetStorageId()), ctx);
 }
 
 void TColumnShard::ActivateTiering(const TInternalPathId pathId, const THashSet<NTiers::TExternalStorageId>& usedTiers) {
-    AFL_VERIFY(Tiers);
+    YDB_LOG_VERIFY(Tiers);
     Tiers->ActivateTiers(usedTiers, true);
     OnTieringModified(pathId);
 }
@@ -2017,7 +2048,6 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(NLocalDbBackup::TEvStartBackup, Handle);
         HFunc(NLocalDbBackup::TEvCancelBackup, Handle);
         hFunc(TEvPrivate::TEvPrefetchPortionsMetadata, Handle);
-        hFunc(TEvPrivate::TEvSetLoadedKeyRanges, Handle);
         hFunc(TEvPrivate::TEvReportBaseStatistics, Handle);
         hFunc(TEvPrivate::TEvReportExecutorStatistics, Handle);
         HFunc(NEvents::TDataEvents::TEvWrite, Handle);

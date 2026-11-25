@@ -328,7 +328,7 @@ void CheckSchema(const TYsonStructPtr& ysonStruct, TStringBuf expected, const TY
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TYsonStructSchemaTest, TestYsonStruct)
+TEST(TYsonStructSchemaTest, YsonStruct)
 {
     CheckSchema(
         New<TTestYsonStruct>(),
@@ -358,7 +358,7 @@ TEST(TYsonStructSchemaTest, TestYsonStruct)
             ];})");
 }
 
-TEST(TYsonStructSchemaTest, TestSchemaForProtobuf)
+TEST(TYsonStructSchemaTest, SchemaForProtobuf)
 {
     CheckSchema(
         New<TTestStructWithProtobuf>(),
@@ -381,7 +381,7 @@ TEST(TYsonStructSchemaTest, TestSchemaForProtobuf)
             ];})");
 }
 
-TEST(TYsonStructSchemaTest, TestSchemaForProtobufAsYson)
+TEST(TYsonStructSchemaTest, SchemaForProtobufAsYson)
 {
     CheckSchema(
         New<TTestStructWithProtobufAsYson>(),
@@ -404,7 +404,7 @@ TEST(TYsonStructSchemaTest, TestSchemaForProtobufAsYson)
             ];})");
 }
 
-TEST(TYsonStructSchemaTest, TestSchemaForProtobufAsString)
+TEST(TYsonStructSchemaTest, SchemaForProtobufAsString)
 {
     CheckSchema(
         New<TTestStructWithProtobufAsString>(),
@@ -421,7 +421,7 @@ TEST(TYsonStructSchemaTest, TestSchemaForProtobufAsString)
             ];})");
 }
 
-TEST(TYsonStructSchemaTest, TestYsonStructWithCustomType)
+TEST(TYsonStructSchemaTest, YsonStructWithCustomType)
 {
     CheckSchema(
         New<TTestStructWithCustomType>(),
@@ -431,7 +431,7 @@ TEST(TYsonStructSchemaTest, TestYsonStructWithCustomType)
             ]})");
 }
 
-TEST(TYsonStructSchemaTest, TestYsonStructWithTuples)
+TEST(TYsonStructSchemaTest, YsonStructWithTuples)
 {
     CheckSchema(
         New<TTestStructWithTuples>(),
@@ -456,7 +456,7 @@ TEST(TYsonStructSchemaTest, TestYsonStructWithTuples)
             ]})");
 }
 
-TEST(TYsonStructSchemaTest, TestYsonStructWithArray)
+TEST(TYsonStructSchemaTest, YsonStructWithArray)
 {
     CheckSchema(
         New<TTestStructWithArray>(),
@@ -510,7 +510,7 @@ IMapNodePtr UnwrapMember(IMapNodePtr member)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TYsonStructSchemaTest, TestDefaultValues)
+TEST(TYsonStructSchemaTest, DefaultValues)
 {
     {
         auto schema = GetSchema(New<TTestYsonStruct>(), {.AddDefaultValues = true});
@@ -534,7 +534,7 @@ TEST(TYsonStructSchemaTest, TestDefaultValues)
     }
 }
 
-TEST(TYsonStructSchemaTest, TestDefaultValuesWithRequiredParameter)
+TEST(TYsonStructSchemaTest, DefaultValuesWithRequiredParameter)
 {
     auto schema = GetSchema(New<TTestStructWithRequiredParameters>(), {.AddDefaultValues = true});
     auto description = Format("Schema: %v", ConvertToYsonString(schema, EYsonFormat::Pretty));
@@ -543,7 +543,7 @@ TEST(TYsonStructSchemaTest, TestDefaultValuesWithRequiredParameter)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TYsonStructSchemaTest, TestSourceLocation)
+TEST(TYsonStructSchemaTest, SourceLocation)
 {
     {
         auto schema = GetSchema(New<TTestYsonStruct>(), {.AddSourceLocation = true});

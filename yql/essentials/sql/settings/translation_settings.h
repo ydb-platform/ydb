@@ -5,12 +5,14 @@
 #include <yql/essentials/sql/settings/flags/flags.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/public/langver/yql_langver.h>
+#include <yql/essentials/public/sql_meta/statement_kind.h>
 #include <yql/essentials/public/udf_meta/udf_meta.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
+#include <util/generic/set.h>
 #include <util/generic/vector.h>
 
 namespace google::protobuf { // NOLINT(readability-identifier-naming)
@@ -153,6 +155,8 @@ struct TTranslationSettings {
     NYql::IAutoParamBuilderFactory* AutoParamBuilderFactory = nullptr;
     bool EmitReadsForExists = true;
     bool AlwaysAllowExports = false;
+    // Unset allows all kinds; an empty set allows only unclassified statements (queries, pragmas, etc.).
+    TMaybe<TSet<NYql::EStatementKind>> AllowedStatementKinds;
     bool IsReplay = false;
     bool AllowTablesFunction = false;
 

@@ -115,7 +115,7 @@ struct TScriptExecutionsYdbSetup {
 
         // Init sdk
         NYdb::TDriverConfig driverCfg;
-        driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << GrpcPort).SetDatabase(Tests::TestDomainName).SetAuthToken(BUILTIN_ACL_ROOT);
+        driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << GrpcPort).SetDatabase(TestDatabase).SetAuthToken(BUILTIN_ACL_ROOT);
         YdbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
         TableClient = MakeHolder<NYdb::NTable::TTableClient>(*YdbDriver);
         auto createSessionResult = TableClient->CreateSession().ExtractValueSync();

@@ -319,9 +319,11 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     }
     if (SplitMergeEnabled(TabletConfig) && MirroringEnabled(TabletConfig) && AppData(ctx)->FeatureFlags.GetEnableMirroredTopicSplitMerge()) {
         if (MirrorTopicDescriberActorId) {
-            ctx.Send(MirrorTopicDescriberActorId, new TEvPQ::TEvChangePartitionConfig(nullptr, TabletConfig));
+            auto tabletConfig = TabletConfig;
+            tabletConfig.SetTopicPath(Path);
+            ctx.Send(MirrorTopicDescriberActorId, new TEvPQ::TEvChangePartitionConfig(nullptr, tabletConfig));
         } else {
-            MirrorTopicDescriberActorId = ctx.Register(CreateMirrorDescriber(TabletID(), SelfId(), Topic, TabletConfig.GetPartitionConfig().GetMirrorFrom()));
+            MirrorTopicDescriberActorId = ctx.Register(CreateMirrorDescriber(TabletID(), SelfId(), Topic, TabletConfig.GetPartitionConfig().GetMirrorFrom(), TabletConfig.GetYdbDatabasePath(), Path));
         }
     } else {
         if (MirrorTopicDescriberActorId) {

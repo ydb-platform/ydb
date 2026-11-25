@@ -15,27 +15,35 @@ namespace NHive {
 
 namespace {
 
-bool SameThroughputRecord(const NKikimrTabletBase::TThroughputRecord& lhs,
-                          const NKikimrTabletBase::TThroughputRecord& rhs) {
+bool SameThroughputRecord(
+        const NKikimrTabletBase::TThroughputRecord& lhs,
+        const NKikimrTabletBase::TThroughputRecord& rhs)
+{
     if (lhs.GetThroughput() != rhs.GetThroughput()
             || lhs.GetGroupID() != rhs.GetGroupID()
             || lhs.GetChannel() != rhs.GetChannel()
             || lhs.HasThroughput() != rhs.HasThroughput()
             || lhs.HasGroupID() != rhs.HasGroupID()
-            || lhs.HasChannel() != rhs.HasChannel()) {
+            || lhs.HasChannel() != rhs.HasChannel())
+    {
         return false;
     }
+
     static const auto* reflection = lhs.GetReflection();
     if (reflection->GetUnknownFields(lhs).field_count() == 0
-            && reflection->GetUnknownFields(rhs).field_count() == 0) {
+            && reflection->GetUnknownFields(rhs).field_count() == 0)
+    {
         return true;
     }
+
     return lhs.SerializeAsString() == rhs.SerializeAsString();
 }
 
-template <class TRecords>
-bool SameThroughputRecords(const TVector<NKikimrTabletBase::TThroughputRecord>& stored,
-                           const TRecords& incoming) {
+template <typename TRecords>
+bool SameThroughputRecords(
+        const TVector<NKikimrTabletBase::TThroughputRecord>& stored,
+        const TRecords& incoming)
+{
     return stored.size() == size_t(incoming.size())
         && std::equal(stored.begin(), stored.end(), incoming.begin(), SameThroughputRecord);
 }

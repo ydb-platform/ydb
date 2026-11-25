@@ -126,6 +126,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, QueryCacheUseForCalc);
     REGISTER_SETTING(*this, QueryCacheUseExpirationTimeout);
     REGISTER_SETTING(*this, QueryCacheReportProgress);
+    REGISTER_SETTING(*this, EnableProgressDataStatistics);
 
     REGISTER_SETTING(*this, DefaultMemoryLimit);
     REGISTER_SETTING(*this, DefaultMemoryReserveFactor).Lower(0.0).Upper(1.0);
@@ -364,6 +365,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, JoinMergeUnsortedFactor).Lower(0.0);
     REGISTER_SETTING(*this, JoinMergeForce);
     REGISTER_SETTING(*this, MapJoinLimit);
+    REGISTER_SETTING(*this, BlockMapJoinLimit);
     REGISTER_SETTING(*this, MapJoinShardMinRows);
     REGISTER_SETTING(*this, MapJoinShardCount).Lower(1).Upper(10);
     REGISTER_SETTING(*this, MapJoinUseFlow);
@@ -374,11 +376,14 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, ConvertDynamicTablesToStatic).Parser([](const TString& v) { return FromString<EConvertDynamicTablesToStatic>(v); });
     REGISTER_SETTING(*this, _EnableDynamicTablesWrite);
     REGISTER_SETTING(*this, KeepMergeWithDynamicInput);
+    REGISTER_SETTING(*this, BypassMergeWithInputSettings);
+    REGISTER_SETTING(*this, BypassIdentityMapWithSysColumns);
     REGISTER_SETTING(*this, DisableOptimizers);
     REGISTER_SETTING(*this, MaxInputTables).Lower(2).Upper(3000); // 3000 - default max limit on YT clusters
     REGISTER_SETTING(*this, MaxOutputTables).Lower(1).Upper(100); // https://ml.yandex-team.ru/thread/yt/166633186212752141/
     REGISTER_SETTING(*this, MaxInputTablesForSortedMerge).Lower(2).Upper(1000); // https://st.yandex-team.ru/YTADMINREQ-16742
     REGISTER_SETTING(*this, DisableFuseOperations);
+    REGISTER_SETTING(*this, LateFuseOperations);
     REGISTER_SETTING(*this, EnableFuseMapToMapReduce)
         .ValueSetter([](TYtSettings& settings, const TString& arg, bool value) {
             Y_UNUSED(arg);

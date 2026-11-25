@@ -3,6 +3,7 @@
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/protos/bridge_storage.pb.h>
 #include <ydb/core/sys_view/common/events.h>
@@ -26,6 +27,112 @@ TAutoPtr<TEventHandle<TEvent>> WaitReply(TEnvironmentSetup& env, const TActorId&
 }
 
 Y_UNIT_TEST_SUITE(BridgeRejoin) {
+    Y_UNIT_TEST(PileRestartsBeforeStage2CommitIsStored) {
+        using namespace NBridgeTest;
+        using TState = NKikimrBridge::TClusterState;
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        SwitchPileState(env, 1, TState::DISCONNECTED);
+        checker.Write(groupId);
+
+        bool holdCommit = true;
+        bool restarted = false;
+        std::set<ui32> blockedNodes;
+        std::set<ui32> recoveredProposals;
+        std::optional<NKikimrBlobStorage::TStorageConfig> lastCommittedConfig;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId < 9 || nodeId > 16) {
+                return true;
+            }
+            if (holdCommit && ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record;
+                if (record.HasCommittedStorageConfig() && record.HasProposedStorageConfig()
+                        && record.GetCommittedStorageConfig().GetClusterState().GetPerPileState(1) == TState::NOT_SYNCHRONIZED_1
+                        && record.GetProposedStorageConfig().GetClusterState().GetPerPileState(1) == TState::NOT_SYNCHRONIZED_2) {
+                    lastCommittedConfig = record.GetCommittedStorageConfig();
+                }
+                if (record.HasCommittedStorageConfig() && record.GetCommittedStorageConfig()
+                        .GetClusterState().GetPerPileState(1) == TState::NOT_SYNCHRONIZED_2) {
+                    blockedNodes.insert(nodeId);
+                    return false;
+                }
+            }
+            if (restarted && ev->GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadataResult::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeWardenReadMetadataResult>()->Record;
+                if (record.HasCommittedStorageConfig() && record.HasProposedStorageConfig()
+                        && record.GetCommittedStorageConfig().GetClusterState().GetPerPileState(1) == TState::NOT_SYNCHRONIZED_1
+                        && record.GetProposedStorageConfig().GetClusterState().GetPerPileState(1) == TState::NOT_SYNCHRONIZED_2) {
+                    recoveredProposals.insert(nodeId);
+                }
+            }
+            return true;
+        };
+        SwitchPileState(env, 1, TState::NOT_SYNCHRONIZED_1);
+        const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+        while (blockedNodes.size() != 8 && env.Runtime->GetClock() < deadline) {
+            env.Sim(TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(blockedNodes.size(), 8, "not all nodes reached the stage-2 commit write");
+        for (ui32 nodeId = 9; nodeId <= 16; ++nodeId) {
+            env.StopNode(nodeId);
+        }
+
+        UNIT_ASSERT(lastCommittedConfig);
+        const TActorId connectionChecker = env.Runtime->Register(CreateDistconfBridgeConnectionCheckerActor(
+            TBridgePileId::FromPileIndex(0), "pile_1"), 1);
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        auto checkConnection = [&](const NKikimrBlobStorage::TStorageConfig& peerConfig) {
+            NKikimrBlobStorage::TConnectivityPayload payload;
+            TBridgePileId::FromPileIndex(1).CopyToProto(&payload,
+                &NKikimrBlobStorage::TConnectivityPayload::SetBridgePileId);
+            payload.SetBridgePileName("pile_2");
+            payload.SetPileListChangeCapable(true);
+            payload.SetBridgeFeatureLevel(NStorage::BridgeFeatureLevel);
+            payload.MutableStorageConfig()->CopyFrom(peerConfig);
+            THashMap<TString, TString> params;
+            UNIT_ASSERT(payload.SerializeToString(&params["distconf"]));
+            env.Runtime->Send(new IEventHandle(connectionChecker, edge,
+                new TEvInterconnect::TEvCheckIncomingConnection(9, std::move(params))), 1);
+            return WaitReply<TEvInterconnect::TEvCheckIncomingConnectionResult>(env, edge, "bridge handshake after a pile crash");
+        };
+        const auto response = checkConnection(*lastCommittedConfig);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->ErrorReason.value_or(TString()), "peer cluster state is obsolete");
+        bool sentConfig = false;
+        for (const auto& [key, value] : response->Get()->ParamsToSend) {
+            NKikimrBlobStorage::TConnectivityPayload reply;
+            UNIT_ASSERT(reply.ParseFromString(value));
+            sentConfig |= reply.HasStorageConfig()
+                && reply.GetStorageConfig().GetClusterState().GetPerPileState(1) == TState::NOT_SYNCHRONIZED_2;
+        }
+        UNIT_ASSERT_C(sentConfig, "the returning pile did not receive the current configuration");
+
+        auto diverged = *lastCommittedConfig;
+        diverged.MutableClusterState()->SetGuid(diverged.GetClusterState().GetGuid() + 1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&diverged);
+        const auto rejected = checkConnection(diverged);
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->ErrorReason.value_or(TString()), "cluster state history has been diverged");
+
+        holdCommit = false;
+        restarted = true;
+        for (ui32 nodeId = 9; nodeId <= 16; ++nodeId) {
+            env.StartNode(nodeId);
+        }
+        WaitForPileState(env, 1, TState::SYNCHRONIZED);
+        UNIT_ASSERT_C(!recoveredProposals.empty(), "restart did not exercise a stored proposal without its commit");
+        checker.CheckAll();
+        checker.Write(groupId);
+        env.Runtime->FilterFunction = {};
+    }
+
     Y_UNIT_TEST(TwoDisconnectedPilesRecoverData) {
         TEnvironmentSetup env{{
             .NodeCount = 24,
@@ -185,11 +292,16 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         }
         env.Sim(TDuration::Seconds(6)); // BSC refreshes the counters every 5 s
         const auto numGroups = groupsInStage(poolCounters("pile_1", env.StoragePoolName), "SYNCED");
-        UNIT_ASSERT_GT(numGroups, 0);
+        UNIT_ASSERT_VALUES_EQUAL(numGroups, 1);
+        const auto logicalGroups = GetServiceCounters(runtime->GetNode(env.Settings.ControllerNodeId)->AppData->Counters,
+            "bridge")->GetSubgroup("subsystem", "bsc")->GetSubgroup("database", env.StoragePoolName)
+            ->GetSubgroup("storagePool", env.StoragePoolName)->FindCounter("LogicalGroupsAssigned");
+        UNIT_ASSERT(logicalGroups);
+        UNIT_ASSERT_VALUES_EQUAL(logicalGroups->Val(), 1);
         for (const auto& pile : rejoiningPiles) {
             const auto counters = poolCounters(pile, env.StoragePoolName);
             UNIT_ASSERT_GT(groupsInStage(counters, "BLOCKS"), 0);
-            UNIT_ASSERT_GT(counters->GetCounter("SyncersRunning")->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("SyncersRunning")->Val(), 1);
             UNIT_ASSERT_VALUES_EQUAL(pileCounters(pile)->GetCounter("UnsyncedBSC")->Val(), 1);
             UNIT_ASSERT_VALUES_EQUAL(pileInState(pile, "NOT_SYNCHRONIZED_2"), 1);
         }
@@ -263,6 +375,7 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             env.Sim(TDuration::Seconds(1));
         }
         env.Sim(TDuration::Seconds(6));
+        UNIT_ASSERT_VALUES_EQUAL(logicalGroups->Val(), 0);
         for (const auto& pile : rejoiningPiles) {
             const auto counters = poolCounters(pile, env.StoragePoolName);
             UNIT_ASSERT_VALUES_EQUAL(groupsInStage(counters, "SYNCED"), numGroups);

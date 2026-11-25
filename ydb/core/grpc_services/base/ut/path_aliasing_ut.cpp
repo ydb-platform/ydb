@@ -51,6 +51,39 @@ namespace NKikimr::NGRpcService {
     } // namespace
 
     Y_UNIT_TEST_SUITE(PathAliasingRequestContext) {
+        Y_UNIT_TEST_TWIN(DotComponentsRespectFeatureFlag, relativePathsEnabled) {
+            TActorSystemStub actorSystem;
+            actorSystem.AppData.DomainsInfo = new TDomainsInfo;
+            actorSystem.AppData.DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("Root").Release());
+            actorSystem.AppData.FeatureFlags.SetEnableRelativePaths(relativePathsEnabled);
+            TNamedRequest request("Ydb.Scheme.V1.SchemeService/ListDirectory", "/Root/db");
+            request.EnablePathNormalization();
+
+            for (const auto& [path, expected] : TVector<std::pair<TString, TString>>{
+                {".", "/Root/db"},
+                {"./", "/Root/db"},
+                {"././", "/Root/db"},
+                {"dir/./table/.", "/Root/db/dir/table"},
+                {"/Root/./db/./table", "/Root/db/table"},
+                {"/./", "/"},
+                {"..", "/Root/db/.."},
+                {"../table", "/Root/db/../table"},
+                {".sys/partition_stats", "/Root/db/.sys/partition_stats"},
+                {"table.v1", "/Root/db/table.v1"},
+                {"/Root/db//table.v1/", "/Root/db//table.v1/"},
+                {"", ""},
+            }) {
+                UNIT_ASSERT_VALUES_EQUAL_C(request.NormalizePath(path),
+                    relativePathsEnabled ? expected : path, path);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath(".", "restore/."),
+                relativePathsEnabled ? "/Root/db/restore" : ".");
+
+            request.InitializePathNormalization(MakeNormalizer());
+            UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/./raw/./table"),
+                relativePathsEnabled ? "/rewritten/table" : "/./raw/./table");
+        }
+
         Y_UNIT_TEST_TWIN(SchemaPathsRespectFeatureFlag, relativePathsEnabled) {
             TActorSystemStub actorSystem;
             actorSystem.AppData.DomainsInfo = new TDomainsInfo;

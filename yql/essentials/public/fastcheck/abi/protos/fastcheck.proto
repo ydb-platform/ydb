@@ -29,6 +29,10 @@ message TFastCheckResult {
     repeated NYql.NIssue.NProto.IssueMessage Issues = 2;
 }
 
+message TStatementKinds {
+    repeated int32 Items = 1;
+}
+
 message TLinterRequest {
     optional bytes Program = 1;
     optional bytes File = 2;
@@ -46,6 +50,7 @@ message TLinterRequest {
     optional bool HasFilters = 14;
     repeated TFilter Filters = 15;
     optional bool ListOnly = 16;
+    optional TStatementKinds AllowedStatementKinds = 17;
 }
 
 message TCheckResult {

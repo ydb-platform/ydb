@@ -4,8 +4,13 @@
 
 namespace NKikimr::NBlobDepot {
 
-    IActor* CreateBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings /*settings*/, ui64 /*tabletId*/) {
+    IActor* CreateBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings /*settings*/, ui64 /*tabletId*/,
+            std::shared_ptr<TS3BalancerEndpoint> /*lastEndpoint*/) {
         Y_ABORT("S3 is not supported on Windows");
+    }
+
+    IActor* CreateRetiredS3Sweep(TActorId, ui64, const NKikimrBlobDepot::TBlobDepotConfig&) {
+        return nullptr;
     }
 
 } // NKikimr::NBlobDepot

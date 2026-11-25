@@ -176,7 +176,7 @@ void TNodeInfo::UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& 
     Hive.UpdateTotalResourceValues(this, tablet, before, after, ResourceValues - oldResourceValues, normalizedValues - oldNormalizedValues);
 }
 
-bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debugState) const {
+bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debugState, bool checkPile) const {
     const auto& effectiveAllowedDomains = filter.GetEffectiveAllowedDomains();
     bool result = false;
 
@@ -218,7 +218,7 @@ bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debu
         return false;
     }
 
-    if (Hive.BridgeInfo) {
+    if (checkPile && Hive.BridgeInfo) {
         if (!filter.IsAllowedPile(BridgePileId)) {
             return false;
         }
@@ -392,6 +392,32 @@ ui64 TNodeInfo::GetMaxCountForTabletType(TTabletTypes::EType tabletType) const {
     return maxCount;
 }
 
+void TNodeInfo::SetTabletAvailabilityRestriction(TTabletTypes::EType tabletType, ui64 maxCount) {
+    TabletAvailabilityRestrictions[tabletType] = maxCount;
+    auto it = TabletAvailability.find(tabletType);
+    if (it != TabletAvailability.end()) {
+        it->second.UpdateRestriction(maxCount);
+    }
+}
+
+bool TNodeInfo::ResetTabletAvailabilityRestriction(TTabletTypes::EType tabletType) {
+    auto itRestriction = TabletAvailabilityRestrictions.find(tabletType);
+    auto itAvailability = TabletAvailability.find(tabletType);
+    bool hasRealRestriction = itRestriction != TabletAvailabilityRestrictions.end()
+        && itRestriction->second != MAX_TABLET_COUNT_DEFAULT_VALUE;
+    if (hasRealRestriction || itAvailability == TabletAvailability.end()) {
+        if (itRestriction != TabletAvailabilityRestrictions.end()) {
+            TabletAvailabilityRestrictions.erase(itRestriction);
+        }
+        if (itAvailability != TabletAvailability.end()) {
+            itAvailability->second.RemoveRestriction();
+        }
+        return false;
+    }
+    SetTabletAvailabilityRestriction(tabletType, MAX_TABLET_COUNT_DEFAULT_VALUE);
+    return true;
+}
+
 bool TNodeInfo::IsOverloaded() const {
     auto maxValues = GetResourceMaximumValues() * Hive.GetResourceOvercommitment();
     auto normValues = NormalizeRawValues(GetResourceCurrentValues(), maxValues);
@@ -423,13 +449,15 @@ void TNodeInfo::DeregisterInDomains() {
     Hive.UpdateNodeSegments(this);
 }
 
-void TNodeInfo::Ping() {
+void TNodeInfo::Ping(bool sendSettings, bool sendCapabilities) {
     Y_ABORT_UNLESS((bool)Local);
     YDB_LOG_DEBUG("TNodeInfo::Ping queueing ping",
         {"logPrefix", GetLogPrefix()},
         {"nodeId", Id},
-        {"local", Local});
-    Hive.QueuePing(Local);
+        {"local", Local},
+        {"sendSettings", sendSettings},
+        {"sendCapabilities", sendCapabilities});
+    Hive.QueuePing({.Local = Local, .SendSettings = sendSettings, .SendCapabilities = sendCapabilities});
 }
 
 void TNodeInfo::SendReconnect(const TActorId& local) {
@@ -441,6 +469,7 @@ void TNodeInfo::SendReconnect(const TActorId& local) {
 }
 
 void TNodeInfo::SetDown(bool down, EHiveEventReason reason, TString details) {
+    const bool becameUp = Down && !down;
     if (Down != down) {
         Hive.RecordNodeEvent(*this, down ? EHiveEventType::Down : EHiveEventType::Up, reason, std::move(details));
     }
@@ -451,6 +480,14 @@ void TNodeInfo::SetDown(bool down, EHiveEventReason reason, TString details) {
     } else {
         Hive.ObjectDistributions.AddNode(*this);
         Hive.ProcessWaitQueue();
+        if (becameUp && Hive.BridgeInfo) {
+            // a pile drain may have been waiting for a node in an allowed pile to move the tablets to; the nodes
+            // of a draining pile are left out, as a pile drain brings its own nodes back up when it ends
+            const auto* pile = Hive.FindPile(BridgePileId);
+            if (!(pile && pile->Drain) && TNodeFilter(Hive).IsAllowedPile(BridgePileId)) {
+                Hive.ProcessPileDrains();
+            }
+        }
     }
 }
 
@@ -700,6 +737,64 @@ void TNodeInfo::SetLocation(const TNodeLocation& location, EHiveEventReason reas
     }
     Location = location;
     LocationAcquired = true;
+}
+
+void TNodeInfo::CreateCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& hiveGroup) {
+    if (Counters) {
+        return;
+    }
+    Counters = std::make_unique<TCounters>();
+    TCounters& c = *Counters;
+    c.Parent = hiveGroup;
+    auto group = hiveGroup->GetSubgroup("peer_node_id", ToString(Id));
+    auto counter = [&group](const char* name, bool derivative = false) {
+        return group->GetCounter(name, derivative);
+    };
+    c.BalanceUsagePercent = counter("BalanceUsagePercent");
+    c.TabletsUsageCpuPercent = counter("TabletsUsageCpuPercent");
+    c.TabletsUsageMemPercent = counter("TabletsUsageMemPercent");
+    c.TabletsUsageNetPercent = counter("TabletsUsageNetPercent");
+    c.TabletsUsageCtr = counter("TabletsUsageCtr");
+    c.NodeUsageAvgComputeResourcesPercent = counter("NodeUsageAvgComputeResourcesPercent");
+    c.NodeUsageAvgCpuPercent = counter("NodeUsageAvgCpuPercent");
+    c.NodeUsageAvgMemPercent = counter("NodeUsageAvgMemPercent");
+    c.NodeUsageAvgNetPercent = counter("NodeUsageAvgNetPercent");
+    c.NodeUsageAvgCtr = counter("NodeUsageAvgCtr");
+    c.NodeTabletsRunning = counter("NodeTabletsRunning");
+    c.NodeTabletsStarting = counter("NodeTabletsStarting");
+    c.TabletsMovedToNode = counter("TabletsMovedToNode", true);
+    c.TabletsMovedFromNode = counter("TabletsMovedFromNode", true);
+}
+
+void TNodeInfo::DropCounters() {
+    if (Counters) {
+        Counters->Parent->RemoveSubgroup("peer_node_id", ToString(Id));
+        Counters.reset();
+    }
+}
+
+void TNodeInfo::UpdateCounters() {
+    if (!Counters) {
+        return;
+    }
+    using namespace NMetrics;
+    TCounters& c = *Counters;
+    const TResourceRawValues maximum = GetResourceMaximumValues();
+    // as THive::GetStats sees this node
+    const TResourceNormalizedValues normalizedResValues = NormalizeRawValues(ResourceValues, maximum);
+    c.BalanceUsagePercent->Set(GetNodeUsage(normalizedResValues) * 100);
+    c.TabletsUsageCpuPercent->Set(std::get<EResource::CPU>(normalizedResValues) * 100);
+    c.TabletsUsageMemPercent->Set(std::get<EResource::Memory>(normalizedResValues) * 100);
+    c.TabletsUsageNetPercent->Set(std::get<EResource::Network>(normalizedResValues) * 100);
+    c.TabletsUsageCtr->Set(std::get<EResource::Counter>(ResourceValues));
+    // as the balancer sees this node when it orders nodes and checks a move
+    c.NodeUsageAvgComputeResourcesPercent->Set(GetNodeUsage(EResourceToBalance::ComputeResources) * 100);
+    c.NodeUsageAvgCpuPercent->Set(GetNodeUsage(EResourceToBalance::CPU) * 100);
+    c.NodeUsageAvgMemPercent->Set(GetNodeUsage(EResourceToBalance::Memory) * 100);
+    c.NodeUsageAvgNetPercent->Set(GetNodeUsage(EResourceToBalance::Network) * 100);
+    c.NodeUsageAvgCtr->Set(std::get<NMetrics::EResource::Counter>(GetResourceCurrentValues()));
+    c.NodeTabletsRunning->Set(GetTabletsRunning());
+    c.NodeTabletsStarting->Set(GetTabletsScheduled());
 }
 
 TString TNodeInfo::GetLogPrefix() const {

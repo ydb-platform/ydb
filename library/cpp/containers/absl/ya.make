@@ -11,6 +11,7 @@ SRCS(
     flat_hash_map_saveload.h
     flat_hash_set.h
     flat_hash_set_saveload.h
+    inlined_vector.h
 )
 
 END()

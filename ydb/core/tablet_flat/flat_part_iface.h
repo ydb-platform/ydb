@@ -74,6 +74,9 @@ namespace NTable {
         virtual TResult Locate(const TMemTable*, ui64 ref, ui32 tag) = 0;
         virtual TResult Locate(const TPart*, ui64 ref, ELargeObj lob) = 0;
 
+        // The scan has finished the current key and no longer needs its history.
+        virtual void ReleaseRowHistory() {}
+
         /**
          * Returns a data page of the column group, or nullptr if it is not loaded yet
          */

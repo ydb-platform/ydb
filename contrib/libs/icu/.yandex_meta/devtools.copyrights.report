@@ -336,17 +336,6 @@ BELONGS ya.make
     Files with this license:
         readme.html [7:10]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 15a10786a52ce6e33763c52348c47981
-BELONGS ya.make
-    License text:
-        Copyright © 2016-2025 Unicode, Inc.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        LICENSE [5:5]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 15d83207399227b14a1044b1cba00a64
 BELONGS ya.make
     License text:
@@ -1892,6 +1881,17 @@ BELONGS ya.make
         i18n/islamcal.cpp [5:6]
         include/unicode/ulocdata.h [6:7]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 707dc075d0308fbc394a2d9582258081
+BELONGS ya.make
+    License text:
+        Copyright © 1991-2026 Unicode, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5:5]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 72568c613e837640648dd9c49821e644
 BELONGS ya.make
     License text:
@@ -2531,7 +2531,8 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 93c4a85915c1f800bd94a4e22b075152
 BELONGS ya.make
     License text:
-        (c) 2016 and later Unicode, Inc. and others
+          <i>© 2016 and later: Unicode, Inc. and others. License &amp; terms of use: http://www.unicode.org/copyright.html</i> 
+          <i>© 1995-2016 International Business Machines Corporation and others</i>
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -3461,7 +3462,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        i18n/messageformat2.cpp [544:546]
+        i18n/messageformat2.cpp [714:716]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a021d3bd6d6cbb97cbccc0ab1586c491
 BELONGS ya.make
@@ -3851,7 +3852,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        APIChangeReport.html [1706:1708]
+        APIChangeReport.html [1313:1315]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c1b7297fc443f46a1d1de36f8b788822
 BELONGS ya.make
@@ -4365,7 +4366,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        i18n/messageformat2.cpp [602:612]
+        i18n/messageformat2.cpp [772:782]
 
 KEEP     COPYRIGHT_SERVICE_LABEL eed7e8b3d80757822970ac3a50dd6716
 BELONGS ya.make

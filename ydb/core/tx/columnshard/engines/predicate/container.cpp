@@ -30,7 +30,7 @@ int TPredicateContainer::MatchScalar(const ui32 columnIdx, const std::shared_ptr
     if (columnIdx >= NumColumns()) {
         return 1;
     }
-    AFL_VERIFY(columnIdx < Object->Batch.GetSorting()->GetColumns().size());
+    YDB_LOG_VERIFY(columnIdx < Object->Batch.GetSorting()->GetColumns().size());
     const auto& c = Object->Batch.GetSorting()->GetColumns()[columnIdx];
     auto sPredicate = c->GetScalar(0);
     const int cmpResult = NArrow::ScalarCompare(sPredicate, s);
@@ -83,7 +83,7 @@ bool TPredicateContainer::IsBackwardInterval() const {
 }
 
 bool TPredicateContainer::IsInclude() const {
-    AFL_VERIFY(!IsAll());
+    YDB_LOG_VERIFY(!IsAll());
     return GetCompareType() == NArrow::ECompareType::GREATER_OR_EQUAL || GetCompareType() == NArrow::ECompareType::LESS_OR_EQUAL;
 }
 
@@ -151,8 +151,8 @@ TConclusion<TPredicateContainer> TPredicateContainer::BuildPredicateTo(std::opti
 
 std::optional<NArrow::NMerger::TSortableBatchPosition::TFoundPosition> TPredicateContainer::FindFirstIncluded(
     NArrow::NMerger::TRWSortableBatchPosition& begin) const {
-    AFL_VERIFY(IsForwardInterval());
-    AFL_VERIFY(begin.GetRecordsCount());
+    YDB_LOG_VERIFY(IsForwardInterval());
+    YDB_LOG_VERIFY(begin.GetRecordsCount());
 
     if (!Object) {
         return NArrow::NMerger::TSortableBatchPosition::TFoundPosition(begin.GetPosition(), std::partial_ordering::equivalent);
@@ -164,8 +164,8 @@ std::optional<NArrow::NMerger::TSortableBatchPosition::TFoundPosition> TPredicat
 
 std::optional<NArrow::NMerger::TSortableBatchPosition::TFoundPosition> TPredicateContainer::FindFirstExcluded(
     NArrow::NMerger::TRWSortableBatchPosition& begin) const {
-    AFL_VERIFY(IsBackwardInterval());
-    AFL_VERIFY(begin.GetRecordsCount());
+    YDB_LOG_VERIFY(IsBackwardInterval());
+    YDB_LOG_VERIFY(begin.GetRecordsCount());
 
     if (!Object) {
         return std::nullopt;

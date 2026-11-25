@@ -13,6 +13,19 @@ using NKqp::TKikimrSettings;
 using TDescriptionPromise = NThreading::TPromise<NKqp::TEvDescribeSecretsResponse::TDescription>;
 
 Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
+    Y_UNIT_TEST(DescriptionRequiresMatchingRevisions) {
+        using TDescription = NKqp::TEvDescribeSecretsResponse::TDescription;
+        const std::vector<TString> values = {"first", "second"};
+        const TDescription legacy(values);
+        UNIT_ASSERT_VALUES_EQUAL(legacy.Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(legacy.SecretValues, values);
+        UNIT_ASSERT(!legacy.SecretRevisions);
+
+        const std::vector<NKqp::TSecretRevision> incomplete = {{1, 2, 0}};
+        UNIT_ASSERT_EXCEPTION(TDescription(values, incomplete), yexception);
+        UNIT_ASSERT_EXCEPTION(TDescription(values, {}), yexception);
+    }
+
     Y_UNIT_TEST(GetNewValue) {
         TKikimrRunner kikimr;
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
@@ -48,6 +61,33 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
 
             auto promise = ResolveSecret("/Root/secret-name", kikimr);
             AssertSecretValue(newSecretValue, promise);
+        }
+    }
+
+    Y_UNIT_TEST(RevisionIsCoherentWithValueIncludingEqualValueAlter) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString name = "/Root/revision-secret";
+        CreateSchemaSecret(name, "first", session);
+        const auto first = ResolveSecret(name, kikimr).GetFuture().GetValueSync();
+        UNIT_ASSERT(first.SecretRevisions);
+        UNIT_ASSERT_VALUES_EQUAL(first.SecretRevisions->size(), 1);
+        const auto& firstRevision = first.SecretRevisions->front();
+        UNIT_ASSERT(firstRevision.PathOwnerId && firstRevision.LocalPathId);
+        UNIT_ASSERT_VALUES_EQUAL(firstRevision.Version, 0);
+        ui64 previousVersion = firstRevision.Version;
+        for (const auto& value : {TString("first"), TString("second")}) {
+            AlterSchemaSecret(name, value, session);
+            const auto next = ResolveSecret(name, kikimr).GetFuture().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(next.SecretValues[0], value);
+            UNIT_ASSERT(next.SecretRevisions);
+            UNIT_ASSERT_VALUES_EQUAL(next.SecretRevisions->size(), 1);
+            const auto& nextRevision = next.SecretRevisions->front();
+            UNIT_ASSERT_VALUES_EQUAL(nextRevision.PathOwnerId, firstRevision.PathOwnerId);
+            UNIT_ASSERT_VALUES_EQUAL(nextRevision.LocalPathId, firstRevision.LocalPathId);
+            UNIT_ASSERT_GT(nextRevision.Version, previousVersion);
+            previousVersion = nextRevision.Version;
         }
     }
 

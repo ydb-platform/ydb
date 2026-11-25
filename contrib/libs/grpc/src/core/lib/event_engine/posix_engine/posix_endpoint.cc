@@ -44,6 +44,7 @@
 #include "src/core/lib/event_engine/posix_engine/internal_errqueue.h"
 #include "src/core/lib/event_engine/posix_engine/tcp_socket_utils.h"
 #include "src/core/lib/event_engine/tcp_socket_utils.h"
+#include "src/core/lib/event_engine/trace.h"
 #include "src/core/lib/experiments/experiments.h"
 #include "src/core/lib/gprpp/debug_location.h"
 #include "src/core/lib/gprpp/load_file.h"
@@ -577,6 +578,7 @@ void PosixEndpointImpl::HandleRead(y_absl::Status status) {
     grpc_core::MutexLock lock(&read_mu_);
     ret = HandleReadLocked(status);
     if (ret) {
+      GRPC_EVENT_ENGINE_ENDPOINT_TRACE("Endpoint[%p]: Read complete", this);
       cb = std::move(read_cb_);
       read_cb_ = nullptr;
       incoming_buffer_ = nullptr;
@@ -594,6 +596,7 @@ bool PosixEndpointImpl::Read(y_absl::AnyInvocable<void(y_absl::Status)> on_read,
                              SliceBuffer* buffer,
                              const EventEngine::Endpoint::ReadArgs* args) {
   grpc_core::ReleasableMutexLock lock(&read_mu_);
+  GRPC_EVENT_ENGINE_ENDPOINT_TRACE("Endpoint[%p]: Read", this);
   GPR_ASSERT(read_cb_ == nullptr);
   incoming_buffer_ = buffer;
   incoming_buffer_->Clear();
@@ -634,7 +637,10 @@ bool PosixEndpointImpl::Read(y_absl::AnyInvocable<void(y_absl::Status)> on_read,
       // Read failed immediately. Schedule the on_read callback to run
       // asynchronously.
       lock.Release();
-      engine_->Run([on_read = std::move(on_read), status]() mutable {
+      engine_->Run([on_read = std::move(on_read), status, this]() mutable {
+        GRPC_EVENT_ENGINE_ENDPOINT_TRACE(
+            "Endpoint[%p]: Read failed immediately: %s", this,
+            status.ToString().c_str());
         on_read(status);
       });
       Unref();
@@ -644,6 +650,8 @@ bool PosixEndpointImpl::Read(y_absl::AnyInvocable<void(y_absl::Status)> on_read,
     // callback.
     incoming_buffer_ = nullptr;
     Unref();
+    GRPC_EVENT_ENGINE_ENDPOINT_TRACE("Endpoint[%p]: Read succeeded immediately",
+                                     this);
     return true;
   }
   return false;
@@ -1117,6 +1125,8 @@ bool PosixEndpointImpl::TcpFlush(y_absl::Status& status) {
 
 void PosixEndpointImpl::HandleWrite(y_absl::Status status) {
   if (!status.ok()) {
+    GRPC_EVENT_ENGINE_ENDPOINT_TRACE("Endpoint[%p]: Write failed: %s", this,
+                                     status.ToString().c_str());
     y_absl::AnyInvocable<void(y_absl::Status)> cb_ = std::move(write_cb_);
     write_cb_ = nullptr;
     if (current_zerocopy_send_ != nullptr) {
@@ -1134,6 +1144,8 @@ void PosixEndpointImpl::HandleWrite(y_absl::Status status) {
     GPR_DEBUG_ASSERT(status.ok());
     handle_->NotifyOnWrite(on_write_);
   } else {
+    GRPC_EVENT_ENGINE_ENDPOINT_TRACE("Endpoint[%p]: Write complete: %s", this,
+                                     status.ToString().c_str());
     y_absl::AnyInvocable<void(y_absl::Status)> cb_ = std::move(write_cb_);
     write_cb_ = nullptr;
     current_zerocopy_send_ = nullptr;
@@ -1152,15 +1164,22 @@ bool PosixEndpointImpl::Write(
   GPR_DEBUG_ASSERT(current_zerocopy_send_ == nullptr);
   GPR_DEBUG_ASSERT(data != nullptr);
 
+  GRPC_EVENT_ENGINE_ENDPOINT_TRACE("Endpoint[%p]: Write %" PRIdPTR " bytes",
+                                   this, data->Length());
+
   if (data->Length() == 0) {
     TcpShutdownTracedBufferList();
     if (handle_->IsHandleShutdown()) {
       status = TcpAnnotateError(y_absl::InternalError("EOF"));
-      engine_->Run([on_writable = std::move(on_writable), status]() mutable {
-        on_writable(status);
-      });
+      engine_->Run(
+          [on_writable = std::move(on_writable), status, this]() mutable {
+            GRPC_EVENT_ENGINE_ENDPOINT_TRACE("Endpoint[%p]: Write failed: %s",
+                                             this, status.ToString().c_str());
+            on_writable(status);
+          });
       return false;
     }
+    GRPC_EVENT_ENGINE_ENDPOINT_TRACE("Endpoint[%p]: Write skipped", this);
     return true;
   }
 
@@ -1190,13 +1209,18 @@ bool PosixEndpointImpl::Write(
   if (!status.ok()) {
     // Write failed immediately. Schedule the on_writable callback to run
     // asynchronously.
-    engine_->Run([on_writable = std::move(on_writable), status]() mutable {
-      on_writable(status);
-    });
+    engine_->Run(
+        [on_writable = std::move(on_writable), status, this]() mutable {
+          GRPC_EVENT_ENGINE_ENDPOINT_TRACE("Endpoint[%p]: Write failed: %s",
+                                           this, status.ToString().c_str());
+          on_writable(status);
+        });
     return false;
   }
   // Write succeeded immediately. Return true and don't run the on_writable
   // callback.
+  GRPC_EVENT_ENGINE_ENDPOINT_TRACE("Endpoint[%p]: Write succeded immediately",
+                                   this);
   return true;
 }
 

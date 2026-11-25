@@ -11,7 +11,7 @@ TCSCounters::TCSCounters()
     , TxProgress(*this)
 {
     for (auto&& i : GetEnumAllValues<EOverloadStatus>()) {
-        AFL_VERIFY((ui32)i == WaitingOverloads.size());
+        YDB_LOG_VERIFY((ui32)i == WaitingOverloads.size());
         auto overloadCounters = CreateSubGroup("overload_type", ::ToString(i));
         WaitingOverloads.emplace_back(overloadCounters.GetDeriviative("Overload/Waiting/Count"));
         WriteOverloadCount.emplace_back(overloadCounters.GetDeriviative("Overload/Write/Count"));
@@ -92,17 +92,17 @@ TCSCounters::TCSCounters()
 void TCSCounters::OnFailedWriteResponse(const EWriteFailReason reason) const {
     WriteRequests->Sub(1);
     auto it = FailedWriteRequests.find(reason);
-    AFL_VERIFY(it != FailedWriteRequests.end());
+    YDB_LOG_VERIFY(it != FailedWriteRequests.end());
     it->second->Add(1);
 }
 
 void TCSCounters::OnWaitingOverload(const EOverloadStatus status) const {
-    AFL_VERIFY((ui64)status < WaitingOverloads.size());
+    YDB_LOG_VERIFY((ui64)status < WaitingOverloads.size());
     WaitingOverloads[(ui64)status]->Inc();
 }
 
 void TCSCounters::OnWriteOverload(const EOverloadStatus status, const ui32 size) const {
-    AFL_VERIFY((ui64)status < WriteOverloadCount.size());
+    YDB_LOG_VERIFY((ui64)status < WriteOverloadCount.size());
     WriteOverloadCount[(ui64)status]->Inc();
     WriteOverloadBytes[(ui64)status]->Add(size);
 }

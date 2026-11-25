@@ -8,14 +8,14 @@
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
 void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
-    AFL_VERIFY(!!BlobBatch);
+    YDB_LOG_VERIFY(!!BlobBatch);
     if (blobsWroteSuccessfully) {
         Manager->SaveBlobBatchOnExecute(BlobBatch, dbBlobs);
     }
 }
 
 void TWriteAction::DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) {
-    AFL_VERIFY(!!BlobBatch);
+    YDB_LOG_VERIFY(!!BlobBatch);
     ui64 blobsWritten = BlobBatch.GetBlobCount();
     ui64 bytesWritten = BlobBatch.GetTotalSize();
     if (blobsWroteSuccessfully) {

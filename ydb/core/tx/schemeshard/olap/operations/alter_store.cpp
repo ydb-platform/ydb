@@ -179,6 +179,13 @@ public:
              TEvColumnShard::TEvProposeTransactionResult::EventType });
     }
 
+    // ColumnShard can report completion before this schemeshard has applied the plan step.
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "TEvNotifyTxCompletionResult triggered early");
+        NTableState::CollectSchemaChanged(OperationId, ev, context);
+        return false;
+    }
+
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
 
@@ -525,7 +532,8 @@ public:
                 continue;
             }
             auto it = alterData->SchemaPresets.find(table->Description.GetSchemaPresetId());
-            AFL_VERIFY(it != alterData->SchemaPresets.end())("preset_info", table->Description.DebugString());
+            YDB_LOG_VERIFY(it != alterData->SchemaPresets.end(),
+                {"presetInfo", table->Description.DebugString()});
             if (!it->second.ValidateTtlSettings(table->Description.GetTtlSettings(), context, errors)) {
                 return result;
             }

@@ -28,7 +28,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
     if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
-        AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnExecute(dbWrap, changes, Self->GetLastTxSnapshot()));
+        YDB_LOG_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnExecute(dbWrap, changes, Self->GetLastTxSnapshot()));
         YDB_LOG_DEBUG("apply",
             {"step", "write"},
             {"tabletTxNo", TabletTxNo},
@@ -109,11 +109,11 @@ TTxWriteIndex::TTxWriteIndex(TColumnShard* self, TEvPrivate::TEvWriteIndex::TPtr
     , TabletTxNo(++Self->TabletTxCounter)
     , CurrentSnapshot(Self->GetCurrentSnapshotForInternalModification())
 {
-    AFL_VERIFY(Ev && Ev->Get()->IndexChanges);
+    YDB_LOG_VERIFY(Ev && Ev->Get()->IndexChanges);
 
     auto changes = Ev->Get()->IndexChanges;
     if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
-        AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnTxCreate(changes, CurrentSnapshot));
+        YDB_LOG_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnTxCreate(changes, CurrentSnapshot));
     }
 }
 

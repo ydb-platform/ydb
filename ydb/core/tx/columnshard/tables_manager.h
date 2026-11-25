@@ -153,12 +153,12 @@ public:
                 dropVersion = pathInfo.DropVersion;
             }
         }
-        AFL_VERIFY(dropVersion);
+        YDB_LOG_VERIFY(dropVersion);
         return *dropVersion;
     }
 
     void Merge(TTableInfo&& other) {
-        AFL_VERIFY(InternalPathId == other.InternalPathId);
+        YDB_LOG_VERIFY(InternalPathId == other.InternalPathId);
         Versions.insert(other.Versions.begin(), other.Versions.end());
         for (auto&& [schemeShardLocalPathId, pathInfo] : other.SchemeShardLocalPathIds) {
             SchemeShardLocalPathIds[schemeShardLocalPathId] = std::move(pathInfo);   // override
@@ -171,21 +171,23 @@ public:
 
     const NOlap::TSnapshot GetDropVersionVerified() const {
         auto dropVersion = GetDropVersionOptional();
-        AFL_VERIFY(dropVersion);
+        YDB_LOG_VERIFY(dropVersion);
         return *dropVersion;
     }
 
     void SetDropVersion(const TSchemeShardLocalPathId& schemeShardLocalPathId, const NOlap::TSnapshot& version) {
         auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
-        AFL_VERIFY(it != SchemeShardLocalPathIds.end());
+        YDB_LOG_VERIFY(it != SchemeShardLocalPathIds.end());
         auto& pathInfo = it->second;
-        AFL_VERIFY(!pathInfo.DropVersion)("exists", pathInfo.DropVersion->DebugString())("version", version.DebugString());
+        YDB_LOG_VERIFY(!pathInfo.DropVersion,
+            {"exists", pathInfo.DropVersion->DebugString()},
+            {"version", version.DebugString()});
         pathInfo.DropVersion = version;
     }
 
     bool IsReadOnly(const TSchemeShardLocalPathId& schemeShardLocalPathId) const {
         auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
-        AFL_VERIFY(it != SchemeShardLocalPathIds.end());
+        YDB_LOG_VERIFY(it != SchemeShardLocalPathIds.end());
         return it->second.IsReadOnly;
     }
 
@@ -202,19 +204,23 @@ public:
 
     void SetCopyVersion(const TSchemeShardLocalPathId& schemeShardLocalPathId, const NOlap::TSnapshot& version) {
         auto& pathInfo = SchemeShardLocalPathIds[schemeShardLocalPathId];
-        AFL_VERIFY(!pathInfo.CopyVersion)("exists", pathInfo.CopyVersion->DebugString())("version", version.DebugString());
+        YDB_LOG_VERIFY(!pathInfo.CopyVersion,
+            {"exists", pathInfo.CopyVersion->DebugString()},
+            {"version", version.DebugString()});
         pathInfo.CopyVersion = version;
     }
 
     void SetReadOnly(const TSchemeShardLocalPathId& schemeShardLocalPathId, const bool isReadOnly) {
         auto& pathInfo = SchemeShardLocalPathIds[schemeShardLocalPathId];
-        AFL_VERIFY(!pathInfo.IsReadOnly)("exists", pathInfo.IsReadOnly)("version", isReadOnly);
+        YDB_LOG_VERIFY(!pathInfo.IsReadOnly,
+            {"exists", pathInfo.IsReadOnly},
+            {"version", isReadOnly});
         pathInfo.IsReadOnly = isReadOnly;
     }
 
     void SetLastCompletedBackupTransaction(const TSchemeShardLocalPathId& schemeShardLocalPathId, TString serializedBackupTx) {
         auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
-        AFL_VERIFY(it != SchemeShardLocalPathIds.end());
+        YDB_LOG_VERIFY(it != SchemeShardLocalPathIds.end());
         it->second.LastCompletedBackupTransaction = std::move(serializedBackupTx);
     }
 
@@ -233,14 +239,14 @@ public:
     void RenameTableSchemeShardLocalPathId(
         NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldPathId, const TSchemeShardLocalPathId newPathId) {
         auto it = SchemeShardLocalPathIds.find(oldPathId);
-        AFL_VERIFY(it != SchemeShardLocalPathIds.end());
+        YDB_LOG_VERIFY(it != SchemeShardLocalPathIds.end());
         const auto& pathInfo = it->second;
         if (!pathInfo.IsReadOnly) {   // v0 can't be read-only. backward compatibility
             Schema::SaveTableSchemeShardLocalPathId(db, InternalPathId, newPathId);
         }
         Schema::RenameTableSchemeShardLocalPathIdV1(db, InternalPathId, oldPathId, newPathId, pathInfo.DropVersion, pathInfo.CopyVersion,
             pathInfo.LastCompletedBackupTransaction, pathInfo.IsReadOnly);
-        AFL_VERIFY(SchemeShardLocalPathIds
+        YDB_LOG_VERIFY(SchemeShardLocalPathIds
                        .insert({newPathId, TPathInfo{pathInfo.DropVersion, pathInfo.CopyVersion,
                                               pathInfo.LastCompletedBackupTransaction, pathInfo.IsReadOnly}})
                        .second);
@@ -250,19 +256,20 @@ public:
     void CopySchemeShardLocalPathId(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId srcSchemeShardLocalPathId,
         const TSchemeShardLocalPathId dstSchemeShardLocalPathId, const NOlap::TSnapshot& copyVersion) {
         auto it = SchemeShardLocalPathIds.find(srcSchemeShardLocalPathId);
-        AFL_VERIFY(it != SchemeShardLocalPathIds.end());
+        YDB_LOG_VERIFY(it != SchemeShardLocalPathIds.end());
         const auto dstIt = SchemeShardLocalPathIds.find(dstSchemeShardLocalPathId);
         if (dstIt == SchemeShardLocalPathIds.end()) {
             Schema::CopySchemeShardLocalPathIdV1(
                 db, InternalPathId, dstSchemeShardLocalPathId, it->second.DropVersion, copyVersion, std::nullopt, true);
-            AFL_VERIFY(SchemeShardLocalPathIds
+            YDB_LOG_VERIFY(SchemeShardLocalPathIds
                            .insert({dstSchemeShardLocalPathId, TPathInfo{it->second.DropVersion, copyVersion, std::nullopt, true}})
                            .second);
             return;
         }
-        AFL_VERIFY(dstIt->second.CopyVersion == copyVersion)("expected", copyVersion.DebugString())(
-            "actual", dstIt->second.CopyVersion->DebugString());
-        AFL_VERIFY(dstIt->second.IsReadOnly);
+        YDB_LOG_VERIFY(dstIt->second.CopyVersion == copyVersion,
+            {"expected", copyVersion.DebugString()},
+            {"actual", dstIt->second.CopyVersion->DebugString()});
+        YDB_LOG_VERIFY(dstIt->second.IsReadOnly);
     }
 
     bool IsDropped(const std::optional<NOlap::TSnapshot>& minReadSnapshot = std::nullopt) const {
@@ -277,24 +284,24 @@ public:
     }
 
     TTableInfo(const std::set<TUnifiedPathId>& unifiedPathIds) {
-        AFL_VERIFY(unifiedPathIds.size());
+        YDB_LOG_VERIFY(unifiedPathIds.size());
         for (const auto& unifiedPathId : unifiedPathIds) {
-            AFL_VERIFY(!InternalPathId || InternalPathId == unifiedPathId.InternalPathId);
+            YDB_LOG_VERIFY(!InternalPathId || InternalPathId == unifiedPathId.InternalPathId);
             InternalPathId = unifiedPathId.InternalPathId;
-            AFL_VERIFY(SchemeShardLocalPathIds.insert({unifiedPathId.SchemeShardLocalPathId, {}}).second);
+            YDB_LOG_VERIFY(SchemeShardLocalPathIds.insert({unifiedPathId.SchemeShardLocalPathId, {}}).second);
         }
-        AFL_VERIFY(SchemeShardLocalPathIds.size());
+        YDB_LOG_VERIFY(SchemeShardLocalPathIds.size());
     }
 
     template <class TRow>
     static TTableInfo InitFromDB(const TRow& rowset) {
         const auto internalPathId = TInternalPathId::FromRawValue(rowset.template GetValue<Schema::TableInfo::PathId>());
-        AFL_VERIFY(internalPathId);
+        YDB_LOG_VERIFY(internalPathId);
         const auto& schemeShardLocalPathId =
             TSchemeShardLocalPathId::FromRawValue(rowset.template HaveValue<Schema::TableInfo::SchemeShardLocalPathId>()
                                                       ? rowset.template GetValue<Schema::TableInfo::SchemeShardLocalPathId>()
                                                       : internalPathId.GetRawValue());
-        AFL_VERIFY(schemeShardLocalPathId);
+        YDB_LOG_VERIFY(schemeShardLocalPathId);
         TTableInfo result({ TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId) });
         if (rowset.template HaveValue<Schema::TableInfo::DropStep>() && rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
             result.SetDropVersion(schemeShardLocalPathId, NOlap::TSnapshot(rowset.template GetValue<Schema::TableInfo::DropStep>(),
@@ -306,10 +313,10 @@ public:
     template <class TRow>
     static TTableInfo InitFromDBV1(const TRow& rowset) {
         const auto internalPathId = TInternalPathId::FromRawValue(rowset.template GetValue<Schema::TableInfoV1::PathId>());
-        AFL_VERIFY(internalPathId);
+        YDB_LOG_VERIFY(internalPathId);
         const auto schemeShardLocalPathId =
             TSchemeShardLocalPathId::FromRawValue(rowset.template GetValue<Schema::TableInfoV1::SchemeShardLocalPathId>());
-        AFL_VERIFY(schemeShardLocalPathId);
+        YDB_LOG_VERIFY(schemeShardLocalPathId);
         TTableInfo result({ TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId) });
         if (rowset.template HaveValue<Schema::TableInfoV1::DropStep>() && rowset.template HaveValue<Schema::TableInfoV1::DropTxId>()) {
             result.SetDropVersion(schemeShardLocalPathId, NOlap::TSnapshot(rowset.template GetValue<Schema::TableInfoV1::DropStep>(),
@@ -336,7 +343,8 @@ private:
 
     void AddVersion(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot, std::optional<NOlap::TTiering> ttl) {
         auto [it, inserted] = Ttl[pathId].emplace(snapshot, ttl);
-        AFL_VERIFY(inserted || it->second == ttl)("snapshot", snapshot);
+        YDB_LOG_VERIFY(inserted || it->second == ttl,
+            {"snapshot", snapshot});
     }
 
 public:
@@ -345,7 +353,7 @@ public:
         std::optional<NOlap::TTiering> ttlVersion;
         if (ttlSettings.HasEnabled()) {
             NOlap::TTiering deserializedTtl;
-            AFL_VERIFY(deserializedTtl.DeserializeFromProto(ttlSettings.GetEnabled()).IsSuccess());
+            YDB_LOG_VERIFY(deserializedTtl.DeserializeFromProto(ttlSettings.GetEnabled()).IsSuccess());
             ttlVersion.emplace(std::move(deserializedTtl));
         }
         AddVersion(pathId, snapshot, ttlVersion);
@@ -443,7 +451,7 @@ public:
         }
 
         bool operator<(const TSchemaAddress& item) const {
-            AFL_VERIFY(PresetId == item.PresetId);
+            YDB_LOG_VERIFY(PresetId == item.PresetId);
             return Snapshot < item.Snapshot;
         }
     };
@@ -467,8 +475,8 @@ public:
             : ToRemove(toRemove)
             , Finish(finish)
         {
-            AFL_VERIFY(toRemove.size());
-            AFL_VERIFY(*ToRemove.rbegin() < Finish);
+            YDB_LOG_VERIFY(toRemove.size());
+            YDB_LOG_VERIFY(*ToRemove.rbegin() < Finish);
         }
     };
 
@@ -479,9 +487,9 @@ public:
     }
 
     TUnifiedPathId GetTabletPathIdVerified() const {
-        AFL_VERIFY(TabletPathId.has_value());
-        AFL_VERIFY(TabletPathId->InternalPathId.IsValid());
-        AFL_VERIFY(TabletPathId->SchemeShardLocalPathId.IsValid());
+        YDB_LOG_VERIFY(TabletPathId.has_value());
+        YDB_LOG_VERIFY(TabletPathId->InternalPathId.IsValid());
+        YDB_LOG_VERIFY(TabletPathId->SchemeShardLocalPathId.IsValid());
         return *TabletPathId;
     }
 
@@ -575,17 +583,17 @@ public:
 
     template <class TIndex>
     TIndex& MutablePrimaryIndexAsVerified() const {
-        AFL_VERIFY(!!PrimaryIndex);
+        YDB_LOG_VERIFY(!!PrimaryIndex);
         auto result = dynamic_cast<TIndex*>(PrimaryIndex.get());
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 
     template <class TIndex>
     const TIndex& GetPrimaryIndexAsVerified() const {
-        AFL_VERIFY(!!PrimaryIndex);
+        YDB_LOG_VERIFY(!!PrimaryIndex);
         auto result = dynamic_cast<const TIndex*>(PrimaryIndex.get());
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 
@@ -595,7 +603,7 @@ public:
             return nullptr;
         }
         auto result = dynamic_cast<const TIndex*>(PrimaryIndex.get());
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return result;
     }
 
@@ -605,7 +613,7 @@ public:
             return nullptr;
         }
         auto result = dynamic_cast<TIndex*>(PrimaryIndex.get());
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return result;
     }
 
@@ -619,7 +627,7 @@ public:
     void SetLastCompletedBackupTransaction(const TSchemeShardLocalPathId schemeShardLocalPathId, TString serializedBackupTx) {
         const auto internalPathId = ResolveInternalPathIdVerified(schemeShardLocalPathId, false);
         auto* table = Tables.FindPtr(internalPathId);
-        AFL_VERIFY(table);
+        YDB_LOG_VERIFY(table);
         table->SetLastCompletedBackupTransaction(schemeShardLocalPathId, std::move(serializedBackupTx));
     }
 

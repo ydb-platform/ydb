@@ -1,4 +1,5 @@
 #include "s3.h"
+#include "config.h"
 #include "s3_router_events.h"
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
@@ -20,27 +21,30 @@ namespace NKikimr::NBlobDepot {
         YDB_LOG_DEBUG("Init",
             {"marker", "BDTS05"},
             {"settings", settings});
+        DeleteRoute = settings ? std::make_shared<const TString>(TS3DeleteContext::MakeRouteKey(*settings)) : nullptr;
         if (settings) {
-            // All S3 traffic goes through the per-node router managed by NodeWarden.
-            // Acquire is fire-and-forget: NodeWarden registers the router under its
-            // well-known service id before any later event we send can be processed.
+            RouterGeneration = Self->Executor()->Generation();
             Self->Send(MakeBlobStorageNodeWardenID(Self->SelfId().NodeId()),
-                new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(Self->TabletID(), *settings));
-            WrapperId = MakeBlobDepotS3RouterID(Self->TabletID());
-            BasePath = TStringBuilder() << settings->GetSettings().GetObjectKeyPattern() << '/' << Self->Config.GetName();
+                new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(Self->TabletID(), RouterGeneration, *settings));
+            BasePath = MakeS3BasePath(settings->GetSettings(), Self->Config.GetName());
             Bucket = settings->GetSettings().GetBucket();
             SyncMode = settings->HasSyncMode();
             AsyncMode = settings->HasAsyncMode();
-            Enabled = true;
+            const auto prefixError = ValidateS3BasePath(BasePath);
+            // Legacy depots could share both the prefix and the tablet-local locator numbers.
+            GarbageCollectionEnabled = Self->Config.GetS3NamespaceValidated() && !prefixError;
 
             CurrentMaxWritesInFlight = MaxWritesInFlight();
             CurrentMaxDeletesInFlight = MaxDeletesInFlight();
             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = CurrentMaxDeletesInFlight;
             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] = CurrentMaxWritesInFlight;
+            if (!DeleteQueue.empty()) {
+                RunDeletersIfNeeded();
+            }
         } else {
             SyncMode = false;
             AsyncMode = false;
-            Enabled = false;
+            GarbageCollectionEnabled = false;
         }
     }
 
@@ -54,15 +58,32 @@ namespace NKikimr::NBlobDepot {
         if (ScannerActorId) {
             Self->Send(new IEventHandle(TEvents::TSystem::Poison, 0, ScannerActorId, Self->SelfId(), nullptr, 0));
         }
-        if (WrapperId) {
+        if (RouterGeneration) {
             Self->Send(MakeBlobStorageNodeWardenID(Self->SelfId().NodeId()),
-                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(Self->TabletID()));
+                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(Self->TabletID(), RouterGeneration,
+                    Self->RestartingForConfigChange));
             WrapperId = {};
         }
     }
 
     void TS3Manager::Handle(TAutoPtr<IEventHandle> ev) {
         STRICT_STFUNC_BODY(
+            hFunc(NStorage::TEvNodeWardenBlobDepotS3RouterReady, [&](auto ev) {
+                const auto& msg = *ev->Get();
+                if (msg.TabletId != Self->TabletID() || msg.Generation != RouterGeneration || WrapperId) {
+                    return;
+                }
+                if (!msg.Router) {
+                    Self->Send(Self->Tablet(), new TEvents::TEvPoison);
+                    return;
+                }
+                WrapperId = msg.Router;
+                RunDeletersIfNeeded();
+                if (Self->Data->IsLoaded()) {
+                    OnDataLoaded();
+                }
+                Self->ProcessRegisterAgentQ();
+            })
             fFunc(TEvPrivate::EvDeleteResult, HandleDeleter)
             fFunc(TEvPrivate::EvScanFound, HandleScanner)
             cFunc(TEvPrivate::EvDeleteThrottleWakeup, HandleDeleteThrottleWakeup)
@@ -71,7 +92,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TS3Manager::OnDataLoaded() {
-        if (Enabled) {
+        if (WrapperId && GarbageCollectionEnabled) {
             RunScannerActor();
         }
     }

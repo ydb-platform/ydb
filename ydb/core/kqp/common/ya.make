@@ -2,12 +2,10 @@ YQL_LIBRARY()
 
 SRCS(
     control.cpp
-    dynamic_function_registry.cpp
     kqp.cpp
     kqp.h
     kqp_batch_operations.cpp
     kqp_event_ids.h
-    kqp_event_impl.cpp
     kqp_expr_helpers.cpp
     kqp_expr_helpers.h
     kqp_lwtrace_probes.cpp
@@ -15,33 +13,28 @@ SRCS(
     kqp_resolve.cpp
     kqp_resolve.h
     kqp_row_builder.cpp
-    kqp_ru_calc.cpp
     kqp_shard_meta.cpp
     kqp_timeouts.cpp
     kqp_timeouts.h
     kqp_tx.cpp
     kqp_tx_manager.cpp
-    kqp_types.cpp
-    kqp_types.h
-    kqp_user_request_context.cpp
-    kqp_user_request_context.h
     kqp_yql.cpp
     kqp_yql.h
 )
 
 PEERDIR(
-    ydb/core/kqp/common/compile_cache
     library/cpp/json/writer
     library/cpp/lwtrace
     library/cpp/protobuf/json
-    library/cpp/threading/hot_swap
     ydb/core/base
     ydb/core/engine
     ydb/core/grpc_services/cancelation
     ydb/core/kqp/common/compilation
+    ydb/core/kqp/common/compile_cache
     ydb/core/kqp/common/events
     ydb/core/kqp/common/shutdown
     ydb/core/kqp/common/simple
+    ydb/core/kqp/common/stats
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/provider
     ydb/core/kqp/script_executions/common
@@ -73,8 +66,11 @@ END()
 RECURSE(
     compilation
     compile_cache
+    dynamic_function_registry
     events
     result_set_format
     simple
+    stats
     ut
+    warmup
 )

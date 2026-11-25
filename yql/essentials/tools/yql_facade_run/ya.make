@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/core/project_settings/convert
     yql/essentials/providers/pg/provider
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/proto

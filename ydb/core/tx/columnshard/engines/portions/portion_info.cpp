@@ -121,10 +121,20 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
 }
 
 ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) const {
-    AFL_VERIFY(SchemaVersion);
+    YDB_LOG_VERIFY(SchemaVersion);
     auto schema = index.GetSchemaVerified(SchemaVersion);
-    AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion);
+    YDB_LOG_VERIFY(!!schema,
+        {"details", TStringBuilder() << "cannot find schema for version " << SchemaVersion});
     return schema;
+}
+
+bool TPortionInfo::NeedSchemeActualization(const TVersionedIndex& index) const {
+    const auto& threshold = index.GetSchemeActualizationThreshold();
+    return threshold && GetSchemaVersionVerified() < *threshold;
+}
+
+ISnapshotSchema::TPtr TPortionInfo::GetRewriteSchema(const TVersionedIndex& index) const {
+    return NeedSchemeActualization(index) ? index.GetLastSchema() : GetSchema(index);
 }
 
 bool TPortionInfo::NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const {

@@ -53,6 +53,62 @@ class TestViewerPileNodes(BridgeKiKiMRTest):
                 raise AssertionError(f"Viewer on node {node.node_id} returned {actual}, expected {expected}")
             time.sleep(1)
 
+    def get_node_pile_names(self, node):
+        response = requests.get(
+            f"http://{node.host}:{node.mon_port}/viewer/json/nodes",
+            params={"fields_required": "NodeId,PileName,SystemState"}, timeout=30,
+        )
+        response.raise_for_status()
+
+        payload = response.json()
+        nodes = payload.get("Nodes") if isinstance(payload, dict) else None
+        if not nodes:
+            raise ValueError("Viewer response has no nodes")
+
+        pile_names = set()
+        for item in nodes:
+            if not isinstance(item, dict):
+                raise ValueError(f"Viewer returned an invalid node entry: {item!r}")
+            node_id = item.get("NodeId", "unknown")
+            pile_name = item.get("PileName")
+            if pile_name is None:
+                raise ValueError(f"Node {node_id} has no PileName")
+            system_state = item.get("SystemState")
+            if not isinstance(system_state, dict):
+                raise ValueError(f"Node {node_id} has no SystemState")
+            location = system_state.get("Location")
+            if not isinstance(location, dict):
+                raise ValueError(f"Node {node_id} has no SystemState.Location")
+            bridge_pile_name = location.get("BridgePileName")
+            if bridge_pile_name is None:
+                raise ValueError(f"Node {node_id} has no SystemState.Location.BridgePileName")
+            if pile_name != bridge_pile_name:
+                raise ValueError(
+                    f"Node {node_id} has PileName {pile_name!r}, "
+                    f"but SystemState.Location.BridgePileName is {bridge_pile_name!r}"
+                )
+            pile_names.add(pile_name)
+        return pile_names
+
+    def wait_node_pile_names(self, node, expected):
+        deadline = time.monotonic() + self.wait_timeout
+        while True:
+            try:
+                actual = self.get_node_pile_names(node)
+                if actual == expected:
+                    return
+            except (requests.RequestException, ValueError) as error:
+                actual = error
+            if time.monotonic() >= deadline:
+                raise AssertionError(
+                    f"Viewer on node {node.node_id} returned {actual}, expected pile names {expected}"
+                )
+            time.sleep(1)
+
+    def test_node_pile_name_with_system_state(self):
+        node = self.pile_nodes["r1"][0]
+        self.wait_node_pile_names(node, set(self.pile_names))
+
     def test_pile_node_counts(self):
         nodes_per_pile = self.nodes_count // len(self.pile_names)
         storage_node = self.pile_nodes["r1"][0]

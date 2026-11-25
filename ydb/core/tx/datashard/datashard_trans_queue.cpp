@@ -235,29 +235,24 @@ void TTransQueue::ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& o
     db.NoMoreReadsForTx();
 }
 
-void TTransQueue::ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId source, const TStringBuf& txBody) {
+void TTransQueue::ProposePersistentTx(NIceDb::TNiceDb& db, TOperation& op, TActorId source, const TString& txBody) {
     using Schema = TDataShard::Schema;
 
     const ui64 preserveFlagsMask = TTxFlags::PublicFlagsMask | TTxFlags::PreservedPrivateFlagsMask;
 
-    AddTxInFly(op);
+    AddTxInFly(&op);
 
-    if (op->HasVolatilePrepareFlag()) {
-        // We keep volatile transactions in memory and don't store anything
-        return;
-    }
-
-    db.Table<Schema::TxMain>().Key(op->GetTxId()).Update(
-        NIceDb::TUpdate<Schema::TxMain::Kind>(op->GetKind()),
-        NIceDb::TUpdate<Schema::TxMain::Flags>(op->GetFlags() & preserveFlagsMask),
-        NIceDb::TUpdate<Schema::TxMain::MaxStep>(op->GetMaxStep()),
-        NIceDb::TUpdate<Schema::TxMain::ReceivedAt>(op->GetReceivedAt().GetValue()),
-        NIceDb::TUpdate<Schema::TxMain::Flags64>(op->GetFlags() & preserveFlagsMask),
+    db.Table<Schema::TxMain>().Key(op.GetTxId()).Update(
+        NIceDb::TUpdate<Schema::TxMain::Kind>(op.GetKind()),
+        NIceDb::TUpdate<Schema::TxMain::Flags>(op.GetFlags() & preserveFlagsMask),
+        NIceDb::TUpdate<Schema::TxMain::MaxStep>(op.GetMaxStep()),
+        NIceDb::TUpdate<Schema::TxMain::ReceivedAt>(op.GetReceivedAt().GetValue()),
+        NIceDb::TUpdate<Schema::TxMain::Flags64>(op.GetFlags() & preserveFlagsMask),
         NIceDb::TUpdate<Schema::TxMain::Source>(source),
-        NIceDb::TUpdate<Schema::TxMain::Cookie>(op->GetCookie()));
+        NIceDb::TUpdate<Schema::TxMain::Cookie>(op.GetCookie()));
 
-    db.Table<Schema::TxDetails>().Key(op->GetTxId(), Self->TabletID()).Update(
-        NIceDb::TUpdate<Schema::TxDetails::Body>(TString(txBody)),
+    db.Table<Schema::TxDetails>().Key(op.GetTxId(), Self->TabletID()).Update(
+        NIceDb::TUpdate<Schema::TxDetails::Body>(txBody),
         NIceDb::TUpdate<Schema::TxDetails::Source>(source));
 
     // NOTE: we no longer add rows to the DeadlineQueue table

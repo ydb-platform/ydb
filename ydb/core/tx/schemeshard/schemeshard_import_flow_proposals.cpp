@@ -5,6 +5,8 @@
 #include "schemeshard_path_describer.h"
 #include "schemeshard_xxport__helpers.h"
 
+#include <algorithm>
+
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
@@ -266,11 +268,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTING);
             *tableDesc.MutableReplicationConfig() = config;
             for (auto& index : *indexedTable.MutableIndexDescription()) {
-                // Match the index types with independent replication targets in
-                // replication/controller/target_discoverer.cpp.
-                if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobal
-                        || index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
-                    *index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig() = config;
+                if (!NTableIndex::HasReplicatedImplTables(NTableIndex::GetIndexType(index))) {
+                    continue;
+                }
+
+                for (auto& implTable : *index.MutableIndexImplTableDescriptions()) {
+                    *implTable.MutableReplicationConfig() = config;
                 }
             }
         }
@@ -590,6 +593,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
             } else if (minActivePartitions == 0) {
                 minActivePartitions = 1;
             }
+            if (minActivePartitions > Max<ui32>()) {
+                // Internal fields are uint32, a larger value would silently truncate.
+                error = TStringBuilder() << "min_active_partitions must not exceed " << Max<ui32>();
+                return nullptr;
+            }
             cdcStream.SetTopicPartitions(minActivePartitions);
         }
 
@@ -603,7 +611,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
                 error = "maxActivePartitions must be >= 0";
                 return nullptr;
             } else if (maxActivePartitions == 0) {
-                maxActivePartitions = 50;
+                // Unset max keeps the historical ceiling of 50, but never
+                // below the requested min. The effective value is
+                // materialized on the wire so older schemeshards keep
+                // accepting the request during a rolling upgrade.
+                maxActivePartitions = std::max<i64>(cdcStream.GetTopicPartitions(), 50);
+            }
+            if (maxActivePartitions > Max<ui32>()) {
+                // Internal fields are uint32, a larger value would silently truncate.
+                error = TStringBuilder() << "max_active_partitions must not exceed " << Max<ui32>();
+                return nullptr;
             }
             cdcStream.SetMaxPartitionCount(maxActivePartitions);
         }

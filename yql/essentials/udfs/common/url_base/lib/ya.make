@@ -24,4 +24,9 @@ PEERDIR(
     contrib/libs/apache/arrow
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    yql/udfs/comdep_analytics/crm_advisor
+)
+
 END()

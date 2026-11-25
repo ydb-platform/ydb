@@ -77,6 +77,8 @@ namespace NKikimr {
             TCowHolder<TMap<TBoxStoragePoolId, TStoragePoolInfo>> StoragePools;
             TCowHolder<std::set<std::pair<TBoxStoragePoolId, TGroupId>>> StoragePoolGroups;
             TCowHolder<TMap<TGroupId, TBlobDepotDeleteQueueInfo>> BlobDepotDeleteQueue;
+            TRetiredS3Namespaces NewRetiredS3Namespaces;
+            TBlobDepotOwners ChangedBlobDepotOwners;
 
             // system-level configuration
             TOverlayMap<TPDiskId, TPDiskInfo> PDisks;
@@ -156,13 +158,13 @@ namespace NKikimr {
             TConfigFitAction Fit;
 
             THashSet<TGroupId> GroupContentChanged;
-            TVector<ui32> GroupStateUpdates;
+            TSet<ui32> GroupStateUpdates;
             THashSet<TGroupId> GroupFailureModelChanged;
             // Pools whose leading-disk override changed. Their VDisk service-set records are resent
             // without touching group generation.
             THashSet<TBoxStoragePoolId> HeapAllocatorNumLeadingDisksChanged;
 
-            std::expected<void, TString> ApplyDataCenterStates(bool suppressFailModelChecking, bool suppressDegradedGroupsChecking);
+            std::expected<void, TString> ValidateMirror3dcGroupStates(const TValidateConfigUpdatesParameters& parameters);
 
             bool PushStaticGroupsToSelfHeal = false;
 
@@ -250,6 +252,9 @@ namespace NKikimr {
                 StoragePools.Commit();
                 StoragePoolGroups.Commit();
                 BlobDepotDeleteQueue.Commit();
+                CommitBlobDepotOwners();
+                Self.RetiredS3Namespaces.merge(NewRetiredS3Namespaces);
+                Y_ABORT_UNLESS(NewRetiredS3Namespaces.empty());
                 PDisks.Commit();
                 DrivesSerials.Commit();
                 Nodes.Commit();
@@ -270,7 +275,8 @@ namespace NKikimr {
 
             bool Changed() const {
                 return DataCenterStates.Changed() || HostConfigs.Changed() || Boxes.Changed() || StoragePools.Changed() ||
-                    StoragePoolGroups.Changed() || BlobDepotDeleteQueue.Changed() || PDisks.Changed() ||
+                    StoragePoolGroups.Changed() || BlobDepotDeleteQueue.Changed() || !NewRetiredS3Namespaces.empty() ||
+                    PDisks.Changed() ||
                     DrivesSerials.Changed() || Nodes.Changed() || VSlots.Changed() || Groups.Changed() ||
                     IndexGroupSpeciesToGroup.Changed() || NextGroupId.Changed() || NextStoragePoolId.Changed() ||
                     SerialManagementStage.Changed() || NextVirtualGroupId.Changed();
@@ -345,6 +351,8 @@ namespace NKikimr {
                 return res;
             }
 
+            void DetachBlobDepot(TGroupInfo& group, const NKikimrBlobDepot::TBlobDepotConfig& config);
+
             // delete the group along with its VDisks
             void DeleteExistingGroupWithVSlots(const TGroupInfo& group) {
                 const TGroupId groupId = group.ID;
@@ -363,10 +371,12 @@ namespace NKikimr {
                     NKikimrBlobDepot::TBlobDepotConfig config;
                     const bool success = config.ParseFromString(*group->BlobDepotConfig);
                     Y_ABORT_UNLESS(success);
+                    ChangeLiveBlobDepotClaims(*group, config, false);
                     if (config.GetHiveContacted()) {
                         const auto [it, inserted] = BlobDepotDeleteQueue.Unshare().try_emplace(groupId, group->HiveId,
                             config.HasTabletId() ? MakeMaybe(config.GetTabletId()) : Nothing());
                         Y_ABORT_UNLESS(inserted);
+                        RetireS3Namespace(groupId, config);
                     }
                 }
 
@@ -397,6 +407,63 @@ namespace NKikimr {
                 Groups.DeleteExistingEntry(groupId);
                 GroupContentChanged.erase(groupId);
                 GroupFailureModelChanged.erase(groupId);
+            }
+
+            // the bridge proxy group the part belongs to; nullptr for groups that are not parts of existing bridged ones
+            const TGroupInfo *FindBridgeProxyGroup(const TGroupInfo& group) const {
+                return group.IsBridgePileOnly() && group.BridgeProxyGroupId
+                    ? Groups.Find(*group.BridgeProxyGroupId)
+                    : nullptr;
+            }
+
+            // the parts of the bridged group, but the inline pile, which is the group itself; none for other groups
+            static std::vector<TGroupId> GetBridgeParts(const TGroupInfo& group) {
+                std::vector<TGroupId> parts;
+                if (group.BridgeGroupInfo) {
+                    NBridge::ForEachGroupPile(group.BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                            const NKikimrBridge::TGroupState::TPile& pile) {
+                        if (const auto partId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                                partId != group.ID) {
+                            parts.push_back(partId);
+                        }
+                    });
+                }
+                return parts;
+            }
+
+            // delete the group along with its VDisks and, for a bridge proxy group, along with its parts, which nothing
+            // else refers to then; every deleted group is removed from the set of the ones to process
+            void DeleteGroupWithBridgeParts(const TGroupInfo& group, THashSet<TGroupId>& pending) {
+                for (const TGroupId partId : GetBridgeParts(group)) {
+                    // group entries are held by pointers, so deleting other groups keeps `group` valid
+                    if (const TGroupInfo *part = Groups.Find(partId)) {
+                        DeleteExistingGroupWithVSlots(*part);
+                        pending.erase(partId);
+                    }
+                }
+                pending.erase(group.ID);
+                DeleteExistingGroupWithVSlots(group);
+            }
+
+            // delete the listed groups along with the parts of the bridged ones; a part can't go without its bridge proxy
+            // group, as the proxy group would refer to a group that doesn't exist; the callbacks throw the errors of the
+            // command for a missing group and for such a part
+            template<typename TNotFound, typename TPartAlone>
+            void DeleteGroupsWithBridgeParts(const std::vector<TGroupId>& groups, TNotFound&& notFound,
+                    TPartAlone&& partAlone) {
+                THashSet<TGroupId> pending(groups.begin(), groups.end());
+                for (const TGroupId groupId : groups) {
+                    if (!pending.contains(groupId)) {
+                        continue; // deleted along with its bridge proxy group, or listed twice
+                    } else if (const TGroupInfo *group = Groups.Find(groupId); !group) {
+                        notFound(groupId);
+                    } else if (const TGroupInfo *proxy = FindBridgeProxyGroup(*group);
+                            proxy && !pending.contains(proxy->ID)) { // an existing proxy group is pending when listed
+                        partAlone(groupId, proxy->ID);
+                    } else {
+                        DeleteGroupWithBridgeParts(*group, pending);
+                    }
+                }
             }
 
         private:
@@ -439,6 +506,13 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TForgetDriveSerial& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMigrateToSerial& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TAllocateVirtualGroup& cmd, TStatus& status);
+            void RetireS3Namespace(TGroupId groupId, const NKikimrBlobDepot::TBlobDepotConfig& config);
+            void ChangeBlobDepotClaim(const TBlobDepotClaim& key, TGroupId id, bool add);
+            void ChangeLiveBlobDepotClaims(const TGroupInfo& group, const NKikimrBlobDepot::TBlobDepotConfig& config, bool add);
+            void CommitBlobDepotOwners();
+            const std::set<TGroupId>& FindBlobDepotOwners(const TBlobDepotClaim& key) const;
+            void CheckBlobDepotS3Prefix(const NKikimrBlobDepot::TS3BackendSettings& settings, TStringBuf groupName,
+                TStringBuf storageName, std::optional<TGroupId> ownGroup = std::nullopt) const;
             void ExecuteStep(const NKikimrBlobStorage::TDecommitGroups& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TWipeVDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TSanitizeGroup& cmd, TStatus& status);

@@ -1,0 +1,341 @@
+# Source: https://github.com/gregrahn/join-order-benchmark/blob/master/schema.sql
+tables:
+  - name: aka_name
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: person_id
+        type: Int32
+        not_null: true
+      - name: name
+        type: string_type
+        not_null: true
+      - name: imdb_index
+        type: string_type
+      - name: name_pcode_cf
+        type: string_type
+      - name: name_pcode_nf
+        type: string_type
+      - name: surname_pcode
+        type: string_type
+      - name: md5sum
+        type: string_type
+    primary_key: [id]
+  - name: aka_title
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: movie_id
+        type: Int32
+        not_null: true
+      - name: title
+        type: string_type
+        not_null: true
+      - name: imdb_index
+        type: string_type
+      - name: kind_id
+        type: Int32
+        not_null: true
+      - name: production_year
+        type: Int32
+      - name: phonetic_code
+        type: string_type
+      - name: episode_of_id
+        type: Int32
+      - name: season_nr
+        type: Int32
+      - name: episode_nr
+        type: Int32
+      - name: note
+        type: string_type
+      - name: md5sum
+        type: string_type
+    primary_key: [id]
+  - name: cast_info
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: person_id
+        type: Int32
+        not_null: true
+      - name: movie_id
+        type: Int32
+        not_null: true
+      - name: person_role_id
+        type: Int32
+      - name: note
+        type: string_type
+      - name: nr_order
+        type: Int32
+      - name: role_id
+        type: Int32
+        not_null: true
+    primary_key: [id]
+  - name: char_name
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: name
+        type: string_type
+        not_null: true
+      - name: imdb_index
+        type: string_type
+      - name: imdb_id
+        type: Int32
+      - name: name_pcode_nf
+        type: string_type
+      - name: surname_pcode
+        type: string_type
+      - name: md5sum
+        type: string_type
+    primary_key: [id]
+  - name: comp_cast_type
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: kind
+        type: string_type
+        not_null: true
+    primary_key: [id]
+  - name: company_name
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: name
+        type: string_type
+        not_null: true
+      - name: country_code
+        type: string_type
+      - name: imdb_id
+        type: Int32
+      - name: name_pcode_nf
+        type: string_type
+      - name: name_pcode_sf
+        type: string_type
+      - name: md5sum
+        type: string_type
+    primary_key: [id]
+  - name: company_type
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: kind
+        type: string_type
+        not_null: true
+    primary_key: [id]
+  - name: complete_cast
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: movie_id
+        type: Int32
+      - name: subject_id
+        type: Int32
+        not_null: true
+      - name: status_id
+        type: Int32
+        not_null: true
+    primary_key: [id]
+  - name: info_type
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: info
+        type: string_type
+        not_null: true
+    primary_key: [id]
+  - name: keyword
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: keyword
+        type: string_type
+        not_null: true
+      - name: phonetic_code
+        type: string_type
+    primary_key: [id]
+  - name: kind_type
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: kind
+        type: string_type
+        not_null: true
+    primary_key: [id]
+  - name: link_type
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: link
+        type: string_type
+        not_null: true
+    primary_key: [id]
+  - name: movie_companies
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: movie_id
+        type: Int32
+        not_null: true
+      - name: company_id
+        type: Int32
+        not_null: true
+      - name: company_type_id
+        type: Int32
+        not_null: true
+      - name: note
+        type: string_type
+    primary_key: [id]
+  - name: movie_info
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: movie_id
+        type: Int32
+        not_null: true
+      - name: info_type_id
+        type: Int32
+        not_null: true
+      - name: info
+        type: string_type
+        not_null: true
+      - name: note
+        type: string_type
+    primary_key: [id]
+  - name: movie_info_idx
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: movie_id
+        type: Int32
+        not_null: true
+      - name: info_type_id
+        type: Int32
+        not_null: true
+      - name: info
+        type: string_type
+        not_null: true
+      - name: note
+        type: string_type
+    primary_key: [id]
+  - name: movie_keyword
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: movie_id
+        type: Int32
+        not_null: true
+      - name: keyword_id
+        type: Int32
+        not_null: true
+    primary_key: [id]
+  - name: movie_link
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: movie_id
+        type: Int32
+        not_null: true
+      - name: linked_movie_id
+        type: Int32
+        not_null: true
+      - name: link_type_id
+        type: Int32
+        not_null: true
+    primary_key: [id]
+  - name: name
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: name
+        type: string_type
+        not_null: true
+      - name: imdb_index
+        type: string_type
+      - name: imdb_id
+        type: Int32
+      - name: gender
+        type: string_type
+      - name: name_pcode_cf
+        type: string_type
+      - name: name_pcode_nf
+        type: string_type
+      - name: surname_pcode
+        type: string_type
+      - name: md5sum
+        type: string_type
+    primary_key: [id]
+  - name: person_info
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: person_id
+        type: Int32
+        not_null: true
+      - name: info_type_id
+        type: Int32
+        not_null: true
+      - name: info
+        type: string_type
+        not_null: true
+      - name: note
+        type: string_type
+    primary_key: [id]
+  - name: role_type
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: role
+        type: string_type
+        not_null: true
+    primary_key: [id]
+  - name: title
+    columns:
+      - name: id
+        type: Int32
+        not_null: true
+      - name: title
+        type: string_type
+        not_null: true
+      - name: imdb_index
+        type: string_type
+      - name: kind_id
+        type: Int32
+        not_null: true
+      - name: production_year
+        type: Int32
+      - name: imdb_id
+        type: Int32
+      - name: phonetic_code
+        type: string_type
+      - name: episode_of_id
+        type: Int32
+      - name: season_nr
+        type: Int32
+      - name: episode_nr
+        type: Int32
+      - name: series_years
+        type: string_type
+      - name: md5sum
+        type: string_type
+    primary_key: [id]

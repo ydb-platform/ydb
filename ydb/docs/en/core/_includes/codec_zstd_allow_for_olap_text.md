@@ -1,1 +1,0 @@
-Codec `"zstd"` is supported only for [column-oriented](../concepts/datamodel/table.md#column-oriented-tables) tables.

@@ -3,22 +3,31 @@
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
 namespace NKikimr::NOlap::NLoading {
 
 bool TGranuleOnlyPortionsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     std::vector<TPortionInfo::TPtr> portions;
+    const TVersionedIndex& versionedIndex = Engine->GetVersionedIndex();
     if (!db.LoadPortions([&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-            const TIndexInfo& indexInfo = portion->GetSchema(*VersionedIndex)->GetIndexInfo();
-            AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
+            if (portion->GetType() == EPortionType::Written) {
+                const auto& written = static_cast<const TWrittenPortionInfoConstructor&>(*portion);
+                // the uncommitted_portions stage has already loaded them from the operations
+                if (!written.HasCommitSnapshot() && Self->HasInsertedPortion(written.GetPortionIdVerified())) {
+                    return true;
+                }
+            }
+            const TIndexInfo& indexInfo = portion->GetSchema(versionedIndex)->GetIndexInfo();
+            YDB_LOG_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
             portions.emplace_back(portion->Build());
             return true;
         }, Self->GetPathId())) {
         return false;
     }
-    for (auto&& i : portions) {
-        Self->UpsertPortionOnLoad(i);
+    for (const auto& portion : portions) {
+        Engine->AddPortionLoadedOnStart(*Self, portion);
     }
     return true;
 }
@@ -54,10 +63,10 @@ bool TGranuleIndexesReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext
 
 bool TGranuleFinishAccessorsLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
     THashMap<ui64, TPortionDataAccessors> constructors = Context->ExtractConstructors();
-    AFL_VERIFY(Self->GetPortions().size() == constructors.size());
+    YDB_LOG_VERIFY(Self->GetPortions().size() == constructors.size());
     for (auto&& i : Self->GetPortions()) {
         auto it = constructors.find(i.first);
-        AFL_VERIFY(it != constructors.end());
+        YDB_LOG_VERIFY(it != constructors.end());
         auto accessor =
             TPortionAccessorConstructor::BuildForLoading(i.second, it->second.DetachBuildInfo(), std::move(it->second.MutableIndexes()));
         Self->GetDataAccessorsManager()->AddPortion(accessor);
@@ -65,15 +74,8 @@ bool TGranuleFinishAccessorsLoading::DoExecute(NTabletFlatExecutor::TTransaction
     return true;
 }
 
-bool TGranuleFinishCommonLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
-    AFL_VERIFY(!Started);
-    Started = true;
-    Self->OnAfterPortionsLoad();
-    return true;
-}
-
 bool TGranuleOptimizerLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
-    Self->AddLoadedPortionsToOptimizer();
+    Self->AddPortionsToOptimizer(Self->GetActivePortions());
     return true;
 }
 

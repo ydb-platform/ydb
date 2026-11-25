@@ -16,15 +16,15 @@ namespace {
 class TNoDataAccessorsManager: public NDataAccessorControl::IDataAccessorsManager {
 private:
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& /*request*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     virtual void DoAddPortion(const std::shared_ptr<TPortionDataAccessor>& /*accessor*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& /*portion*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
 public:

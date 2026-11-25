@@ -71,16 +71,16 @@ private:
     char Delim;
 };
 
-void CommonInit(const NLastGetopt::TOptsParseResult& res, const TString& udfResolverPath, bool filterSysCalls,
+void CommonInit(const NLastGetopt::TOptsParseResult& res, NCommon::TOutProcUdfResolverOptions resolverOptions,
     const TVector<TString>& udfsPaths, TFileStoragePtr fileStorage,
     IUdfResolver::TPtr& udfResolver, IFunctionRegistry::TPtr funcRegistry, TUdfIndex::TPtr& udfIndex) {
 
     if (fileStorage && res.Has("scan-udfs")) {
-        if (!udfResolverPath) {
+        if (!resolverOptions.ResolverPath) {
             ythrow yexception() << "udf-resolver path must be specified when use 'scan-udfs'";
         }
 
-        udfResolver = NCommon::CreateOutProcUdfResolver(funcRegistry.Get(), fileStorage, udfResolverPath, {}, {}, filterSysCalls, {});
+        udfResolver = NCommon::CreateOutProcUdfResolver(funcRegistry.Get(), fileStorage, std::move(resolverOptions));
 
         Cerr << TInstant::Now().ToStringLocalUpToSeconds() << " Udf scanning started for " << udfsPaths.size() << " udfs ..." << Endl;
         THoldingFileStorage storage(fileStorage);
@@ -93,8 +93,8 @@ void CommonInit(const NLastGetopt::TOptsParseResult& res, const TString& udfReso
         return;
     }
 
-    udfResolver = fileStorage && udfResolverPath
-        ? NCommon::CreateOutProcUdfResolver(funcRegistry.Get(), fileStorage, udfResolverPath, {}, {}, false, {})
+    udfResolver = fileStorage && resolverOptions.ResolverPath
+        ? NCommon::CreateOutProcUdfResolver(funcRegistry.Get(), fileStorage, std::move(resolverOptions))
         : NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), fileStorage, true);
 }
 
@@ -125,8 +125,7 @@ int RunUI(int argc, const char* argv[])
     TString udfsDir;
     TString mountConfig;
     TVector<TString> filesMappingList;
-    TString udfResolverPath;
-    bool udfResolverFilterSyscalls = false;
+    NCommon::TOutProcUdfResolverOptions udfResolverOptions;
     TString gatewaysCfgFile;
     TString fsCfgFile;
     TString pgExtConfig;
@@ -141,11 +140,11 @@ int RunUI(int argc, const char* argv[])
     opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&udfsDir);
     opts.AddLongOption('m', "mounts", "Mount points config file.").StoreResult(&mountConfig);
     opts.AddLongOption('f', "file", "name@path").AppendTo(&filesMappingList);
-    opts.AddLongOption("udf-resolver", "Path to udf-resolver").Optional().RequiredArgument("PATH").StoreResult(&udfResolverPath);
+    opts.AddLongOption("udf-resolver", "Path to udf-resolver").Optional().RequiredArgument("PATH").StoreResult(&udfResolverOptions.ResolverPath);
     opts.AddLongOption("udf-resolver-filter-syscalls", "Filter syscalls in udf resolver")
         .Optional()
         .NoArgument()
-        .SetFlag(&udfResolverFilterSyscalls);
+        .SetFlag(&udfResolverOptions.FilterSysCalls);
     opts.AddLongOption("scan-udfs", "Scan specified udfs with external udf resolver to use static function registry").NoArgument();
     opts.AddLongOption('C', "cluster", "set cluster to service mapping").RequiredArgument("name@service").Handler(new TStoreMappingFunctor(&clusterMapping));
     opts.AddLongOption("gateways-cfg", "gateways configuration file").Optional().RequiredArgument("FILE").StoreResult(&gatewaysCfgFile);
@@ -223,7 +222,7 @@ int RunUI(int argc, const char* argv[])
     auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, CreateBuiltinRegistry(), false, udfsPaths);
     TUdfIndex::TPtr udfIndex;
 
-    CommonInit(res, udfResolverPath, udfResolverFilterSyscalls, udfsPaths, fileStorage, udfResolver, funcRegistry, udfIndex);
+    CommonInit(res, std::move(udfResolverOptions), udfsPaths, fileStorage, udfResolver, funcRegistry, udfIndex);
 
     NSQLTranslationV1::TLexers lexers;
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();

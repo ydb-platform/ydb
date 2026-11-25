@@ -5,15 +5,30 @@ import time
 import typing
 
 
-def _last_seq(path: str) -> int:
-    """`seq` of the last complete line of an existing JSON-lines sink, or 0."""
+def _repair_tail_and_last_seq(path: str) -> int:
+    """Remove the unterminated tail and return the last complete line's seq, or 0.
+
+    Only newline-terminated records survive recovery, even if a tail is valid JSON.
+    """
     try:
-        with open(path, "rb") as f:
+        with open(path, "r+b") as f:
             f.seek(0, 2)
-            size = f.tell()
-            f.seek(max(0, size - 65536))
+            size = end = f.tell()
+            # A crash may leave an unterminated event. Find the last newline
+            # in bounded blocks, including tails longer than the seq window.
+            while end:
+                start = max(0, end - 65536)
+                f.seek(start)
+                newline = f.read(end - start).rfind(b"\n")
+                if newline >= 0:
+                    end = start + newline + 1
+                    break
+                end = start
+            if end != size:
+                f.truncate(end)
+            f.seek(max(0, end - 65536))
             lines = f.read().splitlines()
-    except OSError:
+    except FileNotFoundError:
         return 0
     for raw in reversed(lines):
         try:
@@ -35,7 +50,7 @@ class EventLog:
         self._clock = clock
         self._events: typing.Deque[dict] = collections.deque(maxlen=capacity)
         # a revived process appends to the log of the killed one: keep `seq` unique and growing across restarts
-        self._seq = _last_seq(sink_path) if sink_path else 0
+        self._seq = _repair_tail_and_last_seq(sink_path) if sink_path else 0
         self._sink = open(sink_path, "a", buffering=1) if sink_path else None
 
     @property

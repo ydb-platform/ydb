@@ -21,8 +21,9 @@ namespace NKikimr::NBlobDepot {
             NKikimrBlobDepot::TEvCommitBlobSeq CommitBlobSeq;
             TBlobSeqId BlobSeqId;
             std::optional<TS3Locator> LocatorInFlight;
-            TActorId WriterActorId;
-            ui64 ConnectionInstanceOnStart;
+            ui64 ConnectionInstanceOnStart = 0;
+            ui64 PrepareS3RequestId = 0;
+            bool S3PutMayArriveLate = false;
             ui32 S3SlowDownRetries = 0;
 
             NWilson::TSpan PrepareWriteS3Span;
@@ -48,31 +49,39 @@ namespace NKikimr::NBlobDepot {
                 if (returnBlobSeqId) {
                     BlobSeqId.ToProto(msg.AddItems());
                 }
-                if (LocatorInFlight) {
+                if (LocatorInFlight && ConnectionInstanceOnStart == Agent.ConnectionInstance) {
                     LocatorInFlight->ToProto(msg.AddS3Locators());
+                    msg.SetS3PutMayArriveLate(S3PutMayArriveLate);
                     if (s3SlowDown) {
                         msg.SetS3SlowDown(true);
                     }
                 }
                 LocatorInFlight.reset();
-                Agent.Issue(std::move(msg), this, nullptr);
+                S3PutMayArriveLate = false;
+                if (msg.ItemsSize() || msg.S3LocatorsSize()) {
+                    Agent.Issue(std::move(msg), nullptr, nullptr);
+                }
             }
 
             void OnDestroy(bool success) override {
+                if (PrepareS3RequestId) {
+                    Agent.TakeOverS3Preparation(PrepareS3RequestId);
+                }
                 if (IsInFlight || LocatorInFlight) {
                     Y_ABORT_UNLESS(!success);
                     SendDiscardSpoiled(false);
-                }
-
-                if (WriterActorId) {
-                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, WriterActorId, Agent.SelfId(),
-                        nullptr, 0));
                 }
 
                 TBlobStorageQuery::OnDestroy(success);
             }
 
             void Initiate() override {
+                if (Agent.S3BackendSettings && Agent.S3BackendSettings->HasSyncMode()) {
+                    LimitS3Deadline(Request.Deadline);
+                    if (CheckDeadline(TActivationContext::Monotonic())) {
+                        return;
+                    }
+                }
                 if (Request.Buffer.size() > MaxBlobSize) {
                     return EndWithError(NKikimrProto::ERROR, "blob is way too big");
                 } else if (Request.Buffer.size() != Request.Id.BlobSize()) {
@@ -299,6 +308,10 @@ namespace NKikimr::NBlobDepot {
                     [&](TEvBlobDepot::TEvCommitBlobSeqResult *ev) {
                         HandleCommitBlobSeqResult(std::move(context), ev->Record);
                     },
+                    [&](TS3PutResult& result) {
+                        S3PutMayArriveLate = result.MayArriveLate;
+                        OnPutS3ObjectResponse(std::move(result.Error), result.SlowDown);
+                    },
                     [&](TTabletDisconnected) {
                         EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
                     },
@@ -439,6 +452,10 @@ namespace NKikimr::NBlobDepot {
             // writing directly to S3
 
             void IssueS3Put() {
+                LimitS3Deadline(Request.Deadline);
+                if (CheckDeadline(TActivationContext::Monotonic())) {
+                    return;
+                }
                 NKikimrBlobDepot::TEvPrepareWriteS3 query;
                 auto *item = query.AddItems();
                 item->SetKey(Request.Id.AsBinaryString());
@@ -455,13 +472,21 @@ namespace NKikimr::NBlobDepot {
                     PrepareWriteS3Span.Attribute("slow_down_retry", S3SlowDownRetries);
                 }
 
-                Agent.Issue(query, this, nullptr, PrepareWriteS3Span.GetTraceId());
+                ConnectionInstanceOnStart = Agent.ConnectionInstance;
+                PrepareS3RequestId = Agent.Issue(query, this, nullptr, PrepareWriteS3Span.GetTraceId());
             }
 
             void HandlePrepareWriteS3Result(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvPrepareWriteS3Result& msg) {
 #ifndef KIKIMR_DISABLE_S3_OPS
+                PrepareS3RequestId = 0;
                 Y_ABORT_UNLESS(msg.ItemsSize() == 1);
                 const auto& item = msg.GetItems(0);
+                if (item.GetStatus() == NKikimrProto::OK) {
+                    LocatorInFlight = TS3Locator::FromProto(item.GetS3Locator());
+                }
+                if (CheckDeadline(TActivationContext::Monotonic())) {
+                    return;
+                }
                 if (item.GetStatus() != NKikimrProto::OK) {
                     if (PrepareWriteS3Span) {
                         PrepareWriteS3Span.EndError(item.GetErrorReason());
@@ -477,10 +502,7 @@ namespace NKikimr::NBlobDepot {
                 auto *locator = commitItem->MutableS3Locator();
                 locator->CopyFrom(item.GetS3Locator());
 
-                LocatorInFlight.emplace(TS3Locator::FromProto(*locator));
-
-                const TS3Locator temp = TS3Locator::FromProto(*locator);
-                TString key = temp.MakeObjectName(Agent.S3BasePath);
+                TString key = LocatorInFlight->MakeObjectName(Agent.S3BasePath);
 
                 YDB_LOG_DEBUG("Starting WriteActor",
                     {"marker", "BDA54"},
@@ -495,24 +517,29 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 // Pass a copy so Request.Buffer remains intact for potential SlowDown-driven retries.
-                WriterActorId = IssueWriteS3(std::move(key), TRope(Request.Buffer), Request.Id, temp);
-
-                ConnectionInstanceOnStart = Agent.ConnectionInstance;
+                S3PutMayArriveLate = true;
+                IssueWriteS3(std::move(key), TRope(Request.Buffer), Request.Id, *LocatorInFlight);
 #else
                 Y_UNUSED(msg);
                 Y_ABORT("S3 is not supported");
 #endif
             }
 
-            void OnPutS3ObjectResponse(std::optional<TString>&& error, bool slowDown) override {
+            void OnPutS3ObjectResponse(std::optional<TString>&& error, bool slowDown) {
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Written_to_S3",
+                    {"marker", "BDEV37"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"blobId", Request.Id},
+                    {"locator", LocatorInFlight});
                 YDB_LOG_COMP(error ? PRI_WARN : PRI_DEBUG, BLOB_DEPOT_AGENT, "OnPutS3ObjectResponse",
                     {"marker", "BDA53"},
                     {"agentId", Agent.LogId},
                     {"queryId", GetQueryId()},
                     {"error", error},
                     {"slowDown", slowDown});
-
-                WriterActorId = {};
 
                 if (WriteS3Span) {
                     if (error) {
@@ -531,11 +558,15 @@ namespace NKikimr::NBlobDepot {
                     slowDown = false;
                     LocatorInFlight.reset(); // prevent discarding this locator
                 }
+                if (CheckDeadline(TActivationContext::Monotonic())) {
+                    return;
+                }
 
                 if (!error) {
                     ++*Agent.S3PutsOk;
                     *Agent.S3PutBytesOk += LocatorInFlight->Len;
 
+                    CommitBlobSeq.MutableItems(0)->SetS3PutMayArriveLate(S3PutMayArriveLate);
                     LocatorInFlight.reset();
                     IssueCommitBlobSeq(false);
                     return;

@@ -1066,7 +1066,7 @@ private:
 
             const bool canReconnect = ev.Status == NFq::EMessageStreamStatus::Unavailable || ev.Status == NFq::EMessageStreamStatus::Timeout ||
                                       ev.Status == NFq::EMessageStreamStatus::NotFound;
-            if (!canReconnect) {
+            if (Self.Clusters.size() == 1 || !canReconnect) {
                 TIssue issue(message);
                 for (const auto& subIssue : ev.Issues) {
                     issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));

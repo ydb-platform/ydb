@@ -278,7 +278,10 @@ class TestLogbroker(StreamingTestBase):
                     state.Issues,
                 )
                 if state.RetryCount > retry_count:
-                    assert "clusters are unavailable simultaneously" in str(state.Issues), state
+                    expected_issue = (
+                        "Read session to topic" if len(cluster_names) == 1 else "clusters are unavailable simultaneously"
+                    )
+                    assert expected_issue in str(state.Issues), state
                     logging.info(
                         "Query %s retried: RetryCount %s -> %s; issues=%s",
                         self.query_name,

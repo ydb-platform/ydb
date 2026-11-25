@@ -688,7 +688,9 @@ Y_UNIT_TEST(TestBlock42VGetCountWithErasure) {
         }
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(vGets.size(), 8);
+    // A fast plan with no new I/O now falls back to the normal plan, which
+    // can issue additional reads to slow sources.
+    UNIT_ASSERT_VALUES_EQUAL(vGets.size(), 10);
 
     UNIT_ASSERT(getResult);
     UNIT_ASSERT_VALUES_EQUAL(getResult->ResponseSz, queryCount);

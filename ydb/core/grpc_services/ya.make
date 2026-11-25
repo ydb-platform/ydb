@@ -184,6 +184,7 @@ JOIN_SRCS(
 )
 
 PEERDIR(
+    ydb/library/actors/async
     contrib/libs/xxhash
     library/cpp/cgiparam
     library/cpp/digest/old_crc

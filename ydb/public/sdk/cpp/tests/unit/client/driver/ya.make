@@ -14,12 +14,14 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/impl/observability
     ydb/public/sdk/cpp/src/client/impl/internal/sdk_runtime
     ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types/credentials/oidc
     ydb/public/sdk/cpp/src/library/grpc/client
 )
 
 SRCS(
     driver_ut.cpp
+    rediscovery_ut.cpp
 )
 
 END()

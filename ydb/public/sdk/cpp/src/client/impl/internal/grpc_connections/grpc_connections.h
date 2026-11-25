@@ -131,6 +131,8 @@ public:
         TDbDriverStatePtr dbState, const TEndpointKey& preferredEndpoint,
         TRpcRequestSettings::TEndpointPolicy endpointPolicy)
     {
+        TEndpointKey selected;
+        std::function<bool()> stillCurrent;
         auto clientConfig = NYdbGrpc::TGRpcClientConfig(dbState->DiscoveryEndpoint);
         const auto& sslCredentials = dbState->SslCredentials;
         clientConfig.SslCredentials = {.pem_root_certs = TStringType{sslCredentials.CaCert}, .pem_private_key = TStringType{sslCredentials.PrivateKey}, .pem_cert_chain = TStringType{sslCredentials.Cert}};
@@ -155,11 +157,19 @@ public:
                 || dbState->Database.empty()
                 || endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint)
             {
-                SetGrpcKeepAlive(clientConfig, GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY, GRpcKeepAlivePermitWithoutCalls_);
+                if (!dbState->EndpointPool.UsesWatch()) {
+                    SetGrpcKeepAlive(clientConfig, GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY, GRpcKeepAlivePermitWithoutCalls_);
+                }
             } else {
                 auto endpoint = dbState->EndpointPool.GetEndpoint(preferredEndpoint, endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UsePreferredEndpointStrictly);
                 if (!endpoint) {
                     return {nullptr, TEndpointKey()};
+                }
+                selected.Admission = std::move(endpoint.Admission);
+                if (!selected.Admission) {
+                    stillCurrent = [&] {
+                        return bool(dbState->EndpointPool.GetEndpoint(TEndpointKey(clientConfig.Locator, 0), true));
+                    };
                 }
                 clientConfig.Locator = endpoint.Endpoint;
                 clientConfig.SslTargetNameOverride = endpoint.SslTargetNameOverride;
@@ -169,20 +179,35 @@ public:
             }
         }
 
+        if (selected.Admission && !selected.Admission->ChannelKey.empty()) {
+            // gRPC also pools subchannels across channel objects. Separate the new assignment there.
+            clientConfig.StringChannelParams["ydb.sdk.assignment"] = selected.Admission->ChannelKey;
+        }
         if (UsePerChannelTcpConnection_) {
             clientConfig.IntChannelParams[GRPC_ARG_USE_LOCAL_SUBCHANNEL_POOL] = 1;
         }
 
+        auto admission = selected.Admission ? selected.Admission->Acquire() : std::shared_lock<std::shared_mutex>{};
+        if (selected.Admission && !admission) {
+            return {nullptr, TEndpointKey()};
+        }
         std::unique_ptr<TServiceConnection<TService>> conn;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+        const auto& key = selected.Admission ? selected.Admission->PoolKey(clientConfig.Locator) : clientConfig.Locator;
         ChannelPool_.GetStubsHolderLocked(
-            clientConfig.Locator, clientConfig, [&conn, this](NYdbGrpc::TStubsHolder& holder) mutable {
-            conn.reset(GRpcClientLow_.CreateGRpcServiceConnection<TService>(holder).release());
-        });
+            key, clientConfig, [&](NYdbGrpc::TStubsHolder& holder) {
+            holder.AddOwner(std::shared_ptr<void>(dbState, &dbState->EndpointPool));
+            if (dbState->EndpointPool.UsesWatch() && !selected.Admission) {
+                std::lock_guard guard(dbState->BootstrapPinMutex);
+                dbState->BootstrapPin = holder.Pin();
+            }
+            conn = GRpcClientLow_.CreateGRpcServiceConnection<TService>(holder);
+        }, std::move(stillCurrent));
 #else
         conn = std::move(GRpcClientLow_.CreateGRpcServiceConnection<TService>(clientConfig));
 #endif
-        return {std::move(conn), TEndpointKey(clientConfig.Locator, 0)};
+        selected.Endpoint = clientConfig.Locator;
+        return {std::move(conn), std::move(selected)};
     }
 
     template<class TService, class TRequest, class TResponse>
@@ -353,6 +378,7 @@ public:
 
                     try {
                         meta = MakeCallMeta(requestSettings, dbState, authInfo);
+                        meta.EndpointAdmission = endpoint.Admission;
                     } catch (const TYdbException& e) {
                         context.reset();
                         RunResponseCallback<TResponse>(
@@ -594,6 +620,7 @@ public:
                 TCallMeta meta;
                 try {
                     meta = MakeCallMeta(requestSettings, dbState, authInfo);
+                    meta.EndpointAdmission = endpoint.Admission;
                 } catch (const TYdbException& e) {
                     context.reset();
                     RunStreamCallback(
@@ -703,6 +730,7 @@ public:
                     TCallMeta meta;
                     try {
                         meta = MakeCallMeta(requestSettings, dbState, authInfo);
+                        meta.EndpointAdmission = endpoint.Admission;
                     } catch (const TYdbException& e) {
                         context.reset();
                         RunStreamCallback(
@@ -754,13 +782,19 @@ public:
             }, dbState, requestSettings.PreferredEndpoint, requestSettings.EndpointPolicy);
     }
 
+    void StartEndpointWatch(TDbDriverStatePtr state) override;
+    NThreading::TFuture<void> WatchEndpoints(std::weak_ptr<TDbDriverState> state, IQueueClientContextPtr context);
     TAsyncListEndpointsResult GetEndpoints(TDbDriverStatePtr dbState) override;
+    TAsyncListEndpointsResult ListEndpoints(TDbDriverStatePtr dbState, TRpcRequestSettings rpcSettings, IQueueClientContextPtr context = {});
     TListEndpointsResult MutateDiscovery(TListEndpointsResult result, const TDbDriverState* dbDriverState);
 
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    void DeleteChannels(const std::vector<std::string>& endpoints) override {
+    void CollectRetiredChannels() override {
+        ChannelPool_.CollectRetiredChannels();
+    }
+    void DeleteChannels(const std::vector<std::string>& endpoints, const TEndpointPool& owner) override {
         for (const auto& endpoint : endpoints) {
-            ChannelPool_.DeleteChannel(endpoint);
+            ChannelPool_.DeleteChannel(endpoint, [&](auto& holder) { return holder.ReleaseOwner(&owner); });
         }
     }
 #endif
@@ -868,11 +902,17 @@ private:
                             const auto& updateResult = future.GetValue();
                             if (needUpdateChannels) {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-                                DeleteChannels(updateResult.Removed);
+                                DeleteChannels(updateResult.Removed, dbState->EndpointPool);
 #endif
                             }
                             auto discoveryStatus = updateResult.DiscoveryStatus;
-                            if (discoveryStatus.Status == EStatus::SUCCESS) {
+                            if (discoveryStatus.Ok() && dbState->EndpointPool.UsesWatch()) {
+                                auto [connection, selected] = GetServiceConnection<TService>(dbState, preferredEndpoint, endpointPolicy);
+                                if (!connection) {
+                                    discoveryStatus = TPlainStatus(EStatus::UNAVAILABLE, "Endpoint absent from the current assignment");
+                                }
+                                callback(std::move(discoveryStatus), std::move(connection), std::move(selected));
+                            } else if (discoveryStatus.Ok()) {
                                 WithServiceConnection<TService>(std::move(callback), dbState, preferredEndpoint, endpointPolicy);
                             } else {
                                 callback(

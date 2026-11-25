@@ -22,6 +22,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 
 /*
@@ -234,17 +235,37 @@ template<typename TResponse>
 using TAdvancedResponseCallback = std::function<void (const grpc::ClientContext&, TGrpcStatus&&, TResponse&&)>;
 
 // Call associated metadata
+// Keep an endpoint admitted through submission to the gRPC stub. Old handles
+// keep their retired guard even when the same address appears after failback.
+class TEndpointAdmission {
+public:
+    explicit TEndpointAdmission(std::string channelKey = {})
+        : ChannelKey(std::move(channelKey))
+    {}
+
+    const std::string& PoolKey(const std::string& endpoint) const {
+        return ChannelKey.empty() ? endpoint : ChannelKey;
+    }
+
+    const std::string ChannelKey;
+    std::shared_lock<std::shared_mutex> Acquire();
+    void Retire();
+
+private:
+    std::shared_mutex Mutex_;
+    bool Open_ = true;
+};
+
 struct TCallMeta {
     std::shared_ptr<grpc::CallCredentials> CallCredentials;
     std::vector<std::pair<std::string, std::string>> Aux;
     std::variant<std::monostate, NYdb::TDeadline, NYdb::TDeadline::Duration> Timeout; // timeout as duration from now or time point in future
+    std::shared_ptr<TEndpointAdmission> EndpointAdmission = nullptr;
 };
 
 class TGRpcRequestProcessorCommon {
 protected:
-    void ApplyMeta(const TCallMeta& meta);
-
-    void GetInitialMetadata(std::unordered_multimap<std::string, std::string>* metadata);
+    static void ApplyMeta(grpc::ClientContext& context, const TCallMeta& meta);
 
     void InitCallbackGuard(IQueueClientContextProvider* provider) {
         CallbackGuardFactory_ = provider->GetCallbackGuardFactory();
@@ -256,16 +277,23 @@ protected:
     }
 
     grpc::Status Status;
-    grpc::ClientContext Context;
     std::shared_ptr<IQueueClientContext> LocalContext;
     TQueueClientCallbackGuardFactory CallbackGuardFactory_;
+};
+
+class TUnaryRequestProcessorCommon : public TGRpcRequestProcessorCommon {
+protected:
+    grpc::ClientContext Context;
+    void ApplyMeta(const TCallMeta& meta) {
+        TGRpcRequestProcessorCommon::ApplyMeta(Context, meta);
+    }
 };
 
 template<typename TStub, typename TRequest, typename TResponse>
 class TSimpleRequestProcessor
     : public TThrRefBase
     , public IQueueClientEvent
-    , public TGRpcRequestProcessorCommon {
+    , public TUnaryRequestProcessorCommon {
     using TAsyncReaderPtr = std::unique_ptr<grpc::ClientAsyncResponseReader<TResponse>>;
     template<typename> friend class TServiceConnection;
 public:
@@ -314,13 +342,18 @@ private:
         return this;
     }
 
-    void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider) {
+    void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider,
+               const std::shared_ptr<TEndpointAdmission>& admission = {}) {
         InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        if (!context) {
+        auto dispatch = admission && context ? admission->Acquire() : std::shared_lock<std::shared_mutex>{};
+        if (!context || (admission && !dispatch)) {
+            auto status = context
+                ? TGrpcStatus(grpc::StatusCode::UNAVAILABLE, "Endpoint retired before RPC dispatch")
+                : TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down");
             Replied_ = true;
             RunGuarded([&] {
-                Callback_(TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down"), std::move(Reply_));
+                Callback_(std::move(status), std::move(Reply_));
             });
             Callback_ = nullptr;
             return;
@@ -331,6 +364,7 @@ private:
             Reader_ = (stub.*asyncRequest)(&Context, request, context->CompletionQueue());
             Reader_->Finish(&Reply_, &Status, FinishedEvent());
         }
+        dispatch = {};
         context->SubscribeStop([self = TPtr(this)] {
             self->Stop();
         });
@@ -352,7 +386,7 @@ template<typename TStub, typename TRequest, typename TResponse>
 class TAdvancedRequestProcessor
     : public TThrRefBase
     , public IQueueClientEvent
-    , public TGRpcRequestProcessorCommon {
+    , public TUnaryRequestProcessorCommon {
     using TAsyncReaderPtr = std::unique_ptr<grpc::ClientAsyncResponseReader<TResponse>>;
     template<typename> friend class TServiceConnection;
 public:
@@ -401,13 +435,18 @@ private:
         return this;
     }
 
-    void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider) {
+    void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider,
+               const std::shared_ptr<TEndpointAdmission>& admission = {}) {
         InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        if (!context) {
+        auto dispatch = admission && context ? admission->Acquire() : std::shared_lock<std::shared_mutex>{};
+        if (!context || (admission && !dispatch)) {
+            auto status = context
+                ? TGrpcStatus(grpc::StatusCode::UNAVAILABLE, "Endpoint retired before RPC dispatch")
+                : TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down");
             Replied_ = true;
             RunGuarded([&] {
-                Callback_(Context, TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down"), std::move(Reply_));
+                Callback_(Context, std::move(status), std::move(Reply_));
             });
             Callback_ = nullptr;
             return;
@@ -418,6 +457,7 @@ private:
             Reader_ = (stub.*asyncRequest)(&Context, request, context->CompletionQueue());
             Reader_->Finish(&Reply_, &Status, FinishedEvent());
         }
+        dispatch = {};
         context->SubscribeStop([self = TPtr(this)] {
             self->Stop();
         });
@@ -562,6 +602,22 @@ public:
         }
     }
 
+    void AddOwner(const std::shared_ptr<void>& owner);
+    bool ReleaseOwner(const void* owner);
+
+    std::shared_ptr<void> Pin() {
+        std::unique_lock guard(RWMutex_);
+        if (!Pin_) {
+            Pin_ = std::make_shared<char>();
+        }
+        return Pin_;
+    }
+
+    // Caller holds the channel pool's exclusive lock, excluding Pin().
+    bool IsPinned() const {
+        return Pin_.use_count() > 1;
+    }
+
     const TInstant& GetLastUseTime() const {
         return LastUsed_;
     }
@@ -570,6 +626,10 @@ public:
         LastUsed_ = time;
     }
 private:
+    friend class TChannelPool;
+    bool DeferredRetirement_ = false;
+    std::unordered_map<const void*, std::weak_ptr<void>> Owners_;
+    std::shared_ptr<void> Pin_;
     TInstant LastUsed_ = Now();
     std::shared_mutex RWMutex_;
     std::unordered_map<TypeInfoRef, std::shared_ptr<void>, THasher, TEqualTo> Stubs_;
@@ -581,8 +641,10 @@ public:
     TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, const TDuration& expireTime = TDuration::Minutes(6), bool tcpNoDelay = true);
     //Allows to CreateStub from TStubsHolder under lock
     //The callback will be called just during GetStubsHolderLocked call
-    void GetStubsHolderLocked(const std::string& channelId, const TGRpcClientConfig& config, std::function<void(TStubsHolder&)> cb);
-    void DeleteChannel(const std::string& channelId);
+    void GetStubsHolderLocked(const std::string& channelId, const TGRpcClientConfig& config, std::function<void(TStubsHolder&)> cb,
+                              std::function<bool()> stillCurrent = {});
+    void DeleteChannel(const std::string& channelId, std::function<bool(TStubsHolder&)> canRemove = {});
+    void CollectRetiredChannels();
     void DeleteExpiredStubsHolders();
 private:
     std::shared_mutex RWMutex_;
@@ -598,10 +660,29 @@ private:
 template<class TResponse>
 using TStreamReaderCallback = std::function<void(TGrpcStatus&&, typename IStreamRequestReadProcessor<TResponse>::TPtr)>;
 
+class TGRpcStreamRequestProcessorCommon : public TGRpcRequestProcessorCommon {
+protected:
+    grpc::ClientContext& ActiveContext() {
+        if (!Context) {
+            Y_ABORT("gRPC stream accessed after completion");
+        }
+        return *Context;
+    }
+    void ApplyMeta(const TCallMeta& meta) {
+        TGRpcRequestProcessorCommon::ApplyMeta(ActiveContext(), meta);
+    }
+    void GetInitialMetadata(std::unordered_multimap<std::string, std::string>* metadata);
+    void ReleaseContext(bool hasInitialMetadata);
+
+private:
+    std::optional<grpc::ClientContext> Context{std::in_place};
+    std::unordered_multimap<std::string, std::string> SavedInitialMetadata_;
+};
+
 template<typename TStub, typename TRequest, typename TResponse>
 class TStreamRequestReadProcessor
     : public IStreamRequestReadProcessor<TResponse>
-    , public TGRpcRequestProcessorCommon {
+    , public TGRpcStreamRequestProcessorCommon {
     template<typename> friend class TServiceConnection;
 public:
     using TSelf = TStreamRequestReadProcessor;
@@ -619,10 +700,12 @@ public:
     }
 
     void Cancel() override {
-        Context.TryCancel();
-
         {
             std::unique_lock<std::mutex> guard(Mutex);
+            if (Finished) {
+                return;
+            }
+            ActiveContext().TryCancel();
             Cancelled = true;
             if (Started && !ReadFinished) {
                 if (!ReadActive) {
@@ -707,8 +790,8 @@ public:
                 FinishCallback = std::move(callback);
                 if (!ReadFinished) {
                     ReadFinished = true;
+                    Stream->Finish(&Status, OnFinishedTag.Prepare());
                 }
-                Stream->Finish(&Status, OnFinishedTag.Prepare());
                 return;
             }
             if (FinishedOk) {
@@ -750,12 +833,16 @@ public:
     }
 
 private:
-    void Start(TStub& stub, const TRequest& request, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider) {
+    void Start(TStub& stub, const TRequest& request, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider,
+               const std::shared_ptr<TEndpointAdmission>& admission = {}) {
         InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        if (!context) {
+        auto dispatch = admission && context ? admission->Acquire() : std::shared_lock<std::shared_mutex>{};
+        if (!context || (admission && !dispatch)) {
+            auto status = context
+                ? TGrpcStatus(grpc::StatusCode::UNAVAILABLE, "Endpoint retired before RPC dispatch")
+                : TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down");
             auto callback = std::move(Callback);
-            TGrpcStatus status(grpc::StatusCode::CANCELLED, "Client is shutting down");
             RunGuarded([&] {
                 callback(std::move(status), nullptr);
             });
@@ -765,9 +852,10 @@ private:
         {
             std::unique_lock<std::mutex> guard(Mutex);
             LocalContext = context;
-            Stream = (stub.*asyncRequest)(&Context, request, context->CompletionQueue(), OnStartDoneTag.Prepare());
+            Stream = (stub.*asyncRequest)(&ActiveContext(), request, context->CompletionQueue(), OnStartDoneTag.Prepare());
         }
 
+        dispatch = {};
         context->SubscribeStop([self = TPtr(this)] {
             self->Cancel();
         });
@@ -776,7 +864,6 @@ private:
     void OnReadDone(bool ok) {
         TGrpcStatus status;
         TReadCallback callback;
-        std::unordered_multimap<std::string, std::string>* initialMetadata = nullptr;
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
@@ -797,13 +884,11 @@ private:
             callback = std::move(ReadCallback);
             ReadCallback = nullptr;
             ReadActive = false;
-            initialMetadata = InitialMetadata;
-            InitialMetadata = nullptr;
+            if (InitialMetadata) {
+                GetInitialMetadata(InitialMetadata);
+                InitialMetadata = nullptr;
+            }
             HasInitialMetadata = true;
-        }
-
-        if (initialMetadata) {
-            GetInitialMetadata(initialMetadata);
         }
 
         RunGuarded([&] {
@@ -835,6 +920,7 @@ private:
         TGrpcStatus status;
         std::vector<TReadCallback> finishedCallbacks;
         TReaderCallback startCallback;
+        TGrpcStatus eof(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
         TReadCallback readCallback;
         TReadCallback finishCallback;
 
@@ -869,6 +955,15 @@ private:
                 }
                 ReadActive = false;
             }
+            if (readCallback && status.Ok()) {
+                for (const auto& [name, value] : ActiveContext().GetServerTrailingMetadata()) {
+                    eof.ServerTrailingMetadata.emplace(
+                        std::string(name.begin(), name.end()),
+                        std::string(value.begin(), value.end()));
+                }
+            }
+            Stream.reset();
+            ReleaseContext(HasInitialMetadata);
         }
 
         for (auto& finishedCallback : finishedCallbacks) {
@@ -887,12 +982,7 @@ private:
             });
         } else if (readCallback) {
             if (status.Ok()) {
-                status = TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
-                for (const auto& [name, value] : Context.GetServerTrailingMetadata()) {
-                    status.ServerTrailingMetadata.emplace(
-                        std::string(name.begin(), name.end()),
-                        std::string(value.begin(), value.end()));
-                }
+                status = std::move(eof);
             }
             RunGuarded([&] {
                 readCallback(std::move(status));
@@ -931,7 +1021,7 @@ using TStreamConnectedCallback = std::function<void(TGrpcStatus&&, typename IStr
 template<class TStub, class TRequest, class TResponse>
 class TStreamRequestReadWriteProcessor
     : public IStreamRequestReadWriteProcessor<TRequest, TResponse>
-    , public TGRpcRequestProcessorCommon {
+    , public TGRpcStreamRequestProcessorCommon {
 public:
     using TSelf = TStreamRequestReadWriteProcessor;
     using TBase = IStreamRequestReadWriteProcessor<TRequest, TResponse>;
@@ -950,10 +1040,12 @@ public:
     }
 
     void Cancel() override {
-        Context.TryCancel();
-
         {
             std::unique_lock<std::mutex> guard(Mutex);
+            if (Finished) {
+                return;
+            }
+            ActiveContext().TryCancel();
             Cancelled = true;
             if (Started && !(ReadFinished && WriteFinished)) {
                 if (!ReadActive) {
@@ -1157,12 +1249,16 @@ private:
     template<typename> friend class TServiceConnection;
     friend struct TStreamRequestReadWriteProcessorTestAccess;
 
-    void Start(TStub& stub, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider) {
+    void Start(TStub& stub, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider,
+               const std::shared_ptr<TEndpointAdmission>& admission = {}) {
         InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        if (!context) {
+        auto dispatch = admission && context ? admission->Acquire() : std::shared_lock<std::shared_mutex>{};
+        if (!context || (admission && !dispatch)) {
+            auto status = context
+                ? TGrpcStatus(grpc::StatusCode::UNAVAILABLE, "Endpoint retired before RPC dispatch")
+                : TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down");
             auto callback = std::move(ConnectedCallback);
-            TGrpcStatus status(grpc::StatusCode::CANCELLED, "Client is shutting down");
             RunGuarded([&] {
                 callback(std::move(status), nullptr);
             });
@@ -1172,9 +1268,10 @@ private:
         {
             std::unique_lock<std::mutex> guard(Mutex);
             LocalContext = context;
-            Stream = (stub.*asyncRequest)(&Context, context->CompletionQueue(), OnConnectedTag.Prepare());
+            Stream = (stub.*asyncRequest)(&ActiveContext(), context->CompletionQueue(), OnConnectedTag.Prepare());
         }
 
+        dispatch = {};
         context->SubscribeStop([self = TPtr(this)] {
             self->Cancel();
         });
@@ -1206,7 +1303,6 @@ private:
     void OnReadDone(bool ok) {
         TGrpcStatus status;
         TReadCallback callback;
-        std::unordered_multimap<std::string, std::string>* initialMetadata = nullptr;
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
@@ -1231,13 +1327,11 @@ private:
             callback = std::move(ReadCallback);
             ReadCallback = nullptr;
             ReadActive = false;
-            initialMetadata = InitialMetadata;
-            InitialMetadata = nullptr;
+            if (InitialMetadata) {
+                GetInitialMetadata(InitialMetadata);
+                InitialMetadata = nullptr;
+            }
             HasInitialMetadata = true;
-        }
-
-        if (initialMetadata) {
-            GetInitialMetadata(initialMetadata);
         }
 
         RunGuarded([&] {
@@ -1320,12 +1414,17 @@ private:
 
             if (ok) {
                 status = Status;
+                for (const auto& [name, value] : ActiveContext().GetServerTrailingMetadata()) {
+                    status.ServerTrailingMetadata.emplace(std::string(name.begin(), name.end()), std::string(value.begin(), value.end()));
+                }
             } else if (Cancelled) {
                 status = TGrpcStatus(grpc::StatusCode::CANCELLED, "Stream cancelled");
             } else {
                 status = TGrpcStatus::Internal("Unexpected error");
             }
 
+            Stream.reset();
+            ReleaseContext(HasInitialMetadata);
             writesDropped.swap(WriteQueue);
             finishedCallbacks.swap(FinishedCallbacks);
 
@@ -1345,6 +1444,14 @@ private:
             }
         }
 
+        // Publish the terminal transport status before a failed write can reconnect.
+        for (auto& finishedCallback : finishedCallbacks) {
+            TGrpcStatus statusCopy = status;
+            RunGuarded([&] {
+                finishedCallback(std::move(statusCopy));
+            });
+        }
+
         while (!writesDropped.empty()) {
             auto callback = std::move(writesDropped.front().Callback);
             // Release the queued request before reporting its completion.
@@ -1360,13 +1467,6 @@ private:
             }
         }
 
-        for (auto& finishedCallback : finishedCallbacks) {
-            TGrpcStatus statusCopy = status;
-            RunGuarded([&] {
-                finishedCallback(std::move(statusCopy));
-            });
-        }
-
         if (connectedCallback) {
             if (status.Ok()) {
                 status = TGrpcStatus(grpc::StatusCode::UNKNOWN, "Unknown stream failure");
@@ -1376,12 +1476,8 @@ private:
             });
         } else if (readCallback) {
             if (status.Ok()) {
-                status = TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
-                for (const auto& [name, value] : Context.GetServerTrailingMetadata()) {
-                    status.ServerTrailingMetadata.emplace(
-                        std::string(name.begin(), name.end()),
-                        std::string(value.begin(), value.end()));
-                }
+                status.GRpcStatusCode = grpc::StatusCode::OUT_OF_RANGE;
+                status.Msg = "Read EOF";
             }
             RunGuarded([&] {
                 readCallback(std::move(status));
@@ -1451,7 +1547,7 @@ public:
     {
         auto processor = MakeIntrusive<TSimpleRequestProcessor<TStub, TRequest, TResponse>>(std::move(callback));
         processor->ApplyMeta(metas);
-        processor->Start(*Stub_, asyncRequest, request, provider ? provider : Provider_);
+        processor->Start(*Stub_, asyncRequest, request, provider ? provider : Provider_, metas.EndpointAdmission);
     }
 
     /*
@@ -1466,7 +1562,7 @@ public:
     {
         auto processor = MakeIntrusive<TAdvancedRequestProcessor<TStub, TRequest, TResponse>>(std::move(callback));
         processor->ApplyMeta(metas);
-        processor->Start(*Stub_, asyncRequest, request, provider ? provider : Provider_);
+        processor->Start(*Stub_, asyncRequest, request, provider ? provider : Provider_, metas.EndpointAdmission);
     }
 
     /*
@@ -1480,7 +1576,7 @@ public:
     {
         auto processor = MakeIntrusive<TStreamRequestReadWriteProcessor<TStub, TRequest, TResponse>>(std::move(callback));
         processor->ApplyMeta(metas);
-        processor->Start(*Stub_, std::move(asyncRequest), provider ? provider : Provider_);
+        processor->Start(*Stub_, std::move(asyncRequest), provider ? provider : Provider_, metas.EndpointAdmission);
     }
 
     /*
@@ -1495,7 +1591,7 @@ public:
     {
         auto processor = MakeIntrusive<TStreamRequestReadProcessor<TStub, TRequest, TResponse>>(std::move(callback));
         processor->ApplyMeta(metas);
-        processor->Start(*Stub_, request, std::move(asyncRequest), provider ? provider : Provider_);
+        processor->Start(*Stub_, request, std::move(asyncRequest), provider ? provider : Provider_, metas.EndpointAdmission);
     }
 
 private:

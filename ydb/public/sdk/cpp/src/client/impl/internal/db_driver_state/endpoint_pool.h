@@ -29,8 +29,14 @@ struct TEndpointUpdateResult {
 
 class TEndpointPool {
 public:
-    TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client);
+
+    TEndpointPool(TListEndpointsResultProvider&& provider, IInternalClient* client);
     ~TEndpointPool();
+    void EnableWatch(const std::string& bootstrap, const std::string& database);
+    enum class ERouteUpdate { Refresh, Switch, LegacyRefresh };
+    void PublishWatchResult(TListEndpointsResult result, ERouteUpdate update = ERouteUpdate::Refresh,
+        std::optional<uint64_t> routeGeneration = {});
+    bool UsesWatch() const { return UsesWatch_; }
     std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync();
     TEndpointRecord GetEndpoint(const TEndpointKey& preferredEndpoint, bool onlyPreferred = false) const;
     TDuration TimeSinceLastUpdate() const;
@@ -47,6 +53,7 @@ public:
     static constexpr std::int32_t GetLocalityShift();
 
 private:
+    std::vector<std::string> Install(const Ydb::Discovery::ListEndpointsResult& result);
     bool IsPreferredEndpoint(const Ydb::Discovery::EndpointInfo& endpoint,
                              const std::string& selfLocation,
                              const std::unordered_map<std::string, Ydb::Bridge::PileState>& pileStates) const;
@@ -54,8 +61,14 @@ private:
 
 private:
     TListEndpointsResultProvider Provider_;
+    IInternalClient* const Client_;
     std::mutex Mutex_;
     TEndpointElectorSafe Elector_;
+    bool UsesWatch_ = false; // Set before publishing the driver state.
+    TPlainStatus WatchStatus_;
+    std::string WatchScope_;
+    std::string WatchChannelSuffix_;
+    std::unordered_map<std::string, std::shared_ptr<NYdbGrpc::TEndpointAdmission>> WatchAdmissions_;
     NThreading::TPromise<TEndpointUpdateResult> DiscoveryPromise_;
     std::atomic_uint64_t LastUpdateTime_;
     const TBalancingPolicy::TImpl BalancingPolicy_;

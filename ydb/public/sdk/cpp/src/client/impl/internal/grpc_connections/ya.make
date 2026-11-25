@@ -7,6 +7,7 @@ ENDIF()
 
 SRCS(
     actions.cpp
+    long_poll.cpp
     grpc_connections.cpp
 )
 

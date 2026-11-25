@@ -2,6 +2,8 @@
 
 #include <util/generic/size_literals.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
+
 namespace NKikimr::NPQ {
 
 static constexpr ui64 MAX_DELETE_COMMAND_SIZE = 10_MB;
@@ -315,9 +317,9 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
 
                 size += cmd.ByteSize();
                 if (size >= MAX_DELETE_COMMAND_SIZE || toDelOffsets.size() >= MAX_DELETE_COMMAND_COUNT) {
-                    LOG_INFO_S(*TlsActivationContext, NKikimrServices::PERSQUEUE, "DropOldSourceIds reached proto size limit"
-                        << ": size# " << size
-                        << ", count# " << toDelOffsets.size());
+                    YDB_LOG_INFO("DropOldSourceIds reached proto size limit",
+                        {"size", size},
+                        {"count", toDelOffsets.size()});
                     reachedLimit = true;
                     break;
                 }

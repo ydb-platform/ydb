@@ -775,11 +775,14 @@ public:
             } else {
                 Y_DEBUG_ABORT_UNLESS(HeaderType::ContentEncoding == contentEncoding);
                 if (HeaderType::ContentEncoding != contentEncoding) {
-                    ALOG_ERROR(HttpLog, "Content-Encoding already set to " << HeaderType::ContentEncoding << ", cannot set to " << contentEncoding);
+                    YDB_LOG_ERROR_COMP(HttpLog, "Content-Encoding already set to cannot set",
+                        {"oldContentEncoding", HeaderType::ContentEncoding},
+                        {"newContentEncoding", contentEncoding});
                 }
             }
         } else {
-            ALOG_ERROR(HttpLog, "Content-Encoding " << contentEncoding << " not supported");
+            YDB_LOG_ERROR_COMP(HttpLog, "Content-Encoding not supported",
+                {"contentEncoding", contentEncoding});
         }
     }
 

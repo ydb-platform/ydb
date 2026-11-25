@@ -10,6 +10,8 @@
 
 extern "C" {
 #include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 }
 
 namespace NKikimr {
@@ -36,8 +38,8 @@ class TExpirationCondition: public IEraseRowsCondition {
     TMaybe<TString> GetWallClockDyNumber() const {
         const auto instantValue = InstantValue(WallClockInstant, Unit);
         if (!instantValue) {
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Unsupported unit: " << static_cast<ui32>(Unit));
+            YDB_LOG_CRIT("Unsupported",
+                {"unit", static_cast<ui32>(Unit)});
             CannotSerialize = true;
             return Nothing();
         }
@@ -46,8 +48,8 @@ class TExpirationCondition: public IEraseRowsCondition {
         WallClockSerialized = NDyNumber::ParseDyNumberString(strInstant);
         if (!WallClockSerialized) {
             CannotSerialize = true;
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Cannot parse DyNumber from: " << strInstant.Quote());
+            YDB_LOG_CRIT("Cannot parse DyNumber",
+                {"from", strInstant});
         }
 
         return WallClockSerialized;
@@ -57,8 +59,8 @@ class TExpirationCondition: public IEraseRowsCondition {
         const auto& result = NPg::PgNativeBinaryFromNativeText(value, Type.GetPgTypeDesc());
         if (result.Error) {
             CannotSerialize = true;
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Cannot create PG native binary from: " << value.Quote());
+            YDB_LOG_CRIT("Cannot create PG native binary",
+                {"from", value});
         } else {
             WallClockSerialized = std::move(result.Str);
         }
@@ -76,8 +78,8 @@ class TExpirationCondition: public IEraseRowsCondition {
             case INT8OID: {
                 const auto instantValue = InstantValue(WallClockInstant, Unit);
                 if (!instantValue) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Unsupported unit: " << static_cast<ui32>(Unit));
+                    YDB_LOG_CRIT("Unsupported",
+                        {"unit", static_cast<ui32>(Unit)});
                     CannotSerialize = true;
                     return Nothing();
                 }
@@ -87,7 +89,7 @@ class TExpirationCondition: public IEraseRowsCondition {
             }
             default:
                 CannotSerialize = true;
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Unsupported PG type");
+                YDB_LOG_CRIT("Unsupported PG type");
         }
         return WallClockSerialized;
     }
@@ -133,8 +135,8 @@ class TExpirationCondition: public IEraseRowsCondition {
             case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
                 return TInstant::MicroSeconds(value / 1000) <= WallClockInstant;
             default:
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Unsupported unit: " << static_cast<ui32>(Unit));
+                YDB_LOG_CRIT("Unsupported",
+                    {"unit", static_cast<ui32>(Unit)});
                 return false;
             }
         default:

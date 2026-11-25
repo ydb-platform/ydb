@@ -9,7 +9,11 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+<<<<<<< HEAD
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
+=======
+#include <ydb/library/yql/providers/solomon/common/constants.h>
+>>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/actors/http_sender_actor.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -55,8 +59,12 @@ using namespace NKikimr::NMiniKQL;
 
 namespace {
 
+<<<<<<< HEAD
 const ui64 MaxMetricsPerRequest = 1000; // Max allowed count is 10000
 const ui64 MaxRequestsInflight = 3;
+=======
+static_assert(NSo::NConstants::MaxSensorsPerRow <= NSo::NConstants::DefaultWriteMaxPointsPerRequest);
+>>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
 
 const auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolicy(
     [](const NHttp::TEvHttpProxy::TEvHttpIncomingResponse* resp){
@@ -81,6 +89,11 @@ struct TDqSolomonWriteParams {
     NSo::NProto::TDqSolomonShard Shard;
 };
 
+struct TPendingBatch {
+    TUnboxedValueBatch Rows;
+    i64 DataSize = 0;
+};
+
 struct TMetricsToSend {
     TString Data;
     ui64 MetricsCount = 0;
@@ -96,6 +109,7 @@ class TDqSolomonWriteActor : public NActors::TActor<TDqSolomonWriteActor>, publi
 public:
     static constexpr char ActorName[] = "DQ_SOLOMON_WRITE_ACTOR";
 
+<<<<<<< HEAD
     TDqSolomonWriteActor(
         ui64 outputIndex,
         TCollectStatsLevel statsLevel,
@@ -107,22 +121,48 @@ public:
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
         i64 freeSpace,
         bool enableStreamingQueriesCounters)
+=======
+    TDqSolomonWriteActor(ui64 outputIndex, TCollectStatsLevel statsLevel, const TTxId& txId, ui64 taskId, TDqSolomonWriteParams&& writeParams,
+        NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks, const ::NMonitoring::TDynamicCounterPtr& counters,
+        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider, std::shared_ptr<TScopedAlloc> alloc, i64 freeSpace,
+        bool enableStreamingQueriesCounters, bool enableCountersPerTask)
+>>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
         : TActor<TDqSolomonWriteActor>(&TDqSolomonWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TxId(txId)
         , LogPrefix(TStringBuilder() << "TxId: " << TxId << ", Solomon sink. ")
         , WriteParams(std::move(writeParams))
+        , MaxRequestsInflight(WriteParams.Shard.HasMaxRequestsInflight() ? WriteParams.Shard.GetMaxRequestsInflight()
+                                                                         : NSo::NConstants::DefaultWriteMaxRequestsInflight)
+        , MaxPointsPerRequest(WriteParams.Shard.HasMaxPointsPerRequest() ? WriteParams.Shard.GetMaxPointsPerRequest()
+                                                                         : NSo::NConstants::DefaultWriteMaxPointsPerRequest)
         , Url(GetUrl())
         , Callbacks(callbacks)
         , Metrics(counters, TxId, taskId, enableStreamingQueriesCounters)
         , FreeSpace(freeSpace)
+<<<<<<< HEAD
         , UserMetricsEncoder(
             WriteParams.Shard.GetScheme(),
             WriteParams.Shard.GetClusterType() == NSo::NProto::ESolomonClusterType::CT_MONITORING)
+=======
+        , Alloc(std::move(alloc))
+        ,
+        UserMetricsEncoder(WriteParams.Shard.GetScheme(), WriteParams.Shard.GetClusterType() == NSo::NProto::ESolomonClusterType::CT_MONITORING)
+>>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
         , CredentialsProvider(credentialsProvider)
     {
+        YQL_ENSURE(Alloc, "Solomon sink requires a MiniKQL allocator");
+        YQL_ENSURE(MaxRequestsInflight > 0, "solomon.WriteMaxRequestsInflight must be positive");
+        YQL_ENSURE(MaxPointsPerRequest > 0 && MaxPointsPerRequest <= NSo::NConstants::MaxWritePointsPerRequest,
+            "solomon.WriteMaxPointsPerRequest must be between 1 and " << NSo::NConstants::MaxWritePointsPerRequest);
+        YQL_ENSURE(MaxPointsPerRequest >= static_cast<ui64>(WriteParams.Shard.GetScheme().SensorsSize()),
+            "solomon.WriteMaxPointsPerRequest must be at least the number of sensors in a row");
         SINK_LOG_D("Init");
         EgressStats.Level = statsLevel;
+    }
+
+    ~TDqSolomonWriteActor() override {
+        ClearPendingBatches();
     }
 
     STRICT_STFUNC(StateFunc,
@@ -131,11 +171,15 @@ public:
 
 public:
     void SendData(
+<<<<<<< HEAD
         NKikimr::NMiniKQL::TUnboxedValueBatch&& batch,
         i64,
         const TMaybe<NDqProto::TCheckpoint>& checkpoint,
         bool finished) override
     {
+=======
+        NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 dataSize, const TMaybe<NDqProto::TCheckpoint>& checkpoint, bool finished) override {
+>>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
         YQL_ENSURE(!batch.IsWide(), "Wide streams are not supported");
         SINK_LOG_T("Got " << batch.RowCount() << " items to send. Checkpoint: " << checkpoint.Defined()
                    << ". Send queue: " << SendingBuffer.size() << ". Inflight: " << InflightBuffer.size()
@@ -145,29 +189,48 @@ public:
             Finished = true;
         }
 
-        ui64 metricsCount = 0;
-        batch.ForEachRow([&](const auto& value) {
-            if (metricsCount && metricsCount + WriteParams.Shard.GetScheme().GetSensors().size() > MaxMetricsPerRequest) {
-                PushMetricsToBuffer(metricsCount);
+        if (!batch.empty()) {
+            YQL_ENSURE(dataSize >= 0, "Negative input batch size");
+            if (dataSize == 0) {
+                // Direct callers may omit the upstream size estimate.
+                dataSize = batch.RowCount() * (1 + WriteParams.Shard.GetScheme().LabelsSize() + WriteParams.Shard.GetScheme().SensorsSize()) *
+                           sizeof(NUdf::TUnboxedValue);
+                batch.ForEachRow([&](const NUdf::TUnboxedValue& value) {
+                    for (const auto& label : WriteParams.Shard.GetScheme().GetLabels()) {
+                        const auto labelValue = value.GetElement(label.GetIndex());
+                        dataSize += labelValue.AsStringRef().Size();
+                    }
+                });
             }
 
-            metricsCount += UserMetricsEncoder.Append(value);
-            EgressStats.Rows++;
-        });
-
-        if (metricsCount != 0) {
-            PushMetricsToBuffer(metricsCount);
+            FreeSpace -= dataSize;
+            EgressStats.Rows += batch.RowCount();
+            auto* pending = SendingBuffer.empty() ? nullptr : std::get_if<TPendingBatch>(&SendingBuffer.back());
+            const auto sensorsPerRow = WriteParams.Shard.GetScheme().SensorsSize();
+            if (pending && (pending->Rows.RowCount() + batch.RowCount()) * sensorsPerRow <= MaxPointsPerRequest) {
+                // Compact small inputs instead of retaining a separate MiniKQL page per SendData call.
+                batch.ForEachRow([&](NUdf::TUnboxedValue& value) {
+                    pending->Rows.emplace_back(std::move(value));
+                });
+                pending->DataSize += dataSize;
+            } else {
+                SendingBuffer.emplace(TPendingBatch{ std::move(batch), dataSize });
+            }
         }
 
         if (checkpoint) {
             SendingBuffer.emplace(*checkpoint);
         }
 
+<<<<<<< HEAD
         while (TryToSendNextBatch()) {}
 
         if (FreeSpace <= 0) {
             ShouldNotifyNewFreeSpace = true;
         }
+=======
+        SendPendingBatches();
+>>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
 
         CheckFinished();
     };
@@ -297,11 +360,20 @@ private:
 
         HandleSuccessSolomonResponse(*res->HttpIncomingResponse->Get(), ev->Cookie);
 
+<<<<<<< HEAD
         while (TryToSendNextBatch()) {}
     }
 
     // IActor & IDqComputeActorAsyncOutput
     void PassAway() override { // Is called from Compute Actor
+=======
+        SendPendingBatches();
+    }
+
+    // IActor & IDqComputeActorAsyncOutput
+    void PassAway() override {   // Is called from Compute Actor
+        ClearPendingBatches();
+>>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
         for (const auto& [_, metricsInflight] : InflightBuffer) {
             Send(metricsInflight.HttpSenderId, new TEvents::TEvPoison());
         }
@@ -325,6 +397,7 @@ private:
                 WriteParams.Shard.GetClusterType());
     }
 
+<<<<<<< HEAD
     void PushMetricsToBuffer(ui64& metricsCount) {
         try {
             auto data = UserMetricsEncoder.Encode();
@@ -335,9 +408,42 @@ private:
         } catch (const yexception& e) {
             TIssues issues { TIssue(TStringBuilder() << "Error while encoding solomon metrics: " << e.what()) };
             Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+=======
+    void ClearPendingBatches() {
+        if (SendingBuffer.empty()) {
+            return;
+>>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
         }
+        auto guard = Guard(*Alloc);
+        while (!SendingBuffer.empty()) {
+            if (const auto* pending = std::get_if<TPendingBatch>(&SendingBuffer.front())) {
+                FreeSpace += pending->DataSize;
+            }
+            SendingBuffer.pop();
+        }
+    }
 
-        metricsCount = 0;
+    TMetricsToSend BuildMetricsBatch() {
+        auto guard = Guard(*Alloc);
+        TMetricsToSend result;
+        const auto sensorsPerRow = WriteParams.Shard.GetScheme().SensorsSize();
+        YQL_ENSURE(sensorsPerRow > 0 && sensorsPerRow <= NSo::NConstants::MaxSensorsPerRow, "Invalid Solomon sensor count");
+        while (!SendingBuffer.empty() && std::holds_alternative<TPendingBatch>(SendingBuffer.front()) &&
+               result.MetricsCount + sensorsPerRow <= MaxPointsPerRequest) {
+            auto& pending = std::get<TPendingBatch>(SendingBuffer.front());
+            auto value = std::move(*pending.Rows.Head());
+            result.MetricsCount += UserMetricsEncoder.Append(value);
+            pending.Rows.Pop();
+            if (pending.Rows.empty()) {
+                // Keep the whole input reservation until its last row is consumed:
+                // dataSize is an upstream estimate, not an exact per-row allocation size.
+                FreeSpace += pending.DataSize;
+                SendingBuffer.pop();
+            }
+        }
+        result.Data = UserMetricsEncoder.Encode();
+        FreeSpace -= result.Data.size();
+        return result;
     }
 
     std::optional<NHttp::THttpOutgoingRequestPtr> BuildSolomonRequest(const TString& data) {
@@ -382,6 +488,20 @@ private:
         return true;
     }
 
+    void SendPendingBatches() {
+        while (TryToSendNextBatch()) {
+        }
+
+        // Encoding pending rows can consume the space released by an ACK.
+        // Notify the producer only after all available slots have been filled.
+        if (FreeSpace <= 0) {
+            ShouldNotifyNewFreeSpace = true;
+        } else if (ShouldNotifyNewFreeSpace) {
+            ShouldNotifyNewFreeSpace = false;
+            Callbacks->ResumeExecution();
+        }
+    }
+
     bool TryToSendNextBatch() {
         Metrics.ReportSendingBufferSize(SendingBuffer.size());
         Metrics.ReportInflightRequestsCount(InflightBuffer.size());
@@ -402,15 +522,19 @@ private:
             return false;
         }
 
-        auto variant = SendingBuffer.front();
-        SendingBuffer.pop();
-
-        if (std::holds_alternative<TMetricsToSend>(variant)) {
+        if (std::holds_alternative<TPendingBatch>(SendingBuffer.front())) {
             if (Y_UNLIKELY(!HttpProxyId)) {
                 HttpProxyId = Register(NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance()));
             }
 
-            const auto& metricsToSend = std::get<TMetricsToSend>(variant);
+            TMetricsToSend metricsToSend;
+            try {
+                metricsToSend = BuildMetricsBatch();
+            } catch (const yexception& e) {
+                TIssues issues{ TIssue(TStringBuilder() << "Error while encoding solomon metrics: " << e.what()) };
+                Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+                return false;
+            }
             const auto httpRequest = BuildSolomonRequest(metricsToSend.Data);
 
             if (!httpRequest) {
@@ -423,7 +547,8 @@ private:
 
             const size_t bodySize = metricsToSend.Data.size();
             const TActorId httpSenderId = Register(CreateHttpSenderActor(SelfId(), HttpProxyId, RetryPolicy));
-            Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(*httpRequest), /*flags=*/0, Cookie);
+            Send(
+                httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(*httpRequest, /*allowConnectionReuse=*/true), /*flags=*/0, Cookie);
             SINK_LOG_T("Sent " << metricsToSend.MetricsCount << " metrics with size of " << metricsToSend.Data.size() << " bytes to solomon");
 
             *Metrics.SentMetrics += metricsToSend.MetricsCount;
@@ -433,9 +558,10 @@ private:
             return true;
         }
 
-        if (std::holds_alternative<NDqProto::TCheckpoint>(variant)) {
+        if (std::holds_alternative<NDqProto::TCheckpoint>(SendingBuffer.front())) {
             SINK_LOG_D("Process checkpoint. Inflight before checkpoint: " << InflightBuffer.size());
-            CheckpointInProgress = std::get<NDqProto::TCheckpoint>(std::move(variant));
+            CheckpointInProgress = std::get<NDqProto::TCheckpoint>(std::move(SendingBuffer.front()));
+            SendingBuffer.pop();
             if (InflightBuffer.empty()) {
                 DoCheckpoint();
                 return true;
@@ -462,10 +588,6 @@ private:
         // Helper: erase the inflight entry and restore FreeSpace, then report error.
         auto reportError = [&](TIssues issues, NYql::NDqProto::StatusIds::StatusCode code) {
             FreeSpace += ptr->second.BodySize;
-            if (ShouldNotifyNewFreeSpace && FreeSpace > 0) {
-                Callbacks->ResumeExecution();
-                ShouldNotifyNewFreeSpace = false;
-            }
             InflightBuffer.erase(ptr);
             Callbacks->OnAsyncOutputError(OutputIndex, issues, code);
         };
@@ -517,10 +639,6 @@ private:
         }
 
         FreeSpace += ptr->second.BodySize;
-        if (ShouldNotifyNewFreeSpace && FreeSpace > 0) {
-            Callbacks->ResumeExecution();
-            ShouldNotifyNewFreeSpace = false;
-        }
         InflightBuffer.erase(ptr);
 
         if (CheckpointInProgress && InflightBuffer.empty()) {
@@ -547,17 +665,20 @@ private:
     const TTxId TxId;
     const TString LogPrefix;
     const TDqSolomonWriteParams WriteParams;
+    const ui64 MaxRequestsInflight;
+    const ui64 MaxPointsPerRequest;
     const TString Url;
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* const Callbacks;
     TDqSolomonWriteActorMetrics Metrics;
     i64 FreeSpace = 0;
+    const std::shared_ptr<TScopedAlloc> Alloc;
     TActorId HttpProxyId;
     bool Finished = false;
 
     TString SourceId;
     bool ShouldNotifyNewFreeSpace = false;
     std::optional<NDqProto::TCheckpoint> CheckpointInProgress = std::nullopt;
-    std::queue<std::variant<TMetricsToSend, NDqProto::TCheckpoint>> SendingBuffer;
+    std::queue<std::variant<TPendingBatch, NDqProto::TCheckpoint>> SendingBuffer;
     THashMap<ui64, TMetricsInflight> InflightBuffer;
 
     TMetricsEncoder UserMetricsEncoder;
@@ -567,6 +688,7 @@ private:
 
 } // anonymous namespace
 
+<<<<<<< HEAD
 std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(
     NYql::NSo::NProto::TDqSolomonShard&& settings,
     ui64 outputIndex,
@@ -579,6 +701,13 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
     IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     i64 freeSpace,
     bool enableStreamingQueriesCounters)
+=======
+std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(NYql::NSo::NProto::TDqSolomonShard&& settings,
+    ui64 outputIndex, TCollectStatsLevel statsLevel, const TTxId& txId, ui64 taskId, const THashMap<TString, TString>& secureParams,
+    NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks, const ::NMonitoring::TDynamicCounterPtr& counters,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, std::shared_ptr<TScopedAlloc> alloc, i64 freeSpace,
+    bool enableStreamingQueriesCounters, bool enableCountersPerTask)
+>>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -590,6 +719,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
     auto credentialsProviderFactory = credentialsFactory->Create(token);
     auto credentialsProvider = credentialsProviderFactory->CreateProvider();
 
+<<<<<<< HEAD
     TDqSolomonWriteActor* actor = new TDqSolomonWriteActor(
         outputIndex,
         statsLevel,
@@ -602,6 +732,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
         freeSpace,
         enableStreamingQueriesCounters);
     return {actor, actor};
+=======
+    TDqSolomonWriteActor* actor = new TDqSolomonWriteActor(outputIndex, statsLevel, txId, taskId, std::move(params), callbacks, counters,
+        credentialsProvider, std::move(alloc), freeSpace, enableStreamingQueriesCounters, enableCountersPerTask);
+    return { actor, actor };
+>>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
 }
 
 void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters) {
@@ -616,6 +751,7 @@ void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, IStructuredT
                 txId = taskParamsIt->second;
             }
 
+<<<<<<< HEAD
             return CreateDqSolomonWriteActor(
                 std::move(settings),
                 args.OutputIndex,
@@ -628,6 +764,11 @@ void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, IStructuredT
                 credentialsFactory,
                 DqSolomonDefaultFreeSpace,
                 enableStreamingQueriesCounters);
+=======
+            return CreateDqSolomonWriteActor(std::move(settings), args.OutputIndex, args.StatsLevel, txId, args.TaskId, args.SecureParams,
+                args.Callback, counters, credentialsFactory, std::move(args.Alloc), DqSolomonDefaultFreeSpace, enableStreamingQueriesCounters,
+                enableCountersPerTask);
+>>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
         });
 }
 

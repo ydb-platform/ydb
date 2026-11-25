@@ -646,6 +646,20 @@ auto LevelLambdaFrom(
         const auto target = TExprBase(apply.Ref().ChildPtr(3 - match.EmbeddingArg));
         auto targetExpr = target.Ptr();
         bool optionalTarget = target.Ref().GetTypeAnn()->IsOptionalOrNull();
+        // Strip the tag on the vector value before rebuilding its optional
+        // maps. Untag around an optional map aliases its MiniKQL IfPresent.
+        if (const auto* type = RemoveOptionalType(target.Ref().GetTypeAnn());
+            type->GetKind() == ETypeAnnotationKind::Tagged)
+        {
+            const auto tag = ctx.NewAtom(pos, type->Cast<TTaggedExprType>()->GetTag());
+            if (optionalTarget) {
+                const auto item = ctx.NewArgument(pos, "vector");
+                targetExpr = ctx.NewCallable(pos, "Map", {targetExpr,
+                    ctx.NewLambda(pos, ctx.NewArguments(pos, {item}), ctx.NewCallable(pos, "Untag", {item, tag}))});
+            } else {
+                targetExpr = ctx.NewCallable(pos, "Untag", {targetExpr, tag});
+            }
+        }
         const auto row = TCoArguments(fromArgs.Ptr()).Arg(0);
         const auto centroid = Build<TCoMember>(ctx, pos)
             .Struct(row)
@@ -670,13 +684,6 @@ auto LevelLambdaFrom(
                 levelBody = ctx.ChangeChild(it->Ref(), TCoFlatMap::idx_Lambda,
                     ctx.DeepCopyLambda(it->Lambda().Ref(), std::move(levelBody)));
             }
-        }
-        // The distance operands still carry their original types here. Normalize
-        // the standalone target before its reconstructed maps are reannotated.
-        if (const auto* type = RemoveOptionalType(target.Ref().GetTypeAnn());
-            type->GetKind() == ETypeAnnotationKind::Tagged)
-        {
-            targetExpr = ctx.NewCallable(pos, "Untag", {targetExpr, ctx.NewAtom(pos, type->Cast<TTaggedExprType>()->GetTag())});
         }
         targetVectorExpr = std::move(targetExpr);
         return NewLambdaFrom(ctx, pos, replaces, fromArgs.Ref(), TExprBase(levelBody)).Ptr();

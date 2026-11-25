@@ -2,18 +2,22 @@
 
 #include <ydb/core/base/table_index.h>
 
+#include <util/generic/hash.h>
 #include <util/string/builder.h>
 #include <util/string/printf.h>
+
+#include <algorithm>
 
 namespace NKikimr::NBackup {
 
 namespace {
 
-// FillIndexDescription emits dictionary settings only for a stored non-compact
-// relevance index. The two layouts of plain fulltext and JSON use the same table names.
+// Compact relevance has docs/stats settings but no dictionary. Before per-table settings
+// were introduced, all relevance indexes had a dictionary and exported only the main settings.
 std::span<const std::string_view> GetBackupImplTables(const Ydb::Table::TableIndex& index) {
-    const bool compact = index.has_global_fulltext_relevance_index()
-        && !index.global_fulltext_relevance_index().has_dict_table_settings();
+    const auto& relevance = index.global_fulltext_relevance_index();
+    const bool compact = !relevance.has_dict_table_settings()
+        && (relevance.has_docs_table_settings() || relevance.has_stats_table_settings());
     const auto type = NTableIndex::TryConvertIndexType(index.type_case(), compact);
     if (!type || index.has_global_async_index() || index.has_global_hnsw_index()) {
         return {};
@@ -51,24 +55,31 @@ TVector<TIndexMetadata> MakeIndexesMetadata(
     return result;
 }
 
-TString FindMissingIndexImplTable(const google::protobuf::RepeatedPtrField<Ydb::Table::TableIndex>& indexes,
+TString GetIndexMetadataIssue(const google::protobuf::RepeatedPtrField<Ydb::Table::TableIndex>& indexes,
         std::span<const TIndexMetadata> materialized) {
-    THashSet<TStringBuf> listedTables;
-    THashSet<TStringBuf> listedIndexes;
+    THashMap<TStringBuf, THashSet<TStringBuf>> listedTables;
     for (const auto& entry : materialized) {
         const TStringBuf path(entry.ImplTablePrefix);
-        listedTables.insert(path);
-        listedIndexes.insert(path.Before('/'));
+        listedTables[path.Before('/')].insert(path.After('/'));
     }
     for (const auto& index : indexes) {
-        // An index with no materialized tables may be rebuilt from the base table.
-        if (!listedIndexes.contains(index.name())) {
+        const auto* listed = listedTables.FindPtr(index.name());
+        if (!listed) {
+            // Definition-only indexes have no entries and can be rebuilt.
             continue;
         }
-        for (const auto& implTable : GetBackupImplTables(index)) {
-            TString path = TStringBuilder() << index.name() << "/" << implTable;
-            if (!listedTables.contains(path)) {
-                return path;
+        const auto expected = GetBackupImplTables(index);
+        if (expected.empty()) {
+            continue;
+        }
+        for (const auto& table : expected) {
+            if (!listed->contains(table)) {
+                return TStringBuilder() << "materialized index data is missing from the backup: " << index.name() << "/" << table;
+            }
+        }
+        for (const auto& table : *listed) {
+            if (std::find(expected.begin(), expected.end(), std::string_view(table)) == expected.end()) {
+                return TStringBuilder() << "unexpected materialized index table in the backup: " << index.name() << "/" << table;
             }
         }
     }

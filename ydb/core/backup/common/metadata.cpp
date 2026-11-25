@@ -288,53 +288,52 @@ bool TSchemaMapping::Deserialize(const TString& jsonContent, TString& error) {
         return false;
     }
 
-    bool hasIV = false;
-    bool first = true;
-    for (const auto& [exportObject, info] : mapping.GetMap()) {
+    const auto& objects = mapping.GetMap();
+    const bool encrypted = !objects.empty() && objects.begin()->second.Has("iv");
+    const auto parseIV = [&](const NJson::TJsonValue& value, TEncryptionIV& result) {
+        if (!value.IsString()) {
+            error = "IV in schema mapping json is not a string";
+            return false;
+        }
+        try {
+            result = TEncryptionIV::FromHexString(value.GetString());
+            if (result.Size() == TEncryptionIV::SIZE) {
+                return true;
+            }
+            error = "Invalid IV size in schema mapping json";
+        } catch (const std::exception& e) {
+            error = TStringBuilder() << "Invalid IV in schema mapping json: " << e.what();
+        }
+        return false;
+    };
+    for (const auto& [exportObject, info] : objects) {
         const NJson::TJsonValue& exportPrefix = info["exportPrefix"];
-        const NJson::TJsonValue& iv = info["iv"];
         if (!exportPrefix.IsString()) {
             error = "Incorrect exportPrefix";
             return false;
         }
-        if (first) {
-            hasIV = info.Has("iv");
-        } else {
-            first = false;
-            if (hasIV != info.Has("iv")) {
-                error = "Incorrect iv in schema mapping json";
-                return false;
-            }
-        }
-        if (hasIV && !iv.IsString()) {
-            error = "IV in schema mapping json is not a string";
+        if (info.Has("iv") != encrypted) {
+            error = "Inconsistent encryption settings in schema mapping json";
             return false;
         }
         TItem& item = Items.emplace_back();
         item.ExportPrefix = exportPrefix.GetString();
         item.ObjectPath = exportObject;
-        if (hasIV) {
-            item.IV = TEncryptionIV::FromHexString(iv.GetString());
+        if (encrypted && !parseIV(info["iv"], item.IV.ConstructInPlace())) {
+            return false;
         }
         if (info.Has("indexIVs")) {
             const auto& indexIVs = info["indexIVs"];
-            if (!hasIV || !indexIVs.IsMap()) {
+            if (!encrypted || !indexIVs.IsMap()) {
                 error = "Incorrect indexIVs in schema mapping json";
                 return false;
             }
             for (const auto& [path, indexIV] : indexIVs.GetMap()) {
-                if (!indexIV.IsString()) {
-                    error = "Index IV in schema mapping json is not a string";
+                TEncryptionIV parsedIV;
+                if (!parseIV(indexIV, parsedIV)) {
                     return false;
                 }
-                try {
-                    auto parsedIV = TEncryptionIV::FromHexString(indexIV.GetString());
-                    Y_ENSURE(parsedIV.Size() == TEncryptionIV::SIZE, "Invalid index IV size");
-                    item.IndexIVs.emplace(path, std::move(parsedIV));
-                } catch (const std::exception& ex) {
-                    error = TStringBuilder() << "Invalid index IV in schema mapping json: " << ex.what();
-                    return false;
-                }
+                item.IndexIVs.emplace(path, std::move(parsedIV));
             }
         }
     }

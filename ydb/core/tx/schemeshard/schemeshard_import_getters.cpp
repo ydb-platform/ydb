@@ -550,16 +550,20 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         );
 
         const bool canSkip = IndexPopulationMode != Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT;
-        auto skipMaterializedIndexes = [&]() {
+        auto skipIndex = [&]() {
             Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
             auto& item = ImportInfo->Items.at(ItemIdx);
-            item.MaterializedIndexes.clear();
-            StartDownloadingChangefeeds();
+            const TString name(TStringBuf(IndexImplTablePrefixes.at(IndexCheckedMaterializedIndexImplTable).ImplTablePrefix).Before('/'));
+            IndexesToRebuild.insert(name);
+            EraseIf(item.MaterializedIndexes, [&](const auto& entry) {
+                return TStringBuf(entry.first.ImplTablePrefix).Before('/') == name;
+            });
+            DownloadMaterializedIndexes();
         };
 
         if (NoObjectFound(result.GetError().GetErrorType())) {
             if (canSkip) {
-                return skipMaterializedIndexes();
+                return skipIndex();
             }
             return Reply(Ydb::StatusIds::BAD_REQUEST,
                 TStringBuilder() << CurrentMaterializedIndexSchemeKey()
@@ -573,11 +577,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         if (Key && !IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].IV) {
             // Index data cannot be decrypted without its IV
             if (canSkip) {
-                YDB_LOG_NOTICE("No index IV in schema mapping, indexes will be built",
+                YDB_LOG_NOTICE("No index IV in schema mapping, index will be rebuilt",
                     {"self", SelfId()},
                     {"key", CurrentMaterializedIndexSchemeKey()},
                 );
-                return skipMaterializedIndexes();
+                return skipIndex();
             }
             return Reply(Ydb::StatusIds::BAD_REQUEST,
                 TStringBuilder() << CurrentMaterializedIndexSchemeKey() << ": no index IV in schema mapping");
@@ -1175,11 +1179,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
 
         if (const auto& indexes = item.Metadata.GetIndexes()) {
-            if (item.Table) {
-                if (const auto missing = NBackup::FindMissingIndexImplTable(item.Table->indexes(), *indexes)) {
+            // Plaintext paths identify their index by name. AUTO can check each downloaded
+            // layout in CreateTablePropose and rebuild only the incomplete ones.
+            if (item.Table && (Key || IndexPopulationMode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT)) {
+                if (const auto issue = NBackup::GetIndexMetadataIssue(item.Table->indexes(), *indexes)) {
                     if (IndexPopulationMode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT) {
-                        return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << MetadataKey
-                            << ": materialized index data is missing from the backup: " << missing);
+                        return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << MetadataKey << ": " << issue);
                     }
                     // Older DataShards may also have numbered the remaining tables differently.
                     return StartDownloadingChangefeeds();
@@ -1197,40 +1202,17 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             }
 
             DownloadMaterializedIndexes();
-        } else {
-            if (!Key) { // not encrypted
-                if (item.Table) {
-                    IndexImplTablePrefixes.reserve(item.Table->indexes_size());
-
-                    for (const auto& index : item.Table->indexes()) {
-                        if (index.has_local_bloom_filter_index() || IndexesToRebuild.contains(index.name())) {
-                            continue;
-                        }
-                        const auto indexType = NTableIndex::TryConvertIndexType(index.type_case(), AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
-                        if (!indexType) {
-                            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << MetadataKey << ": unsupported index"
-                                << ": name# " << index.name()
-                                << ": type# " << static_cast<int>(index.type_case()));
-                        }
-
-                        const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
-
-                        for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns)) {
-                            const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
-                            IndexImplTablePrefixes.push_back({implTablePrefix, implTablePrefix});
-                        }
-                    }
-                }
-
-                DownloadMaterializedIndexes();
-            } else {
-                Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << MetadataKey << ": no indexes described in table metadata");
+        } else if (!Key) {
+            if (item.Table) {
+                IndexImplTablePrefixes = NBackup::MakeIndexesMetadata(item.Table->indexes(), 0, false);
             }
+            DownloadMaterializedIndexes();
+        } else {
+            Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << MetadataKey << ": no indexes described in table metadata");
         }
     }
 
     void DownloadMaterializedIndexes() {
-        // Preserve metadata positions: encrypted index schemes use them to derive their IVs.
         while (IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size()) {
             const auto& prefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ImplTablePrefix;
             if (!IndexesToRebuild.contains(prefix.substr(0, prefix.find('/')))) {

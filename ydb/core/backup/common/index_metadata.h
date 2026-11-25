@@ -20,7 +20,7 @@ TVector<TIndexMetadata> MakeIndexesMetadata(
     ui32 firstExportPrefixNumber,
     bool encrypted);
 
-TString FindMissingIndexImplTable(const google::protobuf::RepeatedPtrField<Ydb::Table::TableIndex>& indexes,
+TString GetIndexMetadataIssue(const google::protobuf::RepeatedPtrField<Ydb::Table::TableIndex>& indexes,
     std::span<const TIndexMetadata> materialized);
 
 } // namespace NKikimr::NBackup

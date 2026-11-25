@@ -13343,14 +13343,23 @@ public:
         Write(NBackup::ChecksumKey(path), NBackup::ComputeChecksum(plain));
     }
 
-    void RemoveIndexListFromPlaintextMetadata() {
-        const TString path = "backup/metadata.json";
+    void EditTableMetadata(const std::function<void(NJson::TJsonValue&)>& edit) {
+        const TString path = Algorithm ? "backup/metadata.json.enc" : "backup/metadata.json";
+        const auto [plain, iv] = Algorithm ? ReadEncrypted(path) : std::make_pair(Read(path), NBackup::TEncryptionIV{});
         NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(Read(path), &json));
-        json.EraseValue("indexes");
+        UNIT_ASSERT(NJson::ReadJsonTree(plain, &json));
+        edit(json);
         const TString content = NJson::WriteJson(json, false);
-        Write(path, content);
-        Write(NBackup::ChecksumKey(path), NBackup::ComputeChecksum(content));
+        if (Algorithm) {
+            WriteEncrypted(path, content, iv);
+        } else {
+            Write(path, content);
+            Write(NBackup::ChecksumKey(path), NBackup::ComputeChecksum(content));
+        }
+    }
+
+    void RemoveIndexListFromPlaintextMetadata() {
+        EditTableMetadata([](NJson::TJsonValue& json) { json.EraseValue("indexes"); });
     }
 
 private:
@@ -13429,6 +13438,7 @@ enum class EIndexImportScenario {
     RebootDuringImport,
     RebootBeforeScheme,
     NoIndexIVsInMapping,
+    OneIndexIVMissing,
 };
 
 struct TIndexBackupOptions {
@@ -13576,7 +13586,7 @@ public:
 
     void CreateTables();
     NBackup::TMetadata ExportTables(EIndexExportEvent event, bool legacyDataShard);
-    void RemoveIndexIVs();
+    void RemoveIndexIVs(bool onlyOne);
     void SwapIndexFiles(const NBackup::TMetadata& metadata, const TString& file);
     void RestoreTables(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, EIndexImportScenario scenario);
 
@@ -13818,14 +13828,18 @@ NBackup::TMetadata TMaterializedIndexBackup::CheckBackup(bool changefeedBeforeBa
     return metadata;
 }
 
-void TMaterializedIndexBackup::RemoveIndexIVs() {
+void TMaterializedIndexBackup::RemoveIndexIVs(bool onlyOne) {
     const TString path = "SchemaMapping/mapping.json.enc";
     const auto [plain, iv] = Storage.ReadEncrypted(path);
     NBackup::TSchemaMapping mapping;
     TString error;
     UNIT_ASSERT_C(mapping.Deserialize(plain, error), error);
     for (auto& item : mapping.Items) {
-        item.IndexIVs.clear();
+        if (onlyOne) {
+            item.IndexIVs.erase("by_value/indexImplTable");
+        } else {
+            item.IndexIVs.clear();
+        }
     }
     Storage.WriteEncrypted(path, mapping.Serialize(), iv);
 }
@@ -13896,7 +13910,8 @@ void TMaterializedIndexBackup::RestoreTables(Ydb::Import::ImportFromS3Settings::
         UNIT_ASSERT_C(result.GetResponse().GetEntry().GetIssues().empty(), result.DebugString());
         // Without index IVs AUTO mode must fall back to building the indexes
         const bool expectBuild = mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD || noIndexIVs;
-        UNIT_ASSERT_VALUES_EQUAL(indexBuilds, expectBuild ? IndexNames.size() : 0);
+        const size_t expectedBuilds = expectBuild ? IndexNames.size() : size_t(scenario == EIndexImportScenario::OneIndexIVMissing);
+        UNIT_ASSERT_VALUES_EQUAL(indexBuilds, expectedBuilds);
 
         TestDescribeResult(DescribePath(Runtime, restoredPath), {NLs::PathExist, NLs::IndexesCount(2)});
         CheckRestoredRows(Runtime, restoredPath, "", 3);
@@ -13917,8 +13932,8 @@ void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
     TMaterializedIndexBackup backup(isFs, encrypted, options.Algorithm, options.ChangefeedsExport);
     backup.CreateTables();
     const auto metadata = backup.ExportTables(options.ExportEvent, options.LegacyDataShard);
-    if (options.ImportScenario == EIndexImportScenario::NoIndexIVsInMapping) {
-        backup.RemoveIndexIVs();
+    if (options.ImportScenario == EIndexImportScenario::NoIndexIVsInMapping || options.ImportScenario == EIndexImportScenario::OneIndexIVMissing) {
+        backup.RemoveIndexIVs(options.ImportScenario == EIndexImportScenario::OneIndexIVMissing);
     } else if (options.ImportScenario == EIndexImportScenario::SwapScheme) {
         backup.SwapIndexFiles(metadata, "scheme.pb.enc");
     } else if (options.ImportScenario == EIndexImportScenario::SwapData) {
@@ -13927,9 +13942,15 @@ void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
     backup.RestoreTables(mode, options.ImportScenario);
 }
 
-void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, bool prefixed = false,
-        bool toggleCompactForExport = false) {
-    TBackupStorage storage(isFs);
+struct TComplexIndexBackupOptions {
+    bool Prefixed = false;
+    bool ToggleCompactForExport = false;
+    bool Encrypted = true;
+    bool LegacyWithoutIndexList = false;
+};
+
+void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, const TComplexIndexBackupOptions& options = {}) {
+    TBackupStorage storage(isFs, options.Encrypted ? "AES-128-GCM" : "");
     TTestBasicRuntime runtime;
     const bool isVector = type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
     const bool compact = type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
@@ -13951,7 +13972,7 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, bool 
     const ui32 rowCount = isVector ? 200 : 4;
     if (isVector) {
         WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/Table", 0, 0, rowCount);
-        indexColumns = prefixed ? TVector<TString>{"prefix", "embedding"} : TVector<TString>{"embedding"};
+        indexColumns = options.Prefixed ? TVector<TString>{"prefix", "embedding"} : TVector<TString>{"embedding"};
         TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard,
             "/MyRoot", "/MyRoot/Table", "index1", indexColumns);
     } else {
@@ -13977,14 +13998,22 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, bool 
     const auto build = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
     UNIT_ASSERT_VALUES_EQUAL(build.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
-    if (toggleCompactForExport) {
+    if (options.ToggleCompactForExport) {
+        for (const char* name : {"z_global", "zz_global"}) {
+            Ydb::Table::TableIndex global;
+            global.set_name(name);
+            global.add_index_columns("value");
+            global.mutable_global_index();
+            TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", global);
+            env.TestWaitNotification(runtime, txId);
+        }
         runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(!compact);
     }
     TestExport(runtime, ++txId, "/MyRoot", storage.ExportRequest({{"/MyRoot/Table", "backup"}}, true, "zstd"));
     env.TestWaitNotification(runtime, txId);
     TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
-    if (toggleCompactForExport) {
+    if (options.ToggleCompactForExport) {
         runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(compact);
     }
     using TSettings = Ydb::Import::ImportFromS3Settings;
@@ -13992,6 +14021,12 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, bool 
         TestImport(runtime, ++txId, "/MyRoot", storage.ImportRequest(mode, {restoredPath}));
         env.TestWaitNotification(runtime, txId);
     };
+    if (options.LegacyWithoutIndexList) {
+        storage.RemoveIndexListFromPlaintextMetadata();
+        // The running SchemeShard still creates compact indexes. The getter must use the source
+        // layout even when the runtime flag has changed since the SchemeShard started.
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(false);
+    }
     const auto implTables = NTableIndex::GetImplTables(type, indexColumns);
     for (const bool directImport : {false, true}) {
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(directImport);
@@ -14018,7 +14053,7 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, bool 
         }
     }
 
-    if (toggleCompactForExport) {
+    if (options.ToggleCompactForExport) {
         runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(!compact);
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         ui32 indexBuilds = 0;
@@ -14037,28 +14072,44 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, bool 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
     }
 
-    if (toggleCompactForExport && !compact) {
-        // A legacy DataShard lists three consecutive prefixes, with no dictionary.
-        const TString path = "backup/metadata.json.enc";
-        const auto [plain, iv] = storage.ReadEncrypted(path);
-        NJson::TJsonValue metadata;
-        UNIT_ASSERT(NJson::ReadJsonTree(plain, &metadata));
-        auto& indexes = metadata["indexes"].GetArraySafe();
-        UNIT_ASSERT_VALUES_EQUAL(indexes.at(0)["impl_table_prefix"].GetString(), "index1/indexImplDictTable");
-        indexes.erase(indexes.begin());
-        for (size_t i = 0; i < indexes.size(); ++i) {
-            indexes[i]["export_prefix"] = Sprintf("%03zu", i + 1);
-        }
-        storage.WriteEncrypted(path, NJson::WriteJson(metadata, false), iv);
+    if (options.ToggleCompactForExport) {
+        // A legacy DataShard uses the runtime flag to list either one extra table or one too few.
+        storage.EditTableMetadata([&](NJson::TJsonValue& metadata) {
+            auto& indexes = metadata["indexes"].GetArraySafe();
+            const TString dictPrefix = "index1/indexImplDictTable";
+            if (compact) {
+                NJson::TJsonValue dict;
+                dict["impl_table_prefix"] = dictPrefix;
+                dict["export_prefix"] = dictPrefix;
+                indexes.insert(indexes.begin(), std::move(dict));
+            } else {
+                const auto dict = FindIf(indexes, [&](const auto& entry) { return entry["impl_table_prefix"].GetString() == dictPrefix; });
+                UNIT_ASSERT(dict != indexes.end());
+                indexes.erase(dict);
+            }
+            if (options.Encrypted) {
+                for (size_t i = 0; i < indexes.size(); ++i) {
+                    indexes[i]["export_prefix"] = Sprintf("%03zu", i + 1);
+                }
+            }
+        });
 
         restore("/MyRoot/Incomplete", TSettings::INDEX_POPULATION_MODE_IMPORT);
         const auto result = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
         UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(result.GetResponse().GetEntry().GetIssues()),
             "index1/indexImplDictTable");
 
+        TVector<TString> builds;
+        auto observer = runtime.AddObserver<TEvIndexBuilder::TEvCreateRequest>([&](const auto& ev) {
+            builds.push_back(ev->Get()->Record.GetSettings().index().name());
+        });
         restore("/MyRoot/Rebuilt", TSettings::INDEX_POPULATION_MODE_AUTO);
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        const TString suffix = "/index1/indexImplDictTable";
+        Sort(builds);
+        UNIT_ASSERT_VALUES_EQUAL(builds, (options.Encrypted ? TVector<TString>{"index1", "z_global", "zz_global"} : TVector<TString>{"index1"}));
+        CheckRestoredRows(runtime, "/MyRoot/Rebuilt", "/z_global/indexImplTable", rowCount);
+        CheckRestoredRows(runtime, "/MyRoot/Rebuilt", "/zz_global/indexImplTable", rowCount);
+        const TString suffix = compact ? "/index1/indexImplDocsTable" : "/index1/indexImplDictTable";
         UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table" + suffix),
             ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Rebuilt" + suffix));
     }
@@ -14327,7 +14378,7 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
     }
 
     Y_UNIT_TEST_QUAD(VectorIndex, IsFs, Prefixed) {
-        ExportImportComplexIndex(IsFs, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, Prefixed);
+        ExportImportComplexIndex(IsFs, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {.Prefixed = Prefixed});
     }
 
     Y_UNIT_TEST_FLAG(VectorIndexBuildFinishesDuringEncryptedExport, Prefixed) {
@@ -14777,7 +14828,17 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
     Y_UNIT_TEST_FLAG(FulltextRelevanceLayoutChangedBeforeExport, Compact) {
         const auto type = Compact ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
             : NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
-        ExportImportComplexIndex(false, type, false, true);
+        ExportImportComplexIndex(false, type, {.ToggleCompactForExport = true});
+    }
+
+    Y_UNIT_TEST(LegacyPlaintextCompactRelevanceUsesSourceLayout) {
+        ExportImportComplexIndex(true, NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance,
+            {.Encrypted = false, .LegacyWithoutIndexList = true});
+    }
+
+    Y_UNIT_TEST(PlaintextMissingFulltextDictionaryPreservesOtherIndex) {
+        ExportImportComplexIndex(true, NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance,
+            {.ToggleCompactForExport = true, .Encrypted = false});
     }
 
     Y_UNIT_TEST_QUAD(FulltextIndex, Compact, Relevance) {
@@ -14869,6 +14930,11 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
     Y_UNIT_TEST_FLAG(ChangefeedDuringExport, IsFs) {
         ExportImportMaterializedIndexes(IsFs, true, Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
             {.ExportEvent = EIndexExportEvent::ChangefeedDuringExport});
+    }
+
+    Y_UNIT_TEST(OneMissingIndexIVOnlyRebuildsThatIndex) {
+        ExportImportMaterializedIndexes(true, true, Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO,
+            {.ImportScenario = EIndexImportScenario::OneIndexIVMissing});
     }
 
     Y_UNIT_TEST_QUAD(NoIndexIVsInMapping, IsFs, Auto) {

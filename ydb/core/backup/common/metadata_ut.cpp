@@ -53,6 +53,21 @@ Y_UNIT_TEST_SUITE(IndexMetadataTest) {
         }
     }
 
+    Y_UNIT_TEST(IndexedSchemaMappingRequiresConsistentParentIVs) {
+        for (const TString other : {
+                R"({"exportPrefix":"002"})",
+                R"({"exportPrefix":"002","iv":"00"})",
+                R"({"exportPrefix":"002","iv":"not-hex"})"}) {
+            TSchemaMapping mapping;
+            TString error;
+            UNIT_ASSERT(!mapping.Deserialize(TString(R"({"exportedObjects":{
+                "Table":{"exportPrefix":"001","iv":"000102030405060708090A0B",
+                    "indexIVs":{"idx/indexImplTable":"010102030405060708090A0B"}},
+                "Other":)") + other + "}}", error));
+            UNIT_ASSERT_C(!error.empty(), other);
+        }
+    }
+
     Y_UNIT_TEST(IndexIVIsNotSerialized) {
         // Authoritative index IVs live in the authenticated schema mapping only
         TMetadata metadata;
@@ -104,22 +119,28 @@ Y_UNIT_TEST_SUITE(IndexMetadataTest) {
         }
     }
 
-    Y_UNIT_TEST(MissingFulltextDictionary) {
+    Y_UNIT_TEST(FulltextDictionaryLayouts) {
         google::protobuf::RepeatedPtrField<Ydb::Table::TableIndex> indexes;
         auto& index = *indexes.Add();
         index.set_name("text");
         auto* relevance = index.mutable_global_fulltext_relevance_index();
 
+        // Before per-table settings, the full layout was the only one available.
+        UNIT_ASSERT_VALUES_EQUAL(NBackup::MakeIndexesMetadata(indexes, 1, false).size(), 4);
+        relevance->mutable_docs_table_settings();
+        relevance->mutable_stats_table_settings();
         // A legacy DataShard can list the compact layout for an existing non-compact index.
         auto compact = NBackup::MakeIndexesMetadata(indexes, 1, true);
         UNIT_ASSERT_VALUES_EQUAL(compact.size(), 3);
-        UNIT_ASSERT(!NBackup::FindMissingIndexImplTable(indexes, compact));
+        UNIT_ASSERT(!NBackup::GetIndexMetadataIssue(indexes, compact));
 
         relevance->mutable_dict_table_settings();
-        UNIT_ASSERT_VALUES_EQUAL(NBackup::FindMissingIndexImplTable(indexes, compact), "text/indexImplDictTable");
+        UNIT_ASSERT_STRING_CONTAINS(NBackup::GetIndexMetadataIssue(indexes, compact), "missing from the backup: text/indexImplDictTable");
         const auto full = NBackup::MakeIndexesMetadata(indexes, 1, true);
         UNIT_ASSERT_VALUES_EQUAL(full.size(), 4);
-        UNIT_ASSERT(!NBackup::FindMissingIndexImplTable(indexes, full));
+        UNIT_ASSERT(!NBackup::GetIndexMetadataIssue(indexes, full));
+        relevance->clear_dict_table_settings();
+        UNIT_ASSERT_STRING_CONTAINS(NBackup::GetIndexMetadataIssue(indexes, full), "unexpected materialized index table in the backup: text/indexImplDictTable");
     }
 }
 

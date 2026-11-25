@@ -1160,6 +1160,11 @@ void FillColumnDescriptionImpl(TYdbProto& out,
     }
 
     for (const auto& column : in.GetColumns()) {
+        if constexpr (std::is_same_v<TYdbProto, Ydb::Table::DescribeTableResult>) {
+            if (column.GetIsBuildInProgress()) {
+                continue;
+            }
+        }
         auto newColumn = out.add_columns();
         Ydb::Type* columnType = AddColumn(newColumn, column);
 

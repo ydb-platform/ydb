@@ -4,6 +4,7 @@
 
 #include "datashard_ut_common_kqp.h"
 #include <ydb/core/formats/factory.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
@@ -1286,6 +1287,42 @@ public:
         }
     }
 
+    void CheckDescribeTable(EColumnState state) {
+        using TEvRequest = NGRpcService::TGrpcRequestOperationCall<
+            Ydb::Table::DescribeTableRequest, Ydb::Table::DescribeTableResponse>;
+        Ydb::Table::DescribeTableRequest request;
+        request.set_path("/Root/Table");
+        const auto response = Runtime().WaitFuture(NRpcService::DoLocalRpc<TEvRequest>(
+            std::move(request), "/Root", Nothing(), Runtime().GetActorSystem(0)));
+        const auto& operation = response.operation();
+        UNIT_ASSERT(operation.ready());
+        UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), Ydb::StatusIds::SUCCESS, response.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(operation.issues_size(), 0);
+        Ydb::Table::DescribeTableResult result;
+        UNIT_ASSERT(operation.result().UnpackTo(&result));
+        UNIT_ASSERT_VALUES_EQUAL(result.primary_key_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.primary_key(0), "key");
+        TProjection names;
+        for (const auto& column : result.columns()) {
+            names.push_back(column.name());
+            UNIT_ASSERT(column.type().has_optional_type());
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(column.type().optional_type().item().type_id()), static_cast<int>(Ydb::Type::UINT32));
+            if (column.name() == "extra" || column.name() == "other") {
+                UNIT_ASSERT(column.has_from_literal());
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(column.from_literal().type().type_id()), static_cast<int>(Ydb::Type::UINT32));
+                UNIT_ASSERT_VALUES_EQUAL(column.from_literal().value().uint32_value(), Value(0, column.name()));
+            }
+        }
+        auto expected = ExistingColumns;
+        if (state == EColumnState::Ready) {
+            expected.push_back("extra");
+            expected.push_back("other");
+        }
+        Sort(names);
+        Sort(expected);
+        UNIT_ASSERT_C(names == expected, result.DebugString());
+    }
+
     // Reused without weakening expectations across every build/lifecycle transition.
     void CheckInvariants(const TVector<ERead>& reads, EColumnState state) {
         for (auto shard : Shards()) {
@@ -1310,6 +1347,7 @@ public:
             }
         }
         CheckReadTable({}, state);
+        CheckDescribeTable(state);
     }
 
     void CheckInvariants(ERead read, EColumnState state) {
@@ -1604,6 +1642,7 @@ public:
 void TestBuildingColumn(ERead read, bool restart = false) {
     TBuildingColumnFixture fixture;
     fixture.CheckReadTable({}, EColumnState::Absent);
+    fixture.CheckDescribeTable(EColumnState::Absent);
     TColumnBuild build(fixture);
     fixture.CheckInvariants(read, EColumnState::Building); // no uploads yet
     build.CommitBatch(1);
@@ -1701,10 +1740,12 @@ Y_UNIT_TEST_SUITE(DataShardBuildingColumns) {
     Y_UNIT_TEST(ReadTableImplicitKeyOnlyDuringBackfill) {
         TBuildingColumnFixture fixture(true);
         fixture.CheckReadTable({}, EColumnState::Absent);
+        fixture.CheckDescribeTable(EColumnState::Absent);
         TColumnBuild build(fixture);
         const auto checkBuilding = [&] {
             fixture.CheckReadTable({}, EColumnState::Building);
             fixture.CheckReadTable({"key", "extra", "other"}, EColumnState::Building);
+            fixture.CheckDescribeTable(EColumnState::Building);
         };
         checkBuilding();
         build.CommitBatch(1);
@@ -1715,9 +1756,11 @@ Y_UNIT_TEST_SUITE(DataShardBuildingColumns) {
         checkBuilding();
         build.Finish();
         fixture.CheckReadTable({}, EColumnState::Ready);
+        fixture.CheckDescribeTable(EColumnState::Ready);
         fixture.RestartSchemeShard();
         fixture.RestartDataShards();
         fixture.CheckReadTable({}, EColumnState::Ready);
+        fixture.CheckDescribeTable(EColumnState::Ready);
     }
 
     Y_UNIT_TEST(SchemeShardRestartDuringBackfill) {

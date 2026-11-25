@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/persqueue/deferred_publish
     ydb/core/persqueue/events
     ydb/core/persqueue/public
+    ydb/core/persqueue/public/codecs
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/public/dataplane
     ydb/core/persqueue/public/describer
@@ -43,6 +44,7 @@ PEERDIR(
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/src/client/proto
     ydb/public/sdk/cpp/src/library/kafka
+    ydb/public/sdk/cpp/src/library/persqueue/obfuscate
     ydb/services/lib/actors
     ydb/services/lib/sharding
     ydb/services/metadata

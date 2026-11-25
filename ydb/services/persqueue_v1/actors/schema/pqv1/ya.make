@@ -8,6 +8,7 @@ PEERDIR(
     ydb/core/persqueue/public/schema
     ydb/library/persqueue/topic_parser
     ydb/public/api/protos
+    ydb/public/sdk/cpp/src/library/persqueue/obfuscate
     ydb/services/lib/actors
     ydb/services/persqueue_v1/actors/schema/common
 )

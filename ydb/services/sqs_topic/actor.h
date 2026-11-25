@@ -138,7 +138,7 @@ namespace NKikimr::NSqsTopic::V1 {
             if (ru == 0) {
                 return static_cast<TDerived*>(this)->OnRequestUnitsCharged(ctx);
             }
-            AFL_ENSURE(!QuoterActorId_);
+            YDB_LOG_ENSURE(!QuoterActorId_);
             QuoterActorId_ = this->RegisterWithSameMailbox(NPQ::NRuQuoter::CreateRequestUnitsQuoter(
                 this->SelfId(),
                 NPQ::NRuQuoter::TRequestUnitsQuoterSettings{

@@ -5,11 +5,14 @@
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blob_depot/s3_router_events.h>
+#include <ydb/core/blob_depot/wakeup_timer.h>
 #include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
+
+#include <list>
 
 namespace NKikimr::NBlobDepot {
 
@@ -42,6 +45,11 @@ namespace NKikimr::NBlobDepot {
     };
 
     struct TTabletDisconnected {};
+
+    struct TS3PutResult {
+        std::optional<TString> Error;
+        bool SlowDown = false;
+    };
 
     struct TKeyResolved {
         struct TSuccess {
@@ -128,6 +136,7 @@ namespace NKikimr::NBlobDepot {
             // internal events
             TTabletDisconnected,
             TKeyResolved,
+            TS3PutResult,
 
             // tablet responses
             TEvBlobDepot::TEvRegisterAgentResult*,
@@ -264,6 +273,7 @@ namespace NKikimr::NBlobDepot {
                 EvPendingEventQueueWatchdog,
                 EvPushMetrics,
                 EvS3GetThrottleWakeup,
+                EvS3Result,
             };
         };
 
@@ -308,12 +318,13 @@ namespace NKikimr::NBlobDepot {
                 fFunc(TEvBlobStorage::EvAssimilate, HandleAssimilate);
                 hFunc(TEvBlobStorage::TEvBunchOfEvents, Handle);
                 cFunc(TEvPrivate::EvProcessPendingEvent, HandleProcessPendingEvent);
-                cFunc(TEvPrivate::EvPendingEventQueueWatchdog, HandlePendingEventQueueWatchdog);
+                fFunc(TEvPrivate::EvPendingEventQueueWatchdog, HandlePendingEventQueueWatchdog);
 
                 cFunc(TEvPrivate::EvQueryWatchdog, HandleQueryWatchdog);
 
                 cFunc(TEvPrivate::EvPushMetrics, HandlePushMetrics);
 
+                fFunc(TEvPrivate::EvS3Result, HandleS3Result);
                 cFunc(TEvPrivate::EvS3GetThrottleWakeup, HandleS3GetThrottleWakeup);
             )
 
@@ -323,6 +334,11 @@ namespace NKikimr::NBlobDepot {
 
         void PassAway() override {
             ClearPendingEventQueue("BlobDepot agent destroyed");
+            // Destruction releases outstanding subrequests. Normal PUT error cleanup can also issue
+            // new tablet requests, so shutdown only needs to send each client's terminal reply.
+            for (auto& query : ExecutingQueries) {
+                query.SendErrorResponse(NKikimrProto::ERROR, "BlobDepot agent destroyed");
+            }
             if (AgentCounters) {
                 GetServiceCounters(AppData()->Counters, "blob_depot_agent")->RemoveSubgroup("group", ::ToString(VirtualGroupId));
             }
@@ -339,7 +355,7 @@ namespace NKikimr::NBlobDepot {
                 return;
             }
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
-                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(TabletId));
+                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(TabletId, BlobDepotGeneration));
             S3WrapperId = {};
         }
 
@@ -348,6 +364,7 @@ namespace NKikimr::NBlobDepot {
             if (const auto& info = ev->Get()->Info) {
                 Y_ABORT_UNLESS(info->BlobDepotId);
                 if (TabletId != *info->BlobDepotId) {
+                    ReleaseS3Wrapper();
                     TabletId = *info->BlobDepotId;
                     LogId = TStringBuilder() << '{' << TabletId << '@' << VirtualGroupId << '}';
                     if (TabletId && TabletId != Max<ui64>()) {
@@ -389,6 +406,7 @@ namespace NKikimr::NBlobDepot {
         template<typename TEvent>
         void HandleOtherResponse(TAutoPtr<TEventHandle<TEvent>> ev);
 
+        TRequestsInFlight::node_type ExtractRequest(ui64 id, TRequestsInFlight& map);
         void OnRequestComplete(ui64 id, TRequestSender::TResponse response, TRequestsInFlight& map,
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay = nullptr);
         void DropTabletRequest(ui64 id);
@@ -471,12 +489,10 @@ namespace NKikimr::NBlobDepot {
             std::multimap<TMonotonic, TQuery*>::iterator QueryWatchdogMapIter;
             NLog::EPriority WatchdogPriority = NLog::PRI_WARN;
             bool Destroyed = false;
+            bool SkipBridgeAccountingForSubrequests = false;
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
             ui32 BlockChecksRemain = 3;
             NWilson::TSpan Span;
-
-            struct TLifetimeToken {};
-            std::shared_ptr<TLifetimeToken> LifetimeToken;
 
             static constexpr TDuration WatchdogDuration = TDuration::Seconds(10);
 
@@ -486,13 +502,19 @@ namespace NKikimr::NBlobDepot {
 
             void CheckQueryExecutionTime(TMonotonic now);
             bool CheckDeadline(TMonotonic now);
-            void SetResolveDeadline(NKikimrBlobDepot::TEvResolve& resolve) const;
+            void SetResolveParameters(NKikimrBlobDepot::TEvResolve& resolve,
+                NKikimrBlobStorage::TDataKind::E dataKind) const;
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason,
+                bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0);
+            void SendErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
                 bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0);
             void EndWithSuccess(std::unique_ptr<IEventBase> response);
             TString GetName() const;
             TString GetQueryId() const;
+            bool ShouldSkipBridgeAccountingForSubrequests() const {
+                return SkipBridgeAccountingForSubrequests;
+            }
             virtual ui64 GetTabletId() const { return 0; }
             virtual void Initiate() = 0;
 
@@ -500,16 +522,15 @@ namespace NKikimr::NBlobDepot {
             virtual void OnRead(ui64 /*tag*/, TReadOutcome&& /*outcome*/) {}
             virtual void OnIdAllocated(bool /*success*/, const TString& /*errorReason*/) {}
             virtual void OnDestroy(bool /*success*/) {}
-            virtual void OnPutS3ObjectResponse(std::optional<TString>&& /*error*/, bool /*slowDown*/) { Y_ABORT(); }
             virtual void OnCheckIntegrity(TCheckOutcome&& /*outcome*/) {}
 
             NKikimrProto::EReplyStatus CheckBlockForTablet(ui64 tabletId, std::optional<ui32> generation,
                 ui32 *blockedGeneration = nullptr);
 
-            using TFinishCallback = std::function<void(std::optional<TString>, const char*)>;
+            using TFinishCallback = std::function<void(NKikimrProto::EReplyStatus, TString, const char*)>;
             void IssueReadS3(const TString& key, ui32 offset, ui32 len, TFinishCallback finish, ui64 readId);
 
-            TActorId IssueWriteS3(TString&& key, TRope&& buffer, TLogoBlobID id, TS3Locator locator);
+            void IssueWriteS3(TString&& key, TRope&& buffer, TLogoBlobID id, TS3Locator locator);
 
         protected: // reading logic
             struct TReadContext;
@@ -526,15 +547,20 @@ namespace NKikimr::NBlobDepot {
             };
             struct TCheckContext;
 
+            enum class EMissingMapping { Changed, KeyGone, Unreliable, Current };
+            using TMissingMappingResult = std::variant<EMissingMapping, TReadOutcome::TError>;
+            TMissingMappingResult RefreshMissingMapping(TReadArg& arg, const NKikimrBlobDepot::TEvResolveResult& record);
+            NKikimrBlobDepot::TEvResolve MakeMissingDataResolve(const TReadArg& arg) const;
             bool IssueRead(TReadArg&& arg, TString& error);
+            void RetryReadAfterMissing(TReadContext& context, TString locator);
             void HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg);
             void HandleResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg);
             void HandleResolveDisconnected(const TRequestContext::TPtr& context);
 
             void IssueCheckIntegrity(TReadArg&& arg);
             void HandleCheckIntegrityResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvCheckIntegrityResult& msg);
-            void HandleCheckIntegrityS3Result(TCheckContext& checkContext, const TString& key, ui32 len,
-                std::optional<TString> data, const char *error);
+            void HandleCheckIntegrityS3Result(TCheckContext& checkContext, const TString& key,
+                NKikimrProto::EReplyStatus status, const char *error);
             void OnCheckIntegrityPartDone(TCheckContext& checkContext);
             void HandleCheckIntegrityResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg);
 
@@ -555,23 +581,35 @@ namespace NKikimr::NBlobDepot {
                 , Request(*Event->Get<TEvent>())
             {
                 ExecutionRelay = std::move(Request.ExecutionRelay);
+                SkipBridgeAccountingForSubrequests = Request.IsProxySubrequest ||
+                    (ExecutionRelay && ExecutionRelay->BridgeProxyPoolCounters);
             }
 
         protected:
             TEvent& Request;
         };
 
+        struct TPendingEvent;
+        using TPendingEventQueue = std::list<TPendingEvent>;
+        using TPendingEventExpirations = std::multimap<TMonotonic, TPendingEventQueue::iterator>;
+
         struct TPendingEvent {
             std::unique_ptr<IEventHandle> Event;
             size_t Size;
-            TMonotonic ExpirationTimestamp;
             TMonotonic Received;
+            bool ExpiresAtRequestDeadline;
+            TPendingEventExpirations::iterator ExpirationIt;
         };
 
-        std::deque<TPendingEvent> PendingEventQ;
+        TPendingEventQueue PendingEventQ;
+        // Dispatch stays FIFO, while deadlines can expire in a different order.
+        TPendingEventExpirations PendingEventExpirations;
+        TWakeupTimer PendingEventQueueTimer;
         size_t PendingEventBytes = 0;
         static constexpr size_t MaxPendingEventBytes = 32'000'000; // ~32 MB
         static constexpr TDuration EventExpirationTime = TDuration::Seconds(60);
+        // A query cancellation can unlink pending reads during agent destruction.
+        std::list<ui64> PendingS3Reads;
         std::multimap<TMonotonic, TQuery*> QueryWatchdogMap;
         TIntrusiveListWithAutoDelete<TQuery, TQuery::TDeleter, TExecutingQueries> ExecutingQueries;
         TIntrusiveListWithAutoDelete<TQuery, TQuery::TDeleter, TExecutingQueries> DeletePendingQueries;
@@ -582,17 +620,14 @@ namespace NKikimr::NBlobDepot {
         void HandleAssimilate(TAutoPtr<IEventHandle> ev);
         void HandlePendingEvent();
         void HandleProcessPendingEvent();
+        TPendingEvent ExtractPendingEvent(TPendingEventQueue::iterator it);
+        void ExpirePendingEvent(TPendingEventQueue::iterator it);
         void ClearPendingEventQueue(const TString& reason);
         void ProcessStorageEvent(std::unique_ptr<IEventHandle> ev, TMonotonic received);
-        void HandlePendingEventQueueWatchdog();
+        void SchedulePendingEventQueueWatchdog();
+        void HandlePendingEventQueueWatchdog(const TAutoPtr<IEventHandle>& ev);
         void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
         void HandleQueryWatchdog();
-
-        // called by helper actors through InvokeOtherActor, so no query is on the stack and the ended ones can go
-        void Invoke(std::function<void()> callback) {
-            callback();
-            DeletePendingQueries.Clear();
-        }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -634,7 +669,7 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // DS proxy interaction
 
-        void SendToProxy(ui32 groupId, std::unique_ptr<IEventBase> event, TRequestSender *sender,
+        void SendToProxy(ui32 groupId, std::unique_ptr<IEventBase> event, TQuery *query,
             TRequestContext::TPtr context, NWilson::TTraceId traceId = {});
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -688,7 +723,10 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        struct TPendingS3Read {
+        struct TS3Read : TRequestContext {
+            ui64 RequestId;
+            TMonotonic Deadline;
+            std::optional<std::list<ui64>::iterator> Queued;
             TString Key;
             ui32 Offset;
             ui32 Len;
@@ -697,16 +735,16 @@ namespace NKikimr::NBlobDepot {
             ui32 SlowDownRetries = 0;
             NWilson::TSpan Span;
 
-            void Complete(std::optional<TString> data, const char *error) {
+            void Complete(NKikimrProto::EReplyStatus status, TString data, const char *error) {
                 if (Span) {
-                    if (data) {
+                    if (status == NKikimrProto::OK) {
                         Span.EndOk();
                     } else {
                         Span.EndError(error ? error : "");
                     }
                 }
 
-                Finish(std::move(data), error);
+                Finish(status, std::move(data), error);
             }
         };
 
@@ -717,12 +755,18 @@ namespace NKikimr::NBlobDepot {
         ui32 ConsecutiveSuccessfulGetBatches = 0;
         ui32 S3GetsInFlight = 0;
         ui32 S3PutsInFlight = 0;
-        std::deque<TPendingS3Read> PendingS3Reads;
 
-        void IssueOrEnqueueS3Read(TPendingS3Read&& read);
-        void DispatchS3Read(TPendingS3Read&& read);
+
+        struct TEvS3Result;
+        class TS3ReplyActor;
+        enum class ES3Operation { Read, Write };
+        void HandleS3Result(TAutoPtr<IEventHandle> ev);
+        void HandleS3ReadResult(ui64 id, IEventHandle& result);
+        void HandleS3WriteResult(ui64 id, IEventHandle& result);
+        void IssueOrEnqueueS3Read(TS3Read& read);
+        void DispatchS3Read(const TS3Read& read);
         void NotifyS3GetSlowDown();
-        void OnS3GetCompleted(bool success, ui64 bytes);
+        void OnS3GetCompleted(bool success);
         void RunPendingS3ReadsIfPossible();
         void HandleS3GetThrottleWakeup();
 

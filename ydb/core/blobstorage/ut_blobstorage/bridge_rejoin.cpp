@@ -292,11 +292,16 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         }
         env.Sim(TDuration::Seconds(6)); // BSC refreshes the counters every 5 s
         const auto numGroups = groupsInStage(poolCounters("pile_1", env.StoragePoolName), "SYNCED");
-        UNIT_ASSERT_GT(numGroups, 0);
+        UNIT_ASSERT_VALUES_EQUAL(numGroups, 1);
+        const auto logicalGroups = GetServiceCounters(runtime->GetNode(env.Settings.ControllerNodeId)->AppData->Counters,
+            "bridge")->GetSubgroup("subsystem", "bsc")->GetSubgroup("database", env.StoragePoolName)
+            ->GetSubgroup("storagePool", env.StoragePoolName)->FindCounter("LogicalGroupsAssigned");
+        UNIT_ASSERT(logicalGroups);
+        UNIT_ASSERT_VALUES_EQUAL(logicalGroups->Val(), 1);
         for (const auto& pile : rejoiningPiles) {
             const auto counters = poolCounters(pile, env.StoragePoolName);
             UNIT_ASSERT_GT(groupsInStage(counters, "BLOCKS"), 0);
-            UNIT_ASSERT_GT(counters->GetCounter("SyncersRunning")->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("SyncersRunning")->Val(), 1);
             UNIT_ASSERT_VALUES_EQUAL(pileCounters(pile)->GetCounter("UnsyncedBSC")->Val(), 1);
             UNIT_ASSERT_VALUES_EQUAL(pileInState(pile, "NOT_SYNCHRONIZED_2"), 1);
         }
@@ -370,6 +375,7 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             env.Sim(TDuration::Seconds(1));
         }
         env.Sim(TDuration::Seconds(6));
+        UNIT_ASSERT_VALUES_EQUAL(logicalGroups->Val(), 0);
         for (const auto& pile : rejoiningPiles) {
             const auto counters = poolCounters(pile, env.StoragePoolName);
             UNIT_ASSERT_VALUES_EQUAL(groupsInStage(counters, "SYNCED"), numGroups);

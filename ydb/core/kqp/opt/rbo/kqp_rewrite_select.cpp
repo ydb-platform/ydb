@@ -1646,11 +1646,15 @@ TExprNode::TPtr RewriteReadOrEffectInput(const TExprNode::TPtr& node, TExprConte
         Y_ENSURE(read.Ranges().Maybe<TCoVoid>(), "Unexpected ranges in a predicate write");
         Y_ENSURE(!TKqpReadTableSettings::Parse(read).Sampling, "Sampling in a predicate write");
         const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
+        auto sourceType = GetTableSourceType(table, ctx, node->Pos());
+        if (kqpCtx.Config->GetEnableFallbackOnRowTables() && sourceType->Content() == "Row") {
+            Y_ENSURE(false, "Fallback due to row table flag");
+        }
         return Build<TKqpOpRead>(ctx, node->Pos())
             .Table(read.Table())
             .Alias().Build("")
             .Columns(read.Columns())
-            .SourceType(GetTableSourceType(table, ctx, node->Pos()))
+            .SourceType(sourceType)
             .UniqueId().Value(ToString(uniqueSourceIdCounter++)).Build()
             .Done().Ptr();
     }
@@ -1963,13 +1967,17 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     YQL_ENSURE(!TKqpReadTableSettings::Parse(readExpr).Sampling,
                         "Sampling is not supported by the relational optimizer");
                     const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, readExpr.Table().Path());
+                    auto sourceType = GetTableSourceType(tableDesc, ctx, node->Pos());
+                    if (kqpCtx.Config->GetEnableFallbackOnRowTables() && sourceType->Content() == "Row") {
+                        Y_ENSURE(false, "Fallback due to row table flag");
+                    }
 
                     // clang-format off
                     fromExpr = Build<TKqpOpRead>(ctx, node->Pos())
                         .Table(readExpr.Table())
                         .Alias(alias)
                         .Columns(readExpr.Columns())
-                        .SourceType(GetTableSourceType(tableDesc, ctx, node->Pos()))
+                        .SourceType(sourceType)
                         .UniqueId().Value(std::to_string(uniqueSourceIdCounter++)).Build()
                     .Done().Ptr();
                     // clang-format on

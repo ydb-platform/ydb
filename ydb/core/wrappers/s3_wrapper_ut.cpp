@@ -12,6 +12,7 @@
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/hash_set.h>
 #include <util/string/printf.h>
 
 using namespace NActors;
@@ -51,7 +52,17 @@ public:
         Y_ABORT_UNLESS(!Port.Defined());
         Port = PortManager.GetPort();
 
-        S3Mock = MakeHolder<TS3Mock>(TS3Mock::TSettings(*Port));
+        TS3Mock::TSettings settings(*Port);
+        settings.ErrorResponse = [](TStringBuf method, TStringBuf path) -> TString {
+            if (method == "GET" && path.EndsWith("/short-range")) {
+                return "HTTP/1.1 206 Partial Content\r\nContent-Length: 2\r\nContent-Range: bytes 0-1/2\r\n\r\nab";
+            }
+            if (method == "GET" && path.EndsWith("/oversized-range")) {
+                return "HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nabcdefgh";
+            }
+            return {};
+        };
+        S3Mock = MakeHolder<TS3Mock>(settings);
         Y_ABORT_UNLESS(S3Mock->Start());
 
         Runtime = MakeHolder<TTestBasicRuntime>();
@@ -122,6 +133,60 @@ class TS3WrapperTests: public TS3MockTest {
 
         UNIT_ASSERT(response->Get());
         return std::make_pair(response->Get()->Result, response->Get()->Body);
+    }
+
+    auto ListObjects(const TString& prefix) {
+        auto request = ListObjectsRequest().WithBucket("").WithPrefix(prefix);
+        auto response = Send<NExternalStorage::TEvListObjectsResponse>(
+            new NExternalStorage::TEvListObjectsRequest(request));
+
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+    auto DeleteObjects(const TString& firstKey, const TString& secondKey) {
+        auto request = DeleteObjectsRequest().WithBucket("").WithDelete(Aws::S3::Model::Delete()
+            .AddObjects(ObjectIdentifier().WithKey(firstKey))
+            .AddObjects(ObjectIdentifier().WithKey(secondKey)));
+        auto response = Send<NExternalStorage::TEvDeleteObjectsResponse>(
+            new NExternalStorage::TEvDeleteObjectsRequest(request));
+
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+    void CheckNormalizedKeys(const TString& rawPrefix, const TString& prefix) {
+        const TString firstKey = prefix + "1/a/b/1";
+        const TString secondKey = prefix + "1/c/d/2";
+        const TString body = "body";
+
+        // An object written by the old point-request implementation must remain readable.
+        const auto oldPut = PutObject(rawPrefix + "1/a/b/1", TString(body));
+        UNIT_ASSERT_C(oldPut.IsSuccess(), oldPut.GetError().GetMessage());
+        const auto newPut = PutObject(secondKey, TString(body));
+        UNIT_ASSERT_C(newPut.IsSuccess(), newPut.GetError().GetMessage());
+
+        const auto [get, bytes] = GetObject(firstKey, body.size());
+        UNIT_ASSERT_C(get.IsSuccess(), get.GetError().GetMessage());
+        UNIT_ASSERT_VALUES_EQUAL(bytes, body);
+
+        const auto list = ListObjects(prefix);
+        UNIT_ASSERT_C(list.IsSuccess(), list.GetError().GetMessage());
+        const auto& contents = list.GetResult().GetContents();
+        UNIT_ASSERT_VALUES_EQUAL(contents.size(), 2);
+        THashSet<TString> listed;
+        for (const auto& item : contents) {
+            listed.emplace(item.GetKey());
+        }
+        UNIT_ASSERT(listed.contains(firstKey));
+        UNIT_ASSERT(listed.contains(secondKey));
+
+        const auto deleted = DeleteObjects(firstKey, secondKey);
+        UNIT_ASSERT_C(deleted.IsSuccess(), deleted.GetError().GetMessage());
+        UNIT_ASSERT_VALUES_EQUAL(deleted.GetResult().GetDeleted().size(), 2);
+        const auto after = ListObjects(prefix);
+        UNIT_ASSERT_C(after.IsSuccess(), after.GetError().GetMessage());
+        UNIT_ASSERT(after.GetResult().GetContents().empty());
     }
 
     auto CreateMultipartUpload(const TString& key) {
@@ -220,6 +285,21 @@ public:
             auto [result, actualBody] = GetObject("key", body.size());
             UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
             UNIT_ASSERT_VALUES_EQUAL(actualBody, body);
+        }
+    }
+
+    void NormalizesEmptyKeySegments() {
+        CheckNormalizedKeys("/vg/", "vg/");
+        CheckNormalizedKeys("archive/team//vg/", "archive/team/vg/");
+    }
+
+    void RejectsInvalidRangeResponseLength() {
+        for (const char *key : {"short-range", "oversized-range"}) {
+            auto [result, body] = GetObject(key, 4);
+            UNIT_ASSERT_C(!result.IsSuccess(), key);
+            UNIT_ASSERT_VALUES_EQUAL(TString(result.GetError().GetExceptionName()), "InvalidRangeResponse");
+            UNIT_ASSERT(result.GetError().ShouldRetry());
+            UNIT_ASSERT(body.empty());
         }
     }
 
@@ -340,6 +420,8 @@ private:
     UNIT_TEST(PutObject);
     UNIT_TEST(HeadObject);
     UNIT_TEST(GetObject);
+    UNIT_TEST(NormalizesEmptyKeySegments);
+    UNIT_TEST(RejectsInvalidRangeResponseLength);
     UNIT_TEST(MultipartUpload);
     UNIT_TEST(AbortMultipartUpload);
     UNIT_TEST(HeadUnknownObject);

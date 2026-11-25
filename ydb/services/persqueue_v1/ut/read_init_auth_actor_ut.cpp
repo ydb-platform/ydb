@@ -171,6 +171,9 @@ namespace NKikimr::NGRpcProxy::V1 {
                     auto self = MakeIntrusive<TNavigate::TDirEntryInfo>();
                     self->Info.SetName("stream");
                     entry.Self = self;
+                    auto list = MakeIntrusive<TNavigate::TListNodeEntry>();
+                    list->Children.emplace_back("streamImpl", TPathId(1, 1), TNavigate::KindTopic);
+                    entry.ListNodeEntry = list;
                     return;
                 }
                 UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), streamImplPath);
@@ -192,6 +195,35 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(), streamPath);
             UNIT_ASSERT_VALUES_EQUAL(converter->GetOriginalPath(), streamPath);
+        }
+
+        Y_UNIT_TEST(InvalidCdcChildrenCloseSession) {
+            for (const int childrenCount : {-1, 0, 2}) {
+                const TString streamPath = "/Root/table/stream";
+                TEnv env(true, [&](TNavigate&, TNavigate::TEntry& entry) {
+                    UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), streamPath);
+                    entry.Status = TNavigate::EStatus::Ok;
+                    entry.Kind = TNavigate::KindCdcStream;
+                    auto self = MakeIntrusive<TNavigate::TDirEntryInfo>();
+                    self->Info.SetName("stream");
+                    entry.Self = self;
+                    if (childrenCount >= 0) {
+                        auto list = MakeIntrusive<TNavigate::TListNodeEntry>();
+                        for (int i = 0; i < childrenCount; ++i) {
+                            list->Children.emplace_back("streamImpl" + ToString(i), TPathId(1, i + 1), TNavigate::KindTopic);
+                        }
+                        entry.ListNodeEntry = list;
+                    }
+                });
+
+                NPersQueue::TTopicNamesConverterFactory factory(true, "/Root", "");
+                env.Start(MakeTopics({factory.MakeDiscoveryConverter(streamPath, Nothing(), "", "/Root")}));
+                const auto* result = env.WaitClose();
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(result->ErrorCode),
+                    static_cast<int>(Ydb::PersQueue::ErrorCode::ERROR));
+                UNIT_ASSERT(result->Reason.Contains("could not retrieve child topic description"));
+                UNIT_ASSERT_VALUES_EQUAL(env.Requested.size(), 1);
+            }
         }
 
         Y_UNIT_TEST(LegacyMissFallsBackToModernPath) {

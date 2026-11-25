@@ -123,7 +123,7 @@ void TDSAccessorInitialized::Execute(const NRequest::TConfig& config, const TStr
     IInitializationBehaviour::TPtr initializationBehaviour, IInitializerOutput::TPtr controller,
     const std::shared_ptr<NProvider::TInitializationSnapshotOwner>& snapshotOwner)
 {
-    AFL_VERIFY(snapshotOwner);
+    YDB_LOG_VERIFY(snapshotOwner);
     std::shared_ptr<TDSAccessorInitialized> initializer(
         new TDSAccessorInitialized(config, componentId, initializationBehaviour, controller, snapshotOwner));
 

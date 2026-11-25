@@ -1683,6 +1683,25 @@ public:
         }
     };
 
+    enum class EBlobDepotClaim { GroupName, LogicalPrefix, PhysicalPrefix, AmbiguousBucket, RetiredPrefix };
+    using TBlobDepotClaim = std::tuple<EBlobDepotClaim, TString, TString>; // kind, bucket, name or normalized prefix
+    using TBlobDepotOwners = std::map<TBlobDepotClaim, std::set<TGroupId>>;
+
+    struct TRetiredS3Namespace {
+        using Table = Schema::RetiredS3Namespaces;
+        ui64 BlobDepotId = 0;
+        TString S3Config;
+        NKikimrBlobDepot::TBlobDepotConfig GetConfig() const;
+
+        template<typename T>
+        static void Apply(TBlobStorageController*, T&& callback) {
+            static TTableAdapter<Table, TRetiredS3Namespace,
+                Table::BlobDepotId, Table::S3Config> adapter(
+                    &TRetiredS3Namespace::BlobDepotId, &TRetiredS3Namespace::S3Config);
+            callback(&adapter);
+        }
+    };
+
     struct TConfigValidationInfo {
         enum class ESource {
             Distconf,
@@ -1731,6 +1750,11 @@ private:
     TMap<TBoxStoragePoolId, TStoragePoolInfo> StoragePools;
     std::set<std::pair<TBoxStoragePoolId, TGroupId>> StoragePoolGroups;
     TMap<TGroupId, TBlobDepotDeleteQueueInfo> BlobDepotDeleteQueue;
+    using TRetiredS3Namespaces = TMap<TGroupId, TRetiredS3Namespace>;
+    TRetiredS3Namespaces RetiredS3Namespaces;
+
+    TBlobDepotOwners BlobDepotOwners;
+    void RebuildBlobDepotOwners();
     ui64 NextOperationLogIndex = 1;
     TActorId StatProcessorActorId;
     bool SelfHealEnable = false;
@@ -2828,6 +2852,7 @@ public:
             {"marker", "BSC09"});
         Become(&TThis::StateWork);
 
+        RebuildBlobDepotOwners();
         SubscribeToFeatureFlags();
 
         ValidateInternalState();

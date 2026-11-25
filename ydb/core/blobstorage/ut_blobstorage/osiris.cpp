@@ -502,13 +502,15 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
 
         // I/I/R -> I/I/I: bring back the previously empty realm and collect metadata.
         const ui32 startupDoneBefore = startupSyncDone[2];
-        const ui32 requestsBefore = fullSyncRequests[2];
+        std::array<ui32, 3> requestsBefore = fullSyncRequests;
         setStates({NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}});
         for (ui32 attempt = 0; attempt < 1200 && startupSyncDone[2] < startupDoneBefore + 3; ++attempt) {
             env.Sim(TDuration::MilliSeconds(100));
         }
         UNIT_ASSERT_C(startupSyncDone[2] >= startupDoneBefore + 3, "Returning realm must finish full sync");
-        UNIT_ASSERT_C(fullSyncRequests[2] > requestsBefore, "F->R must start full sync");
+        UNIT_ASSERT_C(fullSyncRequests[2] > requestsBefore[2], "X->R must start full sync in the returning realm");
+        UNIT_ASSERT_VALUES_EQUAL(fullSyncRequests[0], requestsBefore[0]);
+        UNIT_ASSERT_VALUES_EQUAL(fullSyncRequests[1], requestsBefore[1]);
         setStates({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
 
         // Establish D=2+2 before publishing the completed invariant. Completed

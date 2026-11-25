@@ -1220,6 +1220,7 @@ TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
             }
             colDescr->SetNotNull(column.NotNull);
             colDescr->SetSetNotNullInProgress(column.SetNotNullInProgress);
+            colDescr->SetIsBuildInProgress(column.IsBuildInProgress);
             colDescr->SetFamily(column.Family);
             if (column.DefaultKind == ETableColumnDefaultKind::FromSequence) {
                 colDescr->SetDefaultFromSequence(column.DefaultValue);

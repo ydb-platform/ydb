@@ -47,6 +47,8 @@ namespace NKikimr {
             Send(queue.QueueActorId, ev->Get()->Clone());
         }
         Info = ev->Get()->NewInfo;
+        // The read fail model can change without a queue reconnecting.
+        EvaluateConnectionQuorum();
     }
 
     void TBlobRecoveryActor::Handle(TEvProxyQueueState::TPtr ev) {
@@ -69,7 +71,7 @@ namespace NKikimr {
                 connected |= {&Info->GetTopology(), vdiskId};
             }
         }
-        IsConnected = Info->GetQuorumChecker().CheckFailModelForGroup(~connected);
+        IsConnected = Info->GetQuorumChecker().CheckReadFailModelForGroup(*Info, ~connected);
         if (IsConnected) {
             SendPendingQueries();
         }

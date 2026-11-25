@@ -1,5 +1,6 @@
 #include "sessions.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_start_from_initiator.h>
 #include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_start_to_source.h>
@@ -10,14 +11,22 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
+namespace {
+
+// a session locks its data at its start, before anything changes it; with deferred loading compaction runs before every portion is loaded
+void VerifyNoDeferredPortionLoading() {
+    YDB_LOG_VERIFY(!HasAppData() || !AppDataVerified().ColumnShardConfig.GetDeferredPortionLoadingSettings().GetEnabled(),
+        {"reason", "data sharing is not supported with deferred portion loading"});
+}
+
+}   // namespace
+
 void TSessionsManager::Start(NColumnShard::TColumnShard& shard) const {
     YDB_LOG_CREATE_CONTEXT(
         {"sessions", "start"},
         {"tabletId", shard.TabletID()});
-    if (!shard.GetIndexAs<TColumnEngineForLogs>().AreAllPortionsLoaded(std::nullopt)) {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-            {"skipReason", "portions_not_loaded"});
-        return;
+    if (!SourceSessions.empty() || !DestSessions.empty()) {
+        VerifyNoDeferredPortionLoading();
     }
     for (auto&& i : SourceSessions) {
         if (i.second->IsReadyForStarting()) {
@@ -135,6 +144,7 @@ bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForL
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ProposeDestSession(
     NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session) {
+    VerifyNoDeferredPortionLoading();
     YDB_LOG_VERIFY(session);
     return std::make_unique<TTxProposeFromInitiator>(self, session, DestSessions, "tx_propose_from_initiator");
 }
@@ -147,6 +157,7 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ConfirmDest
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::InitializeSourceSession(
     NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session) {
+    VerifyNoDeferredPortionLoading();
     YDB_LOG_VERIFY(session);
     return std::make_unique<TTxStartToSource>(self, session, SourceSessions, "tx_start_to_source");
 }

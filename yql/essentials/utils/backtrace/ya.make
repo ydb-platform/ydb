@@ -30,6 +30,15 @@ ELSE()
     )
 ENDIF()
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    ads/core/tools/unified_agent
+    logbroker/unified_agent
+    sdg/infra/sdc-unified-agent
+    alice/rtlog/agent
+    robot/rthub
+)
+
 END()
 
 RECURSE_FOR_TESTS(ut)

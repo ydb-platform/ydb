@@ -808,8 +808,15 @@ void DoCreatePqPart(
     } else if (op.GetTopicAutoPartitioning()) {
         auto * ps = pqConfig.MutablePartitionStrategy();
         ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
-        ps->SetMaxPartitionCount(op.GetMaxPartitionCount());
-        ps->SetMinPartitionCount(op.HasTopicPartitions() ? op.GetTopicPartitions() : 1);
+        const ui32 minPartitionCount = op.HasTopicPartitions() ? op.GetTopicPartitions() : 1;
+        ps->SetMinPartitionCount(minPartitionCount);
+        // An explicit max is kept as-is: min > max is rejected in CreatePersQueueGroup.
+        // An absent max keeps the historical ceiling of 50, but never below the min.
+        if (op.HasMaxPartitionCount()) {
+            ps->SetMaxPartitionCount(op.GetMaxPartitionCount());
+        } else {
+            ps->SetMaxPartitionCount(std::max<ui32>(minPartitionCount, 50));
+        }
         ps->SetScaleThresholdSeconds(30);
     } else {
         for (const auto& tag : table->KeyColumnIds) {

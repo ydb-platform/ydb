@@ -18,6 +18,7 @@ private:
     TMonotonic TxInitSchemaFinishInstant;
     TMonotonic TxInitCreateInstant;
     TMonotonic TxInitFinishInstant;
+    TMonotonic SwitchedToWorkInstant;
     NLWTrace::TOrbit Orbit;
 
     void TraceStageFinished(const TString& stage, const TDuration duration);
@@ -33,7 +34,8 @@ public:
     void OnTxInitSchemaFinished();
     void OnTxInitCreated();
     void OnTxInitFinished();
-    void OnSwitchedToWork(const ui64 portionsCount);
+    void OnSwitchedToWork(const ui64 portionsCount, const bool portionsLoaded);
+    void OnAllPortionsLoaded(const ui64 portionsCount, const ui32 batches);
 };
 
 }   // namespace NKikimr::NColumnShard

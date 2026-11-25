@@ -24,6 +24,12 @@
 #include <util/system/tempfile.h>
 #include <cstring>
 
+#ifdef _unix_
+#include <csignal>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
 namespace NKikimr { namespace NPDisk {
 
 class TDriveEstimatorTestPeer {
@@ -502,6 +508,127 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
             }
         }
     }
+
+    // One hasher shared by consecutive sectors keeps the hash mode it found, and still accepts a
+    // sector written in another mode: the mode is only the first guess.
+    Y_UNIT_TEST(SectorRestoratorSharedHasherMixedModes) {
+        const bool enableSectorEncryption = true;
+        TDiskFormat format = {};
+        format.Clear(enableSectorEncryption);
+        enum EMode { Salted, Ordinary, Old };
+        const EMode modes[] = {Ordinary, Ordinary, Salted, Salted, Old, Ordinary};
+        TSectorsWithData sectors(format.SectorSize, std::size(modes));
+        const ui64 magic = 0x123951924;
+        const ui64 offset = format.SectorSize * 17;
+        const TLogoBlobID blobId(1, 2, 3, 0, 100, 0, 1);
+        NPDisk::TPDiskHashCalculator writeHasher;
+        NPDisk::TPDiskHashCalculator readHasher;
+        for (ui32 i = 0; i < sectors.Size(); ++i) {
+            memset(sectors[i].Begin(), 13 + i, sectors[i].Size());
+            sectors[i].SetCanary();
+            TDataSectorFooter *footer = sectors[i].GetDataFooter();
+            footer->SetVersionAndEncryption(enableSectorEncryption);
+            footer->Nonce = i + 1;
+            const ui8 *data = sectors[i].Begin();
+            const ui32 size = sectors[i].Size();
+            switch (modes[i]) {
+            case Salted:
+                footer->Hash = writeHasher.HashSector(offset, magic, data, size, blobId);
+                break;
+            case Ordinary:
+                footer->Hash = writeHasher.HashSector(offset, magic, data, size, {});
+                break;
+            case Old:
+                footer->Hash = writeHasher.OldHashSector(offset, magic, data, size);
+                break;
+            }
+            TSectorRestorator restorator(false, 1, false, format, blobId);
+            restorator.Restore(sectors[i].Begin(), offset, magic, 0, 0, &readHasher);
+            UNIT_ASSERT_C(restorator.GoodSectorCount == 1, "i# " << i
+                    << " GoodSectorCount# " << restorator.GoodSectorCount);
+        }
+
+        // A corrupted sector is still rejected with a shared hasher.
+        sectors[0][0] ^= 1;
+        TSectorRestorator restorator(false, 1, false, format, blobId);
+        restorator.Restore(sectors[0].Begin(), offset, magic, 0, 0, &readHasher);
+        UNIT_ASSERT_VALUES_EQUAL(restorator.GoodSectorCount, 0);
+    }
+
+    // Sectors sealed outside the PDisk pass the PDisk's own sector check and open back to the payload.
+    Y_UNIT_TEST(FormatContextSealOpen) {
+        for (const bool encrypt : {false, true}) {
+            TDiskFormat format = {};
+            format.Clear(encrypt);
+            format.ChunkKey = 0x0123456789ABCDEFull;
+            const std::shared_ptr<const TFormatContext> ctx = std::make_shared<const TFormatContext>(format, encrypt);
+            const TChunkIdx chunkIdx = 5;
+            const ui64 chunkNonce = 1000;
+            const TLogoBlobID blobId(1, 2, 3, 0, 100, 0, 1);
+            const ui32 payloadSize = ctx->GetSectorPayloadSize();
+            UNIT_ASSERT_VALUES_EQUAL(payloadSize, format.SectorPayloadSize());
+
+            TVector<ui8> payload(payloadSize);
+            for (ui32 i = 0; i < payloadSize; ++i) {
+                payload[i] = ui8(i * 7 + 1);
+            }
+            TSectorsWithData sectors(format.SectorSize, 2);
+            TFormatContext::TSealer sealer(ctx, chunkIdx, chunkNonce, blobId);
+            sealer.Seal(sectors[0].Begin(), payload.data(), payloadSize, 3);
+            memcpy(sectors[1].Begin(), payload.data(), 100);
+            sealer.SealInPlace(sectors[1].Begin(), 100, 4);
+
+            for (ui32 i = 0; i < 2; ++i) {
+                TSectorRestorator restorator(false, 1, false, format, blobId);
+                restorator.Restore(sectors[i].Begin(), format.Offset(chunkIdx, 3 + i), format.MagicDataChunk, 0, 0);
+                UNIT_ASSERT_VALUES_EQUAL_C(restorator.GoodSectorCount, 1, "encrypt# " << encrypt << " i# " << i);
+                UNIT_ASSERT_VALUES_EQUAL(sectors[i].GetDataFooter()->Nonce, chunkNonce + 3 + i);
+            }
+
+            TFormatContext::TOpener opener(ctx, chunkIdx, chunkNonce, blobId);
+            TVector<ui8> out(payloadSize);
+            UNIT_ASSERT(!opener.Open(out.data(), sectors[0].Begin(), 4, 0, payloadSize)); // wrong place
+            UNIT_ASSERT(opener.Open(out.data(), sectors[0].Begin(), 3, 0, payloadSize));
+            UNIT_ASSERT(memcmp(out.data(), payload.data(), payloadSize) == 0);
+            UNIT_ASSERT(opener.Open(out.data(), sectors[1].Begin(), 4, 10, 90));
+            UNIT_ASSERT(memcmp(out.data(), payload.data() + 10, 90) == 0);
+        }
+    }
+
+#ifdef _unix_
+    Y_UNIT_TEST(FormatContextVerifiedBadCanaryIsFatal) {
+        for (bool encrypt : {false, true}) {
+            TDiskFormat format = {};
+            format.Clear(encrypt);
+            const auto ctx = std::make_shared<const TFormatContext>(format, encrypt);
+            const TChunkIdx chunk = 5;
+            const ui32 sectorIdx = 3;
+            const ui64 nonce = 1000;
+            TSectorsWithData sectors(format.SectorSize, 1);
+            ui8* sector = sectors[0].Begin();
+            TFormatContext::TSealer(ctx, chunk, nonce, {}).Seal(sector, "x", 1, sectorIdx);
+            sector[ctx->GetSectorPayloadSize()] ^= 1;
+            ui8 out = 0;
+            TFormatContext::TOpener opener(ctx, chunk, nonce, {});
+            UNIT_ASSERT(!opener.Open(&out, sector, sectorIdx, 0, 1)); // stale hash is a recoverable read error
+            UNIT_ASSERT_VALUES_EQUAL(out, 0);
+            sectors[0].GetDataFooter()->Hash = TPDiskHashCalculator().HashSector(
+                format.Offset(chunk, sectorIdx), format.MagicDataChunk, sector, format.SectorSize, {});
+
+            const pid_t pid = fork();
+            UNIT_ASSERT_C(pid >= 0, "fork failed");
+            if (!pid) {
+                signal(SIGABRT, SIG_DFL);
+                opener.Open(&out, sector, sectorIdx, 0, 1);
+                _exit(0);
+            }
+            int status = 0;
+            UNIT_ASSERT_VALUES_EQUAL(waitpid(pid, &status, 0), pid);
+            UNIT_ASSERT_C(WIFSIGNALED(status), status);
+            UNIT_ASSERT_VALUES_EQUAL(WTERMSIG(status), SIGABRT);
+        }
+    }
+#endif
 
     Y_UNIT_TEST(SectorPrint) {
         TSectorsWithData sectors(97, 1);

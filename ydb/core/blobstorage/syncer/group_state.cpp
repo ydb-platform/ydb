@@ -21,7 +21,7 @@ std::optional<TMirror3dcGroupConfiguration> GetConfiguration(const TGroupReplica
     return std::nullopt;
 }
 
-// W expands from 2 in Included to 2+2 in Included and Recovering on this edge.
+// W expands from 2 in Included to 2+2 in Included and Recovering on these edges.
 bool WaitForRecoveringVDiskStartup(EMirror3dcGroupState state) {
     using TGroupState = NKikimrBlobStorage::TGroupState;
     return state == TGroupState::DC_SOLO_RECOVERY_INV1_PENDING || state == TGroupState::DC_SOLO_RECOVERY_INV2_PENDING;
@@ -227,12 +227,12 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         }
         EraseQueries(groupId);
         group->Pending = 0;
-        if (group->Stage == EStage::CheckPromotion) {
+        if (group->Stage == EStage::CheckPromotion || WaitForRecoveringVDiskStartup(*group->Info.GroupState)) {
             ProposeState(groupId, group);
             return;
         }
         StatusPollGroups.erase(groupId);
-        group->Stage = WaitForRecoveringVDiskStartup(*group->Info.GroupState) ? EStage::Propose : EStage::Repair;
+        group->Stage = EStage::Repair;
         RepairGroups.insert(groupId);
     }
 
@@ -276,8 +276,8 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
                     continue;
                 }
                 const bool checkPromotion = group.Stage == EStage::CheckPromotion;
-                if (checkPromotion) {
-                    // Health must come from one round after repair, including on proposal retries.
+                if (checkPromotion || WaitForRecoveringVDiskStartup(*group.Info.GroupState)) {
+                    // These transitions require a fresh set of replies, including on proposal retries.
                     group.ConfirmedDisks.assign(group.Info.VDisks.size(), false);
                 }
                 ActiveGroups.push_back(groupId);

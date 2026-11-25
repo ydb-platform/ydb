@@ -95,6 +95,6 @@ TEvChangeExchange::ESenderType GetSenderType(const TEvChangeExchange::TSenderPar
 
 IActor* CreateChangeSender(const TDataShard* self);
 IActor* CreateChangeExchangeSplit(const TDataShard* self, const TVector<ui64>& dstDataShards,
-    std::shared_ptr<const NKikimrTxDataShard::TSplitMergeDescription> splitDescription);
+    const NKikimrTxDataShard::TSplitMergeDescription& splitDescription);
 
 }

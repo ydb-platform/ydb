@@ -6851,6 +6851,64 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     }
 
+    Y_UNIT_TEST(ShouldRegisterMergeChildOnlyByParentOfEachPartitionWhenKeyRangeHeartbeats) {
+        // given
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions().Shards(2));
+
+        auto forceKeyRangeHeartbeatMode = ForceKeyRangeHeartbeatMode(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        const auto parents = GetTableShards(server, edgeActor, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(parents.size(), 2);
+
+        THashMap<TString, THashSet<ui32>> parentToPartitions;
+        bool childRegisteredWithoutKeyRange = false;
+        auto observeSplitCommands = runtime.AddObserver<TEvPersQueue::TEvRequest>([&](auto& ev) {
+            const auto& request = ev->Get()->Record.GetPartitionRequest();
+            if (!request.HasCmdSplitMessageGroup()) {
+                return;
+            }
+            const auto& cmd = request.GetCmdSplitMessageGroup();
+            for (const auto& group : cmd.GetDeregisterGroups()) {
+                parentToPartitions[group.GetId()].insert(request.GetPartition());
+            }
+            for (const auto& group : cmd.GetRegisterGroups()) {
+                childRegisteredWithoutKeyRange |= !group.HasPartitionKeyRange();
+            }
+        });
+
+        // when
+        WaitTxNotification(server, edgeActor, AsyncMergeTable(server, edgeActor, "/Root/Table", parents));
+
+        // then
+        const auto children = GetTableShards(server, edgeActor, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(children.size(), 1);
+        const auto child = children.at(0);
+
+        for (ui32 partitionId : {0u, 1u}) {
+            for (ui32 attempt = 0; attempt < 60 && !IsSourceRegistered(runtime, edgeActor, partitionId, child); ++attempt) {
+                SimulateSleep(server, TDuration::Seconds(1));
+            }
+            UNIT_ASSERT_C(IsSourceRegistered(runtime, edgeActor, partitionId, child), partitionId);
+        }
+
+        UNIT_ASSERT_EQUAL(parentToPartitions[NPQ::NSourceIdEncoding::EncodeSimple(ToString(parents.at(0)))], THashSet<ui32>({0}));
+        UNIT_ASSERT_EQUAL(parentToPartitions[NPQ::NSourceIdEncoding::EncodeSimple(ToString(parents.at(1)))], THashSet<ui32>({1}));
+        UNIT_ASSERT(!childRegisteredWithoutKeyRange);
+    }
+
     Y_UNIT_TEST(ShouldResolveTopicWithSyncVersionWhenPartitionWriterFailsAndKeyRangeHeartbeats) {
         // given
         TPortManager portManager;

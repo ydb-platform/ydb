@@ -244,6 +244,15 @@ class TCdcWorker
         return Check(&TSchemeCacheHelpers::CheckEntryKind<TNavigate::TEntry>, &TThis::LogWarnAndRetry, entry, expected);
     }
 
+    bool CheckNotEmpty(const TIntrusiveConstPtr<TNavigate::TCdcStreamInfo>& streamInfo) {
+        if (streamInfo) {
+            return true;
+        }
+
+        LogCritAndRetry(TStringBuilder() << "Empty stream info at '" << CurrentStateName() << "'");
+        return false;
+    }
+
     bool CheckNotEmpty(const TIntrusiveConstPtr<TNavigate::TPQGroupInfo>& pqInfo) {
         if (pqInfo) {
             return true;
@@ -306,9 +315,11 @@ class TCdcWorker
             return Ack();
         }
 
-        if (entry.CdcStreamInfo) {
-            HeartbeatMode = entry.CdcStreamInfo->Description.GetHeartbeatMode();
+        if (!CheckNotEmpty(entry.CdcStreamInfo)) {
+            return;
         }
+
+        HeartbeatMode = entry.CdcStreamInfo->Description.GetHeartbeatMode();
 
         Y_ENSURE(entry.ListNodeEntry->Children.size() == 1);
         const auto& topic = entry.ListNodeEntry->Children.at(0);
@@ -347,8 +358,8 @@ class TCdcWorker
     }
 
     TVector<ui64> GetChildrenToRegister(const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition,
-            TConstArrayRef<NScheme::TTypeInfo> topicKeySchema) const {
-        if (const auto keyRangeSplit = GetKeyRangeSplit(topicKeySchema)) {
+            const std::shared_ptr<const TKeyRangeSplit>& keyRangeSplit, TConstArrayRef<NScheme::TTypeInfo> topicKeySchema) const {
+        if (keyRangeSplit) {
             return keyRangeSplit->GetChildrenIntersecting(NPQ::TPartitionKeyRange::Parse(partition.GetKeyRange()), topicKeySchema);
         }
         return DstTabletIds;
@@ -382,7 +393,12 @@ class TCdcWorker
             return;
         }
 
+        if (HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange && !entry.PQGroupInfo->Schema) {
+            return LogCritAndRetry("Empty schema for key range heartbeats");
+        }
+
         THashMap<ui32, TActorId> workers;
+        const auto keyRangeSplit = GetKeyRangeSplit(entry.PQGroupInfo->Schema);
 
         for (const auto& partition : entry.PQGroupInfo->Description.GetPartitions()) {
             const auto partitionId = partition.GetPartitionId();
@@ -392,7 +408,7 @@ class TCdcWorker
                 continue;
             }
 
-            const auto dstTabletIds = GetChildrenToRegister(partition, entry.PQGroupInfo->Schema);
+            const auto dstTabletIds = GetChildrenToRegister(partition, keyRangeSplit, entry.PQGroupInfo->Schema);
             if (dstTabletIds.empty()) {
                 continue;
             }
@@ -406,7 +422,7 @@ class TCdcWorker
                     {"partitionId", partitionId});
 
                 const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId, SrcTabletId, dstTabletIds,
-                    GetKeyRangeSplit(entry.PQGroupInfo->Schema)));
+                    keyRangeSplit));
                 workers.emplace(partitionId, worker);
                 Pending.emplace(worker, partitionId);
             }
@@ -618,11 +634,11 @@ public:
     }
 
     explicit TChangeExchageSplit(const TDataShard* self, const TVector<ui64>& dstDataShards,
-            std::shared_ptr<const NKikimrTxDataShard::TSplitMergeDescription> splitDescription)
+            const NKikimrTxDataShard::TSplitMergeDescription& splitDescription)
         : TActorBootstrapped()
         , DataShard{self->TabletID(), self->Generation(), self->SelfId()}
         , DstDataShards(dstDataShards)
-        , KeyRangeSplit(std::make_shared<const TKeyRangeSplit>(self->TabletID(), *splitDescription))
+        , KeyRangeSplit(std::make_shared<const TKeyRangeSplit>(self->TabletID(), splitDescription))
     {
         for (const auto& [_, tableInfo] : self->GetUserTables()) {
             for (const auto& [streamPathId, _] : tableInfo->CdcStreams) {
@@ -669,9 +685,9 @@ private:
 }; // TChangeExchageSplit
 
 IActor* CreateChangeExchangeSplit(const TDataShard* self, const TVector<ui64>& dstDataShards,
-        std::shared_ptr<const NKikimrTxDataShard::TSplitMergeDescription> splitDescription)
+        const NKikimrTxDataShard::TSplitMergeDescription& splitDescription)
 {
-    return new TChangeExchageSplit(self, dstDataShards, std::move(splitDescription));
+    return new TChangeExchageSplit(self, dstDataShards, splitDescription);
 }
 
 } // NDataShard

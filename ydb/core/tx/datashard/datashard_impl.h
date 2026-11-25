@@ -2959,7 +2959,7 @@ private:
         void DoSplit(const TActorContext& ctx) {
             Y_ENSURE(DstTabletIds);
             Worker = ctx.Register(CreateChangeExchangeSplit(Self, TVector<ui64>(DstTabletIds.begin(), DstTabletIds.end()),
-                Self->SrcSplitDescription));
+                *Self->SrcSplitDescription));
             Acked = false;
         }
 

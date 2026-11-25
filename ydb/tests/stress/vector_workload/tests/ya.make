@@ -13,7 +13,6 @@ REQUIREMENTS(ram:32 cpu:4)
 TAG(ya:external)
 
 SIZE(LARGE)
-TAG(ya:fat)
 TIMEOUT(1200)
 
 DEPENDS(

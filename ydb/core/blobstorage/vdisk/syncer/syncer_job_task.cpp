@@ -246,16 +246,6 @@ namespace NKikimr {
 
         }
 
-        TSjOutcome TSyncerJobTask::HandleRestart(const TSyncState &newSyncState) {
-            SetSyncState(newSyncState);
-            EndOfStream = false;
-            Phase = EStart;
-            Y_VERIFY_S(Type == EJustSync, Ctx->SyncerCtx->VCtx->VDiskLogPrefix);
-
-            Sublog.Log() << "HandleRestart: newSyncState# " << newSyncState << "\n";
-            return NextRequest();
-        }
-
         void TSyncerJobTask::HandleStatusFlags(const NKikimrBlobStorage::TEvVSyncResult &record) {
             Y_VERIFY_DEBUG_S(record.GetStatus() == NKikimrProto::OK ||
                 record.GetStatus() == NKikimrProto::ALREADY ||
@@ -306,6 +296,7 @@ namespace NKikimr {
                     HandleStatusFlags(record);
                     SetSyncState(newSyncState);
                     return ReplyAndDie(TSyncStatusVal::DisksSynced);
+                case NKikimrProto::RESTART:
                 case NKikimrProto::NODATA:
                     HandleStatusFlags(record);
                     PrepareToFullRecovery(newSyncState);
@@ -314,9 +305,6 @@ namespace NKikimr {
                     return ReplyAndDie(TSyncStatusVal::NotReady);
                 case NKikimrProto::BLOCKED:
                     return ReplyAndDie(TSyncStatusVal::Locked);
-                case NKikimrProto::RESTART:
-                    HandleStatusFlags(record);
-                    return HandleRestart(newSyncState);
                 default: {
                     Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_ERROR, BS_SYNCER,
                            VDISKP(Ctx->SyncerCtx->VCtx->VDiskLogPrefix,

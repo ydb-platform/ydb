@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(RollingWipe) {
         const ui32 unavailableNode = info->GetActorId(unavailableOrder).NodeId();
         env.StopNode(unavailableNode);
 
-        // Block talet generation
+        // Block tablet generation
         const ui64 tabletId = 1;
         const ui32 blockedGeneration = 42;
         const TActorId blockEdge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId);

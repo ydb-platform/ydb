@@ -1,10 +1,12 @@
 #include "blobstorage_syncer_scheduler.h"
+#include "blobstorage_syncer.h"
 #include "blobstorage_syncer_localwriter.h"
 #include "blobstorage_syncer_committer.h"
 #include "index_sst_writer.h"
 #include "syncer_job_task.h"
 #include "syncer_job_actor.h"
 #include "syncer_merger.h"
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
 
@@ -227,6 +229,92 @@ namespace NKikimr {
         bool Scheduled;
         THashSet<ui32> StartupDataSyncPeers;
         THashSet<ui32> FullSyncRequested;
+        TBlobStorageGroupInfo::TGroupVDisks MetadataSources;
+        bool MetadataReplicated = false;
+        bool NeedsMetadataSnapshot = false;
+        THashMap<ui32, ui64> SnapshotIncarnations;
+        ui32 FirstGeneration = 0;
+
+        bool TracksGenerationCuts() const {
+            return GInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+                && GInfo->GetTopology().GetTotalFailRealmsNum() == 3;
+        }
+
+        void StartMetadataSync(bool hasPreviousMetadata) {
+            if (!TracksGenerationCuts()) {
+                return;
+            }
+            MetadataSources = TBlobStorageGroupInfo::TGroupVDisks(&GInfo->GetTopology());
+            SnapshotIncarnations.clear();
+            MetadataReplicated = false;
+            NeedsMetadataSnapshot = !hasPreviousMetadata;
+            if (NeedsMetadataSnapshot) {
+                // Pulled records live in Hull. Incremental sync alone cannot rebuild
+                // a missed generation's inherited metadata from another peer.
+                for (const auto& peer : *SyncerData->Neighbors) {
+                    if (!peer.Myself && !GInfo->IsFailRealmExcluded(GInfo->GetVDiskId(peer.OrderNumber).FailRealm)) {
+                        FullSyncRequested.insert(peer.OrderNumber);
+                    }
+                }
+            }
+            if (!SyncerData->Neighbors->DbBirthLsn || (GInfo->GroupGeneration > 1
+                    && FirstGeneration < GInfo->GroupGeneration - 1)) {
+                const auto self = SyncerContext->VCtx->ShortSelfVDisk;
+                RecordMetadataSource(self, 0);
+            }
+        }
+
+        void RememberMetadataSnapshot(const TVDiskID& source, const TSyncState& cursor) {
+            if (NeedsMetadataSnapshot && source.GroupGeneration == GInfo->GroupGeneration) {
+                SnapshotIncarnations[GInfo->GetOrderNumber(source)] = cursor.Guid;
+            }
+        }
+
+        void RecordMetadataSource(const TVDiskIdShort& source, ui64 incarnation) {
+            if (MetadataReplicated || !TracksGenerationCuts()) {
+                return;
+            }
+            ui32 order = GInfo->GetOrderNumber(source);
+            if (NeedsMetadataSnapshot && source != SyncerContext->VCtx->ShortSelfVDisk) {
+                auto it = SnapshotIncarnations.find(order);
+                if (it == SnapshotIncarnations.end() || it->second != incarnation) {
+                    if (!GInfo->IsFailRealmExcluded(source.FailRealm)) {
+                        FullSyncRequested.insert(order);
+                    }
+                    return;
+                }
+            }
+            if (MetadataSources[order]) {
+                return;
+            }
+            MetadataSources |= TBlobStorageGroupInfo::TGroupVDisks(&GInfo->GetTopology(), source);
+            const auto& group = GInfo->GetMirror3dcState();
+            TMirror3dcGroupConfiguration current{group.State, group.FailRealmStates};
+            using Q = TMirror3dcWriteQuorumChecker;
+            if (NeedsMetadataSnapshot && !Q::CoversInheritedMetadata(current, MetadataSources)) {
+                return;
+            }
+            if (Q::CanAcknowledgeMetadataWithout(current, MetadataSources)) {
+                return;
+            }
+            // A disk may restart directly in this generation. Cover each possible
+            // predecessor with the same physical realm mapping, including a pure generation bump.
+            for (const auto& edge : Mirror3dcAllowedGroupTransitions) {
+                if (edge.To != current.State) {
+                    continue;
+                }
+                auto realms = *GetMirror3dcRealmStates(edge.From);
+                do {
+                    TMirror3dcGroupConfiguration previous{edge.From, realms};
+                    if (IsAllowedMirror3dcGroupTransition(previous, current)
+                            && Q::CanAcknowledgeMetadataWithout(previous, MetadataSources)) {
+                        return;
+                    }
+                } while (std::next_permutation(realms.begin(), realms.end()));
+            }
+            MetadataReplicated = true;
+            Send(SyncerContext->SkeletonId, new TEvGenerationMetadataReplicated(GInfo->GroupGeneration));
+        }
         bool StartupDataSyncDoneReported = false;
         std::shared_ptr<TSjCtx> JobCtx;
 
@@ -288,6 +376,13 @@ namespace NKikimr {
                 }
             }
 
+            const auto& cut = SyncerData->GenerationCut;
+            ui32 generation = GInfo->GroupGeneration;
+            FirstGeneration = cut.HasFirstGeneration() ? cut.GetFirstGeneration() : generation;
+            bool hasPreviousMetadata = generation == 1
+                || (cut.GetGeneration() == generation && (cut.GetHasPreviousMetadata() || cut.GetMetadataReplicated()))
+                || (generation > 1 && cut.GetGeneration() == generation - 1 && cut.GetMetadataReplicated());
+            StartMetadataSync(hasPreviousMetadata);
             ActualizeUnsyncedDisksNum();
 
             // if we haven't found any neighbors to sync with, notify skeleton
@@ -350,6 +445,13 @@ namespace NKikimr {
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
+        void Handle(TEvSyncerGenerationCutApplied::TPtr& ev, const TActorContext&) {
+            const auto& source = ev->Get()->Source;
+            if (source.GroupGeneration == GInfo->GroupGeneration) {
+                RecordMetadataSource(source, ev->Get()->Incarnation);
+            }
+        }
+
         void Handle(TEvSyncerJobDone::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
             TEvSyncerJobDone *msg = ev->Get();
@@ -364,6 +466,14 @@ namespace NKikimr {
                 return;
             }
 #endif
+            if (msg->Task->VDiskId.GroupGeneration == GInfo->GroupGeneration
+                    && !msg->Task->IsFullRecoveryTask() && msg->Task->GenerationCutReached
+                    && TPeerSyncState::Good(msg->Task->GetCurrent().LastSyncStatus)) {
+                RecordMetadataSource(msg->Task->VDiskId, msg->Task->GetCurrent().SyncState.Guid);
+            }
+            if (msg->Task->IsFullRecoveryTask() && TPeerSyncState::Good(msg->Task->GetCurrent().LastSyncStatus)) {
+                RememberMetadataSnapshot(msg->Task->VDiskId, msg->Task->GetCurrent().SyncState);
+            }
             if (msg->Task->NeedCommit()) {
                 Commit(ctx, msg->Task->VDiskId, msg->Task->GetCurrent(), msg->Task->IsFullRecoveryTask());
             } else {
@@ -385,6 +495,7 @@ namespace NKikimr {
 
                 YDB_LOG_INFO_CTX(ctx, VDISKP(SyncerContext->VCtx->VDiskLogPrefix, "SyncerScheduler: full sync finished: vDiskId# %s oldSyncState# %s newSyncState# %s", vDiskId.ToString().data(), it->second.SyncState.ToString().data(), peerSyncState.SyncState.ToString().data()));
 
+                RememberMetadataSnapshot(vDiskId, peerSyncState.SyncState);
                 if (it->second.SyncState != peerSyncState.SyncState) {
                     Commit(ctx, vDiskId, peerSyncState, false);
                 } else {
@@ -396,7 +507,10 @@ namespace NKikimr {
 
         void Handle(TEvSyncerFullSyncDiskCancelled::TPtr& ev, const TActorContext& ctx) {
             const auto vDiskId = ev->Get()->VDiskId;
-            const auto peerSyncState = ev->Get()->PeerSyncState;
+            auto peerSyncState = ev->Get()->PeerSyncState;
+            // The merger's starting cursor can be the new incarnation's DbBirthLsn.
+            // Only a completed full snapshot makes that cursor safe for incremental sync.
+            peerSyncState.SyncState = (*SyncerData->Neighbors)[vDiskId].Get().PeerSyncState.SyncState;
             YDB_LOG_INFO_CTX(ctx, VDISKP(SyncerContext->VCtx->VDiskLogPrefix, "SyncerScheduler: full sync disk cancelled: vDiskId# %s status# %s", vDiskId.ToString().data(), NKikimrVDiskData::TSyncerVDiskEntry::ESyncStatus_Name(peerSyncState.LastSyncStatus).data()));
             ApplyChanges(ctx, vDiskId, peerSyncState, true);
         }
@@ -418,6 +532,7 @@ namespace NKikimr {
                     TActorId(),
                     info->Get().PeerSyncState,
                     JobCtx);
+            task->WatchGenerationCut = TracksGenerationCuts() && !MetadataReplicated && !MetadataSources[info->OrderNumber];
             const TActorId aid = ctx.Register(CreateSyncerJob(SyncerContext, std::move(task), ctx.SelfID));
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 
@@ -517,7 +632,9 @@ namespace NKikimr {
                     FullSyncRequested.insert(peer.OrderNumber);
                 }
             }
+            bool hasPreviousMetadata = MetadataReplicated && msg->NewInfo->GroupGeneration - GInfo->GroupGeneration == 1;
             GInfo = msg->NewInfo;
+            StartMetadataSync(hasPreviousMetadata);
             JobCtx = TSjCtx::Create(SyncerContext, GInfo);
 
             // Running jobs finish first; queued peers can start full sync immediately.
@@ -544,6 +661,7 @@ namespace NKikimr {
 
         STRICT_STFUNC(StateFunc,
             HFunc(TEvSyncerJobDone, Handle)
+            HFunc(TEvSyncerGenerationCutApplied, Handle)
             HFunc(TEvSyncerCommitProxyDone, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
@@ -586,6 +704,7 @@ namespace NKikimr {
             , CommitterId(committerId)
             , NotifyId(notifyId)
             , Scheduled(false)
+            , MetadataSources(&info->GetTopology())
             , JobCtx(TSjCtx::Create(SyncerContext, GInfo))
         {}
     };

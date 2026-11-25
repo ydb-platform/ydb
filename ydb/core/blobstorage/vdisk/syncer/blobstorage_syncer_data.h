@@ -214,6 +214,7 @@ namespace NKikimr {
         const TString VDiskLogPrefix;
         TSyncNeighborsPtr Neighbors;
         NSyncer::TLocalSyncerState LocalSyncerState;
+        NKikimrVDiskData::TSyncerEntryPoint::TGenerationCut GenerationCut;
         const TActorId NotifyId;
         std::optional<NKikimrConfig::TStoredCompatibilityInfo> StoredCompatibilityInfo;
         NKikimrConfig::TStoredCompatibilityInfo CurrentCompatibilityInfo;

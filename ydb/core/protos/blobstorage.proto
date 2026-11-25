@@ -777,6 +777,8 @@ message TEvVSyncResult {
     }
     optional TStat Stat = 7;
     optional uint32 StatusFlags = 8;
+    // Source SyncLog position when it began serving this group generation.
+    optional uint64 GenerationStartLsn = 9;
 }
 
 enum ESyncFullStage {
@@ -907,6 +909,7 @@ message TEvVStatusResult {
     optional bool IsReadOnly = 13 [default = false];
     // Includes repeated Osiris and replication for the current durability target D.
     optional bool DurabilityReplicated = 14 [default = false];
+    optional uint64 GenerationStartLsn = 15;
     optional fixed64 IncarnationGuid = 30;
     optional NKikimrBlobStorage.TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
 }

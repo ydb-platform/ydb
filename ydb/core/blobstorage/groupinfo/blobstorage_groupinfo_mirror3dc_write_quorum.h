@@ -128,6 +128,32 @@ class TMirror3dcWriteQuorumChecker {
     }
 
 public:
+    // A GC request can be acknowledged only by writable disks. Could it have
+    // succeeded without any of the sources whose generation cuts we applied?
+    static bool CanAcknowledgeMetadataWithout(const TMirror3dcGroupConfiguration& config,
+            const TBlobStorageGroupInfo::TGroupVDisks& sources) {
+        auto unavailable = CountFailedDomainsByRealm(sources);
+        for (ui32 realm = 0; realm < config.Realms.size(); ++realm) {
+            if (!IsWritable(config.Realms[realm])) {
+                unavailable[realm] = 3;
+            }
+        }
+        auto layouts = *GetMirror3dcGroupLayouts(config.State);
+        TMirror3dcWriteQuorumChecker checker(config.Realms, layouts.Write, layouts.Ensured, config.State);
+        return checker.HasStartupQuorum(unavailable);
+    }
+
+    static bool HasEnsuredMetadataLayout(const TMirror3dcGroupConfiguration& next,
+            const TBlobStorageGroupInfo::TGroupVDisks& unconfirmed) {
+        auto available = CountFailedDomainsByRealm(unconfirmed);
+        for (ui32& count : available) {
+            count = 3 - Min<ui32>(3, count);
+        }
+        auto layouts = *GetMirror3dcGroupLayouts(next.State);
+        TMirror3dcWriteQuorumChecker checker(next.Realms, layouts.Write, layouts.Ensured, next.State);
+        return checker.CheckCounts(available, layouts.Ensured, EParticipants::Read);
+    }
+
     static bool CanHideEnsuredLayout(const TMirror3dcGroupConfiguration& config,
             const TBlobStorageGroupInfo::TGroupVDisks& uncertainDisks) {
         const auto& topology = *uncertainDisks.GetTopology();
@@ -138,6 +164,14 @@ public:
         const TMirror3dcGroupLayouts layouts = *GetMirror3dcGroupLayouts(config.State);
         const TMirror3dcWriteQuorumChecker checker(config.Realms, layouts.Write, layouts.Ensured, config.State);
         return checker.CheckCounts(CountFailedDomainsByRealm(uncertainDisks), layouts.Ensured, EParticipants::Read);
+    }
+
+    static bool CoversInheritedMetadata(const TMirror3dcGroupConfiguration& current,
+            const TBlobStorageGroupInfo::TGroupVDisks& snapshotSources) {
+        // At promotion the confirmed destinations both contain E and intersect
+        // every E. Either property on the snapshots guarantees an overlap.
+        auto missing = ~snapshotSources;
+        return !CanHideEnsuredLayout(current, missing) || HasEnsuredMetadataLayout(current, missing);
     }
 
     static bool CheckReadFailModelForGroup(const TBlobStorageGroupInfo& info,

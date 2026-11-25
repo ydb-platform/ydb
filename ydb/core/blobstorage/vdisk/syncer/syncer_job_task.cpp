@@ -60,6 +60,7 @@ namespace NKikimr {
             , SstWriterId(sstWriterId)
             , Type(type)
             , OldSyncState(peerState.SyncState)
+            , AppliedSyncState(peerState.SyncState)
             , Current(peerState)
             , Ctx(ctx)
             , Sublog(false, Ctx->SelfVDiskId.ToString() + ": ")
@@ -143,8 +144,11 @@ namespace NKikimr {
             auto now = TAppData::TimeProvider->Now();
             Current.LastSyncStatus = status;
             Current.LastTry = now;
-            if (NSyncer::TPeerSyncState::Good(status))
+            if (NSyncer::TPeerSyncState::Good(status)) {
                 Current.LastGood = now;
+            } else if (status != TSyncStatusVal::FullRecover) {
+                Current.SyncState = AppliedSyncState;
+            }
 
             // log
             Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_DEBUG, BS_SYNCER,
@@ -294,6 +298,8 @@ namespace NKikimr {
                         fromVDisk.ToString().data(), newSyncState.ToString().data()));
             // status check
             NKikimrProto::EReplyStatus status = record.GetStatus();
+            GenerationCutReached = WatchGenerationCut && (status == NKikimrProto::OK || status == NKikimrProto::ALREADY)
+                && record.HasGenerationStartLsn() && newSyncState.SyncedLsn >= record.GetGenerationStartLsn();
             switch (status) {
                 case NKikimrProto::OK:
                     HandleStatusFlags(record);
@@ -474,6 +480,9 @@ namespace NKikimr {
                 Ctx->SyncerCtx->VCtx->VDiskLogPrefix << "msg# " << ev->Get()->ToString() <<
                 "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
 
+            if (!IsFullRecoveryTask()) {
+                AppliedSyncState = Current.SyncState;
+            }
             if (EndOfStream) {
                 return ReplyAndDie(TSyncStatusVal::SyncDone);
             } else {

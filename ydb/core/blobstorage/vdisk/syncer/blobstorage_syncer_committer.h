@@ -28,7 +28,8 @@ namespace NKikimr {
         enum EModif {
             ENone,
             ELocalGuid,
-            EVDiskEntry
+            EVDiskEntry,
+            EGenerationCut
         };
 
         // what we modify local state or info about other VDisk
@@ -43,6 +44,7 @@ namespace NKikimr {
         NKikimrVDiskData::TSyncerVDiskEntry VDiskEntry;
         // in case of Modif=EVDiskEntry we modify info about this VDisk
         TVDiskID VDiskId;
+        NKikimrVDiskData::TSyncerEntryPoint::TGenerationCut GenerationCut;
         // just cookie
         const void *Cookie = nullptr;
 

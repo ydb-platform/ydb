@@ -520,6 +520,10 @@ namespace NKikimr {
            synced racks minus handoff parts.
          */
 
+        // The current mirror-3-dc availability quorum can acknowledge a barrier in Solo.
+        // Earlier Keep records can still be confined to excluded realms, even when the
+        // surviving realm has all the required data parts. A Solo barrier needs separate
+        // durable confirmation that the surviving realm has caught up on GC metadata.
         auto& topology = *cache->Topology;
         auto synced = TBlobStorageGroupInfo::TGroupVDisks::CreateFromMask(&topology, Data & cache->BarrierIngressValueMask);
         return topology.GetQuorumChecker().CheckQuorumForGroup(synced);

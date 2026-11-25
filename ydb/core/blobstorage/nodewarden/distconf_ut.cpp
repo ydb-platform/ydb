@@ -439,8 +439,10 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         repaired->SetMirror3dcState(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1);
         repaired->MutableRings(2)->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
         UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&secondConfig, secondExclusion));
-        UNIT_ASSERT(repaired->GetMirror3dcState() == NKikimrBlobStorage::TGroupState::DC_SOLO_INV1);
-        UNIT_ASSERT(repaired->GetRings(1).GetState() == NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        // The policy is durable before the group actor confirms the new invariant.
+        UNIT_ASSERT(!NStorage::ApplyStaticDataCenterStates(&secondConfig, secondExclusion));
+        UNIT_ASSERT(repaired->GetMirror3dcState() == NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1);
+        UNIT_ASSERT(repaired->GetRings(1).GetState() == NKikimrBlobStorage::TDataCenterState::INCLUDED);
         UNIT_ASSERT(repaired->GetRings(2).GetState() == NKikimrBlobStorage::TDataCenterState::EXCLUDED);
         auto conflicting = config;
         conflicting.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0)->MutableRings(2)->SetState(

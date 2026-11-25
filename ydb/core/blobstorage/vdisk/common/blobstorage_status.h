@@ -31,6 +31,7 @@ namespace NKikimr {
             const TInstant &now,
             bool replDone,
             bool durabilityReplDone,
-            bool isReadOnly);
+            bool isReadOnly,
+            std::optional<ui64> generationStartLsn);
 
 } // NKikimr

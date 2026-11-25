@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 
 namespace NKikimr {
 
@@ -13,6 +14,18 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TEvSyncerJobDone
     ////////////////////////////////////////////////////////////////////////////
+    struct TEvSyncerGenerationCutApplied
+        : TEventLocal<TEvSyncerGenerationCutApplied, TEvBlobStorage::EvSyncerGenerationCutApplied>
+    {
+        TVDiskID Source;
+        ui64 Incarnation;
+
+        TEvSyncerGenerationCutApplied(const TVDiskID& source, ui64 incarnation)
+            : Source(source)
+            , Incarnation(incarnation)
+        {}
+    };
+
     struct TEvSyncerJobDone :
             public TEventLocal<TEvSyncerJobDone, TEvBlobStorage::EvSyncJobDone>
     {

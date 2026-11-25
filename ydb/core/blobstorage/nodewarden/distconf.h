@@ -400,7 +400,7 @@ namespace NKikimr::NStorage {
         void CancelStateStorageSelfHealRefresh();
 
         TActorId StaticGroupStateActor;
-        THashMap<ui32, ui32> StaticGroupRepairGenerations;
+        THashMap<ui32, ui64> StaticGroupRepairGenerations;
         void RefreshStaticGroupRepairs();
         void StopStaticGroupRepairs();
         void Handle(NGroupSyncer::TEvGroupState::TEvPropose::TPtr ev);

@@ -33,11 +33,48 @@ namespace NKikimr::NStorage {
         }
     }
 
-    static std::optional<TMirror3dcGroupConfiguration> NextStaticRepairState(const NKikimrBlobStorage::TGroupInfo& group) {
+    static THashMap<ui32, TString> GetNodeDataCenters(const NKikimrBlobStorage::TStorageConfig& config) {
+        THashMap<ui32, TString> dataCenters;
+        for (const auto& node : config.GetAllNodes()) {
+            dataCenters.emplace(node.GetNodeId(), node.GetLocation().GetDataCenter());
+        }
+        return dataCenters;
+    }
+
+    static NGroupSyncer::TExcludedRealms GetExcludedRealms(const NKikimrBlobStorage::TGroupInfo& group,
+            const TDataCenterStates& states, const THashMap<ui32, TString>& dataCenters) {
+        std::array<bool, 3> excluded{};
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            const auto& ring = group.GetRings(realm);
+            std::optional<TString> realmDataCenter;
+            for (const auto& domain : ring.GetFailDomains()) {
+                for (const auto& disk : domain.GetVDiskLocations()) {
+                    auto it = dataCenters.find(disk.GetNodeID());
+                    Y_ENSURE(it != dataCenters.end(), "Unknown static VDisk node");
+                    Y_ENSURE(!realmDataCenter || *realmDataCenter == it->second,
+                        "Static fail realm spans different data centers");
+                    realmDataCenter = it->second;
+                }
+            }
+            Y_ENSURE(realmDataCenter, "Empty static fail realm");
+            auto it = states.find(*realmDataCenter);
+            excluded[realm] = it != states.end() && it->second == NKikimrBlobStorage::TDataCenterState::EXCLUDED;
+        }
+        return excluded;
+    }
+
+    static std::optional<TMirror3dcGroupConfiguration> NextStaticGroupState(const NKikimrBlobStorage::TGroupInfo& group,
+            const std::optional<NGroupSyncer::TExcludedRealms>& target) {
         if (!IsOrdinaryMirror3dcGroup(group) || group.RingsSize() != 3) {
             return std::nullopt;
         }
-        return RecoveringComplete(ReadMirror3dcConfiguration(group));
+        auto current = ReadMirror3dcConfiguration(group);
+        if (target) {
+            if (auto next = NGroupSyncer::NextDataCenterTransition(current, *target)) {
+                return next;
+            }
+        }
+        return RecoveringComplete(current);
     }
 
     void TInvokeRequestHandlerActor::CheckStaticGroupStateUpdate(const NKikimrBlobStorage::TStorageConfig& proposed) const {
@@ -60,13 +97,15 @@ namespace NKikimr::NStorage {
         }
     }
 
-    static std::optional<NGroupSyncer::TGroupReplicationInfo> GetStaticGroupReplicationInfo(const NKikimrBlobStorage::TGroupInfo& group) {
-        if (!NextStaticRepairState(group)) {
+    static std::optional<NGroupSyncer::TGroupReplicationInfo> GetStaticGroupReplicationInfo(
+            const NKikimrBlobStorage::TGroupInfo& group, const std::optional<NGroupSyncer::TExcludedRealms>& target) {
+        if (!NextStaticGroupState(group, target)) {
             return std::nullopt;
         }
         TIntrusivePtr<TBlobStorageGroupInfo> info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
         const TMirror3dcGroupState& state = info->GetMirror3dcState();
         NGroupSyncer::TGroupReplicationInfo result;
+        result.TargetExcluded = target;
         result.Generation = info->GroupGeneration;
         result.Topology = info->PickTopology();
         result.GroupState = state.State;
@@ -81,10 +120,7 @@ namespace NKikimr::NStorage {
             const NKikimrBlobStorage::TDataCenterStates& command) {
         auto states = ParseDataCenterStates(command);
         Y_ENSURE(states, states.error());
-        THashMap<ui32, TString> dataCenters;
-        for (const auto& node : config->GetAllNodes()) {
-            dataCenters.emplace(node.GetNodeId(), node.GetLocation().GetDataCenter());
-        }
+        auto dataCenters = GetNodeDataCenters(*config);
         auto *serviceSet = config->MutableBlobStorageConfig()->MutableServiceSet();
         THashMap<TGroupId, ui32> generations;
         for (auto& group : *serviceSet->MutableGroups()) {
@@ -93,23 +129,7 @@ namespace NKikimr::NStorage {
             }
             Y_ENSURE(group.RingsSize() == 3, "Static mirror-3-dc group must have three realms");
             TMirror3dcGroupConfiguration current = ReadMirror3dcConfiguration(group);
-            std::array<bool, 3> excluded{};
-            for (ui32 realm = 0; realm < 3; ++realm) {
-                const auto& ring = group.GetRings(realm);
-                std::optional<TString> realmDataCenter;
-                for (const auto& domain : ring.GetFailDomains()) {
-                    for (const auto& disk : domain.GetVDiskLocations()) {
-                        auto it = dataCenters.find(disk.GetNodeID());
-                        Y_ENSURE(it != dataCenters.end(), "Unknown static VDisk node");
-                        Y_ENSURE(!realmDataCenter || *realmDataCenter == it->second,
-                            "Static fail realm spans different data centers");
-                        realmDataCenter = it->second;
-                    }
-                }
-                Y_ENSURE(realmDataCenter, "Empty static fail realm");
-                auto it = states->find(*realmDataCenter);
-                excluded[realm] = it != states->end() && it->second == NKikimrBlobStorage::TDataCenterState::EXCLUDED;
-            }
+            auto excluded = GetExcludedRealms(group, *states, dataCenters);
             Y_ENSURE(IsValidMirror3dcGroupConfiguration(current), "Invalid static mirror-3-dc configuration");
             ui32 changes = 0;
             for (ui32 realm = 0; realm < 3; ++realm) {
@@ -121,7 +141,7 @@ namespace NKikimr::NStorage {
                 Y_ENSURE(next, "Invalid static mirror-3-dc transition");
                 current = *next;
             }
-            if (changes) {
+            if (changes && !ChangesMirror3dcInvariant(ReadMirror3dcConfiguration(group), current)) {
                 Y_ENSURE(group.GetGroupGeneration() != Max<ui32>(), "Static group generation overflow");
                 AdvanceStaticGroup(&group, current);
                 generations.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID),
@@ -161,15 +181,23 @@ namespace NKikimr::NStorage {
             return StopStaticGroupRepairs();
         }
 
-        THashMap<ui32, ui32> generations;
+        const auto states = ParseDataCenterStates(StorageConfig->GetDataCenterStates());
+        Y_ENSURE(states, states.error());
+        auto dataCenters = GetNodeDataCenters(*StorageConfig);
+        THashMap<ui32, ui64> generations;
         for (const auto& group : StorageConfig->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
             ui32 id = group.GetGroupID();
-            ui32 generation = group.GetGroupGeneration();
+            if (!IsOrdinaryMirror3dcGroup(group) || group.RingsSize() != 3) {
+                continue;
+            }
+            ui64 generation = StorageConfig->GetGeneration();
             if (auto it = StaticGroupRepairGenerations.find(id); it != StaticGroupRepairGenerations.end() && it->second == generation) {
                 generations.emplace(id, generation);
                 continue;
             }
-            auto info = GetStaticGroupReplicationInfo(group);
+            auto target = StorageConfig->HasDataCenterStates()
+                ? std::optional(GetExcludedRealms(group, *states, dataCenters)) : std::nullopt;
+            auto info = GetStaticGroupReplicationInfo(group, target);
             if (!info) {
                 continue;
             }
@@ -221,7 +249,11 @@ namespace NKikimr::NStorage {
             if (group.GetGroupGeneration() != op.Generation) {
                 throw TExRace() << "Static group generation changed";
             }
-            if (NextStaticRepairState(group) != op.Next) {
+            auto states = ParseDataCenterStates(config.GetDataCenterStates());
+            Y_ENSURE(states, states.error());
+            auto target = config.HasDataCenterStates() && IsOrdinaryMirror3dcGroup(group) && group.RingsSize() == 3
+                ? std::optional(GetExcludedRealms(group, *states, GetNodeDataCenters(config))) : std::nullopt;
+            if (NextStaticGroupState(group, target) != op.Next) {
                 throw TExRace() << "Static group recovery target changed";
             }
             if (op.Generation == Max<ui32>()) {

@@ -23,6 +23,20 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(manager.GetConfirmedLsnForSyncLog(), pending.Last);
         }
 
+        Y_UNIT_TEST(GenerationCutIncludesPendingSyncLogWrites) {
+            TLsnMngr manager(20, 9, false);
+            UNIT_ASSERT_VALUES_EQUAL(manager.GetLastAllocatedSyncLogLsn(), 9);
+            const TLsnSeg gc = manager.AllocLsnForHullAndSyncLog(3);
+            manager.AllocLsnForLocalUse();
+            UNIT_ASSERT_VALUES_EQUAL(manager.GetLastAllocatedSyncLogLsn(), gc.Last);
+            UNIT_ASSERT_VALUES_EQUAL(manager.GetConfirmedLsnForSyncLog(), 9);
+            manager.ConfirmLsnForHull(gc, true);
+            manager.AllocLsnForHull();
+            UNIT_ASSERT_VALUES_EQUAL(manager.GetLastAllocatedSyncLogLsn(), gc.Last);
+            const TLsnSeg batch = manager.AllocDiscreteLsnBatchForHullAndSyncLog(2);
+            UNIT_ASSERT_VALUES_EQUAL(manager.GetLastAllocatedSyncLogLsn(), batch.Last);
+        }
+
         Y_UNIT_TEST(Test1) {
             TLsnAllocTracker t(100);
             STR << t.ToString() << "\n";

@@ -1,6 +1,9 @@
 #include <ydb/services/distributed_storage/grpc_service.h>
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/base/tablet.h>
+#include <ydb/core/protos/tx_proxy.pb.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/testlib/test_client.h>
@@ -15,6 +18,7 @@
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
 #include <util/generic/vector.h>
+#include <util/system/thread.h>
 
 #include <utility>
 
@@ -271,6 +275,41 @@ Y_UNIT_TEST_SUITE(DistributedStorageGRpcService) {
             hasStaticVDisk |= vdisk.is_static();
         }
         UNIT_ASSERT(hasStaticVDisk);
+    }
+
+    Y_UNIT_TEST(StorageStateRejectsUnsupportedPoolFilters) {
+        TDistributedStorageTestServer server;
+        const auto initial = StreamStorageState(server.GetChannel(), {.StoragePools = true});
+        UNIT_ASSERT(!initial.StoragePools.empty());
+        const auto& pool = initial.StoragePools.front();
+        auto& runtime = *server.GetRuntime();
+        const auto edge = runtime.AllocateEdgeActor();
+        auto query = MakeHolder<TEvTablet::TEvLocalMKQL>();
+        query->Record.MutableProgram()->MutableProgram()->SetText(TStringBuilder()
+            << "((return (AsList (UpdateRow 'BoxStoragePoolPDiskFilterV2 '('('BoxId (Uint64 '" << pool.box_id()
+            << ")) '('StoragePoolId (Uint64 '" << pool.storage_pool_id()
+            << ")) '('Filter (String '\"\\x0a\\x03\\xa0\\x06\\x07\"))) '()))))");
+        runtime.SendToPipe(MakeBSControllerID(), edge, query.Release());
+        const auto written = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(written->Get()->Record.GetStatus(), NKikimrProto::OK,
+            written->Get()->Record.ShortDebugString());
+        ForwardToTablet(runtime, MakeBSControllerID(), edge, new TEvents::TEvPoisonPill(), 0, true);
+        TStorageStateResult result;
+        for (ui32 attempt = 0; attempt != 100; ++attempt) {
+            result = StreamStorageState(server.GetChannel(), TStorageStateOptions::All());
+            if (result.Status == Ydb::StatusIds::UNSUPPORTED) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNSUPPORTED);
+        UNIT_ASSERT(result.StoragePools.empty());
+        UNIT_ASSERT(result.Groups.empty()); // Validate before streaming any snapshot data.
+        UNIT_ASSERT(result.Issues.size());
+        UNIT_ASSERT_STRING_CONTAINS(result.Issues.Get(0).message(), "StoragePoolId#");
+        const auto groups = StreamStorageState(server.GetChannel(), {.Groups = true});
+        UNIT_ASSERT_VALUES_EQUAL(groups.Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(!groups.Groups.empty());
     }
 
     Y_UNIT_TEST(StorageStateContainsOnlyRequestedSections) {

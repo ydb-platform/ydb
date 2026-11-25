@@ -298,8 +298,8 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
         for (const auto unsupported : {EFilterMode::UnknownProperty, EFilterMode::InvalidProperty}) {
             mode = unsupported;
             rewrittenPools = 0;
-            env->Sim(TDuration::Seconds(5));
-            UNIT_ASSERT_C(rewrittenPools >= 3, rewrittenPools);
+            UNIT_ASSERT_C(env.WaitFor([&] { return rewrittenPools >= 3; }, 30), rewrittenPools);
+            env->Sim(TDuration::MilliSeconds(100)); // Let the last response reach the balancer.
             UNIT_ASSERT_VALUES_EQUAL(reassigns, 0);
         }
 

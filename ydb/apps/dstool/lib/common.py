@@ -1053,6 +1053,11 @@ def pdisk_matches_storage_pool(pdisk, sp, location=None):
 
     for pdisk_filter in sp.PDiskFilter:
         for prop in pdisk_filter.Property:
+            known = type(prop)()
+            known.CopyFrom(prop)
+            known.DiscardUnknownFields()  # Recursive, including unknown Location subfields.
+            if known != prop:
+                break
             if prop.HasField('Type'):
                 if prop.Type != pdisk.Type:
                     break
@@ -1072,8 +1077,7 @@ def pdisk_matches_storage_pool(pdisk, sp, location=None):
                 ):
                     break
             else:
-                print('ERROR: unknown property in StoragePool filter', file=sys.stderr)
-                sys.exit(1)
+                break
         else:
             return True
 

@@ -13467,25 +13467,38 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
     }
 
     Y_UNIT_TEST(PDiskLocationFilterRestrictsStaticPlacement) {
-        TSetup s = MakeSetup();
-        s.SetNodeRack(3, "selected-rack");
-        auto* settings = s.Config.MutableSelfManagementConfig();
-        settings->MutableGeometry()->CopyFrom(Geometry(1));
-        auto* filter = settings->AddPDiskFilter();
-        filter->AddProperty()->SetType(NKikimrBlobStorage::ROT);
-        filter->AddProperty()->MutableLocation()->SetRack("selected-rack");
-        NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
-        keeper.AllocateStaticGroup({
-            .Config = &s.Config,
-            .GroupId = TGroupId::FromValue(0),
-            .GroupGeneration = 2,
-            .GroupType = TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
-            .ReplacedDisks = {{TVDiskIdShort(0, 0, 0), NBsController::TPDiskId()}},
-            .BaseConfig = &s.BaseConfig,
-            .IgnoreVSlotQuotaCheck = true,
-            .AllowUnusableDisks = true,
-        });
-        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskPDisk().NodeId, 3u);
+        for (ui32 variant = 0; variant != 4; ++variant) {
+            TSetup s = MakeSetup();
+            s.SetNodeRack(3, "selected-rack");
+            auto* settings = s.Config.MutableSelfManagementConfig();
+            settings->MutableGeometry()->CopyFrom(Geometry(1));
+            if (variant != 0) {
+                auto* opaque = settings->AddPDiskFilter()->AddProperty();
+                if (variant == 1) {
+                    opaque->SetType(NKikimrBlobStorage::ROT);
+                }
+                if (variant == 3) {
+                    opaque->MutableLocation()->mutable_unknown_fields()->AddVarint(100, 7);
+                } else {
+                    opaque->GetReflection()->MutableUnknownFields(opaque)->AddVarint(100, 7);
+                }
+            }
+            auto* filter = settings->AddPDiskFilter();
+            filter->AddProperty()->SetType(NKikimrBlobStorage::ROT);
+            filter->AddProperty()->MutableLocation()->SetRack("selected-rack");
+            NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+            keeper.AllocateStaticGroup({
+                .Config = &s.Config,
+                .GroupId = TGroupId::FromValue(0),
+                .GroupGeneration = 2,
+                .GroupType = TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+                .ReplacedDisks = {{TVDiskIdShort(0, 0, 0), NBsController::TPDiskId()}},
+                .BaseConfig = &s.BaseConfig,
+                .IgnoreVSlotQuotaCheck = true,
+                .AllowUnusableDisks = true,
+            });
+            UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskPDisk().NodeId, 3u);
+        }
     }
 
     Y_UNIT_TEST(UsesValidExplicitTarget) {

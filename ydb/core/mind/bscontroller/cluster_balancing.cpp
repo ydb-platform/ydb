@@ -16,6 +16,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <set>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -57,6 +58,8 @@ namespace NKikimr::NBsController {
                 return std::tie(left.BoxId, left.StoragePoolId) < std::tie(right.BoxId, right.StoragePoolId);
             }
         };
+
+        std::set<std::tuple<ui64, ui64, TString>> InvalidFilters;
 
         struct TStorageInfo {
             std::unordered_set<TGroupId> MovableGroups;
@@ -135,6 +138,7 @@ namespace NKikimr::NBsController {
                 std::vector<TPDiskFilter> Filters;
             };
             std::unordered_map<ui64, std::vector<TPoolFilters>> storagePoolsByBox;
+            decltype(InvalidFilters) invalidFilters;
             for (const auto& pool : storagePoolsStatus.GetStoragePool()) {
                 if (!pool.HasBoxId()) {
                     continue;
@@ -145,15 +149,20 @@ namespace NKikimr::NBsController {
                         parsedPool.Filters.push_back(TPDiskFilter::Parse(pool.GetBoxId(), pool.GetStoragePoolId(), filter));
                     } catch (const yexception& ex) {
                         // An invalid OR branch must not broaden the set of eligible disks.
-                        YDB_LOG_WARN("Skipping invalid PDisk filter in cluster balancing",
-                            {"marker", "BSCB18"},
-                            {"BoxId", pool.GetBoxId()},
-                            {"StoragePoolId", pool.GetStoragePoolId()},
-                            {"error", ex.what()});
+                        const auto key = std::make_tuple(pool.GetBoxId(), pool.GetStoragePoolId(), filter.SerializeAsString());
+                        if (invalidFilters.insert(key).second && !InvalidFilters.contains(key)) {
+                            YDB_LOG_WARN("Skipping invalid PDisk filter in cluster balancing",
+                                {"marker", "BSCB18"},
+                                {"BoxId", pool.GetBoxId()},
+                                {"StoragePoolId", pool.GetStoragePoolId()},
+                                {"error", ex.what()});
+                        }
                     }
                 }
                 storagePoolsByBox[pool.GetBoxId()].push_back(std::move(parsedPool));
             }
+
+            InvalidFilters = std::move(invalidFilters);
 
             const TNodeLocation emptyLocation;
             for (const auto& pdisk : config.GetPDisk()) {

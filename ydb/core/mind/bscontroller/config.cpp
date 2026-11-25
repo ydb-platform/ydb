@@ -1486,6 +1486,64 @@ namespace NKikimr::NBsController {
             }
         }
 
+        TBlobStorageController::TStoragePoolInfo::TPDiskFilters
+        TBlobStorageController::TStoragePoolInfo::GetMatchingFilters() const {
+            TPDiskFilters result;
+            for (const auto& filter : PDiskFilters) {
+                if (!filter.IsUnsupported) {
+                    result.insert(TPDiskFilter{.Type = filter.Type, .SharedWithOs = filter.SharedWithOs,
+                        .ReadCentric = filter.ReadCentric, .Kind = filter.Kind, .Location = filter.Location,
+                        .RequiredLocation = filter.RequiredLocation});
+                }
+            }
+            return result;
+        }
+
+        TBlobStorageController::TStoragePoolInfo::TPDiskFilters
+        TBlobStorageController::TStoragePoolInfo::ParsePDiskFilters(ui64 boxId, ui64 storagePoolId,
+                const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& filters,
+                const TPDiskFilters* previous) {
+            std::map<TString, std::vector<const TPDiskFilter*>> stored;
+            if (previous) {
+                for (const auto& filter : *previous) {
+                    NKikimrBlobStorage::TPDiskFilter proto;
+                    Serialize(&proto, filter);
+                    stored[proto.SerializeAsString()].push_back(&filter);
+                }
+            }
+            struct TRequestedFilter {
+                const NKikimrBlobStorage::TPDiskFilter* Proto = nullptr;
+                size_t Count = 0;
+            };
+            std::map<TString, TRequestedFilter> requested;
+            for (const auto& proto : filters) {
+                auto& request = requested[proto.SerializeAsString()];
+                request.Proto = &proto;
+                ++request.Count;
+            }
+            TPDiskFilters result;
+            for (const auto& [bytes, request] : requested) {
+                if (const auto it = stored.find(bytes); it != stored.end()) {
+                    // A wire round trip can reorder unknown oneof alternatives. Reuse the original keys.
+                    // Several distinct keys may have the same wire response; never guess which one was removed.
+                    if (request.Count < it->second.size() && std::any_of(it->second.begin(), it->second.end(),
+                            [](const auto* filter) { return filter->IsUnsupported; })) {
+                        throw TExError() << "Ambiguous PDisk filter edit; preserve or remove all identical branches";
+                    }
+                    for (const auto* filter : it->second) {
+                        result.insert(*filter);
+                    }
+                } else {
+                    auto filter = TPDiskFilter::Parse(boxId, storagePoolId, *request.Proto);
+                    if (filter.IsUnsupported) {
+                        throw TExError() << "Cannot add an unsupported PDisk filter";
+                    }
+                    result.insert(std::move(filter));
+                }
+            }
+            return result;
+        }
+
         bool TBlobStorageController::TStoragePoolInfo::LoadPDiskFilters(NIceDb::TNiceDb& db,
                 const TBoxStoragePoolId& id) {
             PDiskFilters.clear();
@@ -1500,8 +1558,16 @@ namespace NKikimr::NBsController {
                     } else {
                         const auto key = rows.template GetValue<typename T::Filter>();
                         NKikimrBlobStorage::TPDiskFilter proto;
-                        Y_ABORT_UNLESS(proto.ParseFromString(key));
-                        PDiskFilters.insert(TPDiskFilter::Parse(std::get<0>(id), std::get<1>(id), proto, &key));
+                        const auto [boxId, poolId] = id;
+                        Y_ABORT_UNLESS(proto.ParseFromString(key), "Invalid PDisk filter protobuf: BoxId# %" PRIu64
+                            " StoragePoolId# %" PRIu64, boxId, poolId);
+                        try {
+                            PDiskFilters.insert(TPDiskFilter::Parse(boxId, poolId, proto, &key));
+                        } catch (const TExError&) {
+                            // A future writer may use validation rules this binary does not understand.
+                            PDiskFilters.insert(TPDiskFilter{.BoxId = boxId, .StoragePoolId = poolId,
+                                .SerializedFilter = key, .IsUnsupported = true});
+                        }
                     }
                     if (!rows.Next()) {
                         return false;
@@ -1536,31 +1602,6 @@ namespace NKikimr::NBsController {
             }
         }
 
-        static bool HasUnknownFieldsRecursive(const NProtoBuf::Message& msg) {
-            const auto* reflection = msg.GetReflection();
-            if (!reflection->GetUnknownFields(msg).empty()) {
-                return true;
-            }
-
-            std::vector<const NProtoBuf::FieldDescriptor*> fields;
-            reflection->ListFields(msg, &fields);
-            for (const auto* field : fields) {
-                if (field->cpp_type() != NProtoBuf::FieldDescriptor::CPPTYPE_MESSAGE) {
-                    continue;
-                }
-                if (field->is_repeated()) {
-                    for (int i = 0; i < reflection->FieldSize(msg, field); ++i) {
-                        if (HasUnknownFieldsRecursive(reflection->GetRepeatedMessage(msg, field, i))) {
-                            return true;
-                        }
-                    }
-                } else if (HasUnknownFieldsRecursive(reflection->GetMessage(msg, field))) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         TBlobStorageController::TStoragePoolInfo::TPDiskFilter
         TBlobStorageController::TStoragePoolInfo::TPDiskFilter::Parse(ui64 boxId, ui64 storagePoolId,
                 const NKikimrBlobStorage::TPDiskFilter& proto, const TString* serialized) {
@@ -1570,9 +1611,9 @@ namespace NKikimr::NBsController {
             bool hasLocation = false;
 
             for (const auto &property : proto.GetProperty()) {
-                if (HasUnknownFieldsRecursive(property)) {
+                if (HasUnknownPDiskFilterFields(property)) {
                     // Preserve the whole constraint if any part of it is not understood.
-                    filter.HasUnknownRequiredProperty = true;
+                    filter.IsUnsupported = true;
                     continue;
                 }
                 switch (property.GetPropertyCase()) {
@@ -1612,12 +1653,12 @@ namespace NKikimr::NBsController {
                 throw TExError() << "TPDiskFilter.TRequiredProperty.Property has invalid case";
             }
 
-            if (!filter.Type && !filter.HasUnknownRequiredProperty) {
+            if (!filter.Type && !filter.IsUnsupported) {
                 throw TExError() << "TPDiskFilter did not specify Type property";
             }
 
             // Keep plain filters readable by pre-V2 builds. Loaded V2 rows must retain their original keys.
-            if (serialized || filter.Location || filter.HasUnknownRequiredProperty
+            if (serialized || filter.Location || filter.IsUnsupported
                     || !proto.GetReflection()->GetUnknownFields(proto).empty()) {
                 filter.SerializedFilter = serialized ? *serialized : proto.SerializeAsString();
             }

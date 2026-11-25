@@ -1,10 +1,14 @@
 #pragma once
 
+#include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
 
 #include <algorithm>
 
 namespace NKikimr {
+
+// Unknown fields anywhere inside a required property make the entire filter ineligible.
+bool HasUnknownPDiskFilterFields(const NKikimrBlobStorage::TPDiskFilter::TRequiredProperty& property);
 
 // Numeric legacy aliases do not preserve partial-field semantics when converted
 // by TNodeLocation. Require the current string fields in placement filters.

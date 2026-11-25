@@ -1043,13 +1043,12 @@ namespace NKikimr {
                         << "," << storagePool.DomainLevelBegin << "," << storagePool.DomainLevelEnd
                         << "," << storagePool.NumFailRealms << "," << storagePool.NumFailDomainsPerFailRealm
                         << "," << storagePool.NumVDisksPerFailDomain;
-                    for (const auto& filter : storagePool.PDiskFilters) {
+                    for (const auto& filter : storagePool.GetMatchingFilters()) {
                         identifier << " Filter# " << filter.Type << "," << filter.SharedWithOs
                             << "," << filter.ReadCentric << "," << filter.Kind;
                         if (filter.Location) {
                             identifier << " Location# " << filter.Location->size() << ":" << *filter.Location;
                         }
-                        identifier << " UnknownRequiredProperty# " << filter.HasUnknownRequiredProperty;
                     }
                     auto& [numGroups, id] = filterMap[identifier];
                     numGroups += storagePool.NumGroups;

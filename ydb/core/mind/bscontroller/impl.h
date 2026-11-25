@@ -1301,7 +1301,7 @@ public:
             // Authoritative protobuf for V2 filters; the fields above are its matching cache. On load, this is
             // the exact stored key, not a reserialization. Only BoxId/StoragePoolId may change without reparsing.
             TMaybe<TString> SerializedFilter;
-            bool HasUnknownRequiredProperty = false;
+            bool IsUnsupported = false;
 
             void SetLocation(const TString& serialized) {
                 Location = serialized;
@@ -1342,7 +1342,7 @@ public:
                 // obtain disk kind
                 Schema::BoxStoragePoolPDiskFilter::Kind::Type kind = c.Kind();
 
-                return !HasUnknownRequiredProperty
+                return !IsUnsupported
                     && (!Type || *Type == type)
                     && (!SharedWithOs || *SharedWithOs == sharedWithOs)
                     && (!ReadCentric || *ReadCentric == readCentric)
@@ -1372,8 +1372,8 @@ public:
                 if (Location) {
                     s << comma() << "Location:" << TNodeLocation::ParseLocation(*Location).ShortDebugString();
                 }
-                if (HasUnknownRequiredProperty) {
-                    s << comma() << "UnknownRequiredProperty";
+                if (IsUnsupported) {
+                    s << comma() << "UnsupportedFilter";
                 }
             }
 
@@ -1409,7 +1409,7 @@ public:
                 TMaybe<TString> location;
                 ::LoadMany(s, Type, SharedWithOs, ReadCentric, Kind, location);
                 SerializedFilter.Clear();
-                HasUnknownRequiredProperty = false;
+                IsUnsupported = false;
                 Location.Clear();
                 RequiredLocation.reset();
                 if (location) {
@@ -1533,6 +1533,11 @@ public:
         TUserIds UserIds;
         TPDiskFilters PDiskFilters;
 
+        // Matching identity excludes opaque OR branches and persisted protobuf encodings.
+        TPDiskFilters GetMatchingFilters() const;
+        static TPDiskFilters ParsePDiskFilters(ui64 boxId, ui64 storagePoolId,
+            const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& filters,
+            const TPDiskFilters* previous);
         bool LoadPDiskFilters(NIceDb::TNiceDb& db, const TBoxStoragePoolId& id);
         static void UpdatePDiskFilters(NTable::TDatabase& db, const TPDiskFilters* previous,
             const TPDiskFilters* current);

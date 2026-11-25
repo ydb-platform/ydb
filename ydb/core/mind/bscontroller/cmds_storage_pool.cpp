@@ -229,11 +229,8 @@ namespace NKikimr::NBsController {
             storagePool.UserIds.emplace(boxId, storagePoolId, userId);
         }
 
-        // A ReadStoragePool round trip may change the protobuf wire encoding and rewrite an unchanged filter once.
-        // UpdatePDiskFilters deletes the previous row using its exact stored key.
-        for (const auto &item : cmd.GetPDiskFilter()) {
-            storagePool.PDiskFilters.insert(TStoragePoolInfo::TPDiskFilter::Parse(boxId, storagePoolId, item));
-        }
+        storagePool.PDiskFilters = TStoragePoolInfo::ParsePDiskFilters(boxId, storagePoolId, cmd.GetPDiskFilter(),
+            existing ? &current->second.PDiskFilters : nullptr);
 
         if (cmd.HasExistingGroups()) {
             throw TExError() << "migration is not supported anymore";

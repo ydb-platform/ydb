@@ -310,6 +310,10 @@ namespace NKikimr::NStorage {
             for (const auto& pdiskFilter : selfManagementConfig.GetPDiskFilter()) {
                 bool m = true;
                 for (const auto& p : pdiskFilter.GetProperty()) {
+                    if (HasUnknownPDiskFilterFields(p)) {
+                        m = false;
+                        break;
+                    }
                     bool pMatch = false;
                     switch (p.GetPropertyCase()) {
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kType:

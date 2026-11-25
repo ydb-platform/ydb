@@ -1021,9 +1021,16 @@ Y_UNIT_TEST_SUITE(TStateStorageProxyDelete) {
     Y_UNIT_TEST(DeleteNeedsMajorityOfEachRingGroup) {
         TDeleteFixture f(6);
         f.AddGroup(0, 3, 3);
-        f.AddGroup(3, 3, 3);
+        f.AddGroup(3, 3, 3).SetPileState(NKikimrConfig::TStateStorageConfig::SYNCHRONIZED);
         // Four replicas answer, including only one from the second group.
         f.CheckDelete(NKikimrProto::ERROR, 4, 1, 2);
+    }
+
+    Y_UNIT_TEST(DeleteSucceedsWithoutMajorityInNotSynchronizedGroup) {
+        TDeleteFixture f(6);
+        f.AddGroup(0, 3, 3);
+        f.AddGroup(3, 3, 3).SetPileState(NKikimrConfig::TStateStorageConfig::NOT_SYNCHRONIZED);
+        f.CheckDelete(NKikimrProto::OK, 4, 1, 2);
     }
 
     Y_UNIT_TEST(DeleteAcceptsCookieLessRepliesFromCoLocatedReplicas) {

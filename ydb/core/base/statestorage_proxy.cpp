@@ -1133,16 +1133,13 @@ protected:
     const ui64 Cookie;
     TIntrusivePtr<TStateStorageInfo> Info;
     ui64 TabletID;
-    struct TTarget {
-        ui32 GroupIdx;
-        bool CountsForQuorum;
-    };
     // Each target gets its own reply address because legacy replicas reply with a zero cookie.
-    THashMap<TActorId, TTarget> PendingTargets;
+    THashMap<TActorId, ui32> PendingTargets;
     TVector<ui32> GroupAcks;
 
     static bool RequiresQuorum(const TStateStorageInfo::TRingGroup& group) {
-        return group.State != ERingGroupState::DISCONNECTED && !group.WriteOnly;
+        return !group.WriteOnly
+            && (group.State == ERingGroupState::PRIMARY || group.State == ERingGroupState::SYNCHRONIZED);
     }
 
 public:
@@ -1184,13 +1181,12 @@ public:
     void Bootstrap() {
         GroupAcks.assign(Info->RingGroups.size(), 0);
         for (ui32 idx : xrange(Info->RingGroups.size())) {
-            const auto& ringGroup = Info->RingGroups[idx];
             TStateStorageInfo::TSelection selection;
             Info->SelectReplicas(TabletID, &selection, idx);
             // Clean up the selected replicas even in groups that do not require a quorum.
             for (const TActorId& replica : selection) {
                 const TActorIdentity replyTo(RegisterAlias());
-                PendingTargets.emplace(replyTo, TTarget{idx, RequiresQuorum(ringGroup)});
+                PendingTargets.emplace(replyTo, idx);
                 replyTo.Send(replica,
                     new TEvStateStorage::TEvReplicaDelete(TabletID, Info->ClusterStateGeneration, Info->ClusterStateGuid),
                     IEventHandle::FlagTrackDelivery);
@@ -1239,9 +1235,7 @@ public:
             SendResponse(NKikimrProto::ERROR);
             return;
         }
-        if (target->second.CountsForQuorum) {
-            ++GroupAcks[target->second.GroupIdx];
-        }
+        ++GroupAcks[target->second];
         PendingTargets.erase(target);
         OnResponseReceived();
     }

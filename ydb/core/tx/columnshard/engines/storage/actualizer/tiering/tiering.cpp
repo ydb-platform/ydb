@@ -57,7 +57,6 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
                     {"reason", "data not ready"});
                 return {};
             } else if (!it->second) {
-                Counters.SkipEvictionForMissingMax->Inc();
                 YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
                     {"event", "skip_add_portion"},
                     {"reason", "no data for ttl usage (need to create index or use first pk column)"});

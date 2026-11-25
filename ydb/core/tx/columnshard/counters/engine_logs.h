@@ -220,10 +220,6 @@ private:
     NMonitoring::THistogramPtr ActualizationTaskSizeRemove;
     NMonitoring::THistogramPtr ActualizationTaskSizeEvict;
 
-    // Count skipped AddPortion attempts, not distinct portions.
-    NMonitoring::TDynamicCounters::TCounterPtr ActualizationSkipAlreadyConsideredCount;
-    NMonitoring::TDynamicCounters::TCounterPtr ActualizationSkipLockedCount;
-
     NMonitoring::TDynamicCounters::TCounterPtr ActualizationSkipRWProgressCount;
     NMonitoring::THistogramPtr ActualizationSkipTooFreshPortion;
 
@@ -285,14 +281,6 @@ public:
     };
 
     void OnActualizationTask(const ui32 evictCount, const ui32 removeCount) const;
-
-    void OnActualizationSkipAlreadyConsidered() const {
-        ActualizationSkipAlreadyConsideredCount->Inc();
-    }
-
-    void OnActualizationSkipLocked() const {
-        ActualizationSkipLockedCount->Inc();
-    }
 
     TPortionsInfoGuard BuildPortionBlobsGuard() const {
         return TPortionsInfoGuard(BlobSizeDistribution, PortionSizeDistribution, PortionRecordsDistribution, BadPortionsCount);

@@ -24,13 +24,10 @@ const TDuration Tier1EvictAfter = TDuration::Hours(1);
 const TDuration Tier2EvictAfter = TDuration::Hours(2);
 
 TIndexInfo MakeTestIndexInfo(const std::shared_ptr<TSchemaObjectsCache>& cache, const ui64 version, const bool schemeNeedActualization,
-    const bool tieringNeedActualization = false, const bool withTtlColumn = false) {
+    const bool tieringNeedActualization = false) {
     NKikimrSchemeOp::TColumnTableSchema proto;
     *proto.MutableColumns()->Add() = NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)).CreateColumn(PkColumnId);
     proto.AddKeyColumnNames("pk");
-    if (withTtlColumn) {
-        *proto.MutableColumns()->Add() = NArrow::NTest::TTestColumn("ttl", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)).CreateColumn(2);
-    }
     proto.SetVersion(version);
     proto.MutableOptions()->SetSchemeNeedActualization(schemeNeedActualization);
     proto.MutableOptions()->SetTieringNeedActualization(tieringNeedActualization);
@@ -62,10 +59,10 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TController>, Controller);
 
 public:
-    explicit TTestEnv(const bool withTtlColumn = false)
+    TTestEnv()
         : Controller(std::make_shared<TController>())
     {
-        VersionedIndex.AddIndex(TSnapshot(1, 1), Cache->GetOrInsertIndexInfo(MakeTestIndexInfo(Cache, 1, false, false, withTtlColumn)));
+        VersionedIndex.AddIndex(TSnapshot(1, 1), Cache->GetOrInsertIndexInfo(MakeTestIndexInfo(Cache, 1, false)));
         Actualizer.emplace(TestPathId, VersionedIndex, Storages);
     }
 
@@ -75,15 +72,6 @@ public:
 
     const std::shared_ptr<NDataLocks::TManager>& GetDataLocksManager() const {
         return DataLocksManager;
-    }
-
-    void ActualizePortionMetadata() {
-        // This fixture has no column or index chunks: only the presence of TTL index metadata is inspected.
-        const std::vector<TUnifiedBlobId> blobs;
-        const std::vector<TColumnRecord> records;
-        const std::vector<TIndexChunk> indexes;
-        const TPortionDataAccessor accessor(Portions.at(TestPortionId), blobs, records, indexes, false);
-        Actualizer->ActualizePortionInfo(accessor, TActualizationContext(TestStart));
     }
 
     TRWAddress MakeAddress(const TString& targetTier) const {
@@ -200,10 +188,10 @@ Y_UNIT_TEST_SUITE(TTieringProcessContextTests) {
         UNIT_ASSERT_VALUES_EQUAL(context.GetTasks().begin()->first, env.MakeAddress(Tier2));
     }
 
-    Y_UNIT_TEST(LockedAndRepeatedPortionsHaveDistinctCounters) {
+    Y_UNIT_TEST(RWProgressCountsDataLocksOnly) {
         TTestEnv env;
-        const auto locked = env.GetCounters().GetDeriviative("Actualization/Skip/Locked/Count");
-        const auto repeated = env.GetCounters().GetDeriviative("Actualization/Skip/AlreadyConsidered/Count");
+        const auto skipped = env.GetCounters().GetDeriviative("Actualization/Skip/RWProgress/Count");
+        const auto before = skipped->Val();
         auto portion = env.MakePortion(TDuration::Zero());
         auto guard = env.GetDataLocksManager()->RegisterLock(std::make_shared<NDataLocks::TListPortionsLock>(
             "test_compaction", std::vector<std::shared_ptr<TPortionInfo>>{ portion }, NDataLocks::ELockCategory::Compaction));
@@ -211,15 +199,13 @@ Y_UNIT_TEST_SUITE(TTieringProcessContextTests) {
         auto context = env.MakeProcessContext();
         UNIT_ASSERT_EQUAL(context.AddPortion(portion, env.MakeEvictionFeatures(Tier2), TDuration::Zero()),
             TTieringProcessContext::EAddPortionResult::PORTION_LOCKED);
-        UNIT_ASSERT_VALUES_EQUAL(locked->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(repeated->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(skipped->Val(), before + 1);
         UNIT_ASSERT(context.GetTasks().empty());
 
-        // The rejected portion was already considered in this pass; do not count the lock twice.
+        // Reconsidering a portion in the same pass does not encounter the lock again.
         UNIT_ASSERT_EQUAL(context.AddPortion(portion, env.MakeEvictionFeatures(Tier2), TDuration::Zero()),
             TTieringProcessContext::EAddPortionResult::PORTION_LOCKED);
-        UNIT_ASSERT_VALUES_EQUAL(locked->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(repeated->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(skipped->Val(), before + 1);
         UNIT_ASSERT(context.GetTasks().empty());
 
         guard->Release(*env.GetDataLocksManager());
@@ -227,8 +213,7 @@ Y_UNIT_TEST_SUITE(TTieringProcessContextTests) {
         UNIT_ASSERT_EQUAL(nextContext.AddPortion(portion, env.MakeEvictionFeatures(Tier2), TDuration::Zero()),
             TTieringProcessContext::EAddPortionResult::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(nextContext.GetTasks().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(locked->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(repeated->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(skipped->Val(), before + 1);
     }
 
     Y_UNIT_TEST(FirstTaskIsNotBuiltForAddressAtLimit) {
@@ -247,36 +232,6 @@ Y_UNIT_TEST_SUITE(TTieringProcessContextTests) {
 // ends up under are computed at different instants and need not match. That is why the caller's per-queue check
 // cannot stand in for the check above.
 Y_UNIT_TEST_SUITE(TTieringActualizerTests) {
-    Y_UNIT_TEST(MissingTtlMaxIsCountedAfterMetadataArrives) {
-        TTestEnv env(true);
-        TTieringCounters counters;
-        const auto skipped = counters.SkipEvictionForMissingMax;
-        const auto before = skipped->Val();
-        env.QueueTieredPortion(IStoragesManager::DefaultStorageId, TDuration::Hours(3));
-        TTiering tiering;
-        UNIT_ASSERT(tiering.Add(std::make_shared<TTierInfo>(NColumnShard::NTiers::TExternalStorageId(Tier1), Tier1EvictAfter, "ttl", 1)));
-        env.RefreshTiering(tiering);
-
-        // Waiting for metadata is not evidence of a missing maximum.
-        UNIT_ASSERT(env.ExtractTasks().empty());
-        UNIT_ASSERT_VALUES_EQUAL(skipped->Val(), before);
-        env.ActualizePortionMetadata();
-        UNIT_ASSERT(env.ExtractTasks().empty());
-        UNIT_ASSERT_VALUES_EQUAL(skipped->Val(), before + 1);
-
-        // Duplicate metadata delivery does not evaluate the portion again.
-        env.ActualizePortionMetadata();
-        UNIT_ASSERT_VALUES_EQUAL(skipped->Val(), before + 1);
-        // Refresh does evaluate it again: the counter measures attempts, not unique portions.
-        env.RefreshTiering(tiering);
-        UNIT_ASSERT_VALUES_EQUAL(skipped->Val(), before + 2);
-
-        // Switching to the first PK column provides a maximum without an index.
-        env.RefreshTiering(MakeTestTiering());
-        UNIT_ASSERT(!env.ExtractTasks().empty());
-        UNIT_ASSERT_VALUES_EQUAL(skipped->Val(), before + 2);
-    }
-
     Y_UNIT_TEST(PrefixChangesMoveExistingPortionsWhenActualizationEnabled) {
         using NColumnShard::NTiers::TExternalStorageId;
         const std::vector<std::optional<TString>> prefixes = { std::nullopt, TString(), TString("old/data"), TString("new/data") };

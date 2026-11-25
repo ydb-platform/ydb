@@ -61,9 +61,6 @@ TEngineLogsCounters::TEngineLogsCounters()
     ActualizationTaskSizeRemove = TBase::GetHistogram("Actualization/RemoveTasks/Size", NMonitoring::ExponentialHistogram(18, 2));
     ActualizationTaskSizeEvict = TBase::GetHistogram("Actualization/EvictTasks/Size", NMonitoring::ExponentialHistogram(18, 2));
 
-    ActualizationSkipAlreadyConsideredCount = TBase::GetDeriviative("Actualization/Skip/AlreadyConsidered/Count");
-    ActualizationSkipLockedCount = TBase::GetDeriviative("Actualization/Skip/Locked/Count");
-
     ActualizationSkipRWProgressCount = TBase::GetDeriviative("Actualization/Skip/RWProgress/Count");
     ActualizationSkipTooFreshPortion = TBase::GetHistogram("Actualization//Skip/TooFresh/Duration", NMonitoring::LinearHistogram(12, 0, 360));
 

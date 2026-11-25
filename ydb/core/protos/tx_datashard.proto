@@ -388,9 +388,8 @@ message TKqpVectorResolveSettings {
     optional uint64 QuerySpanId = 20;
 
     optional string PoolId = 21;
-    reserved 22, 23;
-    optional NKqpProto.TKqpPhyCnVectorResolve.EIndexType IndexType = 24;
-    optional NKqpProto.TKqpPhyCnVectorResolve.EOperation Operation = 25;
+    optional NKqpProto.TKqpPhyCnVectorResolve.EIndexType IndexType = 22;
+    optional NKqpProto.TKqpPhyCnVectorResolve.EOperation Operation = 23;
 }
 
 // Settings of the input-transform actor reading top-K rows from a vector KMeans tree index.

@@ -1,14 +1,14 @@
 #include "full_otel_log_sink.h"
 
-#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log_settings.h>
 
 #include <library/cpp/svnversion/svnversion.h>
 
 namespace NActors::NStructuredLog {
 
-TFullOtelLogSink::TFullOtelLogSink(TBaseOtelLogSink::TOtelSettings settings)
+TFullOtelLogSink::TFullOtelLogSink(TBaseOtelLogSink::TOtelSettings settings, TString logType)
     : TBaseOtelLogSink(std::move(settings))
+    , LogType(std::move(logType))
 {
 }
 
@@ -22,7 +22,7 @@ void TFullOtelLogSink::FillLogRecordAttributes(
         AddAttr(attrs, "meta.location", location.Str());
     }
 
-    AddAttr(attrs, "labels.component", TBaseOtelLogSink::GetComponentName(message.Component));
+    AddAttr(attrs, "labels.component", GetComponentName(message.Component));
     AddAttr(attrs, "meta.microseconds", message.Time.MicroSeconds());
 
     AddAttr(attrs, "meta.priority", TString{NLog::PriorityToString(message.Priority)});
@@ -47,17 +47,15 @@ void TFullOtelLogSink::FillScopeAttributes(
 
 void TFullOtelLogSink::FillResourceAttributes(
     google::protobuf::RepeatedPtrField<otel_common_v1::KeyValue>& attrs) {
-    AddAttr(attrs, "labels.log_type", TString("debug"));
+    AddAttr(attrs, "labels.log_type", LogType);
     AddAttr(attrs, "labels.tag", TString("KIKIMR"));
 
-    if (TlsActivationContext) {
-        if (NLog::TSettings* logSettings = TlsActivationContext->LoggerSettings()) {
-            AddAttr(attrs, "labels.database",
-                logSettings->TenantName ? logSettings->TenantName : TString("static"));
-            AddAttr(attrs, "meta.node_id", logSettings->NodeId);
-            AddAttr(attrs, "cluster", logSettings->ClusterName);
-            AddAttr(attrs, "host", logSettings->ShortHostName);
-        }
+    if (LogSettings) {
+        AddAttr(attrs, "labels.database",
+            LogSettings->TenantName ? LogSettings->TenantName : TString("static"));
+        AddAttr(attrs, "meta.node_id", LogSettings->NodeId);
+        AddAttr(attrs, "cluster", LogSettings->ClusterName);
+        AddAttr(attrs, "host", LogSettings->ShortHostName);
     }
 }
 

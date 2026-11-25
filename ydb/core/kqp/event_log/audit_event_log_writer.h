@@ -15,8 +15,10 @@ public:
     }
 
     bool operator()(const NActors::NStructuredLog::TLogMessage& message) const {
+        const TString prefix("Audit event");
         if (message.Component != NKikimrServices::AUDIT_LOG_WRITER ||
-            message.TextMessage != "Audit event") {
+            message.TextMessage.size() < prefix.size() ||
+            message.TextMessage.substr(0, prefix.size()) != prefix) {
             return false;
         }
 
@@ -64,6 +66,10 @@ public:
 
 class TSchemeShardEventLog {
 public:
+    static TStringBuf GetOtelLogType() {
+        return "audit-schemeshard";
+    }
+
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto result = TAuditEventLogCommon::GetColumns();
         auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
@@ -106,6 +112,10 @@ public:
 
 class TGrpcProxyEventLog {
 public:
+    static TStringBuf GetOtelLogType() {
+        return "audit-grpc-proxy";
+    }
+
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
 
@@ -137,6 +147,10 @@ public:
 
 class TGrpcConnEventLog {
 public:
+    static TStringBuf GetOtelLogType() {
+        return "audit-grpc-conn";
+    }
+
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         return TAuditEventLogCommon::GetColumns();
     }
@@ -148,6 +162,10 @@ public:
 
 class TGrpcLoginEventLog {
 public:
+    static TStringBuf GetOtelLogType() {
+        return "audit-grpc-login";
+    }
+
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
         auto result = TAuditEventLogCommon::GetColumns();
@@ -165,6 +183,10 @@ public:
 
 class TMonitoringEventLog {
 public:
+    static TStringBuf GetOtelLogType() {
+        return "audit-monitoring";
+    }
+
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
         auto result = TAuditEventLogCommon::GetColumns();
@@ -185,6 +207,10 @@ public:
 
 class TAuditServiceEventLog {
 public:
+    static TStringBuf GetOtelLogType() {
+        return "audit-heartbeat";
+    }
+
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         return TAuditEventLogCommon::GetColumns();
     }
@@ -196,6 +222,10 @@ public:
 
 class TBscEventLog {
 public:
+    static TStringBuf GetOtelLogType() {
+        return "audit-bsc";
+    }
+
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto result = TAuditEventLogCommon::GetColumns();
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
@@ -213,6 +243,10 @@ public:
 
 class TDistconfEventLog {
 public:
+    static TStringBuf GetOtelLogType() {
+        return "audit-distconf";
+    }
+
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto result = TAuditEventLogCommon::GetColumns();
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
@@ -230,6 +264,10 @@ public:
 
 class TWebLoginEventLog {
 public:
+    static TStringBuf GetOtelLogType() {
+        return "audit-web-login";
+    }
+
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         return TAuditEventLogCommon::GetColumns();
     }
@@ -241,6 +279,10 @@ public:
 
 class TConsoleEventLog {
 public:
+    static TStringBuf GetOtelLogType() {
+        return "audit-console";
+    }
+
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto result = TAuditEventLogCommon::GetColumns();
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{

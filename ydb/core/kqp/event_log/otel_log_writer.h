@@ -24,6 +24,13 @@ public:
     {
     }
 
+    TBaseOtelLogWriter(NActors::NStructuredLog::TBaseOtelLogSink::TOtelSettings settings, TString logType)
+        : TBase(std::move(settings), std::move(logType))
+        , Filter(TLogClass::CreateFilter())
+        , RequiredKeys(MakeRequiredKeys())
+    {
+    }
+
     void Write(const NActors::NStructuredLog::TLogMessage& message) override {
         if (!Filter(message)) {
             return;
@@ -62,9 +69,9 @@ public:
 template <typename TLogClass>
 class TFullOtelLogWriter : public TBaseOtelLogWriter<TLogClass, NActors::NStructuredLog::TFullOtelLogSink> {
 public:
-    template <typename TArg>
-    TFullOtelLogWriter(TArg&& arg)
-        : TBaseOtelLogWriter<TLogClass, NActors::NStructuredLog::TFullOtelLogSink>(std::forward<TArg>(arg))
+    explicit TFullOtelLogWriter(NActors::NStructuredLog::TBaseOtelLogSink::TOtelSettings settings)
+        : TBaseOtelLogWriter<TLogClass, NActors::NStructuredLog::TFullOtelLogSink>(
+              std::move(settings), TString{TLogClass::GetOtelLogType()})
     {
     }
 };

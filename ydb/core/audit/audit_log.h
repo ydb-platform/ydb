@@ -8,6 +8,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/string_value_extractor.h>
 #include <ydb/library/actors/struct_log/structured_message.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -18,7 +19,14 @@
             NActors::NStructuredLog::TStructuredMessage auditStructuredMessage;                                                 \
             expr                                                                                                                \
             ::NKikimr::NAudit::SendAuditLog(sys, std::move(auditParts));                                                        \
-            YDB_LOG_NOTICE_COMP(NKikimrServices::EServiceKikimr::AUDIT_LOG_WRITER, "Audit event", auditStructuredMessage);      \
+            ::NActors::NStructuredLog::TStringValueExtractor extractor;                                                         \
+            TStringBuilder auditStructuredMessageText;                                                                          \
+            auditStructuredMessageText << "Audit event";                                                                        \
+            auto operation = extractor.ExtractValue(auditStructuredMessage, {"operation"});                                     \
+            if (operation.has_value()) {                                                                                        \
+                auditStructuredMessageText << ": " << operation.value();                                                        \
+            }                                                                                                                   \
+            YDB_LOG_NOTICE_COMP(NKikimrServices::EServiceKikimr::AUDIT_LOG_WRITER, auditStructuredMessageText, auditStructuredMessage);  \
         }                                                                                                                       \
     } while (0) /**/
 

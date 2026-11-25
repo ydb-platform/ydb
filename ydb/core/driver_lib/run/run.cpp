@@ -5,6 +5,7 @@
 #include "kikimr_services_initializers.h"
 
 #include <ydb/core/kqp/event_log/kqp_event_log_writer.h>
+#include <ydb/core/kqp/common/warmup/warmup.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/memory_controller/memory_controller.h>

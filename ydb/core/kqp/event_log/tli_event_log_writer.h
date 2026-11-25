@@ -56,6 +56,10 @@ public:
 
 class TDataShardTliEventLog {
 public:
+    static TStringBuf GetOtelLogType() {
+        return "tli-datashard";
+    }
+
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto notNull = TEventLogColumn::TDatabaseSettings::NotNull();
         auto notNullDict = TEventLogColumn::TDatabaseSettings::NotNull().SetDictionary(true);
@@ -90,6 +94,10 @@ public:
 
 class TSessionTliEventLog {
 public:
+    static TStringBuf GetOtelLogType() {
+        return "tli-session";
+    }
+
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto notNullDict = TEventLogColumn::TDatabaseSettings::NotNull().SetDictionary(true);
 

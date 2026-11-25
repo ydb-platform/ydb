@@ -28,6 +28,10 @@
 #include <utility>
 #include <vector>
 
+namespace NActors::NLog {
+struct TSettings;
+}
+
 namespace NActors::NStructuredLog {
 
 namespace otel_logs_v1 = ::opentelemetry::proto::logs::v1;
@@ -80,7 +84,7 @@ protected:
     }
     static otel_logs_v1::SeverityNumber GetOtelSeverity(NActors::NLog::EPrio priority);
     static const char* GetOtelSeverityText(NActors::NLog::EPrio priority);
-    static TString GetComponentName(NActors::NLog::EComponent component);
+    TString GetComponentName(NActors::NLog::EComponent component) const;
 
     void FillLogRecord(otel_logs_v1::LogRecord& record, const TLogMessage& message);
 
@@ -93,6 +97,7 @@ protected:
         google::protobuf::RepeatedPtrField<otel_common_v1::KeyValue>& attrs) = 0;
 
     const TOtelSettings Settings;
+    const NLog::TSettings* const LogSettings;
 
 private:
     void FillLogRequest(

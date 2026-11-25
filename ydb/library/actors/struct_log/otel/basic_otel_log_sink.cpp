@@ -57,11 +57,9 @@ const char* TBaseOtelLogSink::GetOtelSeverityText(NActors::NLog::EPrio priority)
     return "UNSPECIFIED";
 }
 
-TString TBaseOtelLogSink::GetComponentName(NActors::NLog::EComponent component) {
-    if (TlsActivationContext) {
-        if (NLog::TSettings* logSettings = TlsActivationContext->LoggerSettings()) {
-            return TString{logSettings->ComponentName(component)};
-        }
+TString TBaseOtelLogSink::GetComponentName(NActors::NLog::EComponent component) const {
+    if (LogSettings) {
+        return TString{LogSettings->ComponentName(component)};
     }
     return ToString(static_cast<ui32>(component));
 }
@@ -103,7 +101,8 @@ TBaseOtelLogSink::TOtelSettings::TOtelSettings() {
 }
 
 TBaseOtelLogSink::TBaseOtelLogSink(TOtelSettings settings)
-    : Settings(std::move(settings)) {
+    : Settings(std::move(settings))
+    , LogSettings(TlsActivationContext ? TlsActivationContext->LoggerSettings() : nullptr) {
     Channel = grpc::CreateCustomChannel(
         Settings.CollectorUri.c_str(),
         grpc::InsecureChannelCredentials(),

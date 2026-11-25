@@ -19,7 +19,7 @@ void TSimpleOtelLogSink::FillLogRecordAttributes(
     }
 
     AddAttr(attrs, "nodeId", message.NodeId);
-    AddAttr(attrs, "component", TBaseOtelLogSink::GetComponentName(message.Component));
+    AddAttr(attrs, "component", GetComponentName(message.Component));
 
     message.StructuredMessage.ForEachTyped([&](const std::vector<TKeyName>& key, const auto& value) {
 

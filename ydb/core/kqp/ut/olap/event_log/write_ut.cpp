@@ -355,10 +355,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:351")", R"(["3"])",  "[3u]"},
-            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:353")", R"(["7"])",   "[7u]"},
-            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:355")", R"(["ace"])", "#"},
-            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:356")", R"(#)",       "#"}});
+            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:348")", R"(["3"])",  "[3u]"},
+            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:350")", R"(["7"])",   "[7u]"},
+            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:352")", R"(["ace"])", "#"},
+            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:353")", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {

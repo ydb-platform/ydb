@@ -26,6 +26,14 @@
 
 Например, если сейчас в таблице 1000 строк, порог 20% соответствует 200 обновлениям или удалениям. Повторные изменения одной строки учитываются отдельно.
 
+{% if feature_flags.enable_background_analyze_change_ratio == false %}
+{% note warning %}
+
+Порог изменений не учитывается, пока выключен фича-флаг `enable_background_analyze_change_ratio`: статистика обновляется только по плановому интервалу 24 часа. Флаг включается в секции `feature_flags`, см. [фича-флаги](feature_flags.md).
+
+{% endnote %}
+{% endif %}
+
 ## Гистограмма первичного ключа {#analyze-collect-primary-key-histogram}
 
 При создании многоколоночной статистики через [CREATE TABLE ... STATISTICS](../../yql/reference/syntax/create_table/statistics.md) укажите столбцы, по которым она будет собираться.

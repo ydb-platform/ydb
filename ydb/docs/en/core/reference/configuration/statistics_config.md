@@ -26,6 +26,14 @@ Sampling (`ANALYZE SAMPLE` with a rate below `1`) does not change the schedule.
 
 For example, if the table currently has 1,000 rows, a 20% threshold corresponds to 200 updates or deletes. Repeated changes to the same row are counted separately.
 
+{% if feature_flags.enable_background_analyze_change_ratio == false %}
+{% note warning %}
+
+The change threshold is not applied while the `enable_background_analyze_change_ratio` feature flag is disabled: statistics are refreshed only on the scheduled 24-hour interval. The flag is set in the `feature_flags` section, see [feature flags](feature_flags.md).
+
+{% endnote %}
+{% endif %}
+
 ## Primary-key histogram {#analyze-collect-primary-key-histogram}
 
 When defining multi-column statistics with [CREATE TABLE ... STATISTICS](../../yql/reference/syntax/create_table/statistics.md), specify the columns to include.

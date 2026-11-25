@@ -40,3 +40,4 @@ feature_flags:
 | `enable_external_data_sources`                           | Включение [внешних источников данных](../../concepts/datamodel/external_data_source.md)|
 | `enable_grpc_audit`                                      | Включение [аудита](../../security/audit-log.md#grpc-connection) изменений состояния gRPC-соединения |
 | `enable_fs_backups`                                      | Включение операций [резервного копирования и восстановления на сетевую файловую систему](../../concepts/backup.md#nfs) |
+| `enable_background_analyze_change_ratio`                 | [Порог изменений](statistics_config.md#background-analyze-change-ratio-threshold-percent) для повторного фонового сбора статистики `ANALYZE` |

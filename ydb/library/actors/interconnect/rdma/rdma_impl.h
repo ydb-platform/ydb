@@ -12,10 +12,10 @@
 #include <ydb/library/actors/util/intrusive_funnel_queue.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/monlib/metrics/metric_sub_registry.h>
+#include <library/cpp/threading/bounded_queue/bounded_queue.h>
 #include <library/cpp/threading/queue/mpsc_read_as_filled.h>
 
-
-#include <util/thread/lfqueue.h>
+#include <util/generic/bitops.h>
 #include <util/system/guard.h>
 #include <util/system/rwlock.h>
 #include <util/system/spinlock.h>
@@ -655,6 +655,7 @@ public:
         : TCqCommon(as)
         , Thread(ThreadFunc, this)
         , Finished(false)
+        , Queue(FastClp2<size_t>(sz < 2 ? 2 : sz))
         , NonBlockingPolling(nonBlockingPolling)
     {
         auto counter = MakeCounters(c);
@@ -669,13 +670,13 @@ public:
 
         // Fill queue
         for (size_t i = 0; i < sz; i++) {
-            Queue.Enqueue(&WrBuf[i]);
+            Y_ABORT_UNLESS(Queue.Enqueue(&WrBuf[i]));
         }
     }
 
     void ReturnWr(IWr* wr) noexcept override {
         Allocated.fetch_sub(1);
-        Queue.Enqueue(static_cast<TWr*>(wr));
+        Y_ABORT_UNLESS(Queue.Enqueue(static_cast<TWr*>(wr)));
     }
 
 protected:
@@ -750,8 +751,7 @@ public:
         while (true) {
             if (ctx) {
                 TWr* wr = nullptr;
-                Queue.Dequeue(&wr);
-                if (wr) {
+                if (Queue.Dequeue(wr)) {
                     preparedWr.emplace_back(wr);
                     if (preparedWr.size() < ctx->GetVerbsNum()) {
                         if (tryBuildAtOnce) {
@@ -954,7 +954,7 @@ protected:
     // Queue is used to commnicate with client code (from actors)
     // It is possible to use Single Producer Multiple Consumer queue here but in this case
     // imlementation of Release() methos on IWr* will be musch more difficult
-    TLockFreeQueue<TWr*> Queue;
+    NThreading::TBoundedQueue<TWr*> Queue;
 
     TIntrusiveFunnelQueue<TIbVerbsBuilderImpl> Waiters;
 

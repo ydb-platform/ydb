@@ -17,6 +17,7 @@ IF (OS_LINUX)
         contrib/libs/protobuf
         library/cpp/containers/absl
         library/cpp/monlib/dynamic_counters
+        library/cpp/threading/bounded_queue
         library/cpp/threading/queue
     )
 

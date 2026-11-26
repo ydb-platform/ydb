@@ -990,7 +990,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
             userTable,
             request.GetScanSettings());
 
-        StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
+        StartScan<TEvDataShard::TEvBuildIndexProgressResponse>(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid, ev->Sender);
     } catch (const std::exception& exc) {
         FailScan<TEvDataShard::TEvBuildIndexProgressResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TBuildIndexScan");
     }

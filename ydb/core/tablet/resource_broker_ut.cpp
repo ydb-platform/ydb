@@ -320,13 +320,16 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         setLimits(100, 100, 0);
         SubmitTask(runtime, broker, sender, 1, 1, 0, "build_index", 5);
-        GetInstantResourceBroker(runtime, broker, sender);
-        CheckCounters(counters, "queue", "queue_scan", 0, 0, 0, 1, 0);
+        WaitForError(runtime, 1, TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED);
         setLimits(100, 0, 100);
-        CheckCounters(counters, "queue", "queue_scan", 0, 0, 0, 1, 0);
+        SubmitTask(runtime, broker, sender, 1, 1, 0, "build_index", 5);
+        WaitForError(runtime, 1, TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED);
         setLimits(0, 100, 100);
-        CheckCounters(counters, "queue", "queue_scan", 0, 0, 0, 1, 0);
+        SubmitTask(runtime, broker, sender, 1, 1, 0, "build_index", 5);
+        WaitForError(runtime, 1, TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 0, 0, 0);
         setLimits(1, 1, 1);
+        SubmitTask(runtime, broker, sender, 1, 1, 0, "build_index", 5);
         WaitForResourceAllocation(runtime, 1);
         FinishTask(runtime, broker, sender, 1);
 
@@ -335,6 +338,11 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         SubmitTask(runtime, broker, sender, 3, 1, 0, "build_index", 5);
         GetInstantResourceBroker(runtime, broker, sender);
         CheckCounters(counters, "queue", "queue_scan", 1, 1, 1, 1, 1);
+        setLimits(1, 0, 1);
+        WaitForError(runtime, 3, TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED);
+        CheckCounters(counters, "queue", "queue_scan", 1, 1, 1, 0, 1);
+        setLimits(1, 1, 1);
+        SubmitTask(runtime, broker, sender, 3, 1, 0, "build_index", 5);
         FinishTask(runtime, broker, sender, 2);
         WaitForResourceAllocation(runtime, 3);
     }

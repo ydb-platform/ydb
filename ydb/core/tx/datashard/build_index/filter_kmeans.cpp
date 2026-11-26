@@ -526,7 +526,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvFilterKMeansRequest::TPtr& ev, cons
             TabletID(), userTable, request, ev->Sender, std::move(response)
         );
 
-        StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
+        StartScan<TEvDataShard::TEvFilterKMeansResponse>(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid, ev->Sender);
     } catch (const std::exception& exc) {
         FailScan<TEvDataShard::TEvFilterKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TFilterKMeansScan");
     }

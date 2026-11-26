@@ -2010,6 +2010,31 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         UNIT_ASSERT(!constructed);
     }
 
+    Y_UNIT_TEST(UnmeteredEagerIndexScanRejectedAtZeroLimit) {
+        TMyEnvScans env;
+        auto configure = MakeHolder<TEvResourceBroker::TEvConfigure>();
+        configure->Merge = true;
+        auto* queue = configure->Record.AddQueues();
+        queue->SetName("queue_build_index");
+        queue->MutableLimit()->SetMemory(0);
+        env.SendEv(MakeResourceBrokerID(), configure.Release());
+        UNIT_ASSERT(env->GrabEdgeEventRethrow<TEvResourceBroker::TEvConfigureResult>(env.Edge)->Get()->Record.GetSuccess());
+
+        bool finished = false;
+        size_t failures = 0;
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            TScanOptions options;
+            options.SetResourceBroker("build_index", 10);
+            options.OnAdmissionFailure = [&](const TString& reason, bool) {
+                UNIT_ASSERT_STRING_CONTAINS(reason, "scan memory reservation exceeds the current broker limit");
+                ++failures;
+            };
+            executor->QueueScan(TRowsModel::TableId, new TAdmissionReadyScan(finished), 12345, options);
+        }));
+        env->WaitFor("unmetered eager index scan rejected", [&] { return failures == 1; });
+        UNIT_ASSERT(!finished);
+    }
+
     Y_UNIT_TEST(AdmittedEagerStartupFailureNotifiesCaller) {
         TMyEnvScans env;
         bool destroyed = false;

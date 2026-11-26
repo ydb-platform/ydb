@@ -12,6 +12,7 @@ public:
 
     TContiguousSpan GetData() const override { return Buffer.GetContiguousSpan(); }
     TMutableContiguousSpan UnsafeGetDataMut() override { return {Buffer.UnsafeGetDataMut(), Buffer.GetSize()}; }
+    bool IsPrivate() const override { return IContiguousChunk::IsPrivate() && Buffer.IsPrivate(); }
     size_t GetOccupiedMemorySize() const override { return Buffer.GetOccupiedMemorySize(); }
     TPtr Clone() override { return MakeIntrusive<TReservedPipeChunk>(TRcBuf::Copy(GetData()), Reservation); }
 

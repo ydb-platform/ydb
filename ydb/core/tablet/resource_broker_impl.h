@@ -336,7 +336,10 @@ public:
     bool FitsMemoryLimit(const TString& type, const TResourceValues& resources) const {
         const auto& queue = TaskConfig(type).Queue;
         const auto bytes = resources[NKikimrResourceBroker::MEMORY];
-        return (!queue->StrictMemoryLimit && type != "build_index") || bytes <= GetMemoryLimit(type);
+        if (type == "build_index") {
+            return Max<ui64>(1, bytes) <= GetMemoryLimit(type);
+        }
+        return !queue->StrictMemoryLimit || bytes <= GetMemoryLimit(type);
     }
 
     ui64 GetMemoryLimit(const TString& type) const {

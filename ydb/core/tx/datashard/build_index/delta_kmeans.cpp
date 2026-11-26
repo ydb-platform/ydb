@@ -844,7 +844,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvDeltaKMeansRequest::TPtr& ev, const
             TabletID(), userTable, request, from, to, ev->Sender, std::move(response), std::move(clusters)
         );
 
-        StartScan(this, std::move(scan), id, seqNo, to, userTable.LocalTid);
+        StartScan<TEvDataShard::TEvDeltaKMeansResponse>(this, std::move(scan), id, seqNo, to, userTable.LocalTid, ev->Sender);
     } catch (const std::exception& exc) {
         FailScan<TEvDataShard::TEvDeltaKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TDeltaKMeansScan");
     }

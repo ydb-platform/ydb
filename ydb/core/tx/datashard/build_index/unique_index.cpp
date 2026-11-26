@@ -330,7 +330,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
             ev->Sender);
 
         // We don't need a specific row version here, because KQP level forbids table modification during unique index building.
-        StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
+        StartScan<TEvDataShard::TEvValidateUniqueIndexResponse>(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid, ev->Sender);
     } catch (const std::exception& exc) {
         FailScan<TEvDataShard::TEvValidateUniqueIndexResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TValidateUniqueIndexScan");
     }

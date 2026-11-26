@@ -555,8 +555,33 @@ private:
     ui64 CurrentSourceSeqNo = 0;
 };
 
+template<typename TResponse>
+void FillScanResponseCommonFields(TResponse& response, ui64 scanId, ui64 tabletId, TScanRecord::TSeqNo seqNo)
+{
+    auto& rec = response.Record;
+    rec.SetId(scanId);
+    rec.SetTabletId(tabletId);
+    rec.SetRequestSeqNoGeneration(seqNo.Generation);
+    rec.SetRequestSeqNoRound(seqNo.Round);
+}
+
+template<typename TResponse>
+void SendScanError(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::TSeqNo seqNo, const TString& reason)
+{
+    auto response = MakeHolder<TResponse>();
+    FillScanResponseCommonFields(*response, scanId, tabletId, seqNo);
+    response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+
+    auto* issue = response->Record.AddIssues();
+    issue->set_severity(NYql::TSeverityIds::S_ERROR);
+    issue->set_message(reason);
+
+    TlsActivationContext->Send(new IEventHandle(sender, TActorId(), response.Release()));
+}
+
+template<typename TResponse>
 inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui64 id,
-    TScanRecord::TSeqNo seqNo, std::optional<TRowVersion> rowVersion, ui32 tableId)
+    TScanRecord::TSeqNo seqNo, std::optional<TRowVersion> rowVersion, ui32 tableId, TActorId sender)
 {
     auto& scanManager = dataShard->GetScanManager();
 
@@ -577,18 +602,12 @@ inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui6
         scanOpts.SetSnapshotRowVersion(*rowVersion);
     }
     scanOpts.SetResourceBroker("build_index", 10);
+    scanOpts.OnAdmissionFailure = [dataShard, id, seqNo, sender](const TString& reason, bool) {
+        dataShard->GetScanManager().Drop(id);
+        SendScanError<TResponse>(id, dataShard->TabletID(), sender, seqNo, reason);
+    };
     const auto scanId = dataShard->QueueScan(tableId, std::move(scan), 0, scanOpts);
     scanManager.Set(id, seqNo).push_back(scanId);
-}
-
-template<typename TResponse>
-void FillScanResponseCommonFields(TResponse& response, ui64 scanId, ui64 tabletId, TScanRecord::TSeqNo seqNo)
-{
-    auto& rec = response.Record;
-    rec.SetId(scanId);
-    rec.SetTabletId(tabletId);
-    rec.SetRequestSeqNoGeneration(seqNo.Generation);
-    rec.SetRequestSeqNoRound(seqNo.Round);
 }
 
 template<typename TResponse>
@@ -603,15 +622,7 @@ inline void FailScan(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::T
 
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true)->Inc();
 
-    auto response = MakeHolder<TResponse>();
-    FillScanResponseCommonFields(*response, scanId, tabletId, seqNo);
-    response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-
-    auto* issue = response->Record.AddIssues();
-    issue->set_severity(NYql::TSeverityIds::S_ERROR);
-    issue->set_message(TStringBuilder() << "Scan failed " << exc.what());
-
-    TlsActivationContext->Send(new IEventHandle(sender, TActorId(), response.Release()));
+    SendScanError<TResponse>(scanId, tabletId, sender, seqNo, TStringBuilder() << "Scan failed " << exc.what());
 }
 
 }

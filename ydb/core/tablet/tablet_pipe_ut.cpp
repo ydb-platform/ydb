@@ -401,9 +401,9 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         for (bool dataInPayload : {false, true}) {
             auto reservation = std::make_shared<int>();
             const std::weak_ptr<void> lifetime = reservation;
+            const auto buffer = MakeIntrusive<TEventSerializedData>(TString(16 * 1024, 'p'), TEventSerializationInfo{});
             TRope wire;
             {
-                const auto buffer = MakeIntrusive<TEventSerializedData>(TString(16 * 1024, 'p'), TEventSerializationInfo{});
                 auto push = MakeHolder<TEvTabletPipe::TEvPush>(1, 2, TActorId(), buffer, 0, TEventSerializationInfo{}, dataInPayload);
                 push->MemoryReservation = std::move(reservation);
                 IEventHandle handle(TActorId(), TActorId(), push.Release());
@@ -421,6 +421,8 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
                 auto end = payload;
                 end.AdvanceToNextContiguousBlock();
                 wire = wire.Extract(payload, end);
+                wire.Begin().ContiguousDataMut()[0] = 'q';
+                UNIT_ASSERT_VALUES_EQUAL(buffer->GetRope().Begin().ContiguousData()[0], 'p');
             }
             auto copy = wire;
             copy.Begin().ContiguousDataMut()[0] = 'q';

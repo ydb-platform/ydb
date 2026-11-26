@@ -362,12 +362,10 @@ public:
         }
 
         if (Self->ReceiveSnapshotsFrom.empty()) {
-            const auto minVersion = Self->GetSnapshotManager().GetLowWatermark();
-
             // Source deletions (or the legacy fallback) were restored above
             // without consulting retention. Only additional cleanup is gated:
             // the merged watermark may still contain retained snapshot points.
-            Self->GetSnapshotManager().CleanupUnretainedRowVersions(txc.DB, TRowVersion::Min(), minVersion);
+            Self->GetSnapshotManager().CleanupRowVersionsBelowLowWatermark(txc.DB);
 
             for (auto& kv : Self->ReplicatedTables) {
                 TReplicationSourceOffsetsDb rdb(txc);

@@ -186,16 +186,19 @@ void TestPersistentAndRegistryRetention(bool registryReleasedFirst) {
     TSnapshotRetentionTest test;
     test.WriteVersion(1);
     const auto snapshot = CreateVolatileSnapshot(test.Server, {"/Root/table-a"}, TDuration::Hours(1));
+    // Pin the cleanup boundary just past the snapshot through both releases.
+    const TRowVersion boundary(snapshot.Step + 1, 0);
     test.GetRuntime().SimulateSleep(TDuration::Seconds(1));
     test.WriteVersion(2);
     test.GetRuntime().SimulateSleep(TDuration::Seconds(3));
-    test.PublishRegistry({snapshot}, {test.TableA});
+    test.PublishRegistry({snapshot}, {test.TableA}, boundary);
     test.RunCleanup();
+    UNIT_ASSERT_VALUES_EQUAL(test.GetCleanupBoundary(test.ShardA), boundary);
     UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
     UNIT_ASSERT(test.IsRemoved(test.ShardB, snapshot));
 
     if (registryReleasedFirst) {
-        test.PublishRegistry();
+        test.PublishRegistry({}, {}, boundary);
     } else {
         UNIT_ASSERT(DiscardVolatileSnapshot(test.Server, {"/Root/table-a"}, snapshot));
     }
@@ -205,10 +208,11 @@ void TestPersistentAndRegistryRetention(bool registryReleasedFirst) {
     if (registryReleasedFirst) {
         UNIT_ASSERT(DiscardVolatileSnapshot(test.Server, {"/Root/table-a"}, snapshot));
     } else {
-        test.PublishRegistry();
+        test.PublishRegistry({}, {}, boundary);
     }
     test.RunCleanup();
     UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+    UNIT_ASSERT_VALUES_EQUAL(test.GetCleanupBoundary(test.ShardA), boundary);
 }
 
 } // namespace

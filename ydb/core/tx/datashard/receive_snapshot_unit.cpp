@@ -129,8 +129,6 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
     Y_ENSURE(DataShard.GetSnapshotManager().GetSnapshots().empty(),
         "Found unexpected persistent snapshots at CopyTable destination");
 
-    const auto minVersion = DataShard.GetSnapshotManager().GetLowWatermark();
-
     for (const auto& range : removedRowVersions) {
         txc.DB.RemoveRowVersions(userTable->LocalTid, range.Lower, range.Upper);
     }
@@ -138,7 +136,7 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
     // does not prove that retained points in this or other user tables are gone.
     // Additional cleanup uses each destination table identity and deliberately
     // waits for registry readiness when retention is enabled.
-    DataShard.GetSnapshotManager().CleanupUnretainedRowVersions(txc.DB, TRowVersion::Min(), minVersion);
+    DataShard.GetSnapshotManager().CleanupRowVersionsBelowLowWatermark(txc.DB);
 
     if (hasOpenTxs && loanedTables) {
         // We must wait for loan to complete, so ReceiveSnapshotCleanup would

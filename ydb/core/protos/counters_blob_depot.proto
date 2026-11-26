@@ -203,5 +203,5 @@ enum ETxTypes {
     TXTYPE_PREPARE = 21 [(NKikimr.TxTypeOpts) = {Name: "TTxPrepare"}];
     TXTYPE_HARD_COLLECT_ASSIMILATED_BLOBS = 22 [(NKikimr.TxTypeOpts) = {Name: "TTxHardCollectAssimilatedBlobs"}];
     TXTYPE_QUERY_BLOCKS = 23 [(NKikimr.TxTypeOpts) = {Name: "TTxQueryBlocks"}];
-    TXTYPE_DELETE_TABLET_DATA = 25 [(NKikimr.TxTypeOpts) = {Name: "TTxDeleteTabletData"}];
+    TXTYPE_DELETE_TABLET_DATA = 24 [(NKikimr.TxTypeOpts) = {Name: "TTxDeleteTabletData"}];
 }

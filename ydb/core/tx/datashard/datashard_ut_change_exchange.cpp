@@ -6816,7 +6816,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
-        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions().Shards(2));
+        SetSplitMergePartCountLimit(&runtime, -1);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions());
+
+        const auto initialShards = GetTableShards(server, edgeActor, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(initialShards.size(), 1);
+        WaitTxNotification(server, edgeActor, AsyncSplitTable(server, edgeActor, "/Root/Table", initialShards.at(0), 2147483648u));
 
         auto forceKeyRangeHeartbeatMode = ForceKeyRangeHeartbeatMode(runtime);
         WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
@@ -6824,7 +6829,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         const auto parents = GetTableShards(server, edgeActor, "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(parents.size(), 2);
-        SetSplitMergePartCountLimit(&runtime, -1);
 
         THashMap<TString, THashSet<ui32>> parentToPartitions;
         bool childRegisteredWithoutKeyRange = false;

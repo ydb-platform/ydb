@@ -3,8 +3,6 @@
 #include "../config.h"
 #include "../s3_router.h"
 #include "../s3_router_events.h"
-#include "../events.h"
-#include "../s3_request_timer.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -14,7 +12,6 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/wrappers/abstract.h>
-#include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -455,57 +452,6 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
             latencySamples += snapshot->Value(i);
         }
         UNIT_ASSERT(latencySamples > 0);
-    }
-
-    Y_UNIT_TEST(RetiredListCancelsIdleSdkRequestAndUsesAggregateCounters) {
-        TStallingS3Server server(1, TDuration::Seconds(30));
-        TTestActorRuntime runtime;
-        runtime.SetUseRealInterconnect();
-        runtime.Initialize(TAppPrepare().Unwrap());
-
-        NKikimrBlobDepot::TBlobDepotConfig config;
-        config.SetName("retired-list");
-        auto* settings = config.MutableS3BackendSettings()->MutableSettings();
-        SetStallingEndpoint(*settings, server.GetPort());
-        settings->SetExecutorThreadsCount(1);
-        const auto edge = runtime.AllocateEdgeActor();
-        const auto sweep = runtime.Register(CreateRetiredS3Sweep(edge, 12345, config));
-        runtime.EnableScheduleForActor(sweep);
-        WaitReal(runtime, [&] { return server.GetRequestsReceived() == 1; });
-
-        auto module = GetServiceCounters(runtime.GetAppData(0).Counters, "tablets")->FindSubgroup("subsystem", "blob_depot")
-            ->FindSubgroup("module_id", "s3_router");
-        UNIT_ASSERT(!module->FindSubgroup("tablet", "12345"));
-        auto retired = module->FindSubgroup("component", "RetiredNamespaces");
-        UNIT_ASSERT(retired);
-        auto errors = retired->FindSubgroup("route", "Balancer")->FindCounter("Errors");
-        UNIT_ASSERT(errors);
-
-        const auto started = TInstant::Now();
-        runtime.SimulateSleep(TS3RequestTimer::Timeout);
-        const auto result = runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvRetiredS3SweepComplete>(edge, TDuration::Seconds(1));
-        UNIT_ASSERT(result && !result->Get()->Success);
-        WaitReal(runtime, [&] { return *errors == 1; }, TDuration::Seconds(15));
-        // A blocked SDK worker would wait for the server's delayed response before wrapper teardown could finish.
-        UNIT_ASSERT(TInstant::Now() - started < TDuration::Seconds(20));
-    }
-
-    Y_UNIT_TEST(RetiredEndpointsShareSdkWorkers) {
-        using NWrappers::NExternalStorage::TS3ExternalStorageConfig;
-        auto make = [](const TString& endpoint) {
-            NKikimrSchemeOp::TS3Settings settings;
-            settings.SetEndpoint(endpoint);
-            settings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
-            settings.SetExecutorThreadsCount(1);
-            return std::make_shared<TS3ExternalStorageConfig>(NKikimrConfig::TAwsClientConfig(), settings, nullptr);
-        };
-        const auto first = make("retired-a.example");
-        const auto second = make("retired-b.example");
-        const auto live = first->GetConfig().executor;
-        first->UseSharedCleanupExecutor();
-        second->UseSharedCleanupExecutor();
-        UNIT_ASSERT(first->GetConfig().executor == second->GetConfig().executor);
-        UNIT_ASSERT(first->GetConfig().executor != live);
     }
 
     Y_UNIT_TEST(StoppedScannerReleasesOnlyItsQueuedLists) {

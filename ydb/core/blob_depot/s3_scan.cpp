@@ -230,7 +230,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TS3Manager::RunPutProbe() {
-        if (!GarbageCollectionEnabled || !WrapperId || !Self->Data->IsLoaded() || !NumPutWatches) {
+        if (!WrapperId || !Self->Data->IsLoaded() || !NumPutWatches) {
             return;
         }
         if (ReadingPutWatches) {
@@ -286,7 +286,7 @@ namespace NKikimr::NBlobDepot {
                     NIceDb::TUpdate<T::Interval>(Min(TDuration::Hours(1), watch.Interval * 2)));
             }
             tx.FinishTx();
-            if (startReconciliation && !ScannerActorId && GarbageCollectionEnabled) {
+            if (startReconciliation && !ScannerActorId) {
                 ScheduleScan(NextOrphanScan - TActivationContext::Now());
             }
             DuePutWatches.pop_front();
@@ -372,7 +372,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TS3Manager::RunScannerActor() {
-        Y_ABORT_UNLESS(GarbageCollectionEnabled);
+        Y_ABORT_UNLESS(WrapperId);
         if (ScannerActorId) {
             return;
         }

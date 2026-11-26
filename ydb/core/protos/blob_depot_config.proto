@@ -73,17 +73,6 @@ message TBlobDepotConfig {
     optional NKikimrHive.TEvCreateTablet HiveParams = 6; // extra hive parameters
     optional uint64 TenantHiveId = 7;
     optional TS3BackendSettings S3BackendSettings = 8;
-    // S3 path suffix shared by the tablet and its agents. New BSC depots include a per-depot UUID.
     optional string Name = 9;
-    // Async packs can survive later mode changes. Their locators use the configured bucket and key prefix.
-    optional bool S3NamespacePinned = 10;
-    // BSC checked exclusive ownership of this physical S3 namespace. Absent on legacy depots
-    // until an explicit namespace validation. Independent of the cooling flag and mode.
-    optional bool S3NamespaceValidated = 11;
-    // Once BSC has authorized async cooling, shared objects can survive subsequent mode changes.
-    optional bool EverAuthorizedDataCooling = 12;
-    // BSC authorized cooling into the current physical namespace after the rollout gate opened.
-    optional bool S3CoolingAuthorized = 15;
-    // Issued by BSC at allocation. A name resembling a GUID does not prove its origin.
-    optional string GeneratedS3NamespaceId = 16;
+    reserved 10 to 12, 15, 16;
 }

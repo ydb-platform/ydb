@@ -1306,11 +1306,6 @@ void TBlobStorageController::PassAway() {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
         }
     }
-    for (const auto& [groupId, info] : RetiredS3Namespaces) {
-        if (info.SchedulerId) {
-            Send(info.SchedulerId, new TEvents::TEvPoison);
-        }
-    }
     if (CmsPipe) {
         NTabletPipe::CloseAndForgetClient(SelfId(), CmsPipe);
     }
@@ -1449,7 +1444,6 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kGetInterfaceVersion:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMovePDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateBridgeGroupInfo:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kManageRetiredS3Namespace:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReconfigureVirtualGroup:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kRecommissionGroups:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineDDiskPool:

@@ -289,11 +289,8 @@ namespace NKikimr::NBlobDepot {
             {"locator", locator});
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_OBJECTS] = ++TotalS3TrashObjects;
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_SIZE] = TotalS3TrashSize += locator.Len;
-        // The TrashS3 row survives until a configuration with exclusive ownership reloads it.
-        if (GarbageCollectionEnabled) {
-            DeleteQueue.push_back(locator);
-            RunDeletersIfNeeded();
-        }
+        DeleteQueue.push_back(locator);
+        RunDeletersIfNeeded();
     }
 
     void TS3Manager::RunDeletersIfNeeded() {

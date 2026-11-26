@@ -677,16 +677,6 @@ def _bsc_request_for_display(request):
         result = type(request)()
         result.CopyFrom(request)
         result.ClearField('SecurityToken')
-        result.Request.CopyFrom(_bsc_request_for_display(request.Request))
-        return result
-    if isinstance(request, kikimr_bsconfig.TConfigRequest) and any(
-        cmd.ManageRetiredS3Namespace.HasField('Credentials') for cmd in request.Command
-    ):
-        result = type(request)()
-        result.CopyFrom(request)
-        for cmd in result.Command:
-            if cmd.ManageRetiredS3Namespace.HasField('Credentials'):
-                cmd.ManageRetiredS3Namespace.Credentials.Clear()
         return result
     return request
 

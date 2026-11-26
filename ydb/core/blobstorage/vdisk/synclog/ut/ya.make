@@ -8,6 +8,7 @@ PEERDIR(
     library/cpp/testing/unittest
     ydb/core/base
     ydb/core/blobstorage
+    ydb/library/actors/testlib
 )
 
 SRCS(

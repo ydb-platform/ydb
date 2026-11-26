@@ -32,7 +32,9 @@ public:
             return;
         }
 
-        LastLsn = SyncLogSnapshot->LogStartLsn;
+        if (SyncLogSnapshot->LogStartLsn > 0) {
+            LastLsn = SyncLogSnapshot->LogStartLsn - 1;
+        }
         DiskIt = TDiskRecLogSnapshot::TIndexRecIterator(SyncLogSnapshot->DiskSnapPtr);
         DiskIt.Seek(LastLsn);
         if (BuildThresholds) {
@@ -160,7 +162,7 @@ private:
     TDiskRecLogSnapshot::TIndexRecIterator DiskIt;
     TPhantomFlags Flags;
     TPhantomFlagThresholds Thresholds;
-    ui64 LastLsn;
+    ui64 LastLsn = 0;
 
     const bool BuildThresholds = true;
 };

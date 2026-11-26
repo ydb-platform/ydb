@@ -262,6 +262,8 @@ public:
     }
 
 private:
+    friend struct TGRpcRequestTestAccess;
+
     void Clone() {
         if (!Server_->IsShuttingDown()) {
             if (RequestCallback_) {
@@ -527,6 +529,12 @@ private:
     }
 
     void OnFinish(EQueueEventStatus evStatus) {
+        // Claim completion before updating ClientLost_: subscribers must observe
+        // the cancellation state of the first notification, even on reentry.
+        if (FinishStarted_.exchange(true)) {
+            return;
+        }
+
         if (this->Context.IsCancelled()) {
             ClientLost_.store(true);
             FinishPromise_.SetValue(EFinishStatus::CANCEL);
@@ -590,6 +598,7 @@ private:
     bool SkipUpdateCountersOnError = false;
     IStreamAdaptor::TPtr StreamAdaptor_;
     std::atomic<bool> ClientLost_ = false;
+    std::atomic<bool> FinishStarted_ = false;
 };
 
 template<typename TIn, typename TOut, typename TService, typename TInProtoPrinter = ::NKikimr::TSecurityTextFormatPrinter<TIn>, typename TOutProtoPrinter = ::NKikimr::TSecurityTextFormatPrinter<TOut>>

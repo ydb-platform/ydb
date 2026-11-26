@@ -15,6 +15,10 @@ namespace NSyncLog {
 NActors::IActor* CreatePhantomFlagStorageBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
         const TActorId& requesterId, TSyncLogSnapshotPtr snapshot, bool buildThresholds);
 
+struct TPhantomFlagStorageSnapshot;
+NActors::IActor* CreatePhantomFlagStorageSnapshotActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
+        const TActorId& requesterId, TSyncLogSnapshotPtr snapshot, TPhantomFlagStorageSnapshot storageSnapshot);
+
 }
 
 } // namespace NKikimr

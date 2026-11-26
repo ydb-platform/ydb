@@ -501,6 +501,14 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         Test(erasure, states1, states2, true);
     }
 
+    Y_UNIT_TEST(TestFullSyncWithFullPhantomFlagStorage) {
+        const auto erasure = TBlobStorageGroupType::ErasureMirror3dc;
+        const auto states = GetStatesOneDead(erasure, 8_KB);
+        // With 8 KiB PhantomFlagStorage only fits 256 flags of 300 used in test,
+        // later DoNotKeep flags remain in SyncLog and must be synced from there
+        Test(erasure, states, states, /*expectPhantoms=*/false);
+    }
+
     Y_UNIT_TEST(FailedFullSyncDoesNotAdvanceSyncState) {
         const TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3dc;
         const auto states = GetStatesOneDead(erasure, 10_KB);

@@ -130,6 +130,7 @@ namespace NKikimr {
             // on the next request.  Empty for the volatile in-memory path.
             std::unordered_set<ui32> ProcessedChunks;
             bool Eof;
+            bool ReadError = false;
         };
 
         struct TEvSyncLogUpdateNeighbourSyncedLsn

@@ -452,6 +452,15 @@ namespace NKikimr {
 
         void Handle(NSyncLog::TEvPhantomFlagStorageGetSnapshotResult::TPtr& ev) {
             auto* msg = ev->Get();
+            if (msg->ReadError) {
+                Result->Record.SetStatus(NKikimrProto::ERROR);
+                Result->Record.ClearData();
+                SendVDiskResponse(TActivationContext::AsActorContext(), CurrentEvent->Sender, Result.release(), 0, HullCtx->VCtx, {});
+                Send(ParentId, new TEvents::TEvGone);
+                ++FullSyncGroup->UnorderedDataProtocolActorsTerminated();
+                PassAway();
+                return;
+            }
             std::move(msg->Flags.begin(), msg->Flags.end(), std::back_inserter(PhantomFlagsQueue));
             ProcessedChunks = std::move(msg->ProcessedChunks);
             StreamFinished = msg->Eof;

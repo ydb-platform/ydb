@@ -17,14 +17,20 @@ namespace NSyncLog {
 class TPhantomFlagStorageBuilderActor : public TActorBootstrapped<TPhantomFlagStorageBuilderActor> {
 public:
     TPhantomFlagStorageBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
-            const TActorId& requesterId, TSyncLogSnapshotPtr snapshot, bool buildThresholds)
+            const TActorId& requesterId, TSyncLogSnapshotPtr snapshot, bool buildThresholds,
+            std::optional<TPhantomFlagStorageSnapshot> storageSnapshot = std::nullopt)
         : TActorBootstrapped<TPhantomFlagStorageBuilderActor>()
         , SlCtx(slCtx)
         , RequesterId(requesterId)
         , SyncLogSnapshot(snapshot)
         , Thresholds(slCtx->VCtx->Top->GType)
         , BuildThresholds(buildThresholds)
-    {}
+        , StorageSnapshot(std::move(storageSnapshot))
+    {
+        if (StorageSnapshot) {
+            Flags = std::move(StorageSnapshot->Flags);
+        }
+    }
 
     void Bootstrap() {
         if (!SyncLogSnapshot) {
@@ -63,6 +69,10 @@ private:
     }
 
     void Handle(const NPDisk::TEvChunkReadResult::TPtr& ev) {
+        if (StorageSnapshot && (ev->Get()->Status != NKikimrProto::OK || !ev->Get()->Data.IsReadable())) {
+            FinishSnapshot(/*readError=*/true);
+            return;
+        }
         if (ev->Get()->Status == NKikimrProto::OK) {
             auto [chunkIdx, idxRec] = DiskIt.Get();
             const NPDisk::TEvChunkReadResult* msg = ev->Get();
@@ -142,9 +152,21 @@ private:
         Flags.push_back(flag);
     }
 
-    void Finish() {
-        Send(RequesterId, new TEvPhantomFlagStorageFinishBuilder(std::move(Flags), std::move(Thresholds)));
+    void FinishSnapshot(bool readError) {
+        auto result = std::make_unique<TEvPhantomFlagStorageGetSnapshotResult>(
+            std::move(Flags), std::move(StorageSnapshot->Thresholds), std::unordered_set<ui32>{}, /*eof=*/true);
+        result->ReadError = readError;
+        Send(RequesterId, result.release());
         PassAway();
+    }
+
+    void Finish() {
+        if (StorageSnapshot) {
+            FinishSnapshot(/*readError=*/false);
+        } else {
+            Send(RequesterId, new TEvPhantomFlagStorageFinishBuilder(std::move(Flags), std::move(Thresholds)));
+            PassAway();
+        }
     }
 
     STRICT_STFUNC(StateWaitHullSnapshot,
@@ -165,12 +187,19 @@ private:
     ui64 LastLsn = 0;
 
     const bool BuildThresholds = true;
+    std::optional<TPhantomFlagStorageSnapshot> StorageSnapshot;
 };
 
 
 NActors::IActor* CreatePhantomFlagStorageBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
         const TActorId& requesterId, TSyncLogSnapshotPtr snapshot, bool buildThresholds) {
     return new TPhantomFlagStorageBuilderActor(slCtx, requesterId, snapshot, buildThresholds);
+}
+
+NActors::IActor* CreatePhantomFlagStorageSnapshotActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
+        const TActorId& requesterId, TSyncLogSnapshotPtr snapshot, TPhantomFlagStorageSnapshot storageSnapshot) {
+    return new TPhantomFlagStorageBuilderActor(slCtx, requesterId, std::move(snapshot), false,
+            std::move(storageSnapshot));
 }
 
 } // namespace NSyncLog

@@ -1,4 +1,5 @@
 #include "phantom_flag_storage_state.h"
+#include "phantom_flag_storage_builder.h"
 #include "phantom_flag_storage_processor.h"
 
 #include <ydb/core/util/stlog.h>
@@ -160,12 +161,8 @@ void TPhantomFlagStorageState::RequestSnapshot(TEvPhantomFlagStorageGetSnapshot:
         YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Acquiring snapshot"),
             {"marker", "BSPFS05"},
             {"flagsCount", StoredFlags.size()});
-        auto res = std::make_unique<TEvPhantomFlagStorageGetSnapshotResult>(
-                TPhantomFlags(StoredFlags),
-                TPhantomFlagThresholds(Thresholds),
-                std::unordered_set<ui32>{},
-                /*eof=*/true);
-        TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient, res.release()));
+        TActivationContext::Register(CreatePhantomFlagStorageSnapshotActor(SlCtx, ev->Sender,
+                std::move(ev->Get()->SyncLogSnapshot), TPhantomFlagStorageSnapshot(StoredFlags, Thresholds)));
     }
 }
 

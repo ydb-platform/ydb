@@ -1462,6 +1462,64 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, other, expr, literal FROM TestTable ORDER BY k;", "[[1;[10];#;[7u]];[2;[20];[42u];[8u]]]");
     }
 
+    Y_UNIT_TEST_TWIN(NewRboPartialUpsertWithExpressionDefault, EnableFallback) {
+        auto appConfig = DefaultExprAppConfig();
+        auto* config = appConfig.MutableTableServiceConfig();
+        config->SetEnableNewRBO(true);
+        config->SetEnableFallbackToYqlOptimizer(EnableFallback);
+        config->SetEnableIndexStreamWrite(true);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(ValueTableDDL());
+        fixture.Exec("INSERT INTO TestTable (k, other, v) VALUES (1, 0, 7ul);");
+
+        fixture.Exec("UPSERT INTO TestTable (k, other) VALUES (1, 10), (2, 20);");
+        fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", "[[1;[10];[7u]];[2;[20];[42u]]]");
+    }
+
+    Y_UNIT_TEST_TWIN(UpsertOmittedKeysWithCompileTimeDefaults, EnableCompileTimeDefaults) {
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(TStringBuilder() << R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL DEFAULT 1,
+                part Uint64 NOT NULL DEFAULT RandomNumber(2) * 0ul + 2ul,
+                other Int32,
+                v Uint64 DEFAULT )" << DefaultExpr << R"(,
+                PRIMARY KEY (k, part)
+            );
+        )");
+
+        fixture.Exec("UPSERT INTO TestTable (other) VALUES (10);");
+        fixture.Check("SELECT k, part, other, v FROM TestTable;", "[[1;2u;[10];[42u]]]");
+        fixture.Exec("UPSERT INTO TestTable (k, part, v) VALUES (1, 2ul, 7ul);");
+        fixture.Exec("UPSERT INTO TestTable (other) VALUES (20);");
+        fixture.Check("SELECT k, part, other, v FROM TestTable;", "[[1;2u;[20];[7u]]]");
+    }
+
+    Y_UNIT_TEST_TWIN(MixedDefaultsWithIndexedReturning, EnableCompileTimeDefaults) {
+        auto appConfig = DefaultExprAppConfig();
+        auto* config = appConfig.MutableTableServiceConfig();
+        config->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        config->SetEnableIndexStreamWrite(true);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(TStringBuilder() << R"(
+            CREATE TABLE TestTable (
+                id Serial,
+                tag Int32 NOT NULL,
+                expr Uint64 DEFAULT )" << DefaultExpr << R"(,
+                literal Uint64 DEFAULT 8ul,
+                PRIMARY KEY (id),
+                INDEX idx_expr GLOBAL SYNC ON (expr) COVER (tag, literal)
+            );
+        )");
+
+        const TString expected = "[[1;10;[42u];[8u]]]";
+        fixture.Check("UPSERT INTO TestTable (tag) VALUES (10) RETURNING id, tag, expr, literal;", expected);
+        fixture.Check("SELECT id, tag, expr, literal FROM TestTable;", expected);
+        fixture.Check("SELECT id, tag, expr, literal FROM TestTable VIEW idx_expr;", expected);
+    }
+
     Y_UNIT_TEST(ExpressionLiteralAndGeneratedDefaultsStayConsistent) {
         TTestFixture fixture(TFixtureOptions{.GeneratedStored = true});
         fixture.Exec(TStringBuilder() << R"(

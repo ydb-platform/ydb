@@ -18,9 +18,4 @@ CFLAGS(
 
 NO_COMPILER_WARNINGS()
 
-PEERDIR_FROM_POLICY(
-    ALLOW
-    statbox/nile_debug
-)
-
 END()

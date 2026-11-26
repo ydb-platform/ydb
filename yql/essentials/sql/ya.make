@@ -15,6 +15,12 @@ SRCS(
     sql.cpp
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    logos/projects/ads/mldwh/querygen
+    toloka/analytics/programs/yql_parser
+)
+
 END()
 
 RECURSE(

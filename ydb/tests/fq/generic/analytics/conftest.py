@@ -55,6 +55,7 @@ def create_source(client, settings):
             source_type,
             f"tests-fq-generic-analytics-{kind}:{port}",
             database.dbname,
+            token="root@builtin" if kind == "ydb" else None,
             login=database.username if kind != "ydb" else None,
             password=database.password if kind != "ydb" else None,
             protocol=database.protocol if kind == "clickhouse" else "NATIVE" if kind == "postgresql" else None,

@@ -1125,7 +1125,12 @@ class TestJoinStreaming(StreamingTestBase):
         create_read_rule(self.input_topic, self.consumer_name, default_endpoint=endpoint)
         self.create_source(kikimr, "wmyds" if shared else "myyds", shared=shared, endpoint=endpoint)
         create_external_data_source(
-            kikimr.ydb_client, "ydb_conn_join_table", "Ydb", "tests-fq-generic-streaming-ydb:2136", "local"
+            kikimr.ydb_client,
+            "ydb_conn_join_table",
+            "Ydb",
+            "tests-fq-generic-streaming-ydb:2136",
+            "local",
+            token="root@builtin",
         )
         one_time_waiter.wait()
         return endpoint
@@ -1267,18 +1272,23 @@ class TestJoinStreaming(StreamingTestBase):
         partitions_count,
     ):
         title = f"slj_wm_{partitions_count}{str(streamlookup)[:1]}{limit}{tasks}"
-        endpoint = self._prepare(kikimr, title, partitions_count, shared=True)
+        # Shared reading does not populate the partition metadata required by watermarks.
+        endpoint = self._prepare(kikimr, title, partitions_count)
         table_name = "join_table"
 
         options = ()
         streamlookup_hint = Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else ''
-        idle_clause = R", WATERMARK_IDLE_TIMEOUT = 'PT5S'" if tasks > 1 or partitions_count > 1 else ""
+        watermark_granularity = 2
+        watermark_idle_timeout = 5
+        idle_clause = (
+            Rf", WATERMARK_IDLE_TIMEOUT = 'PT{watermark_idle_timeout}S'" if tasks > 1 or partitions_count > 1 else ""
+        )
         sql = Rf'''
             PRAGMA ydb.MaxTasksPerStage = "{tasks}";
 
             $event_time = ($ts) -> (CAST(($ts*1000000ul) AS Timestamp));
 
-            $input = SELECT * FROM wmyds.`{self.input_topic}`
+            $input = SELECT * FROM myyds.`{self.input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -1286,12 +1296,14 @@ class TestJoinStreaming(StreamingTestBase):
                             user Int32,
                             skip Bool
                         )
-                        , WATERMARK = $event_time(`ts`) - Interval('PT3S')
-                        , WATERMARK_GRANULARITY = 'PT2S'
+                    );
+            $input = SELECT e.*, $event_time(ts) AS event_time FROM $input AS e;
+            $input = SELECT * FROM $input WITH (
+                        WATERMARK = event_time - Interval('PT3S'),
+                        WATERMARK_GRANULARITY = 'PT{watermark_granularity}S'
                         {idle_clause}
-                    )            ;
-            $input =
-                SELECT e.*, $event_time(ts) AS event_time FROM $input AS e WHERE skip IS DISTINCT FROM true;
+            );
+            $input = SELECT * FROM $input WHERE skip IS DISTINCT FROM true;
             $enriched = SELECT event_time, ts, u.data as uid
                 FROM
                     $input as e
@@ -1304,7 +1316,7 @@ class TestJoinStreaming(StreamingTestBase):
                             , uid
                 ;
 
-            insert into wmyds.`{self.output_topic}`
+            insert into myyds.`{self.output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             '''
 
@@ -1337,15 +1349,17 @@ class TestJoinStreaming(StreamingTestBase):
         self._start(kikimr, query_name, sql)
         self.wait_completed_checkpoints(kikimr, query_name)
 
+        if partitions_count > 1 or tasks > 1:
+            # Let empty partitions become idle before sending event-time watermarks.
+            # Both the activity time and the idle check are rounded to the next granularity tick.
+            time.sleep(watermark_idle_timeout + 2 * watermark_granularity)
+
         for offset in range(0, len(messages), MAX_WRITE_STREAM_SIZE):
             self.write_stream(
                 map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]),
                 partition_key=b'1',
                 endpoint=endpoint,
             )
-        if partitions_count > 1 or tasks > 1:
-            time.sleep(5.0)
-
         expected_len = sum(map(len, messages)) - len(messages)
         read_data = self.read_stream(expected_len, endpoint=endpoint)
         if DEBUG:

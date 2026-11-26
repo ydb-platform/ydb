@@ -2001,6 +2001,65 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT a FROM TestTable;", "[[10]]");
     }
 
+    Y_UNIT_TEST(StatementTimestampDefaultAcrossShards) {
+        TTestFixture fixture;
+        fixture.Exec(R"(
+            CREATE TABLE Source (
+                k Int32 NOT NULL,
+                PRIMARY KEY (k)
+            ) WITH (PARTITION_AT_KEYS = (3, 5));
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                actual Timestamp NOT NULL DEFAULT CurrentUtcTimestamp(),
+                expected Timestamp NOT NULL,
+                PRIMARY KEY (k)
+            ) WITH (PARTITION_AT_KEYS = (3, 5));
+        )");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "actual"), "CurrentUtcTimestamp()");
+        fixture.Exec("INSERT INTO Source (k) VALUES (1), (2), (3), (4), (5), (6);");
+        fixture.Exec("INSERT INTO TestTable (k, expected) SELECT k, CurrentUtcTimestamp() FROM Source;");
+        fixture.Check("SELECT COUNT(*), COUNT(DISTINCT actual), COUNT_IF(actual = expected) FROM TestTable;", "[[6u;1u;6u]]");
+    }
+
+    Y_UNIT_TEST(RandomDefaultAcrossShardsWithUniqueIndex) {
+        TScopedEpochRandomProvider random;
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v Uint64 NOT NULL DEFAULT RandomNumber(1),
+                PRIMARY KEY (k),
+                INDEX idx_v GLOBAL UNIQUE SYNC ON (v)
+            ) WITH (PARTITION_AT_KEYS = (2, 3));
+        )");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), "RandomNumber(1)");
+
+        TStringBuilder expected;
+        expected << "[";
+        // A constant random dependency can be shared across rows in one statement.
+        for (i32 key = 1; key <= 3; ++key) {
+            random.SetEpoch(key);
+            auto query = TStringBuilder() << "INSERT INTO TestTable (k) VALUES (" << key << ") RETURNING k, v;";
+            auto result = fixture.QuerySession().ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("k").GetInt32(), key);
+            const ui64 value = parser.ColumnParser("v").GetUint64();
+            UNIT_ASSERT_VALUES_EQUAL(value >> 60, static_cast<ui64>(key));
+            UNIT_ASSERT(!parser.TryNextRow());
+            if (key != 1) {
+                expected << ";";
+            }
+            expected << "[" << key << ";" << value << "u]";
+        }
+        expected << "]";
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", expected);
+        fixture.Check("SELECT k, v FROM TestTable VIEW idx_v ORDER BY k;", expected);
+    }
+
     Y_UNIT_TEST(CachedRandomDefaultConsistentWithReturningAndIndex) {
         TScopedEpochRandomProvider random;
         TTestFixture fixture;
@@ -2102,6 +2161,26 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec("INSERT INTO TestTable (k, v) VALUES (2, 7ul);");
         fixture.Check("SELECT k FROM TestTable VIEW idx_v WHERE v = 42ul;", "[[1]]");
         fixture.Check("SELECT k FROM TestTable VIEW idx_v WHERE v = 7ul;", "[[2]]");
+    }
+
+    Y_UNIT_TEST(SequenceExhaustionRollsBackDefaultedBatch) {
+        TTestFixture fixture;
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Serial,
+                other Int32 NOT NULL,
+                v Uint64 DEFAULT RandomNumber(1) * 0ul + 42ul,
+                PRIMARY KEY (k),
+                INDEX idx_other GLOBAL SYNC ON (other) COVER (v)
+            );
+        )");
+        fixture.Check("INSERT INTO TestTable (other) VALUES (10) RETURNING k, other, v;", "[[1;10;[42u]]]");
+        // Serial uses an Int32 sequence. Restart at its last two available values.
+        fixture.Exec("ALTER SEQUENCE `/Root/TestTable/_serial_column_k` RESTART WITH 2147483646;");
+
+        fixture.Rejects("INSERT INTO TestTable (other) VALUES (20), (30), (40);", "doesn't have any more values available");
+        fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", "[[1;10;[42u]]]");
+        fixture.Check("SELECT k, other, v FROM TestTable VIEW idx_other ORDER BY k;", "[[1;10;[42u]]]");
     }
 
     Y_UNIT_TEST(UniqueIndexRejectsDefaultCollisionsAtomically) {
@@ -2592,6 +2671,54 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Rejects("INSERT INTO TestTable (k) VALUES (2);", "Missing not null column in input: required");
         fixture.Exec("INSERT INTO TestTable (k, required) VALUES (2, 7ul);");
         fixture.Check("SELECT k, v, required FROM TestTable ORDER BY k;", "[[1;[42u];42u];[2;#;7u]]");
+    }
+
+    Y_UNIT_TEST(PreparedInsertAfterTableRecreation) {
+        TTestFixture fixture;
+        fixture.Exec(ValueTableDDL());
+
+        auto tableClient = fixture.Runner().GetTableClient();
+        auto session = tableClient.CreateSession().ExtractValueSync().GetSession();
+        auto prepareResult = session.PrepareDataQuery(R"(
+            DECLARE $k AS Int32;
+            INSERT INTO `/Root/TestTable` (k) VALUES ($k);
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        auto prepared = prepareResult.GetQuery();
+        const auto executePrepared = [&](i32 key) {
+            auto params = prepared.GetParamsBuilder().AddParam("$k").Int32(key).Build().Build();
+            return prepared.Execute(NYdb::NTable::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+        };
+
+        const auto originalResult = executePrepared(1);
+        UNIT_ASSERT_C(originalResult.IsSuccess(), originalResult.GetIssues().ToString());
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42u]]]");
+
+        const auto tableId = [&] {
+            const auto describe = fixture.Runner().GetTestClient().Ls("/Root/TestTable");
+            const auto& path = describe->Record.GetPathDescription().GetSelf();
+            UNIT_ASSERT_C(path.GetPathId(), describe->Record.ShortDebugString());
+            return path.GetPathId();
+        };
+        const auto oldTableId = tableId();
+        const TString replacement = "RandomNumber(1) * 0ul + 84ul";
+        fixture.Exec("DROP TABLE TestTable;");
+        fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Uint64 DEFAULT " << replacement));
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), replacement);
+        UNIT_ASSERT_VALUES_UNEQUAL(tableId(), oldTableId);
+
+        const auto result = executePrepared(2);
+        if (result.IsSuccess()) {
+            fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[2;[84u]]]");
+        } else {
+            const auto status = result.GetStatus();
+            const auto& issues = result.GetIssues();
+            const bool missingQuery = status == EStatus::NOT_FOUND && issues.ToString().find("Query not found:") != std::string::npos;
+            const bool invalidated = status == EStatus::ABORTED && HasIssue(issues, NYql::TIssuesIds::KIKIMR_QUERY_INVALIDATED);
+            UNIT_ASSERT_C(missingQuery || invalidated, status << ": " << issues.ToString());
+            fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[]");
+        }
+        fixture.Check("INSERT INTO TestTable (k) VALUES (3) RETURNING k, v;", "[[3;[84u]]]");
     }
 
     Y_UNIT_TEST_TWIN(PreparedInsertIsRecompiledAfterDefaultChange, DropDefault) {

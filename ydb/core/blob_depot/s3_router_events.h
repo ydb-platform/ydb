@@ -1,5 +1,8 @@
 #pragma once
 
+#include "config.h"
+#include "s3_route.h"
+
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/wrappers/events/abstract.h>
@@ -7,13 +10,41 @@
 
 namespace NKikimr::NBlobDepot {
 
-    struct TS3PutContext : NWrappers::NExternalStorage::IRequestContext {
-        enum class ESource { Agent, Cooling };
+    struct TS3RequestDeadline : NWrappers::NExternalStorage::IRequestContext {
         const TMonotonic Deadline;
+
+        explicit TS3RequestDeadline(TMonotonic deadline)
+            : Deadline(deadline)
+        {}
+    };
+
+    struct TS3GetContext : TS3RequestDeadline {
+        using TS3RequestDeadline::TS3RequestDeadline;
+    };
+
+    struct TS3DeleteContext : TS3RequestDeadline {
+        const std::shared_ptr<const TString> Route;
+
+        TS3DeleteContext(TMonotonic deadline, std::shared_ptr<const TString> route)
+            : TS3RequestDeadline(deadline)
+            , Route(std::move(route))
+        {}
+
+        static TString MakeRouteKey(const NKikimrBlobDepot::TS3BackendSettings& backend) {
+            auto route = GetS3Route(backend);
+            // Point and batch operations use the same canonical key prefix in this bucket.
+            route.MutableSettings()->SetBucket(backend.GetSettings().GetBucket());
+            route.MutableSettings()->SetObjectKeyPattern(MakeS3BasePath(backend.GetSettings(), {}));
+            return route.SerializeAsString();
+        }
+    };
+
+    struct TS3PutContext : TS3RequestDeadline {
+        enum class ESource { Agent, Cooling };
         const ESource Source;
 
         TS3PutContext(TMonotonic deadline, ESource source)
-            : Deadline(deadline)
+            : TS3RequestDeadline(deadline)
             , Source(source)
         {}
     };
@@ -26,10 +57,7 @@ namespace NKikimr::NStorage {
     // S3 router actor. NodeWarden creates one on first acquire, replaces it when a newer
     // tablet generation supplies changed settings, and stops it on the last release.
     //
-    // Fire-and-forget: NodeWarden registers the router under the well-known service id
-    // MakeBlobDepotS3RouterID(TabletId) synchronously while handling this event, before
-    // any subsequent event from the same sender can be delivered. There is no result
-    // event; callers simply talk to the service id afterwards.
+    // The reply binds the consumer and its workers to this concrete router incarnation.
     struct TEvNodeWardenAcquireBlobDepotS3Router
         : TEventLocal<TEvNodeWardenAcquireBlobDepotS3Router, TEvBlobStorage::EvNodeWardenAcquireBlobDepotS3Router>
     {
@@ -44,15 +72,31 @@ namespace NKikimr::NStorage {
         {}
     };
 
+    struct TEvNodeWardenBlobDepotS3RouterReady
+        : TEventLocal<TEvNodeWardenBlobDepotS3RouterReady, TEvBlobStorage::EvNodeWardenBlobDepotS3RouterReady>
+    {
+        const ui64 TabletId;
+        const ui32 Generation;
+        const TActorId Router;
+
+        TEvNodeWardenBlobDepotS3RouterReady(ui64 tabletId, ui32 generation, TActorId router)
+            : TabletId(tabletId)
+            , Generation(generation)
+            , Router(router)
+        {}
+    };
+
     struct TEvNodeWardenReleaseBlobDepotS3Router
         : TEventLocal<TEvNodeWardenReleaseBlobDepotS3Router, TEvBlobStorage::EvNodeWardenReleaseBlobDepotS3Router>
     {
         ui64 TabletId;
         ui32 Generation;
+        bool RestartingForConfigChange;
 
-        TEvNodeWardenReleaseBlobDepotS3Router(ui64 tabletId, ui32 generation)
+        TEvNodeWardenReleaseBlobDepotS3Router(ui64 tabletId, ui32 generation, bool restartingForConfigChange = false)
             : TabletId(tabletId)
             , Generation(generation)
+            , RestartingForConfigChange(restartingForConfigChange)
         {}
     };
 

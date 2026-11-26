@@ -11,4 +11,9 @@ SRCS(
     lexer.cpp
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    cml/util/yql_split_code/lib
+)
+
 END()

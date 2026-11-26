@@ -7,6 +7,8 @@
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/threading/Executor.h>
 
+#include <mutex>
+
 #ifndef KIKIMR_DISABLE_S3_OPS
 namespace NKikimr::NWrappers::NExternalStorage {
 
@@ -47,6 +49,26 @@ public:
 };
 
 namespace {
+
+// Most clients share endpoint-specific workers. Acquire them when work is actually submitted,
+// so constructing a client that selects a different executor does not retain a pool for its endpoint.
+class TLazyS3EndpointExecutor final : public Aws::Utils::Threading::Executor {
+    const TString Endpoint;
+    const ui32 ThreadsCount;
+    std::once_flag Initialized;
+    std::shared_ptr<Aws::Utils::Threading::Executor> Pool;
+
+public:
+    TLazyS3EndpointExecutor(TString endpoint, ui32 threadsCount)
+        : Endpoint(std::move(endpoint))
+        , ThreadsCount(threadsCount)
+    {}
+
+    bool SubmitToThread(std::function<void()>&& task) override {
+        std::call_once(Initialized, [&] { Pool = TS3ThreadsPoolByEndpoint::GetPool(Endpoint, ThreadsCount); });
+        return Pool->Submit(std::move(task));
+    }
+};
 
 Aws::Client::ClientConfiguration MakeDefaultConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings) {
     Aws::Client::ClientConfiguration config;
@@ -145,7 +167,8 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
         config.httpRequestTimeoutMs = settings.GetHttpRequestTimeoutMs();
     }
 
-    config.executor = TS3ThreadsPoolByEndpoint::GetPool(settings.GetEndpoint(), settings.HasExecutorThreadsCount() ? settings.GetExecutorThreadsCount() : defaultAwsClientSettings.GetExecutorThreadsCount());
+    config.executor = std::make_shared<TLazyS3EndpointExecutor>(settings.GetEndpoint(),
+        settings.HasExecutorThreadsCount() ? settings.GetExecutorThreadsCount() : defaultAwsClientSettings.GetExecutorThreadsCount());
 
     if (settings.HasMaxConnectionsCount()) {
         config.maxConnections = settings.GetMaxConnectionsCount();
@@ -197,6 +220,11 @@ Aws::Auth::AWSCredentials TS3ExternalStorageConfig::CredentialsFromSettings(cons
 
 Aws::Auth::AWSCredentials TS3ExternalStorageConfig::CredentialsFromSettings(const Ydb::Export::ExportToS3Settings& settings) {
     return NPrivate::CredentialsFromSettings(settings);
+}
+
+void TS3ExternalStorageConfig::UseSharedCleanupExecutor() {
+    static const auto cleanup = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(4);
+    Config.executor = cleanup;
 }
 
 TString TS3ExternalStorageConfig::DoGetStorageId() const {

@@ -13,9 +13,6 @@ namespace NKikimr::NBlobDepot {
     void TS3Manager::Init(const NKikimrBlobDepot::TS3BackendSettings *settings) {
         if (settings) {
             Y_ABORT("S3 is not supported on Windows");
-        } else {
-            SyncMode = false;
-            AsyncMode = false;
         }
     }
 
@@ -24,6 +21,10 @@ namespace NKikimr::NBlobDepot {
     void TS3Manager::Handle(TAutoPtr<IEventHandle> /*ev*/) {
         Y_ABORT("S3 is not supported on Windows");
     }
+
+    void TS3Manager::EnqueuePutWatch(TS3Locator, TInstant, NTabletFlatExecutor::TTransactionContext&) { Y_ABORT("S3 is not supported on Windows"); }
+
+    void TS3Manager::RunPutProbe() { Y_ABORT("S3 is not supported on Windows"); }
 
     void TS3Manager::AddTrashToCollect(TS3Locator /*locator*/) {
         Y_ABORT("S3 is not supported on Windows");
@@ -56,7 +57,7 @@ namespace NKikimr::NBlobDepot {
     // called unconditionally on every pipe server disconnect, so it must not abort here
     void TS3Manager::DropPendingPrepareWrites(const TActorId& /*pipeServerId*/) {}
 
-    void TS3Manager::OnKeyWritten(const TData::TKey& /*key*/, const TValueChain& /*valueChain*/) {}
+    void TS3Manager::MaybeScheduleCooling() {}
 
     void TS3Manager::OnDataLoaded() {}
 

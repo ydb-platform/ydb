@@ -15,6 +15,7 @@ LIBRARY()
         SRCS(
             s3.cpp
             s3_delete.cpp
+            s3_retire.cpp
             s3_scan.cpp
             s3_upload.cpp
             s3_write.cpp
@@ -26,9 +27,8 @@ LIBRARY()
         blob_depot.cpp
         blob_depot.h
         config.cpp
-        s3_put_timeout.h
-        defs.h
         config.h
+        defs.h
         types.h
         wakeup_timer.h
         events.h
@@ -40,6 +40,8 @@ LIBRARY()
         blob_depot_tablet.h
         blocks.cpp
         blocks.h
+        cooling_index.cpp
+        cooling_index.h
         coro_tx.cpp
         coro_tx.h
         data.cpp
@@ -61,6 +63,7 @@ LIBRARY()
         mon_main.h
         move_data.cpp
         s3.h
+        s3_collection.h
         s3_error.h
         s3_request_timer.h
         s3_router.h

@@ -10,4 +10,9 @@ SRCS(
     yconf.cpp
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    contrib/libs/leveldb
+)
+
 END()

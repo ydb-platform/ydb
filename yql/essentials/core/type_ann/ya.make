@@ -44,4 +44,6 @@ PEERDIR(
     library/cpp/yson/node
 )
 
+PEERDIR_FROM_POLICY(ALLOW classifieds/vsdwh/tools/ci/jobs/yql_udf/parser)
+
 END()

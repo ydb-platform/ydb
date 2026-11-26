@@ -332,7 +332,7 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[2], 17, id, data), NKikimrProto::OK);
     }
 
-    void CheckGetMergeKeepsFlags(NKikimrProto::EReplyStatus otherStatus, bool reverseOrder) {
+    void CheckGetMergeKeepsDoNotKeep(NKikimrProto::EReplyStatus otherStatus, bool reverseOrder) {
         TEnvironmentSetup env(MakeTwoPileSettings());
         env.CreatePool();
         env.Sim(TDuration::Seconds(30));
@@ -383,12 +383,12 @@ namespace {
         const auto& r = res->Get()->Responses[0];
         UNIT_ASSERT_VALUES_EQUAL(r.Id, id);
         UNIT_ASSERT_VALUES_EQUAL(r.Status, otherStatus == NKikimrProto::NODATA ? NKikimrProto::OK : NKikimrProto::ERROR);
-        UNIT_ASSERT_C(r.Keep, "merge lost Keep from the other pile");
+        UNIT_ASSERT_C(!r.Keep, "DoNotKeep must suppress Keep from another pile");
         UNIT_ASSERT_C(r.DoNotKeep, "merge lost DoNotKeep from the other pile");
         env.Runtime->FilterFunction = {};
     }
 
-    void CheckRepairFailurePreservesIdentity(bool failPut) {
+    void CheckRepairFailurePreservesIdentity(std::optional<NKikimrProto::EReplyStatus> failedReadStatus) {
         TEnvironmentSetup env(MakeTwoPileSettings());
         env.CreatePool();
         env.Sim(TDuration::Seconds(30));
@@ -405,18 +405,20 @@ namespace {
 
         bool failureInjected = false;
         env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
-            const ui32 resultType = failPut ? TEvBlobStorage::EvPutResult : TEvBlobStorage::EvGetResult;
+            const ui32 resultType = failedReadStatus ? TEvBlobStorage::EvGetResult : TEvBlobStorage::EvPutResult;
             if (ev->GetTypeRewrite() != resultType) {
                 return true;
             }
             if (IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite()); actor &&
                     TypeName(*actor).Contains("TBridgedBlobStorageProxyActor")) {
-                if (!failPut) {
+                if (failedReadStatus) {
                     auto *msg = ev->Get<TEvBlobStorage::TEvGetResult>();
                     // The original query asks for both blobs; the repair reads one full blob at a time.
                     if (msg->ResponseSz == 1 && msg->Responses[0].Id == ids[0]) {
-                        msg->Responses[0].Status = NKikimrProto::NODATA;
+                        msg->Responses[0].Status = *failedReadStatus;
                         msg->Responses[0].Buffer = {};
+                        msg->Responses[0].Keep = false;
+                        msg->Responses[0].DoNotKeep = true;
                         failureInjected = true;
                     }
                 } else {
@@ -446,7 +448,9 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(r.Id, ids[i]);
             UNIT_ASSERT_VALUES_EQUAL(r.Shift, 2);
             UNIT_ASSERT_VALUES_EQUAL(r.RequestedSize, 3);
-            UNIT_ASSERT(r.Keep);
+            const bool released = i == 0 && failedReadStatus.has_value();
+            UNIT_ASSERT_VALUES_EQUAL(r.Keep, !released);
+            UNIT_ASSERT_VALUES_EQUAL(r.DoNotKeep, released);
             UNIT_ASSERT_VALUES_EQUAL(r.Status, i ? NKikimrProto::OK : NKikimrProto::ERROR);
             UNIT_ASSERT_VALUES_EQUAL(r.Buffer.ConvertToString(), i ? data.substr(2, 3) : TString());
         }
@@ -458,16 +462,20 @@ namespace {
 
 Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
 
-    Y_UNIT_TEST_TWIN(GetRepairFailurePreservesIdentity, failPut) {
-        CheckRepairFailurePreservesIdentity(failPut);
+    Y_UNIT_TEST_TWIN(GetRepairReadFailurePreservesIdentityAndFlags, noData) {
+        CheckRepairFailurePreservesIdentity(noData ? NKikimrProto::NODATA : NKikimrProto::ERROR);
     }
 
-    Y_UNIT_TEST_TWIN(GetMergeKeepsFlagsOnNodataReplacement, reverseOrder) {
-        CheckGetMergeKeepsFlags(NKikimrProto::NODATA, reverseOrder);
+    Y_UNIT_TEST(GetRepairPutFailurePreservesIdentityAndFlags) {
+        CheckRepairFailurePreservesIdentity(std::nullopt);
     }
 
-    Y_UNIT_TEST_TWIN(GetMergeKeepsFlagsOnErrorReplacement, reverseOrder) {
-        CheckGetMergeKeepsFlags(NKikimrProto::ERROR, reverseOrder);
+    Y_UNIT_TEST_TWIN(GetMergeKeepsDoNotKeepOnNodataReplacement, reverseOrder) {
+        CheckGetMergeKeepsDoNotKeep(NKikimrProto::NODATA, reverseOrder);
+    }
+
+    Y_UNIT_TEST_TWIN(GetMergeKeepsDoNotKeepOnErrorReplacement, reverseOrder) {
+        CheckGetMergeKeepsDoNotKeep(NKikimrProto::ERROR, reverseOrder);
     }
 
     Y_UNIT_TEST(SyncerCopiesDoNotKeepToMissingTarget) {
@@ -816,6 +824,113 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses.size(), 1);
         UNIT_ASSERT(numDropped); // the blob has been read for restoration
 
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[1], 9, id, data), NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST_TWIN(GetRestoreDoesNotReissueReleasedKeep, vetoInFirstRead) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto pileGroups = GetPileGroups(env, groupId);
+        const TString data = "blob to be restored";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        PutToPileGroup(env, pileGroups[0], 1, id, data);
+
+        bool sawIndex = false;
+        bool sawBody = false;
+        ui32 restorePuts = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (!ev->HasEvent()) {
+                return true;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut) {
+                const auto& put = *ev->Get<TEvBlobStorage::TEvPut>();
+                if (put.Id == id && put.WriteSource == TWriteSource::BridgeProxyRestorePut) {
+                    UNIT_ASSERT_C(!put.IssueKeepFlag, "repair must honor DoNotKeep from either read");
+                    ++restorePuts;
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult) {
+                const IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite());
+                auto& result = *ev->Get<TEvBlobStorage::TEvGetResult>();
+                if (actor && TypeName(*actor).Contains("TBridgedBlobStorageProxyActor") &&
+                        result.GroupId == pileGroups[0] && result.ResponseSz == 1) {
+                    auto& response = result.Responses[0];
+                    if (response.Id == id && response.Status == NKikimrProto::OK) {
+                        const bool isBodyRead = !response.Buffer.empty();
+                        (isBodyRead ? sawBody : sawIndex) = true;
+                        response.DoNotKeep = isBodyRead != vetoInFirstRead;
+                        response.Keep = !response.DoNotKeep;
+                    }
+                }
+            }
+            return true;
+        };
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::FastRead, /*mustRestoreFirst=*/ true, /*isIndexOnly=*/ true));
+        });
+        const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        env.Runtime->FilterFunction = {};
+
+        UNIT_ASSERT(sawIndex && sawBody);
+        UNIT_ASSERT_VALUES_EQUAL(restorePuts, 1);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+        const auto& response = res->Get()->Responses[0];
+        UNIT_ASSERT_VALUES_EQUAL(response.Status, NKikimrProto::OK);
+        UNIT_ASSERT(response.DoNotKeep && !response.Keep);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[1], 9, id, data), NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST(GetRestoreReusesFirstReplyBody) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto pileGroups = GetPileGroups(env, groupId);
+        const TString data = "full body for repair";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        PutToPileGroup(env, pileGroups[0], 1, id, data);
+
+        std::array<ui32, 2> getCounts{};
+        std::array<std::unique_ptr<IEventHandle>, 2> replies;
+        bool holdReplies = true;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet) {
+                for (size_t i = 0; i < getCounts.size(); ++i) {
+                    if (ev->Recipient == MakeBlobStorageProxyID(pileGroups[i])) {
+                        ++getCounts[i];
+                    }
+                }
+            } else if (holdReplies && ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult && ev->HasEvent()) {
+                const auto& result = *ev->Get<TEvBlobStorage::TEvGetResult>();
+                for (size_t i = 0; i < replies.size(); ++i) {
+                    if (result.GroupId == pileGroups[i] && result.ResponseSz == 1 && result.Responses[0].Id == id) {
+                        UNIT_ASSERT(!replies[i]);
+                        UNIT_ASSERT_VALUES_EQUAL(result.Responses[0].Status, i ? NKikimrProto::NODATA : NKikimrProto::OK);
+                        replies[i] = std::move(ev);
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::FastRead, /*mustRestoreFirst=*/ true));
+        });
+        WaitUntil(env, [&] { return replies[0] && replies[1]; }, "both physical GET replies");
+        holdReplies = false;
+        env.Runtime->Send(replies[0].release(), 1);
+        env.Sim(TDuration::MilliSeconds(10));
+        env.Runtime->Send(replies[1].release(), 1);
+        const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        env.Runtime->FilterFunction = {};
+
+        CheckGetResult(*res->Get(), data);
+        UNIT_ASSERT_VALUES_EQUAL(getCounts[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(getCounts[1], 1);
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[1], 9, id, data), NKikimrProto::OK);
     }
 

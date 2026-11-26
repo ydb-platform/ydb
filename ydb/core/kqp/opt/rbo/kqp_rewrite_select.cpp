@@ -520,6 +520,14 @@ TExprNode::TPtr GetTableSourceType(const NYql::TKikimrTableDescription& desc, TE
     // clang-format on
 }
 
+// The settings of a table read that the relational optimizer keeps: ForcePrimary, set by VIEW PRIMARY KEY or when
+// automatic index selection is disabled, so that the read is not redirected to an index.
+TExprNode::TPtr BuildOpReadSettings(const TKqlReadTableRanges& read, TExprContext& ctx, TPositionHandle pos) {
+    TKqpReadTableSettings settings;
+    settings.ForcePrimary = TKqpReadTableSettings::Parse(read).ForcePrimary;
+    return settings.BuildNode(ctx, pos).Ptr();
+}
+
 TExprNode::TPtr GetMember(TExprNode::TPtr node) {
     TExprNode::TPtr member = node;
     return member->IsCallable("Member") ? member : nullptr;
@@ -1656,6 +1664,7 @@ TExprNode::TPtr RewriteReadOrEffectInput(const TExprNode::TPtr& node, TExprConte
             .Columns(read.Columns())
             .SourceType(sourceType)
             .UniqueId().Value(ToString(uniqueSourceIdCounter++)).Build()
+            .Settings(BuildOpReadSettings(read, ctx, node->Pos()))
             .Done().Ptr();
     }
     if (TCoFilter::Match(node.Get()) || TCoOrderedFilter::Match(node.Get())) {
@@ -1979,6 +1988,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                         .Columns(readExpr.Columns())
                         .SourceType(sourceType)
                         .UniqueId().Value(std::to_string(uniqueSourceIdCounter++)).Build()
+                        .Settings(BuildOpReadSettings(readExpr, ctx, node->Pos()))
                     .Done().Ptr();
                     // clang-format on
                 }

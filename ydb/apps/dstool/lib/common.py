@@ -585,7 +585,7 @@ def invoke_grpc(
         ('grpc.max_receive_message_length', 256 << 20),  # 256 MiB
     ]
     if connection_params.debug:
-        p = ', '.join('<<< %s >>>' % text_format.MessageToString(param, as_one_line=True) for param in params)
+        p = ', '.join('<<< %s >>>' % text_format.MessageToString(_bsc_request_for_display(param), as_one_line=True) for param in params)
         print('INFO: issuing %s(%s) @%s:%d protocol %s' % (func, p, endpoint.host, endpoint.grpc_port,
               endpoint.protocol), file=sys.stderr)
 
@@ -672,15 +672,32 @@ def fetch_storage_state(storage_pools=False, groups=False, vdisks=False, pdisks=
     return result
 
 
+def _bsc_request_for_display(request):
+    if isinstance(request, kikimr_msgbus.TBlobStorageConfigRequest):
+        result = type(request)()
+        result.CopyFrom(request)
+        result.ClearField('SecurityToken')
+        result.Request.CopyFrom(_bsc_request_for_display(request.Request))
+        return result
+    if isinstance(request, kikimr_bsconfig.TConfigRequest) and any(
+        cmd.ManageRetiredS3Namespace.HasField('Credentials') for cmd in request.Command
+    ):
+        result = type(request)()
+        result.CopyFrom(request)
+        for cmd in result.Command:
+            if cmd.ManageRetiredS3Namespace.HasField('Credentials'):
+                cmd.ManageRetiredS3Namespace.Credentials.Clear()
+        return result
+    return request
+
+
 def invoke_grpc_bsc_request(request, endpoint=None):
     bs_request = kikimr_msgbus.TBlobStorageConfigRequest(Domain=connection_params.domain, Request=request)
     if connection_params.token is not None:
         bs_request.SecurityToken = connection_params.token
     bs_response = invoke_grpc('BlobStorageConfig', bs_request, endpoint=endpoint)
     if bs_response.Status != 1:
-        # remove security token from error message
-        bs_request.SecurityToken = ''
-        request_s = text_format.MessageToString(bs_request, as_one_line=True)
+        request_s = text_format.MessageToString(_bsc_request_for_display(bs_request), as_one_line=True)
         response_s = text_format.MessageToString(bs_response, as_one_line=True)
         raise QueryError('Failed to gRPC-query blob storage controller; request: %s; response: %s' % (request_s, response_s))
     return bs_response.BlobStorageConfigResponse
@@ -1548,7 +1565,7 @@ def print_result(format: str, status: str, description: str = None, file=None):
 
 def print_request_result(args, request, response):
     success = is_successful_bsc_response(response)
-    error_reason = 'Request has failed: \n{0}\n{1}\n'.format(request, response)
+    error_reason = 'Request has failed: \n{0}\n{1}\n'.format(_bsc_request_for_display(request), response)
     print_status(args, success, error_reason)
 
 

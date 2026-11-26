@@ -4,6 +4,10 @@ BUILD_ONLY_IF(ARCH_X86_64)
 
 UNITTEST()
 
+CFLAGS(
+    -DYQL_FASTCHECK_TEST_NEW_FEATURES
+)
+
 BUNDLE_OUTPUT(
     yql/essentials/public/fastcheck/abi/fat
     fastcheck_abi_internalized.a
@@ -26,6 +30,7 @@ SRCS(
 PEERDIR(
     yql/essentials/public/fastcheck/abi/interface
     yql/essentials/public/fastcheck/abi/serialization
+    yql/essentials/public/sql_meta
     yql/essentials/public/udf_meta/interface
 )
 

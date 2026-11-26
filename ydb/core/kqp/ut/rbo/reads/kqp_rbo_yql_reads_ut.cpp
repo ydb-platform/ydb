@@ -1660,6 +1660,74 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    // As in the old optimizer, VIEW PRIMARY KEY and disabled automatic index selection keep a read on the main table,
+    // both for a filter and for a top-N sort, while an explicit VIEW of an index still reads the index.
+    Y_UNIT_TEST(ViewPrimaryKeyKeepsMainTable) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64,
+                PRIMARY KEY (a, b)
+            ) WITH (PARTITION_AT_KEYS = (1, 2));
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [a, b, c] : std::vector<std::tuple<i64, i64, std::optional<i64>>>{
+                {0, 9, 5}, {1, 1, std::nullopt}, {1, 2, 3}, {2, 1, 1}, {2, 2, 4}}) {
+            rows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("b").Int64(b).AddMember("c").OptionalInt64(c).EndStruct();
+        }
+        rows.EndList();
+        const auto rowsResult = db.BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(rowsResult.IsSuccess(), rowsResult.GetIssues().ToString());
+
+        // The index is built over the loaded rows.
+        schemeResult = session.ExecuteSchemeQuery("ALTER TABLE `/Root/t` ADD INDEX idx_c GLOBAL ON (c)").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        const TString noAutoIndex = "PRAGMA ydb.OptDisableAutoIndexSelection = 'true'; ";
+        struct TCase {
+            TString Query;
+            TString Expected;
+            // Whether the query reads the index.
+            bool ReadsIndex;
+        };
+        const std::vector<TCase> cases = {
+            {"select a, b from `/Root/t` where c = 4", "[[2;2]]", true},
+            {"select a, b from `/Root/t` view primary key where c = 4", "[[2;2]]", false},
+            {noAutoIndex + "select a, b from `/Root/t` where c = 4", "[[2;2]]", false},
+            {"select a, b, c from `/Root/t` order by c limit 2", "[[1;1;#];[2;1;[1]]]", true},
+            {"select a, b, c from `/Root/t` view primary key order by c limit 2", "[[1;1;#];[2;1;[1]]]", false},
+            {noAutoIndex + "select a, b, c from `/Root/t` order by c limit 2", "[[1;1;#];[2;1;[1]]]", false},
+            // An explicit index is read whatever the automatic selection does.
+            {noAutoIndex + "select a, b from `/Root/t` view idx_c where c = 4", "[[2;2]]", true},
+        };
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = "PRAGMA YqlSelect = 'force'; " + testCase.Query + ";";
+            auto explain = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString ast{*explain.GetStats()->GetAst()};
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("(KqpTable '\"/Root/t/idx_c/indexImplTable\""), testCase.ReadsIndex,
+                query << ", ast: " << ast);
+
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYson(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(ExistsDropsSubquerySort) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

@@ -46,6 +46,8 @@ message TValue {
     optional bool Public = 4;
     optional bool GoingToAssimilate = 5;
     optional uint32 ValueVersion = 6;
+    optional uint32 HotWriteGeneration = 7;
+    optional uint64 HotWriteSequence = 8;
 }
 
 message TGivenIdRange {
@@ -202,6 +204,8 @@ message TEvCommitBlobSeq {
         repeated TExtraBlockCheck ExtraBlockChecks = 7;
         optional bool IssueKeepFlag = 8;
         optional bool IgnoreBlock = 9;
+        // The SDK retried this S3 PUT; an earlier attempt may still complete after the mapping is collected.
+        optional bool S3PutMayArriveLate = 10;
     }
 
     repeated TItem Items = 1;
@@ -220,6 +224,8 @@ message TEvDiscardSpoiledBlobSeq {
     repeated TBlobSeqId Items = 1;
     repeated TS3Locator S3Locators = 2;
     optional bool S3SlowDown = 3; // set when at least one S3Locator is being discarded due to S3 SlowDown response
+    // A dispatched PUT can still reach S3 after the tablet releases its logical write slot.
+    optional bool S3PutMayArriveLate = 4;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

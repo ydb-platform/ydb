@@ -8,6 +8,11 @@ PEERDIR(
 
 PY_SRCS(__init__.py)
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    contrib
+)
+
 END()
 
 RECURSE_FOR_TESTS(ut)

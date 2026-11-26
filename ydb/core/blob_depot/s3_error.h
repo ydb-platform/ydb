@@ -24,4 +24,20 @@ namespace NKikimr::NBlobDepot {
         return error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_KEY || IsS3MissingKey(error.GetExceptionName());
     }
 
+    inline bool IsS3MissingBucket(const Aws::S3::S3Error& error) {
+        return error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_BUCKET || error.GetExceptionName() == "NoSuchBucket";
+    }
+
+    inline bool S3PutMayArriveAfterError(const Aws::S3::S3Error& error) {
+        const int status = static_cast<int>(error.GetResponseCode());
+        return status < 400 || status == 408 || status >= 500;
+    }
+
+    inline bool IsS3MissingHead(const Aws::S3::S3Error& error) {
+        const auto type = error.GetErrorType();
+        // Unlike GET, HEAD has no error body to identify NoSuchKey.
+        return IsS3MissingKey(error) || type == Aws::S3::S3Errors::RESOURCE_NOT_FOUND ||
+            (!IsS3MissingBucket(error) && error.GetResponseCode() == Aws::Http::HttpResponseCode::NOT_FOUND);
+    }
+
 } // namespace NKikimr::NBlobDepot

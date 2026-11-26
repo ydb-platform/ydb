@@ -607,7 +607,8 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     built.push_back(std::move(mainBuilt));
 
     TVector<TString> filterPhysical;
-    if (!kqpCtx.Config->IsAutoIndexSelectionDisabled() && !candidates.front().Score.PointCoversKey) {
+    // As in the old optimizer, VIEW PRIMARY KEY keeps the read on the main table.
+    if (!kqpCtx.Config->IsAutoIndexSelectionDisabled() && !read->ForcePrimary && !candidates.front().Score.PointCoversKey) {
         filterPhysical = FilterPhysicalColumns(*filter, *read, props);
         for (const auto& index : mainMeta.Indexes) {
             if (!IsSelectableIndex(index)) {
@@ -785,6 +786,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     const auto sortDir = chosenIndexMeta ? ESortDir::None : read->SortDir;
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), storageType, tableCallable, read->OlapFilterLambda,
                                           read->Limit, std::move(rangeInfo), TExpression(originalLambda, &ctx, &props), sortDir, read->Props, read->Pos);
+    newRead->ForcePrimary = read->ForcePrimary;
 
     // An always true filter would stand between the read and its consumers, e.g. an OLAP aggregate.
     if (IsPrunedToTrue(chosen.PrunedLambda)) {
@@ -840,7 +842,8 @@ TIntrusivePtr<IOperator> TSelectIndexForTopSortRule::SimpleMatchAndApply(const T
         return input;
     }
     const auto read = CastOperator<TOpRead>(current);
-    if (read->GetTableStorageType() != NYql::EStorageType::RowStorage || read->RangeInfo || read->Limit || read->SortDir != ESortDir::None) {
+    if (read->GetTableStorageType() != NYql::EStorageType::RowStorage || read->ForcePrimary || read->RangeInfo || read->Limit
+        || read->SortDir != ESortDir::None) {
         return input;
     }
 

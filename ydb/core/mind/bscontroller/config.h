@@ -78,6 +78,7 @@ namespace NKikimr {
             TCowHolder<std::set<std::pair<TBoxStoragePoolId, TGroupId>>> StoragePoolGroups;
             TCowHolder<TMap<TGroupId, TBlobDepotDeleteQueueInfo>> BlobDepotDeleteQueue;
             TRetiredS3Namespaces NewRetiredS3Namespaces;
+            TRetiredS3Namespaces UpdatedRetiredS3Namespaces;
             TBlobDepotOwners ChangedBlobDepotOwners;
 
             // system-level configuration
@@ -275,7 +276,7 @@ namespace NKikimr {
 
             bool Changed() const {
                 return DataCenterStates.Changed() || HostConfigs.Changed() || Boxes.Changed() || StoragePools.Changed() ||
-                    StoragePoolGroups.Changed() || BlobDepotDeleteQueue.Changed() || !NewRetiredS3Namespaces.empty() ||
+                    StoragePoolGroups.Changed() || BlobDepotDeleteQueue.Changed() || !NewRetiredS3Namespaces.empty() || !UpdatedRetiredS3Namespaces.empty() ||
                     PDisks.Changed() ||
                     DrivesSerials.Changed() || Nodes.Changed() || VSlots.Changed() || Groups.Changed() ||
                     IndexGroupSpeciesToGroup.Changed() || NextGroupId.Changed() || NextStoragePoolId.Changed() ||
@@ -511,6 +512,8 @@ namespace NKikimr {
             void ChangeLiveBlobDepotClaims(const TGroupInfo& group, const NKikimrBlobDepot::TBlobDepotConfig& config, bool add);
             void CommitBlobDepotOwners();
             const std::set<TGroupId>& FindBlobDepotOwners(const TBlobDepotClaim& key) const;
+            bool KeepsRetiredS3Namespace(TGroupId id, const NKikimrBlobDepot::TS3BackendSettings& settings,
+                TStringBuf storageName) const;
             void CheckBlobDepotS3Prefix(const NKikimrBlobDepot::TS3BackendSettings& settings, TStringBuf groupName,
                 TStringBuf storageName, std::optional<TGroupId> ownGroup = std::nullopt) const;
             void ExecuteStep(const NKikimrBlobStorage::TDecommitGroups& cmd, TStatus& status);
@@ -525,6 +528,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TMovePDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TPopulatePDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TUpdateBridgeGroupInfo& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TManageRetiredS3Namespace& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReconfigureVirtualGroup& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TRecommissionGroups& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDefineDDiskPool& cmd, TStatus& status);

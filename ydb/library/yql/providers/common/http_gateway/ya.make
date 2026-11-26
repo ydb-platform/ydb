@@ -16,6 +16,7 @@ PEERDIR(
     ydb/library/actors/http
     ydb/library/actors/prof
     ydb/library/actors/protos
+    ydb/library/yql/dq/actors/common
     yql/essentials/providers/common/proto
     yql/essentials/public/issue
     yql/essentials/utils

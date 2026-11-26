@@ -373,6 +373,42 @@ void AssertXdcDeclareNotSerialized(IEventBase* ev, ui32 maxSerializedEventSize) 
 } // namespace
 
 Y_UNIT_TEST_SUITE(EventOutputChannel) {
+    Y_UNIT_TEST(GluesSmallMainChannelProtobufEventsIntoSingleSpan) {
+        auto common = MakeIntrusive<TInterconnectProxyCommon>();
+        common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        std::shared_ptr<IInterconnectMetrics> metrics = CreateInterconnectCounters(common);
+        metrics->SetPeerInfo("peer", "1", "peer");
+
+        auto releaseCallback = [](THolder<IEventBase>) {};
+        TEventHolderPool pool(common, releaseCallback);
+
+        TSessionParams params;
+        TEventOutputChannel channel(1, 1, 64 << 20, metrics, params, nullptr);
+
+        for (ui64 blobId : {1, 2}) {
+            auto* ev = new TEvTestSerialization;
+            ev->Record.SetBlobID(blobId);
+            auto evHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), ev);
+            channel.Push(*evHandle, pool, TInstant::Zero());
+        }
+
+        NInterconnect::TOutgoingStream mainStream;
+        NInterconnect::TOutgoingStream xdcStream;
+        TTcpPacketOutTask task(params, mainStream, xdcStream);
+
+        UNIT_ASSERT(channel.FeedBuf(task, 1));
+        UNIT_ASSERT(channel.FeedBuf(task, 1));
+        task.Finish(1, 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(mainStream.GetSendQueueSize(), 1u);
+
+        TVector<TConstIoVec> data;
+        mainStream.ProduceIoVec(data, 1024, Max<size_t>());
+        UNIT_ASSERT_VALUES_EQUAL(data.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(data.front().Size, task.GetPacketSize());
+    }
+
     Y_UNIT_TEST(PropagatesSerializedEventTooLargeFromCoroutineSerializer) {
         auto common = MakeIntrusive<TInterconnectProxyCommon>();
         common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();

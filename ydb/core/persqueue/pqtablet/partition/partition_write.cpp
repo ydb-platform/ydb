@@ -947,7 +947,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const T
                 return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
                     "AfterSplit must be set");
             }
-            if (it->second.KeyRange) {
+            if (Config.GetSplitByPartitionKey() && it->second.KeyRange) {
                 NKikimrPQ::TPartitionKeyRange keyRange;
                 it->second.KeyRange->Serialize(keyRange);
                 if (body.KeyRange && body.KeyRange->SerializeAsString() != keyRange.SerializeAsString()) {

@@ -48,6 +48,7 @@ struct TConfigParams {
     ui64 Version = 0;
     TVector<TCreateConsumerParams> Consumers;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS;
+    bool SplitByPartitionKey = false;
 };
 
 struct TCreatePartitionParams {
@@ -533,6 +534,7 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                         1,
                         config.MeteringMode);
     Config.SetLocalDC(true);
+    Config.SetSplitByPartitionKey(config.SplitByPartitionKey);
 
     NPersQueue::TTopicNamesConverterFactory factory(Ctx->Runtime->GetAppData(0).PQConfig.GetTopicsAreFirstClassCitizen(), "/Root/PQ", "dc1");
     TopicConverter = factory.MakeTopicConverter(Config);
@@ -2756,7 +2758,7 @@ void PutMessagesInNewHead(THead& newHead, ui64 offset, TVector<TClientBlob> mess
 Y_UNIT_TEST_F(ShouldPreserveSourceKeyRangeWhenSplitRegistrationIsConfirmed, TPartitionFixture)
 {
     // given
-    CreatePartition();
+    CreatePartition({}, {.SplitByPartitionKey = true});
     SendEvent(new TEvPQ::TEvRegisterMessageGroup(1, "parent", Nothing(), 0, false));
     WaitCmdWrite();
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
@@ -2796,7 +2798,7 @@ Y_UNIT_TEST_F(ShouldPreserveSourceKeyRangeWhenSplitRegistrationIsConfirmed, TPar
 Y_UNIT_TEST_F(ShouldRejectSplitRegistrationConfirmationWhenKeyRangeDiffers, TPartitionFixture)
 {
     // given
-    CreatePartition();
+    CreatePartition({}, {.SplitByPartitionKey = true});
     SendEvent(new TEvPQ::TEvRegisterMessageGroup(1, "parent", Nothing(), 0, false));
     WaitCmdWrite();
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
@@ -2824,6 +2826,50 @@ Y_UNIT_TEST_F(ShouldRejectSplitRegistrationConfirmationWhenKeyRangeDiffers, TPar
     // then
     WaitErrorResponse({.Cookie = 3, .ErrorCode = NPersQueue::NErrorCode::BAD_REQUEST});
     UNIT_ASSERT(!Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(1)));
+}
+
+Y_UNIT_TEST_F(ShouldStoreConfirmedKeyRangeWhenTopicIsNotSplitByPartitionKey, TPartitionFixture)
+{
+    // given
+    CreatePartition();
+    SendEvent(new TEvPQ::TEvRegisterMessageGroup(1, "parent", Nothing(), 0, false));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 1});
+
+    const ui64 boundary = 50;
+    TMaybe<NKikimrPQ::TPartitionKeyRange> childRange;
+    childRange.ConstructInPlace().SetToBound(TSerializedCellVec::Serialize({TCell::Make(boundary)}));
+    TVector<TEvPQ::TEvSplitMessageGroup::TDeregisterBody> parents;
+    parents.emplace_back("parent");
+    TVector<TEvPQ::TEvSplitMessageGroup::TRegisterBody> children;
+    children.emplace_back("child", std::move(childRange), 0, false);
+    SendEvent(new TEvPQ::TEvSplitMessageGroup(2, std::move(parents), std::move(children)));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 2});
+
+    const ui64 otherBoundary = 100;
+    const TString confirmedUpperBound = TSerializedCellVec::Serialize({TCell::Make(otherBoundary)});
+    TMaybe<NKikimrPQ::TPartitionKeyRange> confirmationRange;
+    confirmationRange.ConstructInPlace().SetToBound(confirmedUpperBound);
+
+    // when
+    SendEvent(new TEvPQ::TEvRegisterMessageGroup(3, "child", std::move(confirmationRange), 0, true));
+
+    // then
+    auto write = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
+    const auto* group = FindIfPtr(write->Record.GetCmdWrite(), [](const auto& cmd) {
+        const auto& key = cmd.GetKey();
+        return key.size() > TKeyPrefix::MarkedSize() && key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkProtoSourceId
+            && key.substr(TKeyPrefix::MarkedSize()) == "child";
+    });
+    UNIT_ASSERT(group);
+    NKikimrPQ::TMessageGroupInfo info;
+    UNIT_ASSERT(info.ParseFromString(group->GetValue()));
+    UNIT_ASSERT_VALUES_EQUAL(info.GetKeyRange().GetToBound(), confirmedUpperBound);
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 3});
 }
 
 // FROM_WRITTEN_AT must read a multi-message blob and commit to the first message

@@ -2889,6 +2889,29 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )",
             R"([[1;"1"];[2;"2"];[3;"3"]])",
             {}, false, false);
+
+        // JSON_VALUE is pushed. Unwrap blocks the predicate from KqpOlapApply, so it stays in the FlatMap.
+        // The limit must stay above that predicate: rows 1-3 fail it, and LIMIT 1 has to return row 4.
+        {
+            const TString query = pragma + R"(
+                SELECT a, JSON_VALUE(payload, "$.activity_name") AS activity_name
+                FROM `/Root/LimitProj`
+                WHERE Unwrap(Unicode::ToLower(class)) = 'other'
+                LIMIT 1;
+            )";
+            auto explained = session2.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explained.GetStatus(), EStatus::SUCCESS, explained.GetIssues().ToString());
+            const TString ast(*explained.GetStats()->GetAst());
+            UNIT_ASSERT_C(ast.find("ItemsLimit") == TString::npos, ast);
+            UNIT_ASSERT_C(ast.find("KqpOlapProjection") != TString::npos, ast);
+            UNIT_ASSERT_C(ast.find("Unwrap") != TString::npos, ast);
+
+            auto executed = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(executed.GetStatus(), EStatus::SUCCESS, executed.GetIssues().ToString());
+            CompareYson(R"([[4;["Open"]]])", FormatResultSetYson(executed.GetResultSet(0)));
+        }
     }
 
     // Unit tests for datetime pushdowns in query service

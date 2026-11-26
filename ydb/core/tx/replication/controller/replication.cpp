@@ -2,6 +2,7 @@
 #include "private_events.h"
 #include "replication.h"
 #include "resource_id_resolver.h"
+#include "schema.h"
 #include "secret_resolver.h"
 #include "target_discoverer.h"
 #include "target_table.h"
@@ -151,10 +152,7 @@ public:
         const auto previousLag = GetLag();
         const auto res = Targets.emplace(id, CreateTarget(self, id, kind, std::forward<Args>(args)...));
         Y_VERIFY_S(res.second, "Duplicate target: " << id);
-        // CDC mirrors have no replication workers reporting lag.
-        if (kind != ETargetKind::CdcTopic) {
-            TLagProvider::AddPendingLag(id);
-        }
+        TLagProvider::AddPendingLag(id);
         NotifyLagChanged(previousLag);
         return id;
     }
@@ -172,22 +170,24 @@ public:
     }
 
     void RemoveTarget(ui64 id) {
-        const auto previousLag = GetLag();
         const auto it = Targets.find(id);
-        if (it != Targets.end()) {
-            if (auto* cdc = GetCdcTarget(it->second.Ptr.Get())) {
-                const auto parent = CdcChildren.find(cdc->GetCdc().GetParentTargetId());
-                Y_ABORT_UNLESS(parent != CdcChildren.end());
-                Erase(parent->second, cdc);
-                if (parent->second.empty()) {
-                    CdcChildren.erase(parent);
-                }
-            }
-
-            TLagProvider::RemoveLag(it->second, id);
-            Targets.erase(it);
-            NotifyLagChanged(previousLag);
+        if (it == Targets.end()) {
+            return;
         }
+
+        const auto previousLag = GetLag();
+        if (auto* cdc = TTargetCdc::Cast(it->second.Ptr.Get())) {
+            const auto parent = CdcChildren.find(cdc->GetCdc().GetParentTargetId());
+            Y_ABORT_UNLESS(parent != CdcChildren.end());
+            Erase(parent->second, cdc);
+            if (parent->second.empty()) {
+                CdcChildren.erase(parent);
+            }
+        }
+
+        TLagProvider::RemoveLag(it->second, id);
+        Targets.erase(it);
+        NotifyLagChanged(previousLag);
     }
 
     TVector<ITarget*> GetTargets() const {
@@ -378,7 +378,7 @@ public:
 
     void UpdateLag(ui64 targetId, std::optional<TDuration> lag) {
         auto it = Targets.find(targetId);
-        if (it == Targets.end() || it->second->GetKind() == ETargetKind::CdcTopic) {
+        if (it == Targets.end()) {
             return;
         }
 
@@ -493,7 +493,6 @@ TVector<TString> TReplication::GetTargetTablePaths() const {
 }
 
 void TReplication::RegisterCdcChild(ui64 parentId, TTargetCdc& child) {
-    child.GetCdc().SetParentTargetId(parentId);
     Impl->CdcChildren[parentId].push_back(&child);
 }
 
@@ -506,13 +505,29 @@ TConstArrayRef<TTargetCdc*> TReplication::GetCdcChildren(ui64 parentId) const {
 
 bool TReplication::AreCdcChildrenPrepared(ui64 parentId) const {
     for (const auto* child : GetCdcChildren(parentId)) {
-        if (child->GetCdc().GetPhase() != NKikimrReplicationController::TCdcTarget::PREPARED
-            && child->GetCdc().GetPhase() != NKikimrReplicationController::TCdcTarget::FINISHED)
-        {
+        switch (child->GetCdc().GetPhase()) {
+        case NKikimrReplicationController::TCdcTarget::PREPARED:
+        case NKikimrReplicationController::TCdcTarget::FINISHED:
+            break;
+        default:
             return false;
         }
     }
     return true;
+}
+
+void TReplication::FinishCdcChildren(ui64 parentId, NIceDb::TNiceDb& db) {
+    for (auto* child : GetCdcChildren(parentId)) {
+        if (child->GetCdc().GetPhase() == NKikimrReplicationController::TCdcTarget::FINISHED) {
+            continue;
+        }
+        Y_ABORT_UNLESS(child->GetCdc().GetPhase() == NKikimrReplicationController::TCdcTarget::PREPARED);
+        child->GetCdc().SetPhase(NKikimrReplicationController::TCdcTarget::FINISHED);
+        child->SetDstState(TReplication::EDstState::Done);
+        db.Table<TControllerSchema::Targets>().Key(GetId(), child->GetId()).Update(
+            NIceDb::TUpdate<TControllerSchema::Targets::DstState>(child->GetDstState()),
+            NIceDb::TUpdate<TControllerSchema::Targets::Cdc>(child->GetCdc().SerializeAsString()));
+    }
 }
 
 bool IsTopicTarget(TReplication::ETargetKind kind) {

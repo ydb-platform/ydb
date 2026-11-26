@@ -3,6 +3,9 @@
 #include "schema.h"
 
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
+#include <util/generic/algorithm.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -10,7 +13,10 @@ using TCdc = NKikimrReplicationController::TCdcTarget;
 
 TTargetCdc::TTargetCdc(TReplication* replication, ui64 id, const IConfig::TPtr& config)
     : TTargetTopic(replication, id, config)
-{}
+    , Cdc(static_cast<const TConfig&>(*config).Cdc)
+{
+    replication->RegisterCdcChild(Cdc.GetParentTargetId(), *this);
+}
 
 TCdc& TTargetCdc::GetCdc() { return Cdc; }
 const TCdc& TTargetCdc::GetCdc() const { return Cdc; }
@@ -60,8 +66,7 @@ void TTargetCdc::Progress(const TActorContext& ctx) {
     if (GetDstState() == EDstState::Creating && GetStreamState() == EStreamState::Ready) {
         const auto* table = replication->FindTarget(Cdc.GetParentTargetId());
         if (!table || !table->GetDstPathId()
-            || (table->GetDstState() != EDstState::Ready && table->GetDstState() != EDstState::Paused
-                && table->GetDstState() != EDstState::PreparingCdc))
+            || !EqualToOneOf(table->GetDstState(), EDstState::Ready, EDstState::Paused, EDstState::PreparingCdc))
         {
             return;
         }
@@ -89,28 +94,25 @@ void TTargetCdc::Shutdown(const TActorContext& ctx) {
     TTargetTopic::Shutdown(ctx);
 }
 
-TTargetCdc* GetCdcTarget(TReplication::ITarget* target) {
+TTargetCdc* TTargetCdc::Cast(TReplication::ITarget* target) {
     return target && target->GetKind() == TReplication::ETargetKind::CdcTopic
         ? static_cast<TTargetCdc*>(target) : nullptr;
 }
 
-const TTargetCdc* GetCdcTarget(const TReplication::ITarget* target) {
+const TTargetCdc* TTargetCdc::Cast(const TReplication::ITarget* target) {
     return target && target->GetKind() == TReplication::ETargetKind::CdcTopic
         ? static_cast<const TTargetCdc*>(target) : nullptr;
 }
 
-void FinishCdcChildren(const TReplication& replication, ui64 parentId, NIceDb::TNiceDb& db) {
-    for (auto* child : replication.GetCdcChildren(parentId)) {
-        if (child->GetCdc().GetPhase() == TCdc::FINISHED) {
-            continue;
-        }
-        Y_ABORT_UNLESS(child->GetCdc().GetPhase() == TCdc::PREPARED);
-        child->GetCdc().SetPhase(TCdc::FINISHED);
-        child->SetDstState(TReplication::EDstState::Done);
-        db.Table<TControllerSchema::Targets>().Key(replication.GetId(), child->GetId()).Update(
-            NIceDb::TUpdate<TControllerSchema::Targets::DstState>(child->GetDstState()),
-            NIceDb::TUpdate<TControllerSchema::Targets::Cdc>(child->GetCdc().SerializeAsString()));
-    }
+bool TTargetCdc::IsUserStream(const NYdb::NTable::TChangefeedDescription& stream) {
+    Ydb::Table::ChangefeedDescription proto;
+    stream.SerializeTo(proto);
+    return IsUserStream(proto);
+}
+
+bool TTargetCdc::IsUserStream(const Ydb::Table::ChangefeedDescription& stream) {
+    return stream.format() != Ydb::Table::ChangefeedFormat::FORMAT_UNSPECIFIED
+        && !stream.attributes().contains("__async_replication");
 }
 
 }

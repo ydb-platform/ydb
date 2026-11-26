@@ -139,6 +139,8 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         env.AddCdc("Disabled", Ydb::Table::ChangefeedDescription::STATE_DISABLED);
         auto& service = env.AddCdc("Service", Ydb::Table::ChangefeedDescription::STATE_ENABLED);
         (*service.mutable_attributes())["__async_replication"] = "";
+        auto& internal = env.AddCdc("Internal", Ydb::Table::ChangefeedDescription::STATE_ENABLED);
+        internal.set_format(Ydb::Table::ChangefeedFormat::FORMAT_UNSPECIFIED);
 
         const auto result = env.Discover();
         UNIT_ASSERT(result->Get()->IsSuccess());

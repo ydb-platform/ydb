@@ -125,9 +125,12 @@ class TController::TTxInit: public TTxBase {
             case TReplication::ETargetKind::Transfer:
                 config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, replication->GetConfig());
                 break;
-            case TReplication::ETargetKind::CdcTopic:
-                config = std::make_shared<TTargetCdc::TConfig>(srcPath, dstPath);
+            case TReplication::ETargetKind::CdcTopic: {
+                NKikimrReplicationController::TCdcTarget cdc;
+                Y_ABORT_UNLESS(cdc.ParseFromString(rowset.GetValue<Schema::Targets::Cdc>()));
+                config = std::make_shared<TTargetCdc::TConfig>(srcPath, dstPath, cdc);
                 break;
+            }
             case TReplication::ETargetKind::Topic:
                 config = std::make_shared<TTargetTopic::TTopicConfig>(srcPath, dstPath);
                 break;
@@ -142,10 +145,6 @@ class TController::TTxInit: public TTxBase {
                 : dstState);
             target->SetDstPathId(dstPathId);
             target->SetIssue(issue);
-            if (auto* cdc = GetCdcTarget(target)) {
-                Y_ABORT_UNLESS(cdc->GetCdc().ParseFromString(rowset.GetValue<Schema::Targets::Cdc>()));
-                replication->RegisterCdcChild(cdc->GetCdc().GetParentTargetId(), *cdc);
-            }
             const auto indexBuild = rowset.GetValueOrDefault<Schema::Targets::IndexBuild>(TString());
             if (indexBuild) {
                 target->SetIndexBuild(true);

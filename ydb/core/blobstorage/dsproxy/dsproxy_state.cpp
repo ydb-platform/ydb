@@ -275,7 +275,7 @@ namespace NKikimr {
 
     void TBlobStorageGroupProxy::SwitchToWorkWhenGoodToGo() {
         Y_ABORT_UNLESS(Sessions);
-        if (Sessions->GoodToGo(*Topology, ForceWaitAllDrives)) {
+        if (Sessions->GoodToGo(*Info, ForceWaitAllDrives)) {
             YDB_LOG_INFO("-> StateWork",
                 {"group", GroupId},
                 {"marker", "DSP11"});
@@ -319,7 +319,7 @@ namespace NKikimr {
         if (msg->IsConnected && (CurrentStateFunc() == &TThis::StateEstablishingSessions ||
                 CurrentStateFunc() == &TThis::StateEstablishingSessionsTimeout)) {
             SwitchToWorkWhenGoodToGo();
-        } else if (!msg->IsConnected && CurrentStateFunc() == &TThis::StateWork && !Sessions->GoodToGo(*Topology, false)) {
+        } else if (!msg->IsConnected && CurrentStateFunc() == &TThis::StateWork && !Sessions->GoodToGo(*Info, false)) {
             SetStateEstablishingSessions();
         }
 
@@ -371,6 +371,12 @@ namespace NKikimr {
         InlinePileBridgeProxyId = {};
         ErrorDescription = "DsProxy got a Poison Pill";
         SetStateEstablishingSessionsTimeout();
+        // Batched puts have been counted on receipt and are still waiting for their request actor.
+        for (const auto& [handleClass, tactic, reduceInterpileTraffic] : PutBatchedBucketQueue) {
+            for (const auto& ev : BatchedPuts[handleClass][tactic][reduceInterpileTraffic].Queue) {
+                SendErrorResponse(ev);
+            }
+        }
 
         if (NumUnconnectedDisks != Max<ui32>()) {
             NodeMon->DecNumUnconnected(NumUnconnectedDisks);

@@ -4553,6 +4553,66 @@ Y_UNIT_TEST(SelectWithFulltextMatch_RowIdOptIn_Plain) {
     UNIT_ASSERT(!seenPks.contains("pk-400"));
 }
 
+// Regression: in rowid mode the cached fulltext plan also pins the schema version of the
+// unique secondary index impl table used to resolve __ydb_row_id -> PK. That table is not
+// part of the fulltext index's own impl tables, so registering only Table + IndexTables in
+// TKqpQueryState::FillTables left it out of the cached-plan version check: bumping its
+// schema version alone (e.g. an ALTER of uniq_rowid/indexImplTable) kept replaying the
+// stale plan, whose reads the datashard rejects with SCHEME_ERROR.
+Y_UNIT_TEST(SelectAfterUniqueIndexImplTableSchemaVersionBump) {
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    CreateRowIdTable(db);
+    AddUniqueRowIdIndex(db);
+    AddFulltextIndexPlain(db);
+    UpsertRowIdData(db);
+
+    const auto querySettings = NYdb::NQuery::TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(30));
+    const TString sql = R"sql(
+        SELECT Pk, Text FROM `/Root/RowIdTexts` VIEW `fulltext_idx`
+        WHERE FulltextMatch(Text, "cats")
+        ORDER BY Pk;
+    )sql";
+
+    // 1. Execute once to populate the compile cache; the plan now pins the current
+    //    uniq_rowid/indexImplTable schema version.
+    TString expected;
+    {
+        auto result = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        expected = NYdb::FormatResultSetYson(result.GetResultSet(0));
+        UNIT_ASSERT_STRING_CONTAINS(expected, "pk-100"); // sanity: the query actually matched rows
+    }
+
+    // 2. Bump ONLY the unique index impl table's schema version, leaving the main table and
+    //    the fulltext index impl tables untouched.
+    {
+        Tests::TClient& client = kikimr.GetTestClient();
+        const TString scheme = R"(
+            Name: "indexImplTable"
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 1
+                    SizeToSplit: 100500
+                }
+            }
+        )";
+        auto result = client.AlterTable("/Root/RowIdTexts/uniq_rowid", scheme, {});
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK,
+            result->Record.ShortDebugString());
+    }
+
+    // 3. Re-execute the same query. It hits the compile cache; with the unique impl table in
+    //    the version-check set the skew is detected, the query recompiles transparently and
+    //    returns the same rows.
+    {
+        auto result = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(expected, NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 Y_UNIT_TEST(SelectWithFulltextMatch_RowIdOptIn_CompactAutoProvision) {
     // Custom-PK table with NO pre-created __ydb_row_id infrastructure: building a compact fulltext
     // index must auto-provision the __ydb_row_id column + unique index, then build + serve in rowid mode.

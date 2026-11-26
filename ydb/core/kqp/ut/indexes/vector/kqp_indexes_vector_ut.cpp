@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_QUAD(VectorIndexAutoupdate, Prefixed, EnableIndexStreamWrite) {
         for (const auto autoupdate : {std::optional<bool>(), std::make_optional(true), std::make_optional(false)}) {
-            auto settings = TKikimrSettings();
+            auto settings = TKikimrSettings().SetEnableRebuildIndex(true);
             settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
             TKikimrRunner kikimr(settings);
             auto db = kikimr.GetTableClient();
@@ -2135,6 +2135,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_TWIN(VectorIndexRebuildCustomParallel, EnableIndexStreamWrite) {
         auto serverSettings = TKikimrSettings()
+            .SetEnableRebuildIndex(true)
             .SetUseRealThreads(false);
         if (EnableIndexStreamWrite) {
             serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
@@ -2178,7 +2179,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     Y_UNIT_TEST_QUAD(VectorIndexRebuildAllowsQueries, EnableIndexStreamWrite, Covering) {
-        auto settings = TKikimrSettings().SetUseRealThreads(false);
+        auto settings = TKikimrSettings()
+            .SetEnableRebuildIndex(true)
+            .SetUseRealThreads(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
         TKikimrRunner kikimr(settings);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();

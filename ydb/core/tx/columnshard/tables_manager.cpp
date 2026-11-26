@@ -2,6 +2,7 @@
 #include "tables_manager.h"
 
 #include "engines/column_engine_logs.h"
+#include "engines/index_portions_by_last_key.h"
 #include "engines/metadata_accessor.h"
 #include "engines/reader/simple_reader/iterator/sys_view/abstract/schema.h"
 #include "transactions/transactions/tx_add_sharding_info.h"
@@ -419,7 +420,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
                 {"version", versionView.GetVersion()});
             if (!PrimaryIndex) {
                 PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(),
-                    DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, preset->Id, versionView, PortionsStats);
+                    DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, preset->Id, versionView, DataStats);
             } else {
                 PrimaryIndex->RegisterSchemaVersion(version, preset->Id, versionView);
             }
@@ -599,7 +600,9 @@ void TTablesManager::AddSchemaVersion(
     if (!PrimaryIndex) {
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(),
             DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, presetId,
-            NOlap::IColumnEngine::TSchemaVersionView(versionInfo), PortionsStats);
+            NOlap::IColumnEngine::TSchemaVersionView(versionInfo), DataStats);
+        NOlap::TIndexPortionsByLastKey::Create(
+            db.GetDatabase(), PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetPrimaryKeyColumns());
         for (auto&& i : Tables) {
             PrimaryIndex->RegisterTable(i.first);
         }
@@ -658,11 +661,11 @@ void TTablesManager::AddTableVersion(const TInternalPathId pathId, const NOlap::
 
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
     const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-    const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId)
+    const std::shared_ptr<TShardDataStats>& dataStats, const ui64 tabletId)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , LoadTimeCounters(std::make_unique<TTableLoadTimeCounters>())
-    , PortionsStats(portionsStats)
+    , DataStats(dataStats)
     , TabletId(tabletId)
     , GenerateInternalPathId(AppData()->ColumnShardConfig.GetGenerateInternalPathId() ||
                              NYDBTest::TControllers::GetColumnShardController()->IsForcedGenerateInternalPathId())

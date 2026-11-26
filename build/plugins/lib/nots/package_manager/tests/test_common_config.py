@@ -492,3 +492,40 @@ def test_common_config_rejects_nots_metadata(tmp_path, metadata):
     pj, _ = fixture(tmp_path, metadata + "\ncatalogs: {}")
     with pytest.raises(ValueError, match="nots is only allowed in the module nots.yaml"):
         load_common_config(pj, str(tmp_path))
+
+
+@pytest.mark.parametrize("local_yaml", [False, True])
+def test_pnpmfile_array_rebase_and_graph_inputs(tmp_path, local_yaml):
+    from build.plugins.lib.nots.package_manager.common_config import common_config_inputs, load_effective_pnpm_config
+
+    pj, _ = fixture(
+        tmp_path,
+        "pnpmfile: [hooks/shared.cjs]\npatchedDependencies: {shared: patches/shared.patch}\n",
+    )
+    local = {
+        "pnpmfile": ["hooks/local.mjs", "../hooks/shared.cjs"],
+        "patchedDependencies": {"local": "patches/local.patch"},
+    }
+    if local_yaml:
+        pj.data = {}
+        (Path(pj.path).parent / "nots.yaml").write_text(
+            json.dumps({"nots": {"commonConfigPath": "../common.yaml"}, **local})
+        )
+    else:
+        pj.data["pnpm"] = local
+    effective = load_effective_pnpm_config(pj, str(tmp_path))
+    assert effective[2]["pnpmfile"] == ["../hooks/shared.cjs", "hooks/local.mjs"]
+    assert effective[2]["patchedDependencies"] == {
+        "shared": "../patches/shared.patch",
+        "local": "patches/local.patch",
+    }
+    expected = [
+        "project/common.yaml",
+        "project/hooks/shared.cjs",
+        "project/patches/shared.patch",
+        "project/pkg/hooks/local.mjs",
+        "project/pkg/patches/local.patch",
+    ]
+    if local_yaml:
+        expected.append("project/pkg/nots.yaml")
+    assert common_config_inputs(pj, str(tmp_path), effective) == sorted(expected)

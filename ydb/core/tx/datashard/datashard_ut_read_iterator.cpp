@@ -7,6 +7,7 @@
 
 #include <ydb/core/tx/datashard/hnsw_index/hnsw_index_build_unit.h>
 
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_tli.h>
@@ -4318,8 +4319,16 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
         auto sender = runtime.AllocateEdgeActor();
         const auto schedulerId = NKqp::MakeKqpSchedulerServiceId(runtime.GetFirstNodeId());
         runtime.Send(schedulerId, sender, new TEvAddDatabase("/Root"));
-        runtime.Send(schedulerId, sender, new TEvAddPool("/Root", "read_pool"));
         InitRoot(server, sender);
+
+        // Create the pool before registering it so the workload manager can resolve the subscription.
+        auto createPool = MakeSQLRequest(R"(CREATE RESOURCE POOL read_pool WITH (TOTAL_CPU_LIMIT_PERCENT_PER_NODE = "10");)", false);
+        createPool->Record.MutableRequest()->SetDatabase("/Root");
+        runtime.Send(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, createPool.Release());
+        const auto createPoolResult = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
+        const auto& createPoolRecord = createPoolResult->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL_C(createPoolRecord.GetYdbStatus(), Ydb::StatusIds::SUCCESS, createPoolRecord.DebugString());
+        runtime.Send(schedulerId, sender, new TEvAddPool("/Root", "read_pool"));
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1",
@@ -4331,8 +4340,15 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
         RebootTablet(runtime, shard, sender);
         SimulateSleep(runtime, TDuration::Seconds(1));
 
-        auto query = runtime.GetAppData().KqpComputeScheduler->GetReadQuery("/Root", "read_pool");
-        UNIT_ASSERT(query);
+        const auto scheduler = runtime.GetAppData().KqpComputeScheduler;
+        runtime.WaitFor("read_pool quota to be published", [&] {
+            const auto tree = scheduler->GetStaticTree();
+            const auto* db = tree->GetDatabase("/Root");
+            const auto* pool = db ? db->GetPool("read_pool") : nullptr;
+            return pool && pool->GetReadLimit() == TDuration::MilliSeconds(100);
+        }, TDuration::Seconds(30));
+        auto query = scheduler->GetReadQuery("/Root", "read_pool");
+        UNIT_ASSERT_C(query, "The scheduler must have a read query for read_pool");
         bool replied = false;
         auto observer = runtime.AddObserver<TEvDataShard::TEvReadResult>(
             [&](TEvDataShard::TEvReadResult::TPtr&) { replied = true; });
@@ -8474,6 +8490,28 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.Index() == graph, !Reboot);
     }
 
+
+    Y_UNIT_TEST_TWIN(HnswRejectsInvalidEfSearch, Zero) {
+        THnswLifecycleFixture fixture;
+        auto request = fixture.Request();
+        request->Record.MutableVectorTopK()->SetHnswEfSearch(Zero ? 0 : 1001);
+        const auto result = fixture.Helper.SendRead("hnsw-lifecycle", request.release());
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(result->Record.DebugString(), TStringBuilder() << "HNSWEfSearch must be in 1.." << NKMeans::MaxHnswEfSearch);
+    }
+
+    Y_UNIT_TEST_TWIN(HnswEfSearchDoesNotRejectOrdinaryVectorScan, Zero) {
+        THnswLifecycleFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetEnableHnswIndex(false);
+        }
+        auto request = fixture.Request();
+        request->Record.MutableVectorTopK()->SetHnswEfSearch(Zero ? 0 : NKMeans::MaxHnswEfSearch + 1);
+        const auto result = fixture.Helper.SendRead("hnsw-lifecycle", request.release());
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 1u);
+    }
 
     Y_UNIT_TEST_QUAD(HnswSchemaFinalizationRequestsBackgroundBuild, BelowMinRows, Reboot) {
         THnswLifecycleFixture fixture(false, true, true, BelowMinRows ? 100 : 1);

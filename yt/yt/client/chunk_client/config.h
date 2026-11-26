@@ -298,6 +298,8 @@ struct TErasureReaderConfig
     , public virtual TBlockFetcherConfig
 {
     bool EnableAutoRepair;
+    //! Retain failed and slow parts across attempts of an adaptive repair operation while they remain repairable.
+    bool EnableSessionFailureHistory;
     double ReplicationReaderSpeedLimitPerSec;
     TDuration SlowReaderExpirationTimeout;
     TDuration ReplicationReaderTimeout;

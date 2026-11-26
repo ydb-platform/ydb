@@ -47,12 +47,17 @@ public:
 private:
   void AggregateIntoBuckets(std::unique_ptr<AdaptingCircularBufferCounter> &buckets,
                             double value) noexcept;
-  void Downscale(uint32_t by) noexcept;
+
+  /* Reduces the scale by up to `by`, stopping at kMinRuntimeScale. Returns the reduction that was
+   * actually applied, which callers must use to shift bucket indices. */
+  uint32_t Downscale(uint32_t by) noexcept;
 
   mutable opentelemetry::common::SpinLockMutex lock_;
   Base2ExponentialHistogramPointData point_data_;
   Base2ExponentialHistogramIndexer indexer_;
   bool record_min_max_ = true;
+  // Keeps the scale floor warning off the record hot path after the first occurrence.
+  bool floor_warning_emitted_ = false;
 };
 
 }  // namespace metrics

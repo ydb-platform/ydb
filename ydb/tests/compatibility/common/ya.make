@@ -23,6 +23,7 @@ TEST_SRCS(
     test_show_create_table.py
     test_snapshot_isolation.py
     test_row_table_compression.py
+    test_checksum_table.py
 )
 
 SIZE(LARGE)

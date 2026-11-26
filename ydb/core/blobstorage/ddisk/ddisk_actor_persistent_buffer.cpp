@@ -185,6 +185,9 @@ namespace NKikimr::NDDisk {
             update->Record.SetAvailableSize(ui64(Min(ev->Get()->FreeChunks, ownerFree)) * ChunkSize);
             update->Record.SetPersistentBufferId(MakeBlobStoragePersistentBufferId(
                 SelfId().NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId).ToString());
+            if (BaseInfo.StoragePoolName) {
+                update->Record.SetStoragePoolName(BaseInfo.StoragePoolName);
+            }
             if (ev->Get()->Status == NKikimrProto::OK && NormalizedOccupancy >= 0) {
                 update->Record.SetDDiskOccupancy(NormalizedOccupancy);
             }
@@ -248,6 +251,7 @@ namespace NKikimr::NDDisk {
                 {"marker", "BSPB"},
                 {"PBufferId", SelfId()});
             PersistentBufferReady = true;
+            PublishHealth();
             UpdateFreeSpaceInfo();
             *Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
             *Counters.PersistentBuffer.TotalBytes =
@@ -824,6 +828,7 @@ namespace NKikimr::NDDisk {
                 {"marker", "BSPB"},
                 {"PBufferId", SelfId()});
             PersistentBufferReady = true;
+            PublishHealth();
             UpdateFreeSpaceInfo();
             *Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
             *Counters.PersistentBuffer.TotalBytes =

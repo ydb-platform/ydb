@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 
 #include <functional>
 
@@ -40,6 +41,7 @@ public:
     TFlagHandler Ui32Handler(ui32* field);
     TFlagHandler Ui64Handler(ui64* field);
     TFlagHandler NoopHandler();
+    TFlagHandler FlagsHandler(THashSet<TString>& flags);
 
 protected:
     bool IsSettingAllowed(const TPosition& pos, TStringBuf name, TExprContext& ctx);

@@ -179,6 +179,18 @@ bool SeqnoViolation(TMaybe<i16> lastEpoch, ui64 lastSeqNo, TMaybe<i16> messageEp
     return messageSeqNo <= lastSeqNo;
 }
 
+TDuration TPartition::GetOffsetsSnapshotSendInterval(const TActorContext& ctx) const {
+    const auto& featureFlags = AppData(ctx)->FeatureFlags;
+    bool isTopicMutateDisabled = featureFlags.GetEnableSourceTopicMutateRestricted() ||
+        !featureFlags.GetEnableClientModifications() ||
+        Config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED ||
+        Config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE;
+
+    return isTopicMutateDisabled ?
+        TDuration::Seconds(1) :
+        TDuration::Seconds(30);
+}
+
 bool TPartition::LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const {
     return !IsActive() &&
         (static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == GetEndOffset() ||
@@ -1748,6 +1760,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TAc
 
     PQ_ENSURE(IsSupportive());
 
+    StopCompaction = true;
     ev->Get()->OriginalPartition = ev->Sender;
     AddPendingEvent(ev);
 }
@@ -4264,11 +4277,14 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
         }
     }
 
-    if (replicationSessionEstablished) {
+    if (replicationSessionEstablished || ctx.Now() - LastOffsetsSnapshotSentTime > GetOffsetsSnapshotSendInterval(ctx)) {
         SendOffsetsToReplicationConsumer(ctx);
+        LastOffsetsSnapshotSentTime = ctx.Now();
     } else if (!changedUsers.empty()) {
         SendOffsetsToReplicationConsumer(ctx, changedUsers);
+        LastOffsetsSnapshotSentTime = ctx.Now();
     }
+
     ChangeConfigActs.clear();
     AnswerCurrentReplies(ctx);
 
@@ -4290,6 +4306,14 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
                                           const TActorContext& ctx)
 {
     bool autopartitioningChanged = SplitMergeEnabled(Config) != SplitMergeEnabled(config);
+
+    TVector<TString> consumersToResendOffsets;
+    for (const auto& consumer : config.GetConsumers()) {
+        const auto* previous = GetConsumer(Config, consumer.GetName());
+        if (previous && !previous->GetReplicateOffsets() && consumer.GetReplicateOffsets()) {
+            consumersToResendOffsets.push_back(consumer.GetName());
+        }
+    }
 
     Config = std::move(config);
     PartitionConfig = GetPartitionConfig(Config);
@@ -4334,8 +4358,9 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
 
     if (MirroringEnabled(Config)) {
         if (Mirrorer) {
-            ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
-                                                                          Config));
+            auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, Config);
+            event->ConsumersToResendOffsets = std::move(consumersToResendOffsets);
+            ctx.Send(Mirrorer->Actor, event.Release());
         } else {
             ScaleStatus = NKikimrPQ::EScaleStatus::NORMAL;
             CreateMirrorerActor();

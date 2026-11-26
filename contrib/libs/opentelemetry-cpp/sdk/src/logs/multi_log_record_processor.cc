@@ -169,9 +169,10 @@ bool MultiLogRecordProcessor::InternalForceFlush(std::chrono::microseconds timeo
 
 bool MultiLogRecordProcessor::InternalShutdown(std::chrono::microseconds timeout) noexcept
 {
-  bool result           = true;
-  auto start_time       = std::chrono::system_clock::now();
-  auto overflow_checker = std::chrono::system_clock::time_point::max();
+  bool result                = true;
+  bool has_unlimited_timeout = timeout == (std::chrono::microseconds::max)();
+  auto start_time            = std::chrono::system_clock::now();
+  auto overflow_checker      = std::chrono::system_clock::time_point::max();
   std::chrono::system_clock::time_point expire_time;
   if (std::chrono::duration_cast<std::chrono::microseconds>(overflow_checker - start_time) <=
       timeout)
@@ -188,6 +189,10 @@ bool MultiLogRecordProcessor::InternalShutdown(std::chrono::microseconds timeout
     if (!processor->Shutdown(timeout))
     {
       result = false;
+    }
+    if (has_unlimited_timeout)
+    {
+      continue;
     }
     start_time = std::chrono::system_clock::now();
     if (expire_time > start_time)

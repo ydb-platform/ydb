@@ -48,6 +48,21 @@ DEFINE_REFCOUNTED_TYPE(IUnversionedRowsetWriter)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct IColumnarUnversionedWriter
+    : public virtual NChunkClient::IWriterBase
+{
+    /*!
+     *  Same readiness contract as scalar Write.
+     *
+     *  Do not reuse underlying buffers.
+     */
+    [[nodiscard]] virtual bool Write(IUnversionedColumnarRowBatchPtr batch) = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IColumnarUnversionedWriter)
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Writes a schemaless unversioned rowset.
 /*!
  *  Writes unversioned rowset with schema and variable columns.

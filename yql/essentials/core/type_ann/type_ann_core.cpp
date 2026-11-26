@@ -6174,6 +6174,12 @@ IGraphTransformer::TStatus CoalesceWrapper(const TExprNode::TPtr& input, TExprNo
     const auto leftType = input->Head().GetTypeAnn();
     const auto rightType = input->Tail().GetTypeAnn();
 
+    if (leftType->GetKind() == ETypeAnnotationKind::Universal ||
+        (rightType->GetKind() == ETypeAnnotationKind::Universal && leftType->IsOptionalOrNull())) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     auto leftItemType = leftType;
     if (leftType->GetKind() == ETypeAnnotationKind::Optional) {
         leftItemType = leftType->Cast<TOptionalExprType>()->GetItemType();
@@ -12241,7 +12247,7 @@ IGraphTransformer::TStatus TableSourceWrapper(const TExprNode::TPtr& input, TExp
     }
 
     if (isWide) {
-        if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
+        if (!EnsureWideStreamType(input->Head(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
     } else {

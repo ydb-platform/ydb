@@ -282,14 +282,10 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
             _set_resource_vars(unit, erm_json, tool, nodejs_version)
 
             if nodejs_version.major >= 25:
-                target_needs_libatomic = unit.get("OS_LINUX") == "yes"
-                host_needs_libatomic = unit.get("HOST_OS_LINUX") == "yes"
-                if target_needs_libatomic or host_needs_libatomic:
-                    dirs.append(os.path.join("build", "platform", dir_name, "libatomic"))
-                if target_needs_libatomic:
+                if unit.get("OS_LINUX") == "yes":
                     unit.set(["_TARGET_NEEDS_LIBATOMIC", "yes"])
-                if host_needs_libatomic:
-                    unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $LIBATOMIC_1_2_0_RESOURCE_GLOBAL"])
+                if unit.get("HOST_OS_LINUX") == "yes":
+                    unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $NODEJS_ROOT/libs"])
 
         elif erm_json.is_resource_multiplatform(tool):
             v = erm_json.select_version_of(tool)
@@ -332,7 +328,7 @@ def _TS_RUNTIME_BIN_CONFIGURE(unit: ymake.Unit) -> None:
             unit.set(
                 [
                     "COPY_LIBATOMIC_CMD",
-                    '$COPY_CMD $WITH_LIBATOMIC_1_2_0_RESOURCE_GLOBAL/libatomic.so.1 ${output:".nots-runtime/libatomic.so.1"}',
+                    '$COPY_CMD $WITH_NODEJS_ROOT/libs/libatomic.so.1 ${output:".nots-runtime/libatomic.so.1"}',
                 ]
             )
     if unit.get("_WITH_BUN_BIN") == "yes":
@@ -606,11 +602,11 @@ def _prepare_deps_configure(unit: ymake.Unit) -> None:
     from lib.nots.package_manager.common_config import common_config_inputs
     from lib.nots.package_manager.utils import b_rooted, build_ws_config_path, s_rooted
 
-    has_deps = pj.has_dependencies()
     local_cli = unit.get_subst("TS_LOCAL_CLI") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
     effective_config = _configure_pnpm_settings(unit, pm, pj)
     _, _, settings = effective_config
+    has_deps = pj.has_dependencies() or bool(settings.get("overrides"))
     platform = _configure_tarballs_platform(unit)
     ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(
         unit.get("_TARBALLS_STORE"),
@@ -872,6 +868,11 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
     if _use_hermetic_node_modules(unit):
         unit.on_setup_extract_node_modules_layer_recipe(pm.module_path)
     else:
+        from lib.nots.package_manager.common_config import common_config_inputs
+
+        pj = pm.load_package_json_from_dir(pm.sources_path)
+        # The recipe installs from the isolated test source sandbox, not build inputs.
+        unit.ondata(["arcadia/" + filename for filename in common_config_inputs(pj, pm.sources_root)])
         unit.on_setup_install_node_modules_recipe(pm.module_path)
     unit.on_setup_extract_output_tars_recipe(pm.module_path)
     __set_append(unit, "TEST_RECIPES_VALUE", user_recipes)
@@ -884,7 +885,8 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
 
     if unit.get("_LD_LIBRARY_PATH_ARGS"):
         declared_env = unit.get_subst("TEST_ENV_VALUE")
-        test_env_value = df.prepare_env(f'{declared_env} "LD_LIBRARY_PATH=$LIBATOMIC_1_2_0_RESOURCE_GLOBAL"')
+        nodejs_resource = unit.get("NODEJS-ROOT-VAR-NAME")
+        test_env_value = df.prepare_env(f'{declared_env} "LD_LIBRARY_PATH=${nodejs_resource}/libs"')
 
     pj_scripts = pm.load_package_json_from_dir(pm.sources_path).data.get("scripts", {})
 
@@ -920,16 +922,30 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
 def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
-    has_deps = pj.has_dependencies()
+    effective_config = _configure_pnpm_settings(unit, pm, pj)
+    _, _, settings = effective_config
+    has_deps = pj.has_dependencies() or bool(settings.get("overrides"))
     prod_bundle = unit.get("_WITH_NODE_MODULES_PROD") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
     if use_hermetic_node_modules:
         _configure_hermetic_node_modules(unit)
 
-    local_peers = pm.get_local_peers_from_package_json()
+    local_peers = pm.get_local_peers_from_package_json(pj, settings)
     if local_peers:
         unit.onpeerdir(local_peers)
         __set_append(unit, "_NODE_MODULES_INOUTS", "${hide:PEERS} ${hide:PEERS_LATE_OUTS}")
+
+    if not has_deps and settings.get("pnpmfile"):
+        from lib.nots.package_manager.common_config import common_config_inputs
+        from lib.nots.package_manager.utils import s_rooted
+
+        __set_append(
+            unit,
+            "_NODE_MODULES_INOUTS",
+            _build_directives(
+                ["hide", "input"], [s_rooted(p) for p in common_config_inputs(pj, pm.sources_root, effective_config)]
+            ),
+        )
 
     if has_deps:
         nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
@@ -960,10 +976,11 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         }
         ins = [path for path in ins if path not in source_manifests]
 
-        if not use_hermetic_node_modules:
+        if not use_hermetic_node_modules or settings.get("pnpmfile"):
             from lib.nots.package_manager.common_config import common_config_inputs
 
-            ins.extend(s_rooted(p) for p in common_config_inputs(pj, pm.sources_root))
+            # beforePacking hooks also run in the build action, including hermetic builds.
+            ins.extend(s_rooted(p) for p in common_config_inputs(pj, pm.sources_root, effective_config))
             # Legacy builders materialize node_modules in the build action and
             # copy pnpm patches from the source tree there. Declare those files
             # explicitly so they are available in a distbuild sandbox.
@@ -984,9 +1001,6 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         if pj.get_use_prebuilder():
             _setup_prebuilder_resource(unit)
 
-            from lib.nots.package_manager.common_config import load_common_config
-
-            _, _, settings = load_common_config(pj, pm.sources_root, include_settings=True)
             is_valid, validation_messages = pj.validate_prebuilds(settings.get("overrides", {}))
 
             if not is_valid:
@@ -1100,3 +1114,25 @@ def _TS_OUTPUT_PREFIX(unit: ymake.Unit, *args: str) -> None:
         raise ValueError("TS_OUTPUT_PREFIX accepts at most one path")
     prefix = args[0] if args else unit.get("MODDIR")
     unit.set(["_TS_OUTPUT_PREFIX_ARG", shlex.quote("--output-prefix=" + prefix)])
+
+
+@ymake.macro
+@_with_report_configure_error
+def _NOTS_TOOL_CONFIGURE(unit: ymake.Unit):
+    # Build the source runner and its workspace peers with the pinned bundle.
+    bootstrap = (
+        unit.get("TS_USE_PREBUILT_NOTS_TOOL") != "yes"
+        and unit.get("MODDIR") in unit.get("_NOTS_BOOTSTRAP_MODULES").split()
+    )
+    tool_path = "devtools/frontend_build_platform/nots/" + ("bootstrap" if bootstrap else "builder")
+
+    # Build commands use the host resource. Recipes use the bundled archiver
+    # so released yatest can launch them without additional DART fields.
+    unit.onpeerdir(["build/platform/bun", "devtools/frontend_build_platform/nots/bsdtar"])
+    unit.set(["_NOTS_BSDTAR_ENV", "NOTS_BSDTAR_PATH=$BSDTAR_RESOURCE_GLOBAL/bsdtar"])
+    tool = '${tool:"' + tool_path + '"} ${hide:TS_FAKEID} ${hide;input:T0_SETTINGS_PATH}'
+    tool += ' ${env:_NOTS_BSDTAR_ENV} ${hide;input:"devtools/frontend_build_platform/nots/tier0-settings/src/settings.schema.json"}'
+    tool += ' ${hide;input:"devtools/frontend_build_platform/nots/tier0-settings/src/pnpmfile.mjs"}'
+    unit.set(["NOTS_TOOL", tool])
+    unit.set(["_NOTS_RECIPE_DEPENDS", tool_path])
+    unit.set(["_NOTS_RECIPE", tool_path + "/nots-recipe"])

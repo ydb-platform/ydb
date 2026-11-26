@@ -365,7 +365,7 @@ class ConnectedChannelStream : public Orphanable {
   grpc_stream_refcount stream_refcount_;
   StreamPtr stream_;
   Arena* arena_ = GetContext<Arena>();
-  Party* const party_ = static_cast<Party*>(Activity::current());
+  Party* const party_ = GetContext<Party>();
   ExternallyObservableLatch<void> finished_;
 };
 
@@ -384,17 +384,18 @@ auto ConnectedChannelStream::RecvMessages(
               gpr_log(GPR_INFO,
                       "%s[connected] RecvMessage: received payload of %" PRIdPTR
                       " bytes",
-                      Activity::current()->DebugTag().c_str(),
+                      GetContext<Activity>()->DebugTag().c_str(),
                       pending_message->payload()->Length());
             }
             return Map(incoming_messages.Push(std::move(pending_message)),
                        [](bool ok) -> LoopCtl<y_absl::Status> {
                          if (!ok) {
                            if (grpc_call_trace.enabled()) {
-                             gpr_log(GPR_INFO,
-                                     "%s[connected] RecvMessage: failed to "
-                                     "push message towards the application",
-                                     Activity::current()->DebugTag().c_str());
+                             gpr_log(
+                                 GPR_INFO,
+                                 "%s[connected] RecvMessage: failed to "
+                                 "push message towards the application",
+                                 GetContext<Activity>()->DebugTag().c_str());
                            }
                            return y_absl::OkStatus();
                          }
@@ -407,7 +408,7 @@ auto ConnectedChannelStream::RecvMessages(
               gpr_log(GPR_INFO,
                       "%s[connected] RecvMessage: reached end of stream with "
                       "status:%s",
-                      Activity::current()->DebugTag().c_str(),
+                      GetContext<Activity>()->DebugTag().c_str(),
                       status.status().ToString().c_str());
             }
             if (cancel_on_error && !status.ok()) {
@@ -445,7 +446,7 @@ ArenaPromise<ServerMetadataHandle> MakeClientCallPromise(Transport* transport,
   transport->filter_stack_transport()->InitStream(stream->stream(),
                                                   stream->stream_refcount(),
                                                   nullptr, GetContext<Arena>());
-  auto* party = static_cast<Party*>(Activity::current());
+  auto* party = GetContext<Party>();
   party->Spawn("set_polling_entity", call_args.polling_entity->Wait(),
                [transport, stream = stream->InternalRef()](
                    grpc_polling_entity polling_entity) {
@@ -465,7 +466,7 @@ ArenaPromise<ServerMetadataHandle> MakeClientCallPromise(Transport* transport,
   // Start a promise to receive server initial metadata and then forward it up
   // through the receiving pipe.
   auto server_initial_metadata =
-      GetContext<Arena>()->MakePooled<ServerMetadata>(GetContext<Arena>());
+      GetContext<Arena>()->MakePooled<ServerMetadata>();
   party->Spawn(
       "recv_initial_metadata",
       TrySeq(GetContext<BatchBuilder>()->ReceiveServerInitialMetadata(
@@ -475,7 +476,7 @@ ArenaPromise<ServerMetadataHandle> MakeClientCallPromise(Transport* transport,
                if (grpc_call_trace.enabled()) {
                  gpr_log(GPR_DEBUG,
                          "%s[connected] Publish client initial metadata: %s",
-                         Activity::current()->DebugTag().c_str(),
+                         GetContext<Activity>()->DebugTag().c_str(),
                          server_initial_metadata->DebugString().c_str());
                }
                return Map(pipe->Push(std::move(server_initial_metadata)),
@@ -503,15 +504,14 @@ ArenaPromise<ServerMetadataHandle> MakeClientCallPromise(Transport* transport,
   // If this fails, we massage the error into metadata that we can report
   // upwards.
   auto server_trailing_metadata =
-      GetContext<Arena>()->MakePooled<ServerMetadata>(GetContext<Arena>());
+      GetContext<Arena>()->MakePooled<ServerMetadata>();
   auto recv_trailing_metadata =
       Map(GetContext<BatchBuilder>()->ReceiveServerTrailingMetadata(
               stream->batch_target()),
           [](y_absl::StatusOr<ServerMetadataHandle> status) mutable {
             if (!status.ok()) {
               auto server_trailing_metadata =
-                  GetContext<Arena>()->MakePooled<ServerMetadata>(
-                      GetContext<Arena>());
+                  GetContext<Arena>()->MakePooled<ServerMetadata>();
               grpc_status_code status_code = GRPC_STATUS_UNKNOWN;
               TString message;
               grpc_error_get_status(status.status(), Timestamp::InfFuture(),
@@ -582,7 +582,7 @@ ArenaPromise<ServerMetadataHandle> MakeServerCallPromise(
       stream->stream(), stream->stream_refcount(),
       GetContext<CallContext>()->server_call_context()->server_stream_data(),
       GetContext<Arena>());
-  auto* party = static_cast<Party*>(Activity::current());
+  auto* party = GetContext<Party>();
 
   // Arifacts we need for the lifetime of the call.
   struct CallData {
@@ -748,7 +748,7 @@ ArenaPromise<ServerMetadataHandle> MakeServerCallPromise(
                       : nullptr;
         if (md != nullptr) {
           call_data->sent_initial_metadata = true;
-          auto* party = static_cast<Party*>(Activity::current());
+          auto* party = GetContext<Party>();
           party->Spawn("connected/send_initial_metadata",
                        GetContext<BatchBuilder>()->SendServerInitialMetadata(
                            stream->batch_target(), std::move(md)),
@@ -778,7 +778,7 @@ ArenaPromise<ServerMetadataHandle> MakeServerCallPromise(
               gpr_log(
                   GPR_DEBUG,
                   "%s[connected] Got trailing metadata; status=%s metadata=%s",
-                  Activity::current()->DebugTag().c_str(),
+                  GetContext<Activity>()->DebugTag().c_str(),
                   status.status().ToString().c_str(),
                   status.ok() ? (*status)->DebugString().c_str() : "<none>");
             }
@@ -787,8 +787,7 @@ ArenaPromise<ServerMetadataHandle> MakeServerCallPromise(
               trailing_metadata = std::move(*status);
             } else {
               trailing_metadata =
-                  GetContext<Arena>()->MakePooled<ClientMetadata>(
-                      GetContext<Arena>());
+                  GetContext<Arena>()->MakePooled<ClientMetadata>();
               grpc_status_code status_code = GRPC_STATUS_UNKNOWN;
               TString message;
               grpc_error_get_status(status.status(), Timestamp::InfFuture(),
@@ -898,8 +897,7 @@ ArenaPromise<ServerMetadataHandle> MakeClientTransportCallPromise(
                  md->Set(GrpcStatusFromWire(), true);
                  return md;
                }
-               auto m = GetContext<Arena>()->MakePooled<ServerMetadata>(
-                   GetContext<Arena>());
+               auto m = GetContext<Arena>()->MakePooled<ServerMetadata>();
                m->Set(GrpcStatusMetadata(), GRPC_STATUS_CANCELLED);
                m->Set(GrpcCallWasCancelled(), true);
                return m;

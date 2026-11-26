@@ -10,5 +10,8 @@ private:
         const TVersionedIndex& versionedIndex, TGranuleMeta* granule, const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) override;
 
 public:
+    virtual bool LoadsChunksAtStart() const override {
+        return true;
+    }
 };
 }   // namespace NKikimr::NOlap::NDataAccessorControl::NInMem

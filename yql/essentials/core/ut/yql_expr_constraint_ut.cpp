@@ -6,10 +6,12 @@
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_constraint_streaming.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <library/cpp/iterator/zip.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -21,7 +23,11 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
 struct TParseAndAnnotateSettings {
     bool EnableMatchRecognize = false;
+    bool EnableOptimization = false;
+    bool EnableKeepWorld = false;
+    TLangVersion LangVer = MinLangVersion;
     TStringBuf ExpectedError;
+    TStringBuf OptimizerFlag;
 };
 
 TExprNode::TPtr ParseAndAnnotate(const TStringBuf program, TExprContext& exprCtx, const TParseAndAnnotateSettings& settings = {}) {
@@ -34,6 +40,13 @@ TExprNode::TPtr ParseAndAnnotate(const TStringBuf program, TExprContext& exprCtx
     auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
     typeAnnotationContext->RandomProvider = CreateDeterministicRandomProvider(1);
     typeAnnotationContext->MatchRecognize = settings.EnableMatchRecognize;
+    if (settings.OptimizerFlag) {
+        typeAnnotationContext->OptimizerFlags.insert(to_lower(TString(settings.OptimizerFlag)));
+    }
+    typeAnnotationContext->LangVer = settings.LangVer;
+    if (settings.EnableKeepWorld) {
+        typeAnnotationContext->OptimizerFlags.insert("keepworld");
+    }
 
     auto writerFactory = []() { return CreateYsonResultWriter(NYson::EYsonFormat::Binary); };
     auto resultProviderConfig = MakeIntrusive<TResultProviderConfig>(*typeAnnotationContext,
@@ -42,14 +55,18 @@ TExprNode::TPtr ParseAndAnnotate(const TStringBuf program, TExprContext& exprCtx
     auto resultProvider = CreateResultProvider(resultProviderConfig);
     typeAnnotationContext->AddDataSink(ResultProviderName, resultProvider);
 
-    auto transformer = TTransformationPipeline(typeAnnotationContext)
-                           .AddServiceTransformers()
-                           .AddPreTypeAnnotation()
-                           .AddExpressionEvaluation(*functionRegistry)
-                           .AddIOAnnotation()
-                           .AddTypeAnnotation()
-                           .AddPostTypeAnnotation()
-                           .Build();
+    auto pipeline = TTransformationPipeline(typeAnnotationContext);
+    pipeline
+        .AddServiceTransformers()
+        .AddPreTypeAnnotation()
+        .AddExpressionEvaluation(*functionRegistry)
+        .AddIOAnnotation()
+        .AddTypeAnnotation()
+        .AddPostTypeAnnotation();
+    if (settings.EnableOptimization) {
+        pipeline.AddCommonOptimization();
+    }
+    auto transformer = pipeline.Build();
 
     const auto status = SyncTransform(*transformer, exprRoot, exprCtx);
 
@@ -3846,6 +3863,226 @@ Y_UNIT_TEST(HoppingWindowNegative) {
     }
 }
 
+Y_UNIT_TEST(IfPresentConstantEmptyOptimization) {
+    const TStringBuf program = R"((
+        (let sink (DataSink 'result))
+        (let result (IfPresent
+            (Nothing (OptionalType (DataType 'Bool)))
+            (lambda '(value) (Just (Bool 'true)))
+            (Nothing (OptionalType (DataType 'Bool)))))
+        (let world (Write! world sink (Key) result '()))
+        (return (Commit! world sink))
+    ))";
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(program, exprCtx, {.EnableOptimization = true});
+    CheckConstraint<TEmptyConstraintNode>(exprRoot, "Nothing", "Empty");
+    const auto result = FindNode(exprRoot, [](const TExprNode::TPtr& node) { return node->IsCallable("ResWrite!"); });
+    UNIT_ASSERT(result);
+    UNIT_ASSERT(result->Child(3)->IsCallable("Nothing"));
+}
+
+Y_UNIT_TEST(IfPresentEmptyInputOptimization) {
+    for (const TStringBuf input : {"nothing", "(If (Parameter 'condition (DataType 'Bool)) nothing nothing)", "(Ensure nothing (Bool 'false) (String 'pure_error))"}) {
+        for (const bool multiple : {false, true}) {
+            for (const TStringBuf fallback : {"nothing", "(Just (Bool 'false))"}) {
+                const TString program = TStringBuilder() << R"((
+                    (let nothing (Nothing (OptionalType (DataType 'Bool))))
+                    (let result (IfPresent )" << (multiple ? "(Just (Bool 'true)) " : "")
+                                                         << input
+                                                         << " (lambda '" << (multiple ? "(first second)" : "(first)") << " (Just (Bool 'true))) " << fallback << R"())
+                    (let sink (DataSink 'result))
+                    (let world (Write! world sink (Key) result '()))
+                    (return (Commit! world sink))
+                ))";
+                TExprContext exprCtx;
+                const auto exprRoot = ParseAndAnnotate(program, exprCtx);
+                const auto node = FindNode(exprRoot, [](const TExprNode::TPtr& node) { return node->IsCallable("IfPresent"); });
+                UNIT_ASSERT(node);
+                UNIT_ASSERT(node->Child(multiple ? 1 : 0)->GetConstraint<TEmptyConstraintNode>());
+                const auto expected = node->TailPtr();
+                UNIT_ASSERT(OptimizeIfPresent<true>(node, exprCtx) == expected);
+                UNIT_ASSERT(OptimizeIfPresent<false>(node, exprCtx) == expected);
+                UNIT_ASSERT((OptimizeIfPresent<false, false>(node, exprCtx) == expected));
+            }
+        }
+    }
+}
+
+Y_UNIT_TEST(IfPresentConstantPresentOptimization) {
+    for (const TStringBuf value : {"(Bool 'false)", "(Nothing (OptionalType (DataType 'Bool)))"}) {
+        const TString program = TStringBuilder() << R"((
+            (let sink (DataSink 'result))
+            (let result (IfPresent (Just )" << value
+                                                 << R"()
+                (lambda '(value) (Just (Bool 'true)))
+                (Nothing (OptionalType (DataType 'Bool)))))
+            (let world (Write! world sink (Key) result '()))
+            (return (Commit! world sink))
+        ))";
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(program, exprCtx, {.EnableOptimization = true});
+        const auto result = FindNode(exprRoot, [](const TExprNode::TPtr& node) { return node->IsCallable("ResWrite!"); });
+        UNIT_ASSERT(result);
+        const auto& optional = *result->Child(3);
+        UNIT_ASSERT(optional.IsCallable("Just"));
+        UNIT_ASSERT(optional.Head().IsCallable("Bool"));
+        UNIT_ASSERT_VALUES_EQUAL(optional.Head().Head().Content(), "true");
+    }
+}
+
+Y_UNIT_TEST(IfPresentPreservesEmptyInputEvaluation) {
+    for (const TStringBuf inputs : {
+             "(WithSideEffectsMode (Ensure nothing (Bool 'false) (String 'must_evaluate_input)) 'General)",
+             "(WithSideEffectsMode (Ensure (Just (Bool 'true)) (Bool 'false) (String 'must_evaluate_input)) 'General) nothing"}) {
+        const bool multiple = inputs.EndsWith(" nothing");
+        const TString program = TStringBuilder() << R"((
+            (let nothing (Nothing (OptionalType (DataType 'Bool))))
+            (let result (IfPresent )" << inputs
+                                                 << " (lambda '" << (multiple ? "(first second)" : "(first)") << R"( (Bool 'true)) (Bool 'false)))
+            (let sink (DataSink 'result))
+            (let world (Write! world sink (Key) result '()))
+            (return (Commit! world sink))
+        ))";
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(program, exprCtx, {.EnableOptimization = true, .LangVer = MakeLangVersion(2025, 4)});
+        UNIT_ASSERT_C(FindNode(exprRoot, [](const TExprNode::TPtr& node) { return node->IsCallable("Ensure"); }), inputs);
+    }
+}
+
+Y_UNIT_TEST(IfPresentPreservesInputWorld) {
+    for (const TStringBuf inputs : {"(WithWorld nothing side_effect)", "(WithWorld (Just (Bool 'true)) side_effect) nothing"}) {
+        const bool multiple = inputs.EndsWith(" nothing");
+        const TString program = TStringBuilder() << R"((
+            (let nothing (Nothing (OptionalType (DataType 'Bool))))
+            (let sink (DataSink 'result))
+            (let side_effect (Write! world sink (Key) (String 'must_execute) '()))
+            (let result (IfPresent )" << inputs << " (lambda '"
+                                                 << (multiple ? "(first second)" : "(first)") << R"( (Bool 'true)) (Bool 'false)))
+            (let world (Write! world sink (Key) result '()))
+            (return (Commit! world sink))
+        ))";
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(program, exprCtx, {.EnableOptimization = true, .EnableKeepWorld = true});
+        UNIT_ASSERT_C(FindNode(exprRoot, [](const TExprNode::TPtr& node) {
+                          return node->IsCallable("String") && node->Head().IsAtom("must_execute");
+                      }), inputs);
+    }
+}
+
+Y_UNIT_TEST(IfPresentSkipsInputsAfterNothing) {
+    for (const bool leadingPresent : {false, true}) {
+        const TString program = TStringBuilder() << R"((
+        (let nothing (Nothing (OptionalType (DataType 'Bool))))
+        (let result (IfPresent )" << (leadingPresent ? "(Just (Bool 'true)) " : "")
+                                                 << R"( nothing
+            (WithSideEffectsMode (Ensure (Just (Bool 'true)) (Bool 'false) (String 'must_not_evaluate)) 'General)
+            (lambda ')" << (leadingPresent ? "(first second third)" : "(first second)")
+                                                 << R"( (Bool 'true)) (Bool 'false)))
+        (let sink (DataSink 'result))
+        (let world (Write! world sink (Key) result '()))
+        (return (Commit! world sink))
+    ))";
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(program, exprCtx, {.EnableOptimization = true, .LangVer = MakeLangVersion(2025, 4)});
+        const auto result = FindNode(exprRoot, [](const TExprNode::TPtr& node) { return node->IsCallable("ResWrite!"); });
+        UNIT_ASSERT(result);
+        UNIT_ASSERT(result->Child(3)->IsCallable("Bool"));
+        UNIT_ASSERT_VALUES_EQUAL(result->Child(3)->Head().Content(), "false");
+    }
+}
+
+Y_UNIT_TEST(IfPresentPresentInputConstraints) {
+    for (const TStringBuf input : {
+             "(Just nothing)",
+             "(Just (List (ListType (DataType 'Bool))))",
+             "(Just (EmptyList))",
+             "(Just (EmptyDict))",
+             "(If (Parameter 'condition (DataType 'Bool)) (Just (EmptyList)) (Just (EmptyList)))",
+             "(If (Parameter 'condition (DataType 'Bool)) (Just (EmptyDict)) (Just (EmptyDict)))",
+             "(Map (Just (Bool 'true)) (lambda '(value) (EmptyList)))",
+             "(Map (Just (Bool 'true)) (lambda '(value) (EmptyDict)))",
+             "(If (Parameter 'condition (DataType 'Bool)) (Just nothing) (Just nothing))",
+             "(Map (Just (Bool 'true)) (lambda '(value) nothing))"}) {
+        const TString program = TStringBuilder() << R"((
+            (let nothing (Nothing (OptionalType (DataType 'Bool))))
+            (let result (IfPresent )" << input << R"( (lambda '(value) (Bool 'true)) (Bool 'false)))
+            (let sink (DataSink 'result))
+            (let world (Write! world sink (Key) result '()))
+            (return (Commit! world sink))
+        ))";
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(program, exprCtx);
+        const auto node = FindNode(exprRoot, [](const TExprNode::TPtr& node) { return node->IsCallable("IfPresent"); });
+        UNIT_ASSERT(node);
+        UNIT_ASSERT_C(!node->Head().GetConstraint<TEmptyConstraintNode>(), input);
+        UNIT_ASSERT(OptimizeIfPresent<true>(node, exprCtx)->IsCallable("If"));
+    }
+}
+
+TString MakeRecurringOptionalStateProgram(TStringBuf callable, TStringBuf optional) {
+    const bool wide = callable.StartsWith("Wide");
+    const bool condense = callable.Contains("Condense");
+    return TStringBuilder() << R"((
+        (let nothing (Nothing (OptionalType (DataType 'Int32))))
+        (let data (AsList (Int32 '1) (Int32 '2) (Int32 '3)))
+        (let input )" << (wide ? "(ExpandMap (ToFlow data) (lambda '(item) item))" : "data")
+                            << R"()
+        (let result ()" << callable
+                            << " input "
+                            << (callable == "Condense" ? "nothing" : "(lambda '(item) nothing)")
+                            << (condense ? " (lambda '(item state) (Bool 'false))" : "")
+                            << " (lambda '(item state) (IfPresent " << optional << R"( (lambda '(value) (Just (+ value item))) (Just item)))))
+        (let sink (DataSink 'result))
+        (let world (Write! world sink (Key) )"
+                            << (wide ? "(Collect (NarrowMap result (lambda '(state) state)))" : "result") << R"( '()))
+        (return (Commit! world sink))
+    ))";
+}
+
+void CheckRecurringOptionalStateConstraints(TStringBuf callable, TStringBuf optional) {
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(MakeRecurringOptionalStateProgram(callable, optional), exprCtx);
+    const auto operation = FindNode(exprRoot, [callable](const TExprNode::TPtr& node) { return node->IsCallable(callable); });
+    UNIT_ASSERT(operation);
+    for (ui32 index = 2; index < operation->ChildrenSize(); ++index) {
+        const auto& state = operation->Child(index)->Head().Tail();
+        UNIT_ASSERT_C(!state.GetConstraint<TEmptyConstraintNode>(), callable << " state must describe subsequent iterations too");
+    }
+    const auto ifPresent = FindNode(exprRoot, [](const TExprNode::TPtr& node) { return node->IsCallable("IfPresent"); });
+    UNIT_ASSERT(ifPresent);
+    UNIT_ASSERT_C(!ifPresent->Head().GetConstraint<TEmptyConstraintNode>(), callable << ": " << optional);
+}
+
+Y_UNIT_TEST(CondenseOptionalStateConstraints) {
+    for (const TStringBuf optional : {"state", "(If (== item (Int32 '3)) state nothing)"}) {
+        CheckRecurringOptionalStateConstraints("Condense", optional);
+    }
+}
+
+Y_UNIT_TEST(Condense1OptionalStateConstraints) {
+    for (const TStringBuf optional : {"state", "(If (== item (Int32 '3)) state nothing)"}) {
+        CheckRecurringOptionalStateConstraints("Condense1", optional);
+    }
+}
+
+Y_UNIT_TEST(Chain1MapOptionalStateConstraints) {
+    for (const TStringBuf optional : {"state", "(If (== item (Int32 '3)) state nothing)"}) {
+        CheckRecurringOptionalStateConstraints("Chain1Map", optional);
+    }
+}
+
+Y_UNIT_TEST(WideCondense1OptionalStateConstraints) {
+    for (const TStringBuf optional : {"state", "(If (== item (Int32 '3)) state nothing)"}) {
+        CheckRecurringOptionalStateConstraints("WideCondense1", optional);
+    }
+}
+
+Y_UNIT_TEST(WideChain1MapOptionalStateConstraints) {
+    for (const TStringBuf optional : {"state", "(If (== item (Int32 '3)) state nothing)"}) {
+        CheckRecurringOptionalStateConstraints("WideChain1Map", optional);
+    }
+}
+
 Y_UNIT_TEST(IfPresentEmptyBranches) {
     for (const bool emptyInput : {false, true}) {
         for (const bool emptyThen : {false, true}) {
@@ -4193,6 +4430,41 @@ Y_UNIT_TEST(MultiWithEmpty) {
     CheckConstraint<TEmptyConstraintNode>(exprRoot, "Take", "Empty");
     CheckConstraint<TVarIndexConstraintNode>(exprRoot, "Visit", "VarIndex(0:0,0:1)");
     CheckConstraint<TVarIndexConstraintNode>(exprRoot, "Just", "VarIndex(0:0,0:1,1:1)");
+}
+
+Y_UNIT_TEST(MultiWithEmptyAndUnknownLambdaMulti) {
+    for (const TStringBuf map : {"Map", "FlatMap"}) {
+        const auto s = TStringBuilder() << R"((
+            (let res (DataSink 'result))
+            (let list (AsList (AsStruct '('key (String 'value)))))
+            (let empty (Take list (Uint64 '0)))
+            (let data (Mux '(empty list)))
+            (let data (LMap data (lambda '(stream)
+                ()" << map << R"( stream (lambda '(row)
+                    )" << (map == "FlatMap" ? "(Just " : "")
+                                        << R"((AsStruct '('original_row row) '('constant (String 'value))))"
+                                        << (map == "FlatMap" ? ")" : "") << R"(
+                ))
+            )))
+            (let world (Write! world res (Key) data '()))
+            (return (Commit! world res))
+        ))";
+
+        for (const TStringBuf flag : {"", "FixMultiConstraintInference", "DisableFixMultiConstraintInference"}) {
+            TExprContext exprCtx;
+            const auto exprRoot = ParseAndAnnotate(s, exprCtx, {.OptimizerFlag = flag});
+            const bool fixMultiInference = flag != "DisableFixMultiConstraintInference";
+            CheckConstraint<TEmptyConstraintNode>(exprRoot, "Take", "Empty");
+            CheckConstraint<TMultiConstraintNode>(exprRoot, "Mux", "Multi(1:{})");
+            // The constant field prevents MakeCommon from inferring Multi in either mode.
+            CheckConstraints<TMultiConstraintNode>(exprRoot, "AsStruct", {"", ""});
+            CheckConstraints<TVarIndexConstraintNode>(exprRoot, "AsStruct", {"", "VarIndex(0:0,1:1)"});
+            CheckConstraint<TEmptyConstraintNode>(exprRoot, map, fixMultiInference ? "" : "Empty");
+            CheckConstraint<TMultiConstraintNode>(exprRoot, map, "");
+            CheckConstraint<TEmptyConstraintNode>(exprRoot, "LMap", fixMultiInference ? "" : "Empty");
+            CheckConstraint<TMultiConstraintNode>(exprRoot, "LMap", "");
+        }
+    }
 }
 
 Y_UNIT_TEST(VisitWithoutRowUsageInOneBranch) {

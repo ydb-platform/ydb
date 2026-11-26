@@ -18,6 +18,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
 
 #include <atomic>
 
@@ -648,7 +649,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
     void AttachTableWithVectorIndex(bool withSyncIndex) {
         TEnv env;
-        // A backup restores the source schema, including its vector indexes.
+        // A backup restores the source schema, including its vector indexes: the restored impl
+        // tables are attached and replicated instead of the indexes being dropped.
         CreateTableWithVectorIndexes(env, "/Root/Source", withSyncIndex);
         CreateTableWithVectorIndexes(env, "/Root/Dst", withSyncIndex);
         const auto pathId = env.GetPathId("/Root/Dst");
@@ -659,11 +661,14 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         const auto dst = env.GetDescription("/Root/Dst");
         const auto& indexes = dst.GetPathDescription().GetTable().GetTableIndexes();
-        UNIT_ASSERT_VALUES_EQUAL(indexes.size(), withSyncIndex ? 1 : 0);
-        if (withSyncIndex) {
-            UNIT_ASSERT_VALUES_EQUAL(indexes.Get(0).GetName(), "by_embedding");
-            UNIT_ASSERT_VALUES_EQUAL(indexes.Get(0).GetType(), NKikimrSchemeOp::EIndexTypeGlobal);
+        UNIT_ASSERT_VALUES_EQUAL(indexes.size(), withSyncIndex ? 3 : 2);
+        THashSet<TString> names;
+        for (const auto& index : indexes) {
+            names.insert(index.GetName());
         }
+        UNIT_ASSERT(names.contains("vector_idx"));
+        UNIT_ASSERT(names.contains("other_vector_idx"));
+        UNIT_ASSERT_VALUES_EQUAL(names.contains("by_embedding"), withSyncIndex);
         const auto src = env.GetDescription("/Root/Source");
         UNIT_ASSERT_VALUES_EQUAL(src.GetPathDescription().GetTable().TableIndexesSize(), withSyncIndex ? 3 : 2);
         UNIT_ASSERT_VALUES_EQUAL(src.GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
@@ -696,34 +701,34 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 2);
     }
 
-    Y_UNIT_TEST(RecoverAttachmentAfterVectorIndexDrop) {
-        TEnv env(true, ERuntimeMode::Simulated);
+    Y_UNIT_TEST(RecoverAttachmentWithVectorIndexes) {
+        TEnv env;
         CreateTableWithVectorIndexes(env, "/Root/Source");
         CreateTableWithVectorIndexes(env, "/Root/Dst");
         const auto pathId = env.GetPathId("/Root/Dst");
         SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
-        const auto creator = StartVectorIndexAttachment(env);
-
-        bool dropCompleted = false;
-        auto observer = env.GetRuntime().AddObserver<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(
-            [&](NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-                if (ev->Recipient == creator) {
-                    dropCompleted = true;
-                    ev.Reset();
-                }
-            });
-        env.GetRuntime().WaitFor("first vector index removal", [&] { return dropCompleted; }, TDuration::Seconds(60));
-        env.SendAsync(creator, new TEvents::TEvPoison());
-        observer.Remove();
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 1);
 
         StartVectorIndexAttachment(env);
         AssertVectorIndexAttachment(env, pathId);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 0);
+
+        // Retry as if the controller restarted before persisting the result.
+        StartVectorIndexAttachment(env);
+        AssertVectorIndexAttachment(env, pathId);
+
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Source").GetPathDescription().GetTable().TableIndexesSize(), 2);
     }
 
-    Y_UNIT_TEST(StandbyDropsRestoredVectorIndexes) {
+    void SetVectorIndexImplTablesImported(TEnv<>& env) {
+        for (const auto* index : {"vector_idx", "other_vector_idx"}) {
+            for (const auto* implTable : {"indexImplLevelTable", "indexImplPostingTable"}) {
+                SetImportState(env, TString(TStringBuilder() << "/Root/Dst/" << index << '/' << implTable),
+                    NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StandbyKeepsRestoredVectorIndexes) {
         TEnv env(true, ERuntimeMode::Simulated);
         CreateTableWithVectorIndexes(env, "/Root/Source");
         env.GetRuntime().RegisterService(MakeReplicationServiceId(env.GetRuntime().GetNodeId(0)),
@@ -784,6 +789,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(200600));
         CreateTableWithVectorIndexes(env, "/Root/Dst");
         SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
+        SetVectorIndexImplTablesImported(env);
         const auto pathId = env.GetPathId("/Root/Dst");
 
         const auto resumed = env.RunCall([&] {
@@ -796,7 +802,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         const auto dst = env.GetDescription("/Root/Dst");
         UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/Dst"), pathId);
-        UNIT_ASSERT_VALUES_EQUAL(dst.GetPathDescription().GetTable().TableIndexesSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(dst.GetPathDescription().GetTable().TableIndexesSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(dst.GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
             NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Source").GetPathDescription().GetTable().TableIndexesSize(), 2);
@@ -995,6 +1001,47 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                 UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, pathId);
             }
         }
+    }
+
+    // An index built from the restored data (its impl table has no import state) may differ from the
+    // source one (clustering, fulltext segment compaction), so it must not be attached.
+    Y_UNIT_TEST(AttachBuiltIndexTable) {
+        TFeatureFlags flags;
+        flags.SetEnableChangefeedsOnIndexTables(true);
+        TEnv env(flags);
+        auto table = TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Uint32"},
+            },
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTableWithIndex("/Root", *MakeTableDescription(table),
+            "by_value", TVector<TString>{"value"}, NKikimrSchemeOp::EIndexTypeGlobal);
+        table.Name = "Dst";
+        env.CreateTableWithIndex("/Root", *MakeTableDescription(table),
+            "by_value", TVector<TString>{"value"}, NKikimrSchemeOp::EIndexTypeGlobal);
+
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+        // An index built from the restored data is never marked as imported.
+        SetImportState(env, "/Root/Dst/by_value/indexImplTable", NKikimrSchemeOp::TTableReplicationConfig::IMPORTING);
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+        UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender())->Get()->IsSuccess());
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 2, TReplication::ETargetKind::IndexTable,
+            "/Root/Source/by_value/indexImplTable", "/Root/Dst/by_value/indexImplTable",
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSchemeError);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Error, "was built during the import");
     }
 
     Y_UNIT_TEST(AttachmentAlterRejectsDroppedIndexAfterRestart) {

@@ -207,10 +207,10 @@ PEERDIR(
     ydb/core/health_check
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
-    ydb/core/kqp/common
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
     ydb/core/kqp/common/stats
+    ydb/core/kqp/executer_actor/shards_resolver
     ydb/core/kqp/query_plan
     ydb/core/kqp/script_executions/common
     ydb/core/local_indexes/bloom
@@ -222,7 +222,7 @@ PEERDIR(
     ydb/core/security/ldap_auth_provider
     ydb/core/security/sasl
     ydb/core/statistics
-    ydb/core/sys_view
+    ydb/core/sys_view/scan_factory
     ydb/core/tx
     ydb/core/tx/data_events
     ydb/core/tx/datashard

@@ -346,7 +346,32 @@ bool TS3Mock::TRequest::HttpServeAction(const TReplyParams& params, EMethod meth
     if (ENABLE_S3_MOCK_LOG) {
         Cerr << "S3_MOCK::HttpServeAction: " << (ui32)method << " / " << path << " / " << queryParams.Print() << Endl;
     }
-    if (queryParams.Has("uploads")) {
+    if (method == EMethod::Post && queryParams.Has("delete")) {
+        const NXml::TDocument request(params.Input.ReadAll(), NXml::TDocument::String);
+        NXml::TDocument response("DeleteResult", NXml::TDocument::RootName);
+        const auto quiet = request.Root().FirstChild("Quiet");
+        const bool reportDeleted = quiet.IsNull() || quiet.Value<TString>() != "true";
+        const TString bucketPath = path.EndsWith('/') ? TString(path) : TStringBuilder() << path << '/';
+        for (auto object = request.Root().FirstChild("Object"); !object.IsNull(); object = object.NextSibling("Object")) {
+            const auto keyNode = object.FirstChild("Key");
+            if (keyNode.IsNull()) {
+                return HttpBadRequest(params, "Missing object key");
+            }
+            const TString key = keyNode.Value<TString>();
+            Parent->Data.erase(bucketPath + key);
+            if (reportDeleted) {
+                response.Root().AddChild("Deleted").AddChild("Key", key);
+            }
+        }
+        const TString body = response.ToString();
+        THttpHeaders headers;
+        headers.AddHeader("Content-Type", "application/xml");
+        headers.AddHeader("Content-Length", body.size());
+        params.Output << "HTTP/1.1 200 Ok\r\n";
+        headers.OutTo(&params.Output);
+        params.Output << "\r\n" << body;
+        params.Output.Flush();
+    } else if (queryParams.Has("uploads")) {
         const int uploadId = Parent->NextUploadId++;
         Parent->MultipartUploads[std::make_pair(path, ToString(uploadId))] = {};
 

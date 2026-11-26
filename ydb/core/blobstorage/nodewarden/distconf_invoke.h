@@ -87,13 +87,14 @@ namespace NKikimr::NStorage {
         // Query execution logic
 
         void ExecuteQuery();
-        void IssueScatterTask(TEvScatter&& task, TGatherCallback callback);
+        void IssueScatterTask(TEvScatter&& task, TGatherCallback callback, TMonotonic gatherDeadline = TMonotonic::Max());
         void Handle(TEvNodeConfigGather::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration update
 
         void UpdateConfig(TQuery::TUpdateConfig *request);
+        void CheckStaticGroupStateUpdate(const NKikimrBlobStorage::TStorageConfig& proposed) const;
         void DescendCommittedStorageConfig(const TQuery::TDescendCommittedStorageConfig& request);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -109,6 +110,7 @@ namespace NKikimr::NStorage {
         std::optional<TResult::TReassignGroupDisk> ReassignGroupDiskResult;
 
         void ReassignGroupDisk(const TQuery::TReassignGroupDisk& cmd);
+        void IssueVStatusQuery(TActorId actorId, TVDiskID vdiskId);
         void IssueVStatusQueries(const NKikimrBlobStorage::TGroupInfo& group);
         void SendVStatusQuery(TActorId actorId, TVDiskID vdiskId, TActorId sessionId = {});
         void SendPendingVStatusQueries(ui32 nodeId, TActorId sessionId);
@@ -124,6 +126,8 @@ namespace NKikimr::NStorage {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // VDiskSlain/DropDonor logic
+
+        TStorageConfigPtr DropAllDonorsBase;
 
         void StaticVDiskSlain(const TQuery::TStaticVDiskSlain& cmd);
         void DropDonor(const TQuery::TDropDonor& cmd);
@@ -156,14 +160,18 @@ namespace NKikimr::NStorage {
         std::optional<ui64> StorageYamlVersion;
         bool IsDryRun = false;
 
+        static constexpr TDuration CommitConfirmationTimeout = TDuration::Seconds(30);
+        TDuration NextDisableRetryOffset = TDuration::Seconds(1);
         TStorageConfigPtr ConfigAwaitingCommit;
         TMonotonic CommitConfirmationDeadline;
-        bool FullCommitConfirmationNeeded = false;
+        bool StartWithFullCommitRead = false;
         static constexpr ui64 ConfigValidationTimeoutCookie = 1;
         static constexpr ui64 VStatusTimeoutCookie = 2;
         static constexpr ui64 DataCenterRetryCookie = 3;
         static constexpr ui64 DataCenterTimeoutCookie = 4;
         TMonotonic DataCenterReconciliationDeadline;
+        std::optional<TStorageConfigMeta> DataCenterConfigToConfirm;
+        std::optional<NKikimrBlobStorage::TDataCenterStates> AppliedDataCenterStates;
         bool DataCenterPreflight = false;
         bool WaitingForConfigValidation = false;
 
@@ -197,7 +205,9 @@ namespace NKikimr::NStorage {
         void ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
                 ui64 expectedStorageYamlVersion, bool enablingDistconf);
         void ReplaceStorageConfigExecute();
-        void StartCommitConfirmation();
+        void StartCommitConfirmation(const std::optional<TStorageConfigMeta>& expected = {});
+        void RetrySelfHealConfirmationOrFinish(TResult::EStatus status, TStringBuf reason);
+        void FinishConfigChange();
         void CollectCommittedConfig();
         void TryEnableDistconf();
         void ConnectToController();
@@ -252,9 +262,10 @@ namespace NKikimr::NStorage {
         // Configuration proposition
 
         void AdvanceGeneration();
-        void StartDataCenterReconciliation();
+        void StartDataCenterReconciliation(TStorageConfigMeta config);
         void SendDataCenterSnapshot();
         void ApplyDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& command);
+        void PromoteStaticGroup(const TPromoteStaticGroup& op);
         void QueryConfig(const TQuery::TQueryConfig& request);
         void CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback, bool allowConflictingGenerationAdvance = false);
         void StartRecoveryProposition(TProcessCollectConfigsResult& result);

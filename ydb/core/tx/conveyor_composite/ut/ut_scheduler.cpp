@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/runtime/scheduler/service/service.h>
 #include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/tree/snapshot.h>
@@ -152,7 +153,7 @@ namespace NKikimr::NConveyorComposite {
                 .AttemptBonus = TDuration::Zero(),
                 .MaxRandomDelay = TDuration::MicroSeconds(1),
             });
-            auto counters = MakeIntrusive<NKqp::TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             auto root = std::make_shared<NHdrf::NDynamic::TRoot>(counters);
             auto database = std::make_shared<NHdrf::NDynamic::TDatabase>("database");
             auto pool = std::make_shared<NHdrf::NDynamic::TPool>("pool", counters);
@@ -161,6 +162,8 @@ namespace NKikimr::NConveyorComposite {
             database->AddPool(pool);
             pool->AddQuery(query);
             auto snapshot = std::make_shared<NHdrf::NSnapshot::TQuery>(identity.QueryId, query);
+            // Model an already-demanding query: a zero assigned share must throttle, not bootstrap.
+            snapshot->CpuMaxDemand = Max<ui64>(fairShare, 1);
             snapshot->CpuFairShare = fairShare;
             query->SetSnapshot(snapshot);
             return {
@@ -238,10 +241,10 @@ namespace NKikimr::NConveyorComposite {
 
             void SendQueryResponse(const NKqp::NScheduler::NHdrf::NDynamic::TQueryPtr& query) {
                 auto database = Runtime.GrabEdgeEvent<NKqp::NScheduler::TEvAddDatabase>(Scheduler);
-                auto pool = Runtime.GrabEdgeEvent<NKqp::NScheduler::TEvAddPool>(Scheduler);
                 auto request = Runtime.GrabEdgeEvent<NKqp::NScheduler::TEvAddQuery>(Scheduler);
                 UNIT_ASSERT_VALUES_EQUAL(database->Get()->DatabaseId, "database");
-                UNIT_ASSERT_VALUES_EQUAL(pool->Get()->PoolId, "pool");
+                UNIT_ASSERT_VALUES_EQUAL(request->Get()->DatabaseId, "database");
+                UNIT_ASSERT_VALUES_EQUAL(request->Get()->PoolId, "pool");
                 UNIT_ASSERT_VALUES_EQUAL(request->Cookie, request->Get()->QueryId);
                 auto response = std::make_unique<NKqp::NScheduler::TEvQueryResponse>();
                 response->Query = query;
@@ -272,7 +275,7 @@ namespace NKikimr::NConveyorComposite {
                 auto& scheduler = Runtime.GetAppData().KqpComputeScheduler;
                 if (!scheduler) {
                     scheduler = std::make_shared<NKqp::NScheduler::TComputeScheduler>(
-                        MakeIntrusive<NKqp::TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()), NKqp::NScheduler::TOptions{});
+                        MakeIntrusive<NMonitoring::TDynamicCounters>(), NKqp::NScheduler::TOptions{});
                 }
                 scheduler->ToggleEnabled(enabled);
             }
@@ -1058,7 +1061,7 @@ namespace NKikimr::NConveyorComposite {
                 UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 4);
                 UNIT_ASSERT_VALUES_EQUAL(fixture.Adds[0], 1);
                 UNIT_ASSERT_VALUES_EQUAL(fixture.Removes[0], 1);
-                UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 4);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 3);
             }
         }
 
@@ -1099,7 +1102,7 @@ namespace NKikimr::NConveyorComposite {
             fixture.UnregisterProcess(3);
             fixture.WaitFor([&] { return fixture.Removes[0] == 1; });
             UNIT_ASSERT_VALUES_EQUAL(fixture.Adds[0], 1);
-            UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 4);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 3);
         }
 
         /* Scenario:
@@ -1220,7 +1223,7 @@ namespace NKikimr::NConveyorComposite {
             TSchedulerRuntimeFixture fixture(proto);
             const auto identity = MakeIdentity(1);
 
-            auto counters = MakeIntrusive<NKqp::TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             NKqp::NScheduler::TOptions options{
                 .DelayParams = {
                     .MaxDelay = TDuration::MilliSeconds(10),
@@ -1230,9 +1233,10 @@ namespace NKikimr::NConveyorComposite {
                 },
             };
             auto scheduler = std::make_shared<NKqp::NScheduler::TComputeScheduler>(counters, options);
-            scheduler->AddOrUpdateDatabase("database", {});
-            scheduler->AddOrUpdatePool("database", "pool", {});
-            auto query = scheduler->AddOrUpdateQuery("database", "pool", identity.QueryId, {});
+            auto configuration = std::make_unique<NKqp::NScheduler::NHdrf::NStatic::TRoot>();
+            configuration->GetOrCreateDatabase("database").GetOrCreatePool("pool");
+            scheduler->UpdateConfiguration(std::move(configuration));
+            auto query = scheduler->AddOrUpdateQuery("database", "pool", identity.QueryId);
             scheduler->ToggleEnabled(true);
             fixture.Runtime.GetAppData().KqpComputeScheduler = scheduler;
             auto service = fixture.Runtime.Register(NKqp::CreateKqpComputeSchedulerService(TDuration::MilliSeconds(1)));
@@ -1337,7 +1341,7 @@ namespace NKikimr::NConveyorComposite {
             fixture.UnregisterProcess(5);
             fixture.Submit(service, 0); // Default processes must remain usable after migration cleanup.
             fixture.WaitFor([&] { return service.Val() == 3; });
-            UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 3);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 2);
             UNIT_ASSERT_VALUES_EQUAL(fixture.Removes[identity.QueryId], 0);
         }
 

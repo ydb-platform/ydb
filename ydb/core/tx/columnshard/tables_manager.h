@@ -11,8 +11,8 @@
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
-#include <ydb/core/tx/columnshard/counters/portion_index.h>
 #include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/data_stats/shard_data_stats.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -396,7 +396,7 @@ private:
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
     YDB_READONLY_DEF(NBackgroundTasks::TControlInterfaceContainer<NOlap::TSchemaObjectsCache>, SchemaObjectsCache);
-    std::shared_ptr<TPortionIndexStats> PortionsStats;
+    std::shared_ptr<TShardDataStats> DataStats;
     ui64 TabletId = 0;
     bool GenerateInternalPathId;
     std::optional<TUnifiedPathId> TabletPathId;
@@ -419,7 +419,7 @@ public:   //IPathIdTranslator
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId);
+        const std::shared_ptr<TShardDataStats>& dataStats, const ui64 tabletId);
 
     TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(const TString& tablePath,
         const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt) const;

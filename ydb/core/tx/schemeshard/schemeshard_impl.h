@@ -363,6 +363,12 @@ public:
     struct TTxDatabaseFreezeDone;
     THashMap<TPathId, TPathDbRef> OwnDbRefs; // path's own type info record ref
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
+    // Inventory of durable rows, independent of active restore bookkeeping.
+    // Completed headers remain until FORGET/DROP; legacy items may have no state.
+    // Rebuilt on init and maintained by the persistence helpers below, so DROP
+    // can remove all owned records without reads in its plan callback.
+    THashMap<ui64, TPathId> PersistedIncrementalRestoreOps;
+    THashMap<ui64, THashSet<ui32>> PersistedIncrementalRestoreItems;
 
     // Simplified state tracking for sequential incremental restore
 
@@ -444,6 +450,7 @@ public:
     bool EnableBackgroundCompactionServerless = false;
     bool EnableBorrowedSplitCompaction = false;
     bool EnableMoveIndex = true;
+    bool EnableRebuildIndex = false;
     bool EnableAlterDatabaseCreateHiveFirst = false;
     bool EnableStatistics = false;
     bool EnableWasmCompileController = false;
@@ -455,6 +462,7 @@ public:
     bool EnableInitialUniqueIndex = false;
     bool EnableAddUniqueIndex = false;
     bool EnableOnlineAddUniqueIndex = false;
+    bool EnableConsistentVectorIndexBuild = false;
     bool EnableHnswIndex = false;
     bool EnableFulltextIndex = false;
     bool EnableCompactFulltextIndex = false;
@@ -1096,6 +1104,9 @@ public:
     void PersistRemoveTestShardSet(NIceDb::TNiceDb& db, TPathId pathId);
 
     void PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op);
+    void PersistRemoveLongIncrementalRestoreOp(NIceDb::TNiceDb& db, ui64 operationId);
+    void PersistIncrementalRestoreItem(NIceDb::TNiceDb& db, ui64 operationId, const TIncrementalRestoreState::TItem& item);
+    void PersistRemoveIncrementalRestoreItem(NIceDb::TNiceDb& db, ui64 operationId, ui32 itemSeq);
 
     // Secret
     void PersistSecret(NIceDb::TNiceDb& db, TPathId pathId, const TSecretInfo& secretInfo);
@@ -2030,6 +2041,7 @@ public:
         struct TTxReplyRecomputeKMeans;
         struct TTxReplyFilterKMeans;
         struct TTxReplyLocalKMeans;
+        struct TTxReplyDeltaKMeans;
         struct TTxReplyPrefixKMeans;
         struct TTxReplyUploadSample;
         struct TTxReplyValidateUniqueIndex;
@@ -2063,6 +2075,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvRecomputeKMeansResponse::TPtr& recompute);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvFilterKMeansResponse::TPtr& filter);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvLocalKMeansResponse::TPtr& local);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvDeltaKMeansResponse::TPtr& delta);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvPrefixKMeansResponse::TPtr& prefix);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& response);
@@ -2084,6 +2097,7 @@ public:
     void Handle(TEvDataShard::TEvRecomputeKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvFilterKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvLocalKMeansResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvDeltaKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPrefixKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& ev, const TActorContext& ctx);

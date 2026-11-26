@@ -9,3 +9,8 @@
 - source_filter: "^contrib/tools/cython/Cython/Utility"
   includes:
     - internal/pycore_frame.h: contrib/libs/python/Include/internal/pycore_frame.h
+
+# The selected Python supplies optional headers induced by Cython.
+- source_filter: "^contrib/tools/cython(_py2)?/induced_deps[.]h$"
+  includes:
+  - internal/pycore_frame.h: contrib/libs/python/Include/internal/pycore_frame.h

@@ -312,7 +312,6 @@ namespace NKikimr {
                         .RestartCounter = ev->Get()->RestartCounter,
                         .TraceId = std::move(ev->TraceId),
                         .Event = ev->Get(),
-                        .ExecutionRelay = ev->Get()->ExecutionRelay,
                         .LatencyQueueKind = kind,
                         .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                         .EnableStorageRetroTraceGeneration = static_cast<bool>(Controls.EnableStorageRetroTraceGeneration.Update(now)),
@@ -658,7 +657,6 @@ namespace NKikimr {
                                     .RestartCounter = ev->Get()->RestartCounter,
                                     .TraceId = std::move(ev->TraceId),
                                     .Event = ev->Get(),
-                                    .ExecutionRelay = ev->Get()->ExecutionRelay,
                                     .LatencyQueueKind = kind,
                                     .ForceGroupGeneration = forceGroupGeneration,
                                     .EnableStorageRetroTraceGeneration = static_cast<bool>(Controls.EnableStorageRetroTraceGeneration.Update(now)),
@@ -895,6 +893,7 @@ namespace NKikimr {
                 Y_DEBUG_ABORT_UNLESS(common);
                 if (common) {
                     common->DataKind = DataKind;
+                    common->IsProxySubrequest = IsProxySubrequest;
                 }
             }
             ++*Mon->NodeMon->RestartHisto[Min<size_t>(Mon->NodeMon->RestartHisto.size() - 1, RestartCounter)];
@@ -1005,16 +1004,6 @@ namespace NKikimr {
     TLogoBlobID TBlobStorageGroupRequestActor::GetBlobId(TEvBlobStorage::TEvVPatchDiff &ev) {
         Y_ABORT_UNLESS(ev.Record.HasPatchedPartBlobId());
         return LogoBlobIDFromLogoBlobID(ev.Record.GetPatchedPartBlobId());
-    }
-
-    void TBlobStorageGroupRequestActor::SendToProxy(std::unique_ptr<IEventBase> event, ui64 cookie, NWilson::TTraceId traceId) {
-        if (ForceGroupGeneration || DataKind != NKikimrBlobStorage::TDataKind::USER) {
-            if (auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(event.get())) {
-                common->ForceGroupGeneration = ForceGroupGeneration;
-                common->DataKind = DataKind;
-            }
-        }
-        Send(ProxyActorId, event.release(), 0, cookie, std::move(traceId));
     }
 
     void TBlobStorageGroupRequestActor::SendResponseAndDie(std::unique_ptr<IEventBase>&& ev,

@@ -55,7 +55,8 @@ struct Schema: NIceDb::Schema {
         NormalizersTableId,
         NormalizerEventsTableId,
         ColumnsV1TableId,
-        ColumnsV2TableId
+        ColumnsV2TableId,
+        PortionsByLastKeyTableId
     };
 
     enum class ETierTables: ui32 {

@@ -3,7 +3,6 @@
 
 #include "opentelemetry/ext/http/client/curl/http_time_util.h"
 
-#include <cctype>
 #include <chrono>
 #include <ctime>
 #include <iomanip>
@@ -12,6 +11,7 @@
 #include <sstream>
 #include <string>
 
+#include "opentelemetry/common/detail/ascii.h"
 #include "opentelemetry/common/string_util.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -35,7 +35,7 @@ bool HttpTimeUtil::ParseDelaySeconds(nostd::string_view value, std::chrono::seco
   std::chrono::seconds::rep result = 0;
   for (const char c : value)
   {
-    if (!std::isdigit(static_cast<int>(static_cast<unsigned char>(c))))
+    if (!opentelemetry::common::detail::IsAsciiDigit(c))
     {
       return false;
     }

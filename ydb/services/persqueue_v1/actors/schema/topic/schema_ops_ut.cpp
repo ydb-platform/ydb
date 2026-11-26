@@ -8,6 +8,7 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/grpc_request/grpc_request.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
@@ -1013,6 +1014,77 @@ Y_UNIT_TEST(DescribeTopicSmokeAndMissing) {
     }
 }
 
+Y_UNIT_TEST(DescribeReplicateOffsets) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    auto channel = grpc::CreateChannel(
+        "localhost:" + ToString(server->Server->GrpcPort), grpc::InsecureChannelCredentials());
+    auto pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
+
+    for (const std::optional<bool> replicateOffsets : {std::optional<bool>{}, {false}, {true}}) {
+        const TString path = TStringBuilder() << "/Root/topic_replicate_offsets_"
+            << (replicateOffsets ? (*replicateOffsets ? "true" : "false") : "default");
+        auto createRequest = MakeCreateTopicRequest(path);
+        if (replicateOffsets.has_value()) {
+            createRequest.mutable_consumers(0)->set_replicate_offsets(*replicateOffsets);
+        }
+        createRequest.add_consumers()->set_name("default");
+        auto createResult = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+            runtime, createRequest, CreateCreateTopicActor, path);
+        AssertStatus(createResult, Ydb::StatusIds::SUCCESS);
+
+        const auto createdTopic = DescribeTopic(runtime, path);
+        for (const auto& consumer : createdTopic.consumers()) {
+            UNIT_ASSERT_VALUES_EQUAL(consumer.replicate_offsets(),
+                consumer.name() != "user" || replicateOffsets.value_or(true));
+        }
+
+        Ydb::Topic::AlterTopicRequest alterRequest;
+        alterRequest.set_path(path);
+        alterRequest.mutable_set_retention_period()->set_seconds(3600);
+        auto alterResult = DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, alterRequest, CreateAlterTopicActor, path);
+        AssertStatus(alterResult, Ydb::StatusIds::SUCCESS);
+
+        const auto topic = DescribeTopic(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(topic.consumers_size(), 2);
+        for (const auto& consumer : topic.consumers()) {
+            UNIT_ASSERT_VALUES_EQUAL(consumer.replicate_offsets(),
+                consumer.name() != "user" || replicateOffsets.value_or(true));
+
+            Ydb::Topic::DescribeConsumerRequest request;
+            request.set_path(path);
+            request.set_consumer(consumer.name());
+            auto result = DoActorRequest<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
+                runtime, request, CreateDescribeConsumerActor, path);
+            AssertStatus(result, Ydb::StatusIds::SUCCESS);
+            const auto& describedConsumer = GetResult<Ydb::Topic::DescribeConsumerResult>(result).consumer();
+            UNIT_ASSERT_VALUES_EQUAL(describedConsumer.name(), consumer.name());
+            UNIT_ASSERT_VALUES_EQUAL(describedConsumer.replicate_offsets(), consumer.replicate_offsets());
+        }
+
+        auto future = NThreading::Async([&] {
+            grpc::ClientContext context;
+            context.AddMetadata("x-ydb-database", "/Root");
+            Ydb::PersQueue::V1::DescribeTopicRequest request;
+            request.set_path(path);
+            Ydb::PersQueue::V1::DescribeTopicResponse response;
+            const auto status = pqStub->DescribeTopic(&context, request, &response);
+            UNIT_ASSERT_C(status.ok(), status.error_message());
+            return response;
+        }, *server->Pool);
+        const auto response = static_cast<NKikimr::TTestActorRuntime&>(runtime).WaitFuture(std::move(future));
+        UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS, response.DebugString());
+        Ydb::PersQueue::V1::DescribeTopicResult pqTopic;
+        UNIT_ASSERT(response.operation().result().UnpackTo(&pqTopic));
+        UNIT_ASSERT_VALUES_EQUAL(pqTopic.settings().read_rules_size(), 2);
+        for (const auto& rule : pqTopic.settings().read_rules()) {
+            UNIT_ASSERT_VALUES_EQUAL(rule.replicate_offsets(),
+                rule.consumer_name() != "user" || replicateOffsets.value_or(true));
+        }
+    }
+}
+
 Y_UNIT_TEST(DescribeTopicWithLocationAndStats) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
@@ -1435,6 +1507,57 @@ Y_UNIT_TEST(CannotChangeConsumerType) {
     auto result = DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
         runtime, request, CreateAlterTopicActor, path);
     AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "Cannot alter consumer type");
+}
+
+Y_UNIT_TEST(AlterCdcAddsReplicationConsumer) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
+    ExecuteDDL(*setup, "CREATE TABLE cdc_source (id Uint64, PRIMARY KEY (id))");
+    ExecuteDDL(*setup, "ALTER TABLE cdc_source ADD CHANGEFEED feed WITH (FORMAT = 'JSON', MODE = 'UPDATES')");
+
+    const TString path = "/Root/cdc_source/feed";
+    auto add = [&](const TString& name) {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        auto* consumer = request.add_add_consumers();
+        consumer->set_name(name);
+        consumer->set_important(true);
+        (*request.mutable_alter_attributes())["_ydb_replication_consumer"] = name;
+        return request;
+    };
+    auto alter = [&](const Ydb::Topic::AlterTopicRequest& request) {
+        return DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, request, CreateAlterTopicActor, path);
+    };
+
+    auto request = add("mirror");
+    request.clear_alter_attributes();
+    AssertStatus(alter(request), Ydb::StatusIds::SUCCESS);
+    const TString mismatch = "Existing CDC consumer does not match the replication consumer";
+    AssertStatus(alter(add("mirror")), Ydb::StatusIds::PRECONDITION_FAILED, mismatch);
+
+    // Explicit replacement remains a valid batch; duplicate replay must match the installed consumer.
+    request = add("mirror");
+    request.add_drop_consumers("mirror");
+    AssertStatus(alter(request), Ydb::StatusIds::SUCCESS);
+    AssertStatus(alter(add("mirror")), Ydb::StatusIds::ALREADY_EXISTS);
+
+    request.Clear();
+    request.set_path(path);
+    auto* consumer = request.add_alter_consumers();
+    consumer->set_name("mirror");
+    consumer->set_set_important(false);
+    AssertStatus(alter(request), Ydb::StatusIds::SUCCESS);
+    AssertStatus(alter(add("mirror")), Ydb::StatusIds::PRECONDITION_FAILED, mismatch);
+    consumer->set_set_important(true);
+    AssertStatus(alter(request), Ydb::StatusIds::SUCCESS);
+    AssertStatus(alter(add("other")), Ydb::StatusIds::PRECONDITION_FAILED, "CDC stream already has a replication consumer");
+    const auto config = DescribeTabletConfig(runtime, path, "/Root", true);
+    const auto* mirror = NPQ::GetConsumer(config, "mirror");
+    UNIT_ASSERT(mirror && mirror->GetImportant());
+    UNIT_ASSERT(mirror->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
+    UNIT_ASSERT(!NPQ::GetConsumer(config, "other"));
 }
 
 Y_UNIT_TEST(AlterCdcAllowsRetentionAndWriteLimits) {

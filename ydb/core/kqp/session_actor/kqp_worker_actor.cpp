@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host.h>
+#include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/library/aclib/aclib.h>
@@ -197,6 +198,9 @@ public:
             ctx.ActorSystem(), ctx.SelfID.NodeId(), RequestCounters, QueryServiceConfig, NWilson::TTraceId(ev->TraceId));
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
+        if (const auto policy = QueryState->RequestEv->DisablePgCompatibility) {
+            Config->FeatureFlags.SetDisablePgCompatibility(*policy);
+        }
 
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver, FederatedQuerySetup,
             QueryState->RequestEv->GetUserToken(), GUCSettings, QueryServiceConfig, Settings.ApplicationName, AppData(ctx)->FunctionRegistry,
@@ -240,6 +244,15 @@ public:
             onBadRequest(TStringBuilder() << "Wrong database, expected: " << Settings.Database
                 << ", got: " << QueryState->RequestEv->GetDatabase());
             return;
+        }
+
+        if (Config->FeatureFlags.GetDisablePgCompatibility()) {
+            try {
+                TQueryData::ValidateNoPgParameters(queryRequest->GetYdbParameters());
+            } catch (const yexception& e) {
+                onBadRequest(e.what());
+                return;
+            }
         }
 
         if (!CheckLegacyYql(queryRequest.get())) {

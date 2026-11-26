@@ -8,6 +8,7 @@
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
 
 namespace NKikimr::NPQ::NSchema {
@@ -17,6 +18,9 @@ namespace {
 TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
     if (alter.has_set_important()) {
         consumer.set_important(alter.set_important());
+    }
+    if (alter.has_set_replicate_offsets()) {
+        consumer.set_replicate_offsets(alter.set_replicate_offsets());
     }
     if (alter.has_set_read_from()) {
         consumer.mutable_read_from()->CopyFrom(alter.set_read_from());
@@ -226,8 +230,43 @@ TResult ApplyChangesInt(
         if (!code) return code;
     }
 
-    if (request.alter_attributes().size()) {
-        CHECK_CDC;
+    const auto& attributes = request.alter_attributes();
+    if (isCdcStream && !attributes.empty()) {
+        const auto it = attributes.find("_ydb_replication_consumer");
+        if (attributes.size() != 1 || it == attributes.end() || it->second.empty()) {
+            return {Ydb::StatusIds::BAD_REQUEST, "Full alter of cdc stream is forbidden"};
+        }
+        const auto added = FindIf(request.add_consumers(), [&](const auto& consumer) { return consumer.name() == it->second; });
+        if (added == request.add_consumers().end()) {
+            return {Ydb::StatusIds::BAD_REQUEST, "Full alter of cdc stream is forbidden"};
+        }
+
+        const auto name = NPersQueue::ConvertNewConsumerName(it->second, pqConfig);
+        for (const auto& consumer : pqTabletConfig->GetConsumers()) {
+            if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION && consumer.GetName() != name) {
+                return {Ydb::StatusIds::PRECONDITION_FAILED, "CDC stream already has a replication consumer"};
+            }
+            if (consumer.GetName() != name) {
+                continue;
+            }
+            const bool dropped = AnyOf(request.drop_consumers(), [&](const auto& drop) {
+                return drop == consumer.GetName() || drop == NPersQueue::ConvertOldConsumerName(consumer.GetName(), pqConfig);
+            });
+            if (!dropped) {
+                auto period = ConvertConsumerAvailabilityPeriod(added->availability_period(), added->name());
+                if (!period) {
+                    return period.error();
+                }
+                const auto availabilityMs = period->has_value() ? period->value().MilliSeconds() : 0;
+                // Duplicate creation is treated as replay by the controller, so it must not hide a GUID collision.
+                if (consumer.GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
+                    || consumer.GetImportant() != added->important()
+                    || consumer.GetAvailabilityPeriodMs() != availabilityMs)
+                {
+                    return {Ydb::StatusIds::PRECONDITION_FAILED, "Existing CDC consumer does not match the replication consumer"};
+                }
+            }
+        }
     }
 
     NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings consumersAdvancedMonitoringSettings;
@@ -315,6 +354,9 @@ TResult ApplyChangesInt(
         Ydb::StatusIds_StatusCode status;
         TString error;
         FillConsumer(consumer, *pqTabletConfig, c, status, error, false);
+        if (!c.HasReplicateOffsets()) {
+            consumer.clear_replicate_offsets();
+        }
     }
 
 

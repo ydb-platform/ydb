@@ -9,6 +9,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
+    ydb/core/mind/bootstrapper
     ydb/core/testlib/default
 )
 
@@ -16,6 +17,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     bootstrapper_ut.cpp
+    node_whiteboard_ut.cpp
     pipe_tracker_ut.cpp
     resource_broker_ut.cpp
     tablet_counters_ut.cpp

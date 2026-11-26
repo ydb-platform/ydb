@@ -12,7 +12,7 @@ TEvInternal::TEvTaskProcessedResult::TEvTaskProcessedResult(
     , WorkerIdx(workerIdx)
     , WorkersPoolId(workersPoolId)
     , QueryIdentity(identity) {
-    AFL_VERIFY(Results.size());
+    YDB_LOG_VERIFY(Results.size());
 }
 
 TWorkerTaskResult::TWorkerTaskResult(
@@ -21,7 +21,7 @@ TWorkerTaskResult::TWorkerTaskResult(
     , Start(start)
     , Finish(finish)
     , Accounted(std::move(accounted)) {
-    AFL_VERIFY(Start <= Finish);
+    YDB_LOG_VERIFY(Start <= Finish);
 }
 
 }   // namespace NKikimr::NConveyorComposite

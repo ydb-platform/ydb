@@ -48,6 +48,10 @@ public:
                 << "Index build with uid '" << uid << "' already exists");
         }
 
+        if (settings.is_rebuild() && !Self->EnableRebuildIndex) {
+            return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "REBUILD INDEX is disabled (EnableRebuildIndex)");
+        }
+
         const auto domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
         {
             const auto checks = domainPath.Check();
@@ -467,10 +471,6 @@ private:
                 == Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex;
             if (isHnsw && !Self->EnableHnswIndex) {
                 explain = "HNSW index support is disabled (EnableHnswIndex)";
-                return false;
-            }
-            if (isHnsw) {
-                explain = "HNSW index implementation is not available yet (SQL support)";
                 return false;
             }
             const auto& requestedSettings = isHnsw

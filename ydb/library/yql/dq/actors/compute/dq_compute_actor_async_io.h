@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
+#include <ydb/library/yql/dq/actors/common/dq_schedulable.h>
 #include <ydb/library/yql/dq/actors/compute/events/events.h>
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
@@ -115,6 +115,10 @@ struct IDqComputeActorAsyncInput {
     virtual ui64 GetInputIndex() const = 0;
 
     virtual const TDqAsyncStats& GetIngressStats() const = 0;
+
+    // Plain text for monitoring, called from the compute actor's mailbox.
+    // Do not access state owned by actors in other mailboxes.
+    virtual TString GetDebugInfo() const { return {}; }
 
     // Gets data and returns space used by filled data batch.
     // Watermark will be returned if source watermark was moved forward. Watermark should be handled AFTER data.

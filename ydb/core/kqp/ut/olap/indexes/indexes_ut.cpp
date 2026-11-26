@@ -534,7 +534,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             FEATURES=`{"column_names" : ["field"]}`);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTableAllIdx` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_max, TYPE=MAX, FEATURES=`{"column_name" : "val"}`);
+        ALTER OBJECT `/Root/ColumnTableAllIdx` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_minmax_val, TYPE=MIN_MAX, FEATURES=`{"column_name" : "val"}`);
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTableAllIdx` (pk, field, val) VALUES (1u, 'alpha_beta_gamma', 42u);
@@ -542,7 +542,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"alpha_beta_gamma\",\"max\":\"alpha_beta_gamma\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTableAllIdx/.sys/primary_index_stats` WHERE EntityName="idx_minmax";
         EXPECTED: [[%true]]
         ------
-        READ: SELECT COUNT(*) FROM (SELECT EntityName FROM `/Root/ColumnTableAllIdx/.sys/primary_index_stats` WHERE EntityName IN ("idx_bloom", "idx_ngram", "idx_cms", "idx_max") GROUP BY EntityName);
+        READ: SELECT COUNT(*) FROM (SELECT EntityName FROM `/Root/ColumnTableAllIdx/.sys/primary_index_stats` WHERE EntityName IN ("idx_bloom", "idx_ngram", "idx_cms", "idx_minmax_val") GROUP BY EntityName);
         EXPECTED: [[4u;]]
     )";
     Y_UNIT_TEST(AllScalarColumnShardIndexesOnInsert) {
@@ -2335,7 +2335,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             CompareYson(result, R"([[20000u;]])");
         }
 
-        YDB_LOG_VERIFY(updatesCount + 6 ==
+        YDB_LOG_VERIFY(updatesCount + 3 ==
             (ui64)csController->GetActualizationRefreshSchemeCount().Val(),
             {"updates", updatesCount},
             {"count", csController->GetActualizationRefreshSchemeCount().Val()});

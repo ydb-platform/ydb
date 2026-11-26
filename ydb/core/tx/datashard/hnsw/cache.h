@@ -46,6 +46,7 @@ struct TEvHnswCache {
         EvGraphAnnouncement,
         EvStatusRequest,
         EvStatusResponse,
+        EvCancelAcquire,
         EvEnd,
     };
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_HNSW_CACHE));
@@ -78,6 +79,13 @@ struct TEvHnswCache {
         std::shared_ptr<THnswIndex> Graph;
         std::shared_ptr<const THnswJournalSnapshot> Journal;
         TString Error;
+    };
+    struct TEvCancelAcquire : NActors::TEventLocal<TEvCancelAcquire, EvCancelAcquire> {
+        TEvCancelAcquire(TString key, ui64 requestId)
+            : Key(std::move(key)), RequestId(requestId)
+        {}
+        TString Key;
+        ui64 RequestId;
     };
     struct TEvForget : NActors::TEventLocal<TEvForget, EvForget> {
         explicit TEvForget(TString key) : Key(std::move(key)) {}

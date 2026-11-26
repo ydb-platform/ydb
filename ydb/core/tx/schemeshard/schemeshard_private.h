@@ -69,6 +69,7 @@ namespace TEvPrivate {
         EvImportKesusResult,
         EvHnswReplicaStatus,
         EvProgressHnswIndexBuild,
+        EvCleanupHnswReplicaFailures,
         EvEnd
     };
 
@@ -121,6 +122,9 @@ namespace TEvPrivate {
         NKikimrHnsw::TReplicaProbeResult Record;
         bool IndexBuild = false;
     };
+
+    struct TEvCleanupHnswReplicaFailures
+        : TEventLocal<TEvCleanupHnswReplicaFailures, EvCleanupHnswReplicaFailures> {};
 
     struct TEvProgressHnswIndexBuild : TEventLocal<TEvProgressHnswIndexBuild, EvProgressHnswIndexBuild> {
         explicit TEvProgressHnswIndexBuild(ui64 buildId) : BuildId(buildId) {}

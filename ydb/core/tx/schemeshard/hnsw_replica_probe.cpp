@@ -45,7 +45,9 @@ public:
                 && (Config.HasFollowerCount() || Config.HasCrossDataCenterFollowerCount()
                     || Config.HasAllowFollowerPromotion())) {
             auto* group = Config.AddFollowerGroups();
-            group->SetAllowLeaderPromotion(Config.GetAllowFollowerPromotion());
+            if (Config.HasAllowFollowerPromotion()) {
+                group->SetAllowLeaderPromotion(Config.GetAllowFollowerPromotion());
+            }
             group->SetAllowClientRead(true);
             if (Config.HasCrossDataCenterFollowerCount()) {
                 group->SetFollowerCount(Config.GetCrossDataCenterFollowerCount());

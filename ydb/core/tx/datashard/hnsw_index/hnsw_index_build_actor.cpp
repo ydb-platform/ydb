@@ -243,7 +243,7 @@ namespace NKikimr::NDataShard {
                 DeferHnswIndexBuild(result->LocalTid, TDuration::Zero(), result->IndexId);
                 ScheduleHnswRebuild(result->LocalTid, result->IndexId);
             } else {
-                DisableHnswIndexBuild(result->LocalTid, result->IndexId);
+                DisableHnswIndexBuild(result->LocalTid, result->IndexId, /* belowMinRows */ true);
             }
             return;
         }

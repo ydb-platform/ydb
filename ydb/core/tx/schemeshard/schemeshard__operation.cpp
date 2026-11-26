@@ -1543,11 +1543,7 @@ void TOperation::DoNotify(TSchemeShard* ss, TSideEffects& sideEffects, const TAc
     Y_ABORT_UNLESS(IsReadyToNotify());
 
     for (auto& subscriber: Subscribers) {
-        THolder<TEvSchemeShard::TEvNotifyTxCompletionResult> msg = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletionResult>(ui64(TxId));
-        if (const auto it = ss->HnswReplicaFailures.find(ui64(TxId)); it != ss->HnswReplicaFailures.end()) {
-            msg->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
-            msg->Record.SetError(it->second);
-        }
+        THolder<TEvSchemeShard::TEvNotifyTxCompletionResult> msg(ss->MakeNotifyTxCompletionResult(ui64(TxId)));
         YDB_LOG_DEBUG_CTX(ctx, "TOperation DoNotify: send TEvNotifyTxCompletionResult",
             {"actorId", subscriber},
             {"message", msg->Record.ShortDebugString()},

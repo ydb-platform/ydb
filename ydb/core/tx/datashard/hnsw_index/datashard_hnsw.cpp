@@ -2,6 +2,7 @@
 #include "hnsw_index_build_actor.h"
 #include <ydb/core/tx/datashard/build_index/kmeans_helper.h>
 
+#include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
 
 namespace NKikimr::NDataShard {
@@ -437,6 +438,7 @@ namespace NKikimr::NDataShard {
             return;
         }
         if (changedThreshold) {
+            entry->BelowMinRows = false;
             entry->NextScanAttemptAt = TInstant::Zero();
         }
         entry->VectorColumnTag = vectorColumnTag;
@@ -514,6 +516,7 @@ namespace NKikimr::NDataShard {
         }
         HnswBuildQueue.erase(HnswBuildQueue.begin());
         entry.Rebuilds += bool(entry.Index);
+        entry.BelowMinRows = false;
         entry.Building = true;
         entry.BuildVersion = baseVersion;
         entry.BuildReadPin = entry.Changes->PinReadVersion(baseVersion);
@@ -571,12 +574,33 @@ namespace NKikimr::NDataShard {
         if (table == HnswIndexCache.end()) {
             return;
         }
+        std::optional<bool> replicasChanged;
+        const auto hasReplicaChange = [&] {
+            if (!replicasChanged) {
+                NKikimrSchemeOp::TTableDescription oldDescription, newDescription;
+                before.GetSchema(oldDescription);
+                after.GetSchema(newDescription);
+                const auto& oldConfig = oldDescription.GetPartitionConfig();
+                const auto& newConfig = newDescription.GetPartitionConfig();
+                const auto& oldGroups = oldConfig.GetFollowerGroups();
+                const auto& newGroups = newConfig.GetFollowerGroups();
+                replicasChanged = oldConfig.GetFollowerCount() != newConfig.GetFollowerCount()
+                    || oldConfig.GetCrossDataCenterFollowerCount() != newConfig.GetCrossDataCenterFollowerCount()
+                    || oldConfig.GetAllowFollowerPromotion() != newConfig.GetAllowFollowerPromotion()
+                    || !std::equal(oldGroups.begin(), oldGroups.end(), newGroups.begin(), newGroups.end(),
+                        [](const auto& lhs, const auto& rhs) {
+                            return lhs.SerializeAsString() == rhs.SerializeAsString();
+                        });
+            }
+            return *replicasChanged;
+        };
         for (auto it = table->second.begin(); it != table->second.end();) {
             const auto* oldIndex = before.HnswIndexes.FindPtr(it->first);
             const auto* newIndex = after.HnswIndexes.FindPtr(it->first);
             bool unchanged = oldIndex && newIndex
                 && oldIndex->VectorColumnTag == newIndex->VectorColumnTag
-                && oldIndex->SchemaVersion == newIndex->SchemaVersion
+                && (oldIndex->SchemaVersion == newIndex->SchemaVersion
+                    || (it->second.Index && !it->second.Building && hasReplicaChange()))
                 && AreHnswIndexSettingsCompatible(oldIndex->Settings, newIndex->Settings)
                 && GetHnswMinRows(oldIndex->Settings) == GetHnswMinRows(newIndex->Settings)
                 && GetHnswDeltaRows(oldIndex->Settings) == GetHnswDeltaRows(newIndex->Settings);
@@ -588,6 +612,9 @@ namespace NKikimr::NDataShard {
                     && oldColumn->NotNull == newColumn->NotNull;
             }
             if (unchanged) {
+                // The replica ALTER advances the index schema version. The
+                // compatible graph still stores the same keys and embeddings.
+                it->second.IndexSchemaVersion = newIndex->SchemaVersion;
                 ++it;
             } else {
                 InvalidateHnswIndex(before.LocalTid, it->first);
@@ -609,6 +636,7 @@ namespace NKikimr::NDataShard {
             Send(entry.BuildActor, new TEvents::TEvPoison()); entry.BuildActor = {};
         }
         entry.Building = false;
+        entry.BelowMinRows = false;
         entry.BuildReadPin.reset();
         entry.SnapshotReadPins.clear();
         entry.OpenTransactionsTracked = false;
@@ -637,6 +665,13 @@ namespace NKikimr::NDataShard {
         entry.FollowerNotRequired = false;
         entry.FollowerGraph.reset();
         entry.FollowerJournal.reset();
+        if (entry.FollowerSnapshot.HasRequestId() && TlsActivationContext) {
+            for (const auto* key : {&entry.FollowerSnapshot.GetGraphKey(), &entry.FollowerSnapshot.GetJournalKey()}) {
+                if (!key->empty()) {
+                    Send(MakeHnswCacheId(), new TEvHnswCache::TEvCancelAcquire(*key, entry.BuildToken));
+                }
+            }
+        }
         entry.FollowerSnapshot.Clear();
         entry.FollowerChangeCounter.reset();
         entry.FollowerReadVersion = TRowVersion::Min();
@@ -660,7 +695,9 @@ namespace NKikimr::NDataShard {
     void TDataShard::EvictHnswIndexesToLimit() {
         ForEachHnswIndexEntry([&](ui32 localTid, const TPathId& indexId, auto& entry) {
             const ui64 bytes = HnswCacheMemoryTracker->RetireIfOverLimit(entry.MemoryOwner);
-            if (!bytes) {
+            const bool retiringGraph = (entry.Index && entry.Index->IsGraphRetiring())
+                || (entry.FollowerGraph && entry.FollowerGraph->IsGraphRetiring());
+            if (!bytes && !retiringGraph) {
                 return;
             }
             InvalidateHnswIndex(localTid, indexId);
@@ -914,16 +951,24 @@ namespace NKikimr::NDataShard {
                 entry.Changes->AdvanceRetentionFloor(HasFollowers()
                     ? Min(floor, SnapshotManager.GetFollowerReadEdge().first)
                     : floor);
+            } else if (!entry.Building) {
+                entry.Changes->AdvanceRetentionFloor(entry.FollowerReadVersion);
             }
-            entry.Changes->Set(std::move(key), change.Version, std::move(change.Vector), std::move(change.MemoryReservation));
+            entry.Changes->Set(std::move(key), change.Version, std::move(change.Vector),
+                std::move(change.MemoryReservation), change.RedoStep);
         }
         if (entry.NextScanAttemptAt == TInstant::Max()) {
+            entry.BelowMinRows = false;
             entry.NextScanAttemptAt = TInstant::Zero();
             if (!entry.Index) {
                 entry.InitialBuildAttemptsLeft = 30;
             }
         }
-        ScheduleHnswRebuild(localTid, indexId);
+        if (IsFollower()) {
+            ScheduleHnswFollowerSync();
+        } else {
+            ScheduleHnswRebuild(localTid, indexId);
+        }
     }
 
     void TDataShard::UpdateHnswIndex(ui32 localTid, NTable::ERowOp rowOp,

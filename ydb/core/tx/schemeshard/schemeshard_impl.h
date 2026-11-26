@@ -1630,7 +1630,17 @@ public:
     void Handle(NReplication::TEvController::TEvAlterReplicationResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NReplication::TEvController::TEvDropReplicationResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
-    THashMap<ui64, TString> HnswReplicaFailures;
+    struct THnswReplicaFailure {
+        TString Error;
+        TInstant ExpiresAt;
+    };
+    THashMap<ui64, THnswReplicaFailure> HnswReplicaFailures;
+    bool HnswReplicaFailureCleanupScheduled = false;
+    struct TTxCleanupHnswReplicaFailures;
+    void RecordHnswReplicaFailure(ui64 txId, TString error, NIceDb::TNiceDb& db, const TActorContext& ctx);
+    TEvSchemeShard::TEvNotifyTxCompletionResult* MakeNotifyTxCompletionResult(ui64 txId) const;
+    void ScheduleHnswReplicaFailureCleanup(const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCleanupHnswReplicaFailures::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvHnswReplicaStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvProgressHnswIndexBuild::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSchemaChanged::TPtr& ev, const TActorContext& ctx);

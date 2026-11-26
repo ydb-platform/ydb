@@ -165,12 +165,12 @@ namespace NKikimr::NDataShard {
     }
 
     void THnswIndexChanges::Set(TString key, TRowVersion version,
-                                std::optional<TString> vector, std::shared_ptr<void> reservation) {
+                                std::optional<TString> vector, std::shared_ptr<void> reservation, ui32 redoStep) {
         auto& history = Rows[key];
         const auto before = history.empty() ? std::optional<TRowVersion>{} : history.back().Version;
         auto it = std::lower_bound(history.begin(), history.end(), version,
                                    [](const TVersion& item, TRowVersion value) { return item.Version < value; });
-        TVersion item{version, std::move(vector), std::move(reservation)};
+        TVersion item{version, std::move(vector), std::move(reservation), redoStep};
         const size_t bytes = EstimateBytes(key, item.Vector ? item.Vector->size() : 0);
         if (it != history.end() && it->Version == version) {
             EstimatedBytes -= EstimateBytes(key, it->Vector ? it->Vector->size() : 0);
@@ -707,6 +707,20 @@ namespace NKikimr::NDataShard {
 
     size_t THnswIndex::GraphUseCount() const {
         return Impl->Graph.use_count();
+    }
+
+    bool THnswIndex::RetireGraphIfOverLimit() const {
+        const auto& graph = *Impl->Graph;
+        return graph.MemoryTracker && graph.MemoryTracker->RetireIfOverLimit(graph.MemoryOwner);
+    }
+
+    bool THnswIndex::IsGraphRetiring() const {
+        const auto& graph = *Impl->Graph;
+        return graph.MemoryTracker && graph.MemoryTracker->IsRetiring(graph.MemoryOwner);
+    }
+
+    bool THnswIndex::CanAdmitSearch(size_t k, ui32 efSearch) const {
+        return bool(Impl->Graph->AcquireSearchMemory(Impl->EstimatedSearchAuxMemoryBytes(k, efSearch)));
     }
 
     void THnswIndex::SetGraphReservation(std::shared_ptr<void> reservation,

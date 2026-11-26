@@ -8800,6 +8800,24 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.DestinationTracker->GetUsed(), charged);
     }
 
+    Y_UNIT_TEST(HnswTransferredGraphRetiresWhileBorrowed) {
+        THnswTransferFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        fixture.Start(fixture.Destination);
+        auto result = fixture.Wait(fixture.Destination);
+        UNIT_ASSERT_C(result->Get()->Graph, result->Get()->Error);
+        auto borrowed = std::move(result->Get()->Graph);
+        UNIT_ASSERT(!borrowed->IsGraphRetiring());
+
+        runtime.Send(new IEventHandle(fixture.Cache, fixture.Destination, new NMemory::TEvConsumerLimit(0)), 1);
+        runtime.WaitFor("borrowed HNSW graph to retire", [&] { return borrowed->IsGraphRetiring(); });
+        UNIT_ASSERT(!borrowed->CanAdmitSearch());
+        borrowed.reset();
+        runtime.WaitFor("retired HNSW graph memory to be released", [&] {
+            return fixture.DestinationTracker->GetUsed() == 0;
+        });
+    }
+
     Y_UNIT_TEST(HnswTransferRestoresJournalWithPrivateDestinationReservation) {
         THnswTransferFixture fixture;
         auto& runtime = *fixture.Helper.Server->GetRuntime();
@@ -9333,6 +9351,45 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT(!old->CanRead(oldVersion));
         fixture.WarmReplica();
         fixture.CheckPrepared(1);
+    }
+
+    Y_UNIT_TEST(HnswFollowerInvalidatesGraphOnUnsafeTruncate) {
+        THnswReplicaFixture fixture;
+        fixture.WarmReplica();
+        auto old = fixture.ReplicaIndex();
+        auto* follower = fixture.Follower();
+        const auto version = follower->GetSnapshotManager().GetFollowerReadEdge().first;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+
+        ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, R"(
+            PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
+            TRUNCATE TABLE `/Root/hnsw-lifecycle` WITH (unsafe = true);
+        )");
+
+        for (ui32 attempt = 0; attempt < 20 && old->CanRead(version); ++attempt) {
+            fixture.Follower();
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT(!old->CanRead(version));
+        const auto result = fixture.Helper.SendRead("hnsw-lifecycle", fixture.Request().release());
+        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 0u);
+    }
+
+    Y_UNIT_TEST(HnswFollowerKeepsGraphAfterLockOnlyCommit) {
+        THnswReplicaFixture fixture;
+        fixture.WarmReplica();
+        auto graph = fixture.ReplicaIndex();
+        auto* follower = fixture.Follower();
+        const auto version = follower->GetSnapshotManager().GetFollowerReadEdge().first;
+        const auto localTid = follower->GetUserTables().begin()->second->LocalTid;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        runtime.RunCall([&] {
+            // A lock-only transaction produces commit redo without a pending row update.
+            follower->OnRedoCommit(localTid, Max<ui64>() - 1, version);
+            return true;
+        });
+        UNIT_ASSERT(graph->CanRead(version));
+        UNIT_ASSERT(fixture.ReplicaIndex()->SharesGraphWith(*graph));
     }
 
     Y_UNIT_TEST(HnswFollowerEmptyPartitionResumesBootstrapAfterGrowth) {

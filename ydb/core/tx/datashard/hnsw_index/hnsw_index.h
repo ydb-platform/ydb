@@ -99,11 +99,12 @@ namespace NKikimr::NDataShard {
             TRowVersion Version;
             std::optional<TString> Vector;
             std::shared_ptr<void> MemoryReservation;
+            ui32 RedoStep = 0;
         };
         using THistory = std::vector<TVersion>;
 
         void Set(TString key, TRowVersion version, std::optional<TString> vector,
-                 std::shared_ptr<void> reservation = {});
+                 std::shared_ptr<void> reservation = {}, ui32 redoStep = 0);
         static const TVersion* Find(const THistory& history, TRowVersion version, TRowVersion base);
         const TVersion* Find(TStringBuf key, TRowVersion version, TRowVersion base) const;
         size_t CountAfter(TRowVersion base) const;
@@ -181,6 +182,9 @@ namespace NKikimr::NDataShard {
         bool HasGraphReservation() const;
         void SetGraphMemoryTracker(std::shared_ptr<THnswCacheMemoryTracker> tracker, ui64 owner);
         size_t GraphUseCount() const;
+        bool RetireGraphIfOverLimit() const;
+        bool IsGraphRetiring() const;
+        bool CanAdmitSearch(size_t k = 1, ui32 efSearch = 15) const;
         void SetGraphReservation(std::shared_ptr<void> reservation,
             std::shared_ptr<THnswCacheMemoryTracker> tracker = {}, bool deferDeletion = false);
 

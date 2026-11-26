@@ -3963,8 +3963,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (!failures.IsReady())
                     return false;
                 while (!failures.EndOfSet()) {
-                    Self->HnswReplicaFailures[failures.GetValue<Schema::HnswReplicaFailures::TxId>()] =
-                        failures.GetValue<Schema::HnswReplicaFailures::Error>();
+                    Self->HnswReplicaFailures[failures.GetValue<Schema::HnswReplicaFailures::TxId>()] = {
+                        failures.GetValue<Schema::HnswReplicaFailures::Error>(),
+                        TInstant::MicroSeconds(failures.GetValueOrDefault<Schema::HnswReplicaFailures::ExpiresAt>(0)),
+                    };
                     if (!failures.Next())
                         return false;
                 }
@@ -4002,6 +4004,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 txState.NeedUpdateObject = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedUpdateObject>(false);
                 txState.NeedSyncHive = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedSyncHive>(false);
                 txState.HnswWaitRequired = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::HnswWaitRequired>(false);
+                txState.HnswReplicaSettingsRequested = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::HnswReplicaSettingsRequested>(false);
                 txState.HnswSchemaVersion = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::HnswSchemaVersion>(0);
                 txState.HnswWaitStartedAt = TInstant::MicroSeconds(
                     txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::HnswWaitStartedAt>(0));

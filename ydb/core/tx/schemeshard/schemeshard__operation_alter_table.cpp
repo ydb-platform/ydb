@@ -369,13 +369,15 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     return alterData;
 }
 
-void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr table, const TBindingsRoomsChanges& bindingChanges, TOperationContext& context) {
+void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr table,
+        const TBindingsRoomsChanges& bindingChanges, bool checkHnswReplicas, TOperationContext& context) {
 
     path->LastTxId = opId.GetTxId();
     path->PathState = TPathElement::EPathState::EPathStateAlter;
 
     TTxState& txState = context.SS->CreateTx(opId, TTxState::TxAlterTable, path->PathId);
     txState.State = TTxState::CreateParts;
+    txState.HnswReplicaSettingsRequested = checkHnswReplicas;
 
     NIceDb::TNiceDb db(context.GetDB());
 
@@ -582,7 +584,8 @@ public:
             for (const auto& group : config.GetFollowerGroups()) {
                 hasFollowers |= group.GetFollowerCount() != 0;
             }
-            txState->HnswWaitRequired = hasFollowers && previousReplicas != SerializeReplicaSettings(config);
+            txState->HnswWaitRequired = hasFollowers && (txState->HnswReplicaSettingsRequested
+                || previousReplicas != SerializeReplicaSettings(config));
             if (txState->HnswWaitRequired) {
                 txState->HnswSchemaVersion = table->AlterVersion;
                 txState->HnswWaitStartedAt = context.Ctx.Now();
@@ -667,16 +670,31 @@ void ReleaseHnswAlterSchema(TOperationId operationId, TOperationContext& context
         return;
 
     auto path = context.SS->PathsById.at(state->TargetPathId);
-    if (path->LastTxId == operationId.GetTxId()
-            && path->PathState == TPathElement::EPathState::EPathStateAlter) {
-        path->PathState = TPathElement::EPathState::EPathStateNoChanges;
-        context.SS->ClearDescribePathCaches(path);
-    }
-    // ReleasePathState defers release until the entire operation finishes.
-    // This phase observes the table without retaining schema/shard ownership.
     auto operation = context.SS->Operations.at(operationId.GetTxId());
-    operation->ReleasePathAtDone.erase(path->PathId);
+    const auto releasePath = [&](const TPathElement::TPtr& target) {
+        if (target->LastTxId == operationId.GetTxId()
+                && target->PathState == TPathElement::EPathState::EPathStateAlter) {
+            target->PathState = TPathElement::EPathState::EPathStateNoChanges;
+            context.SS->ClearDescribePathCaches(target);
+        }
+        operation->ReleasePathAtDone.erase(target->PathId);
+    };
+    releasePath(path);
+
+    // The sibling index ALTER may schedule its own path release. Record the
+    // early release so completing or restoring that part cannot reacquire it.
     NIceDb::TNiceDb db(context.GetDB());
+    for (ui32 partId = 0; partId < operation->Parts.size(); ++partId) {
+        const TOperationId part(operationId.GetTxId(), partId);
+        auto* index = context.SS->FindTx(part);
+        if (index && index->TxType == TTxState::TxAlterTableIndex && index->State == TTxState::Done
+                && index->TargetPathId == path->ParentPathId && !index->HnswWaitRequired) {
+            index->HnswWaitRequired = true;
+            db.Table<Schema::TxInFlightV2>().Key(part.GetTxId(), part.GetSubTxId()).Update(
+                NIceDb::TUpdate<Schema::TxInFlightV2::HnswWaitRequired>(true));
+            releasePath(context.SS->PathsById.at(index->TargetPathId));
+        }
+    }
     for (const auto& shard : state->Shards) {
         auto info = context.SS->ShardInfos.find(shard.Idx);
         if (info != context.SS->ShardInfos.end() && info->second.CurrentTxId == operationId.GetTxId()) {
@@ -700,10 +718,7 @@ public:
     bool Finish(TOperationContext& context, TString error = {}) {
         NIceDb::TNiceDb db(context.GetDB());
         if (!error.empty()) {
-            const ui64 txId = ui64(OperationId.GetTxId());
-            context.SS->HnswReplicaFailures[txId] = error;
-            db.Table<Schema::HnswReplicaFailures>().Key(txId).Update(
-                NIceDb::TUpdate<Schema::HnswReplicaFailures::Error>(error));
+            context.SS->RecordHnswReplicaFailure(ui64(OperationId.GetTxId()), std::move(error), db, context.Ctx);
         }
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         return true;
@@ -1122,7 +1137,11 @@ public:
         }
 
         table->PrepareAlter(alterData);
-        PrepareChanges(OperationId, path.Base(), table, bindingChanges, context);
+        const auto& requested = alter.GetPartitionConfig();
+        const bool checkHnswReplicas = path.Base()->Name == NTableIndex::NKMeans::PostingTable
+            && (requested.HasFollowerCount() || requested.HasCrossDataCenterFollowerCount()
+                || requested.HasAllowFollowerPromotion() || requested.FollowerGroupsSize());
+        PrepareChanges(OperationId, path.Base(), table, bindingChanges, checkHnswReplicas, context);
 
         SetState(NextState());
         return result;

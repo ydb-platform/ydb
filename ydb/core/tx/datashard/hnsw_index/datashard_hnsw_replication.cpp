@@ -146,26 +146,28 @@ public:
                         || entry.FollowerNotRequired) {
                     continue;
                 }
-                if (entry.Building && entry.Changes->Valid && ctx.Now() < entry.FollowerRequestAt + TDuration::Minutes(5)) {
-                    Self->TryInstallFollowerHnswIndex(localTid, indexId);
-                    continue;
+                if (entry.Building && entry.Changes->Valid) {
+                    const ui32 step = Self->Executor()->Step();
+                    if (entry.FollowerSnapshot.HasRequestId() && step > entry.FollowerReplayStep) {
+                        entry.FollowerReplayStep = step;
+                        entry.FollowerProgressAt = ctx.Now();
+                    }
+                    // The cache times downloads from the most recent chunk.
+                    const bool downloading = entry.FollowerSnapshot.HasRequestId()
+                        && (!entry.FollowerGraph || !entry.FollowerJournal);
+                    if (downloading || ctx.Now() < entry.FollowerProgressAt + TDuration::Minutes(5)) {
+                        Self->TryInstallFollowerHnswIndex(localTid, indexId);
+                        continue;
+                    }
                 }
                 if (ctx.Now() < entry.NextScanAttemptAt)
                     continue;
-                if (!entry.Index || !entry.FollowerJournalTracking || !entry.Changes->Valid) {
-                    const auto desiredBase = entry.FollowerDesiredBase;
-                    Self->InvalidateHnswIndex(localTid, indexId);
-                    entry.FollowerDesiredBase = desiredBase;
-                    Self->ResetHnswIndexChanges(entry);
-                    entry.FollowerReadVersion = TRowVersion::Min();
-                } else {
-                    // Keep serving the current generation while its replacement
-                    // downloads. The same private journal covers both bases.
-                    entry.FollowerGraph.reset();
-                    entry.FollowerJournal.reset();
-                    entry.FollowerSnapshot.Clear();
-                    entry.FollowerBootstrapChanges = {};
-                }
+                // Covered redo may be omitted once the manifest arrives. Reads
+                // use the exact path until the new graph and journal are installed.
+                const auto desiredBase = entry.FollowerDesiredBase;
+                Self->InvalidateHnswIndex(localTid, indexId);
+                entry.FollowerDesiredBase = desiredBase;
+                Self->ResetHnswIndexChanges(entry);
                 entry.IndexSchemaVersion = metadata.SchemaVersion;
                 entry.Settings = metadata.Settings;
                 entry.VectorColumnTag = metadata.VectorColumnTag;
@@ -174,7 +176,8 @@ public:
                 entry.Building = true;
                 entry.FollowerJournalTracking = true;
                 entry.FollowerChangeCounter = txc.DB.Head(localTid);
-                entry.FollowerRequestAt = ctx.Now();
+                entry.FollowerProgressAt = ctx.Now();
+                entry.FollowerReplayStep = Self->Executor()->Step();
                 Self->TrackHnswOpenTransactions(localTid, txc.DB, indexId);
                 if (!entry.Changes->Valid)
                     continue;
@@ -285,7 +288,7 @@ public:
         result.SetCheckpointStep(Self->Executor()->CreateFollowerSnapshotCheckpoint());
         result.SetSourceNodeId(Self->SelfId().NodeId());
         if (!entry.Index) {
-            if (!entry.Building && entry.NextScanAttemptAt == TInstant::Max())
+            if (!entry.Building && entry.BelowMinRows)
                 result.SetNotRequired(true);
             else
                 result.SetError("Leader HNSW graph is not ready");
@@ -418,7 +421,7 @@ void TDataShard::Handle(TEvHnswCache::TEvSnapshotResponse::TPtr& ev, const TActo
     }
 }
 
-void TDataShard::Handle(TEvHnswCache::TEvAcquired::TPtr& ev, const TActorContext&) {
+void TDataShard::Handle(TEvHnswCache::TEvAcquired::TPtr& ev, const TActorContext& ctx) {
     if (!IsFollower())
         return;
     const auto& result = *ev->Get();
@@ -439,6 +442,7 @@ void TDataShard::Handle(TEvHnswCache::TEvAcquired::TPtr& ev, const TActorContext
             entry.FollowerJournal = result.Journal;
         else
             return;
+        entry.FollowerProgressAt = ctx.Now();
         TryInstallFollowerHnswIndex(localTid, indexId);
     });
 }
@@ -472,11 +476,13 @@ void TDataShard::TryInstallFollowerHnswIndex(ui32 localTid, TPathId indexId) {
             DeferHnswIndexBuild(localTid, TDuration::Seconds(1), indexId);
             return;
         }
-        // Redo has already reached the checkpoint. An equal version in our
-        // journal includes at least that state and may contain a later replay.
+        // Multiple immediate writes can have the same MVCC version. Only
+        // redo after the checkpoint supersedes a value exported by the leader.
         const auto history = entry.Changes->Rows.find(change.Key);
         if (history != entry.Changes->Rows.end() && AnyOf(history->second,
-                [&](const auto& known) { return known.Version == change.Version; })) {
+                [&](const auto& known) {
+                    return known.Version == change.Version && known.RedoStep > snapshot.GetCheckpointStep();
+                })) {
             continue;
         }
         auto reservation = TryReserveHnswCacheMemory(
@@ -486,10 +492,11 @@ void TDataShard::TryInstallFollowerHnswIndex(ui32 localTid, TPathId indexId) {
             DeferHnswIndexBuild(localTid, TDuration::Seconds(1), indexId);
             return;
         }
-        entry.Changes->Set(change.Key, change.Version, change.Vector, std::move(reservation));
+        entry.Changes->Set(change.Key, change.Version, change.Vector, std::move(reservation), snapshot.GetCheckpointStep());
     }
     // Redo since the request cannot reconstruct history dropped by the leader
     // before it exported this journal.
+    entry.SnapshotReadPins.clear();
     entry.Changes->AdvanceRetentionFloor(entry.FollowerJournal->LowerReadVersion);
     auto graph = entry.FollowerGraph->CreateView(base, entry.Changes, base);
     entry.FollowerGraph.reset();
@@ -571,7 +578,7 @@ public:
                 && entry.FollowerLeaderGeneration == result.GetLeaderGeneration()
                 && entry.FollowerSnapshot.GetLeaderGeneration() == result.GetLeaderGeneration()
                 && Self->Executor()->Step() >= entry.FollowerSnapshot.GetCheckpointStep()
-            : !entry.Index && !entry.Building && entry.NextScanAttemptAt == TInstant::Max();
+            : !entry.Index && !entry.Building && entry.BelowMinRows;
         result.SetNotRequired(notRequired);
         result.SetReady(notRequired);
         if (!notRequired) {
@@ -579,8 +586,7 @@ public:
                     metadata->Settings, false, edge, indexId)) {
                 // Loading a graph is insufficient if its first search cannot
                 // obtain workspace under the current node-wide memory grant.
-                const auto workspace = Self->TryReserveHnswCacheMemory(graph->EstimatedSearchMemoryBytes());
-                result.SetReady(bool(workspace));
+                result.SetReady(graph->CanAdmitSearch());
             }
         }
         result.SetGraphKey(entry.GraphKey);
@@ -692,7 +698,7 @@ void TDataShard::OnRedoUpdate(ui32 localTid, NTable::ERowOp op, TArrayRef<const 
             InvalidateHnswIndex(localTid, indexId);
             return;
         }
-        THnswIndexChanges::TVersion change{version, std::move(vector), std::move(reservation)};
+        THnswIndexChanges::TVersion change{version, std::move(vector), std::move(reservation), Executor()->Step()};
         if (txId)
             entry.Pending[txId][std::move(serialized)] = std::move(change);
         else if (TrackFollowerHnswCommit(localTid, indexId, version))
@@ -719,8 +725,11 @@ void TDataShard::OnRedoCommit(ui32 localTid, ui64 txId, TRowVersion version) {
             return;
         }
         auto pending = entry.Pending.find(txId);
-        if (entry.UntrackedTransactions.erase(txId) || pending == entry.Pending.end()) {
+        if (entry.UntrackedTransactions.erase(txId)) {
             InvalidateHnswIndex(localTid, indexId);
+            return;
+        }
+        if (pending == entry.Pending.end()) {
             return;
         }
         auto changes = std::move(pending->second);
@@ -730,6 +739,7 @@ void TDataShard::OnRedoCommit(ui32 localTid, ui64 txId, TRowVersion version) {
             return;
         for (auto& [key, change] : changes) {
             change.Version = version;
+            change.RedoStep = Executor()->Step();
             ApplyHnswIndexChange(localTid, key, std::move(change), indexId);
         }
     };

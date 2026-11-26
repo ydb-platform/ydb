@@ -1708,6 +1708,8 @@ public:
         return NKikimrServices::TActivity::TX_DATASHARD_ACTOR;
     }
 
+    static constexpr ui32 HnswIndexBuildResultEvent = TEvPrivate::EvHnswIndexBuildResult;
+
     TDataShard(const TActorId &tablet, TTabletStorageInfo *info);
     ~TDataShard();
 
@@ -2028,6 +2030,7 @@ public:
     void Handle(TEvHnswCache::TEvGraphAnnouncement::TPtr& ev, const TActorContext& ctx);
     NTable::IRedoObserver* GetFollowerRedoObserver() override;
     void OnFollowerPartsReplaced(ui32 localTid) override { InvalidateHnswTable(localTid); }
+    void OnTruncate(ui32 localTid) override { InvalidateHnswTable(localTid); }
     void OnLeaderUserAuxUpdate(TString update) override;
     void OnRedoUpdate(ui32 localTid, NTable::ERowOp op, TArrayRef<const TRawTypeValue> key,
         TArrayRef<const NTable::TUpdateOp> updates, TArrayRef<const NPageCollection::TMemGlob> annex,
@@ -2065,12 +2068,13 @@ public:
         }
     }
 
-    void DisableHnswIndexBuild(ui32 localTid, TPathId indexId = {}) {
+    void DisableHnswIndexBuild(ui32 localTid, TPathId indexId = {}, bool belowMinRows = false) {
         indexId = ResolveHnswIndexId(localTid, indexId);
         EraseIf(HnswBuildQueue, [&](const auto& queued) { return queued.first == localTid && queued.second == indexId; });
         if (auto* entry = FindHnswIndexEntry(localTid, indexId)) {
             entry->Building = false;
             entry->BuildReadPin.reset();
+            entry->BelowMinRows = belowMinRows;
             entry->NextScanAttemptAt = TInstant::Max();
             if (HnswCacheMemoryTracker) { HnswCacheMemoryTracker->ResetDemand(entry->MemoryOwner); }
         }
@@ -3308,6 +3312,7 @@ private:
         ui32 InitialBuildAttemptsLeft = 0;
         bool RebuildScheduled = false;
         bool Building = false;
+        bool BelowMinRows = false;
         TInstant NextScanAttemptAt;
         std::optional<NTable::TDatabase::TChangeCounter> FollowerChangeCounter;
         TRowVersion FollowerReadVersion = TRowVersion::Min();
@@ -3315,7 +3320,8 @@ private:
         std::shared_ptr<THnswIndex> FollowerGraph;
         std::shared_ptr<const THnswJournalSnapshot> FollowerJournal;
         TActorId FollowerPipe;
-        TInstant FollowerRequestAt;
+        TInstant FollowerProgressAt;
+        ui32 FollowerReplayStep = 0;
         THnswBootstrapChanges FollowerBootstrapChanges;
         TRowVersion FollowerDesiredBase = TRowVersion::Min();
         ui64 FollowerLeaderGeneration = 0;

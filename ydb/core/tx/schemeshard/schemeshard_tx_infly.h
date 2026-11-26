@@ -97,6 +97,7 @@ struct TTxState {
     bool NeedUpdateObject = false;
     bool NeedSyncHive = false;
     bool HnswWaitRequired = false;
+    bool HnswReplicaSettingsRequested = false;
     ui64 HnswSchemaVersion = 0;
     TInstant HnswWaitStartedAt;
     ui64 HnswProbeRound = 0;

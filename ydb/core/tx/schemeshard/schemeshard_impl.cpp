@@ -405,6 +405,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     ParentDomainLink.SendSync(ctx);
 
     ScheduleConditionalEraseRun(ctx);
+    ScheduleHnswReplicaFailureCleanup(ctx);
     ScheduleServerlessStorageBilling(ctx);
 
     Y_ABORT_UNLESS(CleanDroppedPathsDisabled);
@@ -3117,6 +3118,10 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
                 NIceDb::TUpdate<Schema::TxInFlightV2::NeedSyncHive>(txState.NeedSyncHive),
                 NIceDb::TUpdate<Schema::TxInFlightV2::LoadSplitLineage>(txState.LoadSplitLineage)
                 );
+    if (txState.HnswReplicaSettingsRequested) {
+        db.Table<Schema::TxInFlightV2>().Key(opId.GetTxId(), opId.GetSubTxId()).Update(
+            NIceDb::TUpdate<Schema::TxInFlightV2::HnswReplicaSettingsRequested>(true));
+    }
     if (txState.HnswWaitRequired) {
         db.Table<Schema::TxInFlightV2>().Key(opId.GetTxId(), opId.GetSubTxId()).Update(
             NIceDb::TUpdate<Schema::TxInFlightV2::HnswWaitRequired>(true),
@@ -6171,6 +6176,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvDataShard::TEvProposeTransactionResult, Handle);
         HFuncTraced(TEvPrivate::TEvHnswReplicaStatus, Handle);
+        HFuncTraced(TEvPrivate::TEvCleanupHnswReplicaFailures, Handle);
         HFuncTraced(TEvDataShard::TEvSchemaChanged, Handle);
         HFuncTraced(TEvDataShard::TEvStateChanged, Handle);
         HFuncTraced(TEvDataShard::TEvInitSplitMergeDestinationAck, Handle);

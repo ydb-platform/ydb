@@ -3763,9 +3763,6 @@ public:
                     Self->PersistBuildIndexState(db, buildInfo);
                     Self->PersistBuildIndexApplyTx(db, buildInfo);
                 } else {
-                    if (WaitForHnswReplicas(buildInfo, txc, ctx)) {
-                        break;
-                    }
                     ChangeState(BuildId, TIndexBuildInfo::EState::Unlocking);
                 }
                 Progress(BuildId);
@@ -3778,7 +3775,7 @@ public:
                 Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.UnlockTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
-            } else {
+            } else if (!WaitForHnswReplicas(buildInfo, txc, ctx)) {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Done);
                 Progress(BuildId);
             }

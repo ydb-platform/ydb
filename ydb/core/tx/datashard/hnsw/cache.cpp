@@ -66,6 +66,7 @@ class THnswCache : public TActorBootstrapped<THnswCache> {
         TActorId Owner;
         TMonotonic LastAccess;
         ui64 MemoryBytes = 0;
+        ui64 MemoryOwner = 0;
         std::shared_ptr<TTempFileHandle> File;
         std::shared_ptr<void> Reservation;
         std::shared_ptr<void> TransferReservation;
@@ -79,6 +80,11 @@ class THnswCache : public TActorBootstrapped<THnswCache> {
         bool IsJournal = false;
         bool Exporting = false;
         bool Loading = false;
+    };
+    struct TAdmission {
+        ui64 Owner = THnswCacheMemoryTracker::AllocateOwner();
+        ui64 RequestId = 0;
+        TMonotonic ExpiresAt;
     };
     using TEntries = THashMap<TString, TEntry>;
 
@@ -140,6 +146,12 @@ private:
 
     void Handle(TEvHnswCache::TEvUnregister::TPtr& ev) {
         Clients.erase(ev->Sender);
+        if (auto it = Admissions.find(ev->Sender); it != Admissions.end()) {
+            for (const auto& [_, admission] : it->second) {
+                Tracker->ResetDemand(admission.Owner);
+            }
+            Admissions.erase(it);
+        }
         for (auto it = Entries.begin(); it != Entries.end();) {
             if (it->second.Owner == ev->Sender) {
                 Erase(it++, "HNSW generation is no longer available");
@@ -174,7 +186,10 @@ private:
             // advertises them. Clients invalidate private views and forget the
             // publication if pressure persists; borrowed storage stays charged.
             for (auto it = Entries.begin(); it != Entries.end();) {
-                if (IsUnused(it->second)) {
+                const auto& graph = it->second.Graph;
+                const bool retireGraph = graph && !it->second.Owner
+                    && (graph->IsGraphRetiring() || graph->RetireGraphIfOverLimit());
+                if (retireGraph || IsUnused(it->second)) {
                     Erase(it++, "HNSW generation is no longer available");
                 } else {
                     ++it;
@@ -223,7 +238,7 @@ private:
             it->second.LastAccess = TActivationContext::Monotonic();
             return;
         }
-        auto metadata = TryReserveHnswMemory(Tracker, 256 + 2 * message.Key.size());
+        auto metadata = TryReserveHnswMemory(Tracker, 256 + 2 * message.Key.size(), 0, false);
         if (!metadata) {
             Counters->GetCounter("AdmissionErrors", true)->Inc();
             return;
@@ -252,6 +267,7 @@ private:
         auto response = MakeHolder<TEvHnswCache::TEvAcquired>();
         response->Key = request.Key;
         response->RequestId = request.RequestId;
+        ClearAdmission(ev->Sender, request.Key);
         auto it = Entries.find(request.Key);
         if (!Enabled()) {
             response->Error = "HNSW index support is disabled (EnableHnswIndex)";
@@ -313,8 +329,9 @@ private:
         if (entry.Waiters.size() >= MaxWaiters) {
             return false;
         }
-        auto reservation = TryReserveHnswMemory(Tracker, 256);
+        auto reservation = TryReserveHnswMemory(Tracker, 256, 0, false);
         if (!reservation) {
+            RequestAdmission(ev, 256);
             return false;
         }
         entry.Waiters.push_back({ev->Sender, ev->Get()->RequestId, std::move(reservation)});
@@ -322,6 +339,9 @@ private:
     }
 
     void Erase(TEntries::iterator it, const TString& error) {
+        if (it->second.MemoryOwner) {
+            Tracker->ResetDemand(it->second.MemoryOwner);
+        }
         Reply(it->second, it->first, error);
         for (auto& request : it->second.ChunkRequests) {
             ReplyChunk(request.Request, nullptr, error);
@@ -337,6 +357,41 @@ private:
             IEventHandle::FlagTrackDelivery, entry.TransferId);
     }
 
+    void ClearAdmission(TActorId client, const TString& key, ui64 requestId = 0) {
+        if (auto it = Admissions.find(client); it != Admissions.end()) {
+            auto request = it->second.find(key);
+            if (request != it->second.end() && (!requestId || request->second.RequestId == requestId)) {
+                Tracker->ResetDemand(request->second.Owner);
+                it->second.erase(request);
+                if (it->second.empty()) {
+                    Admissions.erase(it);
+                }
+            }
+        }
+    }
+
+    void RequestAdmission(const TEvHnswCache::TEvAcquire::TPtr& ev, ui64 bytes) {
+        auto& admission = Admissions[ev->Sender][ev->Get()->Key];
+        admission.RequestId = ev->Get()->RequestId;
+        admission.ExpiresAt = TActivationContext::Monotonic() + TDuration::Minutes(5);
+        Tracker->Request(bytes, admission.Owner);
+    }
+
+    void Handle(TEvHnswCache::TEvCancelAcquire::TPtr& ev) {
+        const auto& request = *ev->Get();
+        ClearAdmission(ev->Sender, request.Key, request.RequestId);
+        if (auto it = Entries.find(request.Key); it != Entries.end() && it->second.TransferId) {
+            auto& waiters = it->second.Waiters;
+            EraseIf(waiters, [&](const auto& waiter) {
+                return waiter.Actor == ev->Sender && waiter.RequestId == request.RequestId;
+            });
+            if (waiters.empty()) {
+                Erase(it, "HNSW transfer cancelled");
+                UpdateCounters();
+            }
+        }
+    }
+
     void StartAcquire(TEvHnswCache::TEvAcquire::TPtr& ev) {
         const auto& request = *ev->Get();
         TEntry entry;
@@ -345,10 +400,20 @@ private:
         entry.MemoryBytes = request.MemoryBytes;
         entry.Settings = request.Settings;
         entry.IsJournal = request.Journal;
-        entry.Metadata = TryReserveHnswMemory(Tracker, 256 + 2 * request.Key.size());
-        entry.Reservation = TryReserveHnswMemory(Tracker, entry.MemoryBytes);
-        entry.TransferReservation = TryReserveHnswMemory(Tracker, 2 * ChunkBytes + 8192);
+        entry.MemoryOwner = THnswCacheMemoryTracker::AllocateOwner();
+        const ui64 metadataBytes = 256 + 2 * request.Key.size();
+        constexpr ui64 transferBytes = 2 * ChunkBytes + 8192;
+        constexpr ui64 waiterBytes = 256;
+        const ui64 overhead = metadataBytes + transferBytes + waiterBytes;
+        if (entry.MemoryBytes <= Max<ui64>() - overhead) {
+            entry.Metadata = TryReserveHnswMemory(Tracker, metadataBytes, 0, false);
+            entry.Reservation = TryReserveHnswMemory(Tracker, entry.MemoryBytes, entry.MemoryOwner, false);
+            entry.TransferReservation = TryReserveHnswMemory(Tracker, transferBytes, 0, false);
+        }
         if (!entry.Metadata || !entry.Reservation || !entry.TransferReservation || !AddWaiter(entry, ev)) {
+            if (entry.MemoryBytes <= Max<ui64>() - overhead) {
+                RequestAdmission(ev, entry.MemoryBytes + overhead);
+            }
             auto response = MakeHolder<TEvHnswCache::TEvAcquired>();
             response->Key = request.Key;
             response->RequestId = request.RequestId;
@@ -409,7 +474,7 @@ private:
                     error = "Invalid HNSW transfer offset";
                 else {
                     const ui64 bytes = Min(ChunkBytes, size - request.GetOffset());
-                    response->BufferReservation = TryReserveHnswMemory(Tracker, 2 * bytes + 4096);
+                    response->BufferReservation = TryReserveHnswMemory(Tracker, 2 * bytes + 4096, 0, false);
                     if (!response->BufferReservation)
                         ythrow yexception() << "HNSW transfer memory admission pending";
                     TString data = TString::Uninitialized(bytes);
@@ -439,7 +504,7 @@ private:
         if (entry.File && !entry.Exporting && !entry.TransferId) {
             ReplyChunk(ev, &entry);
         } else if (entry.Graph || entry.Journal) {
-            auto reservation = TryReserveHnswMemory(Tracker, 512);
+            auto reservation = TryReserveHnswMemory(Tracker, 512, 0, false);
             if (!reservation || entry.ChunkRequests.size() >= MaxWaiters) {
                 ReplyChunk(ev, nullptr, "HNSW transfer queue admission pending");
                 return;
@@ -505,7 +570,7 @@ private:
         entry.Loading = true;
         StartWorker([replyTo = SelfId(), key = it->first, transferId = entry.TransferId,
                 file = entry.File, reservation = entry.Reservation, isJournal = entry.IsJournal,
-                settings = entry.Settings, budget = entry.MemoryBytes, tracker = Tracker] {
+                settings = entry.Settings, budget = entry.MemoryBytes, tracker = Tracker, owner = entry.MemoryOwner] {
             auto result = MakeHolder<TEvLoaded>();
             result->Key = key;
             result->TransferId = transferId;
@@ -517,8 +582,10 @@ private:
                     result->Journal = std::move(journal);
                 } else {
                     result->Graph = THnswIndex::LoadGraph(input, settings, budget, result->Error);
-                    if (result->Graph)
-                        result->Graph->SetGraphReservation(reservation, tracker, /*deferDeletion=*/true);
+                    if (result->Graph) {
+                        result->Graph->SetGraphReservation(reservation, {}, /*deferDeletion=*/true);
+                        result->Graph->SetGraphMemoryTracker(tracker, owner);
+                    }
                 }
                 if (result->Error.empty() && input.peek() != std::char_traits<char>::eof())
                     result->Error = "Trailing data in HNSW snapshot";
@@ -552,6 +619,7 @@ private:
         entry.Journal = std::move(result.Journal);
         entry.Reservation.reset();
         entry.TransferReservation.reset();
+        entry.File.reset();
         Reply(entry, it->first, result.Error);
         UpdateCounters();
     }
@@ -566,6 +634,20 @@ private:
 
     void HandleWakeup() {
         const auto now = TActivationContext::Monotonic();
+        for (auto client = Admissions.begin(); client != Admissions.end();) {
+            EraseNodesIf(client->second, [&](const auto& item) {
+                if (item.second.ExpiresAt > now) {
+                    return false;
+                }
+                Tracker->ResetDemand(item.second.Owner);
+                return true;
+            });
+            if (client->second.empty()) {
+                Admissions.erase(client++);
+            } else {
+                ++client;
+            }
+        }
         for (auto it = Entries.begin(); it != Entries.end();) {
             if (!Enabled() || (it->second.TransferId && now - it->second.LastAccess > TDuration::Minutes(5))
                     || (IsUnused(it->second)
@@ -595,6 +677,7 @@ private:
             hFunc(TEvHnswCache::TEvUnregister, Handle);
             hFunc(TEvHnswCache::TEvPublish, Handle);
             hFunc(TEvHnswCache::TEvAcquire, Handle);
+            hFunc(TEvHnswCache::TEvCancelAcquire, Handle);
             hFunc(TEvHnswCache::TEvForget, Handle);
             hFunc(TEvHnswCache::TEvChunkRequest, Handle);
             hFunc(TEvHnswCache::TEvChunkResponse, Handle);
@@ -614,6 +697,7 @@ private:
     ui64 NextExportId = 0;
     std::shared_ptr<THnswCacheMemoryTracker> Tracker = std::make_shared<THnswCacheMemoryTracker>(true);
     THashSet<TActorId> Clients;
+    THashMap<TActorId, THashMap<TString, TAdmission>> Admissions;
     TEntries Entries;
 };
 

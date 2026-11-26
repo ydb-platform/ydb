@@ -70,6 +70,19 @@ public:
     }
 };
 
+class TAlterIndexDone : public TDone {
+public:
+    explicit TAlterIndexDone(TOperationId id) : TDone(id) {}
+
+    bool ProgressState(TOperationContext& context) override {
+        if (context.SS->FindTx(OperationId)->HnswWaitRequired) {
+            context.OnComplete.DoneOperation(OperationId);
+            return true;
+        }
+        return TDone::ProgressState(context);
+    }
+};
+
 class TAlterTableIndex: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
@@ -89,7 +102,7 @@ class TAlterTableIndex: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return MakeHolder<TAlterIndexDone>(OperationId);
         default:
             return nullptr;
         }

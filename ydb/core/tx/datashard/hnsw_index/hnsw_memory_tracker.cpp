@@ -14,7 +14,9 @@ namespace NKikimr::NDataShard {
     void THnswCacheMemoryTracker::Request(ui64 bytes, ui64 owner) {
         std::lock_guard guard(Mutex);
         auto& account = Accounts[owner];
+        ExcessDemand -= account.GetExcessDemand();
         account.Demand = Max(account.Demand, bytes);
+        ExcessDemand += account.GetExcessDemand();
         Report();
     }
 
@@ -66,20 +68,29 @@ namespace NKikimr::NDataShard {
         return usage;
     }
 
-    bool THnswCacheMemoryTracker::TryAcquire(ui64 bytes, ui64 owner) {
+    bool THnswCacheMemoryTracker::TryAcquire(ui64 bytes, ui64 owner, bool requestOnFailure) {
         std::lock_guard guard(Mutex);
-        auto& account = Accounts[owner];
-        if (account.Retiring) {
+        if (const auto* account = Accounts.FindPtr(owner); account && account->Retiring) {
             return false;
         }
         if (!Limit || Used > Limit || bytes > Limit - Used) {
-            account.Demand = Max(account.Demand, SaturatingAdd(account.Used, bytes));
-            Report();
+            if (requestOnFailure) {
+                auto& account = Accounts[owner];
+                ExcessDemand -= account.GetExcessDemand();
+                account.Demand = Max(account.Demand, SaturatingAdd(account.Used, bytes));
+                ExcessDemand += account.GetExcessDemand();
+                Report();
+            }
             return false;
         }
-        account.Used += bytes;
-        Used += bytes;
-        Report();
+        if (bytes) {
+            auto& account = Accounts[owner];
+            ExcessDemand -= account.GetExcessDemand();
+            account.Used += bytes;
+            ExcessDemand += account.GetExcessDemand();
+            Used += bytes;
+            Report();
+        }
         return true;
     }
 
@@ -87,7 +98,9 @@ namespace NKikimr::NDataShard {
         std::lock_guard guard(Mutex);
         if (auto* account = Accounts.FindPtr(owner)) {
             const ui64 released = Min(bytes, account->Used);
+            ExcessDemand -= account->GetExcessDemand();
             account->Used -= released;
+            ExcessDemand += account->GetExcessDemand();
             Used -= released;
             if (account->Retiring) {
                 RetiringBytes -= released;
@@ -102,6 +115,7 @@ namespace NKikimr::NDataShard {
     void THnswCacheMemoryTracker::ResetDemand(ui64 owner) {
         std::lock_guard guard(Mutex);
         if (auto* account = Accounts.FindPtr(owner)) {
+            ExcessDemand -= account->GetExcessDemand();
             account->Demand = 0;
             if (!account->Used) {
                 Accounts.erase(owner);
@@ -150,12 +164,15 @@ namespace NKikimr::NDataShard {
         return b > Max<ui64>() - a ? Max<ui64>() : a + b;
     }
 
+    bool THnswCacheMemoryTracker::IsRetiring(ui64 owner) const {
+        std::lock_guard guard(Mutex);
+        const auto* account = Accounts.FindPtr(owner);
+        return account && account->Retiring;
+    }
+
     ui64 THnswCacheMemoryTracker::GetRequiredBytes() const {
-        ui64 demand = Used;
-        for (const auto& [_, account] : Accounts) {
-            demand = SaturatingAdd(demand, account.Demand > account.Used ? account.Demand - account.Used : 0);
-        }
-        return demand;
+        const auto demand = Used + ExcessDemand;
+        return demand > Max<ui64>() ? Max<ui64>() : static_cast<ui64>(demand);
     }
 
     void THnswCacheMemoryTracker::Report() {
@@ -169,7 +186,7 @@ namespace NKikimr::NDataShard {
     }
 
     std::shared_ptr<void> TryReserveHnswMemory(
-        const std::shared_ptr<THnswCacheMemoryTracker>& tracker, ui64 bytes, ui64 owner)
+        const std::shared_ptr<THnswCacheMemoryTracker>& tracker, ui64 bytes, ui64 owner, bool requestOnFailure)
     {
         struct TReservation {
             std::shared_ptr<THnswCacheMemoryTracker> Tracker;
@@ -182,7 +199,7 @@ namespace NKikimr::NDataShard {
             }
         };
         auto reservation = std::make_shared<TReservation>(TReservation{tracker, owner});
-        if (!tracker->TryAcquire(bytes, owner)) {
+        if (!tracker->TryAcquire(bytes, owner, requestOnFailure)) {
             return {};
         }
         reservation->Bytes = bytes;

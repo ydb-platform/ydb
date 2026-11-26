@@ -87,7 +87,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressHnswIndexBuild::TPtr& ev, const
     }
     auto& buildInfo = *it->second;
     buildInfo.HnswProgressScheduled = false;
-    if (buildInfo.State == TIndexBuildInfo::EState::Applying && buildInfo.ApplyTxDone) {
+    if (buildInfo.State == TIndexBuildInfo::EState::Unlocking && buildInfo.UnlockTxDone) {
         Execute(CreateTxProgress(id), ctx);
     }
 }
@@ -107,7 +107,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvHnswReplicaStatus::TPtr& ev, const TAct
         return;
     }
     auto& build = *it->second;
-    if (build.State != TIndexBuildInfo::EState::Applying || !build.ApplyTxDone
+    if (build.State != TIndexBuildInfo::EState::Unlocking || !build.UnlockTxDone
             || !build.HnswProbeInFlight || ev->Sender != build.HnswProbeActor
             || result.GetRound() != build.HnswProbeRound) {
         return;

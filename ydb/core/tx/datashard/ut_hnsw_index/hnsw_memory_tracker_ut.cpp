@@ -150,7 +150,14 @@ namespace NKikimr::NDataShard {
             UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 0u);
             UNIT_ASSERT(!tracker.TryAcquire(Max<ui64>(), 1));
             UNIT_ASSERT(!tracker.TryAcquire(Max<ui64>(), 2));
+            tracker.Request(1, 3);
             UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, Max<ui64>());
+            tracker.ResetDemand(1);
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, Max<ui64>());
+            tracker.ResetDemand(2);
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 1u);
+            UNIT_ASSERT(!tracker.TryAcquire(Max<ui64>(), 4, /* requestOnFailure */ false));
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 1u);
         }
 
         Y_UNIT_TEST(IdleDemandIsZeroAndAbandonedRequestsReleaseTheirShare) {

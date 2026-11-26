@@ -2026,8 +2026,21 @@ Y_UNIT_TEST_SUITE(KqpHnswReplicaReadiness) {
         const TString posting = "/Root/HnswDownload/idx/indexImplPostingTable";
         const auto sender = runtime.AllocateEdgeActor();
         auto shards = GetTableShards(&kikimr.GetTestServer(), sender, posting);
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
+        const auto leader = ResolveTablet(runtime, shards.front());
+        runtime.WaitFor("leader HNSW graph before changing replica settings", [&] {
+            const auto* shard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(leader));
+            if (!shard || shard->GetUserTables().empty()) {
+                return false;
+            }
+            const auto& table = *shard->GetUserTables().begin()->second;
+            if (table.HnswIndexes.empty()) {
+                return false;
+            }
+            const auto stats = shard->GetHnswIndexStats(table.LocalTid, table.HnswIndexes.begin()->first);
+            return stats && stats->Ready;
+        });
         ui64 localBuilds = 0, leaderBuilds = 0;
-        constexpr ui32 hnswBuildResultEvent = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
         const auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NDataShard::TEvHnswCache::TEvAcquired::EventType) {
                 const auto& result = *ev->Get<NDataShard::TEvHnswCache::TEvAcquired>();
@@ -2054,7 +2067,7 @@ Y_UNIT_TEST_SUITE(KqpHnswReplicaReadiness) {
                 auto& info = *ev->Get<TEvStateStorage::TEvInfo>();
                 if (info.Followers.size() == followers)
                     info.Followers.pop_back();
-            } else if (ev->GetTypeRewrite() == hnswBuildResultEvent) {
+            } else if (ev->GetTypeRewrite() == NDataShard::TDataShard::HnswIndexBuildResultEvent) {
                 const auto* shard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(ev->Recipient));
                 if (shard && shard->IsFollower())
                     ++localBuilds;
@@ -2221,10 +2234,11 @@ Y_UNIT_TEST_SUITE(KqpHnswReplicaReadiness) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         Y_DEFER { runtime.SetObserverFunc(observer); };
-        auto alter = session.ExecuteSchemeQuery(R"(
+        const auto sql = R"(
             ALTER TABLE `/Root/HnswReplicaTimeout/idx/indexImplPostingTable`
             SET (READ_REPLICAS_SETTINGS = "PER_AZ:1");
-        )");
+        )";
+        auto alter = session.ExecuteSchemeQuery(sql);
         runtime.WaitFor("replica readiness operation", [&] { return owner && txId; });
         runtime.SimulateSleep(TDuration::Seconds(20));
         UNIT_ASSERT(!alter.HasValue());
@@ -2249,6 +2263,17 @@ Y_UNIT_TEST_SUITE(KqpHnswReplicaReadiness) {
         if (!Reboot) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "settings were applied");
         }
+
+        const auto originalTxId = txId;
+        auto retry = session.ExecuteSchemeQuery(sql);
+        runtime.WaitFor("identical replica settings retry to probe readiness", [&] {
+            return txId != originalTxId || retry.HasValue();
+        });
+        UNIT_ASSERT(!retry.HasValue());
+        runtime.SimulateSleep(TDuration::Seconds(35));
+        const auto retried = runtime.WaitFuture(retry);
+        UNIT_ASSERT_VALUES_EQUAL(retried.GetStatus(), NYdb::EStatus::UNAVAILABLE);
+        UNIT_ASSERT_STRING_CONTAINS(retried.GetIssues().ToString(), "settings were applied");
     }
 
 

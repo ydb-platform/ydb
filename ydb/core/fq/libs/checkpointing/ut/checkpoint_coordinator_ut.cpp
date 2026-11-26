@@ -15,6 +15,8 @@
 #include <google/protobuf/util/message_differencer.h>
 #include <library/cpp/testing/unittest/gtest.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <yql/essentials/minikql/mkql_node_builder.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
 
 namespace NFq {
 
@@ -77,12 +79,15 @@ struct TTestBootstrap: public TTestActorRuntime {
     TCheckpointId CheckpointId3;
     TCheckpointId CheckpointId4;
     TString GraphDescId;
+    NProto::TGraphParams Params;
+    bool ForeignRestore = false;
 
     THashMap<TActorId, ui64> ActorToTask;
 
     ::NMonitoring::TDynamicCounterPtr Counters = new ::NMonitoring::TDynamicCounters();
 
-    explicit TTestBootstrap(ui64 graphFlags, ui64 snaphotRotationPeriod, const TString& sourceType, TMaybe<TInstant> outputStartTime = {})
+    explicit TTestBootstrap(ui64 graphFlags, ui64 snaphotRotationPeriod, const TString& sourceType, TMaybe<TInstant> outputStartTime = {},
+        bool foreignRestore = false)
         : TTestActorRuntime(true)
         , GraphState(BuildTestGraph(graphFlags, sourceType))
         , CoordinatorId("my-graph-id", 42)
@@ -120,10 +125,28 @@ struct TTestBootstrap: public TTestActorRuntime {
 
         TCheckpointCoordinatorSettings coordinatorSettings(Settings);
         coordinatorSettings.OutputStartTime = outputStartTime;
-        CheckpointCoordinator =
-            Register(MakeCheckpointCoordinator(CoordinatorId, StorageProxy, RunActor, coordinatorSettings, Counters, NProto::TGraphParams(),
-                outputStartTime ? FederatedQuery::StateLoadMode::EMPTY : FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT, {}, false)
-                         .Release());
+        coordinatorSettings.RequireCompatibleStateRecovery = foreignRestore;
+        ForeignRestore = foreignRestore;
+        FederatedQuery::StreamingDisposition disposition;
+        if (foreignRestore) {
+            disposition.mutable_from_last_checkpoint()->set_force(false);
+            using namespace NKikimr::NMiniKQL;
+            TScopedAlloc alloc(__LOCATION__);
+            TTypeEnvironment env(alloc);
+            const auto raw = SerializeRuntimeNode(TRuntimeNode(TCallableBuilder(env, "NoState", env.GetTypeOfVoidLazy()).Build(), false), env);
+            for (const auto& ready : GraphState.GetTask()) {
+                auto& task = *Params.AddTasks();
+                task.SetId(ready.GetId());
+                task.SetStageId(1);
+                task.AddInputs()->AddChannels();
+                task.MutableProgram()->SetRaw(raw);
+                task.MutableProgram()->SetRuntimeVersion(NYql::NDqProto::RUNTIME_VERSION_YQL_1_0);
+            }
+        }
+        CheckpointCoordinator = Register(MakeCheckpointCoordinator(CoordinatorId, StorageProxy, RunActor, coordinatorSettings, Counters, Params,
+            outputStartTime || foreignRestore ? FederatedQuery::StateLoadMode::EMPTY : FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT,
+            disposition, foreignRestore)
+                                             .Release());
 
         auto ev = BuildEvReadyState();
         Send(new IEventHandle(CheckpointCoordinator, RunActor, ev.release()));
@@ -279,8 +302,9 @@ struct TTestBootstrap: public TTestActorRuntime {
 Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     class CheckpointsTestHelper: public TTestBootstrap {
     public:
-        CheckpointsTestHelper(ui64 graphFlags, ui64 snaphotRotationPeriod = 0, const TString& sourceType = TString(NYql::PqSource))
-            : TTestBootstrap(graphFlags, snaphotRotationPeriod, sourceType)
+        CheckpointsTestHelper(
+            ui64 graphFlags, ui64 snaphotRotationPeriod = 0, const TString& sourceType = TString(NYql::PqSource), bool foreignRestore = false)
+            : TTestBootstrap(graphFlags, snaphotRotationPeriod, sourceType, {}, foreignRestore)
         {
         }
 
@@ -299,8 +323,8 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
             MockNewCheckpointCoordinatorAckEvent(EgressActor);
 
             Cerr << "Waiting for TEvGetCheckpointsMetadataRequest (storage)" << Endl;
-            ExpectEvent(StorageProxy, TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest(
-                                          CoordinatorId.GraphId, { ECheckpointStatus::PendingCommit, ECheckpointStatus::Completed }, 1, false));
+            ExpectEvent(StorageProxy, TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest(CoordinatorId.GraphId,
+                                          { ECheckpointStatus::PendingCommit, ECheckpointStatus::Completed }, 1, ForeignRestore));
 
             MockCheckpointsMetadataResponse({}, std::move(checkpoints));
         }
@@ -312,7 +336,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
                 ExpectEvent(StorageProxy, TEvCheckpointStorage::TEvCreateCheckpointRequest(CoordinatorId, checkpointId, 3, *graphDescId));
             } else {
                 NProto::TCheckpointGraphDescription graphDesc;
-                graphDesc.MutableGraph()->CopyFrom(NProto::TGraphParams());
+                graphDesc.MutableGraph()->CopyFrom(Params);
                 ExpectEvent(StorageProxy, TEvCheckpointStorage::TEvCreateCheckpointRequest(CoordinatorId, checkpointId, 3, graphDesc));
             }
 
@@ -375,6 +399,62 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
             ExpectEvent(EgressActor, NYql::NDq::TEvDqCompute::TEvRun());
         }
     };
+
+    Y_UNIT_TEST(ReplannedGraphConfirmsZeroCheckpointOnlyAfterPendingCommit) {
+        // Recreate a coordinator with a saved transition at each interruption
+        // boundary. Until confirmation, checkpoint metadata must include its
+        // original graph and task restore must use an explicit foreign plan.
+        for (ui32 boundary = 0; boundary < 5; ++boundary) {
+            CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, 0, TString(NYql::PqSource), true);
+            const auto oldId = TCheckpointId(test.CoordinatorId.Generation - 1, 7);
+            TCheckpointMetadata old(test.CoordinatorId.GraphId, oldId,
+                boundary == 4 ? ECheckpointStatus::PendingCommit : ECheckpointStatus::Completed, TInstant::Zero(), TInstant::Zero());
+            old.Graph = test.Params;
+            test.RegisterCoordinator({ old });
+            for (auto actor : { test.IngressActor, test.MapActor, test.EgressActor }) {
+                const auto restore = test.GrabEdgeEvent<NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpoint>(actor, TDuration::Seconds(10));
+                UNIT_ASSERT(restore);
+                UNIT_ASSERT(restore->Get()->Record.GetStateLoadPlan().GetStateType() != NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_OWN);
+                if (boundary) {
+                    test.Send(new IEventHandle(test.CheckpointCoordinator, actor,
+                        new NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpointResult(restore->Get()->Record.GetCheckpoint(),
+                            test.ActorToTask.at(actor), NYql::NDqProto::TEvRestoreFromCheckpointResult::OK, {})));
+                }
+            }
+            const auto noConfirmation = [&] {
+                auto events = test.CaptureMailboxEvents(test.RunActor.Hint(), test.RunActor.NodeId());
+                for (const auto& event : events) {
+                    UNIT_ASSERT(event->GetTypeRewrite() != TEvCheckpointCoordinator::TEvZeroCheckpointDone::EventType);
+                }
+                test.PushMailboxEventsFront(test.RunActor.Hint(), test.RunActor.NodeId(), events);
+            };
+            noConfirmation();
+            if (!boundary) {
+                continue;   // Saved candidate, before foreign restore completes.
+            }
+            if (boundary == 1) {
+                UNIT_ASSERT(test.GrabEdgeEvent<TEvCheckpointStorage::TEvCreateCheckpointRequest>(test.StorageProxy, TDuration::Seconds(10)));
+                continue;   // Foreign restore finished, before checkpoint metadata is saved.
+            }
+            TCheckpointId transition(test.CoordinatorId.Generation, 1);
+            test.InjectCheckpoint(transition);
+            noConfirmation();
+            if (boundary == 2) {
+                continue;   // Metadata exists, task states have not been saved.
+            }
+            test.MockNodeStateSavedEvent(transition, test.IngressActor);
+            test.MockNodeStateSavedEvent(transition, test.MapActor);
+            test.MockNodeStateSavedEvent(transition, test.EgressActor);
+            UNIT_ASSERT(
+                test.GrabEdgeEvent<TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest>(test.StorageProxy, TDuration::Seconds(10)));
+            noConfirmation();
+            if (boundary == 3) {
+                continue;   // Task states saved, PendingCommit is not confirmed.
+            }
+            test.MockSetCheckpointPendingCommitStatusResponse(transition);
+            UNIT_ASSERT(test.GrabEdgeEvent<TEvCheckpointCoordinator::TEvZeroCheckpointDone>(test.RunActor, TDuration::Seconds(10)));
+        }
+    }
 
     Y_UNIT_TEST(ShouldTriggerCheckpointWithSource) {
         CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, 0);

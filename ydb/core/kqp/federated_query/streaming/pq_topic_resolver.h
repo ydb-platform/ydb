@@ -18,7 +18,8 @@ namespace NKikimr::NKqp {
 //
 // The actor describes the supplied PQ sources in parallel using
 // `pqGatewayFactory`, patches the partition counts in `*queryPhysicalGraph`,
-// and then sends TEvStreamingQueryPrepared back to `owner`.
+// and then sends TEvStreamingQueryPrepared back to `owner`. When source
+// templates are supplied, it also returns refreshed descriptors for replanning.
 //
 // Must be called only after SecureParams have been resolved (i.e. after secrets
 // snapshot is obtained) so that the secureParams map is fully populated.
@@ -32,6 +33,7 @@ namespace NKikimr::NKqp {
 //   queryPhysicalGraph  – will be patched in-place with new partition counts
 NActors::IActor* CreateKqpPqTopicResolver(const NActors::TActorId& owner, ui64 txId, TVector<TPqTopicResolverSource> sources,
     THashMap<TString, TString> secureParams, NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
-    std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph);
+    std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph, TPqSourcePlanningSnapshot sourceTemplates = {},
+    ui32 maxTasksPerStage = 0);
 
 }   // namespace NKikimr::NKqp

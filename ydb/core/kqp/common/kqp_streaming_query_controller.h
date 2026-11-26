@@ -3,6 +3,9 @@
 #include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
+
+#include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -19,6 +22,9 @@
 namespace NKikimr::NKqp {
 
 class TKqpTasksGraph;
+
+// Execution-local source descriptors. The compiled query remains immutable.
+using TPqSourcePlanningSnapshot = THashMap<NYql::NDq::TStageId, NKqpProto::TKqpExternalSource>;
 
 // Description of a single PQ topic source that needs to be resolved.
 struct TPqTopicResolverSource {
@@ -71,6 +77,11 @@ public:
     virtual std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> GetGraphToRestore(
         const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, ui32 usableThreadsPerNode) = 0;
 
+    // Whether restoring the prepared graph changed its task count.
+    virtual bool HasGraphChanged() const {
+        return false;
+    }
+
     // Starts side actors after the tasks graph is built (and saved, if requested).
     virtual TStartedActors Start(
         std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> graph, const TKqpTasksGraph& tasksGraph) = 0;
@@ -102,6 +113,8 @@ public:
         std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> Graph;
         bool SaveGraph = false;
         bool HasPqSources = false;
+        bool PrepareReplanning = false;
+        TPqSourcePlanningSnapshot SourceTemplates;
     };
 
     virtual ~IKqpStreamingQueryControllerFactory() = default;
@@ -115,6 +128,7 @@ struct TEvStreamingQueryPrepared : public NActors::TEventLocal<TEvStreamingQuery
 {
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
     NYql::TIssues Issues;
+    TPqSourcePlanningSnapshot Snapshot;
 };
 
 } // namespace NKikimr::NKqp

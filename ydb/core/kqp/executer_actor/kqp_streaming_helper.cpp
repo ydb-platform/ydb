@@ -73,9 +73,9 @@ private:
 
 // Collect PQ sources only from the transactions of the current executer.
 // Topics whose partition list was already fixed at compile time by a
-// __ydb_partition_id predicate are skipped — their ReadRanges are authoritative.
+// __ydb_partition_id predicate are skipped unless preparing a replanning snapshot.
 TVector<TPqTopicResolverSource> CollectPqSources(
-    const TVector<IKqpGateway::TPhysicalTxData>& transactions, const TString& database) {
+    const TVector<IKqpGateway::TPhysicalTxData>& transactions, const TString& database, bool discoverPruned) {
     TVector<TPqTopicResolverSource> result;
     for (const auto& tx : transactions) {
         for (const auto& stage : tx.Body->GetStages()) {
@@ -96,7 +96,7 @@ TVector<TPqTopicResolverSource> CollectPqSources(
             // and must not be overwritten with the current total partition count.
             NYql::NPq::NProto::TDqPqTopicSource topicSourceProto;
             const bool usedPartitionPredicate = extSrc.GetSettings().UnpackTo(&topicSourceProto) && topicSourceProto.GetUsedPartitionPredicate();
-            if (usedPartitionPredicate) {
+            if (usedPartitionPredicate && !discoverPruned) {
                 continue;
             }
 
@@ -113,6 +113,26 @@ TVector<TPqTopicResolverSource> CollectPqSources(
             resolverSrc.DatabaseForClusterConfig = ts.GetDatabase();
             result.push_back(std::move(resolverSrc));
         }
+    }
+    return result;
+}
+
+TPqSourcePlanningSnapshot CollectPqSourcePlanningSnapshot(const TVector<IKqpGateway::TPhysicalTxData>& transactions) {
+    TPqSourcePlanningSnapshot result;
+    ui32 txId = 0;
+    ui32 stageBase = 0;
+    for (const auto& tx : transactions) {
+        ui32 stageIdx = 0;
+        for (const auto& stage : tx.Body->GetStages()) {
+            if (stage.SourcesSize() && stage.GetSources(0).HasExternalSource()
+                && stage.GetSources(0).GetExternalSource().GetType() == "PqSource")
+            {
+                result.emplace(NYql::NDq::TStageId(txId, stageBase + stageIdx), stage.GetSources(0).GetExternalSource());
+            }
+            ++stageIdx;
+        }
+        stageBase += tx.Body->StagesSize();
+        ++txId;
     }
     return result;
 }

@@ -9,7 +9,9 @@
 namespace NKikimr::NKqp {
 
 TVector<TPqTopicResolverSource> CollectPqSources(
-    const TVector<IKqpGateway::TPhysicalTxData>& transactions, const TString& database);
+    const TVector<IKqpGateway::TPhysicalTxData>& transactions, const TString& database, bool discoverPruned = false);
+
+TPqSourcePlanningSnapshot CollectPqSourcePlanningSnapshot(const TVector<IKqpGateway::TPhysicalTxData>& transactions);
 
 constexpr TDuration StreamingQueryUpdateCountersPeriod = TDuration::Seconds(1);
 

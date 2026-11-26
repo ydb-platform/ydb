@@ -1344,6 +1344,177 @@ TReplayTestGraph MakeShuffleAggregation(ui32 producers = 1, bool map = false, bo
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TAggregationShuffleRecovery) {
+    Y_UNIT_TEST(AnalyzesCompiledStageWithoutSyntheticTasks) {
+        NYql::NDqProto::TDqTask task;
+        SetAggregationProgram(task, "/Root/state");
+        const TGraphStateContext context;
+        const auto stage = AnalyzeStageProgram(task.GetProgram(), task.GetProgram().GetRaw(), context);
+        UNIT_ASSERT(stage.Tasks.empty());
+        UNIT_ASSERT_VALUES_EQUAL(stage.StatefulOperators.size(), 1);
+        const auto guard = context.BindAllocator();
+        UNIT_ASSERT_VALUES_EQUAL(GetStreamingAggregationIdentity(*stage.StatefulOperators.front()), "/Root/state");
+    }
+
+    Y_UNIT_TEST(ReplannedHoppingTransfersOnlyIdenticalPrograms) {
+        TReplayTestGraph old, next;
+        old.Source(1, 0, 2, false, 1);
+        old.Hop(100, 1, 10'000'000, 20'000'000, 40'000'000);
+        next.Source(10, 0, 2, false, 2);
+        next.Source(20, 1, 2, false, 2);
+        next.Hop(1000, 10, 10'000'000, 20'000'000, 40'000'000);
+        old.Builder.Graph.Mutable(1)->SetStageId(50);
+        next.Builder.Graph.Mutable(2)->SetStageId(50);
+        for (bool changed : { false, true }) {
+            if (changed) {
+                SetReplayProgram(*next.Builder.Graph.Mutable(2), 10'000'000, 30'000'000);
+                next.Builder.Graph.Mutable(2)->SetStageId(50);
+            }
+            for (bool packed : { false, true }) {
+                const auto before = old.Params(packed), after = next.Params(packed);
+                const TGraphStateContext context;
+                const TGraphStateInfo previous(before, context), target(after, context);
+                TStateLoadPlan plan;
+                TSourceRecoverySet sources;
+                NYql::TIssues issues;
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    MakeContinueFromStreamingOffsetsPlan(previous, target, false, plan, sources, issues, true), !changed, issues.ToString());
+                if (!changed) {
+                    UNIT_ASSERT_VALUES_EQUAL(plan.at(1000).GetProgram().GetForeignTaskId(), 100);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NewPartitionReadersInheritOriginalSourceTimestamp) {
+        TReplayTestGraph old, next;
+        old.Source(1, 0, 1, false);
+        for (ui64 partition = 0; partition < 4; ++partition) {
+            next.Source(10 + partition, partition, 4, false);
+        }
+        const auto before = old.Params(), after = next.Params();
+        const TGraphStateContext context;
+        const TGraphStateInfo previous(before, context), target(after, context);
+        TStateLoadPlan plan;
+        TSourceRecoverySet sources;
+        NYql::TIssues issues;
+        UNIT_ASSERT_C(MakeContinueFromStreamingOffsetsPlan(previous, target, false, plan, sources, issues, true), issues.ToString());
+        for (ui64 partition = 0; partition < 4; ++partition) {
+            UNIT_ASSERT_VALUES_EQUAL(plan.at(10 + partition).GetSources(0).GetForeignTasksSources(0).GetTaskId(), 1);
+        }
+        UNIT_ASSERT(!OffsetPlan(before, after, false, plan, issues));
+    }
+
+    Y_UNIT_TEST(ReplannedInMemoryAggregationRequiresIdenticalProgramAndRouting) {
+        auto old = MakeShuffleAggregation(1);
+        auto next = MakeShuffleAggregation(2);
+        for (auto* graph : { &old, &next }) {
+            for (auto& task : graph->Builder.Graph) {
+                if (task.GetStageId() == 50) {
+                    SetAggregationProgram(task, {}, {}, {}, false);
+                }
+            }
+        }
+        for (auto& task : next.Builder.Graph) {
+            task.SetId(task.GetId() + 1000);
+            for (auto& input : *task.MutableInputs()) {
+                for (auto& channel : *input.MutableChannels()) {
+                    channel.SetSrcTaskId(channel.GetSrcTaskId() + 1000);
+                    channel.SetDstTaskId(channel.GetDstTaskId() + 1000);
+                }
+            }
+            for (auto& output : *task.MutableOutputs()) {
+                for (auto& channel : *output.MutableChannels()) {
+                    channel.SetSrcTaskId(channel.GetSrcTaskId() + 1000);
+                    channel.SetDstTaskId(channel.GetDstTaskId() + 1000);
+                }
+            }
+        }
+        for (bool packed : { false, true }) {
+            const auto before = old.Params(packed), after = next.Params(packed);
+            const auto check = [&](const NProto::TGraphParams& candidate, bool success) {
+                const TGraphStateContext context;
+                const TGraphStateInfo previous(before, context), target(candidate, context);
+                TStateLoadPlan plan;
+                TSourceRecoverySet sources;
+                NYql::TIssues issues;
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    MakeContinueFromStreamingOffsetsPlan(previous, target, false, plan, sources, issues, true), success, issues.ToString());
+                if (success) {
+                    UNIT_ASSERT_VALUES_EQUAL(plan.at(1100).GetProgram().GetForeignTaskId(), 100);
+                    UNIT_ASSERT_VALUES_EQUAL(plan.at(1101).GetProgram().GetForeignTaskId(), 101);
+                }
+                UNIT_ASSERT(!OffsetPlan(before, candidate, false, plan, issues));
+            };
+            check(after, true);
+            auto reordered = after;
+            reordered.MutableTasks(0)->MutableOutputs(0)->MutableChannels()->SwapElements(0, 1);
+            check(reordered, false);
+            auto changed = after;
+            for (auto& task : *changed.MutableTasks()) {
+                if (task.GetStageId() == 50) {
+                    SetAggregationProgram(task, "changed", {}, {}, false);
+                }
+            }
+            check(changed, false);
+        }
+    }
+
+    Y_UNIT_TEST(ReplannedAggregationTransfersStateByShuffleSlotRatherThanTaskId) {
+        using namespace NYql::NDqProto::NDqStateLoadPlan;
+        for (const bool tableBound : { false, true }) {
+            for (const bool nextNodeMajorOrder : { false, true }) {
+                auto old = MakeShuffleAggregation(1);
+                auto next = MakeShuffleAggregation(2);
+                for (auto* graph : { &old, &next }) {
+                    for (auto& task : graph->Builder.Graph) {
+                        if (task.GetStageId() == 50 && !tableBound) {
+                            SetAggregationProgram(task, {}, {}, {}, false);
+                        }
+                        if (task.GetStageId() == 1 && (graph == &old || nextNodeMajorOrder)) {
+                            // V2 placement orders stage tasks by node. Hash slots can therefore
+                            // target task 101 before task 100 while their IDs stay unchanged.
+                            task.MutableOutputs(0)->MutableChannels()->SwapElements(0, 1);
+                        }
+                    }
+                }
+                for (auto& task : next.Builder.Graph) {
+                    task.SetId(task.GetId() + 1000);
+                    for (auto& input : *task.MutableInputs()) {
+                        for (auto& channel : *input.MutableChannels()) {
+                            channel.SetSrcTaskId(channel.GetSrcTaskId() + 1000);
+                            channel.SetDstTaskId(channel.GetDstTaskId() + 1000);
+                        }
+                    }
+                    for (auto& output : *task.MutableOutputs()) {
+                        for (auto& channel : *output.MutableChannels()) {
+                            channel.SetSrcTaskId(channel.GetSrcTaskId() + 1000);
+                            channel.SetDstTaskId(channel.GetDstTaskId() + 1000);
+                        }
+                    }
+                }
+
+                for (const bool packed : { false, true }) {
+                    const auto before = old.Params(packed), after = next.Params(packed);
+                    const TGraphStateContext context;
+                    const TGraphStateInfo previous(before, context), target(after, context);
+                    TStateLoadPlan plan;
+                    TSourceRecoverySet sources;
+                    NYql::TIssues issues;
+                    UNIT_ASSERT_C(MakeContinueFromStreamingOffsetsPlan(previous, target, false, plan, sources, issues, true), issues.ToString());
+                    UNIT_ASSERT_C(issues.Empty(), issues.ToString());
+                    for (const ui64 taskId : { 1100, 1101 }) {
+                        UNIT_ASSERT(plan.at(taskId).GetProgram().GetStateType() == STATE_TYPE_FOREIGN);
+                        UNIT_ASSERT(plan.at(taskId).GetProgram().HasForeignTaskId());
+                    }
+                    // The old graph's slots own states 101 and 100, respectively.
+                    // A candidate with the opposite task order must swap the state owners.
+                    UNIT_ASSERT_VALUES_EQUAL(plan.at(1100).GetProgram().GetForeignTaskId(), nextNodeMajorOrder ? 100 : 101);
+                    UNIT_ASSERT_VALUES_EQUAL(plan.at(1101).GetProgram().GetForeignTaskId(), nextNodeMajorOrder ? 101 : 100);
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(MatchesTablesAndSortedTasksAcrossStageAndTaskIds) {
         using namespace NYql::NDqProto::NDqStateLoadPlan;
         auto old = MakeShuffleAggregation(2);

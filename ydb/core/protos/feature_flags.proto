@@ -507,4 +507,6 @@ message TFeatureFlags {
     // Enable after all nodes support packed S3 mappings and the rollback window has closed.
     // Then reconfigure existing async groups through BSC to validate their S3 namespaces.
     optional bool EnableBlobDepotDataCooling = 403 [default = false];
+    // Rebuild streaming execution graphs with the regular planner on restart.
+    optional bool EnableStreamingQueryReplanning = 404 [default = false];
 }

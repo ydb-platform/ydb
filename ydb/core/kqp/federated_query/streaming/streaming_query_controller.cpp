@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
+#include <ydb/core/kqp/executer_actor/kqp_graph_replanning.h>
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
 #include <ydb/core/kqp/federated_query/actors/streaming_query_nodes_manager.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
@@ -72,13 +73,16 @@ public:
     }
 
     bool NeedsPrepare() const override {
-        return AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart() && Settings.HasPqSources && Settings.Graph &&
-               PqGatewayFactory;
+        return (AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart() ||
+                   AppData()->FeatureFlags.GetEnableStreamingQueryReplanning()) &&
+               Settings.HasPqSources && Settings.Graph && PqGatewayFactory;
     }
 
     void StartPrepare(TVector<TPqTopicResolverSource> sources, THashMap<TString, TString> secureParams) override {
-        TActivationContext::RegisterWithSameMailbox(CreateKqpPqTopicResolver(Settings.ExecuterId, Settings.TxId, std::move(sources),
-                                                        std::move(secureParams), PqGatewayFactory, MutableGraph()), Settings.ExecuterId);
+        auto* resolver =
+            CreateKqpPqTopicResolver(Settings.ExecuterId, Settings.TxId, std::move(sources), std::move(secureParams), PqGatewayFactory,
+                MutableGraph(), Settings.SourceTemplates, Settings.Graph->GetPreparedQuery().GetPhysicalQuery().GetMaxTasksPerStage());
+        TActivationContext::RegisterWithSameMailbox(resolver, Settings.ExecuterId);
     }
 
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> GetGraphToRestore(
@@ -87,7 +91,7 @@ public:
             return nullptr;
         }
 
-        if (Settings.HasPqSources && AppData()->FeatureFlags.GetEnablePqSourceRescaling()) {
+        if (Settings.HasPqSources && AppData()->FeatureFlags.GetEnablePqSourceRescaling() && !Settings.PrepareReplanning) {
             const auto& graph = MutableGraph();
             const auto taskCount = graph->TasksSize();
             PatchQueryPhysicalGraphForRescaling(*graph, resourcesSnapshot, usableThreadsPerNode);
@@ -95,6 +99,10 @@ public:
         }
 
         return PatchedGraph ? PatchedGraph : Settings.Graph;
+    }
+
+    bool HasGraphChanged() const override {
+        return RescalingChangedTaskCount;
     }
 
     TStartedActors Start(std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> graph, const TKqpTasksGraph& tasksGraph) override {
@@ -118,16 +126,23 @@ public:
         }
 
         NFq::TCheckpointCoordinatorSettings coordinatorSettings;
+        coordinatorSettings.RequireCompatibleStateRecovery = graph->GetRequiresCompatibleStateRecovery();
         coordinatorSettings.ProviderIntegrations = CheckpointProviderIntegrations;
         if (const auto& checkpointInterval = context->CheckpointInterval) {
             coordinatorSettings.SetCheckpointingPeriod(*checkpointInterval);
         }
 
-        const auto streamingDisposition = MakeStreamingDisposition(*context, coordinatorSettings);
+        auto streamingDisposition = MakeStreamingDisposition(*context, coordinatorSettings);
+        if (coordinatorSettings.RequireCompatibleStateRecovery && !graph->GetZeroCheckpointSaved()) {
+            // Until the new graph has its own checkpoint, recover from the
+            // checkpoint graph that preceded the persisted transition.
+            streamingDisposition.Clear();
+            streamingDisposition.mutable_from_last_checkpoint()->set_force(false);
+        }
         const auto stateLoadMode = graph->GetZeroCheckpointSaved() ? FederatedQuery::FROM_LAST_CHECKPOINT : FederatedQuery::EMPTY;
         const bool restoreOffsetsFromForeignCheckpoint =
             (stateLoadMode == FederatedQuery::StateLoadMode::EMPTY && streamingDisposition.has_from_last_checkpoint()) ||
-            RescalingChangedTaskCount;
+            RescalingChangedTaskCount || (coordinatorSettings.RequireCompatibleStateRecovery && !graph->GetZeroCheckpointSaved());
 
         auto counters = Settings.KqpCounters;
         if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && !context->StreamingQueryPath.empty()) {
@@ -244,10 +259,8 @@ private:
     NFq::NProto::TGraphParams MakeGraphParams(const NKikimrKqp::TQueryPhysicalGraph& graph, const TKqpTasksGraph& tasksGraph) const {
         const auto& userToken = Settings.UserToken;
 
-        NFq::NProto::TGraphParams graphParams;
-        for (const auto& task : graph.GetTasks()) {
-            auto& checkpointTask = *graphParams.AddTasks();
-            checkpointTask = task.GetDqTask();
+        auto graphParams = MakeCheckpointGraphParams(graph);
+        for (auto& checkpointTask : *graphParams.MutableTasks()) {
             checkpointTask.ClearSecureParams();
 
             auto& requestContext = *checkpointTask.MutableRequestContext();

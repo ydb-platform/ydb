@@ -1267,6 +1267,9 @@ message TQueryPhysicalGraph {
     optional bool ZeroCheckpointSaved = 3;
     // True only for a plan compiled with PostgreSQL compatibility disabled.
     optional bool CompiledWithPgCompatibilityDisabled = 4;
+    // Automatic graph transitions must preserve compatible operator state even
+    // if a restart happens before the new graph's zero checkpoint is saved.
+    optional bool RequiresCompatibleStateRecovery = 5;
 }
 
 /// KQP workload manager Events

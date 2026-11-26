@@ -171,7 +171,7 @@ struct TLookupFixture {
         const NActors::TActorId done = Runtime.AllocateEdgeActor();
         Runtime.Register(new TCallInActor([&](const TActorContext& ctx) {
             TKqpDbCountersPtr dbCounters;
-            record = cache.Lookup(uid, query, tempTables, /*promote=*/true, userSid, Counters, dbCounters,
+            record = cache.Lookup(uid, query, /*disablePgCompatibility=*/true, tempTables, /*promote=*/true, userSid, Counters, dbCounters,
                 done, ctx, mode, plansOnly);
         }, done));
         Runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(done);
@@ -481,6 +481,25 @@ Y_UNIT_TEST_SUITE(KqpQueryCacheSnapshots) {
         clock.Clock->Advance(TDuration::Seconds(5));
         UNIT_ASSERT_VALUES_EQUAL(cache.EraseExpiredQueries(), 1);
         UNIT_ASSERT(!cache.LookupByUid("s", false));
+    }
+
+    Y_UNIT_TEST(UnchangedSnapshotWithoutDeliveriesPreservesTtl) {
+        TClockFixture clock;
+        auto cache = CreateKqpQueryCache(true, 2, TDuration::Seconds(10));
+        const auto plan = MakeResult("s", "SELECT s");
+        const auto snapshot = MakeSnapshot(4);
+        cache->Insert(plan, snapshot, 1);
+        const auto inserted = LastTouched(*cache, "s");
+        clock.Clock->Advance(TDuration::Seconds(5));
+        cache->Replace(plan, snapshot, 0);
+        UNIT_ASSERT_VALUES_EQUAL(LastTouched(*cache, "s"), inserted);
+        clock.Clock->Advance(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(cache->EraseExpiredQueries(), 1);
+
+        cache->Insert(plan, snapshot, 1);
+        clock.Clock->Advance(TDuration::Seconds(5));
+        cache->Replace(plan, MakeSnapshot(4), 0);
+        UNIT_ASSERT_VALUES_EQUAL(LastTouched(*cache, "s"), clock.Clock->Now());
     }
 
     Y_UNIT_TEST(WarmupWindowCountsFirstHitAndSubsequentMisses) {

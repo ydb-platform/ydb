@@ -24,12 +24,13 @@ TKqpTempTablesState::TConstPtr SomeTempTables() {
     return state;
 }
 
-TKikimrSettings MakeSettings(bool compileCacheV2) {
+TKikimrSettings MakeSettings(bool compileCacheV2, bool readCommitted, ui32 cacheSize) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableFeatureFlags()->SetEnableCompileCacheV2(compileCacheV2);
     appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
     appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
-    appConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(false);
+    appConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(readCommitted);
+    appConfig.MutableTableServiceConfig()->SetCompileQueryCacheSize(cacheSize);
     appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
     return TKikimrSettings(appConfig).SetUseRealThreads(false).SetWithSampleTables(false);
 }
@@ -37,8 +38,8 @@ TKikimrSettings MakeSettings(bool compileCacheV2) {
 // Talks to the compile service directly. The optimizer does not build snapshots yet, so the observer
 // stands in for it: every compile actor response carries `Output` as the optimizer's snapshot.
 struct TSnapshotFixture {
-    explicit TSnapshotFixture(bool compileCacheV2)
-        : Kikimr(MakeSettings(compileCacheV2))
+    explicit TSnapshotFixture(bool compileCacheV2, bool readCommitted = true, ui32 cacheSize = 100)
+        : Kikimr(MakeSettings(compileCacheV2, readCommitted, cacheSize))
         , Runtime(*Kikimr.GetTestServer().GetRuntime())
     {
         UNIT_ASSERT(Kikimr.RunCall([&] {
@@ -64,8 +65,9 @@ struct TSnapshotFixture {
         });
     }
 
-    void Send(const TString& user = "root@builtin", TKqpTempTablesState::TConstPtr tempTables = nullptr) {
-        TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", user, Query,
+    void Send(const TString& user = "root@builtin", TKqpTempTablesState::TConstPtr tempTables = nullptr,
+        const TString& text = Query) {
+        TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", user, text,
             TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY), nullptr, TGUCSettings{});
         Runtime.Send(new IEventHandle(ServiceActor, Edge, new TEvKqp::TEvCompileRequest(Token(user), "", Nothing(),
             std::move(query), true, false, TInstant::Max(), nullptr, std::make_shared<TGUCSettings>(), Nothing(),
@@ -73,9 +75,10 @@ struct TSnapshotFixture {
     }
 
     void SendByUid(const TString& uid, const TString& user = "root@builtin", bool usePessimisticLocks = false,
-        bool warmup = false) {
+        bool warmup = false, TInstant deadline = TInstant::Max(),
+        TGUCSettings::TPtr guc = std::make_shared<TGUCSettings>()) {
         auto request = MakeHolder<TEvKqp::TEvCompileRequest>(Token(user), "", uid,
-            Nothing(), true, false, TInstant::Max(), nullptr, std::make_shared<TGUCSettings>(), Nothing(),
+            Nothing(), true, false, deadline, nullptr, std::move(guc), Nothing(),
             std::make_shared<std::atomic<bool>>(true), Context());
         request->UsePessimisticLocks = usePessimisticLocks;
         request->IsWarmupCompilation = warmup;
@@ -219,7 +222,7 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
     }
 
     Y_UNIT_TEST(SnapshotSurvivesCompileErrors) {
-        TSnapshotFixture f(true);
+        TSnapshotFixture f(true, /*readCommitted=*/false);
         f.Output = std::make_shared<TFakeSnapshot>();
         f.Send();
         const TString uid = f.Receive(false)->Uid;
@@ -232,22 +235,69 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
         UNIT_ASSERT_VALUES_EQUAL(f.Receive(false)->Uid, uid);
         UNIT_ASSERT_VALUES_EQUAL(f.Row(uid).GetAccessCount(), 2);
 
-        {
-            // Deliver the compile actor's timeout once it has started processing this request.
-            const auto timeout = f.Runtime.AddObserver<TEvKqp::TEvContinueProcess>(
-                [&](TEvKqp::TEvContinueProcess::TPtr& ev) {
-                    if (!ev->Get()->QueryId) {
-                        f.Runtime.SendAsync(new IEventHandle(ev->Recipient, ev->Recipient, new TEvents::TEvWakeup()));
-                        ev.Reset();
-                    }
-                });
-            f.SendByUid(uid);
-            UNIT_ASSERT_VALUES_EQUAL(f.ReceiveStatus(), Ydb::StatusIds::TIMEOUT);
-        }
+        f.SendByUid(uid, "root@builtin", false, false, TInstant::MicroSeconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(f.ReceiveStatus(), Ydb::StatusIds::TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL(f.Row(uid).GetAccessCount(), 2);
         f.SendByUid(uid);
         UNIT_ASSERT_VALUES_EQUAL(f.Receive(false)->Uid, uid);
         UNIT_ASSERT_VALUES_EQUAL(f.Row(uid).GetAccessCount(), 3);
+    }
+
+    Y_UNIT_TEST(DifferentExecutionSettingsPreservePreparedSnapshot) {
+        TSnapshotFixture f(true, /*readCommitted=*/true);
+        f.Output = std::make_shared<TFakeSnapshot>();
+        f.Send();
+        const auto prepared = f.Receive(false);
+        const TString uid = prepared->Uid;
+        f.Output = nullptr;
+
+        f.SendByUid(uid, "root@builtin", /*usePessimisticLocks=*/true);
+        const auto rc = f.Receive(false);
+        UNIT_ASSERT_VALUES_EQUAL(rc->Uid, uid);
+        UNIT_ASSERT(rc->Query->Settings().UsePessimisticLocks);
+
+        auto guc = std::make_shared<TGUCSettings>();
+        guc->Set("search_path", "custom");
+        f.SendByUid(uid, "root@builtin", false, false, TInstant::Max(), guc);
+        const auto custom = f.Receive(false);
+        UNIT_ASSERT_VALUES_EQUAL(custom->Uid, uid);
+        UNIT_ASSERT(custom->Query->DecodeGUCSettings() == *guc);
+        UNIT_ASSERT_VALUES_EQUAL(f.Row(uid).GetCompiledQueryAt(), prepared->CompiledAt.MicroSeconds());
+        UNIT_ASSERT_VALUES_EQUAL(f.Row(uid).GetAccessCount(), 3);
+
+        f.SendByUid(uid);
+        const auto normal = f.Receive(false);
+        UNIT_ASSERT_VALUES_EQUAL(normal->Uid, uid);
+        UNIT_ASSERT(!normal->Query->Settings().UsePessimisticLocks);
+        UNIT_ASSERT(normal->Query->DecodeGUCSettings() == prepared->Query->DecodeGUCSettings());
+        f.Send();
+        UNIT_ASSERT_VALUES_EQUAL(f.Receive(true)->Uid, uid);
+    }
+
+    Y_UNIT_TEST(PgModeChangeRecompilesPreparedSnapshot) {
+        TSnapshotFixture f(true);
+        f.Output = std::make_shared<TFakeSnapshot>();
+        f.Send();
+        const auto prepared = f.Receive(false);
+        auto& appData = f.Runtime.GetAppData();
+        NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+        flags.SetDisablePgCompatibility(!prepared->Query->DisablePgCompatibility());
+        appData.UpdateRuntimeFlags(flags);
+
+        f.Output = nullptr;
+        f.SendByUid(prepared->Uid, "root@builtin", /*usePessimisticLocks=*/true);
+        const auto privatePlan = f.Receive(false);
+        UNIT_ASSERT_VALUES_EQUAL(privatePlan->Query->DisablePgCompatibility(), flags.GetDisablePgCompatibility());
+        UNIT_ASSERT(privatePlan->Query->Settings().UsePessimisticLocks);
+        UNIT_ASSERT_VALUES_EQUAL(f.Row(prepared->Uid).GetCompiledQueryAt(), prepared->CompiledAt.MicroSeconds());
+
+        f.SendByUid(prepared->Uid);
+        const auto replacement = f.Receive(false);
+        UNIT_ASSERT_VALUES_EQUAL(replacement->Uid, prepared->Uid);
+        UNIT_ASSERT_VALUES_EQUAL(replacement->Query->DisablePgCompatibility(), flags.GetDisablePgCompatibility());
+        UNIT_ASSERT(!replacement->Query->Settings().UsePessimisticLocks);
+        f.Send();
+        UNIT_ASSERT_EQUAL(f.Receive(true), replacement);
     }
 
     Y_UNIT_TEST(CountsClientsSharingSnapshotCompilation) {
@@ -305,6 +355,36 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
         };
         UNIT_ASSERT(!fromCache());
         UNIT_ASSERT_VALUES_EQUAL(fromCache(), !CompileCacheV2);
+    }
+
+    Y_UNIT_TEST(EvictedSnapshotDoesNotServeWaitingTextRequest) {
+        TSnapshotFixture f(true, /*readCommitted=*/true, /*cacheSize=*/1);
+        f.Output = std::make_shared<TFakeSnapshot>();
+        f.Send();
+        const TString uid = f.Receive(false)->Uid;
+
+        f.SendByUid(uid);
+        f.Hold();
+        f.Send("root@builtin", nullptr, "SELECT 43 AS evict_snapshot;");
+        f.Receive(false);
+        f.SendByUid(uid);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReceiveStatus(), Ydb::StatusIds::NOT_FOUND);
+        f.Send();
+        f.Release();
+        UNIT_ASSERT_VALUES_EQUAL(f.Receive(false)->Uid, uid);
+        UNIT_ASSERT_VALUES_UNEQUAL(f.Receive(false)->Uid, uid);
+    }
+
+    Y_UNIT_TEST(DisabledV2CacheIsolatesTempTableRequests) {
+        TSnapshotFixture f(true, /*readCommitted=*/true, /*cacheSize=*/0);
+        f.Send("root@builtin", SomeTempTables());
+        f.Hold();
+        f.Send();
+        f.Release();
+        const TString first = f.Receive(false)->Uid;
+        UNIT_ASSERT_VALUES_UNEQUAL(first, f.Receive(false)->Uid);
+        f.Send();
+        UNIT_ASSERT_VALUES_UNEQUAL(first, f.Receive(false)->Uid);
     }
 
     // Waiting requests join a compilation only in the same context: with temp tables the same name can

@@ -91,6 +91,8 @@ public:
         DisablePgCompatibility_ = value;
     }
 
+    // Returns whether the prepared key changed for this execution.
+    bool SetExecutionSettings(bool usePessimisticLocks, const TKqpEncodedGUC& gucSettings);
     void SetUserSid(TStringBuf userSid);
     void SetQueryParameterTypes(std::shared_ptr<const TParameterTypes> queryParameterTypes);
 

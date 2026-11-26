@@ -255,9 +255,10 @@ Y_UNIT_TEST_TWIN(CompilationCacheHitMissCounters, CompileCacheV2) {
 namespace {
 
 class TPreparedCompileCacheTest {
-    static TKikimrSettings MakeSettings(ui32 cacheSize) {
+    static TKikimrSettings MakeSettings(ui32 cacheSize, bool compileCacheV2) {
         TKikimrSettings settings;
         settings.SetUseRealThreads(false).SetWithSampleTables(false).SetDisablePgCompatibility(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableCompileCacheV2(compileCacheV2);
         auto* config = settings.AppConfig.MutableTableServiceConfig();
         config->SetCompileQueryCacheSize(cacheSize);
         config->SetCompileMaxActiveRequests(2);
@@ -267,8 +268,8 @@ class TPreparedCompileCacheTest {
     TKikimrRunner Kikimr;
 
 public:
-    explicit TPreparedCompileCacheTest(ui32 cacheSize)
-        : Kikimr(MakeSettings(cacheSize))
+    TPreparedCompileCacheTest(ui32 cacheSize, bool compileCacheV2)
+        : Kikimr(MakeSettings(cacheSize, compileCacheV2))
         , Runtime(*Kikimr.GetTestServer().GetRuntime())
         , Service(MakeKqpCompileServiceID(Runtime.GetNodeId()))
         , Edge(Runtime.AllocateEdgeActor())
@@ -328,8 +329,8 @@ private:
 
 } // anonymous namespace
 
-Y_UNIT_TEST(QueuedPrepareAfterRevalidationTargetEvicted) {
-    TPreparedCompileCacheTest cache(1);
+Y_UNIT_TEST_TWIN(QueuedPrepareAfterRevalidationTargetEvicted, CompileCacheV2) {
+    TPreparedCompileCacheTest cache(1, CompileCacheV2);
     const TString text = "SELECT 42 AS prepared_cache;";
     cache.Prepare(cache.Edge, text);
     const TString oldUid = cache.Receive(cache.Edge)->Get()->CompileResult->Uid;
@@ -357,8 +358,8 @@ Y_UNIT_TEST(QueuedPrepareAfterRevalidationTargetEvicted) {
     UNIT_ASSERT(cache.Receive(cache.Edge)->Get()->Stats.FromCache);
 }
 
-Y_UNIT_TEST(ConcurrentRecompilesPreservePreparedUids) {
-    TPreparedCompileCacheTest cache(4);
+Y_UNIT_TEST_TWIN(ConcurrentRecompilesPreservePreparedUids, CompileCacheV2) {
+    TPreparedCompileCacheTest cache(4, CompileCacheV2);
     const TString text = "SELECT 42 AS prepared_cache;";
     cache.Prepare(cache.Edge, text);
     const TString firstUid = cache.Receive(cache.Edge)->Get()->CompileResult->Uid;
@@ -398,8 +399,8 @@ Y_UNIT_TEST(ConcurrentRecompilesPreservePreparedUids) {
     }
 }
 
-Y_UNIT_TEST(LateInvalidationPreservesReplacementPreparedPlan) {
-    TPreparedCompileCacheTest cache(1);
+Y_UNIT_TEST_TWIN(LateInvalidationPreservesReplacementPreparedPlan, CompileCacheV2) {
+    TPreparedCompileCacheTest cache(1, CompileCacheV2);
     cache.Prepare(cache.Edge, "SELECT 42 AS prepared_cache;");
     const auto oldPlan = cache.Receive(cache.Edge)->Get()->CompileResult;
 

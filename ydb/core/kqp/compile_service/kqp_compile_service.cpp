@@ -1,4 +1,6 @@
 #include "kqp_compile_service.h"
+
+#include <util/generic/algorithm.h>
 #include "helpers/kqp_compile_service_helpers.h"
 
 #include <ydb/core/kqp/tracing/kqp_trace_flow.h>
@@ -113,9 +115,26 @@ struct TKqpCompileRequest {
     bool RevalidatePgCompatibility = false;
 
     ui64 ConfigGeneration = 0;
+    ui64 SnapshotGeneration = 0;
     std::optional<TQueryCacheSnapshotRecord> SourceSnapshot;
     bool IsRecompile = false;
+    bool BypassSnapshot = false;
+    bool EnableSnapshots = false;
+
     bool HasTempTables() const { return TempTablesState && !TempTablesState->TempTables.empty(); }
+
+    void ResumeFrom(const TQueryCacheSnapshotRecord& source, ui64 generation) {
+        SourceSnapshot = source;
+        SnapshotGeneration = generation;
+        if (!GUCSettings) {
+            GUCSettings = std::make_shared<TGUCSettings>();
+        }
+        // EXECUTE by UID supplies these settings independently of the prepared key.
+        const bool settingsDiffer = Query.SetExecutionSettings(UsePessimisticLocks, TKqpEncodedGUC::Encode(*GUCSettings));
+        BypassSnapshot = HasTempTables() || settingsDiffer;
+    }
+
+    bool CanShareCompilation() const { return !BypassSnapshot && !HasTempTables(); }
 
     TInstant CompileQueueEnqueuedAt = TInstant::Now();
 
@@ -137,9 +156,12 @@ class TKqpRequestsQueue {
     using TRequestsIteratorSet = THashSet<TRequestsIterator, TRequestsIteratorHash>;
 
 public:
-    TKqpRequestsQueue(TIntrusivePtr<TKqpCounters> counters, size_t maxSize)
+    using TJoinable = TVector<TRequestsIterator>;
+
+    TKqpRequestsQueue(TIntrusivePtr<TKqpCounters> counters, size_t maxSize, bool isolateRequestContexts)
         : Counters(counters)
-        , MaxSize(maxSize) {}
+        , MaxSize(maxSize)
+        , IsolateRequestContexts(isolateRequestContexts) {}
 
     std::optional<TKqpCompileRequest> Enqueue(TKqpCompileRequest&& request) {
         if (Size() >= MaxSize) {
@@ -193,49 +215,30 @@ public:
         return {};
     }
 
-    // A recompile belongs to a plan delivery already counted for this client request.
-    ui64 CountClientPlanDeliveries(const TKqpCompileRequest& active) const {
-        const auto counts = [](const TKqpCompileRequest& request) {
-            return !request.IsRecompile && !request.CompileSettings.IsWarmupCompilation && request.IsIntrestedInResult();
-        };
-        ui64 deliveries = counts(active);
+    TJoinable GetJoinable(const TKqpCompileRequest& active) const {
+        TJoinable result;
         if (const auto* waiting = QueryIndex.FindPtr(active.Query)) {
-            for (const auto& it : *waiting) {
-                if (CanJoinCompilation(active, *it) && counts(*it)) {
-                    ++deliveries;
+            for (auto it : *waiting) {
+                if ((!it->RecompileByUid || it->Uid == active.Uid)
+                    && (!IsolateRequestContexts || CanJoinCompilation(active, *it))) {
+                    result.push_back(it);
                 }
             }
         }
-        return deliveries;
+        return result;
     }
 
-    TVector<TKqpCompileRequest> ExtractByQuery(const TKqpCompileRequest& active, bool snapshotRules, bool canJoinPrepare) {
-        auto queryIt = QueryIndex.find(active.Query);
-        if (queryIt == QueryIndex.end()) {
-            return {};
-        }
-
-        TVector<TKqpCompileRequest> result;
-        auto& waiting = queryIt->second;
-        for (auto it = waiting.begin(); it != waiting.end();) {
-            auto requestIt = *it;
-            if ((requestIt->RecompileByUid && requestIt->Uid != active.Uid)
-                || (requestIt->CompileSettings.IsQueryActionPrepare && !canJoinPrepare)
-                || (snapshotRules && !CanJoinCompilation(active, *requestIt))) {
-                ++it;
-                continue;
+    TRequestsList Extract(const TKqpQueryId& query, const TJoinable& joinable) {
+        TRequestsList result;
+        if (!joinable.empty()) {
+            auto it = QueryIndex.find(query);
+            for (auto waiting : joinable) {
+                it->second.erase(waiting);
+                result.splice(result.end(), Queue, waiting);
             }
-            waiting.erase(it++);
-            Y_ENSURE(requestIt != Queue.end());
-            auto request = std::move(*requestIt);
-
-            Queue.erase(requestIt);
-
-            result.push_back(std::move(request));
-        }
-
-        if (waiting.empty()) {
-            QueryIndex.erase(queryIt);
+            if (it->second.empty()) {
+                QueryIndex.erase(it);
+            }
         }
         return result;
     }
@@ -265,12 +268,13 @@ public:
 
 private:
     static bool CanJoinCompilation(const TKqpCompileRequest& active, const TKqpCompileRequest& waiting) {
-        return !active.HasTempTables() && !waiting.HasTempTables()
+        return active.CanShareCompilation() && waiting.CanShareCompilation()
             && ((!active.SourceSnapshot && !waiting.SourceSnapshot) || active.Uid == waiting.Uid);
     }
 
     TIntrusivePtr<TKqpCounters> Counters;
     size_t MaxSize = 0;
+    const bool IsolateRequestContexts;
     TRequestsList Queue;
     THashMap<TKqpQueryId, TRequestsIteratorSet> QueryIndex;
     THashMap<TKqpQueryId, TKqpCompileRequest> ActiveRequests;
@@ -304,7 +308,7 @@ public:
         , KqpSettings(kqpSettings)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
-        , RequestsQueue(Counters, TableServiceConfig.GetCompileRequestQueueSize())
+        , RequestsQueue(Counters, TableServiceConfig.GetCompileRequestQueueSize(), QueryCache->CountsAccesses())
         , QueryReplayFactory(std::move(queryReplayFactory))
         , FederatedQuerySetup(federatedQuerySetup)
     {}
@@ -604,8 +608,6 @@ private:
             ctx,
             request.IsWarmupCompilation ? EWarmupAttributionMode::Warmup : EWarmupAttributionMode::Client);
 
-        auto compileResult = record.GetPlan();
-        const auto* snapshot = record.GetSnapshot();
         TString revalidateUid;
         if (request.Uid && !record) {
             const auto previous = QueryCache->LookupByUid(*request.Uid, false);
@@ -613,18 +615,24 @@ private:
                 && previous.GetQuery().UserSid() == userSid
                 && !HasTempTablesNameClashes(previous.GetPlan(), request.TempTablesState))
             {
-                request.Query = previous.GetQuery();
-                request.Query->SetDisablePgCompatibility(disablePgCompatibility);
-                request.GUCSettings = std::make_shared<TGUCSettings>(request.Query->DecodeGUCSettings());
-                request.UsePessimisticLocks = request.Query->Settings().UsePessimisticLocks;
                 revalidateUid = *request.Uid;
-                request.Uid.Clear();
-                if (request.KeepInCache) {
-                    QueryCache->FindByUid(revalidateUid, true);
+                if (previous.GetSnapshot()) {
+                    record = previous;
+                } else {
+                    request.Query = previous.GetQuery();
+                    request.Query->SetDisablePgCompatibility(disablePgCompatibility);
+                    request.GUCSettings = std::make_shared<TGUCSettings>(request.Query->DecodeGUCSettings());
+                    request.UsePessimisticLocks = request.Query->Settings().UsePessimisticLocks;
+                    request.Uid.Clear();
+                    if (request.KeepInCache) {
+                        QueryCache->FindByUid(revalidateUid, true);
+                    }
                 }
             }
         }
 
+        const auto compileResult = record.GetPlan();
+        const auto* snapshot = record.GetSnapshot();
         if (request.Uid) {
             if (compileResult) {
                 Y_ENSURE(compileResult->Query);
@@ -677,7 +685,8 @@ private:
                 ? ECompileActorAction::SPLIT
                 : ECompileActorAction::COMPILE,
             request.IsWarmupCompilation);
-        TKqpCompileRequest compileRequest(ev->Sender, snapshot ? snapshot->Info->Uid : revalidateUid.empty() ? CreateGuidAsString() : revalidateUid,
+        const TString uid = snapshot ? snapshot->Info->Uid : (revalidateUid.empty() ? CreateGuidAsString() : revalidateUid);
+        TKqpCompileRequest compileRequest(ev->Sender, uid,
             snapshot ? snapshot->Info->Query : std::move(*request.Query),
             compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
@@ -686,8 +695,8 @@ private:
         compileRequest.RecompileByUid = compileRequest.RevalidatePgCompatibility;
 
         if (snapshot) {
-            compileRequest.SourceSnapshot = *snapshot;
-            compileRequest.ConfigGeneration = ConfigGeneration;
+            compileRequest.ResumeFrom(*snapshot, ConfigGeneration);
+            compileRequest.Query.SetDisablePgCompatibility(disablePgCompatibility);
         }
 
         // Report the miss before queueing, even if the request is later rejected,
@@ -745,7 +754,7 @@ private:
                 ev->Get()->Split
                     ? ECompileActorAction::SPLIT
                     : ECompileActorAction::COMPILE);
-            auto query = request.Query ? *request.Query : record.GetQuery();
+            auto query = record.GetSnapshot() || !request.Query ? record.GetQuery() : *request.Query;
             query.SetDisablePgCompatibility(disablePgCompatibility);
             if (compileResult && !modeChanged) {
                 query.SetUserSid(compileResult->Query->UserSid());
@@ -755,7 +764,7 @@ private:
                         {"cache", compileResult->Query->SerializeToString()});
                 }
                 query = *compileResult->Query;
-            } else if (modeChanged && !request.Query) {
+            } else if (modeChanged && !request.Query && !record.GetSnapshot()) {
                 request.GUCSettings = std::make_shared<TGUCSettings>(query.DecodeGUCSettings());
                 request.UsePessimisticLocks = query.Settings().UsePessimisticLocks;
             }
@@ -770,9 +779,8 @@ private:
             compileRequest.RevalidatePgCompatibility = modeChanged;
 
             compileRequest.IsRecompile = true;
-            if (auto* snapshot = record.GetSnapshot(); snapshot && !modeChanged) {
-                compileRequest.SourceSnapshot = *snapshot;
-                compileRequest.ConfigGeneration = ConfigGeneration;
+            if (auto* snapshot = record.GetSnapshot()) {
+                compileRequest.ResumeFrom(*snapshot, ConfigGeneration);
             }
             EnqueueCompileRequest(std::move(compileRequest), ctx);
             return;
@@ -790,6 +798,13 @@ private:
                 ev->Cookie, std::move(ev->Get()->Orbit), std::move(compileServiceSpan));
             return;
         }
+    }
+
+    static ui64 CountClientPlanDeliveries(const TKqpCompileRequest& active, const TKqpRequestsQueue::TJoinable& waiting) {
+        const auto counts = [](const TKqpCompileRequest& request) {
+            return !request.IsRecompile && !request.CompileSettings.IsWarmupCompilation && request.IsIntrestedInResult();
+        };
+        return counts(active) + std::count_if(waiting.begin(), waiting.end(), [&](auto it) { return counts(*it); });
     }
 
     void Handle(TEvKqp::TEvCompileResponse::TPtr& ev, const TActorContext& ctx) {
@@ -826,21 +841,28 @@ private:
 
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
+                auto waiting = RequestsQueue.GetJoinable(compileRequest);
                 bool canJoinPrepare = !compileRequest.RevalidatePgCompatibility;
-                const bool bypassSnapshot = compileRequest.SourceSnapshot && compileRequest.HasTempTables();
-                if (bypassSnapshot && !isStale) {
-                    QueryCache->CountSnapshotAccesses(*compileRequest.SourceSnapshot, RequestsQueue.CountClientPlanDeliveries(compileRequest));
-                } else if (!hasTempTablesNameClashes && !bypassSnapshot && !skipRevalidationCacheUpdate) {
+                const ui64 accesses = QueryCache->CountsAccesses() ? CountClientPlanDeliveries(compileRequest, waiting) : 0;
+                if (compileRequest.BypassSnapshot) {
+                    if (!isStale) {
+                        QueryCache->CountSnapshotAccesses(*compileRequest.SourceSnapshot, accesses);
+                    }
+                } else if (!hasTempTablesNameClashes && !skipRevalidationCacheUpdate) {
                     if (isStale) {
                         YDB_LOG_DEBUG_CTX(ctx, "Skipped caching compile result from stale config generation",
                             {"queryUid", compileResult->Uid},
                             {"requestGeneration", compileRequest.ConfigGeneration},
                             {"currentGeneration", ConfigGeneration});
                     } else if (compileRequest.RevalidatePgCompatibility) {
-                        canJoinPrepare = QueryCache->Replace(compileResult);
+                        const auto current = QueryCache->LookupByUid(compileRequest.Uid, false);
+                        if (!compileRequest.SourceSnapshot || (current.GetSnapshot()
+                            && current.GetSnapshot()->Info == compileRequest.SourceSnapshot->Info)) {
+                            auto snapshot = compileRequest.EnableSnapshots ? ev->Get()->CacheOutput.CacheSnapshot : nullptr;
+                            canJoinPrepare = QueryCache->Replace(compileResult, std::move(snapshot), accesses);
+                        }
                     } else {
-                        const ui64 accesses = QueryCache->CountsAccesses() ? RequestsQueue.CountClientPlanDeliveries(compileRequest) : 0;
-                        auto snapshot = compileResult->UsedNewRbo && !compileRequest.HasTempTables() && QueryCache->SupportsSnapshots()
+                        auto snapshot = compileRequest.EnableSnapshots
                             ? ev->Get()->CacheOutput.CacheSnapshot : nullptr;
                         UpdateQueryCache(ctx, compileResult, std::move(snapshot), compileRequest.SourceSnapshot, accesses, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, compileRequest.CompileSettings.IsWarmupCompilation);
                     }
@@ -848,12 +870,15 @@ private:
 
                 if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
                     QueryReplayBackend->Collect(*ev->Get()->ReplayMessage);
-                    if (!isStale && !bypassSnapshot && !skipRevalidationCacheUpdate) {
+                    if (!isStale && !compileRequest.BypassSnapshot && !skipRevalidationCacheUpdate) {
                         QueryCache->AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
                     }
                 }
 
-                auto requests = RequestsQueue.ExtractByQuery(compileRequest, QueryCache->SupportsSnapshots(), canJoinPrepare);
+                if (!canJoinPrepare) {
+                    EraseIf(waiting, [](auto it) { return it->CompileSettings.IsQueryActionPrepare; });
+                }
+                auto requests = RequestsQueue.Extract(compileRequest.Query, waiting);
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, TString(request.Query.UserSid()), compileActorId.ToString());
                     MarkJoinedCompilation(request.CompileServiceSpan, compileRequest.CompileServiceSpan);
@@ -1051,11 +1076,12 @@ private:
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
         request.WaitSpan.EndOk();
         TOptimizerInput optimizerInput;
-        optimizerInput.EnableSnapshots = QueryCache->SupportsSnapshots() && TableServiceConfig.GetEnableNewRBO()
-            && !request.Query.Settings.IsAnalyze && !request.HasTempTables()
+        request.EnableSnapshots = QueryCache->SupportsSnapshots() && TableServiceConfig.GetEnableNewRBO()
+            && !request.Query.Settings().IsAnalyze && request.CanShareCompilation()
             && (request.CompileSettings.KeepInCache || request.SourceSnapshot)
             && request.CompileSettings.Action == ECompileActorAction::COMPILE;
-        if (optimizerInput.EnableSnapshots && request.SourceSnapshot && request.ConfigGeneration == ConfigGeneration) {
+        optimizerInput.EnableSnapshots = request.EnableSnapshots;
+        if (request.EnableSnapshots && request.SourceSnapshot && !request.RevalidatePgCompatibility && request.SnapshotGeneration == ConfigGeneration) {
             optimizerInput.CacheSnapshot = request.SourceSnapshot->Snapshot;
         }
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, PathNormalizer, QueryServiceConfig, ModuleResolverState, Counters,

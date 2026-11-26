@@ -147,13 +147,14 @@ public:
         TDropped dropped;
         TGuard<TAdaptiveLock> guard(Lock);
 
-        auto* entry = FindEntryLocked(compileResult->Uid, true, now, dropped);
+        const bool promote = accesses || !snapshot;
+        auto* entry = FindEntryLocked(compileResult->Uid, promote, now, dropped);
         if (!entry) {
             return false;
         }
 
         const bool sameQuery = entry->Record.GetQuery() == *compileResult->Query;
-        if (!sameQuery) {
+        if (!sameQuery && entry->Record.GetQuery().DisablePgCompatibility() == compileResult->Query->DisablePgCompatibility()) {
             EraseOtherUidLocked(*compileResult->Query, compileResult->Uid, dropped);
         }
         ApplySnapshotBudget(fresh, compileResult, entry);
@@ -163,6 +164,9 @@ public:
             const auto* previous = entry->Record.GetSnapshot();
             if (previous && fresh.Record.GetSnapshot() && previous->Snapshot == snapshot) {
                 return true; // The same snapshot keeps its original compilation metadata.
+            }
+            if (!promote) {
+                FindEntryLocked(compileResult->Uid, true, now, dropped);
             }
             SnapshotBytes -= entry->SnapshotBytes();
             SnapshotBytes += fresh.SnapshotBytes();
@@ -376,18 +380,15 @@ private:
         const auto evicted = InsertLocked(uid, std::move(entry), now, dropped);
         CacheBytes += bytes;
         SnapshotBytes += snapshotBytes;
-        QueryIndex[query] = uid;
+        // PG revalidation may leave two prepared UIDs for the same text.
+        QueryIndex.try_emplace(query, uid);
         return evicted != 0;
     }
 
     TQueryCacheEntryV2* FindByUidImpl(const TString& uid, bool promote, TInstant now, TDropped& dropped, std::optional<bool> mode = {}) {
         // A snapshot lookup only starts a compilation. Refresh its TTL on successful delivery.
-        auto* entry = FindEntryLocked(uid, [promote, now, mode](TQueryCacheEntryV2& entry) {
-            if (!promote || entry.Record.GetSnapshot() || (mode && entry.Record.GetQuery().DisablePgCompatibility() != *mode)) {
-                return false;
-            }
-            entry.LastTouched = now;
-            return true;
+        auto* entry = FindEntryLocked(uid, [promote, mode](const TQueryCacheEntryV2& entry) {
+            return promote && !entry.Record.GetSnapshot() && (!mode || entry.Record.GetQuery().DisablePgCompatibility() == *mode);
         }, now, dropped);
         return entry && (!mode || entry->Record.GetQuery().DisablePgCompatibility() == *mode) ? entry : nullptr;
     }

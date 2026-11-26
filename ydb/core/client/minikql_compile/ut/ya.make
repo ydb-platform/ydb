@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/client/minikql_compile)
 ALLOCATOR(J)
 
 SRCS(
+    local_sql_ut.cpp
     yql_expr_minikql_compile_ut.cpp
 )
 

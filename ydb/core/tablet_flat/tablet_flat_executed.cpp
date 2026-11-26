@@ -8,6 +8,16 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_EXECUTOR
 
+namespace NKikimr::NTabletFlatExecutor {
+void RenderTabletQueryPage(
+    NMon::TEvRemoteHttpInfo::TPtr& ev,
+    const TActorContext& ctx,
+    IMiniKQLFactory* factory,
+    const NTable::TScheme& scheme,
+    ui64 tabletId,
+    bool follower);
+}
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
@@ -273,6 +283,9 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
     } else if (path == "/db" && Executor()) {
         Executor()->RenderHtmlDb(ev, ExecutorCtx(ctx));
         return;
+    } else if (path == "/query" && Executor()) {
+        RenderTabletQueryPage(ev, ctx, Factory.Get(), Scheme(), TabletID(), Executor()->GetStats().IsFollower());
+        return;
     } else {
         const TDuration uptime = TAppData::TimeProvider->Now() - StartTime0;
         const TStringBuf tabletMonRoot = IsTabletDevUiSecurePath(path)
@@ -325,6 +338,9 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
                 }
                 DIV_CLASS("row") {
                     DIV_CLASS("col-md-12") {str << "<a href=\"" << tabletMonRoot << "tablets/executorInternals?" << queryString << "\">Executor DB internals</a>";}
+                }
+                DIV_CLASS("row") {
+                    DIV_CLASS("col-md-12") {str << "<a href=\"" << tabletMonRoot << "tablets/query?" << queryString << "\">Query</a>";}
                 }
                 DIV_CLASS("row") {
                     DIV_CLASS("col-md-12") {str << "<a href=\"" << tabletMonRoot << "tablets?FollowerID=" << TabletID() << "\">Connect to follower</a>";}

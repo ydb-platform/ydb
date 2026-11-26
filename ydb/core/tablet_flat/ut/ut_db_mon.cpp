@@ -1,9 +1,12 @@
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/tablet_flat/ut/minikql_env/registry.h>
 #include <ydb/core/tablet_flat/flat_executor_ut_common.h>
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tablet/tablet_monitoring_proxy.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/testlib/actors/wait_events.h>
 
+#include <library/cpp/http/fetch/httpheader.h>
 #include <library/cpp/monlib/service/mon_service_http_request.h>
 #include <util/string/cast.h>
 #include <util/system/env.h>
@@ -85,7 +88,7 @@ class TDbMonTablet : public TActor<TDbMonTablet>, public TTabletExecutedFlat {
 public:
     TDbMonTablet(const TActorId& sender, const TActorId& tablet, TTabletStorageInfo* info)
         : TActor(&TThis::StateInit)
-        , TTabletExecutedFlat(info, tablet, nullptr)
+        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , Sender(sender)
     {}
 
@@ -183,6 +186,8 @@ class TDbMonEnv : public TMyEnvBase {
 public:
     TDbMonEnv()
     {
+        Env.GetAppData().FunctionRegistry = TestBuiltinFunctionRegistry();
+
         FireTablet(Edge, Tablet, [edge = Edge](const TActorId& tablet, TTabletStorageInfo* info) {
             return new TDbMonTablet(edge, tablet, info);
         });
@@ -225,6 +230,18 @@ public:
 
         SendAsync(new NMon::TEvRemoteHttpInfo(request));
 
+        return GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>()->Get()->Html;
+    }
+
+    TString RequestQuery(const TString& program)
+    {
+        NActorsProto::TRemoteHttpInfo info;
+        info.SetMethod(HTTP_METHOD_POST);
+        info.SetPath("/query");
+        auto* field = info.AddPostParams();
+        field->SetKey("program");
+        field->SetValue(program);
+        SendAsync(new NMon::TEvRemoteHttpInfo(std::move(info)));
         return GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>()->Get()->Html;
     }
 
@@ -649,6 +666,16 @@ Y_UNIT_TEST_SUITE(TabletMon) {
         env.Env.SetScheduledEventsSelectorFunc(prevScheduledEventsSelector);
         env.Env.SetRegistrationObserverFunc(prevRegistrationObserver);
         env.Env.SetDispatchTimeout(prevDispatchTimeout);
+    }
+
+    Y_UNIT_TEST(QueryPageRunsSql) {
+        TDbMonEnv env;
+        env.AddRowsAndCompact(3);
+
+        const TString html = env.RequestQuery("SELECT value FROM dbmon_test WHERE key = 1");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Local query status: OK");
+        UNIT_ASSERT_STRING_CONTAINS(html, "xxx");
+        UNIT_ASSERT_STRING_CONTAINS(html, "dbmon_test");
     }
 }
 

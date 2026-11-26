@@ -6755,6 +6755,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
         return result.Get(0).GetState();
     }
 
+    TString GetSourceStateName(TTestActorRuntime& runtime, const TActorId& sender, ui32 partitionId, ui64 dataShardId) {
+        return NKikimrPQ::TMessageGroupInfo::EState_Name(GetSourceState(runtime, sender, partitionId, dataShardId));
+    }
+
     Y_UNIT_TEST(ShouldRegisterSplitChildrenOnlyInPartitionsOfTheirRangeWhenKeyRangeHeartbeats) {
         // given
         TPortManager portManager;
@@ -6793,8 +6797,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             for (ui32 attempt = 0; attempt < 60 && GetSourceState(runtime, edgeActor, 1, child) != NKikimrPQ::TMessageGroupInfo::STATE_PENDING_REGISTRATION; ++attempt) {
                 SimulateSleep(server, TDuration::Seconds(1));
             }
-            UNIT_ASSERT_VALUES_EQUAL_C(GetSourceState(runtime, edgeActor, 1, child), NKikimrPQ::TMessageGroupInfo::STATE_PENDING_REGISTRATION, child);
-            UNIT_ASSERT_VALUES_EQUAL_C(GetSourceState(runtime, edgeActor, 0, child), NKikimrPQ::TMessageGroupInfo::STATE_UNKNOWN, child);
+            UNIT_ASSERT_VALUES_EQUAL_C(GetSourceStateName(runtime, edgeActor, 1, child), "STATE_PENDING_REGISTRATION", child);
+            UNIT_ASSERT_VALUES_EQUAL_C(GetSourceStateName(runtime, edgeActor, 0, child), "STATE_UNKNOWN", child);
         }
     }
 
@@ -6848,7 +6852,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             for (ui32 attempt = 0; attempt < 60 && GetSourceState(runtime, edgeActor, partitionId, child) != NKikimrPQ::TMessageGroupInfo::STATE_PENDING_REGISTRATION; ++attempt) {
                 SimulateSleep(server, TDuration::Seconds(1));
             }
-            UNIT_ASSERT_VALUES_EQUAL_C(GetSourceState(runtime, edgeActor, partitionId, child), NKikimrPQ::TMessageGroupInfo::STATE_PENDING_REGISTRATION, partitionId);
+            UNIT_ASSERT_VALUES_EQUAL_C(GetSourceStateName(runtime, edgeActor, partitionId, child), "STATE_PENDING_REGISTRATION", partitionId);
         }
 
         UNIT_ASSERT_EQUAL(parentToPartitions[NPQ::NSourceIdEncoding::EncodeSimple(ToString(parents.at(0)))], THashSet<ui32>({0}));

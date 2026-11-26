@@ -26,8 +26,12 @@ NPQ::TPartitionKeyRange MakeKeyRange(const TSerializedCellVec& from, const TSeri
 
 namespace {
 
+bool IsUnbounded(const TMaybe<TSerializedCellVec>& bound) {
+    return !bound || bound->GetCells().empty();
+}
+
 bool IsEntirelyBefore(const NPQ::TPartitionKeyRange& range, const NPQ::TPartitionKeyRange& other, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
-    if (!range.ToBound || !other.FromBound) {
+    if (IsUnbounded(range.ToBound) || IsUnbounded(other.FromBound)) {
         return false;
     }
     return ComparePrefixBorders(keyTypes,

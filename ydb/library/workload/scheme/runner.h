@@ -20,14 +20,16 @@ inline constexpr ui32 MAX_WORKLOAD_THREADS = 256;
 class IClient {
 public:
     virtual ~IClient() = default;
-    // Ensure the directory exists and refresh the inventory used by Inspect.
-    virtual void PrepareDirectory(const TString& path) = 0;
+    // Refresh the inventory used by Inspect; create missing directories only when requested.
+    virtual void PrepareDirectory(const TString& path, bool create) = 0;
     virtual NThreading::TFuture<void> Create(const TObject& object) = 0;
     virtual NThreading::TFuture<EObjectState> Inspect(const TObject& object) = 0;
+    virtual NThreading::TFuture<void> Describe(const TObject& object) = 0;
+    virtual NThreading::TFuture<void> List(const TString& path) = 0;
     virtual NThreading::TFuture<void> Alter(const TObject& object, bool add) = 0;
 };
 
-enum class EOperation { CreateTable, CreateTopic, AddColumns, DropColumns, AddConsumers, DropConsumers, Count };
+enum class EOperation { CreateTable, CreateTopic, AddColumns, DropColumns, AddConsumers, DropConsumers, DescribeTable, DescribeTopic, ListDirectory, Count };
 constexpr size_t OperationCount = static_cast<size_t>(EOperation::Count);
 const char* OperationName(EOperation operation);
 

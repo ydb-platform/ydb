@@ -329,6 +329,94 @@ Y_UNIT_TEST_SUITE_F(YdbWorkloadScheme, TSchemeWorkloadFixture) {
         CheckIndexedColumnRejected({"extra_1"}, {"extra_0"});
     }
 
+    Y_UNIT_TEST(AllOperationsWithoutConfig) {
+        const auto output = RunYdb({"workload", "scheme", "run"}, {"--path", Path, "--tables", "2", "--topics", "2",
+            "--partitions", "2", "--operations", "create=2,alter=2,describe=2,list=1", "-t", "1", "-s", "5"});
+        UNIT_ASSERT_STRING_CONTAINS(output, "CreateTable\t2\n");
+        UNIT_ASSERT_STRING_CONTAINS(output, "CreateTopic\t2\n");
+        for (const TString& operation : {"AddColumns", "AddConsumers", "DescribeTable", "DescribeTopic", "ListDirectory"}) {
+            UNIT_ASSERT_STRING_CONTAINS(output, operation + "\t");
+            UNIT_ASSERT_C(!output.Contains(operation + "\t0\n"), output);
+        }
+        auto driver = Driver();
+        NYdb::NTopic::TTopicClient topics(driver);
+        const auto topic = topics.DescribeTopic(std::string(FullPath("topic_0"))).GetValueSync();
+        UNIT_ASSERT(topic.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetTopicDescription().GetPartitions().size(), 2);
+        NYdb::NTable::TTableClient tables(driver);
+        const auto table = tables.GetSession().GetValueSync().GetSession().DescribeTable(
+            std::string(FullPath("table_0")), NYdb::NTable::TDescribeTableSettings().WithKeyShardBoundary(true)).GetValueSync();
+        UNIT_ASSERT(table.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(table.GetTableDescription().GetKeyRanges().size(), 2);
+    }
+
+    Y_UNIT_TEST(OperationsOptionReplacesYamlAndReadOnlyPreservesSchemas) {
+        WriteConfig("tables: {count: 2, partitions: 2, alter_batch_size: 3}\ntopics: {count: 2, partitions: 3, alter_batch_size: 2}");
+        Init();
+        const auto output = RunYdb({"workload", "scheme", "run"}, {"--config", ConfigPath,
+            "--operations", "describe=4,list=2", "-s", "1", "-t", "1"});
+        for (const TString& operation : {"CreateTable", "CreateTopic", "AddColumns", "DropColumns", "AddConsumers", "DropConsumers"}) {
+            UNIT_ASSERT_STRING_CONTAINS(output, operation + "\t0\n");
+        }
+        for (const TString& operation : {"DescribeTable", "DescribeTopic", "ListDirectory"}) {
+            UNIT_ASSERT_C(!output.Contains(operation + "\t0\n"), output);
+        }
+        auto driver = Driver();
+        NYdb::NTable::TTableClient tables(driver);
+        NYdb::NTopic::TTopicClient topics(driver);
+        auto session = tables.GetSession().GetValueSync().GetSession();
+        for (ui32 i = 0; i < 2; ++i) {
+            CheckTable(session, i, false);
+            CheckTopic(topics, i, false);
+        }
+    }
+
+    Y_UNIT_TEST(YamlOperationsAndInitForReadOnlyWorkload) {
+        {
+            TOFStream out(ConfigPath);
+            out << "path: " << Path << "\noperations: {describe: 2, list: 1}\n"
+                << "tables: {count: 1, partitions: 2, alter_batch_size: 3}\n";
+        }
+        UNIT_ASSERT_STRING_CONTAINS(Init(), "CreateTable\t1\n");
+        const auto output = RunYdb({"workload", "scheme", "run"}, {"--config", ConfigPath, "-s", "1"});
+        UNIT_ASSERT_STRING_CONTAINS(output, "CreateTable\t0\n");
+        UNIT_ASSERT_STRING_CONTAINS(output, "AddColumns\t0\n");
+        UNIT_ASSERT(!output.Contains("DescribeTable\t0\n"));
+        UNIT_ASSERT(!output.Contains("ListDirectory\t0\n"));
+    }
+
+    Y_UNIT_TEST(OptionsOverrideGroupsAndPartitionCounts) {
+        WriteConfig("tables: {count: 3, partitions: 8, alter_batch_size: 3}\ntopics: {count: 2, partitions: 8}");
+        const auto output = RunYdb({"workload", "scheme", "init"}, {"--config", ConfigPath,
+            "--tables", "1", "--topics", "1", "--partitions", "2"});
+        UNIT_ASSERT_STRING_CONTAINS(output, "CreateTable\t1\n");
+        UNIT_ASSERT_STRING_CONTAINS(output, "CreateTopic\t1\n");
+        auto driver = Driver();
+        NYdb::NTable::TTableClient tables(driver);
+        CheckTable(tables.GetSession().GetValueSync().GetSession(), 0, false);
+        NYdb::NTopic::TTopicClient topics(driver);
+        const auto topic = topics.DescribeTopic(std::string(FullPath("topic_0"))).GetValueSync();
+        UNIT_ASSERT(topic.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetTopicDescription().GetPartitions().size(), 2);
+    }
+
+    Y_UNIT_TEST(ReadOnlyDoesNotCreateMissingDirectoryOrObjects) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(RunYdb({"workload", "scheme", "run"}, {"--path", Path,
+            "--operations", "list=1", "-s", "1"}), yexception, "DescribePath");
+        auto driver = Driver();
+        NYdb::NScheme::TSchemeClient scheme(driver);
+        UNIT_ASSERT(!scheme.DescribePath(std::string(Database() + "/" + Path)).GetValueSync().IsSuccess());
+        WriteConfig("tables: {count: 1, initial_count: 0, partitions: 1}");
+        Init();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(RunYdb({"workload", "scheme", "run"}, {"--config", ConfigPath,
+            "--operations", "describe=1", "-s", "1"}), yexception, "create is disabled");
+        const auto output = RunYdb({"workload", "scheme", "run"}, {"--path", Path, "--operations", "list=2", "-s", "1"});
+        UNIT_ASSERT(!output.Contains("ListDirectory\t0\n"));
+        const auto listing = scheme.ListDirectory(std::string(Database() + "/" + Path)).GetValueSync();
+        UNIT_ASSERT(listing.IsSuccess());
+        UNIT_ASSERT(listing.GetChildren().empty());
+    }
+
     Y_UNIT_TEST(InvalidConfigurationFails) {
         WriteConfig("tables: {count: 1, partitions: 0}");
         UNIT_ASSERT_EXCEPTION_CONTAINS(Init(), yexception, "tables.partitions");

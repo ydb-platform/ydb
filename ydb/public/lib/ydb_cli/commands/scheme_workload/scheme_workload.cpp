@@ -17,14 +17,20 @@ namespace {
 class TCommandSchemeLoad final : public TYdbCommand, private TInterruptableCommand {
 public:
     explicit TCommandSchemeLoad(bool init)
-        : TYdbCommand(init ? "init" : "run", {}, init ? "Create initial_count tables and topics" : "Create missing objects and repeatedly alter tables and topics")
+        : TYdbCommand(init ? "init" : "run", {}, init ? "Create initial_count tables and topics" : "Run configured schema operations on tables and topics")
         , Init_(init)
     {}
 
     void Config(TConfig& config) override {
         TYdbCommand::Config(config);
         config.SetFreeArgsNum(0);
-        config.Opts->AddLongOption("config", "Workload YAML configuration file.").Required().RequiredArgument("PATH").StoreResult(&ConfigPath_);
+        config.Opts->AddLongOption("config", "Optional workload YAML configuration file.").RequiredArgument("PATH").StoreResult(&ConfigPath_);
+        config.Opts->AddLongOption("path", "Workload directory relative to the database; overrides YAML.").RequiredArgument("PATH").StoreResult(&Path_);
+        config.Opts->AddLongOption("tables", "Target table count; overrides YAML.").RequiredArgument("N").StoreResult(&Tables_);
+        config.Opts->AddLongOption("topics", "Target topic count; overrides YAML.").RequiredArgument("N").StoreResult(&Topics_);
+        config.Opts->AddLongOption("partitions", "Initial partitions for all configured object groups; overrides YAML.").RequiredArgument("N").StoreResult(&Partitions_);
+        config.Opts->AddLongOption("operations", "Replace run operations and in-flight limits: create=N,alter=N,describe=N,list=N. Omitted operations are disabled.")
+            .RequiredArgument("NAME=N,...").StoreResult(&Operations_);
         config.Opts->AddLongOption('t', "threads", "Number of workload threads for preparing and starting operations.")
             .DefaultValue(NYdbWorkload::NScheme::DEFAULT_WORKLOAD_THREADS).StoreResult(&Threads_);
         if (!Init_) {
@@ -35,7 +41,26 @@ public:
 
     void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
-        WorkloadConfig_ = NYdbWorkload::NScheme::ParseConfig(TFileInput(ConfigPath_).ReadAll());
+        NYdbWorkload::NScheme::TConfigOverrides overrides;
+        if (config.ParseResult->Has("path")) {
+            overrides.Path = Path_;
+        }
+        if (config.ParseResult->Has("tables")) {
+            overrides.Tables = Tables_;
+        }
+        if (config.ParseResult->Has("topics")) {
+            overrides.Topics = Topics_;
+        }
+        if (config.ParseResult->Has("partitions")) {
+            overrides.Partitions = Partitions_;
+        }
+        if (config.ParseResult->Has("operations")) {
+            overrides.Operations = Operations_;
+        }
+        const TString yaml = config.ParseResult->Has("config") ? TFileInput(ConfigPath_).ReadAll() : TString("{}");
+        WorkloadConfig_ = NYdbWorkload::NScheme::ParseConfig(yaml, overrides);
+        Y_ENSURE(Threads_ > 0 && Threads_ <= NYdbWorkload::NScheme::MAX_WORKLOAD_THREADS,
+            "--threads must be in [1, " << NYdbWorkload::NScheme::MAX_WORKLOAD_THREADS << "]");
         if (!Init_) {
             Y_ENSURE(Seconds_ > 0, "--seconds must be positive");
         }
@@ -45,9 +70,8 @@ public:
         SetInterruptHandlers();
         Y_DEFER { ResetInterrupted(); };
         auto driver = CreateDriver(config);
-        const ui64 concurrency = Init_ ? WorkloadConfig_.CreateConcurrency
-            : ui64(WorkloadConfig_.CreateConcurrency) + WorkloadConfig_.AlterConcurrency;
-        auto client = CreateSchemeWorkloadClient(driver, config.Database, std::min<ui64>(concurrency, WorkloadConfig_.ObjectCount()));
+        const ui64 concurrency = Init_ ? std::max(1u, WorkloadConfig_.CreateConcurrency) : WorkloadConfig_.TotalConcurrency();
+        auto client = CreateSchemeWorkloadClient(driver, config.Database, std::max<ui64>(1, std::min<ui64>(concurrency, WorkloadConfig_.ObjectCount())));
         NYdbWorkload::NScheme::TRunner runner(WorkloadConfig_, *client, [] { return IsInterrupted(); }, Threads_);
         const auto started = TMonotonic::Now();
         const auto print = [&] {
@@ -75,6 +99,11 @@ public:
 private:
     const bool Init_;
     TString ConfigPath_;
+    TString Path_;
+    TString Tables_;
+    TString Topics_;
+    TString Partitions_;
+    TString Operations_;
     ui32 Seconds_ = 60;
     ui32 Threads_ = NYdbWorkload::NScheme::DEFAULT_WORKLOAD_THREADS;
     NYdbWorkload::NScheme::TConfig WorkloadConfig_;
@@ -83,7 +112,7 @@ private:
 } // namespace
 
 TCommandWorkloadScheme::TCommandWorkloadScheme()
-    : TClientCommandTree("scheme", {}, "Create and alter tables and topics to stress schema operations")
+    : TClientCommandTree("scheme", {}, "Stress schema creation, alteration, description and directory listing")
 {
     AddCommand(std::make_unique<TCommandSchemeLoad>(true));
     AddCommand(std::make_unique<TCommandSchemeLoad>(false));

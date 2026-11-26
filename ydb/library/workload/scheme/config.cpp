@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <utility>
 
 namespace NYdbWorkload::NScheme {
 namespace {
@@ -52,11 +53,48 @@ TGroupConfig ParseGroup(const YAML::Node& node, const TString& name) {
 
 } // namespace
 
-TConfig ParseConfig(const TString& yaml) {
+TConfig ParseConfig(const TString& yaml, const TConfigOverrides& overrides) {
     const auto documents = YAML::LoadAll(std::string(yaml));
     Y_ENSURE(documents.size() == 1, "Expected exactly one YAML document");
-    const auto& root = documents.front();
-    CheckKeys(root, {"path", "create_concurrency", "alter_concurrency", "tables", "topics"}, "config");
+    auto root = documents.front();
+    CheckKeys(root, {"path", "create_concurrency", "alter_concurrency", "operations", "tables", "topics"}, "config");
+    Y_ENSURE(!root["operations"] || (!root["create_concurrency"] && !root["alter_concurrency"]),
+        "operations cannot be combined with create_concurrency or alter_concurrency");
+    if (root["operations"]) {
+        CheckKeys(root["operations"], {"create", "alter", "describe", "list"}, "operations");
+    }
+    for (const auto& [name, count] : {std::pair{"tables", overrides.Tables}, std::pair{"topics", overrides.Topics}}) {
+        if (root[name]) {
+            CheckKeys(root[name], {"count", "initial_count", "partitions", "alter_batch_size"}, name);
+        }
+        if (count) {
+            if (!root[name]) {
+                root[name]["partitions"] = 1;
+            }
+            root[name]["count"] = std::string(*count);
+        }
+        if (overrides.Partitions && root[name]) {
+            root[name]["partitions"] = std::string(*overrides.Partitions);
+        }
+    }
+    if (overrides.Path) {
+        root["path"] = std::string(*overrides.Path);
+    }
+    if (overrides.Operations) {
+        YAML::Node operations(YAML::NodeType::Map);
+        for (const auto& part : StringSplitter(*overrides.Operations).Split(',')) {
+            const TStringBuf item = part.Token();
+            const auto separator = item.find('=');
+            Y_ENSURE(separator != TStringBuf::npos && separator > 0 && separator + 1 < item.size(),
+                "--operations must be a comma-separated list such as create=16,describe=32");
+            const std::string name(item.substr(0, separator));
+            Y_ENSURE(!operations[name], "Duplicate operation: " << name);
+            operations[name] = std::string(item.substr(separator + 1));
+        }
+        root.remove("create_concurrency");
+        root.remove("alter_concurrency");
+        root["operations"] = operations;
+    }
     TConfig result;
     Y_ENSURE(root["path"].IsScalar(), "path must be a relative database path");
     result.Path = root["path"].Scalar();
@@ -69,22 +107,41 @@ TConfig ParseConfig(const TString& yaml) {
                 || c == '_' || c == '-' || c == '.', "Unsupported character in path");
         }
     }
-    if (root["create_concurrency"]) {
-        result.CreateConcurrency = Integer(root["create_concurrency"], "create_concurrency");
+    if (root["operations"]) {
+        const auto operations = root["operations"];
+        CheckKeys(operations, {"create", "alter", "describe", "list"}, "operations");
+        result.CreateConcurrency = operations["create"] ? Integer(operations["create"], "operations.create") : 0;
+        result.AlterConcurrency = operations["alter"] ? Integer(operations["alter"], "operations.alter") : 0;
+        result.DescribeConcurrency = operations["describe"] ? Integer(operations["describe"], "operations.describe") : 0;
+        result.ListConcurrency = operations["list"] ? Integer(operations["list"], "operations.list") : 0;
+        Y_ENSURE(result.TotalConcurrency() > 0, "operations must not be empty");
+        Y_ENSURE(result.TotalConcurrency() <= MAX_IN_FLIGHT_OPERATIONS,
+            "Sum of operation concurrency limits must not exceed " << MAX_IN_FLIGHT_OPERATIONS);
+    } else {
+        if (root["create_concurrency"]) {
+            result.CreateConcurrency = Integer(root["create_concurrency"], "create_concurrency");
+        }
+        if (root["alter_concurrency"]) {
+            result.AlterConcurrency = Integer(root["alter_concurrency"], "alter_concurrency");
+        }
+        Y_ENSURE(result.TotalConcurrency() <= MAX_IN_FLIGHT_OPERATIONS,
+            "create_concurrency + alter_concurrency must not exceed " << MAX_IN_FLIGHT_OPERATIONS);
     }
-    if (root["alter_concurrency"]) {
-        result.AlterConcurrency = Integer(root["alter_concurrency"], "alter_concurrency");
-    }
-    Y_ENSURE(ui64(result.CreateConcurrency) + result.AlterConcurrency <= MAX_IN_FLIGHT_OPERATIONS,
-        "create_concurrency + alter_concurrency must not exceed " << MAX_IN_FLIGHT_OPERATIONS);
     if (root["tables"]) {
         result.Tables = ParseGroup(root["tables"], "tables");
     }
     if (root["topics"]) {
         result.Topics = ParseGroup(root["topics"], "topics");
     }
-    Y_ENSURE(result.Tables || result.Topics, "At least one of tables or topics is required");
+    Y_ENSURE(result.Tables || result.Topics ||
+        (result.ListConcurrency && !result.CreateConcurrency && !result.AlterConcurrency && !result.DescribeConcurrency),
+        "At least one of tables or topics is required unless only list is enabled");
+    Y_ENSURE(!overrides.Partitions || result.Tables || result.Topics, "--partitions requires tables or topics");
     return result;
+}
+
+ui64 TConfig::TotalConcurrency() const {
+    return ui64(CreateConcurrency) + AlterConcurrency + DescribeConcurrency + ListConcurrency;
 }
 
 ui64 TConfig::ObjectCount() const {

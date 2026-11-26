@@ -102,6 +102,85 @@ topics: {count: 3, partitions: 16, alter_batch_size: 4}
         }
     }
 
+    Y_UNIT_TEST(SelectsOperationsAndRejectsInvalidMaps) {
+        const auto config = ParseConfig("path: load\noperations: {describe: 32, list: 2}\ntables: {count: 5, partitions: 1}");
+        UNIT_ASSERT_VALUES_EQUAL(config.CreateConcurrency, 0);
+        UNIT_ASSERT_VALUES_EQUAL(config.AlterConcurrency, 0);
+        UNIT_ASSERT_VALUES_EQUAL(config.DescribeConcurrency, 32);
+        UNIT_ASSERT_VALUES_EQUAL(config.ListConcurrency, 2);
+        UNIT_ASSERT_VALUES_EQUAL(config.TotalConcurrency(), 34);
+        for (const TString& operations : {"{}", "[]", "null", "{drop: 1}", "{describe: 0}", "{list: -1}",
+                "{list: 1, list: 2}", "{create: 100, alter: 100, describe: 56, list: 1}", "{list: 4294967295}"}) {
+            UNIT_ASSERT_EXCEPTION(ParseConfig("path: load\ntables: {count: 1, partitions: 1}\noperations: " + operations), std::exception);
+        }
+        UNIT_ASSERT_EXCEPTION_CONTAINS(ParseConfig("path: load\noperations: {list: 1}\ncreate_concurrency: 1"),
+            yexception, "cannot be combined");
+        UNIT_ASSERT_EXCEPTION(ParseConfig("path: load\noperations: {describe: 1}"), yexception);
+        UNIT_ASSERT_VALUES_EQUAL(ParseConfig("path: load\noperations: {list: 256}").TotalConcurrency(), 256);
+    }
+
+    Y_UNIT_TEST(OptionsBuildConfigurationWithoutFile) {
+        TConfigOverrides options;
+        options.Path = "load";
+        options.Tables = "3";
+        options.Topics = "2";
+        options.Operations = "create=4,alter=2,describe=8,list=1";
+        const auto config = ParseConfig("{}", options);
+        UNIT_ASSERT_VALUES_EQUAL(config.ObjectCount(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(config.InitialObjectCount(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(config.Tables->Partitions, 1);
+        UNIT_ASSERT_VALUES_EQUAL(config.Topics->Partitions, 1);
+        UNIT_ASSERT_VALUES_EQUAL(config.Tables->AlterBatchSize, 1);
+        UNIT_ASSERT_VALUES_EQUAL(config.TotalConcurrency(), 15);
+        UNIT_ASSERT_VALUES_EQUAL(config.DescribeConcurrency, 8);
+    }
+
+    Y_UNIT_TEST(OptionsOverrideOnlyExplicitFieldsAndReplaceOperations) {
+        const TString yaml = "path: load\ncreate_concurrency: 16\nalter_concurrency: 8\n"
+            "tables: {count: 10, initial_count: 2, partitions: 4, alter_batch_size: 3}\n"
+            "topics: {count: 5, partitions: 8}";
+        TConfigOverrides options;
+        options.Path = "other";
+        options.Tables = "7";
+        options.Operations = "describe=32";
+        auto config = ParseConfig(yaml, options);
+        UNIT_ASSERT_VALUES_EQUAL(config.Path, "other");
+        UNIT_ASSERT_VALUES_EQUAL(config.Tables->Count, 7);
+        UNIT_ASSERT_VALUES_EQUAL(config.Tables->InitialCount, 2);
+        UNIT_ASSERT_VALUES_EQUAL(config.Tables->Partitions, 4);
+        UNIT_ASSERT_VALUES_EQUAL(config.Tables->AlterBatchSize, 3);
+        UNIT_ASSERT_VALUES_EQUAL(config.Topics->Count, 5);
+        UNIT_ASSERT_VALUES_EQUAL(config.Topics->Partitions, 8);
+        UNIT_ASSERT_VALUES_EQUAL(config.TotalConcurrency(), 32);
+        UNIT_ASSERT_VALUES_EQUAL(config.CreateConcurrency + config.AlterConcurrency + config.ListConcurrency, 0);
+        options.Partitions = "16";
+        config = ParseConfig(yaml, options);
+        UNIT_ASSERT_VALUES_EQUAL(config.Tables->Partitions, 16);
+        UNIT_ASSERT_VALUES_EQUAL(config.Topics->Partitions, 16);
+        options.Tables = "1";
+        UNIT_ASSERT_EXCEPTION_CONTAINS(ParseConfig(yaml, options), yexception, "initial_count must not exceed count");
+        options = {};
+        options.Operations = "list=2";
+        config = ParseConfig("path: load\noperations: {describe: 5}", options);
+        UNIT_ASSERT_VALUES_EQUAL(config.TotalConcurrency(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(config.DescribeConcurrency, 0);
+    }
+
+    Y_UNIT_TEST(RejectsInvalidOptions) {
+        TConfigOverrides options;
+        for (const TString& operations : {"", "list", "list=", "=1", "list=1,", "list=1,list=2", "drop=1", "list=0", "list=1=2", "list=-1"}) {
+            options.Operations = operations;
+            UNIT_ASSERT_EXCEPTION(ParseConfig("path: load", options), std::exception);
+        }
+        options = {};
+        options.Partitions = "2";
+        UNIT_ASSERT_EXCEPTION_CONTAINS(ParseConfig("path: load\noperations: {list: 1}", options), yexception, "requires tables or topics");
+        for (const TString& count : {"0", "-1", "4294967296", "foo"}) {
+            options.Tables = count;
+            UNIT_ASSERT_EXCEPTION(ParseConfig("path: load", options), std::exception);
+        }
+    }
+
     Y_UNIT_TEST(ObjectCountDoesNotOverflow) {
         const auto config = ParseConfig("path: load\ntables: {count: 4294967295, partitions: 1}\ntopics: {count: 1, partitions: 1}");
         UNIT_ASSERT_VALUES_EQUAL(config.ObjectCount(), 4294967296ULL);

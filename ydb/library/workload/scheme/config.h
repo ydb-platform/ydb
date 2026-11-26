@@ -28,15 +28,27 @@ struct TConfig {
     TString Path;
     ui32 CreateConcurrency = 1;
     ui32 AlterConcurrency = 1;
+    ui32 DescribeConcurrency = 0;
+    ui32 ListConcurrency = 0;
     std::optional<TGroupConfig> Tables;
     std::optional<TGroupConfig> Topics;
 
+    ui64 TotalConcurrency() const;
     ui64 ObjectCount() const;
     ui64 InitialObjectCount() const;
     TObject Object(ui64 index) const;
     TObject InitialObject(ui64 index) const;
 };
 
-TConfig ParseConfig(const TString& yaml);
+// Only explicitly supplied CLI options override YAML fields.
+struct TConfigOverrides {
+    std::optional<TString> Path;
+    std::optional<TString> Tables;
+    std::optional<TString> Topics;
+    std::optional<TString> Partitions;
+    std::optional<TString> Operations;
+};
+
+TConfig ParseConfig(const TString& yaml, const TConfigOverrides& overrides = {});
 
 } // namespace NYdbWorkload::NScheme

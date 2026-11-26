@@ -122,7 +122,7 @@ void Execute(IThreadPool& pool, const TRunner::TCancelled& cancelled, TSchedule&
 } // namespace
 
 const char* OperationName(EOperation operation) {
-    static constexpr const char* Names[] = {"CreateTable", "CreateTopic", "AddColumns", "DropColumns", "AddConsumers", "DropConsumers"};
+    static constexpr const char* Names[] = {"CreateTable", "CreateTopic", "AddColumns", "DropColumns", "AddConsumers", "DropConsumers", "DescribeTable", "DescribeTopic", "ListDirectory"};
     return Names[static_cast<size_t>(operation)];
 }
 
@@ -134,8 +134,7 @@ TRunner::TRunner(const TConfig& config, IClient& client, TCancelled cancelled, u
 {
     Y_ENSURE(Threads_ > 0 && Threads_ <= MAX_WORKLOAD_THREADS,
         "--threads must be in [1, " << MAX_WORKLOAD_THREADS << "]");
-    Y_ENSURE(Config_.CreateConcurrency && Config_.AlterConcurrency
-        && ui64(Config_.CreateConcurrency) + Config_.AlterConcurrency <= MAX_IN_FLIGHT_OPERATIONS,
+    Y_ENSURE(Config_.TotalConcurrency() > 0 && Config_.TotalConcurrency() <= MAX_IN_FLIGHT_OPERATIONS,
         "Invalid scheme workload concurrency");
 }
 
@@ -151,10 +150,10 @@ void TRunner::Init() {
     Y_ENSURE(!Cancelled_(), "Scheme workload interrupted");
     TThreadPool pool;
     pool.Start(std::min<ui64>(Threads_, Config_.InitialObjectCount()));
-    Client_.PrepareDirectory(Config_.Path);
+    Client_.PrepareDirectory(Config_.Path, true);
     ui64 next = 0;
     Execute(pool, Cancelled_, [&](TPendingOperations& pending) {
-        if (next == Config_.InitialObjectCount() || pending.Size() >= Config_.CreateConcurrency) {
+        if (next == Config_.InitialObjectCount() || pending.Size() >= std::max(1u, Config_.CreateConcurrency)) {
             return false;
         }
         const auto object = Config_.InitialObject(next++);
@@ -169,12 +168,14 @@ void TRunner::Run(TDuration duration) {
     Y_ENSURE(duration > TDuration::Zero(), "Run duration must be positive");
     Y_ENSURE(!Cancelled_(), "Scheme workload interrupted");
     TThreadPool pool;
-    pool.Start(std::min<ui64>(Threads_, Config_.ObjectCount()));
-    Client_.PrepareDirectory(Config_.Path);
-    std::vector<EObjectState> states(Config_.ObjectCount());
+    pool.Start(std::min<ui64>(Threads_, std::max<ui64>(1, Config_.ObjectCount() + Config_.ListConcurrency)));
+    Client_.PrepareDirectory(Config_.Path, Config_.CreateConcurrency != 0);
+    const ui64 objectCount = Config_.CreateConcurrency || Config_.AlterConcurrency || Config_.DescribeConcurrency
+        ? Config_.ObjectCount() : 0;
+    std::vector<EObjectState> states(objectCount);
     ui64 next = 0;
     Execute(pool, Cancelled_, [&](TPendingOperations& pending) {
-        if (next == Config_.ObjectCount() || pending.Size() >= Config_.AlterConcurrency) {
+        if (next == objectCount || pending.Size() >= Config_.TotalConcurrency()) {
             return false;
         }
         const ui64 index = next++;
@@ -188,45 +189,71 @@ void TRunner::Run(TDuration duration) {
 
     std::deque<ui64> missing;
     std::deque<ui64> ready;
-    for (ui64 index = 0; index < Config_.ObjectCount(); ++index) {
+    for (ui64 index = 0; index < objectCount; ++index) {
         (states[index] == EObjectState::Missing ? missing : ready).push_back(index);
     }
 
-    ui32 creating = 0;
-    ui32 altering = 0;
-    bool preferCreate = true;
-    const auto deadline = TMonotonic::Now() + duration;
-    // The scheduling thread owns both queues and updates them when futures complete.
-    Execute(pool, Cancelled_, [&](TPendingOperations& pending) {
-        const bool canCreate = !missing.empty() && creating < Config_.CreateConcurrency;
-        const bool canAlter = !ready.empty() && altering < Config_.AlterConcurrency;
-        if (!canCreate && !canAlter) {
-            return false;
-        }
+    Y_ENSURE(Config_.CreateConcurrency || missing.empty(),
+        "Objects are missing while create is disabled; run init or enable create");
 
-        const bool create = canCreate && (preferCreate || !canAlter);
-        preferCreate = !create;
-        auto& queue = create ? missing : ready;
-        const ui64 index = queue.front();
-        queue.pop_front();
-        ++(create ? creating : altering);
-        const bool add = states[index] == EObjectState::WithoutBatch;
-        const auto object = Config_.Object(index);
-        pending.Start([this, object, create, add] {
-            return create ? Client_.Create(object) : Client_.Alter(object, add);
-        }, [&, index, create, add, type = object.Type] {
-            if (create) {
-                Count(type == EObjectType::Table ? EOperation::CreateTable : EOperation::CreateTopic);
-            } else {
-                Count(type == EObjectType::Table
-                    ? (add ? EOperation::AddColumns : EOperation::DropColumns)
-                    : (add ? EOperation::AddConsumers : EOperation::DropConsumers));
+    enum EKind : size_t { Create, Alter, Describe, List, KindCount };
+    const std::array<ui32, KindCount> limits = {Config_.CreateConcurrency, Config_.AlterConcurrency,
+        Config_.DescribeConcurrency, Config_.ListConcurrency};
+    std::array<ui32, KindCount> active{};
+    size_t nextKind = Create;
+    const auto deadline = TMonotonic::Now() + duration;
+    // One coordinator owns the queues; ALTER and DESCRIBE share the ready set,
+    // so no object has overlapping operations. Directory listings are independent.
+    Execute(pool, Cancelled_, [&](TPendingOperations& pending) {
+        for (size_t attempt = 0; attempt < KindCount; ++attempt) {
+            const auto kind = static_cast<EKind>(nextKind);
+            nextKind = (nextKind + 1) % KindCount;
+            if (active[kind] >= limits[kind]) {
+                continue;
             }
-            --(create ? creating : altering);
-            states[index] = !create && add ? EObjectState::WithBatch : EObjectState::WithoutBatch;
-            ready.push_back(index);
-        });
-        return true;
+            if (kind == List) {
+                ++active[kind];
+                pending.Start([this] { return Client_.List(Config_.Path); }, [&] {
+                    --active[List];
+                    Count(EOperation::ListDirectory);
+                });
+                return true;
+            }
+            auto& queue = kind == Create ? missing : ready;
+            if (queue.empty()) {
+                continue;
+            }
+            const ui64 index = queue.front();
+            queue.pop_front();
+            ++active[kind];
+            const bool add = states[index] == EObjectState::WithoutBatch;
+            const auto object = Config_.Object(index);
+            pending.Start([this, object, kind, add] {
+                if (kind == Create) {
+                    return Client_.Create(object);
+                }
+                if (kind == Describe) {
+                    return Client_.Describe(object);
+                }
+                return Client_.Alter(object, add);
+            }, [&, index, kind, add, type = object.Type] {
+                if (kind == Create) {
+                    Count(type == EObjectType::Table ? EOperation::CreateTable : EOperation::CreateTopic);
+                    states[index] = EObjectState::WithoutBatch;
+                } else if (kind == Describe) {
+                    Count(type == EObjectType::Table ? EOperation::DescribeTable : EOperation::DescribeTopic);
+                } else {
+                    Count(type == EObjectType::Table
+                        ? (add ? EOperation::AddColumns : EOperation::DropColumns)
+                        : (add ? EOperation::AddConsumers : EOperation::DropConsumers));
+                    states[index] = add ? EObjectState::WithBatch : EObjectState::WithoutBatch;
+                }
+                --active[kind];
+                ready.push_back(index);
+            });
+            return true;
+        }
+        return false;
     }, deadline);
 }
 

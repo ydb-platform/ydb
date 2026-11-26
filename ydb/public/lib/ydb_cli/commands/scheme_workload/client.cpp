@@ -46,7 +46,7 @@ public:
         }
     }
 
-    void PrepareDirectory(const TString& path) override {
+    void PrepareDirectory(const TString& path, bool create) override {
         std::string fullPath = Database_;
         for (const auto& part : StringSplitter(path).Split('/')) {
             fullPath += "/" + std::string(part.Token());
@@ -54,7 +54,7 @@ public:
             if (result.IsSuccess()) {
                 Y_ENSURE(result.GetEntry().Type == NScheme::ESchemeEntryType::Directory, "Expected directory at " << fullPath);
             } else {
-                if (result.GetStatus() != EStatus::SCHEME_ERROR) {
+                if (!create || result.GetStatus() != EStatus::SCHEME_ERROR) {
                     Check(result, "DescribePath", fullPath);
                 }
                 Check(Scheme_.MakeDirectory(fullPath, NScheme::TMakeDirectorySettings().ClientTimeout(RequestTimeout)).GetValueSync(), "MakeDirectory", fullPath);
@@ -137,6 +137,30 @@ public:
                     names.insert(consumer.GetConsumerName());
                 }
                 return CheckBatch(names, "reader_", object) ? EObjectState::WithBatch : EObjectState::WithoutBatch;
+            });
+    }
+
+    TFuture<void> Describe(const TObject& object) override {
+        const auto path = FullPath(object);
+        if (object.Type == EObjectType::Table) {
+            return WithSession([path](auto& session) {
+                return session.DescribeTable(path, NTable::TDescribeTableSettings()
+                    .WithKeyShardBoundary(true).ClientTimeout(RequestTimeout));
+            }).Apply([path](const auto& result) {
+                Check(result.GetValue(), "DescribeTable", path);
+            });
+        }
+        return Topics_.DescribeTopic(path, NTopic::TDescribeTopicSettings().ClientTimeout(RequestTimeout))
+            .Apply([path](const auto& result) {
+                Check(result.GetValue(), "DescribeTopic", path);
+            });
+    }
+
+    TFuture<void> List(const TString& relativePath) override {
+        const auto path = Database_ + "/" + std::string(relativePath);
+        return Scheme_.ListDirectory(path, NScheme::TListDirectorySettings().ClientTimeout(RequestTimeout))
+            .Apply([path](const auto& result) {
+                Check(result.GetValue(), "ListDirectory", path);
             });
     }
 

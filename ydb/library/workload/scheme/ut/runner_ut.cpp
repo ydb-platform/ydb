@@ -19,7 +19,7 @@ namespace {
 
 class TClient final : public IClient {
 public:
-    void PrepareDirectory(const TString&) override { ++Directories; }
+    void PrepareDirectory(const TString&, bool create) override { ++Directories; CreateDirectory = create; }
 
     NThreading::TFuture<void> Create(const TObject& object) override {
         Enter(object, true);
@@ -66,6 +66,23 @@ public:
             ++Drops;
         }
         BatchSizes.insert(object.AlterBatchSize);
+        return NThreading::MakeFuture();
+    }
+
+    NThreading::TFuture<void> Describe(const TObject& object) override {
+        Enter(object, false);
+        Y_DEFER { Leave(object, false); };
+        std::lock_guard guard(Mutex);
+        Y_ENSURE(!FailDescribe, "DESCRIBE failed");
+        Y_ENSURE(Present.contains(object.Path), "Describing missing object");
+        ++Describes;
+        return NThreading::MakeFuture();
+    }
+
+    NThreading::TFuture<void> List(const TString&) override {
+        std::lock_guard guard(Mutex);
+        Y_ENSURE(!FailList, "LIST failed");
+        ++Lists;
         return NThreading::MakeFuture();
     }
 
@@ -118,6 +135,11 @@ public:
     ui64 Alters = 0;
     ui64 Adds = 0;
     ui64 Drops = 0;
+    bool CreateDirectory = false;
+    bool FailDescribe = false;
+    bool FailList = false;
+    ui64 Describes = 0;
+    ui64 Lists = 0;
     bool FailAlter = false;
     bool FailCreate = false;
     TString InvalidPath;
@@ -138,7 +160,7 @@ topics: {count: 2, partitions: 2, alter_batch_size: 3}
 
 class TDeferredClient final : public IClient {
 public:
-    void PrepareDirectory(const TString&) override {}
+    void PrepareDirectory(const TString&, bool) override {}
 
     NThreading::TFuture<void> Create(const TObject&) override {
         ++Creates;
@@ -155,6 +177,19 @@ public:
         return Start();
     }
 
+    NThreading::TFuture<void> Describe(const TObject&) override {
+        ++Describes;
+        return Start();
+    }
+
+    NThreading::TFuture<void> List(const TString&) override {
+        ++Lists;
+        return Start();
+    }
+
+    ui32 Describes = 0;
+    ui32 Lists = 0;
+    ui32 Expected = 5;
     ui32 Creates = 0;
     ui32 Alters = 0;
     TManualEvent AllStarted;
@@ -162,7 +197,7 @@ public:
 
 private:
     NThreading::TFuture<void> Start() {
-        if (Creates + Alters == 5) {
+        if (Creates + Alters + Describes + Lists == Expected) {
             AllStarted.Signal();
         }
         return Completion.GetFuture();
@@ -186,6 +221,117 @@ Y_UNIT_TEST_SUITE(SchemeWorkloadRunner) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(runner.Run(TDuration::Seconds(10)), yexception, "interrupted");
         UNIT_ASSERT_VALUES_EQUAL(client.Creates, 3);
         UNIT_ASSERT_VALUES_EQUAL(client.Alters, 2);
+    }
+
+    Y_UNIT_TEST(SingleThreadStartsAllOperationKindsWithIndependentLimits) {
+        auto config = Config();
+        config.AlterConcurrency = 1;
+        config.DescribeConcurrency = 1;
+        config.ListConcurrency = 2;
+        TDeferredClient client;
+        client.Expected = 7;
+        std::atomic<bool> cancelled = false;
+        std::jthread complete([&] {
+            client.AllStarted.Wait(5000);
+            cancelled = true;
+            client.Completion.SetValue();
+        });
+        TRunner runner(config, client, [&] { return cancelled.load(); }, 1);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(runner.Run(TDuration::Seconds(10)), yexception, "interrupted");
+        UNIT_ASSERT_VALUES_EQUAL(client.Creates, 3);
+        UNIT_ASSERT_VALUES_EQUAL(client.Alters, 1);
+        UNIT_ASSERT_VALUES_EQUAL(client.Describes, 1);
+        UNIT_ASSERT_VALUES_EQUAL(client.Lists, 2);
+        UNIT_ASSERT_VALUES_EQUAL(runner.Statistics()[static_cast<size_t>(EOperation::ListDirectory)], 2);
+    }
+
+    Y_UNIT_TEST(ReadOnlyDoesNotMutateAndCountsTrafficSeparatelyFromInspection) {
+        auto config = Config();
+        config.CreateConcurrency = 0;
+        config.AlterConcurrency = 0;
+        config.DescribeConcurrency = 3;
+        config.ListConcurrency = 1;
+        TClient client;
+        for (ui64 i = 0; i < config.ObjectCount(); ++i) {
+            client.Present[config.Object(i).Path] = i % 2;
+        }
+        const auto before = client.Present;
+        TRunner runner(config, client);
+        runner.Run(TDuration::MilliSeconds(100));
+        UNIT_ASSERT(!client.CreateDirectory);
+        UNIT_ASSERT(client.Present == before);
+        UNIT_ASSERT_VALUES_EQUAL(client.Creates + client.Alters, 0);
+        UNIT_ASSERT_VALUES_EQUAL(client.Inspects, config.ObjectCount());
+        const auto counters = runner.Statistics();
+        UNIT_ASSERT_VALUES_EQUAL(counters[static_cast<size_t>(EOperation::DescribeTable)]
+            + counters[static_cast<size_t>(EOperation::DescribeTopic)], client.Describes);
+        UNIT_ASSERT_GT(client.Describes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters[static_cast<size_t>(EOperation::ListDirectory)], client.Lists);
+        UNIT_ASSERT_GT(client.Lists, 0);
+    }
+
+    Y_UNIT_TEST(MissingObjectsRequireCreate) {
+        auto config = Config();
+        config.CreateConcurrency = 0;
+        config.AlterConcurrency = 0;
+        config.DescribeConcurrency = 2;
+        TClient client;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TRunner(config, client).Run(TDuration::Seconds(1)), yexception, "create is disabled");
+        UNIT_ASSERT(!client.CreateDirectory);
+        UNIT_ASSERT_VALUES_EQUAL(client.Creates + client.Alters + client.Describes, 0);
+    }
+
+    Y_UNIT_TEST(ListOnlyNeedsNoObjectsAndDoesNotInspectThem) {
+        const auto config = ParseConfig("path: load\noperations: {list: 3}");
+        TClient client;
+        TRunner runner(config, client, [] { return false; }, 1);
+        runner.Run(TDuration::MilliSeconds(50));
+        UNIT_ASSERT(!client.CreateDirectory);
+        UNIT_ASSERT_VALUES_EQUAL(client.Inspects + client.Creates + client.Alters, 0);
+        UNIT_ASSERT_GT(client.Lists, 0);
+        UNIT_ASSERT_VALUES_EQUAL(runner.Statistics()[static_cast<size_t>(EOperation::ListDirectory)], client.Lists);
+    }
+
+    Y_UNIT_TEST(ReadFailuresPropagateWithoutCountingSuccess) {
+        for (bool list : {false, true}) {
+            auto config = Config();
+            config.CreateConcurrency = 0;
+            config.AlterConcurrency = 0;
+            config.DescribeConcurrency = list ? 0 : 1;
+            config.ListConcurrency = list ? 1 : 0;
+            TClient client;
+            for (ui64 i = 0; i < config.ObjectCount(); ++i) {
+                client.Present[config.Object(i).Path] = false;
+            }
+            client.FailDescribe = !list;
+            client.FailList = list;
+            TRunner runner(config, client);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(runner.Run(TDuration::Seconds(1)), yexception, list ? "LIST failed" : "DESCRIBE failed");
+            for (auto counter : runner.Statistics()) {
+                UNIT_ASSERT_VALUES_EQUAL(counter, 0);
+            }
+            UNIT_ASSERT(client.Busy.empty());
+        }
+    }
+
+    Y_UNIT_TEST(CreateOnlyFinishesAtTarget) {
+        auto config = Config();
+        config.AlterConcurrency = 0;
+        TClient client;
+        TRunner(config, client).Run(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(client.Creates, config.ObjectCount());
+        UNIT_ASSERT_VALUES_EQUAL(client.Alters + client.Describes + client.Lists, 0);
+    }
+
+    Y_UNIT_TEST(InitPreparesObjectsForDescribeOnlyRun) {
+        auto config = Config();
+        config.CreateConcurrency = 0;
+        config.AlterConcurrency = 0;
+        config.DescribeConcurrency = 2;
+        TClient client;
+        TRunner(config, client).Init();
+        UNIT_ASSERT(client.CreateDirectory);
+        UNIT_ASSERT_VALUES_EQUAL(client.Creates, config.InitialObjectCount());
     }
 
     Y_UNIT_TEST(CreateConcurrencyAndBothTypes) {

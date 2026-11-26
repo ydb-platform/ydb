@@ -8,6 +8,7 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/executor_pool.h>
 #include <ydb/library/actors/core/mon_stats.h>
 #include <ydb/library/query_actor/query_actor.h>
@@ -30,6 +31,8 @@ struct TQueryOptions {
     TDuration CancelAfter;
     TString QueryId;
     TString Sql = ReadSql;
+    TMaybe<TString> Token;
+    bool OnlineReadOnly = false;
 };
 
 struct TResult {
@@ -94,6 +97,17 @@ public:
         return *Kikimr.GetTestServer().GetRuntime();
     }
 
+    void CreateBackupCopy() {
+        Kikimr.RunCall([&] {
+            UNIT_ASSERT_VALUES_EQUAL(Kikimr.GetTestClient().CreateTable("/Root", R"(
+                Name: "BackupCopy"
+                CopyFromTable: "/Root/Objects"
+                IsBackup: true
+            )"), NMsgBusProxy::MSTATUS_OK);
+            return true;
+        });
+    }
+
     TString CreateSession() {
         using TRpc = TGrpcRequestOperationCall<Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse>;
         auto future = DoLocalRpc<TRpc>(Ydb::Table::CreateSessionRequest(), "/Root", Nothing(), Runtime().GetActorSystem(SessionNode), true);
@@ -113,13 +127,18 @@ public:
         } else {
             request.mutable_query()->set_yql_text(options.Sql);
         }
-        request.mutable_tx_control()->mutable_begin_tx()->mutable_snapshot_read_only();
+        auto* begin = request.mutable_tx_control()->mutable_begin_tx();
+        if (options.OnlineReadOnly) {
+            begin->mutable_online_read_only()->set_allow_inconsistent_reads(true);
+        } else {
+            begin->mutable_snapshot_read_only();
+        }
         request.mutable_tx_control()->set_commit_tx(true);
         request.mutable_query_cache_policy()->set_keep_in_cache(true);
         request.set_collect_stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
         request.mutable_operation_params()->mutable_operation_timeout()->set_seconds(options.Timeout.Seconds());
         request.mutable_operation_params()->mutable_cancel_after()->set_seconds(options.CancelAfter.Seconds());
-        return DoLocalRpc<TRpc>(std::move(request), "/Root", Nothing(), options.RequestType, Runtime().GetActorSystem(0), options.Internal);
+        return DoLocalRpc<TRpc>(std::move(request), "/Root", options.Token, options.RequestType, Runtime().GetActorSystem(0), options.Internal);
     }
 
 private:
@@ -170,6 +189,37 @@ Ydb::Table::ExecuteQueryResult AssertAggregate(const Ydb::Table::ExecuteDataQuer
 }   // namespace
 
 Y_UNIT_TEST_SUITE(QueryActorChecksumTable) {
+    Y_UNIT_TEST_TWIN(PrivateBackupCopyRequiresTrustedChecksumRequest, Remote) {
+        TTestEnv env(Remote);
+        env.CreateBackupCopy();
+        const auto session = env.CreateSession();
+        TQueryOptions options;
+        options.Sql = "SELECT SUM(Value) AS Total, COUNT(*) AS Rows FROM `/Root/BackupCopy`";
+        options.Token = NACLib::TSystemUsers::Metadata().SerializeAsString();
+        options.OnlineReadOnly = true;
+
+        AssertAggregate(env.Runtime().WaitFuture(env.Start(session, options)));
+
+        const auto expectRejected = [&](const TQueryOptions& rejected) {
+            const auto response = env.Runtime().WaitFuture(env.Start(session, rejected));
+            UNIT_ASSERT_C(response.operation().status() != Ydb::StatusIds::SUCCESS, response.DebugString());
+        };
+        options.Internal = false;
+        expectRejected(options);
+        options.Internal = true;
+        options.Token = NACLib::TSystemUsers::Tmp().SerializeAsString();
+        expectRejected(options);
+        options.Token = NACLib::TSystemUsers::Metadata().SerializeAsString();
+        options.RequestType = Nothing();
+        expectRejected(options);
+
+        options.RequestType = TString(NRequestTypes::ChecksumTable);
+        options.Sql = ReadSql;
+        const auto response = env.Runtime().WaitFuture(env.Start(session, options));
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::PRECONDITION_FAILED);
+        UNIT_ASSERT_STRING_CONTAINS(response.DebugString(), "Export checksum requires a private backup table");
+    }
+
     Y_UNIT_TEST_TWIN(QueryActorExceedsDefaultTimeout, Remote) {
         TTestEnv env(Remote);
         const auto session = env.CreateSession();

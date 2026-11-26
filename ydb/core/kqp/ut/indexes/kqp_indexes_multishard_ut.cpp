@@ -1417,7 +1417,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             )"));
 
             auto result = ExecuteDataQuery(session, query);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[2u]]");
         }
@@ -1428,7 +1428,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             )"));
 
             auto result = ExecuteDataQuery(session, query);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[#];[[5u]]]");
         }
@@ -1439,7 +1439,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             )"));
 
             auto result = ExecuteDataQuery(session, query);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[#];[#]]");
         }
@@ -1450,7 +1450,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             )"));
 
             auto result = ExecuteDataQuery(session, query);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[#;#;[\"nullnull\"]];[#;[5u];[\"null5\"]]]");
         }
@@ -1461,7 +1461,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             )"));
 
             auto result = ExecuteDataQuery(session, query);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[#;[5u];[\"null5\"]];[#;#;[\"nullnull\"]]]");
         }
@@ -1481,7 +1481,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             )"));
 
             auto result = ExecuteDataQuery(session, query);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[2u]]]");
         }
@@ -1492,7 +1492,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             )"));
 
             auto result = ExecuteDataQuery(session, query);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[]");
         }
@@ -1503,7 +1503,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             )"));
 
             auto result = ExecuteDataQuery(session, query);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[2u];[2000000000u]]]");
         }

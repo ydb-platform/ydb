@@ -1807,6 +1807,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithDoubleYdbJoin, TStreamingTestFixture) {
+        // NewRBO fallback repeats metadata calls, exceeding this test's mock expectations.
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableNewRBO(false);
         const auto connectorClient = SetupMockConnectorClient();
         const auto pqGateway = SetupMockPqGateway();
 

@@ -383,6 +383,11 @@ bool HasIssue(const NYql::TIssues& issues, ui32 code,
 bool HasIssue(const NYdb::NIssue::TIssues& issues, ui32 code,
     std::function<bool(const NYdb::NIssue::TIssue& issue)> predicate = {});
 
+// Ignore only the informational NewRBO fallback diagnostic and informational
+// wrappers left empty by its removal; preserve all other warnings and errors.
+NYql::TIssues IssuesWithoutRboFallback(const NYql::TIssues& issues);
+NYdb::NIssue::TIssues IssuesWithoutRboFallback(const NYdb::NIssue::TIssues& issues);
+
 void PrintQueryStats(const NYdb::NTable::TDataQueryResult& result);
 
 struct TExpectedTableStats {

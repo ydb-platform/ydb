@@ -839,13 +839,13 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         test(DisableOpt, [](const TDataQueryResult& result) {
             AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 2);
             AssertTableReads(result, "/Root/SecondaryKeys", 2);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
             AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 2);
             AssertTableReads(result, "/Root/SecondaryKeys", 2);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
         });
     }
 
@@ -884,7 +884,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
 
         test(EnableOpt, [](const TDataQueryResult& result) {
             AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
         });
     }
 
@@ -920,13 +920,13 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         test(DisableOpt, [](const TDataQueryResult& result) {
             AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 2);
             AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
             AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 2);
             AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
         });
     }
 
@@ -969,13 +969,13 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         test(DisableOpt, [](const TDataQueryResult& result) {
             AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 1);
             AssertTableReads(result, "/Root/SecondaryComplexKeys", 1);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
             AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 1);
             AssertTableReads(result, "/Root/SecondaryComplexKeys", 1);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
         });
     }
 

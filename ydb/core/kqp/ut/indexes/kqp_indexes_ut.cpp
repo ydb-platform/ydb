@@ -340,7 +340,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                                      execSettings)
                               .ExtractValueSync();
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[#];[[7]]]");
 
@@ -371,7 +371,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[#;#;[\"Payload8\"]];[#;[7];[\"Payload7\"]]]");
         }
@@ -2015,7 +2015,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             auto result = client.ExecuteYqlScript(query).GetValueSync();
 
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[]");
         }
@@ -5477,7 +5477,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             );)";
 
             auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
@@ -5500,7 +5500,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             )";
 
             auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
@@ -5516,7 +5516,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             )"));
 
             auto result = session.ExecuteDataQuery(selectSql, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), R"([[[100u];[101u]];[[200u];[201u]]])");
         }

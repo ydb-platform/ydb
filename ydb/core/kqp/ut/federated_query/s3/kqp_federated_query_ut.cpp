@@ -622,7 +622,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         {
             auto [readyOp, results] = ExecuteScriptOverBinding(NKikimrConfig::TTableServiceConfig::BM_DROP);
             UNIT_ASSERT_VALUES_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToOneLineString());
-            UNIT_ASSERT_VALUES_EQUAL(readyOp.Status().GetIssues().ToString(), "");
+            UNIT_ASSERT_VALUES_EQUAL(IssuesWithoutRboFallback(readyOp.Status().GetIssues()).ToString(), "");
 
             TResultSetParser resultSet(results.ExtractResultSet());
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
@@ -1093,7 +1093,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         resultFuture.Wait();
         UNIT_ASSERT_C(!resultFuture.GetValueSync().IsSuccess(), resultFuture.GetValueSync().GetIssues().ToString());
 
-        UNIT_ASSERT_NO_DIFF(resultFuture.GetValueSync().GetIssues().ToString(),
+        UNIT_ASSERT_NO_DIFF(IssuesWithoutRboFallback(resultFuture.GetValueSync().GetIssues()).ToString(),
             "<main>: Error: Pre type annotation, code: 1020\n"
             "    <main>:3:27: Error: Write mode 'update' is not supported for external entities\n");
     }

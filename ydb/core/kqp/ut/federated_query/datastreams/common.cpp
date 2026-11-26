@@ -1247,7 +1247,8 @@ std::vector<TStreamingSysViewTestFixture::TSysViewResult> TStreamingSysViewTestF
         UNIT_ASSERT_VALUES_EQUAL(
             *resultSet.ColumnParser("Path").GetOptionalUtf8(), JoinPath(TVector{ TString{ "/Root" }, TString{ row.Name } }));
         UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), row.Status);
-        UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Issues").GetOptionalUtf8(), row.Issues);
+        const auto issues = DeserializeIssues(*resultSet.ColumnParser("Issues").GetOptionalUtf8());
+        UNIT_ASSERT_STRING_CONTAINS(SerializeIssues(IssuesWithoutRboFallback(issues)), row.Issues);
 
         const bool expectExecutions = row.Run && IsIn({ "RUNNING", "COMPLETED", "CANCELLED", "FAILED" }, row.Status);
         if (expectExecutions || row.CheckPlan) {

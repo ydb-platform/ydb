@@ -659,6 +659,7 @@ public:
             .SetWithSampleTables(false)
             .SetUseRealThreads(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableColumnStatistics(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
 
         if constexpr (N > 0) {
             using TExecutor = NKikimrConfig::TActorSystemConfig::TExecutor;

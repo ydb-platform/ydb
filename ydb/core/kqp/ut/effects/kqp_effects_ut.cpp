@@ -345,7 +345,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
                 ("foo", 10u), ("bar", 11u), ("baz", 10u)
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(IssuesWithoutRboFallback(result.GetIssues()).Size(), 0, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
             SELECT * FROM `/Root/TwoShard` WHERE Key > 5 AND Key < 100 ORDER BY Key;
@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
                 ("foo", 1u), ("bar", 11u)
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(IssuesWithoutRboFallback(result.GetIssues()).Size(), 0, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
             SELECT * FROM `/Root/TwoShard` WHERE Key = 1 OR Key = 11 ORDER BY Key;

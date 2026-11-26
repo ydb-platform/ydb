@@ -2,6 +2,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
+#include <type_traits>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -9,6 +11,41 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpPragma) {
+    Y_UNIT_TEST_TWIN(RboFallbackIssueFiltering, SdkIssues) {
+        using TIssue = std::conditional_t<SdkIssues, NYdb::NIssue::TIssue, NYql::TIssue>;
+        using TIssues = std::conditional_t<SdkIssues, NYdb::NIssue::TIssues, NYql::TIssues>;
+        using TSeverity = decltype(TIssue().GetSeverity());
+
+        TIssue fallback("Compilation with the new RBO failed: unsupported query");
+        fallback.SetCode(NYql::DEFAULT_ERROR, static_cast<TSeverity>(NYql::TSeverityIds::S_INFO));
+        UNIT_ASSERT(IssuesWithoutRboFallback(TIssues{fallback}).Empty());
+
+        TIssue wrapper("Execution");
+        wrapper.SetCode(NYql::TIssuesIds::CORE_EXEC, static_cast<TSeverity>(NYql::TSeverityIds::S_INFO));
+        wrapper.AddSubIssue(MakeIntrusive<TIssue>(fallback));
+        UNIT_ASSERT(IssuesWithoutRboFallback(TIssues{wrapper}).Empty());
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.GetSubIssues().size(), 1);
+
+        TIssue warning("An unrelated warning");
+        warning.SetCode(1108, static_cast<TSeverity>(NYql::TSeverityIds::S_WARNING));
+        wrapper.AddSubIssue(MakeIntrusive<TIssue>(warning));
+        TIssue expected;
+        expected.CopyWithoutSubIssues(wrapper);
+        expected.AddSubIssue(MakeIntrusive<TIssue>(warning));
+        UNIT_ASSERT_VALUES_EQUAL(IssuesWithoutRboFallback(TIssues{wrapper}).ToString(), TIssues{expected}.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.GetSubIssues().size(), 2);
+
+        // Matching text at warning/error severity is not a fallback notification.
+        for (const auto severity : {NYql::TSeverityIds::S_WARNING, NYql::TSeverityIds::S_ERROR}) {
+            fallback.SetCode(NYql::DEFAULT_ERROR, static_cast<TSeverity>(severity));
+            UNIT_ASSERT_VALUES_EQUAL(IssuesWithoutRboFallback(TIssues{fallback}).ToString(), TIssues{fallback}.ToString());
+        }
+
+        TIssue info("An unrelated informational diagnostic");
+        info.SetCode(NYql::DEFAULT_ERROR, static_cast<TSeverity>(NYql::TSeverityIds::S_INFO));
+        UNIT_ASSERT_VALUES_EQUAL(IssuesWithoutRboFallback(TIssues{info}).ToString(), TIssues{info}.ToString());
+    }
+
     Y_UNIT_TEST(Auth) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -198,7 +235,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(IssuesWithoutRboFallback(result.GetIssues()).Empty(), result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(MatchRecognizeWithTimeOrderRecoverer) {

@@ -26,7 +26,6 @@ public:
 
     void AddState(EPDiskState state, bool isNodeLocked);
     EPDiskStatus Compute(EPDiskStatus current, TString& reason) const;
-    EMaintenanceStatus::E ComputeMaintenanceStatus(EMaintenanceStatus::E current) const;
 
     EPDiskState GetState() const;
     EPDiskState GetPrevState() const;
@@ -126,9 +125,9 @@ struct TPDiskInfo
     EPDiskStatus ActualStatus = EPDiskStatus::ACTIVE;
     EPDiskStatus PrevStatus = EPDiskStatus::UNKNOWN;
     // From BSC.
-    EMaintenanceStatus::E ActualMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
+    EMaintenanceStatus::E BscMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
     // CMS already requested to set. 
-    EMaintenanceStatus::E InFlightMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
+    EMaintenanceStatus::E InFlightToBscMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
     TInstant LastStatusChange;
     bool StatusChangeFailed = false;
     // means that this pdisk status change last time was the reason of whole request failure

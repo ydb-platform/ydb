@@ -190,14 +190,6 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
     }
 }
 
-EMaintenanceStatus::E TPDiskStatusComputer::ComputeMaintenanceStatus(EMaintenanceStatus::E current) const {
-    if (current == EMaintenanceStatus::NOT_SET) {
-        return current;
-    }
-
-    return TargetMaintenanceStatus;
-}
-
 EPDiskState TPDiskStatusComputer::GetState() const {
     return State;
 }
@@ -287,7 +279,7 @@ bool TPDiskStatus::IsChanged() const {
 }
 
 bool TPDiskStatus::IsMaintenanceStatusChanged() const {
-    return CurrentMaintenanceStatus != ComputeMaintenanceStatus(CurrentMaintenanceStatus);
+    return CurrentMaintenanceStatus != GetTargetMaintenanceStatus();
 }
 
 void TPDiskStatus::ApplyChanges(TString& reason) {
@@ -305,7 +297,7 @@ void TPDiskStatus::ApplyDriveStatusChanges(TString& reason) {
 }
 
 void TPDiskStatus::ApplyMaintenanceStatusChanges() {
-    CurrentMaintenanceStatus = ComputeMaintenanceStatus(CurrentMaintenanceStatus);
+    CurrentMaintenanceStatus = GetTargetMaintenanceStatus();
 }
 
 EPDiskStatus TPDiskStatus::GetStatus() const {
@@ -368,7 +360,7 @@ TPDiskInfo::TPDiskInfo(
         initialDeploymentGracePeriod
     )
     , ActualStatus(initialStatus)
-    , ActualMaintenanceStatus(initialMaintenanceStatus)
+    , BscMaintenanceStatus(initialMaintenanceStatus)
 {
     Touch();
 }
@@ -715,7 +707,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                 if (pdisks.contains(id)) {
                     auto pdiskInfo = pdisks.at(id);
                     pdiskInfo->Touch();
-                    pdiskInfo->ActualMaintenanceStatus = pdisk.GetMaintenanceStatus();
+                    pdiskInfo->BscMaintenanceStatus = pdisk.GetMaintenanceStatus();
                     continue;
                 }
 
@@ -1202,6 +1194,12 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         TGuardian changed(SentinelState, Config.DataCenterRatio, Config.RoomRatio, Config.RackRatio, Config.PileRatio, Config.FaultyPDisksThresholdPerNode);
         TClusterMap::TPDiskIDSet alwaysAllowed;
 
+        const auto needsMaintenanceUpdate = [](const TPDiskInfo& info) {
+            const auto target = info.GetTargetMaintenanceStatus();
+            return info.IsMaintenanceStatusChanged()
+                || (target != EMaintenanceStatus::NOT_SET && target != info.BscMaintenanceStatus);
+        };
+
         for (auto& pdisk : SentinelState->PDisks) {
             const TPDiskID& id = pdisk.first;
             TPDiskInfo& info = *(pdisk.second);
@@ -1257,7 +1255,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             all.AddPDisk(id, hasGoodState);
 
             const bool driveChanged = info.IsDriveStatusChanged();
-            const bool maintenanceChanged = info.IsMaintenanceStatusChanged();
+            const bool maintenanceChanged = needsMaintenanceUpdate(info);
 
             if (driveChanged) {
                 if (info.IsNewStatusGood() || info.HasForcedStatus()) {
@@ -1314,7 +1312,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             info->IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED;
 
             const bool driveChanged = info->IsDriveStatusChanged();
-            const bool maintenanceChanged = info->IsMaintenanceStatusChanged();
+            const bool maintenanceChanged = needsMaintenanceUpdate(*info);
 
             if (driveChanged && !info->IsChangingAllowed()) {
                 info->AllowChanging();
@@ -1350,7 +1348,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             pdisk->DisallowChanging();
             pdisk->IgnoreReason = reason;
 
-            if (pdisk->IsMaintenanceStatusChanged()) {
+            if (needsMaintenanceUpdate(*pdisk)) {
                 const EPDiskStatus status = pdisk->GetStatus();
                 const EMaintenanceStatus::E maintenanceStatus = pdisk->GetMaintenanceStatus();
                 pdisk->ApplyMaintenanceStatusChanges();
@@ -1462,9 +1460,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             command.SetSkipIfPileCutOff(true);
 
             EMaintenanceStatus::E maintenanceStatus = info->GetMaintenanceStatus();
-            if (maintenanceStatus != EMaintenanceStatus::NOT_SET && maintenanceStatus != info->ActualMaintenanceStatus) {
+            if (maintenanceStatus != EMaintenanceStatus::NOT_SET && maintenanceStatus != info->BscMaintenanceStatus) {
                 command.SetMaintenanceStatus(maintenanceStatus);
-                info->InFlightMaintenanceStatus = maintenanceStatus;
+                info->InFlightToBscMaintenanceStatus = maintenanceStatus;
             }
         }
         request->Record.MutableRequest()->SetIgnoreDisintegratedGroupsChecks(true);
@@ -1572,7 +1570,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                     entry.MutableInfo()->SetLastStatusChange(info->LastStatusChange.ToString());
                     entry.MutableInfo()->SetIgnoreReason(info->IgnoreReason);
                     entry.MutableInfo()->SetStatusChangeFailed(info->StatusChangeFailed);
-                    entry.MutableInfo()->SetMaintenanceStatus(info->ActualMaintenanceStatus);
+                    entry.MutableInfo()->SetMaintenanceStatus(info->BscMaintenanceStatus);
                     entry.MutableInfo()->SetDesiredMaintenanceStatus(info->GetMaintenanceStatus());
                     // entry.MutableInfo()->SetPrevDesiredMaintenanceStatus(info->PrevMaintenanceStatus);
                 }
@@ -1616,10 +1614,10 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             info.PrevStatus = info.ActualStatus;
             info.ActualStatus = info.GetStatus();
             
-            if (info.InFlightMaintenanceStatus != EMaintenanceStatus::NOT_SET) {
-                info.ActualMaintenanceStatus = info.InFlightMaintenanceStatus;   
+            if (info.InFlightToBscMaintenanceStatus != EMaintenanceStatus::NOT_SET) {
+                info.BscMaintenanceStatus = info.InFlightToBscMaintenanceStatus;
             }
-            info.InFlightMaintenanceStatus = EMaintenanceStatus::NOT_SET;
+            info.InFlightToBscMaintenanceStatus = EMaintenanceStatus::NOT_SET;
             
             info.LastStatusChange = Now();
             info.PrevStatusChangeAttempt = info.StatusChangeAttempt;

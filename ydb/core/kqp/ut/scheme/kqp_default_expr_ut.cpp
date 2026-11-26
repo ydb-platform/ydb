@@ -3390,6 +3390,28 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         UNIT_ASSERT(messages.at(4)["reset"]["v"].IsNull());
     }
 
+    Y_UNIT_TEST_TWIN(SetExpressionDefaultOnReplicationSourceRejected, SchemaChanges) {
+        TTestFixture fixture;
+        fixture.Exec(DefaultExprDDL("v Uint64 DEFAULT 7ul"));
+
+        auto sessionResult = fixture.Runner().GetTableClient().CreateSession().ExtractValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        NYdb::NTable::TChangefeedDescription changefeed("feed", NYdb::NTable::EChangefeedMode::Updates,
+            NYdb::NTable::EChangefeedFormat::Json);
+        changefeed.AddAttribute("__async_replication", R"({"id":"1","path":"/Root/Replication"})");
+        if (SchemaChanges) {
+            changefeed.WithSchemaChanges();
+        }
+        const auto created = session.AlterTable("/Root/TestTable",
+            NYdb::NTable::TAlterTableSettings().AppendAddChangefeeds(changefeed)).ExtractValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+
+        fixture.Rejects(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << DefaultExpr << ";",
+            "on replicated table");
+        fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING v;", "[[[7u]]]");
+    }
+
     // Literal defaults retain their metadata kind when replacing an expression.
     Y_UNIT_TEST(SetLiteralDefaultOverExprColumn) {
         TTestFixture fixture;

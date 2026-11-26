@@ -914,6 +914,11 @@ public:
                     return result;
                 }
             }
+            if (AnyOf(alter.GetColumns(), [](const auto& column) { return column.HasDefaultFromExpression(); })) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Cannot set an expression default on replicated table");
+                return result;
+            }
         }
 
         // CDC schema records contain the resulting column name/type/key

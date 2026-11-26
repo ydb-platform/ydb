@@ -1629,43 +1629,39 @@ TSelectRowVersionResult TTable::SelectRowVersionByKeyPrefix(
         if (!TCellVectorsEquals{}(iter->GetKey().Cells().Slice(0, keyPrefix.size()), keyPrefix)) {
             break;
         }
-        while (ready == NTable::EReady::Data && iter->IsUncommitted()) {
-            if (iter->Row().GetRowState() != ERowOp::Absent) {
-                // non-lock-only deltas are pushed to OnSkipUncommitted() to result in an optimistic conflict
-                if (observer) {
-                    observer.OnSkipUncommitted(iter->GetUncommittedTxId());
-                }
-            } else {
-                // live lock-only deltas are processed to wait for a pessimistic lock on them
-                auto [lockMode, lockTxId] = iter->GetLockInfo();
-                // Lock is only valid as long as it's not committed or removed
-                if (!CommittedTransactions.Contains(lockTxId) && !RemovedTransactions.Contains(lockTxId)) {
-                    res.LockMode = lockMode;
-                    res.LockTxId = lockTxId;
-                }
+        ELockMode lockMode = ELockMode::None;
+        ui64 lockTxId = 0;
+        while (ready == EReady::Data) {
+            // The newest lock for this key may be attached to a delta or a committed row, including an erase.
+            if (lockMode == ELockMode::None) {
+                std::tie(lockMode, lockTxId) = iter->GetLockInfo();
+            }
+            if (!iter->IsUncommitted()) {
+                break;
+            }
+            if (observer && iter->Row().GetRowState() != ERowOp::Absent) {
+                observer.OnSkipUncommitted(iter->GetUncommittedTxId());
             }
             ready = iter->SkipUncommitted();
         }
-        if (ready == NTable::EReady::Page) {
+        if (ready == EReady::Page) {
             break;
         }
-        // If there is an active pessimistic lock - return it anyway, even if the row does not exist
-        if (res.LockMode != ELockMode::None) {
-            res.Ready = ready;
-            if (ready != NTable::EReady::Gone) {
-                res.RowVersion = iter->GetRowVersion();
-                res.RowTxId = iter->GetDeltaTxId();
-                res.RowOp = iter->Row().GetRowState();
-            }
-            return res;
+        const bool hasLiveLock = lockMode != ELockMode::None
+            && !CommittedTransactions.Contains(lockTxId) && !RemovedTransactions.Contains(lockTxId);
+        if (!hasLiveLock && (ready == EReady::Gone || iter->Row().GetRowState() == ERowOp::Erase)) {
+            continue;
         }
-        // If there is no pessimistic lock - we'll return any non-removed row from the range
-        if (ready != NTable::EReady::Gone &&
-            iter->Row().GetRowState() != ERowOp::Erase) {
-            res.Ready = NTable::EReady::Data;
+        res = TSelectRowVersionResult(ready);
+        if (ready == EReady::Data) {
             res.RowVersion = iter->GetRowVersion();
             res.RowTxId = iter->GetDeltaTxId();
             res.RowOp = iter->Row().GetRowState();
+        }
+        if (hasLiveLock) {
+            res.LockMode = lockMode;
+            res.LockTxId = lockTxId;
+            return res;
         }
     }
     if (ready == NTable::EReady::Page) {

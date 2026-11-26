@@ -1705,6 +1705,53 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
         lockRows.ExpectResult(req2);
     }
 
+    Y_UNIT_TEST(UniqueIndexLockOverCompactedErase) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false);
+        settings.FeatureFlags.SetEnableAddUniqueIndex(true);
+        auto [runtime, server, sender] = TestCreateServer(pm, settings);
+        UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime, R"(
+            CREATE TABLE `/Root/table` (
+                uniq Int32, pk Int32, PRIMARY KEY (uniq, pk), INDEX idx GLOBAL UNIQUE ON (uniq)
+            );
+        )"), "SUCCESS");
+        const TString indexPath = "/Root/table/idx/indexImplTable";
+        const auto tableId = ResolveTableId(server, sender, indexPath);
+        const auto shards = GetTableShards(server, sender, indexPath);
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+        const ui64 shard = shards.front();
+
+        // Write an erase directly so there is no older index entry for this key.
+        Write(runtime, sender, shard, MakeWriteRequest(std::nullopt, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE, tableId,
+            {1, 2}, {TCell::Make(i32(42)), TCell::Make(i32(1))}), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+        TTestPipe pipe(runtime, shard);
+        TLockRowsHelper lockRows(runtime, pipe);
+        auto lockIndexKey = [&](const TLockHandle& owner, i32 pk) {
+            return lockRows.SendRequest(owner, tableId, TKeysBuilder(2).Add(42).Add(pk).Build(), [](auto* req) {
+                req->Record.AddColumnIds(2);
+            });
+        };
+        TLockHandle first(123, runtime.GetActorSystem(0));
+        TLockHandle second(234, runtime.GetActorSystem(0));
+        lockRows.ExpectResult(lockIndexKey(first, 1));
+
+        auto compact = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
+        compact->Record.SetCompactSinglePartedShards(true);
+        pipe.Send(sender, compact.Release());
+        const auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK,
+            result->Get()->Record.ShortDebugString());
+
+        // Different physical keys share the same unique prefix. The second lock must wait.
+        const auto pending = lockIndexKey(second, 2);
+        lockRows.ExpectNoResult();
+        first.Reset();
+        lockRows.ExpectResult(pending);
+    }
+
     Y_UNIT_TEST(UniqueIndexNulls) {
         TPortManager pm;
 

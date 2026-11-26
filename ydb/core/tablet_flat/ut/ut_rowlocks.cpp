@@ -617,6 +617,51 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         UNIT_ASSERT(!me->HasTxData(table1, 103u));
     }
 
+    Y_UNIT_TEST(UniqueIndexLockOverCompactedErase) {
+        TDbExec me;
+        constexpr ui32 table = 1;
+        constexpr ui64 lockTxId = 101;
+        const TRowVersion erased(1, 11);
+
+        me.ToLine().Begin().Apply(*TAlter()
+            .AddTable("index", table)
+            .AddColumn(table, "uniq", 1, ETypes::Uint64, false, false)
+            .AddColumn(table, "pk", 2, ETypes::Uint64, false, false)
+            .AddColumnToKey(table, 1)
+            .AddColumnToKey(table, 2));
+        me.ToLine().WriteVer(erased).EraseN(table, 1_u64, 2_u64).Commit();
+        me.ToLine().Begin().WriteTx(lockTxId).LockRowN(table, ELockMode::Exclusive, 1_u64, 2_u64).Commit();
+
+        const TVector<TCell> prefix{TCell::Make(1_u64)};
+        auto lookupPrefix = [&] {
+            return me.ToLine()->SelectRowVersionByKeyPrefix(table, prefix, nullptr);
+        };
+        me.ToLine().Begin();
+        auto before = lookupPrefix();
+        UNIT_ASSERT_VALUES_EQUAL(before.LockMode, ELockMode::Exclusive);
+        UNIT_ASSERT_VALUES_EQUAL(before.LockTxId, lockTxId);
+        me.ToLine().Commit();
+
+        me.ToLine().Snap(table).Compact(table, true);
+
+        me.ToLine().Begin();
+        auto fullKey = me.ToLine().SelectRowVersionN(table, 1_u64, 2_u64);
+        UNIT_ASSERT_VALUES_EQUAL(fullKey.RowOp, ERowOp::Erase);
+        UNIT_ASSERT_VALUES_EQUAL(fullKey.RowVersion, erased);
+        UNIT_ASSERT_VALUES_EQUAL(fullKey.LockTxId, lockTxId);
+        auto after = lookupPrefix();
+        UNIT_ASSERT_VALUES_EQUAL(after.LockMode, ELockMode::Exclusive);
+        UNIT_ASSERT_VALUES_EQUAL(after.LockTxId, lockTxId);
+        me.ToLine().RemoveTx(table, lockTxId).Commit();
+
+        me.ToLine().Begin();
+        auto released = lookupPrefix();
+        UNIT_ASSERT_VALUES_EQUAL(released.Ready, EReady::Gone);
+        UNIT_ASSERT_VALUES_EQUAL(released.LockMode, ELockMode::None);
+        UNIT_ASSERT_VALUES_EQUAL(released.LockTxId, 0u);
+        me.ToLine().Commit();
+    }
+
     Y_UNIT_TEST(UniqueIndexRowLocks) {
         TDbExec me;
 

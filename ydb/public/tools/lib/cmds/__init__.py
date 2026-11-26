@@ -546,6 +546,11 @@ def deploy(arguments, actor_system_config=None):
         pdisk_store_path=pdisk_store_path,
         domain_name='local',
         pq_client_service_types=pq_client_service_types(arguments),
+        enable_pq=(
+            (os.getenv("YDB_ENABLE_PQ") == "true")
+            if os.getenv("YDB_ENABLE_PQ") is not None
+            else True  # ydb_recipe: keep PQ/gRPC; Python KikimrConfigGenerator defaults False
+        ),
         enable_pqcd=enable_pqcd(arguments),
         suppress_version_check=arguments.suppress_version_check,
         udfs_path=arguments.ydb_udfs_dir,

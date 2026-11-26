@@ -7,6 +7,7 @@ SIZE(MEDIUM)
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_DSTOOL_BINARY="ydb/apps/dstool/ydb-dstool")
+ENV(YDB_ENABLE_PQ="true")
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(

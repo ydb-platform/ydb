@@ -8,6 +8,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/iam_grpc_emulator/recipe/r
 
 DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/fq-connector-go)
 ENV(COMPOSE_HTTP_TIMEOUT=1200)  # during parallel tests execution there could be huge disk io, which triggers timeouts in docker-compose
+ENV(YDB_ENABLE_PQ="true")
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 TEST_SRCS(

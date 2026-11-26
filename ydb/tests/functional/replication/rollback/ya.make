@@ -7,6 +7,7 @@ TEST_SRCS(
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=false)
+ENV(YDB_ENABLE_PQ="true")
 
 PEERDIR(
     ydb/tests/library

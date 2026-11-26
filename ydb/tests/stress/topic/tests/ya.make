@@ -3,6 +3,7 @@ PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/topic/workload_topic")
+ENV(YDB_ENABLE_PQ="true")
 
 TEST_SRCS(
     test_workload_topic.py

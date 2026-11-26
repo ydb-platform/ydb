@@ -15,6 +15,8 @@ SRCS(
     transfer_ut.cpp
 )
 
+ENV(YDB_ENABLE_PQ="true")
+
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 SIZE(LARGE)

@@ -54,6 +54,7 @@ class KikimrSqsTopicTestBase(object):
     def _setup_config_generator(cls):
         return KikimrConfigGenerator(
             use_in_memory_pdisks=cls.use_in_memory_pdisks,
+            enable_pq=True,  # sqs_topic queues are backed by topics
             additional_log_configs={
                 'HTTP_PROXY': LogLevels.DEBUG,
                 'SQS': LogLevels.TRACE,

@@ -82,6 +82,9 @@ private:
 
         template <class TVisitor>
         size_t ScanForRewrite(size_t limit, TVisitor&& visitor) {
+            if (Count(EPortionState::Ready) == 0 && Count(EPortionState::RewriteStarted) == 0) {
+                return 0;
+            }
             return Scan(RewriteCursor, limit, visitor);
         }
 

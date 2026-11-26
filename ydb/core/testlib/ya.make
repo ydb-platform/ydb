@@ -35,6 +35,7 @@ PEERDIR(
     ydb/core/client
     ydb/core/client/metadata
     ydb/core/client/minikql_compile
+    ydb/core/client/scheme_cache_lib
     ydb/core/client/server
     ydb/core/cms/console
     ydb/core/driver_lib/run

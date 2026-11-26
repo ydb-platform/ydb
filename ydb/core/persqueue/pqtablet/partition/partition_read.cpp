@@ -368,7 +368,8 @@ std::pair<TInstant, TInstant> TPartition::GetTime(const TUserInfo& userInfo, ui6
 
 void TPartition::Handle(TEvPQ::TEvGetClientOffset::TPtr& ev, const TActorContext& ctx) {
     auto& userInfo = UsersInfoStorage->GetOrCreate(ev->Get()->ClientId, ctx);
-    PQ_ENSURE(userInfo.Offset >= -1)("Unexpected Offset", userInfo.Offset);
+    PQ_ENSURE(userInfo.Offset >= -1,
+        {"unexpectedOffset", userInfo.Offset});
     ui64 offset = Max<i64>(userInfo.Offset, 0);
     auto ts = GetTime(userInfo, offset);
     TabletCounters.Cumulative()[COUNTER_PQ_GET_CLIENT_OFFSET_OK].Increment(1);
@@ -384,7 +385,8 @@ void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& 
     }
 
     const ui64& offset = ev->Get()->Offset;
-    PQ_ENSURE(offset <= (ui64)Max<i64>())("Unexpected Offset", offset);
+    PQ_ENSURE(offset <= (ui64)Max<i64>(),
+        {"unexpectedOffset", offset});
 
     AddUserAct(ev->Release());
 

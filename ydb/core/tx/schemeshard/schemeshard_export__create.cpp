@@ -732,21 +732,16 @@ private:
                 }
             }
 
-            bool hasIndexPlan = false;
+            bool hasIndexItems = false;
             for (ui32 parentIdx : xrange(metadata.SchemaMappingSize())) {
-                const auto& parentItem = exportInfo.Items.at(parentIdx);
-                if (parentItem.SourcePathType != NKikimrSchemeOp::EPathTypeTable) {
-                    continue;
-                }
-                // Empty also fixes the plan: an index may be added before the copy.
                 auto& mapping = *metadata.MutableSchemaMapping(parentIdx);
-                auto& prefixes = *mapping.MutableIndexExportPrefixes();
-                hasIndexPlan = true;
                 if (!mapping.HasIndexIVs()) {
                     continue;
                 }
-
-                const auto indexes = GetTableIndexesExportMetadata(Self, parentItem.SourcePathId, true, &mapping.GetIndexIVs());
+                hasIndexItems = true;
+                const auto& parentItem = exportInfo.Items.at(parentIdx);
+                auto& prefixes = *mapping.MutableIndexExportPrefixes();
+                const auto indexes = GetTableIndexesExportMetadata(Self, parentItem.SourcePathId, true);
                 if (!indexes) {
                     issues = indexes.GetErrorMessage();
                     return false;
@@ -759,7 +754,7 @@ private:
                     }
                 }
             }
-            if (hasIndexPlan && metadata.ByteSizeLong() + exportSettings.ByteSizeLong() >= metadataBudget) {
+            if (hasIndexItems && metadata.ByteSizeLong() + exportSettings.ByteSizeLong() >= metadataBudget) {
                 issues = "Encrypted index export metadata exceeds the maximum SchemeShard commit size";
                 return false;
             }

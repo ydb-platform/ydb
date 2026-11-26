@@ -2688,7 +2688,6 @@ message TExportMetadata {
         optional TExportIndexIVs IndexIVs = 4;
         // Fixed once per export, the same list is sent to DataShard
         optional TIndexExportPrefixes IndexExportPrefixes = 5;
-        reserved 6;
     }
 
     repeated TSchemaMappingItem SchemaMapping = 1;

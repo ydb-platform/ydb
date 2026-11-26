@@ -14,7 +14,6 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
-#include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
@@ -114,42 +113,9 @@ static TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetada
     return NBackup::MakeIndexesMetadata(scheme.indexes(), changefeedsCount + 1, encrypted);
 }
 
-static void FillChangefeedTopics(TSchemeShard* ss, const NKikimrSchemeOp::TTableDescription& table,
-    NKikimrSchemeOp::TBackupTask& task)
-{
-    for (const auto& cdcStream : table.GetCdcStreams()) {
-        const auto cdcPathDesc = GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
-        for (const auto& child : cdcPathDesc.GetChildren()) {
-            if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
-                *task.AddChangefeedUnderlyingTopics() =
-                    GetDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
-            }
-        }
-    }
-}
-
-static bool HasMaterializedIndexData(NKikimrSchemeOp::EIndexType type) {
-    return type != NKikimrSchemeOp::EIndexTypeGlobalHnsw && type != NKikimrSchemeOp::EIndexTypeGlobalAsync
-        && !TTableIndexInfo::IsLocalIndex(type);
-}
-
-TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetadata(TSchemeShard* ss, const TPathId& tablePathId,
-    bool encrypted, const NKikimrSchemeOp::TExportIndexIVs* selectedImplTables)
-{
-    auto description = GetDescription(ss, tablePathId);
-    auto& table = *description.MutableTable();
-    if (selectedImplTables) {
-        THashSet<TStringBuf> planned;
-        for (const auto& [path, iv] : selectedImplTables->GetIVs()) {
-            planned.insert(TStringBuf(path).Before('/'));
-        }
-        // An index added since the export items were selected has no data item.
-        // Remove it before numbering so older DataShards derive the same prefixes.
-        EraseIf(*table.MutableTableIndexes(), [&](const auto& index) {
-            return HasMaterializedIndexData(index.GetType()) && !planned.contains(index.GetName());
-        });
-    }
-    return GetTableIndexesExportMetadata(table, encrypted);
+TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetadata(TSchemeShard* ss, const TPathId& tablePathId, bool encrypted) {
+    // The same description that FillTableDescription passes to DataShard
+    return GetTableIndexesExportMetadata(GetDescription(ss, tablePathId).GetTable(), encrypted);
 }
 
 static TConclusion<TString> ComputeIndexItemSuffix(
@@ -256,27 +222,36 @@ void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription
     }
 }
 
-NKikimrSchemeOp::TPathDescription FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task,
-    const TPath& sourcePath, const TPath& exportItemPath)
-{
+void FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc, const TPathId& exportItemPathId) {
+    auto copiedPath = GetDescription(ss, exportItemPathId);
+    const auto& copiedTable = copiedPath.GetTable();
+
+    *desc.MutableSplitBoundary() = copiedTable.GetSplitBoundary();
+    *desc.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedTable.GetPartitionConfig().GetPartitioningPolicy();
+}
+
+void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, const TPath& sourcePath, const TPath& exportItemPath) {
     if (!sourcePath.IsResolved() || (!sourcePath->IsColumnTable() && !exportItemPath.IsResolved())) {
-        return {};
+        return;
     }
 
-    NKikimrSchemeOp::TPathDescription copiedPath;
     auto sourceDescription = GetDescription(ss, sourcePath.Base()->PathId);
     if (sourceDescription.HasTable()) {
         FillSetValForSequences(
             ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
-        copiedPath = GetDescription(ss, exportItemPath.Base()->PathId);
-        auto& table = *sourceDescription.MutableTable();
-        *table.MutableSplitBoundary() = copiedPath.GetTable().GetSplitBoundary();
-        *table.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedPath.GetTable().GetPartitionConfig().GetPartitioningPolicy();
-        FillChangefeedTopics(ss, sourceDescription.GetTable(), task);
+        FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+        for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
+            auto cdcPathDesc =  GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
+            for (const auto& child : cdcPathDesc.GetChildren()) {
+                if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
+                    *task.AddChangefeedUnderlyingTopics() =
+                        GetDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
+                }
+            }
+        }
     }
 
     task.MutableTable()->CopyFrom(sourceDescription);
-    return copiedPath;
 }
 
 TString GetExportItemIV(const TExportInfo& exportInfo, ui32 itemIdx) {
@@ -321,53 +296,13 @@ void FillEncryptionSettings(
         encryptionSettings.SetEncryptionAlgorithm(exportInfo.ExportMetadata.GetEncryptionAlgorithm());
         encryptionSettings.SetIV(GetExportItemIV(exportInfo, itemIdx));
         *encryptionSettings.MutableSymmetricKey() = exportSettings.encryption_settings().symmetric_key();
-    }
-}
 
-static void FillIndexExportSettings(NKikimrSchemeOp::TBackupTask& task, const TExportInfo& exportInfo,
-    ui32 itemIdx, const NKikimrSchemeOp::TTableDescription& copiedTable)
-{
-    if (!exportInfo.IncludeIndexData || exportInfo.Items.at(itemIdx).ParentIdx != Max<ui32>() || !task.GetTable().HasTable()) {
-        return;
-    }
-    const auto* mapping = itemIdx < exportInfo.ExportMetadata.SchemaMappingSize()
-        ? &exportInfo.ExportMetadata.GetSchemaMapping(itemIdx) : nullptr;
-    const bool hasIndexPlan = mapping && mapping->HasIndexExportPrefixes();
-    THashSet<TStringBuf> plannedIndexes;
-    auto& table = *task.MutableTable()->MutableTable();
-    if (hasIndexPlan) {
-        *task.MutableIndexExportPrefixes() = mapping->GetIndexExportPrefixes();
-        for (const auto& index : mapping->GetIndexExportPrefixes().GetIndexes()) {
-            plannedIndexes.insert(TStringBuf(index.GetImplTablePrefix()).Before('/'));
-        }
-
-        auto& partitionConfig = *table.MutablePartitionConfig();
-        const auto& copiedConfig = copiedTable.GetPartitionConfig();
-        if (copiedConfig.HasEnableFilterByKey()) {
-            partitionConfig.SetEnableFilterByKey(copiedConfig.GetEnableFilterByKey());
-        } else {
-            partitionConfig.ClearEnableFilterByKey();
-        }
-        partitionConfig.MutableByKeyFilterPrefixes()->CopyFrom(copiedConfig.GetByKeyFilterPrefixes());
-        table.MutableColumns()->CopyFrom(copiedTable.GetColumns());
-        table.MutableKeyColumnNames()->CopyFrom(copiedTable.GetKeyColumnNames());
-        table.MutableKeyColumnIds()->CopyFrom(copiedTable.GetKeyColumnIds());
-    }
-    const auto useCopiedIndex = [hasIndexPlan](const auto& index) {
-        const auto type = index.GetType();
-        return type == NKikimrSchemeOp::EIndexTypeGlobalHnsw || (hasIndexPlan
-            && (type == NKikimrSchemeOp::EIndexTypeGlobalAsync || TTableIndexInfo::IsLocalIndex(type)));
-    };
-    auto& indexes = *table.MutableTableIndexes();
-    // The plan, including an empty one, determines which materialized indexes
-    // have data items.
-    EraseIf(indexes, [&](const auto& index) {
-        return useCopiedIndex(index) || (hasIndexPlan && HasMaterializedIndexData(index.GetType())
-            && !plannedIndexes.contains(index.GetName()));
-    });
-    for (const auto& index : copiedTable.GetTableIndexes()) {
-        if (useCopiedIndex(index)) {
-            *indexes.Add() = index;
+        const bool isTableItem = exportInfo.Items.at(itemIdx).ParentIdx == Max<ui32>();
+        if (isTableItem && itemIdx < exportInfo.ExportMetadata.SchemaMappingSize()) {
+            const auto& mapping = exportInfo.ExportMetadata.GetSchemaMapping(itemIdx);
+            if (mapping.HasIndexExportPrefixes()) {
+                *task.MutableIndexExportPrefixes() = mapping.GetIndexExportPrefixes();
+            }
         }
     }
 }
@@ -391,13 +326,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
     const TPath exportPath = TPath::Init(exportInfo.ExportPathId, ss);
     auto& task = *modifyScheme.MutableBackup();
-    NKikimrSchemeOp::TPathDescription copiedParent;
 
     if (item.ParentIdx == Max<ui32>()) {
         modifyScheme.SetWorkingDir(exportPath.PathString());
         task.SetTableName(ToString(itemIdx));
 
-        copiedParent = FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)));
+        FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)));
     } else {
         auto parentPath = exportPath.Child(ToString(item.ParentIdx));
 
@@ -425,31 +359,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         return nullptr;
     }
 
-    // Backup copies disable TTL. Its live definition must still be usable with
-    // the copied columns that go into the backup.
-    const auto& ttl = task.GetTable().GetTable().GetTTLSettings();
-    if (ttl.HasEnabled() && item.ParentIdx == Max<ui32>()
-            && itemIdx < exportInfo.ExportMetadata.SchemaMappingSize()
-            && exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).HasIndexExportPrefixes()) {
-        const auto copyPath = exportPath.Child(ToString(itemIdx));
-        const auto& columns = ss->Tables.at(copyPath.Base()->PathId)->Columns;
-        THashMap<TString, ui32> columnIds;
-        for (const auto& [id, column] : columns) {
-            if (!column.IsDropped()) {
-                columnIds.emplace(column.Name, id);
-            }
-        }
-        // Export preserves an existing TTL even if new PostgreSQL columns are disabled.
-        if (!ValidateTtlSettings(ttl, columns, {}, columnIds, *copyPath.DomainInfo(), /*disablePgCompatibility=*/false, error)) {
-            error = TStringBuilder() << "TTL is incompatible with the exported table copy: " << error;
-            return nullptr;
-        }
-    }
-
     task.SetNeedToBill(!exportInfo.UserSID || !ss->SystemBackupSIDs.contains(*exportInfo.UserSID));
-    if (exportInfo.Kind != TExportInfo::EKind::YT) {
-        FillIndexExportSettings(task, exportInfo, itemIdx, copiedParent.GetTable());
-    }
     task.SetSnapshotStep(exportInfo.SnapshotStep);
     task.SetSnapshotTxId(exportInfo.SnapshotTxId);
 

@@ -55,8 +55,7 @@ TConclusion<TString> ExportItemDestinationPrefix(TSchemeShard* ss, const TExport
 NBackup::TEncryptionIV MakeExportIndexItemIV(const NBackup::TEncryptionIV& exportIV, ui32 itemIdx);
 
 // Index impl tables that DataShard lists in the table metadata.json on export
-TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetadata(TSchemeShard* ss, const TPathId& tablePathId,
-    bool encrypted, const NKikimrSchemeOp::TExportIndexIVs* selectedImplTables = nullptr);
+TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetadata(TSchemeShard* ss, const TPathId& tablePathId, bool encrypted);
 
 void PrepareDropping(TSchemeShard* ss, TExportInfo& exportInfo, NIceDb::TNiceDb& db,
     TExportInfo::EState droppingState, std::function<void(ui64)> func);

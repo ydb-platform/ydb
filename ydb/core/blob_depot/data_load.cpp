@@ -214,8 +214,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::CheckPendingS3References(NTabletFlatExecutor::TTransactionContext& txc, void* cookie) {
+        constexpr size_t MaxChecksPerTx = 1'000;
         NIceDb::TNiceDb db(txc.DB);
-        for (size_t n = 0; n < 1000 && !PendingS3RefChecks.empty(); ++n) {
+        for (size_t n = 0; n < MaxChecksPerTx && !PendingS3RefChecks.empty(); ++n) {
             const auto it = PendingS3RefChecks.begin();
             const auto [generation, keyId] = it->first;
             if (RefCountS3.contains(it->first)) {

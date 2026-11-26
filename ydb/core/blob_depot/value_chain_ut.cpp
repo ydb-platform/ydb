@@ -6,8 +6,8 @@ namespace NKikimr::NBlobDepot {
 
     Y_UNIT_TEST_SUITE(BlobDepotValueChainPayload) {
         Y_UNIT_TEST(PreservesPackedAndLegacyS3Ranges) {
-            const TS3Locator packed{8, 1, 1};
-            const TS3Locator legacy{4, 1, 2};
+            const TS3Locator packed{.Len = 8, .Generation = 1, .KeyId = 1};
+            const TS3Locator legacy{.Len = 4, .Generation = 1, .KeyId = 2};
             TValueChain chain;
             auto *item = chain.Add();
             packed.ToProto(item->MutableS3Locator());
@@ -51,7 +51,7 @@ namespace NKikimr::NBlobDepot {
         Y_UNIT_TEST(RejectsRangeOutsideObject) {
             TValueChain chain;
             auto *item = chain.Add();
-            TS3Locator{8, 1, 1}.ToProto(item->MutableS3Locator());
+            TS3Locator{.Len = 8, .Generation = 1, .KeyId = 1}.ToProto(item->MutableS3Locator());
             item->SetSubrangeEnd(ui64{1} << 32);
 
             UNIT_ASSERT(!EnumerateValueChainPayload(chain, 1, [](auto, ui32, ui32) {

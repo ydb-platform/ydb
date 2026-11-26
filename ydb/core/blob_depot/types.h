@@ -280,18 +280,27 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
+    inline std::optional<std::pair<ui32, ui32>> GetValueChainRange(const NKikimrBlobDepot::TValueChain& item,
+            ui32 payloadSize) {
+        const ui64 begin = item.GetSubrangeBegin();
+        const ui64 end = item.HasSubrangeEnd() ? item.GetSubrangeEnd() : payloadSize;
+        if (begin > end || end > payloadSize) {
+            return std::nullopt;
+        }
+        return std::pair{static_cast<ui32>(begin), static_cast<ui32>(end)};
+    }
+
     // Resolve and copy logical payloads, excluding footers even when they share a physical blob with the data.
     template<typename TCallback>
     bool EnumerateValueChainPayload(const TValueChain& valueChain, ui64 tabletId, TCallback&& callback) {
         for (const auto& item : valueChain) {
-            const ui64 begin = item.GetSubrangeBegin();
             bool valid = true;
             const auto emit = [&](auto locator, ui32 payloadSize) {
-                const ui64 end = item.HasSubrangeEnd() ? item.GetSubrangeEnd() : payloadSize;
-                if (begin > end || end > payloadSize) {
+                const auto range = GetValueChainRange(item, payloadSize);
+                if (!range) {
                     valid = false;
-                } else if (begin != end) {
-                    callback(locator, static_cast<ui32>(begin), static_cast<ui32>(end));
+                } else if (range->first != range->second) {
+                    callback(locator, range->first, range->second);
                 }
             };
             EnumerateBlobsForValueChainItem(item, tabletId, TOverloaded{

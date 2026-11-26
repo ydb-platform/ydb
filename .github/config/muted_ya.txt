@@ -4,8 +4,6 @@ ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/kqp/ut/rbo/statistics/join_order KqpJoinOrderAnalyzedStatistics.TPCDS+ColumnStore
 ydb/core/kqp/ut/rbo/statistics/join_order KqpJoinOrderAnalyzedStatistics.TPCDS-ColumnStore
-ydb/core/persqueue/ut TPartitionTests.ReadLagClampsWhenFirstUnreadWrittenAfterLastRead
-ydb/core/persqueue/ut TPartitionTests.ReadLagEstimateUsesFirstUnreadMessage
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/tests/compatibility/common test_checksum_table.py.TestChecksumTable.test_checksum_survives_upgrade[restart_stable-26-3-1_to_stable-26-4-1]
 ydb/tests/compatibility/common test_checksum_table.py.TestChecksumTable.test_checksum_survives_upgrade[restart_stable-26-4-1_to_prestable-27-1-1]
@@ -34,11 +32,6 @@ ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prest
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/mirror3dc test_mirror3dc.py.TestMirror3dc.test_exclude_one_dc_external_recovery
 ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy
-ydb/tests/functional/sdk/cpp/path_aliasing TPathAliasing.DiscoveryAndSchemeResources
-ydb/tests/stress/oltp_workload/tests py3test.sole chunk
-ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
-ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
-ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
 ydb/tests/stress/reconfig_state_storage_workload/tests/large py3test.[test_board_workload.py] chunk
 ydb/tests/stress/reconfig_state_storage_workload/tests/large py3test.[test_scheme_board_workload.py] chunk
 ydb/tests/stress/reconfig_state_storage_workload/tests/large py3test.[test_state_storage_workload.py] chunk

@@ -24,6 +24,7 @@ SRCS(
     kqp_peephole_ut.cpp
     kqp_partitions_by_keys_sort_ut.cpp
     kqp_constant_folding_ut.cpp
+    kqp_pg_map_join_ut.cpp
 )
 
 PEERDIR(

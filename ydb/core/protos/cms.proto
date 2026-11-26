@@ -569,6 +569,8 @@ message TResetMarkerResponse {
 
 message TVersionInfo {
     optional bool SupportWalleDrainData = 1;
+    // Component health, configured slot inventory, and DDisk list filters/grouping.
+    optional bool SupportDDiskDiagnostics = 2;
 }
 
 message TGetConfigRequest {
@@ -871,6 +873,8 @@ message TDDiskDiskListRequest {
     optional EDDiskDiskGroupBy GroupBy = 13 [default = DDISK_DISK_GROUP_BY_NONE];
     optional string FilterGroup = 14;
     optional bool GroupsOnly = 15 [default = false];
+    // With OnlyProblems, include failures of roles used by tablets. Inventory always checks both roles.
+    optional bool IncludeComponentProblems = 16 [default = false];
 }
 
 message TDDiskDiskListResponse {

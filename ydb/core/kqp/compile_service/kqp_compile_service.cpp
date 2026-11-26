@@ -532,7 +532,7 @@ private:
         const auto& query = ev->Get()->Query;
         LWTRACK(KqpCompileServiceHandleRequest,
             ev->Get()->Orbit,
-            query ? query->UserSid : "");
+            query ? TString(query->UserSid()) : "");
 
         try {
             PerformRequest(ev, ctx);
@@ -556,7 +556,7 @@ private:
         YDB_LOG_DEBUG_CTX(ctx, "Received compile request",
             {"sender", ev->Sender},
             {"queryUid", (request.Uid ? *request.Uid : "<empty>")},
-            {"queryText", (request.Query ? EscapeC(request.Query->Text) : "<empty>")},
+            {"queryText", (request.Query ? EscapeC(request.Query->Text()) : "<empty>")},
             {"keepInCache", request.KeepInCache},
             {"split", request.Split},
             {"userRequestContext", *request.UserRequestContext});
@@ -583,14 +583,14 @@ private:
         TString revalidateUid;
         if (request.Uid && !compileResult) {
             const auto previous = QueryCache->FindByUid(*request.Uid, false);
-            if (previous && previous->Query->DisablePgCompatibility != disablePgCompatibility
-                && previous->Query->UserSid == userSid
+            if (previous && previous->Query->DisablePgCompatibility() != disablePgCompatibility
+                && previous->Query->UserSid() == userSid
                 && !HasTempTablesNameClashes(previous, request.TempTablesState))
             {
                 request.Query = *previous->Query;
-                request.Query->DisablePgCompatibility = disablePgCompatibility;
-                request.GUCSettings = std::make_shared<TGUCSettings>(request.Query->GUCSettings);
-                request.UsePessimisticLocks = request.Query->Settings.UsePessimisticLocks;
+                request.Query->SetDisablePgCompatibility(disablePgCompatibility);
+                request.GUCSettings = std::make_shared<TGUCSettings>(request.Query->DecodeGUCSettings());
+                request.UsePessimisticLocks = request.Query->Settings().UsePessimisticLocks;
                 revalidateUid = *request.Uid;
                 request.Uid.Clear();
                 if (request.KeepInCache) {
@@ -602,7 +602,7 @@ private:
         if (request.Uid) {
             if (compileResult) {
                 Y_ENSURE(compileResult->Query);
-                if (compileResult->Query->UserSid == userSid) {
+                if (compileResult->Query->UserSid() == userSid) {
                     YDB_LOG_DEBUG_CTX(ctx, "Served query from cache by uid",
                         {"sender", ev->Sender},
                         {"queryUid", *request.Uid});
@@ -613,7 +613,7 @@ private:
                     YDB_LOG_NOTICE_CTX(ctx, "Non-matching user sid for query",
                         {"sender", ev->Sender},
                         {"queryUid", *request.Uid},
-                        {"expectedSid", compileResult->Query->UserSid},
+                        {"expectedSid", compileResult->Query->UserSid()},
                         {"actualSid", userSid});
                 }
             } else {
@@ -641,7 +641,7 @@ private:
 
         LWTRACK(KqpCompileServiceEnqueued,
             ev->Get()->Orbit,
-            ev->Get()->Query ? ev->Get()->Query->UserSid : "");
+            ev->Get()->Query ? TString(ev->Get()->Query->UserSid()) : "");
 
         TKqpCompileSettings compileSettings(
             request.KeepInCache,
@@ -693,7 +693,7 @@ private:
         if (HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
             compileResult = nullptr;
         }
-        const bool modeChanged = compileResult && compileResult->Query->DisablePgCompatibility != disablePgCompatibility;
+        const bool modeChanged = compileResult && compileResult->Query->DisablePgCompatibility() != disablePgCompatibility;
 
         if (compileResult || request.Query) {
             Counters->ReportCompileRequestCompile(dbCounters);
@@ -709,9 +709,9 @@ private:
                     ? ECompileActorAction::SPLIT
                     : ECompileActorAction::COMPILE);
             auto query = request.Query ? *request.Query : *compileResult->Query;
-            query.DisablePgCompatibility = disablePgCompatibility;
+            query.SetDisablePgCompatibility(disablePgCompatibility);
             if (compileResult && !modeChanged) {
-                query.UserSid = compileResult->Query->UserSid;
+                query.SetUserSid(compileResult->Query->UserSid());
                 if (query != *compileResult->Query) {
                     YDB_LOG_WARN_CTX(ctx, "QueryId in recompile request and queryId in cache are different queryId in queryId",
                         {"request", query.SerializeToString()},
@@ -719,8 +719,8 @@ private:
                 }
                 query = *compileResult->Query;
             } else if (modeChanged && !request.Query) {
-                request.GUCSettings = std::make_shared<TGUCSettings>(query.GUCSettings);
-                request.UsePessimisticLocks = query.Settings.UsePessimisticLocks;
+                request.GUCSettings = std::make_shared<TGUCSettings>(query.DecodeGUCSettings());
+                request.UsePessimisticLocks = query.Settings().UsePessimisticLocks;
             }
             TKqpCompileRequest compileRequest(ev->Sender, request.Uid, std::move(query),
                 compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName,
@@ -807,7 +807,7 @@ private:
 
                 auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query, compileResult->Uid, canJoinPrepare);
                 for (auto& request : requests) {
-                    LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
+                    LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, TString(request.Query.UserSid()), compileActorId.ToString());
                     MarkJoinedCompilation(request.CompileServiceSpan, compileRequest.CompileServiceSpan);
                     LinkDependsOn(request.WaitSpan, ev->TraceId);
                     EndQueryTraceSpan(request.WaitSpan, compileResult->Status);
@@ -820,13 +820,13 @@ private:
                 // (e.g. a recompile reuses the UID of the cached query).
                 if (!isStale && !hasTempTablesNameClashes && !compileRequest.RevalidatePgCompatibility) {
                     const auto current = QueryCache->FindByUid(compileResult->Uid, false);
-                    if (current && current->Query->DisablePgCompatibility == compileRequest.Query.DisablePgCompatibility) {
+                    if (current && current->Query->DisablePgCompatibility() == compileRequest.Query.DisablePgCompatibility()) {
                         QueryCache->EraseByUid(compileResult->Uid);
                     }
                 }
             }
 
-            LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, compileRequest.Query.UserSid, compileActorId.ToString());
+            LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, TString(compileRequest.Query.UserSid()), compileActorId.ToString());
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
                 compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
         }
@@ -939,7 +939,7 @@ private:
         auto query = *compileResult->Query;
 
         YQL_ENSURE(compileResult->PreparedQuery);
-        YQL_ENSURE(!query.QueryParameterTypes);
+        YQL_ENSURE(!query.QueryParameterTypes());
         if (compileResult->PreparedQuery->GetParameters().empty()) {
             return false;
         }
@@ -949,7 +949,7 @@ private:
             ConvertMiniKQLTypeToYdbType(param.GetType(), paramType);
             queryParameterTypes->insert({param.GetName(), paramType});
         }
-        query.QueryParameterTypes = queryParameterTypes;
+        query.SetQueryParameterTypes(queryParameterTypes);
         if (QueryCache->FindByQuery(query, keepInCache)) {
             return false;
         }
@@ -1022,7 +1022,7 @@ private:
         const auto& query = compileResult->Query;
         LWTRACK(KqpCompileServiceReply,
             orbit,
-            query ? query->UserSid : "",
+            query ? TString(query->UserSid()) : "",
             compileResult->Issues.ToString());
 
         YDB_LOG_DEBUG_CTX(ctx, "Send response",
@@ -1225,7 +1225,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::FindByUidImpl(const TString& uid, b
     auto it = Index.find(TItem(uid));
     if (it != Index.end()) {
         TItem* item = &const_cast<TItem&>(*it);
-        if (disablePgCompatibility && item->Value.CompileResult->Query->DisablePgCompatibility != *disablePgCompatibility) {
+        if (disablePgCompatibility && item->Value.CompileResult->Query->DisablePgCompatibility() != *disablePgCompatibility) {
             return nullptr;
         }
         if (promote) {
@@ -1373,6 +1373,16 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     const TActorContext& ctx,
     EWarmupAttributionMode warmupAttribution)
 {
+    // Rebuilds the key, so it is done before taking the lock.
+    if (!uid && query) {
+        query->SetDisablePgCompatibility(disablePgCompatibility);
+        if (query->UserSid().empty()) {
+            query->SetUserSid(userSid);
+        } else {
+            Y_ENSURE(query->UserSid() == userSid);
+        }
+    }
+
     TGuard<TAdaptiveLock> guard(Lock);
 
     *counters->CompileQueryCacheSize = SizeImpl();
@@ -1386,7 +1396,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
 
         if (compileResult) {
             Y_ENSURE(compileResult->Query);
-            if (compileResult->Query->UserSid == userSid) {
+            if (compileResult->Query->UserSid() == userSid) {
                 counters->ReportQueryCacheHit(dbCounters, true);
 
                 YDB_LOG_DEBUG_CTX(ctx, "Served query from cache by uid",
@@ -1399,7 +1409,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
                 YDB_LOG_NOTICE_CTX(ctx, "Non-matching user sid for query",
                     {"sender", sender},
                     {"queryUid", *uid},
-                    {"expectedSid", compileResult->Query->UserSid},
+                    {"expectedSid", compileResult->Query->UserSid()},
                     {"actualSid", userSid});
             }
         }
@@ -1412,13 +1422,6 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     }
 
     Y_ENSURE(query);
-    query->DisablePgCompatibility = disablePgCompatibility;
-
-    if (query->UserSid.empty()) {
-        query->UserSid = userSid;
-    } else {
-        Y_ENSURE(query->UserSid == userSid);
-    }
 
     YDB_LOG_DEBUG_CTX(ctx, "Try to find query by queryId",
         {"queryId", query->SerializeToString()});

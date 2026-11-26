@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/scheme_types/scheme_type_info.h>
-#include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>

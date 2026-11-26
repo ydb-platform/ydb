@@ -11,20 +11,21 @@ namespace NKikimr::NBlobDepot {
         const ui64 AgentInstanceId;
         std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle> Request;
         std::unique_ptr<IEventHandle> Response;
+        const ui32 ReservedSlots;
         ui32 AllocatedLocatorCount = 0;
 
     public:
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_PREPARE_WRITE_S3; }
 
-        TTxPrepareWriteS3(TBlobDepot *self, TAgent& agent, std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle> request)
+        TTxPrepareWriteS3(TBlobDepot *self, TAgent& agent,
+                std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle> request, ui32 reservedSlots)
             : TTransactionBase(self, std::move(request->TraceId))
             , AgentInstanceId(*agent.AgentInstanceId)
             , Request(std::move(request))
+            , ReservedSlots(reservedSlots)
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            AllocatedLocatorCount = 0;
-
             // The response is addressed back through the pipe server this request arrived on (MakeResponseFor uses
             // Request->Recipient as the sender), and the agent drops any response that does not come from its
             // current pipe server. Matching NodeId and AgentInstanceId is not enough: a transient disconnect and
@@ -55,27 +56,24 @@ namespace NKikimr::NBlobDepot {
                     // basic checks have failed (blocked, item was deleted, or something else)
                     responseItem->SetStatus(status);
                     responseItem->SetErrorReason(error);
+                } else if (AllocatedLocatorCount == ReservedSlots) {
+                    responseItem->SetStatus(NKikimrProto::TRYLATER);
+                    responseItem->SetErrorReason("S3 write slots exhausted; retry this item after committing or discarding the prepared items");
                 } else {
                     responseItem->SetStatus(NKikimrProto::OK);
 
                     const TS3Locator locator = Self->S3Manager->AllocateS3Locator(item.GetLen());
                     locator.ToProto(responseItem->MutableS3Locator());
 
-                    // we put it here until operation is completed; if tablet restarts and operation fails, then this
-                    // key will be deleted; we also rewrite spoiled locator because Len is different
-                    db.Table<Schema::TrashS3>().Key(locator.Generation, locator.KeyId).Update<Schema::TrashS3::Len>(locator.Len);
+                    // A restart or agent disconnect can race an already dispatched PUT.
+                    using T = Schema::TrashS3;
+                    db.Table<T>().Key(locator.Generation, locator.KeyId).Update(
+                        NIceDb::TUpdate<T::Len>(locator.Len), NIceDb::TUpdate<T::UnfinishedAgentPut>(true));
 
                     const bool inserted = agent.S3WritesInFlight.insert(locator).second;
                     Y_ABORT_UNLESS(inserted);
                     ++AllocatedLocatorCount;
                 }
-            }
-
-            if (AllocatedLocatorCount) {
-                // This has to stay in lockstep with agent.S3WritesInFlight, which is what OnAgentDisconnect counts
-                // when it releases the slots of a departing agent -- and it may well run between Execute and
-                // Complete of this very transaction. TTxCommitBlobSeq releases them from Execute for the same reason.
-                Self->S3Manager->OnS3WriteInFlightAdded(AllocatedLocatorCount);
             }
 
             return true;
@@ -113,6 +111,11 @@ namespace NKikimr::NBlobDepot {
             if (Response) {
                 TActivationContext::Send(Response.release());
             }
+            // Allocated slots belong to the pipe and may already have been released on disconnect.
+            // The transaction owns the rest, including all reservations when its pipe disappeared before Execute.
+            if (ReservedSlots > AllocatedLocatorCount) {
+                Self->S3Manager->OnS3WritesInFlightAbandoned(ReservedSlots - AllocatedLocatorCount);
+            }
         }
     };
 
@@ -129,6 +132,17 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TS3Manager::HandlePrepareWriteS3(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev) {
+        if (Self->IsDataCoolingEnabled()) {
+            auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev);
+            for (size_t i = 0; i < ev->Get()->Record.ItemsSize(); ++i) {
+                auto *item = record->AddItems();
+                item->SetStatus(NKikimrProto::ERROR);
+                item->SetErrorReason("Async S3 uses tablet-side uploads");
+            }
+            TActivationContext::Send(response.release());
+            return;
+        }
+
         ApplyMaxWritesInFlight();
 
         const TMonotonic now = TActivationContext::Monotonic();
@@ -155,15 +169,23 @@ namespace NKikimr::NBlobDepot {
         }
 
         auto& agent = Self->GetAgent(ev->Recipient);
+        StartPrepareWriteS3(agent, std::move(ev));
+    }
 
+    void TS3Manager::StartPrepareWriteS3(TAgent& agent, TEvBlobDepot::TEvPrepareWriteS3::TPtr ev) {
         YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "TEvPrepareWriteS3",
             {"marker", "BDTS07"},
             {"id", Self->GetLogId()},
             {"agentId", agent.Connection->NodeId},
             {"msg", ev->Get()->Record});
 
+        // Execute can enqueue the transaction, especially when a commit is draining the prepare queue.
+        // Charge each potential locator before handing the request to the executor.
+        Y_DEBUG_ABORT_UNLESS(S3WritesInFlight < CurrentMaxWritesInFlight);
+        const ui32 slots = Min<ui32>(ev->Get()->Record.ItemsSize(), CurrentMaxWritesInFlight - S3WritesInFlight);
+        OnS3WriteInFlightAdded(slots);
         Self->Execute(std::make_unique<TTxPrepareWriteS3>(Self, agent,
-            std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle>(ev.Release())));
+            std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle>(ev.Release()), slots));
     }
 
     void TS3Manager::NotifyPutSlowDown() {
@@ -231,14 +253,7 @@ namespace NKikimr::NBlobDepot {
                 continue;
             }
 
-            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "TEvPrepareWriteS3",
-                {"marker", "BDTS07"},
-                {"id", Self->GetLogId()},
-                {"agentId", agent->Connection->NodeId},
-                {"msg", ev->Get()->Record});
-
-            Self->Execute(std::make_unique<TTxPrepareWriteS3>(Self, *agent,
-                std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle>(ev.Release())));
+            StartPrepareWriteS3(*agent, std::move(ev));
         }
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_PENDING_QUEUE_SIZE] = PendingPrepareWrites.size();
     }

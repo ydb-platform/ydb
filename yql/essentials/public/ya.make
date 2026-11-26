@@ -12,6 +12,9 @@ RECURSE(
     sql_format
     sql_format/abi/impl
     sql_format/impl
+    sql_inspect
+    sql_inspect/abi/impl
+    sql_inspect/impl
     types
     udf
     udf_meta
@@ -22,5 +25,6 @@ IF (OS_LINUX AND ARCH_X86_64 AND SANITIZER_TYPE != "undefined")
     RECURSE(
         fastcheck/abi/fat
         sql_format/abi/fat
+        sql_inspect/abi/fat
     )
 ENDIF()

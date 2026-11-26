@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/container/container.h>
 #include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/program/collection.h>
+#include <ydb/core/formats/arrow/program/execution.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>

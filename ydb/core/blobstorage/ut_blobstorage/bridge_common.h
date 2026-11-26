@@ -63,6 +63,20 @@ namespace NBridgeTest {
         return TNodeLocation(location);
     }
 
+    inline TEnvironmentSetup::TSettings MakeLocalPileFirstSettings(bool enabled = true, ui32 numPiles = 2) {
+        TFeatureFlags featureFlags;
+        featureFlags.SetEnableBridgeProxyLocalPileFirstGet(enabled);
+        return {
+            .NodeCount = 8 * numPiles,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .FeatureFlags = featureFlags,
+            .SelfManagementConfig = true,
+            .NumPiles = numPiles,
+            .AutomaticBootstrap = true,
+        };
+    }
+
     // nodes of the cluster being converted have no pile names in their locations
     inline TNodeLocation GetUnbridgedLocation(ui32 nodeId) {
         NActorsInterconnect::TNodeLocation location;

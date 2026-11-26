@@ -533,16 +533,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<BoxId, StoragePoolId, Filter>;
     };
 
-
-    // Hive completion (including on an older controller during rollback) must not
-    // erase the durable intent to remove retired S3 objects and late PUTs.
-    struct RetiredS3Namespaces : Table<137> {
-        struct GroupId : Column<1, NScheme::NTypeIds::Uint32> {};
-        struct BlobDepotId : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct S3Config : Column<3, NScheme::NTypeIds::String> {};
-        using TKey = TableKey<GroupId>;
-        using TColumns = TableColumns<GroupId, BlobDepotId, S3Config>;
-    };
+    // Table 137 was used for retired BlobDepot S3 namespaces.
 
     using TTables = SchemaTables<
         Node,
@@ -568,7 +559,6 @@ struct Schema : NIceDb::Schema {
         ScrubState,
         DriveSerial,
         BlobDepotDeleteQueue,
-        RetiredS3Namespaces,
         BridgeSyncState,
         DirectBlockGroupTabletState,
         DirectBlockGroupClaims,

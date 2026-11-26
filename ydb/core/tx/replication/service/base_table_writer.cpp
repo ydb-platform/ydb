@@ -6,7 +6,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/change_exchange/util.h>
-#include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/replication/common/schema_change.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>

@@ -46,6 +46,7 @@ TExecutorBootLogic::TExecutorBootLogic(IOps *ops, IExecutorPageCache& pageCache,
 
 TExecutorBootLogic::~TExecutorBootLogic()
 {
+    CancelMetadataLoads();
     LoadBlobQueue.Clear();
 
     Loads.clear();
@@ -192,7 +193,38 @@ void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
     }
 }
 
-NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, NTable::TLoader::TFetch&& fetch) {
+bool TExecutorBootLogic::LoadMetadata(NBoot::IStep* step, ui32 slot, const NPageCollection::TLargeGlobId& descriptor,
+    const void* request, THolder<NActors::IEventBase> event)
+{
+    if (MetadataCancelled) {
+        return false;
+    }
+    Y_ENSURE(MetadataLoads.emplace(request, TMetadataLoad{ TIntrusivePtr<NBoot::IStep>(step), slot }).second);
+    TVector<TLogoBlobID> blobs;
+    descriptor.MaterializeTo(blobs);
+    for (const auto& blob : blobs) {
+        SeenBlob(blob);
+    }
+    Ops->Send(NSharedCache::MakeSharedPageCacheId(), event.Release(), 0, BootAttempt);
+    return true;
+}
+
+void TExecutorBootLogic::UpdateMetadata(THolder<NActors::IEventBase> event)
+{
+    Ops->Send(NSharedCache::MakeSharedPageCacheId(), event.Release());
+}
+
+void TExecutorBootLogic::CancelMetadataLoads() noexcept {
+    MetadataCancelled = true;
+    decltype(MetadataLoads) loads;
+    loads.swap(MetadataLoads);
+    for (const auto& [_, load] : loads) {
+        load.Step->CancelMetadata();
+    }
+}
+
+NBoot::TSpawned TExecutorBootLogic::LoadPages(
+    NBoot::IStep *step, NTable::TLoader& loader, NTable::TLoader::TFetch&& fetch) {
     auto success = Loads.insert(std::make_pair(fetch.PageCollection.Get(), step)).second;
 
     Y_ENSURE(success, "IPageCollection queued twice for loading");
@@ -201,11 +233,7 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, NTable::TLoade
 
     Ops->Send(
         NSharedCache::MakeSharedPageCacheId(),
-        PageCache.MakePageRequest(
-            NBlockIO::EPriority::Fast,
-            std::move(fetch.PageCollection),
-            std::move(fetch.Pages),
-            BootAttempt).Release(),
+        loader.MakeRequest(NBlockIO::EPriority::Fast, std::move(fetch), BootAttempt).Release(),
         0, (ui64)ERequestTypeCookie::BootLogic);
 
     return NBoot::TSpawned(true);
@@ -293,12 +321,38 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
         if (!LoadBlobQueue.ProcessResult(msg))
             return OpResultBroken;
 
-    } else if (PageCache.EventKind(ev.GetTypeRewrite()) == EPageCacheEvent::Result) {
+    } else if (TPageCacheMetadataResult metadata; PageCache.Protocol().ReadMetadataResult(ev, metadata)) {
+        if (MetadataCancelled || ev.Cookie != BootAttempt) {
+            return OpResultUnhandled;
+        }
+        const auto it = MetadataLoads.find(metadata.Request);
+        if (it == MetadataLoads.end()) {
+            return OpResultUnhandled;
+        }
+        auto load = std::move(it->second);
+        MetadataLoads.erase(it);
+        try {
+            if (load.Step->HandleMetadata(load.Slot, metadata, *ev.GetBase()) == NTable::EMetadataLoadResult::Error) {
+                if (metadata.Status == NKikimrProto::NODATA) {
+                    GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_boot_nodata", true)->Inc();
+                }
+                load.Step->CancelMetadata();
+                CancelMetadataLoads();
+                return OpResultBroken;
+            }
+        } catch (...) {
+            load.Step->CancelMetadata();
+            CancelMetadataLoads();
+            throw;
+        }
+        load.Step.Drop();
+        Steps->Execute();
+    } else if (PageCache.Protocol().EventKind(ev.GetTypeRewrite()) == EPageCacheEvent::Result) {
         if (ERequestTypeCookie(ev.Cookie) != ERequestTypeCookie::BootLogic)
             return OpResultUnhandled;
 
         auto& event = *ev.GetBase();
-        const auto msg = PageCache.ReadResult(event);
+        const auto msg = PageCache.Protocol().ReadResult(event);
         if (msg.Cookie != BootAttempt)
             return OpResultUnhandled;
 
@@ -366,6 +420,7 @@ TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() {
 }
 
 void TExecutorBootLogic::Cancel() {
+    CancelMetadataLoads();
     if (LeaseWaiter) {
         Ops->Send(LeaseWaiter, new TEvents::TEvPoison);
     }

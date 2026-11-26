@@ -91,6 +91,14 @@ private:
     THashMap<TLogoBlobID, TIntrusivePtr<NBoot::TLoadBlobs>> EntriesToLoad;
     THashMap<const NPageCollection::IPageCollection*, TIntrusivePtr<NBoot::IStep>> Loads;
 
+    struct TMetadataLoad {
+        TIntrusivePtr<NBoot::IStep> Step;
+        ui32 Slot;
+    };
+
+    THashMap<const void*, TMetadataLoad> MetadataLoads;
+    bool MetadataCancelled = false;
+
     ui32 GroupResolveCachedChannel;
     ui32 GroupResolveCachedGeneration;
     ui32 GroupResolveCachedGroup;
@@ -102,7 +110,11 @@ private:
     ui32 GetBSGroupFor(const TLogoBlobID &logo) const;
     ui32 GetBSGroupID(ui32 channel, ui32 generation);
     void LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs>);
-    NBoot::TSpawned LoadPages(NBoot::IStep*, NTable::TLoader::TFetch&& fetch);
+    bool LoadMetadata(NBoot::IStep* step, ui32 slot, const NPageCollection::TLargeGlobId& descriptor,
+        const void* request, THolder<NActors::IEventBase> event);
+    void UpdateMetadata(THolder<NActors::IEventBase> event);
+    void CancelMetadataLoads() noexcept;
+    NBoot::TSpawned LoadPages(NBoot::IStep*, NTable::TLoader& loader, NTable::TLoader::TFetch&& fetch);
 
     void OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cookie) override;
     void SeenBlob(const TLogoBlobID& id);

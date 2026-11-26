@@ -10,6 +10,19 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
     namespace {
 
+        class TPrivatePageCacheProtocol final : public IPageCacheProtocol {
+        public:
+            EPageCacheEvent EventKind(ui32 eventType) const noexcept override;
+            TPageCacheResult ReadResult(NActors::IEventBase& event) const override;
+            THolder<NActors::IEventBase> MakePageRequest(NBlockIO::EPriority priority,
+                TIntrusiveConstPtr<NPageCollection::IPageCollection> collection,
+                TVector<NTable::NPage::TPageLocation> locations, ui64 cookie) const override;
+            THolder<NActors::IEventBase> MakeCollectionUpdate(
+                TIntrusiveConstPtr<NPageCollection::IPageCollection> collection, ECacheMode mode,
+                TVector<NPageCollection::TBtreeSeed> btreeSeeds) const override;
+            THolder<NActors::IEventBase> MakeUnregisterRequest() const override;
+        };
+
         THolder<NTable::IPartLoaderEnv> AddPrivateWrittenPages(
             void* context, TArrayRef<NWriter::TWrittenPageCollection> collections, TPageCacheEventSender send) {
             auto* cachePages = static_cast<NSharedCache::TSharedCachePages*>(context);
@@ -48,6 +61,11 @@ namespace NTabletFlatExecutor {
         }
 
     } // namespace
+
+    const IPageCacheProtocol& GetPrivatePageCacheProtocol() noexcept {
+        static const TPrivatePageCacheProtocol protocol;
+        return protocol;
+    }
 
     THolder<NTable::IPartLoaderEnv> TWrittenPageCache::AddWrittenPages(
         TArrayRef<NWriter::TWrittenPageCollection> collections, TPageCacheEventSender send) const {
@@ -194,7 +212,7 @@ namespace NTabletFlatExecutor {
             << NKikimrProto::EReplyStatus_Name(Status) << "}";
     }
 
-    EPageCacheEvent TPrivatePageCacheBackend::EventKind(ui32 eventType) const noexcept {
+    EPageCacheEvent TPrivatePageCacheProtocol::EventKind(ui32 eventType) const noexcept {
         switch (eventType) {
             case NSharedCache::EvResult:
                 return EPageCacheEvent::Result;
@@ -207,7 +225,7 @@ namespace NTabletFlatExecutor {
         }
     }
 
-    TPageCacheResult TPrivatePageCacheBackend::ReadResult(NActors::IEventBase& event) const {
+    TPageCacheResult TPrivatePageCacheProtocol::ReadResult(NActors::IEventBase& event) const {
         auto& result = *CheckedCast<NSharedCache::TEvResult*>(&event);
         return {
             .Status = result.Status,
@@ -218,19 +236,19 @@ namespace NTabletFlatExecutor {
         };
     }
 
-    THolder<NActors::IEventBase> TPrivatePageCacheBackend::MakePageRequest(NBlockIO::EPriority priority,
+    THolder<NActors::IEventBase> TPrivatePageCacheProtocol::MakePageRequest(NBlockIO::EPriority priority,
         TIntrusiveConstPtr<NPageCollection::IPageCollection> collection,
         TVector<NTable::NPage::TPageLocation> locations, ui64 cookie) const {
         return MakeHolder<NSharedCache::TEvRequest>(priority, std::move(collection), std::move(locations), cookie);
     }
 
-    THolder<NActors::IEventBase> TPrivatePageCacheBackend::MakeCollectionUpdate(
+    THolder<NActors::IEventBase> TPrivatePageCacheProtocol::MakeCollectionUpdate(
         TIntrusiveConstPtr<NPageCollection::IPageCollection> collection, ECacheMode mode,
         TVector<NPageCollection::TBtreeSeed> btreeSeeds) const {
         return MakeHolder<NSharedCache::TEvAttach>(std::move(collection), mode, std::move(btreeSeeds));
     }
 
-    THolder<NActors::IEventBase> TPrivatePageCacheBackend::MakeUnregisterRequest() const {
+    THolder<NActors::IEventBase> TPrivatePageCacheProtocol::MakeUnregisterRequest() const {
         return MakeHolder<NSharedCache::TEvUnregister>();
     }
 

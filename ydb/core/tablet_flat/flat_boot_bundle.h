@@ -16,6 +16,8 @@ namespace NTabletFlatExecutor {
 namespace NBoot {
 
     class TBundleLoadStep final: public NBoot::IStep {
+        friend class NTable::TMetadataLoadContext;
+
     public:
         static constexpr NBoot::EStep StepKind = NBoot::EStep::Bundle;
 
@@ -36,16 +38,21 @@ namespace NBoot {
     private: /* IStep, boot logic DSL actor interface   */
         void Start() override
         {
-            LoaderEnv = Logic->PageCache.MakeLoaderEnvironment(LargeGlobIds, Back->PageCollections.Get());
-            Components.resize(LargeGlobIds.size());
-
-            for (auto slot: xrange(LargeGlobIds.size())) {
-                if (!LoaderEnv->HasCollection(slot)) {
-                    LeftMetas += Spawn<TLoadBlobs>(LargeGlobIds[slot], slot);
-                }
+            auto environment = Logic->PageCache.MakeLoaderEnvironment(LargeGlobIds, Back->PageCollections.Get());
+            TVector<NTable::TPageCollectionComponents> components(LargeGlobIds.size());
+            for (ui32 slot = 0; slot < LargeGlobIds.size(); ++slot) {
+                components[slot].LargeGlobId = LargeGlobIds[slot];
             }
-
-            TryLoad();
+            NTable::TPartComponents parts{
+                .PageCollectionComponents = std::move(components),
+                .Legacy = std::move(Legacy),
+                .Opaque = std::move(Opaque),
+                .Deltas = std::move(Deltas),
+                .Epoch = Epoch,
+            };
+            Loader = new NTable::TLoader(std::move(environment), std::move(parts));
+            Loader->BeginMetadata(MetadataContext());
+            TryFinalize();
         }
 
         bool HandleBio(const TPageCacheResult& msg, NActors::IEventBase& event) override
@@ -70,47 +77,66 @@ namespace NBoot {
 
         void HandleStep(TIntrusivePtr<IStep> step) override
         {
-            auto *load = step->ConsumeAs<TLoadBlobs>(LeftMetas);
-
-            if (Loader) {
-                Y_TABLET_ERROR("Got an unexpected load blobs result");
-            } else if (load->Cookie >= LargeGlobIds.size()) {
-                Y_TABLET_ERROR("Got blobs load step with an invalid cookie");
-            } else if (LoaderEnv->HasCollection(load->Cookie)) {
-                Y_TABLET_ERROR("Page collection is already loaded at room " << load->Cookie);
-            } else {
-                // StageParseMeta constructs missing collections from these components
-                Components[load->Cookie].LargeGlobId = load->LargeGlobId;
-                Components[load->Cookie].RawMeta = load->PlainData();
+            auto* load = step->FinalCast<TLoadBlobs>();
+            const auto result = Loader->SaveMetadata(load->Cookie, load->PlainData());
+            if (result == NTable::EMetadataLoadResult::Error) {
+                Y_TABLET_ERROR("Got empty page collection metadata");
             }
-
-            TryLoad();
-        }
-
-    private:
-        void TryLoad()
-        {
-            if (!LeftMetas) {
-                NTable::TPartComponents parts{
-                    .PageCollectionComponents = std::move(Components),
-                    .Legacy = std::move(Legacy),
-                    .Opaque = std::move(Opaque),
-                    .Deltas = std::move(Deltas),
-                    .Epoch = Epoch,
-                };
-
-                // Pass pre-built collections — StageParseMeta fills null slots from components
-                Loader = new NTable::TLoader(std::move(LoaderEnv), std::move(parts));
-
+            if (result != NTable::EMetadataLoadResult::Ignored) {
                 TryFinalize();
             }
         }
 
+        NTable::EMetadataLoadResult HandleMetadata(
+            ui32 slot, const TPageCacheMetadataResult& metadata, NActors::IEventBase& event) override {
+            const auto result = Loader->AcceptMetadata(slot, metadata, event, MetadataContext());
+            if (result == NTable::EMetadataLoadResult::Error) {
+                if (auto logl = Env->Logger()->Log(ELnLev::Error)) {
+                    logl << NFmt::Do(*Back) << " Collection metadata load failed for " << LargeGlobIds[slot].Lead
+                         << ": " << metadata.Error;
+                }
+                return result;
+            }
+            if (result != NTable::EMetadataLoadResult::Ignored) {
+                TryFinalize();
+            }
+            return result;
+        }
+
+        void CancelMetadata() noexcept override {
+            Loader->CancelMetadata();
+        }
+
+    private:
+        NTable::TMetadataLoadContext MetadataContext()
+        {
+            return { *this, TActivationContext::ActorSystem(), Logic->SelfId, Logic->BootAttempt,
+                NBlockIO::EPriority::Fast };
+        }
+
+        void LoadRawMetadata(ui32 slot, const NPageCollection::TLargeGlobId& id)
+        {
+            Spawn<TLoadBlobs>(id, slot);
+        }
+
+        bool SendMetadataRequest(ui32 slot, const void* request, THolder<NActors::IEventBase> event)
+        {
+            return Logic->LoadMetadata(this, slot, LargeGlobIds[slot], request, std::move(event));
+        }
+
+        void SendMetadataUpdate(THolder<NActors::IEventBase> event)
+        {
+            Logic->UpdateMetadata(std::move(event));
+        }
+
         void TryFinalize()
         {
+            if (!Loader->MetadataReady()) {
+                return;
+            }
             if (!LeftReads) {
                 if (auto fetch = Loader->Run({.PreloadIndex = true, .PreloadData = false})) {
-                    LeftReads += Logic->LoadPages(this, std::move(fetch));
+                    LeftReads += Logic->LoadPages(this, *Loader, std::move(fetch));
                 }
             }
 
@@ -141,14 +167,11 @@ namespace NBoot {
 
         TAutoPtr<NTable::TLoader> Loader;
         TVector<NPageCollection::TLargeGlobId> LargeGlobIds;
-        TVector<NTable::TPageCollectionComponents> Components;
-        THolder<NTable::IPartLoaderEnv> LoaderEnv;
         TString Legacy;
         TString Opaque;
         TVector<TString> Deltas;
         NTable::TEpoch Epoch;
 
-        TLeft LeftMetas;
         TLeft LeftReads;
     };
 }

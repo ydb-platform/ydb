@@ -485,11 +485,11 @@ Y_UNIT_TEST_SUITE(TLegacyPageReadEnv) {
         TReadFixture f;
         THolder<TPrivatePageCache> cache;
         TPrivatePageCacheBackend backend(cache);
-        IExecutorPageCache& pageCache = backend;
-        UNIT_ASSERT(pageCache.EventKind(NSharedCache::EvResult) == EPageCacheEvent::Result);
-        UNIT_ASSERT(pageCache.EventKind(NSharedCache::EvUpdated) == EPageCacheEvent::Updated);
-        UNIT_ASSERT(pageCache.EventKind(NSharedCache::EvStickyCollectionPages) == EPageCacheEvent::StickyPages);
-        UNIT_ASSERT(pageCache.EventKind(TEvents::TSystem::Poison) == EPageCacheEvent::Unhandled);
+        const auto& protocol = backend.Protocol();
+        UNIT_ASSERT(protocol.EventKind(NSharedCache::EvResult) == EPageCacheEvent::Result);
+        UNIT_ASSERT(protocol.EventKind(NSharedCache::EvUpdated) == EPageCacheEvent::Updated);
+        UNIT_ASSERT(protocol.EventKind(NSharedCache::EvStickyCollectionPages) == EPageCacheEvent::StickyPages);
+        UNIT_ASSERT(protocol.EventKind(TEvents::TSystem::Poison) == EPageCacheEvent::Unhandled);
         const ui32 slot = f.Part->DataSlot({});
         const auto& descriptor = f.Part->GetPageCollectionRef(slot);
         constexpr ui64 cookie = 135;
@@ -503,7 +503,7 @@ Y_UNIT_TEST_SUITE(TLegacyPageReadEnv) {
             NActors::IEventHandle envelope(
                 TActorId(), TActorId(), result.Release(), 0, ui64(ERequestTypeCookie::Transaction));
             auto& typed = *CheckedCast<NSharedCache::TEvResult*>(envelope.GetBase());
-            const auto view = pageCache.ReadResult(typed);
+            const auto view = protocol.ReadResult(typed);
             UNIT_ASSERT(view.Status == status);
             UNIT_ASSERT(view.PageCollection == descriptor.Get());
             UNIT_ASSERT(&view.WaitPad == &typed.WaitPad);
@@ -529,11 +529,12 @@ Y_UNIT_TEST_SUITE(TLegacyPageReadEnv) {
         THolder<TPrivatePageCache> cache;
         TPrivatePageCacheBackend backend(cache);
         IExecutorPageCache& pageCache = backend;
+        const auto& protocol = pageCache.Protocol();
         const auto& descriptor = f.Part->GetPageCollectionRef(f.Part->DataSlot({}));
         for (auto priority : { NBlockIO::EPriority::Fast, NBlockIO::EPriority::Bkgr }) {
             auto locations = f.Locations;
             const auto* storage = locations.data();
-            auto event = pageCache.MakePageRequest(priority, descriptor, std::move(locations), 73);
+            auto event = protocol.MakePageRequest(priority, descriptor, std::move(locations), 73);
             UNIT_ASSERT_VALUES_EQUAL(event->Type(), NSharedCache::EvRequest);
             const auto& request = *CheckedCast<NSharedCache::TEvRequest*>(event.Get());
             UNIT_ASSERT(request.Priority == priority);
@@ -552,7 +553,7 @@ Y_UNIT_TEST_SUITE(TLegacyPageReadEnv) {
         } };
         const auto expectedSeeds = seeds;
         const auto* seedStorage = seeds.data();
-        auto update = pageCache.MakeCollectionUpdate(descriptor, ECacheMode::TryKeepInMemory, std::move(seeds));
+        auto update = protocol.MakeCollectionUpdate(descriptor, ECacheMode::TryKeepInMemory, std::move(seeds));
         UNIT_ASSERT_VALUES_EQUAL(update->Type(), NSharedCache::EvAttach);
         const auto& attach = *CheckedCast<NSharedCache::TEvAttach*>(update.Get());
         UNIT_ASSERT(attach.PageCollection.Get() == descriptor.Get());

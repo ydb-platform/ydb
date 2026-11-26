@@ -10,9 +10,15 @@
 #include <util/generic/function_ref.h>
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
+#include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
 
 #include <memory>
+
+namespace NActors {
+class IEventHandle;
+class TActorSystem;
+} // namespace NActors
 
 namespace NWilson {
 class TTraceId;
@@ -26,6 +32,7 @@ namespace NKikimr::NTable {
 class TDatabase;
 class TPartStore;
 struct IPartLoaderEnv;
+enum class EMetadataLoadResult;
 }
 
 namespace NKikimr::NTabletFlatExecutor {
@@ -140,10 +147,42 @@ struct TPageCacheResult {
     EPageCacheResultKind Kind = EPageCacheResultKind::Pages;
 };
 
+struct TPageCacheMetadataResult {
+    // The source event keeps this identity alive through dispatch
+    const void* Request = nullptr;
+    NKikimrProto::EReplyStatus Status = NKikimrProto::OK;
+    TStringBuf Error;
+};
+
+class IPageMetadataLoadGroup : public TThrRefBase {
+public:
+    virtual ~IPageMetadataLoadGroup() = default;
+};
+
 enum class EPageResultStatus {
     Ignored,
     Error,
     Ready,
+};
+
+// Immutable protocol instances outlive all actors and environments that use them
+class IPageCacheProtocol {
+public:
+    virtual ~IPageCacheProtocol() = default;
+
+    virtual EPageCacheEvent EventKind(ui32 eventType) const noexcept = 0;
+    virtual TPageCacheResult ReadResult(NActors::IEventBase& event) const = 0;
+
+    virtual bool ReadMetadataResult(NActors::IEventHandle&, TPageCacheMetadataResult&) const {
+        return false;
+    }
+    virtual THolder<NActors::IEventBase> MakePageRequest(NBlockIO::EPriority priority,
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> collection,
+        TVector<NTable::NPage::TPageLocation> locations, ui64 cookie = 0) const = 0;
+    virtual THolder<NActors::IEventBase> MakeCollectionUpdate(
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> collection, NTable::NPage::ECacheMode mode,
+        TVector<NPageCollection::TBtreeSeed> btreeSeeds = {}) const = 0;
+    virtual THolder<NActors::IEventBase> MakeUnregisterRequest() const = 0;
 };
 
 // Backend operations shared by the executor; concrete pin owners stay private
@@ -182,15 +221,11 @@ public:
     virtual void WithTransactionPages(
         NTable::TDatabase& database, TSeat& seat, TFunctionRef<void(ITransactionPages&, TTransactionEnv&)> execute) = 0;
 
-    virtual EPageCacheEvent EventKind(ui32 eventType) const noexcept = 0;
-    virtual TPageCacheResult ReadResult(NActors::IEventBase& event) const = 0;
-    virtual THolder<NActors::IEventBase> MakePageRequest(NBlockIO::EPriority priority,
-        TIntrusiveConstPtr<NPageCollection::IPageCollection> collection,
-        TVector<NTable::NPage::TPageLocation> locations, ui64 cookie = 0) const = 0;
-    virtual THolder<NActors::IEventBase> MakeCollectionUpdate(
-        TIntrusiveConstPtr<NPageCollection::IPageCollection> collection, NTable::NPage::ECacheMode mode,
-        TVector<NPageCollection::TBtreeSeed> btreeSeeds = {}) const = 0;
-    virtual THolder<NActors::IEventBase> MakeUnregisterRequest() const = 0;
+    virtual const IPageCacheProtocol& Protocol() const noexcept = 0;
+
+    THolder<NActors::IEventBase> MakeUnregisterRequest() const {
+        return Protocol().MakeUnregisterRequest();
+    }
 
     // Prepares the fresh wait pad before the executor sends any page requests
     virtual TPageRequests PreparePageRequests(

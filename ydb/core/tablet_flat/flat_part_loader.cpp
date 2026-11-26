@@ -27,10 +27,56 @@ TLoader::TLoader(THolder<IEnv> environment, TPartComponents components)
     }
 }
 
-TLoader::~TLoader() { }
-
-void TLoader::StageParseMeta()
+TLoader::~TLoader()
 {
+    LoaderEnv->CancelMetadata();
+}
+
+void TLoader::BeginMetadata(const TMetadataLoadContext& context)
+{
+    const auto prepareRoot = [this] {
+        return PrepareMetadataRoot();
+    };
+    LoaderEnv->BeginMetadata(Components.PageCollectionComponents, context, prepareRoot);
+}
+
+EMetadataLoadResult TLoader::SaveMetadata(ui32 slot, TSharedData data)
+{
+    return LoaderEnv->SaveMetadata(Components.PageCollectionComponents, slot, std::move(data));
+}
+
+EMetadataLoadResult TLoader::AcceptMetadata(ui32 slot, const NTabletFlatExecutor::TPageCacheMetadataResult& result,
+    NActors::IEventBase& event, const TMetadataLoadContext& context)
+{
+    const auto prepareRoot = [this] {
+        return PrepareMetadataRoot();
+    };
+    return LoaderEnv->AcceptMetadata(slot, result, event, context, prepareRoot);
+}
+
+bool TLoader::PrepareMetadataRoot()
+{
+    PrepareRoot();
+    const auto slots = GetSlots();
+    for (ui32 slot = 0; slot < LoaderEnv->GetCollectionCount() && slot < slots.SlotsCount(); ++slot) {
+        if (!LoaderEnv->HasCollection(slot)) {
+            continue;
+        }
+        bool skip = false;
+        for (auto groupId : StrippedV1Shadows) {
+            skip |= slots.IndexSlot(groupId) == slot;
+        }
+        LoaderEnv->GetCollection(slot)->SetSkipBTreeIndexV1Shadow(skip);
+    }
+    return HasOuterCollection();
+}
+
+void TLoader::PrepareRoot()
+{
+    if (Stage != EStage::Root) {
+        return;
+    }
+
     if (LoaderEnv->GetCollectionCount() < Components.PageCollectionComponents.size()) {
         LoaderEnv->ResizeCollections(Components.PageCollectionComponents.size());
     }
@@ -196,7 +242,13 @@ void TLoader::StageParseMeta()
     MaxRowVersion.Step = Root.GetMaxRowVersion().GetStep();
     MaxRowVersion.TxId = Root.GetMaxRowVersion().GetTxId();
 
-    bool isOuterSlot = (SmallId != Max<TPageId>());
+    Stage = EStage::Meta;
+}
+
+void TLoader::StageParseMeta()
+{
+    const ui32 metaPages = LoaderEnv->GetCollection(0)->MetaPages();
+    bool isOuterSlot = HasOuterCollection();
 
     for (ui32 i = 1; i < LoaderEnv->GetCollectionCount() - isOuterSlot; i++) {
         if (LoaderEnv->HasCollection(i)) {
@@ -212,14 +264,14 @@ void TLoader::StageParseMeta()
 
     const auto slots = GetSlots();
 
-    if (!HasBasics() || (Rooted && SchemeId != meta.TotalPages() - 1)
+    if (!HasBasics() || (Rooted && SchemeId != metaPages - 1)
         || (LargeId == Max<TPageId>()) != (GlobsId == Max<TPageId>())
         || (slots.OuterSlot() + (SmallId == Max<TPageId>() ? 0 : 1)) != LoaderEnv->GetCollectionCount()
         || (!PartLayout.SeparateDescriptorCollection && !(PartLayout.KeyIndexInDescriptor && PartLayout.GroupIndexesInDescriptor)))
     {
         Y_TABLET_ERROR("Part " << LoaderEnv->GetCollection(0)->Label() << " has"
             << " invalid layout : " << (Rooted ? "rooted" : "legacy")
-            << " " << LoaderEnv->GetCollectionCount() << "s " << meta.TotalPages() << "pg"
+            << " " << LoaderEnv->GetCollectionCount() << "s " << metaPages << "pg"
             << ", Scheme " << SchemeId
             << ", FlatIndex " << (FlatGroupIndexes.size() ? FlatGroupIndexes[0] : Max<TPageId>())
             << ", BTreeIndex " << (BTreeGroupIndexes.size() ? BTreeGroupIndexes[0].RootV1PageId() : Max<TPageId>())
@@ -520,6 +572,44 @@ void TLoader::Save(NActors::IEventBase& event)
     } else {
         Y_TABLET_ERROR("Unexpected pages save on stage " << int(Stage));
     }
+}
+
+void TLoader::TLoaderEnv::BeginMetadata(
+    TArrayRef<TPageCollectionComponents> components, const TMetadataLoadContext& context, TFunctionRef<bool()>)
+{
+    if (MetadataState != EMetadataState::Idle) {
+        return;
+    }
+    MetadataState = EMetadataState::Loading;
+    if (GetCollectionCount() < components.size()) {
+        ResizeCollections(components.size());
+    }
+    for (ui32 slot = 0; slot < components.size(); ++slot) {
+        MetadataRemaining += !HasCollection(slot) && !components[slot].RawMeta;
+    }
+    for (ui32 slot = 0; slot < components.size(); ++slot) {
+        if (!HasCollection(slot) && !components[slot].RawMeta) {
+            context.LoadRaw(slot, components[slot].LargeGlobId);
+        }
+    }
+}
+
+EMetadataLoadResult TLoader::TLoaderEnv::SaveMetadata(
+    TArrayRef<TPageCollectionComponents> components, ui32 slot, TSharedData data)
+{
+    if (MetadataState != EMetadataState::Loading || MetadataRemaining == 0) {
+        return EMetadataLoadResult::Ignored;
+    }
+    Y_ENSURE(slot < components.size(), "Metadata slot is out of range");
+    if (HasCollection(slot) || components[slot].RawMeta) {
+        return EMetadataLoadResult::Ignored;
+    }
+    if (!data) {
+        return EMetadataLoadResult::Error;
+    }
+    components[slot].RawMeta = std::move(data);
+    --MetadataRemaining;
+    return MetadataRemaining ? EMetadataLoadResult::Pending : EMetadataLoadResult::Ready;
 }
 
 void TLoader::TLoaderEnv::PrepareCollection(ui32 slot, TPageCollectionComponents& components, bool outer)

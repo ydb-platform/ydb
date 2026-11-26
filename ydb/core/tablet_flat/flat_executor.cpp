@@ -1468,8 +1468,7 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
         if (auto fetch = stage->Loader.Run({.PreloadIndex = true, .PreloadData = PreloadTablesData.contains(partSwitch.TableId)})) {
             stage->Fetching = fetch.PageCollection.Get();
 
-            Send(MakeSharedPageCacheId(), PageCache.MakePageRequest(
-                NBlockIO::EPriority::Fast, std::move(fetch.PageCollection), std::move(fetch.Pages)),
+            Send(MakeSharedPageCacheId(), stage->Loader.MakeRequest(NBlockIO::EPriority::Fast, std::move(fetch)),
                 0, ui64(ERequestTypeCookie::PendingInit));
 
             ++partSwitch.PendingLoads;
@@ -1628,6 +1627,7 @@ void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const 
     Y_DEBUG_ABORT_UNLESS(cacheModes);
 
     auto* partStore = partView.As<NTable::TPartStore>();
+    const auto& protocol = PageCache.Protocol();
     const auto stickyGroups = MakeStickyGroups(partView, stickyColumns);
     auto collectionModes = GetPartStoreCacheModes(partView, cacheModes);
     const auto modeChanged = PageCache.UpdateCollectionModes(*partStore, collectionModes, stickyGroups);
@@ -1635,7 +1635,7 @@ void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const 
     // A separate descriptor page collection has no data pages to attach B-tree seeds with
     if (const ui32 slot = partStore->DescriptorSlot(); slot != partStore->DataSlot({ }) && modeChanged[slot]) {
         const auto& pageCollection = partStore->GetPageCollectionRef(slot);
-        Send(MakeSharedPageCacheId(), PageCache.MakeCollectionUpdate(pageCollection, collectionModes[slot]));
+        Send(MakeSharedPageCacheId(), protocol.MakeCollectionUpdate(pageCollection, collectionModes[slot]));
     }
 
     // A group is re-seeded when the mode of the collection with its data or index pages changes.
@@ -1647,8 +1647,8 @@ void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const 
 
         const ui32 slot = partStore->DataSlot(groupId);
         const auto& pageCollection = partStore->GetPageCollectionRef(slot);
-        Send(MakeSharedPageCacheId(), PageCache.MakeCollectionUpdate(pageCollection, collectionModes[slot],
-            MakeBtreeSeeds(*partStore, groupIndex, stickyGroups, collectionModes)));
+        Send(MakeSharedPageCacheId(), protocol.MakeCollectionUpdate(pageCollection, collectionModes[slot],
+                                          MakeBtreeSeeds(*partStore, groupIndex, stickyGroups, collectionModes)));
     }
 }
 
@@ -1657,6 +1657,7 @@ void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView,
     Y_DEBUG_ABORT_UNLESS(stickyColumns);
 
     auto partStore = partView.As<NTable::TPartStore>();
+    const auto& protocol = PageCache.Protocol();
     const auto stickyGroups = MakeStickyGroups(partView, stickyColumns);
     auto collectionModes = GetPartStoreCacheModes(partView, cacheModes);
     PageCache.ReadCollectionModes(*partStore, collectionModes, stickyGroups);
@@ -1667,13 +1668,13 @@ void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView,
         const ui32 slot = partStore->DataSlot(groupId);
         const auto& pageCollection = partStore->GetPageCollectionRef(slot);
         if (auto seeds = MakeBtreeSeeds(*partStore, groupIndex, stickyGroups, collectionModes); seeds) {
-            Send(MakeSharedPageCacheId(), PageCache.MakeCollectionUpdate(pageCollection,
-                collectionModes[slot], std::move(seeds)));
+            Send(MakeSharedPageCacheId(),
+                protocol.MakeCollectionUpdate(pageCollection, collectionModes[slot], std::move(seeds)));
         }
 
         if (stickyGroups[groupIndex]) {
-            Send(MakeSharedPageCacheId(), PageCache.MakePageRequest(
-                NBlockIO::EPriority::Bkgr, pageCollection, partStore->GetPages(partStore->DataSlot(groupId), groupId)),
+            Send(MakeSharedPageCacheId(),
+                protocol.MakePageRequest(NBlockIO::EPriority::Bkgr, pageCollection, partStore->GetPages(slot, groupId)),
                 0, ui64(ERequestTypeCookie::StickyPages));
         }
     }
@@ -1682,9 +1683,8 @@ void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView,
     // collection 0 of the old layout, so V1 indexes kept in it stay in memory
     if (const ui32 slot = partStore->DescriptorSlot(); slot != partStore->DataSlot({ }) && IsStickySlot(*partStore, slot, stickyGroups)) {
         const auto& pageCollection = partStore->GetPageCollectionRef(slot);
-        Send(MakeSharedPageCacheId(), PageCache.MakePageRequest(
-            NBlockIO::EPriority::Bkgr, pageCollection, partStore->GetPages(slot, { })),
-            0, ui64(ERequestTypeCookie::StickyPages));
+        Send(MakeSharedPageCacheId(), protocol.MakePageRequest(NBlockIO::EPriority::Bkgr, pageCollection,
+                                          partStore->GetPages(slot, {})), 0, ui64(ERequestTypeCookie::StickyPages));
     }
 }
 
@@ -3327,7 +3327,7 @@ void TExecutor::Handle(TEvents::TEvFlushLog::TPtr &ev) {
 
 void TExecutor::HandlePageCacheResult(NActors::IEventHandle& ev) {
     auto& event = *ev.GetBase();
-    const auto msg = PageCache.ReadResult(event);
+    const auto msg = PageCache.Protocol().ReadResult(event);
     const bool failed = (msg.Status != NKikimrProto::OK);
     const auto requestType = ERequestTypeCookie(ev.Cookie);
 
@@ -3431,7 +3431,7 @@ void TExecutor::HandlePageCacheResult(NActors::IEventHandle& ev) {
 }
 
 void TExecutor::HandlePageCacheEvent(NActors::IEventHandle& ev) {
-    switch (PageCache.EventKind(ev.GetTypeRewrite())) {
+    switch (PageCache.Protocol().EventKind(ev.GetTypeRewrite())) {
         case EPageCacheEvent::Result:
             HandlePageCacheResult(ev);
             break;

@@ -2355,7 +2355,7 @@ FROM `{table_name}`"""
                 )
                 WHERE foo.bar regexp "lunch" and foo.bat.`0` > 0
                       {comment_for_pushdown} OR ListLength(foo.baz) > 5
-                      OR foo.bum.b IS NOT NULL OR foo.bum.cd.d IS DISTINCT FROM NULL OR foo.bum.cd.c
+                      OR foo.but.b IS NOT NULL OR foo.but.cd.d IS DISTINCT FROM NULL OR foo.but.cd.c
                 ;
                 $in = SELECT * FROM $in FLATTEN COLUMNS; -- expand foo
                 $in = SELECT
@@ -2383,7 +2383,7 @@ FROM `{table_name}`"""
         longstr = '23456789876543212345678987654321'  # so that it won't fit SSO/embedded
         data = [
             '{"foo":{"bar":"before lunch", "bat":[0], "but":null}}',
-            '{"fo\\u006f":{"bar":"lunch time", "baz":[1,2], "bat":[1,"{longstr}"],"bet":{"a":1,"b{longstr}c":2},"bum":{"обед":true,"\\u043fолдни\\u043a":null},,"but":[123,456]},"test":"xy{longstr}z"}',
+            '{"fo\\u006f":{"bar":"lunch time", "baz":[1,2], "bat":[1,"{longstr}"],"bet":{"a":1,"b{longstr}c":2},"bum":{"обед":true,"\\u043fолдни\\u043a":null},"but":[123,456]},"test":"xy{longstr}z"}',
             '{"foo":{"bar":"after lunch", "baz":[], "bat":[2,"t{longstr}a"],"bet":{"a":2,"c{longstr}d":3},"bum":{"supper":false},"but":[789,"foo"]},"test":"x{longstr}yz"}',
             '{"foo":{"bar":"is lunch over", "bat":[3],"but":true},"test":"x{longstr}yz"}',
             '{"foo":{"bar":"lunch was yummy", "bat":[4,null,"that"],"but":1234},"test":"x{longstr}yz"}',
@@ -2428,9 +2428,9 @@ FROM `{table_name}`"""
                     filter = operator[pushdown_key]
                     assert "`bar`" in filter
                     assert "`bat`" in filter
-                    assert "((`foo`).`bum`).`b`" in filter
-                    assert "(((`foo`).`bum`).`cd`).`c`" in filter
-                    assert "(((`foo`).`bum`).`cd`).`d`" in filter
+                    assert "((`foo`).`but`).`b`" in filter
+                    assert "(((`foo`).`but`).`cd`).`c`" in filter
+                    assert "(((`foo`).`but`).`cd`).`d`" in filter
                     sources += 1
         assert sources > 0
 

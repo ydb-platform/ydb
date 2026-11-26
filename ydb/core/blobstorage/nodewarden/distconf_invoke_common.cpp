@@ -415,15 +415,10 @@ namespace NKikimr::NStorage {
             if (result.ErrorReason || result.IsDistconfDisabledQuorum || !result.RecoveredConfig) {
                 throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable configuration");
             }
-            if (useTargetQuorum && (result.RecoveredConfig->GetGeneration() < Self->StorageConfig->GetGeneration()
-                    || (result.RecoveredConfig->GetGeneration() == Self->StorageConfig->GetGeneration()
-                        && TStorageConfigMeta(*result.RecoveredConfig) != TStorageConfigMeta(*Self->StorageConfig)))) {
+            if (useTargetQuorum && !TStorageConfigMeta(*result.RecoveredConfig).IsSameOrNewerThan(*Self->StorageConfig)) {
                 throw TExRace() << "The target quorum has not recovered the current configuration";
             }
             if (result.RequiresRecoveryProposition) {
-                if (!Self->Scepter) {
-                    throw TExRace() << "A pending proposition must be recovered before changing DC availability";
-                }
                 return StartRecoveryProposition(result);
             }
             if (!result.RequiresGenerationAdvance) {
@@ -436,6 +431,10 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::StartRecoveryProposition(TProcessCollectConfigsResult& result) {
         Y_ABORT_UNLESS(result.RequiresRecoveryProposition && result.ConfigToPropose && result.PropositionBase);
+        // IsPropositionCurrent requires a working root to commit a non-bridge recovery proposition.
+        if (!Self->IsBridged() && !Self->Scepter) {
+            throw TExRace() << "No working root to recover the pending configuration";
+        }
         RecoveryProposition = true;
         StartPropositionImpl(&*result.ConfigToPropose, false, &*result.PropositionBase, false);
     }

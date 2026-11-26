@@ -52,6 +52,10 @@ namespace NKikimr::NStorage {
             SetFingerprint(config.GetFingerprint());
         }
 
+        bool IsSameOrNewerThan(const TStorageConfigMeta& base) const {
+            return *this == base || GetGeneration() > base.GetGeneration();
+        }
+
         friend bool operator ==(const TStorageConfigMeta& x, const TStorageConfigMeta& y) {
             return x.GetGeneration() == y.GetGeneration()
                 && x.GetFingerprint() == y.GetFingerprint();

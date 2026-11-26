@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         TWorkerId Worker{0, 0, 0};
         const bool Transfer;
 
-        explicit TSetup(ui32 nodeCount = 2, bool transfer = false, bool secret = false)
+        explicit TSetup(ui32 nodeCount = 2, bool transfer = false, bool secret = false, bool global = false)
             : Env(true, ERuntimeMode::Simulated, nodeCount)
             , Transfer(transfer)
         {
@@ -132,8 +132,9 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                 result = session.ExecuteSchemeQuery(Sprintf(R"(
                     CREATE ASYNC REPLICATION `replication` FOR
                         `/Root/table` AS `/Root/replica`
-                    WITH (CONNECTION_STRING = "grpc://%s/?database=/Root"%s);
-                )", Env.GetEndpoint().c_str(), secret ? ", TOKEN_SECRET_PATH = \"/Root/source-token\"" : "")).GetValueSync();
+                    WITH (CONNECTION_STRING = "grpc://%s/?database=/Root"%s%s);
+                )", Env.GetEndpoint().c_str(), secret ? ", TOKEN_SECRET_PATH = \"/Root/source-token\"" : "",
+                    global ? ", CONSISTENCY_LEVEL = \"GLOBAL\", COMMIT_INTERVAL = Interval(\"PT10S\")" : "")).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             });
 
@@ -875,7 +876,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
 
     Y_UNIT_TEST(ShouldRemoveParentWhenChildReportsHeartbeat) {
         // given
-        TSetup s(1);
+        TSetup s(1, false, false, true);
         const auto child = EndWorkerWithChild(s);
 
         // when
@@ -892,7 +893,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
 
     Y_UNIT_TEST(ShouldKeepParentWhenChildHasNoHeartbeat) {
         // given
-        TSetup s(1);
+        TSetup s(1, false, false, true);
         ui32 stops = 0;
         auto observer = s.Env.GetRuntime().AddObserver<TEvService::TEvStopWorker>([&](TEvService::TEvStopWorker::TPtr&) {
             ++stops;
@@ -936,7 +937,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
 
     Y_UNIT_TEST(ShouldPersistCompletedTransitionWhenParentIsRemoved) {
         // given
-        TSetup s(1);
+        TSetup s(1, false, false, true);
         const auto child = EndWorkerWithChild(s);
         SendHeartbeat(s, child, TRowVersion(10, 1));
         s.ProcessQueues();
@@ -951,7 +952,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
 
     Y_UNIT_TEST(ShouldNotRunRemovedParentWhenControllerRestarts) {
         // given
-        TSetup s(1);
+        TSetup s(1, false, false, true);
         RemoveParentAfterChildHeartbeat(s);
         auto& runtime = s.Env.GetRuntime();
         bool registered = false;
@@ -981,7 +982,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
 
     Y_UNIT_TEST(ShouldRunRemovedParentAgainWhenReplicationIsResumed) {
         // given
-        TSetup s(1);
+        TSetup s(1, false, false, true);
         auto& runtime = s.Env.GetRuntime();
         const auto child = RemoveParentAfterChildHeartbeat(s);
         UNIT_ASSERT(HasCompletedTransitionRow(s, s.Worker));
@@ -1042,7 +1043,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
 
     Y_UNIT_TEST(ShouldRemoveBothParentsWhenMergedChildReportsHeartbeat) {
         // given
-        TSetup s(1);
+        TSetup s(1, false, false, true);
         auto& runtime = s.Env.GetRuntime();
         const auto secondParent = PartitionWorker(s, 1);
         const auto child = PartitionWorker(s, 2);
@@ -1070,7 +1071,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
 
     Y_UNIT_TEST(ShouldRemoveParentWhenChildTransitionIsCompleted) {
         // given
-        TSetup s(1);
+        TSetup s(1, false, false, true);
         const auto firstChild = PartitionWorker(s, 1);
         const auto secondChild = PartitionWorker(s, 2);
         const auto firstGrandchild = PartitionWorker(s, 3);
@@ -1099,7 +1100,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
 
     Y_UNIT_TEST(ShouldStopRemovedParentWhenNodeReconnects) {
         // given
-        TSetup s(1);
+        TSetup s(1, false, false, true);
         auto& runtime = s.Env.GetRuntime();
         const auto child = EndWorkerWithChild(s);
         SendHeartbeat(s, child, TRowVersion(10, 1));
@@ -1120,6 +1121,24 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         // then
         s.ExpectStop(0);
         UNIT_ASSERT(!s.HasWorkerRow());
+    }
+
+    Y_UNIT_TEST(ShouldKeepParentWhenReplicationIsNotGlobal) {
+        // given
+        TSetup s(1);
+        ui32 stops = 0;
+        auto observer = s.Env.GetRuntime().AddObserver<TEvService::TEvStopWorker>([&](TEvService::TEvStopWorker::TPtr&) {
+            ++stops;
+        });
+        const auto child = EndWorkerWithChild(s);
+
+        // when
+        SendHeartbeat(s, child, TRowVersion(10, 1));
+
+        // then
+        s.ProcessQueues(true);
+        UNIT_ASSERT_VALUES_EQUAL(stops, 0);
+        UNIT_ASSERT(s.HasWorkerRow());
     }
 
     Y_UNIT_TEST(RecoveredWorkerAuthenticatesAndConsumesAfterDelayedSecret) {

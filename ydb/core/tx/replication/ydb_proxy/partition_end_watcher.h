@@ -44,8 +44,8 @@ public:
     }
 
     inline void Clear(ui64 committedOffset) {
-        PendingCommittedOffset = committedOffset;
-        CommittedOffset = committedOffset;
+        PendingCommittedOffset = committedOffset - 1;
+        CommittedOffset = committedOffset - 1;
         EndPartitionSessionEvent.Clear();
     }
 

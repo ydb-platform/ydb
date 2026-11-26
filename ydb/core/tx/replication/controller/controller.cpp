@@ -792,7 +792,7 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
     for (auto partitionId : record.GetChildPartitionsIds()) {
         children.emplace_back(id.ReplicationId(), id.TargetId(), partitionId);
     }
-    if (!children.empty()) {
+    if (!children.empty() && Replications.at(id.ReplicationId())->GetConfig().GetConsistencySettings().HasGlobal()) {
         SplitMergeTransitions.StartTransition(id, children);
     }
 

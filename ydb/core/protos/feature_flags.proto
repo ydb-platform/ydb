@@ -508,4 +508,6 @@ message TFeatureFlags {
     optional bool EnableConsistentVectorIndexBuild = 405 [default = true];
     optional bool EnableReadSecretRpcHandler = 406 [default = false];
     optional bool EnableCdcKeyRangeHeartbeats = 407 [default = false];
+    // Preparation only: unused until the lock-free page cache is integrated.
+    optional bool EnableLockFreePageCache = 408 [default = false, (RequireRestart) = true];
 }

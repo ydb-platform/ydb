@@ -216,12 +216,10 @@ class TController::TTxIndexBuild: public TTxBase {
                     auto assigned = Self->AssignedTxIds.lower_bound(end);
                     if (assigned != Self->AssignedTxIds.end()) {
                         txId = assigned->second;
-                        if (assigned->first != end) {
-                            Self->AddWriteTxAlias(db, end, txId);
-                        }
+                        Self->ExtendWriteTx(db, txId, end);
                     } else if (CanReuseLastGlobalAssignment(join)) {
                         txId = Self->AssignedTxIds.rbegin()->second;
-                        Self->AddWriteTxAlias(db, end, txId);
+                        Self->ExtendWriteTx(db, txId, end);
                     } else if (!Self->AllocatedTxIds.empty() && Self->CountOpenWriteTxIds() < MaxOpenTxIds + 1) {
                         txId = Allocate(end, db);
                     }

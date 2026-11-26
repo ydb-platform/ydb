@@ -49,14 +49,10 @@ bool TController::HasPendingTargetFlushTxId(const TSchemaBarrier& barrier) const
     });
 }
 
-TRowVersion TController::GetWriteTxEnd(ui64 writeTxId) const {
-    TRowVersion end = TRowVersion::Min();
-    for (const auto& [version, assignedTxId] : AssignedTxIds) {
-        if (assignedTxId == writeTxId) {
-            end = version;
-        }
-    }
-    return end;
+TRowVersion TController::GetFirstWriteTxEnd() const {
+    const auto first = AssignedTxIds.begin();
+    const auto next = std::next(first);
+    return next != AssignedTxIds.end() && next->second == first->second ? next->first : first->first;
 }
 
 void TController::EraseWriteTx(NIceDb::TNiceDb& db, ui64 writeTxId) {
@@ -205,7 +201,7 @@ public:
 
         Y_ABORT_UNLESS(!Self->WorkersByHeartbeat.empty());
         const auto writeTxId = Self->AssignedTxIds.begin()->second;
-        const auto writeTxEnd = Self->GetWriteTxEnd(writeTxId);
+        const auto writeTxEnd = Self->GetFirstWriteTxEnd();
         if (Self->WorkersByHeartbeat.begin()->first < writeTxEnd) {
             return true; // version has not been changed
         }
@@ -293,7 +289,7 @@ public:
         auto it = Self->AssignedTxIds.begin();
         Y_ABORT_UNLESS(it != Self->AssignedTxIds.end());
         Y_ABORT_UNLESS(it->second == Self->CommittingTxId);
-        const auto writeTxEnd = Self->GetWriteTxEnd(Self->CommittingTxId);
+        const auto writeTxEnd = Self->GetFirstWriteTxEnd();
 
         const auto& record = Status->Get()->Record;
         const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
@@ -347,7 +343,7 @@ public:
             return true;
         }
 
-        const auto nextWriteTxEnd = Self->GetWriteTxEnd(it->second);
+        const auto nextWriteTxEnd = Self->GetFirstWriteTxEnd();
         if (Self->WorkersByHeartbeat.begin()->first < nextWriteTxEnd) {
             return true;
         }

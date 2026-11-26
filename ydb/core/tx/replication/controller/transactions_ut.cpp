@@ -1,10 +1,12 @@
 #include "controller_impl.h"
 
 #include <ydb/core/base/hive.h>
+#include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/replication/ut_helpers/mock_service.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 
@@ -125,6 +127,15 @@ struct TTransactionsEnv: TEnv<> {
 
     size_t Count() {
         return Describe().assigned_size();
+    }
+
+    size_t CountTxIdRows() {
+        NKikimrMiniKQL::TResult result;
+        UNIT_ASSERT_VALUES_EQUAL(LocalQuery(GetRuntime(), TabletId, R"((
+            (let range '('('VersionStep (Null) (Void)) '('VersionTxId (Null) (Void))))
+            (return (AsList (SetResult 'Rows (SelectRange 'TxIds range '('WriteTxId) '())))))
+        ))", result), NKikimrProto::OK);
+        return result.GetValue().GetStruct(0).GetOptional().GetStruct(0).ListSize();
     }
 
     std::optional<NYdb::NReplication::TReplicationDescription::TTransactions> SdkTransactions(bool stats) {
@@ -315,17 +326,49 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
         // given
         TTransactionsEnv env;
         const auto txIds = FoldLaterIntervalAtLimit(env);
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(69999), txIds.back());
         env.HoldCommits();
         env.Heartbeat(40000);
         CommitHeldWriteTxs(env, TVector<ui64>(txIds.begin(), txIds.end() - 1));
         UNIT_ASSERT_VALUES_EQUAL(env.Count(), 1);
 
         // when
-        env.Heartbeat(50000);
+        env.Heartbeat(60000);
 
         // then
         UNIT_ASSERT(!env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender(), TDuration::Seconds(1)));
         UNIT_ASSERT_VALUES_EQUAL(env.Count(), 1);
+    }
+
+    Y_UNIT_TEST(ShouldKeepTwoKeysPerWriteTxWhenFoldingRepeatedly) {
+        // given
+        TTransactionsEnv env;
+        const auto txIds = FoldLaterIntervalAtLimit(env);
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(69999), txIds.back());
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(79999), txIds.back());
+
+        // when
+        const auto folded = env.Assign(89999);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(folded, txIds.back());
+        UNIT_ASSERT_VALUES_EQUAL(env.CountTxIdRows(), 6);
+    }
+
+    Y_UNIT_TEST(ShouldReuseFoldedTxIdForIntervalOfMovedKey) {
+        // given
+        TTransactionsEnv env;
+        const auto txIds = FoldLaterIntervalAtLimit(env);
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(69999), txIds.back());
+        env.HoldCommits();
+        env.Heartbeat();
+        CommitHeldWriteTxs(env, {txIds.front()});
+
+        // when
+        const auto repeated = env.Assign(59999);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(repeated, txIds.back());
     }
 
     Y_UNIT_TEST(ShouldRemoveAllKeysOfFoldedTxIdWhenItIsCommitted) {
@@ -363,10 +406,11 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
         UNIT_ASSERT_VALUES_UNEQUAL(later, txIds.back());
     }
 
-    Y_UNIT_TEST(ShouldReuseFoldedTxIdForLaterIntervalAfterRestart) {
+    Y_UNIT_TEST(ShouldRestoreBothKeysOfFoldedTxIdAfterRestart) {
         // given
         TTransactionsEnv env;
         const auto txIds = FoldLaterIntervalAtLimit(env);
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(69999), txIds.back());
         env.HoldCommits();
         env.Heartbeat();
         CommitHeldWriteTxs(env, {txIds.front()});

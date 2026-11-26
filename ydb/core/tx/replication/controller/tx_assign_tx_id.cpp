@@ -97,10 +97,9 @@ public:
             auto it = Self->AssignedTxIds.lower_bound(version);
             if (it != Self->AssignedTxIds.end()
                     && (it->first == version || !Self->IndexBuilds.empty() || IsBetweenKeysOfWriteTx(it))) {
-                if (it->first != version) {
-                    Self->AddWriteTxAlias(db, version, it->second);
-                }
-                return it->second;
+                const auto txId = it->second;
+                Self->ExtendWriteTx(db, txId, version);
+                return txId;
             }
 
             if (Self->CountOpenWriteTxIds() >= MaxOpenTxIds) {
@@ -157,17 +156,16 @@ public:
                     NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
                 );
             } else {
-                Self->AddWriteTxAlias(db, it->first, Self->AssignedTxIds.rbegin()->second);
+                Self->ExtendWriteTx(db, Self->AssignedTxIds.rbegin()->second, it->first);
             }
         }
 
         result = Process([&](const TRowVersion& version) -> TAssignResult {
             auto it = Self->AssignedTxIds.lower_bound(version);
             Y_ABORT_UNLESS(it != Self->AssignedTxIds.end());
-            if (it->first != version) {
-                Self->AddWriteTxAlias(db, version, it->second);
-            }
-            return it->second;
+            const auto txId = it->second;
+            Self->ExtendWriteTx(db, txId, version);
+            return txId;
         });
 
         Y_ABORT_UNLESS(std::holds_alternative<TTxId>(result));
@@ -224,10 +222,32 @@ size_t TController::CountOpenWriteTxIds() const {
     return writeTxIds.size();
 }
 
-void TController::AddWriteTxAlias(NIceDb::TNiceDb& db, const TRowVersion& version, ui64 writeTxId) {
-    const bool inserted = AssignedTxIds.emplace(version, writeTxId).second;
+void TController::ExtendWriteTx(NIceDb::TNiceDb& db, ui64 writeTxId, const TRowVersion& intervalEnd) {
+    std::optional<TRowVersion> first;
+    TRowVersion last = TRowVersion::Min();
+    for (const auto& [version, txId] : AssignedTxIds) {
+        if (txId == writeTxId) {
+            if (!first) {
+                first = version;
+            }
+            last = version;
+        }
+    }
+
+    Y_ABORT_UNLESS(first);
+    if (*first <= intervalEnd && intervalEnd <= last) {
+        return;
+    }
+
+    if (*first != last) {
+        const auto moved = intervalEnd < *first ? *first : last;
+        AssignedTxIds.erase(moved);
+        db.Table<Schema::TxIds>().Key(moved.Step, moved.TxId).Delete();
+    }
+
+    const bool inserted = AssignedTxIds.emplace(intervalEnd, writeTxId).second;
     Y_ABORT_UNLESS(inserted);
-    db.Table<Schema::TxIds>().Key(version.Step, version.TxId).Update(
+    db.Table<Schema::TxIds>().Key(intervalEnd.Step, intervalEnd.TxId).Update(
         NIceDb::TUpdate<Schema::TxIds::WriteTxId>(writeTxId)
     );
 }

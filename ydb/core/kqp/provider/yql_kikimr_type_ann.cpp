@@ -2723,6 +2723,12 @@ private:
                                 ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), "DEFAULT expression SQL text is missing"));
                                 return TStatus::Error;
                             }
+                            if (const auto prefix = setDefault.ContextPrefix();
+                                prefix && !CheckDefaultExpressionPragmas(prefix.Cast().Value(), SessionCtx->Query().TranslationSettings,
+                                    nameNode.Pos(), ctx))
+                            {
+                                return TStatus::Error;
+                            }
                             if (!column || !columnType) {
                                 ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
                                     << "Cannot determine the type of column " << name));

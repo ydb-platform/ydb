@@ -766,6 +766,24 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;#]]");
     }
 
+    Y_UNIT_TEST(DisableAnsiInPragmaRejectsAlterExpressionDefault) {
+        TTestFixture fixture;
+        fixture.Exec(DefaultExprDDL("v Bool DEFAULT true"));
+        const TString disabled = "PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;\n";
+        const TString expression = "(RandomNumber(1) * 0ul + 2ul) IN AsList(1ul, NULL)";
+        const TString alter = TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << expression << ";";
+
+        fixture.Rejects(disabled + alter, "DEFAULT expressions do not support PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections");
+        fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, v;", "[[1;[%true]]]");
+
+        fixture.Exec(disabled + "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT false;");
+        fixture.Check("INSERT INTO TestTable (k) VALUES (2) RETURNING k, v;", "[[2;[%false]]]");
+
+        fixture.Exec(disabled + "PRAGMA AnsiInForEmptyOrNullableItemsCollections;\n" + alter);
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), expression);
+        fixture.Check("INSERT INTO TestTable (k) VALUES (3) RETURNING k, v;", "[[3;#]]");
+    }
+
     Y_UNIT_TEST(UnrelatedDeclareAccepted) {
         TTestFixture fixture;
         // Unrelated query declarations are not part of the stored expression

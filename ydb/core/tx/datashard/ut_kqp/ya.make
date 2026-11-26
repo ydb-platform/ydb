@@ -15,7 +15,6 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/testlib/default
     ydb/core/tx
-    ydb/library/yql/dq/actors/compute
     yql/essentials/public/udf/service/exception_policy
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/src/client/result

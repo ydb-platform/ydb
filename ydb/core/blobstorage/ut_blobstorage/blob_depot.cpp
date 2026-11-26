@@ -66,11 +66,11 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         }
     }
 
-    void TestMaxGenerationBlock(bool collectByCompleteDeletionBlock) {
+    void TestMaxGenerationBlock(bool dropBarriers) {
         ui32 seed;
         LoadSeed(seed);
         TFeatureFlags featureFlags;
-        featureFlags.SetEnableCollectByCompleteDeletionBlock(collectByCompleteDeletionBlock);
+        featureFlags.SetEnableCollectByCompleteDeletionBlock(dropBarriers);
         TBlobDepotTestEnvironment tenv(seed, 1, 8, TBlobStorageGroupType::ErasureMirror3of4, featureFlags);
 
         auto& env = *tenv.Env;
@@ -90,37 +90,50 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
             UNIT_ASSERT_VALUES_EQUAL_C(getResult->Get()->Responses[0].Status, expected, getResult->Get()->ToString());
         };
 
+        auto hardBarrier = [&](ui32 generation, ui32 step, bool ignoreBlock = false,
+                NKikimrProto::EReplyStatus expected = NKikimrProto::OK) {
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvCollectGarbage(tabletId, generation, generation,
+                    id.Channel(), true, generation, step, nullptr, nullptr, TInstant::Max(), false,
+                    TWriteSource::Unknown, /*hard=*/true, ignoreBlock));
+            });
+            auto res = CaptureTEvCollectGarbageResult(env, sender, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, expected, res->Get()->ToString());
+            if (expected == NKikimrProto::ERROR) {
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->ErrorReason, "repeated command with different collect parameters received");
+            }
+        };
+
         SendTEvPut(env, sender, groupId, id, data);
         auto putResult = CaptureTEvPutResult(env, sender, false);
         UNIT_ASSERT_VALUES_EQUAL_C(putResult->Get()->Status, NKikimrProto::OK, putResult->Get()->ToString());
 
+        hardBarrier(1, 0);
         checkBlob(NKikimrProto::OK);
 
-        // Hive deletes the tablet for good: with EnableCollectByCompleteDeletionBlock the Max generation
-        // block alone has to collect its data, because the hard barrier that normally follows may never be
-        // observed -- a VDisk that has seen this block is free to drop the barrier records of this tablet;
-        // without it the data stays until that hard barrier
         SendTEvBlock(env, sender, groupId, tabletId, Max<ui32>());
         auto blockResult = CaptureTEvBlockResult(env, sender, false);
         UNIT_ASSERT_VALUES_EQUAL_C(blockResult->Get()->Status, NKikimrProto::OK, blockResult->Get()->ToString());
 
         env.Sim(TDuration::Seconds(1));
 
-        checkBlob(collectByCompleteDeletionBlock ? NKikimrProto::NODATA : NKikimrProto::OK);
-
-        // With the flag, the hard barrier Hive sends after the block is redundant by now and must not be
-        // recorded: Hive retries it, and each retry would otherwise bring back a barrier row we have purged.
-        for (int attempt = 0; attempt < 2; ++attempt) {
-            SendTEvCollectGarbage(env, sender, groupId, tabletId, Max<ui32>(), Max<ui32>(), id.Channel(),
-                true, Max<ui32>(), Max<ui32>(), nullptr, nullptr, false, true);
-            auto collectResult = CaptureTEvCollectGarbageResult(env, sender, false);
-            UNIT_ASSERT_VALUES_EQUAL_C(collectResult->Get()->Status, NKikimrProto::OK,
-                collectResult->Get()->ToString());
-        }
-
-        env.Sim(TDuration::Seconds(1));
-
         checkBlob(NKikimrProto::NODATA);
+
+        // A retained barrier rejects the same command number with a different collect step.
+        const auto retryStatus = dropBarriers ? NKikimrProto::OK : NKikimrProto::ERROR;
+        hardBarrier(1, 1, /*ignoreBlock=*/true, retryStatus);
+
+        // Hive can retry the final barrier after the block has collected the data.
+        const ui32 max = Max<ui32>();
+        hardBarrier(max, max);
+        hardBarrier(max, max);
+
+        const auto depotTablet = TryGetBlobDepotTabletId(env, groupId);
+        UNIT_ASSERT(depotTablet);
+        RebootBlobDepotTablet(env, *depotTablet);
+        checkBlob(NKikimrProto::NODATA);
+
+        hardBarrier(max, max - 1, /*ignoreBlock=*/true, retryStatus);
     }
 
     Y_UNIT_TEST(BasicPutAndGet) {
@@ -310,7 +323,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         TestMaxGenerationBlock(true);
     }
 
-    Y_UNIT_TEST(MaxGenerationBlockWaitsForBarrierWhenDisabled) {
+    Y_UNIT_TEST(MaxGenerationBlockRetainsHardBarrierWhenDisabled) {
         TestMaxGenerationBlock(false);
     }
 

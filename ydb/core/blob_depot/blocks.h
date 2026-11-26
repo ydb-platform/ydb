@@ -60,16 +60,8 @@ namespace NKikimr::NBlobDepot {
 
         bool CheckBlock(ui64 tabletId, ui32 generation) const;
 
-        // A block with generation Max<ui32>() is the tombstone Hive writes when it deletes a tablet
-        // for good; from that moment on none of the tablet's data is needed and nothing can ever be
-        // written for it again. We must not wait for the hard barrier that Hive sends next -- a
-        // VDisk that has seen this block is free to drop the barrier records themselves, so during
-        // decommission they may never reach us. Unless EnableCollectByCompleteDeletionBlock is on, no
-        // tablet is considered deleted and its data waits for that hard barrier as usual.
+        // Decommission can deliver the permanent block after the source VDisks have dropped the barriers.
         bool IsTabletDeleted(ui64 tabletId) const {
-            if (!Self->CollectByCompleteDeletionBlock) {
-                return false;
-            }
             const auto it = Blocks.find(tabletId);
             return it != Blocks.end() && IsCompleteTabletDeletionBlock(it->second.BlockedGeneration);
         }

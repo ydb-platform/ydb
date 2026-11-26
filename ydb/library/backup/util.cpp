@@ -54,7 +54,7 @@ TString RelPathFromAbsolute(TString db, TString path) {
         throw yexception() << "path should be absolute, " << info;
     }
 
-    if (!path.StartsWith(db)) {
+    if (path != db && !path.StartsWith(db + '/')) {
         throw yexception() << "the path should starts with a name of the database, " << info;
     }
 

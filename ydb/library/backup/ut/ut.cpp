@@ -798,6 +798,11 @@ Y_UNIT_TEST(PathParseTest) {
     UNIT_CHECK_GENERATED_EXCEPTION(RelPathFromAbsolute("/my_db", "my_db/my_folder"), yexception);
     UNIT_CHECK_GENERATED_EXCEPTION(RelPathFromAbsolute("/my_db", "/other_db/my_folder"), yexception);
 
+    UNIT_ASSERT_EQUAL(RelPathFromAbsolute("/Root/dev", "/Root/dev/orders"), "orders");
+    UNIT_ASSERT_EQUAL(RelPathFromAbsolute("/Root/develop", "/Root/develop/orders"), "orders");
+    UNIT_CHECK_GENERATED_EXCEPTION(RelPathFromAbsolute("/Root/dev", "/Root/develop/orders"), yexception);
+    UNIT_CHECK_GENERATED_EXCEPTION(RelPathFromAbsolute("/Root/dev", "/Root/develop"), yexception);
+
     UNIT_ASSERT_EQUAL(RelPathFromAbsolute("/ru/my_db/", "/ru/my_db/my_folder"), "my_folder");
     UNIT_ASSERT_EQUAL(RelPathFromAbsolute("/ru/my_db/", "/ru/my_db/"), "/");
     UNIT_ASSERT_EQUAL(RelPathFromAbsolute("/ru/my_db/", "/ru/my_db"), "/");

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common_data.h"
+#include "portions.h"
 
 #include <ydb/core/tx/columnshard/common/portion.h>
 
@@ -19,43 +20,6 @@ class TColumnEngineForLogs;
 
 namespace NKikimr::NColumnShard {
 
-class TBaseGranuleDataClassSummary {
-protected:
-    i64 ColumnPortionsSize = 0;
-    i64 TotalPortionsSize = 0;
-    i64 PortionsCount = 0;
-    i64 RecordsCount = 0;
-    i64 MetadataMemoryPortionsSize = 0;
-
-public:
-    i64 GetColumnPortionsSize() const {
-        return ColumnPortionsSize;
-    }
-
-    i64 GetTotalPortionsSize() const {
-        return TotalPortionsSize;
-    }
-
-    i64 GetRecordsCount() const {
-        return RecordsCount;
-    }
-
-    i64 GetPortionsCount() const {
-        return PortionsCount;
-    }
-
-    i64 GetMetadataMemoryPortionsSize() const {
-        return MetadataMemoryPortionsSize;
-    }
-
-    TString DebugString() const {
-        return TStringBuilder() << "columns_size:" << ColumnPortionsSize << ";total_size:" << TotalPortionsSize << ";count:" << PortionsCount
-                                << ";metadata_portions_size:" << MetadataMemoryPortionsSize << ";records_count:" << RecordsCount << ";";
-    }
-
-    TBaseGranuleDataClassSummary operator+(const TBaseGranuleDataClassSummary& item) const;
-};
-
 class TDataClassCounters {
 private:
     std::shared_ptr<TValueAggregationClient> PortionsSize;
@@ -69,9 +33,9 @@ public:
     {
     }
 
-    void OnPortionsInfo(const TBaseGranuleDataClassSummary& dataInfo) const {
-        PortionsSize->SetValue(dataInfo.GetTotalPortionsSize());
-        PortionsCount->SetValue(dataInfo.GetPortionsCount());
+    void OnPortionsInfo(const NOlap::TSimplePortionsGroupInfo& portions) const {
+        PortionsSize->SetValue(portions.GetBlobBytes());
+        PortionsCount->SetValue(portions.GetCount());
     }
 };
 
@@ -137,7 +101,7 @@ public:
     {
     }
 
-    void OnPortionsDataRefresh(const TBaseGranuleDataClassSummary& inserted, const TBaseGranuleDataClassSummary& compacted) const {
+    void OnPortionsDataRefresh(const NOlap::TSimplePortionsGroupInfo& inserted, const NOlap::TSimplePortionsGroupInfo& compacted) const {
         FullData.OnPortionsInfo(inserted + compacted);
         InsertedData.OnPortionsInfo(inserted);
         CompactedData.OnPortionsInfo(compacted);
@@ -244,30 +208,25 @@ private:
     NMonitoring::THistogramPtr HistogramAddPortionDurationMs;
 
     TAgentGranuleDataCounters GranuleDataAgent;
-    std::vector<std::shared_ptr<TIncrementalHistogram>> BlobSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionRecordsDistribution;
 
 public:
     friend class NKikimr::NOlap::TColumnEngineForLogs;
 
-    class TPortionsInfoGuard {
+    // monitoring of the shard's portions: sizes and row counts by class, tiny portions
+    class TPortionSizeHistograms {
     private:
-        std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> BlobGuards;
         std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> PortionRecordCountGuards;
         std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> PortionSizeGuards;
         TValueGuard BadPortionsCount;
 
     public:
-        TPortionsInfoGuard(const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrBlobs,
-            const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrPortionSize,
+        TPortionSizeHistograms(const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrPortionSize,
             const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrRecordsCount,
             NMonitoring::TDynamicCounters::TCounterPtr badPortionsCount)
             : BadPortionsCount(badPortionsCount)
         {
-            for (auto&& i : distrBlobs) {
-                BlobGuards.emplace_back(i->BuildGuard());
-            }
             for (auto&& i : distrPortionSize) {
                 PortionSizeGuards.emplace_back(i->BuildGuard());
             }
@@ -282,8 +241,8 @@ public:
 
     void OnActualizationTask(const ui32 evictCount, const ui32 removeCount) const;
 
-    TPortionsInfoGuard BuildPortionBlobsGuard() const {
-        return TPortionsInfoGuard(BlobSizeDistribution, PortionSizeDistribution, PortionRecordsDistribution, BadPortionsCount);
+    TPortionSizeHistograms BuildPortionSizeHistograms() const {
+        return TPortionSizeHistograms(PortionSizeDistribution, PortionRecordsDistribution, BadPortionsCount);
     }
 
     TGranuleDataCounters RegisterGranuleDataCounters() const {

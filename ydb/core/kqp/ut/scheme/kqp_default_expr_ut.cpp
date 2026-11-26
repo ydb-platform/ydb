@@ -1525,6 +1525,27 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, other, expr, literal FROM TestTable ORDER BY k;", "[[1;[10];#;[7u]];[2;[20];[42u];[8u]]]");
     }
 
+    Y_UNIT_TEST(UpsertWithExpressionDefaultDoesNotNeedSelectRow) {
+        TTestFixture fixture(TKikimrSettings(DefaultExprAppConfig()).SetWithSampleTables(false).SetAuthToken("root@builtin"));
+        fixture.Exec(ValueTableDDL());
+        fixture.Exec("INSERT INTO TestTable (k, other, v) VALUES (1, 0, 7ul);");
+
+        const TString writer = "writer@builtin";
+        auto& client = fixture.Runner().GetTestClient();
+        client.SetSecurityToken("root@builtin");
+        client.TestGrantConnect(writer);
+        client.TestGrant("/Root", "TestTable", writer, NACLib::EAccessRights(NACLib::DescribeSchema | NACLib::UpdateRow));
+        auto db = fixture.Runner().GetQueryClient(TClientSettings().AuthToken(writer));
+
+        const auto select = db.ExecuteQuery("SELECT v FROM TestTable;", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(!select.IsSuccess(), "SELECT succeeded without SelectRow");
+        UNIT_ASSERT_STRING_CONTAINS(select.GetIssues().ToString(), "AccessDenied");
+        const auto upsert = db.ExecuteQuery("UPSERT INTO TestTable (k, other) VALUES (1, 10), (2, 20);",
+            TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+        fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", "[[1;[10];[7u]];[2;[20];[42u]]]");
+    }
+
     Y_UNIT_TEST_TWIN(NewRboPartialUpsertWithExpressionDefault, EnableFallback) {
         auto appConfig = DefaultExprAppConfig();
         auto* config = appConfig.MutableTableServiceConfig();

@@ -1672,6 +1672,23 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT b, g = a + 8ul FROM TestTable WHERE k = 2;", "[[[8u];%true]]");
     }
 
+    Y_UNIT_TEST(UpdateOnWithNullKeyUsesStoredGeneratedDependency) {
+        TTestFixture fixture(TFixtureOptions{.GeneratedStored = true});
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                tenant Uint64 NOT NULL,
+                k Int32,
+                a Uint64 NOT NULL,
+                b Uint64 NOT NULL DEFAULT RandomNumber(1) * 0ul + 9ul,
+                g Uint64 NOT NULL GENERATED ALWAYS AS (a + b) STORED,
+                PRIMARY KEY (tenant, k)
+            );
+        )");
+        fixture.Exec("INSERT INTO TestTable (tenant, k, a, b) VALUES (1ul, NULL, 1ul, 7ul);");
+        fixture.Exec("UPDATE TestTable ON (tenant, k, a) VALUES (1ul, NULL, 5ul), (2ul, NULL, 6ul);");
+        fixture.Check("SELECT tenant, k, a, b, g FROM TestTable ORDER BY tenant, k;", "[[1u;#;5u;7u;12u]]");
+    }
+
     Y_UNIT_TEST(StoredAndVirtualColumnsUseDefaultedValue) {
         auto appConfig = DefaultExprAppConfig(TFixtureOptions{.GeneratedStored = true});
         appConfig.MutableFeatureFlags()->SetEnableGeneratedVirtual(true);

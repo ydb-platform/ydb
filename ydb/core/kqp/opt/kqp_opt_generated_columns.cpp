@@ -211,10 +211,8 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
 
     TKqpStreamLookupSettings lookupSettings;
     lookupSettings.Strategy = EStreamLookupStrategyType::LookupJoinRows;
-    if (!dropRowsAbsentFromTable) {
-        // UPSERT can update a row whose primary key contains NULL.
-        lookupSettings.AllowNullKeysPrefixSize = pk.size();
-    }
+    // A write addresses the full primary key, including NULL components.
+    lookupSettings.AllowNullKeysPrefixSize = pk.size();
 
     auto joined = Build<TKqlStreamLookupTable>(ctx, pos)
         .Table(BuildTableMeta(table, pos, ctx))

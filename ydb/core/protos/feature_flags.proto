@@ -505,4 +505,5 @@ message TFeatureFlags {
     // Enable after all nodes support packed S3 mappings and the rollback window has closed.
     optional bool EnableBlobDepotDataCooling = 403 [default = false];
     optional bool EnableAsyncReplicationSnapshotProvenance = 404 [default = false];
+    optional bool EnableAsyncReplicationBootstrap = 405 [default = false];
 }

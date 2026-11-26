@@ -31,6 +31,27 @@ using namespace NYql::NCommon;
 
 namespace {
 
+// Exhaustive, and without a default case, so a mode added to the parser cannot reach the proto as
+// a different one. The strings are the lower-cased values the provider produces.
+std::optional<NKikimrReplication::TReplicationConfig::EBootstrapMode> BootstrapModeFromString(
+    const TString& value)
+{
+    using TConfig = NKikimrReplication::TReplicationConfig;
+    if (value == "scan") {
+        return TConfig::BOOTSTRAP_MODE_SCAN;
+    }
+    if (value == "import") {
+        return TConfig::BOOTSTRAP_MODE_IMPORT;
+    }
+    if (value == "switchover") {
+        return TConfig::BOOTSTRAP_MODE_SWITCHOVER;
+    }
+    if (value == "auto_import") {
+        return TConfig::BOOTSTRAP_MODE_AUTO_IMPORT;
+    }
+    return std::nullopt;
+}
+
 bool ConvertDataSlotToYdbTypedValue(NYql::EDataSlot fromType, const TString& fromValue, Ydb::Type* toType,
     Ydb::Value* toValue)
 {
@@ -3196,13 +3217,31 @@ public:
                 consistency->Serialize(*config.MutableConsistencySettings()->MutableGlobal());
             }
             if (const auto& bootstrap = settings.Settings.Bootstrap) {
-                if (*bootstrap == "scan") {
-                    config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SCAN);
-                } else if (*bootstrap == "import") {
-                    config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_IMPORT);
-                } else {
-                    config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SWITCHOVER);
+                // Mapped explicitly, with no fallback: an unrecognised mode must not silently
+                // become some other one. SWITCHOVER in particular demotes tables the replication
+                // did not create and is gated on a cluster administrator.
+                const auto mode = BootstrapModeFromString(*bootstrap);
+                if (!mode) {
+                    return MakeFuture(ResultFromError<TGenericResult>(
+                        TStringBuilder() << "Unknown bootstrap mode: " << *bootstrap));
                 }
+                // Nothing drives a seeded bootstrap yet, so accepting one would persist a
+                // replication that never starts.
+                if (*mode == NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_AUTO_IMPORT
+                    && !AppData()->FeatureFlags.GetEnableAsyncReplicationBootstrap())
+                {
+                    return MakeFuture(ResultFromError<TGenericResult>(
+                        "BOOTSTRAP = 'AUTO_IMPORT' is not supported:"
+                        " EnableAsyncReplicationBootstrap is off"));
+                }
+                config.SetBootstrap(*mode);
+            }
+            if (const auto& storage = settings.Settings.BootstrapStorage) {
+                config.MutableBootstrapStorage()->MutableExternalDataSource()->SetPath(
+                    AdjustPath(*storage, GetDatabase()));
+            }
+            if (const auto& prefix = settings.Settings.BootstrapPrefix) {
+                config.MutableBootstrapStorage()->SetPrefix(*prefix);
             }
             if (const auto& initialScan = settings.Settings.InitialScan) {
                 config.SetInitialScan(*initialScan);

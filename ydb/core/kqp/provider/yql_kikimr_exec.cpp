@@ -1239,17 +1239,42 @@ namespace {
             } else if (name == "bootstrap") {
                 auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 const auto mode = to_lower(value);
-                if (mode != "scan" && mode != "import" && mode != "switchover") {
+                if (mode != "scan" && mode != "import" && mode != "switchover" && mode != "auto_import") {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                         TStringBuilder() << "Unknown bootstrap mode: " << value));
                     return false;
                 }
                 dstSettings.Bootstrap = mode;
+            } else if (name == "bootstrap_storage") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (value.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        "BOOTSTRAP_STORAGE must not be empty"));
+                    return false;
+                }
+                dstSettings.BootstrapStorage = value;
+            } else if (name == "bootstrap_prefix") {
+                dstSettings.BootstrapPrefix =
+                    ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
             }
         }
 
         if (dstSettings.RowConsistency && dstSettings.GlobalConsistency) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "Ambiguous consistency level"));
+            return false;
+        }
+
+        // The mode says who fills the destination; the storage only says from where. Neither is
+        // usable without the other, and a setting that would be silently ignored is an error.
+        const bool autoImport = dstSettings.Bootstrap && *dstSettings.Bootstrap == "auto_import";
+        if (autoImport && !dstSettings.BootstrapStorage) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                "BOOTSTRAP = 'AUTO_IMPORT' requires BOOTSTRAP_STORAGE"));
+            return false;
+        }
+        if (!autoImport && (dstSettings.BootstrapStorage || dstSettings.BootstrapPrefix)) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                "BOOTSTRAP_STORAGE and BOOTSTRAP_PREFIX are only supported with BOOTSTRAP = 'AUTO_IMPORT'"));
             return false;
         }
 

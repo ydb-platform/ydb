@@ -10993,6 +10993,91 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateAsyncReplicationBootstrapSettings) {
+        // A distinct name per statement: a refused CREATE still leaves its path behind, so
+        // reusing one would fail with "path exists but creating right now".
+        ui32 seq = 0;
+        const auto create = [&seq](const TString& settings) {
+            const ui32 n = seq++;
+            return Sprintf(R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication%u` FOR
+                    `/Root/table` AS `/Root/replica%u`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    %s
+                );
+            )", n, n, settings.c_str());
+        };
+        const auto rejects = [&](TSession& session, const TString& settings, const TString& error) {
+            const auto result = session.ExecuteSchemeQuery(create(settings)).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, settings);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), error,
+                settings << " -> " << result.GetIssues().ToOneLineString());
+        };
+
+        // The statement's own shape is rejected by the provider, so no flag is needed for these.
+        {
+            TKikimrRunner kikimr;
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+            rejects(session, R"(BOOTSTRAP = "NONSENSE")", "Unknown bootstrap mode: NONSENSE");
+            rejects(session, R"(BOOTSTRAP = "AUTO_IMPORT")",
+                "BOOTSTRAP = 'AUTO_IMPORT' requires BOOTSTRAP_STORAGE");
+            rejects(session, R"(BOOTSTRAP = "IMPORT", BOOTSTRAP_STORAGE = "/Root/storage")",
+                "only supported with BOOTSTRAP = 'AUTO_IMPORT'");
+            rejects(session, R"(BOOTSTRAP = "SCAN", BOOTSTRAP_STORAGE = "/Root/storage")",
+                "only supported with BOOTSTRAP = 'AUTO_IMPORT'");
+            rejects(session, R"(BOOTSTRAP_STORAGE = "/Root/storage")",
+                "only supported with BOOTSTRAP = 'AUTO_IMPORT'");
+            rejects(session, R"(BOOTSTRAP_PREFIX = "seed")",
+                "only supported with BOOTSTRAP = 'AUTO_IMPORT'");
+            // Unknown setting names are refused by the SQL translator's closed list, which is what
+            // makes an older server reject these settings rather than ignore them.
+            rejects(session, R"(AUTO_BOOTSTRAP_STORAGE = "/Root/storage")",
+                "Unknown replication setting: AUTO_BOOTSTRAP_STORAGE");
+            // Mode settings stay create-only.
+            {
+                const auto result = session.ExecuteSchemeQuery(R"(
+                    --!syntax_v1
+                    ALTER ASYNC REPLICATION `/Root/replication` SET (BOOTSTRAP_STORAGE = "/Root/storage");
+                )").GetValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(),
+                    "BOOTSTRAP_STORAGE is not supported in ALTER");
+            }
+        }
+
+        // A well-formed statement reaches SchemeShard, where the feature flag decides.
+        {
+            TKikimrRunner kikimr;
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            rejects(session, R"(BOOTSTRAP = "AUTO_IMPORT", BOOTSTRAP_STORAGE = "/Root/storage")",
+                "EnableAsyncReplicationBootstrap is off");
+        }
+        {
+            NKikimrConfig::TFeatureFlags featureFlags;
+            featureFlags.SetEnableAsyncReplicationBootstrap(true);
+            TKikimrRunner kikimr(featureFlags);
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+            // AUTO_IMPORT implies no initial scan, so an explicit one contradicts it. This check
+            // must keep working once the temporary gate below is removed.
+            rejects(session,
+                R"(BOOTSTRAP = "AUTO_IMPORT", BOOTSTRAP_STORAGE = "/Root/storage", INITIAL_SCAN = TRUE)",
+                "BOOTSTRAP and INITIAL_SCAN contradict each other");
+            // With the flag on, a well-formed statement is accepted; whether the storage can
+            // actually be used is the controller's to discover and report.
+            {
+                const auto result = session.ExecuteSchemeQuery(
+                    create(R"(BOOTSTRAP = "AUTO_IMPORT", BOOTSTRAP_STORAGE = "/Root/storage")")
+                ).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                    result.GetIssues().ToString());
+            }
+        }
+    }
+
     Y_UNIT_TEST(CreateAsyncReplicationReportsTrailingSlashInSourcePath) {
         TKikimrRunner kikimr;
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();

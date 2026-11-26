@@ -101,6 +101,22 @@ message TAvailabilityPeriod {
     }
 }
 
+// Locator for the intermediate storage of a seeded (AUTO_IMPORT) bootstrap: a reference, never
+// inline credentials. A second kind can be added to the oneof without disturbing the rest.
+message TBootstrapStorageSettings {
+    // An EXTERNAL DATA SOURCE of type ObjectStorage with AUTH_METHOD = 'AWS'.
+    message TExternalDataSource {
+        optional string Path = 1;
+    }
+
+    oneof Storage {
+        TExternalDataSource ExternalDataSource = 1;
+    }
+
+    // Path prefix inside the storage; the controller appends its own unique segments.
+    optional string Prefix = 2;
+}
+
 message TReplicationConfig {
     message TTargetEverything {
         optional string DstPrefix = 1;
@@ -176,8 +192,14 @@ message TReplicationConfig {
         // after a planned role switchover: the controller demotes each one to a read-only replica
         // in place and copies nothing. Cluster administrators only.
         BOOTSTRAP_MODE_SWITCHOVER = 3;
+        // As IMPORT, except that the controller fills the placeholders itself. Requires
+        // BootstrapStorage.
+        BOOTSTRAP_MODE_AUTO_IMPORT = 4;
     }
     optional EBootstrapMode Bootstrap = 13;
+    // Where an AUTO_IMPORT bootstrap puts the snapshot it takes of the source. Rejected for
+    // every other bootstrap mode.
+    optional TBootstrapStorageSettings BootstrapStorage = 14;
 
     reserved 6; // InitialSync
 }

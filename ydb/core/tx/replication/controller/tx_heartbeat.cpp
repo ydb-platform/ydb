@@ -230,8 +230,7 @@ public:
             Self->RemoveParentsWithReadyChildren(ctx);
         }
 
-        const bool quorumRecheckRequested = std::exchange(Self->HeartbeatQuorumRecheckRequested, false);
-        if (Self->PendingHeartbeats || quorumRecheckRequested) {
+        if (Self->PendingHeartbeats) {
             Self->Execute(new TTxHeartbeat(Self), ctx);
         } else {
             Self->ProcessHeartbeatsInFlight = false;
@@ -244,14 +243,6 @@ void TController::RunTxHeartbeat(const TActorContext& ctx) {
     if (!ProcessHeartbeatsInFlight) {
         ProcessHeartbeatsInFlight = true;
         Execute(new TTxHeartbeat(this), ctx);
-    }
-}
-
-void TController::RecheckHeartbeatQuorum(const TActorContext& ctx) {
-    if (ProcessHeartbeatsInFlight) {
-        HeartbeatQuorumRecheckRequested = true;
-    } else {
-        RunTxHeartbeat(ctx);
     }
 }
 

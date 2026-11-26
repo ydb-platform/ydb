@@ -3778,6 +3778,112 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Unsupported scan reader policy name 'BOGUS'")});
     }
 
+    Y_UNIT_TEST(SparsedColumnsRejectedOnCreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        UNIT_ASSERT(!runtime.GetAppData().FeatureFlags.GetEnableSparsedColumns());
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BadSparse"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "id" Type: "Uint64" NotNull: true DefaultValue { Scalar { Uint64: 42 } } }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "id"
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusInvalidParameter, "Sparsed columns are disabled for column tables: column 'id'")});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "GoodSparse"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "id" Type: "Uint64" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" DefaultValue { Scalar { String: "42" } } }
+                KeyColumnNames: "id"
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusInvalidParameter, "column 'data' has a default value or a sparsed accessor")});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "GoodSparse"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "id" Type: "Uint64" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "id"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(InStoreSparsedColumnsRejectedOnCreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        UNIT_ASSERT(!runtime.GetAppData().FeatureFlags.GetEnableSparsedColumns());
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "id" Type: "Uint64" NotNull: true DefaultValue { Scalar { Uint64: 42 } } }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "id"
+                }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusInvalidParameter, "Sparsed columns are disabled for column tables: column 'id'")});
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "id" Type: "Uint64" NotNull: true }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "id"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "TableWithSparse"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "id" Type: "Uint64" NotNull: true DefaultValue { Scalar { Uint64: 42 } } }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "id"
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusInvalidParameter, "Sparsed columns are disabled for column tables: column 'id'")});
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "TableWithSparse"
+            ColumnShardCount: 1
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(AlterTableLegacyAddColumnFeatureFlagChecked) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.GetAppData().FeatureFlags.SetEnableColumnshardBool(false);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            Columns { Name: "flag" Type: "Bool" }
+        )", {TExpectedResult(NKikimrScheme::StatusInvalidParameter, "EnableColumnshardBool feature flag is off")});
+        env.TestWaitNotification(runtime, txId);
+        const auto describe = DescribePath(runtime, "/MyRoot/ColumnTable");
+        for (const auto& column : describe.GetPathDescription().GetColumnTableDescription().GetSchema().GetColumns()) {
+            UNIT_ASSERT_UNEQUAL(column.GetName(), "flag");
+        }
+    }
+
     Y_UNIT_TEST(AlterShardsRejectedWhenShardingDisabled) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -3795,6 +3901,116 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Name: "ColumnTable"
             AlterShards { Modification { OpenReadIds: 1 } }
         )", {TExpectedResult(NKikimrScheme::StatusPreconditionFailed, "Alter sharding is disabled for OLAP tables")});
+    }
+
+    Y_UNIT_TEST(InStorePresetColumnFeatureFlagsChecked) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnshardBool(true);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "id" Type: "Uint64" NotNull: true }
+                    Columns { Name: "flag" Type: "Bool" }
+                    KeyColumnNames: "id"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.GetAppData().FeatureFlags.SetEnableColumnshardBool(false);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "Table1"
+            ColumnShardCount: 1
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "EnableColumnshardBool feature flag is off")});
+
+        runtime.GetAppData().FeatureFlags.SetEnableColumnshardBool(true);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "Table1"
+            ColumnShardCount: 1
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(AlterShardsModificationUnknownShardRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableAlterShardingInColumnShard(true);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            AlterShards { Modification { CloseWriteIds: 999999 } }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "incorrect shard id from CloseWriteIds - not exists in full scope")});
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            AlterShards { Modification { DeleteShardIds: 999999 } }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "shard id from DeleteShardIds absent with current full shardIds list")});
+    }
+
+    Y_UNIT_TEST(AlterShardsTransferUnknownDestinationRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableAlterShardingInColumnShard(true);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            AlterShards { Transfer { Transfers {
+                SessionId: "ut-session"
+                DestinationTabletId: 999999
+                SourceTabletIds: 888888
+            } } }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Unknown destination tablet id for shards transfer: 999999")});
+    }
+
+    Y_UNIT_TEST(CreateColumnTableBadChannelsNoPhantomPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            ColumnShardCount: 1
+            StorageConfig { DataChannelCount: 1000 }
+            Schema {
+                Columns { Name: "id" Type: "Uint64" NotNull: true }
+                KeyColumnNames: "id"
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusInvalidParameter)});
+
+        // The failed propose must leave no phantom path: a retry with a valid config succeeds.
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "id" Type: "Uint64" NotNull: true }
+                KeyColumnNames: "id"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
     }
 
     Y_UNIT_TEST(ConsistencyShardingUnknownTabletRejected) {

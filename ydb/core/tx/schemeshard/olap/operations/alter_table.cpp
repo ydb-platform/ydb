@@ -275,6 +275,18 @@ public:
                 return result;
             }
         }
+        if (Transaction.HasAlterTable()) {
+            TVector<NKikimrSchemeOp::TOlapColumnDescription> addColumns;
+            for (const auto& column : Transaction.GetAlterTable().GetColumns()) {
+                auto& olapColumn = addColumns.emplace_back();
+                olapColumn.SetName(column.GetName());
+                olapColumn.SetType(column.GetType());
+            }
+            if (auto checkResult = CheckColumns(addColumns, AppData()); !checkResult) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, checkResult.error());
+                return result;
+            }
+        }
 
         TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
         {

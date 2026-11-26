@@ -61,6 +61,7 @@ bool BuildSqlTranslationSettings(
     settings.SyntaxVersion = request.SyntaxVersion;
     settings.Flags = TranslationFlags();
     settings.LangVer = request.LangVer;
+    settings.AllowedStatementKinds = request.AllowedStatementKinds;
 
     if (!request.UdfMeta) {
         settings.UdfMeta = GetDefaultUdfMeta();
@@ -114,6 +115,7 @@ void BuildPgTranslationSettings(
 {
     settings.Arena = arena;
     settings.PgParser = true;
+    settings.AllowedStatementKinds = request.AllowedStatementKinds;
     FillClusters(request, settings);
 }
 

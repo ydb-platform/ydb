@@ -1,7 +1,7 @@
 #include "kqp_opt_cbo.h"
 #include "kqp_opt_log_rules.h"
 
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
@@ -464,8 +464,10 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteTopSortOverIndexRead(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        TExprBase output = KqpRewriteTopSortOverIndexRead(node, ctx, TypesCtx, KqpCtx, *getParents());
-        DumpAppliedRule("RewriteTopSortOverIndexRead", node.Ptr(), output.Ptr(), ctx);
+        auto output = KqpRewriteTopSortOverIndexRead(node, ctx, TypesCtx, KqpCtx, *getParents());
+        if (output) {
+            DumpAppliedRule("RewriteTopSortOverIndexRead", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
         return output;
     }
 

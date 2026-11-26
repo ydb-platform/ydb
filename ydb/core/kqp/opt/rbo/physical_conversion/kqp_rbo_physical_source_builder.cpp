@@ -264,6 +264,10 @@ NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
                 if (Read.Limit) {
                     settings.SetItemsLimit(Read.Limit);
                 }
+            } else if (Read.Limit) {
+                // As in the old optimizer, a read with a limit reads one shard at a time, so it stops at the limit.
+                settings.SetItemsLimit(Read.Limit);
+                settings.SequentialInFlight = 1;
             }
 
             TExprNode::TPtr sourceSettings;

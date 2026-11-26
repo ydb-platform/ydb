@@ -48,6 +48,7 @@ def add_options(p):
     g = p.add_mutually_exclusive_group()
     g.add_argument('--storage-pool', type=str, help='Storage pool to balance')
     common.add_group_ids_option(g)
+    p.add_argument('--pdisk-type', choices=['ROT', 'SSD', 'NVME'], help='Filter candidate VDisks by source PDisk Type')
     p.add_argument('--max-donors-per-pdisk', type=int, default=0, help='Limit number of donors per pdisk')
     p.add_argument('--allow-same-node', action='store_true', help='Allow to relocate vdisks from one group to the same node')
     p.add_argument('--prefer-less-occupied-rack', action='store_true', help='Take into account racks\' free slots picking pdisk from rack with more free slots first')
@@ -214,6 +215,11 @@ class BalancingStrategy(IBalancingStrategy):
         super().__init__(args, cluster_info, groups_info)
         self.histo = None
         self.overpopulated_pdisks = set()
+        pdisk_type = common.EPDiskType.Value(args.pdisk_type) if args.pdisk_type is not None else None
+        self.selected_pdisks = {
+            pdisk_id for pdisk_id, pdisk in cluster_info.pdisk_map.items()
+            if pdisk_type is None or pdisk.Type == pdisk_type
+        }
 
     def verify_cluster_state(self):
         existing_storage_pools = set(self.cluster_info.group_id_to_storage_pool_name_map.values())
@@ -239,7 +245,7 @@ class BalancingStrategy(IBalancingStrategy):
                 return True
 
     def calculate_extra_info(self):
-        self.histo = Counter(self.cluster_info.pdisk_usage.values())
+        self.histo = Counter(usage for pdisk_id, usage in self.cluster_info.pdisk_usage.items() if pdisk_id in self.selected_pdisks)
         self.overpopulated_pdisks = list_overpopulated_pdisks(self.cluster_info)
         common.print_if_verbose(self.args, 'Number of used slots -> number pdisks: ' + ' '.join('%d=>%d' % (k, self.histo[k]) for k in sorted(self.histo)), file=sys.stdout)
         return False
@@ -269,6 +275,7 @@ class BalancingStrategy(IBalancingStrategy):
     def list_candidate_vslots(self):
         candidate_vslots = self.cluster_info.base_config.VSlot
         candidate_vslots = filter_vslots_by_group_ids(candidate_vslots, self.args.group_ids)
+        candidate_vslots = filter_vslots_by_pdisks(candidate_vslots, self.selected_pdisks)
         candidate_vslots = self.filter_must_first_vslots(candidate_vslots)
         if not candidate_vslots:
             return [], True
@@ -407,6 +414,7 @@ class SpaceRatioBalancingStrategy(BalancingStrategy):
                 "CandidateVSlots": [],
             }
             for pdisk_id, pdisk in self.cluster_info.pdisk_map.items()
+            if pdisk_id in self.selected_pdisks
             if pdisk.PDiskMetrics.TotalSize > 0  # pdisk works
         }
         for vslot in candidate_vslots:
@@ -431,7 +439,7 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
     def calculate_extra_info(self):
         pdisk_types = set()
         for vslot in self.cluster_info.base_config.VSlot:
-            if vslot.GroupId in self.args.group_ids:
+            if vslot.GroupId in self.args.group_ids and common.get_pdisk_id(vslot.VSlotId) in self.selected_pdisks:
                 pdisk_id = common.get_pdisk_id(vslot.VSlotId)
                 pdisk = self.cluster_info.pdisk_map[pdisk_id]
                 pdisk_types.add((pdisk.BoxId, pdisk.Type))
@@ -456,6 +464,7 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
             self.pdisk_groups_usage[pdisk_id] = 0
 
         vslots = filter_vslots_by_group_ids(self.cluster_info.base_config.VSlot, self.args.group_ids)
+        vslots = filter_vslots_by_pdisks(vslots, self.selected_pdisks)
 
         for vslot in vslots:
             pdisk_id = common.get_pdisk_id(vslot.VSlotId)

@@ -15,4 +15,5 @@ items:
       href: examples/schemas/overloaded-shard-simple-case.md
     - name: Перегруженный шард и недостаточно ресурсов CPU
       href: examples/schemas/overloaded-shard-insufficient-cpu.md
-
+- name: Расхождение времени между клиентскими хостами и кластером
+  href: client-clock-skew.md

@@ -1090,7 +1090,6 @@ public:
 
                 if (Storage) {
                     THashMap<NKikimrViewer::TStorageUsage::EType, TDatabaseStorageStats> databaseStorageByType;
-                    THashMap<NKikimrViewer::TStorageUsage::EType, TStorageQuota> storageQuotasByType;
 
                     auto itDescribeScheme = DescribeSchemeResult.find(name);
                     if (itDescribeScheme != DescribeSchemeResult.end() && itDescribeScheme->second.IsOk()) {
@@ -1145,11 +1144,12 @@ public:
                                 domainDescription.GetDiskSpaceUsage().GetTopics().GetDataSize();
                         }
 
-                        if (storageQuotasByType.empty()) {
-                            auto& quotas = storageQuotasByType[guessedStorageType];
-                            quotas.HardQuota = domainDescription.GetDatabaseQuotas().data_size_hard_quota();
-                            quotas.SoftQuota = domainDescription.GetDatabaseQuotas().data_size_soft_quota();
-                        }
+                        // the raw configured database quotas on the guessed type;
+                        // the quotas SchemeShard actually enforces are in DiskSpaceQuotaUsage
+                        THashMap<NKikimrViewer::TStorageUsage::EType, TStorageQuota> storageQuotasByType;
+                        auto& quotas = storageQuotasByType[guessedStorageType];
+                        quotas.HardQuota = domainDescription.GetDatabaseQuotas().data_size_hard_quota();
+                        quotas.SoftQuota = domainDescription.GetDatabaseQuotas().data_size_soft_quota();
 
                         for (const auto& [type, size] : tablesStorageByType) {
                             auto it = storageQuotasByType.find(type);
@@ -1162,13 +1162,13 @@ public:
                                 tablesStorage.SetHardQuota(it->second.HardQuota);
                             }
                         }
-                    }
 
-                    for (const auto& quota : tenant.GetDatabaseQuotas().storage_quotas()) {
-                        auto type = GetStorageType(quota.unit_kind());
-                        auto& usage = storageQuotasByType[type];
-                        usage.SoftQuota += quota.data_size_soft_quota();
-                        usage.HardQuota += quota.data_size_hard_quota();
+                        if (domainDescription.HasDomainState()) {
+                            tenant.MutableDomainState()->CopyFrom(domainDescription.GetDomainState());
+                        }
+                        if (domainDescription.HasDiskSpaceQuotaUsage()) {
+                            tenant.MutableDiskSpaceQuotaUsage()->CopyFrom(domainDescription.GetDiskSpaceQuotaUsage());
+                        }
                     }
                 }
 

@@ -42,7 +42,7 @@ public:
         return *this;
     }
 
-    TKqpTranslationSettingsBuilder& SetQueryParameters(const std::shared_ptr<std::map<TString, Ydb::Type>>& value) {
+    TKqpTranslationSettingsBuilder& SetQueryParameters(const std::shared_ptr<const std::map<TString, Ydb::Type>>& value) {
         QueryParameters = value;
         return *this;
     }
@@ -87,7 +87,7 @@ private:
     TMaybe<bool> SqlAutoCommit = {};
     TGUCSettings::TPtr GUCSettings;
     TMaybe<TString> ApplicationName = {};
-    std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameters = {};
+    std::shared_ptr<const std::map<TString, Ydb::Type>> QueryParameters = {};
     NYql::TLangVersion LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
     bool IsAmbiguityError = false;

@@ -5,7 +5,7 @@
 #include <array>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
@@ -274,11 +274,18 @@ bool TKikimrTablesData::IsTableImmutable(const TStringBuf& cluster, const TStrin
     auto mainTableImpl = GetMainTableIfTableIsImplTableOfIndex(cluster, path);
     if (mainTableImpl) {
         for (const auto& index: mainTableImpl->Metadata->Indexes) {
-            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            if (TIndexDescription::IsVectorIndex(index.Type)) {
                 const auto levelTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::LevelTable;
+                if (path == levelTablePath) {
+                    return true;
+                }
+                if (index.Type == TIndexDescription::EType::GlobalSyncHnsw) {
+                    // HNSW postings and prefix groups are maintained by DML.
+                    continue;
+                }
                 const auto postingTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::PostingTable;
                 const auto prefixTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable;
-                if (path == levelTablePath || path == postingTablePath || path == prefixTablePath) {
+                if (path == postingTablePath || path == prefixTablePath) {
                     return true;
                 }
             }

@@ -4,6 +4,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
 
+#include <algorithm>
 #include <utility>
 
 namespace NKikimr::NGRpcService {
@@ -40,6 +41,12 @@ namespace NKikimr::NGRpcService {
                 resolved = CanonizePath(resolved);
             }
         }
+        if (appData && appData->FeatureFlags.GetEnableRelativePaths() && resolved.Contains('.')) {
+            auto parts = NKikimr::SplitPath(resolved);
+            if (std::erase(parts, TString("."))) {
+                resolved = (resolved.StartsWith('/') ? "/" : "") + JoinPath(parts);
+            }
+        }
         return PathNormalizer_ ? PathNormalizer_->NormalizePath(resolved) : resolved;
     }
 
@@ -50,13 +57,18 @@ namespace NKikimr::NGRpcService {
             return;
         }
 
+        const TString method = GetRpcMethodName();
+        if (method == "Ydb.Discovery.V1.DiscoveryService/NodeRegistration") {
+            DisablePathNormalization();
+            return;
+        }
+
         auto database = GetDatabaseNameFromRequest();
         const auto* appData = HasAppData() ? AppData() : nullptr;
         const bool relativeDatabase = database && !database->empty() && !database->StartsWith('/')
             && appData && appData->FeatureFlags.GetEnableRelativePaths()
             && appData->DomainsInfo && appData->DomainsInfo->Domain;
 
-        const TString method = GetRpcMethodName();
         if (method.StartsWith("Ydb.PersQueue.V1.") ||
             method.StartsWith("Ydb.Cms.V1.CmsService/")) {
             DisablePathNormalization();

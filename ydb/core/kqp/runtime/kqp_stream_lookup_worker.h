@@ -21,6 +21,7 @@ struct TLookupSettings {
 
     ui32 AllowNullKeysPrefixSize;
     bool KeepRowsOrder;
+    bool LookupJoinUniqueKeys = false;
     ui32 CookieFormatVersion = 0;
     NKqpProto::EStreamLookupStrategy LookupStrategy;
     std::unique_ptr<NKikimrKqp::TReadVectorTopK> VectorTopK;

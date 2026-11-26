@@ -4,6 +4,8 @@
 #include <util/system/yassert.h>
 #include <util/system/unaligned_mem.h>
 
+#include <stddef.h>
+
 #define PUT_8(x, buf, shift) WriteUnaligned<ui8>((buf)++, (x) >> (shift))
 #define GET_8_OR(x, buf, type, shift) (x) |= (type) * (buf)++ << (shift)
 
@@ -273,6 +275,34 @@ struct mem_traits {
     ui8 firstByte = how::get_8(buf);           \
     DO_UNPACK_64(firstByte, x, buf, how, ret); \
     MACRO_END
+
+inline size_t GetVarintSize(ui8 firstByte) {
+    if (firstByte < 0x80) {
+        return 1;
+    }
+    if (firstByte < 0xC0) {
+        return 2;
+    }
+    if (firstByte < 0xE0) {
+        return 3;
+    }
+    if (firstByte < 0xF0) {
+        return 4;
+    }
+    if (firstByte < 0xF8) {
+        return 5;
+    }
+    if (firstByte < 0xFC) {
+        return 6;
+    }
+    if (firstByte < 0xFE) {
+        return 7;
+    }
+    if (firstByte < 0xFF) {
+        return 8;
+    }
+    return 9;
+}
 
 inline int in_long(i64& longVal, const char* ptrBuf) {
     int ret = 0;

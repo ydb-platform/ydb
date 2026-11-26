@@ -6,6 +6,8 @@
 
 #include <library/cpp/yt/system/proc.h>
 
+#include <util/generic/function_ref.h>
+
 #include <util/system/file.h>
 
 #include <yt/yt/core/misc/fs.h>
@@ -185,7 +187,9 @@ std::string SafeGetUsernameByUid(int uid);
 
 void SetUid(int uid);
 
-std::vector<int> CloseAllDescriptors(const std::vector<int>& exceptFor = std::vector<int>());
+//! Call with no concurrent changes to the descriptor table.
+bool TryCloseDescriptors(TFunctionRef<bool(int) noexcept> fdFilter) noexcept;
+void CloseDescriptors(TFunctionRef<bool(int) noexcept> fdFilter) noexcept;
 
 int GetFileDescriptorCount();
 

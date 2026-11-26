@@ -21,10 +21,11 @@
 #include <grpc/support/port_platform.h>
 #include <util/system/thread.h>
 
+#include <inttypes.h>
+
+#include <csignal>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
-
-#include <grpc/support/time.h>
 
 #ifdef GPR_POSIX_SYNC
 
@@ -36,6 +37,7 @@
 #include <grpc/support/log.h>
 #include <grpc/support/sync.h>
 #include <grpc/support/thd_id.h>
+#include <grpc/support/time.h>
 
 #include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/gprpp/crash.h"
@@ -45,6 +47,7 @@
 
 namespace grpc_core {
 namespace {
+
 class ThreadInternalsPosix;
 
 struct thd_arg {
@@ -181,6 +184,28 @@ class ThreadInternalsPosix : public internal::ThreadInternalsInterface {
 };
 
 }  // namespace
+
+void Thread::Signal(gpr_thd_id tid, int sig) {
+  auto kill_err = pthread_kill((pthread_t)tid, sig);
+  if (kill_err != 0) {
+    gpr_log(GPR_ERROR, "pthread_kill for tid %" PRIdPTR " failed: %s", tid,
+            StrError(kill_err).c_str());
+  }
+}
+
+#ifndef GPR_ANDROID
+void Thread::Kill(gpr_thd_id tid) {
+  auto cancel_err = pthread_cancel((pthread_t)tid);
+  if (cancel_err != 0) {
+    gpr_log(GPR_ERROR, "pthread_cancel for tid %" PRIdPTR " failed: %s", tid,
+            StrError(cancel_err).c_str());
+  }
+}
+#else  // GPR_ANDROID
+void Thread::Kill(gpr_thd_id /* tid */) {
+  gpr_log(GPR_DEBUG, "Thread::Kill is not supported on Android.");
+}
+#endif
 
 Thread::Thread(const char* thd_name, void (*thd_body)(void* arg), void* arg,
                bool* success, const Options& options)

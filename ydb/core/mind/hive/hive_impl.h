@@ -284,6 +284,9 @@ protected:
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartPileDrain(TBridgePileInfo& pile);
     bool HasTabletsToDrain(TBridgePileId pileId) const;
+    // marks for drain the piles that have tablets their placement does not allow there (anymore)
+    void MarkPilesWithMisplacedTablets(NIceDb::TNiceDb& db);
+    void OnBridgeTabletPlacementChanged(NKikimrConfig::THiveConfig::EBridgeTabletPlacement previous);
     void ProcessPileDrains();
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     bool StartHiveStorageBalancer(TStorageBalancerSettings settings);
@@ -694,6 +697,7 @@ protected:
     void HandleInit(TEvPrivate::TEvProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessPileDrains::TPtr&);
+    void HandleInit(TEvPrivate::TEvProcessPileDrains::TPtr&);
     void Handle(TEvPrivate::TEvPostponeProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessDisconnectNode::TPtr&);
     void HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&);
@@ -1152,6 +1156,10 @@ public:
 
     NKikimrConfig::THiveConfig::EHiveBootStrategy GetBootStrategy() const {
         return CurrentConfig.GetBootStrategy();
+    }
+
+    NKikimrConfig::THiveConfig::EBridgeTabletPlacement GetBridgeTabletPlacement() const {
+        return CurrentConfig.GetBridgeTabletPlacement();
     }
 
     NKikimrConfig::THiveConfig::EHiveChannelBalanceStrategy GetChannelBalanceStrategy() const {

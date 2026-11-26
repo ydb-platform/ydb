@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/scheme/mkql/type_info.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
@@ -582,7 +582,7 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpPhyTableOperation& operat
 
 NUdf::TUnboxedValue ExtractPhyValue(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoPhyValue,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const NUdf::TUnboxedValue& defaultValue, NMiniKQL::TType** valueType)
+    const NUdf::TUnboxedValue& defaultValue, NMiniKQL::TType** valueType, bool allowOptional)
 {
     if (valueType) {
         *valueType = nullptr;
@@ -610,7 +610,9 @@ NUdf::TUnboxedValue ExtractPhyValue(const TStageInfo& stageInfo, const NKqpProto
 
             auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(paramName);
             YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data ||
-                type->GetKind() == NMiniKQL::TType::EKind::Tagged, "Unexpected PhyValue kind " << (int)type->GetKind());
+                type->GetKind() == NMiniKQL::TType::EKind::Tagged ||
+                (allowOptional && type->GetKind() == NMiniKQL::TType::EKind::Optional),
+                "Unexpected PhyValue kind " << (int)type->GetKind());
             if (valueType) {
                 *valueType = type;
             }

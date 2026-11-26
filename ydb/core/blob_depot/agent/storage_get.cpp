@@ -117,15 +117,21 @@ namespace NKikimr::NBlobDepot {
                     --AnswersRemain;
                 } else {
                     Y_ABORT_UNLESS(Request.MustRestoreFirst <= value->ReliablyWritten);
+                    const auto& query = Request.Queries[queryIdx];
+                    if (query.Shift >= query.Id.BlobSize()) {
+                        EndWithError(NKikimrProto::ERROR, "GET offset is outside the blob");
+                        return false;
+                    }
+                    const ui32 available = query.Id.BlobSize() - query.Shift;
                     TReadArg arg{
                         *value,
                         Request.GetHandleClass,
                         Request.MustRestoreFirst,
-                        Request.Queries[queryIdx].Shift,
-                        Request.Queries[queryIdx].Size,
+                        query.Shift,
+                        query.Size ? Min(query.Size, available) : available,
                         queryIdx,
                         Request.ReaderTabletData,
-                        Request.Queries[queryIdx].Id.AsBinaryString(),
+                        query.Id.AsBinaryString(),
                         Request.DataKind,
                     };
                     TString error;
@@ -170,17 +176,6 @@ namespace NKikimr::NBlobDepot {
 
             void CheckAndFinish() {
                 if (!AnswersRemain) {
-                    if (!Request.IsIndexOnly) {
-                        for (size_t i = 0, count = Response->ResponseSz; i < count; ++i) {
-                            const auto& item = Response->Responses[i];
-                            if (item.Status == NKikimrProto::OK) {
-                                Y_VERIFY_S(item.Buffer.size() == item.RequestedSize ? Min(item.RequestedSize,
-                                    item.Id.BlobSize() - Min(item.Id.BlobSize(), item.Shift)) : item.Id.BlobSize(),
-                                    "Id# " << item.Id << " Shift# " << item.Shift << " RequestedSize# " << item.RequestedSize
-                                    << " Buffer.size# " << item.Buffer.size());
-                            }
-                        }
-                    }
                     EndWithSuccess();
                 }
             }

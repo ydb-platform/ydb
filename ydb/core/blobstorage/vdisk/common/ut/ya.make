@@ -6,6 +6,7 @@ REQUIREMENTS(cpu:1)
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
+    library/cpp/time_provider
     ydb/core/base
     ydb/core/blobstorage/groupinfo
     ydb/core/erasure
@@ -24,6 +25,7 @@ SRCS(
     vdisk_mongroups_ut.cpp
     vdisk_outofspace_ut.cpp
     vdisk_pdisk_error_ut.cpp
+    vdisk_sector_sealing_ut.cpp
     vdisk_syncneighbors_ut.cpp
 )
 

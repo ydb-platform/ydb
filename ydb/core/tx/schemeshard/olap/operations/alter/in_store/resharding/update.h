@@ -11,7 +11,7 @@ private:
     using TBase = ISSEntityUpdate;
     NOlap::NBackground::TTxChainData TxChainData;
     virtual TString DoGetShardTxBodyString(const ui64 /*tabletId*/, const TMessageSeqNo& /*seqNo*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return "";
     }
 

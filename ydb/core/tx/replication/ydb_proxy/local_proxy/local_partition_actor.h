@@ -66,6 +66,7 @@ protected:
     const std::string Database;
     const TString TopicPath;
     const ui32 PartitionId;
+    bool IsAsyncReplication = false;
 
     ui64 PartitionTabletId;
     TActorId PartitionPipeClient;

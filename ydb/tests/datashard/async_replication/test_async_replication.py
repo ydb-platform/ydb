@@ -105,6 +105,75 @@ class TestAsyncReplicationBase(MulticlusterTestBase):
             return len(rows) == 1 and rows[0].count == expected_rows
         return predicate
 
+    def run_cli(self, cluster, *args):
+        return yatest.common.execute([
+            self.ydb_cli_path,
+            "--endpoint", f"grpc://{self.get_endpoint(cluster)}",
+            "--database", self.get_database(),
+            *args,
+        ]).stdout
+
+    def describe(self, cluster, path):
+        return json.loads(self.run_cli(
+            cluster, "scheme", "describe", path, "--stats", "--format", "proto-json-base64"))
+
+    def run_s3_operation(self, cluster, operation, bucket, source, destination, extra_args=()):
+        endpoint = urlparse(os.environ["S3_ENDPOINT"])
+        result = json.loads(self.run_cli(
+            cluster, operation, "s3",
+            "--s3-endpoint", endpoint.netloc, "--scheme", endpoint.scheme,
+            "--bucket", bucket, "--access-key", "test", "--secret-key", "test",
+            "--use-virtual-addressing", "false",
+            "--item", f"Source={source},Destination={destination}",
+            "--format", "proto-json-base64", *extra_args))
+        operation_id = result["id"]
+
+        def completed():
+            nonlocal result
+            result = json.loads(self.run_cli(
+                cluster, "operation", "get", operation_id, "--format", "proto-json-base64"))
+            if not result.get("ready", False):
+                return False
+            assert result.get("status") == "SUCCESS", result
+            return True
+
+        assert wait_for(completed, timeout_seconds=100), f"{operation} did not finish: {result}"
+        self.run_cli(cluster, "operation", "forget", operation_id)
+
+    # The destination of a replication created with INITIAL_SCAN = FALSE is seeded with a dump of
+    # the source (a backup-restore initial synchronization) and then attached. The restored table
+    # brings its data, and the replication continues on top of it.
+    def seed_destination_from_dump(self, table_name: str, table_path: str, source, destination,
+                                   export_args=(), import_args=()):
+        # FIXME for the future: remove duplicate code (test_consistency.py)
+        def changefeed_ready():
+            description = self.describe(self.clusters[1], f"replication_{table_name}")
+            assert "error" not in description, description
+            if "paused" not in description:
+                return False
+            # Index tables are replicated as separate items next to the base table one.
+            items = [item for item in description.get("items", []) if item.get("source_path") == table_path]
+            if len(items) != 1:
+                return False
+            name = items[0].get("source_changefeed_name")
+            table = self.describe(self.clusters[0], table_path)
+            if not any(feed["name"] == name and feed["state"] == "STATE_ENABLED" for feed in table.get("changefeeds", [])):
+                return False
+            topic = self.describe(self.clusters[0], f"{table_path}/{name}")
+            return any(consumer["name"] == "replicationConsumer" for consumer in topic.get("consumers", []))
+        assert wait_for(changefeed_ready, timeout_seconds=100), "Source changefeed is not ready for backup"
+        assert wait_for(lambda: DMLOperations(destination).table_exists(table_name), timeout_seconds=100), \
+            "Destination placeholder was not created"
+
+        bucket = f"replication-{self.hash_short}"
+        boto3.client(
+            "s3", endpoint_url=os.environ["S3_ENDPOINT"],
+            aws_access_key_id="test", aws_secret_access_key="test", region_name="us-east-1",
+        ).create_bucket(Bucket=bucket)
+        self.run_s3_operation(self.clusters[0], "export", bucket, table_path, table_name, export_args)
+        self.run_s3_operation(self.clusters[1], "import", bucket, table_name, table_path, import_args)
+        destination.query(f"ALTER ASYNC REPLICATION `replication_{table_name}` SET (STATE = 'STANDBY')")
+
 
 class TestAsyncReplication(TestAsyncReplicationBase):
     @pytest.mark.parametrize(
@@ -241,41 +310,6 @@ class TestAsyncReplicationSerial(TestAsyncReplicationBase):
         assert new_ids[0] > max(source_ids), \
             f"The destination sequence was not advanced: {new_ids[0]} <= {max(source_ids)}"
 
-    def run_cli(self, cluster, *args):
-        return yatest.common.execute([
-            self.ydb_cli_path,
-            "--endpoint", f"grpc://{self.get_endpoint(cluster)}",
-            "--database", self.get_database(),
-            *args,
-        ]).stdout
-
-    def describe(self, cluster, path):
-        return json.loads(self.run_cli(
-            cluster, "scheme", "describe", path, "--stats", "--format", "proto-json-base64"))
-
-    def run_s3_operation(self, cluster, operation, bucket, source, destination):
-        endpoint = urlparse(os.environ["S3_ENDPOINT"])
-        result = json.loads(self.run_cli(
-            cluster, operation, "s3",
-            "--s3-endpoint", endpoint.netloc, "--scheme", endpoint.scheme,
-            "--bucket", bucket, "--access-key", "test", "--secret-key", "test",
-            "--use-virtual-addressing", "false",
-            "--item", f"Source={source},Destination={destination}",
-            "--format", "proto-json-base64"))
-        operation_id = result["id"]
-
-        def completed():
-            nonlocal result
-            result = json.loads(self.run_cli(
-                cluster, "operation", "get", operation_id, "--format", "proto-json-base64"))
-            if not result.get("ready", False):
-                return False
-            assert result.get("status") == "SUCCESS", result
-            return True
-
-        assert wait_for(completed, timeout_seconds=100), f"{operation} did not finish: {result}"
-        self.run_cli(cluster, "operation", "forget", operation_id)
-
     # The destination may also be seeded with a dump of the source (a backup-restore initial
     # synchronization) instead of an initial scan: the restored table brings its data and its
     # sequence position, and the replication continues on top of it.
@@ -306,31 +340,7 @@ class TestAsyncReplicationSerial(TestAsyncReplicationBase):
 
         assert len(source_ids()) == 3
 
-        # FIXME for the future: remove duplicate code (test_consistency.py)
-        def changefeed_ready():
-            description = self.describe(self.clusters[1], f"replication_{table_name}")
-            assert "error" not in description, description
-            items = description.get("items", [])
-            if "paused" not in description or len(items) != 1:
-                return False
-            name = items[0].get("source_changefeed_name")
-            table = self.describe(self.clusters[0], table_path)
-            if not any(feed["name"] == name and feed["state"] == "STATE_ENABLED" for feed in table.get("changefeeds", [])):
-                return False
-            topic = self.describe(self.clusters[0], f"{table_path}/{name}")
-            return any(consumer["name"] == "replicationConsumer" for consumer in topic.get("consumers", []))
-        assert wait_for(changefeed_ready, timeout_seconds=100), "Source changefeed is not ready for backup"
-        assert wait_for(lambda: DMLOperations(destination).table_exists(table_name), timeout_seconds=100), \
-            "Destination placeholder was not created"
-
-        bucket = f"replication-{self.hash_short}"
-        boto3.client(
-            "s3", endpoint_url=os.environ["S3_ENDPOINT"],
-            aws_access_key_id="test", aws_secret_access_key="test", region_name="us-east-1",
-        ).create_bucket(Bucket=bucket)
-        self.run_s3_operation(self.clusters[0], "export", bucket, table_path, table_name)
-        self.run_s3_operation(self.clusters[1], "import", bucket, table_name, table_path)
-        destination.query(f"ALTER ASYNC REPLICATION `replication_{table_name}` SET (STATE = 'STANDBY')")
+        self.seed_destination_from_dump(table_name, table_path, source, destination)
 
         source.query(f'INSERT INTO `{table_name}` (value) VALUES ("d")')
 
@@ -348,6 +358,351 @@ class TestAsyncReplicationSerial(TestAsyncReplicationBase):
         assert len(new_ids) == 1, f"Unexpected number of inserted rows: {new_ids}"
         assert new_ids[0] > max(source_ids()), \
             f"The destination sequence was not advanced: {new_ids[0]} <= {max(source_ids())}"
+
+
+class TestAsyncReplicationFulltextRowId(TestAsyncReplicationBase):
+    @classmethod
+    def get_extra_feature_flags(cls):
+        return super().get_extra_feature_flags() + ["enable_index_materialization"]
+
+    @classmethod
+    def get_extra_grpc_services(cls):
+        return ["replication"]
+
+    def test_fulltext_relevance_rowid(self):
+        table_name = f"fulltext_{self.hash_short}"
+        table_path = f"{self.get_database()}/{table_name}"
+
+        source = Query.create(self.get_database(), self.get_endpoint(self.clusters[0]))
+        destination = Query.create(self.get_database(), self.get_endpoint(self.clusters[1]))
+
+        # A String primary key cannot serve as a fulltext doc id, so the index provisions the
+        # __ydb_row_id column backed by its own sequence.
+        source.query(f"""
+            CREATE TABLE `{table_name}` (
+                `pk` String NOT NULL,
+                `text` Utf8 NOT NULL,
+                PRIMARY KEY (`pk`)
+            )
+        """)
+        source.query(f"""
+            ALTER TABLE `{table_name}` ADD INDEX `ft_idx`
+                GLOBAL USING fulltext_relevance ON (`text`)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        """)
+
+        match_query = f"""
+            SELECT `pk` FROM `{table_name}` VIEW `ft_idx`
+            WHERE FulltextMatch(`text`, "unicorn") LIMIT 10
+        """
+        assert wait_for(lambda: self.query_ok(source, match_query), timeout_seconds=100), \
+            "The fulltext index is not ready"
+
+        source.query(f"""
+            UPSERT INTO `{table_name}` (`pk`, `text`) VALUES
+                ("a"u, "the unicorn is here"u),
+                ("b"u, "another unicorn"u)
+        """)
+        assert wait_for(lambda: len(source.query(match_query)) == 2, timeout_seconds=100), \
+            "The fulltext index is not filled"
+
+        destination.query(f"""
+            CREATE ASYNC REPLICATION `replication_{table_name}`
+            FOR `{table_path}` AS `{table_path}`
+            WITH (CONNECTION_STRING =
+                'grpc://{self.get_endpoint(self.clusters[0])}/?database={self.get_database()}')
+        """)
+
+        destination_dml = DMLOperations(destination)
+        assert wait_for(lambda: destination_dml.table_exists(table_name), timeout_seconds=100), "Table not created"
+        assert wait_for(lambda: sorted(row.pk for row in destination.query(
+            f"SELECT `pk` FROM `{table_name}`")) == [b"a", b"b"], timeout_seconds=100), "Data was not replicated"
+        assert wait_for(lambda: len(destination.query(match_query)) == 2, timeout_seconds=100), \
+            "The index impl tables were not replicated"
+
+        # The destination recreated the __ydb_row_id sequence from the source describe, and
+        # replication advanced it past the applied values: a new row gets a fresh doc id instead of
+        # colliding with the replicated ones (the unique index over __ydb_row_id would reject it).
+        assert wait_for(lambda: self.replication_done(destination, table_name), timeout_seconds=100), \
+            "Cannot complete the replication"
+
+        self.write_after_done(destination, table_name,
+                              f'UPSERT INTO `{table_name}` (`pk`, `text`) VALUES ("c"u, "a new unicorn"u)')
+        assert wait_for(lambda: len(destination.query(f"SELECT `pk` FROM `{table_name}`")) == 3,
+                        timeout_seconds=100), "The row was not inserted"
+        assert wait_for(lambda: len(destination.query(match_query)) == 3, timeout_seconds=100), \
+            "The destination did not index the new row"
+
+    # The destination is seeded with a dump of the source: the restored fulltext index and its impl
+    # tables are kept and attached instead of being dropped, and new changes keep being replicated.
+    def test_fulltext_relevance_seeded_from_dump(self):
+        table_name = f"fulltext_dump_{self.hash_short}"
+        table_path = f"{self.get_database()}/{table_name}"
+
+        source = Query.create(self.get_database(), self.get_endpoint(self.clusters[0]))
+        destination = Query.create(self.get_database(), self.get_endpoint(self.clusters[1]))
+
+        source.query(f"""
+            CREATE TABLE `{table_name}` (
+                `pk` String NOT NULL,
+                `text` Utf8 NOT NULL,
+                PRIMARY KEY (`pk`)
+            )
+        """)
+        source.query(f"""
+            ALTER TABLE `{table_name}` ADD INDEX `ft_idx`
+                GLOBAL USING fulltext_relevance ON (`text`)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        """)
+
+        match_query = f"""
+            SELECT `pk` FROM `{table_name}` VIEW `ft_idx`
+            WHERE FulltextMatch(`text`, "unicorn") LIMIT 10
+        """
+        source.query(f"""
+            UPSERT INTO `{table_name}` (`pk`, `text`) VALUES
+                ("a"u, "the unicorn is here"u),
+                ("b"u, "another unicorn"u)
+        """)
+        assert wait_for(lambda: len(source.query(match_query)) == 2, timeout_seconds=100), \
+            "The fulltext index is not filled"
+
+        destination.query(f"""
+            CREATE ASYNC REPLICATION `replication_{table_name}`
+            FOR `{table_path}` AS `{table_path}`
+            WITH (
+                CONNECTION_STRING = 'grpc://{self.get_endpoint(self.clusters[0])}/?database={self.get_database()}',
+                INITIAL_SCAN = FALSE
+            )
+        """)
+        # The index impl tables are restored as is, so the destination index keeps serving the
+        # restored rows and the replication continues on top of it.
+        self.seed_destination_from_dump(
+            table_name, table_path, source, destination,
+            export_args=["--include-index-data", "true"],
+            import_args=["--index-population-mode", "Import"])
+
+        assert wait_for(lambda: sorted(row.pk for row in destination.query(
+            f"SELECT `pk` FROM `{table_name}`")) == [b"a", b"b"], timeout_seconds=100), "Data was not restored"
+
+        # The restored index impl tables take a moment to be attached, and the destination index
+        # reads may be retried while its scheme settles.
+        def destination_matches(expected):
+            try:
+                return len(destination.query(match_query)) == expected
+            except ydb.issues.Error:
+                return False
+
+        assert wait_for(lambda: destination_matches(2), timeout_seconds=100), \
+            "The restored index impl tables were not attached"
+
+        source.query(f'UPSERT INTO `{table_name}` (`pk`, `text`) VALUES ("c"u, "a new unicorn"u)')
+        assert wait_for(lambda: destination_matches(3), timeout_seconds=100), \
+            "The index impl tables were not replicated on top of the restored index"
+
+        assert wait_for(lambda: self.replication_done(destination, table_name), timeout_seconds=100), \
+            "Cannot complete the replication"
+
+        self.write_after_done(destination, table_name,
+                              f'UPSERT INTO `{table_name}` (`pk`, `text`) VALUES ("d"u, "one more unicorn"u)')
+        assert wait_for(lambda: len(destination.query(f"SELECT `pk` FROM `{table_name}`")) == 4,
+                        timeout_seconds=100), "The row was not inserted"
+        assert wait_for(lambda: destination_matches(4), timeout_seconds=100), \
+            "The destination did not index the new row"
+
+
+class TestAsyncReplicationPrefixedVectorIndex(TestAsyncReplicationBase):
+    @classmethod
+    def get_extra_feature_flags(cls):
+        return super().get_extra_feature_flags() + ["enable_index_materialization"]
+
+    @classmethod
+    def get_extra_grpc_services(cls):
+        return ["replication"]
+
+    def test_prefixed_vector_index(self):
+        table_name = f"vector_{self.hash_short}"
+        table_path = f"{self.get_database()}/{table_name}"
+
+        source = Query.create(self.get_database(), self.get_endpoint(self.clusters[0]))
+        destination = Query.create(self.get_database(), self.get_endpoint(self.clusters[1]))
+
+        # A prefixed vector index keeps cluster ids in the indexImplPrefixTable, generated by a
+        # table-local sequence.
+        source.query(f"""
+            CREATE TABLE `{table_name}` (
+                `key` Uint64,
+                `user` Uint64,
+                `vec` String,
+                PRIMARY KEY (`key`)
+            )
+        """)
+        source.query(f"""
+            ALTER TABLE `{table_name}` ADD INDEX `vec_idx`
+                GLOBAL USING vector_kmeans_tree ON (`user`, `vec`)
+                WITH (distance=cosine, vector_type=float, vector_dimension=4, levels=2, clusters=2)
+        """)
+
+        knn_query = f"""
+            $Target = Knn::ToBinaryStringFloat([1.0f, 0.0f, 0.0f, 0.0f]);
+            SELECT `key` FROM `{table_name}` VIEW `vec_idx`
+            WHERE `user` = 1
+            ORDER BY Knn::CosineDistance(`vec`, $Target) ASC LIMIT 10
+        """
+        assert wait_for(lambda: self.query_ok(source, knn_query), timeout_seconds=100), \
+            "The vector index is not ready"
+
+        source.query(f"""
+            UPSERT INTO `{table_name}` (`key`, `user`, `vec`) VALUES
+                (1, 1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f, 0.0f, 0.0f]), "FloatVector")),
+                (2, 1, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f, 0.0f, 0.0f]), "FloatVector"))
+        """)
+        assert wait_for(lambda: len(source.query(knn_query)) == 2, timeout_seconds=100), \
+            "The vector index is not filled"
+
+        destination.query(f"""
+            CREATE ASYNC REPLICATION `replication_{table_name}`
+            FOR `{table_path}` AS `{table_path}`
+            WITH (CONNECTION_STRING =
+                'grpc://{self.get_endpoint(self.clusters[0])}/?database={self.get_database()}')
+        """)
+
+        destination_dml = DMLOperations(destination)
+        assert wait_for(lambda: destination_dml.table_exists(table_name), timeout_seconds=100), "Table not created"
+        assert wait_for(lambda: sorted(row.key for row in destination.query(
+            f"SELECT `key` FROM `{table_name}`")) == [1, 2], timeout_seconds=100), "Data was not replicated"
+        assert wait_for(lambda: len(destination.query(knn_query)) == 2, timeout_seconds=100), \
+            "The index impl tables were not replicated"
+
+        assert wait_for(lambda: self.replication_done(destination, table_name), timeout_seconds=100), \
+            "Cannot complete the replication"
+
+        self.write_after_done(destination, table_name, f"""
+            UPSERT INTO `{table_name}` (`key`, `user`, `vec`)
+            VALUES (3, 1, Untag(Knn::ToBinaryStringFloat([0.5f, 0.5f, 0.0f, 0.0f]), "FloatVector"))
+        """)
+        assert wait_for(lambda: len(destination.query(f"SELECT `key` FROM `{table_name}`")) == 3,
+                        timeout_seconds=100), "The row was not inserted"
+        assert wait_for(lambda: 3 in [row.key for row in destination.query(knn_query)], timeout_seconds=100), \
+            "The destination did not index the new row"
+
+    # The destination is seeded with a dump of the source: the restored vector index is kept, and
+    # the level/posting/prefix impl tables are attached and replicated on top of the restored data.
+    def test_prefixed_vector_index_seeded_from_dump(self):
+        table_name = f"vector_dump_{self.hash_short}"
+        table_path = f"{self.get_database()}/{table_name}"
+
+        source = Query.create(self.get_database(), self.get_endpoint(self.clusters[0]))
+        destination = Query.create(self.get_database(), self.get_endpoint(self.clusters[1]))
+
+        source.query(f"""
+            CREATE TABLE `{table_name}` (
+                `key` Uint64,
+                `user` Uint64,
+                `vec` String,
+                PRIMARY KEY (`key`)
+            )
+        """)
+        source.query(f"""
+            ALTER TABLE `{table_name}` ADD INDEX `vec_idx`
+                GLOBAL USING vector_kmeans_tree ON (`user`, `vec`)
+                WITH (distance=cosine, vector_type=float, vector_dimension=4, levels=2, clusters=2)
+        """)
+
+        knn_query = f"""
+            $Target = Knn::ToBinaryStringFloat([1.0f, 0.0f, 0.0f, 0.0f]);
+            SELECT `key` FROM `{table_name}` VIEW `vec_idx`
+            WHERE `user` = 1
+            ORDER BY Knn::CosineDistance(`vec`, $Target) ASC LIMIT 10
+        """
+        source.query(f"""
+            UPSERT INTO `{table_name}` (`key`, `user`, `vec`) VALUES
+                (1, 1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f, 0.0f, 0.0f]), "FloatVector")),
+                (2, 1, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f, 0.0f, 0.0f]), "FloatVector"))
+        """)
+        assert wait_for(lambda: len(source.query(knn_query)) == 2, timeout_seconds=100), \
+            "The vector index is not filled"
+
+        destination.query(f"""
+            CREATE ASYNC REPLICATION `replication_{table_name}`
+            FOR `{table_path}` AS `{table_path}`
+            WITH (
+                CONNECTION_STRING = 'grpc://{self.get_endpoint(self.clusters[0])}/?database={self.get_database()}',
+                INITIAL_SCAN = FALSE
+            )
+        """)
+        # The vector index data is restored as is: the level table with the source centroids is
+        # imported as well, so the replicated posting rows refer to the clusters it describes.
+        self.seed_destination_from_dump(
+            table_name, table_path, source, destination,
+            export_args=["--include-index-data", "true"],
+            import_args=["--index-population-mode", "Import"])
+
+        assert wait_for(lambda: sorted(row.key for row in destination.query(
+            f"SELECT `key` FROM `{table_name}`")) == [1, 2], timeout_seconds=100), "Data was not restored"
+
+        # The destination index reads may be retried while the restored scheme settles.
+        def destination_knn_keys():
+            try:
+                return {row.key for row in destination.query(knn_query)}
+            except ydb.issues.Error:
+                return set()
+
+        assert wait_for(lambda: len(destination_knn_keys()) == 2, timeout_seconds=100), \
+            "The restored index impl tables were not attached"
+
+        source.query(f"""
+            UPSERT INTO `{table_name}` (`key`, `user`, `vec`) VALUES
+                (3, 1, Untag(Knn::ToBinaryStringFloat([0.5f, 0.5f, 0.0f, 0.0f]), "FloatVector"))
+        """)
+        assert wait_for(lambda: 3 in destination_knn_keys(), timeout_seconds=100), \
+            "The index impl tables were not replicated on top of the restored index"
+
+        assert wait_for(lambda: self.replication_done(destination, table_name), timeout_seconds=100), \
+            "Cannot complete the replication"
+
+        self.write_after_done(destination, table_name, f"""
+            UPSERT INTO `{table_name}` (`key`, `user`, `vec`)
+            VALUES (4, 1, Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f, 0.0f, 1.0f]), "FloatVector"))
+        """)
+        assert wait_for(lambda: len(destination.query(f"SELECT `key` FROM `{table_name}`")) == 4,
+                        timeout_seconds=100), "The row was not inserted"
+        assert wait_for(lambda: 4 in destination_knn_keys(), timeout_seconds=100), \
+            "The destination did not index the new row"
+
+
+class TestAsyncReplicationLocalIndex(TestAsyncReplicationBase):
+    def test_local_bloom_index(self):
+        table_name = f"local_{self.hash_short}"
+        table_path = f"{self.get_database()}/{table_name}"
+
+        source = Query.create(self.get_database(), self.get_endpoint(self.clusters[0]))
+        destination = Query.create(self.get_database(), self.get_endpoint(self.clusters[1]))
+
+        # A local index lives inside the table and has no impl tables, but the destination table
+        # still has to be created with it instead of being rejected by the scheme validation.
+        source.query(f"""
+            CREATE TABLE `{table_name}` (
+                `key` Uint64,
+                `value` Utf8,
+                PRIMARY KEY (`key`),
+                INDEX `bloom_idx` LOCAL USING bloom_filter ON (`key`) WITH (false_positive_probability=0.01)
+            )
+        """)
+
+        destination.query(f"""
+            CREATE ASYNC REPLICATION `replication_{table_name}`
+            FOR `{table_path}` AS `{table_path}`
+            WITH (CONNECTION_STRING =
+                'grpc://{self.get_endpoint(self.clusters[0])}/?database={self.get_database()}')
+        """)
+
+        destination_dml = DMLOperations(destination)
+        assert wait_for(lambda: destination_dml.table_exists(table_name), timeout_seconds=100), "Table not created"
+
+        source.query(f'INSERT INTO `{table_name}` (`key`, `value`) VALUES (1, "a"), (2, "b")')
+        assert wait_for(lambda: sorted(row.key for row in destination.query(
+            f"SELECT `key` FROM `{table_name}`")) == [1, 2], timeout_seconds=100), "Data was not replicated"
 
 
 class TestPgAsyncReplication(TestPgBase, TestAsyncReplicationBase):

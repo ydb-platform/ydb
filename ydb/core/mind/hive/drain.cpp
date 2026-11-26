@@ -317,9 +317,12 @@ void THive::StartPileDrain(TBridgePileInfo& pile) {
     if (!pile.Drain || pile.DrainActor || IsPrimaryPile(pile.Id)) {
         return;
     }
-    if (std::none_of(Nodes.begin(), Nodes.end(), [this](const auto& item) {
+    // a default filter allows the piles where any tablet may run: the primary pile, or all the synchronized ones
+    // when BridgeTabletPlacement allows that
+    const TNodeFilter filter(*this);
+    if (std::none_of(Nodes.begin(), Nodes.end(), [&](const auto& item) {
         const auto& node = item.second;
-        return node.IsAlive() && !node.Down && IsPrimaryPile(node.BridgePileId);
+        return node.IsAlive() && !node.Down && node.BridgePileId != pile.Id && filter.IsAllowedPile(node.BridgePileId);
     })) {
         return;
     }
@@ -353,6 +356,12 @@ void THive::ProcessPileDrains() {
     }
     ProcessPileDrainsScheduled = true;
     Send(SelfId(), new TEvPrivate::TEvProcessPileDrains());
+}
+
+void THive::HandleInit(TEvPrivate::TEvProcessPileDrains::TPtr&) {
+    // requested while loading (e.g. by a config notification); the load ends with UpdatePiles, which processes
+    // the pile drains once Hive works, so it is only needed to allow scheduling again
+    ProcessPileDrainsScheduled = false;
 }
 
 void THive::Handle(TEvPrivate::TEvProcessPileDrains::TPtr&) {

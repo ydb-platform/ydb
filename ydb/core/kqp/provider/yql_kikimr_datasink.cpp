@@ -1049,6 +1049,10 @@ public:
         }
 
         const bool isExternalTable = metadata.IsExternalTable();
+        if (isExternalTable && !ValidateExternalTablePgCompatibility(metadata,
+                SessionCtx->Config().FeatureFlags.GetDisablePgCompatibility(), ctx, node->Child(2)->Pos())) {
+            return false;
+        }
         if (!ExternalWritePaths.insert(NCommon::FullTableName(dataSink.Cluster(), key.GetTablePath())).second) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
                 << "Multiple writes into same topic or external object is not supported. "

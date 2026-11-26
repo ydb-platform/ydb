@@ -34,14 +34,6 @@ SRCS(
     kqp_write_actor.cpp
     kqp_write_actor_settings.cpp
     kqp_write_table.cpp
-    scheduler/kqp_compute_scheduler_service.cpp
-    scheduler/kqp_schedulable_base.cpp
-    scheduler/kqp_schedulable_memory.cpp
-    scheduler/kqp_schedulable_read.cpp
-    scheduler/kqp_schedulable_task.cpp
-    scheduler/kqp_schedulable_work_factory.cpp
-    scheduler/tree/dynamic.cpp
-    scheduler/tree/snapshot.cpp
 )
 
 PEERDIR(
@@ -58,7 +50,9 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/common/buffer
     ydb/core/kqp/common/result_set_format
+    ydb/core/kqp/common/result_set_format/settings
     ydb/core/kqp/runtime/common
+    ydb/core/kqp/runtime/scheduler
     ydb/core/kqp/runtime/streaming
     ydb/core/kqp/tracing
     ydb/core/mon
@@ -66,6 +60,7 @@ PEERDIR(
     ydb/core/persqueue/public
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/scheme/mkql
     ydb/core/tx/scheme_board
     ydb/core/ydb_convert
     ydb/library/aclib
@@ -75,6 +70,7 @@ PEERDIR(
     ydb/library/mkql_proto
     ydb/library/query_actor
     ydb/library/yql/dq/actors
+    ydb/library/yql/dq/actors/common
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/actors/spilling
@@ -82,6 +78,7 @@ PEERDIR(
     ydb/library/yql/dq/runtime
     ydb/library/yverify_stream
     ydb/public/sdk/cpp/src/client/params
+    ydb/services/workload_manager/common
     yql/essentials/minikql/comp_nodes
     yql/essentials/minikql/computation/llvm16
     yql/essentials/utils
@@ -91,6 +88,7 @@ END()
 
 RECURSE(
     common
+    scheduler
     streaming
 )
 

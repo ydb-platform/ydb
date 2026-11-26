@@ -9,7 +9,7 @@ TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::ILayoutPolicy::Layout(c
     if (result.IsFail()) {
         return result;
     }
-    AFL_VERIFY(result->GetTabletIds().size() == shardsCount);
+    YDB_LOG_VERIFY(result->GetTabletIds().size() == shardsCount);
     return result;
 }
 

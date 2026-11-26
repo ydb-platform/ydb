@@ -24,4 +24,4 @@ ALTER TABLE `my_table` SET (
 
 ---
 
-<span id="cluster-partition-size-limit">\*</span> Независимо от значения `AUTO_PARTITIONING_PARTITION_SIZE_MB` партиция всегда разделяется при достижении жёсткого лимита размера, заданного на уровне кластера (**2 ГиБ** по умолчанию).
+<span id="cluster-partition-size-limit">\*</span> Независимо от значения `AUTO_PARTITIONING_PARTITION_SIZE_MB` партиция всегда разделяется при достижении жёсткого лимита размера, заданного на уровне кластера с помощью параметра [force_shard_split_data_size](../../../reference/configuration/immediate_controls_config.md) (**2 ГиБ** по умолчанию).

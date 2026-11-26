@@ -42,7 +42,7 @@ struct TCdcAggregatorStreamSourcesDiff {
 
 struct TCdcAggregatorStreamHeartbeatsDiff {
     THashMap<ui64, NPQ::THeartbeat> LastHeartbeatsBySourceDataShardId;
-    std::optional<NPQ::THeartbeat> CurrentHeartbeat;
+    std::optional<NPQ::THeartbeat> UpdatedCurrentHeartbeat;
 };
 
 struct TCdcAggregatorStreamPartitioningChange {

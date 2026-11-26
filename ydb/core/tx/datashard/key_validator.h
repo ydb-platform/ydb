@@ -41,6 +41,7 @@ public:
 
     bool IsValidKey(TKeyDesc& key, const TValidateOptions& options) const;
     std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys(const TValidateOptions& options) const;
+    TString GetBuildingColumnError() const;
 
     ui64 GetTableSchemaVersion(const TTableId& tableId) const;
 

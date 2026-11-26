@@ -11,6 +11,7 @@ import yatest.common
 from ydb.tests.library.clients.kikimr_client import KiKiMRMessageBusClient
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.functional.mirror3dc.kv_churn import KvChurnWorkload
+from ydb.tests.functional.mirror3dc.kv_workload import BSQUEUE_RECONNECT_GRACE
 from ydb.tests.functional.mirror3dc.mirror3dc_base import Mirror3dcTestBase
 
 
@@ -42,19 +43,6 @@ class TestMirror3dcChaos(Mirror3dcTestBase):
     def setUp(self):
         self.control_clients = {}
         super().setUp()
-        self.actions_log_path = yatest.common.output_path('mirror3dc_chaos_actions.log')
-        handler = logging.FileHandler(self.actions_log_path, mode='w', encoding='utf-8')
-        handler.setFormatter(logging.Formatter(
-            '%(asctime)s.%(msecs)03d [%(threadName)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S',
-        ))
-        self.actions_logger = logging.Logger(f'{__name__}.actions', level=logging.INFO)
-        self.actions_logger.addHandler(handler)
-        self.addCleanup(handler.close)
-        self.actions_logger.info('CONTROL CLUSTER_TOPOLOGY nodes_by_dc=%s', {
-            dc: sorted(node_id for node_id, node_dc in self.node_data_centers.items() if node_dc == dc)
-            for dc in self.data_centers
-        })
-        logger.info('Chaos actions and KV log: %s', self.actions_log_path)
         self.topology_lock = threading.Lock()
         self.down_node = None
         self.last_change = None
@@ -83,14 +71,7 @@ class TestMirror3dcChaos(Mirror3dcTestBase):
         states = {realm.DataCenter: realm.State for realm in group.FailRealms}
         self.assertEqual(len(group.FailRealms), 3, str(group))
         self.assertEqual(set(states), set(self.data_centers), str(group))
-        self.actions_logger.info(
-            'CONTROL GROUP_STATE group=%s generation=%s state=%s states=%s',
-            self.group_id,
-            group.GroupGeneration,
-            self.GROUP_STATES.EState.Name(group.Mirror3dcState),
-            {dc: self.DC_STATES.EState.Name(state) for dc, state in sorted(states.items())},
-        )
-        logger.info(
+        logger.debug(
             'Chaos group %s generation %s state %s: %s',
             self.group_id,
             group.GroupGeneration,
@@ -127,6 +108,7 @@ class TestMirror3dcChaos(Mirror3dcTestBase):
                 self.assertGreaterEqual(now - self.last_change, self.DC_CHANGE_INTERVAL)
             self.actions_logger.info('CONTROL DC_CHANGE_REQUEST dc=%s state=%s', dc, self.DC_STATES.EState.Name(state))
             if state == self.DC_STATES.INCLUDED:
+                workload.expect_reconnect(BSQUEUE_RECONNECT_GRACE, group_id=self.group_id)
                 self.return_dc(dc)
             else:
                 self.define_dc_state(dc, state)
@@ -267,12 +249,12 @@ class TestMirror3dcChaos(Mirror3dcTestBase):
                 pending = None
             time.sleep(self.ACTION_INTERVAL)
 
-    def _test_random_dc_transitions_and_node_restarts(self):
+    def test_random_dc_transitions_and_node_restarts(self):
         seed = int(yatest.common.get_param('mirror3dc_chaos_seed', '20261030'))
         duration = float(yatest.common.get_param('mirror3dc_chaos_seconds', '180'))
         self.assertGreater(duration, 0)
         logger.info('Mirror3dc chaos seed=%d, duration=%s seconds', seed, duration)
-        self.actions_logger.info('CONTROL TEST_START seed=%d duration=%s', seed, duration)
+        self.actions_logger.info('CONTROL CHAOS_START seed=%d duration=%s', seed, duration)
         stop_faults = threading.Event()
         with KvChurnWorkload(
             [node.endpoint for node in self.cluster.nodes.values()],

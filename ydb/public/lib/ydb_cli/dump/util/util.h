@@ -1,5 +1,7 @@
 #pragma once
 
+#include "compatibility/compatibility.h"
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/cms/cms.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
@@ -81,9 +83,5 @@ TStatus CreateDatabase(
     NCms::TCmsClient& cmsClient,
     const std::string& path,
     const NCms::TCreateDatabaseSettings& settings = {});
-
-TStatus CheckSysViewCompatibility(
-    const Ydb::Table::DescribeSystemViewResult& dumpedProto,
-    const Ydb::Table::DescribeSystemViewResult& actualProto);
 
 } // NYdb::NDump

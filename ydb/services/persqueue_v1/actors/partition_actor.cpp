@@ -84,6 +84,7 @@ TPartitionActor::TPartitionActor(
     , Protocol(protocol)
     , FirstRead(true)
     , ReadingFinishedSent(false)
+    , WindowExhaustedSent(false)
     , NotCommitedToFinishParents(notCommitedToFinishParents)
 {
 }
@@ -192,7 +193,10 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::sh
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications() && !TopicHolder->IsAsyncReplication) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()
+        && !TopicHolder->IsAsyncReplication
+        && !TopicHolder->IsReplicationConsumer)
+    {
         CloseSessionAndDie("Consumer offset commits are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED, ctx);
         return;
     }
@@ -499,24 +503,26 @@ void SetBatchWriteTimestampMS(Topic::StreamReadMessage::ReadResponse::Batch* bat
 }
 
 TString GetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch) {
-    AFL_ENSURE(batch);
+    YDB_LOG_ENSURE(batch);
     return batch->source_id();
 }
 
 TString GetBatchSourceId(Topic::StreamReadMessage::ReadResponse::Batch* batch) {
-    AFL_ENSURE(batch);
+    YDB_LOG_ENSURE(batch);
     return batch->producer_id();
 }
 
 void SetBatchExtraField(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, TString key, TString value) {
-    AFL_ENSURE(batch)("key", key);
+    YDB_LOG_ENSURE(batch,
+        {"key", key});
     auto* item = batch->add_extra_fields();
     item->set_key(std::move(key));
     item->set_value(std::move(value));
 }
 
 void SetBatchExtraField(Topic::StreamReadMessage::ReadResponse::Batch* batch, TString key, TString value) {
-    AFL_ENSURE(batch)("key", key);
+    YDB_LOG_ENSURE(batch,
+        {"key", key});
     (*batch->mutable_write_session_meta())[key] = std::move(value);
 }
 
@@ -565,15 +571,15 @@ bool FillBatchedData(
         const ui64 messageCount = BatchedResultMessageCount(r.GetLogicalMessageCount());
         // When reading from the middle of a batch, tablet returns the whole blob
         // with base offset below ReadOffset; SDK skips already-committed records.
-        AFL_ENSURE(BatchedResultCoversReadOffset(r.GetOffset(), r.GetLogicalMessageCount(), ReadOffset))
-            ("partition", Partition)
-            ("topic", topic->GetPrimaryPath())
-            ("offset", r.GetOffset())
-            ("message_count", messageCount)
-            ("logical_message_count", r.GetLogicalMessageCount())
-            ("read_offset", ReadOffset)
-            ("result_index", i)
-            ("end_offset", EndOffset);
+        YDB_LOG_ENSURE(BatchedResultCoversReadOffset(r.GetOffset(), r.GetLogicalMessageCount(), ReadOffset),
+            {"partition", Partition},
+            {"topic", topic->GetPrimaryPath()},
+            {"offset", r.GetOffset()},
+            {"messageCount", messageCount},
+            {"logicalMessageCount", r.GetLogicalMessageCount()},
+            {"readOffset", ReadOffset},
+            {"resultIndex", i},
+            {"endOffset", EndOffset});
         AdvanceReadOffsetFromBatchedResult(r.GetOffset(), r.GetLogicalMessageCount(), ReadOffset);
         hasOffset = true;
 
@@ -606,10 +612,10 @@ bool FillBatchedData(
             // If write time and source id are the same, the rest fields will be the same too.
             currentBatch = partitionData->add_batches();
             i64 write_ts = static_cast<i64>(r.GetWriteTimestampMS());
-            AFL_ENSURE(write_ts >= 0)
-                ("partition", Partition)
-                ("write_ts", write_ts)
-                ("offset", r.GetOffset());
+            YDB_LOG_ENSURE(write_ts >= 0,
+                {"partition", Partition},
+                {"writeTs", write_ts},
+                {"offset", r.GetOffset()});
             SetBatchWriteTimestampMS(currentBatch, write_ts);
             SetBatchSourceId(currentBatch, std::move(sourceId));
             batchCodec = GetDataChunkCodec(proto);
@@ -986,6 +992,10 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
     PARTITION_ENSURE(!RequestInfly)
         ("direct_read_id", DirectReadId);
 
+    if (!WindowExhaustedSent && IsPartitionExhausted()) {
+        return SendReadWindowExhausted(ctx);
+    }
+
     if (isInFlightMemoryOk && IsPartitionDataReady()) {
         SendPartitionReady(ctx);
     } else if (IsNeedMorePartitionData()) {
@@ -1086,6 +1096,10 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
         ctx.Send(ParentId, readResponse.Release());
     }
 
+    if (!WindowExhaustedSent && IsPartitionExhausted()) {
+        SendReadWindowExhausted(ctx);
+    }
+
     PipeGeneration = 0; //reset tries counter - all ok
 }
 
@@ -1095,7 +1109,8 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         const auto errorCode = ev->Get()->Record.GetErrorCode();
         if (errorCode == NPersQueue::NErrorCode::WRONG_COOKIE
             || errorCode == NPersQueue::NErrorCode::BAD_REQUEST
-            || errorCode == NPersQueue::NErrorCode::READ_ERROR_NO_SESSION) {
+            || errorCode == NPersQueue::NErrorCode::READ_ERROR_NO_SESSION
+            || ev->Get()->Record.GetPartitionResponse().GetCloseSession()) {
             Counters.Errors.Inc();
             ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("status is not ok: " + ev->Get()->Record.GetErrorReason(), ConvertOldCode(ev->Get()->Record.GetErrorCode())));
         } else {
@@ -1269,6 +1284,11 @@ void TPartitionActor::SendPartitionReady(const TActorContext& ctx) {
     ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, ReadOffset, EndOffset));
 }
 
+void TPartitionActor::SendReadWindowExhausted(const TActorContext& ctx) {
+    WindowExhaustedSent = true;
+    ctx.Send(ParentId, new TEvPQProxy::TEvReadWindowExhausted(Topic->GetInternalName(), Partition.Partition, Partition.AssignId));
+}
+
 
 void TPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
@@ -1426,6 +1446,10 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
             SendCommit(CommitsInfly.back().first, CommitsInfly.back().second.Offset, ctx);
     } else {
         ClientCommitOffset = CommittedOffset;
+    }
+
+    if (!WindowExhaustedSent && IsPartitionExhausted()) {
+        return SendReadWindowExhausted(ctx);
     }
 
     if (!MaxTimeLagMs && !ReadTimestampMs && IsPartitionDataReady()) {
@@ -1764,7 +1788,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
             childPartitionIds.reserve(record.GetChildPartitionIds().size());
             childPartitionIds.insert(childPartitionIds.end(), record.GetChildPartitionIds().begin(), record.GetChildPartitionIds().end());
 
-            ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, FirstRead,
+            ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, Partition.AssignId, FirstRead,
                      std::move(adjacentPartitionIds), std::move(childPartitionIds), EndOffset));
         } else if (FirstRead) {
             ctx.Send(ParentId, new TEvPQProxy::TEvReadingStarted(Topic->GetInternalName(), Partition.Partition));
@@ -1977,6 +2001,10 @@ bool TPartitionActor::IsPartitionDataReady() const {
 
 bool TPartitionActor::IsNeedMorePartitionData() const {
     return ReadOffset >= EndOffset && (!ClientMaxOffset.Defined() || ReadOffset < *ClientMaxOffset);
+}
+
+bool TPartitionActor::IsPartitionExhausted() const {
+    return ClientMaxOffset.Defined() && ReadOffset >= *ClientMaxOffset;
 }
 
 }

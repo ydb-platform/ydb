@@ -120,3 +120,12 @@ def test_missing_include_is_reported_for_including_file(source_root, tmp_path, m
     assert list(pybuild.parse_pyx_includes(MODULE + '/broken.pyx', 'broken.pyx', source_root)) == []
     assert len(errors) == 1
     assert errors[0].startswith("'broken.pyx' includes missing file: missing.pxi")
+
+
+def test_resource_cython_coverage_follows_root_relative_include(source_root):
+    unit = FakeUnit(
+        source_root,
+        {'CYTHON_COVERAGE': 'yes', '_USE_RESOURCE_CYTHON': 'yes', 'COVERAGE_TARGET_REGEXP': OTHER},
+    )
+
+    assert pybuild.is_cython_coverage_enabled(unit, [('with_root_include.pyx', 'mod')], py3=True)

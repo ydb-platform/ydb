@@ -556,6 +556,7 @@ Y_UNIT_TEST_SUITE(BridgeSkipperHealth) {
             {EPileState::Suspended, true, true, false, EPileVerdict::Unknown},
             {EPileState::Disconnected, true, true, false, {}},
             {EPileState::Inactive, true, true, false, {}},
+            {EPileState::HotStandby, true, true, false, {}},
         };
         for (const auto& test : cases) {
             TScenario s;

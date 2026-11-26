@@ -237,7 +237,7 @@ message TFeatureFlags {
     optional bool EnableTinyDisks = 207 [default = true];
     optional bool EnableMetricsLevel = 208 [default = true];
     optional bool EnableCompileCacheView = 209 [default = true];
-    optional bool EnableSecureScriptExecutions = 210 [default = false];
+    optional bool EnableSecureScriptExecutions = 210 [default = true];
     optional bool EnableColumnshardBool = 211 [default = true];
     optional bool EnableTopicMessageLevelParallelism = 212 [default = true];
     optional bool EnableOlapRejectProbability = 213 [default = true];
@@ -402,7 +402,7 @@ message TFeatureFlags {
     // Applied at PDisk start (Keeper.Reset). ICB PDisk_<id>_ChunkBaseLimitPerMille
     // still overrides the cyan permille; floors stay on while this flag is on.
     optional bool EnableTightPDiskSpaceColors = 333 [default = false, (RequireRestart) = true];
-    optional bool CollectHourMetric = 334 [default = false];
+    optional bool CollectHourMetric = 334 [default = true];
     optional bool EnableStreamingQueryReadFrom = 335 [default = false];
     optional bool EnableIamDelegationSecrets = 336 [default = false]; // YDBFEATURES-144
     optional bool EnableStreamingQueryStateRecompute = 337 [default = false];
@@ -435,7 +435,7 @@ message TFeatureFlags {
     optional bool EnableLocalDBBtreeIndexV2 = 353 [default = false];
     // Only a leading '/' makes a client path absolute. Otherwise prepend the
     // cluster root for database names, or the database for schema-object paths.
-    optional bool EnableRelativePaths = 354 [default = false];
+    optional bool EnableRelativePaths = 354 [default = true];
     optional bool EnableKillSession = 355 [default = false];
     // Enables SAVEPOINT, ROLLBACK TO SAVEPOINT and RELEASE SAVEPOINT in interactive transactions.
     optional bool EnableSavepoints = 356 [default = false];
@@ -491,4 +491,20 @@ message TFeatureFlags {
     optional bool EnableTopicWriteSessionsInitQuoting = 391 [default = false];
     optional bool EnableAsyncReplicationChecksumCheck = 392 [default = false];
     optional bool EnableIndexShadowDataRepair = 393 [default = false];
+    // (LOGBROKER-10680). Default false is
+    // the legacy zeroing behaviour that undercounted the consumed
+    // write quota.
+    optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
+    optional bool EnableColumnShardStats = 395 [default = false];
+    optional bool EnableTopicReplication = 396 [default = false];
+    optional bool EnableRebuildIndex = 397 [default = false];
+    optional bool EnableDefaultFromExpression = 398 [default = false];
+    optional bool ShareShardedMkqlProgram = 399 [default = false];
+    // Disables client access to built-in PostgreSQL compatibility in YDB.
+    optional bool DisablePgCompatibility = 400 [default = false];
+    optional bool EnableBridgeProxyLocalPileFirstGet = 401 [default = false];
+    optional bool EnableChecksumTable = 402 [default = false];
+    // Enable after all nodes support packed S3 mappings and the rollback window has closed.
+    optional bool EnableBlobDepotDataCooling = 403 [default = false];
+    optional bool EnableAsyncReplicationSnapshotProvenance = 404 [default = false];
 }

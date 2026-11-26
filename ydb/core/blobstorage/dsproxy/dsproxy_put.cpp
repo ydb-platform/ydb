@@ -601,6 +601,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                 item.Span.GetTraceId()
             ));
             put->RestartCounter = counter;
+            put->IsProxySubrequest = item.IsProxySubrequest;
             put->ExecutionRelay = std::move(item.ExecutionRelay);
         }
         return ev;

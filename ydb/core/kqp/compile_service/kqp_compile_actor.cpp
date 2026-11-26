@@ -1,5 +1,5 @@
 #include "kqp_compile_service.h"
-#include "kqp_warmup_compile_actor.h"
+#include <ydb/core/kqp/common/warmup/warmup.h>
 
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
@@ -24,6 +24,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/digest/md5/md5.h>
 
+#include <util/random/random.h>
 #include <util/string/escape.h>
 
 #include <ydb/core/base/cputime.h>
@@ -41,6 +42,24 @@ const TString YqlName = "CompileActor";
 
 inline TString GetQueryTextForLog(const TString& queryText) {
     return EscapeC(NKikimr::ProtectQueryForLoggingIfSensitive(queryText));
+}
+
+// Picks the optimizer for one compilation. NewRBORolloutRatio applies only when EnableNewRBO is set.
+bool ShouldUseNewRBO(const NKikimrConfig::TTableServiceConfig& config, const TKqpQueryId& queryId) {
+    // ANALYZE scans use UDAF factories unsupported by new RBO.
+    if (!config.GetEnableNewRBO() || queryId.Settings().IsAnalyze) {
+        return false;
+    }
+
+    const double ratio = config.GetNewRBORolloutRatio();
+    if (ratio >= 1.0) {
+        return true;
+    }
+    // A NaN ratio fails both this check and the draw below, so it selects the YQL optimizer.
+    if (ratio <= 0.0) {
+        return false;
+    }
+    return RandomNumber<double>() < ratio;
 }
 
 } // namespace
@@ -82,7 +101,7 @@ public:
         , FederatedQuerySetup(federatedQuerySetup)
         , Uid(uid)
         , QueryId(queryId)
-        , QueryRef(QueryId.Text, QueryId.QueryParameterTypes)
+        , QueryRef(QueryId.Text(), QueryId.QueryParameterTypes())
         , UserToken(userToken)
         , ClientAddress(clientAddress)
         , DbCounters(dbCounters)
@@ -98,7 +117,8 @@ public:
         , TempTablesState(std::move(tempTablesState))
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
-        , EnableNewRBO(tableServiceConfig.GetEnableNewRBO() && !queryId.Settings.IsAnalyze)
+        // Drawn once per actor: fallback retries rebuild the config from this value.
+        , EnableNewRBO(ShouldUseNewRBO(tableServiceConfig, queryId))
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
         , UsePessimisticLocks(usePessimisticLocks)
     {
@@ -110,10 +130,10 @@ public:
     TKikimrConfiguration::TPtr BuildConfiguration(const TTableServiceConfig& tableServiceConfig) {
         NYql::TKikimrConfiguration::TPtr config = MakeIntrusive<TKikimrConfiguration>();
 
-        config->Init(KqpSettings->DefaultSettings.GetDefaultSettings(), QueryId.Cluster, KqpSettings->Settings, false);
+        config->Init(KqpSettings->DefaultSettings.GetDefaultSettings(), TString(QueryId.Cluster()), KqpSettings->Settings, false);
 
-        if (!QueryId.Database.empty()) {
-            config->_KqpTablePathPrefix = QueryId.Database;
+        if (!QueryId.Database().empty()) {
+            config->_KqpTablePathPrefix = TString(QueryId.Database());
         }
 
         config->ApplyServiceConfig(tableServiceConfig);
@@ -125,7 +145,7 @@ public:
         // YQL optimizer on their first attempt, as well as on fallback retries.
         config->SetEnableNewRBO(EnableNewRBO);
 
-        if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
+        if (QueryId.Settings().QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings().QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
             ui32 scriptResultRowsLimit = QueryServiceConfig.GetScriptResultRowsLimit();
             if (scriptResultRowsLimit > 0) {
                 config->_ResultRowsLimit = scriptResultRowsLimit;
@@ -134,7 +154,7 @@ public:
             }
         }
 
-        if (IsIn({NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY}, QueryId.Settings.QueryType)) {
+        if (IsIn({NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY}, QueryId.Settings().QueryType)) {
             config->_KqpYqlConstraintsTransformerEnabled = AppData()->FeatureFlags.GetEnableKqpConstraintsTransformer();
         }
 
@@ -250,7 +270,7 @@ private:
 
     void StartSplitting(const TActorContext &ctx) {
         Become(&TKqpCompileActor::SplitState);
-        if (QueryId.Settings.Syntax == Ydb::Query::Syntax::SYNTAX_PG) {
+        if (QueryId.Settings().Syntax == Ydb::Query::Syntax::SYNTAX_PG) {
             NYql::TIssue issue(NYql::TPosition(), "PostgreSQL syntax is not supported");
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
         }
@@ -301,9 +321,9 @@ private:
 
         YDB_LOG_DEBUG_CTX(ctx, "Starting query compilation",
             {"self", ctx.SelfID},
-            {"cluster", QueryId.Cluster},
-            {"database", QueryId.Database},
-            {"queryText", GetQueryTextForLog(QueryId.Text)},
+            {"cluster", QueryId.Cluster()},
+            {"database", QueryId.Database()},
+            {"queryText", GetQueryTextForLog(QueryId.Text())},
             {"startTime", StartTime});
 
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
@@ -316,12 +336,12 @@ private:
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
         }
         if (UsePessimisticLocks
-                && QueryId.Settings.QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY
-                && QueryId.Settings.QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY) {
+                && QueryId.Settings().QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY
+                && QueryId.Settings().QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY) {
             NYql::TIssue issue(NYql::TPosition(), "Read Committed isolation level is supported only for generic query.");
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
         }
-        if (QueryId.Settings.Syntax == Ydb::Query::Syntax::SYNTAX_PG) {
+        if (QueryId.Settings().Syntax == Ydb::Query::Syntax::SYNTAX_PG) {
             NYql::TIssue issue(NYql::TPosition(), "PostgreSQL syntax is not supported");
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
         }
@@ -335,7 +355,7 @@ private:
     void StartCompilationWithSettings(IKqpHost::TPrepareSettings& prepareSettings) {
         NCpuTime::TCpuTimer timer(CompileCpuTime);
 
-        switch (QueryId.Settings.QueryType) {
+        switch (QueryId.Settings().QueryType) {
             case NKikimrKqp::QUERY_TYPE_SQL_DML:
                 AsyncCompileResult = KqpHost->PrepareDataQuery(QueryRef, prepareSettings);
                 break;
@@ -363,7 +383,7 @@ private:
                 break;
 
             default:
-                YQL_ENSURE(false, "Unexpected query type: " << QueryId.Settings.QueryType);
+                YQL_ENSURE(false, "Unexpected query type: " << QueryId.Settings().QueryType);
         }
 
         EnableNewRBO = Config->GetEnableNewRBO();
@@ -399,26 +419,28 @@ private:
         counters->TxProxyMon = Counters->TxProxyMon;
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
-                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup,
+                TString(QueryId.Cluster()), TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup,
                 CompileActorSpan.GetTraceId(), traceParentProvider);
-        Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, QueryId.DatabaseId, std::move(loader),
+        Gateway = CreateKikimrIcGateway(TString(QueryId.Cluster()), QueryId.Settings().QueryType, TString(QueryId.Database()), TString(QueryId.DatabaseId()), std::move(loader),
             ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig, CompileActorSpan.GetTraceId(), std::move(traceParentProvider));
-        Gateway->SetToken(QueryId.Cluster, UserToken);
+        Gateway->SetToken(TString(QueryId.Cluster()), UserToken);
         Gateway->SetClientAddress(ClientAddress);
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
+        Config->FeatureFlags.SetDisablePgCompatibility(QueryId.DisablePgCompatibility());
 
-        KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
+        // Retain the session's temporary-table snapshot for compilation retries.
+        KqpHost = CreateKqpHost(Gateway, TString(QueryId.Cluster()), TString(QueryId.Database()), Config, ModuleResolverState->ModuleResolver,
             FederatedQuerySetup, UserToken, GUCSettings, QueryServiceConfig, ApplicationName, AppData(ctx)->FunctionRegistry,
-            false, false, std::move(TempTablesState), nullptr, SplitCtx.get(), UserRequestContext, UsePessimisticLocks);
+            false, false, TempTablesState, nullptr, SplitCtx.get(), UserRequestContext, UsePessimisticLocks);
 
         IKqpHost::TPrepareSettings prepareSettings;
-        prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
-        prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
-        prepareSettings.RuntimeParameterSizeLimit = QueryId.Settings.RuntimeParameterSizeLimit;
-        prepareSettings.RuntimeParameterSizeLimitSatisfied = QueryId.Settings.RuntimeParameterSizeLimitSatisfied;
+        prepareSettings.DocumentApiRestricted = QueryId.Settings().DocumentApiRestricted;
+        prepareSettings.IsInternalCall = QueryId.Settings().IsInternalCall;
+        prepareSettings.RuntimeParameterSizeLimit = QueryId.Settings().RuntimeParameterSizeLimit;
+        prepareSettings.RuntimeParameterSizeLimitSatisfied = QueryId.Settings().RuntimeParameterSizeLimitSatisfied;
         // Internal ANALYZE scans require legacy translation; new RBO forces YqlSelect.
-        if (QueryId.Settings.IsAnalyze) {
+        if (QueryId.Settings().IsAnalyze) {
             prepareSettings.YqlSelect = NSQLTranslation::EYqlSelect::Disable;
         } else if (EnableNewRBO) {
             prepareSettings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
@@ -426,7 +448,7 @@ private:
         prepareSettings.UsePessimisticLocks = UsePessimisticLocks;
         prepareSettings.CompileTrace = CompileTrace;
 
-        switch (QueryId.Settings.Syntax) {
+        switch (QueryId.Settings().Syntax) {
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:
                 prepareSettings.UsePgParser = false;
                 prepareSettings.SyntaxVersion = 1;
@@ -447,7 +469,7 @@ private:
     }
 
     void AddMessageToReplayLog(const TString& queryPlan) {
-        if (NKikimr::IsQueryWithSensitiveInfo(QueryId.Text)) {
+        if (NKikimr::IsQueryWithSensitiveInfo(QueryId.Text())) {
             // Skip both replay log and QueryDiagnostics replay message for sensitive queries.
             return;
         }
@@ -463,8 +485,8 @@ private:
         replayMessage.InsertValue("query_id", Uid);
         replayMessage.InsertValue("version", "1.0");
         NJson::TJsonValue queryParameterTypes(NJson::JSON_MAP);
-        if (QueryId.QueryParameterTypes) {
-            for (const auto& [paramName, paramType] : *QueryId.QueryParameterTypes) {
+        if (QueryId.QueryParameterTypes()) {
+            for (const auto& [paramName, paramType] : *QueryId.QueryParameterTypes()) {
                 queryParameterTypes[paramName] = Base64Encode(paramType.SerializeAsString());
             }
         }
@@ -472,9 +494,9 @@ private:
         replayMessage.InsertValue("created_at", ToString(TlsActivationContext->ActorSystem()->Timestamp().Seconds()));
         // Keep the field for compatibility with existing query replay datasets.
         replayMessage.InsertValue("query_syntax", "1");
-        replayMessage.InsertValue("query_database", QueryId.Database);
-        replayMessage.InsertValue("query_cluster", QueryId.Cluster);
-        replayMessage.InsertValue("query_type", ToString(QueryId.Settings.QueryType));
+        replayMessage.InsertValue("query_database", QueryId.Database());
+        replayMessage.InsertValue("query_cluster", QueryId.Cluster());
+        replayMessage.InsertValue("query_type", ToString(QueryId.Settings().QueryType));
 
         if (CollectFullDiagnostics) {
             NJson::TJsonValue tablesMetaUserView(NJson::JSON_ARRAY);
@@ -489,7 +511,7 @@ private:
         }
 
         replayMessage.InsertValue("query_plan", queryPlan);
-        replayMessage.InsertValue("query_text", EscapeC(QueryId.Text));
+        replayMessage.InsertValue("query_text", EscapeC(QueryId.Text()));
         replayMessage.InsertValue("table_metadata", TString(NJson::WriteJson(tablesMeta, false)));
         replayMessage.InsertValue("table_meta_serialization_type", EMetaSerializationType::EncodedProto);
 
@@ -620,7 +642,6 @@ private:
             Counters->ReportCompileNewRBOFailed(DbCounters);
         }
 
-        auto database = QueryId.Database;
         if (kqpResult.SqlVersion) {
             Counters->ReportSqlVersion(DbCounters, *kqpResult.SqlVersion);
         }
@@ -631,7 +652,7 @@ private:
 
         ETableReadType maxReadType = ExtractMostHeavyReadType(kqpResult.QueryPlan);
 
-        auto queryType = QueryId.Settings.QueryType;
+        auto queryType = QueryId.Settings().QueryType;
 
         KqpCompileResult = TKqpCompileResult::Make(Uid, status, CollectIssues(kqpResult.Issues()), maxReadType, CompileCpuTime, std::move(QueryId), meta);
         KqpCompileResult->UsedNewRbo = EnableNewRBO;
@@ -666,9 +687,9 @@ private:
     void HandleTimeout() {
         YDB_LOG_NOTICE("Query compilation timed out",
             {"self", SelfId()},
-            {"cluster", QueryId.Cluster},
-            {"database", QueryId.Database},
-            {"queryText", GetQueryTextForLog(QueryId.Text)},
+            {"cluster", QueryId.Cluster()},
+            {"database", QueryId.Database()},
+            {"queryText", GetQueryTextForLog(QueryId.Text())},
             {"startTime", StartTime});
 
         NYql::TIssue issue(NYql::TPosition(), "Query compilation timed out.");
@@ -678,10 +699,10 @@ private:
     NJson::TJsonValue CollectMeta() {
         NJson::TJsonValue meta;
         NJson::TJsonValue parameters;
-        if (QueryId.QueryParameterTypes) {
+        if (QueryId.QueryParameterTypes()) {
             NProtobufJson::TProto2JsonConfig config;
             config.SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumName);
-            for (const auto& [name, typedValue] : *QueryId.QueryParameterTypes) {
+            for (const auto& [name, typedValue] : *QueryId.QueryParameterTypes()) {
                 NProtobufJson::Proto2Json(typedValue, parameters[name], config);
             }
         }
@@ -724,10 +745,10 @@ private:
         YDB_LOG_ERROR_CTX(ctx, "Rebuilding compile configuration and restarting compilation",
             {"logMessage", logMessage},
             {"self", ctx.SelfID},
-            {"database", QueryId.Database},
+            {"database", QueryId.Database()},
             {"status", Ydb::StatusIds_StatusCode_Name(status)},
             {"issues", issues},
-            {"queryText", GetQueryTextForLog(QueryId.Text)});
+            {"queryText", GetQueryTextForLog(QueryId.Text())});
 
         // Explicitly drop a pointer to result, it holds pointer `TExprNode` allocated from `TExprContext` in KqpHost
         // and we want rebuild a KqpHost.

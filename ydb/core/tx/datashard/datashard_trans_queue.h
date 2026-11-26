@@ -82,7 +82,18 @@ private: // for pipeline only
 
     // Propose
 
-    void ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId source, const TStringBuf& txBody);
+    template <typename TOp>
+    void ProposeTx(NIceDb::TNiceDb& db, TOp& op, TActorId source) {
+        if (op.HasVolatilePrepareFlag()) {
+            // Volatile transactions are kept in memory.
+            AddTxInFly(&op);
+            return;
+        }
+
+        ProposePersistentTx(db, op, source, op.GetTxBody());
+    }
+
+    void ProposePersistentTx(NIceDb::TNiceDb& db, TOperation& op, TActorId source, const TString& txBody);
     void UpdateTxFlags(NIceDb::TNiceDb& db, ui64 txId, ui64 flags);
     void UpdateTxBody(NIceDb::TNiceDb& db, ui64 txId, const TStringBuf& txBody);
     void ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& op);

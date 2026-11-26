@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TDSProxyGetTest) {
 
 Y_UNIT_TEST(Mirror3dcBatchGetKeepsPerBlobErrors) {
     for (bool mustRestore : {false, true}) {
-        for (const auto [phantomCheck, errorMask] : {std::pair{false, 1u}, {true, 1u}, {true, 7u}}) {
+        for (const auto [phantomCheck, errorMask] : {std::pair{false, 1u}, {false, 7u}, {true, 1u}, {true, 7u}}) {
             TActorSystemStub actorSystemStub;
             TGroupMock group(0, TErasureType::ErasureMirror3dc, 4, 3, 1);
             const auto info = group.GetInfo();
@@ -128,8 +128,9 @@ void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool
                 q.Id = blobSet.Get(queryIdx % blobCount).Id;
                 if (checkCrc) {
                     q.Shift = (queryIdx % groupType.DataParts()) * groupType.PartUserSize(q.Id.BlobSize());
-                    q.Shift = q.Shift <= q.Id.BlobSize() ? q.Shift : 0;
-                    q.Size = Max((ui64)16, (ui64)(queryIdx * 177) % (q.Id.BlobSize() - q.Shift));
+                    q.Shift = q.Shift < q.Id.BlobSize() ? q.Shift : 0;
+                    q.Size = Min<ui64>(q.Id.BlobSize() - q.Shift,
+                        Max((ui64)16, (ui64)(queryIdx * 177) % (q.Id.BlobSize() - q.Shift)));
                 } else {
                     q.Shift = (queryIdx * 177) % q.Id.BlobSize();
                     q.Size = Min((ui64)70, (ui64)q.Id.BlobSize() - (ui64)q.Shift);
@@ -197,6 +198,14 @@ void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool
 // Without CRC
 Y_UNIT_TEST(TestBlock42GetIntervalsAllOk) {
     TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, false, false);
+}
+
+Y_UNIT_TEST(TestBlock82GetIntervalsAllOk) {
+    TestIntervalsAndCrcAllOk(TErasureType::Erasure8Plus2Block, false, false);
+}
+
+Y_UNIT_TEST(TestBlock82GetBlobCrcCheck) {
+    TestIntervalsAndCrcAllOk(TErasureType::Erasure8Plus2Block, false, true);
 }
 
 //Y_UNIT_TEST(TestBlock42GetIntervalsAllOkVerbose) {
@@ -1123,6 +1132,10 @@ void TestWipedErrorWithTwoBlobs(TErasureType::EErasureSpecies erasureSpecies, bo
 
 Y_UNIT_TEST(TestBlock42GetIntervalsWipedAllOk) {
     TestIntervalsWipedAllOk(TErasureType::Erasure4Plus2Block, false);
+}
+
+Y_UNIT_TEST(TestBlock82GetIntervalsWipedAllOk) {
+    TestIntervalsWipedAllOk(TErasureType::Erasure8Plus2Block, false);
 }
 
 Y_UNIT_TEST(TestBlock42GetIntervalsWipedError) {

@@ -2635,7 +2635,7 @@ Y_UNIT_TEST(FromAsTableImmediateCluster) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        ":2:32: Error: Cluster shouldn't be specified for AS_TABLE source");
+        ":2:26: Error: Cluster shouldn't be specified for AS_TABLE source");
 }
 
 Y_UNIT_TEST(FromConcatUnknownCluster) {

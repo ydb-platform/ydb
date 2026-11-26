@@ -4491,7 +4491,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateTableWithPgColumn) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -6710,6 +6710,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(RebuildVectorIndexSameColumnsSql) {
         // Rebuild without changing the column set (columns omitted entirely) must still work.
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableRebuildIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -6751,6 +6752,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(RebuildVectorIndexInvalidClustersAndLevelsSql) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableRebuildIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -6862,7 +6864,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(RebuildNonVectorIndexSql) {
-        // REBUILD INDEX is only supported for vector_kmeans_tree indexes; rebuilding a
+        // REBUILD INDEX is only supported for vector indexes; rebuilding a
         // plain secondary index must be rejected at the KQP exec layer.
         NKikimrConfig::TFeatureFlags featureFlags;
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
@@ -6890,7 +6892,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )").ExtractValueSync();
             UNIT_ASSERT_VALUES_UNEQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
-                "only supported for vector_kmeans_tree");
+                "only supported for vector indexes");
         }
     }
 
@@ -7011,7 +7013,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(AlterTableWithPgColumn) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString tableName = "/Root/TableWithPgColumn";
@@ -10089,7 +10091,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query2 = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << tableName << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_value1, TYPE=MAX, FEATURES=`{\"column_name\": \"Value1\"}`))";
+                NAME=min_max_value1, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"Value1\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             result = session.ExecuteSchemeQuery(query2).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -10098,7 +10101,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query2 = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << tableName << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_value2, TYPE=MAX, FEATURES=`{\"column_name\": \"Value2\"}`))";
+                NAME=min_max_value2, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"Value2\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             result = session.ExecuteSchemeQuery(query2).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -10358,7 +10362,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto& sequenceDescription = describeResult.GetPathDescription().GetSequenceDescription();
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetName(), "_serial_column_Key");
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMinValue(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMaxValue(), 9223372036854775807);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMaxValue(), 2147483647);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetStartValue(), 50);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCache(), 1);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetIncrement(), 11);
@@ -16079,14 +16083,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
         {
-            // Cascade compaction is not supported for column tables.
+            // column table: CASCADE rewrites the portions to the current schema, an empty table has nothing to rewrite
             auto query = R"sql(
                 ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 2, CASCADE = true);
             )sql";
             auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
-            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Cascade compaction is not supported for column tables",
-                result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
     }
 
@@ -16421,7 +16423,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterQuery = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_value1, TYPE=MAX, FEATURES=`{\"column_name\": \"created_at\"}`))";
+                NAME=min_max_value1, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"created_at\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
 
@@ -16757,6 +16760,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     Y_UNIT_TEST(AddPgColumnWithStore) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetDisablePgCompatibility(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -17078,7 +17082,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterQuery = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_pk_int, TYPE=MAX, FEATURES=`{\"column_name\": \"created_at\"}`))";
+                NAME=min_max_pk_int, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"created_at\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
@@ -17389,7 +17394,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterQuery = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_pk_int, TYPE=MAX, FEATURES=`{\"column_name\": \"timestamp\"}`))";
+                NAME=min_max_pk_int, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"timestamp\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
@@ -17428,7 +17434,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterQuery = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_pk_int, TYPE=MAX, FEATURES=`{\"column_name\": \"timestamp\"}`))";
+                NAME=min_max_pk_int, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"timestamp\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
@@ -17789,6 +17796,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
     void CheckPgColumnRejected(const TString& typeName) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetDisablePgCompatibility(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -17827,6 +17835,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
     Y_UNIT_TEST(PgMultipleTypesColumn) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetDisablePgCompatibility(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {

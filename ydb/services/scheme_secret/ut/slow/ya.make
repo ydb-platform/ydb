@@ -2,10 +2,6 @@ UNITTEST_FOR(ydb/services/scheme_secret)
 
 SIZE(LARGE)
 
-TAG(
-    ya:fat
-)
-
 PEERDIR(
     ydb/services/scheme_secret
     ydb/services/scheme_secret/ut/common
@@ -18,5 +14,7 @@ SRCS(
 )
 
 YQL_LAST_ABI_VERSION()
+
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 END()

@@ -19,7 +19,11 @@
 #include <string.h>
 
 #include <algorithm>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
 
+#include "y_absl/base/no_destructor.h"
+#include "y_absl/container/flat_hash_set.h"
 #include "y_absl/strings/escaping.h"
 #include "y_absl/strings/match.h"
 #include "y_absl/strings/str_cat.h"
@@ -43,15 +47,73 @@ void DebugStringBuilder::Add(y_absl::string_view key, y_absl::string_view value)
   y_absl::StrAppend(&out_, y_absl::CEscape(key), ": ", y_absl::CEscape(value));
 }
 
+void DebugStringBuilder::AddAfterRedaction(y_absl::string_view key,
+                                           y_absl::string_view value) {
+  if (IsAllowListed(key)) {
+    Add(key, value);
+  } else {
+    Add(key, y_absl::StrCat(value.size(), " bytes redacted by allow listing."));
+  }
+}
+
+bool DebugStringBuilder::IsAllowListed(const y_absl::string_view key) const {
+  static const y_absl::NoDestructor<y_absl::flat_hash_set<TString>> allow_list(
+      [] {
+        y_absl::flat_hash_set<TString> allow_list;
+        // go/keep-sorted start
+        allow_list.insert(TString(ContentTypeMetadata::key()));
+        allow_list.insert(TString(EndpointLoadMetricsBinMetadata::key()));
+        allow_list.insert(TString(GrpcAcceptEncodingMetadata::key()));
+        allow_list.insert(TString(GrpcEncodingMetadata::key()));
+        allow_list.insert(TString(GrpcInternalEncodingRequest::key()));
+        allow_list.insert(TString(GrpcLbClientStatsMetadata::key()));
+        allow_list.insert(TString(GrpcMessageMetadata::key()));
+        allow_list.insert(TString(GrpcPreviousRpcAttemptsMetadata::key()));
+        allow_list.insert(TString(GrpcRetryPushbackMsMetadata::key()));
+        allow_list.insert(TString(GrpcServerStatsBinMetadata::key()));
+        allow_list.insert(TString(GrpcStatusMetadata::key()));
+        allow_list.insert(TString(GrpcTagsBinMetadata::key()));
+        allow_list.insert(TString(GrpcTimeoutMetadata::key()));
+        allow_list.insert(TString(GrpcTraceBinMetadata::key()));
+        allow_list.insert(TString(HostMetadata::key()));
+        allow_list.insert(TString(HttpAuthorityMetadata::key()));
+        allow_list.insert(TString(HttpMethodMetadata::key()));
+        allow_list.insert(TString(HttpPathMetadata::key()));
+        allow_list.insert(TString(HttpSchemeMetadata::key()));
+        allow_list.insert(TString(HttpStatusMetadata::key()));
+        allow_list.insert(TString(LbCostBinMetadata::key()));
+        allow_list.insert(TString(LbTokenMetadata::key()));
+        allow_list.insert(TString(TeMetadata::key()));
+        allow_list.insert(TString(UserAgentMetadata::key()));
+        allow_list.insert(TString(XEnvoyPeerMetadata::key()));
+
+        // go/keep-sorted end
+        // go/keep-sorted start
+        allow_list.insert(TString(GrpcCallWasCancelled::DebugKey()));
+        allow_list.insert(TString(GrpcRegisteredMethod::DebugKey()));
+        allow_list.insert(TString(GrpcStatusContext::DebugKey()));
+        allow_list.insert(TString(GrpcStatusFromWire::DebugKey()));
+        allow_list.insert(TString(GrpcStreamNetworkState::DebugKey()));
+        allow_list.insert(TString(GrpcTarPit::DebugKey()));
+        allow_list.insert(TString(GrpcTrailersOnly::DebugKey()));
+        allow_list.insert(TString(PeerString::DebugKey()));
+        allow_list.insert(TString(WaitForReady::DebugKey()));
+        // go/keep-sorted end
+        return allow_list;
+      }());
+  return allow_list->contains(key);
+}
+
 void UnknownMap::Append(y_absl::string_view key, Slice value) {
-  unknown_.EmplaceBack(Slice::FromCopiedString(key), value.Ref());
+  unknown_.emplace_back(Slice::FromCopiedString(key), value.Ref());
 }
 
 void UnknownMap::Remove(y_absl::string_view key) {
-  unknown_.SetEnd(std::remove_if(unknown_.begin(), unknown_.end(),
-                                 [key](const std::pair<Slice, Slice>& p) {
-                                   return p.first.as_string_view() == key;
-                                 }));
+  unknown_.erase(std::remove_if(unknown_.begin(), unknown_.end(),
+                                [key](const std::pair<Slice, Slice>& p) {
+                                  return p.first.as_string_view() == key;
+                                }),
+                 unknown_.end());
 }
 
 y_absl::optional<y_absl::string_view> UnknownMap::GetStringValue(
@@ -72,7 +134,7 @@ y_absl::optional<y_absl::string_view> UnknownMap::GetStringValue(
 }  // namespace metadata_detail
 
 ContentTypeMetadata::MementoType ContentTypeMetadata::ParseMemento(
-    Slice value, bool, MetadataParseErrorFn on_error) {
+    Slice value, bool, MetadataParseErrorFn /*on_error*/) {
   auto out = kInvalid;
   auto value_string = value.as_string_view();
   if (value_string == "application/grpc") {
@@ -84,7 +146,9 @@ ContentTypeMetadata::MementoType ContentTypeMetadata::ParseMemento(
   } else if (value_string.empty()) {
     out = kEmpty;
   } else {
-    on_error("invalid value", value);
+    // We are intentionally not invoking on_error here since the spec is not
+    // clear on what the behavior should be here, so to avoid breaking anyone,
+    // we should continue to accept this.
   }
   return out;
 }

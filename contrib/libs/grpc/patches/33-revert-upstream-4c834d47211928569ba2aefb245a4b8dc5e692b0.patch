@@ -1,12 +1,16 @@
-commit 92e2590ebd110faeda5d6a760f526797fee52255 (HEAD -> grpc, arcadia/users/nechda/grpc)
-author: nechda
-date: 2026-02-19T21:19:10+03:00
+Keep legacy networking as the default on non-CFStream POSIX platforms.
 
-    revert upstream commit 4c834d47211928569ba2aefb245a4b8dc5e692b0
+Rebased on gRPC 1.63.2: disable both EventEngine listener and DNS defaults,
+including finalized experiments. Preserve upstream Windows defaults and the
+existing listener shim customization from the original revert of
+4c834d47211928569ba2aefb245a4b8dc5e692b0.
 
---- contrib/libs/grpc/src/core/lib/event_engine/shim.cc	(8d6250a7907f77ec2b16b1aef4fdc301ce9f2f6d)
-+++ contrib/libs/grpc/src/core/lib/event_engine/shim.cc	(92e2590ebd110faeda5d6a760f526797fee52255)
-@@ -45,8 +45,7 @@ bool UseEventEngineClient() {
+--- a/src/core/lib/event_engine/shim.cc
++++ b/src/core/lib/event_engine/shim.cc
+@@ -37,14 +37,13 @@
+ #endif
+ }
+ 
  bool UseEventEngineListener() {
  // TODO(hork, eryu): Adjust the ifdefs accordingly when event engines become
  // available for other platforms.
@@ -16,36 +20,47 @@ date: 2026-02-19T21:19:10+03:00
    return grpc_core::IsEventEngineListenerEnabled();
  #else
    return false;
-@@ -54,8 +53,7 @@ bool UseEventEngineListener() {
+ #endif
  }
  
- bool EventEngineSupportsFd() {
--#if defined(GRPC_POSIX_SOCKET_TCP) && !defined(GRPC_CFSTREAM) && \
--    !defined(GRPC_DO_NOT_INSTANTIATE_POSIX_POLLER)
-+#if defined(GRPC_POSIX_SOCKET_TCP) && !defined(GRPC_CFSTREAM)
-   return g_event_engine_supports_fd;
- #else
-   return false;
---- contrib/libs/grpc/src/core/lib/experiments/experiments.cc	(8d6250a7907f77ec2b16b1aef4fdc301ce9f2f6d)
-+++ contrib/libs/grpc/src/core/lib/experiments/experiments.cc	(92e2590ebd110faeda5d6a760f526797fee52255)
-@@ -704,7 +704,7 @@
+--- a/src/core/lib/experiments/experiments.cc
++++ b/src/core/lib/experiments/experiments.cc
+@@ -544,15 +544,15 @@
+      additional_constraints_canary_client_privacy, nullptr, 0, false, false},
+     {"client_privacy", description_client_privacy,
+      additional_constraints_client_privacy, nullptr, 0, false, false},
+     {"event_engine_client", description_event_engine_client,
+      additional_constraints_event_engine_client, nullptr, 0, false, true},
      {"event_engine_dns", description_event_engine_dns,
-      additional_constraints_event_engine_dns, nullptr, 0, false, false},
+-     additional_constraints_event_engine_dns, nullptr, 0, true, false},
++     additional_constraints_event_engine_dns, nullptr, 0, false, false},
      {"event_engine_listener", description_event_engine_listener,
 -     additional_constraints_event_engine_listener, nullptr, 0, true, true},
 +     additional_constraints_event_engine_listener, nullptr, 0, false, true},
      {"free_large_allocator", description_free_large_allocator,
       additional_constraints_free_large_allocator, nullptr, 0, false, true},
      {"http2_stats_fix", description_http2_stats_fix,
---- contrib/libs/grpc/src/core/lib/experiments/experiments.h	(8d6250a7907f77ec2b16b1aef4fdc301ce9f2f6d)
-+++ contrib/libs/grpc/src/core/lib/experiments/experiments.h	(92e2590ebd110faeda5d6a760f526797fee52255)
-@@ -217,8 +217,7 @@ inline bool IsClientPrivacyEnabled() { return false; }
- inline bool IsCombinerOffloadToEventEngineEnabled() { return true; }
+      additional_constraints_http2_stats_fix, nullptr, 0, true, true},
+     {"keepalive_fix", description_keepalive_fix,
+      additional_constraints_keepalive_fix, nullptr, 0, false, false},
+--- a/src/core/lib/experiments/experiments.h
++++ b/src/core/lib/experiments/experiments.h
+@@ -128,16 +128,14 @@
+ #else
+ inline bool IsCallStatusOverrideOnCancellationEnabled() { return false; }
+ inline bool IsCallV3Enabled() { return false; }
+ inline bool IsCanaryClientPrivacyEnabled() { return false; }
+ inline bool IsClientPrivacyEnabled() { return false; }
  inline bool IsEventEngineClientEnabled() { return false; }
- inline bool IsEventEngineDnsEnabled() { return false; }
+-#define GRPC_EXPERIMENT_IS_INCLUDED_EVENT_ENGINE_DNS
+-inline bool IsEventEngineDnsEnabled() { return true; }
 -#define GRPC_EXPERIMENT_IS_INCLUDED_EVENT_ENGINE_LISTENER
 -inline bool IsEventEngineListenerEnabled() { return true; }
++inline bool IsEventEngineDnsEnabled() { return false; }
 +inline bool IsEventEngineListenerEnabled() { return false; }
  inline bool IsFreeLargeAllocatorEnabled() { return false; }
  #define GRPC_EXPERIMENT_IS_INCLUDED_HTTP2_STATS_FIX
  inline bool IsHttp2StatsFixEnabled() { return true; }
+ inline bool IsKeepaliveFixEnabled() { return false; }
+ inline bool IsKeepaliveServerFixEnabled() { return false; }
+ #define GRPC_EXPERIMENT_IS_INCLUDED_MONITORING_EXPERIMENT

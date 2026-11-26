@@ -81,7 +81,7 @@ TString XdsEndpointResource::Priority::Locality::ToString() const {
   for (const EndpointAddresses& endpoint : endpoints) {
     endpoint_strings.emplace_back(endpoint.ToString());
   }
-  return y_absl::StrCat("{name=", name->AsHumanReadableString(),
+  return y_absl::StrCat("{name=", name->human_readable_string().as_string_view(),
                       ", lb_weight=", lb_weight, ", endpoints=[",
                       y_absl::StrJoin(endpoint_strings, ", "), "]}");
 }
@@ -420,7 +420,8 @@ y_absl::StatusOr<std::shared_ptr<const XdsEndpointResource>> EdsResourceParse(
         if (it != locality_map.end()) {
           errors.AddError(y_absl::StrCat(
               "duplicate locality ",
-              parsed_locality->locality.name->AsHumanReadableString(),
+              parsed_locality->locality.name->human_readable_string()
+                  .as_string_view(),
               " found in priority ", parsed_locality->priority));
         } else {
           locality_map.emplace(parsed_locality->locality.name.get(),

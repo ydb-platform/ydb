@@ -6,7 +6,6 @@
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
@@ -41,21 +40,10 @@ bool NeedsTierChange(const TString& current, const TString& target, const TTieri
 
 }   // namespace
 
-std::shared_ptr<NKikimr::NOlap::ISnapshotSchema> TTieringActualizer::GetTargetSchema(
-    const std::shared_ptr<ISnapshotSchema>& portionSchema) const {
-    if (!TargetCriticalSchema) {
-        return portionSchema;
-    }
-    if (portionSchema->GetVersion() < TargetCriticalSchema->GetVersion()) {
-        return TargetCriticalSchema;
-    }
-    return portionSchema;
-}
-
 std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::BuildActualizationInfo(
     const TPortionInfo& portion, const TInstant now) const {
     std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);
-    std::shared_ptr<ISnapshotSchema> targetSchema = GetTargetSchema(portionSchema);
+    std::shared_ptr<ISnapshotSchema> targetSchema = portion.GetRewriteSchema(VersionedIndex);
     const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
 
     if (Tiering) {
@@ -195,25 +183,16 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
         std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);
         std::shared_ptr<arrow::Scalar> max;
         YDB_LOG_VERIFY(*TieringColumnId != portionSchema->GetIndexInfo().GetPKColumnIds().front());
-        if (auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId)) {
+        if (auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMinMax(*TieringColumnId)) {
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
             const std::vector<TString> data = accessor.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
             if (!data.empty()) {
-                max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
-            }
-        }
-        if (max == nullptr) {
-            if (auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMinMax(*TieringColumnId)) {
-                NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
-                const std::vector<TString> data = accessor.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
-                if (!data.empty()) {
-                    auto type = portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type();
-                    auto minmax = NArrow::NAccessor::TMinMax::MakeNull(type);
-                    for (auto&& d : data) {
-                        minmax.UniteWith(NArrow::NAccessor::TMinMax::FromBinaryString(d, type));
-                    }
-                    max = minmax.Max();
+                auto type = portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type();
+                auto minmax = NArrow::NAccessor::TMinMax::MakeNull(type);
+                for (auto&& d : data) {
+                    minmax.UniteWith(NArrow::NAccessor::TMinMax::FromBinaryString(d, type));
                 }
+                max = minmax.Max();
             }
         }
         YDB_LOG_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
@@ -264,8 +243,8 @@ void TTieringActualizer::DoExtractTasks(
                     continue;
                 }
                 auto portionScheme = portion->GetSchema(VersionedIndex);
-                TPortionEvictionFeatures features(
-                    portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
+                TPortionEvictionFeatures features(portion->GetSchemaVersionVerified(), portionScheme, info->GetTargetScheme(),
+                    portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
                 features.SetTargetTierName(info->GetTargetTierName());
 
                 switch (tasksContext.AddPortion(portion, std::move(features), info->GetLateness())) {
@@ -334,7 +313,6 @@ void TTieringActualizer::Refresh(const std::optional<TTiering>& info, const TAdd
     if (Tiering) {
         newTieringColumnId = VersionedIndex.GetLastSchema()->GetColumnId(Tiering->GetEvictColumnName());
     }
-    TargetCriticalSchema = VersionedIndex.GetLastCriticalSchema();
     PortionsInfo.clear();
     NewPortionIds.clear();
     PortionIdByWaitDuration.clear();

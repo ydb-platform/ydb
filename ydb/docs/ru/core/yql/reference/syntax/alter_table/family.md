@@ -57,11 +57,23 @@ ALTER TABLE series_with_families ALTER FAMILY default SET DATA "rot";
 
 ### Изменение кодека сжатия
 
-Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит кодек сжатия на `lz4`:
+Параметр `COMPRESSION` принимает значения `"off"`, `"lz4"` и `"zstd"`. Параметр `COMPRESSION_LEVEL` принимает значения от `0` до `22` и поддерживается только для ZSTD. Если уровень не указан, сохраняется текущий уровень или используется `1`, если уровень ранее не был задан. Явное значение `0` выбирает уровень по умолчанию библиотеки ZSTD — `3`. При смене кодека на `"off"` или `"lz4"` уровень сбрасывается.
+
+Приведённый ниже код для группы колонок `default` в таблице `series_with_families` включит сжатие ZSTD с уровнем `5`:
 
 ```yql
-ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION "lz4";
+ALTER TABLE series_with_families
+    ALTER FAMILY default SET COMPRESSION "zstd",
+    ALTER FAMILY default SET COMPRESSION_LEVEL 5;
 ```
+
+Для группы, которая уже использует ZSTD, можно изменить только уровень:
+
+```yql
+ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION_LEVEL 9;
+```
+
+Подробнее см. в разделе [Сжатие в строковых таблицах](../../../../concepts/compression.md#row-oriented-tables).
 
 ### Изменение режима кэширования
 
@@ -75,4 +87,4 @@ ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION "lz4";
 ALTER TABLE series_with_families ALTER FAMILY default SET CACHE_MODE "in_memory";
 ```
 
-Могут быть указаны все параметры группы колонок, описанные в команде [`CREATE TABLE`](../create_table/secondary_index.md)
+Могут быть указаны все параметры группы колонок, описанные в команде [`CREATE TABLE`](../create_table/family.md).

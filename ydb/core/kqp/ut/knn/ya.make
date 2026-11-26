@@ -10,10 +10,10 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/testing/mock_server
     ydb/core/kqp
     ydb/core/kqp/ut/common
     ydb/library/yql/udfs/common/knn
+    ydb/public/sdk/cpp/tests/unit/client/oidc/helpers
     yql/essentials/sql/pg_dummy
 )
 

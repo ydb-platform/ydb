@@ -25,7 +25,7 @@ Knn::ApplyRemoteEmbedder(
 
 `BaseUrl` is the API base URL, for example `https://api.openai.com/v1`.
 The UDF appends `/embeddings`, accepting a trailing slash in the base URL.
-HTTP and HTTPS are supported; HTTPS verifies the server certificate.
+Database secrets require HTTPS with server certificate verification.
 The scalar request sends `input` as a JSON string. The streaming request sends
 each batch as a JSON array.
 The token is read from the execution environment's UDF secure parameters using
@@ -34,7 +34,11 @@ The token is read from the execution environment's UDF secure parameters using
 KQP resolves it using the normal secret permission checks and supplies it to
 the UDF.
 Missing secrets and invalid configuration fail the query.
-KQP checks each request against the node's `QueryServiceConfig.HostnamePatterns`.
+An administrator must bind each absolute schema-secret path to an HTTPS origin
+in `QueryServiceConfig.RemoteEmbedderSecretOrigins`. For example, bind
+`/Root/openai_token` to `https://api.openai.com` for the base URL above. Both
+the hostname and effective port must match. KQP checks the live binding and
+the node's `QueryServiceConfig.HostnamePatterns` before each POST.
 
 `Embedding` uses the binary float-vector representation produced by
 `Knn::ToBinaryStringFloat` (without its type tag), suitable for storage in a
@@ -72,7 +76,7 @@ quota.
 
 ```sql
 SELECT Knn::ApplyRemoteEmbedder(
-    'Дом', 'text-embedding-3-large', 'https://api.openai.com/v1', 'openai_token');
+    'Дом', 'text-embedding-3-large', 'https://api.openai.com/v1', '/Root/openai_token');
 
 $requests = AsList(
     AsStruct('Молоко' AS Text, AsStruct(1 AS Id) AS PassThrough),
@@ -84,6 +88,6 @@ FROM (
     PROCESS AS_TABLE($requests)
     USING Knn::ApplyRemoteEmbedder(
         TableRows(), 'text-embedding-3-large', 'https://api.openai.com/v1',
-        'openai_token', 32u, 10240u, 5u)
+        '/Root/openai_token', 32u, 10240u, 5u)
 );
 ```

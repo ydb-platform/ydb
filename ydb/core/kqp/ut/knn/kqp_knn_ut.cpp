@@ -11,7 +11,7 @@
 
 #include <ydb/library/testlib/helpers.h>
 
-#include <library/cpp/testing/mock_server/server.h>
+#include <ydb/public/sdk/cpp/tests/unit/client/oidc/helpers/test_server.h>
 
 #include <util/string/subst.h>
 
@@ -23,31 +23,27 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpKnn) {
     Y_UNIT_TEST(RemoteEmbedderRfcSyntax) {
-        class TEmbedderMock : public TRequestReplier {
-        public:
-            bool DoReply(const TReplyParams& params) override {
-                const auto* auth = params.Input.Headers().FindHeader("Authorization");
-                params.Input.ReadAll();
-                THttpResponse response(auth && auth->Value() == "Bearer embedder-token" ? HTTP_OK : HTTP_UNAUTHORIZED);
-                response.SetContent(R"({"data":[{"index":0,"embedding":[0.5,-0.25]}]})");
-                response.OutTo(params.Output);
-                return true;
-            }
-        };
-
-        TPortManager ports;
-        const auto port = ports.GetPort();
-        NMock::TMockServer server(port, [] { return new TEmbedderMock; });
-        const TString url = TStringBuilder() << "http://localhost:" << port << "/v1";
+        TOidcTestServer server;
+        const TString url(server.Issuer());
+        const TString origin(url.substr(0, url.rfind('/')));
+        for (size_t i = 0; i < 3; ++i) {
+            server.Enqueue(R"({"data":[{"index":0,"embedding":[0.5,-0.25]}]})", HTTP_OK);
+        }
 
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableQueryServiceConfig()->AddHostnamePatterns("^localhost$");
+        auto* queryConfig = settings.AppConfig.MutableQueryServiceConfig();
+        queryConfig->AddHostnamePatterns("^localhost$");
+        (*queryConfig->MutableRemoteEmbedderSecretOrigins())["/Root/embedder_token"] = origin;
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
         auto create = client.ExecuteQuery(R"(
             CREATE SECRET `/Root/embedder_token` WITH (value = 'embedder-token');
         )", NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        auto unbound = client.ExecuteQuery(R"(
+            CREATE SECRET `/Root/unbound_embedder_token` WITH (value = 'unbound-token');
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(unbound.IsSuccess(), unbound.GetIssues().ToString());
 
         auto scalar = client.ExecuteQuery(TStringBuilder() << R"(
             SELECT ApplyRemoteEmbedder('Дом', 'test-model', ')" << url << R"(', '/Root/embedder_token', 0 AS MaxRetries).Status AS Status;
@@ -69,11 +65,21 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         UNIT_ASSERT_VALUES_EQUAL(batchRows.ColumnParser("Status").GetUint32(), 200);
         UNIT_ASSERT(!batchRows.TryNextRow());
 
-        auto blocked = client.ExecuteQuery(TStringBuilder() << R"(
-            SELECT ApplyRemoteEmbedder('Дом', 'test-model', 'http://127.0.0.1:)" << port << R"(/v1', '/Root/embedder_token', 0).Status;
+        for (const auto& [destination, expected] : std::initializer_list<std::pair<TString, TStringBuf>>{
+            {TString("http://") + origin.substr(8), "HTTPS is required"},
+            {"https://localhost:1", "destination does not match the approved HTTPS origin"},
+        }) {
+            auto blocked = client.ExecuteQuery(TStringBuilder() << R"(
+                SELECT ApplyRemoteEmbedder('Дом', 'test-model', ')" << destination << R"(', '/Root/embedder_token', 0).Status;
+            )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!blocked.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(blocked.GetIssues().ToString(), expected);
+        }
+        auto noBinding = client.ExecuteQuery(TStringBuilder() << R"(
+            SELECT ApplyRemoteEmbedder('Дом', 'test-model', ')" << url << R"(', '/Root/unbound_embedder_token', 0).Status;
         )", NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT(!blocked.IsSuccess());
-        UNIT_ASSERT_STRING_CONTAINS(blocked.GetIssues().ToString(), "It is not allowed to access hostname");
+        UNIT_ASSERT(!noBinding.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(noBinding.GetIssues().ToString(), "no approved HTTPS origin");
 
         auto invalid = client.ExecuteQuery(TStringBuilder() << R"(
             SELECT ApplyRemoteEmbedder('Дом', 'test-model', ')" << url << R"(', '').Status;
@@ -85,6 +91,12 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
             CREATE TABLE `/Root/EmbedderInput` (id Int32, text String, PRIMARY KEY (id));
         )", NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(table.IsSuccess(), table.GetIssues().ToString());
+        auto wrongKind = client.ExecuteQuery(TStringBuilder() << R"(
+            SELECT ApplyRemoteEmbedder('Дом', 'test-model', ')" << url << R"(', '/Root/EmbedderInput', 0).Status;
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(wrongKind.GetStatus(), EStatus::BAD_REQUEST, wrongKind.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(wrongKind.GetIssues().ToString(), "/Root/EmbedderInput");
+
         auto insert = client.ExecuteQuery(R"(
             UPSERT INTO `/Root/EmbedderInput` (id, text) VALUES (1, 'Молоко');
         )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -95,6 +107,12 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         )").ExtractValueSync();
         UNIT_ASSERT_C(scan.IsSuccess(), scan.GetIssues().ToString());
         CompareYson("[[200u]]", StreamResultToYson(scan));
+        const auto requests = server.Requests();
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 3);
+        for (const auto& request : requests) {
+            UNIT_ASSERT_VALUES_EQUAL(request.Authorization, "Bearer embedder-token");
+            UNIT_ASSERT_VALUES_EQUAL(request.Path, "/realm/embeddings");
+        }
     }
 
     void CheckDistance(float actual, float expected) {

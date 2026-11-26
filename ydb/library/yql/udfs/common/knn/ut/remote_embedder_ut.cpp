@@ -8,6 +8,8 @@
 #include <yql/essentials/minikql/mkql_utils.h>
 #include <yql/essentials/public/udf/udf_type_printer.h>
 
+#include <ydb/public/sdk/cpp/tests/unit/client/oidc/helpers/test_server.h>
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/testing/mock_server/server.h>
@@ -37,6 +39,7 @@ public:
         HttpCodes Status;
         TString Body;
         bool OmitContentLength = false;
+        TString RawResponse = {};
     };
 
     explicit TServer(TVector<TReply> replies = {}, bool ipv6 = false)
@@ -112,6 +115,11 @@ private:
                 if (index < Owner_.Replies_.size()) {
                     reply = Owner_.Replies_[index];
                 }
+            }
+            if (reply.RawResponse) {
+                params.Output.EnableBodyEncoding(false);
+                params.Output.Write(reply.RawResponse);
+                return true;
             }
             if (reply.OmitContentLength) {
                 params.Output << "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n" << reply.Body;
@@ -203,6 +211,7 @@ private:
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
         if (Yield_ && !Yielded_) {
             Yielded_ = true;
+            result = NUdf::TUnboxedValuePod(ui64(42));
             return NUdf::EFetchStatus::Yield;
         }
         if (Index_ == Rows_) {
@@ -261,6 +270,24 @@ ui32 EmbeddingSize(const NUdf::TUnboxedValue& row) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
+    Y_UNIT_TEST(TransportSendsBearerTokenOverTls) {
+        TOidcTestServer server;
+        const TString url(server.Issuer());
+        server.Enqueue(R"({"data":[{"index":0,"embedding":[1]}]})", HTTP_OK);
+
+        TSetup setup;
+        const NUdf::TUnboxedValue args[] = {
+            setup.String("text"), setup.String("model"), setup.String(url), setup.String("secret"),
+            NUdf::TUnboxedValuePod(ui32(0)),
+        };
+        const auto result = setup.Function(false).Run(&setup.Builder, args);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetElement(1).Get<ui32>(), 200);
+        const auto requests = server.Requests();
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(requests[0].Path, "/realm/embeddings");
+        UNIT_ASSERT_VALUES_EQUAL(requests[0].Authorization, "Bearer test-token");
+    }
+
     Y_UNIT_TEST(HttpAndTimersRunIndependentlyOfTheCaller) {
         class TSlowReply : public TRequestReplier {
         public:
@@ -469,6 +496,66 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
             UNIT_ASSERT_VALUES_EQUAL(EmbeddingSize(result), 0);
             UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
         }
+    }
+
+    Y_UNIT_TEST(AcceptsChunkedResponseWithExtensionAndTrailer) {
+        TServer server({{.Status = HTTP_OK, .Body = {}, .RawResponse =
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
+            "2c;name=value\r\n"
+            R"({"data":[{"index":0,"embedding":[5,-0.25]}]})"
+            "\r\n0\r\nX-Checksum: example\r\n\r\n"}});
+        TSetup setup;
+        const auto result = setup.Scalar(server);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetElement(1).Get<ui32>(), 200);
+        CheckEmbedding(result, 5);
+        UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
+    }
+
+    Y_UNIT_TEST(RejectOversizedHttpMetadataWithoutRetry) {
+        const TString chunkedHead = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n";
+        const TString json = R"({"data":[{"index":0,"embedding":[5,-0.25]}]})";
+        const TString chunk = "2c\r\n" + json + "\r\n";
+        const TString longLine(8 * 1024, 'x');
+        TString headersAndTrailers;
+        TString chunkFraming;
+        for (size_t i = 0; i < 17; ++i) {
+            headersAndTrailers += "X-Padding: " + TString(4 * 1024, 'x') + "\r\n";
+        }
+        const TString paddedExtension = "1;name=" + TString(4 * 1024, 'x') + "\r\n";
+        for (size_t i = 0; i < 256; ++i) {
+            chunkFraming += paddedExtension;
+            chunkFraming += i < json.size() ? json[i] : ' ';
+            chunkFraming += "\r\n";
+        }
+
+        const TVector<std::pair<TString, TString>> responses = {
+            {"status line", "HTTP/1.1 503 " + longLine + "\r\nContent-Length: 0\r\n\r\n"},
+            {"header line", "HTTP/1.1 503 Unavailable\r\nX-Padding: " + longLine + "\r\nContent-Length: 0\r\n\r\n"},
+            {"header bytes", "HTTP/1.1 503 Unavailable\r\n" + headersAndTrailers + "Content-Length: 0\r\n\r\n"},
+            {"trailer line", chunkedHead + chunk + "0\r\nX-Padding: " + longLine + "\r\n\r\n"},
+            {"trailer bytes", chunkedHead + chunk + "0\r\n" + headersAndTrailers + "\r\n"},
+            {"chunk extension", chunkedHead + "2c;name=" + longLine + "\r\n" + json + "\r\n0\r\n\r\n"},
+            {"chunk framing bytes", chunkedHead + chunkFraming + "0\r\n\r\n"},
+        };
+        TSetup setup;
+        for (const auto& [name, response] : responses) {
+            TServer server({{.Status = HTTP_OK, .Body = {}, .RawResponse = response}});
+            const auto result = setup.Scalar(server, 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetElement(1).Get<ui32>(), 502, name);
+            UNIT_ASSERT_VALUES_EQUAL_C(EmbeddingSize(result), 0, name);
+            UNIT_ASSERT_VALUES_EQUAL_C(server.Requests().size(), 1, name);
+        }
+    }
+
+    Y_UNIT_TEST(RejectDeeplyNestedResponse) {
+        const TString body = TStringBuilder()
+            << R"({"data":[{"index":0,"embedding":[1]}],"extra":)"
+            << TString(4096, '[') << '0' << TString(4096, ']') << '}';
+        TServer server({{HTTP_OK, body}});
+        TSetup setup;
+        const auto result = setup.Scalar(server);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetElement(1).Get<ui32>(), 502);
+        UNIT_ASSERT_VALUES_EQUAL(EmbeddingSize(result), 0);
     }
 
     Y_UNIT_TEST(RejectDuplicateIndicesAndInconsistentDimensions) {

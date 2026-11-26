@@ -46,9 +46,9 @@ void VisitSecretArguments(const NYql::TExprNode::TPtr& node, TCallback&& callbac
     });
 }
 
-bool IsSecretLiteral(const NYql::TExprNode* secret) {
+bool IsAbsoluteSecretPathLiteral(const NYql::TExprNode* secret) {
     return secret && secret->IsCallable("String") && secret->ChildrenSize() == 1
-        && secret->Head().IsAtom() && !secret->Head().Content().empty();
+        && secret->Head().IsAtom() && secret->Head().Content().StartsWith('/') && secret->Head().Content().size() > 1;
 }
 
 } // namespace
@@ -56,9 +56,9 @@ bool IsSecretLiteral(const NYql::TExprNode* secret) {
 bool ValidateRemoteEmbedderSecretNames(const NYql::TExprNode::TPtr& node, NYql::TExprContext& ctx) {
     bool valid = true;
     VisitSecretArguments(node, [&](const auto& call, const auto* secret) {
-        if (!IsSecretLiteral(secret)) {
+        if (!IsAbsoluteSecretPathLiteral(secret)) {
             NYql::TIssue issue(ctx.GetPosition(secret ? secret->Pos() : call.Pos()),
-                "RemoteEmbedder: AuthSecretName must be a non-empty String literal");
+                "RemoteEmbedder: AuthSecretName must be a non-empty String literal with an absolute schema secret path");
             issue.SetCode(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, NYql::TSeverityIds::S_ERROR);
             ctx.AddError(issue);
             valid = false;
@@ -69,7 +69,7 @@ bool ValidateRemoteEmbedderSecretNames(const NYql::TExprNode::TPtr& node, NYql::
 
 void FillRemoteEmbedderSecureParams(const NYql::TExprNode::TPtr& node, THashMap<TString, TString>& secureParams) {
     VisitSecretArguments(node, [&](const auto&, const auto* secret) {
-        if (IsSecretLiteral(secret)) {
+        if (IsAbsoluteSecretPathLiteral(secret)) {
             const TString secretName(secret->Head().Content());
             secureParams.emplace(secretName, NYql::TStructuredTokenBuilder().SetTokenAuthWithSecret(secretName, "").ToJson());
         }

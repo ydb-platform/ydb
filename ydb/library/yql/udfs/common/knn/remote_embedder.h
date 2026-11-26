@@ -6,7 +6,7 @@
 
 namespace NKnn {
 
-void ValidateRemoteEmbedderHost(TStringBuf host);
+void ValidateRemoteEmbedderDestination(TStringBuf secretName, TStringBuf host, ui16 port, bool useTls);
 
 struct TRemoteEmbedder {
     using TTypeAwareMarker = void;

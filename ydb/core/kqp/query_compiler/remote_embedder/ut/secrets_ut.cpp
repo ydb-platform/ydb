@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedderSecrets) {
     Y_UNIT_TEST(CollectsPositionalAndNamedSecretArguments) {
         NYql::TExprContext ctx;
         const auto pos = ctx.AppendPosition({});
-        const auto secret = ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "secret")});
+        const auto secret = ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "/Root/secret")});
         const auto apply = Apply(ctx, "Knn.ApplyRemoteEmbedder", secret);
         NYql::TExprNode::TListType args(apply->Children().begin() + 1, apply->Children().end());
         const auto namedOption = ctx.NewCallable(pos, "NamedApply", {
@@ -68,21 +68,23 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedderSecrets) {
             UNIT_ASSERT(ValidateRemoteEmbedderSecretNames(call, ctx));
             FillRemoteEmbedderSecureParams(call, params);
             UNIT_ASSERT_VALUES_EQUAL(params.size(), 1);
-            UNIT_ASSERT(params.contains("secret"));
+            UNIT_ASSERT(params.contains("/Root/secret"));
         }
     }
 
-    Y_UNIT_TEST(RejectsDynamicAndEmptySecretNames) {
+    Y_UNIT_TEST(RejectsDynamicEmptyAndRelativeSecretNames) {
         NYql::TExprContext ctx;
         const auto pos = ctx.AppendPosition({});
         THashMap<TString, TString> params;
         const auto parameter = ctx.NewCallable(pos, "Parameter", {ctx.NewAtom(pos, "dynamic")});
         const auto empty = ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "")});
+        const auto relative = ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "secret")});
         const auto scalar = Apply(ctx, "Knn.ApplyRemoteEmbedder", parameter);
         const auto stream = Apply(ctx, "Knn.ApplyRemoteEmbedder", empty, /*stream=*/true);
-        UNIT_ASSERT(!ValidateRemoteEmbedderSecretNames(ctx.NewList(pos, {scalar, stream}), ctx));
+        const auto relativeCall = Apply(ctx, "Knn.ApplyRemoteEmbedder", relative);
+        UNIT_ASSERT(!ValidateRemoteEmbedderSecretNames(ctx.NewList(pos, {scalar, stream, relativeCall}), ctx));
         UNIT_ASSERT_STRING_CONTAINS(ctx.IssueManager.GetIssues().ToString(), "AuthSecretName must be a non-empty String literal");
-        FillRemoteEmbedderSecureParams(ctx.NewList(pos, {scalar, stream}), params);
+        FillRemoteEmbedderSecureParams(ctx.NewList(pos, {scalar, stream, relativeCall}), params);
         UNIT_ASSERT(params.empty());
     }
 }

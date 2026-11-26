@@ -139,25 +139,28 @@ IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector
     return new TDescribeSecretsActor(ownerUserId, secretIds, promise);
 }
 
-// It's a hack so we can simulate Scheme Cache retryable errors in tests
 NSchemeCache::TSchemeCacheNavigate::EStatus GetSchemeCacheEntryStatus(
     const TDescribeSchemaSecretsService::ISchemeCacheStatusGetter* schemeCacheStatusGetter,
     NSchemeCache::TSchemeCacheNavigate::TEntry& entry)
 {
-    if (schemeCacheStatusGetter) {
-        return schemeCacheStatusGetter->GetStatus(entry);
+    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+    const auto status = schemeCacheStatusGetter ? schemeCacheStatusGetter->GetStatus(entry) : entry.Status;
+    if (status == TNavigate::EStatus::Ok && (entry.Kind != TNavigate::KindSecret || !entry.SecretInfo)) {
+        return TNavigate::EStatus::PathErrorUnknown;
     }
-    return entry.Status;
+    return status;
 }
 
 NKikimrScheme::EStatus GetSchemeShardPathStatus(
     const TDescribeSchemaSecretsService::ISchemeShardStatusGetter* schemeShardStatusGetter,
     const NKikimrScheme::TEvDescribeSchemeResult& record)
 {
-    if (schemeShardStatusGetter) {
-        return schemeShardStatusGetter->GetStatus(record);
+    const auto status = schemeShardStatusGetter ? schemeShardStatusGetter->GetStatus(record) : record.GetStatus();
+    // The object can be replaced between the scheme-cache lookup and the describe request.
+    if (status == NKikimrScheme::EStatus::StatusSuccess && !record.GetPathDescription().HasSecretDescription()) {
+        return NKikimrScheme::EStatus::StatusPathDoesNotExist;
     }
-    return record.GetStatus();
+    return status;
 }
 
 bool IsRetryableSchemeShardStatus(NKikimrScheme::EStatus status) {
@@ -478,7 +481,7 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
     TString firstUnresolvedPath;
     for (size_t i = 0; i < result.ResultSet.size(); ++i) {
         auto& entry = result.ResultSet[i];
-        switch (GetSchemeCacheEntryStatus(SchemeCacheStatusGetter, entry)) {
+        switch (const auto entryStatus = GetSchemeCacheEntryStatus(SchemeCacheStatusGetter, entry)) {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok: {
                 break;
             }
@@ -510,7 +513,7 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
                 YDB_LOG_NOTICE("SchemeCache error",
                     {"event", "TEvNavigateKeySetResult"},
                     {"requestId", requestId},
-                    {"entryStatus", ToString(entry.Status)},
+                    {"entryStatus", ToString(entryStatus)},
                     {"unresolvedPaths", ListSecrets(unresolvedPaths)}
                 );
                 FillResponse(

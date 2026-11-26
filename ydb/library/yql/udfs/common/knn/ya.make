@@ -24,8 +24,10 @@ IF (MODULE_TAG != "YQL_UDF_SHARED")
         remote_embedder_http.cpp
     )
     PEERDIR(
-        library/cpp/http/simple
+        library/cpp/http/io
+        library/cpp/http/misc
         library/cpp/json
+        library/cpp/openssl/io
         library/cpp/regex/pcre
         library/cpp/threading/future
         library/cpp/time_provider

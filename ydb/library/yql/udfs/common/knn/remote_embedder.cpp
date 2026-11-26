@@ -43,17 +43,17 @@ struct TBatchResult {
 // Each invocation owns its retry budget and rate limiter.
 class TEmbedderClient {
 public:
-    TEmbedderClient(TString model, TStringBuf baseUrl, TString token, ui32 maxRetries, ui32 tokensPerSecond)
+    TEmbedderClient(TString model, TStringBuf baseUrl, TString token, TStringBuf secretName, ui32 maxRetries, ui32 tokensPerSecond)
         : Model_(std::move(model))
+        , SecretName_(secretName)
         , MaxRetries_(maxRetries)
         , TokensPerSecond_(tokensPerSecond)
     {
         NUri::TUri url;
-        Y_ENSURE(url.ParseAbs(baseUrl) == NUri::TState::ParsedOK &&
+        Y_ENSURE(url.ParseAbs(baseUrl, NUri::TFeature::FeaturesDefaultOrSchemeKnown) == NUri::TState::ParsedOK &&
             (url.GetScheme() == NUri::TScheme::SchemeHTTP || url.GetScheme() == NUri::TScheme::SchemeHTTPS) &&
             !url.GetHost().empty() && !(url.GetFieldMask() & (NUri::TField::FlagAuth | NUri::TField::FlagQuery | NUri::TField::FlagFrag)),
             "RemoteEmbedder: BaseUrl must be an HTTP(S) base URL without credentials, query or fragment");
-        NKnn::ValidateRemoteEmbedderHost(url.GetHost());
         Y_ENSURE(!Model_.empty(), "RemoteEmbedder: Model must not be empty");
         Y_ENSURE(Model_.size() <= MaxBatchBytes, "RemoteEmbedder: Model exceeds the request byte limit");
         Y_ENSURE(!token.empty() && token.find_first_of("\r\n") == TString::npos,
@@ -67,6 +67,7 @@ public:
         Port_ = url.GetPort();
         const auto host = url.GetHost();
         DialHost_ = host.StartsWith('[') && host.EndsWith(']') ? host.SubStr(1, host.size() - 2) : host;
+        NKnn::ValidateRemoteEmbedderDestination(SecretName_, DialHost_, Port_, UseTls_);
         Authority_ = host;
         if (Port_ != (UseTls_ ? 443 : 80)) {
             Authority_ += TStringBuilder() << ':' << Port_;
@@ -106,7 +107,7 @@ private:
             << "\r\nContent-Length: " << body.size() << "\r\n\r\n" << body;
         for (ui64 attempt = 0; ; ++attempt) {
             Throttle(estimatedTokens);
-            NKnn::ValidateRemoteEmbedderHost(DialHost_);
+            NKnn::ValidateRemoteEmbedderDestination(SecretName_, DialHost_, Port_, UseTls_);
             const auto response = NKnn::PostRemoteEmbedderRequest(DialHost_, Port_, UseTls_, httpRequest).ExtractValueSync();
             const auto status = response.Status;
             if (status >= 200 && status < 300) {
@@ -141,7 +142,10 @@ private:
 
     TBatchResult ParseResponse(TStringBuf body, size_t count, ui32 status, ui64 estimatedTokens) {
         NJson::TJsonValue response;
-        if (!NJson::ReadJsonTree(body, &response) || !response["data"].IsArray() || response["data"].GetArray().size() != count) {
+        NJson::TJsonReaderConfig config;
+        config.UseIterativeParser = true;
+        config.MaxDepth = 16;
+        if (!NJson::ReadJsonTree(body, &config, &response) || !response["data"].IsArray() || response["data"].GetArray().size() != count) {
             return {InvalidResponse, {}};
         }
         const auto& usage = response["usage"]["prompt_tokens"];
@@ -175,6 +179,7 @@ private:
     }
 
     TString Model_;
+    TString SecretName_;
     TString Path_;
     TString DialHost_;
     TString Authority_;
@@ -258,7 +263,7 @@ public:
         TSourcePosition pos, ITypeInfoHelper::TPtr typeHelper, const TType* passThroughType)
         : Builder_(builder)
         , Input_(args[0])
-        , Client_(TString(args[1].AsStringRef()), args[2].AsStringRef(), GetToken(builder, args[3].AsStringRef()),
+        , Client_(TString(args[1].AsStringRef()), args[2].AsStringRef(), GetToken(builder, args[3].AsStringRef()), args[3].AsStringRef(),
               args[6] ? args[6].Get<ui32>() : DefaultMaxRetries, args[5] ? args[5].Get<ui32>() : 0)
         , BatchSize_(args[4] ? args[4].Get<ui32>() : DefaultBatchSize)
         , TextIndex_(textIndex)
@@ -287,13 +292,15 @@ private:
         }
         while (!Finished_ && Texts_.size() < Min<size_t>(BatchSize_, MaxBatchRows)) {
             if (!PendingRow_) {
-                switch (Input_.Fetch(PendingRow_)) {
+                TUnboxedValue row;
+                switch (Input_.Fetch(row)) {
                     case EFetchStatus::Yield:
                         return EFetchStatus::Yield;
                     case EFetchStatus::Finish:
                         Finished_ = true;
                         break;
                     case EFetchStatus::Ok:
+                        PendingRow_ = std::move(row);
                         break;
                 }
             }
@@ -365,7 +372,7 @@ private:
         if (Stream_) {
             return TUnboxedValuePod(new TEmbedderStream(builder, args, TextIndex_, PassThroughIndex_, Pos_, TypeHelper_, PassThroughType_));
         }
-        TEmbedderClient client(TString(args[1].AsStringRef()), args[2].AsStringRef(), GetToken(builder, args[3].AsStringRef()),
+        TEmbedderClient client(TString(args[1].AsStringRef()), args[2].AsStringRef(), GetToken(builder, args[3].AsStringRef()), args[3].AsStringRef(),
             args[4] ? args[4].Get<ui32>() : DefaultMaxRetries, 0);
         return MakeResult(builder, client.Apply(TString(args[0].AsStringRef())), 0);
     } catch (const std::exception& e) {

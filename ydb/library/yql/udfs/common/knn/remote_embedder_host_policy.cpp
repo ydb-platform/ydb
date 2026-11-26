@@ -5,21 +5,43 @@
 #include <ydb/core/protos/config.pb.h>
 
 #include <library/cpp/regex/pcre/regexp.h>
+#include <library/cpp/uri/uri.h>
+
+#include <util/string/ascii.h>
 
 namespace NKnn {
 
-void ValidateRemoteEmbedderHost(TStringBuf host) {
+void ValidateRemoteEmbedderDestination(TStringBuf secretName, TStringBuf host, ui16 port, bool useTls) {
     if (!NKikimr::HasAppData()) {
+        // Standalone C++ hosts supply their own credentials and have no database secret resolver.
+        Y_ENSURE(!secretName.StartsWith('/'), "RemoteEmbedder: database secret policy is unavailable");
         return;
     }
     const auto* appData = NKikimr::AppData();
     const auto config = NKikimr::LoadQueryServiceConfig(*appData);
-    const auto& patterns = (config ? *config : appData->QueryServiceConfig).GetHostnamePatterns();
+    const auto& settings = config ? *config : appData->QueryServiceConfig;
+    Y_ENSURE(useTls, "RemoteEmbedder: HTTPS is required for database secrets");
+
+    const auto& origins = settings.GetRemoteEmbedderSecretOrigins();
+    const auto it = origins.find(TString(secretName));
+    Y_ENSURE(secretName.StartsWith('/') && appData->FeatureFlags.GetEnableSchemaSecrets() && it != origins.end(),
+        "RemoteEmbedder: no approved HTTPS origin for the database secret");
+    NUri::TUri origin;
+    Y_ENSURE(origin.ParseAbs(it->second, NUri::TFeature::FeaturesDefaultOrSchemeKnown) == NUri::TState::ParsedOK
+        && origin.GetScheme() == NUri::TScheme::SchemeHTTPS
+        && !(origin.GetFieldMask() & (NUri::TField::FlagAuth | NUri::TField::FlagQuery | NUri::TField::FlagFrag))
+        && (origin.GetField(NUri::TField::FieldPath).empty() || origin.GetField(NUri::TField::FieldPath) == "/"),
+        "RemoteEmbedder: configured secret origin must be an HTTPS origin");
+    auto approvedHost = origin.GetHost();
+    if (approvedHost.StartsWith('[') && approvedHost.EndsWith(']')) {
+        approvedHost = approvedHost.SubStr(1, approvedHost.size() - 2);
+    }
+    Y_ENSURE(AsciiEqualsIgnoreCase(approvedHost, host) && origin.GetPort() == port,
+        "RemoteEmbedder: destination does not match the approved HTTPS origin for the database secret");
+
+    const auto& patterns = settings.GetHostnamePatterns();
     if (patterns.empty()) {
         return;
-    }
-    if (host.StartsWith('[') && host.EndsWith(']')) {
-        host = host.SubStr(1, host.size() - 2);
     }
     const TString hostname(host);
     for (const auto& pattern : patterns) {

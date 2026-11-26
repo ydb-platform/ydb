@@ -7,6 +7,8 @@
 #include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/library/testlib/helpers.h>
 
+#include <util/generic/scope.h>
+
 #include <algorithm>
 
 using namespace NBridgeTest;
@@ -890,6 +892,42 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
 
         checker.Write(groupId);
         checker.CheckAll();
+    }
+
+    Y_UNIT_TEST(RepeatedConversionFinishWaitsForCommittedMarkerClear) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        TEnvironmentSetup env(MakeUnbridgedSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+
+        TBscNotificationRetry retry(env, [](const auto& config) {
+            return config.GetPrevConfig().GetClusterStateDetails().GetBscConversionPending()
+                && !config.GetClusterStateDetails().GetBscConversionPending();
+        });
+        std::optional<ui64> conversionId;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType) {
+                const auto& request = ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record;
+                if (request.HasNotifyBscConversionFinished()) {
+                    if (!conversionId) {
+                        conversionId = request.GetNotifyBscConversionFinished().GetBscConversionId();
+                    }
+                    retry.ObserveNotification(*ev);
+                }
+            }
+            return retry.Filter(nodeId, ev);
+        };
+        Y_DEFER { env.Runtime->FilterFunction = {}; };
+        auto res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        WaitUntil(env, [&] { return retry.HasHeldWrites(); }, "pending flag clear waiting for commit", TDuration::Seconds(1));
+        UNIT_ASSERT(conversionId && *conversionId);
+        res = InvokeDistconf(env, [&](auto& request) {
+            request.MutableNotifyBscConversionFinished()->SetBscConversionId(*conversionId + 1);
+        });
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        retry.CheckRetryWaitsForCommit();
     }
 
     Y_UNIT_TEST(ConvertStaticGroup) {

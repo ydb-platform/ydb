@@ -119,6 +119,46 @@ namespace NBridgeTest {
                 forward), nodeId);
     }
 
+    // keeps events matching the predicate until released
+    class TEventHold {
+        TEnvironmentSetup& Env;
+        const std::function<bool(IEventHandle&)> Predicate;
+        bool Hold = true;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> Held;
+
+    public:
+        TEventHold(TEnvironmentSetup& env, std::function<bool(IEventHandle&)> predicate)
+            : Env(env)
+            , Predicate(std::move(predicate))
+        {}
+
+        bool Filter(ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (Hold && Predicate(*ev)) {
+                Held.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            return true;
+        }
+
+        bool HasHeld() const {
+            return !Held.empty();
+        }
+
+        void WaitForHeld() {
+            for (ui32 i = 0; i < 120 && Held.empty(); ++i) {
+                Env.Sim(TDuration::Seconds(1));
+            }
+            UNIT_ASSERT(!Held.empty());
+        }
+
+        void Release() {
+            Hold = false;
+            for (auto& [nodeId, ev] : std::exchange(Held, {})) {
+                ResendEvent(Env, nodeId, std::move(ev));
+            }
+        }
+    };
+
     // check that the read result contains exactly one blob with the expected data
     inline void CheckGetResult(const TEvBlobStorage::TEvGetResult& m, const TString& data) {
         UNIT_ASSERT_VALUES_EQUAL_C(m.Status, NKikimrProto::OK, m.ToString());
@@ -408,6 +448,57 @@ namespace NBridgeTest {
             const std::function<TString()>& describe) {
         WaitUntil(env, condition, what, TDuration::Seconds(10), 60, describe);
     }
+
+    class TBscNotificationRetry {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        TEnvironmentSetup& Env;
+        TEventHold HeldWrites;
+        TActorId Sender;
+        ui64 Cookie = 0;
+        bool Retried = false;
+        std::vector<TResult::EStatus> Replies;
+
+    public:
+        TBscNotificationRetry(TEnvironmentSetup& env, auto shouldHoldCommit)
+            : Env(env)
+            , HeldWrites(env, [shouldHoldCommit](IEventHandle& ev) {
+                return ev.GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType
+                    && shouldHoldCommit(ev.Get<NStorage::TEvNodeWardenWriteMetadata>()->Record.GetCommittedStorageConfig());
+            })
+        {}
+
+        void ObserveNotification(const IEventHandle& ev) {
+            if (!Sender) {
+                Sender = ev.Sender;
+                Cookie = ev.Cookie;
+            } else if (Sender == ev.Sender && Cookie == ev.Cookie && !Replies.empty()) {
+                Retried = true;
+            }
+        }
+
+        bool Filter(ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (Sender && ev->Recipient == Sender && ev->Cookie == Cookie
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
+                Replies.push_back(ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record.GetStatus());
+            }
+            return HeldWrites.Filter(nodeId, ev);
+        }
+
+        bool HasHeldWrites() const {
+            return HeldWrites.HasHeld();
+        }
+
+        void CheckRetryWaitsForCommit() {
+            WaitUntil(Env, [&] { return Retried; }, "BSC notification retried", TDuration::Seconds(1));
+            Env.Sim(TDuration::Seconds(1));
+            UNIT_ASSERT(HasHeldWrites());
+            UNIT_ASSERT_VALUES_EQUAL(Replies.size(), 1u);
+            UNIT_ASSERT_EQUAL(Replies.front(), TResult::NO_QUORUM);
+            HeldWrites.Release();
+            WaitUntil(Env, [&] { return Replies.size() >= 2; }, "committed BSC notification", TDuration::Seconds(1));
+            UNIT_ASSERT_EQUAL(Replies[1], TResult::OK);
+        }
+    };
 
     // request the change of the pile state in the next cluster state generation
     inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult TrySwitchPileState(TEnvironmentSetup& env, ui32 pileIndex,

@@ -909,8 +909,12 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         s.ProcessQueues();
         const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0], TDuration::Seconds(30));
         UNIT_ASSERT(run);
-        UNIT_ASSERT(run->Get()->Record.GetCommand().GetRemoteTopicReader().GetConnectionParams()
-            .GetCredentialInstanceId() != oldGeneration);
+        const auto& record = run->Get()->Record;
+        const auto& controller = record.GetController();
+        const TString generationPrefix = TStringBuilder() << controller.GetTabletId() << ':' << controller.GetGeneration() << ':';
+        const auto& current = record.GetCommand().GetRemoteTopicReader().GetConnectionParams().GetCredentialInstanceId();
+        UNIT_ASSERT_C(current.StartsWith(generationPrefix), current);
+        UNIT_ASSERT(!oldGeneration.StartsWith(generationPrefix));
         UNIT_ASSERT(s.Describe().GetState().HasStandBy());
     }
 

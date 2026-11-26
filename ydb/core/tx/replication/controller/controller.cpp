@@ -7,6 +7,8 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
+#include <util/string/builder.h>
+
 #include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
@@ -405,6 +407,11 @@ void TController::Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorCon
     YDB_LOG_TRACE_CTX(ctx, "Handle",
         {"ev", ev->Get()->ToString()});
     RunTxDropDstResult(ev, ctx);
+}
+
+TString TController::AllocateCredentialInstanceId() {
+    // Workers can outlive the controller. The tablet generation fences their old credentials after a restart.
+    return TStringBuilder() << TabletID() << ':' << Executor()->Generation() << ':' << ++CredentialInstanceSequence;
 }
 
 void TController::Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx) {

@@ -46,7 +46,7 @@ public:
         if (Ev->Get()->IsSuccess()) {
             YDB_LOG_NOTICE_CTX(ctx, "Secret resolved",
                 {"rid", rid});
-            Replication->UpdateSecret(Ev->Get()->Value, Ev->Get()->Revision, TStringBuilder() << Ev->Sender << ":" << Ev->Cookie);
+            Replication->UpdateSecret(Ev->Get()->Value, Ev->Get()->Revision, Self->AllocateCredentialInstanceId());
         } else {
             YDB_LOG_ERROR_CTX(ctx, "Resolve secret error",
                 {"rid", rid},

@@ -27,7 +27,7 @@ public:
         // and explicit lifecycle/config changes atomically clear it.
         Replication = replication;
         Replication->ResetCredentials(ctx);
-        Replication->UpdateSecret(result.Value, result.Revision, ToString(Event->Sender));
+        Replication->UpdateSecret(result.Value, result.Revision, Self->AllocateCredentialInstanceId());
         NIceDb::TNiceDb db(txc.DB);
         for (auto* target : Replication->GetTargets()) {
             target->Shutdown(ctx);

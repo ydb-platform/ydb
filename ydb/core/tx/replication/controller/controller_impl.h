@@ -271,6 +271,7 @@ private:
     void RunTxWorkerRegistrationError(TEvPrivate::TEvWorkerRegistrationError::TPtr& ev, const TActorContext& ctx);
     void RunTxDropDstResult(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveDatabaseResult(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
+    TString AllocateCredentialInstanceId();
     void RunTxResolveSecretResult(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveResourceIdResult(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx);
     void RunTxWorkerError(
@@ -340,6 +341,7 @@ private:
     TTabletCountersBase* TabletCounters;
 
     TSysParams SysParams;
+    ui64 CredentialInstanceSequence = 0;
     THashMap<ui64, TReplication::TPtr> Replications;
     THashMap<TPathId, TReplication::TPtr> ReplicationsByPathId;
     THashMap<ui64, ui8> UnresolvedDatabaseReplications;

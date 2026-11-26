@@ -1316,16 +1316,38 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     }
 }
 
-TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, bool newRboEnabled, const TString& poolId) {
-    TVector<const TString> txPlans;
+TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId) {
+    struct TPlanGroup {
+        bool IsRbo;
+        NJson::TJsonValue Identity;
+        TVector<const TString> TxPlans;
+    };
+    TVector<TPlanGroup> groups;
     for (const auto& execStats: queryStats.GetExecutions()) {
         for (const auto& txPlan: execStats.GetTxPlansWithStats()) {
-            txPlans.push_back(txPlan);
+            if (txPlan.empty()) {
+                continue;
+            }
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(txPlan, &plan, true);
+            // RBO attaches its simplified query plan to every physical
+            // transaction. Legacy transaction plans only contain execution
+            // nodes; their simplified plan is built when assembling the query.
+            const bool isRbo = plan.Has("SimplifiedPlan");
+            if (isRbo) {
+                // Merge stage statistics only for copies of the same query
+                // plan. A split statement can contain independently compiled
+                // queries, including a mixture of RBO and legacy plans.
+                ModifyPlan(plan, [](NJson::TJsonValue& node) {
+                    node.EraseValue("Stats");
+                });
+            }
+            if (groups.empty() || groups.back().IsRbo != isRbo
+                || (isRbo && groups.back().Identity != plan)) {
+                groups.push_back({isRbo, std::move(plan), {}});
+            }
+            groups.back().TxPlans.push_back(txPlan);
         }
-    }
-
-    if (newRboEnabled) {
-        return SerializeRBOAnalyzePlan(txPlans, queryStats, poolId);
     }
 
     NJsonWriter::TBuf writer;
@@ -1350,7 +1372,28 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, bool n
     }
     writer.EndObject();
 
-    return SerializeTxPlans(txPlans, "", writer.Str());
+    const auto serializeGroup = [&](const TPlanGroup& group) {
+        return group.IsRbo
+            ? SerializeRBOAnalyzePlan(group.TxPlans, queryStats, poolId)
+            : SerializeTxPlans(group.TxPlans, "", writer.Str());
+    };
+    if (groups.size() == 1) {
+        return serializeGroup(groups.front());
+    }
+
+    NJson::TJsonValue result;
+    NJson::ReadJsonTree(SerializeTxPlans({}, "", writer.Str()), &result, true);
+    // Preserve each serializer's simplified plan. Running the legacy
+    // simplifier over RBO operators loses their metadata and statistics.
+    for (auto group = groups.rbegin(); group != groups.rend(); ++group) {
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(serializeGroup(*group), &plan, true);
+        for (const auto& node : plan["Plan"]["Plans"].GetArraySafe()) {
+            result["Plan"]["Plans"].AppendValue(node);
+        }
+        result["SimplifiedPlan"]["Plans"].AppendValue(plan["SimplifiedPlan"]);
+    }
+    return result.GetStringRobust();
 }
 
 TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {
@@ -1385,8 +1428,12 @@ TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {
             writer.WriteKey("Plan");
             writer.WriteJsonValue(dqPlan, false, PREC_NDIGITS, 17);
             writer.WriteKey("SimplifiedPlan");
-            auto simplifiedPlan = SimplifyQueryPlan(*dqPlan);
-            writer.WriteJsonValue(&simplifiedPlan, false, PREC_NDIGITS, 17);
+            if (auto existingSimplifiedPlan = planMap.FindPtr("SimplifiedPlan")) {
+                writer.WriteJsonValue(existingSimplifiedPlan, false, PREC_NDIGITS, 17);
+            } else {
+                auto simplifiedPlan = SimplifyQueryPlan(*dqPlan);
+                writer.WriteJsonValue(&simplifiedPlan, false, PREC_NDIGITS, 17);
+            }
         }
         writer.EndObject();
     }

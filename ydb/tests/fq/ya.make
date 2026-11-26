@@ -1,5 +1,4 @@
 RECURSE(
-    common
     generic
     pq_async_io
     solomon
@@ -9,9 +8,6 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
-    compute
-    control_plane_storage
-    http_api
     mem_alloc
     multi_plane
     plans

@@ -6,11 +6,9 @@ NO_CHECK_IMPORTS()
 
 DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/fq-connector-go)
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/mdb_mock/recipe.inc)
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/token_accessor_mock/recipe.inc)
 
 IF (AUTOCHECK)
     # Temporarily disable these tests due to infrastructure incompatibility
@@ -32,7 +30,7 @@ IF (AUTOCHECK)
     )
 ENDIF()
 
-ENV(COMPOSE_HTTP_TIMEOUT=1200)  # during parallel tests execution there could be huge disk io, which triggers timeouts in docker-compose 
+ENV(COMPOSE_HTTP_TIMEOUT=1200)  # during parallel tests execution there could be huge disk io, which triggers timeouts in docker-compose
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 IF (OPENSOURCE)
@@ -42,8 +40,8 @@ IF (OPENSOURCE)
     #     # Too huge for precommit check with sanitizers
     #     SIZE(LARGE)
     # ELSE()
-    #     # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
-    #     # which makes it impossible to run them during precommit checks on Github CI. 
+    #     # Including of docker_compose/recipe.inc automatically converts these tests into LARGE,
+    #     # which makes it impossible to run them during precommit checks on Github CI.
     #     # Next several lines forces these tests to be MEDIUM. To see discussion, visit YDBOPS-8928.
     #     SIZE(MEDIUM)
     # ENDIF()
@@ -63,9 +61,17 @@ PEERDIR(
     library/python/testing/recipe
     library/python/testing/yatest_common
     library/recipes/common
-    ydb/tests/tools/fq_runner
+    ydb/tests/fq/streaming_common
+    ydb/tests/library
+    ydb/public/sdk/python
+    ydb/public/sdk/python/enable_v3_new_behavior
     ydb/public/api/protos
     contrib/python/pytest
+)
+
+DEPENDS(
+    ydb/apps/ydb
+    ydb/apps/ydbd
 )
 
 TEST_SRCS(

@@ -8,16 +8,7 @@ import yatest.common
 import library.python.port_manager
 
 from dataclasses import dataclass
-from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
-from ydb.tests.tools.fq_runner.custom_hooks import *  # noqa: F401,F403 Adding custom hooks for YQv2 support
-from ydb.tests.tools.fq_runner.kikimr_utils import AddInflightExtension
-from ydb.tests.tools.fq_runner.kikimr_utils import AddDataInflightExtension
-from ydb.tests.tools.fq_runner.kikimr_utils import AddFormatSizeLimitExtension
-from ydb.tests.tools.fq_runner.kikimr_utils import DefaultConfigExtension
-from ydb.tests.tools.fq_runner.kikimr_utils import YQv2Extension
-from ydb.tests.tools.fq_runner.kikimr_utils import ComputeExtension
-from ydb.tests.tools.fq_runner.kikimr_utils import StatsModeExtension
-from ydb.tests.tools.fq_runner.kikimr_utils import start_kikimr
+from ydb.tests.fq.streaming_common.common import Kikimr, get_ydb_config
 from library.recipes import common as recipes_common
 
 MOTO_SERVER_PATH = "contrib/python/moto/bin/moto_server"
@@ -59,28 +50,18 @@ def s3(request) -> S3:
 
 
 @pytest.fixture
-def stats_mode():
-    return ''
+def kikimr(request, monkeypatch):
+    monkeypatch.setenv('YDB_TEST_LEASE_DURATION_SEC', '5')
+    config = get_ydb_config(request)
+    config.yaml_config['feature_flags']['enable_script_execution_operations'] = True
+    cluster = Kikimr(config)
+    try:
+        cluster.wait_kqp_node_count(2)
+        yield cluster
+    finally:
+        cluster.stop()
 
 
 @pytest.fixture
-def kikimr(request: pytest.FixtureRequest, s3: S3, yq_version: str, stats_mode: str):
-    kikimr_extensions = [
-        AddFormatSizeLimitExtension(),
-        AddInflightExtension(),
-        AddDataInflightExtension(),
-        DefaultConfigExtension(s3.s3_url),
-        YQv2Extension(yq_version),
-        ComputeExtension(),
-        StatsModeExtension(stats_mode),
-    ]
-    with start_kikimr(request, kikimr_extensions) as kikimr:
-        yield kikimr
-
-
-@pytest.fixture
-def client(kikimr, request=None):
-    client = FederatedQueryClient(
-        request.param["folder_id"] if request is not None else "my_folder", streaming_over_kikimr=kikimr
-    )
-    return client
+def client(kikimr):
+    return kikimr.ydb_client

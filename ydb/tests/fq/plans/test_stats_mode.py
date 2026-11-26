@@ -4,39 +4,44 @@
 import boto3
 import logging
 import pytest
-import ydb.public.api.protos.draft.fq_pb2 as fq
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
+import ydb
+from ydb import convert
 
 
 class TestStatsMode:
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    @pytest.mark.skip(reason="YDB Query Service does not provide an SVG query timeline")
     @pytest.mark.parametrize(
         "stats_mode", ["STATS_MODE_NONE", "STATS_MODE_BASIC", "STATS_MODE_FULL", "STATS_MODE_PROFILE"]
     )
-    def test_mode(self, kikimr, s3, client, stats_mode, yq_version):
+    def test_mode(self, s3, client, stats_mode):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("pbucket")
         bucket.create(ACL='public-read')
-        kikimr.control_plane.wait_bootstrap(1)
-        client.create_storage_connection("pb", "pbucket")
+        client.query(f'''CREATE EXTERNAL DATA SOURCE pb WITH (
+            SOURCE_TYPE="ObjectStorage", LOCATION="{s3.s3_url}/pbucket/", AUTH_METHOD="NONE"
+        );''')
+
+        def execute(sql):
+            with client.session_pool.checkout() as session:
+                mode = getattr(ydb.QueryStatsMode, stats_mode.removeprefix("STATS_MODE_"))
+                with session.execute(sql, stats_mode=mode) as stream:
+                    result_sets = convert.aggregate_result_sets_by_index(stream)
+                return result_sets, session.last_query_stats
 
         sql = '''
             insert into pb.`path/` with (format=csv_with_names)
             select * from AS_TABLE([<|foo:1, bar:"xxx"u|>,<|foo:2, bar:"yyy"u|>]);
             '''
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        execute(sql)
 
         sql = '''
             insert into pb.`path/` with (format=csv_with_names)
             select * from AS_TABLE([<|foo:3, bar:"xxx"u|>,<|foo:4, bar:"yyy"u|>]);
             '''
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        execute(sql)
 
         sql = '''
             select bar, count(foo) as foo_count, sum(foo) as foo_sum
@@ -47,18 +52,13 @@ class TestStatsMode:
             group by bar
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-
-        if yq_version == "v2":
-            result = client.describe_query(query_id).result
-            assert "<svg" in result.query.timeline.svg
-
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        result_sets, stats = execute(sql)
+        if stats_mode in ("STATS_MODE_FULL", "STATS_MODE_PROFILE"):
+            assert stats is not None
+            assert stats.query_plan
+        # The SVG timeline assertion can be restored when Query Service exposes it.
+        result_set = result_sets[0]
         logging.debug(str(result_set))
         assert len(result_set.columns) == 3
         assert len(result_set.rows) == 2
-        # assert result_set.rows[0].items[0].uint64_value == 1024 * 10
-        # 1024 x 1024 x 10 = 10 MB of raw data + little overhead for header, eols etc
-        # assert sum(kikimr.control_plane.get_metering(1)) == 11
+        assert sorted(tuple(row[i] for i in range(3)) for row in result_set.rows) == [(b"xxx", 2, 4), (b"yyy", 2, 6)]

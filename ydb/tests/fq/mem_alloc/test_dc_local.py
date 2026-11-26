@@ -8,6 +8,7 @@ from ydb.tests.library.common.wait_for import wait_for
 
 
 class TestAlloc:
+    @pytest.mark.skip(reason='YDB topic source placement ignores PreferLocalDatacenterExecution')
     @pytest.mark.parametrize('kikimr', [(None, None, None)], indirect=['kikimr'])
     def test_dc_locality(self, kikimr, memory_query):
         io = memory_query('select_dc_locality', partitions=4)

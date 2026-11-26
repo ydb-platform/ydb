@@ -1,6 +1,8 @@
 import json
 import time
 
+import ydb
+
 from ydb.tests.fq.streaming_common.common import (
     StreamingTestBase,
     counter_nodes,
@@ -26,13 +28,21 @@ def memory_metrics(kikimr):
         values = {}
         for name in ('RM/ComputeActors', 'RM/Memory', 'RM/ExternalMemory', 'RM/ExtraMemAllocs'):
             # Read node totals, excluding similarly named counters in subgroups.
-            matches = [s['value'] for s in sensors.data if s['labels'] == {'sensor': name}]
+            matches = [
+                s['value']
+                for s in sensors.data
+                if s['labels'].get('sensor') == name
+                and not (s['labels'].keys() - {'sensor', 'database', 'slot', 'host'})
+            ]
             assert len(matches) == 1, (node_id, name, matches)
             values[name] = matches[0]
         pool_labels = {'schedulerPool': MEMORY_POOL}
         for name in ('MemoryLimit', 'MemoryUsage'):
             value = sensors.find_sensor(dict(pool_labels, sensor=name))
             values[name] = value if value is not None else 0
+        # Long-lived services also reserve RM memory. Compare query allocations
+        # against the idle node baseline captured before creating any queries.
+        values['RM/Memory'] -= getattr(kikimr, 'idle_memory', {}).get(node_id, 0)
         result[node_id] = values
     return result
 
@@ -100,7 +110,10 @@ class MemoryQuery(StreamingTestBase):
         # for partitions under a shared consumer.
         consumer = f'{name}_consumer'
         self.kikimr.external_ydb_client.query(f'ALTER TOPIC `{self.input_topic}` ADD CONSUMER `{consumer}`;')
-        self.kikimr.ydb_client.query(
+        # CREATE can leave the object behind when starting its execution fails.
+        # Keep it for cleanup and preserve the first error instead of retrying DDL.
+        self.queries.append(path)
+        self.kikimr.ydb_client.session_pool.execute_with_retries(
             f'''
             CREATE STREAMING QUERY `{path}` WITH (
                 RESOURCE_POOL = '{MEMORY_POOL}', CHECKPOINT_INTERVAL = 'PT1H'
@@ -109,9 +122,9 @@ class MemoryQuery(StreamingTestBase):
                 {sql}
             END DO;
         ''',
-            timeout=TIMEOUT,
+            settings=ydb.BaseRequestSettings().with_timeout(TIMEOUT),
+            retry_settings=ydb.RetrySettings(max_retries=0),
         )
-        self.queries.append(path)
         if wait:
             assert self.wait_started_or_memory_error(path), self.state(path)
             self.wait_pool_limit()
@@ -178,4 +191,4 @@ class MemoryQuery(StreamingTestBase):
 
     def close(self):
         for query in reversed(self.queries):
-            self.kikimr.ydb_client.query(f'DROP STREAMING QUERY `{query}`;', timeout=TIMEOUT)
+            self.kikimr.ydb_client.query(f'DROP STREAMING QUERY IF EXISTS `{query}`;', timeout=TIMEOUT)

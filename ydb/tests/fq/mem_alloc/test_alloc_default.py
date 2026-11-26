@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import pytest
+import ydb
 
 from ydb.tests.fq.mem_alloc.test_base import (
     DEFAULT_DELTA,
@@ -61,10 +62,16 @@ class TestAlloc:
         memory_per_query = None
         allocated = 0
         blocked = None
+        creation_error = None
         # The pool is limited to 24 MiB on the single compute node. Bound the
         # number of attempts so a missing limit cannot create unlimited queries.
         for _ in range(32):
-            query = io.create(io.aggregation_sql(count=True), wait=False)
+            try:
+                query = io.create(io.aggregation_sql(count=True), wait=False)
+            except ydb.Overloaded as error:
+                blocked = io.queries[-1]
+                creation_error = str(error)
+                break
             if not io.wait_started_or_memory_error(query):
                 blocked = query
                 break
@@ -83,11 +90,12 @@ class TestAlloc:
         assert blocked is not None, 'Queries did not reach the configured memory limit'
         assert running and memory_per_query > 0
         state = io.state(blocked)
-        assert state['RetryCount'] > 0 or state['Status'] in ('SUSPENDED', 'FAILED'), state
+        if creation_error is None:
+            assert state['RetryCount'] > 0 or state['Status'] in ('SUSPENDED', 'FAILED'), state
+        issues = creation_error or '\n'.join(issue_messages(state['Issues']))
         assert any(
-            text in '\n'.join(issue_messages(state['Issues'])).lower()
-            for text in ('not enough memory', 'memory limit exceeded', 'not enough resources')
-        ), state
+            text in issues.lower() for text in ('not enough memory', 'memory limit exceeded', 'not enough resources')
+        ), (creation_error, state)
         io.stop(blocked)
         wait_pool_memory(kikimr, allocated)
         io.stop(running[0])

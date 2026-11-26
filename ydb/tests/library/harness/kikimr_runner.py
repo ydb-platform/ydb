@@ -752,13 +752,31 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         return self._nodes[node_index]
 
-    def __register_slots(self, database, count=1, encryption_key=None, seed_nodes_file=None, bridge_pile_name=None):
-        return [self.__register_slot(database, encryption_key, seed_nodes_file=seed_nodes_file,
-                                     bridge_pile_name=bridge_pile_name) for _ in range(count)]
+    def __register_slots(
+        self, database, count=1, encryption_key=None, seed_nodes_file=None, bridge_pile_name=None, data_center=None
+    ):
+        return [
+            self.__register_slot(
+                database,
+                encryption_key,
+                seed_nodes_file=seed_nodes_file,
+                bridge_pile_name=bridge_pile_name,
+                data_center=data_center,
+            )
+            for _ in range(count)
+        ]
 
-    def register_and_start_slots(self, database, count=1, encryption_key=None, seed_nodes_file=None, bridge_pile_name=None):
-        slots = self.__register_slots(database, count, encryption_key, seed_nodes_file=seed_nodes_file,
-                                      bridge_pile_name=bridge_pile_name)
+    def register_and_start_slots(
+        self, database, count=1, encryption_key=None, seed_nodes_file=None, bridge_pile_name=None, data_center=None
+    ):
+        slots = self.__register_slots(
+            database,
+            count,
+            encryption_key,
+            seed_nodes_file=seed_nodes_file,
+            bridge_pile_name=bridge_pile_name,
+            data_center=data_center,
+        )
         for slot in slots:
             slot.start()
         return slots
@@ -773,7 +791,14 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             writer.write('Keys { ContainerPath: "%s" Pin: "" Id: "%s" Version: 1 } ' % (secret_path, slug))
         return keyfile_path
 
-    def __register_slot(self, tenant_affiliation=None, encryption_key=None, seed_nodes_file=None, bridge_pile_name=None):
+    def __register_slot(
+        self,
+        tenant_affiliation=None,
+        encryption_key=None,
+        seed_nodes_file=None,
+        bridge_pile_name=None,
+        data_center=None,
+    ):
         slot_index = next(self._slot_index_allocator)
         node_broker_port = (
             self.nodes[1].grpc_ssl_port if self.__configurator.grpc_ssl_enable
@@ -796,6 +821,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             configurator=self.__configurator,
             udfs_dir=self.__common_udfs_dir,
             role='slot',
+            data_center=data_center,
             node_broker_port=node_broker_port,
             tenant_affiliation=tenant_affiliation,
             encryption_key=encryption_key,

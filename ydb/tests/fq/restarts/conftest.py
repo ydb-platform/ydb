@@ -24,9 +24,9 @@ class S3:
 def s3(request) -> S3:
     port_manager = library.python.port_manager.PortManager()
     s3_port = port_manager.get_port()
-    s3_url = "http://localhost:{port}".format(port=s3_port)
+    s3_url = "http://127.0.0.1:{port}".format(port=s3_port)
 
-    command = [yatest.common.binary_path(MOTO_SERVER_PATH), "s3", "--host", "::1", "--port", str(s3_port)]
+    command = [yatest.common.binary_path(MOTO_SERVER_PATH), "s3", "--host", "127.0.0.1", "--port", str(s3_port)]
 
     def is_s3_ready():
         try:

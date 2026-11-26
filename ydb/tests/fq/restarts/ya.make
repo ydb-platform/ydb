@@ -2,10 +2,8 @@ PY3TEST()
 
 STYLE_PYTHON()
 
-ENV(
-    YDB_USE_IN_MEMORY_PDISKS=false
-    YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd"
-)
+ENV(YDB_USE_IN_MEMORY_PDISKS=false)
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 PEERDIR(
     contrib/python/boto3

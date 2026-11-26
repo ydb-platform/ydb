@@ -10,7 +10,7 @@ import ydb
 from ydb.public.api.grpc import ydb_operation_v1_pb2_grpc, ydb_query_v1_pb2_grpc
 from ydb.public.api.protos import ydb_operation_pb2, ydb_query_pb2
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
-from ydb.tests.fq.streaming_common.common import StreamingTestBase
+from ydb.tests.fq.streaming_common.common import StreamingTestBase, get_sensors
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 
 logger = logging.getLogger(__name__)
@@ -113,24 +113,34 @@ class TestS3(StreamingTestBase):
                 runner_nodes = [
                     node_id
                     for node_id in kikimr.cluster.slots
-                    if self.get_actor_count(kikimr, node_id, 'KQP_RUN_SCRIPT_ACTOR') > 0
+                    if (
+                        get_sensors(kikimr.cluster, node_id, 'utils').find_sensor(
+                            {
+                                'activity': 'KQP_RUN_SCRIPT_ACTOR',
+                                'sensor': 'ActorsAliveByActivity',
+                                'execpool': 'System',
+                            }
+                        )
+                        or 0
+                    )
+                    > 0
                 ]
-                if not runner_nodes:
-                    operation = self.get_script_operation(client, operation_id)
-                    if operation.ready:
-                        break
-                assert len(runner_nodes) == 1, (runner_nodes, operation)
-                node_ids = runner_nodes + [node_id for node_id in kikimr.cluster.slots if node_id not in runner_nodes]
-                for node_id in node_ids:
-                    node = kikimr.cluster.slots[node_id]
-                    logger.info('Restarting compute node %s', node_id)
-                    node.set_log_file_prefix('logfile_restarted_')
-                    node.kill()  # KiKiMRNode.kill() also starts the node again.
-                kikimr.wait_kqp_node_count(len(kikimr.cluster.slots))
-                kikimr.recreate_driver()
-                client = kikimr.ydb_client
-                restarted = True
-
+                # The operation can still be finalizing after its runner has
+                # exited. Wait for readiness instead of assuming it is alive.
+                assert len(runner_nodes) <= 1, (runner_nodes, operation)
+                if runner_nodes:
+                    node_ids = runner_nodes + [
+                        node_id for node_id in kikimr.cluster.slots if node_id not in runner_nodes
+                    ]
+                    for node_id in node_ids:
+                        node = kikimr.cluster.slots[node_id]
+                        logger.info('Restarting compute node %s', node_id)
+                        node.set_log_file_prefix('logfile_restarted_')
+                        node.kill()  # KiKiMRNode.kill() also starts the node again.
+                    kikimr.wait_kqp_node_count(len(kikimr.cluster.slots))
+                    kikimr.recreate_driver()
+                    client = kikimr.ydb_client
+                    restarted = True
             assert time.monotonic() < deadline, f'Script did not finish within {timeout}s: {operation}'
             time.sleep(0.01)
 

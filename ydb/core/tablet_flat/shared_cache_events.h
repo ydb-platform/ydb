@@ -134,7 +134,7 @@ namespace NKikimr::NSharedCache {
         TIntrusivePtr<NPageCollection::TPagesWaitPad> WaitPad;
         NWilson::TTraceId TraceId;
         const ui64 Cookie;
-        // Read-only metadata lookup; ownership is established by ordinary requests/attachment.
+        // Find or register matching metadata and retain it until the sender detaches or unregisters
         const bool MetaOnly;
     };
 

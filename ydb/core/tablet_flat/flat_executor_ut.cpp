@@ -4415,18 +4415,33 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
             followerSysActor = ev->Sender;
             Cerr << "... observed TEvTablet::TEvFBoot" << Endl;
         });
-        TBlockEvents<NSharedCache::TEvRequest> blockedFollowerRequests(env.Env);
+        TBlockEvents<NSharedCache::TEvResult> blockedFollowerReplies(env.Env, [](const auto& ev) {
+            return ev->Cookie == static_cast<ui64>(NSharedCache::ERequestTypeCookie::BootLogic) &&
+                   bool(ev->Get()->SharedMeta);
+        });
         env.FireFollower(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
             return new TTestFlatTablet(env.Edge, tablet, info);
         }, /* followerId */ 1);
-        env->WaitFor("follower shared cache requests", [&]{ return blockedFollowerRequests.size() > 0; });
+        env->WaitFor("follower metadata registration", [&] {
+            return !blockedFollowerReplies.empty();
+        });
+        const auto followerExecutor = blockedFollowerReplies.front()->GetRecipientRewrite();
+        const auto registeredMetadata = blockedFollowerReplies.front()->Get()->PageCollection->Label();
+        const auto abandonedAttempt = blockedFollowerReplies.front()->Get()->Cookie;
+        bool retiredMetadata = false;
+        auto metadataCleanup = env->AddObserver<NSharedCache::TEvDetach>([&](const auto& ev) {
+            if (ev->Sender == followerExecutor && ev->Get()->PageCollectionId == registeredMetadata) {
+                retiredMetadata = true;
+            }
+        });
 
         Cerr << "... stopping leader" << Endl;
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.WaitForGone();
 
-        blockedFollowerRequests.Stop();
-        TBlockEvents<NSharedCache::TEvRequest> blockedLeaderRequests(env.Env);
+        TBlockEvents<NSharedCache::TEvRequest> blockedLeaderRequests(env.Env, [&](const auto& ev) {
+            return ev->Sender == followerExecutor;
+        });
 
         TActorId leaderSysActor;
         auto leaderBootObserver = env->AddObserver<TEvTablet::TEvBoot>([&](auto& ev) {
@@ -4441,15 +4456,23 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
             env->Send(new IEventHandle(followerSysActor, followerSysActor, promote), 0, /* viaActorSystem */ true);
         }
         env->WaitFor("promoted shared cache requests", [&]{ return blockedLeaderRequests.size() > 0; });
+        UNIT_ASSERT(retiredMetadata);
+        UNIT_ASSERT_VALUES_EQUAL(GetSharedPageCounters(env)->PageCollectionOwners->Val(), 0);
+
+        // Dispatch the abandoned reply while the replacement boot is still waiting for its own request
+        Cerr << "... unblocking earlier replies" << Endl;
+        TWaitForFirstEvent<NSharedCache::TEvResult> staleReply(*env, [&](const auto& ev) {
+            return ev->GetRecipientRewrite() == followerExecutor && ev->Get()->Cookie == abandonedAttempt &&
+                   bool(ev->Get()->SharedMeta);
+        });
+        blockedFollowerReplies.Stop().Unblock();
+        staleReply.Wait(TDuration::Seconds(5));
 
         Cerr << "... unblocking promoted requests" << Endl;
         blockedLeaderRequests.Stop().Unblock();
-        env->SimulateSleep(TDuration::MilliSeconds(10));
-
-        // Simulate reordering replies by reordering requests
-        Cerr << "... unblocking earlier requests" << Endl;
-        blockedFollowerRequests.Unblock();
-        env->SimulateSleep(TDuration::MilliSeconds(10));
+        env.WaitForWakeUp();
+        env.SendAsync(new TEvTestFlatTablet::TEvQueueScan(rows.Rows()));
+        env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
     }
 
 }
@@ -4818,8 +4841,78 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Cold) {
 
         // We must see all 100 rows
         Cerr << "...starting scan" << Endl;
-        env.SendAsync(new TEvTestFlatTablet::TEvQueueScan(rows.Rows()));
-        env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        for (bool cancel : { true, false }) {
+            WakeupSharedCache(env);
+            const auto counters = GetSharedPageCounters(env);
+            const auto ownersBefore = counters->Owners->Val();
+            THashMap<TActorId, THashSet<TLogoBlobID>> metadataRequests;
+            THashSet<TLogoBlobID> ownershipRequests;
+            THashSet<TActorId> unregistered;
+            TActorId driver;
+            auto observeMetadata = env->AddObserver<NSharedCache::TEvRequest>([&](const auto& event) {
+                if (event->Get()->MetaOnly) {
+                    const auto& id = event->Get()->PageCollection->Label();
+                    if (event->Sender == driver) {
+                        ownershipRequests.insert(id);
+                    } else {
+                        metadataRequests[event->Sender].insert(id);
+                    }
+                }
+            });
+            auto observeUnregister = env->AddObserver<NSharedCache::TEvUnregister>([&](const auto& event) {
+                if (!cancel) {
+                    if (const auto* collections = metadataRequests.FindPtr(event->Sender)) {
+                        for (const auto& id : *collections) {
+                            UNIT_ASSERT_C(ownershipRequests.contains(id),
+                                "Cold loader released " << id << " before scan ownership was registered");
+                        }
+                    }
+                }
+                unregistered.insert(event->Sender);
+            });
+            TBlockEvents<IEventHandle> completions(*env, [&](const auto& event) {
+                return metadataRequests.contains(event->Sender) &&
+                       event->GetTypeRewrite() >= EventSpaceBegin(TKikimrEvents::ES_PRIVATE) &&
+                       event->GetTypeRewrite() < EventSpaceEnd(TKikimrEvents::ES_PRIVATE);
+            });
+
+            const auto expectedStatus = cancel ? NTable::EStatus::Term : NTable::EStatus::Done;
+            env.SendAsync(new TEvTestFlatTablet::TEvQueueScan(rows.Rows(), false, false, expectedStatus));
+            env->WaitFor("cold part completion awaiting scan ownership", [&] {
+                return !completions.empty();
+            }, TDuration::Seconds(5));
+            const auto loader = completions.front()->Sender;
+            driver = completions.front()->GetRecipientRewrite();
+            env->SimulateSleep(TDuration::MilliSeconds(1));
+            UNIT_ASSERT(!unregistered.contains(loader));
+
+            // The loader remains a cache owner while its parent has not accepted the part
+            TWaitForFirstEvent<NSharedCache::TEvUpdated> updated(*env, [&](const auto& event) {
+                return event->GetRecipientRewrite() == loader;
+            });
+            env->Send(loader, env.Edge, new NSharedCache::TEvUpdated(), 0, true);
+            updated.Wait(TDuration::Seconds(5));
+
+            if (cancel) {
+                env.SendSync(new TEvTestFlatTablet::TEvCancelScan());
+            } else {
+                completions.Stop().Unblock();
+                env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            }
+            env->WaitFor("cold loader and scan ownership released", [&] {
+                return unregistered.contains(driver) && AllOf(metadataRequests, [&](const auto& item) {
+                    return unregistered.contains(item.first);
+                });
+            }, TDuration::Seconds(5));
+
+            if (cancel) {
+                // A late completion must not register ownership for an already cancelled scan
+                completions.Stop().Unblock();
+                WakeupSharedCache(env);
+                UNIT_ASSERT(ownershipRequests.empty());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(counters->Owners->Val(), ownersBefore);
+        }
 
         for (ui32 attempt = 1; attempt <= 3; ++attempt) {
             // Restart tablet, so cold tables are loaded at boot time

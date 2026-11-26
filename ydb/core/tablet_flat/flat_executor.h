@@ -453,6 +453,8 @@ class TExecutor
     TWaitingSnaps WaitingSnapshots;
 
     ui64 BootAttempt = 0;
+    // Metadata registrations not yet adopted by the private cache
+    THashSet<TLogoBlobID> PendingMetadataCollections;
     THolder<TExecutorBootLogic> BootLogic;
     THolder<TPrivatePageCache> PrivatePageCache;
 
@@ -530,6 +532,7 @@ class TExecutor
     void Active(const TActorContext &ctx);
     void ActivateFollower(const TActorContext &ctx);
     void RecreatePrivateCache();
+    void ReleasePendingMetadata(const TExecutorCaches& retained = {});
     void ReflectSchemeSettings();
     void OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) override;
     void CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&yellowStopChannels, bool terminal = false);

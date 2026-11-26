@@ -439,7 +439,7 @@ Y_UNIT_TEST_SUITE(TSharedCacheMetadataMemory) {
         return collection;
     }
 
-    Y_UNIT_TEST(MetaLookupReusesRegisteredCoreWithoutAddingOwner) {
+    Y_UNIT_TEST(MetaLookupReusesRegisteredCoreAndRetainsOwner) {
         TSharedPageCacheMock sharedCache;
         TRecord record(0);
         auto raw = record.Finish();
@@ -463,16 +463,19 @@ Y_UNIT_TEST_SUITE(TSharedCacheMetadataMemory) {
         UNIT_ASSERT(response->Get()->SharedMeta.Get() == registered->GetSharedMeta().Get());
         UNIT_ASSERT(response->Get()->Pages.empty());
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), bytes);
         sharedCache.Unregister(owner);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
+        sharedCache.Unregister(reader);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 0);
         UNIT_ASSERT(response->Get()->SharedMeta->Raw.data() == raw.data());
     }
 
-    Y_UNIT_TEST(MetaLookupMissDoesNotRegisterCollection) {
+    Y_UNIT_TEST(MetaLookupMissRegistersUntilUnregister) {
         TSharedPageCacheMock sharedCache;
         TRecord record(0);
         auto raw = record.Finish();
@@ -483,9 +486,63 @@ Y_UNIT_TEST_SUITE(TSharedCacheMetadataMemory) {
         auto response = sharedCache.Runtime.GrabEdgeEvent<TEvResult>(reader);
         UNIT_ASSERT(response->Get()->PageCollection.Get() == candidate.Get());
         UNIT_ASSERT(response->Get()->SharedMeta.Get() == candidate->GetSharedMeta().Get());
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), candidate->GetMetadataMemoryUsage());
+        sharedCache.Unregister(reader);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 0);
+        UNIT_ASSERT(response->Get()->SharedMeta.Get() == candidate->GetSharedMeta().Get());
+    }
+
+    Y_UNIT_TEST(MetaLookupConcurrentMissesShareTheFirstRegisteredCore) {
+        TSharedPageCacheMock sharedCache;
+        TRecord record(0);
+        auto raw = record.Finish();
+        const TLargeGlobId id(0, TLogoBlobID(1, 1, 10, 1, raw.size(), 0), raw.size());
+        auto first = MakeIntrusiveConst<NPageCollection::TPageCollection>(id, raw);
+        auto second =
+            MakeIntrusiveConst<NPageCollection::TPageCollection>(id, TSharedData::Copy(raw.data(), raw.size()));
+        UNIT_ASSERT(first->GetSharedMeta().Get() != second->GetSharedMeta().Get());
+        const auto firstReader = sharedCache.Runtime.AllocateEdgeActor();
+        const auto secondReader = sharedCache.Runtime.AllocateEdgeActor();
+
+        // Both lookups precede any ordinary page request or attachment
+        sharedCache.Send(firstReader, new TEvRequest(EPriority::Fast, first, {}, 77, true), 99);
+        sharedCache.Send(secondReader, new TEvRequest(EPriority::Fast, second, {}, 78, true), 100);
+        auto firstReply = sharedCache.Runtime.GrabEdgeEvent<TEvResult>(firstReader);
+        auto secondReply = sharedCache.Runtime.GrabEdgeEvent<TEvResult>(secondReader);
+        UNIT_ASSERT_VALUES_EQUAL(firstReply->Cookie, 99);
+        UNIT_ASSERT_VALUES_EQUAL(secondReply->Cookie, 100);
+        UNIT_ASSERT_VALUES_EQUAL(firstReply->Get()->Cookie, 77);
+        UNIT_ASSERT_VALUES_EQUAL(secondReply->Get()->Cookie, 78);
+        UNIT_ASSERT(firstReply->Get()->PageCollection.Get() == first.Get());
+        UNIT_ASSERT(secondReply->Get()->PageCollection.Get() == second.Get());
+        UNIT_ASSERT(firstReply->Get()->SharedMeta.Get() == first->GetSharedMeta().Get());
+        UNIT_ASSERT(secondReply->Get()->SharedMeta.Get() == first->GetSharedMeta().Get());
+        UNIT_ASSERT(firstReply->Get()->Pages.empty());
+        UNIT_ASSERT(secondReply->Get()->Pages.empty());
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), first->GetMetadataMemoryUsage());
+
+        sharedCache.Unregister(firstReader);
+        sharedCache.Send(secondReader, new TEvRequest(EPriority::Fast, second, {}, 79, true));
+        auto repeated = sharedCache.Runtime.GrabEdgeEvent<TEvResult>(secondReader);
+        UNIT_ASSERT(repeated->Get()->SharedMeta.Get() == first->GetSharedMeta().Get());
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 1);
+        sharedCache.Unregister(secondReader);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 0);
+
+        // Once the registry entry expires a later load can establish a new core
+        sharedCache.Send(secondReader, new TEvRequest(EPriority::Fast, second, {}, 80, true));
+        auto fresh = sharedCache.Runtime.GrabEdgeEvent<TEvResult>(secondReader);
+        UNIT_ASSERT(fresh->Get()->SharedMeta.Get() == second->GetSharedMeta().Get());
+        sharedCache.Unregister(secondReader);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
     }
 
     Y_UNIT_TEST(MetaLookupChecksStorageGroup) {
@@ -506,6 +563,24 @@ Y_UNIT_TEST_SUITE(TSharedCacheMetadataMemory) {
         UNIT_ASSERT(response->Get()->SharedMeta.Get() == candidate->GetSharedMeta().Get());
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->SharedMeta->Group, 1);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
+
+        // The scan's ownership handoff must preserve the same collision fallback
+        const auto parent = sharedCache.Runtime.AllocateEdgeActor();
+        sharedCache.Send(parent, new TEvRequest(EPriority::Fast, candidate, {}, 0, true));
+        auto handoff = sharedCache.Runtime.GrabEdgeEvent<TEvResult>(parent);
+        UNIT_ASSERT(handoff->Get()->SharedMeta.Get() == candidate->GetSharedMeta().Get());
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
+        sharedCache.Unregister(parent);
+
+        auto matching = MakeIntrusiveConst<NPageCollection::TPageCollection>(id, raw);
+        sharedCache.Send(reader, new TEvRequest(EPriority::Fast, matching, {}, 0, true));
+        auto original = sharedCache.Runtime.GrabEdgeEvent<TEvResult>(reader);
+        UNIT_ASSERT(original->Get()->SharedMeta.Get() == registered->GetSharedMeta().Get());
+        UNIT_ASSERT_VALUES_EQUAL(original->Get()->SharedMeta->Group, 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 2);
+        sharedCache.Unregister(reader);
+        sharedCache.Unregister(owner);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
     }
 
     Y_UNIT_TEST(RequestOutlivesCollectionTeardown) {

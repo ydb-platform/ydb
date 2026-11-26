@@ -484,12 +484,21 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             const auto* candidate = dynamic_cast<const NPageCollection::TPageCollection*>(msg->PageCollection.Get());
             Y_ENSURE(candidate);
             auto sharedMeta = candidate->GetSharedMeta();
+            auto descriptor = msg->PageCollection;
             if (const auto* entry = Collections.FindPtr(pageCollectionId)) {
                 const auto* existing =
                     dynamic_cast<const NPageCollection::TPageCollection*>(entry->PageCollection.Get());
                 if (existing && existing->LargeGlobId == candidate->LargeGlobId) {
-                    sharedMeta = existing->GetSharedMeta();
+                    descriptor = entry->PageCollection;
+                } else if (entry->PageCollection || entry->TotalPages != candidate->Total()) {
+                    // A different storage identity must not replace the registered descriptor
+                    descriptor.Reset();
                 }
+            }
+            if (descriptor) {
+                // Publish the first candidate before replying, and retain it through the sender's ownership
+                const auto& collection = AttachCollection(pageCollectionId, std::move(descriptor), ev->Sender);
+                sharedMeta = collection.PageCollection->GetSharedMeta();
             }
             auto result = MakeHolder<TEvResult>(std::move(msg->PageCollection), NKikimrProto::OK, msg->Cookie);
             result->SharedMeta = std::move(sharedMeta);

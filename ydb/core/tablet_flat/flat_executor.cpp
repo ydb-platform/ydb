@@ -286,6 +286,8 @@ void TExecutor::RecreatePrivateCache()
         }
     }
 
+    ReleasePendingMetadata();
+
     if (TransactionWaitPads) {
         auto it = TransactionWaitPads.begin();
         while (it != TransactionWaitPads.end()) {
@@ -872,6 +874,7 @@ void TExecutor::AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCo
     auto syncPages = PrivatePageCache->AddPageCollection(pageCollection);
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode(),
         std::move(btreeSeeds), replayStickyWalk));
+    PendingMetadataCollections.erase(pageCollection->Id);
 
     if (syncPages) {
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvSync(std::move(syncPages)));
@@ -935,6 +938,17 @@ void TExecutor::UpdateCachePagesForDatabase(bool pendingOnly) {
     }
 }
 
+void TExecutor::ReleasePendingMetadata(const TExecutorCaches& retained) {
+    for (auto it = PendingMetadataCollections.begin(); it != PendingMetadataCollections.end();) {
+        if (retained.PageCollections.contains(*it)) {
+            ++it;
+        } else {
+            Send(MakeSharedPageCacheId(), new NSharedCache::TEvDetach(*it));
+            PendingMetadataCollections.erase(it++);
+        }
+    }
+}
+
 TExecutorCaches TExecutor::CleanupState() {
     TExecutorCaches caches;
 
@@ -964,6 +978,9 @@ TExecutorCaches TExecutor::CleanupState() {
     Y_ENSURE(!CompactionLogic);
     BorrowLogic.Destroy();
     VacuumLogic.Destroy();
+
+    // Preserve reusable cores; retire abandoned lookups before the next boot can issue requests
+    ReleasePendingMetadata(caches);
 
     return caches;
 }
@@ -998,7 +1015,8 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
 
     auto executorCaches = CleanupState();
 
-    BootLogic.Reset(new TExecutorBootLogic(this, SelfId(), ++BootAttempt, Owner->Info(), maxBootBytesInFly));
+    BootLogic.Reset(new TExecutorBootLogic(
+        this, SelfId(), ++BootAttempt, Owner->Info(), maxBootBytesInFly, PendingMetadataCollections));
 
     ProcessIoStats(
         NBlockIO::EDir::Read, NBlockIO::EPriority::Fast,
@@ -1039,7 +1057,8 @@ void TExecutor::FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext 
 
     auto executorCaches = CleanupState();
 
-    BootLogic.Reset(new TExecutorBootLogic(this, SelfId(), ++BootAttempt, Owner->Info(), maxBootBytesInFly));
+    BootLogic.Reset(new TExecutorBootLogic(
+        this, SelfId(), ++BootAttempt, Owner->Info(), maxBootBytesInFly, PendingMetadataCollections));
 
     ProcessIoStats(
         NBlockIO::EDir::Read, NBlockIO::EPriority::Fast,
@@ -1474,6 +1493,10 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
         if (auto fetch = stage->Loader.Run({.PreloadIndex = true, .PreloadData = PreloadTablesData.contains(partSwitch.TableId)})) {
             stage->Fetching = fetch.PageCollection.Get();
 
+            if (fetch.MetaOnly &&
+                (!PrivatePageCache || !PrivatePageCache->FindPageCollection(fetch.PageCollection->Label()))) {
+                PendingMetadataCollections.insert(fetch.PageCollection->Label());
+            }
             Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
                 NBlockIO::EPriority::Fast, std::move(fetch.PageCollection), std::move(fetch.Pages), 0, fetch.MetaOnly),
                 0, ui64(ERequestTypeCookie::PendingInit));

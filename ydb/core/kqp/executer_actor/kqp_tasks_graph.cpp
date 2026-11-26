@@ -2480,12 +2480,7 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
 
         FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
 
-<<<<<<< HEAD
-        AddQueryPathParam(task, GetMeta().UserRequestContext);
         if (externalSource.GetType() == "PqSource" && i == 0) {   // Only first task will check partition count.
-=======
-        if (externalSource.GetType() == NYql::PqSource && i == 0) {   // Only first task will check partition count.
->>>>>>> b6543706f32 (dq streamlookup: add counters in kqp [alternative] (#53046))
             task.Meta.TaskParams.emplace("partition_count_check_enabled", "true");
         }
         tasksIds.push_back(task.Id);

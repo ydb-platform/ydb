@@ -48,9 +48,7 @@ void TTablet::SendFollowerAttach(const TActorId& leader) {
     FollowerInfo.LastCookie = ++LastInterconnectSubscribeCookie;
     auto attach = MakeHolder<TEvTablet::TEvFollowerAttach>(TabletID(), FollowerInfo.FollowerAttempt);
     if (CanAcceptPipeConnections()) {
-        auto* ready = attach->Record.MutableReadyFollower();
-        ActorIdToProto(UserTablet, ready->MutableUserActorId());
-        ready->SetFollowerId(FollowerId);
+        TEvTablet::SetReadyFollower(attach->Record.MutableReadyFollower(), FollowerId, UserTablet);
     }
     Send(FollowerInfo.KnownLeaderID,
         attach.Release(),
@@ -2324,8 +2322,7 @@ void TTablet::SendTabletStateUpdate(const TTabletStateSubscriber& subscriber,
             if (follower.FollowerTablet && follower.SyncState != EFollowerSyncState::Ignore) {
                 auto* ready = replyMsg->Record.AddReadyFollowers();
                 ActorIdToProto(follower.FollowerId, ready->MutableActorId());
-                ActorIdToProto(follower.FollowerTablet, ready->MutableUserActorId());
-                ready->SetFollowerId(follower.TabletFollowerId);
+                TEvTablet::SetReadyFollower(ready, follower.TabletFollowerId, follower.FollowerTablet);
             }
         };
         if (readyFollower) {

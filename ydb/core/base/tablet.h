@@ -577,6 +577,11 @@ struct TEvTablet {
         {}
     };
 
+    static void SetReadyFollower(NKikimrTabletBase::TReadyFollower* ready, ui32 followerId, const TActorId& userActorId) {
+        ActorIdToProto(userActorId, ready->MutableUserActorId());
+        ready->SetFollowerId(followerId);
+    }
+
     struct TEvFollowerAttach : public TEventPB<TEvFollowerAttach, NKikimrTabletBase::TEvFollowerAttach, EvFollowerAttach> {
         TEvFollowerAttach()
         {}
@@ -594,9 +599,7 @@ struct TEvTablet {
         TEvFollowerReady(ui64 tabletId, ui32 followerAttempt, ui32 followerId, const TActorId& userTablet) {
             Record.SetTabletId(tabletId);
             Record.SetFollowerAttempt(followerAttempt);
-            auto* ready = Record.MutableReadyFollower();
-            ActorIdToProto(userTablet, ready->MutableUserActorId());
-            ready->SetFollowerId(followerId);
+            SetReadyFollower(Record.MutableReadyFollower(), followerId, userTablet);
         }
     };
 

@@ -9,6 +9,7 @@
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/algorithm.h>
 
 namespace NKikimr {
 
@@ -104,7 +105,9 @@ Y_UNIT_TEST_SUITE(TabletState) {
                     return false;
                 }
                 const auto& record = ev.Get<TEvTablet::TEvTabletStateUpdate>()->Record;
-                return record.ReadyFollowersSize() == 1 && record.GetReadyFollowers(0).GetFollowerId() == id;
+                return AnyOf(record.GetReadyFollowers(), [id](const auto& follower) {
+                    return follower.GetFollowerId() == id;
+                });
             });
             UNIT_ASSERT(runtime.DispatchEvents(options, TDuration::Seconds(30)));
             return actor;
@@ -145,16 +148,14 @@ Y_UNIT_TEST_SUITE(TabletState) {
         UNIT_ASSERT_VALUES_EQUAL(stillLeader->Get()->Tablet, leader);
         UNIT_ASSERT_VALUES_EQUAL(resolverLookups, 1u);
 
-        const ui32 nextFollowerId = followerId + 1;
-        const auto nextFollower = startFollower(nextFollowerId);
-        runtime.GrabEdgeEventRethrow<TEvTablet::TEvRestored>(sender);
-
-        // A new announcement must discard expired, unconfirmed actor incarnations.
-        // Ask for the old ID first, before a follower lookup could clean it up.
+        // The first follower request after expiry must miss even without another announcement.
         const auto expiredFollower = resolve(flags);
         UNIT_ASSERT_UNEQUAL(expiredFollower->Get()->Status, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(resolverLookups, 2u);
 
+        const ui32 nextFollowerId = followerId + 1;
+        const auto nextFollower = startFollower(nextFollowerId);
+        runtime.GrabEdgeEventRethrow<TEvTablet::TEvRestored>(sender);
         flags.SetFollowerId(nextFollowerId);
         const auto currentFollower = resolve(flags);
         UNIT_ASSERT_VALUES_EQUAL(currentFollower->Get()->Status, NKikimrProto::OK);

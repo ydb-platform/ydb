@@ -18,9 +18,8 @@
 #include <ydb/core/util/queue_inplace.h>
 #include <util/generic/map.h>
 #include <util/generic/deque.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/random_provider/random_provider.h>
-
-#include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_RESOLVER
 
@@ -52,7 +51,13 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
     };
 
-    using TFollowerInfo = TEvStateStorage::TEvInfo::TFollowerInfo;
+    struct TCachedFollower {
+        TActorId UserActorId;
+        TEvStateStorage::TEvInfo::TFollowerIdHolder FollowerId;
+        ui64 CacheEpoch = 0;
+        // State Storage confirms the entry until the next lookup.
+        TMonotonic ExpiresAt = TMonotonic::Max();
+    };
 
     struct TEntry {
         enum EState : ui8 {
@@ -99,7 +104,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         TMonotonic LastResolved;
 
-        TVector<TFollowerInfo> KnownFollowers;
+        absl::flat_hash_map<TActorId, TCachedFollower, THash<TActorId>> KnownFollowers;
 
         ui64 CacheEpoch = 0;
         ui64 LastCheckEpoch = 0;
@@ -114,15 +119,17 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     struct TResolveInfo {
     public:
         TEvTabletResolver::TEvForward::TResolveFlags ResFlags;
+        TMonotonic Now;
         TDuration SinceLastResolve;
         ui32 NumLocal;
         ui32 NumLocalDc;
         ui32 NumOtherDc;
         bool* NeedFollowerUpdate;
 
-        TResolveInfo(const TEvTabletResolver::TEvForward& msg, const TDuration& sinceResolve, bool* needFollowerUpdate)
+        TResolveInfo(const TEvTabletResolver::TEvForward& msg, TMonotonic lastResolved, bool* needFollowerUpdate)
             : ResFlags(msg.ResolveFlags)
-            , SinceLastResolve(sinceResolve)
+            , Now(TActivationContext::Monotonic())
+            , SinceLastResolve(Now - lastResolved)
             , NumLocal(0)
             , NumLocalDc(0)
             , NumOtherDc(0)
@@ -228,9 +235,6 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     ui64 LastCacheEpoch = 0;
 
     THashMap<TActorId, TTabletStateSubscription> TabletStateSubscriptions;
-    // A ready announcement can arrive before State Storage knows the follower.
-    // Track only those actors that have not yet appeared in an authoritative reply.
-    THashMap<ui64, THashMap<TActorId, TMonotonic>> UnconfirmedFollowers;
     THashMap<TActorId, TInterconnectSession> InterconnectSessions;
     ui64 LastSeqNo = 0;
 
@@ -281,7 +285,6 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         Y_DEFER {
             TabletCache.Erase(tabletId);
-            UnconfirmedFollowers.erase(tabletId);
             Tablets.erase(tabletId);
         };
 
@@ -390,7 +393,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
     }
 
-    void OnTabletActive(ui64 tabletId, const TActorId& actorId, const TActorId& userActorId) {
+    void OnTabletActive(ui64 tabletId, const TActorId& actorId, const TEvTablet::TEvTabletStateUpdate& update) {
         auto it = Tablets.find(tabletId);
         if (it == Tablets.end()) {
             return;
@@ -401,46 +404,26 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             // When leader is active it implies it's alive
             entry.MarkLeaderAlive();
             if (!entry.KnownLeaderTablet) {
-                entry.KnownLeaderTablet = userActorId;
+                entry.KnownLeaderTablet = update.GetUserActorId();
+            }
+            if (update.Record.ReadyFollowersSize()) {
+                OnReadyFollowers(entry, update);
             }
             return;
         }
 
-        for (auto& followerInfo : entry.KnownFollowers) {
-            if (followerInfo.Follower == actorId) {
-                if (!followerInfo.FollowerTablet) {
-                    followerInfo.FollowerTablet = userActorId;
-                }
-                break;
-            }
+        auto follower = entry.KnownFollowers.find(actorId);
+        if (follower != entry.KnownFollowers.end() && !follower->second.UserActorId) {
+            follower->second.UserActorId = update.GetUserActorId();
         }
     }
 
-    void OnReadyFollowers(ui64 tabletId, const TActorId& leader, const TEvTablet::TEvTabletStateUpdate& update) {
-        auto it = Tablets.find(tabletId);
-        if (it == Tablets.end() || it->second.KnownLeader != leader) {
-            return;
-        }
-
-        TEntry& entry = it->second;
+    void OnReadyFollowers(TEntry& entry, const TEvTablet::TEvTabletStateUpdate& update) {
         const TMonotonic now = TActivationContext::Monotonic();
-        // Leader-only traffic does not refresh the State Storage follower list.
-        if (auto pendingIt = UnconfirmedFollowers.find(tabletId); pendingIt != UnconfirmedFollowers.end()) {
-            auto& pending = pendingIt->second;
-            auto newEnd = std::remove_if(entry.KnownFollowers.begin(), entry.KnownFollowers.end(),
-                [&](const TFollowerInfo& follower) {
-                    auto expired = pending.find(follower.Follower);
-                    if (expired != pending.end() && expired->second <= now) {
-                        pending.erase(expired);
-                        return true;
-                    }
-                    return false;
-                });
-            entry.KnownFollowers.erase(newEnd, entry.KnownFollowers.end());
-            if (pending.empty()) {
-                UnconfirmedFollowers.erase(pendingIt);
-            }
-        }
+        const ui64 epoch = ++LastCacheEpoch;
+        absl::erase_if(entry.KnownFollowers, [now](const auto& item) {
+            return item.second.ExpiresAt <= now;
+        });
         for (const auto& ready : update.Record.GetReadyFollowers()) {
             const TActorId actorId = ActorIdFromProto(ready.GetActorId());
             const TActorId userActorId = ActorIdFromProto(ready.GetUserActorId());
@@ -448,24 +431,14 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 continue;
             }
 
-            const auto followerId = TEvStateStorage::TEvInfo::TFollowerIdHolder(ready.GetFollowerId());
-            auto known = std::find_if(entry.KnownFollowers.begin(), entry.KnownFollowers.end(),
-                [&](const TFollowerInfo& follower) { return follower.Follower == actorId; });
-            if (known == entry.KnownFollowers.end()) {
-                entry.KnownFollowers.emplace_back(actorId, userActorId, followerId);
-                UnconfirmedFollowers[tabletId].emplace(actorId, now + TabletResolverFollowerRefreshPeriod);
-            } else {
-                // State Storage may list this actor without an ID. Preserve that result for explicit routing.
-                known->FollowerTablet = userActorId;
-            }
-        }
-    }
-
-    void ForgetUnconfirmedFollower(ui64 tabletId, const TActorId& actorId) {
-        if (auto it = UnconfirmedFollowers.find(tabletId); it != UnconfirmedFollowers.end()) {
-            it->second.erase(actorId);
-            if (it->second.empty()) {
-                UnconfirmedFollowers.erase(it);
+            auto [itFollower, inserted] = entry.KnownFollowers.try_emplace(actorId);
+            auto& follower = itFollower->second;
+            follower.UserActorId = userActorId;
+            follower.CacheEpoch = epoch;
+            if (inserted) {
+                // Keep the ID (including an unknown ID) once State Storage has supplied it.
+                follower.FollowerId = TEvStateStorage::TEvInfo::TFollowerIdHolder(ready.GetFollowerId());
+                follower.ExpiresAt = now + TabletResolverFollowerRefreshPeriod;
             }
         }
     }
@@ -505,11 +478,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
 
         for (auto it = entry.KnownFollowers.begin(); it != entry.KnownFollowers.end(); ++it) {
-            if (it->Follower == actorId || it->FollowerTablet == actorId) {
+            if (it->first == actorId || it->second.UserActorId == actorId) {
                 YDB_LOG_TRACE("Removing follower",
                     {"tabletId", tabletId},
-                    {"followerNodeId", it->Follower});
-                ForgetUnconfirmedFollower(tabletId, it->Follower);
+                    {"followerNodeId", it->first});
                 entry.KnownFollowers.erase(it);
                 if (entry.State == TEntry::StNormal) {
                     entry.State = TEntry::StResolve;
@@ -620,10 +592,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                                 co_return;
 
                             case NKikimrTabletBase::TEvTabletStateUpdate::StateActive:
-                                OnTabletActive(tabletId, actorId, msg->GetUserActorId());
-                                if (msg->Record.ReadyFollowersSize()) {
-                                    OnReadyFollowers(tabletId, actorId, *msg);
-                                }
+                                OnTabletActive(tabletId, actorId, *msg);
                                 break;
 
                             default:
@@ -733,7 +702,11 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
 
         if (allowFollowers) {
-            for (const auto& followerInfo : entry.KnownFollowers) {
+            for (const auto& [actorId, followerInfo] : entry.KnownFollowers) {
+                if (followerInfo.ExpiresAt <= info.Now) {
+                    continue;
+                }
+
                 // If the caller requested an explicit follower ID, disregard all followers,
                 // which have different follower IDs
                 //
@@ -749,8 +722,8 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                     }
                 }
 
-                bool isLocal = (followerInfo.Follower.NodeId() == selfNode);
-                bool isLocalDc = selfDc && FindNodeDc(followerInfo.Follower.NodeId()) == selfDc;
+                bool isLocal = (actorId.NodeId() == selfNode);
+                bool isLocalDc = selfDc && FindNodeDc(actorId.NodeId()) == selfDc;
                 info.Count(isLocal, isLocalDc);
 
                 ui32 prio = info.ResFlags.GetTabletPriority(isLocal, isLocalDc, true);
@@ -763,8 +736,8 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 addCandidate(
                     prio,
                     TCandidate{
-                        .KnownLeader = followerInfo.Follower,
-                        .KnownLeaderTablet = followerInfo.FollowerTablet,
+                        .KnownLeader = actorId,
+                        .KnownLeaderTablet = followerInfo.UserActorId,
                         .IsLocal = isLocal,
                         .IsLocalDc = isLocalDc,
                         .IsLeader = false,
@@ -835,7 +808,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
     bool SendForward(const TActorId& sender, ui64 cookie, const TEntry& entry, TEvTabletResolver::TEvForward* msg,
                      bool* needFollowerUpdate = nullptr) {
-        TResolveInfo info(*msg, TActivationContext::Monotonic() - entry.LastResolved, needFollowerUpdate); // fills needFollowerUpdate in dtor
+        TResolveInfo info(*msg, entry.LastResolved, needFollowerUpdate); // fills needFollowerUpdate in dtor
         const std::pair<TActorId, TActorId> endpoint = SelectForward(entry, info, msg->TabletID);
         if (endpoint.first) {
             Send(sender, new TEvTabletResolver::TEvForwardResult(msg->TabletID, endpoint.second, endpoint.first, LastCacheEpoch), 0, cookie);
@@ -905,33 +878,23 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
         }
 
-        const TMonotonic now = TActivationContext::Monotonic();
-        if (auto it = UnconfirmedFollowers.find(entry.TabletId); it != UnconfirmedFollowers.end()) {
-            auto& unconfirmed = it->second;
-            if (sameLeader) {
-                for (const auto& follower : msg.Followers) {
-                    unconfirmed.erase(follower.Follower);
-                }
-                for (const auto& follower : entry.KnownFollowers) {
-                    if (auto pending = unconfirmed.find(follower.Follower); pending != unconfirmed.end()) {
-                        if (pending->second > now) {
-                            msg.Followers.push_back(follower);
-                        } else {
-                            unconfirmed.erase(pending);
-                        }
-                    }
-                }
-            } else {
-                unconfirmed.clear();
-            }
-            if (unconfirmed.empty()) {
-                UnconfirmedFollowers.erase(it);
-            }
-        }
-        entry.KnownFollowers = std::move(msg.Followers);
-
-        entry.LastResolved = now;
+        entry.LastResolved = TActivationContext::Monotonic();
         entry.CacheEpoch = ++LastCacheEpoch;
+        for (const auto& follower : msg.Followers) {
+            entry.KnownFollowers.insert_or_assign(follower.Follower, TCachedFollower{
+                .UserActorId = follower.FollowerTablet,
+                .FollowerId = follower.FollowerId,
+                .CacheEpoch = entry.CacheEpoch,
+            });
+        }
+
+        // Only a live announcement from this leader may outlast a lookup that omits it.
+        absl::erase_if(entry.KnownFollowers, [&](const auto& item) {
+            const auto& follower = item.second;
+            return follower.CacheEpoch != entry.CacheEpoch &&
+                (!sameLeader || follower.ExpiresAt == TMonotonic::Max() || follower.ExpiresAt <= entry.LastResolved);
+        });
+        CheckDelayedNodeProblem(entry);
 
         YDB_LOG_DEBUG("Applied tablet entry",
             {"tabletId", msg.TabletID},
@@ -980,50 +943,34 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         return entry;
     }
 
-    void CheckDelayedNodeProblem(ui64 tabletId) {
-        auto it = Tablets.find(tabletId);
-        if (it == Tablets.end()) {
-            return;
-        }
-
-        TEntry& entry = it->second;
-        if (entry.CacheEpoch < LastNodeProblemsUpdateEpoch && entry.LastCheckEpoch < LastNodeProblemsUpdateEpoch) {
+    void CheckDelayedNodeProblem(TEntry& entry) {
+        if (entry.LastCheckEpoch < LastNodeProblemsUpdateEpoch) {
             entry.LastCheckEpoch = LastCacheEpoch;
 
             if (entry.State == TEntry::StNormal) {
                 auto* pMaxProblemEpoch = NodeProblems.FindPtr(entry.KnownLeader.NodeId());
                 if (pMaxProblemEpoch && entry.CacheEpoch <= *pMaxProblemEpoch) {
                     YDB_LOG_DEBUG("Delayed leader invalidation",
-                        {"tabletId", tabletId},
+                        {"tabletId", entry.TabletId},
                         {"leaderNodeId", entry.KnownLeader});
                     entry.CurrentLeaderProblem = true;
                 }
             }
 
-            auto itDst = entry.KnownFollowers.begin();
-            auto itSrc = entry.KnownFollowers.begin();
-            while (itSrc != entry.KnownFollowers.end()) {
-                auto* pMaxProblemEpoch = NodeProblems.FindPtr(itSrc->Follower.NodeId());
-                if (pMaxProblemEpoch && entry.CacheEpoch <= *pMaxProblemEpoch) {
+            const auto removed = absl::erase_if(entry.KnownFollowers, [&](const auto& item) {
+                const auto& [actorId, follower] = item;
+                auto* problemEpoch = NodeProblems.FindPtr(actorId.NodeId());
+                if (problemEpoch && follower.CacheEpoch <= *problemEpoch) {
                     YDB_LOG_DEBUG("Delayed follower invalidation",
-                        {"tabletId", tabletId},
-                        {"followerNodeId", itSrc->Follower});
-                    ForgetUnconfirmedFollower(tabletId, itSrc->Follower);
-                    ++itSrc;
-                    continue;
+                        {"tabletId", entry.TabletId},
+                        {"followerNodeId", actorId});
+                    return true;
                 }
-                if (itDst != itSrc) {
-                    *itDst = *itSrc;
-                }
-                ++itDst;
-                ++itSrc;
-            }
-            if (itDst != itSrc) {
-                entry.KnownFollowers.erase(itDst, itSrc);
-                if (entry.State == TEntry::StNormal) {
-                    entry.State = TEntry::StResolve;
-                    entry.Wakeup.NotifyOne();
-                }
+                return false;
+            });
+            if (removed && entry.State == TEntry::StNormal) {
+                entry.State = TEntry::StResolve;
+                entry.Wakeup.NotifyOne();
             }
         }
     }
@@ -1032,9 +979,8 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         TEvTabletResolver::TEvForward* msg = ev->Get();
         const ui64 tabletId = msg->TabletID;
 
-        CheckDelayedNodeProblem(tabletId);
-
         TEntry& entry = GetEntry(tabletId);
+        CheckDelayedNodeProblem(entry);
         YDB_LOG_DEBUG("Processing forward request",
             {"tabletId", tabletId},
             {"entryState", TEntry::StateToString(entry.State)},

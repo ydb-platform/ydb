@@ -453,4 +453,57 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
             )");
         });
     }
+
+    Y_UNIT_TEST(SplitTopicByPartitionKey) {
+        TTestWithReboots t;
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            t.Runtime->SetScheduledLimit(400);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreatePQGroup(runtime, ++t.TxId, "/MyRoot/DirA", R"(
+                    Name: "Topic"
+                    TotalGroupCount: 1
+                    PartitionPerTablet: 1
+                    PQTabletConfig {
+                        PartitionConfig { LifetimeSeconds: 10 }
+                        PartitionKeySchema { Name: "key" TypeId: 4 }
+                        PartitionStrategy { PartitionStrategyType: CAN_SPLIT MinPartitionCount: 1 MaxPartitionCount: 10 }
+                        SplitByPartitionKey: true
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            NKikimrSchemeOp::TPersQueueGroupDescription alter;
+            alter.SetName("Topic");
+            auto* split = alter.AddSplit();
+            split->SetPartition(0);
+            const TVector<TCell> boundaryCells = {TCell::Make<ui64>(1000)};
+            const auto boundary = TSerializedCellVec::Serialize(boundaryCells);
+            split->SetSplitBoundary(boundary);
+            TestAlterPQGroup(runtime, ++t.TxId, "/MyRoot/DirA", alter.ShortDebugString());
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                const auto topic = DescribePath(runtime, "/MyRoot/DirA/Topic");
+                const auto& group = topic.GetPathDescription().GetPersQueueGroup();
+                UNIT_ASSERT(group.GetPQTabletConfig().GetSplitByPartitionKey());
+                UNIT_ASSERT_VALUES_EQUAL(group.PartitionsSize(), 3);
+                ui32 leftChildren = 0;
+                ui32 rightChildren = 0;
+                for (const auto& partition : group.GetPartitions()) {
+                    if (partition.GetStatus() != NKikimrPQ::ETopicPartitionStatus::Active) {
+                        continue;
+                    }
+                    leftChildren += partition.GetKeyRange().GetToBound() == boundary;
+                    rightChildren += partition.GetKeyRange().GetFromBound() == boundary;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(leftChildren, 1);
+                UNIT_ASSERT_VALUES_EQUAL(rightChildren, 1);
+            }
+        });
+    }
 }

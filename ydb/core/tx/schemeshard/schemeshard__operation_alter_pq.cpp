@@ -43,7 +43,8 @@ bool IsTableKeyStrictlyInsidePartition(const TString& key, const TMaybe<TTopicTa
         const TSerializedCellVec boundCells(bound);
         return CompareTypedCellVectors(cells.GetCells().data(), boundCells.GetCells().data(), keyTypes.data(), keyTypes.size());
     };
-    const bool afterStart = !partition || !partition->FromBound || compareWith(*partition->FromBound) > 0;
+    const TString minKey = TSerializedCellVec::Serialize(TVector<TCell>(keyTypes.size()));
+    const bool afterStart = compareWith(partition && partition->FromBound ? *partition->FromBound : minKey) > 0;
     const bool beforeEnd = !partition || !partition->ToBound || compareWith(*partition->ToBound) < 0;
     return afterStart && beforeEnd;
 }

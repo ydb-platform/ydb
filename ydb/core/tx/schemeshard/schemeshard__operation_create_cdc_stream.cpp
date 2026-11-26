@@ -369,10 +369,9 @@ public:
             return result;
         }
 
-        const bool keyRangeHeartbeats = ShouldUseKeyRangeHeartbeats(streamDesc, AppData()->FeatureFlags);
-        if (keyRangeHeartbeats && (op.HasTopicPartitions() || op.GetTopicAutoPartitioning())) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                "TopicPartitions and TopicAutoPartitioning are not supported for CDC streams with key range heartbeats");
+        const auto [heartbeatMode, heartbeatModeError] = ChooseHeartbeatMode(op, AppData()->FeatureFlags);
+        if (!heartbeatMode) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, heartbeatModeError);
             return result;
         }
 
@@ -421,9 +420,7 @@ public:
 
         context.SS->CdcStreams.Set(pathId, stream);
 
-        if (keyRangeHeartbeats) {
-            stream->AlterData->HeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
-        }
+        stream->AlterData->HeartbeatMode = *heartbeatMode;
 
         if (aggregatorChannels) {
             PlanCdcAggregatorCreation(OperationId, streamPath, *aggregatorChannels, context);
@@ -746,6 +743,22 @@ void DoCreateLock(
 }
 
 } // anonymous
+
+std::pair<std::optional<NKikimrSchemeOp::ECdcStreamHeartbeatMode>, TString> ChooseHeartbeatMode(
+    const NKikimrSchemeOp::TCreateCdcStream& op,
+    const TFeatureFlags& featureFlags)
+{
+    if (!ShouldUseKeyRangeHeartbeats(op.GetStreamDescription(), featureFlags)) {
+        return {NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect, TString()};
+    }
+
+    if (op.HasTopicPartitions() || op.GetTopicAutoPartitioning()) {
+        return {std::nullopt,
+            "TopicPartitions and TopicAutoPartitioning are not supported for CDC streams with key range heartbeats"};
+    }
+
+    return {NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange, TString()};
+}
 
 TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount,
         ui64 maxShardsInPath, const TFeatureFlags& featureFlags) {

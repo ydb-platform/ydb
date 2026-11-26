@@ -2016,7 +2016,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    void RotateCdcStream(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const NKikimrSchemeOp::TCreateCdcStream& newStream) {
+    void RotateCdcStream(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const NKikimrSchemeOp::TCreateCdcStream& newStream,
+            const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted})
+    {
         auto request = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(++txId, TTestTxConfig::SchemeShard);
         auto& transaction = *request->Record.AddTransaction();
         transaction.SetWorkingDir("/MyRoot");
@@ -2036,7 +2038,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         topicDescription.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(86400);
 
         AsyncSend(runtime, TTestTxConfig::SchemeShard, request.release(), 0);
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+        TestModificationResults(runtime, txId, expectedResults);
         env.TestWaitNotification(runtime, txId);
     }
 
@@ -2103,7 +2105,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         THashMap<TString, NKikimrPQ::TPartitionKeyRange> sourceIdToKeyRange;
         auto observer = runtime.AddObserver<TEvPersQueue::TEvProposeTransaction>([&](auto& ev) {
-            for (const auto& group : ev->Get()->Record.GetConfig().GetBootstrapConfig().GetExplicitMessageGroups()) {
+            for (const auto& group : ev->Get()->GetRecord().GetConfig().GetBootstrapConfig().GetExplicitMessageGroups()) {
                 sourceIdToKeyRange[group.GetId()] = group.GetKeyRange();
             }
         });
@@ -2132,6 +2134,54 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         }
     }
 
+    Y_UNIT_TEST(ShouldPassFullKeyBoundsInBootstrapWhenTableKeyWasExtended) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcKeyRangeHeartbeats(true));
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+            SplitBoundary {
+              KeyPrefix {
+                Tuple { Optional { Uint32 : 100 } }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "name" Type: "Utf8" }
+            KeyColumnNames: ["key", "name"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TVector<NKikimrPQ::TPartitionKeyRange> keyRanges;
+        auto observer = runtime.AddObserver<TEvPersQueue::TEvProposeTransaction>([&](auto& ev) {
+            for (const auto& group : ev->Get()->GetRecord().GetConfig().GetBootstrapConfig().GetExplicitMessageGroups()) {
+                keyRanges.push_back(group.GetKeyRange());
+            }
+        });
+
+        // when
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, true).DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        // then
+        const TVector<TCell> boundary = {TCell::Make<ui32>(100), TCell()};
+        const auto fullKeyBound = TSerializedCellVec::Serialize(boundary);
+        UNIT_ASSERT_VALUES_UNEQUAL(keyRanges.size(), 0);
+        for (const auto& keyRange : keyRanges) {
+            UNIT_ASSERT(keyRange.HasFromBound() != keyRange.HasToBound());
+            const auto& bound = keyRange.HasFromBound() ? keyRange.GetFromBound() : keyRange.GetToBound();
+            UNIT_ASSERT_VALUES_EQUAL(bound, fullKeyBound);
+        }
+    }
+
     Y_UNIT_TEST(ShouldPassDataShardsWithoutKeyRangesInBootstrapWhenKeyRangeFlagDisabled) {
         // given
         TTestBasicRuntime runtime;
@@ -2149,7 +2199,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         ui32 groupCount = 0;
         ui32 groupsWithKeyRange = 0;
         auto observer = runtime.AddObserver<TEvPersQueue::TEvProposeTransaction>([&](auto& ev) {
-            for (const auto& group : ev->Get()->Record.GetConfig().GetBootstrapConfig().GetExplicitMessageGroups()) {
+            for (const auto& group : ev->Get()->GetRecord().GetConfig().GetBootstrapConfig().GetExplicitMessageGroups()) {
                 ++groupCount;
                 groupsWithKeyRange += group.HasKeyRange();
             }
@@ -2286,6 +2336,106 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(topic.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 2);
     }
 
+    TString GetStreamTopicPartitionToBound(TTestBasicRuntime& runtime, ui32 partitionId) {
+        const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        for (const auto& partition : topic.GetPathDescription().GetPersQueueGroup().GetPartitions()) {
+            if (partition.GetPartitionId() == partitionId) {
+                return partition.GetKeyRange().GetToBound();
+            }
+        }
+        UNIT_FAIL("Unknown partition: " << partitionId);
+        return {};
+    }
+
+    Y_UNIT_TEST(ShouldRejectSplitBoundaryWhenItIsPartitionEnd) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcKeyRangeHeartbeats(true));
+        ui64 txId = 100;
+        CreateKeyRangeStream(runtime, env, txId, 2);
+        const auto boundary = GetStreamTopicPartitionToBound(runtime, 0);
+
+        // when
+        SplitStreamTopicPartition(runtime, txId, 0, boundary,
+            {{NKikimrScheme::StatusInvalidParameter, "Split boundary must be a table key strictly inside the partition"}});
+
+        // then
+        const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 2);
+    }
+
+    Y_UNIT_TEST(ShouldRejectSplitBoundaryWhenItIsPartitionStart) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcKeyRangeHeartbeats(true));
+        ui64 txId = 100;
+        CreateKeyRangeStream(runtime, env, txId, 2);
+        const auto boundary = GetStreamTopicPartitionToBound(runtime, 0);
+
+        // when
+        SplitStreamTopicPartition(runtime, txId, 1, boundary,
+            {{NKikimrScheme::StatusInvalidParameter, "Split boundary must be a table key strictly inside the partition"}});
+
+        // then
+        const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 2);
+    }
+
+    Y_UNIT_TEST(ShouldRejectSplitBoundaryWhenItIsMinimalKey) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcKeyRangeHeartbeats(true));
+        ui64 txId = 100;
+        CreateKeyRangeStream(runtime, env, txId, 1);
+        const auto minimalKey = TSerializedCellVec::Serialize(TVector<TCell>(1));
+
+        // when
+        SplitStreamTopicPartition(runtime, txId, 0, minimalKey,
+            {{NKikimrScheme::StatusInvalidParameter, "Split boundary must be a table key strictly inside the partition"}});
+
+        // then
+        const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 1);
+    }
+
+    Y_UNIT_TEST(ShouldMergeKeyRangeTopicPartitionsWhenTheyAreAdjacent) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcKeyRangeHeartbeats(true));
+        ui64 txId = 100;
+        CreateKeyRangeStream(runtime, env, txId, 3);
+        const auto rightBoundary = GetStreamTopicPartitionToBound(runtime, 1);
+
+        // when
+        AlterStreamTopic(runtime, txId, [](auto& alter) {
+            auto* merge = alter.AddMerge();
+            merge->SetPartition(0);
+            merge->SetAdjacentPartition(1);
+        }, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        // then
+        const auto navigate = Navigate(runtime, "/MyRoot/Table/Stream/streamImpl", NSchemeCache::TSchemeCacheNavigate::EOp::OpTopic);
+        const auto& entry = navigate->ResultSet.at(0);
+        UNIT_ASSERT(entry.PQGroupInfo);
+        const auto& partitioning = entry.PQGroupInfo->Partitioning;
+        UNIT_ASSERT_VALUES_EQUAL(partitioning.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(partitioning.at(0).ShardId, 3);
+        UNIT_ASSERT(partitioning.at(0).Range);
+        UNIT_ASSERT_VALUES_EQUAL(partitioning.at(0).Range->EndKeyPrefix.GetBuffer(), rightBoundary);
+        UNIT_ASSERT_VALUES_EQUAL(partitioning.at(1).ShardId, 2);
+        UNIT_ASSERT(partitioning.at(1).Range);
+        UNIT_ASSERT(!partitioning.at(1).Range->EndKeyPrefix);
+    }
+
     Y_UNIT_TEST(ShouldRejectRootPartitionBoundsWhenTopicSplitsByPartitionKey) {
         // given
         TTestBasicRuntime runtime;
@@ -2380,6 +2530,28 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             .GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy();
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(after.GetPartitionStrategyType()),
             static_cast<int>(before.GetPartitionStrategyType()));
+    }
+
+    Y_UNIT_TEST(ShouldRejectSplitByPartitionKeyWhenTopicHasNoKeySchema) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        // when
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+                SplitByPartitionKey: true
+            }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Missing key schema with SplitByPartitionKey"}});
+
+        // then
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic"), {NLs::PathNotExist});
     }
 
     Y_UNIT_TEST(ShouldKeepKeyRangeHeartbeatsWhenSchemeShardReboots) {
@@ -2526,7 +2698,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
     }
 
-    Y_UNIT_TEST(ShouldKeepDirectHeartbeatsWhenRotatedStreamSupportsKeyRange) {
+    Y_UNIT_TEST(ShouldUseKeyRangeHeartbeatsWhenRotatedStreamSupportsKeyRange) {
         // given
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
@@ -2547,7 +2719,31 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect),
         });
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/RotatedStream"), {
-            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect),
+            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange),
+        });
+    }
+
+    Y_UNIT_TEST(ShouldRejectTopicPartitioningWhenRotatedStreamUsesKeyRangeHeartbeats) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcKeyRangeHeartbeats(true));
+        ui64 txId = 100;
+        CreateSourceTable(runtime, env, txId);
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, false).DebugString());
+        env.TestWaitNotification(runtime, txId);
+        auto rotatedStream = GlobalReplicationStream(false, true);
+        rotatedStream.MutableStreamDescription()->SetName("RotatedStream");
+        rotatedStream.SetTopicPartitions(4);
+
+        // when
+        RotateCdcStream(runtime, env, txId, rotatedStream, {{NKikimrScheme::StatusInvalidParameter, "key range heartbeats"}});
+
+        // then
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/RotatedStream"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
         });
     }
 

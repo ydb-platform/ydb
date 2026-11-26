@@ -7,6 +7,8 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
+#include <optional>
+
 namespace NKikimr::NSchemeShard::NCdc {
 
 struct TStreamPaths {
@@ -43,6 +45,10 @@ void DoCreateStream(
     const bool internal = false);
 
 bool ShouldAggregateHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
+
+std::pair<std::optional<NKikimrSchemeOp::ECdcStreamHeartbeatMode>, TString> ChooseHeartbeatMode(
+    const NKikimrSchemeOp::TCreateCdcStream& op,
+    const TFeatureFlags& featureFlags);
 
 TMaybe<TChannelsBindings> CheckCdcAggregatorCanBeCreated(
     const NKikimrSchemeOp::TCreateCdcStream& op,

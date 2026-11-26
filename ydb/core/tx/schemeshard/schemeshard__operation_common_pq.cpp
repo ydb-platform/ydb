@@ -5,6 +5,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/pqdata_transaction.pb.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/iterator/iterate_keys.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
@@ -180,6 +181,13 @@ bool IsKeyRangeHeartbeatsStream(const TPathId& streamPathId, const TOperationCon
 
     const auto& stream = it->second->AlterData ? it->second->AlterData : it->second;
     return stream->HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
+}
+
+TString MakeFullKeyBound(const TString& bound, size_t keySize) {
+    const TSerializedCellVec key(bound);
+    TVector<TCell> cells(key.GetCells().begin(), key.GetCells().end());
+    cells.resize(keySize);
+    return TSerializedCellVec::Serialize(cells);
 }
 
 }  // anonymous namespace
@@ -463,10 +471,10 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             // Pass the DataShard key range to a key range CDC topic: PQ registers the source only in its partitions
             if (keyRangeHeartbeats) {
                 if (i > 0) {
-                    mg.MutableKeyRange()->SetFromBound(partitions[i - 1]->EndOfRange);
+                    mg.MutableKeyRange()->SetFromBound(MakeFullKeyBound(partitions[i - 1]->EndOfRange, table->KeyColumnIds.size()));
                 }
                 if (i + 1 < partitions.size()) {
-                    mg.MutableKeyRange()->SetToBound(partitions[i]->EndOfRange);
+                    mg.MutableKeyRange()->SetToBound(MakeFullKeyBound(partitions[i]->EndOfRange, table->KeyColumnIds.size()));
                 }
             }
 

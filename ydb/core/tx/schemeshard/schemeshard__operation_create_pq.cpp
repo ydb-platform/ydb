@@ -110,6 +110,11 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
             errStr = "Missing key schema with specified partition boundaries";
             return nullptr;
         }
+        if (op.GetPQTabletConfig().GetSplitByPartitionKey()) {
+            status = NKikimrScheme::StatusInvalidParameter;
+            errStr = "Missing key schema with SplitByPartitionKey";
+            return nullptr;
+        }
     }
 
     bool splitMergeEnabled = NKikimr::NPQ::SplitMergeEnabled(op.GetPQTabletConfig());

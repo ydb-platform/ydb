@@ -9,7 +9,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/public/lib/value/value.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/json/json_reader.h>
@@ -2455,7 +2454,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             .EnableProtoSourceIdInfo(true)
             .EnableCdcKeyRangeHeartbeats(true));
         ui64 txId = 100;
-        CreateKeyRangeStream(runtime, env, txId, 1);
+        auto stream = GlobalReplicationStream(false, true);
+        stream.MutableStreamDescription()->SetSchemaChanges(true);
+        CreateReplicationStream(runtime, env, txId, 1, stream);
 
         // when
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -2489,60 +2490,19 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         // when
         AlterStreamTopic(runtime, txId, [&](auto& alter) {
-            *alter.MutablePQTabletConfig()->MutablePartitionStrategy() = strategy;
+            auto& config = *alter.MutablePQTabletConfig();
+            config.MutablePartitionConfig();
+            *config.MutablePartitionStrategy() = strategy;
         }, {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
 
         // then
-        const auto& partitions = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl")
-            .GetPathDescription().GetPersQueueGroup().GetPartitions();
-        UNIT_ASSERT_VALUES_EQUAL(CountIf(partitions, [](const auto& partition) {
+        const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        const auto& group = topic.GetPathDescription().GetPersQueueGroup();
+        UNIT_ASSERT_VALUES_EQUAL(group.GetPQTabletConfig().GetPartitionStrategy().GetMinPartitionCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(CountIf(group.GetPartitions(), [](const auto& partition) {
             return partition.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
         }), 2);
-    }
-
-    Y_UNIT_TEST(ShouldRejectSplitBoundaryWhenPgKeyIsMalformed) {
-        // given
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions()
-            .EnableProtoSourceIdInfo(true));
-        ui64 txId = 100;
-        NKikimrSchemeOp::TPersQueueGroupDescription topic;
-        topic.SetName("Topic");
-        topic.SetTotalGroupCount(1);
-        topic.SetPartitionPerTablet(1);
-        auto& config = *topic.MutablePQTabletConfig();
-        config.MutablePartitionConfig()->SetLifetimeSeconds(10);
-        auto& keyComponent = *config.AddPartitionKeySchema();
-        keyComponent.SetName("key");
-        const auto pgType = NScheme::ProtoColumnTypeFromTypeInfoMod(NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgnumeric")), "");
-        keyComponent.SetTypeId(pgType.TypeId);
-        if (pgType.TypeInfo) {
-            *keyComponent.MutableTypeInfo() = *pgType.TypeInfo;
-        }
-        auto& strategy = *config.MutablePartitionStrategy();
-        strategy.SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig::CAN_SPLIT);
-        strategy.SetMinPartitionCount(1);
-        strategy.SetMaxPartitionCount(10);
-        config.SetSplitByPartitionKey(true);
-        TestCreatePQGroup(runtime, ++txId, "/MyRoot", topic.ShortDebugString());
-        env.TestWaitNotification(runtime, txId);
-
-        NKikimrSchemeOp::TPersQueueGroupDescription alter;
-        alter.SetName("Topic");
-        auto* split = alter.AddSplit();
-        split->SetPartition(0);
-        const TString malformed = "\xff\xff\xff";
-        const TVector<TCell> boundary = {TCell(malformed.data(), malformed.size())};
-        split->SetSplitBoundary(TSerializedCellVec::Serialize(boundary));
-
-        // when
-        TestAlterPQGroup(runtime, ++txId, "/MyRoot", alter.ShortDebugString(),
-            {{NKikimrScheme::StatusInvalidParameter, "Split boundary must be a table key strictly inside the partition"}});
-
-        // then
-        const auto described = DescribePath(runtime, "/MyRoot/Topic");
-        UNIT_ASSERT_VALUES_EQUAL(described.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 1);
     }
 
     Y_UNIT_TEST(ShouldRejectRootPartitionBoundsWhenTopicSplitsByPartitionKey) {

@@ -263,7 +263,7 @@ public:
                 errStr = Sprintf("Invalid min and max partition count specified: %u > %u", strategy.GetMinPartitionCount(), strategy.GetMaxPartitionCount());
                 return nullptr;
             }
-            if (strategy.GetMinPartitionCount() > topic->ActivePartitionCount) { // request will increase active partitions
+            if (!tabletConfig->GetSplitByPartitionKey() && strategy.GetMinPartitionCount() > topic->ActivePartitionCount) { // request will increase active partitions
                 if (alter.MergeSize() || alter.SplitSize() || alter.RootPartitionBoundariesSize()) {
                     errStr = Sprintf("Can't increase active partitions and Split/Merge or change root boundaries at the same time");
                     return nullptr;

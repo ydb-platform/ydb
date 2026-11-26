@@ -7,7 +7,7 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
-#include <yql/essentials/core/project_settings/yql_project_settings.h>
+#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
 
 namespace NYql {
 namespace {
@@ -17,6 +17,7 @@ struct TWriteSettingsFixture {
     const TSolomonState::TPtr State = MakeIntrusive<TSolomonState>();
 
     TWriteSettingsFixture() {
+        State->SupportRtmrMode = false;
         auto& config = State->Configuration->ClusterConfigs["test"];
         config.SetCluster("localhost:1");
         config.SetClusterType(TSolomonClusterConfig::SCT_SOLOMON);
@@ -26,7 +27,7 @@ struct TWriteSettingsFixture {
 
     bool Set(const TString& name, const TMaybe<TString>& value, TString& error) {
         return State->Configuration->Dispatch(
-            NCommon::ALL_CLUSTERS, name, value, NCommon::ISettingDispatcher::EStage::STATIC, [&](const TString& message, bool isError) {
+            NCommon::ALL_CLUSTERS, name, value, NCommon::TSettingDispatcher::EStage::STATIC, [&](const TString& message, bool isError) {
                 if (isError) {
                     error = message;
                 }
@@ -90,12 +91,22 @@ Y_UNIT_TEST_SUITE(TSolomonWriteSettingsTest) {
         UNIT_ASSERT_VALUES_EQUAL(settings.GetMaxPointsPerRequest(), 2500);
     }
 
-    Y_UNIT_TEST(ProjectPragmasReachSinkSettings) {
+    Y_UNIT_TEST(ProviderPragmasReachSinkSettings) {
         TWriteSettingsFixture fixture;
-        TProjectSettings pragmas;
-        pragmas.AddPragma("solomon.WriteMaxRequestsInflight", "2");
-        pragmas.AddPragma("solomon.WriteMaxPointsPerRequest", "7");
-        fixture.State->Configuration->ApplyProjectSettings(pragmas);
+        TTypeAnnotationContext types;
+        auto transformer = NCommon::CreateProviderConfigurationTransformer(fixture.State->Configuration, types, "solomon");
+        const TPositionHandle pos;
+        auto source = fixture.Ctx.NewCallable(pos, "DataSource",
+            { fixture.Ctx.NewAtom(pos, "solomon"), fixture.Ctx.NewAtom(pos, NCommon::ALL_CLUSTERS) });
+        auto world = fixture.Ctx.NewWorld(pos);
+        for (const auto& [name, value] : { std::pair<TString, TString>{ "WriteMaxRequestsInflight", "2" },
+                 std::pair<TString, TString>{ "WriteMaxPointsPerRequest", "7" } }) {
+            auto configure = fixture.Ctx.NewCallable(pos, NNodes::TCoConfigure::CallableName(),
+                { world, source, fixture.Ctx.NewAtom(pos, "Attr"), fixture.Ctx.NewAtom(pos, name), fixture.Ctx.NewAtom(pos, value) });
+            TExprNode::TPtr output;
+            const auto status = transformer->Transform(configure, output, fixture.Ctx);
+            UNIT_ASSERT_C(status.Level == IGraphTransformer::TStatus::Ok, fixture.Ctx.IssueManager.GetIssues().ToString());
+        }
         const auto settings = fixture.SinkSettings();
         UNIT_ASSERT_VALUES_EQUAL(settings.GetMaxRequestsInflight(), 2);
         UNIT_ASSERT_VALUES_EQUAL(settings.GetMaxPointsPerRequest(), 7);

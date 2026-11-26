@@ -43,7 +43,6 @@ void InitAsyncOutput(
     const THashMap<TString, TString> secureParams;
 
     caSetup.Execute([&](TFakeActor& actor) {
-<<<<<<< HEAD
         auto [dqAsyncOutput, dqAsyncOutputAsActor] = CreateDqSolomonWriteActor(
             std::move(settings),
             0,
@@ -54,13 +53,8 @@ void InitAsyncOutput(
             &actor.GetAsyncOutputCallbacks(),
             counters,
             CreateStructuredTokenCredentialsFactory(),
+            std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {}),
             freeSpace);
-=======
-        auto [dqAsyncOutput, dqAsyncOutputAsActor] = CreateDqSolomonWriteActor(std::move(settings), 0, NYql::NDq::TCollectStatsLevel::None,
-            "TxId-42", 777, secureParams, &actor.GetAsyncOutputCallbacks(), counters, CreateStructuredTokenCredentialsFactory(),
-            std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {
-            }), freeSpace);
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
 
         actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);
     });

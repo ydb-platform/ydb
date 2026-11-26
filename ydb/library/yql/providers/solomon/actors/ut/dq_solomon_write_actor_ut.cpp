@@ -4,14 +4,9 @@
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 #include <ydb/library/yql/providers/solomon/common/constants.h>
 
-<<<<<<< HEAD
-=======
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/yexception.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/yql_panic.h>
 

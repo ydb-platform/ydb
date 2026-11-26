@@ -28,17 +28,13 @@ namespace {
 
 struct TFixtureOptions {
     bool FeatureFlagEnabled = true;
-    bool IndexStreamWrite = true;
     bool GeneratedStored = false;
-    bool CompileTimeDefaults = true;
 };
 
 NKikimrConfig::TAppConfig DefaultExprAppConfig(const TFixtureOptions& options = {}) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(options.FeatureFlagEnabled);
     appConfig.MutableFeatureFlags()->SetEnableGeneratedStored(options.GeneratedStored);
-    appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(options.CompileTimeDefaults);
-    appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(options.IndexStreamWrite);
     return appConfig;
 }
 
@@ -171,16 +167,6 @@ public:
         return TString(*ast);
     }
 
-    void CheckStreamLookup(const std::string& query, bool expected) {
-        const TString ast = ExplainAst(query);
-        const bool hasStreamLookup = ast.Contains("KqpCnStreamLookup");
-        UNIT_ASSERT_C(hasStreamLookup == expected,
-            "stream lookup expectation mismatch for: " << query
-                << "\nexpected: " << (expected ? "yes" : "no")
-                << ", found: " << (hasStreamLookup ? "yes" : "no")
-                << "\nAST:\n" << ast);
-    }
-
     void CheckTargetReadCount(const std::string& query, size_t expected) {
         const TString ast = ExplainAst(query);
         size_t actual = 0;
@@ -309,8 +295,8 @@ void ExecuteDml(TTestFixture& fixture, const TString& query, const TString& expe
     }
 }
 
-void RunDmlMatrix(ESecondaryIndexKind indexKind, bool withReturning, bool enableIndexStreamWrite = true) {
-    TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = enableIndexStreamWrite});
+void RunDmlMatrix(ESecondaryIndexKind indexKind, bool withReturning) {
+    TTestFixture fixture;
     fixture.Exec(DmlMatrixDDL(indexKind));
 
     ExecuteDml(fixture, "INSERT INTO TestTable (k, other) VALUES (1, 10)", "[[1;[10];[42u]]]", withReturning);
@@ -1231,8 +1217,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v, w FROM TestTable ORDER BY k;", "[[1;[42u];5];[2;[42u];5]]");
     }
 
-    Y_UNIT_TEST_TWIN(OnlyRequiredExpressionDefaultsAreCompiledIntoWriteAst, CompileTimeDefaults) {
-        TTestFixture fixture(TFixtureOptions{.CompileTimeDefaults = CompileTimeDefaults});
+    Y_UNIT_TEST(OnlyRequiredExpressionDefaultsAreCompiledIntoWriteAst) {
+        TTestFixture fixture;
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,
@@ -1274,10 +1260,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         }
     }
 
-    Y_UNIT_TEST_OCTET(UpsertPreparesOmittedDefaultKeys, CompileTimeDefaults, StreamWrite, WithIndex) {
-        TTestFixture fixture(TFixtureOptions{
-            .IndexStreamWrite = StreamWrite,
-            .CompileTimeDefaults = CompileTimeDefaults});
+    Y_UNIT_TEST_TWIN(UpsertPreparesOmittedDefaultKeys, WithIndex) {
+        TTestFixture fixture;
         fixture.Exec(TStringBuilder() << R"(
             CREATE TABLE LiteralKeyTable (
                 k Int32 NOT NULL DEFAULT 1,
@@ -1322,8 +1306,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(ExpressionSequenceAndLiteralDefaultCombinations, CompileTimeDefaults) {
-        TTestFixture fixture(TFixtureOptions{.CompileTimeDefaults = CompileTimeDefaults});
+    Y_UNIT_TEST(ExpressionSequenceAndLiteralDefaultCombinations) {
+        TTestFixture fixture;
         fixture.Exec(TStringBuilder() << R"(
             CREATE TABLE TestTable (
                 id Serial,
@@ -1366,29 +1350,12 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         RunDmlMatrix(ESecondaryIndexKind::None, WithReturning);
     }
 
-    Y_UNIT_TEST_QUAD(DmlMatrixWithSyncIndex, WithReturning, EnableIndexStreamWrite) {
-        RunDmlMatrix(ESecondaryIndexKind::Sync, WithReturning, EnableIndexStreamWrite);
+    Y_UNIT_TEST_TWIN(DmlMatrixWithSyncIndex, WithReturning) {
+        RunDmlMatrix(ESecondaryIndexKind::Sync, WithReturning);
     }
 
-    Y_UNIT_TEST_QUAD(DmlMatrixWithAsyncIndex, WithReturning, EnableIndexStreamWrite) {
-        RunDmlMatrix(ESecondaryIndexKind::Async, WithReturning, EnableIndexStreamWrite);
-    }
-
-    Y_UNIT_TEST_TWIN(StreamLookupPlanMatrix, WithReturning) {
-        TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = false});
-        fixture.Exec(ValueTableDDL());
-
-        const auto query = [=](const TString& write) {
-            return WithReturning ? write + " RETURNING k, other, v;" : write + ";";
-        };
-
-        fixture.CheckStreamLookup(query("INSERT INTO TestTable (k, other) VALUES (1, 10)"), false);
-        fixture.CheckStreamLookup(query("UPSERT INTO TestTable (k, other) VALUES (1, 10)"), WithReturning);
-        fixture.CheckStreamLookup(query("REPLACE INTO TestTable (k, other) VALUES (1, 10)"), false);
-        fixture.CheckStreamLookup(query("UPDATE TestTable SET other = 10 WHERE k = 1"), WithReturning);
-        fixture.CheckStreamLookup(query("DELETE FROM TestTable WHERE k = 1"), WithReturning);
-        fixture.CheckStreamLookup(query("UPDATE TestTable ON (k, other) VALUES (1, 10)"), WithReturning);
-        fixture.CheckStreamLookup(query("DELETE FROM TestTable ON (k) VALUES (1)"), WithReturning);
+    Y_UNIT_TEST_TWIN(DmlMatrixWithAsyncIndex, WithReturning) {
+        RunDmlMatrix(ESecondaryIndexKind::Async, WithReturning);
     }
 
     Y_UNIT_TEST(InsertOmittedAndExplicit) {
@@ -1419,8 +1386,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, other, v FROM TestTable;", "[[1;[5];[7u]]]");
     }
 
-    Y_UNIT_TEST_TWIN(UpsertOmittedDefaultsUseWritePath, StreamIndexWrite) {
-        TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = StreamIndexWrite});
+    Y_UNIT_TEST(UpsertOmittedDefaultsUseWritePath) {
+        TTestFixture fixture;
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,
@@ -1502,8 +1469,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             "[[1;9u;[2u];11u];[2;4u;[3u];7u]]");
     }
 
-    Y_UNIT_TEST_TWIN(UpsertGeneratedUsesStoredDependenciesOrDefaults, CompileTimeDefaults) {
-        TTestFixture fixture(TFixtureOptions{.GeneratedStored = true, .CompileTimeDefaults = CompileTimeDefaults});
+    Y_UNIT_TEST(UpsertGeneratedUsesStoredDependenciesOrDefaults) {
+        TTestFixture fixture(TFixtureOptions{.GeneratedStored = true});
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Int32,
@@ -1560,8 +1527,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             "[[1;7u;8u;9u];[2;50u;51u;52u]]");
     }
 
-    Y_UNIT_TEST_QUAD(FailingDefaultIsEvaluatedBeforeUpsert, StreamWrite, WithIndex) {
-        TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = StreamWrite});
+    Y_UNIT_TEST_TWIN(FailingDefaultIsEvaluatedBeforeUpsert, WithIndex) {
+        TTestFixture fixture;
         fixture.Exec(DefaultExprDDL(
             R"(v Uint64 DEFAULT Ensure(RandomNumber(1), false, "default evaluated"))"));
         if (WithIndex) {
@@ -1578,8 +1545,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", "[[1;[4];[7u]];[2;[6];[8u]]]");
     }
 
-    Y_UNIT_TEST_QUAD(NullKeyUpsertPreservesStoredDefaults, StreamWrite, WithIndex) {
-        TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = StreamWrite});
+    Y_UNIT_TEST_TWIN(NullKeyUpsertPreservesStoredDefaults, WithIndex) {
+        TTestFixture fixture;
         fixture.Exec(TStringBuilder() << R"(
             CREATE TABLE NullKeyTable (
                 k Int32,
@@ -2017,20 +1984,19 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         CompareYson(returned, fixture.QueryYson("SELECT k, v FROM TestTable;"));
     }
 
-    Y_UNIT_TEST_TWIN(RandomDefaultConsistentWithReturningAndIndex, StreamWrite) {
-        // GENERATED columns require the stream writer; legacy still uses actual random values.
-        TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = StreamWrite, .GeneratedStored = StreamWrite});
-        const TString generatedColumn = StreamWrite ? "g Uint64 GENERATED ALWAYS AS (v) STORED," : "";
-        const TString generatedCover = StreamWrite ? ", g" : "";
-        const TString columns = TStringBuilder() << "k, a, v" << generatedCover;
-        fixture.Exec(TStringBuilder() << R"(
+    Y_UNIT_TEST(RandomDefaultConsistentWithReturningAndIndex) {
+        TTestFixture fixture(TFixtureOptions{.GeneratedStored = true});
+        constexpr TStringBuf columns = "k, a, v, g";
+        fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,
                 a Int32 NOT NULL,
                 v Uint64 NOT NULL DEFAULT RandomNumber(1),
-                )" << generatedColumn
-                << "PRIMARY KEY (k), INDEX idx_a GLOBAL SYNC ON (a) COVER (v" << generatedCover
-                << ")) WITH (PARTITION_AT_KEYS = (2));");
+                g Uint64 GENERATED ALWAYS AS (v) STORED,
+                PRIMARY KEY (k),
+                INDEX idx_a GLOBAL SYNC ON (a) COVER (v, g)
+            ) WITH (PARTITION_AT_KEYS = (2));
+        )");
 
         const auto checkWrite = [&](const std::string& write, const TString& predicate,
                                     const TString& expectedKeys, ui64 expectedCount) {
@@ -2040,10 +2006,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             CompareYsonUnordered(returned, fixture.QueryYson(
                 TStringBuilder() << "SELECT " << columns << " FROM TestTable VIEW idx_a WHERE " << predicate << ";"));
             fixture.Check(TStringBuilder() << "SELECT k, a FROM TestTable WHERE " << predicate << " ORDER BY k;", expectedKeys);
-            if (StreamWrite) {
-                fixture.Check(TStringBuilder() << "SELECT COUNT(*) FROM TestTable WHERE " << predicate << " AND v = g;",
-                    TStringBuilder() << "[[" << expectedCount << "u]]");
-            }
+            fixture.Check(TStringBuilder() << "SELECT COUNT(*) FROM TestTable WHERE " << predicate << " AND v = g;",
+                TStringBuilder() << "[[" << expectedCount << "u]]");
         };
         checkWrite("INSERT INTO TestTable (k, a) VALUES (1, 10), (2, 20), (3, 30)",
             "k <= 3", "[[1;10];[2;20];[3;30]]", 3);
@@ -2057,8 +2021,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             "[[1;10];[2;20];[3;30];[4;40];[11;110];[12;120];[13;130]]");
     }
 
-    Y_UNIT_TEST_TWIN(RandomDefaultKeyConsistentWithReturningAndIndex, StreamWrite) {
-        TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = StreamWrite});
+    Y_UNIT_TEST(RandomDefaultKeyConsistentWithReturningAndIndex) {
+        TTestFixture fixture;
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Uint64 NOT NULL DEFAULT RandomNumber(1),
@@ -2132,8 +2096,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             fixture.QueryYson("SELECT k, a, v FROM TestTable VIEW idx_a;"));
     }
 
-    Y_UNIT_TEST_TWIN(ExplicitNullBypassesFailingDefault, StreamWrite) {
-        TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = StreamWrite});
+    Y_UNIT_TEST(ExplicitNullBypassesFailingDefault) {
+        TTestFixture fixture;
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,
@@ -2310,8 +2274,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;#];[2;[42u]];[3;[7u]];[4;[9u]]]");
     }
 
-    Y_UNIT_TEST_TWIN(SetAndDropDefaultsInOneAlter, CompileTimeDefaults) {
-        TTestFixture fixture(TFixtureOptions{.CompileTimeDefaults = CompileTimeDefaults});
+    Y_UNIT_TEST(SetAndDropDefaultsInOneAlter) {
+        TTestFixture fixture;
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,

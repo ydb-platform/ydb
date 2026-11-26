@@ -33,8 +33,6 @@
 
 #include <util/generic/bitmap.h>
 
-#include <algorithm>
-
 namespace NKikimr::NKqp {
 
 using namespace NKikimr::NMiniKQL;
@@ -1825,18 +1823,9 @@ private:
         FillDqInput(read.Ptr(), stageProto, stageProto.AddSources(), dataSourceCategory, ctx, false);
     }
 
-    // Omitted DEFAULT values apply only to new rows during UPSERT.
-    // GENERATED columns are recomputed on every write and must not use this path.
-    static bool IsDefaultColumn(const TKikimrColumnMetadata& column) {
-        switch (column.DefaultKind) {
-            case NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE:
-            case NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL:
-                return true;
-            case NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION:
-                return column.DefaultExpression && column.DefaultExpression->Writable;
-            default:
-                return false;
-        }
+    static bool IsInsertOnlyDefaultColumn(const TKikimrColumnMetadata& column) {
+        return column.IsDefaultFromSequence() || column.IsDefaultFromLiteral()
+            || (column.IsDefaultFromExpression() && column.DefaultExpression && column.DefaultExpression->Writable);
     }
 
     THashMap<TStringBuf, ui32> CreateColumnToOrder(
@@ -1859,7 +1848,7 @@ private:
         }
 
         const auto isDefaultColumn = [&tableMeta](const TString& columnName) {
-            return IsDefaultColumn(tableMeta->Columns.at(columnName));
+            return IsInsertOnlyDefaultColumn(tableMeta->Columns.at(columnName));
         };
 
         // Not DEFAULT columns
@@ -1996,7 +1985,7 @@ private:
             const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
             YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
 
-            if (IsDefaultColumn(*columnMeta)) {
+            if (IsInsertOnlyDefaultColumn(*columnMeta)) {
                 result.Ids.insert(columnMeta->Id);
                 result.Names.insert(columnName);
             }
@@ -2617,6 +2606,7 @@ private:
 
             const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Path()).Metadata;
 
+            // Default columns processed locally (filled by the stream-write path only).
             TLocalDefaultColumns localDefaultColumns;
 
             const bool streamIndexWrite = Config->GetEnableIndexStreamWrite();
@@ -2624,12 +2614,6 @@ private:
                 localDefaultColumns = BuildStreamIndexWrite(settings, settingsProto, tablesMap, tableMeta, shape, streamIndexWrite);
             } else {
                 SetSinkOperationType(settings, settingsProto);
-                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
-                        && tableMeta->Kind == EKikimrTableKind::Datashard && !tableMeta->IsIndexImplTable
-                        && settings.ReturningColumns().Empty()
-                        && std::ranges::none_of(tableMeta->Indexes, &TIndexDescription::ItUsedForWrite)) {
-                    localDefaultColumns = CollectLocalDefaultColumns(settings, tableMeta);
-                }
             }
 
             FillMainTableColumnsAndOrder(settings, settingsProto, tableMeta, shape, localDefaultColumns);
@@ -2938,11 +2922,7 @@ private:
                 if (autoIncrementColumns.contains(columnMeta->Name)) {
                     // it means, that column is a generated column
                     // so it means we should set default value for this column
-                    // DEFAULT expressions are inlined into the write input by BuildWriteInput and
-                    // must never reach the sequencer, which can only carry literals and sequences
-                    YQL_ENSURE(columnMeta->IsDefaultFromLiteral() || columnMeta->IsDefaultFromSequence(),
-                        "Column " << columnMeta->Name << " has an unsupported default kind for the sequencer: "
-                            << static_cast<int>(columnMeta->DefaultKind));
+                    YQL_ENSURE(columnMeta->IsDefaultFromLiteral() || columnMeta->IsDefaultFromSequence());
                     columnProto->SetDefaultKind(columnMeta->DefaultKind);
                     if (columnMeta->IsDefaultFromLiteral()) {
                         columnProto->MutableDefaultFromLiteral()->CopyFrom(columnMeta->DefaultFromLiteral);

@@ -533,19 +533,17 @@ TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputC
         settings = AddSetting(*settings, write.Pos(), "AllowInconsistentWrites", nullptr, ctx);
     }
 
-    const auto [input, columns, needsLookup] = BuildWriteInput(write, table, inputColumns, autoincrement,
+    const auto [input, columns, needsGeneratedLookup] = BuildWriteInput(write, table, inputColumns, autoincrement,
         write.Pos(), ctx, kqpCtx, /* generatedLookup */ true);
 
-    // Partial UPSERT reads missing dependencies of stored generated columns.
-    if (needsLookup) {
+    // A partial UPSERT of a table with STORED generated columns reads the current dependency values
+    // back via a streaming lookup-join on the same table
+    if (needsGeneratedLookup) {
         settings = AddSetting(*settings, write.Pos(), "IsConditionalUpdate", nullptr, ctx);
     }
 
     const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
-    // Plain row-table UPSERTs can apply insert-only defaults in DataShard.
-    if (!useStreamIndex && !generateColumnsIfInsert.Empty()
-            && (table.Metadata->Kind != EKikimrTableKind::Datashard || !write.ReturningColumns().Empty()
-                || std::ranges::any_of(table.Metadata->Indexes, &TIndexDescription::ItUsedForWrite))) {
+    if (!useStreamIndex && generateColumnsIfInsert.Ref().ChildrenSize() > 0) {
         return Build<TKqlInsertOnConflictUpdateRows>(ctx, write.Pos())
             .Table(BuildTableMeta(table, write.Pos(), ctx))
             .Input(input.Ptr())
@@ -574,11 +572,12 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
 {
     auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
     settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("upsert").Done().Ptr(), ctx);
-    const auto [input, columns, needsLookup] = BuildWriteInput(write, table, inputColumns, autoincrement,
+    const auto [input, columns, needsGeneratedLookup] = BuildWriteInput(write, table, inputColumns, autoincrement,
         write.Pos(), ctx, kqpCtx, /* generatedLookup */ true);
 
-    // Partial UPSERT reads missing dependencies of stored generated columns.
-    if (needsLookup) {
+    // A partial UPSERT of a table with STORED generated columns reads the current dependency values
+    // back via a streaming lookup-join on the same table
+    if (needsGeneratedLookup) {
         settings = AddSetting(*settings, write.Pos(), "IsConditionalUpdate", nullptr, ctx);
     }
 

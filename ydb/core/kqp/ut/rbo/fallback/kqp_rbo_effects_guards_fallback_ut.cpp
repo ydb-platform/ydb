@@ -57,8 +57,8 @@ Y_UNIT_TEST_SUITE(KqpRboEffectsGuardsFallback) {
         CompareYson("[[1;[5];105];[2;[7];207]]", FormatResultSetYson(stored.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_TWIN(PartialUpsertWithExpressionDefault, Fallback) {
-        auto config = GuardConfig(Fallback);
+    Y_UNIT_TEST(PartialUpsertWithExpressionDefault) {
+        auto config = GuardConfig(/* fallback */ false);
         config.MutableFeatureFlags()->SetEnableDefaultFromExpression(true);
         TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false));
         auto client = kikimr.GetQueryClient();
@@ -75,9 +75,7 @@ Y_UNIT_TEST_SUITE(KqpRboEffectsGuardsFallback) {
         UNIT_ASSERT_C(seed.IsSuccess(), seed.GetIssues().ToString());
 
         auto result = client.ExecuteQuery("UPSERT INTO D (k, payload) VALUES (1, 5), (2, 6);", TTxControl::NoTx()).GetValueSync();
-        const auto issues = result.GetIssues().ToString();
-        UNIT_ASSERT_C(result.IsSuccess(), issues);
-        UNIT_ASSERT_C(!TStringBuf(issues).Contains("Compilation with the new RBO failed"), issues);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto stored = client.ExecuteQuery("SELECT k, payload, v FROM D ORDER BY k;", TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(stored.IsSuccess(), stored.GetIssues().ToString());

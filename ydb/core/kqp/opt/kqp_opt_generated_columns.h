@@ -12,7 +12,7 @@ namespace NKikimr::NKqp::NOpt {
 struct TBuildWriteInputResult {
     NYql::NNodes::TExprBase Input;
     NYql::NNodes::TCoAtomList Columns;
-    // True when the rewrite injected a stream lookup into the write input.
+    // True when the rewrite injected a stream lookup that reads dependency values back
     bool EmittedStreamLookup = false;
 };
 

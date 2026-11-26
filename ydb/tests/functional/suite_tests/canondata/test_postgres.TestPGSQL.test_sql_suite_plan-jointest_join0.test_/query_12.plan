@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-LeftJoin (Map)",
+                                        "Node Type": "Limit-LeftJoin (ScalarHash)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -47,10 +47,19 @@
                                                         "ExternalPlanNodeId": 11
                                                     },
                                                     {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
+                                                "Name": "LeftJoin (ScalarHash)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
                                                         "ExternalPlanNodeId": 3
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (Map)"
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.unique2)"
                                             }
                                         ],
                                         "PlanNodeId": 12,
@@ -61,7 +70,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "LeftJoin (Map)",
+                                                        "Node Type": "LeftJoin (ScalarHash)-Filter",
                                                         "Operators": [
                                                             {
                                                                 "Condition": "a.unique1 = b.thousand",
@@ -70,10 +79,19 @@
                                                                         "ExternalPlanNodeId": 9
                                                                     },
                                                                     {
+                                                                        "InternalOperatorId": 1
+                                                                    }
+                                                                ],
+                                                                "Name": "LeftJoin (ScalarHash)"
+                                                            },
+                                                            {
+                                                                "Inputs": [
+                                                                    {
                                                                         "ExternalPlanNodeId": 6
                                                                     }
                                                                 ],
-                                                                "Name": "LeftJoin (Map)"
+                                                                "Name": "Filter",
+                                                                "Predicate": "Exist(item.thousand)"
                                                             }
                                                         ],
                                                         "PlanNodeId": 10,

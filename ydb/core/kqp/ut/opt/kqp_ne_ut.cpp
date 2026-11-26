@@ -3211,9 +3211,9 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([
-            [101;[101u];["One"];["Name1"];["Value21"]];
+            [101;[101u];["Two"];["Name1"];["Value22"]];
             [101;[101u];["Three"];["Name3"];["Value23"]];
-            [101;[101u];["Two"];["Name1"];["Value22"]]
+            [101;[101u];["One"];["Name1"];["Value21"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 

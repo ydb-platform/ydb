@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (Map)",
+                                        "Node Type": "TopSort-LeftJoin (ScalarHash)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -48,10 +48,19 @@
                                                         "ExternalPlanNodeId": 6
                                                     },
                                                     {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
+                                                "Name": "LeftJoin (ScalarHash)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
                                                         "ExternalPlanNodeId": 3
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (Map)"
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.i2_1.q2)"
                                             }
                                         ],
                                         "PlanNodeId": 7,
@@ -96,19 +105,16 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "InnerJoin (Map)-Filter",
+                                                        "Node Type": "InnerJoin (ScalarHash)-Filter",
                                                         "Operators": [
                                                             {
                                                                 "Condition": "i2_1.q1 = ss.x",
                                                                 "Inputs": [
                                                                     {
                                                                         "InternalOperatorId": 1
-                                                                    },
-                                                                    {
-                                                                        "Other": "ConstantExpression"
                                                                     }
                                                                 ],
-                                                                "Name": "InnerJoin (Map)"
+                                                                "Name": "InnerJoin (ScalarHash)"
                                                             },
                                                             {
                                                                 "Inputs": [

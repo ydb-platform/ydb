@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-InnerJoin (Map)-Filter",
+                                        "Node Type": "TopSort-InnerJoin (ScalarHash)-Filter-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -48,10 +48,10 @@
                                                         "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 3
+                                                        "InternalOperatorId": 3
                                                     }
                                                 ],
-                                                "Name": "InnerJoin (Map)"
+                                                "Name": "InnerJoin (ScalarHash)"
                                             },
                                             {
                                                 "Inputs": [
@@ -61,6 +61,15 @@
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.i)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 3
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.k)"
                                             }
                                         ],
                                         "PlanNodeId": 5,

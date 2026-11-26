@@ -279,6 +279,28 @@ void AssertSameRows(const TVector<TSamplingRow>& left, const TVector<TSamplingRo
 } // namespace
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorSampling) {
+    Y_UNIT_TEST(ReadsCompactRangesAcrossContinuations) {
+        TSamplingTestHelper helper;
+        helper.UpsertBatch(1, 128);
+        auto request = helper.MakeRead(1.0, 123);
+        for (ui32 i = 1; i <= 128; ++i) {
+            AddRangeQuery<ui32>(*request, { i }, true, { i }, true);
+        }
+        NActors::TAllocChunkSerializer serializer;
+        UNIT_ASSERT(request->SerializeToArcadiaStream(&serializer));
+        auto data = serializer.Release(request->CreateSerializationInfo(false));
+        request.reset(TEvDataShard::TEvRead::Load(data.Get()));
+        data.Reset();
+        UNIT_ASSERT(request->UsesCompactReadData());
+        const auto result = helper.ReadShard(std::move(request), 0, Max<ui32>(), 16, 7);
+        UNIT_ASSERT(result.Finished);
+        UNIT_ASSERT_VALUES_EQUAL(result.Rows.size(), 128);
+        UNIT_ASSERT(result.Results.size() > 1);
+        for (size_t i = 0; i < result.Rows.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(result.Rows[i].Key, i + 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.Rows[i].Value, i + 1);
+        }
+    }
 
     Y_UNIT_TEST(RejectsInvalidRequests) {
         TSamplingTestHelper helper;

@@ -198,9 +198,12 @@ public:
     TEvDataShard::TEvRead::TPtr Ev;
     TEvDataShard::TEvRead* Request = nullptr;
 
-    // parallel to Request->Keys, but real data only in indices,
-    // where in Request->Keys we have key prefix (here we have properly extended one).
+    // Legacy prefix lower bounds; compact reads keep padded cells in the request array.
     TVector<TSerializedCellVec> Keys;
+
+    TReadCellVecView GetKeyLowerBound(size_t index) const {
+        return Request->UsesCompactReadData() ? Request->GetKeyLowerBound(index) : TReadCellVecView(Keys.at(index));
+    }
 
     // State itself //
 

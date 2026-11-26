@@ -743,6 +743,11 @@ public:
     // Parses cells pointing directly into `data`, which must outlive the cells
     static bool TryParseCells(std::string_view data, TVector<TCell>& cells);
 
+    // Decode into caller-owned storage without allocating a vector. Its size must
+    // match the encoded cell count. On failure, cells may be partially overwritten.
+    // Non-inline cell data references `data`, which must outlive the decoded cells.
+    static bool TryParseCellsInto(std::string_view data, TArrayRef<TCell> cells);
+
     const TString& GetBuffer() const { return Buf; }
 
     TString ReleaseBuffer() {

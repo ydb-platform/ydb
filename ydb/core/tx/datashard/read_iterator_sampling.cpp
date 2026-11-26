@@ -81,12 +81,12 @@ TSamplingPos SamplingEnd(const NTable::TBounds& bounds) {
     return {bounds.LastKey, bounds.LastKey && !bounds.LastInclusive};
 }
 
-TSamplingPos SamplingRangeStart(const TSerializedTableRange& range) {
-    return {range.From, !range.From || range.FromInclusive};
+TSamplingPos SamplingRangeStart(const TReadRangeView& range) {
+    return {range.From.ToOwned(), !range.From || range.FromInclusive};
 }
 
-TSamplingPos SamplingRangeEnd(const TSerializedTableRange& range) {
-    return {range.To, range.To && !range.ToInclusive};
+TSamplingPos SamplingRangeEnd(const TReadRangeView& range) {
+    return {range.To.ToOwned(), range.To && !range.ToInclusive};
 }
 
 std::optional<NTable::TBounds> ClipSamplingBounds(

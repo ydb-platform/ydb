@@ -392,19 +392,22 @@ namespace {
         SerializeCellVecBody(cells, resultBufferData, resultCells);
     }
 
-    Y_FORCE_INLINE bool TryDeserializeCellVecBody(std::string_view buf, ui64 cellCount, TVector<TCell>& resultCells) {
-        resultCells.resize_uninitialized(cellCount);
-        TCell* dst = resultCells.data();
-
+    Y_FORCE_INLINE bool TryDeserializeCellVecBody(std::string_view buf, TArrayRef<TCell> cells) {
         TSerializedCellReader reader(buf);
-        for (ui64 i = 0; i < cellCount; ++i) {
-            if (!reader.ReadNewCell(dst)) {
-                resultCells.clear();
+        for (auto& cell : cells) {
+            if (!reader.ReadNewCell(&cell)) {
                 return false;
             }
-            ++dst;
         }
+        return true;
+    }
 
+    Y_FORCE_INLINE bool TryDeserializeCellVecBody(std::string_view buf, ui64 cellCount, TVector<TCell>& resultCells) {
+        resultCells.resize_uninitialized(cellCount);
+        if (!TryDeserializeCellVecBody(buf, TArrayRef<TCell>(resultCells))) {
+            resultCells.clear();
+            return false;
+        }
         return true;
     }
 
@@ -508,6 +511,19 @@ bool TSerializedCellVec::TryParseCells(std::string_view data, TVector<TCell>& ce
     }
 
     return true;
+}
+
+bool TSerializedCellVec::TryParseCellsInto(std::string_view data, TArrayRef<TCell> cells) {
+    if (data.empty()) {
+        return cells.empty();
+    }
+
+    TSerializedCellReader reader(data);
+    ui16 cellCount;
+    if (!reader.Read(&cellCount) || cellCount != cells.size()) {
+        return false;
+    }
+    return TryDeserializeCellVecBody(reader.Snapshot(), cells);
 }
 
 bool TSerializedCellVec::DoTryParse() {

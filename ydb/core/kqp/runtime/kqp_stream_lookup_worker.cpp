@@ -1,4 +1,5 @@
 #include "kqp_stream_lookup_worker.h"
+#include "kqp_read_iterator_common.h"
 #include "kqp_stream_lookup_join_helpers.h"
 #include "kqp_vector_index_levels_cache.h"
 
@@ -7,12 +8,15 @@
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
+
+#include <google/protobuf/wire_format_lite.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -108,11 +112,80 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(TLookupSettings&& settings,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory)
     : TypeEnv(typeEnv)
     , HolderFactory(holderFactory)
-    , Settings(std::move(settings)) {
+    , Settings(std::move(settings))
+    , MaxReadRequestEntries(MaxReadRequestEntriesStreamLookup())
+    , MaxReadRequestBytes(MaxReadRequestBytesStreamLookup())
+{
     KeyColumnTypes.resize(Settings.KeyColumns.size());
     for (const auto& [_, columnInfo] : Settings.KeyColumns) {
         YQL_ENSURE(columnInfo.KeyOrder < static_cast<i64>(KeyColumnTypes.size()));
         KeyColumnTypes[columnInfo.KeyOrder] = columnInfo.PType;
+    }
+}
+
+void TKqpStreamLookupWorker::InitializeReadBatchHeader(NKikimrTxDataShard::TEvRead& record) {
+    // Reserve control fields added by StreamLookup and buffer lookup senders.
+    record.SetReadId(Max<ui64>());
+    record.MutableSnapshot()->SetStep(Max<ui64>());
+    record.MutableSnapshot()->SetTxId(Max<ui64>());
+    record.SetLockTxId(Max<ui64>());
+    record.SetLockNodeId(Max<ui32>());
+    record.SetLockMode(NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
+    record.SetQuerySpanId(Max<ui64>());
+    record.SetMaxRows(Max<ui32>());
+    record.SetMaxBytes(Max<ui32>());
+    record.SetTotalRowsLimit(Max<ui64>());
+    record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+    ReadBatchHeaderBytes = record.ByteSizeLong();
+}
+
+size_t TKqpStreamLookupWorker::GetReadEntryBytes(const TOwnedTableRange& range) const {
+    using TWire = google::protobuf::internal::WireFormatLite;
+    auto fieldSize = [](int number, size_t bytes) {
+        YQL_ENSURE(bytes <= Max<ui32>(), "Stream lookup key exceeds the serialized size representation");
+        return TWire::TagSize(number, TWire::TYPE_BYTES) + TWire::LengthDelimitedSize(bytes);
+    };
+    const size_t from = range.From.empty() ? 0 : TSerializedCellVec::SerializedSize(range.From);
+    if (range.Point) {
+        return fieldSize(NKikimrTxDataShard::TEvRead::kKeysFieldNumber, from);
+    }
+    const size_t to = range.To.empty() ? 0 : TSerializedCellVec::SerializedSize(range.To);
+    const size_t body = fieldSize(NKikimrTx::TKeyRange::kFromFieldNumber, from) +
+                        fieldSize(NKikimrTx::TKeyRange::kToFieldNumber, to) +
+                        TWire::TagSize(NKikimrTx::TKeyRange::kFromInclusiveFieldNumber, TWire::TYPE_BOOL) + 1 +
+                        TWire::TagSize(NKikimrTx::TKeyRange::kToInclusiveFieldNumber, TWire::TYPE_BOOL) + 1;
+    return fieldSize(NKikimrTxDataShard::TEvRead::kRangesFieldNumber, body);
+}
+
+std::vector<TOwnedTableRange> TKqpStreamLookupWorker::AppendReadRange(
+    TReadBatch& batch, TOwnedTableRange&& range) const {
+    const size_t bytes = GetReadEntryBytes(range);
+    std::vector<TOwnedTableRange> ready;
+    if (!batch.Keys.empty() &&
+        ((MaxReadRequestEntries && batch.Keys.size() >= MaxReadRequestEntries) ||
+            (MaxReadRequestBytes && (ReadBatchHeaderBytes >= MaxReadRequestBytes ||
+                                        batch.PayloadBytes > MaxReadRequestBytes - ReadBatchHeaderBytes ||
+                                        bytes > MaxReadRequestBytes - ReadBatchHeaderBytes - batch.PayloadBytes)))) {
+        ready = std::move(batch.Keys);
+        batch = {};
+    }
+    // Keep an oversized atomic entry in its own batch instead of rejecting it.
+    YQL_ENSURE(bytes <= Max<size_t>() - batch.PayloadBytes, "Stream lookup read request size overflow");
+    batch.PayloadBytes += bytes;
+    batch.Keys.emplace_back(std::move(range));
+    return ready;
+}
+
+void TKqpStreamLookupWorker::ScheduleReadBatches(ui64 shardId, std::vector<TOwnedTableRange>&& keys, ui64& readId) {
+    TReadBatch pending;
+    for (auto& key : keys) {
+        auto ready = AppendReadRange(pending, std::move(key));
+        if (!ready.empty()) {
+            ScheduleRead(shardId, readId, std::move(ready));
+        }
+    }
+    if (!pending.Keys.empty()) {
+        ScheduleRead(shardId, readId, std::move(pending.Keys));
     }
 }
 
@@ -137,6 +210,9 @@ public:
                 ? std::move(vectorIndexLevelsCache)
                 : nullptr)
     {
+        NKikimrTxDataShard::TEvRead header;
+        FillReadRequestHeader(0, header);
+        InitializeReadBatchHeader(header);
     }
 
     virtual ~TKqpLookupRows() = default;
@@ -254,27 +330,8 @@ public:
             }
         }
 
-        if (!unprocessedPoints.empty()) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-            FillReadRequest(++newReadId, request, unprocessedPoints);
-            ScheduledReads.emplace_back(shardId, std::move(request));
-            YQL_ENSURE(ReadStateByReadId.emplace(
-                newReadId,
-                TReadState{
-                    .PendingKeys = std::move(unprocessedPoints),
-                }).second);
-        }
-
-        if (!unprocessedRanges.empty()) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-            FillReadRequest(++newReadId, request, unprocessedRanges);
-            ScheduledReads.emplace_back(shardId, std::move(request));
-            YQL_ENSURE(ReadStateByReadId.emplace(
-                newReadId,
-                TReadState{
-                    .PendingKeys = std::move(unprocessedRanges),
-                }).second);
-        }
+        ScheduleReadBatches(shardId, std::move(unprocessedPoints), newReadId);
+        ScheduleReadBatches(shardId, std::move(unprocessedRanges), newReadId);
     }
     size_t ScheduledRequestsCount() final {
         return ScheduledReads.size();
@@ -285,16 +342,25 @@ public:
             return {0, nullptr};
         }
 
-        std::pair<ui64, THolder<TEvDataShard::TEvRead>> next = std::move(ScheduledReads.front());
+        const auto [shardId, readId] = ScheduledReads.front();
         ScheduledReads.pop_front();
-        return std::move(next);
+        THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+        FillReadRequest(readId, request, ReadStateByReadId.at(readId).PendingKeys);
+        return { shardId, std::move(request) };
     }
 
     void BuildRequests(const TPartitionInfo& partitioning, ui64& readId) final {
         YQL_ENSURE(partitioning);
 
-        std::unordered_map<ui64, std::vector<TOwnedTableRange>> rangesPerShard;
-        std::unordered_map<ui64, std::vector<TOwnedTableRange>> pointsPerShard;
+        TReadBatches rangesPerShard;
+        TReadBatches pointsPerShard;
+        auto append = [&](ui64 shardId, TOwnedTableRange&& range) {
+            auto& pending = range.Point ? pointsPerShard[shardId] : rangesPerShard[shardId];
+            auto ready = AppendReadRange(pending, std::move(range));
+            if (!ready.empty()) {
+                ScheduleRead(shardId, readId, std::move(ready));
+            }
+        };
 
         while (!UnprocessedKeys.empty()) {
             auto range = std::move(UnprocessedKeys.front());
@@ -304,18 +370,18 @@ public:
             if (!CacheKeys.empty()) {
                 ui64 pendingReads = 0;
                 for(auto [shardId, range] : partitions) {
-                    THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-                    std::vector<TOwnedTableRange> ranges = {range};
+                    TReadBatch pending;
+                    AppendReadRange(pending, std::move(range));
                     ui64 nextReadId = ++readId;
-                    FillReadRequest(nextReadId, request, ranges);
-                    ScheduledReads.emplace_back(shardId, std::move(request));
+                    ScheduledReads.emplace_back(shardId, nextReadId);
                     ++pendingReads;
-                    YQL_ENSURE(ReadStateByReadId.emplace(
-                        nextReadId,
+                    YQL_ENSURE(ReadStateByReadId
+                                   .emplace(nextReadId,
                         TReadState{
-                            .PendingKeys = std::move(ranges),
+                                           .PendingKeys = std::move(pending.Keys),
                             .CacheKey = CacheKeys.front(),
-                        }).second);
+                                       })
+                                   .second);
                 }
 
                 CacheKeysMap[CacheKeys.front()] = {.PendingReads = pendingReads};
@@ -324,34 +390,19 @@ public:
             }
 
             for (auto [shardId, range] : partitions) {
-                if (range.Point) {
-                    pointsPerShard[shardId].push_back(std::move(range));
-                } else {
-                    rangesPerShard[shardId].push_back(std::move(range));
-                }
+                append(shardId, std::move(range));
             }
         }
 
-        for (auto& [shardId, points] : pointsPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-            FillReadRequest(++readId, request, points);
-            ScheduledReads.emplace_back(shardId, std::move(request));
-            YQL_ENSURE(ReadStateByReadId.emplace(
-                readId,
-                TReadState{
-                    .PendingKeys = std::move(points),
-                }).second);
+        for (auto& [shardId, pending] : pointsPerShard) {
+            if (!pending.Keys.empty()) {
+                ScheduleRead(shardId, readId, std::move(pending.Keys));
+            }
         }
-
-        for (auto& [shardId, ranges] : rangesPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-            FillReadRequest(++readId, request, ranges);
-            ScheduledReads.emplace_back(shardId, std::move(request));
-            YQL_ENSURE(ReadStateByReadId.emplace(
-                readId,
-                TReadState{
-                    .PendingKeys = std::move(ranges),
-                }).second);
+        for (auto& [shardId, pending] : rangesPerShard) {
+            if (!pending.Keys.empty()) {
+                ScheduleRead(shardId, readId, std::move(pending.Keys));
+            }
         }
     }
 
@@ -551,9 +602,14 @@ public:
     }
 
 private:
-    void FillReadRequest(ui64 readId, THolder<TEvDataShard::TEvRead>& request, const std::vector<TOwnedTableRange>& ranges) {
-        auto& record = request->Record;
+    void ScheduleRead(ui64 shardId, ui64& readId, std::vector<TOwnedTableRange>&& keys) final {
+        YQL_ENSURE(!keys.empty());
+        const ui64 nextReadId = ++readId;
+        YQL_ENSURE(ReadStateByReadId.emplace(nextReadId, TReadState{ .PendingKeys = std::move(keys) }).second);
+        ScheduledReads.emplace_back(shardId, nextReadId);
+    }
 
+    void FillReadRequestHeader(ui64 readId, NKikimrTxDataShard::TEvRead& record) {
         record.SetReadId(readId);
 
         record.MutableTableId()->SetOwnerId(Settings.TableId.PathId.OwnerId);
@@ -574,6 +630,10 @@ private:
             record.SetDatabaseId(Settings.Database);
             record.SetPoolId(Settings.PoolId);
         }
+    }
+
+    void FillReadRequest(ui64 readId, THolder<TEvDataShard::TEvRead>& request, const std::vector<TOwnedTableRange>& ranges) {
+        FillReadRequestHeader(readId, request->Record);
 
         YQL_ENSURE(!ranges.empty());
         if (ranges.front().Point) {
@@ -601,7 +661,7 @@ private:
     std::unordered_map<TString, TCacheData> CacheKeysMap;
     std::deque<TString> CacheKeys;
     std::deque<TOwnedTableRange> UnprocessedKeys;
-    std::deque<std::pair<ui64, THolder<TEvDataShard::TEvRead>>> ScheduledReads;
+    std::deque<std::pair<ui64, ui64>> ScheduledReads;
     std::unordered_map<ui64, TReadState> ReadStateByReadId;
     std::deque<TStreamLookupShardReadResult> ReadResults;
     std::unordered_set<TString> UniqueKeys;
@@ -628,6 +688,9 @@ public:
         for (auto column : Settings.Columns) {
             ReadColumns.emplace(column.Name, column);
         }
+        NKikimrTxDataShard::TEvRead header;
+        FillReadRequestHeader(0, header);
+        InitializeReadBatchHeader(header);
     }
 
     struct TUnprocessedLeftRow {
@@ -739,9 +802,11 @@ public:
             return {0, nullptr};
         }
 
-        std::pair<ui64, THolder<TEvDataShard::TEvRead>> next = std::move(ScheduledReads.front());
+        const auto [shardId, readId] = ScheduledReads.front();
         ScheduledReads.pop_front();
-        return std::move(next);
+        THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+        FillReadRequest(readId, request, ReadStateByReadId.at(readId).PendingKeys);
+        return { shardId, std::move(request) };
     }
 
     void RebuildRequest(const ui64 shardId, const ui64& prevReadId, ui64& newReadId) final {
@@ -789,48 +854,22 @@ public:
             }
         }
 
-        if (!unprocessedPoints.empty()) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-            FillReadRequest(++newReadId, request, unprocessedPoints);
-            ScheduledReads.emplace_back(shardId, std::move(request));
-
-            for (const auto& point : unprocessedPoints) {
-                auto rowIt = PendingLeftRowsByKey.find(point.From);
-                YQL_ENSURE(rowIt != PendingLeftRowsByKey.end());
-                rowIt->second.PendingReads.insert(newReadId);
-            }
-
-            YQL_ENSURE(ReadStateByReadId.emplace(
-                newReadId,
-                TReadState{
-                    .PendingKeys = std::move(unprocessedPoints),
-                }).second);
-        }
-
-        if (!unprocessedRanges.empty()) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-            FillReadRequest(++newReadId, request, unprocessedRanges);
-            ScheduledReads.emplace_back(shardId, std::move(request));
-
-            for (const auto& range : unprocessedRanges) {
-                auto rowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(range));
-                YQL_ENSURE(rowIt != PendingLeftRowsByKey.end());
-                rowIt->second.PendingReads.insert(newReadId);
-            }
-
-            YQL_ENSURE(ReadStateByReadId.emplace(
-                newReadId,
-                TReadState{
-                    .PendingKeys = std::move(unprocessedRanges),
-                }).second);
-        }
+        ScheduleReadBatches(shardId, std::move(unprocessedPoints), newReadId);
+        ScheduleReadBatches(shardId, std::move(unprocessedRanges), newReadId);
     }
 
     void BuildRequests(const TPartitionInfo& partitioning, ui64& readId) final {
         YQL_ENSURE(partitioning);
 
-        std::unordered_map<ui64, std::vector<TOwnedTableRange>> rangesPerShard;
-        std::unordered_map<ui64, std::vector<TOwnedTableRange>> pointsPerShard;
+        TReadBatches rangesPerShard;
+        TReadBatches pointsPerShard;
+        auto append = [&](ui64 shardId, TOwnedTableRange&& range) {
+            auto& pending = range.Point ? pointsPerShard[shardId] : rangesPerShard[shardId];
+            auto ready = AppendReadRange(pending, std::move(range));
+            if (!ready.empty()) {
+                ScheduleRead(shardId, readId, std::move(ready));
+            }
+        };
 
         while (!UnprocessedKeys.empty()) {
             auto range = std::move(UnprocessedKeys.front());
@@ -840,11 +879,7 @@ public:
             for (auto [shardId, range] : partitions) {
                 YQL_ENSURE(PendingLeftRowsByKey.contains(ExtractKeyPrefix(range)));
 
-                if (range.Point) {
-                    pointsPerShard[shardId].push_back(std::move(range));
-                } else {
-                    rangesPerShard[shardId].push_back(std::move(range));
-                }
+                append(shardId, std::move(range));
             }
         }
 
@@ -855,11 +890,7 @@ public:
             auto partitions = partitioning->GetIntersectionWithRange(GetKeyColumnTypes(), TTableRange(unprocessedRow.LookupKey));
             for (auto[shardId, range] : partitions) {
                 hasRanges = true;
-                if (range.Point) {
-                    pointsPerShard[shardId].push_back(std::move(range));
-                } else {
-                    rangesPerShard[shardId].push_back(std::move(range));
-                }
+                append(shardId, std::move(range));
             }
 
             if (!hasRanges) {
@@ -875,40 +906,15 @@ public:
             }
         }
 
-        for (auto& [shardId, points] : pointsPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-            FillReadRequest(++readId, request, points);
-            ScheduledReads.emplace_back(shardId, std::move(request));
-
-            for (const auto& point : points) {
-                auto rowIt = PendingLeftRowsByKey.find(point.From);
-                YQL_ENSURE(rowIt != PendingLeftRowsByKey.end());
-                rowIt->second.PendingReads.insert(readId);
+        for (auto& [shardId, pending] : pointsPerShard) {
+            if (!pending.Keys.empty()) {
+                ScheduleRead(shardId, readId, std::move(pending.Keys));
             }
-
-            YQL_ENSURE(ReadStateByReadId.emplace(
-                readId,
-                TReadState{
-                    .PendingKeys = std::move(points),
-                }).second);
         }
-
-        for (auto& [shardId, ranges] : rangesPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-            FillReadRequest(++readId, request, ranges);
-            ScheduledReads.emplace_back(shardId, std::move(request));
-
-            for (const auto& range : ranges) {
-                auto rowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(range));
-                YQL_ENSURE(rowIt != PendingLeftRowsByKey.end());
-                rowIt->second.PendingReads.insert(readId);
+        for (auto& [shardId, pending] : rangesPerShard) {
+            if (!pending.Keys.empty()) {
+                ScheduleRead(shardId, readId, std::move(pending.Keys));
             }
-
-            YQL_ENSURE(ReadStateByReadId.emplace(
-                readId,
-                TReadState{
-                    .PendingKeys = std::move(ranges),
-                }).second);
         }
     }
 
@@ -1232,9 +1238,19 @@ private:
         return Settings.KeepRowsOrder;
     }
 
-    void FillReadRequest(ui64 readId, THolder<TEvDataShard::TEvRead>& request, const std::vector<TOwnedTableRange>& ranges) {
-        auto& record = request->Record;
+    void ScheduleRead(ui64 shardId, ui64& readId, std::vector<TOwnedTableRange>&& keys) final {
+        YQL_ENSURE(!keys.empty());
+        const ui64 nextReadId = ++readId;
+        for (const auto& key : keys) {
+            auto rowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(key));
+            YQL_ENSURE(rowIt != PendingLeftRowsByKey.end());
+            rowIt->second.PendingReads.insert(nextReadId);
+        }
+        YQL_ENSURE(ReadStateByReadId.emplace(nextReadId, TReadState{ .PendingKeys = std::move(keys) }).second);
+        ScheduledReads.emplace_back(shardId, nextReadId);
+    }
 
+    void FillReadRequestHeader(ui64 readId, NKikimrTxDataShard::TEvRead& record) {
         record.SetReadId(readId);
 
         record.MutableTableId()->SetOwnerId(Settings.TableId.PathId.OwnerId);
@@ -1246,6 +1262,15 @@ private:
                 record.AddColumns(column.Id);
             }
         }
+
+        if (!Settings.PoolId.empty()) {
+            record.SetDatabaseId(Settings.Database);
+            record.SetPoolId(Settings.PoolId);
+        }
+    }
+
+    void FillReadRequest(ui64 readId, THolder<TEvDataShard::TEvRead>& request, const std::vector<TOwnedTableRange>& ranges) {
+        FillReadRequestHeader(readId, request->Record);
 
         YQL_ENSURE(!ranges.empty());
         if (ranges.front().Point) {
@@ -1265,11 +1290,6 @@ private:
                     request->Ranges.emplace_back(TSerializedTableRange(range));
                 }
             }
-        }
-
-        if (!Settings.PoolId.empty()) {
-            record.SetDatabaseId(Settings.Database);
-            record.SetPoolId(Settings.PoolId);
         }
     }
 
@@ -1325,7 +1345,7 @@ private:
     std::deque<TUnprocessedLeftRow> UnprocessedRows;
     std::deque<TOwnedTableRange> UnprocessedKeys;
     std::unordered_map<ui64, TReadState> ReadStateByReadId;
-    std::deque<std::pair<ui64, THolder<TEvDataShard::TEvRead>>> ScheduledReads;
+    std::deque<std::pair<ui64, ui64>> ScheduledReads;
     absl::flat_hash_map<TOwnedCellVec, TJoinKeyInfo, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PendingLeftRowsByKey;
     absl::flat_hash_map<ui64, TIntrusivePtr<TResultBatch>> ResultRowsBySeqNo;
     std::deque<TResultBatch::TResultRow> FlushedResultRows;

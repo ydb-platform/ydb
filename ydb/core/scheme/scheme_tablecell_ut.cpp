@@ -296,6 +296,51 @@ Y_UNIT_TEST_SUITE(Scheme) {
         }
     }
 
+    Y_UNIT_TEST(CellVecParseIntoCallerStorage) {
+        const TString large(8193, 'x');
+        const TVector<TCell> source = { TCell::Make<ui64>(42), TCell(), TCell("", 0),
+            TCell(large.data(), large.size()) };
+        const TString data = TSerializedCellVec::Serialize(source);
+        TVector<TCell> decoded(source.size() + 2, TCell::Make<ui64>(777));
+        TArrayRef<TCell> destination(decoded.data() + 1, source.size());
+
+        UNIT_ASSERT(TSerializedCellVec::TryParseCellsInto(std::string_view(data.data(), data.size()), destination));
+        UNIT_ASSERT_VALUES_EQUAL(decoded.front().AsValue<ui64>(), 777);
+        UNIT_ASSERT_VALUES_EQUAL(decoded.back().AsValue<ui64>(), 777);
+        for (size_t i = 0; i < source.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(destination[i].IsNull(), source[i].IsNull());
+            UNIT_ASSERT_VALUES_EQUAL(destination[i].AsBuf(), source[i].AsBuf());
+        }
+        UNIT_ASSERT(destination.back().Data() >= data.data());
+        UNIT_ASSERT(destination.back().Data() + destination.back().Size() <= data.data() + data.size());
+    }
+
+    Y_UNIT_TEST(CellVecParseIntoRejectsWrongSizeAndTruncation) {
+        const TString large(64, 'a');
+        const TString data =
+            TSerializedCellVec::Serialize({ TCell::Make<ui64>(42), TCell(large.data(), large.size()) });
+        TVector<TCell> decoded(4, TCell::Make<ui64>(777));
+        TArrayRef<TCell> destination(decoded.data() + 1, 2);
+
+        UNIT_ASSERT(!TSerializedCellVec::TryParseCellsInto(std::string_view(data.data(), data.size()), {}));
+        UNIT_ASSERT(!TSerializedCellVec::TryParseCellsInto(
+            std::string_view(data.data(), data.size()), TArrayRef<TCell>(decoded)));
+        for (size_t size = 0; size < data.size(); ++size) {
+            UNIT_ASSERT_C(
+                !TSerializedCellVec::TryParseCellsInto(std::string_view(data.data(), size), destination), size);
+            UNIT_ASSERT_VALUES_EQUAL(decoded.front().AsValue<ui64>(), 777);
+            UNIT_ASSERT_VALUES_EQUAL(decoded.back().AsValue<ui64>(), 777);
+        }
+    }
+
+    Y_UNIT_TEST(CellVecParseIntoEmptyStorage) {
+        UNIT_ASSERT(TSerializedCellVec::TryParseCellsInto({}, {}));
+        const TString data = TSerializedCellVec::Serialize({});
+        UNIT_ASSERT(TSerializedCellVec::TryParseCellsInto(std::string_view(data.data(), data.size()), {}));
+        TCell cell;
+        UNIT_ASSERT(!TSerializedCellVec::TryParseCellsInto({}, TArrayRef<TCell>(&cell, 1)));
+    }
+
     ui64 GetCellsHash(TConstArrayRef<TCell> cells, const TVector<TTypeInfo>& types) {
         UNIT_ASSERT_VALUES_EQUAL(cells.size(), types.size());
 

@@ -625,7 +625,7 @@ public:
                     .NotUnderOperation();
 
                 if (!storeChecks) {
-                    result->SetError(checks.GetStatus(), checks.GetError());
+                    result->SetError(storeChecks.GetStatus(), storeChecks.GetError());
                     return result;
                 }
             }

@@ -1,5 +1,6 @@
 #include "add_column.h"
 #include <util/string/type.h>
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 
 namespace NKikimr::NKqp {
 
@@ -14,6 +15,10 @@ TConclusionStatus TAddColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl::
     StorageId = features.Extract("STORAGE_ID");
     if (StorageId && !*StorageId) {
         return TConclusionStatus::Fail("STORAGE_ID cannot be empty string");
+    }
+    if (StorageId && !NKikimr::NOlap::NBlobOperations::IsValidColumnStorageId(*StorageId)) {
+        return TConclusionStatus::Fail("Unsupported STORAGE_ID '" + *StorageId
+            + "': only '__DEFAULT', '__MEMORY' and '__LOCAL_METADATA' are allowed for column tables");
     }
     {
         auto fValue = features.Extract("TYPE");

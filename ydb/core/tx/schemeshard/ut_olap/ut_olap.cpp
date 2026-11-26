@@ -1003,6 +1003,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
     Y_UNIT_TEST(AlterShardReadFlagsCompletesSynchronously) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableAlterShardingInColumnShard(true);
         ui64 txId = 100;
 
         TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
@@ -1035,6 +1036,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
     Y_UNIT_TEST_FLAG(InStoreShardAlterSurvivesReboot, Transfer) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableAlterShardingInColumnShard(true);
         // Sharing still uses SchemeShard path IDs, so run it with legacy IDs.
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetForcedGenerateInternalPathId(!Transfer);
@@ -3450,6 +3452,436 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         }
         UNIT_ASSERT_C(found, "alter must commit after an early ColumnShard completion reply");
+    }
+
+    Y_UNIT_TEST(AlterStoreUnknownPresetRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "unknown"
+                AlterSchema {
+                    AddColumns { Name: "comment" Type: "Utf8" }
+                }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusInvalidParameter, "Cannot alter unknown schema preset 'unknown'")});
+
+        TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
+    }
+
+    Y_UNIT_TEST(CreateColumnTableInStoreUnderOperationRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 storeTxId = ++txId;
+        TBlockEvents<TEvColumnShard::TEvProposeTransaction> storeProposals(runtime,
+            [storeTxId](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+                return ev->Get()->Record.GetTxId() == storeTxId;
+            });
+        TestAlterOlapStore(runtime, storeTxId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema {
+                    AddColumns { Name: "comment" Type: "Utf8" }
+                }
+            }
+        )");
+        runtime.WaitFor("store ALTER proposal blocked", [&]() { return !storeProposals.empty(); });
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "TableUnderOp"
+            ColumnShardCount: 1
+        )", {NKikimrScheme::StatusMultipleModifications});
+
+        storeProposals.Stop().Unblock();
+        env.TestWaitNotification(runtime, storeTxId);
+        TestLs(runtime, "/MyRoot/OlapStore/TableUnderOp", false, NLs::PathNotExist);
+    }
+
+    Y_UNIT_TEST(UnsupportedColumnStorageIdRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true StorageId: "garbage" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Unsupported STORAGE_ID 'garbage' for column 'timestamp'")});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" StorageId: "__DEFAULT" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                AlterColumns { Name: "data" StorageId: "tier1" }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Unsupported STORAGE_ID 'tier1' for column 'data'")});
+    }
+
+    Y_UNIT_TEST(MalformedSchemaIndexesRejectedOnCreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BadTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Id: 1 Name: "id" Type: "Uint64" NotNull: true }
+                Columns { Id: 2 Name: "data" Type: "Utf8" }
+                KeyColumnNames: "id"
+                Indexes {
+                    Id: 3 Name: "dup" ClassName: "BLOOM_FILTER"
+                    BloomFilter { ColumnIds: [2] FalsePositiveProbability: 0.01 }
+                }
+                Indexes {
+                    Id: 4 Name: "dup" ClassName: "BLOOM_FILTER"
+                    BloomFilter { ColumnIds: [2] FalsePositiveProbability: 0.01 }
+                }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Duplicate index name: dup")});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BadTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Id: 1 Name: "id" Type: "Uint64" NotNull: true }
+                Columns { Id: 2 Name: "data" Type: "Utf8" }
+                KeyColumnNames: "id"
+                Indexes {
+                    Name: "no_id" ClassName: "BLOOM_FILTER"
+                    BloomFilter { ColumnIds: [2] FalsePositiveProbability: 0.01 }
+                }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Incorrect index 'no_id'")});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BadTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Id: 1 Name: "id" Type: "Uint64" NotNull: true }
+                Columns { Id: 2 Name: "data" Type: "Utf8" }
+                KeyColumnNames: "id"
+                Indexes {
+                    Id: 3 Name: "bogus" ClassName: "BOGUS" BloomFilter { ColumnIds: [2] }
+                }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "unknown class name 'BOGUS'")});
+    }
+
+    Y_UNIT_TEST(UnknownUpsertIndexClassRejectedOnAlter) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                UpsertIndexes {
+                    Name: "bad" ClassName: "BOGUS"
+                    StorageId: "__LOCAL_METADATA" InheritPortionStorage: false
+                    MinMaxIndex { ColumnName: "data" }
+                }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Unknown or unparsed index class name 'BOGUS' for index 'bad'")});
+    }
+
+    Y_UNIT_TEST(CraftedShardingInfoRejectedOnCreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BadSharding"
+            ColumnShardCount: 2
+            Sharding {
+                ShardsInfo { TabletId: 1001 SequenceIdx: 1 ShardingVersion: 1 }
+                ShardsInfo { TabletId: 1002 SequenceIdx: 1 ShardingVersion: 1 }
+            }
+            Schema {
+                Columns { Id: 1 Name: "id" Type: "Uint64" NotNull: true }
+                KeyColumnNames: "id"
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "duplicate sequence_idx 1 in sharding shards_info")});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BadSharding"
+            ColumnShardCount: 2
+            Sharding {
+                ShardsInfo { TabletId: 1001 SequenceIdx: 1 ShardingVersion: 1 }
+                ShardsInfo { TabletId: 1001 SequenceIdx: 2 ShardingVersion: 1 }
+            }
+            Schema {
+                Columns { Id: 1 Name: "id" Type: "Uint64" NotNull: true }
+                KeyColumnNames: "id"
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "duplicate tablet id 1001 in sharding shards_info")});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BadSharding"
+            ColumnShardCount: 1
+            Sharding {
+                ShardsInfo { TabletId: 1001 SequenceIdx: 1 }
+            }
+            Schema {
+                Columns { Id: 1 Name: "id" Type: "Uint64" NotNull: true }
+                KeyColumnNames: "id"
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "TShardInfo proto has no sharding version")});
+    }
+
+    Y_UNIT_TEST(DropColumnUsedByIndexRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Id: 1 Name: "id" Type: "Uint64" NotNull: true }
+                Columns { Id: 2 Name: "data" Type: "Utf8" }
+                KeyColumnNames: "id"
+                Indexes {
+                    Id: 3 Name: "bloom_data" ClassName: "BLOOM_FILTER"
+                    BloomFilter { ColumnIds: [2] FalsePositiveProbability: 0.01 }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                DropColumns { Name: "data" }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Cannot drop column 'data' because it is used by index 'bloom_data'")});
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                DropColumns { Name: "data" }
+                DropIndexes: "bloom_data"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(DropColumnUsedByStatisticsRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key1" Type: "Uint32" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: [ "timestamp" ]
+            }
+            MultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                DropColumns { Name: "data" }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Cannot drop column 'data' because it is used by statistics 's1'")});
+    }
+
+    Y_UNIT_TEST(ScanReaderPolicyNameValidated) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BadPolicy"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "id" Type: "Uint64" NotNull: true }
+                KeyColumnNames: "id"
+                Options { ScanReaderPolicyName: "BOGUS" }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Unsupported scan reader policy name 'BOGUS'")});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "GoodPolicy"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "id" Type: "Uint64" NotNull: true }
+                KeyColumnNames: "id"
+                Options { ScanReaderPolicyName: "PLAIN" }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto describe = DescribePath(runtime, "/MyRoot/GoodPolicy");
+        UNIT_ASSERT_VALUES_EQUAL(
+            describe.GetPathDescription().GetColumnTableDescription().GetSchema().GetOptions().GetScanReaderPolicyName(), "PLAIN");
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "GoodPolicy"
+            AlterSchema {
+                Options { ScanReaderPolicyName: "BOGUS" }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Unsupported scan reader policy name 'BOGUS'")});
+    }
+
+    Y_UNIT_TEST(InStoreScanReaderPolicyNameValidated) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "BadPolicy"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Options { ScanReaderPolicyName: "BOGUS" }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Unsupported scan reader policy name 'BOGUS'")});
+    }
+
+    Y_UNIT_TEST(AlterShardsRejectedWhenShardingDisabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            AlterShards { Modification { OpenReadIds: 1 } }
+        )", {TExpectedResult(NKikimrScheme::StatusPreconditionFailed, "Alter sharding is disabled for OLAP tables")});
+    }
+
+    Y_UNIT_TEST(ConsistencyShardingUnknownTabletRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableAlterShardingInColumnShard(true);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Sharding {
+                HashSharding { Function: HASH_FUNCTION_CONSISTENCY_64 Columns: "timestamp" }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            AlterShards { Modification {
+                Consistency { Shards { TabletId: 999999 HashIntervalLeftClosed: 0 HashIntervalRightOpened: 10 } }
+            } }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "unknown tablet id 999999 in consistency sharding modification")});
+    }
+
+    Y_UNIT_TEST(InStoreDropColumnUsedByIndexRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalMinMaxIndex(true);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "id" Type: "Uint64" NotNull: true }
+                    Columns { Name: "ts" Type: "Timestamp" }
+                    KeyColumnNames: "id"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema {
+                    UpsertIndexes {
+                        Name: "mm" ClassName: "MIN_MAX"
+                        StorageId: "__LOCAL_METADATA" InheritPortionStorage: false
+                        MinMaxIndex { ColumnName: "ts" }
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema {
+                    DropColumns { Name: "ts" }
+                }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Cannot drop column 'ts' because it is used by index 'mm'")});
+
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema {
+                    DropColumns { Name: "ts" }
+                    DropIndexes: "mm"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
     }
 }
 

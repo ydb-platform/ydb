@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/formats/arrow/serializer
     ydb/core/tx/columnshard/engines/storage/optimizer/abstract
     ydb/core/tx/columnshard/data_accessor/abstract
+    ydb/core/tx/columnshard/blobs_action/common
     ydb/core/kqp/gateway/utils
     ydb/core/protos
 )

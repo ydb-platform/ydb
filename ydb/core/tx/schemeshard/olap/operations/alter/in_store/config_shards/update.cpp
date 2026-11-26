@@ -46,7 +46,10 @@ TConclusionStatus TInStoreShardsUpdate::DoInitializeImpl(const TUpdateInitializa
     auto description = tableInfo->Description;
 
     Sharding = tableInfo->GetShardingVerified(original.GetTableSchemaVerified());
-    Sharding->ApplyModification(Alter.GetModification()).Validate();
+    auto modification = Sharding->ApplyModification(Alter.GetModification());
+    if (modification.IsFail()) {
+        return modification;
+    }
     *description.MutableSharding() = Sharding->SerializeToProto();
     InitializeShardIds();
 

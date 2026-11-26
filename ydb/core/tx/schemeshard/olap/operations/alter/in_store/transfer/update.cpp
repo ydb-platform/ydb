@@ -5,11 +5,20 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-void TInStoreShardsTransfer::InitializeTransfers(
+TConclusionStatus TInStoreShardsTransfer::InitializeTransfers(
     const TUpdateRestoreContext& context, const NKikimrSchemeOp::TAlterColumnTable& alterTable) {
     const auto& table = *TargetInStoreTable;
     auto sharding = table.GetTableInfo()->GetShardingVerified(table.GetTableSchemaVerified());
     for (auto&& alter : alterTable.GetAlterShards().GetTransfer().GetTransfers()) {
+        const auto* destinationShardInfo = sharding->GetShardInfo(alter.GetDestinationTabletId());
+        if (!destinationShardInfo) {
+            return TConclusionStatus::Fail(TStringBuilder() << "Unknown destination tablet id for shards transfer: "
+                << alter.GetDestinationTabletId());
+        }
+        if (!destinationShardInfo->GetOpenForWriteSnapshot()) {
+            return TConclusionStatus::Fail(TStringBuilder() << "No open snapshot for destination tablet id in shards transfer: "
+                << alter.GetDestinationTabletId());
+        }
         NKikimrColumnShardDataSharingProto::TDestinationSession destinationSession;
         destinationSession.SetSessionId(alter.GetSessionId());
         *destinationSession.MutableInitiatorController() = NKikimr::NOlap::NDataSharing::TInitiatorControllerContainer(
@@ -28,17 +37,23 @@ void TInStoreShardsTransfer::InitializeTransfers(
         for (auto&& i : alter.GetSourceTabletIds()) {
             destinationSession.MutableTransferContext()->AddSourceTabletIds(i);
         }
-        YDB_LOG_VERIFY(DestinationSessions.emplace(destinationSession.GetTransferContext().GetDestinationTabletId(), destinationSession).second);
-        YDB_LOG_VERIFY(ShardIdsUsage.emplace(alter.GetDestinationTabletId()).second);
+        if (!DestinationSessions.emplace(destinationSession.GetTransferContext().GetDestinationTabletId(), destinationSession).second) {
+            return TConclusionStatus::Fail(TStringBuilder() << "Duplicated destination tablet id for shards transfer: "
+                << alter.GetDestinationTabletId());
+        }
+        if (!ShardIdsUsage.emplace(alter.GetDestinationTabletId()).second) {
+            return TConclusionStatus::Fail(TStringBuilder() << "Duplicated destination tablet id for shards transfer: "
+                << alter.GetDestinationTabletId());
+        }
     }
+    return TConclusionStatus::Success();
 }
 
 TConclusionStatus TInStoreShardsTransfer::DoRestoreImpl(
     const TUpdateRestoreContext& context, const TColumnTableInfo::TPtr& alterData) {
     TEntityInitializationContext eContext(context.GetSSOperationContext());
     TargetInStoreTable = std::make_shared<TInStoreTable>(context.GetOriginalEntity().GetPathId(), alterData, eContext);
-    InitializeTransfers(context, *alterData->AlterBody);
-    return TConclusionStatus::Success();
+    return InitializeTransfers(context, *alterData->AlterBody);
 }
 
 NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdateInitializationContext& context) {
@@ -52,9 +67,7 @@ NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdat
         inStoreOriginal.GetTableInfoVerified().Description, TMaybe<NKikimrSchemeOp::TColumnStoreSharding>(), context.GetModification()->GetAlterColumnTable());
     TEntityInitializationContext eContext(context.GetSSOperationContext());
     TargetInStoreTable = std::make_shared<TInStoreTable>(context.GetOriginalEntity().GetPathId(), targetInfo, eContext);
-    InitializeTransfers(context, alter);
-
-    return TConclusionStatus::Success();
+    return InitializeTransfers(context, alter);
 }
 
 }

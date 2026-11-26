@@ -2,6 +2,8 @@
 #include "hash_sharding.h"
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
+#include <util/string/builder.h>
+
 namespace NKikimr::NSharding::NConsistency {
 
 class TSpecificShardingInfo {
@@ -44,7 +46,10 @@ public:
             TabletId = proto.GetTabletId();
             HashIntervalLeftClosed = proto.GetHashIntervalLeftClosed();
             HashIntervalRightOpened = proto.GetHashIntervalRightOpened();
-            YDB_LOG_VERIFY(HashIntervalLeftClosed < HashIntervalRightOpened);
+            if (HashIntervalLeftClosed >= HashIntervalRightOpened) {
+                return TConclusionStatus::Fail(TStringBuilder() << "incorrect hash interval for TConsistencyShardingTablet, tabletId="
+                    << TabletId << ": left border " << HashIntervalLeftClosed << " is not less than right border " << HashIntervalRightOpened);
+            }
             return TConclusionStatus::Success();
         }
 
@@ -274,19 +279,24 @@ private:
     virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const override;
     virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildMergeShardsModifiers(const std::vector<ui64>& newTabletIds) const override;
 
-    bool UpdateShardInfo(const TSpecificShardingInfo::TConsistencyShardingTablet& info) {
-        GetShardInfoVerified(info.GetTabletId()).IncrementVersion();
+    TConclusionStatus UpdateShardInfo(const TSpecificShardingInfo::TConsistencyShardingTablet& info) {
+        auto* shardInfo = GetShardInfo(info.GetTabletId());
+        if (!shardInfo) {
+            return TConclusionStatus::Fail(TStringBuilder() << "unknown tablet id " << info.GetTabletId()
+                << " in consistency sharding modification");
+        }
+        shardInfo->IncrementVersion();
         YDB_LOG_VERIFY(!!SpecialShardingInfo);
         if (SpecialShardingInfo->UpdateShardInfo(info)) {
-            return true;
+            return TConclusionStatus::Success();
         }
         for (auto&& i : GetOrderedShardIds()) {
             if (i == info.GetTabletId()) {
                 SpecialShardingInfo->AddShardInfo(info);
-                return true;
+                break;
             }
         }
-        return false;
+        return TConclusionStatus::Success();
     }
 
     bool DeleteShardInfo(const ui64 tabletId) {

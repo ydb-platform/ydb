@@ -57,6 +57,10 @@ public:
         return ColumnIds;
     }
 
+    virtual std::set<ui32> GetUsedColumnIds() const override {
+        return ColumnIds;
+    }
+
     TIndexByColumns() = default;
     TIndexByColumns(const ui32 indexId, const TString& indexName, const ui32 columnId, const TString& storageId,
         const bool inheritPortionStorage, const TReadDataExtractorContainer& extractor);

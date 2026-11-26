@@ -114,8 +114,9 @@ NKikimr::TConclusionStatus TConsistencySharding64::DoApplyModification(const NKi
                 return conclusion;
             }
         }
-        if (!UpdateShardInfo(info)) {
-            return TConclusionStatus::Fail("no shard with same id on update consistency interval");
+        auto update = UpdateShardInfo(info);
+        if (update.IsFail()) {
+            return update;
         }
     }
     return TConclusionStatus::Success();

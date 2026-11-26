@@ -1,3 +1,6 @@
+SIZE(LARGE)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+
 TEST_SRCS(
     ydb/tests/functional/sqs/cloud/test_common.py
     ydb/tests/functional/sqs/cloud/test_yandex_cloud_mode.py
@@ -11,11 +14,7 @@ DATA(
 
 REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE == "thread")
-    SIZE(LARGE)
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:32)
-ELSE()
-    SIZE(MEDIUM)
 ENDIF()
 
 DEPENDS(

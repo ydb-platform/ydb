@@ -2607,6 +2607,8 @@ NProto::EMaintenanceComponent ConvertMaintenanceComponentToProto(EMaintenanceCom
             return NProto::EMaintenanceComponent::MC_RPC_PROXY;
         case EMaintenanceComponent::Host:
             return NProto::EMaintenanceComponent::MC_HOST;
+        case EMaintenanceComponent::ChunkLocation:
+            return NProto::EMaintenanceComponent::MC_CHUNK_LOCATION;
         default:
             THROW_ERROR_EXCEPTION("Invalid maintenance component %Qlv", component);
     }
@@ -3025,11 +3027,8 @@ TFuture<TQuery> TClient::GetQuery(
     if (options.Timestamp) {
         req->set_timestamp(ToProto(options.Timestamp));
     }
-
-    ToProto(req->mutable_progress_parts(), options.ProgressParts);
-
-    if (options.MinProgressRevision) {
-        req->set_min_progress_revision(*options.MinProgressRevision);
+    if (options.ProgressOptions) {
+        req->set_progress_options(ToProto(ConvertToYsonString(options.ProgressOptions)));
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryPtr& rsp) {

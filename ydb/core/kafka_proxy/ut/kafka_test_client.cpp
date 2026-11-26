@@ -5,23 +5,124 @@
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/kafka_proxy/actors/kafka_api_versions_actor.h>
+#include <ydb/core/raw_socket/sock_ssl.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/library/login/sasl/scram.h>
 
 #include <util/random/random.h>
 
+#include <openssl/bio.h>
+#include <openssl/err.h>
+#include <openssl/pem.h>
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
+
 static constexpr TKafkaUint16 ASSIGNMENT_VERSION = 3;
 
 using namespace NKafka;
 
+struct TKafkaTestClient::TSslConnection : public IOutputStream, public IInputStream {
+    NKikimr::NRawSocket::TSslHelpers::TSslHolder<SSL_CTX> Ctx;
+    SSL* Ssl = nullptr;
+
+    TSslConnection(std::string_view clientCertPem, std::string_view clientKeyPem, std::string_view caCertPem, SOCKET fd)
+        : Ctx(NKikimr::NRawSocket::TSslHelpers::CreateClientContext())
+    {
+        UNIT_ASSERT(Ctx);
+        {
+            NKikimr::NRawSocket::TSslHelpers::TSslHolder<BIO> bio(BIO_new_mem_buf(clientCertPem.data(), (int)clientCertPem.size()));
+            NKikimr::NRawSocket::TSslHelpers::TSslHolder<X509> cert(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
+            UNIT_ASSERT(bio);
+            UNIT_ASSERT(cert);
+            UNIT_ASSERT(SSL_CTX_use_certificate(Ctx.get(), cert.get()) == 1);
+        }
+        {
+            NKikimr::NRawSocket::TSslHelpers::TSslHolder<BIO> bio(BIO_new_mem_buf(clientKeyPem.data(), (int)clientKeyPem.size()));
+            NKikimr::NRawSocket::TSslHelpers::TSslHolder<EVP_PKEY> key(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
+            UNIT_ASSERT(bio);
+            UNIT_ASSERT(key);
+            UNIT_ASSERT(SSL_CTX_use_PrivateKey(Ctx.get(), key.get()) == 1);
+            UNIT_ASSERT(SSL_CTX_check_private_key(Ctx.get()));
+        }
+        {
+            NKikimr::NRawSocket::TSslHelpers::TSslHolder<BIO> bio(BIO_new_mem_buf(caCertPem.data(), (int)caCertPem.size()));
+            NKikimr::NRawSocket::TSslHelpers::TSslHolder<X509> ca(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
+            UNIT_ASSERT(bio);
+            UNIT_ASSERT(ca);
+            UNIT_ASSERT(X509_STORE_add_cert(SSL_CTX_get_cert_store(Ctx.get()), ca.get()) == 1);
+        }
+        SSL_CTX_set_verify(Ctx.get(), SSL_VERIFY_PEER, nullptr);
+
+        Ssl = SSL_new(Ctx.get());
+        UNIT_ASSERT(Ssl);
+        UNIT_ASSERT(SSL_set_fd(Ssl, (int)fd) == 1);
+        int res = SSL_connect(Ssl);
+        if (res != 1) {
+            char errorText[256];
+            ERR_error_string_n(ERR_get_error(), errorText, sizeof(errorText));
+            SSL_free(Ssl);
+            Ssl = nullptr;
+            ythrow yexception() << "SSL_connect failed: " << errorText;
+        }
+    }
+
+    ~TSslConnection() {
+        if (Ssl) {
+            SSL_free(Ssl);
+        }
+    }
+
+    void DoWrite(const void* buf, size_t len) override {
+        while (len > 0) {
+            int written = SSL_write(Ssl, buf, (int)len);
+            if (written <= 0) {
+                ythrow yexception() << "SSL_write failed: " << SSL_get_error(Ssl, written);
+            }
+            buf = (const char*)buf + written;
+            len -= (size_t)written;
+        }
+    }
+
+    size_t DoRead(void* buf, size_t len) override {
+        size_t total = 0;
+        while (total < len) {
+            int received = SSL_read(Ssl, (char*)buf + total, (int)(len - total));
+            if (received <= 0) {
+                ythrow yexception() << "SSL_read failed: " << SSL_get_error(Ssl, received);
+            }
+            total += (size_t)received;
+        }
+        return total;
+    }
+};
+
 TKafkaTestClient::TKafkaTestClient(ui16 port, const TString clientName)
     : Addr("localhost", port)
     , Socket(Addr)
-    , So(Socket)
-    , Si(Socket)
+    , PlainSo(Socket)
+    , PlainSi(Socket)
+    , So(&PlainSo)
+    , Si(&PlainSi)
     , Correlation(0)
     , ClientName(clientName) {
 }
+
+TKafkaTestClient::TKafkaTestClient(ui16 port, std::string_view clientCertPem, std::string_view clientKeyPem,
+                                   std::string_view caCertPem, const TString clientName)
+    : Addr("localhost", port)
+    , Socket(Addr)
+    , PlainSo(Socket)
+    , PlainSi(Socket)
+    , So(nullptr)
+    , Si(nullptr)
+    , Correlation(0)
+    , ClientName(clientName) {
+    Ssl = std::make_unique<TSslConnection>(clientCertPem, clientKeyPem, caCertPem, (SOCKET)Socket);
+    So = Ssl.get();
+    Si = Ssl.get();
+}
+
+TKafkaTestClient::~TKafkaTestClient() = default;
 
 void TKafkaTestClient::SetSocketTimeout(ui32 seconds) {
     Socket.SetSocketTimeout(seconds, 0);
@@ -257,12 +358,12 @@ void TKafkaTestClient::ProduceAsync(const TTopicPartition& topicPartition,
         request.TransactionalId = *transactionalId;
     }
 
-    Write(So, &header, &request, false);
+    Write(*So, &header, &request, false);
 }
 
 TMessagePtr<TProduceResponseData> TKafkaTestClient::ReadLastResult(i32 customCorrelationId) {
     TRequestHeaderData header = Header(NKafka::EApiKey::PRODUCE, 9, customCorrelationId);
-    return Read<TProduceResponseData>(Si, &header);
+    return Read<TProduceResponseData>(*Si, &header);
 }
 
 TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartition& topicPartition,
@@ -845,7 +946,7 @@ void TKafkaTestClient::UnknownApiKey() {
     request.ClientSoftwareName = "SuperTest";
     request.ClientSoftwareVersion = "3100.7.13";
 
-    Write(So, &header, &request);
+    Write(*So, &header, &request);
 }
 
 void TKafkaTestClient::PlainAuthenticateToKafka() {
@@ -1034,11 +1135,11 @@ ui32 TKafkaTestClient::NextCorrelation() {
 
 template <std::derived_from<TApiMessage> T>
 TMessagePtr<T> TKafkaTestClient::WriteAndRead(TRequestHeaderData& header, TApiMessage& request, bool silent) {
-    Write(So, &header, &request, silent);
-    return Read<T>(Si, &header);
+    Write(*So, &header, &request, silent);
+    return Read<T>(*Si, &header);
 }
 
-void TKafkaTestClient::Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version, bool silent) {
+void TKafkaTestClient::Write(IOutputStream& so, TApiMessage* request, TKafkaVersion version, bool silent) {
     TKafkaWriteBuffer sb( request->Size(version) + 1000);
     TKafkaWritable writable(sb);
     request->Write(writable, version);
@@ -1049,7 +1150,7 @@ void TKafkaTestClient::Write(TSocketOutput& so, TApiMessage* request, TKafkaVers
     }
 }
 
-void TKafkaTestClient::Write(TSocketOutput& so, TRequestHeaderData* header, TApiMessage* request, bool silent) {
+void TKafkaTestClient::Write(IOutputStream& so, TRequestHeaderData* header, TApiMessage* request, bool silent) {
     TKafkaVersion version = header->RequestApiVersion;
     TKafkaVersion headerVersion = RequestHeaderVersion(request->ApiKey(), version);
     TKafkaVersion bodyVersion = version;
@@ -1072,7 +1173,7 @@ void TKafkaTestClient::Write(TSocketOutput& so, TRequestHeaderData* header, TApi
 }
 
 template<std::derived_from<TApiMessage> T>
-TMessagePtr<T> TKafkaTestClient::Read(TSocketInput& si, TRequestHeaderData* requestHeader) {
+TMessagePtr<T> TKafkaTestClient::Read(IInputStream& si, TRequestHeaderData* requestHeader) {
     TKafkaInt32 size;
 
     si.Read(&size, sizeof(size));
@@ -1129,4 +1230,4 @@ template
 TMessagePtr<TFetchResponseData> TKafkaTestClient::WriteAndRead<TFetchResponseData>(TRequestHeaderData& header, TApiMessage& request, bool silent = false);
 
 template
-TMessagePtr<TProduceResponseData> TKafkaTestClient::Read<TProduceResponseData>(TSocketInput& si, TRequestHeaderData* requestHeader);
+TMessagePtr<TProduceResponseData> TKafkaTestClient::Read<TProduceResponseData>(IInputStream& si, TRequestHeaderData* requestHeader);

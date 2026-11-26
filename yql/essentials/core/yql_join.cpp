@@ -2170,7 +2170,17 @@ bool IsAggrEqualsJoinKeysEnabled(const TTypeAnnotationContext& types) {
 
 bool IsMemberEquality(const TExprNode::TPtr& predicate, const TExprNode& row, TExprNode::TPtr& leftMember, TExprNode::TPtr& rightMember,
                       bool allowAggrEquals) {
-    if (allowAggrEquals && predicate->IsCallable("AggrEquals")) {
+    if (predicate->IsCallable("OptAggrEquals")) {
+        leftMember = predicate->ChildPtr(0);
+        rightMember = predicate->ChildPtr(1);
+        const TTypeAnnotationNode* type = leftMember->GetTypeAnn();
+        if (type->GetKind() == ETypeAnnotationKind::Optional) {
+            type = type->Cast<TOptionalExprType>()->GetItemType();
+        }
+        if (type->HasOptionalOrNull()) {
+            return false;
+        }
+    } else if (allowAggrEquals && predicate->IsCallable("AggrEquals")) {
         leftMember = predicate->ChildPtr(0);
         rightMember = predicate->ChildPtr(1);
         // Generic joins discard keys containing NULLs, which AggrEquals can match.

@@ -62,14 +62,14 @@ bool TCleanSubColumnsPortionsNormalizer::CheckPortion(
 INormalizerTask::TPtr TCleanSubColumnsPortionsNormalizer::BuildTask(
     std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
     std::vector<TPortionDataAccessor> subColumnsPortions;
-    AFL_VERIFY(schemas);
+    YDB_LOG_VERIFY(schemas);
 
     for (auto&& portion : portions) {
         if (portion.GetPortionInfo().HasRemoveSnapshot()) {
             continue;
         }
         auto it = schemas->find(portion.GetPortionInfo().GetPortionId());
-        AFL_VERIFY(it != schemas->end());
+        YDB_LOG_VERIFY(it != schemas->end());
         const auto& indexInfo = it->second->GetIndexInfo();
         for (ui32 i = 0; i < it->second->GetColumnsCount(); ++i) {
             auto loader = indexInfo.GetColumnLoaderOptional(i);

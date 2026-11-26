@@ -22,7 +22,7 @@ std::vector<TGranuleOrdered> TGranulesStorage::GetGranulesForCompaction(
     if (pathIds.size()) {
         for (auto&& pathId : pathIds) {
             auto it = Tables.find(pathId);
-            AFL_VERIFY(it != Tables.end());
+            YDB_LOG_VERIFY(it != Tables.end());
             actor(it->first, it->second);
         }
     } else {

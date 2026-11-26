@@ -32,6 +32,13 @@ void Encode(const TChecksRequest& value, NProto::TLinterRequest& message) {
     message.SetIssueReportTarget(value.IssueReportTarget);
     message.SetSuppressPrerequisiteIssues(value.SuppressPrerequisiteIssues);
     message.SetLimitStrictnessFactor(value.LimitStrictnessFactor);
+    message.ClearAllowedStatementKinds();
+    if (value.AllowedStatementKinds) {
+        auto* kinds = message.MutableAllowedStatementKinds();
+        for (const auto statementKind : *value.AllowedStatementKinds) {
+            kinds->AddItems(static_cast<int>(statementKind));
+        }
+    }
 }
 
 void Decode(const NProto::TLinterRequest& message, TChecksRequest& value) {
@@ -51,6 +58,16 @@ void Decode(const NProto::TLinterRequest& message, TChecksRequest& value) {
     value.IssueReportTarget = message.GetIssueReportTarget();
     value.SuppressPrerequisiteIssues = message.GetSuppressPrerequisiteIssues();
     value.LimitStrictnessFactor = message.GetLimitStrictnessFactor();
+    value.AllowedStatementKinds.Clear();
+    if (message.HasAllowedStatementKinds()) {
+        auto& kinds = value.AllowedStatementKinds.ConstructInPlace();
+        for (const auto statementKind : message.GetAllowedStatementKinds().GetItems()) {
+            if (statementKind >= static_cast<int>(EStatementKind::First) &&
+                statementKind <= static_cast<int>(EStatementKind::Last)) {
+                kinds.insert(static_cast<EStatementKind>(statementKind));
+            }
+        }
+    }
 }
 
 void EncodeMap(const THashMap<TString, TString>& value, google::protobuf::RepeatedPtrField<NProto::TStringPair>& message) {

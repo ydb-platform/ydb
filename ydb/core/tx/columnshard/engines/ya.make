@@ -11,6 +11,7 @@ SRCS(
     column_engine_logs.cpp
     column_engine.cpp
     db_wrapper.cpp
+    index_portions_by_last_key.cpp
     filter.cpp
     defs.cpp
     snapshot_holders.cpp

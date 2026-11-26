@@ -14,6 +14,6 @@ DATA(
     arcadia/yql/essentials/tests/sql_benchmarks/number_operations/suites
 )
 
-SIZE(MEDIUM)
+INCLUDE(${ARCADIA_ROOT}/yql/essentials/tests/sql_benchmarks/common.inc)
 
 END()

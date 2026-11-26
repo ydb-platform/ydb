@@ -65,13 +65,13 @@ using TInternedString = TInternedObject<std::string>;
 using TRaceRegistry = TInternRegistry<TInternRegistryTestValue>;
 using TInternedRaceValue = TInternedObject<TInternRegistryTestValue>;
 
-TEST(TInternRegistryTest, TestEmptyRegistry)
+TEST(TInternRegistryTest, EmptyRegistry)
 {
     auto registry = New<TStringRegistry>();
     EXPECT_EQ(0, registry->GetSize());
 }
 
-TEST(TInternRegistryTest, TestEmptyInstance)
+TEST(TInternRegistryTest, EmptyInstance)
 {
     TInternedString s;
     EXPECT_EQ(0u, s->length());

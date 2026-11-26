@@ -219,4 +219,18 @@ private:
     TVector<TCoMember> ConstantMembers{};
 };
 
+// The key ranges the extractor would build for a key, predicted on the normalized predicate tree, so that the
+// candidates can be scored and costed without building their ranges.
+struct TKeyMatch {
+    size_t PointPrefixLen = 0;
+    size_t UsedPrefixLen = 0;
+    TMaybe<size_t> ExpectedMaxRanges;
+    bool HasResidual = true;
+
+    // The part of the predicate the ranges enforce, null if none
+    std::shared_ptr<TTreeNode> Consumed;
+};
+
+TKeyMatch MatchKey(const std::shared_ptr<TTreeNode>& node, const TVector<TString>& keyColumns, const TMaybe<size_t>& maxRanges);
+
 } // namespace NKikimr::NKqp

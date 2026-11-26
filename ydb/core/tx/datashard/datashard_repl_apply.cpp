@@ -254,6 +254,13 @@ public:
         }
 
         const auto& userTable = *it->second;
+        if (!userTable.IsIncrementalRestore() && !userTable.IsReplicated()) {
+            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
+                "Table is not replicated");
+            return true;
+        }
         if (tableId.GetSchemaVersion() != 0 && userTable.GetTableSchemaVersion() != tableId.GetSchemaVersion()) {
             TString error = TStringBuilder()
                 << "DataShard " << Self->TabletID() << " has table "
@@ -457,11 +464,13 @@ public:
         TReplicationSourceOffsetsDb rdb(txc);
         source.AdvanceMaxOffset(rdb, keyCellVec.GetCells(), sourceOffset);
 
+        if (!MvccVersion && (!writeTxId || collector)) {
+            // Index collection must see earlier immediate writes in this batch.
+            MvccVersion = userDb.GetMvccVersion();
+        }
+
         if (writeTxId) {
             if (collector) {
-                if (!MvccVersion) {
-                    MvccVersion = Self->GetMvccVersion();
-                }
                 if (!collector->OnUpdate(tableId, userTable.LocalTid, rop, key, update, *MvccVersion, nullptr)) {
                     throw TNotReadyTabletException();
                 }
@@ -473,10 +482,6 @@ public:
             Self->UpdateHnswIndex(userTable.LocalTid, rop, keyCellVec.GetCells(), update, txc.DB, TRowVersion::Min(), writeTxId);
             Self->GetConflictsCache().GetTableCache(userTable.LocalTid).AddUncommittedWrite(keyCellVec.GetCells(), writeTxId, txc.DB);
         } else {
-            if (!MvccVersion) {
-                MvccVersion = Self->GetMvccVersion();
-            }
-
             Self->SysLocksTable().BreakLocks(tableId, keyCellVec.GetCells());
             if (collector && !collector->OnUpdate(tableId, userTable.LocalTid, rop, key, update, *MvccVersion, nullptr)) {
                 throw TNotReadyTabletException();

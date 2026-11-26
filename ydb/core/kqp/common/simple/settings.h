@@ -9,6 +9,7 @@
 #include <util/string/builder.h>
 
 #include <tuple>
+#include <type_traits>
 
 namespace NKikimr::NKqp {
 
@@ -26,16 +27,17 @@ struct TKqpQuerySettings {
     explicit TKqpQuerySettings(NKikimrKqp::EQueryType queryType)
         : QueryType(queryType) {}
 
+    // Every field, for comparison and for the cache key. The binding names all
+    // of them: a field added to the struct and not listed here does not compile.
+    auto Fields() const {
+        const auto& [documentApiRestricted, isInternalCall, isAnalyze, runtimeParameterSizeLimit,
+            runtimeParameterSizeLimitSatisfied, queryType, syntax, usePessimisticLocks] = *this;
+        return std::tie(documentApiRestricted, isInternalCall, isAnalyze, runtimeParameterSizeLimit,
+            runtimeParameterSizeLimitSatisfied, queryType, syntax, usePessimisticLocks);
+    }
+
     bool operator==(const TKqpQuerySettings& other) const {
-        return
-            DocumentApiRestricted == other.DocumentApiRestricted &&
-            IsInternalCall == other.IsInternalCall &&
-            IsAnalyze == other.IsAnalyze &&
-            QueryType == other.QueryType &&
-            Syntax == other.Syntax &&
-            UsePessimisticLocks == other.UsePessimisticLocks &&
-            RuntimeParameterSizeLimit == other.RuntimeParameterSizeLimit &&
-            RuntimeParameterSizeLimitSatisfied == other.RuntimeParameterSizeLimitSatisfied;
+        return Fields() == other.Fields();
     }
 
     bool operator!=(const TKqpQuerySettings& other) {
@@ -47,11 +49,13 @@ struct TKqpQuerySettings {
     bool operator<=(const TKqpQuerySettings&) = delete;
     bool operator>=(const TKqpQuerySettings&) = delete;
 
-    size_t GetHash() const noexcept {
-        auto tuple = std::make_tuple(
-            DocumentApiRestricted, IsInternalCall, IsAnalyze, QueryType, Syntax,
-            UsePessimisticLocks, RuntimeParameterSizeLimitSatisfied);
-        return THash<decltype(tuple)>()(tuple);
+    // Appends bytes that are equal exactly when operator== is true.
+    void AppendCacheKey(TString& out) const {
+        std::apply([&out](const auto&... field) {
+            // Raw bytes are only unambiguous for types without padding or several representations of a value.
+            static_assert((std::has_unique_object_representations_v<std::decay_t<decltype(field)>> && ...));
+            (out.append(reinterpret_cast<const char*>(&field), sizeof(field)), ...);
+        }, Fields());
     }
 
     TString SerializeToString() const {
@@ -70,10 +74,3 @@ struct TKqpQuerySettings {
 };
 
 } // namespace NKikimr::NKqp
-
-template<>
-struct THash<NKikimr::NKqp::TKqpQuerySettings> {
-    inline size_t operator()(const NKikimr::NKqp::TKqpQuerySettings& settings) const {
-        return settings.GetHash();
-    }
-};

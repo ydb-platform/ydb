@@ -65,6 +65,66 @@ void TSqlQuery::AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node) {
 
 namespace {
 
+const TRule_simple_table_ref* ModifiedTable(const TRule_sql_stmt_core& statement) {
+    switch (statement.Alt_case()) {
+        case TRule_sql_stmt_core::kAltSqlStmtCore5:
+            return &statement.GetAlt_sql_stmt_core5().GetRule_drop_table_stmt1().GetRule_simple_table_ref4();
+        case TRule_sql_stmt_core::kAltSqlStmtCore7:
+            return &statement.GetAlt_sql_stmt_core7().GetRule_into_table_stmt1().GetRule_into_simple_table_ref3().GetRule_simple_table_ref1();
+        case TRule_sql_stmt_core::kAltSqlStmtCore9:
+            return &statement.GetAlt_sql_stmt_core9().GetRule_update_stmt1().GetRule_simple_table_ref3();
+        case TRule_sql_stmt_core::kAltSqlStmtCore10:
+            return &statement.GetAlt_sql_stmt_core10().GetRule_delete_stmt1().GetRule_simple_table_ref4();
+        case TRule_sql_stmt_core::kAltSqlStmtCore69:
+            return &statement.GetAlt_sql_stmt_core69().GetRule_truncate_table_stmt1().GetRule_simple_table_ref3();
+        default:
+            return nullptr;
+    }
+}
+
+bool IsAnonymousTable(const TRule_simple_table_ref& table) {
+    const auto& core = table.GetRule_simple_table_ref_core1();
+    if (core.Alt_case() == TRule_simple_table_ref_core::kAltSimpleTableRefCore1) {
+        return core.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2().HasBlock1();
+    }
+    return core.GetAlt_simple_table_ref_core2().HasBlock2();
+}
+
+EStatementKind GetTableStatementKind(const TRule_simple_table_ref& table, bool isDrop) {
+    if (IsAnonymousTable(table)) {
+        return EStatementKind::InnerDML;
+    }
+    return isDrop ? EStatementKind::DDL : EStatementKind::DML;
+}
+
+TMaybe<EStatementKind> GetStatementKind(const TRule_sql_stmt_core& statement) {
+    if (const auto* table = ModifiedTable(statement)) {
+        return GetTableStatementKind(*table, statement.Alt_case() == TRule_sql_stmt_core::kAltSqlStmtCore5);
+    }
+    switch (statement.Alt_case()) {
+        case TRule_sql_stmt_core::kAltSqlStmtCore1:  // pragma
+        case TRule_sql_stmt_core::kAltSqlStmtCore2:  // select, process, reduce
+        case TRule_sql_stmt_core::kAltSqlStmtCore3:  // named nodes
+        case TRule_sql_stmt_core::kAltSqlStmtCore6:  // use
+        case TRule_sql_stmt_core::kAltSqlStmtCore12: // declare
+        case TRule_sql_stmt_core::kAltSqlStmtCore13: // import
+        case TRule_sql_stmt_core::kAltSqlStmtCore14: // export
+        case TRule_sql_stmt_core::kAltSqlStmtCore17: // do
+        case TRule_sql_stmt_core::kAltSqlStmtCore18: // define action or subquery
+        case TRule_sql_stmt_core::kAltSqlStmtCore19: // if
+        case TRule_sql_stmt_core::kAltSqlStmtCore20: // for
+        case TRule_sql_stmt_core::kAltSqlStmtCore21: // values
+            return Nothing();
+        case TRule_sql_stmt_core::kAltSqlStmtCore8:  // commit
+        case TRule_sql_stmt_core::kAltSqlStmtCore11: // rollback
+            return EStatementKind::TxControl;
+        case TRule_sql_stmt_core::kAltSqlStmtCore70: // materialize
+            return EStatementKind::InnerDML;
+        default:
+            return EStatementKind::DDL;
+    }
+}
+
 TMaybe<TIssue> ParseProjectPragmaName(const TString& fullName, TString& prefix, TString& name) {
     const auto dot = fullName.find('.');
     prefix = dot == TString::npos ? TString() : to_lower(fullName.substr(0, dot));
@@ -108,6 +168,7 @@ bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
         "consistency_level",
         "commit_interval",
         "initial_scan",
+        "bootstrap",
         "availability_period",
     };
 
@@ -203,11 +264,16 @@ bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
 
 } // namespace
 
-bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, size_t statementNumber) {
+bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, const TTokenIndexRange& range) {
     TStatementName statementName = TStatementName::From(core);
     const size_t blocksBeforeStatement = blocks.size();
 
     const auto& altCase = core.Alt_case();
+    const auto statementKind = GetStatementKind(core);
+    if (statementKind && Ctx_.Settings.AllowedStatementKinds && !Ctx_.Settings.AllowedStatementKinds->contains(*statementKind)) {
+        Error() << statementName.Human << " statement belongs to disallowed kind " << *statementKind;
+        return false;
+    }
     if (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW && (altCase >= TRule_sql_stmt_core::kAltSqlStmtCore4 &&
                                                              altCase != TRule_sql_stmt_core::kAltSqlStmtCore13 &&  // import
                                                              altCase != TRule_sql_stmt_core::kAltSqlStmtCore18 &&  // define_action_or_subquery
@@ -226,7 +292,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
     }
 
     if (NeedUseForAllStatements(altCase)) {
-        Ctx_.ForAllStatementsParts.push_back(statementNumber);
+        Ctx_.ForAllStatementsParts.push_back(range);
     }
 
     switch (altCase) {
@@ -1124,7 +1190,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     }
                     auto& alt = node.GetBlock7().GetAlt2();
                     if (!ParseViewQuery(features, alt.GetRule_define_action_or_subquery_body3(),
-                                        alt.GetToken2(), alt.GetToken4(), context.ServiceId, context.Cluster))
+                                        alt.GetToken2(), context.ServiceId, context.Cluster))
                     {
                         return false;
                     }
@@ -2624,10 +2690,16 @@ bool TSqlQuery::AlterTableAlterColumnSetDefault(const TRule_alter_table_alter_co
         return false;
     }
 
+    TDefaultExpression defaultExpression{
+        .ContextPrefix = Context().ContextRecreationQuery(),
+        .ExprText = Context().QueryText(defaultValueRule.GetRule_expr2()),
+        .Expr = std::move(defaultExpr),
+    };
+
     params.AlterColumns.push_back({
         .Pos = std::move(pos),
         .Name = std::move(name),
-        .DefaultExpr = std::move(defaultExpr),
+        .Default = std::move(defaultExpression),
         .TypeOfChange = TColumnSchema::ETypeOfChange::SetDefault,
     });
     return true;
@@ -4506,8 +4578,6 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
             return nullptr;
         }
 
-        size_t statementNumber = 0;
-
         const auto& stmtList = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
 
         if (!stmtList.HasBlock2() && Ctx_.Settings.Flags.contains("AllowNoStatements")) {
@@ -4532,7 +4602,7 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
         if (!checkExplainToken(firstStmt)) {
             return nullptr;
         }
-        if (!Statement(blocks, firstStmt.GetRule_sql_stmt_core2(), statementNumber++)) {
+        if (!Statement(blocks, firstStmt.GetRule_sql_stmt_core2(), GetTokenIndexRange(firstStmt))) {
             return nullptr;
         }
         for (auto block : statements.GetBlock2()) {
@@ -4540,7 +4610,7 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
             if (!checkExplainToken(stmt)) {
                 return nullptr;
             }
-            if (!Statement(blocks, stmt.GetRule_sql_stmt_core2(), statementNumber++)) {
+            if (!Statement(blocks, stmt.GetRule_sql_stmt_core2(), GetTokenIndexRange(stmt))) {
                 return nullptr;
             }
         }
@@ -4548,7 +4618,7 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
 
     if ((Mode_ == NSQLTranslation::ESqlMode::SUBQUERY ||
          Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW) &&
-        !ValidateSubqueryOrViewBody(blocks))
+        !ValidateSubqueryOrViewBody(blocks, Ctx_.Position(query)))
     {
         return nullptr;
     }
@@ -4681,16 +4751,15 @@ TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_co
         return nullptr;
     }
 
-    size_t statementNumber = 0;
     for (const auto& statement : statements) {
-        if (!Statement(blocks, statement, statementNumber++)) {
+        if (!Statement(blocks, statement, GetTokenIndexRange(statement))) {
             return nullptr;
         }
     }
 
     if ((Mode_ == NSQLTranslation::ESqlMode::SUBQUERY ||
          Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW) &&
-        !ValidateSubqueryOrViewBody(blocks))
+        !ValidateSubqueryOrViewBody(blocks, statements.empty() ? TPosition(1, 1, Ctx_.Settings.File) : Ctx_.Position(statements.front())))
     {
         return nullptr;
     }

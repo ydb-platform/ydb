@@ -1,16 +1,20 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "const.h"
 #include "datashard_active_transaction.h"
+#include "datashard_impl.h"
 #include "datashard_ut_common_kqp.h"
 #include "datashard_user_table.h"
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tablet_flat/flat_table_observer.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <util/string/strip.h>
+
+#include <functional>
 
 namespace NKikimr {
 
@@ -54,6 +58,77 @@ namespace {
             .Replicated(true)
             .ReplicationConsistencyLevel(EConsistencyLevel::Row);
     }
+
+    class TReplicationSetupTx : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+    public:
+        using TCallback = std::function<void(NTabletFlatExecutor::TTransactionContext&)>;
+
+        TReplicationSetupTx(TDataShard* shard, TCallback callback, bool& done)
+            : TBase(shard)
+            , Callback(std::move(callback))
+            , Done(done)
+        {}
+
+        bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext&) override {
+            Callback(txc);
+            return true;
+        }
+
+        void Complete(const TActorContext&) override { Done = true; }
+
+    private:
+        TCallback Callback;
+        bool& Done;
+    };
+
+    class TSubmitReplicationSetupTx : public TActorBootstrapped<TSubmitReplicationSetupTx> {
+    public:
+        TSubmitReplicationSetupTx(NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor,
+                TAutoPtr<NTabletFlatExecutor::ITransaction> tx)
+            : Executor(executor)
+            , Tx(std::move(tx))
+        {}
+
+        void Bootstrap() {
+            Executor->Enqueue(Tx);
+            PassAway();
+        }
+
+    private:
+        NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* Executor;
+        TAutoPtr<NTabletFlatExecutor::ITransaction> Tx;
+    };
+
+    class TAdvanceMediatorOnOffset : public NTable::ITableObserver {
+    public:
+        TAdvanceMediatorOnOffset(TMediatorTimecastSharedEntry::TPtr step, ui64 nextStep)
+            : Step(std::move(step))
+            , NextStep(nextStep)
+        {}
+
+        void OnUpdate(NTable::ERowOp, TArrayRef<const TRawTypeValue>,
+                TArrayRef<const NTable::TUpdateOp>, TRowVersion) override
+        {
+            ++Updates;
+            Step->Set(NextStep);
+        }
+
+        void OnUpdateTx(NTable::ERowOp, TArrayRef<const TRawTypeValue>,
+                TArrayRef<const NTable::TUpdateOp>, ui64) override
+        {
+            UNIT_FAIL("Unexpected uncommitted replication offset");
+        }
+
+        void OnLockRowTx(NTable::ELockMode, TArrayRef<const TRawTypeValue>, ui64) override {
+            UNIT_FAIL("Unexpected replication offset lock");
+        }
+
+        ui32 Updates = 0;
+
+    private:
+        TMediatorTimecastSharedEntry::TPtr Step;
+        const ui64 NextStep;
+    };
 
 } // anonymous namespace
 
@@ -590,6 +665,264 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         ExecSQL(server, sender, "INSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);");
     }
 
+
+    namespace {
+
+    ui64 CountPersistedReplicationMetadata(TTestActorRuntime& runtime, ui64 shard, bool offsets,
+            std::function<void()> beforeWait = {}) {
+        const auto sender = runtime.AllocateEdgeActor();
+        auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+        const TString table = offsets ? "ReplicationSourceOffsets" : "ReplicationSources";
+        const TString extraKey = offsets ? "'('SplitKeyId (Uint64 '0) (Void))" : "";
+        const TString query = TStringBuilder() << R"((
+            (let range '('IncFrom
+                '('PathOwnerId (Uint64 '0) (Void))
+                '('TablePathId (Uint64 '0) (Void))
+                '('SourceId (Uint64 '0) (Void))
+                )" << extraKey << R"())
+            (let rows (Member (SelectRange ')" << table << R"( range '('SourceId) '()) 'List))
+            (return (AsList (SetResult 'count (Length rows))))
+        ))";
+        request->Record.MutableProgram()->MutableProgram()->SetText(query);
+        runtime.SendToPipe(shard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+        if (beforeWait) {
+            beforeWait();
+        }
+        auto response = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), 0, response->Get()->Record.DebugString());
+        return response->Get()->Record.GetExecutionEngineEvaluatedResponse()
+            .GetValue().GetStruct(0).GetOptional().GetUint64();
+    }
+
+    ui64 CountReplicationSourceOffsets(TTestActorRuntime& runtime, ui64 shard, const TPathId& pathId) {
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(shard, sender,
+            new TEvDataShard::TEvGetReplicationSourceOffsets(1, pathId), 0, GetPipeConfigWithRetries());
+        ui64 count = 0;
+        for (;;) {
+            auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReplicationSourceOffsets>(sender);
+            const auto& record = response->Get()->Record;
+            count += record.ResultSize();
+            runtime.SendToPipe(shard, sender,
+                new TEvDataShard::TEvReplicationSourceOffsetsAck(record.GetReadId(), record.GetSeqNo()),
+                0, GetPipeConfigWithRetries());
+            if (record.GetEndOfStream()) {
+                return count;
+            }
+        }
+    }
+
+    void EnableReplication(Tests::TServer::TPtr server) {
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto& tx = *request->Record.MutableTransaction()->MutableModifyScheme();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+        tx.SetWorkingDir("/Root");
+        tx.SetInternal(true);
+        auto& table = *tx.MutableAlterTable();
+        table.SetName("table-1");
+        table.MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        table.MutableReplicationConfig()->SetConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+        auto response = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(),
+            TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress,
+            response->Get()->Record.DebugString());
+        WaitTxNotification(server, sender, response->Get()->Record.GetTxId());
+    }
+
+    } // namespace
+
+    Y_UNIT_TEST_TWIN(DisableReplicationClearsOffsets, Reboot) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false);
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true).ReplicationConsistencyLevel(EConsistencyLevel::Row));
+        const auto shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+
+        ApplyChanges(server, shard, tableId, "source-a", {
+            TChange{.Offset = 100, .WriteTxId = 0, .Key = 1, .Value = 11},
+        });
+        ApplyChanges(server, shard, tableId, "source-b", {
+            TChange{.Offset = 200, .WriteTxId = 0, .Key = 2, .Value = 22},
+        });
+        constexpr ui64 sourceCount = 1500;
+        for (ui64 i = 2; i < sourceCount; ++i) {
+            ApplyChanges(server, shard, tableId, TStringBuilder() << "source-" << i, {
+                TChange{.Offset = 100, .WriteTxId = 0, .Key = 1, .Value = 11},
+            });
+        }
+        UNIT_ASSERT_VALUES_EQUAL(CountPersistedReplicationMetadata(runtime, shard, false), sourceCount);
+        UNIT_ASSERT_VALUES_EQUAL(CountPersistedReplicationMetadata(runtime, shard, true), sourceCount);
+        UNIT_ASSERT_VALUES_EQUAL(CountReplicationSourceOffsets(runtime, shard, tableId.PathId), sourceCount);
+
+        auto* dataShard = dynamic_cast<TDataShard*>(runtime.FindActor(ResolveTablet(runtime, shard)));
+        UNIT_ASSERT(dataShard);
+        const auto executor = dataShard->ExecutorID();
+        TBlockEvents<IEventHandle> activations(runtime, [executor](const IEventHandle::TPtr& ev) {
+            return ev->GetRecipientRewrite() == executor
+                && ev->GetTypeName().Contains("TEvActivateExecution");
+        });
+
+        const ui64 alterTxId = AsyncAlterDropReplicationConfig(server, "/Root", "table-1");
+        bool schemaChanged = false;
+        auto schemaObserver = runtime.AddObserver<TEvDataShard::TEvSchemaChanged>([&](auto& ev) {
+            if (ev->Get()->Record.GetTxId() == alterTxId && ev->Get()->Record.GetOrigin() == shard) {
+                schemaChanged = true;
+            }
+        });
+        bool alterCompleted = false;
+        auto completionObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionResult>([&](auto& ev) {
+            if (ev->Get()->Record.GetTxId() == alterTxId) {
+                alterCompleted = true;
+            }
+        });
+        const auto completionSender = runtime.AllocateEdgeActor();
+        auto notification = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>();
+        notification->Record.SetTxId(alterTxId);
+        runtime.SendToPipe(ChangeStateStorage(SchemeRoot, server->GetSettings().Domain), completionSender,
+            notification.Release(), 0, GetPipeConfigWithRetries());
+
+        ui64 remainingOffsets = sourceCount;
+        for (ui32 attempt = 0; remainingOffsets == sourceCount && attempt < 32; ++attempt) {
+            runtime.WaitFor("paused ALTER execution", [&] { return !activations.empty() || schemaChanged; });
+            UNIT_ASSERT_C(!schemaChanged, "DataShard notified SchemeShard before cleanup finished");
+            // Queue the metadata read behind one pending transaction. Release that
+            // transaction and the read, leaving the next cleanup batch paused.
+            remainingOffsets = CountPersistedReplicationMetadata(runtime, shard, true, [&] {
+                runtime.WaitFor("queued metadata read", [&] { return activations.size() >= 2; });
+                activations.Unblock(2);
+            });
+        }
+        UNIT_ASSERT_C(remainingOffsets > 0 && remainingOffsets < sourceCount,
+            "Expected partially committed cleanup, remaining offsets: " << remainingOffsets);
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_C(!schemaChanged, "DataShard notified SchemeShard with offsets still present");
+        UNIT_ASSERT_C(!alterCompleted, "SchemeShard completed ALTER with offsets still present");
+
+        if (Reboot) {
+            // Keep the old executor paused while it is killed. The replacement
+            // executor has another actor id and resumes the pending ALTER.
+            RebootTablet(runtime, shard, sender);
+            activations.Stop();
+        } else {
+            activations.Stop().Unblock();
+        }
+        auto completed = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvNotifyTxCompletionResult>(completionSender);
+        UNIT_ASSERT_VALUES_EQUAL(completed->Get()->Record.GetTxId(), alterTxId);
+        UNIT_ASSERT(schemaChanged);
+
+        // Disabling replication must preserve user rows and reject late writes.
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"),
+            "key = 1, value = 11\nkey = 2, value = 22\n");
+        ApplyChanges(server, shard, tableId, "source-a", {
+            TChange{.Offset = 101, .WriteTxId = 0, .Key = 1, .Value = 99},
+        }, NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED);
+
+        const auto sources = CountPersistedReplicationMetadata(runtime, shard, false);
+        const auto offsets = CountPersistedReplicationMetadata(runtime, shard, true);
+        const auto streamed = CountReplicationSourceOffsets(runtime, shard, tableId.PathId);
+        UNIT_ASSERT_C(sources == 0 && offsets == 0 && streamed == 0,
+            "Replication metadata survived disable: sources=" << sources
+            << ", offsets=" << offsets << ", streamed=" << streamed << ", reboot=" << Reboot);
+    }
+
+    Y_UNIT_TEST_TWIN(ReenableReplicationAcceptsFreshOffsets, Reboot) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false);
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true).ReplicationConsistencyLevel(EConsistencyLevel::Row));
+        const auto shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+        auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        ApplyChanges(server, shard, tableId, "reused-source", {
+            TChange{.Offset = 100, .WriteTxId = 0, .Key = 1, .Value = 11},
+        });
+
+        WaitTxNotification(server, sender, AsyncAlterDropReplicationConfig(server, "/Root", "table-1"));
+        if (Reboot) {
+            RebootTablet(runtime, shard, sender);
+        }
+        EnableReplication(server);
+        tableId = ResolveTableId(server, sender, "/Root/table-1");
+        ApplyChanges(server, shard, tableId, "reused-source", {
+            TChange{.Offset = 0, .WriteTxId = 0, .Key = 1, .Value = 22},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 22\n");
+    }
+
+
+    Y_UNIT_TEST(AttachReplicationClearsLegacySplitOffsets) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false);
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1");
+        const auto shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+        auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+
+        // Emulate an old version disabling replication without removing metadata.
+        // Source 1 has a nonzero split key, as after merging replication shards.
+        const ui32 splitKey = 10;
+        const auto cell = TCell::Make(splitKey);
+        const auto serialized = TSerializedCellVec::Serialize({&cell, 1});
+        TString escaped;
+        constexpr char hex[] = "0123456789abcdef";
+        for (unsigned char byte : serialized) {
+            escaped += "\\x";
+            escaped += hex[byte >> 4];
+            escaped += hex[byte & 15];
+        }
+        auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+        const TString query = TStringBuilder() << R"((
+            (let owner (Uint64 ')" << tableId.PathId.OwnerId << R"())
+            (let table (Uint64 ')" << tableId.PathId.LocalPathId << R"())
+            (let sourceKey '('('PathOwnerId owner) '('TablePathId table) '('SourceId (Uint64 '1))))
+            (let firstKey '('('PathOwnerId owner) '('TablePathId table) '('SourceId (Uint64 '1)) '('SplitKeyId (Uint64 '0))))
+            (let splitKey '('('PathOwnerId owner) '('TablePathId table) '('SourceId (Uint64 '1)) '('SplitKeyId (Uint64 '1))))
+            (return (AsList
+                (UpdateRow 'ReplicationSources sourceKey '('('SourceName (String 'old-source))))
+                (UpdateRow 'ReplicationSourceOffsets firstKey '('('SplitKey (String '"")) '('MaxOffset (Int64 '100))))
+                (UpdateRow 'ReplicationSourceOffsets splitKey '('('SplitKey (String '")"
+                    << escaped << R"(")) '('MaxOffset (Int64 '200))))
+            ))
+        ))";
+        request->Record.MutableProgram()->MutableProgram()->SetText(query);
+        runtime.SendToPipe(shard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+        auto response = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), 0, response->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(CountPersistedReplicationMetadata(runtime, shard, false), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPersistedReplicationMetadata(runtime, shard, true), 2);
+        RebootTablet(runtime, shard, sender);
+
+        EnableReplication(server);
+        tableId = ResolveTableId(server, sender, "/Root/table-1");
+        ApplyChanges(server, shard, tableId, "new-source", {
+            TChange{.Offset = 0, .WriteTxId = 0, .Key = 20, .Value = 11},
+        });
+        RebootTablet(runtime, shard, sender);
+        ApplyChanges(server, shard, tableId, "new-source", {
+            TChange{.Offset = 1, .WriteTxId = 0, .Key = 20, .Value = 22},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 20, value = 22\n");
+        UNIT_ASSERT_VALUES_EQUAL(CountPersistedReplicationMetadata(runtime, shard, false), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPersistedReplicationMetadata(runtime, shard, true), 1);
+    }
+
     Y_UNIT_TEST(ApplyChangesToReplicatedTable) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -744,6 +1077,148 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
             TChange{.Offset = 3, .WriteTxId = 0, .Key = 1, .Value = 33, .Operation = TChange::EOperation::Reset},
         });
         WaitForContent(server, indexPath, "value = 33, key = 1");
+    }
+
+    enum class EAsyncIndexBatch {
+        EmptyUpsert,
+        NonIndexedUpdate,
+        CompositeIndexUpdate,
+    };
+
+    void CheckAsyncIndexAfterMediatorProgress(EAsyncIndexBatch scenario) {
+        const bool compositeIndex = scenario == EAsyncIndexBatch::CompositeIndexUpdate;
+        const bool emptyUpsert = scenario == EAsyncIndexBatch::EmptyUpsert;
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false);
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        TVector<TString> indexColumns = {"value"};
+        if (compositeIndex) {
+            indexColumns.push_back("value2");
+        }
+        const TString indexPath = "/Root/table-1/by_value/indexImplTable";
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "Uint32", false, false},
+                {"value2", "Uint32", false, false},
+            })
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row)
+            .Indexes({{"by_value", std::move(indexColumns), {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}}));
+        const ui64 tabletId = shards.at(0);
+
+        using TUpdates = TVector<std::pair<ui32, ui32>>;
+        const auto apply = [&](i64 offset, const TVector<TUpdates>& batch) {
+            auto request = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>(tableId.PathId, tableId.SchemaVersion);
+            request->Record.SetSource("source");
+            request->Record.SetDatabaseName("/Root");
+            const TCell key = TCell::Make<ui32>(1);
+            const auto serializedKey = TSerializedCellVec::Serialize({&key, 1});
+            for (const auto& updates : batch) {
+                auto* change = request->Record.AddChanges();
+                change->SetSourceOffset(offset++);
+                change->SetKey(serializedKey);
+                auto* upsert = change->MutableUpsert();
+                TVector<TCell> cells;
+                for (const auto& [tag, value] : updates) {
+                    upsert->AddTags(tag);
+                    cells.push_back(TCell::Make(value));
+                }
+                upsert->SetData(TSerializedCellVec::Serialize(cells));
+            }
+            runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+            const auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(sender);
+            UNIT_ASSERT_C(result->Get()->Record.GetStatus() ==
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK,
+                result->Get()->Record.ShortDebugString());
+        };
+
+        // Create the source before observing offsets so the observer sees only batch updates.
+        if (compositeIndex) {
+            apply(0, {{{2, 10}, {3, 20}}});
+            WaitForContent(server, indexPath, "value = 10, value2 = 20, key = 1");
+        } else {
+            apply(0, {});
+        }
+
+        const auto shardActor = ResolveTablet(runtime, tabletId);
+        auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(shardActor));
+        UNIT_ASSERT(shard);
+        auto* executor = dynamic_cast<NTabletFlatExecutor::NFlatExecutorSetup::IExecutor*>(
+            runtime.FindActor(shard->ExecutorID()));
+        UNIT_ASSERT(executor);
+
+        // Use the normal registration result to give this shard a controllable
+        // shared mediator step, above its existing read/write edges.
+        constexpr ui64 initialStepAdvance = 10000;
+        constexpr ui64 concurrentStepAdvance = 100;
+        const ui64 initialStep = shard->GetMvccVersion().Step + initialStepAdvance;
+        auto step = MakeIntrusive<TMediatorTimecastSharedEntry>();
+        step->Set(initialStep);
+        auto entry = MakeIntrusive<TMediatorTimecastEntry>(step, step);
+        runtime.Send(new IEventHandle(shardActor, sender,
+            new TEvMediatorTimecast::TEvRegisterTabletResult(tabletId, entry)));
+
+        const auto runTx = [&](TReplicationSetupTx::TCallback callback) {
+            bool done = false;
+            runtime.Register(new TSubmitReplicationSetupTx(executor,
+                new TReplicationSetupTx(shard, std::move(callback), done)));
+            runtime.WaitFor("replication setup transaction", [&] { return done; });
+        };
+        auto advance = MakeIntrusive<TAdvanceMediatorOnOffset>(step, initialStep + concurrentStepAdvance);
+        runTx([&](auto& txc) {
+            UNIT_ASSERT_VALUES_EQUAL(shard->GetMvccVersion().Step, initialStep);
+            txc.DB.SetTableObserver(txc.DB.GetScheme().TableNames.at("ReplicationSourceOffsets"), advance);
+        });
+
+        THashSet<ui64> enqueued, removed;
+        auto enqueueObserver = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>([&](auto& ev) {
+            if (ev->Sender == shardActor) {
+                for (const auto& record : ev->Get()->Records) {
+                    enqueued.insert(record.Order);
+                }
+            }
+        });
+        auto removeObserver = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == shardActor) {
+                for (ui64 order : ev->Get()->Records) {
+                    if (enqueued.contains(order)) {
+                        removed.insert(order);
+                    }
+                }
+            }
+        });
+
+        const TUpdates secondUpdate = emptyUpsert ? TUpdates{} : TUpdates{{3, 21}};
+        apply(compositeIndex ? 1 : 0, {{{2, 11}}, secondUpdate});
+        UNIT_ASSERT_VALUES_EQUAL(advance->Updates, 2);
+        UNIT_ASSERT_VALUES_EQUAL(step->Get(), initialStep + concurrentStepAdvance);
+        runTx([&](auto& txc) {
+            txc.DB.SetTableObserver(txc.DB.GetScheme().TableNames.at("ReplicationSourceOffsets"), nullptr);
+        });
+
+        // Wait for the entire batch before checking the final index contents.
+        runtime.WaitFor("all replication index records delivered", [&] {
+            return !enqueued.empty() && enqueued == removed;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), emptyUpsert
+            ? "key = 1, value = 11, value2 = (empty maybe)\n"
+            : "key = 1, value = 11, value2 = 21\n");
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, indexPath), compositeIndex
+            ? "value = 11, value2 = 21, key = 1\n"
+            : "value = 11, key = 1\n");
+    }
+
+    Y_UNIT_TEST_TWIN(AsyncIndexReadsOwnBatchWritesAfterMediatorProgress, EmptyUpsert) {
+        CheckAsyncIndexAfterMediatorProgress(EmptyUpsert ? EAsyncIndexBatch::EmptyUpsert : EAsyncIndexBatch::NonIndexedUpdate);
+    }
+
+    Y_UNIT_TEST(AsyncIndexReadsOwnBatchWritesAfterMediatorProgressCompositeIndex) {
+        CheckAsyncIndexAfterMediatorProgress(EAsyncIndexBatch::CompositeIndexUpdate);
     }
 
     Y_UNIT_TEST(AsyncIndexRejectsOversizedKeyAtomically) {

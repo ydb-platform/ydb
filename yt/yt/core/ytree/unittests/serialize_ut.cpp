@@ -510,7 +510,11 @@ TEST(TYTreeSerializationTest, Protobuf)
     NProto::TTestMessage message;
     message.set_int32_field(1);
     message.set_string_field("test");
-    TestSerializationDeserializationNode(message);
+    TestSerializationDeserialization(message);
+
+    auto stringYson = ConvertToYsonString(message.SerializeAsString());
+    EXPECT_EQ(ConvertTo<NProto::TTestMessage>(ConvertToNode(stringYson)), message);
+    EXPECT_EQ(PullParserConvert<NProto::TTestMessage>(stringYson), message);
 }
 
 TEST(TYTreeSerializationTest, ProtobufKeepUnknown)
@@ -542,6 +546,46 @@ TEST(TYTreeSerializationTest, ProtobufAsString)
     // ConvertTo takes the pull parser for a YSON string, so pass a node to reach the other overload.
     EXPECT_EQ(ConvertTo<TTestMessageAsString>(ConvertToNode(yson)), message);
     EXPECT_EQ(PullParserConvert<TTestMessageAsString>(yson), message);
+
+    auto mapYson = ConvertToYsonString(static_cast<const NProto::TTestMessage&>(message));
+    EXPECT_EQ(ConvertTo<TTestMessageAsString>(ConvertToNode(mapYson)), message);
+    EXPECT_EQ(PullParserConvert<TTestMessageAsString>(mapYson), message);
+}
+
+TEST(TYTreeSerializationTest, ProtobufAsStringFromMap)
+{
+    auto yson = TYsonString(TStringBuf("{int32_field=1;string_field=test;unknown_field=42;}"));
+    auto nodeMessage = ConvertTo<TTestMessageAsString>(ConvertToNode(yson));
+    auto cursorMessage = PullParserConvert<TTestMessageAsString>(yson);
+
+    EXPECT_EQ(nodeMessage.int32_field(), 1);
+    EXPECT_EQ(nodeMessage.string_field(), "test");
+    EXPECT_EQ(cursorMessage, nodeMessage);
+    EXPECT_EQ(cursorMessage.SerializeAsString(), nodeMessage.SerializeAsString());
+    EXPECT_EQ(ConvertToYsonString(nodeMessage), ConvertToYsonString(nodeMessage.SerializeAsString()));
+    EXPECT_TRUE(AreNodesEqual(
+        ConvertToNode(static_cast<const NProto::TTestMessage&>(nodeMessage)),
+        ConvertToNode(yson)));
+}
+
+TEST(TYTreeSerializationTest, ProtobufAsStringFromMapWithAttributes)
+{
+    auto plainYson = TYsonString(TStringBuf("{int32_field=1;string_field=test;unknown_field=42;}"));
+    auto attributedYson = TYsonString(TStringBuf("<tag=1;>{int32_field=1;string_field=test;unknown_field=42;}"));
+    auto nodeMessage = ConvertTo<TTestMessageAsString>(ConvertToNode(plainYson));
+    auto cursorMessage = PullParserConvert<TTestMessageAsString>(attributedYson);
+
+    EXPECT_EQ(cursorMessage.int32_field(), 1);
+    EXPECT_EQ(cursorMessage.string_field(), "test");
+    EXPECT_EQ(cursorMessage.SerializeAsString(), nodeMessage.SerializeAsString());
+}
+
+TEST(TYTreeSerializationTest, ProtobufAsStringInvalidMap)
+{
+    auto yson = TYsonString(TStringBuf("{int32_field=invalid;}"));
+
+    EXPECT_THROW(ConvertTo<TTestMessageAsString>(ConvertToNode(yson)), std::exception);
+    EXPECT_THROW(PullParserConvert<TTestMessageAsString>(yson), std::exception);
 }
 
 TEST(TYTreeSerializationTest, ProtobufAsStringMalformed)

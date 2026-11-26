@@ -9,7 +9,7 @@ namespace NKikimr::NOlap {
 std::shared_ptr<NDataLocks::ILock> TMovePortionsChange::DoBuildDataLock(const TString& id, const NDataLocks::ELockCategory lockCategory) const {
     THashSet<TPortionAddress> portions;
     for (auto&& i : Portions) {
-        AFL_VERIFY(portions.emplace(i.first).second);
+        YDB_LOG_VERIFY(portions.emplace(i.first).second);
     }
     return std::make_shared<NDataLocks::TListPortionsLock>(id, portions, lockCategory);
 }

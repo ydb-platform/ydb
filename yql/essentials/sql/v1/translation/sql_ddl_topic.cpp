@@ -10,15 +10,15 @@ bool StoreConsumerIntervalSetting(
     TNodePtr& setting, TSqlExpression& ctx, TStringBuf statement, const TIdentifier& id,
     const TNodePtr& valueExprNode, bool reset) {
     if (setting) {
-        ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+        ctx.Context().Error(id.Pos) << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
         return false;
     }
     if (reset) {
-        ctx.Error() << to_upper(id.Name) << " reset is not supported";
+        ctx.Context().Error(id.Pos) << to_upper(id.Name) << " reset is not supported";
         return false;
     }
     if (valueExprNode->GetOpName() != "Interval") {
-        ctx.Error() << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
+        ctx.Context().Error(valueExprNode->GetPos()) << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
         return false;
     }
     setting = valueExprNode;
@@ -35,42 +35,42 @@ bool StoreConsumerSettingsEntry(
     if (value) {
         valueExprNode = Unwrap(ctx.Build(value->GetRule_expr1()));
         if (!valueExprNode) {
-            ctx.Error() << "invalid value for setting: " << id.Name;
+            ctx.Context().Error(*value) << "invalid value for setting: " << id.Name;
             return false;
         }
     }
     auto name = to_lower(id.Name);
     if (name == "important") {
         if (settings.Important) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
         if (reset) {
-            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " reset is not supported";
             return false;
         }
         if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "Bool") {
-            ctx.Error() << to_upper(id.Name) << " value should be boolean";
+            ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be boolean";
             return false;
         }
         settings.Important = valueExprNode;
     } else if (name == "availability_period") {
         if (settings.AvailabilityPeriod) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
         if (reset) {
             settings.AvailabilityPeriod.Reset();
         } else {
             if (valueExprNode->GetOpName() != "Interval") {
-                ctx.Error() << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
+                ctx.Context().Error(valueExprNode->GetPos()) << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
                 return false;
             }
             settings.AvailabilityPeriod.Set(valueExprNode);
         }
     } else if (name == "read_from") {
         if (settings.ReadFromTs) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
         if (reset) {
@@ -80,56 +80,56 @@ bool StoreConsumerSettingsEntry(
         }
     } else if (name == "supported_codecs") {
         if (settings.SupportedCodecs) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
         if (reset) {
             settings.SupportedCodecs.Reset();
         } else {
             if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "String") {
-                ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+                ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be a string literal";
                 return false;
             }
             settings.SupportedCodecs.Set(valueExprNode);
         }
     } else if (name == "type") {
         if (settings.Type) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
         if (alter) {
-            ctx.Error() << to_upper(id.Name) << " alter is not supported";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " alter is not supported";
             return false;
         }
         if (reset) {
-            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " reset is not supported";
             return false;
         }
         if (!valueExprNode->IsLiteral() || (valueExprNode->GetLiteralType() != "String" && valueExprNode->GetLiteralType() != "Enum")) {
-            ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be a string literal";
             return false;
         }
         TString value = to_upper(valueExprNode->GetLiteralValue());
         if (value != "STREAMING" && value != "SHARED") {
-            ctx.Error() << to_upper(id.Name) << " value should be 'STREAMING' or 'SHARED', got: " << valueExprNode->GetLiteralValue();
+            ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be 'STREAMING' or 'SHARED', got: " << valueExprNode->GetLiteralValue();
             return false;
         }
         settings.Type = valueExprNode;
     } else if (name == "keep_messages_order") {
         if (settings.KeepMessagesOrder) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
         if (alter) {
-            ctx.Error() << to_upper(id.Name) << " alter is not supported";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " alter is not supported";
             return false;
         }
         if (reset) {
-            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " reset is not supported";
             return false;
         }
         if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "Bool") {
-            ctx.Error() << to_upper(id.Name) << " value should be boolean";
+            ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be boolean";
             return false;
         }
         settings.KeepMessagesOrder = valueExprNode;
@@ -139,48 +139,48 @@ bool StoreConsumerSettingsEntry(
         }
     } else if (name == "max_processing_attempts") {
         if (settings.MaxProcessingAttempts) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
         if (reset) {
-            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " reset is not supported";
             return false;
         }
         if (!valueExprNode->IsIntegerLiteral()) {
-            ctx.Error() << to_upper(id.Name) << " value should be a integer";
+            ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be a integer";
             return false;
         }
         settings.MaxProcessingAttempts = valueExprNode;
     } else if (name == "dead_letter_policy") {
         if (settings.DeadLetterPolicy) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
         if (reset) {
-            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " reset is not supported";
             return false;
         }
         if (!valueExprNode->IsLiteral() || (valueExprNode->GetLiteralType() != "String" && valueExprNode->GetLiteralType() != "Enum")) {
-            ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be a string literal";
             return false;
         }
         TString value = to_upper(valueExprNode->GetLiteralValue());
         if (value != "MOVE" && value != "DELETE" && value != "NONE") {
-            ctx.Error() << to_upper(id.Name) << " value should be 'MOVE', 'DELETE' or 'NONE', got: " << valueExprNode->GetLiteralValue();
+            ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be 'MOVE', 'DELETE' or 'NONE', got: " << valueExprNode->GetLiteralValue();
             return false;
         }
         settings.DeadLetterPolicy = valueExprNode;
     } else if (name == "dead_letter_queue") {
         if (settings.DeadLetterQueue) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
         if (reset) {
-            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " reset is not supported";
             return false;
         }
         if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "String") {
-            ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be a string literal";
             return false;
         }
         settings.DeadLetterQueue = valueExprNode;
@@ -192,8 +192,22 @@ bool StoreConsumerSettingsEntry(
         if (!StoreConsumerIntervalSetting(settings.ReceiveMessageDelay, ctx, statement, id, valueExprNode, reset)) {
             return false;
         }
+    } else if (name == "replicate_offsets") {
+        if (settings.ReplicateOffsets) {
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (reset) {
+            ctx.Context().Error(id.Pos) << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "Bool") {
+            ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be boolean";
+            return false;
+        }
+        settings.ReplicateOffsets = valueExprNode;
     } else {
-        ctx.Error() << to_upper(id.Name) << ": unknown option for consumer";
+        ctx.Context().Error(id.Pos) << to_upper(id.Name) << ": unknown option for consumer";
         return false;
     }
     return true;
@@ -307,7 +321,7 @@ bool StoreTopicSettingsEntry(
     if (value) {
         valueExprNode = Unwrap(ctx.Build(value->GetRule_expr1()));
         if (!valueExprNode) {
-            ctx.Error() << "invalid value for setting: " << id.Name;
+            ctx.Context().Error(*value) << "invalid value for setting: " << id.Name;
             return false;
         }
     }
@@ -317,7 +331,7 @@ bool StoreTopicSettingsEntry(
             settings.MinPartitions.Reset();
         } else {
             if (!valueExprNode->IsIntegerLiteral()) {
-                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be an integer";
                 return false;
             }
             settings.MinPartitions.Set(valueExprNode);
@@ -327,7 +341,7 @@ bool StoreTopicSettingsEntry(
             settings.MaxPartitions.Reset();
         } else {
             if (!valueExprNode->IsIntegerLiteral()) {
-                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be an integer";
                 return false;
             }
             settings.MaxPartitions.Set(valueExprNode);
@@ -337,7 +351,7 @@ bool StoreTopicSettingsEntry(
             settings.RetentionPeriod.Reset();
         } else {
             if (valueExprNode->GetOpName() != "Interval") {
-                ctx.Error() << "Literal of Interval type is expected for retention";
+                ctx.Context().Error(valueExprNode->GetPos()) << "Literal of Interval type is expected for retention";
                 return false;
             }
             settings.RetentionPeriod.Set(valueExprNode);
@@ -347,7 +361,7 @@ bool StoreTopicSettingsEntry(
             settings.RetentionStorage.Reset();
         } else {
             if (!valueExprNode->IsIntegerLiteral()) {
-                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be an integer";
                 return false;
             }
             settings.RetentionStorage.Set(valueExprNode);
@@ -357,7 +371,7 @@ bool StoreTopicSettingsEntry(
             settings.PartitionWriteSpeed.Reset();
         } else {
             if (!valueExprNode->IsIntegerLiteral()) {
-                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be an integer";
                 return false;
             }
             settings.PartitionWriteSpeed.Set(valueExprNode);
@@ -367,7 +381,7 @@ bool StoreTopicSettingsEntry(
             settings.PartitionWriteBurstSpeed.Reset();
         } else {
             if (!valueExprNode->IsIntegerLiteral()) {
-                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be an integer";
                 return false;
             }
             settings.PartitionWriteBurstSpeed.Set(valueExprNode);
@@ -377,7 +391,7 @@ bool StoreTopicSettingsEntry(
             settings.MeteringMode.Reset();
         } else {
             if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "String") {
-                ctx.Error() << to_upper(id.Name) << " value should be string";
+                ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be string";
                 return false;
             }
             settings.MeteringMode.Set(valueExprNode);
@@ -387,7 +401,7 @@ bool StoreTopicSettingsEntry(
             settings.SupportedCodecs.Reset();
         } else {
             if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "String") {
-                ctx.Error() << to_upper(id.Name) << " value should be string";
+                ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be string";
                 return false;
             }
             settings.SupportedCodecs.Set(valueExprNode);
@@ -397,7 +411,7 @@ bool StoreTopicSettingsEntry(
             settings.AutoPartitioningStabilizationWindow.Reset();
         } else {
             if (valueExprNode->GetOpName() != "Interval") {
-                ctx.Error() << "Literal of Interval type is expected for retention";
+                ctx.Context().Error(valueExprNode->GetPos()) << "Literal of Interval type is expected for retention";
                 return false;
             }
             settings.AutoPartitioningStabilizationWindow.Set(valueExprNode);
@@ -407,7 +421,7 @@ bool StoreTopicSettingsEntry(
             settings.AutoPartitioningUpUtilizationPercent.Reset();
         } else {
             if (!valueExprNode->IsIntegerLiteral()) {
-                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be an integer";
                 return false;
             }
             settings.AutoPartitioningUpUtilizationPercent.Set(valueExprNode);
@@ -417,7 +431,7 @@ bool StoreTopicSettingsEntry(
             settings.AutoPartitioningDownUtilizationPercent.Reset();
         } else {
             if (!valueExprNode->IsIntegerLiteral()) {
-                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be an integer";
                 return false;
             }
             settings.AutoPartitioningDownUtilizationPercent.Set(valueExprNode);
@@ -427,7 +441,7 @@ bool StoreTopicSettingsEntry(
             settings.AutoPartitioningStrategy.Reset();
         } else {
             if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "String") {
-                ctx.Error() << to_upper(id.Name) << " value should be string";
+                ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be string";
                 return false;
             }
             settings.AutoPartitioningStrategy.Set(valueExprNode);
@@ -436,7 +450,7 @@ bool StoreTopicSettingsEntry(
         if (reset) {
             settings.MetricsLevel.Reset();
         } else if (!StoreStringOrInt(valueExprNode, settings.MetricsLevel)) {
-            ctx.Error() << to_upper(id.Name) << " value should be an integer or a string";
+            ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be an integer or a string";
             return false;
         }
     } else if (to_lower(id.Name) == "content_based_deduplication") {
@@ -444,13 +458,13 @@ bool StoreTopicSettingsEntry(
             settings.ContentBasedDeduplication.Reset();
         } else {
             if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "Bool") {
-                ctx.Error() << to_upper(id.Name) << " value should be bool";
+                ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be bool";
                 return false;
             }
             settings.ContentBasedDeduplication.Set(valueExprNode);
         }
     } else {
-        ctx.Error() << "unknown topic setting: " << id.Name;
+        ctx.Context().Error(id.Pos) << "unknown topic setting: " << id.Name;
         return false;
     }
     return true;
@@ -541,7 +555,7 @@ bool TTopicTranslation::TopicRefImpl(const TRule_topic_ref& node, TTopicRef& res
     TDeferredAtom cluster = Context().Scoped->CurrCluster;
     if (node.HasBlock1()) {
         if (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW) {
-            Error() << "Cluster should not be used in limited view";
+            Ctx_.Error(node.GetBlock1()) << "Cluster should not be used in limited view";
             return false;
         }
 
@@ -551,13 +565,14 @@ bool TTopicTranslation::TopicRefImpl(const TRule_topic_ref& node, TTopicRef& res
     }
 
     if (cluster.Empty()) {
-        Error() << "No cluster name given and no default cluster is selected";
+        Ctx_.Error(node) << "No cluster name given and no default cluster is selected";
         return false;
     }
 
     result = TTopicRef(Context().MakeName("topic"), cluster, nullptr);
+    const auto pos = Ctx_.Position(node.GetRule_an_id2());
     auto topic = Id(node.GetRule_an_id2(), *this);
-    result.Keys = BuildTopicKey(Context().Pos(), result.Cluster, TDeferredAtom(Context().Pos(), topic));
+    result.Keys = BuildTopicKey(pos, result.Cluster, TDeferredAtom(pos, topic));
 
     return true;
 }
@@ -594,7 +609,7 @@ TNodePtr TTopicTranslation::Build(const TRule_create_topic_stmt& rule) {
         CreateTopicSettings(topic_settings_node, params.TopicSettings);
     }
 
-    return BuildCreateTopic(Ctx_.Pos(), tr, params, Ctx_.Scoped);
+    return BuildCreateTopic(Ctx_.Position(rule), tr, params, Ctx_.Scoped);
 }
 
 TNodePtr TTopicTranslation::Build(const TRule_alter_topic_stmt& rule) {
@@ -624,7 +639,7 @@ TNodePtr TTopicTranslation::Build(const TRule_alter_topic_stmt& rule) {
         }
     }
 
-    return BuildAlterTopic(Ctx_.Pos(), tr, params, Ctx_.Scoped);
+    return BuildAlterTopic(Ctx_.Position(rule), tr, params, Ctx_.Scoped);
 }
 
 TNodePtr TTopicTranslation::Build(const TRule_drop_topic_stmt& rule) {
@@ -638,7 +653,7 @@ TNodePtr TTopicTranslation::Build(const TRule_drop_topic_stmt& rule) {
     if (!TopicRefImpl(rule.GetRule_topic_ref4(), tr)) {
         return nullptr;
     }
-    return BuildDropTopic(Ctx_.Pos(), tr, params, Ctx_.Scoped);
+    return BuildDropTopic(Ctx_.Position(rule), tr, params, Ctx_.Scoped);
 }
 
 } // namespace NSQLTranslationV1

@@ -11,6 +11,7 @@ PEERDIR(
     library/cpp/json
     library/cpp/logger
     ydb/apps/bridge_skipper/runtime
+    ydb/apps/bridge_skipper/http
     ydb/library/actors/testlib
     ydb/public/api/grpc
     ydb/public/api/grpc/draft

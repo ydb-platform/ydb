@@ -4404,6 +4404,10 @@ TNodeResult BuildBuiltinFunc(
                 return Wrap(BuildYqlWindow(pos, std::move(wargs)));
             }
 
+            if (isYqlSelect && IsIn({"sessionwindow", "sessionstart", "sessionstate"}, normalizedName)) {
+                return UnsupportedYqlSelect(ctx, funcInfo.CanonicalSqlName);
+            }
+
             if (isYqlSelect && normalizedName == "grouping") {
                 return Wrap(BuildYqlGrouping(pos, args));
             }

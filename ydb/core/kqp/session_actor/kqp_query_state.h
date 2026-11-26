@@ -3,20 +3,21 @@
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 
 #include "kqp_query_stats.h"
-#include <ydb/core/kqp/common/kqp_current_query_stats.h>
+#include <ydb/core/kqp/common/simple/current_query_stats.h>
 #include "kqp_worker_common.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/buffer/events.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
@@ -76,6 +77,11 @@ public:
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , IsWarmupCompilation_(ev->Get()->GetIsWarmupCompilation())
+        , DisablePgCompatibility_(ev->Get()->DisablePgCompatibility.value_or(
+            AppData()->FeatureFlags.GetDisablePgCompatibility()
+            && !(ev->Get()->IsInternalCall()
+                && ev->Get()->GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN
+                && IsAnalyzeRequest(ev->Get()->GetRequestType()))))
         , StartTime(TInstant::Now())
         , RuntimeStats(startedAt, ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval)
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
@@ -90,10 +96,10 @@ public:
         RequestEv.reset(ev->Release().Release());
 
         if (!RequestEv->GetYdbParameters().empty()) {
-            QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
+            auto queryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
 
             for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
-                QueryParameterTypes->insert({name, typedValue.Gettype()});
+                queryParameterTypes->insert({name, typedValue.Gettype()});
 
                 if ((typedValue.type().has_list_type() || typedValue.type().has_tuple_type()) &&
                     typedValue.value().items().size() > static_cast<i32>(runtimeParameterSizeLimit))
@@ -101,6 +107,8 @@ public:
                     RuntimeParameterSizeLimitSatisfied = false;
                 }
             }
+
+            QueryParameterTypes = std::move(queryParameterTypes);
         }
 
         YQL_ENSURE(RequestEv->HasAction());
@@ -185,6 +193,7 @@ public:
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     bool IsDocumentApiRestricted_ = false;
     bool IsWarmupCompilation_ = false;
+    const bool DisablePgCompatibility_;
 
     TInstant StartTime;
     TInstant ContinueTime;
@@ -218,7 +227,7 @@ public:
     TDuration CpuTime;
     std::optional<NCpuTime::TCpuTimer> CurrentTimer;
 
-    std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
+    std::shared_ptr<const std::map<TString, Ydb::Type>> QueryParameterTypes;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
     TMaybe<TActorId> PoolHandlerActor;
@@ -232,11 +241,7 @@ public:
 
     NYql::TIssues Issues;
 
-    TVector<TQueryAst> Statements;
-    TMaybe<TQueryTxId> ImplicitTxId = {}; // Implicit tx for all statements
-    ui32 CurrentStatementId = 0;
-    ui32 StatementResultIndex = 0;
-    ui32 StatementResultSize = 0;
+    TMaybe<TQueryTxId> ImplicitTxId = {}; // Implicit tx for the query
 
     TMaybe<TString> CommandTagName;
     THashSet<ui32> ParticipantNodes;
@@ -246,6 +251,10 @@ public:
     i32 RuntimeParameterSizeLimit = 0;
     bool RuntimeParameterSizeLimitSatisfied = false;
 
+
+    bool GetDisablePgCompatibility() const {
+        return DisablePgCompatibility_;
+    }
 
     bool IsLocalExecution(ui32 nodeId) const {
         if (RequestEv->GetRequestCtx() == nullptr) {
@@ -293,7 +302,7 @@ public:
         return RequestEv->GetRequestType();
     }
 
-    std::shared_ptr<std::map<TString, Ydb::Type>> GetQueryParameterTypes() const {
+    std::shared_ptr<const std::map<TString, Ydb::Type>> GetQueryParameterTypes() const {
         return QueryParameterTypes;
     }
 
@@ -404,6 +413,13 @@ public:
                     for (const auto& indexTable : fullText.GetIndexTables()) {
                         addTable(indexTable.GetTable());
                     }
+                    // In rowid mode the plan also pins the schema version of the unique secondary
+                    // index impl table used to resolve __ydb_row_id -> PK (see TUniqueIndexReader).
+                    // It is not part of the fulltext index's own impl tables, and it advances
+                    // independently, so track it as well.
+                    if (fullText.HasUniqueIndexImplTable()) {
+                        addTable(fullText.GetUniqueIndexImplTable().GetTable());
+                    }
                 }
             }
 
@@ -446,7 +462,7 @@ public:
     TString ExtractQueryText() const {
         if (CompileResult) {
             if (CompileResult->Query) {
-                return CompileResult->Query->Text;
+                return CompileResult->Query->Text();
             }
             return {};
         }
@@ -529,7 +545,7 @@ public:
 
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
-        AFL_ENSURE(UserRequestContext);
+        YDB_LOG_ENSURE(UserRequestContext);
         if (UserRequestContext->IsStreamingQuery) {
             // Streaming queries are long-running: held-open read locks would be
             // broken by any concurrent write and abort the query.
@@ -547,7 +563,7 @@ public:
             return false;
         }
 
-        AFL_ENSURE(!TxCtx->TxManager->BrokenLocks());
+        YDB_LOG_ENSURE(!TxCtx->TxManager->BrokenLocks());
         if (TxCtx->LockHandle.GetLockId() && !TxCtx->TxManager->GetLockIssue()) {
             return true;  // Continue to acquire locks
         }
@@ -613,28 +629,7 @@ public:
     }
 
     NKqpProto::EIsolationLevel GetIsolationLevel(TKqpTransactionContext* txCtx = nullptr) const;
-
-    bool ProcessingLastStatement() const {
-        return CurrentStatementId + 1 >= Statements.size();
-    }
-
-    void PrepareCurrentStatement() {
-        QueryData = std::make_shared<TQueryData>(TxCtx->TxAlloc);
-        PreparedQuery = {};
-        CompileResult = {};
-        CurrentTx = 0;
-        TableVersions = {};
-        MaxReadType = ETableReadType::Other;
-        TopicOperations = {};
-        ReplayMessage = {};
-    }
-
-    void PrepareNextStatement() {
-        CurrentStatementId++;
-        StatementResultIndex += StatementResultSize;
-        StatementResultSize = 0;
-        PrepareCurrentStatement();
-    }
+    bool UsePessimisticLocks(TKqpTransactionContext* txCtx) const;
 
     // validate the compiled query response and ensure that all table versions are not
     // changed since the last compilation.
@@ -645,25 +640,34 @@ public:
     // same the context of the compiled query to the query state.
     bool SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr compileResult);
     bool SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev);
-    bool SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev);
     bool SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev);
+
+    // A physical graph and a prepared query are served without a key.
+    bool NeedQueryId() const;
+    TMaybe<TKqpQueryId> BuildQueryId(const TKqpEncodedGUC& encodedGUCSettings, TKqpTransactionContext* txCtx) const;
+
+    struct TCacheLookup {
+        TMaybe<TString> Uid;
+        bool KeepInCache = false;
+    };
+    TCacheLookup GetCacheLookup(const TMaybe<TKqpQueryId>& query) const;
 
     bool TryGetFromCache(
         TKqpQueryCache& cache,
-        const TGUCSettings::TPtr& gUCSettingsPtr,
+        TMaybe<TKqpQueryId>& query,
         TIntrusivePtr<TKqpCounters>& counters,
         const TActorId& sender,
-        TKqpTransactionContext* txCtx = nullptr,
         EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None);
 
     // build the compilation request.
-    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx = nullptr);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie,
+        const TGUCSettings::TPtr& gUCSettingsPtr, TMaybe<TKqpQueryId> query, TKqpTransactionContext* txCtx = nullptr);
     // TODO(gvit): get rid of code duplication in these requests,
     // use only one of these requests.
-    std::unique_ptr<TEvKqp::TEvRecompileRequest> BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx = nullptr);
+    std::unique_ptr<TEvKqp::TEvRecompileRequest> BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TMaybe<TKqpQueryId> query, TKqpTransactionContext* txCtx = nullptr);
 
-    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr);
-    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx = nullptr);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, const TKqpEncodedGUC& encodedGUCSettings);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, const TKqpEncodedGUC& encodedGUCSettings, TKqpTransactionContext* txCtx = nullptr);
 
     bool ProcessingLastStatementPart();
     bool PrepareNextStatementPart();

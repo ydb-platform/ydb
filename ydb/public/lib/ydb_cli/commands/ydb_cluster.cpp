@@ -8,6 +8,8 @@
 #include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 
+#include <util/string/split.h>
+
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
@@ -25,6 +27,15 @@ TCommandCluster::TCommandCluster()
     AddCommand(std::make_unique<TCommandClusterRestore>());
     AddCommand(std::make_unique<TCommandBridge>(true));
     AddCommand(std::make_unique<TCommandClusterDiagnostics>());
+}
+
+void TCommandCluster::Validate(TConfig& config) {
+    TClientCommandTree::Validate(config);
+    if (config.NeedToConnect && config.AllowEmptyDatabase && !config.Database.empty()
+        && (!config.Database.StartsWith('/') || StringSplitter(config.Database).Split('/').SkipEmpty().Count() != 1)) {
+        throw TMisuseException() << "This cluster-wide command requires a root domain, for example '-d /Root', "
+            << "or no database. Database '" << config.Database << "' is not a root domain.";
+    }
 }
 
 TCommandClusterBootstrap::TCommandClusterBootstrap()

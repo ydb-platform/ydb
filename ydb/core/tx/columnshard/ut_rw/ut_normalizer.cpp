@@ -307,7 +307,8 @@ public:
         while (!rowset.EndOfSet()) {
             auto metadataString = rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
             NKikimrTxColumnShard::TIndexPortionAccessor metaProto;
-            AFL_VERIFY(metaProto.ParseFromArray(metadataString.data(), metadataString.size()))("event", "cannot parse metadata as protobuf");
+            YDB_LOG_VERIFY(metaProto.ParseFromArray(metadataString.data(), metadataString.size()),
+                {"event", "cannot parse metadata as protobuf"});
             {
                 auto chunk = metaProto.AddChunks();
                 chunk->SetSSColumnId(ColumnId);
@@ -315,7 +316,7 @@ public:
                 chunk->MutableChunkMetadata()->SetNumRows(20048);
                 chunk->MutableChunkMetadata()->SetRawBytes(1);
             }
-            AFL_VERIFY(portions.emplace(NOlap::TPortionAddress(TInternalPathId::FromRawValue(rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>()), rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>()), std::move(metaProto)).second);
+            YDB_LOG_VERIFY(portions.emplace(NOlap::TPortionAddress(TInternalPathId::FromRawValue(rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>()), rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>()), std::move(metaProto)).second);
             UNIT_ASSERT(rowset.Next());
         }
 
@@ -376,7 +377,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
             ui64 commitTxId = baseTxId;
             for (ui32 p = 0; p < portionCount; ++p) {
                 auto batch = batchFull->Slice(p * rowsPerCommit, rowsPerCommit);
-                AFL_VERIFY(writer.Write(batch, {1, 2, 3}, commitTxId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+                YDB_LOG_VERIFY(writer.Write(batch, {1, 2, 3}, commitTxId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
                 planStep = writer.StartCommit(commitTxId);
                 PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, commitTxId));
                 ++commitTxId;
@@ -971,7 +972,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
 
         auto batch = NConstruction::TRecordBatchConstructor({ idColumn, jsonColumn }).BuildBatch(20048);
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
-        AFL_VERIFY(writer.Write(batch, columnsIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        YDB_LOG_VERIFY(writer.Write(batch, columnsIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         planStep = writer.StartCommit(txId);
         PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId));
 

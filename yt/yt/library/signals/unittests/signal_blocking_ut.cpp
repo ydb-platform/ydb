@@ -71,7 +71,7 @@ TEST_F(TSignalBlockingTest, SignalBlockingJustWorks)
     ::raise(SIGRTMIN);
 }
 
-TEST_F(TSignalBlockingTest, TestSignalFD)
+TEST_F(TSignalBlockingTest, SignalFD)
 {
     auto sigFD = OpenSignalFD();
 

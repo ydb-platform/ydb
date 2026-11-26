@@ -48,8 +48,8 @@
 #include "src/core/lib/channel/channel_fwd.h"
 #include "src/core/lib/channel/channel_stack.h"
 #include "src/core/lib/channel/context.h"
-#include "src/core/lib/event_engine/default_event_engine.h"  // IWYU pragma: keep
-#include "src/core/lib/gprpp/crash.h"
+#include "src/core/lib/event_engine/default_event_engine.h"
+#include "src/core/lib/event_engine/event_engine_context.h"  // IWYU pragma: keep
 #include "src/core/lib/gprpp/debug_location.h"
 #include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/iomgr/call_combiner.h"
@@ -68,11 +68,18 @@
 #include "src/core/lib/resource_quota/arena.h"
 #include "src/core/lib/slice/slice_buffer.h"
 #include "src/core/lib/surface/call.h"
+#include "src/core/lib/transport/call_filters.h"
 #include "src/core/lib/transport/error_utils.h"
 #include "src/core/lib/transport/metadata_batch.h"
 #include "src/core/lib/transport/transport.h"
 
 namespace grpc_core {
+
+// HACK: If a filter has this type as a base class it will be skipped in
+// v3 filter stacks. This is a temporary measure to allow the v3 filter stack
+// to be bought up whilst some tests inadvertently rely on hard to convert
+// filters.
+class HackyHackyHackySkipInV3FilterStacks {};
 
 class ChannelFilter {
  public:
@@ -126,8 +133,6 @@ class ChannelFilter {
   std::shared_ptr<grpc_event_engine::experimental::EventEngine> event_engine_ =
       grpc_event_engine::experimental::GetDefaultEventEngine();
 };
-
-struct NoInterceptor {};
 
 namespace promise_filter_detail {
 
@@ -1061,8 +1066,10 @@ MakeFilterCall(Derived* derived) {
 //   the filter does not intercept call finalization.
 // - void OnFinalize(const grpc_call_final_info*):
 //   the filter intercepts call finalization.
+class ImplementChannelFilterTag {};
 template <typename Derived>
-class ImplementChannelFilter : public ChannelFilter {
+class ImplementChannelFilter : public ChannelFilter,
+                               public ImplementChannelFilterTag {
  public:
   // Natively construct a v3 call.
   void InitCall(CallSpineInterface* call_spine) {
@@ -1445,7 +1452,12 @@ class BaseCallData : public Activity, private Wakeable {
     // work.
     void WakeInsideCombiner(Flusher* flusher, bool allow_push_to_pipe);
     // Call is completed, we have trailing metadata. Close things out.
-    void Done(const ServerMetadata& metadata, Flusher* flusher);
+    // Discard buffered messages only for cancellation, a short-circuiting
+    // filter, or server-side non-OK termination. Transport trailers alone
+    // must not let a message bypass the remaining filters.
+    void Done(const ServerMetadata& metadata, Flusher* flusher,
+              bool discard_buffered_message = false);
+    bool IsIdle() const;
 
    private:
     enum class State : uint8_t {
@@ -1599,6 +1611,9 @@ class ClientCallData : public BaseCallData {
     kQueued,
     // We've forwarded the op to the next filter.
     kForwarded,
+    // Trailing metadata arrived while a received message is still being
+    // processed by the filters.
+    kCompletedQueuedBehindReceiveMessage,
     // The op has completed from below, but we haven't yet forwarded it up
     // (the promise gets to interject and mutate it).
     kComplete,
@@ -1908,9 +1923,11 @@ struct ChannelFilterWithFlagsMethods {
 //       ChannelArgs channel_args, ChannelFilter::Args filter_args);
 // };
 template <typename F, FilterEndpoint kEndpoint, uint8_t kFlags = 0>
-y_absl::enable_if_t<std::is_base_of<ChannelFilter, F>::value &&
-                      !std::is_base_of<ImplementChannelFilter<F>, F>::value,
-                  grpc_channel_filter>
+y_absl::enable_if_t<
+    std::is_base_of<ChannelFilter, F>::value &&
+        !std::is_base_of<ImplementChannelFilterTag, F>::value &&
+        !std::is_base_of<HackyHackyHackySkipInV3FilterStacks, F>::value,
+    grpc_channel_filter>
 MakePromiseBasedFilter(const char* name) {
   using CallData = promise_filter_detail::CallData<kEndpoint>;
 
@@ -1949,7 +1966,53 @@ MakePromiseBasedFilter(const char* name) {
 }
 
 template <typename F, FilterEndpoint kEndpoint, uint8_t kFlags = 0>
-y_absl::enable_if_t<std::is_base_of<ImplementChannelFilter<F>, F>::value,
+y_absl::enable_if_t<
+    std::is_base_of<HackyHackyHackySkipInV3FilterStacks, F>::value,
+    grpc_channel_filter>
+MakePromiseBasedFilter(const char* name) {
+  using CallData = promise_filter_detail::CallData<kEndpoint>;
+
+  return grpc_channel_filter{
+      // start_transport_stream_op_batch
+      promise_filter_detail::BaseCallDataMethods::StartTransportStreamOpBatch,
+      // make_call_promise
+      promise_filter_detail::ChannelFilterMethods::MakeCallPromise,
+      [](grpc_channel_element* elem, CallSpineInterface*) {
+        GRPC_LOG_EVERY_N_SEC(
+            1, GPR_ERROR,
+            "gRPC V3 call stack in use, with a filter ('%s') that is not V3.",
+            elem->filter->name);
+      },
+      // start_transport_op
+      promise_filter_detail::ChannelFilterMethods::StartTransportOp,
+      // sizeof_call_data
+      sizeof(CallData),
+      // init_call_elem
+      promise_filter_detail::CallDataFilterWithFlagsMethods<
+          CallData, kFlags>::InitCallElem,
+      // set_pollset_or_pollset_set
+      promise_filter_detail::BaseCallDataMethods::SetPollsetOrPollsetSet,
+      // destroy_call_elem
+      promise_filter_detail::CallDataFilterWithFlagsMethods<
+          CallData, kFlags>::DestroyCallElem,
+      // sizeof_channel_data
+      sizeof(F),
+      // init_channel_elem
+      promise_filter_detail::ChannelFilterWithFlagsMethods<
+          F, kFlags>::InitChannelElem,
+      // post_init_channel_elem
+      promise_filter_detail::ChannelFilterMethods::PostInitChannelElem,
+      // destroy_channel_elem
+      promise_filter_detail::ChannelFilterMethods::DestroyChannelElem,
+      // get_channel_info
+      promise_filter_detail::ChannelFilterMethods::GetChannelInfo,
+      // name
+      name,
+  };
+}
+
+template <typename F, FilterEndpoint kEndpoint, uint8_t kFlags = 0>
+y_absl::enable_if_t<std::is_base_of<ImplementChannelFilterTag, F>::value,
                   grpc_channel_filter>
 MakePromiseBasedFilter(const char* name) {
   using CallData = promise_filter_detail::CallData<kEndpoint>;

@@ -48,6 +48,12 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
                 item.RequestedSize = Queries[i].Size;
             }
             PendingResult->ErrorReason = ErrorReason;
+        } else {
+            for (ui32 i = 0; i < PendingResult->ResponseSz; ++i) {
+                auto& response = PendingResult->Responses[i];
+                const auto& [keep, doNotKeep] = KeepFlags.at(response.Id);
+                response.MergeKeepFlags(keep, doNotKeep);
+            }
         }
         Y_ABORT_UNLESS(PendingResult);
         Mon->CountIndexRestoreGetResponseTime(TActivationContext::Monotonic() - RequestStartTime);
@@ -138,10 +144,6 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
             auto &a = PendingResult->Responses[idx];
             a.Id = q.Id;
 
-            const auto it = KeepFlags.find(q.Id);
-            Y_ABORT_UNLESS(it != KeepFlags.end());
-            std::tie(a.Keep, a.DoNotKeep) = it->second;
-
             DSP_LOG_DEBUG_S("DSPI11", "OnEnoughVGetResults Id# " << q.Id << " BlobStatus# " << DumpBlobStatus(idx));
 
             if (blobState == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
@@ -210,6 +212,9 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
         Y_ABORT_UNLESS(PendingResult);
         for (ui32 i = 0; i < getResult.ResponseSz; ++i) {
             TEvBlobStorage::TEvGetResult::TResponse &response = getResult.Responses[i];
+            auto& [keep, doNotKeep] = KeepFlags.at(response.Id);
+            keep |= response.Keep;
+            doNotKeep |= response.DoNotKeep;
             if (response.Status != NKikimrProto::OK) {
                 if (!DoNotReportIndexRestoreGetMissingBlobs) {
                     DSP_LOG_ERROR_S("DSPI07", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status)
@@ -245,7 +250,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartIndexRestoreGet;
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(Queries, QuerySize, Deadline, GetHandleClass,
-            true /*mustRestoreFirst*/, true /*isIndexOnly*/, std::nullopt /*forceBlockTabletData*/, IsInternal);
+            true /*mustRestoreFirst*/, true /*isIndexOnly*/, ForceBlockTabletData, IsInternal);
         ev->RestartCounter = counter;
         ev->Decommission = Decommission;
         ev->DoNotReportIndexRestoreGetMissingBlobs = DoNotReportIndexRestoreGetMissingBlobs;
@@ -311,9 +316,12 @@ public:
             << " ForceBlockTabletId# " << (ForceBlockTabletData ? ToString(ForceBlockTabletData->Id) : "")
             << " ForceBlockTabletGeneration# " << (ForceBlockTabletData ? ToString(ForceBlockTabletData->Generation) : ""));
 
+        using EQuorum = TGroupQuorumTracker::EQuorum;
+        const EQuorum quorum = ForceBlockTabletData && ForceBlockTabletData->Generation
+            ? EQuorum::Startup : EQuorum::Read;
         for (const auto& vdisk : Info->GetVDisks()) {
             auto vd = Info->GetVDiskId(vdisk.OrderNumber);
-            if (Info->IsFailRealmExcluded(vd.FailRealm)) {
+            if (!Info->IsFailRealmReadable(vd.FailRealm)) {
                 continue;
             }
             std::unique_ptr<TEvBlobStorage::TEvVGet> vget;
@@ -335,7 +343,7 @@ public:
                 if (Info->BelongsToSubgroup(vd, id.Hash())) {
                     if (!vget) {
                         const ui64 cookie = queueId++;
-                        QuorumTracker.try_emplace(cookie, Info.Get());
+                        QuorumTracker.try_emplace(cookie, Info.Get(), quorum);
 
                         vget = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(
                                     vd,

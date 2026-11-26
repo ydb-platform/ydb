@@ -3,6 +3,8 @@
 #include "table_settings.h"
 #include "ydb_convert.h"
 
+#include <algorithm>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
@@ -842,6 +844,12 @@ static bool BuildAlterTableModifySchemeImpl(const TString& path, const TRequest*
             } else if (minActivePartitions == 0) {
                 minActivePartitions = 1;
             }
+            if (minActivePartitions > Max<ui32>()) {
+                // Internal fields are uint32, a larger value would silently truncate.
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "min_active_partitions must not exceed " << Max<ui32>();
+                return false;
+            }
             op->SetTopicPartitions(minActivePartitions);
 
             if (add.topic_partitioning_settings().has_auto_partitioning_settings()) {
@@ -855,7 +863,17 @@ static bool BuildAlterTableModifySchemeImpl(const TString& path, const TRequest*
                     error = "Topic max active partitions count must be positive";
                     return false;
                 } else if (maxActivePartitions == 0) {
-                    maxActivePartitions = 50;
+                    // Unset max keeps the historical ceiling of 50, but never
+                    // below the requested min. The effective value is
+                    // materialized on the wire so older schemeshards keep
+                    // accepting the request during a rolling upgrade.
+                    maxActivePartitions = std::max<i64>(minActivePartitions, 50);
+                }
+                if (maxActivePartitions > Max<ui32>()) {
+                    // Internal fields are uint32, a larger value would silently truncate.
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = TStringBuilder() << "max_active_partitions must not exceed " << Max<ui32>();
+                    return false;
                 }
                 op->SetMaxPartitionCount(maxActivePartitions);
             }
@@ -1142,6 +1160,13 @@ void FillColumnDescriptionImpl(TYdbProto& out,
     }
 
     for (const auto& column : in.GetColumns()) {
+        // DescribeTable exposes ready columns and has no public build-state field.
+        // Other output protos retain the full schema for schema-copying and system-view flows.
+        if constexpr (std::is_same_v<TYdbProto, Ydb::Table::DescribeTableResult>) {
+            if (column.GetIsBuildInProgress()) {
+                continue;
+            }
+        }
         auto newColumn = out.add_columns();
         Ydb::Type* columnType = AddColumn(newColumn, column);
 
@@ -1663,7 +1688,19 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
             return false;
         }
         columnDesc->SetType(NScheme::TypeName(typeInfo, typeMod));
-        columnDesc->SetNotNull(column.not_null());
+
+        // The same rule as for row tables: a non-optional type means NOT NULL unless not_null says otherwise.
+        const bool notOptional = !column.type().has_optional_type();
+        if (!column.has_not_null()) {
+            columnDesc->SetNotNull(notOptional);
+        } else {
+            if (notOptional != column.not_null()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = "Not consistent column type and not_null option for column: " + column.name();
+                return false;
+            }
+            columnDesc->SetNotNull(column.not_null());
+        }
 
         if (NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
             NScheme::ProtoFromTypeInfo(typeInfo, typeMod, *columnDesc->MutableTypeInfo());
@@ -2656,6 +2693,42 @@ void FillMultiColumnStatistics(NKikimrSchemeOp::TMultiColumnStatisticsDescriptio
     }
 }
 
+namespace {
+
+// Mirrors NSchemeShard::NIndex::IsSingleIntegerPrimaryKey: a fulltext index over a table with such
+// a primary key uses the key itself as the document id.
+bool IsSingleIntegerPrimaryKey(const Ydb::Table::CreateTableRequest& in) {
+    if (in.primary_key_size() != 1) {
+        return false;
+    }
+
+    const auto& keyName = in.primary_key(0);
+    for (const auto& column : in.columns()) {
+        if (column.name() != keyName) {
+            continue;
+        }
+
+        const auto& type = column.type().has_optional_type() ? column.type().optional_type().item() : column.type();
+        if (!type.has_type_id()) {
+            return false;
+        }
+
+        switch (type.type_id()) {
+        case Ydb::Type::UINT64:
+        case Ydb::Type::INT64:
+        case Ydb::Type::UINT32:
+        case Ydb::Type::INT32:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    return false;
+}
+
+} // anonymous
+
 bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
     const Ydb::Table::CreateTableRequest& in, bool enableCompactFulltext, Ydb::StatusIds::StatusCode& status, TString& error) {
 
@@ -2664,6 +2737,12 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         error = msg;
         return false;
     };
+
+    // A fulltext index over a table whose primary key is not a single integer column keeps its doc
+    // ids in the synthetic __ydb_row_id column. The mode is not a part of the SDK index description,
+    // so it is restored from the primary key (the same rule the create path uses) when the schema is
+    // re-created from a description (replication, restore) rather than from a user request.
+    const bool rowIdMode = !IsSingleIntegerPrimaryKey(in);
 
     for (const auto& index : in.indexes()) {
         auto indexDesc = out.MutableIndexDescription()->Add();
@@ -2716,6 +2795,9 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
                 ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact
                 : NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain);
             *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_plain_index().fulltext_settings();
+            if (rowIdMode) {
+                indexDesc->MutableFulltextIndexDescription()->SetUseRowIdAsDocId(true);
+            }
             break;
 
         case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
@@ -2723,6 +2805,9 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
                 ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance
                 : NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance);
             *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_relevance_index().fulltext_settings();
+            if (rowIdMode) {
+                indexDesc->MutableFulltextIndexDescription()->SetUseRowIdAsDocId(true);
+            }
             break;
 
         case Ydb::Table::TableIndex::kGlobalJsonIndex:
@@ -2732,8 +2817,17 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             break;
 
         case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
+            // A local index has no impl tables: the datashard keeps the filter inside the table, so
+            // only the settings are carried over a describe -> create round trip.
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomFilter);
+            if (index.local_bloom_filter_index().has_false_positive_probability()) {
+                indexDesc->MutableBloomFilterDescription()->SetFalsePositiveProbability(
+                    index.local_bloom_filter_index().false_positive_probability());
+            }
+            break;
+
         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
-            return returnError(Ydb::StatusIds::UNSUPPORTED, "Local bloom index types are not supported in indexed table creation config");
+            return returnError(Ydb::StatusIds::UNSUPPORTED, "Local bloom_ngram_filter index is not supported in indexed table creation config");
         case Ydb::Table::TableIndex::kLocalMinMaxIndex:
             return returnError(Ydb::StatusIds::UNSUPPORTED, "Local min_max index is not supported in indexed table creation config");
         case Ydb::Table::TableIndex::TYPE_NOT_SET:

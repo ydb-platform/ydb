@@ -4,6 +4,11 @@ SRCS(
     yql_activation_groups.cpp
     yql_dispatch.cpp
     yql_setting.h
+    yql_activation_policy.cpp
+    yql_activation_policy.h
+    yql_config_qplayer.cpp
+    yql_config_qplayer.h
+    yql_setting.cpp
 )
 
 PEERDIR(

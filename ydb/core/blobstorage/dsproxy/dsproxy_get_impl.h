@@ -4,6 +4,7 @@
 #include "dsproxy_blackboard.h"
 #include "dsproxy_mon.h"
 #include "request_history.h"
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <util/generic/set.h>
 
@@ -32,6 +33,7 @@ class TGetImpl {
     const bool ReportDetailedPartMap;
     const bool EnableChecksumCalcAndValidationOnDsProxy;
     std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> ForceBlockTabletData;
+    TBlobStorageGroupInfo::TGroupVDisks FailedReadDisks;
 
     ui64 ReplyBytes = 0;
     i64 BytesToReport = 0;
@@ -63,6 +65,8 @@ class TGetImpl {
 
     THistory History;
 
+    bool CheckVDiskReadFailure(const TVDiskID& vdisk, NKikimrProto::EReplyStatus status);
+
     friend class TBlobStorageGroupGetRequest;
     friend class THistory;
 
@@ -84,6 +88,7 @@ public:
         , ReportDetailedPartMap(ev->ReportDetailedPartMap)
         , EnableChecksumCalcAndValidationOnDsProxy(enableChecksumCalcAndValidationOnDsProxy)
         , ForceBlockTabletData(ev->ForceBlockTabletData)
+        , FailedReadDisks(&Info->GetTopology())
         , Blackboard(info, groupQueues, NKikimrBlobStorage::AsyncBlob, ev->GetHandleClass)
         , RequestPrefix(requestPrefix)
         , PhantomCheck(ev->PhantomCheck)
@@ -107,16 +112,7 @@ public:
     }
 
     ui32 CountRequestBytes() const {
-        ui32 res = 0;
-        for (ui32 k = 0; k < QuerySize; ++k) {
-            const auto& query = Queries[k];
-            ui32 size = query.Size;
-            if (!size) {
-                size = Max<i32>(0, query.Id.BlobSize() - query.Shift);
-            }
-            res += size;
-        }
-        return res;
+        return TEvBlobStorage::TEvGet::CountRequestBytes({Queries.Get(), QuerySize});
     }
 
     ui64 GetReplyBytes() {
@@ -279,7 +275,11 @@ public:
 
         ++ResponseIndex;
 
-        Step(logCtx, outVGets, outVPuts, outGetResult);
+        if (CheckVDiskReadFailure(vdisk, status)) {
+            Step(logCtx, outVGets, outVPuts, outGetResult);
+        } else {
+            PrepareReply(NKikimrProto::ERROR, "Mirror-3-dc read exceeds the group failure model", logCtx, outGetResult);
+        }
         History.AddVGetResult(std::move(vgetResult));
     }
 

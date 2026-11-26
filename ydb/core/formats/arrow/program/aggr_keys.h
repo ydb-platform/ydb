@@ -141,7 +141,7 @@ public:
         : Inputs(input)
         , Output(output)
         , AggregationId(aggregationId) {
-        AFL_VERIFY(Inputs.size() <= 1);
+        YDB_LOG_VERIFY(Inputs.size() <= 1);
     }
 
     TString DebugString() const;

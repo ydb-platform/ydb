@@ -37,6 +37,8 @@ YT_DEFINE_ERROR_ENUM(
     ((ReadOnly)                             (616))
     ((RestartAfterRecovery)                 (617))
     ((ExpectedMutationHandlerException)     (618))
+    ((CausalTimeNotFound)                   (619))
+    ((CausalTimeNotReached)                 (620))
 );
 
 DEFINE_ENUM(EPeerKind,
@@ -47,6 +49,9 @@ DEFINE_ENUM(EPeerKind,
 
 YT_DEFINE_STRONG_TYPEDEF(TRevision, ui64);
 constexpr auto NullRevision = TRevision();
+
+//! Lamport time assigned to an outer mutation record.
+YT_DEFINE_STRONG_TYPEDEF(TCausalTime, ui64);
 
 struct TVersion;
 struct TReachableState;

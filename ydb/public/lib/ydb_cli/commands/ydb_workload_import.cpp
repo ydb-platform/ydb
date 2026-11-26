@@ -252,7 +252,9 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
         }
     }
 
-    if (AtomicGet(ErrorsCount) == 0 && Initializer->PostImport() != EXIT_SUCCESS) {
+    // File-only exports do not populate database tables. Skip post-import database
+    // actions such as ANALYZE and index creation, which could fail if those tables do not exist.
+    if (!UploadParams.FileOutputPath.IsDefined() && AtomicGet(ErrorsCount) == 0 && Initializer->PostImport() != EXIT_SUCCESS) {
         AtomicIncrement(ErrorsCount);
     }
     return AtomicGet(ErrorsCount) ? EXIT_FAILURE : EXIT_SUCCESS;

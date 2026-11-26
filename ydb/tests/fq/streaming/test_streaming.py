@@ -1372,6 +1372,9 @@ FROM `{table_name}`"""
         self.wait_completed_checkpoints(kikimr, query_name)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name)
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{query_name}`;
+        """)
 
     # SchemeShard counters cover the database, so each case needs a fresh cluster.
     @pytest.mark.parametrize(
@@ -1650,6 +1653,9 @@ FROM `{table_name}`"""
         ]
 
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{name}`;
+        """)
 
     @pytest.mark.parametrize(
         "use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"]
@@ -2231,6 +2237,9 @@ FROM `{table_name}`"""
         # After restart the newly written records can reach the table while the
         # delayed records expected below are being validated.
         validate_table(expected_data2, allow_extra_rows=True)
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{query_name}`;
+        """)
 
     @link_test_case("#46139")
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -2374,7 +2383,7 @@ FROM `{table_name}`"""
         longstr = '23456789876543212345678987654321'  # so that it won't fit SSO/embedded
         data = [
             '{"foo":{"bar":"before lunch", "bat":[0], "but":null}}',
-            '{"foo":{"bar":"lunch time", "baz":[1,2], "bat":[1,"{longstr}"],"bet":{"a":1,"b{longstr}c":2},"bum":{"обед":true,"полдник":null},,"but":[123,456]},"test":"xy{longstr}z"}',
+            '{"fo\\u006f":{"bar":"lunch time", "baz":[1,2], "bat":[1,"{longstr}"],"bet":{"a":1,"b{longstr}c":2},"bum":{"обед":true,"\\u043fолдни\\u043a":null},,"but":[123,456]},"test":"xy{longstr}z"}',
             '{"foo":{"bar":"after lunch", "baz":[], "bat":[2,"t{longstr}a"],"bet":{"a":2,"c{longstr}d":3},"bum":{"supper":false},"but":[789,"foo"]},"test":"x{longstr}yz"}',
             '{"foo":{"bar":"is lunch over", "bat":[3],"but":true},"test":"x{longstr}yz"}',
             '{"foo":{"bar":"lunch was yummy", "bat":[4,null,"that"],"but":1234},"test":"x{longstr}yz"}',
@@ -2672,8 +2681,8 @@ FROM `{table_name}`"""
         self.wait_completed_checkpoints(kikimr, name)
 
         messages = [
-            # Valid row with all nested containers.
-            '{"top":{"a":[1,2],"b":[3,"s"],"c":{"k":1},"d":4,"e":"x"},"req":{"id":10,"name":"y"},"note":"ok"}',
+            # Valid row with all nested containers (also validates Dict key unescape, \u006b is 'k')).
+            '{"top":{"a":[1,2],"b":[3,"s"],"c":{"\\u006b":1},"d":4,"e":"x"},"req":{"id":10,"name":"y"},"note":"ok"}',
             # Errors: missing required nested field.
             '{"req":{"name":"no"},"note":"skip-missing-req"}',
             # Errors: top-level structured field has wrong type.
@@ -2694,8 +2703,14 @@ FROM `{table_name}`"""
             '{"req":{"id":"bad"},"note":"skip-req-type"}',
             # Errors: nested required scalar null.
             '{"req":{"id":null},"note":"skip-req-null"}',
-            # Valid: tuple has extra elements, extra tuple elements are ignored.
-            '{"top":{"b":[5,"t","extra"]},"req":{"id":1},"note":"ok-extra"}',
+            # Errors: invalid escaped unicode in top-level field name
+            '{"foo\\ud800":42,"note":"skip-top-broken-escape"}',
+            # Errors: invalid escaped unicode in Struct field name
+            '{"top":{"bar\\ud800":42},"note":"skip-struct-broken-escape"}',
+            # Errors: invalid escaped unicode in Dict field name
+            '{"top":{"c":{"bar\\ud800":42}},"note":"skip-dict-broken-escape"}',
+            # Valid: tuple has extra elements, extra tuple elements are ignored (also validates toplevel key unescape, \u006f is 'o').
+            '{"t\\u006fp":{"b":[5,"t","extra"]},"req":{"id":1},"note":"ok-extra"}',
             # Valid: explicit nulls for optional top-level structs.
             '{"top":null,"req":null,"note":"ok-nulls"}',
             # Valid: optional top-level structs omitted.
@@ -2704,8 +2719,8 @@ FROM `{table_name}`"""
             '{"top":{"a":[],"c":{}},"note":"ok-empty"}',
             # Valid: only one nested scalar present.
             '{"top":{"d":101},"note":"ok-only-d"}',
-            # Valid: tuple trailing optional element omitted.
-            '{"top":{"b":[7]},"note":"ok-tuple-trailing-optional"}',
+            # Valid: tuple trailing optional element omitted (also validates Struct key unescape, \u0062 is 'b').
+            '{"top":{"\\u0062":[7]},"note":"ok-tuple-trailing-optional"}',
             # Valid: explicit null for optional list.
             '{"top":{"a":null},"note":"ok-list-null"}',
             # Valid: unknown top-level and nested keys are ignored.
@@ -2746,15 +2761,10 @@ FROM `{table_name}`"""
 
         # Extra tuple elements are ignored.
         extra_top = parsed["ok-extra"]["top"]
-        assert extra_top.get("b") == [5, "t"]
-        assert extra_top.get("a") is None
-        assert extra_top.get("c") is None
-        assert extra_top.get("d") is None
-        assert extra_top.get("e") is None
+        assert extra_top == {"a": None, "b": [5, "t"], "c": None, "d": None, "e": None}
 
         extra_req = parsed["ok-extra"]["req"]
-        assert extra_req.get("id") == 1
-        assert extra_req.get("name") is None
+        assert extra_req == {"id": 1, "name": None}
 
         # Explicit optional nulls.
         assert parsed["ok-nulls"].get("top") is None
@@ -2766,15 +2776,11 @@ FROM `{table_name}`"""
 
         # Empty containers are valid.
         empty_top = parsed["ok-empty"]["top"]
-        assert empty_top.get("a") == []
-        assert empty_top.get("c") == {}
-        assert empty_top.get("b") is None
+        assert empty_top == {"a": [], "b": None, "c": {}, "d": None, "e": None}
 
         # Only one scalar field present.
         only_d_top = parsed["ok-only-d"]["top"]
-        assert only_d_top.get("d") == 101
-        assert only_d_top.get("a") is None
-        assert only_d_top.get("b") is None
+        assert only_d_top == {"a": None, "b": None, "c": None, "d": 101, "e": None}
         assert parsed["ok-only-d"].get("req") is None
 
         # Tuple trailing optional element omitted.
@@ -2789,6 +2795,8 @@ FROM `{table_name}`"""
 
         # Unknown keys were ignored and the row was still emitted.
         assert "ok-extra-keys" in parsed
+        ok_extra_keys = parsed["ok-extra-keys"]["top"]
+        assert ok_extra_keys == {"a": None, "b": None, "c": None, "d": None, "e": None}
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
@@ -3107,6 +3115,9 @@ FROM `{table_name}`"""
             ALTER STREAMING QUERY `{path}` SET (RUN = TRUE);
         """)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        second_ydb_client.query(f"""
+            DROP STREAMING QUERY `{path}`;
+        """)
 
     @link_test_case("#47255")
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -3291,6 +3302,9 @@ FROM `{table_name}`"""
         # After restart, records written before the query was stopped can be
         # persisted while the expected delayed records are being validated.
         validate_table(expected_data2, allow_extra_rows=True)
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{query_name}`;
+        """)
 
     @link_test_case("#47257")
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -3540,6 +3554,9 @@ FROM `{table_name}`"""
             enable_discovery=False,
         )
         check_issues(get_issues(client=second_ydb_client), "Lease expired")
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{path}`;
+        """)
 
     @pytest.mark.parametrize(
         argnames="table_role,table_store,kikimr",

@@ -11,8 +11,9 @@ SRCS(
 PEERDIR(
     library/cpp/threading/atomic_shared_ptr
     ydb/core/base
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/kqp/common
+    ydb/core/kqp/common/simple
     ydb/core/kqp/query_data
     ydb/core/mind
     ydb/core/protos

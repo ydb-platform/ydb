@@ -21,6 +21,10 @@ SRCS(
     py_variant.cpp
     py_void.cpp
     py_yql_module.cpp
+    py27_backports.cpp
+    py_ctx.cpp
+    py_gil.cpp
+    py_ptr.cpp
 )
 
 IF (USE_SYSTEM_PYTHON AND _SYSTEM_PYTHON27)
@@ -47,6 +51,11 @@ PEERDIR(
 )
 
 NO_COMPILER_WARNINGS()
+
+PEERDIR_FROM_POLICY(
+    ALLOW
+    statbox/nile_debug
+)
 
 END()
 

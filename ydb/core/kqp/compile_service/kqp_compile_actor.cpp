@@ -1,5 +1,5 @@
 #include "kqp_compile_service.h"
-#include "kqp_warmup_compile_actor.h"
+#include <ydb/core/kqp/common/warmup/warmup.h>
 
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
@@ -10,7 +10,6 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host.h>
-#include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 
@@ -25,6 +24,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/digest/md5/md5.h>
 
+#include <util/random/random.h>
 #include <util/string/escape.h>
 
 #include <ydb/core/base/cputime.h>
@@ -42,6 +42,24 @@ const TString YqlName = "CompileActor";
 
 inline TString GetQueryTextForLog(const TString& queryText) {
     return EscapeC(NKikimr::ProtectQueryForLoggingIfSensitive(queryText));
+}
+
+// Picks the optimizer for one compilation. NewRBORolloutRatio applies only when EnableNewRBO is set.
+bool ShouldUseNewRBO(const NKikimrConfig::TTableServiceConfig& config, const TKqpQueryId& queryId) {
+    // ANALYZE scans use UDAF factories unsupported by new RBO.
+    if (!config.GetEnableNewRBO() || queryId.Settings().IsAnalyze) {
+        return false;
+    }
+
+    const double ratio = config.GetNewRBORolloutRatio();
+    if (ratio >= 1.0) {
+        return true;
+    }
+    // A NaN ratio fails both this check and the draw below, so it selects the YQL optimizer.
+    if (ratio <= 0.0) {
+        return false;
+    }
+    return RandomNumber<double>() < ratio;
 }
 
 } // namespace
@@ -71,8 +89,7 @@ public:
         TKqpDbCountersPtr dbCounters, std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState, bool collectFullDiagnostics,
-        bool perStatementResult,
-        ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst,
+        ECompileActorAction compileAction,
         std::shared_ptr<NYql::TExprContext> splitCtx,
         NYql::TExprNode::TPtr splitExpr,
         bool usePessimisticLocks)
@@ -84,7 +101,7 @@ public:
         , FederatedQuerySetup(federatedQuerySetup)
         , Uid(uid)
         , QueryId(queryId)
-        , QueryRef(QueryId.Text, QueryId.QueryParameterTypes, queryAst)
+        , QueryRef(QueryId.Text(), QueryId.QueryParameterTypes())
         , UserToken(userToken)
         , ClientAddress(clientAddress)
         , DbCounters(dbCounters)
@@ -100,13 +117,12 @@ public:
         , TempTablesState(std::move(tempTablesState))
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
-        , QueryAst(std::move(queryAst))
-        , EnableNewRBO(tableServiceConfig.GetEnableNewRBO() && !queryId.Settings.IsAnalyze)
+        // Drawn once per actor: fallback retries rebuild the config from this value.
+        , EnableNewRBO(ShouldUseNewRBO(tableServiceConfig, queryId))
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
         , UsePessimisticLocks(usePessimisticLocks)
     {
         Config = BuildConfiguration(tableServiceConfig);
-        PerStatementResult = perStatementResult && Config->GetEnablePerStatementQueryExecution();
         // The compile actor works concurrently with the compile service that started it.
         MarkSpawn(CompileActorSpan);
     }
@@ -114,10 +130,10 @@ public:
     TKikimrConfiguration::TPtr BuildConfiguration(const TTableServiceConfig& tableServiceConfig) {
         NYql::TKikimrConfiguration::TPtr config = MakeIntrusive<TKikimrConfiguration>();
 
-        config->Init(KqpSettings->DefaultSettings.GetDefaultSettings(), QueryId.Cluster, KqpSettings->Settings, false);
+        config->Init(KqpSettings->DefaultSettings.GetDefaultSettings(), TString(QueryId.Cluster()), KqpSettings->Settings, false);
 
-        if (!QueryId.Database.empty()) {
-            config->_KqpTablePathPrefix = QueryId.Database;
+        if (!QueryId.Database().empty()) {
+            config->_KqpTablePathPrefix = TString(QueryId.Database());
         }
 
         config->ApplyServiceConfig(tableServiceConfig);
@@ -129,7 +145,7 @@ public:
         // YQL optimizer on their first attempt, as well as on fallback retries.
         config->SetEnableNewRBO(EnableNewRBO);
 
-        if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
+        if (QueryId.Settings().QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings().QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
             ui32 scriptResultRowsLimit = QueryServiceConfig.GetScriptResultRowsLimit();
             if (scriptResultRowsLimit > 0) {
                 config->_ResultRowsLimit = scriptResultRowsLimit;
@@ -138,7 +154,7 @@ public:
             }
         }
 
-        if (IsIn({NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY}, QueryId.Settings.QueryType)) {
+        if (IsIn({NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY}, QueryId.Settings().QueryType)) {
             config->_KqpYqlConstraintsTransformerEnabled = AppData()->FeatureFlags.GetEnableKqpConstraintsTransformer();
         }
 
@@ -160,9 +176,6 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         switch(CompileAction) {
-            case ECompileActorAction::PARSE:
-                StartParsing(ctx);
-                break;
             case ECompileActorAction::COMPILE:
                 StartCompilation(ctx);
                 break;
@@ -231,28 +244,6 @@ private:
 
 
 private:
-    TVector<TQueryAst> GetAstStatements(const TActorContext &ctx) {
-        TString cluster = QueryId.Cluster;
-        TKqpTranslationSettingsBuilder settingsBuilder(ConvertType(QueryId.Settings.QueryType), cluster, QueryId.Text, Config->GetYqlBindingsMode(), GUCSettings);
-        settingsBuilder.SetKqpTablePathPrefix(Config->_KqpTablePathPrefix.Get().GetRef())
-            .SetIsEnableExternalDataSources(AppData(ctx)->FeatureFlags.GetEnableExternalDataSources())
-            .SetApplicationName(ApplicationName)
-            .SetQueryParameters(QueryId.QueryParameterTypes)
-            .SetFromConfig(*Config);
-
-        auto span = CompileActorSpan.CreateChild(TCompileTraceLevels::Phase, "Parse query");
-        auto statements = ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult);
-        const bool success = !statements.empty() && std::all_of(statements.begin(), statements.end(), [](const auto& statement) {
-            return statement.Ast && statement.Ast->IsOk() && statement.Ast->Root;
-        });
-        if (success) {
-            span.EndOk();
-        } else {
-            span.EndError("Parsing failed");
-        }
-        return statements;
-    }
-
     void ReplySplitResult(const TActorContext &ctx, IKqpHost::TSplitResult&& result) {
         Y_UNUSED(ctx);
         YDB_LOG_DEBUG("Send split result",
@@ -279,7 +270,7 @@ private:
 
     void StartSplitting(const TActorContext &ctx) {
         Become(&TKqpCompileActor::SplitState);
-        if (QueryId.Settings.Syntax == Ydb::Query::Syntax::SYNTAX_PG) {
+        if (QueryId.Settings().Syntax == Ydb::Query::Syntax::SYNTAX_PG) {
             NYql::TIssue issue(NYql::TPosition(), "PostgreSQL syntax is not supported");
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
         }
@@ -319,11 +310,6 @@ private:
         ReplySplitResult(ctx, std::move(splitResult));
     }
 
-    void StartParsing(const TActorContext &ctx) {
-        Become(&TKqpCompileActor::CompileState);
-        ReplyParseResult(ctx, GetAstStatements(ctx));
-    }
-
     void StartCompilation(const TActorContext &ctx) {
         StartTime = TInstant::Now();
 
@@ -335,9 +321,9 @@ private:
 
         YDB_LOG_DEBUG_CTX(ctx, "Starting query compilation",
             {"self", ctx.SelfID},
-            {"cluster", QueryId.Cluster},
-            {"database", QueryId.Database},
-            {"queryText", GetQueryTextForLog(QueryId.Text)},
+            {"cluster", QueryId.Cluster()},
+            {"database", QueryId.Database()},
+            {"queryText", GetQueryTextForLog(QueryId.Text())},
             {"startTime", StartTime});
 
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
@@ -350,12 +336,12 @@ private:
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
         }
         if (UsePessimisticLocks
-                && QueryId.Settings.QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY
-                && QueryId.Settings.QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY) {
+                && QueryId.Settings().QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY
+                && QueryId.Settings().QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY) {
             NYql::TIssue issue(NYql::TPosition(), "Read Committed isolation level is supported only for generic query.");
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
         }
-        if (QueryId.Settings.Syntax == Ydb::Query::Syntax::SYNTAX_PG) {
+        if (QueryId.Settings().Syntax == Ydb::Query::Syntax::SYNTAX_PG) {
             NYql::TIssue issue(NYql::TPosition(), "PostgreSQL syntax is not supported");
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
         }
@@ -369,7 +355,7 @@ private:
     void StartCompilationWithSettings(IKqpHost::TPrepareSettings& prepareSettings) {
         NCpuTime::TCpuTimer timer(CompileCpuTime);
 
-        switch (QueryId.Settings.QueryType) {
+        switch (QueryId.Settings().QueryType) {
             case NKikimrKqp::QUERY_TYPE_SQL_DML:
                 AsyncCompileResult = KqpHost->PrepareDataQuery(QueryRef, prepareSettings);
                 break;
@@ -397,7 +383,7 @@ private:
                 break;
 
             default:
-                YQL_ENSURE(false, "Unexpected query type: " << QueryId.Settings.QueryType);
+                YQL_ENSURE(false, "Unexpected query type: " << QueryId.Settings().QueryType);
         }
 
         EnableNewRBO = Config->GetEnableNewRBO();
@@ -433,26 +419,27 @@ private:
         counters->TxProxyMon = Counters->TxProxyMon;
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
-                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup,
+                TString(QueryId.Cluster()), TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup,
                 CompileActorSpan.GetTraceId(), traceParentProvider);
-        Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, QueryId.DatabaseId, std::move(loader),
+        Gateway = CreateKikimrIcGateway(TString(QueryId.Cluster()), QueryId.Settings().QueryType, TString(QueryId.Database()), TString(QueryId.DatabaseId()), std::move(loader),
             ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig, CompileActorSpan.GetTraceId(), std::move(traceParentProvider));
-        Gateway->SetToken(QueryId.Cluster, UserToken);
+        Gateway->SetToken(TString(QueryId.Cluster()), UserToken);
         Gateway->SetClientAddress(ClientAddress);
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
+        Config->FeatureFlags.SetDisablePgCompatibility(QueryId.DisablePgCompatibility());
 
-        KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
+        KqpHost = CreateKqpHost(Gateway, TString(QueryId.Cluster()), TString(QueryId.Database()), Config, ModuleResolverState->ModuleResolver,
             FederatedQuerySetup, UserToken, GUCSettings, QueryServiceConfig, ApplicationName, AppData(ctx)->FunctionRegistry,
             false, false, std::move(TempTablesState), nullptr, SplitCtx.get(), UserRequestContext, UsePessimisticLocks);
 
         IKqpHost::TPrepareSettings prepareSettings;
-        prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
-        prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
-        prepareSettings.RuntimeParameterSizeLimit = QueryId.Settings.RuntimeParameterSizeLimit;
-        prepareSettings.RuntimeParameterSizeLimitSatisfied = QueryId.Settings.RuntimeParameterSizeLimitSatisfied;
+        prepareSettings.DocumentApiRestricted = QueryId.Settings().DocumentApiRestricted;
+        prepareSettings.IsInternalCall = QueryId.Settings().IsInternalCall;
+        prepareSettings.RuntimeParameterSizeLimit = QueryId.Settings().RuntimeParameterSizeLimit;
+        prepareSettings.RuntimeParameterSizeLimitSatisfied = QueryId.Settings().RuntimeParameterSizeLimitSatisfied;
         // Internal ANALYZE scans require legacy translation; new RBO forces YqlSelect.
-        if (QueryId.Settings.IsAnalyze) {
+        if (QueryId.Settings().IsAnalyze) {
             prepareSettings.YqlSelect = NSQLTranslation::EYqlSelect::Disable;
         } else if (EnableNewRBO) {
             prepareSettings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
@@ -460,7 +447,7 @@ private:
         prepareSettings.UsePessimisticLocks = UsePessimisticLocks;
         prepareSettings.CompileTrace = CompileTrace;
 
-        switch (QueryId.Settings.Syntax) {
+        switch (QueryId.Settings().Syntax) {
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:
                 prepareSettings.UsePgParser = false;
                 prepareSettings.SyntaxVersion = 1;
@@ -481,7 +468,7 @@ private:
     }
 
     void AddMessageToReplayLog(const TString& queryPlan) {
-        if (NKikimr::IsQueryWithSensitiveInfo(QueryId.Text)) {
+        if (NKikimr::IsQueryWithSensitiveInfo(QueryId.Text())) {
             // Skip both replay log and QueryDiagnostics replay message for sensitive queries.
             return;
         }
@@ -497,8 +484,8 @@ private:
         replayMessage.InsertValue("query_id", Uid);
         replayMessage.InsertValue("version", "1.0");
         NJson::TJsonValue queryParameterTypes(NJson::JSON_MAP);
-        if (QueryId.QueryParameterTypes) {
-            for (const auto& [paramName, paramType] : *QueryId.QueryParameterTypes) {
+        if (QueryId.QueryParameterTypes()) {
+            for (const auto& [paramName, paramType] : *QueryId.QueryParameterTypes()) {
                 queryParameterTypes[paramName] = Base64Encode(paramType.SerializeAsString());
             }
         }
@@ -506,9 +493,9 @@ private:
         replayMessage.InsertValue("created_at", ToString(TlsActivationContext->ActorSystem()->Timestamp().Seconds()));
         // Keep the field for compatibility with existing query replay datasets.
         replayMessage.InsertValue("query_syntax", "1");
-        replayMessage.InsertValue("query_database", QueryId.Database);
-        replayMessage.InsertValue("query_cluster", QueryId.Cluster);
-        replayMessage.InsertValue("query_type", ToString(QueryId.Settings.QueryType));
+        replayMessage.InsertValue("query_database", QueryId.Database());
+        replayMessage.InsertValue("query_cluster", QueryId.Cluster());
+        replayMessage.InsertValue("query_type", ToString(QueryId.Settings().QueryType));
 
         if (CollectFullDiagnostics) {
             NJson::TJsonValue tablesMetaUserView(NJson::JSON_ARRAY);
@@ -523,7 +510,7 @@ private:
         }
 
         replayMessage.InsertValue("query_plan", queryPlan);
-        replayMessage.InsertValue("query_text", EscapeC(QueryId.Text));
+        replayMessage.InsertValue("query_text", EscapeC(QueryId.Text()));
         replayMessage.InsertValue("table_metadata", TString(NJson::WriteJson(tablesMeta, false)));
         replayMessage.InsertValue("table_meta_serialization_type", EMetaSerializationType::EncodedProto);
 
@@ -576,9 +563,9 @@ private:
     void ReplyError(Ydb::StatusIds::StatusCode status, const TIssues& issues) {
         auto meta = CollectMeta();
         if (!KqpCompileResult) {
-            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta);
+            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, CompileCpuTime, std::move(QueryId), meta);
         } else {
-            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, CompileCpuTime, std::move(KqpCompileResult->Query), std::move(KqpCompileResult->QueryAst), meta);
+            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, CompileCpuTime, std::move(KqpCompileResult->Query), meta);
         }
         KqpCompileResult->UsedNewRbo = EnableNewRBO;
 
@@ -600,50 +587,6 @@ private:
     void UnexpectedEvent(const TString& state, ui32 eventType) {
         InternalError(TStringBuilder() << "TKqpCompileActor, unexpected event: " << eventType
             << ", at state:" << state);
-    }
-
-    void ReplyParseResult(const TActorContext &ctx, TVector<TQueryAst>&& astStatements) {
-        Y_UNUSED(ctx);
-
-        if (astStatements.empty()) {
-            NYql::TIssue issue(NYql::TPosition(), "Parsing result of query is empty");
-            ReplyError(Ydb::StatusIds::INTERNAL_ERROR, {issue});
-            return;
-        }
-
-        for (size_t statementId = 0; statementId < astStatements.size(); ++statementId) {
-            if (!astStatements[statementId].Ast || !astStatements[statementId].Ast->IsOk() || !astStatements[statementId].Ast->Root) {
-                YDB_LOG_ERROR("Get parsing result with error statement",
-                    {"self", SelfId()},
-                    {"owner", Owner},
-                    {"id", statementId});
-
-                auto status = GetYdbStatus(astStatements[statementId].Ast->Issues);
-
-                NYql::TIssue issue(NYql::TPosition(), "Error while parsing query.");
-                for (const auto& i : astStatements[statementId].Ast->Issues) {
-                    issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
-                }
-
-                ReplyError(status, {issue});
-                return;
-            }
-        }
-
-        YDB_LOG_DEBUG("Send parsing result statements",
-            {"self", SelfId()},
-            {"owner", Owner},
-            {"size", astStatements.size()});
-
-        auto responseEv = MakeHolder<TEvKqp::TEvParseResponse>(QueryId, std::move(astStatements));
-        // End the spans before the receiver can consume the result.
-        FinishCompileTrace(Ydb::StatusIds::SUCCESS);
-        EndQueryTraceSpan(CompileActorSpan, Ydb::StatusIds::SUCCESS);
-        Send(Owner, responseEv.Release(), 0, 0, CompileActorSpan.GetTraceId());
-
-        Counters->ReportCompileFinish(DbCounters);
-
-        PassAway();
     }
 
     void FillCompileResult(std::unique_ptr<NKikimrKqp::TPreparedQuery> preparingQuery, NKikimrKqp::EQueryType queryType,
@@ -676,7 +619,7 @@ private:
 
         if (kqpResult.NeedToSplit) {
             KqpCompileResult = TKqpCompileResult::Make(
-                Uid, status, CollectIssues(kqpResult.Issues()), ETableReadType::Other, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta, true);
+                Uid, status, CollectIssues(kqpResult.Issues()), ETableReadType::Other, CompileCpuTime, std::move(QueryId), meta, true);
             Reply();
             return;
         }
@@ -698,7 +641,6 @@ private:
             Counters->ReportCompileNewRBOFailed(DbCounters);
         }
 
-        auto database = QueryId.Database;
         if (kqpResult.SqlVersion) {
             Counters->ReportSqlVersion(DbCounters, *kqpResult.SqlVersion);
         }
@@ -709,9 +651,9 @@ private:
 
         ETableReadType maxReadType = ExtractMostHeavyReadType(kqpResult.QueryPlan);
 
-        auto queryType = QueryId.Settings.QueryType;
+        auto queryType = QueryId.Settings().QueryType;
 
-        KqpCompileResult = TKqpCompileResult::Make(Uid, status, CollectIssues(kqpResult.Issues()), maxReadType, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta);
+        KqpCompileResult = TKqpCompileResult::Make(Uid, status, CollectIssues(kqpResult.Issues()), maxReadType, CompileCpuTime, std::move(QueryId), meta);
         KqpCompileResult->UsedNewRbo = EnableNewRBO;
         KqpCompileResult->CommandTagName = kqpResult.CommandTagName;
 
@@ -744,9 +686,9 @@ private:
     void HandleTimeout() {
         YDB_LOG_NOTICE("Query compilation timed out",
             {"self", SelfId()},
-            {"cluster", QueryId.Cluster},
-            {"database", QueryId.Database},
-            {"queryText", GetQueryTextForLog(QueryId.Text)},
+            {"cluster", QueryId.Cluster()},
+            {"database", QueryId.Database()},
+            {"queryText", GetQueryTextForLog(QueryId.Text())},
             {"startTime", StartTime});
 
         NYql::TIssue issue(NYql::TPosition(), "Query compilation timed out.");
@@ -756,10 +698,10 @@ private:
     NJson::TJsonValue CollectMeta() {
         NJson::TJsonValue meta;
         NJson::TJsonValue parameters;
-        if (QueryId.QueryParameterTypes) {
+        if (QueryId.QueryParameterTypes()) {
             NProtobufJson::TProto2JsonConfig config;
             config.SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumName);
-            for (const auto& [name, typedValue] : *QueryId.QueryParameterTypes) {
+            for (const auto& [name, typedValue] : *QueryId.QueryParameterTypes()) {
                 NProtobufJson::Proto2Json(typedValue, parameters[name], config);
             }
         }
@@ -802,10 +744,10 @@ private:
         YDB_LOG_ERROR_CTX(ctx, "Rebuilding compile configuration and restarting compilation",
             {"logMessage", logMessage},
             {"self", ctx.SelfID},
-            {"database", QueryId.Database},
+            {"database", QueryId.Database()},
             {"status", Ydb::StatusIds_StatusCode_Name(status)},
             {"issues", issues},
-            {"queryText", GetQueryTextForLog(QueryId.Text)});
+            {"queryText", GetQueryTextForLog(QueryId.Text())});
 
         // Explicitly drop a pointer to result, it holds pointer `TExprNode` allocated from `TExprContext` in KqpHost
         // and we want rebuild a KqpHost.
@@ -868,9 +810,7 @@ private:
     TKqpTempTablesState::TConstPtr TempTablesState;
     bool CollectFullDiagnostics;
 
-    bool PerStatementResult;
     ECompileActorAction CompileAction;
-    TMaybe<TQueryAst> QueryAst;
     bool EnableNewRBO;
     TMaybe<NYql::TIssue> FallbackToYqlOptimizerIssue;
     bool EnableFallbackToYqlOptimizer;
@@ -886,8 +826,8 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, TKqpDbCountersPtr dbCounters, const TGUCSettings::TPtr& gUCSettings,
     const TMaybe<TString>& applicationName, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
-    ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,
-    bool perStatementResult, std::shared_ptr<NYql::TExprContext> splitCtx, NYql::TExprNode::TPtr splitExpr,
+    ECompileActorAction compileAction, bool collectFullDiagnostics,
+    std::shared_ptr<NYql::TExprContext> splitCtx, NYql::TExprNode::TPtr splitExpr,
     bool usePessimisticLocks)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, pathNormalizer, queryServiceConfig,
@@ -895,7 +835,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
                                 uid, query, userToken, clientAddress, dbCounters,
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState), collectFullDiagnostics,
-                                perStatementResult, compileAction, std::move(queryAst),
+                                compileAction,
                                 std::move(splitCtx), std::move(splitExpr), usePessimisticLocks);
 }
 

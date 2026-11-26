@@ -15,11 +15,11 @@ public:
     TEvExecuteGeneralLocalTransaction(std::unique_ptr<NTabletFlatExecutor::ITransaction>&& transaction)
         : Transaction(std::move(transaction))
     {
-        AFL_VERIFY(!!Transaction);
+        YDB_LOG_VERIFY(!!Transaction);
     }
 
     std::unique_ptr<NTabletFlatExecutor::ITransaction> ExtractTransaction() {
-        AFL_VERIFY(!!Transaction);
+        YDB_LOG_VERIFY(!!Transaction);
         return std::move(Transaction);
     }
 };

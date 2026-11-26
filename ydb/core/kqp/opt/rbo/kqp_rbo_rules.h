@@ -270,6 +270,18 @@ class TEliminateLeftJoinRule : public ISimplifiedRule {
 };
 
 /**
+ * Compute identical aggregations of an aggregate once, such as COUNT(*) in both SELECT and HAVING.
+ * A Map above the aggregate copies the result to the outputs of the others.
+ */
+class TEliminateDuplicateAggregationsRule : public ISimplifiedRule {
+  public:
+    TEliminateDuplicateAggregationsRule() : ISimplifiedRule("Eliminate duplicate aggregations", ERuleProperties::RequireParents) {}
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Expand distinct aggregation.
  */
 class TExpandDistinctAggregationRule: public ISimplifiedRule {
@@ -454,6 +466,19 @@ public:
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
     NYql::EStorageType ApplicableTableType;
+};
+
+/**
+ * Read a row table without ranges through an index whose key order matches the top-N sort over the read.
+ */
+class TSelectIndexForTopSortRule: public ISimplifiedRule {
+public:
+    TSelectIndexForTopSortRule()
+        : ISimplifiedRule("Select index for top sort", ERuleProperties::RequireParents) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
 
 /**

@@ -95,18 +95,21 @@ const TBackupCollectionRestoreResponse::TMetadata& TBackupCollectionRestoreRespo
 namespace NYdb::inline Dev::NOperation {
 
 template NThreading::TFuture<NBackup::TIncrementalBackupResponse> TOperationClient::Get(const TOperation::TOperationId& id);
+template NThreading::TFuture<NBackup::TIncrementalBackupResponse> TOperationClient::Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings);
 template <>
 NThreading::TFuture<TOperationsList<NBackup::TIncrementalBackupResponse>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
     return List<NBackup::TIncrementalBackupResponse>("incbackup", pageSize, pageToken);
 }
 
 template NThreading::TFuture<NBackup::TBackupCollectionRestoreResponse> TOperationClient::Get(const TOperation::TOperationId& id);
+template NThreading::TFuture<NBackup::TBackupCollectionRestoreResponse> TOperationClient::Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings);
 template <>
 NThreading::TFuture<TOperationsList<NBackup::TBackupCollectionRestoreResponse>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
     return List<NBackup::TBackupCollectionRestoreResponse>("restore", pageSize, pageToken);
 }
 
 template NThreading::TFuture<NBackup::TFullBackupResponse> TOperationClient::Get(const TOperation::TOperationId& id);
+template NThreading::TFuture<NBackup::TFullBackupResponse> TOperationClient::Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings);
 template <>
 NThreading::TFuture<TOperationsList<NBackup::TFullBackupResponse>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
     return List<NBackup::TFullBackupResponse>("fullbackup", pageSize, pageToken);

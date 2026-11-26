@@ -55,7 +55,7 @@ void TCdcStreamUnitBase::AddCdcStream(
     }
 
     AddSender.Reset(new TEvChangeExchange::TEvAddSender(
-        tablePathId, TEvChangeExchange::ESenderType::CdcStream, streamPathId
+        tablePathId, streamPathId, TEvChangeExchange::TCdcStreamSender{TUserTable::TCdcStream(streamDesc)}
     ));
 }
 

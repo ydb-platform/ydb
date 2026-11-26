@@ -325,12 +325,6 @@ def validate_test(unit, kw):
             requirements_list.append(req_name + ":" + req_value)
         valid_kw['REQUIREMENTS'] = serialize_list(sorted(requirements_list))
 
-    # Mark test with ya:external tag if it requests any secret from external storages
-    # It's not stable and nonreproducible by definition
-    for x in secret_requirements:
-        if x in requirements:
-            tags.add(consts.YaTestTags.External)
-
     if valid_kw.get("FUZZ-OPTS"):
         for option in get_list("FUZZ-OPTS"):
             if not option.startswith("-"):
@@ -369,7 +363,6 @@ def validate_test(unit, kw):
                     errors.append("File '{}' specified in the YT_SPEC macro doesn't exist".format(filename))
                     continue
                 if not is_yt_spec_contain_pool_info(filename):
-                    tags.add(consts.YaTestTags.External)
                     tags.add("ya:yt_research_pool")
 
     partition = valid_kw.get('TEST_PARTITION', 'SEQUENTIAL')
@@ -856,9 +849,6 @@ def ADD_CHECK_PY_IMPORTS(fields: typing.Any, unit: ymake.Unit, *args: str):
 
     unit.onpeerdir(['library/python/testing/import_test'])
 
-    if unit.get('MODULE_LANG') == 'PY2' and unit.get('DISABLE_PY2_CHECKS') == 'yes':
-        return
-
     dart_record = create_dart_record(fields, unit, (), {})
     if not dart_record:
         return
@@ -1181,9 +1171,6 @@ def _ADD_PY_LINTER_CHECK(fields: typing.Any, unit: ymake.Unit, *args: str):
     _, spec_args = _common.sort_by_keywords(keywords, args)
 
     name = spec_args['NAME'][0]
-
-    if name == consts.PythonLinterName.Py2Flake8 and unit.get('DISABLE_PY2_CHECKS') == 'yes':
-        return
 
     global_resources = consts.LINTER_TO_GLOBAL_RESOURCES.get(name, ())
     for resource, _ in global_resources:

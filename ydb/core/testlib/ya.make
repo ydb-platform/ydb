@@ -53,6 +53,7 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/federated_query
     ydb/core/kqp/proxy_service
+    ydb/core/kqp/runtime/scheduler
     ydb/core/kqp/script_executions/finalization
     ydb/core/metering
     ydb/core/mind
@@ -75,6 +76,7 @@ PEERDIR(
     ydb/core/testlib/actors
     ydb/core/testlib/basics
     ydb/core/testlib/tablet_helpers
+    ydb/core/tx/cdc_aggregator/tablet
     ydb/core/tx/columnshard
     ydb/core/tx/conveyor/service
     ydb/core/tx/conveyor/usage

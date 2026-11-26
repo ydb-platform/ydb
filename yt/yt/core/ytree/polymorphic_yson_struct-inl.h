@@ -140,14 +140,14 @@ void TPolymorphicYsonStruct<TMapping>::Load(
         Storage_->SetUnrecognizedStrategy(*recursiveUnrecognizedStrategy);
     }
 
-    // TypeFieldName must be unrecognized for the original struct
-    // therefore we must delete it prior to |Load| call.
-    map->RemoveChild(TypeFieldName);
-    Storage_->Load(map, postprocess, setDefaults, pathGetter);
-
-    // NB(arkady-e1ppa): We must not actually remove contents of the node as a postcondition
-    // since it mutates serialized data which might be used for config validation.
-    map->AddChild(TypeFieldName, ConvertToNode(HeldType_));
+    Storage_->Load(
+        map,
+        TYsonStructLoadOptions{
+            .Postprocess = postprocess,
+            .SetDefaults = setDefaults,
+            .PathGetter = pathGetter,
+            .ExternallyConsumedKey = std::string(TypeFieldName),
+        });
 }
 
 template <CPolymorphicEnumMapping TMapping>

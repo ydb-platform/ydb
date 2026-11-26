@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/opt/rbo/copy_logical_subtree.h>
 #include <ydb/core/kqp/opt/rbo/rules/decorrelation/dependent_join_pushdown.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 
@@ -274,8 +275,10 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
         }
     }
 
-    Y_UNIT_TEST(JoinSidesGetNullSafeDomainPairs) {
+    Y_UNIT_TEST_TWIN(JoinSidesGetNullSafeDomainPairs, EqualNullsJoinKeys) {
         TPlan plan;
+        plan.Test.Config->SetUseBlockHashJoin(true);
+        plan.Test.Config->SetEnableBlockHashJoinEqualNulls(EqualNullsJoinKeys);
         const auto parameter = plan.Id(), local = plan.Id(), value = plan.Id();
         auto hub = TReplicate::Create(plan.Producer(parameter, local, value),
             plan.Pos, plan.Root.PlanProps.InfoUnitRegistry);
@@ -288,13 +291,27 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
         auto& join = CastOperator<TOpJoin>((*plan.Root.GetInput()));
         UNIT_ASSERT_VALUES_EQUAL(join.JoinKind, "Inner");
         UNIT_ASSERT_VALUES_EQUAL(join.JoinKeys.Items().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(join.JoinKeys.Items().front().EqualNulls, EqualNullsJoinKeys);
         UNIT_ASSERT_VALUES_EQUAL(join.JoinFilters.size(), 1);
         UNIT_ASSERT(join.JoinFilters.front().GetExpressionBody()->IsCallable(">"));
         for (auto* side : join.GetChildren()) {
-            const auto& map = CastOperator<TOpMap>(*side);
-            UNIT_ASSERT_VALUES_EQUAL(map.GetMapElements().Keys().Size(), 1);
-            const auto& entry = *map.GetMapElements().Items().begin();
-            UNIT_ASSERT(entry.second.GetExpression().GetExpressionBody()->IsCallable("StablePickle"));
+            if (!EqualNullsJoinKeys) {
+                UNIT_ASSERT(side->Kind == EOperator::Map);
+                const auto& map = CastOperator<TOpMap>(*side);
+                UNIT_ASSERT_VALUES_EQUAL(map.GetMapElements().Keys().Size(), 1);
+                const auto& entry = *map.GetMapElements().Items().begin();
+                UNIT_ASSERT(entry.second.GetExpression().GetExpressionBody()->IsCallable("StablePickle"));
+            } else {
+                for (const auto& item : IterateSubtree(side)) {
+                    if (item.Current->Kind != EOperator::Map) {
+                        continue;
+                    }
+                    const auto& map = CastOperator<TOpMap>(*item.Current);
+                    for (const auto& entry : map.GetMapElements().Items()) {
+                        UNIT_ASSERT(!entry.second.GetExpression().GetExpressionBody()->IsCallable("StablePickle"));
+                    }
+                }
+            }
         }
         UNIT_ASSERT(!HasFreeCorrelation(plan.Root.GetInput(), {parameter}));
     }

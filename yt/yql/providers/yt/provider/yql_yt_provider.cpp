@@ -7,6 +7,7 @@
 
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <yt/yql/providers/yt/common/yql_names.h>
+#include <yt/yql/providers/yt/lib/nile/operation_permission.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/activation/yql_activation.h>
@@ -420,7 +421,6 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         Y_UNUSED(functionRegistry);
         Y_UNUSED(randomProvider);
         Y_UNUSED(progressWriter);
-        Y_UNUSED(operationOptions);
         Y_UNUSED(hiddenAborter);
 
         IYtFullCapture::TPtr fullCapture;
@@ -443,6 +443,7 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         TStatWriter statWriter;
         std::tie(ytState, statWriter) = CreateYtNativeState(gateway, userName, sessionId, ytGatewayConfig, typeCtx, optFactory, helper, tablesData, fullCapture, qContext);
         ytState->PlanLimits = planLimits;
+        ytState->NileAllowedClusters = BuildNileOperationPermissions(gatewaysConfig, userName, operationOptions.AttrsYson);
 
         TVector<TAttr> mrJobLabels;
         if (ytGatewayConfig && ytGatewayConfig->HasMrJobLabel()) {

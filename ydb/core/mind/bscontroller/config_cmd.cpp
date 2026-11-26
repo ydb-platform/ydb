@@ -2,6 +2,8 @@
 #include "config.h"
 #include "select_groups.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
+
 namespace NKikimr::NBsController {
 
         class TBlobStorageController::TBlobStorageController::TTxConfigCmd
@@ -10,6 +12,8 @@ namespace NKikimr::NBsController {
             const TActorId NotifyId;
             const ui64 Cookie;
             const NKikimrBlobStorage::TConfigRequest Cmd;
+            // The audit log outlives cleanup credentials, including on a rejected command.
+            std::optional<NKikimrBlobStorage::TConfigRequest> RedactedRequest;
             const bool SelfHeal;
             const bool GroupLayoutSanitizer;
             std::optional<THostRecordMap> EnforceHostRecords;
@@ -33,7 +37,18 @@ namespace NKikimr::NBsController {
                 , EnforceHostRecords(std::move(enforceHostRecords))
                 , Ev(new TEvBlobStorage::TEvControllerConfigResponse())
                 , Response(Ev->Record.MutableResponse())
-            {}
+            {
+                for (size_t i = 0; i < Cmd.CommandSize(); ++i) {
+                    if (Cmd.GetCommand(i).GetManageRetiredS3Namespace().HasCredentials()) {
+                        if (!RedactedRequest) {
+                            RedactedRequest = Cmd;
+                        }
+                        RedactedRequest->MutableCommand(i)->MutableManageRetiredS3Namespace()->MutableCredentials()->Clear();
+                    }
+                }
+            }
+
+            const NKikimrBlobStorage::TConfigRequest& AuditRequest() const { return RedactedRequest ? *RedactedRequest : Cmd; }
 
             TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_CONFIG_CMD; }
 
@@ -249,14 +264,10 @@ namespace NKikimr::NBsController {
                     storageConfig ? &storageConfig.value() : nullptr);
                 State->CheckConsistency();
 
-                TString m;
-                google::protobuf::TextFormat::Printer printer;
-                printer.SetSingleLineMode(true);
-                printer.PrintToString(Cmd, &m);
                 YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "Generic command",
                     {"marker", "BSCA02"},
                     {"uniqueId", State->UniqueId},
-                    {"request", Cmd},
+                    {"request", AuditRequest()},
                     {"selfHeal", SelfHeal});
 
                 for (const auto& step : Cmd.GetCommand()) {
@@ -311,6 +322,7 @@ namespace NKikimr::NBsController {
                             MAP_TIMING(SanitizeGroup, SANITIZE_GROUP)
                             MAP_TIMING(CancelVirtualGroup, CANCEL_VIRTUAL_GROUP)
                             MAP_TIMING(ChangeGroupSizeInUnits, CHANGE_GROUP_SIZE_IN_UNITS)
+                            MAP_TIMING(ManageRetiredS3Namespace, MANAGE_RETIRED_S3_NAMESPACE)
                             MAP_TIMING(ReconfigureVirtualGroup, RECONFIGURE_VIRTUAL_GROUP)
                             MAP_TIMING(RecommissionGroups, RECOMMISSION_GROUPS)
                             MAP_TIMING(DefineDDiskPool, DEFINE_DDISK_POOL)
@@ -335,6 +347,7 @@ namespace NKikimr::NBsController {
 
                 const bool hasChanges = Success && State->Changed() && !Cmd.GetRollback();
                 const TValidateConfigUpdatesParameters validationParameters{
+                    .FromGroupStateActor = NotifyId == Self->GroupStateActorId,
                     .SuppressFailModelChecking = Cmd.GetIgnoreGroupFailModelChecks(),
                     .SuppressDegradedGroupsChecking = Cmd.GetIgnoreDegradedGroupsChecks(),
                     .SuppressDisintegratedGroupsChecking = Cmd.GetIgnoreDisintegratedGroupsChecks(),
@@ -386,7 +399,7 @@ namespace NKikimr::NBsController {
                 // update operation log for write transaction
                 NIceDb::TNiceDb db(txc.DB);
                 TString requestBuffer, responseBuffer;
-                Y_PROTOBUF_SUPPRESS_NODISCARD Cmd.SerializeToString(&requestBuffer);
+                Y_PROTOBUF_SUPPRESS_NODISCARD AuditRequest().SerializeToString(&requestBuffer);
                 Y_PROTOBUF_SUPPRESS_NODISCARD Response->SerializeToString(&responseBuffer);
                 db.Table<Schema::OperationLog>().Key(operationLogIndex).Update(
                     NIceDb::TUpdate<Schema::OperationLog::Timestamp>(TActivationContext::Now()),
@@ -398,7 +411,7 @@ namespace NKikimr::NBsController {
 
                 YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "Finished processing command",
                     {"marker", "BSCA10"},
-                    {"request", Cmd.DebugString()},
+                    {"request", AuditRequest().DebugString()},
                     {"response", Response->DebugString()},
                     {"executionTime", executionTime},
                     {"operationLogIndex", operationLogIndex});
@@ -449,6 +462,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(MovePDisk)
                     HANDLE_COMMAND(PopulatePDisk)
                     HANDLE_COMMAND(UpdateBridgeGroupInfo)
+                    HANDLE_COMMAND(ManageRetiredS3Namespace)
                     HANDLE_COMMAND(ReconfigureVirtualGroup)
                     HANDLE_COMMAND(RecommissionGroups)
                     HANDLE_COMMAND(DefineDDiskPool)
@@ -485,10 +499,32 @@ namespace NKikimr::NBsController {
                 } else {
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(Self->NextConfigTxSeqNo - 1);
                 }
-                TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
+                *Ev->Record.MutableResponse()->MutableAppliedDataCenterStates() = SerializeDataCenterStates(Self->DataCenterStates);
+                if (NotifyId == Self->GroupStateActorId) {
+                    Self->Send(NotifyId, new NGroupSyncer::TEvGroupState::TEvProposalResult, 0, Cookie);
+                } else {
+                    TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
+                }
                 Self->UpdatePDisksCounters();
             }
         };
+
+        void TBlobStorageController::Handle(NGroupSyncer::TEvGroupState::TEvPropose::TPtr& ev) {
+            if (ev->Sender != GroupStateActorId) {
+                return;
+            }
+            const auto& proposal = *ev->Get();
+            NKikimrBlobStorage::TConfigRequest request;
+            auto* group = request.AddCommand()->MutableDefineGroupState()->AddGroups();
+            group->SetGroupId(proposal.GroupId);
+            group->SetExpectedGroupGeneration(proposal.Generation);
+            group->SetGroupState(proposal.Next.State);
+            for (EMirror3dcFailRealmState state : proposal.Next.Realms) {
+                group->AddFailRealmStates(state);
+            }
+            TabletCounters->Cumulative()[NBlobStorageController::COUNTER_CONFIG_COUNT].Increment(1);
+            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, false, false, std::nullopt, this));
+        }
 
         void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev) {
             TabletCounters->Cumulative()[NBlobStorageController::COUNTER_CONFIG_COUNT].Increment(1);
@@ -501,10 +537,12 @@ namespace NKikimr::NBsController {
 
             NKikimrBlobStorage::TEvControllerConfigRequest& record(ev->Get()->Record);
             const NKikimrBlobStorage::TConfigRequest& request = record.GetRequest();
+            auto tx = std::make_unique<TTxConfigCmd>(request, ev->Sender, ev->Cookie, ev->Get()->SelfHeal,
+                ev->Get()->GroupLayoutSanitizer, ev->Get()->EnforceHostRecords, this);
             YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Execute TEvControllerConfigRequest",
                 {"marker", "BSCTXCC01"},
-                {"request", request});
-            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, ev->Get()->SelfHeal, ev->Get()->GroupLayoutSanitizer, ev->Get()->EnforceHostRecords, this));
+                {"request", tx->AuditRequest()});
+            Execute(std::move(tx));
         }
 
 } // NKikimr::NBsController

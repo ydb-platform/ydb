@@ -59,7 +59,7 @@ struct TFindEmptyHistoryIntervalsContext {
 };
 
 TFindEmptyHistoryIntervalsContext BuildFindEmptyHistoryIntervalsContext(const TTabletStorageInfo& storageInfo, ui32 generation,
-    ui32 requiredBarrierGeneration, const NOlap::TColumnEngineForLogs* index, NActors::TActorId tabletActorId);
+    ui32 requiredBarrierGeneration, const NOlap::TColumnEngineForLogs& index, NActors::TActorId tabletActorId);
 
 NActors::IActor* CreateFindEmptyHistoryIntervalsActor(TFindEmptyHistoryIntervalsContext&& context,
     const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& config, const TCSCounters& counters, TInstant started);
@@ -99,7 +99,7 @@ public:
     struct TStartContext {
         const TTabletStorageInfo& StorageInfo;
         ui32 Generation;
-        const NOlap::TColumnEngineForLogs* Index;
+        const NOlap::TColumnEngineForLogs& Index;
         NActors::TActorId TabletActorId;
         const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& Config;
         const TCSCounters& Counters;

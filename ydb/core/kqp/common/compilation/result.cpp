@@ -1,16 +1,10 @@
 #include "result.h"
+#include <library/cpp/json/json_writer.h>
 #include <ydb/core/util/proto_duration.h>
 
 namespace NKikimr::NKqp {
 
 constexpr size_t QUERY_TEXT_LIMIT = 10240;
-
-std::shared_ptr<NYql::TAstParseResult> TKqpCompileResult::GetAst() const {
-    if (QueryAst) {
-        return QueryAst->Ast;
-    }
-    return nullptr;
-}
 
 void TKqpCompileResult::SerializeTo(NKikimrKqp::TCompileCacheQueryInfo* to, std::optional<ui64> lastAccessedAt) const {
     to->SetQueryId(Uid);
@@ -25,19 +19,19 @@ void TKqpCompileResult::SerializeTo(NKikimrKqp::TCompileCacheQueryInfo* to, std:
     }
     SetDuration(CompilationDuration, *to->MutableCompilationDuration());
     if (Query.Defined()) {
-        if (Query->Text.size() > QUERY_TEXT_LIMIT) {
-            TString truncatedText = Query->Text.substr(0, QUERY_TEXT_LIMIT);
-            to->SetQuery(truncatedText);
+        const TString& text = Query->Text();
+        if (text.size() > QUERY_TEXT_LIMIT) {
+            to->SetQuery(text.data(), QUERY_TEXT_LIMIT);
             to->SetIsTruncated(true);
         } else {
-            to->SetQuery(Query->Text);
+            to->SetQuery(text);
             to->SetIsTruncated(false);
         }
 
-        to->SetUserSID(Query->UserSid);
-        to->SetDatabase(Query->Database);
-        to->SetQueryType(NKikimrKqp::EQueryType_Name(Query->Settings.QueryType));
-        to->SetSyntax(Ydb::Query::Syntax_Name(Query->Settings.Syntax));
+        to->SetUserSID(TString(Query->UserSid()));
+        to->SetDatabase(TString(Query->Database()));
+        to->SetQueryType(NKikimrKqp::EQueryType_Name(Query->Settings().QueryType));
+        to->SetSyntax(Ydb::Query::Syntax_Name(Query->Settings().Syntax));
     }
 
 }

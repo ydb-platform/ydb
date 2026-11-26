@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/common/blob.h>
+#include <ydb/core/tx/columnshard/engines/portions/meta.h>
 #include <ydb/core/tx/columnshard/tx_reader/abstract.h>
 
 namespace NKikimr::NOlap {
@@ -46,10 +47,27 @@ public:
     using TBase::TBase;
 };
 
+class TEngineUncommittedPortionsReader: public IEngineTxReader {
+private:
+    using TBase = IEngineTxReader;
+    const std::vector<TPortionAddress> PortionAddresses;
+    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
+    virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
+
+public:
+    TEngineUncommittedPortionsReader(const TString& name, TColumnEngineForLogs* self, const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector,
+        std::vector<TPortionAddress>&& portionAddresses)
+        : TBase(name, self, dsGroupSelector)
+        , PortionAddresses(std::move(portionAddresses))
+    {
+    }
+};
+
 class TEngineLoadingFinish: public ITxReader {
 private:
     using TBase = ITxReader;
     TColumnEngineForLogs* Self = nullptr;
+    const bool PortionsLoaded;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
 
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
@@ -57,9 +75,10 @@ private:
     }
 
 public:
-    TEngineLoadingFinish(const TString& name, TColumnEngineForLogs* self)
+    TEngineLoadingFinish(const TString& name, TColumnEngineForLogs* self, const bool portionsLoaded)
         : TBase(name)
         , Self(self)
+        , PortionsLoaded(portionsLoaded)
     {
     }
 };

@@ -1,8 +1,6 @@
 YQL_LIBRARY()
 
 PEERDIR(
-    library/cpp/svnversion
-    library/cpp/threading/task_scheduler
     library/cpp/yson/node
     ydb/library/yql/dq/common
     ydb/library/yql/dq/proto
@@ -19,20 +17,8 @@ PEERDIR(
 )
 
 SRCS(
-    file_cache.cpp
     tasks_runner_local.cpp
-    tasks_runner_pipe.cpp
     tasks_runner_proxy.cpp
 )
 
-IF (OS_WINDOWS)
-    SRCS(tasks_runner_pipe_process_win.cpp)
-ELSE()
-    SRCS(tasks_runner_pipe_process.cpp)
-ENDIF()
-
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

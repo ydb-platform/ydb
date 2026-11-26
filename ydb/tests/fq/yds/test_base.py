@@ -23,7 +23,7 @@ class YdbTopics(StreamingTestBase):
     def read(self, count, topic_path=None, timeout=None):
         return self.read_stream(count, topic_path=topic_path, timeout=timeout, endpoint=self.endpoint)
 
-    def start(self, sql, *, with_checkpoints=True, disposition='FRESH', timeout=120):
+    def create_query(self, sql, *, disposition='FRESH', timeout=120):
         query = self.kikimr.get_database_name() + '/' + self.name + '_query_' + str(len(self.queries))
         self.queries.append(query)
         self.kikimr.ydb_client.query(
@@ -36,6 +36,10 @@ class YdbTopics(StreamingTestBase):
         ''',
             timeout=timeout,
         )
+        return query
+
+    def start(self, sql, *, with_checkpoints=True, disposition='FRESH', timeout=120):
+        query = self.create_query(sql, disposition=disposition, timeout=timeout)
         if with_checkpoints:
             self.checkpoint(query, timeout=timeout)
         else:

@@ -1,4 +1,5 @@
 import logging
+from contextlib import ExitStack
 import string
 import random
 
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class Utils:
-    def __init__(self, enable_tiny_disks):
+    def __init__(self, enable_tiny_disks, request):
         self.config = KikimrConfigGenerator(
             erasure=Erasure.BLOCK_4_2,
             use_in_memory_pdisks=False
@@ -19,19 +20,24 @@ class Utils:
         self.config.yaml_config["feature_flags"]["enable_tiny_disks"] = enable_tiny_disks
 
         self.cluster = KiKiMR(self.config)
+        request.addfinalizer(self.cluster.stop)
+        self._clients = ExitStack()
+        request.addfinalizer(self._clients.close)
         self.cluster.start()
 
-        driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
-        self.session_pool = ydb.SessionPool(driver)
+        driver = self._clients.enter_context(ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root"))
+        self.session_pool = self._clients.enter_context(ydb.SessionPool(driver))
         driver.wait(5, fail_fast=True)
 
     def restart_cluster(self, enable_tiny_disks):
         self.config.yaml_config["feature_flags"]["enable_tiny_disks"] = enable_tiny_disks
         self.cluster.update_configurator_and_restart(self.config)
 
-        driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
+        # Preserve live sessions during the restart, then retire the old client.
+        self._clients.close()
+        driver = self._clients.enter_context(ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root"))
         driver.wait(20)
-        self.session_pool = ydb.SessionPool(driver)
+        self.session_pool = self._clients.enter_context(ydb.SessionPool(driver))
 
     def create_table(self, table_name):
         with self.session_pool.checkout() as session:
@@ -73,29 +79,29 @@ class Utils:
 
 
 class TestTinyVDisks:
-    def test_disabled(self):
-        utils = Utils(False)
+    def test_disabled(self, request):
+        utils = Utils(False, request)
         utils.create_table("table")
         utils.write_data("table", 1, 4194304)
         utils.restart_cluster(False)
         utils.read_data("table")
 
-    def test_enabled(self):
-        utils = Utils(True)
+    def test_enabled(self, request):
+        utils = Utils(True, request)
         utils.create_table("table")
         utils.write_data("table", 1, 4194304)
         utils.restart_cluster(True)
         utils.read_data("table")
 
-    def test_disabled_enabled(self):
-        utils = Utils(False)
+    def test_disabled_enabled(self, request):
+        utils = Utils(False, request)
         utils.create_table("table")
         utils.write_data("table", 1, 4194304)
         utils.restart_cluster(True)
         utils.read_data("table")
 
-    def test_enabled_disabled(self):
-        utils = Utils(enable_tiny_disks=True)
+    def test_enabled_disabled(self, request):
+        utils = Utils(enable_tiny_disks=True, request=request)
         utils.create_table("table")
         utils.write_data("table", 1, 4194304)
         utils.restart_cluster(False)

@@ -1,7 +1,9 @@
+#include "yql_s3_decompressor_actor.h"
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
+#include <ydb/library/yql/dq/actors/common/dq_schedulable.h>
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/events/events.h>
 

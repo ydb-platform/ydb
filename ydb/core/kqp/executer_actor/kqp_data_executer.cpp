@@ -17,7 +17,7 @@
 #include <ydb/core/kqp/common/simple/reattach.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -60,7 +60,7 @@ public:
         const TExecuterConfig& executerConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TGUCSettings::TPtr& GUCSettings,
         TPartitionPrunerConfig partitionPrunerConfig,
         const TShardIdToTableInfoPtr& shardIdToTableInfo,
@@ -73,7 +73,7 @@ public:
         TVector<NKikimr::TTableId> tableIdsForSnapshot)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
             database, userToken, std::move(formatsSettings), counters,
-            executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
+            executerConfig, userRequestContext, TWilsonKqp::DataExecuter,
             "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings), channelService, useKqpTasksGraphV2)
         , ShardIdToTableInfo(shardIdToTableInfo)
         , TableIdsForSnapshot(std::move(tableIdsForSnapshot))
@@ -127,7 +127,7 @@ public:
             !HasOlapTable &&
             (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
         );
-        AFL_ENSURE(!forceSnapshot || Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+        YDB_LOG_ENSURE(!forceSnapshot || Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
 
         return forceSnapshot;
     }
@@ -214,7 +214,7 @@ public:
             MakeResponseAndPassAway();
             return;
         }  else if (Request.LocksOp == ELocksOp::Commit) {
-            AFL_ENSURE(!ReadOnlyTx);
+            YDB_LOG_ENSURE(!ReadOnlyTx);
             Become(&TKqpDataExecuter::FinalizeState);
             YDB_LOG_DEBUG("Send Commit to BufferActor",
                 {"marker", "KQPDATA"},
@@ -330,7 +330,7 @@ public:
     }
 
     void HandleFinalize(TEvents::TEvUndelivered::TPtr& ev) {
-        AFL_ENSURE(ev->Sender == BufferActorId);
+        YDB_LOG_ENSURE(ev->Sender == BufferActorId);
         YDB_LOG_WARN("Got Undelivered from BufferActor",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},
@@ -446,7 +446,7 @@ private:
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
                 hFunc(TEvPrivate::TEvRetry, HandleRetry);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
-                hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
+                hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleExecute);
                 hFunc(TEvDqCompute::TEvState, HandleComputeState);
                 hFunc(TEvDqCompute::TEvNodeState, HandleNodeState);
                 hFunc(TEvDqCompute::TEvChannelData, HandleChannelData);
@@ -473,6 +473,14 @@ private:
             }
         }
         ReportEventElapsedTime();
+    }
+
+    void HandleExecute(TEvKqpNode::TEvStartKqpTasksResponse::TPtr& ev) {
+        HandleStartKqpTasksResponse(ev);
+        if (CurrentStateFunc() == &TThis::WaitShutdownState) {
+            // A failed start can both initiate shutdown and report which tasks started.
+            HandleShutdown(ev);
+        }
     }
 
     void HandleExecute(TEvKqp::TEvAbortExecution::TPtr& ev) {
@@ -831,6 +839,7 @@ private:
             YQL_ENSURE(preparedQuery);
             NKikimrKqp::TQueryPhysicalGraph physicalGraph;
             *physicalGraph.MutablePreparedQuery() = *preparedQuery;
+            physicalGraph.SetCompiledWithPgCompatibilityDisabled(Request.CompiledWithPgCompatibilityDisabled);
             TasksGraph.PersistTasksGraphInfo(physicalGraph);
             Request.QueryPhysicalGraph = std::make_shared<NKikimrKqp::TQueryPhysicalGraph>(std::move(physicalGraph));
         }
@@ -1069,6 +1078,7 @@ private:
 
     void Shutdown() override {
         if (Planner) {
+            Planner->BeginShutdown();
             if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
                 YDB_LOG_INFO("Shutdown immediately - nothing to wait",
                     {"marker", "KQPDATA"},
@@ -1115,6 +1125,9 @@ private:
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvDqCompute::TEvState, HandleShutdown);
             hFunc(TEvDqCompute::TEvNodeState, HandleShutdown);
+            hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleShutdown);
+            hFunc(TEvents::TEvUndelivered, HandleShutdown);
+            hFunc(TEvPrivate::TEvRetry, HandleShutdown);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
             hFunc(TEvents::TEvPoison, HandleShutdown);
             hFunc(TEvDq::TEvAbortExecution, HandleShutdown);
@@ -1130,15 +1143,54 @@ private:
     }
 
     void HandleShutdown(TEvDqCompute::TEvState::TPtr& ev) {
-        HandleComputeStats(ev);
-
-        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-            PassAway();
+        if (HandleComputeStats(ev) && Planner->GetPendingComputeActors().contains(ev->Sender)) {
+            AbortLateComputeActor(ev->Sender);
         }
+        TryFinishShutdown();
     }
 
     void HandleShutdown(TEvDqCompute::TEvNodeState::TPtr&) {
+        TryFinishShutdown();
+    }
+
+    void HandleShutdown(TEvKqpNode::TEvStartKqpTasksResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        if (record.GetTxId() != TxId) {
+            return;
+        }
+
+        for (const auto& task : record.GetStartedTasks()) {
+            const auto computeActor = ActorIdFromProto(task.GetActorId());
+            if (Planner->AcknowledgeCA(task.GetTaskId(), computeActor, nullptr)) {
+                AbortLateComputeActor(computeActor);
+            }
+        }
+        for (const auto& task : record.GetNotStartedTasks()) {
+            Planner->TaskNotStarted(task.GetTaskId());
+        }
+        TryFinishShutdown();
+    }
+
+    void HandleShutdown(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == TEvKqpNode::TEvStartKqpTasksRequest::EventType) {
+            Planner->RequestNotStarted(ev->Cookie);
+            TryFinishShutdown();
+        }
+    }
+
+    void HandleShutdown(TEvPrivate::TEvRetry::TPtr& ev) {
+        Planner->RequestNotStarted(ev->Get()->RequestId);
+        TryFinishShutdown();
+    }
+
+    void AbortLateComputeActor(const TActorId& computeActor) {
+        const auto status = ResponseEv->Record.GetResponse().GetStatus();
+        Send(computeActor, new TEvKqp::TEvAbortExecution(YdbStatusToDqStatus(status), "Terminate execution"));
+    }
+
+    void TryFinishShutdown() {
         if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+            FillLocksFromExtraData();
             PassAway();
         }
     }
@@ -1166,10 +1218,7 @@ private:
             }
         }
 
-        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-            FillLocksFromExtraData();
-            PassAway();
-        }
+        TryFinishShutdown();
     }
 
     void HandleShutdown(TEvents::TEvPoison::TPtr& ev) {
@@ -1259,7 +1308,7 @@ private:
                     // shards it sent EvLocks to; other shards (e.g. locked by plain
                     // reads) are registered without it.
                     if (const auto* meta = shardMetas.FindPtr(lock.GetDataShard())) {
-                        AFL_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+                        YDB_LOG_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath, *meta);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::PESSIMISTIC_LOCK | IKqpTransactionManager::EAction::READ, Request.QuerySpanId);
                     } else {
@@ -1394,7 +1443,7 @@ private:
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     NFormats::TFormatsSettings formatsSettings, TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
@@ -1403,7 +1452,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TVector<NKikimr::TTableId> tableIdsForSnapshot)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, std::move(formatsSettings), counters, executerConfig,
-        std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
+        std::move(asyncIoFactory), creator, userRequestContext, federatedQuerySetup, GUCSettings,
         std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig,
         channelService, useKqpTasksGraphV2, std::move(tableIdsForSnapshot));
 }

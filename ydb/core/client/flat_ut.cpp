@@ -2282,7 +2282,6 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
-        DisableSplitMergePartCountLimit(cleverServer);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
 
@@ -2332,6 +2331,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
 
+        // Set the control after SchemeShard has registered it
+        DisableSplitMergePartCountLimit(cleverServer);
         SplitTwoKeysTable(cleverServer, annoyingClient, "/dc-1/Dir/TableOld", 0, {splitKey});
     }
 

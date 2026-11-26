@@ -1,7 +1,7 @@
 #include "long_tx_write_flow_control.h"
 
 #include <ydb/core/formats/arrow/size_calcer.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/data_events/shard_writer.h>
@@ -77,7 +77,7 @@ public:
     }
 
     virtual ~TLongTxWriteBase() {
-        AFL_VERIFY(MemoryInFlight.Sub(InFlightSize) >= 0);
+        YDB_LOG_VERIFY(MemoryInFlight.Sub(InFlightSize) >= 0);
         Counters->OnMemoryInflight(MemoryInFlight.Val(), GetMemoryInFlightLimit());
     }
 
@@ -106,7 +106,7 @@ protected:
         }
 
         auto accessor = ExtractDataAccessor();
-        AFL_VERIFY(!InFlightSize);
+        YDB_LOG_VERIFY(!InFlightSize);
         InFlightSize = accessor->GetSize();
         const i64 sizeInFlight = MemoryInFlight.Add(InFlightSize);
 
@@ -264,7 +264,7 @@ public:
 
 protected:
     std::unique_ptr<NEvWrite::IShardsSplitter::IEvWriteDataAccessor> ExtractDataAccessor() override {
-        AFL_VERIFY(DataAccessor);
+        YDB_LOG_VERIFY(DataAccessor);
         return std::move(DataAccessor);
     }
 

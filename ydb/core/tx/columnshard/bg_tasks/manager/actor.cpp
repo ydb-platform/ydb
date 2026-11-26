@@ -21,7 +21,7 @@ bool TSessionActor::SendTabletTransaction(std::unique_ptr<NTabletFlatExecutor::I
 }
 
 void TSessionActor::SaveSessionProgress() {
-    AFL_VERIFY(!SaveSessionProgressTx);
+    YDB_LOG_VERIFY(!SaveSessionProgressTx);
     const ui64 txId = GetNextTxId();
     SaveSessionProgressTx.emplace(txId);
     auto tx = std::make_unique<TTxSaveSessionProgress>(Session, SelfId(), Adapter, txId);

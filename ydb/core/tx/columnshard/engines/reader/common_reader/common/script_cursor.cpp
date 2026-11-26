@@ -19,7 +19,7 @@ TConclusion<TExecutionResult> TFetchingScriptCursor::Execute(IDataSource& source
         StepStartInstant = TMonotonic::Now();
     }
     Script->OnExecute();
-    AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
+    YDB_LOG_VERIFY(!Script->IsFinished(CurrentStepIdx));
     while (!Script->IsFinished(CurrentStepIdx)) {
         if (source.HasStageData() && source.GetStageData().IsEmptyWithData()) {
             YDB_LOG_DEBUG("",

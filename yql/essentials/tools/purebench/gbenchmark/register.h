@@ -1,11 +1,9 @@
 #pragma once
 
+#include <library/cpp/testing/gbenchmark/benchmark.h>
+
 #include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
-
-namespace benchmark {
-class Benchmark;
-} // namespace benchmark
 
 namespace NYql::NGBenchmark {
 

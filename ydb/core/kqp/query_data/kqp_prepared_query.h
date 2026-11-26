@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/simple/temp_tables.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
@@ -9,6 +9,7 @@
 #include <util/generic/vector.h>
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace NYql {
@@ -165,6 +166,13 @@ public:
     bool GetUseLlvm(const NYql::NDqProto::TProgram::TSettings& kqpSettingsProto) const;
 };
 
+struct TQueryTableAccess {
+    bool HasOlapRead = false;
+    bool HasOlapWrite = false;
+    bool HasOltpRead = false;
+    bool HasOltpWrite = false;
+};
+
 class TPreparedQueryHolder {
 private:
     YDB_ACCESSOR_DEF(TLlvmSettings, LlvmSettings);
@@ -174,6 +182,16 @@ private:
     TVector<TQueryTable> QueryTables;
     std::vector<TKqpPhyTxHolder::TConstPtr> Transactions;
     TIntrusivePtr<TTableConstInfoMap> TableConstInfoById;
+
+    enum class EBatchMode { None, Sink, InvalidTransform };
+    // Keep validation at its original point of use, including on explain-only plans.
+    struct TProperties {
+        TQueryTableAccess TableAccess;
+        EBatchMode BatchMode = EBatchMode::None;
+        bool UnexpectedReadOp = false;
+        bool UnexpectedWriteOp = false;
+    };
+    std::optional<TProperties> Properties;
 
 public:
 
@@ -192,6 +210,9 @@ public:
     const ::google::protobuf::RepeatedPtrField< ::NKikimrKqp::TParameterDescription>& GetParameters() const {
         return Proto->GetParameters();
     }
+
+    const TQueryTableAccess& GetTableAccess() const;
+    bool IsBatchQuery() const;
 
     const TKqpPhyTxHolder::TConstPtr& GetPhyTx(ui32 idx) const;
     TKqpPhyTxHolder::TConstPtr GetPhyTxOrEmpty(ui32 idx) const;

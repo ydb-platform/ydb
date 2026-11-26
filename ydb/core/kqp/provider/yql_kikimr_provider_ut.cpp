@@ -24,7 +24,8 @@ TContext CreateDefaultParserContext(NYql::TIssues& issues) {
 
     NSQLTranslationV1::TLexers lexers;
     NSQLTranslationV1::TParsers parsers;
-    return TContext(lexers, parsers, settings, { /* hints */ }, issues, { /* query */ });
+    static const NSQLTranslation::TParsedTokenList emptyTokens;
+    return TContext(lexers, parsers, settings, { /* hints */ }, emptyTokens, issues);
 }
 
 TAstNode* CreateAlterTable(TContext& parserContext, const TString& tableName, const TAlterTableParameters& params) {

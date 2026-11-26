@@ -2,6 +2,7 @@
 #include "cdc_schema_change.h"
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
+#include "datashard_repl_offsets.h"
 #include "execution_unit_ctors.h"
 
 #include <utility>
@@ -66,11 +67,22 @@ bool FamilySchemaChanged(const TUserTable& oldTable, const TUserTable& newTable)
 
     for (const auto& [id, column] : newTable.Columns) {
         auto it = oldTable.Columns.find(id);
-        if (it == oldTable.Columns.end()) {
+        if (column.IsBuildInProgress || it == oldTable.Columns.end() || it->second.IsBuildInProgress) {
             continue;
         }
 
         if (FamilyKey(oldTable, it->second.Family) != FamilyKey(newTable, column.Family)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool HasNewVisibleColumns(const TUserTable& oldTable, const TUserTable& newTable) {
+    for (const auto& [tag, column] : newTable.Columns) {
+        const auto it = oldTable.Columns.find(tag);
+        if (!column.IsBuildInProgress && (it == oldTable.Columns.end() || it->second.IsBuildInProgress)) {
             return true;
         }
     }
@@ -190,11 +202,17 @@ public:
                   const TActorContext &ctx) override;
 
 private:
+    struct TCleanupContext {
+        ui64 TxId = 0;
+        TReplicationSourceOffsetsDb::TCleanupCursor Cursor;
+    };
+
+    TCleanupContext Cleanup;
 };
 
 TAlterTableUnit::TAlterTableUnit(TDataShard &dataShard,
                                  TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::AlterTable, false, dataShard, pipeline)
+    : TExecutionUnit(EExecutionUnitKind::AlterTable, true, dataShard, pipeline)
 {
 }
 
@@ -235,6 +253,45 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     }
 
     auto oldInfo = DataShard.FindUserTable(tableId);
+    using TReplicationConfig = NKikimrSchemeOp::TTableReplicationConfig;
+    if (alterTableTx.HasReplicationConfig()
+        && (alterTableTx.GetReplicationConfig().GetMode() == TReplicationConfig::REPLICATION_MODE_NONE
+            || !oldInfo->IsReplicated())
+        && !oldInfo->IsIncrementalRestore()) {
+        if (oldInfo->IsReplicated()) {
+            // Persist NONE before deleting offsets, so delayed replication writes
+            // cannot recreate them. Keep the schema version until ALTER completes.
+            TUserTable::TPtr stopped = new TUserTable(*oldInfo);
+            stopped->ReplicationConfig.Mode = TReplicationConfig::REPLICATION_MODE_NONE;
+            NKikimrSchemeOp::TTableDescription schema;
+            stopped->GetSchema(schema);
+            stopped->ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
+            stopped->SetSchema(schema);
+            NIceDb::TNiceDb db(txc.DB);
+            DataShard.PersistUserTable(db, tableId.LocalPathId, *stopped);
+            TDataShardLocksDb locksDb(DataShard, txc);
+            DataShard.ReplaceUserTable(tableId, stopped, locksDb);
+            DataShard.ReplicatedTables.erase(tableId);
+            return EExecutionStatus::Reschedule;
+        }
+
+        // Clean offsets left by older versions before enabling replication.
+        if (Cleanup.TxId != op->GetTxId()) {
+            Cleanup = {.TxId = op->GetTxId()};
+        }
+
+        DataShard.ReplicatedTables.erase(tableId);
+        TReplicationSourceOffsetsDb rdb(txc);
+        switch (rdb.RemoveTableBatch(tableId, Cleanup.Cursor)) {
+        case TReplicationSourceOffsetsDb::ECleanupStatus::NotReady:
+            return EExecutionStatus::Restart;
+        case TReplicationSourceOffsetsDb::ECleanupStatus::More:
+            return EExecutionStatus::Reschedule;
+        case TReplicationSourceOffsetsDb::ECleanupStatus::Done:
+            Cleanup = {};
+            break;
+        }
+    }
     auto newInfo = DataShard.AlterUserTable(ctx, txc, alterTableTx);
     TDataShardLocksDb locksDb(DataShard, txc);
     DataShard.ReplaceUserTable(tableId, newInfo, locksDb);
@@ -243,18 +300,9 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
         DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
     }
 
-    bool schemaChanged = FamilySchemaChanged(*oldInfo, *newInfo);
-    if (alterTableTx.DropColumnsSize()) {
-        schemaChanged = true;
-    } else {
-        for (const auto& [tag, column] : newInfo->Columns) {
-            if (!oldInfo->Columns.contains(tag)) {
-                schemaChanged = true;
-                break;
-            }
-        }
-    }
-
+    const bool schemaChanged = FamilySchemaChanged(*oldInfo, *newInfo)
+        || HasNewVisibleColumns(*oldInfo, *newInfo)
+        || HasNewVisibleColumns(*newInfo, *oldInfo);
     if (schemaChanged) {
         PersistCdcSchemaChange(DataShard, txc, op, tableId, *newInfo);
     }

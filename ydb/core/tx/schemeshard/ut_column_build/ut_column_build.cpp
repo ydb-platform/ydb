@@ -16,8 +16,8 @@ namespace {
 
 class TColumnBuildFixture {
 public:
-    TColumnBuildFixture()
-        : Env(Runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true))
+    explicit TColumnBuildFixture(TTestEnvOptions options = {})
+        : Env(Runtime, options.EnableAddColumsWithDefaults(true))
     {
         TestCreateTable(Runtime, ++TxId, "/MyRoot", R"(
             Name: "Table"
@@ -43,6 +43,23 @@ public:
         return TestGetBuildIndex(Runtime, TTestTxConfig::SchemeShard, "/MyRoot", id);
     }
 
+    void FinishInitialScan(TBlockEvents<TEvDataShard::TEvCdcStreamScanRequest>& scan) {
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> getReady(Runtime, [](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.TransactionSize() == 1 && record.GetTransaction(0).GetAlterCdcStream().HasGetReady();
+        });
+        scan.Stop().Unblock();
+        Runtime.WaitFor("initial scan finalization", [&] { return !getReady.empty(); });
+
+        const auto readyTxId = getReady.front()->Get()->Record.GetTxId();
+        getReady.Stop().Unblock();
+        Env.TestWaitNotification(Runtime, readyTxId);
+
+        TestDescribeResult(DescribePrivatePath(Runtime, "/MyRoot/Table/Stream"), {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+    }
+
     TTestBasicRuntime Runtime;
     TTestEnv Env;
     ui64 TxId = 100;
@@ -51,6 +68,89 @@ public:
 }
 
 Y_UNIT_TEST_SUITE(ColumnBuildTest) {
+    Y_UNIT_TEST(InitialScanBlocksColumnBuild) {
+        TColumnBuildFixture fixture(TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableChangefeedInitialScan(true));
+
+        auto& runtime = fixture.Runtime;
+        WriteRow(runtime, ++fixture.TxId, "/MyRoot/Table", 1, 101, "existing");
+
+        TBlockEvents<TEvDataShard::TEvCdcStreamScanRequest> scan(runtime);
+        TestCreateCdcStream(runtime, ++fixture.TxId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+                Name: "Stream"
+                Mode: ECdcStreamModeKeysOnly
+                Format: ECdcStreamFormatProto
+                State: ECdcStreamStateScan
+            }
+        )");
+        fixture.Env.TestWaitNotification(runtime, fixture.TxId);
+        runtime.WaitFor("pending initial scan", [&] { return !scan.empty(); });
+
+        Ydb::TypedValue literal;
+        literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
+        literal.mutable_value()->set_uint32_value(42);
+
+        const auto rejected = fixture.CreateBuild("extra", literal, false);
+        UNIT_ASSERT_C(rejected.GetStatus() != Ydb::StatusIds::SUCCESS, rejected.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.DebugString(), "StatusMultipleModifications");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::CheckColumns("Table", {"key", "value"}, {}, {"key"}, true),
+        });
+
+        fixture.FinishInitialScan(scan);
+        const auto created = fixture.CreateBuild("extra", literal, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(created.GetStatus(), Ydb::StatusIds::SUCCESS, created.DebugString());
+
+        const auto finished = fixture.FinishBuild(fixture.TxId);
+        UNIT_ASSERT_VALUES_EQUAL_C(finished.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE, finished.DebugString());
+    }
+
+    Y_UNIT_TEST(ColumnBuildBlocksInitialScan) {
+        TColumnBuildFixture fixture(TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableChangefeedInitialScan(true));
+
+        auto& runtime = fixture.Runtime;
+        WriteRow(runtime, ++fixture.TxId, "/MyRoot/Table", 1, 101, "existing");
+
+        TBlockEvents<TEvDataShard::TEvUploadRowsResponse> backfill(runtime);
+        Ydb::TypedValue literal;
+        literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
+        literal.mutable_value()->set_uint32_value(42);
+
+        const auto created = fixture.CreateBuild("extra", literal, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(created.GetStatus(), Ydb::StatusIds::SUCCESS, created.DebugString());
+
+        const auto buildId = fixture.TxId;
+        runtime.WaitFor("pending column backfill", [&] { return !backfill.empty(); });
+
+        const TString stream = R"(
+            TableName: "Table"
+            StreamDescription {
+                Name: "Stream"
+                Mode: ECdcStreamModeKeysOnly
+                Format: ECdcStreamFormatProto
+                State: ECdcStreamStateScan
+            }
+        )";
+        TestCreateCdcStream(runtime, ++fixture.TxId, "/MyRoot", stream,
+            {NKikimrScheme::StatusMultipleModifications});
+
+        backfill.Stop().Unblock();
+        const auto finished = fixture.FinishBuild(buildId);
+        UNIT_ASSERT_VALUES_EQUAL_C(finished.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE, finished.DebugString());
+
+        TBlockEvents<TEvDataShard::TEvCdcStreamScanRequest> scan(runtime);
+        TestCreateCdcStream(runtime, ++fixture.TxId, "/MyRoot", stream);
+        fixture.Env.TestWaitNotification(runtime, fixture.TxId);
+        runtime.WaitFor("pending initial scan", [&] { return !scan.empty(); });
+        fixture.FinishInitialScan(scan);
+    }
+
     Y_UNIT_TEST_FLAG(NullDefaultNonOptionalDirectRequest, Populated) {
         TColumnBuildFixture fixture;
         auto& runtime = fixture.Runtime;

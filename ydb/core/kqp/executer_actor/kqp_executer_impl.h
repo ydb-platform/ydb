@@ -17,8 +17,8 @@
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_streaming_query_controller.h>
-#include <ydb/core/kqp/common/kqp_types.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/scheme/mkql/type_info.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_streaming_helper.h>
@@ -61,6 +61,7 @@
 
 #include <library/cpp/html/pcdata/pcdata.h>
 
+#include <util/generic/is_in.h>
 
 LWTRACE_USING(KQP_PROVIDER);
 
@@ -127,7 +128,6 @@ public:
         TKqpRequestCounters::TPtr counters,
         const TExecuterConfig& executerConfig,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        ui32 statementResultIndex,
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
         TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing(),
@@ -149,7 +149,6 @@ public:
         , Planner(nullptr)
         , ExecuterRetriesConfig(executerConfig.TableServiceConfig.GetExecuterRetriesConfig())
         , AggregationSettings(executerConfig.TableServiceConfig.GetAggregationConfig())
-        , StatementResultIndex(statementResultIndex)
         , BlockTrackingMode(executerConfig.GetBlockTrackingMode())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
@@ -246,10 +245,11 @@ protected:
         }
 
         TSet<ui64> shardIds; // TODO: assume Column and Data shards have non-intersecting ids.
+        const bool checksumEnabled = AppData()->FeatureFlags.GetEnableChecksumTable();
 
         // Prune partitions here outside of TasksGraph - in all possible cases.
         for (auto& [_, stageInfo] : TasksGraph.GetStagesInfo()) {
-            AFL_ENSURE(TxManager);
+            YDB_LOG_ENSURE(TxManager);
             if (stageInfo.Meta.ShardKey) {
                 TxManager->SetTableMeta(stageInfo.Meta.TableId, IKqpTransactionManager::TTableMeta{
                     .InitialPartitioning = stageInfo.Meta.ShardKey->Partitioning,
@@ -269,6 +269,11 @@ protected:
             }
 
             const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+
+            if (!checksumEnabled && IsIn(stage.GetWasmUdfModules(), "DigestAggregate")) {
+                ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssue("CHECKSUM TABLE is disabled"));
+                return ERROR;
+            }
 
             // Scan tasks from source
             if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
@@ -451,7 +456,7 @@ protected:
     void SendStreamData(NKikimr::NKqp::TKqpExecuterTxResult & txResult, TVector<NYql::NDq::TDqSerializedBatch>&& batches,
         ui32 channelId, ui32 seqNo, bool finished)
     {
-        auto resultIndex = *txResult.QueryResultIndex + StatementResultIndex;
+        auto resultIndex = *txResult.QueryResultIndex;
         auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
         streamEv->Record.SetSeqNo(seqNo);
         streamEv->Record.SetQueryResultIndex(resultIndex);
@@ -1111,10 +1116,6 @@ protected:
 
         if (IsSchedulable()) {
             const auto schedulerServiceId = MakeKqpSchedulerServiceId(SelfId().NodeId());
-
-            // TODO: replace with more precise pool events.
-            auto addPoolEvent = MakeHolder<NScheduler::TEvAddPool>(databaseId, poolId);
-            this->Send(schedulerServiceId, addPoolEvent.Release());
 
             auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
             addQueryEvent->DatabaseId = databaseId;
@@ -2164,8 +2165,6 @@ protected:
 
     THashMap<ui64, TActorId> ResultChannelToComputeActor;
 
-    ui32 StatementResultIndex;
-
     bool AlreadyReplied = false;
 
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
@@ -2203,7 +2202,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings,
     TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, TActorId bufferActorId,
@@ -2215,7 +2214,7 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings,
     TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const std::optional<TLlvmSettings>& llvmSettings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
     const IKqpTransactionManagerPtr& txManager, bool useKqpTasksGraphV2);

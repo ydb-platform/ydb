@@ -16,6 +16,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
+    library/cpp/http/simple
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/persqueue/public/mlp/ut/common
@@ -27,6 +28,8 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
 
     ydb/core/tx/schemeshard/ut_helpers
+    ydb/services/deprecated/persqueue_v0
+    ydb/services/deprecated/persqueue_v0/api/grpc
 )
 
 YQL_LAST_ABI_VERSION()
@@ -41,6 +44,7 @@ SRCS(
     topic_timestamp_ut.cpp
     topic_replication_ut.cpp
     topic_ut.cpp
+    write_mode_ut.cpp
     write_sessions_quoter_ut.cpp
 )
 

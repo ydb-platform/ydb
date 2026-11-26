@@ -3674,14 +3674,6 @@ void TPartition::TryAppendStaleTxMetaWrites()
         TStaleTxMetaEntry entry = std::move(it->second);
         StaleTxMetaPending.erase(it);
 
-        // The first managed ALTER already registered these producers. A delayed
-        // commit still needs its transaction record, while the config and producer
-        // sequence numbers belong to the installed version.
-        if (Config.HasCdcReplication() && entry.TabletConfig.Defined() && entry.TabletConfig->HasCdcReplication()
-                && entry.BootstrapConfig.Defined() && entry.BootstrapConfig->ExplicitMessageGroupsSize()
-                && Config.GetVersion() >= entry.TabletConfig->GetVersion()) {
-            entry.TabletConfig = Nothing();
-        }
         AddCmdWritePersistStaleTxMeta(entry);
         StaleTxMetaInFlight.emplace(txId, std::move(entry));
     }

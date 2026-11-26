@@ -122,7 +122,7 @@ def force_datashard_compact_legacy(tables: list[str], timeout: float, threads: i
 
 def column_compaction_query(tables):
     return ' UNION ALL '.join(
-        f"""SELECT {json.dumps(table)} AS table_path, COUNT(*) AS pending
+        f"""SELECT {json.dumps(table)}u AS table_path, COUNT(*) AS pending
             FROM `{table}/.sys/primary_index_optimizer_stats`
             WHERE CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.weight") AS Uint64) > 0"""
         for table in tables

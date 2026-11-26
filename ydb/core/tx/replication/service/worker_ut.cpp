@@ -446,7 +446,10 @@ Y_UNIT_TEST_SUITE(ServiceSchemaProtocol) {
             UNIT_ASSERT(WriteTopic(env, "/Root/topic", R"json({
                 "tableChanges": [{"table": {
                     "schemaVersion": 2,
-                    "indexes": {},
+                    "indexes": {
+                        "by_value": {"type": "GlobalJson", "indexColumns": ["value"], "dataColumns": [],
+                            "fulltextSettings": "", "useRowIdAsDocId": false}
+                    },
                     "columns": {"key": {"type": "Uint32"}, "value": {"type": "Utf8"}},
                     "primaryKeyColumnNames": ["key"]
                 }}],
@@ -454,12 +457,15 @@ Y_UNIT_TEST_SUITE(ServiceSchemaProtocol) {
             })json"));
             const auto first = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeReport>(edge);
             UNIT_ASSERT_VALUES_EQUAL(first->Get()->Record.GetSchema().HasIndexes(), supportsIndexes);
+            UNIT_ASSERT(!HasFulltextIndexMetadata(first->Get()->Record.GetSchema()));
             auto next = MakeHolder<TEvService::TEvHandshake>(42, 2);
             next->Record.SetSupportsIndexMetadata(!supportsIndexes);
+            next->Record.SetSupportsFulltextIndexMetadata(!supportsIndexes);
             runtime.Send(new IEventHandle(service, edge, next.Release()));
             runtime.GrabEdgeEvent<TEvService::TEvStatus>(edge);
             const auto replay = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeReport>(edge);
             UNIT_ASSERT_VALUES_EQUAL(replay->Get()->Record.GetSchema().HasIndexes(), !supportsIndexes);
+            UNIT_ASSERT_VALUES_EQUAL(HasFulltextIndexMetadata(replay->Get()->Record.GetSchema()), !supportsIndexes);
         }
     }
 }
@@ -484,6 +490,32 @@ Y_UNIT_TEST_SUITE(Worker) {
         conflicting.ClearIndexes();
         conflicting.SetSourceSchemaVersion(2);
         UNIT_ASSERT(!IsSameSchemaChange(indexed, conflicting));
+    }
+
+    Y_UNIT_TEST(MixedWorkerFulltextMetadata) {
+        NKikimrReplication::TSchemaChange legacy;
+        legacy.SetSourceSchemaVersion(1);
+        auto* index = legacy.MutableIndexes()->AddItems();
+        index->SetName("by_value");
+        index->SetType("GlobalFulltextCompact");
+
+        auto enriched = legacy;
+        auto* fulltext = enriched.MutableIndexes()->MutableItems(0);
+        fulltext->MutableFulltextSettings();
+        fulltext->SetUseRowIdAsDocId(true);
+        UNIT_ASSERT(IsSameSchemaChange(legacy, enriched));
+        UNIT_ASSERT(IsSameSchemaChange(enriched, legacy));
+
+        auto merged = legacy;
+        UNIT_ASSERT(MergeSchemaIndexMetadata(merged, enriched));
+        UNIT_ASSERT_VALUES_EQUAL(merged.SerializeAsString(), enriched.SerializeAsString());
+        UNIT_ASSERT(!MergeSchemaIndexMetadata(merged, legacy));
+
+        auto conflicting = enriched;
+        conflicting.MutableIndexes()->MutableItems(0)->SetUseRowIdAsDocId(false);
+        UNIT_ASSERT(!IsSameSchemaChange(enriched, conflicting));
+        ClearFulltextIndexMetadata(merged);
+        UNIT_ASSERT_VALUES_EQUAL(merged.SerializeAsString(), legacy.SerializeAsString());
     }
 
     Y_UNIT_TEST(ReaderRestartBeforeSchemaCheckpointSkipsBufferedReplay) {

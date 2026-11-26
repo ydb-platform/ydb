@@ -373,21 +373,17 @@ public:
             return result;
         }
 
-        bool sourceSnapshot = false;
-        if (Transaction.GetInternal() && path.IsAsyncReplicaTable()
-            && !finalizeMainTable.GetSnapshotTxId() && !finalizeMainTable.GetBuildIndexId()
-            && finalizeMainTable.HasOutcome())
+        const auto& outcome = finalizeMainTable.GetOutcome();
+        const bool sourceSnapshot = outcome.GetSkipLocalSnapshot();
+        if (sourceSnapshot && (!Transaction.GetInternal() || !path.IsAsyncReplicaTable()
+            || (!outcome.HasApply() && !outcome.HasCancel()) || finalizeMainTable.GetSnapshotTxId()
+            || finalizeMainTable.GetBuildIndexId() || finalizeMainTable.HasExtraSnapshotTxId()))
         {
-            const auto& outcome = finalizeMainTable.GetOutcome();
-            const auto indexId = TPathId::FromProto(outcome.HasApply()
-                ? outcome.GetApply().GetIndexPathId() : outcome.GetCancel().GetIndexPathId());
-            if (const auto index = context.SS->Indexes.find(indexId); index != context.SS->Indexes.end()) {
-                sourceSnapshot = NTableIndex::IsFulltextOrJsonIndex(index->second->Type)
-                    || (index->second->Type == NKikimrSchemeOp::EIndexTypeGlobalUnique
-                        && index->second->IndexKeys.size() == 1
-                        && index->second->IndexKeys.front() == NTableIndex::NFulltext::RowIdColumn);
-            }
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                "Only source-CDC index finalization on a replica can skip the local snapshot");
+            return result;
         }
+
         const TTxId snapshotTxId = TTxId(finalizeMainTable.GetSnapshotTxId());
         if (!sourceSnapshot && !context.SS->HasTableSnapshot(tablePathId, snapshotTxId)) {
             errStr = TStringBuilder()
@@ -410,7 +406,6 @@ public:
         if (finalizeMainTable.HasOutcome()) {
             txState.BuildIndexOutcome = std::make_shared<NKikimrSchemeOp::TBuildIndexOutcome>();
             txState.BuildIndexOutcome->CopyFrom(finalizeMainTable.GetOutcome());
-            txState.BuildIndexOutcome->SetSkipLocalSnapshot(sourceSnapshot);
         }
 
         context.SS->PersistTxState(db, OperationId);

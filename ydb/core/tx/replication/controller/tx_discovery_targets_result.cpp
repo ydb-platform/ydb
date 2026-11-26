@@ -2,6 +2,7 @@
 #include "target_transfer.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 
 #include <util/string/join.h>
 
@@ -91,7 +92,7 @@ public:
                     && Replication->GetConfig().GetInitialScan()
                     && AppData()->FeatureFlags.GetEnableFulltextIndexReplication())
                 {
-                    const auto indexPath = Replication->FindTarget(tid)->GetSrcIndexPath();
+                    const auto indexPath = CanonizePath(TString(ExtractParent(target.Config->GetDstPath())));
                     const auto [group, inserted] = indexGroups.emplace(indexPath, tid);
                     Y_UNUSED(inserted);
                     Replication->FindTarget(tid)->SetIndexBuild(true);

@@ -351,6 +351,7 @@ message TEvHandshake {
     // Older controllers compare complete serialized schema reports.
     optional bool SupportsIndexMetadata = 2 [default = false];
     optional bool SupportsSourceOffsets = 3 [default = false];
+    optional bool SupportsFulltextIndexMetadata = 4 [default = false];
 }
 
 message TEvStatus {

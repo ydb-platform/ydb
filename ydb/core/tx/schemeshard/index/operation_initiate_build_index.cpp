@@ -332,22 +332,7 @@ public:
         }
 
         NKikimrScheme::EStatus status;
-        bool sourceSnapshot = false;
-        if (Transaction.GetInternal() && dstPath.IsAsyncReplicaTable()) {
-            for (const auto& [name, childId] : pathEl->GetChildren()) {
-                Y_UNUSED(name);
-                const auto it = context.SS->Indexes.find(childId);
-                if (it == context.SS->Indexes.end() || !it->second->AlterData
-                    || it->second->State != NKikimrSchemeOp::EIndexStateInvalid)
-                {
-                    continue;
-                }
-                const auto& index = *it->second->AlterData;
-                sourceSnapshot |= NTableIndex::IsFulltextOrJsonIndex(index.Type)
-                    || (index.Type == NKikimrSchemeOp::EIndexTypeGlobalUnique && index.IndexKeys.size() == 1
-                        && index.IndexKeys.front() == NTableIndex::NFulltext::RowIdColumn);
-            }
-        }
+        const bool sourceSnapshot = schema.GetSkipLocalSnapshot();
         if (!sourceSnapshot && !context.SS->CanCreateSingleSnapshot(tablePathId, OperationId.GetTxId(), status, errStr)) {
             result->SetError(status, errStr);
             return result;

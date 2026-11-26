@@ -1,5 +1,6 @@
 #include "change_record_cdc_serializer.h"
 #include "change_record.h"
+#include "cdc_schema_change.h"
 #include "type_serialization.h"
 #include <ydb/core/base/table_index.h>
 
@@ -485,8 +486,12 @@ protected:
             table["primaryKeyColumnNames"].AppendValue(it->second.Name);
         }
 
+        const auto stream = schema->CdcStreams.find(record.GetPathId());
+        const bool exposeBuildingRowId = stream != schema->CdcStreams.end()
+            && stream->second.SchemaChanges && stream->second.Mode == NKikimrSchemeOp::ECdcStreamModeUpdate;
         for (const auto& [tag, column] : schema->Columns) {
-            if (column.IsBuildInProgress) {
+            const bool visible = exposeBuildingRowId ? IsCdcSchemaColumnVisible(column) : !column.IsBuildInProgress;
+            if (!visible) {
                 continue;
             }
             table["columns"][column.Name]["type"] = NScheme::TypeName(column.Type, column.TypeMod);

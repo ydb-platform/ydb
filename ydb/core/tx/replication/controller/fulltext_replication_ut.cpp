@@ -48,12 +48,13 @@ struct TReplicationSettings {
     bool PauseBeforeFinish = false;
     bool FinishDuringInitialization = false;
     bool RestartDuringCancellation = false;
+    bool ExistingReadyDestination = false;
 };
 
 void RunReplication(const TReplicationSettings& settings) {
     const auto& [kind, compact, global, initialIndex, jsonDocument, finish, stall, customKey,
         dropDuringScan, prefixAndCovering, attach, raceDiscovery, splitMerge, dropDuringReadiness,
-        pauseBeforeFinish, finishDuringInitialization, restartDuringCancellation] = settings;
+        pauseBeforeFinish, finishDuringInitialization, restartDuringCancellation, existingReadyDestination] = settings;
     NTestHelpers::TFeatureFlags flags;
     flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
     flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
@@ -216,7 +217,7 @@ void RunReplication(const TReplicationSettings& settings) {
     if (initialIndex) {
         compactIndexes("/Root/source");
     }
-    if (attach) {
+    if (attach || existingReadyDestination) {
         if (initialIndex) {
             NYdb::NTable::TTableClient tables(env.GetDriver());
             auto session = env.RunCall([&] { return tables.GetSession().GetValueSync(); });
@@ -235,7 +236,7 @@ void RunReplication(const TReplicationSettings& settings) {
             execute("CREATE TABLE `/Root/other_replica` (key Uint64 NOT NULL, value Uint64, PRIMARY KEY(key));");
         }
     }
-    if (attach) {
+    if (attach || existingReadyDestination) {
         // Consistent copies stand in for imported data. Bootstrap now requires
         // IMPORTED replica metadata on the base and every backing table before
         // the controller can attach and enter STANDBY.
@@ -329,10 +330,26 @@ void RunReplication(const TReplicationSettings& settings) {
                 }
             }
         });
+    std::atomic<bool> sawPrepareExisting{false};
+    auto prepareObserver = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(
+        [&](NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetInitiateIndexBuild().GetPrepareExistingForReplication()) {
+                    sawPrepareExisting = true;
+                }
+            }
+        });
     execute(TStringBuilder() << "CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica`"
         << (stall ? ", `/Root/other` AS `/Root/other_replica`" : "") << " WITH ("
         << "CONNECTION_STRING='grpc://" << env.GetEndpoint() << "/?database=/Root', TOKEN='root@builtin'"
         << (global ? ", CONSISTENCY_LEVEL='GLOBAL', COMMIT_INTERVAL=Interval('PT1S')" : "") << ");");
+    if (existingReadyDestination) {
+        const auto deadline = TInstant::Now() + TDuration::Seconds(90);
+        while (!sawPrepareExisting) {
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "Bootstrap did not prepare the existing Ready index");
+            pause();
+        }
+    }
     if (attach) {
         const auto deadline = TInstant::Now() + TDuration::Seconds(90);
         TVector<TString> paths{"/Root/source"};
@@ -544,6 +561,13 @@ void RunReplication(const TReplicationSettings& settings) {
         return;
     }
     waitQuery(search, keyResult(1));
+    if (customKey && !initialIndex) {
+        const TString rowIdQuery = "SELECT __ydb_row_id FROM `%s` WHERE key=%s;";
+        const auto key = keyValue(1);
+        const auto source = execute(Sprintf(rowIdQuery.c_str(), "/Root/source", key.c_str()));
+        waitQuery(Sprintf(rowIdQuery.c_str(), "/Root/replica", key.c_str()),
+            TString(NYdb::FormatResultSetYson(source.GetResultSet(0))));
+    }
     const TVector<TString> partitionedPaths{
         "/Root/source", "/Root/source/idx/indexImplTable", "/Root/replica", "/Root/replica/idx/indexImplTable"};
     if (splitMerge) {
@@ -793,6 +817,10 @@ Y_UNIT_TEST_SUITE(FulltextReplication) {
         RunReplication({.Kind = "fulltext_plain", .Compact = Compact, .InitialIndex = true});
         RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true, .InitialIndex = true});
         RunReplication({.Kind = "json", .Compact = Compact, .Global = true, .InitialIndex = true});
+    }
+
+    Y_UNIT_TEST(InitialScanWithExistingReadyIndex) {
+        RunReplication({.Kind = "fulltext_plain", .Compact = true, .InitialIndex = true, .ExistingReadyDestination = true});
     }
 
     Y_UNIT_TEST_TWIN(RecoveryAndCompletion, Compact) {

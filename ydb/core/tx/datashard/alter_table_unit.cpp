@@ -82,7 +82,9 @@ bool FamilySchemaChanged(const TUserTable& oldTable, const TUserTable& newTable)
 bool HasNewVisibleColumns(const TUserTable& oldTable, const TUserTable& newTable) {
     for (const auto& [tag, column] : newTable.Columns) {
         const auto it = oldTable.Columns.find(tag);
-        if (!column.IsBuildInProgress && (it == oldTable.Columns.end() || it->second.IsBuildInProgress)) {
+        if (IsCdcSchemaColumnVisible(column)
+            && (it == oldTable.Columns.end() || !IsCdcSchemaColumnVisible(it->second)))
+        {
             return true;
         }
     }

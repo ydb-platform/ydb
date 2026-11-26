@@ -176,7 +176,8 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 if (!pendingIndexes.empty()) {
                     ReportStatus(*it, TStringBuilder() << "Waiting for source fulltext/JSON index builds on "
                         << path.first << ": " << JoinSeq(", ", pendingIndexes));
-                    return RetryDescribe(*it);
+                    Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup(ui64(*it) + 1));
+                    return;
                 }
             }
             ReportStatus(*it, {});
@@ -233,7 +234,6 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                                 indexSrcPath,
                                 CanonizePath(TStringBuilder() << indexDstPath << '/' << NTableIndex::ImplTable),
                                 false, usesRowId && *indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique
-                                    && index.GetIndexName() == NTableIndex::NFulltext::RowIdUniqueIndexName
                                     && indexColumns.size() == 1 && indexColumns.front() == NTableIndex::NFulltext::RowIdColumn));
                         YDB_LOG_INFO("Add target",
                             {"srcPath", target.Config->GetSrcPath()},
@@ -463,7 +463,15 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         ListingRetries.insert(id);
     }
 
-    void Retry() {
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        if (const ui64 tag = ev->Get()->Tag) {
+            const ui32 idx = tag - 1;
+            if (Pending.contains(idx)) {
+                DescribeTable(idx);
+            }
+            return;
+        }
+
         for (const ui32 idx : DescribeRetries) {
             DescribePath(idx);
         }
@@ -527,7 +535,7 @@ public:
             hFunc(TEvYdbProxy::TEvListDirectoryResponse, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
-            sFunc(TEvents::TEvWakeup, Retry);
+            hFunc(TEvents::TEvWakeup, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }

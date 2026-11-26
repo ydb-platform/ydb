@@ -177,9 +177,10 @@ struct TControllerSchema: NIceDb::Schema {
         struct Completed: Column<6, NScheme::NTypeIds::Bool> {};
         struct Offset: Column<7, NScheme::NTypeIds::Uint64> {};
         struct IndexMetadata: Column<8, NScheme::NTypeIds::Bool> {};
+        struct FulltextIndexMetadata: Column<9, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
-        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Reported, Applied, Completed, Offset, IndexMetadata>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Reported, Applied, Completed, Offset, IndexMetadata, FulltextIndexMetadata>;
     };
 
     // Checkpoints outlive live Workers rows: re-registration must retain the

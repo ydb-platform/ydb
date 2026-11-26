@@ -177,6 +177,8 @@ void TController::SendSchemaChangeResult(
     if (barrier != SchemaBarriers.end() && !barrier->second.IndexMetadataWorkers.contains(id)) {
         // Old workers compare serialized schemas, including unknown fields.
         event->Record.MutableSchema()->ClearIndexes();
+    } else if (barrier != SchemaBarriers.end() && !barrier->second.FulltextIndexMetadataWorkers.contains(id)) {
+        ClearFulltextIndexMetadata(*event->Record.MutableSchema());
     }
 
     event->Record.SetOffset(offset);
@@ -503,7 +505,6 @@ class TController::TTxSchemaChangeReport: public TTxBase {
             retained.insert(CanonizePath(ChildPath(SplitPath(table->GetSrcPath()), index.GetName())));
         }
 
-        const auto tablePath = CanonizePath(table->GetSrcPath());
         for (auto* target : replication->GetTargets()) {
             const auto kind = target->GetKind();
             const auto state = target->GetDstState();
@@ -512,8 +513,7 @@ class TController::TTxSchemaChangeReport: public TTxBase {
             }
 
             const auto sourcePath = target->GetSrcIndexPath();
-            const auto parentPath = CanonizePath(TString(ExtractParent(sourcePath)));
-            if (parentPath != tablePath || retained.contains(sourcePath)) {
+            if (replication->FindBaseTableTarget(*target) != table || retained.contains(sourcePath)) {
                 continue;
             }
 
@@ -582,8 +582,7 @@ class TController::TTxSchemaChangeReport: public TTxBase {
             return;
         }
 
-        if (!barrier.Schema.HasIndexes() && record.GetSchema().HasIndexes()) {
-            barrier.Schema.MutableIndexes()->CopyFrom(record.GetSchema().GetIndexes());
+        if (MergeSchemaIndexMetadata(barrier.Schema, record.GetSchema())) {
             db.Table<Schema::Targets>().Key(key.first, key.second).Update(
                 NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(barrier.Schema.SerializeAsString())
             );
@@ -697,18 +696,23 @@ public:
                 barrier.IndexMetadataWorkers.erase(id);
             }
 
+            const bool hasFulltext = HasFulltextIndexMetadata(schema);
+            if (hasFulltext) {
+                barrier.FulltextIndexMetadataWorkers.insert(id);
+            } else {
+                barrier.FulltextIndexMetadataWorkers.erase(id);
+            }
             db.Table<Schema::SchemaBarrierWorkers>()
                 .Key(id.ReplicationId(), id.TargetId(), id.WorkerId()).Update(
-                    NIceDb::TUpdate<Schema::SchemaBarrierWorkers::IndexMetadata>(schema.HasIndexes()));
+                    NIceDb::TUpdate<Schema::SchemaBarrierWorkers::IndexMetadata>(schema.HasIndexes()),
+                    NIceDb::TUpdate<Schema::SchemaBarrierWorkers::FulltextIndexMetadata>(hasFulltext));
 
             const auto phase = barrier.Phase;
             const bool pastCollection = phase != ESchemaBarrierPhase::Collecting && phase != ESchemaBarrierPhase::Error;
-            const bool missingIndexes = !barrier.Schema.HasIndexes() && schema.HasIndexes();
-            if (pastCollection && missingIndexes) {
+            if (pastCollection && MergeSchemaIndexMetadata(barrier.Schema, schema)) {
                 // A barrier written by an older controller may already have
-                // left collection without the index snapshot. Reconcile it
+                // left collection without complete index metadata. Reconcile it
                 // before accepting another report or releasing its workers.
-                barrier.Schema.MutableIndexes()->CopyFrom(schema.GetIndexes());
                 db.Table<Schema::Targets>().Key(key.first, key.second).Update(
                     NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(barrier.Schema.SerializeAsString())
                 );
@@ -1067,7 +1071,8 @@ public:
                     for (const auto* target : replication->GetTargets()) {
                         exists |= target->GetKind() == TReplication::ETargetKind::IndexTable
                             && target->GetDstState() != TReplication::EDstState::Removing
-                            && target->GetSrcIndexPath() == indexPath;
+                            && target->GetSrcIndexPath() == indexPath
+                            && replication->FindBaseTableTarget(*target) == base;
                     }
                     if (exists) {
                         continue;

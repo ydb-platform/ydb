@@ -147,6 +147,9 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         if (!indexName.empty()) {
             TPath index = table.Child(indexName);
             index.Base()->PathId.ToProto(op->MutableOutcome()->MutableApply()->MutableIndexPathId());
+            if (config.GetForReplication() && !config.GetSnapshotTxId() && !config.GetBuildIndexId()) {
+                op->MutableOutcome()->SetSkipLocalSnapshot(true);
+            }
         }
 
         result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));
@@ -271,6 +274,9 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         if (!indexName.empty()) {
             TPath index = table.Child(indexName);
             index.Base()->PathId.ToProto(op->MutableOutcome()->MutableCancel()->MutableIndexPathId());
+            if (config.GetForReplication() && !config.GetSnapshotTxId() && !config.GetBuildIndexId()) {
+                op->MutableOutcome()->SetSkipLocalSnapshot(true);
+            }
         }
 
         result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));
@@ -295,6 +301,9 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
                 return {std::move(op)};
             }
             result.push_back(std::move(op));
+            if (auto reject = CascadeDropTableChildren(result, nextId, index.Child(indexChildItems.first))) {
+                return {std::move(reject)};
+            }
         }
     }
 

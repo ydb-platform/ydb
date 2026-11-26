@@ -137,6 +137,7 @@ public:
 
         if (Replication) {
             Replication->Progress(ctx);
+            Self->RunTxIndexBuild(ctx);
         }
     }
 

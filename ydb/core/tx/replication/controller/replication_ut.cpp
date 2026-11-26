@@ -51,6 +51,19 @@ Y_UNIT_TEST_SUITE(Replication) {
             "/Root/table/search/indexImplDocsTable/changes");
     }
 
+    Y_UNIT_TEST(BackingTableUsesItsOwnDestinationBase) {
+        auto replication = MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2),
+            NKikimrReplication::TReplicationConfig(), "/Root");
+        replication->AddTarget(TReplication::ETargetKind::Table,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/table", "/Root/first"));
+        const auto base = replication->AddTarget(TReplication::ETargetKind::Table,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/table", "/Root/second"));
+        const auto backing = replication->AddTarget(TReplication::ETargetKind::IndexTable,
+            std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+                "/Root/table/search/indexImplTable", "/Root/second/search/indexImplTable", true));
+        UNIT_ASSERT(replication->FindBaseTableTarget(*replication->FindTarget(backing)) == replication->FindTarget(base));
+    }
+
     Y_UNIT_TEST(SourceRetryClassification) {
         struct TCase {
             NYdb::EStatus Status;

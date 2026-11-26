@@ -74,6 +74,7 @@ private:
         THashSet<TWorkerId> ExpectedWorkers;
         THashSet<TWorkerId> ReportedWorkers;
         THashSet<TWorkerId> IndexMetadataWorkers;
+        THashSet<TWorkerId> FulltextIndexMetadataWorkers;
         THashSet<TWorkerId> AppliedWorkers;
         THashSet<TWorkerId> CompletedWorkers;
         THashMap<TWorkerId, ui64> WorkerOffsets;

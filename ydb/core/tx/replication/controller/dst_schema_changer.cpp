@@ -5,6 +5,7 @@
 #include "private_events.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -400,10 +401,11 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             const bool sameData = std::equal(expected.GetDataColumns().begin(), expected.GetDataColumns().end(),
                 index.GetDataColumnNames().begin(), index.GetDataColumnNames().end());
             const bool sameFulltext = !NTableIndex::IsFulltextOrJsonIndex(index.GetType())
-                || (expected.HasFulltextSettings()
-                    && EqualFulltextSettings(expected.GetFulltextSettings(),
-                        index.GetFulltextIndexDescription().GetSettings())
-                    && expected.GetUseRowIdAsDocId() == index.GetFulltextIndexDescription().GetUseRowIdAsDocId());
+                || ((!expected.HasFulltextSettings()
+                        || EqualFulltextSettings(expected.GetFulltextSettings(),
+                            index.GetFulltextIndexDescription().GetSettings()))
+                    && (!expected.HasUseRowIdAsDocId()
+                        || expected.GetUseRowIdAsDocId() == index.GetFulltextIndexDescription().GetUseRowIdAsDocId()));
             if (expected.GetType() != type || !sameKeys || !sameData || !sameFulltext) {
                 error = TStringBuilder() << "destination index differs from source schema: " << index.GetName();
                 return false;
@@ -450,6 +452,14 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             const auto type = GetSchemaIndexType(*added);
             if (!GlobalConsistency && !NTableIndex::IsFulltextOrJsonIndex(type) && !IsFulltextRowIdIndex(*added)) {
                 error = "ADD SYNC INDEX replication requires global consistency";
+                return false;
+            }
+
+            if (NTableIndex::IsFulltextOrJsonIndex(type)
+                && type != NKikimrSchemeOp::EIndexTypeGlobalJson
+                && type != NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                && !NKikimr::NFulltext::ValidateSettings(added->GetFulltextSettings(), error))
+            {
                 return false;
             }
 
@@ -824,6 +834,10 @@ public:
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
+        if (CancelIndex && !DstPathId) {
+            // The controller fenced creation before the base was submitted.
+            return Success();
+        }
         AllocateTxId();
     }
 

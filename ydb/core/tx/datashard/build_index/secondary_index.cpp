@@ -538,9 +538,10 @@ public:
                       const TUserTable& tableInfo,
                       const TIndexBuildScanSettings& scanSettings)
         : TBuildScanUpload(buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings,
-            !(AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
-                && columnBuildSettings.columnSize() == 1
-                && columnBuildSettings.column(0).GetColumnName() == NTableIndex::NFulltext::RowIdColumn)) {
+            !(columnBuildSettings.columnSize() == 1
+                && columnBuildSettings.column(0).GetColumnName() == NTableIndex::NFulltext::RowIdColumn
+                && (!tableInfo.GetSchemaChangesCdcStreams().empty()
+                    || AppData()->FeatureFlags.GetEnableFulltextIndexReplication()))) {
         Y_ENSURE(columnBuildSettings.columnSize() > 0);
         UploadColumnsTypes = BuildTypes(tableInfo, columnBuildSettings);
         UploadMode = NTxProxy::EUploadRowsMode::UpsertIfExists;

@@ -15,16 +15,13 @@ inline bool EqualFulltextSettings(const Ydb::Table::FulltextIndexSettings& left,
 }
 
 inline bool IsFulltextRowIdIndex(const NKikimrSchemeOp::TIndexDescription& index) {
-    return index.GetName() == NTableIndex::NFulltext::RowIdUniqueIndexName
-        && index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique
+    return index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique
         && index.KeyColumnNamesSize() == 1
-        && index.GetKeyColumnNames(0) == NTableIndex::NFulltext::RowIdColumn
-        && !index.DataColumnNamesSize();
+        && index.GetKeyColumnNames(0) == NTableIndex::NFulltext::RowIdColumn;
 }
 
 inline bool IsFulltextRowIdIndex(const Ydb::Table::TableIndexDescription& index) {
-    return index.name() == NTableIndex::NFulltext::RowIdUniqueIndexName
-        && index.has_global_unique_index() && index.index_columns_size() == 1
+    return index.has_global_unique_index() && index.index_columns_size() == 1
         && index.index_columns(0) == NTableIndex::NFulltext::RowIdColumn;
 }
 
@@ -38,10 +35,8 @@ inline bool UsesFulltextRowId(const Ydb::Table::DescribeTableResult& table) {
 }
 
 inline bool IsFulltextRowIdIndex(const NKikimrReplication::TSchemaChange::TIndex& index) {
-    return index.GetName() == NTableIndex::NFulltext::RowIdUniqueIndexName
-        && index.GetType() == "GlobalUnique" && index.IndexColumnsSize() == 1
-        && index.GetIndexColumns(0) == NTableIndex::NFulltext::RowIdColumn
-        && !index.DataColumnsSize();
+    return index.GetType() == "GlobalUnique" && index.IndexColumnsSize() == 1
+        && index.GetIndexColumns(0) == NTableIndex::NFulltext::RowIdColumn;
 }
 
 inline bool IsFulltextIndex(const Ydb::Table::TableIndexDescription& index) {

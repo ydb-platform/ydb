@@ -1,4 +1,5 @@
 #include "change_collector_cdc_stream.h"
+#include "cdc_schema_change.h"
 #include "datashard_impl.h"
 #include "datashard_user_db.h"
 
@@ -386,8 +387,10 @@ void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& 
     const auto table = Self->GetUserTables().at(tableId.PathId.LocalPathId);
 
     if (!updates.empty() && GetValueSchema(table).HasBuildInProgressColumns) {
+        const bool schemaChanges = table->CdcStreams.at(pathId).SchemaChanges;
         SerializeUpdates(body, rop, key, keyTags, updates, [&](TTag tag) {
-            return !table->Columns.at(tag).IsBuildInProgress;
+            const auto& column = table->Columns.at(tag);
+            return schemaChanges ? IsCdcSchemaColumnVisible(column) : !column.IsBuildInProgress;
         });
     } else {
         SerializeUpdates(body, rop, key, keyTags, updates);

@@ -1520,6 +1520,7 @@ message TIndexedTableCreationConfig {
 
 message TInitiateBuildIndexMainTable {
     optional string TableName = 1;
+    optional bool SkipLocalSnapshot = 2;
 }
 
 // Takes a snapshot of the main table and switches the vector index to WriteOnly.
@@ -2026,6 +2027,8 @@ message TIndexBuildConfig {
     optional string RebuildIndexName = 4;
     // Internal replica index creation: data comes from source CDC, without destination backfill.
     optional bool ForReplication = 5 [default = false];
+    // Attach to an already existing replica index without recreating its tables.
+    optional bool PrepareExistingForReplication = 6 [default = false];
 }
 
 message TIndexBuildControl {

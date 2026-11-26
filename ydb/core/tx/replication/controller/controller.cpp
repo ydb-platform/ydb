@@ -6,6 +6,7 @@
 #include <ydb/core/discovery/discovery.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/tx/replication/common/schema_change.h>
 
 #include <algorithm>
 
@@ -528,6 +529,7 @@ void TController::CreateSession(ui32 nodeId, const TActorContext& ctx) {
 
     auto ev = MakeHolder<TEvService::TEvHandshake>(TabletID(), Executor()->Generation());
     ev->Record.SetSupportsIndexMetadata(true);
+    ev->Record.SetSupportsFulltextIndexMetadata(true);
     ev->Record.SetSupportsSourceOffsets(true);
     ui32 flags = 0;
     if (SelfId().NodeId() != nodeId) {
@@ -1056,6 +1058,8 @@ void TController::ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id) {
     result->Record.MutableSchema()->CopyFrom(barrier->second.Schema);
     if (!barrier->second.IndexMetadataWorkers.contains(id)) {
         result->Record.MutableSchema()->ClearIndexes();
+    } else if (!barrier->second.FulltextIndexMetadataWorkers.contains(id)) {
+        ClearFulltextIndexMetadata(*result->Record.MutableSchema());
     }
 
     result->Record.SetOffset(offset->second);

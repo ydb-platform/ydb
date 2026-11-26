@@ -305,6 +305,9 @@ class TController::TTxInit: public TTxBase {
             if (workers.GetValueOrDefault<Schema::SchemaBarrierWorkers::IndexMetadata>(false)) {
                 it->second.IndexMetadataWorkers.insert(id);
             }
+            if (workers.GetValueOrDefault<Schema::SchemaBarrierWorkers::FulltextIndexMetadata>(false)) {
+                it->second.FulltextIndexMetadataWorkers.insert(id);
+            }
 
             if (workers.GetValue<Schema::SchemaBarrierWorkers::Applied>()) {
                 it->second.AppliedWorkers.insert(id);

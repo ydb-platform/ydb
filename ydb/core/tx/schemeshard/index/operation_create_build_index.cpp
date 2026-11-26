@@ -57,6 +57,47 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     const auto& op = tx.GetInitiateIndexBuild();
     NKikimrSchemeOp::TIndexCreationConfig indexDesc = op.GetIndex();
+    if (op.GetPrepareExistingForReplication()) {
+        const auto table = TPath::Resolve(op.GetTable(), context.SS);
+        const auto checks = table.Check().IsAtLocalSchemeShard().IsResolved().NotDeleted()
+            .IsTable().NotUnderOperation();
+        if (!checks) {
+            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+        }
+        if (!tx.GetInternal() || !op.GetForReplication() || op.GetIsRebuild() || !table.IsAsyncReplicaTable()) {
+            return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter,
+                "Preparing an existing index requires an internal replica operation")};
+        }
+        TString error;
+        if (!context.SS->CheckApplyIf(tx, error)) {
+            return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, error)};
+        }
+        const auto& config = context.SS->Tables.at(table->PathId)->ReplicationConfig();
+        if (config.HasOwnerPathId() && (!tx.HasExpectedReplicationOwnerPathId()
+            || TPathId::FromProto(config.GetOwnerPathId()) != TPathId::FromProto(tx.GetExpectedReplicationOwnerPathId())))
+        {
+            return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Destination is owned by another replication")};
+        }
+        const auto index = table.Child(indexDesc.GetName());
+        const auto indexChecks = index.Check().IsResolved().NotDeleted().IsTableIndex().NotUnderOperation();
+        if (!indexChecks) {
+            return {CreateReject(opId, indexChecks.GetStatus(), indexChecks.GetError())};
+        }
+        const auto& existing = *context.SS->Indexes.at(index->PathId);
+        const bool rowId = existing.Type == NKikimrSchemeOp::EIndexTypeGlobalUnique
+            && existing.IndexKeys.size() == 1 && existing.IndexKeys.front() == NTableIndex::NFulltext::RowIdColumn;
+        if ((!NTableIndex::IsFulltextOrJsonIndex(existing.Type) && !rowId)
+            || (existing.State != NKikimrSchemeOp::EIndexStateReady && existing.State != NKikimrSchemeOp::EIndexStateWriteOnly))
+        {
+            return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Index cannot be attached for replica backfill")};
+        }
+        auto alter = TransactionTemplate(table.PathString(), NKikimrSchemeOp::ESchemeOpAlterTableIndex);
+        alter.SetInternal(true);
+        alter.MutableAlterTableIndex()->SetName(index.LeafName());
+        alter.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
+        return {CreateAlterTableIndex(NextPartId(opId, {}), alter)};
+    }
+
     const bool isOnlineRebuild = op.GetIsRebuild() && op.HasRebuildIndexName();
     const bool isRebuild = op.GetIsRebuild() && !isOnlineRebuild;
 
@@ -116,10 +157,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     const bool forReplication = op.GetForReplication();
     const bool rowIdReplication = AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
         && GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalUnique
-        && indexDesc.GetName() == NTableIndex::NFulltext::RowIdUniqueIndexName
         && indexDesc.KeyColumnNamesSize() == 1
-        && indexDesc.GetKeyColumnNames(0) == NTableIndex::NFulltext::RowIdColumn
-        && !indexDesc.DataColumnNamesSize();
+        && indexDesc.GetKeyColumnNames(0) == NTableIndex::NFulltext::RowIdColumn;
     if (forReplication && (!tx.GetInternal() || !table.IsAsyncReplicaTable()
         || (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobal
             && !(AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
@@ -301,6 +340,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         auto& snapshot = *outTx.MutableInitiateBuildIndexMainTable();
         snapshot.SetTableName(table.LeafName());
+        snapshot.SetSkipLocalSnapshot(forReplication
+            && (NTableIndex::IsFulltextOrJsonIndex(GetIndexType(indexDesc)) || rowIdReplication));
 
         result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
     }
@@ -423,7 +464,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             auto prefixColumns = NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames());
             auto implTableDesc = CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
                 indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType, prefixColumns, false);
-            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(!forReplication);
             // Set index table partitions to at least the same number of partitions at the main table
             if (!indexTableDesc.GetPartitionConfig().HasPartitioningPolicy()) {
                 auto& policy = *implTableDesc.MutablePartitionConfig()->MutablePartitioningPolicy();
@@ -464,7 +505,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
                 indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType,
                 NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()));
-            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(!forReplication);
             result.push_back(createImplTable(std::move(implTableDesc)));
             break;
         }
@@ -480,7 +521,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             auto prefixColumns = NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames());
             auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
                 indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType, prefixColumns);
-            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(!forReplication);
             result.push_back(createImplTable(std::move(implTableDesc)));
             result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc)));
             result.push_back(createImplTable(CalcFulltextDictImplTableDesc(tableInfo, tableInfo->PartitionConfig(), dictTableDesc, indexDesc.GetFulltextIndexDescription())));

@@ -2493,7 +2493,7 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
 
         const auto result = YdbExportClient().ExportToS3(settings).GetValueSync();
         WaitOpStatus(result, EStatus::BAD_REQUEST);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Nothing to export");
+        UNIT_ASSERT_STRING_CONTAINS(result.Status().GetIssues().ToString(), "Nothing to export");
         ValidateS3FileList({});
     }
 

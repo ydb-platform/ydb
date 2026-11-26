@@ -1,6 +1,7 @@
 #include "replication.h"
 #include "target_cdc.h"
 #include "target_table.h"
+#include "target_topic.h"
 #include "util.h"
 
 #include <ydb/core/protos/replication.pb.h>
@@ -111,9 +112,10 @@ Y_UNIT_TEST_SUITE(Replication) {
         auto replication = MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2),
             NKikimrReplication::TReplicationConfig(), "/Root");
         auto addFeed = [&](ui64 id, ui64 parentId) {
-            auto* target = replication->AddTarget(id, TReplication::ETargetKind::CdcTopic,
-                std::make_shared<TTargetCdc::TConfig>("source", "destination"));
-            replication->RegisterCdcChild(parentId, *GetCdcTarget(target));
+            NKikimrReplicationController::TCdcTarget cdc;
+            cdc.SetParentTargetId(parentId);
+            replication->AddTarget(id, TReplication::ETargetKind::CdcTopic,
+                std::make_shared<TTargetCdc::TConfig>("source", "destination", cdc));
         };
         addFeed(3, 1);
         addFeed(4, 1);
@@ -180,21 +182,27 @@ Y_UNIT_TEST_SUITE(Replication) {
         }
     };
 
-    Y_UNIT_TEST(CdcTargetsDoNotInvalidateWorkerLag) {
-        TLagSetup s;
-        const auto child = s.Replication->AddTarget(TReplication::ETargetKind::CdcTopic,
-            std::make_shared<TTargetCdc::TConfig>("/Root/table/feed", "/Root/table_replica/feed"));
-        auto* target = s.Replication->FindTarget(child);
-        s.Replication->RegisterCdcChild(s.Target->GetId(), *GetCdcTarget(target));
-
-        UNIT_ASSERT(!target->GetLag());
-        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(5));
-        s.Target->InvalidateLag(1);
-        UNIT_ASSERT(!s.Replication->GetLag());
-        s.Target->UpdateLag(1, TDuration::Seconds(7));
-        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(7));
-        s.Replication->RemoveTarget(child);
-        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(7));
+    Y_UNIT_TEST(TopicTargetsWithoutLagKeepAggregateUnknown) {
+        for (const auto kind : {TReplication::ETargetKind::Topic, TReplication::ETargetKind::CdcTopic}) {
+            TLagSetup s;
+            TReplication::ITarget::IConfig::TPtr config;
+            if (kind == TReplication::ETargetKind::CdcTopic) {
+                NKikimrReplicationController::TCdcTarget cdc;
+                cdc.SetParentTargetId(s.Target->GetId());
+                config = std::make_shared<TTargetCdc::TConfig>("source", "destination", cdc);
+            } else {
+                config = std::make_shared<TTargetTopic::TTopicConfig>("source", "destination");
+            }
+            const auto child = s.Replication->AddTarget(kind, config);
+            UNIT_ASSERT(!s.Replication->FindTarget(child)->GetLag());
+            UNIT_ASSERT(!s.Replication->GetLag());
+            UNIT_ASSERT(s.Target->GetLag() == TDuration::Seconds(5));
+            s.Target->UpdateLag(1, TDuration::Seconds(7));
+            UNIT_ASSERT(!s.Replication->GetLag());
+            UNIT_ASSERT(s.Target->GetLag() == TDuration::Seconds(7));
+            s.Replication->RemoveTarget(child);
+            UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(7));
+        }
     }
 
     Y_UNIT_TEST(WorkerLagPropagatesMaximumChanges) {

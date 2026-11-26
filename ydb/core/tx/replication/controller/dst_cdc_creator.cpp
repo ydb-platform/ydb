@@ -1,6 +1,7 @@
 #include "dst_cdc_creator.h"
 #include "dst_creator.h"
 #include "topic_mirror.h"
+#include "target_cdc.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/public/schema/schema_propose.h>
@@ -38,7 +39,7 @@ bool TCdcCreation::Prepare(const NYdb::NTopic::TTopicDescription& topic, const T
     if (!EqualToOneOf(source.state(), Ydb::Table::ChangefeedDescription::STATE_ENABLED,
             Ydb::Table::ChangefeedDescription::STATE_DISABLED)
         || source.name().empty() || source.name().find('/') != TString::npos
-        || source.attributes().find("__async_replication") != source.attributes().end()
+        || !TTargetCdc::IsUserStream(source)
         || source.schema_changes() || source.virtual_timestamps()
         || source.has_resolved_timestamps_interval())
     {

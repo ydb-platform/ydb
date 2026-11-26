@@ -786,6 +786,20 @@ namespace {
         return nullptr;
     }
 
+    bool CheckDefaultExpressionEnabled(const TKikimrConfiguration& config, TPositionHandle pos, TStringBuf columnName, TExprContext& ctx) {
+        TStringBuf reason;
+        if (!config.FeatureFlags.GetEnableDefaultFromExpression()) {
+            reason = "DEFAULT expressions are disabled";
+        } else if (!config.GetEnableIndexStreamWrite() && !config.GetEnableCompileTimeDefaults()) {
+            reason = "DEFAULT expressions require EnableIndexStreamWrite or EnableCompileTimeDefaults";
+        } else {
+            return true;
+        }
+
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << reason << ". Column: " << columnName));
+        return false;
+    }
+
     IGraphTransformer::TStatus ValidateColumnExpressions(const TKiCreateTable& create, TKikimrTableMetadata& meta,
         TExprContext& ctx, TTypeAnnotationContext& typeCtx, const TString& cluster, TKikimrSessionContext& sessionCtx)
     {
@@ -844,9 +858,7 @@ namespace {
 
             auto& columnMeta = meta.Columns[columnName];
             if (!columnMeta.DefaultExpression->IsGenerated()) {
-                if (!sessionCtx.Config().FeatureFlags.GetEnableDefaultFromExpression()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
-                        << "DEFAULT expressions are disabled. Column: " << columnName));
+                if (!CheckDefaultExpressionEnabled(sessionCtx.Config(), create.Pos(), columnName, ctx)) {
                     return IGraphTransformer::TStatus::Error;
                 }
                 if (meta.TableType == ETableType::ExternalTable) {
@@ -2678,9 +2690,7 @@ private:
                         }
 
                         if (!IsYqlNullExprNode(defaultExpr) && !IsLiteralDefaultValue(defaultExpr)) {
-                            if (!SessionCtx->Config().FeatureFlags.GetEnableDefaultFromExpression()) {
-                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                    << "DEFAULT expressions are disabled. Column: " << name));
+                            if (!CheckDefaultExpressionEnabled(SessionCtx->Config(), nameNode.Pos(), name, ctx)) {
                                 return TStatus::Error;
                             }
                             if (!setDefault.SqlText()) {

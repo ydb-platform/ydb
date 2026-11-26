@@ -936,6 +936,23 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Rejects(ValueTableDDL(), "DEFAULT expressions are disabled");
     }
 
+    Y_UNIT_TEST(ExpressionDefaultsRequireWriteSettings) {
+        auto appConfig = DefaultExprAppConfig();
+        auto* config = appConfig.MutableTableServiceConfig();
+        config->SetEnableIndexStreamWrite(false);
+        config->SetEnableCompileTimeDefaults(false);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        const TString error = "DEFAULT expressions require EnableIndexStreamWrite or EnableCompileTimeDefaults";
+
+        fixture.Rejects(ValueTableDDL(), error);
+        fixture.Exec(DefaultExprDDL("v Uint64 DEFAULT 7ul"));
+        fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT RandomNumber(1);", error);
+
+        const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
+        UNIT_ASSERT_C(column.HasDefaultFromLiteral(), column.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromLiteral().value().uint64_value(), 7u);
+    }
+
     Y_UNIT_TEST(CoercibleSourceRequiresFeatureFlag) {
         TTestFixture fixture(TFixtureOptions{.FeatureFlagEnabled = false});
         fixture.Rejects(DefaultExprDDL(TStringBuilder() << "v Int64 DEFAULT " << DefaultExpr),

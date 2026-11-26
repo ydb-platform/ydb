@@ -2689,9 +2689,8 @@ private:
         ev->Record.SetToSnapshotTxId(ui64(buildInfo.DeltaSnapshotTxId));
         ev->Record.SetToSnapshotStep(ui64(buildInfo.DeltaSnapshotStep));
 
-        const auto& settings = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
-            buildInfo.SpecializedIndexDescription).GetSettings().settings();
-        *ev->Record.MutableSettings() = settings;
+        *ev->Record.MutableSettings() = buildInfo.GetKMeansVectorSettings();
+        ev->Record.SetIndexType(buildInfo.IndexType);
 
         auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.GetBuildIndexName());
         ev->Record.SetOutputName(path.Dive(NTableIndex::NKMeans::PostingTable).PathString());

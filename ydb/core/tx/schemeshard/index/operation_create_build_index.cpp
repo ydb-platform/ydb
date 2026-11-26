@@ -214,6 +214,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         return {CreateReject(opId, status, errStr)};
     }
 
+    const bool isVectorIndex = GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+        || GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalHnsw;
+
     TVector<ISubOperation::TPtr> result;
 
     if (isRebuild) {
@@ -224,7 +227,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         outTx.SetInternal(tx.GetInternal());
         auto alterIndex = outTx.MutableAlterTableIndex();
         alterIndex->SetName(index.LeafName());
-        alterIndex->SetState(GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+        alterIndex->SetState(isVectorIndex
             ? NKikimrSchemeOp::EIndexStateNotReady
             : NKikimrSchemeOp::EIndexStateWriteOnly);
         if (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
@@ -244,10 +247,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         *outTx.MutableLockGuard() = tx.GetLockGuard();
         outTx.MutableCreateTableIndex()->CopyFrom(indexDesc);
         outTx.MutableCreateTableIndex()->SetType(GetIndexType(indexDesc));
-        outTx.MutableCreateTableIndex()->SetState(
-            GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
-                ? NKikimrSchemeOp::EIndexStateNotReady
-                : NKikimrSchemeOp::EIndexStateWriteOnly);
+        outTx.MutableCreateTableIndex()->SetState(isVectorIndex
+            ? NKikimrSchemeOp::EIndexStateNotReady
+            : NKikimrSchemeOp::EIndexStateWriteOnly);
         outTx.SetInternal(tx.GetInternal());
 
         result.push_back(CreateNewTableIndex(NextPartId(opId, result), outTx));
@@ -282,7 +284,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         // and KQP in WriteOnly), so only it needs a shadow copy published at the end.
         // Level and prefix tables are read-only for KQP and must be visible during
         // WriteOnly, so they are written directly to the user table.
-        const bool isVectorIndex = GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
         const bool needShadow = !isVectorIndex || implTableDesc.GetName() == NTableIndex::NKMeans::PostingTable;
         if (!forReplication && needShadow && (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalUnique ||
             context.SS->EnableOnlineAddUniqueIndex))

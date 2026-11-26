@@ -545,6 +545,113 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
     }
 
+    Y_UNIT_TEST(HnswDeltaScanAppliesWritesDuringBuild) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableHnswIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableConsistentVectorIndexBuild(true);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        // Hold the build before the delta scan, so the write below happens after the
+        // build snapshot but before the index is switched to WriteOnly.
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKBlocker(runtime, [&](const auto&) {
+            return true;
+        });
+
+        ui64 buildIndexTx = ++txId;
+        Ydb::Table::TableIndex index;
+        index.set_name("index1");
+        index.add_index_columns("embedding");
+        auto* vector = index.mutable_global_hnsw_index()->mutable_vector_settings();
+        vector->set_clusters(4);
+        vector->set_levels(1);
+        vector->mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        vector->mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
+        vector->mutable_settings()->set_vector_dimension(4);
+        TestBuildIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", index);
+
+        runtime.WaitFor("localK", [&]{ return localKBlocker.size(); });
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateNotReady)});
+
+        // This row is not covered by the build snapshot and must be applied by the delta scan.
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 200, 201);
+
+        localKBlocker.Stop().Unblock();
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+            buildIndexOperation.DebugString());
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+
+        const auto makeVector = [](ui32 key) {
+            TVector<ui8> vec(5);
+            for (ui32 i = 0; i < 4; ++i) {
+                vec[i] = ((key + 106) * (10 * i + 7)) % 256;
+                if (i == 2) {
+                    vec[2] = ((key + 106) * 37) % 256;
+                }
+                if (i == 3) {
+                    vec[3] = ((key + 106) * 47) % 256;
+                }
+            }
+            vec[4] = (ui8)Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
+            return TString((const char*)vec.data(), vec.size());
+        };
+
+        // HNSW builds its graph from posting-table vectors, so every posting row,
+        // including the one applied by the delta scan, must carry the embedding.
+        const TString path = "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable";
+        const auto posting = DescribePath(runtime, tenantSchemeShard, path, true, true, true);
+        const auto& keys = posting.GetPathDescription().GetTable().GetKeyColumnNames();
+        ui32 rows = 0;
+        bool foundDeltaRow = false;
+        for (ui64 tablet : GetTableShards(runtime, tenantSchemeShard, path)) {
+            const auto result = ReadTable(runtime, tablet, "indexImplPostingTable",
+                {keys.begin(), keys.end()}, {"key", "embedding"});
+            const auto list = NClient::TValue::Create(result)["Result"]["List"];
+            for (size_t i = 0; i < list.Size(); ++i) {
+                const ui32 key = list[i]["key"];
+                const TString embedding = TString(list[i]["embedding"]);
+                UNIT_ASSERT_C(!embedding.empty(), "posting row for key " << key << " has no embedding");
+                if (key == 200) {
+                    UNIT_ASSERT_VALUES_EQUAL(embedding, makeVector(200));
+                    foundDeltaRow = true;
+                }
+                ++rows;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(rows, 201u);
+        UNIT_ASSERT_C(foundDeltaRow, "the row written during the build was not applied by the delta scan");
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+    }
+
     Y_UNIT_TEST(PrefixedDeltaScanAppliesWritesDuringBuild) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

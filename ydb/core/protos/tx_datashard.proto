@@ -2132,6 +2132,10 @@ message TEvDeltaKMeansRequest {
     // Names of the index prefix columns, in the index key order. Empty for a
     // non-prefixed index; when empty, PrefixColumns leading table key columns are used.
     repeated string PrefixColumnNames = 22;
+
+    // An HNSW index stores vectors in the posting table to build its graph,
+    // so the scan has to add the embedding column to posting rows.
+    optional NKikimrSchemeOp.EIndexType IndexType = 23 [default = EIndexTypeGlobalVectorKmeansTree];
 }
 
 message TEvDeltaKMeansResponse {

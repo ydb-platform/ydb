@@ -416,6 +416,7 @@ class TTablet : public TActor<TTablet> {
     void SpreadFollowerAuxUpdate(const TString& auxUpdate);
     void SendFollowerAuxUpdate(TLeaderInfo& info, const TActorId& follower, const TString& auxUpdate);
 
+    bool CanAcceptPipeConnections() const;
     void Handle(TEvTabletPipe::TEvConnect::TPtr& ev);
     void Handle(TEvTabletPipe::TEvServerDestroyed::TPtr& ev);
     void HandleQueued(TEvTabletPipe::TEvConnect::TPtr& ev);

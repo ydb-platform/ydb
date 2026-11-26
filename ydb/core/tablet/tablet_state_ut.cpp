@@ -94,16 +94,23 @@ Y_UNIT_TEST_SUITE(TabletState) {
         });
 
         auto setup = MakeIntrusive<TTabletSetupInfo>(createTablet, TMailboxType::Simple, 0u, TMailboxType::Simple, 0u);
-        const auto follower = runtime.Register(CreateTabletFollower(sender,
-            CreateTestTabletInfo(tabletId, TTabletTypes::Dummy), setup.Get(), followerId));
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back([&](IEventHandle& ev) {
-            return ev.GetTypeRewrite() == TEvTablet::TEvTabletStateUpdate::EventType &&
-                ev.Sender == leader && ev.GetRecipientRewrite() == resolver &&
-                ev.Get<TEvTablet::TEvTabletStateUpdate>()->Record.ReadyFollowersSize() == 1;
-        });
-        UNIT_ASSERT(runtime.DispatchEvents(options, TDuration::Seconds(30)));
+        auto startFollower = [&](ui32 id) {
+            const auto actor = runtime.Register(CreateTabletFollower(sender,
+                CreateTestTabletInfo(tabletId, TTabletTypes::Dummy), setup.Get(), id));
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back([&](IEventHandle& ev) {
+                if (ev.GetTypeRewrite() != TEvTablet::TEvTabletStateUpdate::EventType ||
+                        ev.Sender != leader || ev.GetRecipientRewrite() != resolver) {
+                    return false;
+                }
+                const auto& record = ev.Get<TEvTablet::TEvTabletStateUpdate>()->Record;
+                return record.ReadyFollowersSize() == 1 && record.GetReadyFollowers(0).GetFollowerId() == id;
+            });
+            UNIT_ASSERT(runtime.DispatchEvents(options, TDuration::Seconds(30)));
+            return actor;
+        };
 
+        const auto follower = startFollower(followerId);
         const auto restored = runtime.GrabEdgeEventRethrow<TEvTablet::TEvRestored>(sender);
         const auto preferred = resolve(flags);
         UNIT_ASSERT_VALUES_EQUAL(preferred->Get()->Status, NKikimrProto::OK);
@@ -139,18 +146,7 @@ Y_UNIT_TEST_SUITE(TabletState) {
         UNIT_ASSERT_VALUES_EQUAL(resolverLookups, 1u);
 
         const ui32 nextFollowerId = followerId + 1;
-        const auto nextFollower = runtime.Register(CreateTabletFollower(sender,
-            CreateTestTabletInfo(tabletId, TTabletTypes::Dummy), setup.Get(), nextFollowerId));
-        TDispatchOptions nextOptions;
-        nextOptions.FinalEvents.emplace_back([&](IEventHandle& ev) {
-            if (ev.GetTypeRewrite() != TEvTablet::TEvTabletStateUpdate::EventType ||
-                    ev.Sender != leader || ev.GetRecipientRewrite() != resolver) {
-                return false;
-            }
-            const auto& record = ev.Get<TEvTablet::TEvTabletStateUpdate>()->Record;
-            return record.ReadyFollowersSize() == 1 && record.GetReadyFollowers(0).GetFollowerId() == nextFollowerId;
-        });
-        UNIT_ASSERT(runtime.DispatchEvents(nextOptions, TDuration::Seconds(30)));
+        const auto nextFollower = startFollower(nextFollowerId);
         runtime.GrabEdgeEventRethrow<TEvTablet::TEvRestored>(sender);
 
         // A new announcement must discard expired, unconfirmed actor incarnations.

@@ -455,8 +455,8 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 entry.KnownFollowers.emplace_back(actorId, userActorId, followerId);
                 UnconfirmedFollowers[tabletId].emplace(actorId, now + TabletResolverFollowerRefreshPeriod);
             } else {
+                // State Storage may list this actor without an ID. Preserve that result for explicit routing.
                 known->FollowerTablet = userActorId;
-                known->FollowerId = followerId;
             }
         }
     }

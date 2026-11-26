@@ -47,7 +47,7 @@ void TTablet::SendFollowerAttach(const TActorId& leader) {
     FollowerInfo.KnownLeaderID = leader;
     FollowerInfo.LastCookie = ++LastInterconnectSubscribeCookie;
     auto attach = MakeHolder<TEvTablet::TEvFollowerAttach>(TabletID(), FollowerInfo.FollowerAttempt);
-    if (PipeConnectAcceptor->IsActive() && !PipeConnectAcceptor->IsStopped()) {
+    if (CanAcceptPipeConnections()) {
         auto* ready = attach->Record.MutableReadyFollower();
         ActorIdToProto(UserTablet, ready->MutableUserActorId());
         ready->SetFollowerId(FollowerId);
@@ -894,7 +894,7 @@ void TTablet::UpdateReadyFollower(TLeaderInfo& follower, const NKikimrTabletBase
     }
     follower.FollowerTablet = userActorId;
     follower.TabletFollowerId = followerId;
-    if (PipeConnectAcceptor->IsActive() && !PipeConnectAcceptor->IsStopped()) {
+    if (CanAcceptPipeConnections()) {
         for (const auto& [actorId, subscriber] : TabletStateSubscribers) {
             if (subscriber.WatchFollowers) {
                 SendTabletStateUpdate(subscriber, NKikimrTabletBase::TEvTabletStateUpdate::StateActive, &follower);
@@ -1925,6 +1925,10 @@ void TTablet::ProgressSendSyncCommit() {
     }
 }
 
+bool TTablet::CanAcceptPipeConnections() const {
+    return PipeConnectAcceptor->IsActive() && !PipeConnectAcceptor->IsStopped();
+}
+
 void TTablet::Handle(TEvTabletPipe::TEvConnect::TPtr& ev) {
     if (PipeConnectAcceptor->IsStopped()) {
         PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::TRYLATER, Leader);
@@ -1950,7 +1954,7 @@ void TTablet::HandleQueued(TEvTabletPipe::TEvConnect::TPtr& ev) {
 
 void TTablet::HandleByFollower(TEvTabletPipe::TEvConnect::TPtr &ev) {
     Y_DEBUG_ABORT_UNLESS(!Leader);
-    if (PipeConnectAcceptor->IsActive() && !PipeConnectAcceptor->IsStopped()) {
+    if (CanAcceptPipeConnections()) {
         PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, false, StateStorageInfo.KnownGeneration, TabletVersionInfo);
     } else {
         PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::TRYLATER, false);

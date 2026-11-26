@@ -1524,8 +1524,9 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
 
         NTabletPipe::SendData(ctx, PipeClient, req.Release());
     } else {
-        PARTITION_ENSURE(StartReading) //otherwise it is double locking from actor, not client - client makes lock always with StartReading == true
-            ("init_done", InitDone);
+        // otherwise it is double locking from actor, not client - client makes lock always with StartReading == true
+        PARTITION_ENSURE(StartReading,
+            {"init_done", InitDone});
         PARTITION_ENSURE(InitDone,
             {"startReading", StartReading});
         InitStartReading(ctx);

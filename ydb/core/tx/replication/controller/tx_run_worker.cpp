@@ -150,7 +150,7 @@ public:
 
         if (parentRemovalRequested) {
             Self->RemoveParentsWithReadyChildren(ctx);
-            Self->RunTxHeartbeat(ctx);
+            Self->RecheckHeartbeatQuorum(ctx);
         }
 
         const auto replication = Self->Find(Id.ReplicationId());

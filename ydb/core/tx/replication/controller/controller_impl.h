@@ -272,6 +272,7 @@ private:
     void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch = false, TMaybe<ui64> sourceCommittedOffset = Nothing());
     void RunTxAssignTxId(const TActorContext& ctx);
     void RunTxHeartbeat(const TActorContext& ctx);
+    void RecheckHeartbeatQuorum(const TActorContext& ctx);
     void RunTxIndexBuild(const TActorContext& ctx);
     void RunTxIndexReadyTxId(TEvPrivate::TEvSchemaChangeDstAlterTxId::TPtr& ev, const TActorContext& ctx);
     void RunTxIndexReadyResult(TEvPrivate::TEvSchemaChangeDstAlterResult::TPtr& ev, const TActorContext& ctx);
@@ -389,6 +390,7 @@ private:
     TMap<TRowVersion, THashSet<TWorkerId>> WorkersByHeartbeat;
     THashMap<TWorkerId, TRowVersion> PendingHeartbeats;
     bool ProcessHeartbeatsInFlight = false;
+    bool HeartbeatQuorumRecheckRequested = false;
     ui64 CommittingTxId = 0;
     THashMap<ui64, std::pair<ui64, ui64>> SchemaTargetFlushes;
     std::optional<std::pair<ui64, ui64>> ActiveSchemaTargetFlush;

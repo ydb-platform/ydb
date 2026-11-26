@@ -25,8 +25,8 @@ bool TTxSetDown::SetDown(NIceDb::TNiceDb& db) {
         if (Forward) {
             auto tenantHive = Self->GetPipeToTenantHive(node);
             if (tenantHive) {
-                SideEffects.Callback([source = Source, tablet = *tenantHive, node = NodeId, down = Down] {
-                    NTabletPipe::SendData(source, tablet, new TEvHive::TEvSetDown(node, down));
+                SideEffects.Callback([source = Source, tablet = *tenantHive, node = NodeId, down = Down, cookie = Cookie] {
+                    NTabletPipe::SendData(source, tablet, new TEvHive::TEvSetDown(node, down), cookie);
                 });
             } else {
                 SideEffects.Send(Source, new TEvHive::TEvSetDownReply(), 0, Cookie);
@@ -51,7 +51,7 @@ bool TTxSetDown::Execute(TTransactionContext& txc, const TActorContext&) {
     if (!SetDown(db)) {
         auto reply = std::make_unique<TEvHive::TEvSetDownReply>();
         reply->Record.SetStatus(NKikimrProto::ERROR);
-        SideEffects.Send(Source, reply.release());
+        SideEffects.Send(Source, reply.release(), 0, Cookie);
     }
     return true;
 }

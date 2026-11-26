@@ -685,7 +685,7 @@ class TCreateMaintenanceTask
                 } else if (action.has_cordon_action()) {
                     ConvertAction(action.cordon_action(), *cmsRequest.AddActions());
                     const auto nodeId = action.cordon_action().scope().node_id();
-                    NTabletPipe::SendData(SelfId(), HivePipe(SelfId()), new TEvHive::TEvSetDown(nodeId));
+                    NTabletPipe::SendData(SelfId(), HivePipe(SelfId()), new TEvHive::TEvSetDown(nodeId), actionNo);
                     PendingHiveActions.insert(actionNo);
                 } else {
                     Y_ABORT("unreachable");

@@ -9330,20 +9330,37 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT(!fixture.ReplicaIndex()->SharesGraphWith(*stale));
     }
 
-    Y_UNIT_TEST_TWIN(HnswFollowerInvalidatesOnSchemaOrPartReplacement, SchemaChange) {
+    Y_UNIT_TEST(HnswFollowerKeepsGraphAfterCompaction) {
+        THnswReplicaFixture fixture;
+        fixture.WarmReplica();
+        auto graph = fixture.ReplicaIndex();
+        auto* follower = fixture.Follower();
+        const auto previousStep = follower->GetExecutorStep();
+        const auto followerExecutor = follower->ExecutorID();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        const auto& table = fixture.Helper.Tables.at("hnsw-lifecycle");
+        bool compacted = false;
+        auto observe = runtime.AddObserver<TEvTablet::TEvFGcAck>([&](auto& ev) {
+            const auto& ack = *ev->Get();
+            compacted |= ev->Sender == followerExecutor
+                && ack.TabletID == table.TabletId && ack.Step > previousStep;
+        });
+        const auto result = CompactTable(runtime, table.TabletId, table.TableId, false);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+        runtime.WaitFor("follower to apply the compacted parts", [&] { return compacted; });
+        UNIT_ASSERT(fixture.ReplicaIndex() == graph);
+        fixture.CheckPrepared(1);
+    }
+
+    Y_UNIT_TEST(HnswFollowerInvalidatesOnSchemaChange) {
         THnswReplicaFixture fixture;
         fixture.WarmReplica();
         auto old = fixture.ReplicaIndex();
         auto* follower = fixture.Follower();
         const auto oldVersion = follower->GetSnapshotManager().GetFollowerReadEdge().first;
         auto& runtime = *fixture.Helper.Server->GetRuntime();
-        if (SchemaChange) {
-            UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime,
-                "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra String;"), "SUCCESS");
-        } else {
-            const auto& table = fixture.Helper.Tables.at("hnsw-lifecycle");
-            CompactTable(runtime, table.TabletId, table.TableId, false);
-        }
+        UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime,
+            "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra String;"), "SUCCESS");
         for (ui32 attempt = 0; attempt < 20 && old->CanRead(oldVersion); ++attempt) {
             fixture.Follower();
             runtime.SimulateSleep(TDuration::Seconds(1));

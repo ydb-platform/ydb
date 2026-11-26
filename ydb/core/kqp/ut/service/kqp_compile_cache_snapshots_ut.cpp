@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/common/compile_cache/types.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/ut/common/kqp_compile_cache_helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <yql/essentials/public/langver/yql_langver.h>
@@ -11,18 +12,6 @@ namespace NKikimr::NKqp {
 namespace {
 
 const TString Query = "SELECT id, name FROM `/Root/foo` WHERE name = '3_name';";
-
-struct TFakeSnapshot : TPreCboSnapshot {
-    ui64 ByteSize() const override {
-        return 1024;
-    }
-};
-
-TKqpTempTablesState::TConstPtr SomeTempTables() {
-    auto state = std::make_shared<TKqpTempTablesState>();
-    state->TempTables["/Root/tmp"] = {};
-    return state;
-}
 
 TKikimrSettings MakeSettings(bool compileCacheV2, bool readCommitted, ui32 cacheSize) {
     NKikimrConfig::TAppConfig appConfig;
@@ -121,12 +110,7 @@ struct TSnapshotFixture {
 
     // The sys view row of `uid`.
     NKikimrKqp::TCompileCacheQueryInfo Row(const TString& uid) {
-        auto* request = new TEvKqp::TEvListQueryCacheQueriesRequest();
-        request->Record.SetTenantName("/Root");
-        request->Record.SetFreeSpace(1024 * 1024);
-        Runtime.Send(new IEventHandle(ServiceActor, Edge, request));
-        auto response = Runtime.GrabEdgeEvent<TEvKqp::TEvListQueryCacheQueriesResponse>(Edge, TDuration::Seconds(5));
-        UNIT_ASSERT(response);
+        auto response = NTest::ListQueryCache(Runtime, 0, "/Root");
         for (const auto& row : response->Get()->Record.GetCacheCacheQueries()) {
             if (row.GetQueryId() == uid) {
                 return row;
@@ -163,7 +147,7 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
     Y_UNIT_TEST_TWIN(PublishRules, CompileCacheV2) {
         TSnapshotFixture f(CompileCacheV2);
 
-        f.Output = std::make_shared<TFakeSnapshot>();
+        f.Output = std::make_shared<NTest::TFakeSnapshot>();
         f.Send();
         const auto cold = f.Receive(false);
         const TString uid = cold->Uid;
@@ -179,7 +163,7 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
         UNIT_ASSERT_VALUES_EQUAL(f.Receive(false)->Uid, uid);
         UNIT_ASSERT_VALUES_EQUAL(f.Row(uid).GetCompiledQueryAt(), cold->CompiledAt.MicroSeconds());
 
-        f.Output = std::make_shared<TFakeSnapshot>();
+        f.Output = std::make_shared<NTest::TFakeSnapshot>();
         f.Send();
         const auto replaced = f.Receive(false);
         UNIT_ASSERT_VALUES_EQUAL(replaced->Uid, uid);
@@ -203,7 +187,7 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
     Y_UNIT_TEST_TWIN(SnapshotByUid, CompileCacheV2) {
         TSnapshotFixture f(CompileCacheV2);
 
-        f.Output = std::make_shared<TFakeSnapshot>();
+        f.Output = std::make_shared<NTest::TFakeSnapshot>();
         f.Send();
         const TString uid = f.Receive(false)->Uid;
 
@@ -223,7 +207,7 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
 
     Y_UNIT_TEST(SnapshotSurvivesCompileErrors) {
         TSnapshotFixture f(true, /*readCommitted=*/false);
-        f.Output = std::make_shared<TFakeSnapshot>();
+        f.Output = std::make_shared<NTest::TFakeSnapshot>();
         f.Send();
         const TString uid = f.Receive(false)->Uid;
         UNIT_ASSERT_VALUES_EQUAL(f.Row(uid).GetAccessCount(), 1);
@@ -245,7 +229,7 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
 
     Y_UNIT_TEST(DifferentExecutionSettingsPreservePreparedSnapshot) {
         TSnapshotFixture f(true, /*readCommitted=*/true);
-        f.Output = std::make_shared<TFakeSnapshot>();
+        f.Output = std::make_shared<NTest::TFakeSnapshot>();
         f.Send();
         const auto prepared = f.Receive(false);
         const TString uid = prepared->Uid;
@@ -276,7 +260,7 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
 
     Y_UNIT_TEST(PgModeChangeRecompilesPreparedSnapshot) {
         TSnapshotFixture f(true);
-        f.Output = std::make_shared<TFakeSnapshot>();
+        f.Output = std::make_shared<NTest::TFakeSnapshot>();
         f.Send();
         const auto prepared = f.Receive(false);
         auto& appData = f.Runtime.GetAppData();
@@ -302,7 +286,7 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
 
     Y_UNIT_TEST(CountsClientsSharingSnapshotCompilation) {
         TSnapshotFixture f(true);
-        f.Output = std::make_shared<TFakeSnapshot>();
+        f.Output = std::make_shared<NTest::TFakeSnapshot>();
         f.Send();
         const TString uid = f.Receive(false)->Uid;
 
@@ -324,12 +308,12 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
     Y_UNIT_TEST(TempTablesPreservePreparedSnapshot) {
         TSnapshotFixture f(true);
 
-        f.Output = std::make_shared<TFakeSnapshot>();
+        f.Output = std::make_shared<NTest::TFakeSnapshot>();
         f.Send();
         const TString uid = f.Receive(false)->Uid;
 
         f.Output = nullptr;
-        f.Send("root@builtin", SomeTempTables());
+        f.Send("root@builtin", NTest::SomeTempTables());
         UNIT_ASSERT_VALUES_EQUAL(f.Receive(false)->Uid, uid);
         UNIT_ASSERT_VALUES_EQUAL(f.Row(uid).GetAccessCount(), 2);
 
@@ -342,7 +326,7 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
     // A session takes only plans from the cache: with a snapshot record the query is compiled again.
     Y_UNIT_TEST_TWIN(SessionSkipsSnapshot, CompileCacheV2) {
         TSnapshotFixture f(CompileCacheV2);
-        f.Output = std::make_shared<TFakeSnapshot>();
+        f.Output = std::make_shared<NTest::TFakeSnapshot>();
 
         auto fromCache = [&] {
             auto result = f.Kikimr.RunCall([&] {
@@ -359,7 +343,7 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
 
     Y_UNIT_TEST(EvictedSnapshotDoesNotServeWaitingTextRequest) {
         TSnapshotFixture f(true, /*readCommitted=*/true, /*cacheSize=*/1);
-        f.Output = std::make_shared<TFakeSnapshot>();
+        f.Output = std::make_shared<NTest::TFakeSnapshot>();
         f.Send();
         const TString uid = f.Receive(false)->Uid;
 
@@ -377,7 +361,7 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
 
     Y_UNIT_TEST(DisabledV2CacheIsolatesTempTableRequests) {
         TSnapshotFixture f(true, /*readCommitted=*/true, /*cacheSize=*/0);
-        f.Send("root@builtin", SomeTempTables());
+        f.Send("root@builtin", NTest::SomeTempTables());
         f.Hold();
         f.Send();
         f.Release();
@@ -392,7 +376,7 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
     Y_UNIT_TEST_TWIN(NoJoinAcrossTempTables, CompileCacheV2) {
         TSnapshotFixture f(CompileCacheV2);
 
-        f.Send("root@builtin", SomeTempTables());
+        f.Send("root@builtin", NTest::SomeTempTables());
         f.Hold();
         f.Send();
         f.Release();

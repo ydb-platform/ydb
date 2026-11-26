@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/ut/common/kqp_compile_cache_helpers.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 
@@ -96,26 +97,8 @@ NKikimrKqp::TCompileCacheQueryInfo Row(const TKqpQueryCache& cache, const TStrin
     return row;
 }
 
-struct TFakeSnapshot : TPreCboSnapshot {
-    explicit TFakeSnapshot(ui64 bytes)
-        : Bytes(bytes)
-    {}
-
-    ui64 ByteSize() const override {
-        return Bytes;
-    }
-
-    ui64 Bytes;
-};
-
 TPreCboSnapshotPtr MakeSnapshot(ui64 bytes) {
-    return std::make_shared<const TFakeSnapshot>(bytes);
-}
-
-TKqpTempTablesState::TConstPtr SomeTempTables() {
-    auto state = std::make_shared<TKqpTempTablesState>();
-    state->TempTables["/Root/tmp"] = {};
-    return state;
+    return std::make_shared<const NTest::TFakeSnapshot>(bytes);
 }
 
 // Lookup needs a TActorContext, so each call runs inside a one-shot actor.
@@ -463,7 +446,7 @@ Y_UNIT_TEST_SUITE(KqpQueryCacheSnapshots) {
         UNIT_ASSERT_VALUES_EQUAL(Row(cache, "p").GetAccessCount(), 2);
 
         // A cold compile in a session with temp tables still needs the original UID.
-        auto tempTables = SomeTempTables();
+        auto tempTables = NTest::SomeTempTables();
         UNIT_ASSERT(lookup.ByText(cache, "SELECT s", user, false, tempTables).GetSnapshot());
         UNIT_ASSERT(!lookup.ByText(cache, "SELECT s", user, true, tempTables));
         UNIT_ASSERT(lookup.ByUid(cache, "s", user, false, tempTables).GetSnapshot());

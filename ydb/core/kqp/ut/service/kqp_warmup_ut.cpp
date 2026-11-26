@@ -1,5 +1,6 @@
 #include <atomic>
 
+#include <ydb/core/kqp/ut/common/kqp_compile_cache_helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -333,19 +334,7 @@ namespace {
         ui32 nodeIndex,
         const TString& tenantName)
     {
-        auto edgeActor = runtime.AllocateEdgeActor(nodeIndex);
-        auto compileServiceId = MakeKqpCompileServiceID(runtime.GetNodeId(nodeIndex));
-
-        auto* request = new TEvKqp::TEvListQueryCacheQueriesRequest();
-        request->Record.SetTenantName(tenantName);
-        request->Record.SetFreeSpace(1024 * 1024);
-
-        runtime.Send(new IEventHandle(compileServiceId, edgeActor, request), nodeIndex);
-
-        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvListQueryCacheQueriesResponse>(
-            edgeActor, TDuration::Seconds(5));
-        UNIT_ASSERT_C(response, "Failed to get local cache entries from node " << nodeIndex);
-
+        auto response = NTest::ListQueryCache(runtime, nodeIndex, tenantName);
         THashSet<TString> userSids;
         for (const auto& query : response->Get()->Record.GetCacheCacheQueries()) {
             userSids.insert(query.GetUserSID());
@@ -355,15 +344,7 @@ namespace {
 
     // QueryId -> AccessCount of the entries in one node's compile cache.
     THashMap<TString, ui64> GetLocalCacheAccessCounts(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& tenantName) {
-        auto edgeActor = runtime.AllocateEdgeActor(nodeIndex);
-        auto* request = new TEvKqp::TEvListQueryCacheQueriesRequest();
-        request->Record.SetTenantName(tenantName);
-        request->Record.SetFreeSpace(1024 * 1024);
-        runtime.Send(new IEventHandle(MakeKqpCompileServiceID(runtime.GetNodeId(nodeIndex)), edgeActor, request), nodeIndex);
-
-        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvListQueryCacheQueriesResponse>(edgeActor, TDuration::Seconds(5));
-        UNIT_ASSERT_C(response, "Failed to get local cache entries from node " << nodeIndex);
-
+        auto response = NTest::ListQueryCache(runtime, nodeIndex, tenantName);
         THashMap<TString, ui64> accessCounts;
         for (const auto& query : response->Get()->Record.GetCacheCacheQueries()) {
             accessCounts[query.GetQueryId()] = query.GetAccessCount();
@@ -592,21 +573,30 @@ namespace {
         Y_UNIT_TEST_TWIN(WarmupAccessCount, CompileCacheV2) {
             TWarmupTestParams params;
             params.UseRealThreads = false;
+            params.NodeCount = 2;
+            params.FillCache = false;
+            params.FillImplicitParams = false;
             params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0", "user1"};
 
-            auto settings = MakeWarmupTestSettings(params);
-            settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryUseLlvm(false);
-            TKikimrRunner kikimr(settings);
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
             TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+            const TString query = "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = 42u;";
+            const NACLib::TUserToken local("user0@builtin", {"all-users@well-known"});
+            const NACLib::TUserToken remote("user1@builtin", {"all-users@well-known"});
+            UNIT_ASSERT_VALUES_EQUAL(ExecuteQueryWithToken(env.Runtime, 0, local, query), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(ExecuteQueryWithToken(env.Runtime, 1, local, query), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(ExecuteQueryWithToken(env.Runtime, 1, remote, query), Ydb::StatusIds::SUCCESS);
+            const auto peers = env.Runtime.AddObserver<TEvKqp::TEvListProxyNodesResponse>(
+                [&](TEvKqp::TEvListProxyNodesResponse::TPtr& ev) { ev->Get()->ProxyNodes = {env.Runtime.GetNodeId(1)}; });
             const auto before = GetLocalCacheAccessCounts(env.Runtime, env.NodeId, "/Root");
 
             TKqpWarmupConfig warmupActorConfig;
-            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline, /*waitBootstrap=*/true);
             UNIT_ASSERT_C(warmupComplete, "Warmup actor did not complete within timeout");
             UNIT_ASSERT_C(warmupComplete->Get()->Success,
                 "Warmup should complete successfully: " << warmupComplete->Get()->Message);
-            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded > 0, "Warmup loaded nothing, the check would be empty");
+            UNIT_ASSERT_VALUES_EQUAL(warmupComplete->Get()->EntriesLoaded, 2);
 
             const auto after = GetLocalCacheAccessCounts(env.Runtime, env.NodeId, "/Root");
             if (!CompileCacheV2) {

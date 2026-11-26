@@ -205,6 +205,8 @@ bool TLocalBuffer::PushDataChunk(TDataChunk&& data) {
 
     EDqFillLevel fillLevel = FillLevel;
     const bool hasData = data.Rows && !data.Checkpoint;
+    const bool control = data.Finished || data.Checkpoint || data.Watermark;
+    const ui64 bytes = data.Bytes;
     bool freshLocalData = false;
 
     RefreshMemoryPressure();
@@ -254,8 +256,55 @@ bool TLocalBuffer::PushDataChunk(TDataChunk&& data) {
     }
 
     ReadyHook.Mark();
-    NotifyInput(Finished.load(), freshLocalData);
+    // A free worker would otherwise drain the first block while this run still
+    // writes the next ones. Hold the signal only up to DeferredInputNotifyBytes:
+    // a whole producer run is one multi-second join probe.
+    bool overBudget = false;
+    if (ShouldDeferInputNotify(fillLevel, control)) {
+        DeferredInputBytes += bytes;
+        if (DeferredInputBytes < DeferredInputNotifyBytes) {
+            if (freshLocalData) {
+                DeferredFreshLocalData.store(true);
+            }
+            DeferredInputNotify.store(true);
+            NeedToNotifyInput.store(false);
+            PublishOutputSpilling();
+            return true;
+        }
+        overBudget = true;
+    }
+    DeferredInputBytes = 0;
+    const bool held = DeferredInputNotify.exchange(false);
+    const bool fresh = DeferredFreshLocalData.exchange(false) || freshLocalData;
+    PublishOutputSpilling();
+    NotifyInput(held || overBudget || control || Finished.load(), fresh);
     return true;
+}
+
+bool TLocalBuffer::ShouldDeferInputNotify(EDqFillLevel fillLevel, bool control) const {
+    if (fillLevel != EDqFillLevel::NoLimit || control || Finished.load()) {
+        return false;
+    }
+    const auto task = GetInputTask();
+    return task && !task->ObserveOnly;
+}
+
+void TLocalBuffer::FlushDeferredInputNotify() {
+    if (!DeferredInputNotify.exchange(false)) {
+        std::lock_guard lock(Mutex);
+        DeferredInputBytes = 0;
+        return;
+    }
+    const bool fresh = DeferredFreshLocalData.exchange(false);
+    bool pending = false;
+    {
+        std::lock_guard lock(Mutex);
+        DeferredInputBytes = 0;
+        pending = !Queue.empty() || Finished.load() || SpilledBytes.load() > 0 || !LoadingQueue.empty();
+    }
+    if (pending) {
+        NotifyInput(true, fresh);
+    }
 }
 
 bool TLocalBuffer::IsFinished() {
@@ -372,6 +421,12 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
         NotifyOutput(true);
     }
 
+    PublishOutputSpilling();
+    const bool drain = SpilledBytes.load() > 0 || InflightBytes.load() >= GetMaxInflightBytes();
+    if (SpillDrainPublished.exchange(drain) != drain) {
+        NotifyInput(true);
+    }
+
     return true;
 }
 
@@ -439,6 +494,11 @@ void TLocalBuffer::StorageWakeupHandler() {
         ReadyHook.Mark();
         NotifyInput(false);
     }
+    PublishOutputSpilling();
+    const bool drain = SpilledBytes.load() > 0 || InflightBytes.load() >= GetMaxInflightBytes();
+    if (SpillDrainPublished.exchange(drain) != drain) {
+        NotifyInput(true);
+    }
 }
 
 void TLocalBuffer::BindInput() {
@@ -479,8 +539,12 @@ void TLocalBuffer::NotifyInput(bool force, bool freshLocalData) {
     if (NeedToNotifyInput.exchange(false) || force) {
         LastInputNotificationTime.store(TInstant::Now());
         if (auto task = GetInputTask()) {
+            // Unread spill keeps the inflight window small, so the full-channel
+            // check alone never asks the consumer to run.
+            const bool drain = SpilledBytes.load() > 0 || InflightBytes.load() >= GetMaxInflightBytes();
+            SpillDrainPublished.store(drain);
             task->Signal(InputDependency(Info.ChannelId),
-                         InflightBytes.load() >= GetMaxInflightBytes() ? ETaskPriority::Drain : ETaskPriority::Normal,
+                         drain ? ETaskPriority::Drain : ETaskPriority::Normal,
                          freshLocalData);
             if (!task->ObserveOnly) {
                 return;
@@ -489,6 +553,16 @@ void TLocalBuffer::NotifyInput(bool force, bool freshLocalData) {
         NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
             new NActors::IEventHandle(Info.InputActorId, NActors::TActorId{}, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback})
         );
+    }
+}
+
+void TLocalBuffer::PublishOutputSpilling() {
+    const bool spilling = SpilledBytes.load() > 0;
+    if (OutputSpillPublished.exchange(spilling) == spilling) {
+        return;
+    }
+    if (auto task = GetOutputTask()) {
+        task->SetOutputSpilling(OutputDependency(Info.ChannelId), spilling);
     }
 }
 
@@ -539,6 +613,16 @@ TOutputDescriptor::~TOutputDescriptor() {
         // no concurrency here, all TOutputItems hold a reference to the descriptor and are already destroyed
         auto waitQueueBytes = WaitQueueBytes.load();
         FreeQuota(waitQueueBytes - std::min(waitQueueBytes, UnquotedWaitBytes));
+    }
+}
+
+void TOutputDescriptor::PublishOutputSpilling() {
+    const bool spilling = SpilledBytes.load() > 0;
+    if (OutputSpillPublished.exchange(spilling) == spilling) {
+        return;
+    }
+    if (auto task = std::atomic_load(&OutputTask)) {
+        task->SetOutputSpilling(OutputDependency(Info.ChannelId), spilling);
     }
 }
 
@@ -623,6 +707,7 @@ bool TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
             OnFinishConfirmed();
         }
     }
+    PublishOutputSpilling();
     return true;
 }
 
@@ -672,6 +757,7 @@ void TOutputDescriptor::DropSpilledData() {
         LOG_D("DROP SPILLED, ChannelId=" << Info.ChannelId << ", DroppedBytes=" << dropped << ", SpilledBytes=" << SpilledBytes.load()
             << ", SpilledChunks=" << SpilledChunks.size() << ", Loading=" << LoadingQueue.size());
     }
+    PublishOutputSpilling();
 }
 
 void TOutputDescriptor::DrainLoadingQueue(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
@@ -696,6 +782,7 @@ void TOutputDescriptor::DrainLoadingQueue(TNodeState* nodeState, std::shared_ptr
             OnFinishConfirmed();
         }
     }
+    PublishOutputSpilling();
 }
 
 // The storage is read as far as the window allows - or all the way after an early finish or once the peer has
@@ -727,6 +814,7 @@ void TOutputDescriptor::ReloadSpilled(TNodeState* nodeState, std::shared_ptr<TOu
             LoadingQueue.emplace(std::move(info));
         }
     }
+    PublishOutputSpilling();
 }
 
 void TOutputDescriptor::AddPopChunk(ui64 bytes, ui64 rows) {

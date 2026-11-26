@@ -216,6 +216,14 @@ public:
     bool PushDataChunk(TDataChunk&& data);
     void NotifyInput(bool force, bool freshLocalData = false);
     void NotifyOutput(bool force);
+    // Tell the producer to yield while this channel has unread spill, and clear it
+    // once the spill is gone. The consumer drain bit is published from NotifyInput.
+    void PublishOutputSpilling();
+    void FlushDeferredInputNotify() override;
+    bool ShouldDeferInputNotify(EDqFillLevel fillLevel, bool control) const;
+    // A scheduled producer otherwise holds the consumer until the run flushes,
+    // and the join probes that whole buffer in one call. Wake it earlier.
+    static constexpr ui64 DeferredInputNotifyBytes = 1ull << 20;
 
     void ExportPushStats(TDqAsyncStats& stats) override;
     void ExportPopStats(TDqAsyncStats& stats) override;
@@ -245,6 +253,9 @@ public:
 
     std::atomic<ui64> InflightBytes = 0;
     std::atomic<ui64> SpilledBytes = 0;
+    // Last output-spill and input-drain bits published to the scheduler.
+    std::atomic<bool> OutputSpillPublished = false;
+    std::atomic<bool> SpillDrainPublished = false;
     const ui64 MaxInflightBytes; // NoLimit => HardLimit
     const ui64 MinInflightBytes; // HardLimit => NoLimit
     const ui64 ColdInflightBytes; // both of the above while the node is under memory pressure
@@ -275,6 +286,11 @@ public:
     // set by the side which is going to wait, whoever clears it sends TEvResumeExecution, so a flag found set need not be stored again
     std::atomic<bool> NeedToNotifyOutput = false;
     std::atomic<bool> NeedToNotifyInput = false;
+    // Data chunks since the last consumer wake. Released on wake or flush.
+    std::atomic<bool> DeferredInputNotify = false;
+    std::atomic<bool> DeferredFreshLocalData = false;
+    // Under Mutex, together with the queue.
+    ui64 DeferredInputBytes = 0;
 
     std::atomic<bool> EarlyFinished = false;
     std::atomic<bool> OutputBound = false;
@@ -351,6 +367,7 @@ public:
     void DropSpilledData();
     void DrainLoadingQueue(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void ReloadSpilled(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    void PublishOutputSpilling();
 
     // QuotaManager may be assigned later than the descriptor is created - when the output side binds to
     // a descriptor auto-created by an early finish from the peer. It is assigned only once (nullptr to a
@@ -439,6 +456,7 @@ public:
     std::atomic<ui64> PushBytes = 0;
     std::atomic<ui64> RemotePopBytes = 0;
     std::atomic<ui64> SpilledBytes = 0;
+    std::atomic<bool> OutputSpillPublished = false;
     std::atomic<ui64> SeqNo = 0;
 
     // set by the output which is going to wait, whoever clears it sends TEvResumeExecution, so a flag found set need not be stored again
@@ -1159,10 +1177,12 @@ public:
 
     void Finish() override {
         Serializer->Flush(true);
+        Serializer->Buffer->FlushDeferredInputNotify();
     }
 
     void Flush() override {
         Serializer->Flush(false);
+        Serializer->Buffer->FlushDeferredInputNotify();
     }
 
     bool IsFinished() const override {

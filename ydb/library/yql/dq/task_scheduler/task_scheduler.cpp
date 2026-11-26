@@ -167,6 +167,8 @@ void TTaskSchedulingHandle::RequestExecution() {
 
 void TTaskSchedulingHandle::Signal(TTaskDependencyId dependency, ETaskPriority priority, bool freshLocalData) {
     bool enqueue = false;
+    bool reportSaturation = false;
+    TTaskSchedulingSnapshot snapshot;
     {
         std::lock_guard lock(Mutex);
         if (State == EState::Cancelled || State == EState::Finished) {
@@ -175,6 +177,16 @@ void TTaskSchedulingHandle::Signal(TTaskDependencyId dependency, ETaskPriority p
         ++Versions[dependency];
         ++Versions[AnyDependency];
         const auto notifiedAt = Trace ? TMonotonic::Now() : TMonotonic();
+        // Drain here is the full-channel signal, not "this task once read a row".
+        // A later notification below the limit clears it.
+        if (priority == ETaskPriority::Drain || priority == ETaskPriority::Normal) {
+            const bool saturated = priority == ETaskPriority::Drain;
+            if (saturated != ChannelSaturated) {
+                ChannelSaturated = saturated;
+                ++Revision;
+                reportSaturation = true;
+            }
+        }
         if (priority == ETaskPriority::Drain && Priority != priority) {
             Priority = priority;
             ++Revision;
@@ -212,11 +224,59 @@ void TTaskSchedulingHandle::Signal(TTaskDependencyId dependency, ETaskPriority p
             args["dependency"] = ToString(dependency);
             args["version"] = Versions[dependency];
             args["ready"] = enqueue;
+            args["channel_saturated"] = ChannelSaturated;
             Trace->Event("signal", TaskId, Actor, std::move(args), notifiedAt);
         }
+        if (reportSaturation && ReportState) {
+            snapshot = SnapshotLocked();
+        }
+    }
+    if (reportSaturation && ReportState) {
+        ReportState(std::move(snapshot));
     }
     if (enqueue) {
         Enqueue(shared_from_this());
+    }
+}
+
+void TTaskSchedulingHandle::SetOutputSpilling(TTaskDependencyId dependency, bool spilling) {
+    bool report = false;
+    TTaskSchedulingSnapshot snapshot;
+    {
+        std::lock_guard lock(Mutex);
+        if (State == EState::Cancelled || State == EState::Finished) {
+            return;
+        }
+        const bool had = SpillingOutputs.contains(dependency);
+        if (spilling == had) {
+            return;
+        }
+        if (spilling) {
+            SpillingOutputs.insert(dependency);
+        } else {
+            SpillingOutputs.erase(dependency);
+        }
+        // A single spilling output must not park a task that can still write
+        // to another one. Without a graph, any spill keeps the previous rule.
+        ui32 outputs = 0;
+        if (GraphRegistration && GraphRegistration->Graph) {
+            if (const auto* node = GraphRegistration->Graph->FindTask(TaskId)) {
+                outputs = node->OutputsCount;
+            }
+        }
+        const bool now = outputs > 1 ? SpillingOutputs.size() >= outputs : !SpillingOutputs.empty();
+        if (now == OutputSpilling) {
+            return;
+        }
+        OutputSpilling = now;
+        ++Revision;
+        report = true;
+        if (ReportState) {
+            snapshot = SnapshotLocked();
+        }
+    }
+    if (report && ReportState) {
+        ReportState(std::move(snapshot));
     }
 }
 
@@ -583,6 +643,8 @@ ETaskPriority TTaskSchedulingHandle::GetPriority() const {
 TTaskSchedulingSnapshot TTaskSchedulingHandle::SnapshotLocked() const {
     TTaskSchedulingSnapshot snapshot{.Actor = Actor, .Query = Query, .TaskId = TaskId,
         .Revision = Revision, .Generation = Generation, .State = State, .Priority = Priority,
+        .ChannelSaturated = ChannelSaturated,
+        .OutputSpilling = OutputSpilling,
         .Progress = LastProgress, .Waits = LastWaits, .StopReason = LastStopReason,
         .Classification = Classification, .ResumeCondition = Wait, .Operators = Operators};
     auto& classification = snapshot.Classification;

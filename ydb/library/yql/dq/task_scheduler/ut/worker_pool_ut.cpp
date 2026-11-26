@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
         t.Run(std::move(*claim), false);
     }
 
-    Y_UNIT_TEST(NearestReadyTaskWinsAcrossRemoteGraphEdges) {
+    Y_UNIT_TEST(LongestChainReadyTaskWinsAcrossRemoteGraphEdges) {
         TQueues t;
         auto graph = std::make_shared<const TQueryTaskGraph>(
             TVector<TTaskGraphNode>{{1, 1, 1, 0, 1, true}, {2, 2, 99, 1, 1}, {3, 3, 1, 1, 1}},
@@ -204,11 +204,20 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
         t.Add(Id(100), 1, 1);
         t.Add(Id(100), 3, 3);
         auto first = t.Pool->Take({}, 100);
-        UNIT_ASSERT(first && first->Task->TaskId == 3);
+        UNIT_ASSERT(first && first->Task->TaskId == 1);
         t.Run(std::move(*first), false);
         auto next = t.Pool->Take({}, 100);
-        UNIT_ASSERT(next && next->Task->TaskId == 1);
+        UNIT_ASSERT(next && next->Task->TaskId == 3);
         t.Run(std::move(*next), false);
+    }
+
+    Y_UNIT_TEST(ResultDistanceFollowsTheLongestChain) {
+        auto graph = std::make_shared<const TQueryTaskGraph>(
+            TVector<TTaskGraphNode>{{1, 1, 1, 0, 2}, {2, 2, 1, 1, 1}, {4, 4, 1, 2, 1}},
+            TVector<TTaskGraphChannel>{{1, 1, 2}, {2, 2, 4}, {3, 1, 4}, {4, 4, 0}});
+        UNIT_ASSERT_VALUES_EQUAL(*graph->GetResultDistance(4), 0);
+        UNIT_ASSERT_VALUES_EQUAL(*graph->GetResultDistance(2), 1);
+        UNIT_ASSERT_VALUES_EQUAL(*graph->GetResultDistance(1), 2);
     }
 
     Y_UNIT_TEST(QueryCpuServiceAndInFlightReservationsAffectSelection) {
@@ -235,15 +244,18 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
         t.Pool->RegisterGraph(Id(100), 0, graph, {1, 2});
         t.Add(Id(100), 1, 1);
         auto sink = t.Add(Id(100), 2, 2);
-        auto first = t.Pool->Take({}, 100);
-        UNIT_ASSERT(first && first->Task == sink->Task);
-        UNIT_ASSERT(first->Execution->TryAcquire());
-        const auto generation = first->Task->TryDispatch();
-        UNIT_ASSERT(generation && first->Task->Start(*generation));
-        first->Task->Await(InputDependency(1), first->Task->Observe(InputDependency(1)));
-        first->Task->Complete({.RunnerInvoked = true});
-        first->Execution->Release();
-        t.Pool->Finish(*first, 10);
+        auto source = t.Pool->Take({}, 100);
+        UNIT_ASSERT(source && source->Task->TaskId == 1);
+        auto parked = t.Pool->Take({}, 100);
+        UNIT_ASSERT(parked && parked->Task == sink->Task);
+        UNIT_ASSERT(parked->Execution->TryAcquire());
+        const auto generation = parked->Task->TryDispatch();
+        UNIT_ASSERT(generation && parked->Task->Start(*generation));
+        parked->Task->Await(InputDependency(1), parked->Task->Observe(InputDependency(1)));
+        parked->Task->Complete({.RunnerInvoked = true});
+        parked->Execution->Release();
+        t.Pool->Finish(*parked, 10);
+        t.Run(std::move(*source), true);
         sink->Task->Signal(InputDependency(1));
         auto next = t.Pool->Take({}, 100);
         UNIT_ASSERT(next && next->Task->TaskId == 1);
@@ -433,7 +445,7 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
         t.Run(std::move(*claim), false);
     }
 
-    Y_UNIT_TEST(ConsumerPreferenceCanOverrideResultDistance) {
+    Y_UNIT_TEST(CloserToTheResultBeatsTheUpstreamJoin) {
         for (bool enabled : {false, true}) {
             TQueues t(enabled);
             const auto query = Id(100);
@@ -441,7 +453,7 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
                 TVector<TTaskGraphNode>{{1, 1, 1, 1, 1}, {2, 2, 1, 1, 1}},
                 TVector<TTaskGraphChannel>{{1, 1, 2}, {2, 2, 0}});
             t.Pool->RegisterGraph(query, 0, graph, {1, 2});
-            auto consumer = t.Add(query, 1, 1);
+            t.Add(query, 1, 1);
             auto claim = t.Pool->Take({}, 100);
             UNIT_ASSERT(claim && claim->Execution->TryAcquire());
             const auto generation = claim->Task->TryDispatch();
@@ -449,9 +461,9 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
             claim->Task->Complete({.InputRows = 1, .RunnerInvoked = true, .BudgetExhausted = true});
             claim->Execution->Release();
             t.Pool->Finish(*claim, 10);
-            auto closer = t.Add(query, 2, 2);
+            t.Add(query, 2, 2);
             claim = t.Pool->Take({}, 100);
-            UNIT_ASSERT(claim && claim->Task == (enabled ? consumer->Task : closer->Task));
+            UNIT_ASSERT(claim && claim->Task->TaskId == 2);
             t.Run(std::move(*claim), false);
         }
     }
@@ -521,7 +533,7 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
         t.Run(std::move(*next), false);
     }
 
-    Y_UNIT_TEST(UpstreamReadyTaskIsNotStarvedByContinuousResultWork) {
+    Y_UNIT_TEST(ReadySourceStaysAheadOfAStarvedJoin) {
         TQueues t;
         auto graph = std::make_shared<const TQueryTaskGraph>(
             TVector<TTaskGraphNode>{{1, 1, 1, 0, 1, true}, {2, 2, 1, 1, 1}},
@@ -529,14 +541,115 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
         t.Pool->RegisterGraph(Id(100), 0, graph, {1, 2});
         t.Add(Id(100), 1, 1);
         t.Add(Id(100), 2, 2);
-        bool upstreamRan = false;
         for (ui32 i = 0; i < 65; ++i) {
             auto claim = t.Pool->Take({}, 100);
-            UNIT_ASSERT(claim);
-            upstreamRan |= claim->Task->TaskId == 1;
+            UNIT_ASSERT(claim && claim->Task->TaskId == 1);
             t.Run(std::move(*claim), true);
         }
-        UNIT_ASSERT(upstreamRan);
+    }
+
+    Y_UNIT_TEST(AgingRotatesJoins) {
+        TQueues t;
+        auto graph = std::make_shared<const TQueryTaskGraph>(
+            TVector<TTaskGraphNode>{{1, 1, 1, 0, 1}, {2, 2, 1, 1, 1}},
+            TVector<TTaskGraphChannel>{{1, 1, 2}, {2, 2, 0}});
+        t.Pool->RegisterGraph(Id(100), 0, graph, {1, 2});
+        t.Add(Id(100), 1, 1);
+        t.Add(Id(100), 2, 2);
+        for (ui32 i = 0; i < 64; ++i) {
+            auto claim = t.Pool->Take({}, 100);
+            UNIT_ASSERT(claim && claim->Task->TaskId == 2);
+            t.Run(std::move(*claim), true);
+        }
+        auto starved = t.Pool->Take({}, 100);
+        UNIT_ASSERT(starved && starved->Task->TaskId == 1);
+        t.Run(std::move(*starved), false);
+    }
+
+    Y_UNIT_TEST(FullChannelDoesNotPreemptTheSource) {
+        TQueues t;
+        auto graph = std::make_shared<const TQueryTaskGraph>(
+            TVector<TTaskGraphNode>{{1, 1, 1, 0, 1, true}, {2, 2, 1, 1, 1}},
+            TVector<TTaskGraphChannel>{{1, 1, 2}, {2, 2, 0}});
+        const auto query = Id(100);
+        t.Pool->RegisterGraph(query, 0, graph, {1, 2});
+        t.Add(query, 1, 1);
+        auto consumer = t.Add(query, 2, 2);
+        auto claim = t.Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Task->TaskId == 1);
+        t.Run(std::move(*claim), true);
+        consumer->Task->Signal(InputDependency(1), ETaskPriority::Drain);
+        claim = t.Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Task->TaskId == 1);
+        t.Run(std::move(*claim), false);
+        claim = t.Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Task == consumer->Task);
+        t.Run(std::move(*claim), false);
+    }
+
+    Y_UNIT_TEST(SpillingOutputYieldsToATaskWithAFreeOutput) {
+        TQueues t;
+        auto graph = std::make_shared<const TQueryTaskGraph>(
+            TVector<TTaskGraphNode>{{1, 1, 1, 0, 1, true}, {2, 2, 1, 1, 1}},
+            TVector<TTaskGraphChannel>{{1, 1, 2}, {2, 2, 0}});
+        const auto query = Id(100);
+        t.Pool->RegisterGraph(query, 0, graph, {1, 2});
+        auto source = t.Add(query, 1, 1);
+        t.Add(query, 2, 2);
+        auto claim = t.Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Task->TaskId == 1);
+        t.Run(std::move(*claim), true);
+        // Spill on the scan does not hand the workers to the join.
+        source->Task->SetOutputSpilling(OutputDependency(1), true);
+        source->Task->SetOutputSpilling(OutputDependency(2), true);
+        source->Task->Signal(InputDependency(9), ETaskPriority::Drain);
+        claim = t.Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Task->TaskId == 1);
+        t.Run(std::move(*claim), false);
+        claim = t.Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Task->TaskId == 2);
+        t.Run(std::move(*claim), false);
+    }
+
+    Y_UNIT_TEST(OneFreeOutputKeepsTheProducerAhead) {
+        TQueues t;
+        auto graph = std::make_shared<const TQueryTaskGraph>(
+            TVector<TTaskGraphNode>{{1, 1, 1, 1, 2}, {2, 2, 1, 0, 1}},
+            TVector<TTaskGraphChannel>{{1, 2, 1}, {2, 1, 0, 0, 0}, {3, 1, 0, 1, 0}});
+        const auto query = Id(100);
+        auto registration = std::make_shared<TQueryGraphRegistration>(graph, [] {});
+        t.Pool->RegisterGraph(query, 0, graph, {1, 2});
+        auto make = [&](ui64 taskId, ui64 actor) {
+            auto task = std::make_shared<TTaskSchedulingHandle>(Id(actor), query,
+                [pool = t.Pool](auto ready) { pool->Enqueue(std::move(ready)); }, [] {}, nullptr, false, taskId,
+                [pool = t.Pool](auto state) { pool->Report(0, std::move(state)); }, registration);
+            t.Pool->RegisterTask(task);
+            auto execution = std::make_shared<TExecution>();
+            execution->Task = task;
+            execution->OnAvailable = [pool = t.Pool] { pool->NotifyAvailable(); };
+            t.Pool->BindExecution(query, task->Actor, execution);
+            t.Executions.push_back(execution);
+            task->RequestExecution();
+            return execution;
+        };
+        auto source = make(1, 1);
+        make(2, 2);
+        auto claim = t.Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Task->TaskId == 1);
+        t.Run(std::move(*claim), true);
+        // The other output can still take rows, so the producer stays first.
+        source->Task->SetOutputSpilling(OutputDependency(1), true);
+        claim = t.Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Task->TaskId == 1);
+        t.Run(std::move(*claim), true);
+        source->Task->SetOutputSpilling(OutputDependency(2), true);
+        claim = t.Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Task->TaskId == 2);
+        t.Run(std::move(*claim), true);
+        source->Task->SetOutputSpilling(OutputDependency(1), false);
+        claim = t.Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Task->TaskId == 1);
+        t.Run(std::move(*claim), false);
     }
 
     Y_UNIT_TEST(FreshLocalInputPrefersItsConsumerWithinTheQuery) {

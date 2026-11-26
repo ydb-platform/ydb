@@ -116,6 +116,10 @@ public:
     virtual bool Pop(TDataChunk& data) = 0;
     virtual void EarlyFinish() = 0;
 
+    // Scheduled producers hold a consumer signal across chunks and release it
+    // after DeferredInputNotifyBytes, or when the run pauses.
+    virtual void FlushDeferredInputNotify() {}
+
     virtual void ExportPushStats(TDqAsyncStats& stats) = 0;
     virtual void ExportPopStats(TDqAsyncStats& stats) = 0;
 

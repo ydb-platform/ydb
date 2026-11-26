@@ -36,11 +36,23 @@ TQueryTaskGraph::TQueryTaskGraph(TVector<TTaskGraphNode> tasks, TVector<TTaskGra
             pending.push_back(task.TaskId);
         }
     }
+    // Longest path to a result. A shortcut must not hide the chain the query
+    // is still waiting on. A cycle cannot grow past the task count.
     while (!pending.empty()) {
         const auto id = pending.front();
         pending.pop_front();
+        const auto base = ResultDistances.at(id);
+        if (base >= Tasks.size()) {
+            continue;
+        }
+        const auto next = base + 1;
         for (auto parent : predecessors[id]) {
-            if (ResultDistances.emplace(parent, ResultDistances.at(id) + 1).second) {
+            auto it = ResultDistances.find(parent);
+            if (it == ResultDistances.end()) {
+                ResultDistances.emplace(parent, next);
+                pending.push_back(parent);
+            } else if (next > it->second) {
+                it->second = next;
                 pending.push_back(parent);
             }
         }

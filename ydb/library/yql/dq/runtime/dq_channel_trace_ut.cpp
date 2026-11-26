@@ -108,4 +108,109 @@ Y_UNIT_TEST_SUITE(DqChannelTrace) {
         UNIT_ASSERT(!task->HasObservedWaits());
         task->Cancel(true);
     }
+
+    Y_UNIT_TEST(ScheduledConsumerWakesOnceWhenTheProducerRunFinishes) {
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto registry = std::make_shared<TLocalBufferRegistry>(nullptr, counters, 100000, 1000, 128, false);
+        const TChannelFullInfo info(7, {}, {}, 1, 2, TCollectStatsLevel::None);
+        auto buffer = registry->GetOrCreateLocalBuffer(registry, info, nullptr);
+        ui32 enqueues = 0;
+        auto task = std::make_shared<TTaskSchedulingHandle>(NActors::TActorId{}, NActors::TActorId{},
+            [&enqueues](auto) { ++enqueues; }, [] {});
+        buffer->BindTaskScheduling(task, true);
+        const ui32 parked = enqueues;
+        task->RequestExecution();
+        UNIT_ASSERT_VALUES_EQUAL(enqueues, parked + 1);
+        const auto generation = task->TryDispatch();
+        UNIT_ASSERT(generation && task->Start(*generation));
+        task->Await(InputDependency(7), task->Observe(InputDependency(7)));
+        task->Complete({.RunnerInvoked = true});
+        UNIT_ASSERT(task->GetSnapshot().State == ETaskSchedulingState::Blocked);
+        const ui32 before = enqueues;
+
+        for (int i = 0; i < 3; ++i) {
+            TDataChunk chunk(NYql::TChunkedBuffer{}, 1000, false);
+            chunk.Bytes = 100;
+            UNIT_ASSERT(buffer->PushDataChunk(std::move(chunk)));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(enqueues, before);
+        UNIT_ASSERT(buffer->DeferredInputNotify.load());
+
+        buffer->FlushDeferredInputNotify();
+        UNIT_ASSERT_VALUES_EQUAL(enqueues, before + 1);
+        UNIT_ASSERT(!buffer->DeferredInputNotify.load());
+        UNIT_ASSERT(task->GetSnapshot().State == ETaskSchedulingState::Ready);
+        task->Cancel(true);
+    }
+
+    Y_UNIT_TEST(FullChannelWakesTheScheduledConsumerImmediately) {
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto registry = std::make_shared<TLocalBufferRegistry>(nullptr, counters, 250, 100, 50, false);
+        const TChannelFullInfo info(8, {}, {}, 1, 2, TCollectStatsLevel::None);
+        auto buffer = registry->GetOrCreateLocalBuffer(registry, info, nullptr);
+        ui32 enqueues = 0;
+        auto task = std::make_shared<TTaskSchedulingHandle>(NActors::TActorId{}, NActors::TActorId{},
+            [&enqueues](auto) { ++enqueues; }, [] {});
+        buffer->BindTaskScheduling(task, true);
+        task->RequestExecution();
+        const auto generation = task->TryDispatch();
+        UNIT_ASSERT(generation && task->Start(*generation));
+        task->Await(InputDependency(8), task->Observe(InputDependency(8)));
+        task->Complete({.RunnerInvoked = true});
+        const ui32 before = enqueues;
+
+        TDataChunk first(NYql::TChunkedBuffer{}, 1000, false);
+        first.Bytes = 100;
+        UNIT_ASSERT(buffer->PushDataChunk(std::move(first)));
+        UNIT_ASSERT_VALUES_EQUAL(enqueues, before);
+
+        TDataChunk second(NYql::TChunkedBuffer{}, 1000, false);
+        second.Bytes = 100;
+        UNIT_ASSERT(buffer->PushDataChunk(std::move(second)));
+        UNIT_ASSERT_VALUES_EQUAL(enqueues, before);
+
+        TDataChunk third(NYql::TChunkedBuffer{}, 1000, false);
+        third.Bytes = 100;
+        UNIT_ASSERT(buffer->PushDataChunk(std::move(third)));
+        UNIT_ASSERT_VALUES_EQUAL(enqueues, before + 1);
+        UNIT_ASSERT(!buffer->DeferredInputNotify.load());
+        task->Cancel(true);
+    }
+
+    Y_UNIT_TEST(DeferredBatchWakesTheScheduledConsumerBeforeTheRunFlushes) {
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto registry = std::make_shared<TLocalBufferRegistry>(nullptr, counters, 100000000, 1000, 128, false);
+        const TChannelFullInfo info(9, {}, {}, 1, 2, TCollectStatsLevel::None);
+        auto buffer = registry->GetOrCreateLocalBuffer(registry, info, nullptr);
+        ui32 enqueues = 0;
+        auto task = std::make_shared<TTaskSchedulingHandle>(NActors::TActorId{}, NActors::TActorId{},
+            [&enqueues](auto) { ++enqueues; }, [] {});
+        buffer->BindTaskScheduling(task, true);
+        task->RequestExecution();
+        const auto generation = task->TryDispatch();
+        UNIT_ASSERT(generation && task->Start(*generation));
+        task->Await(InputDependency(9), task->Observe(InputDependency(9)));
+        task->Complete({.RunnerInvoked = true});
+        const ui32 before = enqueues;
+
+        TDataChunk below(NYql::TChunkedBuffer{}, 1000, false);
+        below.Bytes = TLocalBuffer::DeferredInputNotifyBytes - 1;
+        UNIT_ASSERT(buffer->PushDataChunk(std::move(below)));
+        UNIT_ASSERT_VALUES_EQUAL(enqueues, before);
+        UNIT_ASSERT(buffer->DeferredInputNotify.load());
+
+        TDataChunk rest(NYql::TChunkedBuffer{}, 1000, false);
+        rest.Bytes = 1;
+        UNIT_ASSERT(buffer->PushDataChunk(std::move(rest)));
+        UNIT_ASSERT_VALUES_EQUAL(enqueues, before + 1);
+        UNIT_ASSERT(!buffer->DeferredInputNotify.load());
+        UNIT_ASSERT_VALUES_EQUAL(buffer->DeferredInputBytes, 0);
+
+        TDataChunk again(NYql::TChunkedBuffer{}, 1000, false);
+        again.Bytes = 100;
+        UNIT_ASSERT(buffer->PushDataChunk(std::move(again)));
+        UNIT_ASSERT_VALUES_EQUAL(enqueues, before + 1);
+        UNIT_ASSERT(buffer->DeferredInputNotify.load());
+        task->Cancel(true);
+    }
 }

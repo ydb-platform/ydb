@@ -131,6 +131,12 @@ struct TTaskSchedulingSnapshot {
     ui64 Generation = 0;
     ETaskSchedulingState State = ETaskSchedulingState::Blocked;
     ETaskPriority Priority = ETaskPriority::Normal;
+    // The input channel is at its inflight limit, or it still has unread spilled
+    // data, so this consumer has to run before its producer can move more data.
+    bool ChannelSaturated = false;
+    // Every output channel of this task has unread spill. One free output keeps
+    // the task runnable, so a scan can still feed the branch that is not full.
+    bool OutputSpilling = false;
     TTaskRunProgress Progress;
     TVector<TTaskWaitDescription> Waits;
     ETaskStopReason StopReason = ETaskStopReason::None;
@@ -195,6 +201,10 @@ public:
     void RequestExecution();
     // freshLocalData is only for a data chunk just pushed into an in-memory local channel.
     void Signal(TTaskDependencyId dependency, ETaskPriority priority = ETaskPriority::Normal, bool freshLocalData = false);
+    // dependency is the output channel. spilling is unread data in its storage.
+    // The task yields only once every output is spilling. One free output still
+    // has somewhere to write, so the task stays runnable.
+    void SetOutputSpilling(TTaskDependencyId dependency, bool spilling);
     ui64 Observe(TTaskDependencyId dependency);
     // The owner calls these around a single Fetch attempt. Intermediate failed
     // probes must not leak into the next successful Fetch's wait description.
@@ -243,6 +253,9 @@ private:
     mutable std::mutex Mutex;
     EState State = EState::Blocked;
     ETaskPriority Priority = ETaskPriority::Normal;
+    bool ChannelSaturated = false;
+    bool OutputSpilling = false;
+    THashSet<TTaskDependencyId> SpillingOutputs;
     THashMap<TTaskDependencyId, ui64> Versions;
     TTaskWaitCondition Wait;
     TVector<TTaskDependencyVersion> ObservedWaits;

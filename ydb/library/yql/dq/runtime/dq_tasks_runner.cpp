@@ -1387,7 +1387,12 @@ private:
             if (Scheduling) {
                 Scheduling->BeginProbe();
             }
-            if (AllocatedHolder->Output->GetFillLevel() != NoLimit) {
+            // SoftLimit is unread spill with room left in storage. The actor path
+            // resumes itself and keeps writing. Stopping here hands the worker to
+            // another task and the scan pays the restart on every chunk.
+            const auto fillLevel = AllocatedHolder->Output->GetFillLevel();
+            const bool spillRoomLeft = Scheduling && !Scheduling->ObserveOnly && fillLevel == SoftLimit;
+            if (fillLevel != NoLimit && !spillRoomLeft) {
                 break;
             }
             if (Scheduling) {
@@ -1424,9 +1429,16 @@ private:
                         ++Stats->TotalOutputsProduced;
                     }
                     dataConsumed = true;
-                    if (Scheduling && !Scheduling->ObserveOnly && MaxRowsPerRun && (LastRunProgress.OutputRows >= MaxRowsPerRun
-                        || (SliceCpuUs && ThreadCPUTime() - SliceCpuStart >= SliceCpuUs)
-                        || (SliceDeadline && TMonotonic::Now() >= SliceDeadline))) {
+                    // MaxRowsPerRun 0 keeps the short CPU slice off. Without a row
+                    // bound a scheduled join stays in this call for the whole probe.
+                    constexpr ui64 ScheduledOutputRowsPerRun = 1ull << 20;
+                    const bool rowBudgetHit = MaxRowsPerRun
+                        ? LastRunProgress.OutputRows >= MaxRowsPerRun
+                        : LastRunProgress.OutputRows >= ScheduledOutputRowsPerRun;
+                    const bool sliceBudgetHit = MaxRowsPerRun && (
+                        (SliceCpuUs && ThreadCPUTime() - SliceCpuStart >= SliceCpuUs)
+                        || (SliceDeadline && TMonotonic::Now() >= SliceDeadline));
+                    if (Scheduling && !Scheduling->ObserveOnly && (rowBudgetHit || sliceBudgetHit)) {
                         LastRunProgress.BudgetExhausted = true;
                         Scheduling->MakeRunnable();
                         AllocatedHolder->Output->Flush();

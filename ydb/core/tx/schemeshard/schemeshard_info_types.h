@@ -258,7 +258,7 @@ struct TTableShardInfo {
 };
 
 struct TColumnFamiliesMerger {
-    TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container);
+    TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container, ui32 lastReservedId = 0);
 
     bool Has(ui32 familyId) const;
     NKikimrSchemeOp::TFamilyDescription* Get(ui32 familyId, TString &errDescr);
@@ -280,6 +280,10 @@ private:
     ui32 NextAutogenId = 0;
 };
 
+void ApplyTierSettingsToFamily(const NKikimrSchemeOp::TTierDescription& tier,
+    NKikimrSchemeOp::TFamilyDescription& family);
+bool ValidateColumnCodecLevel(NKikimrSchemeOp::EColumnCodec codec, i32 level, TString& errDescr);
+
 struct TPartitionConfigMerger {
     static constexpr ui32 MaxFollowersCount = 3;
 
@@ -295,6 +299,9 @@ struct TPartitionConfigMerger {
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
         const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
         const bool isServerlessDomain, TString& errDescr);
+    static bool ApplyChangesInTiers(
+        NKikimrSchemeOp::TPartitionConfig& result, const NKikimrSchemeOp::TPartitionConfig& changes,
+        const TAppData* appData, bool isServerlessDomain, TString& errDescr);
 
     static THashMap<ui32, size_t> DeduplicateColumnFamiliesById(NKikimrSchemeOp::TPartitionConfig& config);
     static THashMap<ui32, size_t> DeduplicateStorageRoomsById(NKikimrSchemeOp::TPartitionConfig& config);

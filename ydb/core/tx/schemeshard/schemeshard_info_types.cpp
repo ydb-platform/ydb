@@ -24,8 +24,6 @@
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
-#include <contrib/libs/zstd/include/zstd.h>
-
 #include <util/generic/algorithm.h>
 
 namespace {
@@ -1321,6 +1319,10 @@ bool TPartitionConfigMerger::ApplyChanges(
         return false;
     }
 
+    if (!ApplyChangesInTiers(result, changes, appData, isServerlessDomain, errDescr)) {
+        return false;
+    }
+
     if (changes.StorageRoomsSize()) {
         errDescr = TStringBuilder()
             << "StorageRooms should not be present in request.";
@@ -1584,8 +1586,23 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
     TString &errDescr)
 {
     result.MutableColumnFamilies()->CopyFrom(src.GetColumnFamilies());
-    TColumnFamiliesMerger merger(result);
+    ui32 lastReservedId = 0;
+    if (src.TiersSize() || changes.TiersSize()) {
+        // Allocate implicit family IDs after all IDs reserved by this table and request.
+        for (const auto& tier : src.GetTiers()) {
+            lastReservedId = Max(lastReservedId, tier.GetId());
+        }
+        for (const auto& tier : changes.GetTiers()) {
+            lastReservedId = Max(lastReservedId, tier.GetId());
+        }
+        for (const auto& family : changes.GetColumnFamilies()) {
+            lastReservedId = Max(lastReservedId, family.GetId());
+        }
+    }
+    TColumnFamiliesMerger merger(result, lastReservedId);
 
+    const auto isDefaultTier = [](const auto& tier) { return tier.GetName() == "default"; };
+    const bool updatesDefaultTier = AnyOf(changes.GetTiers(), isDefaultTier) || AnyOf(changes.GetAlterTiers(), isDefaultTier);
     THashSet<ui32> changedCFamilies;
 
     for (const auto& changesFamily : changes.GetColumnFamilies()) {
@@ -1651,16 +1668,10 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
             dstFamily.SetColumnCodecLevel(changesFamily.GetColumnCodecLevel());
         }
 
-        if (dstFamily.HasColumnCodecLevel()) {
-            if (dstFamily.GetColumnCodec() != NKikimrSchemeOp::ColumnCodecZSTD) {
-                errDescr = "COMPRESSION_LEVEL is supported only for ZSTD compression";
-                return false;
-            }
-            const auto maxLevel = ZSTD_maxCLevel();
-            if (dstFamily.GetColumnCodecLevel() < 0 || dstFamily.GetColumnCodecLevel() > maxLevel) {
-                errDescr = TStringBuilder() << "COMPRESSION_LEVEL for ZSTD must be in range [0, " << maxLevel << "]";
-                return false;
-            }
+        // If the default tier is also updated, validate family 0 after merging both sets of settings.
+        if (dstFamily.HasColumnCodecLevel() && (familyId != 0 || !updatesDefaultTier) &&
+            !ValidateColumnCodecLevel(dstFamily.GetColumnCodec(), dstFamily.GetColumnCodecLevel(), errDescr)) {
+            return false;
         }
 
         if (changesFamily.HasColumnCache()) {
@@ -1885,6 +1896,25 @@ bool TPartitionConfigMerger::VerifyCreateParams(
         errDescr = TStringBuilder()
                 << "Column families require StorageConfig specification";
         return false;
+    }
+
+    if (config.TiersSize()) {
+        THashSet<ui32> familyIds;
+        for (const auto& family : config.GetColumnFamilies()) {
+            familyIds.insert(family.GetId());
+        }
+        for (const auto& tier : config.GetTiers()) {
+            if (familyIds.contains(tier.GetId())) {
+                errDescr = TStringBuilder() << "Tier '" << tier.GetName()
+                    << "' and a column family share id " << tier.GetId();
+                return false;
+            }
+            if (tier.HasStorageConfig() && !hasStorageConfig) {
+                errDescr = TStringBuilder() << "A storage pool for tier '" << tier.GetName()
+                    << "' requires StorageConfig on the default column family";
+                return false;
+            }
+        }
     }
 
     for (const auto& family : config.GetColumnFamilies()) {
@@ -3364,9 +3394,10 @@ bool TImportInfo::IsExcludedFromImport(const TString& path) const {
     return false;
 }
 
-TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)
+TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container, ui32 lastReservedId)
     : Container(container)
     , DeduplicationById(TPartitionConfigMerger::DeduplicateColumnFamiliesById(Container))
+    , NextAutogenId(lastReservedId)
 {
     IdByName["default"] = 0;
 

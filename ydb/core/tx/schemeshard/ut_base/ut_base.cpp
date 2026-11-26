@@ -10,6 +10,7 @@
 
 #include <contrib/libs/zstd/include/zstd.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -5511,6 +5512,160 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::IsTable,
                             NLs::PathVersionEqual(11)});
+    }
+
+    Y_UNIT_TEST(NamedTiersSurviveAlterAndReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableDataTiering(true);
+        flags.SetEnableRowTableZstdCompression(true);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" FamilyName: "payload" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+                ColumnFamilies { Id: 0 StorageConfig {
+                    SysLog { PreferredPoolKind: "pool-kind-1" }
+                    Log { PreferredPoolKind: "pool-kind-1" }
+                    Data { PreferredPoolKind: "pool-kind-1" }
+                } }
+                ColumnFamilies { Name: "payload" }
+                Tiers { Name: "default" Codec: ColumnCodecLZ4 }
+                Tiers {
+                    Name: "archive" Codec: ColumnCodecZSTD CodecLevel: 4
+                    CacheMode: ColumnCacheModeTryKeepInMemory
+                    StorageConfig { PreferredPoolKind: "pool-kind-2" AllowOtherKinds: false }
+                    GroupIndexesInDescriptor: false
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto created = DescribePath(runtime, "/MyRoot/Table", true);
+        const auto& config = created.GetPathDescription().GetTable().GetPartitionConfig();
+        UNIT_ASSERT_VALUES_EQUAL(config.TiersSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetTiers(0).GetName(), "archive");
+        const ui32 archiveId = config.GetTiers(0).GetId();
+        UNIT_ASSERT_UNEQUAL(archiveId, 0u);
+        const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
+
+        const auto check = [&](i32 level, size_t expectedFamilies) {
+            const auto described = DescribePath(runtime, "/MyRoot/Table", true);
+            const auto& current = described.GetPathDescription().GetTable().GetPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(current.TiersSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(current.AlterTiersSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(current.ColumnFamiliesSize(), expectedFamilies);
+            const auto& tier = current.GetTiers(0);
+            UNIT_ASSERT_VALUES_EQUAL(tier.GetId(), archiveId);
+            UNIT_ASSERT_VALUES_EQUAL(tier.GetName(), "archive");
+            UNIT_ASSERT_EQUAL(tier.GetCodec(), NKikimrSchemeOp::ColumnCodecZSTD);
+            UNIT_ASSERT_VALUES_EQUAL(tier.GetCodecLevel(), level);
+            UNIT_ASSERT_EQUAL(tier.GetCacheMode(), NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory);
+            UNIT_ASSERT_VALUES_EQUAL(tier.GetStorageConfig().GetPreferredPoolKind(), "pool-kind-2");
+            UNIT_ASSERT(!tier.GetStorageConfig().GetAllowOtherKinds());
+            UNIT_ASSERT(!tier.GetGroupIndexesInDescriptor());
+            for (const auto& family : current.GetColumnFamilies()) {
+                UNIT_ASSERT_UNEQUAL(family.GetId(), archiveId);
+            }
+
+            const auto local = GetDatashardSchema(runtime, shards.front(), described.GetPathId());
+            const auto& families = local.GetPartitionConfig().GetColumnFamilies();
+            const auto* primary = FindIfPtr(families, [](const auto& family) { return family.GetId() == 0; });
+            const auto* archive = FindIfPtr(families, [=](const auto& family) { return family.GetId() == archiveId; });
+            UNIT_ASSERT(primary && archive);
+            UNIT_ASSERT_EQUAL(primary->GetColumnCodec(), NKikimrSchemeOp::ColumnCodecLZ4);
+            UNIT_ASSERT_UNEQUAL(archive->GetRoom(), primary->GetRoom());
+            UNIT_ASSERT_EQUAL(archive->GetColumnCodec(), NKikimrSchemeOp::ColumnCodecZSTD);
+            UNIT_ASSERT_VALUES_EQUAL(archive->GetColumnCodecLevel(), level);
+            UNIT_ASSERT_EQUAL(archive->GetColumnCacheMode(), NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory);
+            UNIT_ASSERT(archive->GetKeyIndexInDescriptor());
+            UNIT_ASSERT(!archive->GetGroupIndexesInDescriptor());
+            for (const auto& column : local.GetColumns()) {
+                UNIT_ASSERT_UNEQUAL(column.GetFamily(), archiveId);
+            }
+        };
+        check(4, 2);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig { AlterTiers { Name: "archive" CodecLevel: 7 } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        check(7, 2);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot",
+            TStringBuilder() << R"(Name: "Table" Columns { Name: "invalid" Type: "Utf8" Family: )" << archiveId << " }",
+            {NKikimrScheme::StatusInvalidParameter});
+
+        flags.SetEnableDataTiering(false);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "extra" Type: "Utf8" FamilyName: "extra_family" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, shards.front(), sender);
+        check(7, 3);
+    }
+
+    Y_UNIT_TEST(NamedTiersValidateAddAndAlter) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        ui64 txId = 100;
+        const TString table = R"(
+            Name: "Table" Columns { Name: "key" Type: "Uint64" } KeyColumnNames: ["key"]
+            PartitionConfig { Tiers { Name: "archive" Id: 42 } }
+        )";
+        flags.SetEnableDataTiering(false);
+        TestCreateTable(runtime, ++txId, "/MyRoot", table, {NKikimrScheme::StatusInvalidParameter});
+        flags.SetEnableDataTiering(true);
+        TestCreateTable(runtime, ++txId, "/MyRoot", table);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table" PartitionConfig { Tiers { Name: "cold" } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        flags.SetEnableRowTableZstdCompression(true);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                ColumnFamilies { Id: 0 ColumnCodecLevel: 4 }
+                AlterTiers { Name: "default" Codec: ColumnCodecZSTD }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto described = DescribePath(runtime, "/MyRoot/Table", true);
+        const auto& families = described.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies();
+        const auto* primary = FindIfPtr(families, [](const auto& family) { return family.GetId() == 0; });
+        UNIT_ASSERT(primary);
+        UNIT_ASSERT_EQUAL(primary->GetColumnCodec(), NKikimrSchemeOp::ColumnCodecZSTD);
+        UNIT_ASSERT_VALUES_EQUAL(primary->GetColumnCodecLevel(), 4);
+
+        const auto reject = [&](TStringBuf settings) {
+            TestAlterTable(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"Table\" PartitionConfig { " << settings << " }",
+                {NKikimrScheme::StatusInvalidParameter});
+        };
+        reject(R"(Tiers { Name: "archive" })");
+        reject(R"(AlterTiers { Name: "missing" })");
+        reject(R"(Tiers { Name: "another" Id: 42 })");
+        reject(R"(ColumnFamilies { Name: "ordinary" Id: 42 })");
+        reject(R"(AlterTiers { Name: "archive" Id: 43 })");
+        reject(R"(ColumnFamilies { Id: 0 ColumnCodec: ColumnCodecPlain }
+                  AlterTiers { Name: "default" Codec: ColumnCodecLZ4 })");
+        reject(R"(AlterTiers { Name: "archive" CodecLevel: 7 })");
+        flags.SetEnableTableCacheModes(false);
+        reject(R"(AlterTiers { Name: "archive" CacheMode: ColumnCacheModeTryKeepInMemory })");
+        flags.SetEnableDataTiering(false);
+        reject(R"(Tiers { Name: "new" })");
+        reject(R"(AlterTiers { Name: "archive" Codec: ColumnCodecLZ4 })");
     }
 
     Y_UNIT_TEST(ConfigColumnFamily) {

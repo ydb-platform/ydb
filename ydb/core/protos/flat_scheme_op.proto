@@ -167,6 +167,17 @@ message TFamilyDescription {
     optional bool GroupIndexesInDescriptor = 13 [default = true]; // Other group indexes of tier parts
 }
 
+message TTierDescription {
+    optional uint32 Id = 1; // Shares the table's column family ID space.
+    optional string Name = 2;
+    optional EColumnCodec Codec = 3;
+    optional int32 CodecLevel = 4;
+    optional EColumnCacheMode CacheMode = 5;
+    optional TStorageSettings StorageConfig = 6;
+    optional bool KeyIndexInDescriptor = 7 [default = true];
+    optional bool GroupIndexesInDescriptor = 8 [default = true];
+}
+
 message TFastSplitSettings {
     optional uint64 SizeThreshold = 1;
     optional uint64 RowCountThreshold = 2;
@@ -232,11 +243,16 @@ message TPartitionConfig {
     // For fulltext indexes - to determine if the table is an impl table of an index
     optional ESpecialTableType SpecialTableType = 30;
 
+    // Named tier definitions. A schema change adds entries to this collection.
+    // Settings for the default tier are stored in column family 0.
+    repeated TTierDescription Tiers = 31;
     // SchemeShard resolves column and family IDs before sending the policy to DataShard.
     // ALTER replaces the policy when present and preserves it when omitted.
     optional TTieringPolicySettings TieringPolicy = 32;
     reserved 33;
     reserved "ResetTieringPolicy";
+    // Request-only patches to existing named tiers.
+    repeated TTierDescription AlterTiers = 34;
 }
 
 message TByKeyFilterPrefix {

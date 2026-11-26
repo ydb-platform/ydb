@@ -21,12 +21,14 @@ class TWriteSession : public IWriteSession,
 private:
     friend class TSimpleBlockingWriteSession;
     friend class TTopicClient;
+    friend struct TProducerRetryPolicyTestHelper;
 
 public:
     TWriteSession(const TWriteSessionSettings& settings,
             std::shared_ptr<TTopicClient::TImpl> client,
             std::shared_ptr<TGRpcConnectionsImpl> connections,
-            TDbDriverStatePtr dbDriverState);
+            TDbDriverStatePtr dbDriverState,
+            bool closeOnInactivePartition = false);
 
     std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block = false) override;
     std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false,

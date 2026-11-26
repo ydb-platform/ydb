@@ -551,7 +551,7 @@ void TProducer::TEventsWorker::HandleSessionClosedEvent(TSessionClosedEvent&& ev
         partitionIt->second.Locked_ = true;
     }
 
-    if (event.GetStatus() == EStatus::OVERLOADED) {
+    if (IsInactivePartitionError(event.GetStatus(), event.GetIssues())) {
         Producer->HandleAutoPartitioning(partition);
         return;
     }
@@ -961,7 +961,6 @@ TProducer::WrappedWriteSessionPtr TProducer::TSessionsWorker::CreateWriteSession
         .ProducerId(producerId)
         .MessageGroupId(producerId)
         .MaxMemoryUsage(std::numeric_limits<std::uint64_t>::max())
-        .RetryPolicy(Producer->RetryPolicy)
         .EventHandlers(TWriteSessionSettings::TEventHandlers()
         .ReadyToAcceptHandler({})
         .AcksHandler({})
@@ -972,7 +971,7 @@ TProducer::WrappedWriteSessionPtr TProducer::TSessionsWorker::CreateWriteSession
         alteredSettings.PartitionId(partitionId);
     }
     auto writeSession = std::make_shared<TWriteSessionWrapper>(
-        Producer->Client->CreateWriteSession(alteredSettings),
+        Producer->Client->CreateWriteSession(alteredSettings, directToPartition),
         partition,
         directToPartition
     );
@@ -1525,42 +1524,6 @@ void TProducer::TMessagesWorker::RebuildPendingMessagesIndex(std::uint32_t parti
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// TProducer::TProducerRetryPolicy
-
-TProducer::TProducerRetryPolicy::TProducerRetryPolicy(::IRetryPolicy<EStatus>::TPtr userPolicy)
-    : UserPolicy(userPolicy ? std::move(userPolicy) : NYdb::NTopic::IRetryPolicy::GetDefaultPolicy())
-{}
-
-typename TProducer::TProducerRetryPolicy::IRetryState::TPtr TProducer::TProducerRetryPolicy::CreateRetryState() const {
-    struct TRetryState : public IRetryState {
-        explicit TRetryState(::IRetryPolicy<EStatus>::TPtr userPolicy)
-            : UserPolicy(std::move(userPolicy))
-        {}
-
-        TMaybe<TDuration> GetNextRetryDelay(EStatus status) override {
-            // OVERLOADED closes this session so the producer can switch partitions
-            // (HandleAutoPartitioning). A user retry would keep the session on the
-            // inactive partition, so the user policy must not see this status.
-            if (status == EStatus::OVERLOADED) {
-                return Nothing();
-            }
-
-            if (!UserRetryState) {
-                UserRetryState = UserPolicy->CreateRetryState();
-            }
-
-            return UserRetryState->GetNextRetryDelay(status);
-        }
-
-    private:
-        ::IRetryPolicy<EStatus>::TPtr UserPolicy;
-        IRetryState::TPtr UserRetryState;
-    };
-
-    return std::make_unique<TRetryState>(UserPolicy);
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TProducer::Metrics
 
 void TProducer::TMetricGauge::Add(std::uint64_t value) {
@@ -1769,7 +1732,6 @@ TProducer::TProducer(
     SessionsWorker = std::make_shared<TSessionsWorker>(this);
     MessagesWorker = std::make_shared<TMessagesWorker>(this);
     EventsWorker = std::make_shared<TEventsWorker>(this);
-    RetryPolicy = std::make_shared<TProducerRetryPolicy>(Settings.RetryPolicy_);
 
     if (Settings.AsyncExecutionMode_) {
         MainWorkerThread = SystemThreadFactory()->Run([this] {
@@ -2051,7 +2013,9 @@ void TProducer::GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrappedSessio
         }
     }
 
-    if (!receivedSessionClosedEvent || receivedSessionClosedEvent->GetStatus() == EStatus::SUCCESS || receivedSessionClosedEvent->GetStatus() == EStatus::OVERLOADED) {
+    if (!receivedSessionClosedEvent || receivedSessionClosedEvent->IsSuccess() ||
+        IsInactivePartitionError(receivedSessionClosedEvent->GetStatus(), receivedSessionClosedEvent->GetIssues()))
+    {
         LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Failed to get session closed event");
         EventsWorker->HandleSessionClosedEvent(std::move(*sessionClosedEvent), wrappedSession->Partition);
     } else {

@@ -13,6 +13,8 @@
 
 namespace NYdb::inline Dev::NTopic {
 
+bool IsInactivePartitionError(EStatus status, const NIssue::TIssues& issues);
+
 class TWriteSessionEventsQueue: public TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor> {
     using TParent = TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor>;
 
@@ -154,6 +156,7 @@ class TWriteSessionImpl : public TContinuationTokenIssuer,
 private:
     friend class TWriteSession;
     friend class TSimpleBlockingWriteSession;
+    friend struct TProducerRetryPolicyTestHelper;
 
 private:
     using TClientMessage = Ydb::Topic::StreamWriteMessage::FromClient;
@@ -373,7 +376,8 @@ public:
     TWriteSessionImpl(const TWriteSessionSettings& settings,
             std::shared_ptr<TTopicClient::TImpl> client,
             std::shared_ptr<TGRpcConnectionsImpl> connections,
-            TDbDriverStatePtr dbDriverState);
+            TDbDriverStatePtr dbDriverState,
+            bool closeOnInactivePartition);
 
     std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block = false);
     std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false,
@@ -499,6 +503,7 @@ private:
 
 private:
     TWriteSessionSettings Settings;
+    const bool CloseOnInactivePartition;
     std::shared_ptr<TTopicClient::TImpl> Client;
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
 

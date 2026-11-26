@@ -181,8 +181,10 @@ TWriteSessionImpl::TWriteSessionImpl(
         const TWriteSessionSettings& settings,
          std::shared_ptr<TTopicClient::TImpl> client,
          std::shared_ptr<TGRpcConnectionsImpl> connections,
-         TDbDriverStatePtr dbDriverState)
+         TDbDriverStatePtr dbDriverState,
+         bool closeOnInactivePartition)
     : Settings(settings)
+    , CloseOnInactivePartition(closeOnInactivePartition)
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
@@ -254,6 +256,23 @@ void TWriteSessionImpl::Start(const TDuration& delay) {
     Connect(delay);
 }
 
+bool IsInactivePartitionError(EStatus status, const NIssue::TIssues& issues) {
+    if (status != EStatus::OVERLOADED) {
+        return false;
+    }
+
+    const std::function<bool(const NIssue::TIssue&, uint16_t)> keepLooking =
+        [](const NIssue::TIssue& issue, uint16_t) {
+            return issue.GetCode() != WRITE_ERROR_PARTITION_INACTIVE;
+        };
+    for (const auto& issue : issues) {
+        if (!NIssue::WalkThroughIssues(issue, false, keepLooking)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Returns true if we need to switch to another DirectWriteToPartitionId.
 bool NeedToSwitchPartition(const TPlainStatus& status) {
     switch (status.Status) {
@@ -312,10 +331,14 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
         PreferredPartitionLocation = {};
     }
 
-    if (!RetryState) {
-        RetryState = Settings.RetryPolicy_->CreateRetryState();
+    TMaybe<TDuration> nextDelay;
+    // Close a producer's direct session so the producer can refresh its partition routing.
+    if (!CloseOnInactivePartition || !IsInactivePartitionError(status.Status, status.Issues)) {
+        if (!RetryState) {
+            RetryState = Settings.RetryPolicy_->CreateRetryState();
+        }
+        nextDelay = RetryState->GetNextRetryDelay(status.Status);
     }
-    auto nextDelay = RetryState->GetNextRetryDelay(status.Status);
 
     if (nextDelay) {
         result.StartDelay = *nextDelay;

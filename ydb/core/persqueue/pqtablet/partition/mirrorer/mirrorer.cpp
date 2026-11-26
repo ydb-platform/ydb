@@ -271,7 +271,8 @@ void TMirrorer::ProcessWriteResponse(
 
     for (auto& result : response.GetCmdWriteResult()) {
         if (result.GetAlreadyWritten()) {
-            PQ_ENSURE(!WasSuccessfulRecording)("got write result 'already written', but we have successful recording before", result);
+            PQ_ENSURE(!WasSuccessfulRecording,
+                {"got write result 'already written', but we have successful recording before", result});
             ProcessError(ctx, TStringBuilder() << "got write result 'already written': " << result);
         } else {
             WasSuccessfulRecording = true;

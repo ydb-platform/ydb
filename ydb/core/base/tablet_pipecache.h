@@ -153,4 +153,7 @@ IActor* CreatePipePerNodeCache(const TIntrusivePtr<TPipePerNodeCacheConfig> &con
 TActorId MakePipePerNodeCacheID(EPipePerNodeCache kind);
 TActorId MakePipePerNodeCacheID(bool allowFollower);
 
+inline constexpr ui32 VectorReadFollowerPipeCacheCount = 32;
+TActorId MakeVectorReadFollowerPipeCacheID(ui32 index);
+
 }

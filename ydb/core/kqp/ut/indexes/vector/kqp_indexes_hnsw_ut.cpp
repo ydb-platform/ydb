@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
@@ -1766,6 +1767,121 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
 }
 
 Y_UNIT_TEST_SUITE(KqpHnswReplicaReadiness) {
+    Y_UNIT_TEST(HnswReadsUseMultipleFollowersAndKeepPipeCacheAffinity) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true)
+            .SetNeedsStatsCollectors(true).SetEnableForceFollowers(true).SetUseRealThreads(false)};
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().ExtractValueSync().GetSession(); });
+        auto scheme = [&](TString sql) {
+            const auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(sql).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme(R"(
+            CREATE TABLE `/Root/HnswRouting` (pk Int64 NOT NULL, emb String, PRIMARY KEY(pk),
+                INDEX idx GLOBAL USING hnsw ON (emb)
+                WITH (distance=euclidean, vector_type=float, vector_dimension=2,
+                      levels=1, clusters=1, min_rows=1));
+        )");
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, R"(
+            UPSERT INTO `/Root/HnswRouting` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), "FloatVector"));
+        )"); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        scheme(R"(
+            ALTER TABLE `/Root/HnswRouting/idx/indexImplPostingTable`
+                SET (READ_REPLICAS_SETTINGS = "PER_AZ:3");
+        )");
+
+        THashSet<TActorId> cacheActors;
+        for (ui32 i = 0; i < VectorReadFollowerPipeCacheCount; ++i) {
+            const auto actor = runtime.GetLocalServiceId(MakeVectorReadFollowerPipeCacheID(i));
+            UNIT_ASSERT(actor);
+            UNIT_ASSERT(cacheActors.insert(actor).second);
+        }
+        const auto leaderCache = runtime.GetLocalServiceId(MakePipePerNodeCacheID(false));
+        THashMap<TActorId, TActorId> selected;
+        THashSet<TActorId> usedCaches;
+        THashSet<ui32> usedFollowers;
+        TActorId retriedReader;
+        ui32 forwardsOnRetriedReader = 0;
+        ui32 cancelsOnRetriedReader = 0;
+        bool unlinkedRetriedReader = false;
+        bool staleRead = true;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
+                const auto& forward = *ev->Get<TEvPipeCache::TEvForward>();
+                const auto cache = ev->GetRecipientRewrite();
+                if (const auto* read = dynamic_cast<TEvDataShard::TEvRead*>(forward.Ev.Get());
+                        read && read->Record.HasVectorTopK()) {
+                    const auto [it, inserted] = selected.emplace(ev->Sender, cache);
+                    UNIT_ASSERT(inserted || it->second == cache);
+                    if (!staleRead) {
+                        UNIT_ASSERT_VALUES_EQUAL(cache, leaderCache);
+                    } else {
+                        UNIT_ASSERT(cacheActors.contains(cache));
+                        usedCaches.insert(cache);
+                        if (!retriedReader) {
+                            retriedReader = ev->Sender;
+                            ++forwardsOnRetriedReader;
+                            runtime.Send(new IEventHandle(retriedReader, cache,
+                                new TEvPipeCache::TEvDeliveryProblem(forward.TabletId, true)));
+                            return TTestActorRuntime::EEventAction::DROP;
+                        }
+                        if (ev->Sender == retriedReader) {
+                            ++forwardsOnRetriedReader;
+                            UNIT_ASSERT(forward.Options.Subscribe);
+                        }
+                    }
+                } else if (const auto it = selected.find(ev->Sender); it != selected.end()) {
+                    UNIT_ASSERT_VALUES_EQUAL(cache, it->second);
+                    if (ev->Sender == retriedReader && forward.Ev->Type() == TEvDataShard::TEvReadCancel::EventType) {
+                        ++cancelsOnRetriedReader;
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvPipeCache::TEvUnlink::EventType) {
+                if (const auto it = selected.find(ev->Sender); it != selected.end()) {
+                    UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), it->second);
+                    unlinkedRetriedReader |= ev->Sender == retriedReader;
+                }
+            } else if (staleRead && ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType
+                    && ev->Get<TEvDataShard::TEvRead>()->Record.HasVectorTopK()) {
+                const auto* shard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(ev->GetRecipientRewrite()));
+                UNIT_ASSERT(shard && shard->IsFollower());
+                usedFollowers.insert(shard->FollowerId());
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+
+        auto search = [&](const TTxSettings& tx) {
+            const auto result = kikimr.RunCall([&] { return session.ExecuteDataQuery(R"(
+                $q = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+                SELECT pk FROM `/Root/HnswRouting/idx/indexImplPostingTable`
+                ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 1;
+            )", TTxControl::BeginTx(tx).CommitTx()).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1]]");
+        };
+        for (ui32 i = 0; i < 48 && usedFollowers.size() < 2; ++i) {
+            search(TTxSettings::StaleRO());
+        }
+        UNIT_ASSERT_GE(usedCaches.size(), 2);
+        UNIT_ASSERT_GE(usedFollowers.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(forwardsOnRetriedReader, 2);
+        UNIT_ASSERT_GE(cancelsOnRetriedReader, 1);
+        runtime.WaitFor("retried reader to unlink from its cache", [&] { return unlinkedRetriedReader; });
+
+        staleRead = false;
+        const size_t reads = selected.size();
+        search(TTxSettings::SnapshotRO());
+        UNIT_ASSERT_GT(selected.size(), reads);
+    }
+
     void CheckInitialBuildReplicaReadiness(bool reboot, bool expire, bool disable) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);

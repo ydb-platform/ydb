@@ -569,4 +569,11 @@ TActorId MakePipePerNodeCacheID(bool allowFollower) {
     return MakePipePerNodeCacheID(allowFollower ? EPipePerNodeCache::Follower : EPipePerNodeCache::Leader);
 }
 
+TActorId MakeVectorReadFollowerPipeCacheID(ui32 index) {
+    Y_ABORT_UNLESS(index < VectorReadFollowerPipeCacheCount);
+    char name[12] = "VecReadPipe";
+    name[11] = static_cast<char>(index);
+    return TActorId(0, TStringBuf(name, sizeof(name)));
+}
+
 }

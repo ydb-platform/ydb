@@ -1,14 +1,20 @@
 #pragma once
 
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 
 #include <util/generic/array_ref.h>
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
+
+namespace NKikimrSchemeOp {
+    enum ECdcStreamHeartbeatMode : int;
+}
+
+namespace NKikimrTxDataShard {
+    class TSplitMergeDescription;
+}
 
 namespace NKikimr::NDataShard {
 

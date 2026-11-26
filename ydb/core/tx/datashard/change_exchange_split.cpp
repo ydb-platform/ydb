@@ -94,8 +94,13 @@ public:
         return NKikimrServices::TActivity::CHANGE_EXCHANGE_SPLIT_ACTOR;
     }
 
-    explicit TCdcPartitionWorker(const TActorId& parent, ui32 partitionId, ui64 tabletId,
-            ui64 srcTabletId, const TVector<ui64>& dstTabletIds, std::shared_ptr<const TKeyRangeSplit> keyRangeSplit)
+    explicit TCdcPartitionWorker(
+            const TActorId& parent,
+            ui32 partitionId,
+            ui64 tabletId,
+            ui64 srcTabletId,
+            const TVector<ui64>& dstTabletIds,
+            std::shared_ptr<const TKeyRangeSplit> keyRangeSplit)
         : Parent(parent)
         , PartitionId(partitionId)
         , TabletId(tabletId)
@@ -332,9 +337,7 @@ class TCdcWorker
 
     void ResolveTopic(const TPathId& pathId) {
         auto request = MakeHolder<TNavigate>();
-        auto entry = MakeNavigateEntry(pathId, TNavigate::OpTopic);
-        entry.SyncVersion = HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
-        request->ResultSet.push_back(std::move(entry));
+        request->ResultSet.emplace_back(MakeNavigateEntry(pathId, TNavigate::OpTopic));
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
         Become(&TThis::StateResolveTopic);
@@ -357,11 +360,15 @@ class TCdcWorker
         return nullptr;
     }
 
-    TVector<ui64> GetChildrenToRegister(const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition,
-            const std::shared_ptr<const TKeyRangeSplit>& keyRangeSplit, TConstArrayRef<NScheme::TTypeInfo> topicKeySchema) const {
+    TVector<ui64> GetChildrenToRegister(
+        const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition,
+        const std::shared_ptr<const TKeyRangeSplit>& keyRangeSplit,
+        TConstArrayRef<NScheme::TTypeInfo> topicKeySchema) const
+    {
         if (keyRangeSplit) {
             return keyRangeSplit->GetChildrenIntersecting(NPQ::TPartitionKeyRange::Parse(partition.GetKeyRange()), topicKeySchema);
         }
+
         return DstTabletIds;
     }
 
@@ -518,8 +525,12 @@ public:
         return NKikimrServices::TActivity::CHANGE_EXCHANGE_SPLIT_ACTOR;
     }
 
-    explicit TCdcWorker(const TActorId& parent, const TPathId& pathId,
-            ui64 srcTabletId, const TVector<ui64>& dstTabletIds, std::shared_ptr<const TKeyRangeSplit> keyRangeSplit)
+    explicit TCdcWorker(
+            const TActorId& parent,
+            const TPathId& pathId,
+            ui64 srcTabletId,
+            const TVector<ui64>& dstTabletIds,
+            std::shared_ptr<const TKeyRangeSplit> keyRangeSplit)
         : Parent(parent)
         , PathId(pathId)
         , SrcTabletId(srcTabletId)
@@ -633,7 +644,9 @@ public:
         return NKikimrServices::TActivity::CHANGE_EXCHANGE_SPLIT_ACTOR;
     }
 
-    explicit TChangeExchageSplit(const TDataShard* self, const TVector<ui64>& dstDataShards,
+    explicit TChangeExchageSplit(
+            const TDataShard* self,
+            const TVector<ui64>& dstDataShards,
             const NKikimrTxDataShard::TSplitMergeDescription& splitDescription)
         : TActorBootstrapped()
         , DataShard{self->TabletID(), self->Generation(), self->SelfId()}
@@ -684,7 +697,9 @@ private:
 
 }; // TChangeExchageSplit
 
-IActor* CreateChangeExchangeSplit(const TDataShard* self, const TVector<ui64>& dstDataShards,
+IActor* CreateChangeExchangeSplit(
+        const TDataShard* self,
+        const TVector<ui64>& dstDataShards,
         const NKikimrTxDataShard::TSplitMergeDescription& splitDescription)
 {
     return new TChangeExchageSplit(self, dstDataShards, splitDescription);

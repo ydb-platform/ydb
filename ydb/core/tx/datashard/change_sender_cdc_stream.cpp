@@ -44,13 +44,15 @@ static THolder<IChangeRecordSerializer> CreateCdcStreamSerializer(const TUserTab
         .TraceIds = stream.TraceIds,
         .Compression = stream.Compression,
         .CompressionLevel = stream.CompressionLevel,
+        .WriteRowKeys = stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange,
     }));
 }
 
 namespace {
 
 TVector<ui64> MakeIntersectingPartitionIds(const TVector<TKeyDesc::TPartitionInfo>& partitions,
-        const TSerializedTableRange& shardKeyRange, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+        const TSerializedTableRange& shardKeyRange, TConstArrayRef<NScheme::TTypeInfo> keyTypes)
+{
     const auto shardRange = MakeKeyRange(shardKeyRange.From, shardKeyRange.To);
     TVector<ui64> partitionIds;
     TPartitionKeyRange partitionRange;
@@ -158,9 +160,6 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
             cmd.SetIgnoreQuotaDeadline(true);
 
             Serializer->Serialize(cmd, record);
-            if (WriteRowKeys && record.GetKind() == TChangeRecord::EKind::CdcDataChange) {
-                cmd.SetChoosePartitionKey(TSerializedCellVec::Serialize(record.GetKey()));
-            }
 
             Pending.push_back(seqNo);
         }
@@ -317,7 +316,6 @@ public:
         , ShardId(shardId)
         , SourceId(ToString(DataShard.TabletId))
         , Serializer(CreateCdcStreamSerializer(stream, DataShard.TabletId))
-        , WriteRowKeys(stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange)
     {
     }
 
@@ -344,7 +342,6 @@ private:
     const ui64 ShardId;
     const TString SourceId;
     THolder<IChangeRecordSerializer> Serializer;
-    const bool WriteRowKeys;
 
     TActorId Writer;
     i64 MaxSeqNo = 0;
@@ -562,11 +559,9 @@ class TCdcChangeSenderMain
 
     /// ResolveTopic
 
-    void ResolveTopic(bool syncVersion = false) {
+    void ResolveTopic() {
         auto request = MakeHolder<TNavigate>();
-        auto& entry = request->ResultSet.emplace_back(MakeNavigateEntry(TopicPathId, TNavigate::OpTopic));
-        entry.SyncVersion = syncVersion;
-        SyncingTopicVersion = syncVersion;
+        request->ResultSet.emplace_back(MakeNavigateEntry(TopicPathId, TNavigate::OpTopic));
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
         Become(&TThis::StateResolveTopic);
@@ -621,9 +616,6 @@ class TCdcChangeSenderMain
 
         const auto topicVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
         if (TopicVersion && TopicVersion == topicVersion) {
-            if (Stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange && !SyncingTopicVersion) {
-                return ResolveTopic(true);
-            }
             CreateSenders();
             return Become(&TThis::StateMain);
         }
@@ -777,7 +769,11 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_CDC_ACTOR_MAIN;
     }
 
-    explicit TCdcChangeSenderMain(const TDataShardId& dataShard, const TPathId& streamPathId, const TUserTable::TCdcStream& stream, const TSerializedTableRange& shardKeyRange)
+    explicit TCdcChangeSenderMain(
+            const TDataShardId& dataShard,
+            const TPathId& streamPathId,
+            const TUserTable::TCdcStream& stream,
+            const TSerializedTableRange& shardKeyRange)
         : TActorBootstrapped()
         , TChangeSender(this, this, this, this, dataShard.ActorId)
         , StreamPathId(streamPathId)
@@ -835,7 +831,6 @@ private:
     TUserTable::TCdcStream Stream;
     TPathId TopicPathId;
     ui64 TopicVersion;
-    bool SyncingTopicVersion = false;
     THolder<NKikimr::TKeyDesc> KeyDesc;
     THashMap<ui32, ui64> PartitionToShard;
 
@@ -843,7 +838,12 @@ private:
 
 }; // TCdcChangeSenderMain
 
-IActor* CreateCdcStreamChangeSender(const TDataShardId& dataShard, const TPathId& streamPathId, const TUserTable::TCdcStream& stream, const TSerializedTableRange& shardKeyRange) {
+IActor* CreateCdcStreamChangeSender(
+    const TDataShardId& dataShard,
+    const TPathId& streamPathId,
+    const TUserTable::TCdcStream& stream,
+    const TSerializedTableRange& shardKeyRange)
+{
     return new TCdcChangeSenderMain(dataShard, streamPathId, stream, shardKeyRange);
 }
 

@@ -6659,13 +6659,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (id, name, value) VALUES
             (1u, "b"u, 10u),
+            (2147483646u, "zz"u, 15u),
             (2147483647u, "zz"u, 20u),
             (3000000000u, "a"u, 30u);
         )");
 
         // then
         TVector<TVector<std::pair<TString, TString>>> records(2);
-        for (ui32 attempt = 0; attempt < 60 && !(HasKey(records[0], R"(2147483647,"zz")") && HasKey(records[1], R"(3000000000,"a")")); ++attempt) {
+        for (ui32 attempt = 0; attempt < 60 && !(HasKey(records[0], R"(2147483646,"zz")") && HasKey(records[1], R"(2147483647,"zz")") && HasKey(records[1], R"(3000000000,"a")")); ++attempt) {
             SimulateSleep(server, TDuration::Seconds(1));
             for (ui32 i = 0; i < records.size(); ++i) {
                 records[i] = GetRecords(runtime, edgeActor, "/Root/Table/Stream", i);
@@ -6673,11 +6674,13 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
         UNIT_ASSERT(HasKey(records[0], R"(1,"b")"));
-        UNIT_ASSERT(HasKey(records[0], R"(2147483647,"zz")"));
+        UNIT_ASSERT(HasKey(records[0], R"(2147483646,"zz")"));
+        UNIT_ASSERT(!HasKey(records[0], R"(2147483647,"zz")"));
         UNIT_ASSERT(!HasKey(records[0], R"(3000000000,"a")"));
+        UNIT_ASSERT(HasKey(records[1], R"(2147483647,"zz")"));
         UNIT_ASSERT(HasKey(records[1], R"(3000000000,"a")"));
         UNIT_ASSERT(!HasKey(records[1], R"(1,"b")"));
-        UNIT_ASSERT(!HasKey(records[1], R"(2147483647,"zz")"));
+        UNIT_ASSERT(!HasKey(records[1], R"(2147483646,"zz")"));
     }
 
     TString SerializeUint32Key(ui32 value) {
@@ -6701,10 +6704,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
         CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions());
 
         TVector<TString> rowKeys;
+        bool heartbeatSent = false;
         bool heartbeatHasRowKey = false;
         auto observeWrites = runtime.AddObserver<TEvPersQueue::TEvRequest>([&](auto& ev) {
             for (const auto& write : ev->Get()->Record.GetPartitionRequest().GetCmdWrite()) {
                 if (write.HasHeartbeat()) {
+                    heartbeatSent = true;
                     heartbeatHasRowKey |= write.HasChoosePartitionKey();
                 } else if (write.HasData()) {
                     rowKeys.push_back(write.GetChoosePartitionKey());
@@ -6733,10 +6738,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         Sort(rowKeys);
         UNIT_ASSERT_VALUES_EQUAL(rowKeys, TVector<TString>({SerializeUint32Key(1), SerializeUint32Key(2)}));
+        UNIT_ASSERT(heartbeatSent);
         UNIT_ASSERT(!heartbeatHasRowKey);
     }
 
-    bool IsSourceRegistered(TTestActorRuntime& runtime, const TActorId& sender, ui32 partitionId, ui64 dataShardId) {
+    NKikimrPQ::TMessageGroupInfo::EState GetSourceState(TTestActorRuntime& runtime, const TActorId& sender, ui32 partitionId, ui64 dataShardId) {
         auto request = MakeHolder<TEvPersQueue::TEvRequest>();
         auto& record = *request->Record.MutablePartitionRequest();
         record.SetPartition(partitionId);
@@ -6746,7 +6752,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         auto response = runtime.GrabEdgeEventRethrow<TEvPersQueue::TEvResponse>(sender);
         const auto& result = response->Get()->Record.GetPartitionResponse().GetCmdGetMaxSeqNoResult().GetSourceIdInfo();
         UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
-        return result.Get(0).GetState() == NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED;
+        return result.Get(0).GetState();
     }
 
     Y_UNIT_TEST(ShouldRegisterSplitChildrenOnlyInPartitionsOfTheirRangeWhenKeyRangeHeartbeats) {
@@ -6784,11 +6790,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
         UNIT_ASSERT_VALUES_EQUAL(children.size(), 2);
 
         for (const auto child : children) {
-            for (ui32 attempt = 0; attempt < 60 && !IsSourceRegistered(runtime, edgeActor, 1, child); ++attempt) {
+            for (ui32 attempt = 0; attempt < 60 && GetSourceState(runtime, edgeActor, 1, child) != NKikimrPQ::TMessageGroupInfo::STATE_PENDING_REGISTRATION; ++attempt) {
                 SimulateSleep(server, TDuration::Seconds(1));
             }
-            UNIT_ASSERT_C(IsSourceRegistered(runtime, edgeActor, 1, child), child);
-            UNIT_ASSERT_C(!IsSourceRegistered(runtime, edgeActor, 0, child), child);
+            UNIT_ASSERT_VALUES_EQUAL_C(GetSourceState(runtime, edgeActor, 1, child), NKikimrPQ::TMessageGroupInfo::STATE_PENDING_REGISTRATION, child);
+            UNIT_ASSERT_VALUES_EQUAL_C(GetSourceState(runtime, edgeActor, 0, child), NKikimrPQ::TMessageGroupInfo::STATE_UNKNOWN, child);
         }
     }
 
@@ -6839,10 +6845,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
         const auto child = children.at(0);
 
         for (ui32 partitionId : {0u, 1u}) {
-            for (ui32 attempt = 0; attempt < 60 && !IsSourceRegistered(runtime, edgeActor, partitionId, child); ++attempt) {
+            for (ui32 attempt = 0; attempt < 60 && GetSourceState(runtime, edgeActor, partitionId, child) != NKikimrPQ::TMessageGroupInfo::STATE_PENDING_REGISTRATION; ++attempt) {
                 SimulateSleep(server, TDuration::Seconds(1));
             }
-            UNIT_ASSERT_C(IsSourceRegistered(runtime, edgeActor, partitionId, child), partitionId);
+            UNIT_ASSERT_VALUES_EQUAL_C(GetSourceState(runtime, edgeActor, partitionId, child), NKikimrPQ::TMessageGroupInfo::STATE_PENDING_REGISTRATION, partitionId);
         }
 
         UNIT_ASSERT_EQUAL(parentToPartitions[NPQ::NSourceIdEncoding::EncodeSimple(ToString(parents.at(0)))], THashSet<ui32>({0}));
@@ -6850,7 +6856,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         UNIT_ASSERT(!childRegisteredWithoutKeyRange);
     }
 
-    Y_UNIT_TEST(ShouldResolveTopicWithSyncVersionWhenPartitionWriterFailsAndKeyRangeHeartbeats) {
+    Y_UNIT_TEST(ShouldDeliverChangesAfterPartitionWriterFailsWhenKeyRangeHeartbeats) {
         // given
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
@@ -6874,28 +6880,18 @@ Y_UNIT_TEST_SUITE(Cdc) {
             SimulateSleep(server, TDuration::Seconds(1));
         }
 
-        ui32 syncTopicResolves = 0;
-        auto observeResolves = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySet>([&](auto& ev) {
-            for (const auto& entry : ev->Get()->Request->ResultSet) {
-                if (entry.Operation == NSchemeCache::TSchemeCacheNavigate::OpTopic && entry.SyncVersion) {
-                    ++syncTopicResolves;
-                }
-            }
-        });
-
         // when
         RebootTablet(runtime, ResolvePqTablet(runtime, edgeActor, "/Root/Table/Stream", 0), edgeActor);
         ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (2, 20);");
 
         // then
         bool delivered = false;
-        for (ui32 attempt = 0; attempt < 60 && !(delivered && syncTopicResolves); ++attempt) {
+        for (ui32 attempt = 0; attempt < 60 && !delivered; ++attempt) {
             SimulateSleep(server, TDuration::Seconds(1));
             delivered = HasKey(GetRecords(runtime, edgeActor, "/Root/Table/Stream", 0), "2");
         }
 
         UNIT_ASSERT(delivered);
-        UNIT_ASSERT_VALUES_UNEQUAL(syncTopicResolves, 0);
     }
 
     Y_UNIT_TEST(InitialScanAndResolvedTimestamps) {

@@ -1,5 +1,7 @@
 #include "cdc_stream_key_range.h"
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_borders.h>
 
 #include <util/generic/algorithm.h>

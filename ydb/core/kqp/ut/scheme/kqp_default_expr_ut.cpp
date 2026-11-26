@@ -729,6 +729,21 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;[42u]]]");
     }
 
+    Y_UNIT_TEST(DisableAnsiInPragmaRejectsExpressionDefault) {
+        TTestFixture fixture;
+        const std::string disabled = "PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;\n";
+        const std::string column = "v Bool DEFAULT (RandomNumber(1) * 0ul + 2ul) IN AsList(1ul, NULL)";
+        fixture.Rejects(DefaultExprDDL(column, disabled), "DisableAnsiInForEmptyOrNullableItemsCollections");
+
+        fixture.Exec(DefaultExprDDL("v Uint32 DEFAULT 5", disabled));
+        UNIT_ASSERT(fixture.ColumnDesc("/Root/TestTable", "v").HasDefaultFromLiteral());
+        fixture.Exec("DROP TABLE TestTable;");
+
+        fixture.Exec(DefaultExprDDL(column, disabled + "PRAGMA AnsiInForEmptyOrNullableItemsCollections;\n"));
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;#]]");
+    }
+
     Y_UNIT_TEST(UnrelatedDeclareAccepted) {
         TTestFixture fixture;
         // Unrelated query declarations are not part of the stored expression
@@ -1216,6 +1231,19 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
 
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;#]]");
+    }
+
+    Y_UNIT_TEST(SetNotNullRejectsOptionalExpressionDefault) {
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(DefaultExprDDL(
+            R"(v Uint64 DEFAULT CAST("invalid" || CAST(RandomNumber(1) AS String) AS Uint64))"));
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (1, 42ul);");
+
+        fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET NOT NULL;", "DEFAULT expression can evaluate to NULL");
+        UNIT_ASSERT(!fixture.ColumnDesc("/Root/TestTable", "v").GetNotNull());
+        fixture.Check("INSERT INTO TestTable (k) VALUES (2) RETURNING k, v;", "[[2;#]]");
     }
 
     Y_UNIT_TEST(SetAndDropNotNullKeepExpressionDefault) {

@@ -23,8 +23,14 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/sql_types/normalize_name.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
+#include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
+#include <yql/essentials/sql/v1/translation/sql_query.h>
 
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
@@ -800,6 +806,56 @@ namespace {
         return false;
     }
 
+    bool CheckDefaultExpressionPragmas(const TStringBuf prefix, const NSQLTranslation::TTranslationSettings& settings,
+        TPositionHandle pos, TExprContext& ctx)
+    {
+        if (prefix.empty()) {
+            return true;
+        }
+
+        const NSQLTranslationV1::TParsers parsers{
+            NSQLTranslationV1::MakeAntlr4ParserFactory(), NSQLTranslationV1::MakeAntlr4AnsiParserFactory()
+        };
+        TIssues issues;
+        google::protobuf::Arena arena;
+        const auto* ast = NSQLTranslationV1::SqlAST(parsers, TString(prefix), settings.File, issues,
+            NSQLTranslation::SQL_MAX_PARSER_ERRORS, settings.AnsiLexer, &arena);
+        if (!ast) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), "Cannot parse the SQL context of the DEFAULT expression"));
+            return false;
+        }
+
+        const NSQLTranslation::TParsedTokenList tokens;
+        NSQLTranslationV1::TContext sqlContext({}, parsers, settings, {}, tokens, issues);
+        NSQLTranslationV1::TSqlQuery sqlQuery(sqlContext, settings.Mode, /*topLevel=*/true);
+        const auto& query = static_cast<const NSQLv1Generated::TSQLv1ParserAST&>(*ast).GetRule_sql_query();
+        bool disabled = false;
+        for (const auto* statement : NSQLTranslationV1::Statements(query)) {
+            if (!statement->HasAlt_sql_stmt_core1()) {
+                continue;
+            }
+            const auto& pragma = statement->GetAlt_sql_stmt_core1().GetRule_pragma_stmt1();
+            if (!NSQLTranslationV1::OptIdPrefixAsStr(pragma.GetRule_opt_id_prefix_or_type2(), sqlQuery).empty()) {
+                continue;
+            }
+            auto name = NSQLTranslationV1::Id(pragma.GetRule_an_id3(), sqlQuery);
+            if (NormalizeName(sqlContext.Pos(), name)) {
+                continue;
+            }
+            if (name == "disableansiinforemptyornullableitemscollections") {
+                disabled = true;
+            } else if (name == "ansiinforemptyornullableitemscollections") {
+                disabled = false;
+            }
+        }
+
+        if (disabled) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                "DEFAULT expressions do not support PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections"));
+        }
+        return !disabled;
+    }
+
     IGraphTransformer::TStatus ValidateColumnExpressions(const TKiCreateTable& create, TKikimrTableMetadata& meta,
         TExprContext& ctx, TTypeAnnotationContext& typeCtx, const TString& cluster, TKikimrSessionContext& sessionCtx)
     {
@@ -849,6 +905,7 @@ namespace {
 
         const TTypeAnnotationNode* rowType = ctx.MakeType<TStructExprType>(rowTypeItems);
 
+        TStringBuf checkedDefaultPrefix;
         for (auto item : create.Columns()) {
             auto columnTuple = item.Cast<TExprList>();
             auto columnName = TString(columnTuple.Item(0).Cast<TCoAtom>().Value());
@@ -860,6 +917,16 @@ namespace {
             if (!columnMeta.DefaultExpression->IsGenerated()) {
                 if (!CheckDefaultExpressionEnabled(sessionCtx.Config(), create.Pos(), columnName, ctx)) {
                     return IGraphTransformer::TStatus::Error;
+                }
+                if (const auto* source = FindDefaultSourceConstraint(columnTuple);
+                    source && source->Head().Content() != checkedDefaultPrefix)
+                {
+                    checkedDefaultPrefix = source->Head().Content();
+                    if (!CheckDefaultExpressionPragmas(checkedDefaultPrefix, sessionCtx.Query().TranslationSettings,
+                            columnTuple.Pos(), ctx))
+                    {
+                        return IGraphTransformer::TStatus::Error;
+                    }
                 }
                 if (meta.TableType == ETableType::ExternalTable) {
                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Pos()),
@@ -2638,6 +2705,21 @@ private:
                                 << " Column: \"" << name
                                 << "changeColumnConstraints can get exactly one token \\in {\"set_not_null\", \"drop_not_null\"}"));
                             return TStatus::Error;
+                        }
+
+                        const auto& column = table->Metadata->Columns.at(name);
+                        if (constraint.Item(0).Cast<TCoAtom>() == "set_not_null"
+                            && SessionCtx->Config().FeatureFlags.GetEnableSetColumnConstraint()
+                            && column.IsDefaultFromExpression() && !column.DefaultExpression->IsGenerated())
+                        {
+                            const auto& type = RemoveOptionality(*GetColumnTypeFromMetadata(column, ctx));
+                            TExprNode::TPtr lambda;
+                            if (auto status = CompileDefaultColumnLambda(column, type, table->Metadata->Cluster,
+                                    *SessionCtx, Types, ctx, lambda);
+                                status != TStatus::Ok)
+                            {
+                                return status;
+                            }
                         }
                     } else if (alterColumnAction == "setDefaultValue") {
                         if (table->Metadata->Kind == EKikimrTableKind::Olap) {

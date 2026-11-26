@@ -2612,7 +2612,6 @@ private:
 
             const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Path()).Metadata;
 
-            // Default columns processed locally (filled by the stream-write path only).
             TLocalDefaultColumns localDefaultColumns;
 
             const bool streamIndexWrite = Config->GetEnableIndexStreamWrite();
@@ -2620,6 +2619,12 @@ private:
                 localDefaultColumns = BuildStreamIndexWrite(settings, settingsProto, tablesMap, tableMeta, shape, streamIndexWrite);
             } else {
                 SetSinkOperationType(settings, settingsProto);
+                // A plain DataShard UPSERT passes insert-only defaults to the shard regardless of index stream writes.
+                if (!settings.DefaultColumns().Empty() && tableMeta->Kind == EKikimrTableKind::Datashard
+                    && std::ranges::none_of(tableMeta->Indexes, &TIndexDescription::ItUsedForWrite))
+                {
+                    localDefaultColumns = CollectLocalDefaultColumns(settings, tableMeta);
+                }
             }
 
             FillMainTableColumnsAndOrder(settings, settingsProto, tableMeta, shape, localDefaultColumns);

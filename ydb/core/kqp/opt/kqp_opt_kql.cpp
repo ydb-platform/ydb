@@ -544,8 +544,17 @@ TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputC
         settings = AddSetting(*settings, write.Pos(), "IsConditionalUpdate", nullptr, ctx);
     }
 
-    const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
-    if (!useStreamIndex && generateColumnsIfInsert.Ref().ChildrenSize() > 0) {
+    const auto isExpressionDefault = [&table](const TCoAtom& name) {
+        const auto& column = table.Metadata->Columns.at(TString(name.Value()));
+        return column.IsDefaultFromExpression() && column.DefaultExpression->Writable;
+    };
+
+    // A plain DataShard UPSERT can apply omitted expression defaults at insert even with index stream writes disabled.
+    const bool needsLegacyDefaultLookup = !kqpCtx.Config->GetEnableIndexStreamWrite() && !generateColumnsIfInsert.Empty()
+        && (table.Metadata->Kind != EKikimrTableKind::Datashard || !write.ReturningColumns().Empty()
+            || std::ranges::any_of(table.Metadata->Indexes, &TIndexDescription::ItUsedForWrite)
+            || std::none_of(generateColumnsIfInsert.begin(), generateColumnsIfInsert.end(), isExpressionDefault));
+    if (needsLegacyDefaultLookup) {
         return Build<TKqlInsertOnConflictUpdateRows>(ctx, write.Pos())
             .Table(BuildTableMeta(table, write.Pos(), ctx))
             .Input(input.Ptr())

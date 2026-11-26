@@ -243,11 +243,12 @@ public:
         Session = Db.GetSession().GetValueSync().GetSession();
     }
 
-    void DisableCompileTimeDefaults() {
+    template <typename TUpdate>
+    void UpdateTableServiceConfig(TUpdate update) {
         auto& server = Kikimr.GetTestServer();
         auto& runtime = *server.GetRuntime();
         auto appConfig = *server.GetSettings().AppConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(false);
+        update(*appConfig.MutableTableServiceConfig());
 
         const auto edge = runtime.AllocateEdgeActor();
         const auto nodeId = runtime.GetNodeId();
@@ -261,6 +262,10 @@ public:
         auto session = RunCall([&] { return Db.GetSession().ExtractValueSync(); });
         UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
         Session = session.GetSession();
+    }
+
+    void DisableCompileTimeDefaults() {
+        UpdateTableServiceConfig([](auto& config) { config.SetEnableCompileTimeDefaults(false); });
     }
 
     TVector<NJson::TJsonValue> ReadChangefeedMessages(size_t expectedCount) {
@@ -1603,8 +1608,14 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, other, expr, literal FROM TestTable ORDER BY k;", "[[1;[10];#;[7u]];[2;[20];[42u];[8u]]]");
     }
 
-    Y_UNIT_TEST(UpsertWithExpressionDefaultDoesNotNeedSelectRow) {
-        TTestFixture fixture(TKikimrSettings(DefaultExprAppConfig()).SetWithSampleTables(false).SetAuthToken("root@builtin"));
+    Y_UNIT_TEST_TWIN(UpsertWithExpressionDefaultDoesNotNeedSelectRow, EnableNewRBO) {
+        auto appConfig = DefaultExprAppConfig();
+        auto* config = appConfig.MutableTableServiceConfig();
+        config->SetEnableIndexStreamWrite(true);
+        config->SetEnableCompileTimeDefaults(true);
+        config->SetEnableNewRBO(EnableNewRBO);
+        config->SetEnableFallbackToYqlOptimizer(false);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false).SetAuthToken("root@builtin"));
         fixture.Exec(ValueTableDDL());
         fixture.Exec("INSERT INTO TestTable (k, other, v) VALUES (1, 0, 7ul);");
 
@@ -1618,10 +1629,29 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         const auto select = db.ExecuteQuery("SELECT v FROM TestTable;", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(!select.IsSuccess(), "SELECT succeeded without SelectRow");
         UNIT_ASSERT_STRING_CONTAINS(select.GetIssues().ToString(), "AccessDenied");
-        const auto upsert = db.ExecuteQuery("UPSERT INTO TestTable (k, other) VALUES (1, 10), (2, 20);",
-            TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        const TString query = R"(
+            DECLARE $k AS Int32;
+            DECLARE $other AS Int32;
+            UPSERT INTO TestTable (k, other) VALUES (1, $other), ($k, 20);
+        )";
+        const auto upsert = [&](i32 key, i32 other) {
+            auto params = TParamsBuilder().AddParam("$k").Int32(key).Build().AddParam("$other").Int32(other).Build().Build();
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx(), params, TExecuteQuerySettings().StatsMode(EStatsMode::Full))
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetStats());
+            AssertTableStats(result, "/Root/TestTable", {.ExpectedReads = 0, .ExpectedUpdates = 2});
+            return TProtoAccessor::GetProto(*result.GetStats()).compilation().from_cache();
+        };
+
+        upsert(2, 10);
         fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", "[[1;[10];[7u]];[2;[20];[42u]]]");
+
+        fixture.UpdateTableServiceConfig([](auto& config) { config.SetEnableIndexStreamWrite(false); });
+
+        UNIT_ASSERT_C(!upsert(3, 11), "UPSERT must be recompiled after the configuration change");
+        fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", "[[1;[11];[7u]];[2;[20];[42u]];[3;[20];[42u]]]");
     }
 
     Y_UNIT_TEST_TWIN(NewRboPartialUpsertWithExpressionDefault, EnableFallback) {

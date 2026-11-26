@@ -71,8 +71,9 @@ NPDisk::TEvChunkWrite::TPartsPtr GenParts(TReallyFastRng32& rng, size_t size) {
 Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(CommitRecordValidation) {
         using namespace NPDisk;
-        TTestActorRuntimeBase runtime;
-        runtime.Initialize();
+        TTestActorRuntime runtime;
+        auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
+        runtime.Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}, {}});
         auto context = std::make_shared<TPDiskCtx>(runtime.GetActorSystem(0), 12345, runtime.AllocateEdgeActor());
         auto config = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
             TPDiskCategory(DEVICE_TYPE_ROT, 0).GetRaw());

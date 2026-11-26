@@ -297,9 +297,6 @@ void TInitMetaStep::Execute(const TActorContext& ctx) {
 
     addKey(request->Record, TKeyPrefix::TypeMeta, PartitionId());
     addKey(request->Record, TKeyPrefix::TypeTxMeta, PartitionId());
-    if (Partition()->Config.HasCdcReplication() || Partition()->TabletConfig.HasCdcReplication()) {
-        request->Record.AddCmdRead()->SetKey(Partition()->GetCdcReplicationTrimKey());
-    }
 
     ctx.Send(Partition()->TabletActorId, request.Release());
 }
@@ -310,8 +307,7 @@ void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     }
 
     auto& response = ev->Get()->Record;
-    const bool readTrim = Partition()->Config.HasCdcReplication() || Partition()->TabletConfig.HasCdcReplication();
-    PQ_INIT_ENSURE(response.ReadResultSize() == (readTrim ? 3 : 2));
+    PQ_INIT_ENSURE(response.ReadResultSize() == 2);
     LoadMeta(response);
     Done(ctx);
 }
@@ -389,16 +385,6 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse) {
         }
     };
     handleReadResult(kvResponse.GetReadResult(1), loadTxMeta);
-
-    if (kvResponse.ReadResultSize() == 3) {
-        handleReadResult(kvResponse.GetReadResult(2), [this](const auto& response) {
-            NKikimrPQ::TCdcReplicationTrim trim;
-            PQ_INIT_ENSURE(trim.ParseFromString(response.GetValue()));
-            PQ_INIT_ENSURE(trim.GetTxId() && trim.HasOffset() && trim.GetOffset() <= Partition()->GetEndOffset());
-            Partition()->CdcReplicationTrimTxId = trim.GetTxId();
-            Partition()->CdcReplicationTrimOffset = trim.GetOffset();
-        });
-    }
 }
 
 

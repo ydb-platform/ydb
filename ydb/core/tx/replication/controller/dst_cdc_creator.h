@@ -11,6 +11,8 @@
 
 namespace NKikimr::NReplication::NController {
 
+enum class EConsistencyLevel;
+
 struct TDstCdcSettings {
     TPathId TablePathId;
     Ydb::Table::ChangefeedDescription SourceStream;
@@ -41,7 +43,7 @@ struct TCdcCreation {
 
     bool Prepare(const NYdb::NTopic::TTopicDescription& topic, const TString& database, TString& error);
     bool CheckTable(const NKikimrScheme::TEvDescribeSchemeResult& record,
-        const TPathId& replicationPathId, ui64 schemeShardId, TString& owner, TString& error);
+        const TPathId& replicationPathId, ui64 schemeShardId, EConsistencyLevel consistency, TString& owner, TString& error);
     bool CheckStream(const NKikimrScheme::TEvDescribeSchemeResult& record, ui64 schemeShardId,
         const TString& owner, TString& error);
     bool CheckTopic(const NKikimrScheme::TEvDescribeSchemeResult& record, ui64 schemeShardId,

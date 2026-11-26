@@ -1,7 +1,6 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 #include "datashard_active_transaction.h"
-#include "datashard_write.h"
 
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -85,31 +84,23 @@ private:
 ///
 Y_UNIT_TEST_SUITE(TxOrderInternals) {
 
-Y_UNIT_TEST(CdcHandoffRequiresDedicatedKind) {
+Y_UNIT_TEST(CdcActivationRequiresReplicaDetach) {
+    using TConfig = NKikimrSchemeOp::TTableReplicationConfig;
     NKikimrTxDataShard::TFlatSchemeTransaction body;
-    auto& alter = *body.MutableAlterTable();
-    alter.MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
-    alter.AddActivateCdcStreams()->SetLocalId(42);
+    auto* alter = body.MutableAlterTable();
+    alter->AddActivateCdcStreams()->SetLocalId(42);
 
-    auto check = [&](EOperationKind kind, bool expected) {
-        // Recovery reconstructs the operation from this persisted kind.
-        const TBasicOpInfo info(1, kind, 0, 0, TInstant::Zero(), 1);
-        const auto op = NDataShard::NEvWrite::TConvertor::MakeOperation(kind, info, 100);
-        UNIT_ASSERT(op->IsSchemeTx());
-        UNIT_ASSERT_EQUAL(op->GetKind(), kind);
-        auto* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        UNIT_ASSERT(tx);
-        tx->SetTxBody(body.SerializeAsString());
-        UNIT_ASSERT_EQUAL(tx->BuildSchemeTx(), expected);
-    };
+    TActiveTransaction tx(TBasicOpInfo(1, EOperationKind::SchemeTx, 0, 0, TInstant::Zero(), 1));
+    tx.SetTxBody(body.SerializeAsString());
+    UNIT_ASSERT(!tx.BuildSchemeTx());
 
-    check(EOperationKind::SchemeTx, false);
-    check(EOperationKind::CdcHandoff, true);
-    alter.MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-    check(EOperationKind::CdcHandoff, false);
-    alter.ClearActivateCdcStreams();
-    check(EOperationKind::CdcHandoff, false);
-    check(EOperationKind::SchemeTx, true);
+    alter->MutableReplicationConfig()->SetMode(TConfig::REPLICATION_MODE_READ_ONLY);
+    tx.SetTxBody(body.SerializeAsString());
+    UNIT_ASSERT(!tx.BuildSchemeTx());
+
+    alter->MutableReplicationConfig()->SetMode(TConfig::REPLICATION_MODE_NONE);
+    tx.SetTxBody(body.SerializeAsString());
+    UNIT_ASSERT(tx.BuildSchemeTx());
 }
 
 Y_UNIT_TEST(OperationOrder) {

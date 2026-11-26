@@ -1,10 +1,6 @@
-#include "cdc_trim_verifier.h"
 #include "private_events.h"
 #include "public_events.h"
 
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/replication/service/service.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_topic.h>
@@ -62,20 +58,22 @@ class TLiveCdcMirror {
         }, "replication controller state");
     }
 
-    void CheckOffsets(ui64 end, ui64 start = 0) {
+    void CheckOffsets(ui64 end) {
         WaitForTopicOffsets(Destination, DestinationFeed, Consumer, [&](const TTopicOffsets& offsets) {
-            return offsets.Start == start && offsets.End == end && offsets.Committed == 1;
+            return offsets.Start == 0 && offsets.End == end && offsets.Committed == 1;
         }, "destination data and consumer offsets");
     }
 
-    static void CreateReplication(TEnv<>& destination, const TString& sourceEndpoint) {
+    static void CreateReplication(TEnv<>& destination, const TString& sourceEndpoint, bool global = false) {
+        const char* consistency = global ? R"(CONSISTENCY_LEVEL = "GLOBAL", ALLOW_ROW_FOR_TOPICS_IN_GLOBAL = TRUE)"
+            : R"(CONSISTENCY_LEVEL = "ROW")";
         Scheme(destination, Sprintf(R"(CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica`
             WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", TOKEN = "root@builtin",
-                CONSISTENCY_LEVEL = "ROW", INITIAL_SCAN = TRUE);)", sourceEndpoint.c_str()));
+                %s, INITIAL_SCAN = TRUE);)", sourceEndpoint.c_str(), consistency));
     }
 
-    void ReplicateInitialRow(const TString& expectedPath) {
-        CreateReplication(Destination, Source.GetEndpoint());
+    void ReplicateInitialRow(const TString& expectedPath, bool global = false) {
+        CreateReplication(Destination, Source.GetEndpoint(), global);
         WaitForReplication(Destination, [&] {
             return Destination.GetDescription(expectedPath).GetSchemeStatus() == NKikimrScheme::StatusSuccess;
         }, expectedPath);
@@ -172,7 +170,7 @@ public:
             NKikimrScheme::StatusPathDoesNotExist);
     }
 
-    void InitialScanAndMirror() {
+    void InitialScanAndMirror(bool global) {
         Scheme(Source, "ALTER TABLE `/Root/source` ADD INDEX by_value GLOBAL SYNC ON (value);");
         const auto first = ReadTopic(Source, SourceFeed, 1).front();
         UNIT_ASSERT_VALUES_EQUAL(first.Data, R"({"update":{"value":10},"key":[1]})");
@@ -180,7 +178,7 @@ public:
         const auto commit = client.CommitOffset(SourceFeed, 0, Consumer, 1).GetValueSync();
         UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
 
-        ReplicateInitialRow(DestinationFeed);
+        ReplicateInitialRow(DestinationFeed, global);
         const auto index = Destination.GetDescription("/Root/replica/by_value/indexImplTable");
         UNIT_ASSERT_VALUES_EQUAL(index.GetSchemeStatus(), NKikimrScheme::StatusSuccess);
         const auto& indexConfig = index.GetPathDescription().GetTable().GetReplicationConfig();
@@ -216,7 +214,7 @@ public:
         CheckOffsets(2); // Initial scan must not add another CDC record for the existing row.
     }
 
-    void ForceDoneTrimsHistory() {
+    void ForceDonePreservesHistory() {
         const auto feedId = Destination.GetPathId(DestinationFeed);
         const TString topicPath = TString(DestinationFeed) + "/streamImpl";
         const auto topicId = Destination.GetPathId(topicPath);
@@ -243,16 +241,32 @@ public:
 
         Scheme(Destination, "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');");
         WaitForState(NKikimrReplication::TReplicationState::kDone);
-        CheckOffsets(2, 2);
+        CheckOffsets(2);
         UNIT_ASSERT_VALUES_EQUAL(Destination.GetPathId(DestinationFeed), feedId);
         UNIT_ASSERT_VALUES_EQUAL(Destination.GetPathId(topicPath), topicId);
 
         Execute(Destination, "UPSERT INTO `/Root/replica` (key, value) VALUES (4u, 40u);");
-        // Explicitly request offset zero: trimmed records must not be readable again.
-        const auto native = ReadTopic(Destination, DestinationFeed, 1, 0).front();
-        UNIT_ASSERT_VALUES_EQUAL(native.Offset, 2);
-        UNIT_ASSERT_VALUES_EQUAL(native.Data, R"({"update":{"value":40},"key":[4]})");
-        CheckOffsets(3, 2); // The application consumer still has its pre-trim committed offset 1.
+        const auto records = ReadTopic(Destination, DestinationFeed, 3, 0);
+        UNIT_ASSERT_VALUES_EQUAL(records[0].Data, R"({"update":{"value":10},"key":[1]})");
+        UNIT_ASSERT_VALUES_EQUAL(records[1].Data, R"({"update":{"value":20},"key":[2]})");
+        UNIT_ASSERT_VALUES_EQUAL(records[2].Offset, 2);
+        UNIT_ASSERT_VALUES_EQUAL(records[2].Data, R"({"update":{"value":40},"key":[4]})");
+        CheckOffsets(3);
+    }
+
+    void DropPreservesHistory() {
+        Scheme(Destination, "DROP ASYNC REPLICATION `/Root/replication`;");
+        const auto table = Destination.GetDescription("/Root/replica").GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL(table.GetReplicationConfig().GetMode(),
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        const auto feed = Destination.GetDescription(DestinationFeed).GetPathDescription().GetCdcStreamDescription();
+        UNIT_ASSERT_VALUES_EQUAL(feed.GetState(), NKikimrSchemeOp::ECdcStreamStateDisabled);
+        const auto topic = Destination.GetDescription(TString(DestinationFeed) + "/streamImpl").GetPathDescription();
+        UNIT_ASSERT(!topic.GetPersQueueGroup().GetPQTabletConfig().GetPartitionConfig().HasMirrorFrom());
+        CheckOffsets(2);
+        const auto records = ReadTopic(Destination, DestinationFeed, 2, 0);
+        UNIT_ASSERT_VALUES_EQUAL(records[0].Data, R"({"update":{"value":10},"key":[1]})");
+        UNIT_ASSERT_VALUES_EQUAL(records[1].Data, R"({"update":{"value":20},"key":[2]})");
     }
 
 private:
@@ -261,35 +275,6 @@ private:
 };
 
 Y_UNIT_TEST_SUITE(CdcLiveMirroring) {
-    Y_UNIT_TEST_TWIN(TrimVerifierPollsUntilCommitted, ConflictingId) {
-        TTestActorRuntime runtime;
-        runtime.Initialize(TAppPrepare().Unwrap());
-        const auto parent = runtime.AllocateEdgeActor();
-        runtime.RegisterService(MakePipePerNodeCacheID(false), parent);
-
-        NKikimrSchemeOp::TPersQueueGroupDescription topic;
-        topic.SetTotalGroupCount(1);
-        auto* partition = topic.AddPartitions();
-        partition->SetTabletId(1);
-        partition->SetPartitionId(0);
-        const ui64 expected = 10;
-        const auto verifier = runtime.Register(CreateCdcTrimVerifier(parent, TPathId(1, 2), expected, topic));
-        runtime.EnableScheduleForActor(verifier);
-
-        for (const ui64 committed : {ui64{0}, ConflictingId ? expected + 1 : expected}) {
-            runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(parent);
-            auto response = MakeHolder<TEvPersQueue::TEvStatusResponse>();
-            response->Record.SetTabletId(1);
-            auto* part = response->Record.AddPartResult();
-            part->SetPartition(0);
-            part->SetCdcReplicationTrimTxId(committed);
-            runtime.Send(verifier, parent, response.Release());
-        }
-
-        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCdcTrimVerified>(parent);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Success, !ConflictingId);
-    }
-
     Y_UNIT_TEST(ResumeBeforeParentAttachment) {
         TLiveCdcMirror::ResumeBeforeParentAttachment();
     }
@@ -307,13 +292,17 @@ Y_UNIT_TEST_SUITE(CdcLiveMirroring) {
         test.CheckTableReplicationWithoutChangefeed();
     }
 
-    Y_UNIT_TEST(InitialScanMirrorsCdcHistoryAndConsumerOffset) {
+    Y_UNIT_TEST_TWIN(InitialScanMirrorsCdcHistoryAndConsumerOffset, DirectDrop) {
         auto flags = TopicReplicationFlags();
         flags.FeatureFlags.SetEnableCdcReplication(true);
         flags.FeatureFlags.SetEnableCdcHandoff(true);
         TLiveCdcMirror test(flags);
-        test.InitialScanAndMirror();
-        test.ForceDoneTrimsHistory();
+        test.InitialScanAndMirror(/* global */ DirectDrop);
+        if (DirectDrop) {
+            test.DropPreservesHistory();
+        } else {
+            test.ForceDonePreservesHistory();
+        }
     }
 }
 }

@@ -110,7 +110,7 @@ bool TCdcCreation::Prepare(const NYdb::NTopic::TTopicDescription& topic, const T
 }
 
 bool TCdcCreation::CheckTable(const NKikimrScheme::TEvDescribeSchemeResult& record,
-        const TPathId& replicationPathId, ui64 schemeShardId, TString& owner, TString& error)
+        const TPathId& replicationPathId, ui64 schemeShardId, EConsistencyLevel consistency, TString& owner, TString& error)
 {
     const auto& desc = record.GetPathDescription();
     const auto& self = desc.GetSelf();
@@ -119,11 +119,11 @@ bool TCdcCreation::CheckTable(const NKikimrScheme::TEvDescribeSchemeResult& reco
 
     const bool ownedReplica = config.HasOwnerPathId() && TPathId::FromProto(config.GetOwnerPathId()) == replicationPathId
         && config.GetImportState() != NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT
-        && CheckReplicationConfig(config, EReplicationMode::ReadOnly, EConsistencyLevel::Row, error);
+        && CheckReplicationConfig(config, EReplicationMode::ReadOnly, consistency, error);
     if (!replicationPathId || !Settings.TablePathId || id != Settings.TablePathId
         || id.OwnerId != schemeShardId || !desc.HasTable() || !ownedReplica)
     {
-        error = "CDC destination must be the final owned ROW replica";
+        error = "CDC destination must be the owned read-only table with the configured consistency level";
         return false;
     }
 
@@ -240,10 +240,6 @@ bool TCdcCreation::CheckTopic(const NKikimrScheme::TEvDescribeSchemeResult& reco
         return false;
     }
 
-    if (config.GetCdcReplication().HasTrimTxId()) {
-        error = "CDC destination topic already has a trim request";
-        return false;
-    }
     return true;
 }
 

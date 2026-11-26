@@ -79,14 +79,15 @@ public:
                 target->SetDstPathId(Ev->Get()->DstPathId);
                 target->SetDstState(TReplication::EDstState::Alter);
                 *state.MutableStreamPathId() = created.GetStreamPathId();
-                state.SetTrimRequestId(created.GetTrimRequestId());
                 state.ClearInitialCreateTxId();
                 state.ClearSourceStream();
                 state.ClearDefinition();
                 state.ClearTopicSetup();
 
                 if (Replication->GetState() == TReplication::EState::Removing) {
-                    state.SetPhase(NKikimrReplicationController::TCdcTarget::TRIMMING);
+                    // Initial setup leaves the disabled stream without a mirrorer.
+                    state.SetPhase(NKikimrReplicationController::TCdcTarget::FINISHED);
+                    target->SetDstState(TReplication::EDstState::Done);
                 } else if (Replication->GetDesiredState() == TReplication::EState::Done
                     && state.GetPhase() == NKikimrReplicationController::TCdcTarget::STOPPING)
                 {

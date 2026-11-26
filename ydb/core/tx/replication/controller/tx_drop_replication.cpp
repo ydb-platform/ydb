@@ -153,7 +153,7 @@ public:
             );
 
             if (initializingCdc) {
-                // Direct DROP reconciles any admitted CREATE before trimming the managed topic.
+                // Direct DROP reconciles any admitted CREATE before releasing the child.
                 // CASCADE removes the owned table, which fences later child creation.
                 target->SetDstState(finishBirth ? TReplication::EDstState::Creating : TReplication::EDstState::Done);
             } else if (!record.GetCascade() && child) {
@@ -163,11 +163,12 @@ public:
                     continue;
                 }
                 if (state.GetPhase() == TCdc::PREPARED) {
-                    state.SetPhase(TCdc::TRIMMING);
-                } else if (state.GetPhase() != TCdc::TRIMMING) {
+                    state.SetPhase(TCdc::FINISHED);
+                    target->SetDstState(TReplication::EDstState::Done);
+                } else {
                     state.SetPhase(TCdc::STOPPING);
+                    target->SetDstState(TReplication::EDstState::Alter);
                 }
-                target->SetDstState(TReplication::EDstState::Alter);
                 db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                     NIceDb::TUpdate<Schema::Targets::Cdc>(state.SerializeAsString()));
             } else if (cdcParents.contains(tid) || (record.GetCascade() && child)) {

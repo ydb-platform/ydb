@@ -8,7 +8,10 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    library/cpp/json
     ydb/core/persqueue/events
+    ydb/core/persqueue/public
+    ydb/core/persqueue/public/write_meta
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/tx/scheme_cache

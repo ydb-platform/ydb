@@ -1521,6 +1521,7 @@ struct TReplicationSettings : public TReplicationSettingsBase {
     TMaybe<TRowConsistency> RowConsistency;
     TMaybe<TGlobalConsistency> GlobalConsistency;
     TMaybe<bool> InitialScan;
+    bool AllowRowForTopicsInGlobal = false;
     TMaybe<TString> Bootstrap;
     TMaybe<NKikimrReplication::TAvailabilityPeriod> AvailabilityPeriod;
 

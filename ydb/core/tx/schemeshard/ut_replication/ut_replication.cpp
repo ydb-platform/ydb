@@ -1,5 +1,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -16,6 +18,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 
 #include <yql/essentials/public/udf/udf_data_type.h>
+
+#include <library/cpp/json/json_reader.h>
 
 using namespace NSchemeShardUT_Private;
 
@@ -783,10 +787,10 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             TestModificationResult(Runtime, TxId);
             Env.TestWaitNotification(Runtime, TxId);
 
-            Topic = DescribePrivatePath(Runtime, "/MyRoot/Table/Feed/streamImpl").GetPathDescription();
+            Topic = DescribePrivatePath(Runtime, "/MyRoot/Table/Feed/streamImpl", true).GetPathDescription();
         }
 
-        void AlterTopic(const auto& edit, const NKikimr::TPathId* owner, NKikimrScheme::EStatus expected, ui64 trimId = 0) {
+        void AlterTopic(const auto& edit, const NKikimr::TPathId* owner, NKikimrScheme::EStatus expected) {
             const auto desc = DescribePrivatePath(Runtime, "/MyRoot/Table/Feed/streamImpl").GetPathDescription();
             auto* request = AlterPQGroupRequest(++TxId, "/MyRoot/Table/Feed", R"(Name: "streamImpl")");
             auto& tx = *request->Record.MutableTransaction(0);
@@ -800,9 +804,6 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             config = desc.GetPersQueueGroup().GetPQTabletConfig();
             config.ClearPartitionKeySchema();
             edit(config);
-            if (trimId) {
-                tx.MutableAlterPersQueueGroup()->SetTrimCdcReplicationTxId(trimId);
-            }
 
             AsyncSend(Runtime, SchemeShard, request);
             TestModificationResult(Runtime, TxId, expected);
@@ -853,6 +854,37 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
                 tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
             }
             return request;
+        }
+
+        void CheckFirstNativeWrite() {
+            const ui64 key = 42;
+            WriteOp(Runtime, SchemeShard, ++TxId, "/MyRoot/Table", 0,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                {1}, TSerializedCellMatrix({TCell::Make(key)}, 1, 1), true);
+
+            const auto& topic = Topic.GetPersQueueGroup();
+            UNIT_ASSERT_VALUES_EQUAL(topic.PartitionsSize(), 1);
+            const auto& partition = topic.GetPartitions(0);
+            auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+            auto& part = *request->Record.MutablePartitionRequest();
+            part.SetPartition(partition.GetPartitionId());
+            auto& read = *part.MutableCmdRead();
+            read.SetClientId(NPQ::CLIENTID_WITHOUT_CONSUMER);
+            read.SetOffset(0);
+            read.SetCount(1);
+            read.SetTimeoutMs(10000);
+            read.SetExternalOperation(true);
+
+            const auto edge = Runtime.AllocateEdgeActor();
+            ForwardToTablet(Runtime, partition.GetTabletId(), edge, request.Release());
+            const auto reply = Runtime.GrabEdgeEventRethrow<TEvPersQueue::TEvResponse>(edge);
+            const auto& result = reply->Get()->Record.GetPartitionResponse().GetCmdReadResult();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.ResultSize(), 1, reply->Get()->Record.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult(0).GetOffset(), 0);
+            NJson::TJsonValue record;
+            UNIT_ASSERT(NJson::ReadJsonTree(GetDeserializedData(result.GetResult(0).GetData()).GetData(), &record));
+            UNIT_ASSERT(record["update"].IsMap());
+            UNIT_ASSERT_VALUES_EQUAL(record["key"].GetArraySafe().at(0).GetUIntegerSafe(), key);
         }
 
         void Split(ui64 boundary, NKikimrScheme::EStatus expected) {
@@ -938,12 +970,20 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         test.Runtime.WaitFor("prepared detach", [&] { return !prepared.empty(); });
 
         test.Runtime.GetAppData().FeatureFlags.SetEnableCdcHandoff(false);
+        const auto shardId = prepared.front()->Get()->Record.GetOrigin();
+        RebootTablet(test.Runtime, shardId, test.Runtime.AllocateEdgeActor());
+        if (ActivateFeed) {
+            RebootTablet(test.Runtime, test.SchemeShard, test.Runtime.AllocateEdgeActor());
+        }
         prepared.Stop().Unblock();
         test.Env.TestWaitNotification(test.Runtime, test.TxId);
         TestDescribeResult(DescribePath(test.Runtime, "/MyRoot/Table"), {NLs::ReplicationMode(TConfig::REPLICATION_MODE_NONE)});
         TestDescribeResult(DescribePrivatePath(test.Runtime, "/MyRoot/Table/Feed"), {
             NLs::StreamState(ActivateFeed ? NKikimrSchemeOp::ECdcStreamStateReady : NKikimrSchemeOp::ECdcStreamStateDisabled),
         });
+        if (ActivateFeed) {
+            test.CheckFirstNativeWrite();
+        }
     }
 
     Y_UNIT_TEST(CdcTopicAttachmentSerializesWithTableSplits) {
@@ -971,18 +1011,6 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
     Y_UNIT_TEST_TWIN(CdcTopicAttachmentRejectsPartitionQuorum, SchemaChanges) {
         TCdcAttachmentFixture test(SchemaChanges ? "SchemaChanges: true" : "ResolvedTimestampsIntervalMs: 1000");
         test.Attach(NKikimrScheme::StatusPreconditionFailed);
-    }
-
-    Y_UNIT_TEST_TWIN(CdcTrimRejectsKeyCompaction, AlreadyEnabled) {
-        TCdcAttachmentFixture test;
-        test.AlterTopic([&](auto& config) {
-            config.SetReplicationSourceConsumer(test.Consumer);
-            config.SetEnableCompactification(AlreadyEnabled);
-        }, &test.Owner, NKikimrScheme::StatusAccepted);
-        test.Env.TestWaitNotification(test.Runtime, test.TxId);
-
-        test.AlterTopic([](auto& config) { config.SetEnableCompactification(!AlreadyEnabled); },
-            &test.Owner, NKikimrScheme::StatusPreconditionFailed, test.TxId + 1);
     }
 
     Y_UNIT_TEST(ConsumerAlterOnRunningCdcMirror) {

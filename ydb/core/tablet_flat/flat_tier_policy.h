@@ -1,6 +1,6 @@
 #pragma once
 
-#include "flat_row_eggs.h"
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/scheme_log.pb.h>

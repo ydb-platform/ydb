@@ -8,6 +8,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/core/tablet_flat/base
     ydb/core/tx/datashard/ut_common
     library/cpp/getopt
     library/cpp/regex/pcre

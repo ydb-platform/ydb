@@ -1,7 +1,7 @@
 #include "kqp_host_impl.h"
 
 #include <ydb/core/formats/arrow/accessor/common/const.h>
-#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
+#include <ydb/core/tablet_flat/base/bloom_filter_defaults.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/formats/arrow/serializer/utils.h>
 #include <ydb/core/grpc_services/table_settings.h>

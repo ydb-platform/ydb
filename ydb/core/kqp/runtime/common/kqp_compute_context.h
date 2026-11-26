@@ -1,9 +1,8 @@
 #pragma once
 
-#include "kqp_compute_column.h"
+#include <ydb/core/kqp/common/simple/kqp_compute_column.h>
 
 #include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
 #include <ydb/library/yql/dq/runtime/dq_compute.h>

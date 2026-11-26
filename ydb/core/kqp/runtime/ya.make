@@ -61,6 +61,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/scheme
     ydb/core/scheme/mkql
+    ydb/core/tablet_flat/base
     ydb/core/tx/scheme_board
     ydb/core/ydb_convert
     ydb/library/aclib

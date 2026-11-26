@@ -69,6 +69,20 @@ class BuildProfilesTest(unittest.TestCase):
                     flags + ['--thinlto'],
                 )
 
+    def test_reproduction_definition_forms_and_order(self):
+        args = ['-DHARDENING=yes', '-D', 'HARDENING=no',
+                '-D', 'CFLAGS=-one -two', '-DCFLAGS=-three',
+                '-D', 'DEBUGINFO_LINES_ONLY', '-D', 'SECRET=hidden']
+        self.assertEqual(shlex.split(build_profile.portable_reproduction_args(args)),
+                         ['-DHARDENING=yes', '-DHARDENING=no', '-DCFLAGS=-one -two',
+                          '-DCFLAGS=-three', '-DDEBUGINFO_LINES_ONLY'])
+        self.assertEqual(build_profile.portable_reproduction_args(['-D']), '')
+
+    def test_reproduction_value_option_forms(self):
+        args = ['--build=release', '--build', 'debug', '--sanitize=address',
+                '--sanitize', 'thread', '--thinlto', '--no-thinlto']
+        self.assertEqual(shlex.split(build_profile.portable_reproduction_args(args)), args)
+
     def test_public_reproduction_excludes_environment_and_filters(self):
         args = ['--test-env', 'TOKEN=secret', '--test-env=OTHER=secret',
                 '--test-filter', 'Suite::*', '-FCase::*', '--test-filter=Other::*',

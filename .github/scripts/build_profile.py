@@ -60,6 +60,13 @@ def portable_reproduction_args(args):
     index = 0
     while index < len(args):
         arg = args[index]
+        if arg == "-D":
+            if index + 1 < len(args):
+                definition = args[index + 1]
+                if definition.split("=", 1)[0] in definitions:
+                    result.append("-D" + definition)
+            index += 2
+            continue
         if arg in value_options:
             if index + 1 < len(args):
                 result.extend(args[index:index + 2])

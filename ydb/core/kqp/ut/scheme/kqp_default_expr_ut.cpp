@@ -1,8 +1,10 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/grpc_services/service_table.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -398,6 +400,50 @@ void RunDmlMatrix(ESecondaryIndexKind indexKind, bool withReturning) {
         }
     }
 }
+
+class TDefaultChangeRaceSessions {
+public:
+    explicit TDefaultChangeRaceSessions(TKikimrRunner& kikimr)
+        : Kikimr(kikimr)
+        , DdlDriver(kikimr.GetDriverConfig().SetDiscoveryMode(EDiscoveryMode::Off))
+        , WriterDriver(GetWriterConfig())
+    {
+    }
+
+    ~TDefaultChangeRaceSessions() {
+        Kikimr.RunCall([&] {
+            WriterDriver.Stop(true);
+            DdlDriver.Stop(true);
+            return true;
+        });
+    }
+
+    auto Connect() {
+        NQuery::TQueryClient ddlClient(DdlDriver);
+        NYdb::NTable::TTableClient writerClient(WriterDriver);
+        auto ddl = Kikimr.RunCall([&] { return ddlClient.GetSession().ExtractValueSync(); });
+        auto writer = Kikimr.RunCall([&] { return writerClient.CreateSession().ExtractValueSync(); });
+        UNIT_ASSERT_C(ddl.IsSuccess(), ddl.GetIssues().ToString());
+        UNIT_ASSERT_C(writer.IsSuccess(), writer.GetIssues().ToString());
+        const auto& runtime = *Kikimr.GetTestServer().GetRuntime();
+        UNIT_ASSERT_STRING_CONTAINS(ddl.GetSession().GetId(), TStringBuilder() << "node_id=" << runtime.GetNodeId(0) << "&");
+        UNIT_ASSERT_STRING_CONTAINS(writer.GetSession().GetId(), TStringBuilder() << "node_id=" << runtime.GetNodeId(1) << "&");
+        return std::make_pair(ddl.GetSession(), writer.GetSession());
+    }
+
+private:
+    TDriverConfig GetWriterConfig() {
+        const auto port = Ports.GetPort();
+        Kikimr.GetTestServer().EnableGRpc(port, 1);
+        return Kikimr.GetDriverConfig().SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetEndpoint(TStringBuilder() << "localhost:" << port);
+    }
+
+    TKikimrRunner& Kikimr;
+    TPortManager Ports;
+    TDriver DdlDriver;
+    TDriver WriterDriver;
+};
 
 TKikimrSettings DefaultExprBackupSettings() {
     auto config = DefaultExprAppConfig();
@@ -2932,29 +2978,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec("ALTER TABLE TestTable ADD CHANGEFEED feed WITH (MODE = 'NEW_AND_OLD_IMAGES', FORMAT = 'JSON');");
         fixture.Exec("ALTER TOPIC `/Root/TestTable/feed` ADD CONSUMER test_consumer;");
 
-        TPortManager ports;
-        const auto writerPort = ports.GetPort();
-        server.EnableGRpc(writerPort, 1);
-        TDriver ddlDriver(kikimr.GetDriverConfig().SetDiscoveryMode(EDiscoveryMode::Off));
-        TDriver writerDriver(kikimr.GetDriverConfig().SetDiscoveryMode(EDiscoveryMode::Off)
-            .SetEndpoint(TStringBuilder() << "localhost:" << writerPort));
-        Y_DEFER {
-            kikimr.RunCall([&] {
-                writerDriver.Stop(true);
-                ddlDriver.Stop(true);
-                return true;
-            });
-        };
-        auto ddlClient = NQuery::TQueryClient(ddlDriver);
-        auto writerClient = NYdb::NTable::TTableClient(writerDriver);
-        auto connectedDdl = kikimr.RunCall([&] { return ddlClient.GetSession().ExtractValueSync(); });
-        auto connectedWriter = kikimr.RunCall([&] { return writerClient.CreateSession().ExtractValueSync(); });
-        UNIT_ASSERT_C(connectedDdl.IsSuccess(), connectedDdl.GetIssues().ToString());
-        UNIT_ASSERT_C(connectedWriter.IsSuccess(), connectedWriter.GetIssues().ToString());
-        auto ddl = connectedDdl.GetSession();
-        auto writer = connectedWriter.GetSession();
-        UNIT_ASSERT_STRING_CONTAINS(ddl.GetId(), TStringBuilder() << "node_id=" << runtime.GetNodeId(0) << "&");
-        UNIT_ASSERT_STRING_CONTAINS(writer.GetId(), TStringBuilder() << "node_id=" << runtime.GetNodeId(1) << "&");
+        TDefaultChangeRaceSessions sessions(kikimr);
+        auto [ddl, writer] = sessions.Connect();
 
         auto prepareResult = kikimr.RunCall([&] {
             return writer.PrepareDataQuery(R"(
@@ -3047,6 +3072,249 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             expectedCdc.erase(found);
         }
         UNIT_ASSERT(expectedCdc.empty());
+    }
+
+    Y_UNIT_TEST_TWIN(CompiledWritesRaceWithDefaultChangesAcrossNodes, PreparedInsert) {
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false)
+            .SetNodeCount(2).SetUseRealThreads(false));
+        auto& kikimr = fixture.Runner();
+        auto& server = kikimr.GetTestServer();
+        auto& runtime = *server.GetRuntime();
+        runtime.SetFastSimulatedTime(false);
+
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                other Int32 NOT NULL,
+                v Int32 DEFAULT IF(RandomNumber(1) * 0ul = 0ul, 42, 0),
+                PRIMARY KEY (k),
+                INDEX idx_other GLOBAL SYNC ON (other) COVER (v)
+            );
+        )");
+        fixture.Exec("ALTER TABLE TestTable ADD CHANGEFEED feed WITH (MODE = 'NEW_AND_OLD_IMAGES', FORMAT = 'JSON');");
+        fixture.Exec("ALTER TOPIC `/Root/TestTable/feed` ADD CONSUMER test_consumer;");
+
+        TDefaultChangeRaceSessions sessions(kikimr);
+        auto [ddl, writer] = sessions.Connect();
+        const auto tx = NYdb::NTable::TTxControl::BeginTx().CommitTx();
+
+        const TString tablePath = "/Root/TestTable";
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto shards = GetTableShards(&server, sender, tablePath);
+        const auto indexShards = GetTableShards(&server, sender, "/Root/TestTable/idx_other/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(indexShards.size(), 1u);
+
+        const auto shardActor = ResolveTablet(runtime, shards.front());
+        size_t enqueuedChanges = 0;
+        using TEnqueueRecords = NChangeExchange::TEvChangeExchange::TEvEnqueueRecords;
+        auto observeCdc = runtime.AddObserver<TEnqueueRecords>([&](auto& ev) {
+            if (ev->Sender == shardActor) {
+                enqueuedChanges += ev->Get()->Records.size();
+            }
+        });
+
+        struct TRow {
+            i32 Other;
+            std::optional<i32> V;
+
+            bool operator==(const TRow&) const = default;
+        };
+        using TRows = std::map<i32, TRow>;
+        struct TChange {
+            std::optional<TRow> Old;
+            TRow New;
+        };
+        TRows stored;
+        std::map<std::pair<i32, i32>, TChange> changes;
+
+        const auto readRows = [](const auto& result) {
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1u);
+            TRows rows;
+            TResultSetParser parser(result.GetResultSet(0));
+            while (parser.TryNextRow()) {
+                const auto k = parser.ColumnParser("k").GetInt32();
+                const auto other = parser.ColumnParser("other").GetInt32();
+                const auto value = parser.ColumnParser("v").GetOptionalInt32();
+                UNIT_ASSERT_C(rows.emplace(k, TRow{other, value}).second, "duplicate row for key " << k);
+            }
+            return rows;
+        };
+        const auto checkStored = [&] {
+            for (const char* query : {"SELECT k, other, v FROM TestTable ORDER BY k;",
+                    "SELECT k, other, v FROM TestTable VIEW idx_other ORDER BY k;"}) {
+                const auto result = runtime.WaitFuture(ddl.ExecuteQuery(query, TTxControl::NoTx()));
+                UNIT_ASSERT_C(readRows(result) == stored, query << " returned " << FormatResultSetYson(result.GetResultSet(0)));
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(enqueuedChanges, changes.size(), "CDC records enqueued by DataShard");
+        };
+        const auto checkWrite = [&](const auto& result, const TRows& expectedRows) {
+            const auto rows = readRows(result);
+            UNIT_ASSERT_C(rows == expectedRows, "unexpected RETURNING rows: " << FormatResultSetYson(result.GetResultSet(0)));
+            for (const auto& [k, row] : rows) {
+                const auto old = stored.find(k);
+                const auto image = old == stored.end() ? std::nullopt : std::optional<TRow>(old->second);
+                UNIT_ASSERT(changes.emplace(std::make_pair(k, row.Other), TChange{image, row}).second);
+                stored.insert_or_assign(k, row);
+            }
+            // A volatile transaction can return before DataShard enqueues its CDC records.
+            runtime.WaitFor("committed CDC records", [&] { return enqueuedChanges >= changes.size(); }, TDuration::Seconds(30));
+            checkStored();
+        };
+        const auto checkInvalidated = [&](const auto& result) {
+            const auto& issues = result.GetIssues();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, issues.ToString());
+            UNIT_ASSERT_C(HasIssue(issues, NYql::TIssuesIds::KIKIMR_QUERY_INVALIDATED), issues.ToString());
+            UNIT_ASSERT_C(HasIssue(issues, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH), issues.ToString());
+            UNIT_ASSERT(result.GetResultSets().empty());
+            checkStored();
+        };
+
+        const auto race = [&](const auto& executeWrite, const TString& alter) {
+            const auto before = DescribeTable(&server, sender, tablePath);
+            const auto& path = before.GetPathDescription().GetSelf();
+            const auto version = before.GetPathDescription().GetTable().GetTableSchemaVersion();
+            UNIT_ASSERT(version);
+
+            // The write actor has materialized the rows and schema version in TEvWrite.
+            // Hold both destination tablets at the pipe cache while the other node runs ALTER.
+            using TWrite = NEvents::TDataEvents::TEvWrite;
+            NActors::TBlockEvents<TEvPipeCache::TEvForward> blocked(runtime, [&](const auto& ev) {
+                const auto& forward = *ev->Get();
+                return ev->Sender.NodeId() == runtime.GetNodeId(1)
+                    && (forward.TabletId == shards.front() || forward.TabletId == indexShards.front())
+                    && forward.Ev->Type() == TWrite::EventType
+                    && static_cast<const TWrite&>(*forward.Ev).Record.OperationsSize() > 0;
+            });
+            Y_DEFER { blocked.Stop().Unblock(); };
+            const auto findBaseWrite = [&] {
+                return std::find_if(blocked.begin(), blocked.end(), [&](const auto& ev) {
+                    return ev->Get()->TabletId == shards.front();
+                });
+            };
+            const auto timeout = TDuration::Seconds(30);
+            auto write = executeWrite();
+            runtime.WaitFor("compiled write to TestTable", [&] {
+                return findBaseWrite() != blocked.end() || write.HasValue() || write.HasException();
+            }, timeout);
+            const auto base = findBaseWrite();
+            UNIT_ASSERT_C(base != blocked.end(), "write completed without a physical write to TestTable");
+            for (const auto& operation : static_cast<const TWrite&>(*(*base)->Get()->Ev).Record.GetOperations()) {
+                UNIT_ASSERT(operation.HasPayloadIndex());
+                UNIT_ASSERT_VALUES_EQUAL(operation.GetTableId().GetOwnerId(), path.GetSchemeshardId());
+                UNIT_ASSERT_VALUES_EQUAL(operation.GetTableId().GetTableId(), path.GetPathId());
+                UNIT_ASSERT_VALUES_EQUAL(operation.GetTableId().GetSchemaVersion(), version);
+            }
+
+            const auto result = runtime.WaitFuture(ddl.ExecuteQuery(alter, TTxControl::NoTx()), timeout);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto after = DescribeTable(&server, sender, tablePath);
+            UNIT_ASSERT(after.GetPathDescription().GetTable().GetTableSchemaVersion() > version);
+            UNIT_ASSERT_C(!write.HasValue() && !write.HasException(), "write finished before the held rows were delivered");
+            blocked.Stop().Unblock();
+            return runtime.WaitFuture(write, timeout);
+        };
+
+        const TString query = PreparedInsert ? R"(
+            DECLARE $k AS Int32;
+            INSERT INTO TestTable (k, other) VALUES ($k, $k * 10), ($k + 1, ($k + 1) * 10) RETURNING k, other, v;
+        )" : R"(
+            DECLARE $k AS Int32;
+            DECLARE $phase AS Int32;
+            UPSERT INTO TestTable (k, other) VALUES
+                (1, 10 + $phase), (2, 20 + $phase), (3, 30 + $phase), ($k, $k * 10), ($k + 1, ($k + 1) * 10)
+            RETURNING k, other, v;
+        )";
+        std::optional<NYdb::NTable::TDataQuery> prepared;
+        const auto prepare = [&] {
+            if (PreparedInsert) {
+                const auto result = runtime.WaitFuture(writer.PrepareDataQuery(query));
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                prepared = result.GetQuery();
+            }
+        };
+        const auto execute = [&](i32 k, i32 phase) {
+            NYdb::TParamsBuilder params;
+            params.AddParam("$k").Int32(k).Build();
+            if (prepared) {
+                return prepared->Execute(tx, params.Build());
+            }
+            params.AddParam("$phase").Int32(phase).Build();
+            return writer.ExecuteDataQuery(query, tx, params.Build());
+        };
+        const auto expectedRows = [&](i32 k, i32 phase, std::optional<i32> value) {
+            TRows rows{{k, {k * 10, value}}, {k + 1, {(k + 1) * 10, value}}};
+            if (!PreparedInsert) {
+                rows.emplace(1, TRow{10 + phase, 7});
+                rows.emplace(2, TRow{20 + phase, std::nullopt});
+                rows.emplace(3, TRow{30 + phase, 42});
+            }
+            return rows;
+        };
+
+        checkWrite(runtime.WaitFuture(writer.ExecuteDataQuery(
+            "INSERT INTO TestTable (k, other, v) VALUES (1, 10, 7), (2, 20, NULL) RETURNING k, other, v;", tx)),
+            {{1, {10, 7}}, {2, {20, std::nullopt}}});
+        checkWrite(runtime.WaitFuture(writer.ExecuteDataQuery(
+            "INSERT INTO TestTable (k, other) VALUES (3, 30) RETURNING k, other, v;", tx)),
+            {{3, {30, 42}}});
+        prepare();
+        if (PreparedInsert) {
+            checkWrite(runtime.WaitFuture(execute(4, 0)), expectedRows(4, 0, 42));
+        }
+
+        const auto checkTransition = [&](const TString& alter, i32 k, i32 phase, std::optional<i32> newDefault) {
+            auto result = race([&] { return execute(k, phase); }, alter);
+            if (!result.IsSuccess()) {
+                checkInvalidated(result);
+                prepare();
+                result = runtime.WaitFuture(execute(k, phase));
+            }
+            // The held write reaches DataShard after ALTER completes, so success requires the current default.
+            checkWrite(result, expectedRows(k, phase, newDefault));
+        };
+
+        const TString defaultB = "IF(RandomNumber(1) * 0ul = 0ul, 50, 0)";
+        checkTransition(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << defaultB << ";", 6, 1, 50);
+        AssertFromExpression(fixture.ColumnDesc(tablePath, "v"), defaultB);
+        checkTransition("ALTER TABLE TestTable ALTER COLUMN v DROP DEFAULT;", 8, 2, std::nullopt);
+        const auto column = fixture.ColumnDesc(tablePath, "v");
+        UNIT_ASSERT_C(!column.HasDefaultFromExpression() && !column.HasDefaultFromLiteral(), column.ShortDebugString());
+
+        const auto checkImage = [](const NJson::TJsonValue& image, const TRow& row) {
+            UNIT_ASSERT(image.IsMap() && image.Has("other") && image.Has("v"));
+            UNIT_ASSERT_VALUES_EQUAL(image.GetMap().size(), 2u);
+            UNIT_ASSERT(image["other"].IsInteger());
+            UNIT_ASSERT_VALUES_EQUAL(image["other"].GetInteger(), row.Other);
+            if (row.V) {
+                UNIT_ASSERT(image["v"].IsInteger());
+                UNIT_ASSERT_VALUES_EQUAL(image["v"].GetInteger(), *row.V);
+            } else {
+                UNIT_ASSERT(image["v"].IsNull());
+            }
+        };
+        const auto messages = fixture.ReadChangefeedMessages(changes.size());
+        UNIT_ASSERT_VALUES_EQUAL(enqueuedChanges, changes.size());
+        for (const auto& message : messages) {
+            const auto& key = message["key"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(key.size(), 1u);
+            UNIT_ASSERT(key.front().IsInteger());
+            const auto& image = message["newImage"];
+            UNIT_ASSERT(image.Has("other") && image["other"].IsInteger());
+            const auto found = changes.find({static_cast<i32>(key.front().GetInteger()), static_cast<i32>(image["other"].GetInteger())});
+            UNIT_ASSERT_C(found != changes.end(), "unexpected CDC image " << message);
+            checkImage(image, found->second.New);
+            if (found->second.Old) {
+                checkImage(message["oldImage"], *found->second.Old);
+            } else {
+                UNIT_ASSERT(!message.Has("oldImage"));
+            }
+            changes.erase(found);
+        }
+        UNIT_ASSERT(changes.empty());
     }
 
     Y_UNIT_TEST(ChangefeedUsesCurrentExpressionDefault) {

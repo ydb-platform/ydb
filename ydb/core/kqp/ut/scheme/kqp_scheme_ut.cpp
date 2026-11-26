@@ -17407,7 +17407,19 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
 
         {
-            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN timestamp, RESET (TTL);";
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` RESET (TTL);";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto dropIndexQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` DROP INDEX min_max_pk_int;";
+            auto dropIndexResult = testHelper.GetSession().ExecuteSchemeQuery(dropIndexQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(dropIndexResult.GetStatus(), EStatus::SUCCESS, dropIndexResult.GetIssues().ToString());
+        }
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN timestamp;";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
@@ -17450,6 +17462,12 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` RESET (TTL);";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto dropIndexQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` DROP INDEX min_max_pk_int;";
+            auto dropIndexResult = testHelper.GetSession().ExecuteSchemeQuery(dropIndexQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(dropIndexResult.GetStatus(), EStatus::SUCCESS, dropIndexResult.GetIssues().ToString());
         }
 
         {

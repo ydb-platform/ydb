@@ -4612,7 +4612,8 @@ selector_config: []
         if (scenario == EDcChangeScenario::NoChange || scenario == EDcChangeScenario::UnrelatedProposal) {
             UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
             using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
-            UNIT_ASSERT_VALUES_EQUAL(response->GetStatus(), scenario == EDcChangeScenario::NoChange ? TResult::NO_QUORUM : TResult::RACE);
+            UNIT_ASSERT_C(response->GetStatus() == (scenario == EDcChangeScenario::NoChange ? TResult::NO_QUORUM : TResult::RACE),
+                response->DebugString());
             UNIT_ASSERT(!committed());
             return;
         }
@@ -5052,6 +5053,67 @@ selector_config: []
             *MakeNodeWardenConfig(config, bridge), true);
     }
 
+    Y_UNIT_TEST(DataCenterQuorumNoOpDetectsNewerCommittedSnapshot) {
+        using NKikimrBlobStorage::TDataCenterState;
+        using NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        TCommitConfirmationFixture fixture(true);
+        fixture.Config.SetDataCenterQuorumEnabled(true);
+        fixture.Config.MutableDataCenterStates();
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 id : {1, 2, 3}) {
+            *fixture.Metadata(id).MutableCommittedStorageConfig() = fixture.Config;
+        }
+        fixture.Start(true);
+        TActorId root = fixture.Root();
+        NKikimrBlobStorage::TStorageConfig newer = MakeNextConfig(fixture.Config);
+        NKikimrBlobStorage::TDataCenterStates::TDataCenter *dc = newer.MutableDataCenterStates()->AddDataCenter();
+        dc->SetName("dc-2");
+        dc->SetState(TDataCenterState::EXCLUDED);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&newer);
+        for (ui32 id : {1, 2, 3}) {
+            *fixture.Metadata(id).MutableCommittedStorageConfig() = newer;
+        }
+        TActorId client = fixture.Runtime.AllocateEdgeActor(root.NodeId());
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableApplyDataCenterStates();
+        fixture.Runtime.Send(new IEventHandle(root, client, request.release()), root.NodeId());
+        auto reply = fixture.Runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(client);
+        UNIT_ASSERT_C(reply->Get()->Record.GetStatus() == TEvNodeConfigInvokeOnRootResult::RACE, reply->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, root).GetQueryConfig().GetConfig().GetFingerprint(), newer.GetFingerprint());
+    }
+
+    Y_UNIT_TEST(DataCenterQuorumActivationNeedsLegacyWriteQuorum) {
+        TCommitConfirmationFixture fixture(true);
+        for (ui32 id : {1, 2, 3}) {
+            TString name = "dc-" + std::to_string(id);
+            fixture.Config.MutableAllNodes(id - 1)->MutableLocation()->SetDataCenter(name);
+            if (id != 1) {
+                auto *dc = fixture.Config.MutableDataCenterStates()->AddDataCenter();
+                dc->SetName(name);
+                dc->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+            }
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 id : {1, 2, 3}) {
+            *fixture.Metadata(id).MutableCommittedStorageConfig() = fixture.Config;
+        }
+        fixture.Start(true);
+        NKikimrBlobStorage::TStorageConfig activation = MakeNextConfig(fixture.Config);
+        activation.SetDataCenterQuorumEnabled(true);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&activation);
+        TCollectedConfigs collected = MakeCollectedConfigs(fixture.Config, {1, 2, 3});
+        AddCollectedConfig(collected, fixture.Config, {1, 2, 3});
+        AddCollectedConfig(collected, activation, {1}, false);
+        auto result = ProcessCollectedConfigs(fixture, collected, true);
+        UNIT_ASSERT_C(!result.ErrorReason, result.ErrorReason.value_or(""));
+        UNIT_ASSERT(result.RecoveredConfig && !result.RecoveredConfig->GetDataCenterQuorumEnabled());
+        UNIT_ASSERT(!result.RequiresRecoveryProposition);
+        AddCollectedConfig(collected, activation, {2}, false);
+        result = ProcessCollectedConfigs(fixture, collected, true);
+        UNIT_ASSERT_C(!result.ErrorReason, result.ErrorReason.value_or(""));
+        UNIT_ASSERT(result.RecoveredConfig && result.RecoveredConfig->GetDataCenterQuorumEnabled());
+    }
+
     Y_UNIT_TEST(DataCenterQuorumActivationRequiresEveryStaticKeeper) {
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
         TCommitConfirmationFixture fixture(true);
@@ -5075,7 +5137,7 @@ selector_config: []
             fixture.Runtime.Send(new IEventHandle(root, client, request.release()), root.NodeId());
             auto reply = fixture.Runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(client, false);
             UNIT_ASSERT(reply);
-            UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Record.GetStatus(), supported ? TResult::OK : TResult::ERROR,
+            UNIT_ASSERT_C(reply->Get()->Record.GetStatus() == (supported ? TResult::OK : TResult::ERROR),
                 reply->Get()->Record.DebugString());
             UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, root).GetQueryConfig().GetConfig().GetDataCenterQuorumEnabled(), supported);
         }

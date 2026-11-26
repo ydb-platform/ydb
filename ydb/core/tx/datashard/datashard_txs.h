@@ -299,6 +299,7 @@ public:
 
 private:
     TRowVersion MvccVersion = TRowVersion::Min();
+    bool Cancelled = false;
 };
 
 // Attaches a directly-built part (direct part import) as a bottom layer of the

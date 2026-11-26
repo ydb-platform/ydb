@@ -308,6 +308,12 @@ void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TA
         return;
     }
 
+    if (!IsUserTableWriteBlocked() && !IsActiveImport(ev->Get()->TxId, ev->Get()->Record.GetTableId(), ev->Sender)) {
+        ctx.Send(ev->Sender, new TEvDataShard::TEvS3UploadRowsResponse(TabletID(),
+                                 NKikimrTxDataShard::TError::EXECUTION_CANCELLED), 0, ev->Cookie);
+        return;
+    }
+
     if (!MaybeReject<TEvDataShard::TEvS3UploadRowsResponse, true>(this, ev, ctx, "s3 bulk upsert", TDataShard::ELogThrottlerType::S3UploadRows_Reject)) {
         Executor()->Execute(new TTxS3UploadRows(this, ev), ctx);
     }

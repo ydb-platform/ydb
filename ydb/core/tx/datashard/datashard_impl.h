@@ -1500,7 +1500,7 @@ class TDataShard
     void Handle(TEvDataShard::TEvS3DirectWriteBegin::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3DirectWriteFinish::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3DirectWriteAbort::TPtr& ev, const TActorContext& ctx);
-    bool IsActiveDirectImport(ui64 txId, ui64 tableId, const TActorId& sender);
+    bool IsActiveImport(ui64 txId, ui64 tableId, const TActorId& sender);
     TString CheckDirectImportSpace();
     void AbortDirectImportsForSpace();
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
@@ -1694,6 +1694,10 @@ public:
     ~TDataShard();
 
     void CancelS3DirectWrite(ui64 txId);
+
+    const TS3Download* FindS3Download(ui64 txId) const {
+        return S3Downloads.Find(txId);
+    }
 
     void PrepareAndSaveOutReadSets(ui64 step,
                                    ui64 txId,

@@ -935,6 +935,71 @@ Y_UNIT_TEST(ResumeLegacyRestoreAfterEnablingDirectImport) {
     UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), ExpectedUint32TableState(10));
 }
 
+Y_UNIT_TEST_TWIN(LegacyRestorePreservesPlannedVersionAfterRestart, oldCheckpoint) {
+    TTestEnv env;
+    env.Runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(false);
+    env.Runtime.GetAppData().FeatureFlags.SetEnableBackupTableChecksum(false);
+    auto [shards, tableId] = env.CreateUint32Table();
+    const auto desc = env.TableDescription(shards[0], tableId);
+    env.StartS3(MakeCsv(10, ""));
+    const ui64 txId = env.AllocateTxId();
+    TRowVersion version;
+    auto plans = env.Runtime.AddObserver<TEvTxProcessing::TEvPlanStep>([&](auto& ev) {
+        if (ev->Get()->Record.GetTabletID() == shards[0]) {
+            for (const auto& transaction : ev->Get()->Record.GetTransactions()) {
+                if (transaction.GetTxId() == txId) {
+                    version = TRowVersion(ev->Get()->Record.GetStep(), txId);
+                }
+            }
+        }
+    });
+    TMaybe<NKikimrTxDataShard::TShardOpResult> result;
+    ui64 reportedStep = 0;
+    auto done = env.Runtime.AddObserver<TEvDataShard::TEvSchemaChanged>([&](auto& ev) {
+        if (ev->Get()->Record.GetTxId() == txId && ev->Get()->Record.HasOpResult()) {
+            reportedStep = ev->Get()->Record.GetStep();
+            result = ev->Get()->Record.GetOpResult();
+        }
+    });
+    TBlockEvents<TEvDataShard::TEvS3UploadRowsResponse> uploaded(env.Runtime);
+    env.StartRestore(shards[0], tableId.PathId.OwnerId, txId, env.BuildRestoreBody(tableId, desc, 0, 16, txId));
+    env.Runtime.WaitFor("first committed restore batch", [&] {
+        return !uploaded.empty();
+    });
+    UNIT_ASSERT(version.Step);
+    UNIT_ASSERT(!result);
+
+    if (oldCheckpoint) {
+        // Simulate a checkpoint written by an older binary without write-version evidence
+        auto info = uploaded.front()->Get()->Info;
+        UNIT_ASSERT_GT(info.WrittenRows, 0u);
+        UNIT_ASSERT_LT(info.WrittenRows, 10u);
+        info.DownloadState.ClearRestoreWriteProgress();
+        env.Runtime.SendToPipe(
+            shards[0], env.Sender, new TEvDataShard::TEvStoreS3DownloadInfo(txId, info), 0, GetPipeConfigWithRetries());
+        env.Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvS3DownloadInfo>(env.Sender);
+    }
+
+    // Recovery must keep D even after the coordinator has issued a newer read version
+    env.Runtime.SimulateSleep(TDuration::Seconds(1));
+    UNIT_ASSERT(AcquireReadSnapshot(env.Runtime, "/Root") > version);
+    uploaded.Stop();
+    RebootTablet(env.Runtime, shards[0], env.Runtime.AllocateEdgeActor());
+    env.Runtime.WaitFor("restore completion after restart", [&] {
+        return result.Defined();
+    }, TDuration::Minutes(3));
+    UNIT_ASSERT_C(result->GetSuccess(), result->GetExplain());
+    UNIT_ASSERT_VALUES_EQUAL(reportedStep, oldCheckpoint ? 0 : version.Step);
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), ExpectedUint32TableState(10));
+
+    auto request = GetBaseReadRequest(tableId, desc, 2000, NKikimrDataEvents::FORMAT_CELLVEC, version);
+    AddFullRangeQuery(*request);
+    const auto restored = SendRead(env.Server, shards[0], request.release(), env.Sender);
+    UNIT_ASSERT_VALUES_EQUAL(restored->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT(restored->Record.GetFinished());
+    UNIT_ASSERT_VALUES_EQUAL(restored->GetRowsCount(), 10u);
+}
+
 Y_UNIT_TEST_TWIN(ResumeDirectRestoreAfterDisablingDirectImport, committed) {
     TTestEnv env;
     env.ValidateChecksums = true;

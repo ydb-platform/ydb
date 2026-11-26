@@ -52,12 +52,23 @@ const TS3Download* TS3DownloadsManager::Find(ui64 txId) const {
     return Downloads.FindPtr(txId);
 }
 
-const TS3Download& TS3DownloadsManager::Store(NIceDb::TNiceDb& db, ui64 txId, const TS3Download& newInfo) {
+const TS3Download& TS3DownloadsManager::Store(
+    NIceDb::TNiceDb& db, ui64 txId, const TS3Download& newInfo, const TRowVersion* writeVersion)
+{
     auto& info = Downloads[txId];
 
     Y_ENSURE(newInfo.DataETag);
     Y_ENSURE(info.DataETag.GetOrElse(*newInfo.DataETag) == *newInfo.DataETag);
+    // Only the shard's previous committed checkpoint can attest to earlier rows
+    const bool canTrackWrite =
+        writeVersion && newInfo.WrittenRows >= info.WrittenRows && info.HasWrittenAtVersion(*writeVersion);
     info = newInfo;
+    info.DownloadState.ClearRestoreWriteProgress();
+    if (canTrackWrite) {
+        auto* progress = info.DownloadState.MutableRestoreWriteProgress();
+        writeVersion->ToProto(progress->MutableVersion());
+        progress->SetWrittenRows(info.WrittenRows);
+    }
 
     using Schema = TDataShard::Schema;
     db.Table<Schema::S3Downloads>().Key(txId).Update(
@@ -66,7 +77,7 @@ const TS3Download& TS3DownloadsManager::Store(NIceDb::TNiceDb& db, ui64 txId, co
         NIceDb::TUpdate<Schema::S3Downloads::WrittenBytes>(newInfo.WrittenBytes),
         NIceDb::TUpdate<Schema::S3Downloads::WrittenRows>(newInfo.WrittenRows),
         NIceDb::TUpdate<Schema::S3Downloads::ChecksumState>(newInfo.ProcessedChecksumState),
-        NIceDb::TUpdate<Schema::S3Downloads::DownloadState>(newInfo.DownloadState)
+        NIceDb::TUpdate<Schema::S3Downloads::DownloadState>(info.DownloadState)
     );
 
     return info;

@@ -15,6 +15,8 @@
 
 #include <library/cpp/yt/system/handle_eintr.h>
 
+#include <util/generic/size_literals.h>
+
 #include <util/stream/file.h>
 
 #include <util/string/split.h>
@@ -29,6 +31,12 @@
 
 #include <util/folder/iterator.h>
 #include <util/folder/filelist.h>
+
+#include <algorithm>
+#include <charconv>
+#include <cstddef>
+#include <cstring>
+#include <limits>
 
 #ifdef _unix_
     #include <stdio.h>
@@ -1144,11 +1152,6 @@ TError StatusToError(int /*status*/)
     YT_UNIMPLEMENTED();
 }
 
-void CloseAllDescriptors()
-{
-    YT_UNIMPLEMENTED();
-}
-
 void SafePipe(TFileDescriptor /*fd*/ [2])
 {
     YT_UNIMPLEMENTED();
@@ -1195,36 +1198,62 @@ std::string SafeGetUsernameByUid(int /*uid*/)
 }
 #endif
 
-std::vector<int> CloseAllDescriptors(const std::vector<int>& exceptFor)
+bool TryCloseDescriptors(TFunctionRef<bool(int) noexcept> fdFilter) noexcept
 {
 #ifdef _linux_
-    std::vector<int> fds;
-    for (const auto& entry : TDirIterator("/proc/self/fd", TDirIterator::TOptions().SetMaxLevel(1))) {
-        if (entry.fts_type != FTS_SL) {
-            continue;
+    bool success = true;
+    auto closeIfSelected = [&] (int descriptor) noexcept {
+        if (fdFilter(descriptor)) {
+            success &= TryClose(descriptor, /*ignoreBadFD*/ true);
         }
-        const char* begin = entry.fts_name;
-        char* end = nullptr;
-        int fd = static_cast<int>(strtol(begin, &end, 10));
-        if (begin == end ||
-            (std::find(exceptFor.begin(), exceptFor.end(), fd) != exceptFor.end()))
-        {
-            continue;
+    };
+
+#ifdef SYS_getdents64
+    const int directory = ::open("/proc/self/fd", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (directory >= 0) {
+        // A lowered descriptor limit can exclude sockets that are still open.
+        char buffer[4_KB];
+        ssize_t size;
+        while ((size = HandleEintr(::syscall, SYS_getdents64, directory, buffer, sizeof(buffer))) > 0) {
+            for (const char* entry = buffer; entry < buffer + size;) {
+                decltype(dirent64::d_reclen) recordSize;
+                std::memcpy(&recordSize, entry + offsetof(dirent64, d_reclen), sizeof(recordSize));
+
+                int descriptor;
+                if (std::from_chars(entry + offsetof(dirent64, d_name), entry + recordSize, descriptor).ec == std::errc{} &&
+                    descriptor != directory)
+                {
+                    closeIfSelected(descriptor);
+                }
+                entry += recordSize;
+            }
         }
-        // We can add descriptor from TDirIterator here but it will be ignored with ignoreBadFD flag.
-        fds.push_back(fd);
+        ::close(directory);
+        if (size == 0) {
+            return success;
+        }
     }
-
-    bool ignoreBadFD = true;
-    for (int fd : fds) {
-        YT_VERIFY(TryClose(fd, ignoreBadFD));
-    }
-
-    return fds;
-#else
-    Y_UNUSED(exceptFor);
-    return {};
 #endif
+
+    rlimit limit;
+    const int descriptorLimit = ::getrlimit(RLIMIT_NOFILE, &limit) == 0 && limit.rlim_max != RLIM_INFINITY
+        ? static_cast<int>(std::min<rlim_t>(limit.rlim_max, std::numeric_limits<int>::max()))
+        : NSystemInfo::MaxOpenFiles();
+    for (int descriptor = 0; descriptor < descriptorLimit; ++descriptor) {
+        if (::fcntl(descriptor, F_GETFD) >= 0 || errno != EBADF) {
+            closeIfSelected(descriptor);
+        }
+    }
+    return success;
+#else
+    Y_UNUSED(fdFilter);
+    return true;
+#endif
+}
+
+void CloseDescriptors(TFunctionRef<bool(int) noexcept> fdFilter) noexcept
+{
+    YT_VERIFY(TryCloseDescriptors(fdFilter));
 }
 
 int GetFileDescriptorCount()

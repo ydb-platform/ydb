@@ -6,9 +6,13 @@
 #include <yt/yt/core/yson/stream.h>
 #include <yt/yt/core/yson/writer.h>
 
+#include <library/cpp/yt/coding/varint.h>
+
 #include <util/string/escape.h>
+#include <util/system/filemap.h>
 
 #include <array>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -109,6 +113,30 @@ TEST_F(TBufferedYsonWriterTest, String)
 TEST_F(TBufferedYsonWriterTest, EmptyString)
 {
     TEST_SCALAR(TStringBuf(), String)
+}
+
+TEST_F(TBufferedYsonWriterTest, BinaryStringLengthLimit)
+{
+    constexpr size_t MaxStringLength = std::numeric_limits<i32>::max();
+    constexpr size_t MaxEncodedLength = 1 + MaxVarInt32Size + MaxStringLength;
+
+    // Reserve address space without touching the string's pages.
+    TMappedAllocation allocation(MaxStringLength + 1);
+    TStringBuf oversizedValue(allocation.Data(), MaxStringLength + 1);
+
+    TSizeLimitedOutputStream outputStream(/*limit*/ MaxEncodedLength);
+    TBufferedYsonWriter writer(&outputStream, EYsonFormat::Binary);
+    EXPECT_THROW_WITH_SUBSTRING(writer.OnStringScalar(oversizedValue), "signed 32-bit limit");
+    writer.Flush();
+    EXPECT_EQ(outputStream.GetWrittenSize(), 0u);
+
+    EXPECT_THROW_WITH_SUBSTRING(writer.OnKeyedItem(oversizedValue), "signed 32-bit limit");
+    writer.Flush();
+    EXPECT_EQ(outputStream.GetWrittenSize(), 0u);
+
+    writer.OnStringScalar(TStringBuf(allocation.Data(), MaxStringLength));
+    writer.Flush();
+    EXPECT_EQ(outputStream.GetWrittenSize(), MaxEncodedLength);
 }
 
 TEST_F(TBufferedYsonWriterTest, Int64)
@@ -431,7 +459,7 @@ TEST_F(TBufferedYsonWriterTest, ShortStringEscaping)
         writer.OnStringScalar(input);
         writer.Flush();
 
-        TString expected = "\"";
+        std::string expected = "\"";
         expected += ::EscapeC(TStringBuf(input));
         expected += '"';
         EXPECT_EQ(expected, outputStream.Str());
@@ -545,7 +573,7 @@ TEST_F(TBufferedYsonWriterTest, PrettyFormatWithLongIndent)
 
 TEST_F(TBufferedYsonWriterTest, PrettyFormatDoesNotIndentAtNegativeDepth)
 {
-    TSizeLimitedOutputStream outputStream(64);
+    TSizeLimitedOutputStream outputStream(/*limit*/ 64);
     TBufferedYsonWriter writer(&outputStream, EYsonFormat::Pretty);
 
     EXPECT_NO_THROW({

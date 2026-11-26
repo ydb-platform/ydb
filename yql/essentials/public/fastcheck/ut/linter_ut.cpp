@@ -12,7 +12,6 @@ TChecksRequest MakeCheckRequest() {
         .LangVer = GetMaxReleasedLangVersion()};
 }
 
-#ifdef YQL_FASTCHECK_TEST_NEW_FEATURES
 void CheckStatementKindResult(const TChecksRequest& request, const TSet<EStatementKind>& expectedKinds) {
     bool allowed = true;
     for (const auto statementKind : expectedKinds) {
@@ -51,8 +50,6 @@ void CheckStatementKinds(const TString& program, const TSet<EStatementKind>& exp
     CheckStatementKindResult(request, expectedKinds);
 }
 
-#endif
-
 } // namespace
 
 namespace NDeduplicateIssues {
@@ -73,7 +70,6 @@ struct TTestCase {
 } // namespace NDeduplicateIssues
 
 Y_UNIT_TEST_SUITE(TLinterTests) {
-#ifdef YQL_FASTCHECK_TEST_NEW_FEATURES
 Y_UNIT_TEST(AllowedStatementKindsAlwaysAllowed) {
     for (const TString& program : {
              "SELECT 1;", "VALUES (1);", "SELECT * FROM plato.Input;",
@@ -156,8 +152,6 @@ Y_UNIT_TEST(AllowedStatementKindsPostgres) {
         CheckStatementKinds(program, {EStatementKind::TxControl}, ESyntax::PG);
     }
 }
-
-#endif
 
 Y_UNIT_TEST(ListChecksResult) {
     auto res = ListChecks();

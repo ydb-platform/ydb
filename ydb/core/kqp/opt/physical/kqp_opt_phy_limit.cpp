@@ -7,6 +7,7 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -88,7 +89,101 @@ TExprBase KqpDisableOlapBlocksOnLimit(TExprBase node, TTypeAnnotationContext& ty
     return node;
 }
 
-TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+namespace {
+
+bool HasSingleConsumer(const TExprNode* node, const TParentsMap* parents) {
+    if (!parents) {
+        return false;
+    }
+    const auto it = parents->find(node);
+    return it != parents->end() && it->second.size() == 1;
+}
+
+bool IsArgMember(const TExprBase& expr, const TExprNode* arg) {
+    const auto member = expr.Maybe<TCoMember>();
+    return member && member.Cast().Struct().Raw() == arg;
+}
+
+// AsStruct whose every field is Member(lambdaArg, ...): a rename, not a computation.
+bool IsMemberRenameStruct(const TExprBase& expr, const TExprNode* arg) {
+    const auto asStruct = expr.Maybe<TCoAsStruct>();
+    if (!asStruct) {
+        return false;
+    }
+    for (auto field : asStruct.Cast()) {
+        if (!IsArgMember(field.Item(1), arg)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsLiteralTrue(const TExprBase& expr) {
+    const auto boolean = expr.Maybe<TCoBool>();
+    return boolean && boolean.Cast().Literal().Value() == "true";
+}
+
+// Keeps every input row. After OLAP filter and projection push the body is
+// Just(AsStruct(Member...)), or OptionalIf((Bool 'true'), AsStruct(Member...)):
+// the filter push leaves a literal true once every predicate is in KqpOlapFilter.
+// OptionalIf/ListIf with any other predicate still drops rows, so it stays put.
+bool IsRowPreservingRename(const TCoFlatMapBase& flatMap) {
+    const auto lambda = flatMap.Lambda();
+    if (lambda.Args().Size() != 1 || lambda.Ref().ChildrenSize() != 2) {
+        return false;
+    }
+    const auto* arg = lambda.Args().Arg(0).Raw();
+    const auto body = lambda.Body();
+
+    if (IsJustOrSingleAsList(body.Ref())) {
+        return IsMemberRenameStruct(TExprBase(body.Ref().HeadPtr()), arg);
+    }
+
+    if (body.Maybe<TCoOptionalIf>() || body.Maybe<TCoListIf>()) {
+        const auto cond = body.Cast<TCoConditionalValueBase>();
+        if (!IsLiteralTrue(cond.Predicate())) {
+            return false;
+        }
+        auto value = cond.Value();
+        if (IsJustOrSingleAsList(value.Ref())) {
+            value = TExprBase(value.Ref().HeadPtr());
+        }
+        return IsMemberRenameStruct(value, arg);
+    }
+    return false;
+}
+
+// false: a wrapper is shared with another consumer, so the limit must not move under it.
+bool PeelRowPreservingWrappers(TExprBase& input, const TParentsMap* parents, TVector<TExprBase>& peeled) {
+    for (;;) {
+        if (const auto extract = input.Maybe<TCoExtractMembers>()) {
+            if (!HasSingleConsumer(extract.Cast().Raw(), parents)) {
+                return false;
+            }
+            peeled.push_back(extract.Cast());
+            input = extract.Cast().Input();
+            continue;
+        }
+        if (const auto flatMap = input.Maybe<TCoFlatMapBase>()) {
+            if (!IsRowPreservingRename(flatMap.Cast())) {
+                return true;
+            }
+            if (!HasSingleConsumer(flatMap.Cast().Raw(), parents)) {
+                return false;
+            }
+            peeled.push_back(flatMap.Cast());
+            input = flatMap.Cast().Input();
+            continue;
+        }
+        return true;
+    }
+}
+
+} // anonymous namespace
+
+TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+    const TParentsMap* parents)
+{
     if (!node.Maybe<TCoTake>()) {
         return node;
     }
@@ -96,6 +191,16 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
 
     auto maybeSkip = take.Input().Maybe<TCoSkip>();
     auto input = maybeSkip ? maybeSkip.Cast().Input() : take.Input();
+
+    // ExtractMembers and a rename FlatMap sit between Take and the OLAP read after projection push.
+    // The read output type does not change; only its Settings do, so the wrappers are put back with ChangeChild.
+    TVector<TExprBase> peeled;
+    if (!PeelRowPreservingWrappers(input, parents, peeled)) {
+        return node;
+    }
+    if (!peeled.empty() && !HasSingleConsumer(input.Raw(), parents)) {
+        return node;
+    }
 
     bool isReadTable = input.Maybe<TKqpReadTable>().IsValid();
     bool isReadTableRanges = input.Maybe<TKqpReadTableRanges>().IsValid() || input.Maybe<TKqpReadOlapTableRanges>().IsValid();
@@ -155,6 +260,10 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
     }
 
     input = BuildReadNode(node.Pos(), ctx, input, settings);
+
+    for (auto it = peeled.rbegin(); it != peeled.rend(); ++it) {
+        input = TExprBase(ctx.ChangeChild(it->Ref(), TCoInputBase::idx_Input, input.Ptr()));
+    }
 
     if (maybeSkip) {
         input = Build<TCoSkip>(ctx, node.Pos())

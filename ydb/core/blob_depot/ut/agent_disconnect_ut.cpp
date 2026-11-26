@@ -1,7 +1,6 @@
 #include "../blob_depot.h"
 #include "../agent/agent.h"
 #include "../agent/agent_impl.h"
-#include "../config.h"
 #include "../events.h"
 #include "../s3_request_timer.h"
 #include "../s3_router.h"
@@ -21,8 +20,6 @@
 #include <google/protobuf/unknown_field_set.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <algorithm>
-
 namespace NKikimr::NBlobDepot {
 namespace {
 
@@ -35,7 +32,6 @@ struct TAgent {
 struct TLocalMode {};
 struct TSyncMode {
     bool VirtualGroup = false;
-    bool NamespaceValidated = true;
 };
 struct TTestEnv {
     static constexpr ui64 TabletId = 72075186224000000;
@@ -91,7 +87,6 @@ struct TTestEnv {
             if (sync->VirtualGroup) {
                 Config.SetVirtualGroupId(VirtualGroupId);
             }
-            Config.SetS3NamespaceValidated(sync->NamespaceValidated);
             auto* s3 = Config.MutableS3BackendSettings();
             s3->MutableSyncMode();
             s3->MutableSettings()->SetBucket("test-bucket");
@@ -1102,70 +1097,6 @@ Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
 
     Y_UNIT_TEST(QueryBlocksWaitForCommit) {
         CheckQueryBlocksCommit(false);
-    }
-
-    Y_UNIT_TEST(S3TrashWaitsForValidatedNamespaceAcrossRestart) {
-        using TStorage = NWrappers::TEvExternalStorage;
-        TTestEnv env(TSyncMode{.NamespaceValidated = false});
-        TControlBoard::SetValue(3, env.Runtime.GetAppData().Icb->BlobDepotControls.S3MaxDeletesInFlight);
-        TBlockEvents<TStorage::TEvListObjectsRequest> lists(env.Runtime);
-        TBlockEvents<TStorage::TEvDeleteObjectRequest> deletes(env.Runtime);
-        TBlockEvents<TStorage::TEvDeleteObjectsRequest> batches(env.Runtime);
-        const auto writer = env.Connect(1);
-        const auto& settings = env.Config.GetS3BackendSettings().GetSettings();
-        const TString prefix = MakeS3BasePath(settings, env.Config.GetName());
-        THashSet<TString> expected;
-        for (ui64 cookie = 1; cookie <= 3; ++cookie) {
-            env.Prepare(writer, cookie);
-            const auto locator = env.ExpectPrepared(writer, cookie);
-            UNIT_ASSERT(expected.insert(locator.MakeObjectName(prefix)).second);
-            auto discard = std::make_unique<TEvBlobDepot::TEvDiscardSpoiledBlobSeq>();
-            locator.ToProto(discard->Record.AddS3Locators());
-            env.Send(writer, discard.release());
-        }
-        env.QueryBlocks(writer, 12345);
-        UNIT_ASSERT(lists.empty() && deletes.empty() && batches.empty());
-
-        const auto edge = env.Runtime.AllocateEdgeActor();
-        RebootTablet(env.Runtime, TTestEnv::TabletId, edge);
-        const auto deadline = env.Runtime.GetCurrentTime() + TDuration::Seconds(5);
-        for (;;) {
-            env.Runtime.SendToPipe(TTestEnv::TabletId, edge, new TEvTablet::TEvGetCounters, 0, GetPipeConfigWithRetries());
-            const auto reply = env.Runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(edge, TDuration::Seconds(1));
-            UNIT_ASSERT(reply);
-            const auto& counters = reply->Get()->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters();
-            if (std::ranges::any_of(counters, [&](const auto& entry) {
-                return entry.GetName() == "BlobDepot/TotalS3TrashObjects" && entry.GetValue() == expected.size();
-            })) {
-                break;
-            }
-            UNIT_ASSERT_C(env.Runtime.GetCurrentTime() < deadline, "the tablet did not reload its staged S3 trash");
-            env.Runtime.SimulateSleep(TDuration::MilliSeconds(10));
-        }
-        env.QueryBlocks(env.Connect(1, 2), 12345);
-        UNIT_ASSERT(lists.empty() && deletes.empty() && batches.empty());
-
-        env.Config.SetS3NamespaceValidated(true);
-        env.ApplyConfig(2);
-        auto sent = [&] {
-            THashSet<TString> keys;
-            for (const auto& ev : deletes) {
-                const auto& request = ev->Get()->GetRequest();
-                UNIT_ASSERT_VALUES_EQUAL(TString(request.GetBucket()), settings.GetBucket());
-                keys.insert(TString(request.GetKey()));
-            }
-            for (const auto& ev : batches) {
-                const auto& request = ev->Get()->GetRequest();
-                UNIT_ASSERT_VALUES_EQUAL(TString(request.GetBucket()), settings.GetBucket());
-                for (const auto& object : request.GetDelete().GetObjects()) {
-                    keys.insert(TString(object.GetKey()));
-                }
-            }
-            return keys;
-        };
-        env.Runtime.WaitFor("deletion of staged S3 keys in the validated namespace",
-            [&] { return sent().size() >= expected.size(); }, TDuration::Seconds(5));
-        UNIT_ASSERT(sent() == expected);
     }
 
     Y_UNIT_TEST(IdenticalConfigAcknowledgesEachTransactionOnTheSamePipe) {

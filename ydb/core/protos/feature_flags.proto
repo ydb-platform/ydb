@@ -505,6 +505,5 @@ message TFeatureFlags {
     optional bool EnableBridgeProxyLocalPileFirstGet = 401 [default = false];
     optional bool EnableChecksumTable = 402 [default = false];
     // Enable after all nodes support packed S3 mappings and the rollback window has closed.
-    // Then reconfigure existing async groups through BSC to validate their S3 namespaces.
     optional bool EnableBlobDepotDataCooling = 403 [default = false];
 }

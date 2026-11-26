@@ -9,7 +9,6 @@ import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 import "google/protobuf/any.proto";
-import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrBlobStorage;
 
@@ -674,7 +673,8 @@ message TAllocateVirtualGroup {
     }
     repeated NKikimrBlobDepot.TChannelProfile ChannelProfiles = 5;
     uint64 BlobDepotId = 6; // when the tablet is already created; for testing purposes only
-    optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 8; // if S3 is used as a backend for this instance
+    // Each depot needs a dedicated <ObjectKeyPattern>/<Name> in the backing store.
+    optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 8;
 }
 
 message TDecommitGroups {
@@ -707,40 +707,11 @@ message TUpdateBridgeGroupInfo {
 
 message TReconfigureVirtualGroup {
     string Name = 1;
-    // Omit settings to validate ownership of the stored S3 namespace. An explicitly empty message
-    // requests removal of the S3 configuration and requires ConfirmS3Empty for an assigned bucket.
+    // Changing the bucket or key prefix redirects existing locators. Move any referenced objects first.
     optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 2;
-    // Confirm the new route accesses the same S3 objects, including writes already in flight, in any mode.
+    // Confirm the new route accesses the same S3 objects, including writes already in flight.
     bool ConfirmS3RouteChange = 3;
-    // Offline namespace migration. Quiesce the depot, fence old S3 mutations and drain outstanding
-    // requests. Copy its referenced objects with the same locator suffixes into a dedicated empty
-    // destination. Keep writers quiescent and the source readable until the tablet and agents
-    // use the new configuration.
-    bool ConfirmS3NamespaceMigration = 4;
-    // Physical suffix to use on first S3 assignment or to replace a malformed legacy storage name.
-    // Requires ConfirmS3NamespaceMigration. The virtual group keeps its original name.
-    optional string MigratedS3Name = 5;
-    // Remove the S3 route. The operator has quiesced writers and verified that no values reference
-    // S3, outstanding writes have been fenced and drained, and pending S3 deletes have completed.
-    bool ConfirmS3Empty = 6;
-}
-
-// Manage cleanup after the group is retired. The object namespace and route are immutable.
-message TManageRetiredS3Namespace {
-    uint32 GroupId = 1;
-    message TCredentials {
-        string AccessKey = 1 [(Ydb.sensitive) = true];
-        string SecretKey = 2 [(Ydb.sensitive) = true];
-    }
-    oneof Action {
-        TCredentials Credentials = 2;
-        // All users of this physical namespace, including via other bucket aliases and old
-        // migration routes, are drained. Authorize automatic cleanup of a legacy namespace.
-        bool ConfirmExclusiveOwnership = 3;
-        // All objects and outstanding mutations have been cleaned up externally. Release
-        // the cleanup credentials and retain the permanent namespace reservation.
-        bool ConfirmCleanupComplete = 4;
-    }
+    reserved 4 to 6;
 }
 
 message TRecommissionGroups {
@@ -800,6 +771,7 @@ message TDefineGroupState {
 
 message TConfigRequest {
     message TCommand {
+        reserved 68;
         oneof Command {
             TDefineHostConfig DefineHostConfig = 1;
             TReadHostConfig ReadHostConfig = 2;
@@ -854,7 +826,6 @@ message TConfigRequest {
             TDeleteSpecificGroups DeleteSpecificGroups = 62;
             TUpdateStoragePoolSettings UpdateStoragePoolSettings = 63;
             TChangeStoragePoolBridgeMode ChangeStoragePoolBridgeMode = 64;
-            TManageRetiredS3Namespace ManageRetiredS3Namespace = 68;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

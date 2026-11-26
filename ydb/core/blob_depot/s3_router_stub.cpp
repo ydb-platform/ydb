@@ -9,8 +9,4 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT("S3 is not supported on Windows");
     }
 
-    IActor* CreateRetiredS3Sweep(TActorId, ui64, const NKikimrBlobDepot::TBlobDepotConfig&) {
-        return nullptr;
-    }
-
 } // NKikimr::NBlobDepot

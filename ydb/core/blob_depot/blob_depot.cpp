@@ -224,10 +224,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::InitDataCooling() {
         const auto& s3 = Config.GetS3BackendSettings();
         if (AppData()->FeatureFlags.GetEnableBlobDepotDataCooling() && s3.HasAsyncMode()) {
-            if (!Config.GetS3NamespaceValidated() || !Config.GetS3CoolingAuthorized()) {
-                YDB_LOG_WARN_COMP(BLOB_DEPOT, "Data cooling requires BSC to validate the stored S3 namespace",
-                    {"id", GetLogId()});
-            } else if (const auto error = ValidateDataCooling(s3)) {
+            if (const auto error = ValidateDataCooling(s3)) {
                 YDB_LOG_WARN_COMP(BLOB_DEPOT, "Invalid stored data cooling settings",
                     {"id", GetLogId()}, {"error", *error});
             } else {

@@ -17,7 +17,6 @@ namespace NKikimr::NBlobDepot {
         TString Bucket;
         std::shared_ptr<const TString> DeleteRoute;
 
-        bool GarbageCollectionEnabled = false;
 
         ui64 NextKeyId = 1;
 

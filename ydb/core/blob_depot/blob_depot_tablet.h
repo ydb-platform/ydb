@@ -247,10 +247,6 @@ namespace NKikimr::NBlobDepot {
 
         void ProcessRegisterAgentQ();
 
-        bool HasAsyncS3History() const {
-            return Config.GetS3NamespacePinned() || Config.GetS3BackendSettings().HasAsyncMode();
-        }
-
         bool ReadyForAgentQueries() const;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

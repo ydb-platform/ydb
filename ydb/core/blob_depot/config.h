@@ -43,18 +43,6 @@ namespace NKikimr::NBlobDepot {
         return path;
     }
 
-    inline std::optional<TStringBuf> ValidateS3BasePath(TStringBuf basePath) {
-        if (basePath.empty()) {
-            return "The effective S3 key prefix must be nonempty";
-        }
-        for (TStringBuf segment : StringSplitter(basePath).Split('/')) {
-            if (segment == "." || segment == "..") {
-                return "The effective S3 key prefix must not contain dot segments";
-            }
-        }
-        return std::nullopt;
-    }
-
     inline std::optional<TStringBuf> ValidateDataCooling(const NKikimrBlobDepot::TS3BackendSettings& settings) {
         if (!settings.HasAsyncMode()) {
             return std::nullopt;

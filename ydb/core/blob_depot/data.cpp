@@ -257,7 +257,7 @@ namespace NKikimr::NBlobDepot {
                 const auto locator = it->second.GetLocator(objectKey);
                 RefCountS3.erase(it);
                 TotalS3DataSize -= locator.Len;
-                if (!RetriedS3PutsLoaded || (!S3ReferencesLoaded && Self->Config.GetEverAuthorizedDataCooling())) {
+                if (!S3ReferencesLoaded) {
                     // Recovery may still find a retried PUT or another owner of this pack.
                     // Record the candidate in the same transaction as the mapping change.
                     if (PendingS3RefChecks.emplace(objectKey, locator.Len).second) {
@@ -273,6 +273,8 @@ namespace NKikimr::NBlobDepot {
                     {"BDT", Self->TabletID()},
                     {"key", key},
                     {"locator", locator});
+                // A confirmed last release supersedes any outstanding startup check for the pack.
+                PendingS3RefChecks.erase(objectKey);
                 AddToS3Trash(locator, txc, cookie);
                 return false; // keep this blob in deletion queue
             };
@@ -392,7 +394,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::SetHotWriteOrder(TValue& value) {
-        if (Self->HasAsyncS3History()) {
+        if (Self->Config.GetS3BackendSettings().HasAsyncMode()) {
             value.HotWriteGeneration = Self->Executor()->Generation();
             value.HotWriteSequence = NextHotWriteSequence++;
         }

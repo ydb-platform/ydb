@@ -406,7 +406,7 @@ namespace NKikimr::NBlobDepot {
 
     bool TS3Manager::CanCollectScannedObject(const TS3Locator& locator) const {
         const ui32 generation = Self->Executor()->Generation();
-        return GarbageCollectionEnabled && (locator.Generation < generation ||
+        return (locator.Generation < generation ||
             (locator.Generation == generation && locator.KeyId < NextKeyId &&
                 !CoolingObjectsInFlight.contains(locator.GetObjectKey()))) &&
             !Self->Data->IsS3ObjectReferenced(locator);

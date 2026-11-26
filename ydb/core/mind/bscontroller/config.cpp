@@ -690,40 +690,6 @@ namespace NKikimr::NBsController {
             if (state.BlobDepotDeleteQueue.Changed()) {
                 MakeTableMerger<Schema::BlobDepotDeleteQueue>(&BlobDepotDeleteQueue, &state.BlobDepotDeleteQueue.Get(), this)(txc);
             }
-            if (!state.NewRetiredS3Namespaces.empty()) {
-                MakeTableMerger<Schema::RetiredS3Namespaces>(
-                    static_cast<const TRetiredS3Namespaces*>(nullptr), &state.NewRetiredS3Namespaces, this)(txc);
-            }
-
-            for (auto& [groupId, update] : state.UpdatedRetiredS3Namespaces) {
-                using T = Schema::RetiredS3Namespaces;
-                auto& info = RetiredS3Namespaces.at(groupId);
-                const auto oldScheduler = std::exchange(info.SchedulerId, {});
-                info = std::move(update);
-                info.SchedulerId = {};
-                auto row = NIceDb::TNiceDb(txc.DB).Table<T>().Key(groupId.GetRawId());
-                row.Update<T::S3Config>(info.S3Config);
-                row.Update<T::SweepPhase>(info.Phase);
-                row.Update<T::ConsecutiveFailures>(info.ConsecutiveFailures);
-                row.Update<T::LegacyCleanupAuthorized>(info.LegacyCleanupAuthorized);
-                if (info.NextS3Sweep) {
-                    row.Update<T::NextS3Sweep>(*info.NextS3Sweep);
-                } else {
-                    row.UpdateToNull<T::NextS3Sweep>();
-                }
-                // If Hive still owns deletion, its completion starts the scheduler. A subsequent
-                // transaction may already have erased the in-memory queue when this callback runs.
-                const bool hiveDeleted = !state.BlobDepotDeleteQueue.Get().contains(groupId);
-                state.Callbacks.push_back([this, groupId, oldScheduler, hiveDeleted] {
-                    if (oldScheduler) {
-                        Send(oldScheduler, new TEvents::TEvPoison);
-                    }
-                    auto& current = RetiredS3Namespaces.at(groupId);
-                    if (hiveDeleted) {
-                        StartRetiredS3Cleanup(groupId, current);
-                    }
-                });
-            }
 
             // while converting to bridged cluster, watch for groups that have to be converted or stop blocking conversion
             if (StorageConfig && StorageConfig->GetClusterStateDetails().GetBscConversionPending()) {

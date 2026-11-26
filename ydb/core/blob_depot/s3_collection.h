@@ -19,7 +19,7 @@ namespace NKikimr::NBlobDepot {
 
     public:
         explicit TS3Listing(const TString& basePath, TString marker = {})
-            : Prefix(basePath + "/")
+            : Prefix(basePath.empty() ? TString() : basePath + "/")
             , Marker(std::move(marker))
         {}
 

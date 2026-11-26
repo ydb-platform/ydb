@@ -31,14 +31,18 @@ namespace NKikimr::NBlobDepot {
         accounting.Account(LoadFinishTxCycles);
     }
 
+    void TData::RunLoadSuccessorTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx) {
+        tx.RunSuccessorTx();
+        accounting.Account(LoadRunSuccessorTxCycles);
+        ++LoadRunSuccessorTx;
+    }
+
     void TData::RestartLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx, bool progress) {
         if (progress) {
             // we have already processed something, so start the next transaction to prevent keeping already
             // processed data in memory
             FinishLoadTx(accounting, tx);
-            tx.RunSuccessorTx();
-            accounting.Account(LoadRunSuccessorTxCycles);
-            ++LoadRunSuccessorTx;
+            RunLoadSuccessorTx(accounting, tx);
         } else {
             // we haven't read anything at all, so we restart the transaction with the request to read some
             // data
@@ -87,8 +91,6 @@ namespace NKikimr::NBlobDepot {
                     Self->S3Manager->EnqueuePutWatch(item, Max(retireAt, Self->S3Manager->GetPutWatchRetireAt()), *tx);
                 }
             });
-            // Sync-only depots can now recognize their retried PUTs when releasing an object.
-            RetriedS3PutsLoaded = true;
             LoadS3Table<Schema::TrashS3>(tx, accounting, [&](TS3Locator item, auto& rows) {
                 if (rows.template GetValueOrDefault<Schema::TrashS3::CheckReferences>()) {
                     PendingS3RefChecks.emplace(item.GetObjectKey(), item.Len);
@@ -113,14 +115,18 @@ namespace NKikimr::NBlobDepot {
                 RestartLoadTx(accounting, tx, std::exchange(progress, false));
             }
 
-            while (!PendingS3RefChecks.empty()) {
+            // The complete key index now accounts for every owner. Foreground releases can
+            // go straight to trash while we finish checking candidates from the partial load.
+            S3ReferencesLoaded = true;
+            for (;;) {
                 CheckPendingS3References(*tx, &tx);
                 FinishLoadTx(accounting, tx);
                 CommitTrash(&tx);
-                tx.RunSuccessorTx();
+                if (PendingS3RefChecks.empty()) {
+                    break;
+                }
+                RunLoadSuccessorTx(accounting, tx);
             }
-            S3ReferencesLoaded = true;
-            FinishLoadTx(accounting, tx);
             Self->Data->OnLoadComplete();
         }));
     }

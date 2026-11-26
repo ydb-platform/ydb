@@ -515,7 +515,6 @@ namespace NKikimr::NBlobDepot {
         THashMap<TS3ObjectKey, TS3References> RefCountS3;
         std::map<TS3ObjectKey, ui32> PendingS3RefChecks;
         THashMap<TS3ObjectKey, TInstant> PublishedRetriedS3Puts;
-        bool RetriedS3PutsLoaded = false;
         bool S3ReferencesLoaded = false;
         void CheckPendingS3References(NTabletFlatExecutor::TTransactionContext& txc, void* cookie);
         enum class ES3ReferenceAction { Add, Remove, Discard };
@@ -940,6 +939,7 @@ namespace NKikimr::NBlobDepot {
         void LoadS3Table(TCoroTx::TContextBase& tx, TLoadCycleAccounting& accounting, F&& process);
 
         void FinishLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx);
+        void RunLoadSuccessorTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx);
         void RestartLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx, bool progress);
         ELoadTrashResult RunLoadTrashLoop(TCoroTx::TContextBase& tx, TLoadCycleAccounting& accounting, TString& from);
     };

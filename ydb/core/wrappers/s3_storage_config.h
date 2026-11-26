@@ -49,8 +49,6 @@ protected:
 public:
     static Aws::S3::Model::StorageClass ConvertStorageClass(const Ydb::Export::ExportToS3Settings::StorageClass storage);
 
-    void UseSharedCleanupExecutor();
-
     const Aws::Client::ClientConfiguration& GetConfig() const {
         return Config;
     }

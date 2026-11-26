@@ -15,7 +15,6 @@ LIBRARY()
         SRCS(
             s3.cpp
             s3_delete.cpp
-            s3_retire.cpp
             s3_scan.cpp
             s3_upload.cpp
             s3_write.cpp

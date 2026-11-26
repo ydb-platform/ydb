@@ -69,13 +69,25 @@ class BuildProfilesTest(unittest.TestCase):
                     flags + ['--thinlto'],
                 )
 
+    def test_public_reproduction_excludes_environment_and_filters(self):
+        args = ['--test-env', 'TOKEN=secret', '--test-env=OTHER=secret',
+                '--test-filter', 'Suite::*', '-FCase::*', '--test-filter=Other::*',
+                '-DSECRET=secret', '--build', 'release', '--sanitize=address', '-DHARDENING=no']
+        self.assertEqual(shlex.split(build_profile.portable_reproduction_args(args)),
+                         ['--build', 'release', '--sanitize=address', '-DHARDENING=no'])
+
     def test_workflow_presets_resolve(self):
         # Public presets used by the workflow matrices and choice inputs.
         presets = ['release', 'debug', 'relwithdebinfo', 'release-asan', 'release-tsan', 'release-msan']
         with patch.object(build_profile, 'PROFILE_PATH', PROFILES):
             for name in presets:
                 with self.subTest(name=name):
-                    self.assertTrue(build_profile.resolve_profile(name)['args'])
+                    resolved = build_profile.resolve_profile(name)
+                    self.assertTrue(resolved['args'])
+                    expected = {'release-asan': 'address', 'release-tsan': 'thread', 'release-msan': 'memory'}
+                    if name in expected:
+                        self.assertEqual(resolved['sanitize'], expected[name])
+                        self.assertIn('--sanitize=' + expected[name], resolved['args'])
 
     def test_cli_reports_configuration_error(self):
         result = subprocess.run(

@@ -52,17 +52,24 @@ def resolve_profile(name, fallback=None):
 
 
 def portable_reproduction_args(args):
-    # Run-tests creates this file in runner.temp; it does not exist locally.
+    # Reports are public: never copy arbitrary test environments or credentials.
+    # Preserve only compiler options understood by the shared profiles.
+    value_options = {"--build", "--sanitize"}
+    definitions = {"HARDENING", "CFLAGS", "DEBUGINFO_LINES_ONLY"}
     result = []
-    skip_value = False
-    for arg in args:
-        if skip_value:
-            skip_value = False
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg in value_options:
+            if index + 1 < len(args):
+                result.extend(args[index:index + 2])
+            index += 2
             continue
-        if arg == "--test-blacklist-path":
-            skip_value = True
-        elif not arg.startswith("--test-blacklist-path="):
+        if arg in {"--thinlto", "--no-thinlto"} or any(arg.startswith(opt + "=") for opt in value_options):
             result.append(arg)
+        elif arg.startswith("-D") and arg[2:].split("=", 1)[0] in definitions:
+            result.append(arg)
+        index += 1
     return shlex.join(result)
 
 

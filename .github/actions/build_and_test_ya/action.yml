@@ -341,7 +341,7 @@ runs:
         mapfile -t profile_params < "$TMP_DIR/build-profile/args"
         DASHBOARD_SANITIZER=$(cat "$TMP_DIR/build-profile/sanitize")
         reproduction_params=("${profile_params[@]}")
-        if [[ "$DASHBOARD_SANITIZER" == thread || "$DASHBOARD_SANITIZER" == memory ]]; then
+        if [[ "$BUILD_PRESET" == release-tsan || "$BUILD_PRESET" == release-msan ]]; then
           if [ -z "$TEST_RETRY_COUNT" ]; then
             TEST_RETRY_COUNT=1
           fi

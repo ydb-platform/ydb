@@ -24,6 +24,7 @@ namespace NKikimr {
             const ui32 PDiskSpaceMarginPromille;
             TGroupGeometryInfo Geometry;
             const TBoxStoragePoolId StoragePoolId;
+            const std::vector<TString> TargetDataCenters;
             TStoragePoolInfo StoragePool;
             TBridgePileId CurrentPileId;
             std::map<TBridgePileId, std::unique_ptr<TGroupMapper>> Mappers;
@@ -52,6 +53,7 @@ namespace NKikimr {
                 , PDiskSpaceMarginPromille(pdiskSpaceMarginPromille)
                 , Geometry(TGroupGeometryInfo::FromStoragePool(TBlobStorageGroupType(storagePool.ErasureSpecies), storagePool))
                 , StoragePoolId(storagePoolId)
+                , TargetDataCenters(storagePool.GetTargetDataCenters())
                 , StoragePool(storagePool)
                 , Status(status)
                 , VSlotReadyTimestampQ(vslotReadyTimestampQ)
@@ -790,9 +792,13 @@ namespace NKikimr {
             void AllocateNewGroup(TGroupId groupId, TGroupMapper::TGroupDefinition& group, ui32 groupSizeInUnits,
                                   i64 requiredSpace, TBridgePileId bridgePileId) {
                 EnsureGroupMapper();
-                TGroupMapper::TGroupConstraintsDefinition constraints;
-                Geometry.AllocateGroup(*Mapper, groupId, group, constraints, {}, {}, groupSizeInUnits, requiredSpace,
-                    GetPlacementScope(bridgePileId));
+                Geometry.AllocateGroup(*Mapper, {
+                    .GroupId = groupId.GetRawId(),
+                    .GroupSizeInUnits = groupSizeInUnits,
+                    .RequiredSpace = requiredSpace,
+                    .PileScope = GetPlacementScope(bridgePileId),
+                    .SortedTargetDataCenters = TargetDataCenters,
+                }, group);
             }
 
             void PopulateGroupMapper() {
@@ -1049,6 +1055,10 @@ namespace NKikimr {
                         if (filter.Location) {
                             identifier << " Location# " << filter.Location->size() << ":" << *filter.Location;
                         }
+                    }
+                    if (storagePool.SerializedTargetDataCenters) {
+                        const TString& targets = *storagePool.SerializedTargetDataCenters;
+                        identifier << " TargetDataCenters# " << targets.size() << ":" << targets;
                     }
                     auto& [numGroups, id] = filterMap[identifier];
                     numGroups += storagePool.NumGroups;

@@ -459,6 +459,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(DefineDataCenterStates)
                     HANDLE_COMMAND(DefineGroupState)
                     HANDLE_COMMAND(ChangeStoragePoolBridgeMode)
+                    HANDLE_COMMAND(DefineStoragePoolTargetDataCenters)
 
                     default: break;
                 }

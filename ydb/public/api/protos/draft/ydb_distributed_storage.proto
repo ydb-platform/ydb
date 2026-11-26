@@ -393,6 +393,8 @@ message StoragePool {
     // Configuration item generation, used for optimistic concurrency control
     // in configuration updates.
     uint64 config_generation = 12;
+    // Physical datacenters eligible for a new group layout. Empty means unrestricted.
+    repeated string target_data_centers = 13;
 }
 
 // A cluster node as known to the storage controller.

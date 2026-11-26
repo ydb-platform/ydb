@@ -427,6 +427,7 @@ void ConvertStoragePool(const NKikimrBlobStorage::TDefineStoragePool& from, Ydb:
 
     to.set_num_groups(from.GetNumGroups());
     to.set_default_group_size_in_units(from.GetDefaultGroupSizeInUnits());
+    to.mutable_target_data_centers()->CopyFrom(from.GetTargetDataCenters().GetName());
 
     if (from.HasGeometry()) {
         const auto& g = from.GetGeometry();

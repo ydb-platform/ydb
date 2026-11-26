@@ -11,6 +11,28 @@
 
 namespace NKikimr::NBsController {
 
+    static void CheckTargetDataCenterCount(size_t count, TErasureType::EErasureSpecies erasure) {
+        if (count == 0) {
+            throw TExError() << "target datacenter set is empty";
+        }
+        if (erasure == TErasureType::ErasureMirror3dc && count < 3) {
+            throw TExError() << "mirror-3-dc requires at least three target datacenters";
+        }
+    }
+
+    static TString SerializeTargetDataCenters(const NKikimrBlobStorage::TStoragePoolTargetDataCenters& targets,
+            TErasureType::EErasureSpecies erasure) {
+        CheckTargetDataCenterCount(targets.GetName().size(), erasure);
+        NKikimrBlobStorage::TStoragePoolTargetDataCenters sorted;
+        sorted.MutableName()->CopyFrom(targets.GetName());
+        std::sort(sorted.MutableName()->begin(), sorted.MutableName()->end());
+        const auto& names = sorted.GetName();
+        if (names.Get(0).empty() || std::adjacent_find(names.begin(), names.end()) != names.end()) {
+            throw TExError() << "target datacenter names must be nonempty and distinct";
+        }
+        return sorted.SerializeAsString();
+    }
+
     static void UpdateFailRealmDataCenter(NKikimrBlobStorage::TFailRealmInfo* realm,
             ui32 nodeId, const THostRecordMapImpl& hostRecords) {
         NActorsInterconnect::TNodeLocation location;
@@ -189,6 +211,14 @@ namespace NKikimr::NBsController {
         const TString &erasureSpecies = cmd.GetErasureSpecies();
         if (!TBlobStorageGroupType::ParseErasureName(storagePool.ErasureSpecies, erasureSpecies)) {
             throw TExError() << "invalid ErasureSpecies# " << erasureSpecies;
+        }
+        if (cmd.HasTargetDataCenters()) {
+            storagePool.SerializedTargetDataCenters = SerializeTargetDataCenters(cmd.GetTargetDataCenters(), storagePool.ErasureSpecies);
+        } else if (existing && current->second.SerializedTargetDataCenters) {
+            if (current->second.ErasureSpecies != storagePool.ErasureSpecies) {
+                CheckTargetDataCenterCount(current->second.GetTargetDataCenters().size(), storagePool.ErasureSpecies);
+            }
+            storagePool.SerializedTargetDataCenters = current->second.SerializedTargetDataCenters;
         }
 
         // Resolve the default only at creation; updates preserve the stored mode.
@@ -389,6 +419,30 @@ namespace NKikimr::NBsController {
         if (numLeadingDisks != it->second.VDiskHeapAllocatorNumLeadingDisks) {
             StoragePools.Unshare().at(id).VDiskHeapAllocatorNumLeadingDisks = numLeadingDisks;
             HeapAllocatorNumLeadingDisksChanged.insert(id);
+        }
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineStoragePoolTargetDataCenters& cmd,
+            TStatus& /*status*/) {
+        const TBoxStoragePoolId id(cmd.GetBoxId(), cmd.GetStoragePoolId());
+        const auto it = StoragePools.Get().find(id);
+        if (it == StoragePools.Get().end()) {
+            throw TExError() << "StoragePoolId# " << id << " not found";
+        }
+        if (it->second.DDisk) {
+            throw TExError() << "target datacenters apply only to VDisk pools";
+        }
+        const ui64 nextGeneration = CheckGeneration(cmd, StoragePools.Get(), id);
+        std::optional<TString> targets;
+        if (cmd.HasTargetDataCenters()) {
+            targets = SerializeTargetDataCenters(cmd.GetTargetDataCenters(), it->second.ErasureSpecies);
+        } else if (!cmd.HasResetToUnrestricted()) {
+            throw TExError() << "specify target datacenters or reset to unrestricted placement";
+        }
+        if (targets != it->second.SerializedTargetDataCenters) {
+            TStoragePoolInfo& pool = StoragePools.Unshare().at(id);
+            pool.SerializedTargetDataCenters = std::move(targets);
+            pool.Generation = nextGeneration;
         }
     }
 

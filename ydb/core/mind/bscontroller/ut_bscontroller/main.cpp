@@ -30,7 +30,9 @@
 #include <google/protobuf/text_format.h>
 
 #include <algorithm>
+#include <map>
 #include <optional>
+#include <set>
 
 using namespace NActors;
 using namespace NKikimr;
@@ -131,6 +133,17 @@ struct TEnvironmentSetup {
                 auto response = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(self);
             }
         }
+    }
+
+    NKikimrBlobStorage::TDefineStoragePool ReadPool(ui64 poolId = 1) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto* command = request.AddCommand()->MutableReadStoragePool();
+        command->SetBoxId(1);
+        command->AddStoragePoolId(poolId);
+        const auto response = Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(0).StoragePoolSize(), 1);
+        return response.GetStatus(0).GetStoragePool(0);
     }
 
 
@@ -452,16 +465,6 @@ namespace {
             for (const auto& node : config.GetNode()) {
                 NodeDataCenters[node.GetNodeId()] = node.GetLocation().GetDataCenter();
             }
-        }
-
-        NKikimrBlobStorage::TDefineStoragePool ReadPool(ui64 poolId = 1) {
-            NKikimrBlobStorage::TConfigRequest request;
-            auto* command = request.AddCommand()->MutableReadStoragePool();
-            command->SetBoxId(1);
-            command->AddStoragePoolId(poolId);
-            const auto response = Invoke(request);
-            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-            return response.GetStatus(0).GetStoragePool(0);
         }
 
         NKikimrBlobStorage::TConfigRequest Define(std::initializer_list<std::pair<TString, TDataCenter::EState>> states) {
@@ -1536,6 +1539,171 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         for (const auto& [id, group] : env.ReadGroups()) {
             UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), forced.at(id).SerializeAsString());
         }
+    }
+
+    Y_UNIT_TEST(StoragePoolTargetDataCentersDefinition) {
+        TDataCenterStatesEnv env;
+        const auto original = env.ReadPool();
+        UNIT_ASSERT(!original.HasTargetDataCenters());
+        auto define = [&](ui64 generation, std::initializer_list<TString> names) {
+            NKikimrBlobStorage::TConfigRequest request;
+            auto* command = request.AddCommand()->MutableDefineStoragePoolTargetDataCenters();
+            command->SetBoxId(1);
+            command->SetStoragePoolId(1);
+            command->SetItemConfigGeneration(generation);
+            auto* targets = command->MutableTargetDataCenters();
+            for (const TString& name : names) {
+                targets->AddName(name);
+            }
+            return env.Invoke(request);
+        };
+        const ui64 generation = original.GetItemConfigGeneration();
+        UNIT_ASSERT(!define(generation, {}).GetSuccess());
+        UNIT_ASSERT(!define(generation, {"1", "2"}).GetSuccess());
+        UNIT_ASSERT(!define(generation, {"1", "", "3"}).GetSuccess());
+        UNIT_ASSERT(!define(generation, {"1", "1", "3"}).GetSuccess());
+        const auto accepted = define(generation, {"future", "2", "1"});
+        UNIT_ASSERT_C(accepted.GetSuccess(), accepted.DebugString());
+        auto expected = original;
+        expected.SetItemConfigGeneration(generation + 1);
+        for (const TString& name : std::initializer_list<TString>{"1", "2", "future"}) {
+            expected.MutableTargetDataCenters()->AddName(name);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadPool().SerializeAsString(), expected.SerializeAsString());
+        const auto stale = define(generation, {"1", "2", "future"});
+        UNIT_ASSERT(!stale.GetSuccess());
+        UNIT_ASSERT_C(stale.GetStatus(0).GetFailReason() ==
+            NKikimrBlobStorage::TConfigResponse::TStatus::kItemConfigGenerationMismatch, stale.DebugString());
+        UNIT_ASSERT(define(generation + 1, {"2", "future", "1"}).GetSuccess());
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadPool().SerializeAsString(), expected.SerializeAsString());
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto* command = request.AddCommand()->MutableDefineStoragePoolTargetDataCenters();
+        command->SetBoxId(1);
+        command->SetStoragePoolId(1);
+        command->SetItemConfigGeneration(generation + 1);
+        UNIT_ASSERT(!env.Invoke(request).GetSuccess());
+        command->MutableResetToUnrestricted();
+        request.SetRollback(true);
+        UNIT_ASSERT(env.Invoke(request).GetRollbackSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadPool().SerializeAsString(), expected.SerializeAsString());
+        request.SetRollback(false);
+        UNIT_ASSERT(env.Invoke(request).GetSuccess());
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        expected.ClearTargetDataCenters();
+        expected.SetItemConfigGeneration(generation + 2);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadPool().SerializeAsString(), expected.SerializeAsString());
+    }
+
+    Y_UNIT_TEST(StoragePoolTargetDataCentersNewLayoutsAndRepair) {
+        TEnvironmentSetup env(24, 4);
+        bool activeZone;
+        env.Prepare("", [](TTestActorRuntime&) {}, activeZone);
+        env.DisableLogging();
+        const TBaseConfig inventory = FetchBaseConfig(&env);
+        std::map<ui32, TString> nodeDataCenters;
+        for (const auto& node : inventory.GetNode()) {
+            nodeDataCenters.emplace(node.GetNodeId(), node.GetLocation().GetDataCenter());
+        }
+        const TVector<TEnvironmentSetup::TNodeRecord> allNodes = env.GetNodes();
+        TVector<TEnvironmentSetup::TNodeRecord> initialNodes;
+        for (const TEnvironmentSetup::TNodeRecord& node : allNodes) {
+            if (nodeDataCenters.at(std::get<2>(node)) != "4") {
+                initialNodes.push_back(node);
+            }
+        }
+        auto invoke = [&](const NKikimrBlobStorage::TConfigRequest& request) {
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        };
+        const TVector<TEnvironmentSetup::TPDiskDefinition> drives{{"/dev/disk", NKikimrBlobStorage::ROT, false, false, 0}};
+        NKikimrBlobStorage::TConfigRequest request;
+        env.DefineBox(1, "box", drives, initialNodes, request);
+        env.DefineStoragePool(1, 1, "pool", 1, NKikimrBlobStorage::ROT, false, request, "mirror-3-dc");
+        auto* targets = request.MutableCommand(request.CommandSize() - 1)->MutableDefineStoragePool()->MutableTargetDataCenters();
+        for (const char* name : {"1", "2", "3"}) {
+            targets->AddName(name);
+        }
+        invoke(request);
+        const TBaseConfig before = FetchBaseConfig(&env);
+        UNIT_ASSERT_VALUES_EQUAL(before.GroupSize(), 1);
+        const auto& original = before.GetGroup(0);
+        const auto source = std::find_if(original.GetVSlotId().begin(), original.GetVSlotId().end(), [&](const auto& slot) {
+            return nodeDataCenters.at(slot.GetNodeId()) == "1";
+        });
+        UNIT_ASSERT(source != original.GetVSlotId().end());
+
+        request.Clear();
+        auto* change = request.AddCommand()->MutableDefineStoragePoolTargetDataCenters();
+        change->SetBoxId(1);
+        change->SetStoragePoolId(1);
+        change->SetItemConfigGeneration(env.ReadPool().GetItemConfigGeneration());
+        for (const char* name : {"2", "3", "4"}) {
+            change->MutableTargetDataCenters()->AddName(name);
+        }
+        invoke(request);
+        NKikimrBlobStorage::TConfigRequest grow;
+        auto* pool = grow.AddCommand()->MutableDefineStoragePool();
+        *pool = env.ReadPool();
+        pool->ClearTargetDataCenters(); // Older clients omit this field when updating the group count.
+        pool->SetNumGroups(2);
+        UNIT_ASSERT(!env.Invoke(grow).GetSuccess());
+        const TBaseConfig failed = FetchBaseConfig(&env);
+        UNIT_ASSERT_VALUES_EQUAL(failed.GroupSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(failed.GetGroup(0).SerializeAsString(), original.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadPool().GetNumGroups(), 1);
+
+        request.Clear();
+        env.DefineBox(1, "box", drives, allNodes, request, 1);
+        invoke(request);
+        invoke(grow);
+        const TBaseConfig after = FetchBaseConfig(&env);
+        UNIT_ASSERT_VALUES_EQUAL(after.GroupSize(), 2);
+        for (const auto& group : after.GetGroup()) {
+            if (group.GetGroupId() == original.GetGroupId()) {
+                UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), original.SerializeAsString());
+                continue;
+            }
+            std::set<TString> actual;
+            for (const auto& slot : group.GetVSlotId()) {
+                actual.insert(nodeDataCenters.at(slot.GetNodeId()));
+            }
+            const std::set<TString> expected{"2", "3", "4"};
+            UNIT_ASSERT(actual == expected);
+        }
+
+        const TVSlot oldSlot = FindVSlot(before, *source);
+        request = MakeReassignRequest(oldSlot, original.GetGroupGeneration());
+        request.SetIgnoreGroupFailModelChecks(true); // This fixture does not run VDisks.
+        invoke(request);
+        const TVSlot replacement = FindActiveVSlot(FetchBaseConfig(&env), oldSlot);
+        UNIT_ASSERT(!SameVSlotId(oldSlot.GetVSlotId(), replacement.GetVSlotId()));
+        UNIT_ASSERT_VALUES_EQUAL(nodeDataCenters.at(replacement.GetVSlotId().GetNodeId()), "1");
+    }
+
+    Y_UNIT_TEST(StoragePoolTargetDataCentersReserve) {
+        TEnvironmentSetup env(2, 2);
+        bool activeZone;
+        env.Prepare("", [](TTestActorRuntime&) {}, activeZone);
+        env.DisableLogging();
+        NKikimrBlobStorage::TConfigRequest request;
+        env.DefineBox(1, "box", {{"/dev/disk", NKikimrBlobStorage::ROT, false, false, 0}}, env.GetNodes(), request);
+        request.MutableCommand(0)->MutableDefineHostConfig()->MutableDrive(0)->MutablePDiskConfig()->SetExpectedSlotCount(1);
+        const auto box = env.Invoke(request);
+        UNIT_ASSERT_C(box.GetSuccess(), box.DebugString());
+        request.Clear();
+        request.AddCommand()->MutableUpdateSettings()->AddGroupReserveMin(1);
+        UNIT_ASSERT(env.Invoke(request).GetSuccess());
+        request.Clear();
+        env.DefineStoragePool(1, 1, "pool", 1, NKikimrBlobStorage::ROT, false, request, "none");
+        auto* pool = request.MutableCommand(0)->MutableDefineStoragePool();
+        pool->MutableTargetDataCenters()->AddName("1");
+        UNIT_ASSERT(!env.Invoke(request).GetSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(FetchBaseConfig(&env).GroupSize(), 0);
+        pool->MutableTargetDataCenters()->AddName("2");
+        const auto created = env.Invoke(request);
+        UNIT_ASSERT_C(created.GetSuccess(), created.DebugString());
     }
 
     Y_UNIT_TEST(PDiskLocationFilterMatchesSuppliedFields) {

@@ -7,6 +7,9 @@
 
 #include <ydb/library/actors/core/interconnect.h>
 
+#include <util/generic/singleton.h>
+
+#include <span>
 #include <variant>
 
 namespace NKikimr {
@@ -148,6 +151,21 @@ namespace NKikimr {
                 std::optional<TPDiskId> PDiskId = std::nullopt;
             };
             using TGroupConstraintsDefinition = TGroupDefinitionBase<TTargetDiskConstraints>;
+            using TReplacedDisks = THashMap<TVDiskIdShort, TPDiskId>;
+
+            // Inputs are borrowed for the duration of the synchronous allocation.
+            struct TAllocationRequest {
+                ui32 GroupId = 0;
+                const TGroupConstraintsDefinition& Constraints = Default<TGroupConstraintsDefinition>();
+                const TReplacedDisks& ReplacedDisks = Default<TReplacedDisks>();
+                const TForbiddenPDisks& ForbiddenPDisks = Default<TForbiddenPDisks>();
+                ui32 GroupSizeInUnits = 1;
+                i64 RequiredSpace = 0;
+                bool RequireOperational = false;
+                bool IgnoreGroupLayoutChecks = false;
+                TPileScope PileScope = {};
+                std::span<const TString> SortedTargetDataCenters = {};
+            };
 
             template<typename T, typename F>
             static void Traverse(const TGroupDefinitionBase<T>& group, F&& callback) {
@@ -397,6 +415,7 @@ namespace NKikimr {
             // failRealmBeginDxLevel, failRealmEndDxLevel, and then by finding possible options to meet requirements
             // (1) and (2). That is, prefix gives us unique domains in which we can find realms to operate, while
             // prefix+infix part gives us distinct fail realms we can use while generating groups.
+            bool AllocateGroup(const TAllocationRequest& request, TGroupDefinition& group, TGroupMapperError& error);
             bool AllocateGroup(ui32 groupId, TGroupDefinition& group, TGroupMapper::TGroupConstraintsDefinition& constraints,
                 const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace,
                 bool requireOperational, TPileScope pileScope, TGroupMapperError& error);

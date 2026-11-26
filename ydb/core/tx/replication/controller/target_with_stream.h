@@ -103,6 +103,7 @@ protected:
 
 private:
     bool CanDetachWithoutStream() const;
+    bool ProgressRemoving(const TActorContext& ctx);
 
     std::unique_ptr<TTargetWithStreamStats> Stats;
     std::unique_ptr<TTargetWithStreamCounters> Counters;

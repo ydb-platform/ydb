@@ -76,7 +76,7 @@ bool KeepCdcStateDuringAlter(TReplication& replication, TReplication::ITarget& t
 {
     if (replication.GetDesiredState() == TReplication::EState::Done
         && target.GetDstState() == TReplication::EDstState::Done
-        && (GetCdcTarget(&target) || !replication.GetCdcChildren(target.GetId()).empty()))
+        && (TTargetCdc::Cast(&target) || !replication.GetCdcChildren(target.GetId()).empty()))
     {
         return true;
     }
@@ -88,7 +88,7 @@ bool KeepCdcStateDuringAlter(TReplication& replication, TReplication::ITarget& t
         return true;
     }
 
-    const auto* child = GetCdcTarget(&target);
+    const auto* child = TTargetCdc::Cast(&target);
     if (!child || !child->GetCdc().HasSourceStream() || target.GetDstPathId()
         || target.GetDstState() == TReplication::EDstState::Done)
     {
@@ -344,7 +344,7 @@ public:
                 == NKikimrReplication::TReplicationState::TDone::FAILOVER_MODE_FORCE)
         {
             for (auto* target : Replication->GetTargets()) {
-                if (auto* cdc = GetCdcTarget(target);
+                if (auto* cdc = TTargetCdc::Cast(target);
                     cdc && cdc->GetCdc().GetPhase() == NKikimrReplicationController::TCdcTarget::RUNNING)
                 {
                     auto& state = cdc->GetCdc();

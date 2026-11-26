@@ -1,6 +1,7 @@
 #include "logging.h"
 #include "private_events.h"
 #include "target_discoverer.h"
+#include "target_cdc.h"
 #include "target_table.h"
 #include "target_topic.h"
 #include "target_transfer.h"
@@ -161,8 +162,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             if (CdcOwner) {
                 target.CdcStreams = result.GetTableDescription().GetChangefeedDescriptions();
                 EraseIf(target.CdcStreams, [](const auto& stream) {
-                    return stream.GetFormat() == NYdb::NTable::EChangefeedFormat::Unknown
-                        || stream.GetAttributes().contains("__async_replication");
+                    return !TTargetCdc::IsUserStream(stream);
                 });
             }
 

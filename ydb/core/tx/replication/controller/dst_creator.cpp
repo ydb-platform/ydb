@@ -1475,7 +1475,7 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
 
-    if (const auto* cdc = GetCdcTarget(target)) {
+    if (const auto* cdc = TTargetCdc::Cast(target)) {
         if (cdc->GetCdc().HasInitialCreateTxId()) {
             return new TDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetDatabase(),
                 replication->GetPathId(), replication->GetId(), targetId, cdc->GetCdc());

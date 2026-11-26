@@ -1,6 +1,7 @@
 #include "dst_cdc_creator.h"
 #include "dst_creator.h"
 #include "topic_mirror.h"
+#include "target_cdc.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/public/schema/schema_propose.h>
@@ -16,12 +17,29 @@
 
 namespace NKikimr::NReplication::NController {
 
+namespace {
+
+void CopyTopicSetup(const NKikimrPQ::TPQTabletConfig& source, NKikimrPQ::TPQTabletConfig& destination) {
+    *destination.MutableConsumers() = source.GetConsumers();
+
+    const auto& from = source.GetPartitionConfig();
+    auto& to = *destination.MutablePartitionConfig();
+    *to.MutableReadQuota() = from.GetReadQuota();
+    if (from.HasStorageLimitBytes()) {
+        to.SetStorageLimitBytes(from.GetStorageLimitBytes());
+    } else {
+        to.ClearStorageLimitBytes();
+    }
+}
+
+} // anonymous namespace
+
 bool TCdcCreation::Prepare(const NYdb::NTopic::TTopicDescription& topic, const TString& database, TString& error) {
     const auto& source = Settings.SourceStream;
     if (!EqualToOneOf(source.state(), Ydb::Table::ChangefeedDescription::STATE_ENABLED,
             Ydb::Table::ChangefeedDescription::STATE_DISABLED)
         || source.name().empty() || source.name().find('/') != TString::npos
-        || source.attributes().find("__async_replication") != source.attributes().end()
+        || !TTargetCdc::IsUserStream(source)
         || source.schema_changes() || source.virtual_timestamps()
         || source.has_resolved_timestamps_interval())
     {
@@ -81,8 +99,7 @@ bool TCdcCreation::Prepare(const NYdb::NTopic::TTopicDescription& topic, const T
     const auto& config = proposal.GetCreatePersQueueGroup().GetPQTabletConfig();
     Definition.SetRetentionPeriodSeconds(config.GetPartitionConfig().GetLifetimeSeconds());
     Topic.SetReplicationSourceConsumer(Settings.Consumer);
-    *Topic.MutableConsumers() = config.GetConsumers();
-    *Topic.MutablePartitionConfig()->MutableReadQuota() = config.GetPartitionConfig().GetReadQuota();
+    CopyTopicSetup(config, Topic);
     if (AnyOf(Topic.GetConsumers(), [](const auto& consumer) {
         return consumer.GetMetricsLevel() || !consumer.GetMonitoringProjectId().empty();
     })) {
@@ -218,6 +235,11 @@ bool TCdcCreation::CheckTopic(const NKikimrScheme::TEvDescribeSchemeResult& reco
         return false;
     }
 
+    if (config.GetPartitionConfig().GetStorageLimitBytes() != Topic.GetPartitionConfig().GetStorageLimitBytes()) {
+        error = "CDC destination topic storage limit changed";
+        return false;
+    }
+
     if (config.GetCdcReplication().HasTrimTxId()) {
         error = "CDC destination topic already has a trim request";
         return false;
@@ -238,8 +260,7 @@ void TCdcCreation::FillTopicSetup(NKikimrSchemeOp::TModifyScheme& tx,
     config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
     config.ClearPartitionKeySchema();
     config.SetReplicationSourceConsumer(Settings.Consumer);
-    *config.MutableConsumers() = Topic.GetConsumers();
-    *config.MutablePartitionConfig()->MutableReadQuota() = Topic.GetPartitionConfig().GetReadQuota();
+    CopyTopicSetup(Topic, config);
 
     auto& topic = *tx.AddApplyIf();
     topic.SetPathId(Settings.TopicPathId.LocalPathId);

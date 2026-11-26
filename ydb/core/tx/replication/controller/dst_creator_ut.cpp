@@ -884,12 +884,17 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     Y_UNIT_TEST(RecoverCdcAttachmentAfterConsumerAlter) {
         TCdcCreation creation;
         creation.InitialCreateTxId = 42;
+        creation.Settings.TablePathId = TPathId(1, 1);
         creation.Settings.StreamPathId = TPathId(1, 2);
+        creation.Settings.TopicPathId = TPathId(1, 3);
         creation.Settings.Consumer = "source-consumer";
         creation.Definition.SetTopicPartitions(1);
         creation.Definition.SetRetentionPeriodSeconds(3600);
+        constexpr ui64 storageLimitBytes = 8 * 1024 * 1024;
+        creation.Topic.MutablePartitionConfig()->SetStorageLimitBytes(storageLimitBytes);
 
         NKikimrScheme::TEvDescribeSchemeResult record;
+        record.SetPath("/Root/Table/Feed/streamImpl");
         auto& desc = *record.MutablePathDescription();
         auto& self = *desc.MutableSelf();
         self.SetSchemeshardId(creation.Settings.StreamPathId.OwnerId);
@@ -904,11 +909,19 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         topic.AddPartitions()->SetStatus(NKikimrPQ::Active);
         auto& config = *topic.MutablePQTabletConfig();
         config.MutablePartitionConfig()->SetLifetimeSeconds(creation.Definition.GetRetentionPeriodSeconds());
+        NKikimrSchemeOp::TModifyScheme setup;
+        creation.FillTopicSetup(setup, record);
+        const auto& partition = setup.GetAlterPersQueueGroup().GetPQTabletConfig().GetPartitionConfig();
+        UNIT_ASSERT_VALUES_EQUAL(partition.GetStorageLimitBytes(), storageLimitBytes);
         config.SetReplicationSourceConsumer(creation.Settings.Consumer);
         auto& cdc = *config.MutableCdcReplication();
         config.AddConsumers()->SetName("new-reader");
 
         TString error;
+        UNIT_ASSERT(!creation.CheckTopic(record, self.GetSchemeshardId(), self.GetOwner(), error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "storage limit");
+
+        config.MutablePartitionConfig()->SetStorageLimitBytes(partition.GetStorageLimitBytes());
         UNIT_ASSERT_C(creation.CheckTopic(record, self.GetSchemeshardId(), self.GetOwner(), error), error);
         UNIT_ASSERT(!creation.NeedsTopicSetup);
 

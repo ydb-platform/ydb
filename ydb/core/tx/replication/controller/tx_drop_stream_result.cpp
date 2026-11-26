@@ -69,7 +69,7 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         const bool handoffPending = target->GetDstState() == TReplication::EDstState::Alter
-            && (GetCdcTarget(target) || !Replication->GetCdcChildren(tid).empty());
+            && (TTargetCdc::Cast(target) || !Replication->GetCdcChildren(tid).empty());
         if (target->GetDstState() == TReplication::EDstState::Removing || handoffPending) {
             Self->DeleteProcessedSourceOffsets(rid, tid, db);
             target->SetStreamState(TReplication::EStreamState::Removed);

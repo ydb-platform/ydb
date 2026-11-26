@@ -18,14 +18,13 @@ class TController::TTxDiscoveryTargetsResult: public TTxBase {
                 tablePath.ChopSuffix("/");
                 return TStringBuilder() << tablePath << '/' << stream.GetName();
             };
-            const auto config = std::make_shared<TTargetCdc::TConfig>(
-                childPath(table.Config->GetSrcPath()), childPath(table.Config->GetDstPath()));
-            const auto id = Replication->AddTarget(TReplication::ETargetKind::CdcTopic, config);
-
-            auto* child = GetCdcTarget(Replication->FindTarget(id));
-            Replication->RegisterCdcChild(parentId, *child);
-            auto& cdc = child->GetCdc();
+            NKikimrReplicationController::TCdcTarget cdc;
+            cdc.SetParentTargetId(parentId);
             stream.SerializeTo(*cdc.MutableSourceStream());
+
+            const auto config = std::make_shared<TTargetCdc::TConfig>(
+                childPath(table.Config->GetSrcPath()), childPath(table.Config->GetDstPath()), cdc);
+            const auto id = Replication->AddTarget(TReplication::ETargetKind::CdcTopic, config);
 
             db.Table<Schema::Targets>().Key(Replication->GetId(), id).Update(
                 NIceDb::TUpdate<Schema::Targets::Kind>(TReplication::ETargetKind::CdcTopic),

@@ -611,7 +611,7 @@ IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorC
 
     const auto desiredState = replication->GetState() == TReplication::EState::Removing
         ? TReplication::EState::Done : replication->GetDesiredState();
-    if (const auto* cdc = GetCdcTarget(target);
+    if (const auto* cdc = TTargetCdc::Cast(target);
         cdc && cdc->GetCdc().GetPhase() == NKikimrReplicationController::TCdcTarget::TRIMMING)
     {
         return new TDstAlterer(ctx.SelfID, replication->GetSchemeShardId(), replication->GetId(), targetId,

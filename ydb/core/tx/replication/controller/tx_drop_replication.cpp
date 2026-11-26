@@ -116,7 +116,7 @@ public:
         THashSet<ui64> cdcParents;
         if (!record.GetCascade()) {
             for (const auto* target : Replication->GetTargets()) {
-                if (const auto* child = GetCdcTarget(target)) {
+                if (const auto* child = TTargetCdc::Cast(target)) {
                     cdcParents.insert(child->GetCdc().GetParentTargetId());
                 }
             }
@@ -132,7 +132,7 @@ public:
             db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
 
-            auto* child = GetCdcTarget(target);
+            auto* child = TTargetCdc::Cast(target);
             const bool initializingCdc = child && child->GetCdc().HasSourceStream() && !target->GetDstPathId();
             const bool admittedBirth = initializingCdc && child->GetCdc().HasInitialCreateTxId();
             const bool finishBirth = admittedBirth && !record.GetCascade();

@@ -67,7 +67,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         if (Ev->Get()->IsSuccess()) {
             const bool removing = Replication->GetState() == TReplication::EState::Removing;
-            if (auto* cdc = GetCdcTarget(target); cdc
+            if (auto* cdc = TTargetCdc::Cast(target); cdc
                 && (removing || Replication->GetDesiredState() == TReplication::EState::Done))
             {
                 if (!cdc->OnDstAltered(db, ctx)) {
@@ -86,7 +86,7 @@ public:
                 {"tid", tid});
 
             if (target->GetDstState() == TReplication::EDstState::Done) {
-                FinishCdcChildren(*Replication, tid, db);
+                Replication->FinishCdcChildren(tid, db);
             }
 
             if (!removing && Replication->CheckAlterDone()) {
@@ -120,7 +120,7 @@ public:
         );
 
         const auto desiredState = Replication->GetDesiredState();
-        const bool progressCdcParent = GetCdcTarget(target) && Ev->Get()->IsSuccess()
+        const bool progressCdcParent = TTargetCdc::Cast(target) && Ev->Get()->IsSuccess()
             && (desiredState == TReplication::EState::Ready || desiredState == TReplication::EState::Done);
         if (!progressCdcParent && Replication->GetState() != TReplication::EState::Ready
             && Replication->GetState() != TReplication::EState::Removing)

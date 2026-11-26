@@ -65,7 +65,7 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        auto* cdc = GetCdcTarget(target);
+        auto* cdc = TTargetCdc::Cast(target);
         if (Ev->Get()->IsSuccess() && cdc) {
             if (dstState != TReplication::EDstState::Creating) {
                 Replication.Reset();

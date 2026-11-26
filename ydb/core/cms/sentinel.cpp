@@ -1228,7 +1228,8 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             bool hasGoodState = NKikimrBlobStorage::TPDiskState::Normal == info.GetState();
 
             info.ResetForcedStatus();
-            info.SetTargetMaintenanceStatus(EMaintenanceStatus::NOT_SET);
+
+            EMaintenanceStatus::E target = EMaintenanceStatus::NOT_SET;
 
             if (it->second.HasFaultyMarker()) {
                 switch (Config.EvictVDisksStatus) {
@@ -1237,18 +1238,21 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                         info.SetForcedStatus(EPDiskStatus::FAULTY);
                         break;
                     case EEvictVDisksStatus::Maintenance:
-                        info.SetTargetMaintenanceStatus(EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED);
+                        target = EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
                         break;
                     case EEvictVDisksStatus::Disabled:
                         break;
                 }
             } else if (Config.EvictVDisksStatus == EEvictVDisksStatus::Maintenance) {
+                // No FAULTY marker present, but it might have been earlier.
                 if (info.GetTargetMaintenanceStatus() == EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED) {
-                    // Previously we've set LONG_TERM_MAINTENANCE_PLANNED.
+                    // Previously we've set LONG_TERM_MAINTENANCE_PLANNED because of the EEvictVDisksStatus::Maintenance.
                     // Set to NO_REQUEST to remove it.
-                    info.SetTargetMaintenanceStatus(EMaintenanceStatus::NO_REQUEST);
+                    target = EMaintenanceStatus::NO_REQUEST;
                 }
             }
+                        
+            info.SetTargetMaintenanceStatus(target);
 
             all.AddPDisk(id, hasGoodState);
 

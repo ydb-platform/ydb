@@ -22,6 +22,7 @@
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/gateway/clients/composite/yql_pq_composite_read_session.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_kafka_message_stream_client.h>
 #include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -52,6 +53,29 @@ using namespace NKikimr::NMiniKQL;
 
 namespace {
 LWTRACE_USING(DQ_PQ_PROVIDER);
+
+class TKafkaReadActorState final: public NFq::NMessageStream::IMessageStreamReadActorState {
+public:
+    NFq::NMessageStream::TMessageStreamReadState& GetReadState() override {
+        return State;
+    }
+
+    void SaveState(const NDqProto::TCheckpoint&, TSourceState& state) override {
+        // Keep the sink durability barrier, but persist no Kafka positions.
+        state.Data.emplace_back(TString(), 1);
+    }
+
+    void LoadState(const TSourceState& state) override {
+        for (const auto& data : state.Data) {
+            YQL_ENSURE(data.Version == 1 && data.Blob.empty(), "Unexpected Kafka source checkpoint state");
+        }
+        State.Partitions.clear();
+        State.StartingMessageTimestamp = TInstant::Zero();
+    }
+
+private:
+    NFq::NMessageStream::TMessageStreamReadState State;
+};
 
 class TPqReadActorState final: public NInternal::TPqReadState, public NFq::NMessageStream::IMessageStreamReadActorState {
 public:
@@ -152,7 +176,8 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(NPq::NProto::
     common.Stream = settings.GetTopicPath();
     common.Consumer = settings.GetConsumerName();
     common.StopAtCurrentEndOffsets = settings.GetStopAtCurrentEndOffsets();
-    common.RequireWriteTime = true;
+    common.RequireWriteTime = !settings.GetKafka();
+    common.ManagedAssignment = settings.GetKafka();
     common.EnableStreamingAutopartitioning = enableStreamingQueryTopicAutopartitioning;
     common.BufferSize = effectiveReadBufferBytes;
     TDuration::TryParse(settings.GetReconnectPeriod(), common.ReconnectPeriod);
@@ -172,6 +197,33 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(NPq::NProto::
     common.TraceRecord = [tx = TString(TStringBuilder() << txId), stream = common.Stream](const NFq::TMessageStreamRecord& record) {
         LWPROBE(PqReadDataReceived, tx, stream, *record.Data);
     };
+    if (settings.GetKafka()) {
+        YQL_ENSURE(!common.Consumer.empty() && !common.StopAtCurrentEndOffsets && !settings.GetSharedReading() &&
+                       !settings.GetWatermarks().GetEnabled() &&
+                       !settings.GetAllowConsumerRewindForDisposition(), "Unsupported Kafka source settings");
+        common.MetricsSource = "KafkaRead";
+        common.CheckPartitionCountPeriod = TDuration::Zero();
+        common.ReconnectPeriod = TDuration::Zero();
+        NFq::NMessageStream::TMessageStreamReadCluster cluster;
+        cluster.PartitionsCount = topicPartitionsCount;
+        // Read ranges select DQ reader slots, never Kafka partition assignments.
+        cluster.CreateClient = [settings, token](const TActorContext& ctx) {
+            NFq::TKafkaMessageStreamClientSettings config{
+                .BootstrapBrokers = settings.GetEndpoint(),
+                .Token = token,
+                .SaslMechanism = settings.GetSaslMechanism(),
+                .UseTls = settings.GetUseSsl(),
+                .ActorSystem = ctx.ActorSystem(),
+                .ActorPoolId = ctx.SelfID.PoolID(),
+            };
+            return NFq::CreateKafkaMessageStreamClient(settings.GetTopicPath(), std::move(config));
+        };
+        cluster.CreateSession = [](const TActorContext&, NFq::IMessageStreamClient& client, const NFq::TMessageStreamReadSessionSettings& read) {
+            return NThreading::MakeFuture(client.CreateReadSession(read));
+        };
+        common.Clusters.push_back(std::move(cluster));
+        return NFq::NMessageStream::CreateMessageStreamReadActor(std::move(common), std::make_unique<TKafkaReadActorState>());
+    }
     const auto& watermarks = settings.GetWatermarks();
     common.WatermarksEnabled = watermarks.GetEnabled();
     common.IdlePartitionsEnabled = watermarks.GetIdlePartitionsEnabled();
@@ -292,66 +344,67 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(NPq::NProto::
 void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod,
     bool enableStreamingQueriesCounters, bool enableStreamingQueryTopicAutopartitioning) {
-    factory.RegisterSource<NPq::NProto::TDqPqTopicSource>(TString(PqSource),
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod,
-            enableStreamingQueriesCounters,
-            enableStreamingQueryTopicAutopartitioning](NPq::NProto::TDqPqTopicSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args)
-        {
-            NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(DQ_PQ_PROVIDER));
+    auto createSource = [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod,
+                            enableStreamingQueriesCounters, enableStreamingQueryTopicAutopartitioning](
+                            NPq::NProto::TDqPqTopicSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args)
+    {
+        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(DQ_PQ_PROVIDER));
 
-            if (reconnectPeriod) {
-                settings.SetReconnectPeriod(reconnectPeriod);
+        if (reconnectPeriod) {
+            settings.SetReconnectPeriod(reconnectPeriod);
+        }
+
+        TVector<NPq::NProto::TDqReadTaskParams> readTaskParamsMsg;
+        ui32 topicPartitionsCount = ExtractPartitionsFromParams(readTaskParamsMsg, args.TaskParams, args.ReadRanges);
+
+        auto txId = args.TxId;
+        auto taskParamsIt = args.TaskParams.find("query_path");
+        if (taskParamsIt != args.TaskParams.end()) {
+            txId = taskParamsIt->second;
+        }
+
+        TDuration checkPartitionCountPeriod;
+        taskParamsIt = args.TaskParams.find("partition_count_check_enabled");
+        if (taskParamsIt != args.TaskParams.end()) {
+            if (taskParamsIt->second == "true") {
+                checkPartitionCountPeriod = PqDefaultCheckPartitionCountPeriod;
             }
+        }
 
-            TVector<NPq::NProto::TDqReadTaskParams> readTaskParamsMsg;
-            ui32 topicPartitionsCount = ExtractPartitionsFromParams(readTaskParamsMsg, args.TaskParams, args.ReadRanges);
+        TActorId infoAggregator;
+        if (const auto it = args.TaskParams.find("ControlPlane/PqSourcePartitionBalancerAggregatorId"); it != args.TaskParams.end()) {
+            NActorsProto::TActorId actorIdProto;
+            YQL_ENSURE(actorIdProto.ParseFromString(it->second), "Failed to parse " << it->first);
+            infoAggregator = ActorIdFromProto(actorIdProto);
+        }
 
-            auto txId = args.TxId;
-            auto taskParamsIt = args.TaskParams.find("query_path");
-            if (taskParamsIt != args.TaskParams.end()) {
-                txId = taskParamsIt->second;
-            }
+        TActorId controlPlaneActorId;
+        if (const auto it = args.TaskParams.find(PqControlPlaneActorIdParam); it != args.TaskParams.end()) {
+            NActorsProto::TActorId actorIdProto;
+            YQL_ENSURE(actorIdProto.ParseFromString(it->second), "Failed to parse " << it->first);
+            controlPlaneActorId = ActorIdFromProto(actorIdProto);
+        }
 
-            TDuration checkPartitionCountPeriod;
-            taskParamsIt = args.TaskParams.find("partition_count_check_enabled");
-            if (taskParamsIt != args.TaskParams.end()) {
-                if (taskParamsIt->second == "true") {
-                    checkPartitionCountPeriod = PqDefaultCheckPartitionCountPeriod;
-                }
-            }
+        if (!settings.GetSharedReading()) {
+            return CreateDqPqReadActor(std::move(settings), args.InputIndex, args.StatsLevel, txId, args.TaskId, args.SecureParams,
+                std::move(readTaskParamsMsg), driver, credentialsFactory, args.ComputeActorId, args.HolderFactory, args.TypeEnv,
+                std::move(args.Alloc), counters ? counters : args.TaskCounters, pqGateway, topicPartitionsCount, enableStreamingQueriesCounters,
+                PQReadDefaultFreeSpace, infoAggregator, checkPartitionCountPeriod, controlPlaneActorId,
+                enableStreamingQueryTopicAutopartitioning, args.SchedulableWorkFactory);
+        }
 
-            TActorId infoAggregator;
-            if (const auto it = args.TaskParams.find("ControlPlane/PqSourcePartitionBalancerAggregatorId"); it != args.TaskParams.end()) {
-                NActorsProto::TActorId actorIdProto;
-                YQL_ENSURE(actorIdProto.ParseFromString(it->second), "Failed to parse " << it->first);
-                infoAggregator = ActorIdFromProto(actorIdProto);
-            }
+        const TStringBuf format(settings.GetFormat());
+        const TStringBuf normalizedFormat = format.empty() ? TStringBuf("raw") : format;
+        YQL_ENSURE(normalizedFormat == "json_each_row"sv || normalizedFormat == "raw"sv,
+            "Row dispatcher (shared reading) supports only json_each_row and raw formats, got: " << format);
 
-            TActorId controlPlaneActorId;
-            if (const auto it = args.TaskParams.find(PqControlPlaneActorIdParam); it != args.TaskParams.end()) {
-                NActorsProto::TActorId actorIdProto;
-                YQL_ENSURE(actorIdProto.ParseFromString(it->second), "Failed to parse " << it->first);
-                controlPlaneActorId = ActorIdFromProto(actorIdProto);
-            }
-
-            if (!settings.GetSharedReading()) {
-                return CreateDqPqReadActor(std::move(settings), args.InputIndex, args.StatsLevel, txId, args.TaskId, args.SecureParams,
-                    std::move(readTaskParamsMsg), driver, credentialsFactory, args.ComputeActorId, args.HolderFactory, args.TypeEnv,
-                    std::move(args.Alloc), counters ? counters : args.TaskCounters, pqGateway, topicPartitionsCount,
-                    enableStreamingQueriesCounters, PQReadDefaultFreeSpace, infoAggregator, checkPartitionCountPeriod, controlPlaneActorId,
-                    enableStreamingQueryTopicAutopartitioning, args.SchedulableWorkFactory);
-            }
-
-            const TStringBuf format(settings.GetFormat());
-            const TStringBuf normalizedFormat = format.empty() ? TStringBuf("raw") : format;
-            YQL_ENSURE(normalizedFormat == "json_each_row"sv || normalizedFormat == "raw"sv,
-                "Row dispatcher (shared reading) supports only json_each_row and raw formats, got: " << format);
-
-            return CreateDqPqRdReadActor(args.TypeEnv, std::move(settings), args.InputIndex, args.StatsLevel, txId, args.TaskId,
-                args.SecureParams, std::move(readTaskParamsMsg), driver, credentialsFactory, args.ComputeActorId,
-                NFq::RowDispatcherServiceActorId(), args.HolderFactory, counters ? counters : args.TaskCounters, PQReadDefaultFreeSpace,
-                pqGateway, enableStreamingQueriesCounters, checkPartitionCountPeriod, controlPlaneActorId);
-        });
+        return CreateDqPqRdReadActor(args.TypeEnv, std::move(settings), args.InputIndex, args.StatsLevel, txId, args.TaskId, args.SecureParams,
+            std::move(readTaskParamsMsg), driver, credentialsFactory, args.ComputeActorId, NFq::RowDispatcherServiceActorId(),
+            args.HolderFactory, counters ? counters : args.TaskCounters, PQReadDefaultFreeSpace, pqGateway, enableStreamingQueriesCounters,
+            checkPartitionCountPeriod, controlPlaneActorId);
+    };
+    factory.RegisterSource<NPq::NProto::TDqPqTopicSource>(TString(PqSource), createSource);
+    factory.RegisterSource<NPq::NProto::TDqPqTopicSource>(TString(KafkaSource), std::move(createSource));
 }
 
 }   // namespace NYql::NDq

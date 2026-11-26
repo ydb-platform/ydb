@@ -2155,6 +2155,7 @@ private:
         }
 
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
+        TypesCtx->AddDataSource("kafka", NYql::CreateKafkaConfigurationProvider(state));
         TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));
 
         finalizers.emplace_back([pqGateway = state->Gateway, sessionId]() {

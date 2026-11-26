@@ -1224,6 +1224,9 @@ private:
             stagesMap[stage.Ref().UniqueId()] = txProto.StagesSize() - 1;
             const auto* compiledStage = physicalStageByID[stage.Ref().UniqueId()];
             for (const auto& src : compiledStage->GetSources()) {
+                YQL_ENSURE(!src.HasExternalSource() || src.GetExternalSource().GetType() != "KafkaSource"
+                    || !Config->DisableCheckpoints.Get().GetOrElse(false),
+                    "Kafka requires checkpoints as sink acknowledgement barriers; Kafka source offsets are not saved in them");
                 if (src.HasExternalSource() && src.GetExternalSource().GetType() == "PqSource") {
                     hasPqSources = true;
                     break;

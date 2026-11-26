@@ -324,7 +324,9 @@ public:
         }
 
         State_->Configuration->AddCluster(cluster, State_->DatabaseIds, State_->Types->Credentials, State_->DbResolver, properties);
-        Gateway_->AddCluster(cluster);
+        if (properties.Value("source_type", "") != "Kafka") {
+            Gateway_->AddCluster(cluster);
+        }
     }
 
     IDqIntegration* GetDqIntegration() override {

@@ -7,6 +7,7 @@
 #include <ydb/library/yql/providers/ydb_external/common/settings.h>
 
 #include <util/string/cast.h>
+#include <util/string/split.h>
 
 namespace NKikimr::NExternalSource {
 
@@ -89,7 +90,32 @@ struct TExternalDataSource: public IExternalSource {
             }
         }
 
-        ValidateHostname(HostnamePatterns, proto.GetLocation());
+        if (proto.GetSourceType() == ToString(NYql::EDatabaseType::Kafka)) {
+            const auto& props = proto.GetProperties().GetProperties();
+            if (const auto tls = props.find("use_tls"); tls != props.end()) {
+                TString value = tls->second;
+                value.to_lower();
+                if (value != "true" && value != "false") {
+                    throw TExternalSourceException() << "Kafka use_tls must be true or false";
+                }
+            }
+            if (const auto mechanism = props.find("sasl_mechanism"); mechanism != props.end()) {
+                if (mechanism->second != "PLAIN") {
+                    throw TExternalSourceException() << "Unsupported Kafka SASL mechanism: " << mechanism->second;
+                }
+                if (!proto.GetAuth().HasBasic()) {
+                    throw TExternalSourceException() << "Kafka sasl_mechanism requires BASIC authentication";
+                }
+            }
+            for (const auto broker : StringSplitter(proto.GetLocation()).Split(',')) {
+                if (broker.Token().empty()) {
+                    throw TExternalSourceException() << "Kafka bootstrap broker must not be empty";
+                }
+                ValidateHostname(HostnamePatterns, TString(broker.Token()));
+            }
+        } else {
+            ValidateHostname(HostnamePatterns, proto.GetLocation());
+        }
     }
 
     virtual NThreading::TFuture<std::shared_ptr<TMetadata>> LoadDynamicMetadata(std::shared_ptr<TMetadata> meta) override {

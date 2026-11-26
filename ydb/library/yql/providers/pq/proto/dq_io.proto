@@ -124,6 +124,9 @@ message TDqPqTopicSource {
     TWriteTimePredicate WriteTimePredicate = 34;
     bool UsedPartitionPredicate = 35;
     bool AllowConsumerRewindForDisposition = 36;
+    // Kafka uses group-managed assignment and stores durable positions only at the broker.
+    bool Kafka = 37;
+    string SaslMechanism = 38;
 }
 
 message TDqPqTopicSink {

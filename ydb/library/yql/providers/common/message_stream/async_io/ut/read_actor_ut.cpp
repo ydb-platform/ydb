@@ -504,6 +504,27 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
         UNIT_ASSERT_VALUES_EQUAL(*f.Control->Start, 1);
     }
 
+    Y_UNIT_TEST(ManagedAssignmentDoesNotReuseReaderOffsets) {
+        TFixture f;
+        f.ManagedAssignment = true;
+        f.PartitionIds.clear();
+        f.Init(true);
+        f.Start(std::nullopt);
+        f.Data(9);
+        UNIT_ASSERT_VALUES_EQUAL(f.Read().size(), 1);
+        UNIT_ASSERT(f.Client->Settings.PartitionIds.empty());
+
+        // The group can assign this partition again at an earlier committed
+        // position. The old reader-local next offset (10) must not override it.
+        auto reassigned = std::make_shared<TControl>();
+        reassigned->Start = 999;
+        f.Session->Events.emplace_back(TMessageStreamPartitionClosedEvent{ f.Control });
+        f.Start(reassigned, std::nullopt, 1);
+        UNIT_ASSERT(f.Read().empty());
+        UNIT_ASSERT(!reassigned->Start);
+        UNIT_ASSERT(!reassigned->Bound);
+    }
+
     Y_UNIT_TEST(SnapshotAtConsumerEndFinishesWithoutData) {
         TFixture f;
         f.Init();

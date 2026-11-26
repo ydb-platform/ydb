@@ -77,6 +77,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(IPqGateway::TPtr gateway, 
 TPqState::TPqState(const TString& sessionId, bool strictConfigValidation)
     : SessionId(sessionId)
     , Configuration(MakeIntrusive<TPqConfiguration>(strictConfigValidation))
+    , KafkaConfiguration(MakeIntrusive<TKafkaConfiguration>(strictConfigValidation))
 {
 }
 

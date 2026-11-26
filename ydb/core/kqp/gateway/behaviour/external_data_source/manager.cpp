@@ -158,6 +158,7 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         "mdb_cluster_id",   // managed PG, CH, GP, MY
         "database_id",   // managed YDB
         "use_tls",
+        "sasl_mechanism",   // kafka
         "schema",   // managed PG, GP
         "service_name",   // oracle
         "folder_id",   // logging

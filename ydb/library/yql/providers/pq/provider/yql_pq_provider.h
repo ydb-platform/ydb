@@ -20,6 +20,7 @@ class IFunctionRegistry;
 namespace NYql {
 
 struct TPqConfiguration;
+struct TKafkaConfiguration;
 
 struct TPqState: public TThrRefBase {
     using TPtr = TIntrusivePtr<TPqState>;
@@ -68,6 +69,7 @@ public:
 
     TTypeAnnotationContext* Types = nullptr;
     TIntrusivePtr<TPqConfiguration> Configuration;
+    TIntrusivePtr<TKafkaConfiguration> KafkaConfiguration;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     IPqGateway::TPtr Gateway;
     THolder<IDqIntegration> DqIntegration;
@@ -87,6 +89,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(IPqGateway::TPtr gateway, 
     bool useActorSystemThreadsInTopicClient = true, bool allowYtflowEngine = false, bool addTransparentPrefixToTransparentSystemColumns = true);
 
 TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway);
+TIntrusivePtr<IDataProvider> CreateKafkaConfigurationProvider(TPqState::TPtr state);
 TIntrusivePtr<IDataProvider> CreatePqDataSink(TPqState::TPtr state, IPqGateway::TPtr gateway);
 
 }   // namespace NYql

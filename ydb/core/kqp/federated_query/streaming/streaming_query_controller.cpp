@@ -264,7 +264,8 @@ private:
             for (const auto& input : stage.GetSources()) {
                 const auto& externalSource = input.GetExternalSource();
                 NYql::NPq::NProto::TDqPqTopicSource source;
-                if (externalSource.GetType() == "PqSource" && externalSource.GetSettings().UnpackTo(&source)) {
+                if ((externalSource.GetType() == "PqSource" || externalSource.GetType() == "KafkaSource") &&
+                    externalSource.GetSettings().UnpackTo(&source)) {
                     (*checkpointTask.MutableSecureParams())[source.GetToken().GetName()] =
                         NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().RemoveSecrets().ToJson();
                 }

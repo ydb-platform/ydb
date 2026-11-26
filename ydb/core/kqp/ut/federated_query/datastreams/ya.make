@@ -21,6 +21,7 @@ SRCS(
     datastreams_table_mode_ut.cpp
     datastreams_ut.cpp
     kqp_has_path_ut.cpp
+    kafka_streaming_ut.cpp
     streaming_aggregation_ut.cpp
     streaming_ddl_ut.cpp
     streaming_deferrd_commit_write_ut.cpp
@@ -29,6 +30,8 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/librdkafka/src-cpp
+    library/cpp/streams/zstd
     library/cpp/protobuf/interop
     library/cpp/threading/local_executor
     ydb/core/base

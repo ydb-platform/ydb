@@ -9,6 +9,7 @@ ENV(YDB_DEFAULT_CLUSTERADMIN=root@builtin)
 
 TEST_SRCS(
     test_iam.py
+    test_kafka.py
     test_partitions.py
     test_scalar_topic_write.py
     test_rescaling.py

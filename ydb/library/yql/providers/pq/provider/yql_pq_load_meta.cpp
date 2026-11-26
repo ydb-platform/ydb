@@ -4,7 +4,9 @@
 
 #include <ydb/library/yql/providers/common/message_stream/provider.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_kafka_message_stream_client.h>
 
+#include <util/generic/algorithm.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -89,8 +91,28 @@ public:
         auto launchFetch = [&](TTopics& pendingTopics) {
             for (auto& [key, pending] : pendingTopics) {
                 auto& [cluster, topic] = key;
-                pending.Future = State_->Gateway->DescribeFederatedTopic(State_->SessionId, cluster,
-                    State_->Configuration->GetDatabaseForTopic(cluster), topic, State_->Configuration->Tokens.at(cluster));
+                const auto& config = State_->Configuration->ClustersConfigurationSettings.at(cluster);
+                if (config.Kafka) {
+                    auto client = NFq::CreateKafkaMessageStreamClient(topic, {
+                                                                                 .BootstrapBrokers = config.Endpoint,
+                                                                                 .Token = State_->Configuration->Tokens.at(cluster),
+                                                                                 .SaslMechanism = config.SaslMechanism,
+                                                                                 .UseTls = config.UseSsl,
+                                                                             });
+                    pending.Future = client->DescribeStream().Apply([client](const auto& future) {
+                        const auto& result = future.GetValue();
+                        if (!result.IsSuccess()) {
+                            ythrow yexception() << "Cannot describe Kafka topic: " << result.Issues.ToOneLineString();
+                        }
+                        IPqGateway::TClusterInfo info;
+                        info.PartitionsCount = result.Value.Partitions.size();
+                        info.ConsumersKnown = false;
+                        return IPqGateway::TDescribeFederatedTopicResult{ std::move(info) };
+                    });
+                } else {
+                    pending.Future = State_->Gateway->DescribeFederatedTopic(State_->SessionId, cluster,
+                        State_->Configuration->GetDatabaseForTopic(cluster), topic, State_->Configuration->Tokens.at(cluster));
+                }
 
                 // Use a completion promise that always resolves with a value (never exceptional),
                 // so WaitAll does not see exceptions and DoApplyAsyncChanges is always invoked.
@@ -120,12 +142,34 @@ public:
         if (auto status = FillState(PendingWriteTopics_, ctx, true); status != TStatus::Ok) {
             return status;
         }
+        const bool hasKafka = AnyOf(State_->Topics, [this](const auto& item) {
+            return State_->Configuration->ClustersConfigurationSettings.at(item.first.first).Kafka;
+        });
+        if (hasKafka) {
+            bool valid = true;
+            VisitExpr(input, [&](const TExprNode::TPtr& node) {
+                if (node->IsCallable({ "Aggregate", "EquiJoin", "CalcOverWindow", "HoppingCore", "MultiHoppingCore", "Condense", "Condense1",
+                        "CombineByKey", "PartitionByKey", "PartitionsByKeys", "MatchRecognize" })) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Kafka currently supports stateless streaming queries only"));
+                    valid = false;
+                    return false;
+                }
+                return true;
+            });
+            if (!valid) {
+                return TStatus::Error;
+            }
+        }
         return TStatus::Ok;
     }
 
 private:
     TStatus FillState(TTopics& pendingTopics, TExprContext& ctx, bool isWrite) {
         for (auto& [key, pending] : pendingTopics) {
+            if (isWrite && State_->Configuration->ClustersConfigurationSettings.at(key.first).Kafka) {
+                ctx.AddError(TIssue(ctx.GetPosition(pending.Meta.Pos), "Writing to Kafka is unsupported"));
+                return TStatus::Error;
+            }
             try {
                 pending.Meta.FederatedTopic = pending.Future.GetValue();
             } catch (const std::exception& ex) {
@@ -145,7 +189,7 @@ private:
                 if (const auto consumer = State_->Configuration->Consumer.Get(); consumer && !consumer->empty() && pending.Meta.FederatedTopic) {
                     for (const auto& topic : *pending.Meta.FederatedTopic) {
                         // A zero partition count means that topic description failed or the physical cluster is unavailable for read.
-                        if (topic.PartitionsCount && !topic.Consumers.contains(*consumer)) {
+                        if (topic.PartitionsCount && topic.ConsumersKnown && !topic.Consumers.contains(*consumer)) {
                             TStringBuilder message;
                             message << "Consumer `" << *consumer << "` does not exist in topic `" << key.second << '`';
                             if (!topic.Info.Name.empty()) {

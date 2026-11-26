@@ -1261,6 +1261,11 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                         }
                                         f(externalDataSourceMetadata);
                                     });
+                            } else if (dataSource.GetDatabaseType() == NYql::EDatabaseType::Kafka && externalPath) {
+                                if (!dataSource.IsMessageStream()) {
+                                    externalDataSourceMetadata.Metadata->ExternalDataSource().InitObjectKind(NYql::TExternalDataSource::EKind::MessageStream);
+                                }
+                                loadDynamicMetadata(externalDataSourceMetadata);
                             } else if (externalDataSourceMetadata.Metadata->ExternalDataSource().GetDatabaseType() == NYql::EDatabaseType::YT && externalPath) {
                                 auto locked = ptr.lock();
                                 if (!locked) {

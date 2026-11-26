@@ -404,7 +404,7 @@ public:
 
     TMaybe<TSourceWatermarksSettings> ExtractSourceWatermarksSettings(
         const TExprNode& /*node*/, const ::google::protobuf::Any& protoSettings, const TString& sourceType) override {
-        YQL_ENSURE(sourceType == PqSource);
+        YQL_ENSURE(sourceType == PqSource || sourceType == KafkaSource);
         YQL_ENSURE(protoSettings.Is<NPq::NProto::TDqPqTopicSource>());
         NYql::NPq::NProto::TDqPqTopicSource srcDesc;
         if (!protoSettings.UnpackTo(&srcDesc)) {
@@ -434,6 +434,10 @@ public:
                 const auto* clusterDesc = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
                 YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
                 srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
+                srcDesc.SetKafka(clusterDesc->Kafka);
+                if (clusterDesc->Kafka) {
+                    srcDesc.SetSaslMechanism(clusterDesc->SaslMechanism);
+                }
                 auto topicPath = topic.Path().Value();
                 auto topicDatabase = topic.Database().Value();
                 if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE && topicDatabase == "/Root") {
@@ -619,7 +623,7 @@ public:
                 }
 
                 const bool allowConsumerRewindForDisposition =
-                    State_->EnableConsumerRewindForDisposition &&
+                    !clusterDesc->Kafka && State_->EnableConsumerRewindForDisposition &&
                     State_->Disposition.GetDispositionCase() != NPq::NProto::StreamingDisposition::DISPOSITION_NOT_SET;
                 srcDesc.SetAllowConsumerRewindForDisposition(allowConsumerRewindForDisposition);
 
@@ -676,7 +680,13 @@ public:
                 if (sharedReading && !watermarkExprSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use watermark expr: " + watermarkExprSql));
                 }
-                sourceType = PqSource;
+                if (clusterDesc->Kafka) {
+                    YQL_ENSURE(!srcDesc.GetConsumerName().empty(), "Kafka requires PRAGMA kafka.Consumer");
+                    YQL_ENSURE(streamingTopicRead && !sharedReading && !srcDesc.GetWatermarks().GetEnabled() && !commonSettings &&
+                                   !usedPartitionPredicate && offsetPredicates.ItemSize() == 0 && writeTimePredicate.ItemSize() == 0,
+                        "Kafka supports stateless streaming subscriptions without watermarks, explicit partitions or offset/time bounds");
+                }
+                sourceType = clusterDesc->Kafka ? KafkaSource : PqSource;
             }
         }
     }
@@ -768,11 +778,23 @@ public:
 
         TVector<TCoNameValueTuple> props;
 
-        if (auto consumer = State_->Configuration->Consumer.Get()) {
+        auto clusterConfiguration = GetClusterConfiguration(cluster);
+        const auto consumer = clusterConfiguration->Kafka ? State_->KafkaConfiguration->Consumer.Get() : State_->Configuration->Consumer.Get();
+        if (consumer) {
             Add(props, ConsumerSetting, *consumer, pos, ctx);
         }
-
-        auto clusterConfiguration = GetClusterConfiguration(cluster);
+        if (clusterConfiguration->Kafka) {
+            if (!State_->StreamingTopicsReadByDefault || !consumer || consumer->empty() || maybeWatermark) {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(pos), "Kafka requires a streaming query with PRAGMA kafka.Consumer; watermarks are unsupported"));
+                return {};
+            }
+            if (State_->Disposition.has_from_time() || State_->Disposition.has_time_ago() || State_->Disposition.has_output_start_time()) {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(pos), "Kafka resumes from group offsets; timestamp dispositions and OUTPUT_FROM are unsupported"));
+                return {};
+            }
+        }
 
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
         bool useSharedReading = UseSharedReading(clusterConfiguration, pqReadTopic, ctx);

@@ -299,8 +299,8 @@ void TExternalDataSource::ApplyInferredMetadata(const TString& type, const TStri
 
 void TExternalDataSource::InitObjectKind(EKind kind) {
     const bool isYt = DatabaseType == EDatabaseType::YT;
-    Y_ENSURE((IsYdb() || isYt) && Kind == EKind::Unknown,
-        "TExternalDataSource: only an unresolved Ydb or YT source can initialize object kind");
+    Y_ENSURE((IsYdb() || isYt || DatabaseType == EDatabaseType::Kafka) && Kind == EKind::Unknown,
+        "TExternalDataSource: only an unresolved Ydb, YT or Kafka source can initialize object kind");
     Y_ENSURE(kind == EKind::Table || kind == EKind::MessageStream,
         "TExternalDataSource: object kind does not match the connection type");
     Kind = kind;
@@ -309,9 +309,9 @@ void TExternalDataSource::InitObjectKind(EKind kind) {
 TString TExternalDataSource::GetProviderName(const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory) const {
     YQL_ENSURE(externalSourceFactory, "External source factory is null");
     if (IsMessageStream()) {
-        YQL_ENSURE(IsYdb() || DatabaseType == EDatabaseType::YT,
-            "A message stream must use a Ydb or YT connection");
-        return IsYdb() ? TString{NYql::PqProviderName} : TString{NYql::YtProviderName};
+        YQL_ENSURE(IsYdb() || DatabaseType == EDatabaseType::YT || DatabaseType == EDatabaseType::Kafka,
+            "A message stream must use a Ydb, YT or Kafka connection");
+        return DatabaseType == EDatabaseType::YT ? TString{NYql::YtProviderName} : TString{NYql::PqProviderName};
     }
     YQL_ENSURE(DatabaseType, "Unknown source type for external data source \"" << DataSourcePath << "\"");
     return externalSourceFactory->GetOrCreate(*DatabaseType)->GetName();

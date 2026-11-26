@@ -584,7 +584,7 @@ private:
             }
             const bool consumerOffsetsInitialized = ConsumerOffsetsInitialized();
             for (auto& clusterState : Clusters) {
-                if (clusterState.Config.PartitionsCount == 0 || !consumerOffsetsInitialized) {
+                if ((!Settings.ManagedAssignment && clusterState.Config.PartitionsCount == 0) || !consumerOffsetsInitialized) {
                     continue;
                 }
                 auto* session = GetReadSession(clusterState);
@@ -689,8 +689,10 @@ private:
 
     NFq::TMessageStreamReadSessionSettings GetMessageStreamReadSettings(TClusterState& clusterState) const {
         NFq::TMessageStreamReadSessionSettings settings;
-        for (const auto partitionId : GetPartitionsToRead(clusterState)) {
-            settings.PartitionIds.push_back(NFq::TMessageStreamPartitionId{ partitionId });
+        if (!Settings.ManagedAssignment) {
+            for (const auto partitionId : GetPartitionsToRead(clusterState)) {
+                settings.PartitionIds.push_back(NFq::TMessageStreamPartitionId{ partitionId });
+            }
         }
         if (HasReadTimeLowerBound()) {
             settings.ReadFromWriteTime = StartingMessageTimestamp;
@@ -724,7 +726,7 @@ private:
     }
 
     void SubscribeOnNextEvent(TClusterState& clusterState) {
-        if (!clusterState.Config.PartitionsCount) {
+        if (!Settings.ManagedAssignment && !clusterState.Config.PartitionsCount) {
             return;
         }
         auto* session = GetReadSession(clusterState);
@@ -863,7 +865,7 @@ private:
     }
 
     void SchedulePartitionCountTimer() {
-        if (!CheckPartitionCountPeriod || Settings.StopAtCurrentEndOffsets || PartitionCountTimerScheduled) {
+        if (Settings.ManagedAssignment || !CheckPartitionCountPeriod || Settings.StopAtCurrentEndOffsets || PartitionCountTimerScheduled) {
             return;
         }
         PartitionCountTimerScheduled = true;
@@ -1031,6 +1033,14 @@ private:
             const auto partitionKey = MakePartitionKey(Cluster, event.PartitionControl);
 
             Self.ActivePartitionSessions[partitionKey] = event.PartitionControl;
+
+            if (Self.Settings.ManagedAssignment) {
+                // A previous reader-local position may belong to a revoked assignment.
+                // Kafka group offsets are authoritative, including after a rebalance.
+                Self.Partitions[partitionKey] = {};
+                event.PartitionControl->ConfirmStart(std::nullopt, std::nullopt);
+                return;
+            }
 
             auto& partitionInfo = Self.Partitions[partitionKey];
             if (!partitionInfo.Offset && Self.BeginOffset) {

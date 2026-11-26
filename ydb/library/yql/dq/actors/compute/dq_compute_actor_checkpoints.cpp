@@ -814,7 +814,7 @@ void TDqComputeActorCheckpoints::PassAway() {
 }
 
 bool IsInfiniteSourceType(const TString& sourceType) {
-    return sourceType == PqSource;
+    return sourceType == PqSource || sourceType == KafkaSource;
 }
 
 NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const NDqProto::TDqTask& task) {

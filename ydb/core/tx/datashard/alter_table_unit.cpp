@@ -254,6 +254,8 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
             stopped->ReplicationConfig.Mode = TReplicationConfig::REPLICATION_MODE_NONE;
             if (alterTableTx.ActivateCdcStreamsSize()) {
                 stopped->SetTableSchemaVersion(version);
+                // SchemeShard checks that each stream is Disabled before proposing the ALTER.
+                // The table ALTER excludes concurrent stream changes until all shards finish.
                 for (const auto& id : alterTableTx.GetActivateCdcStreams()) {
                     const auto streamId = TPathId::FromProto(id);
                     const auto* stream = stopped->CdcStreams.FindPtr(streamId);

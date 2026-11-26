@@ -1,7 +1,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
-#include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
@@ -12,7 +11,6 @@
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
-#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
@@ -23,7 +21,6 @@
 #include <ydb/library/actors/core/event.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
@@ -33,11 +30,9 @@
 
 #include "make_config.h"
 
-#include <array>
 #include <deque>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <vector>
 
 template<>
@@ -53,27 +48,7 @@ struct TConfigParams {
     ui64 Version = 0;
     TVector<TCreateConsumerParams> Consumers;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS;
-    TString CdcReplicationSourceConsumer;
-    ui64 CdcReplicationTrimTxId = 0;
-    bool Important = false;
 };
-
-NKikimrPQ::TPQTabletConfig MakeConfig(const TConfigParams& params) {
-    auto config = MakeConfig(params.Version, params.Consumers, 1, params.MeteringMode);
-    if (!params.CdcReplicationSourceConsumer.empty()) {
-        config.SetReplicationSourceConsumer(params.CdcReplicationSourceConsumer);
-        auto* cdc = config.MutableCdcReplication();
-        if (params.CdcReplicationTrimTxId) {
-            cdc->SetTrimTxId(params.CdcReplicationTrimTxId);
-        }
-    }
-    if (params.Important) {
-        for (auto& consumer : *config.MutableConsumers()) {
-            consumer.SetImportant(true);
-        }
-    }
-    return config;
-}
 
 struct TCreatePartitionParams {
     TPartitionId Partition = TPartitionId{1};
@@ -93,7 +68,6 @@ struct TCreatePartitionParams {
     bool EmptyDataRangeOk = false;
     TMaybe<ui64> MirroredOffset;
     TMaybe<TRowVersion> LastEmittedHeartbeat;
-    std::optional<ui64> CdcReplicationTrimOffset;
 };
 
 }
@@ -380,10 +354,9 @@ protected:
     void SendConfigResponse(const TConfigParams& config);
     void WaitDiskStatusRequest();
     void SendDiskStatusResponse(TMaybe<ui64>* cookie = nullptr);
-    void WaitMetaReadRequest(bool readCdcTrim = false);
+    void WaitMetaReadRequest();
     void SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> step, TMaybe<ui64> txId, TInstant endWriteTimestamp,
-                              TMaybe<ui64> mirroredOffset = Nothing(), TMaybe<TRowVersion> lastEmittedHeartbeat = Nothing(),
-                              const std::optional<NKikimrPQ::TCdcReplicationTrim>& cdcTrim = std::nullopt);
+                              TMaybe<ui64> mirroredOffset = Nothing(), TMaybe<TRowVersion> lastEmittedHeartbeat = Nothing());
     void WaitBlobReadRequest();
     void SendBlobReadResponse();
     void WaitInfoRangeRequest();
@@ -559,7 +532,10 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
     TAutoPtr<TCounters> counters(new TCounters());
     TabletCounters.reset(counters->GetSecondTabletCounters().Release());
 
-    Config = NHelpers::MakeConfig(config);
+    Config = MakeConfig(config.Version,
+                        config.Consumers,
+                        1,
+                        config.MeteringMode);
     Config.SetLocalDC(true);
 
     NPersQueue::TTopicNamesConverterFactory factory(Ctx->Runtime->GetAppData(0).PQConfig.GetTopicsAreFirstClassCitizen(), "/Root/PQ", "dc1");
@@ -615,17 +591,9 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
         WaitDiskStatusRequest();
         SendDiskStatusResponse();
 
-        std::optional<NKikimrPQ::TCdcReplicationTrim> cdcTrim;
-        if (!params.Config.CdcReplicationSourceConsumer.empty() || !config.CdcReplicationSourceConsumer.empty()) {
-            cdcTrim.emplace();
-            if (params.CdcReplicationTrimOffset) {
-                cdcTrim->SetTxId(params.Config.CdcReplicationTrimTxId);
-                cdcTrim->SetOffset(*params.CdcReplicationTrimOffset);
-            }
-        }
-        WaitMetaReadRequest(cdcTrim.has_value());
+        WaitMetaReadRequest();
         SendMetaReadResponse(params.Begin, params.End, params.PlanStep, params.TxId, params.EndWriteTimestamp,
-                             params.MirroredOffset, params.LastEmittedHeartbeat, cdcTrim);
+                             params.MirroredOffset, params.LastEmittedHeartbeat);
 
         WaitInfoRangeRequest();
         {
@@ -932,7 +900,7 @@ void TPartitionFixture::SendWrite
     msgs.push_back(msg);
 
     auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), isDirectWrite, std::nullopt, TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked);
-    event->MirrorerActor = fromMirrorer ? Ctx->Edge : TActorId{};
+    event->FromMirrorer = fromMirrorer;
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -1080,7 +1048,10 @@ void TPartitionFixture::SendConfigResponse(const TConfigParams& config)
         read->SetStatus(NKikimrProto::OK);
 
         TString out;
-        Y_ABORT_UNLESS(NHelpers::MakeConfig(config).SerializeToString(&out));
+        Y_ABORT_UNLESS(MakeConfig(config.Version,
+            config.Consumers,
+            1,
+            config.MeteringMode).SerializeToString(&out));
 
         read->SetValue(out);
     }
@@ -1111,18 +1082,17 @@ void TPartitionFixture::SendDiskStatusResponse(TMaybe<ui64>* cookie)
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TPartitionFixture::WaitMetaReadRequest(bool readCdcTrim)
+void TPartitionFixture::WaitMetaReadRequest()
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
 
-    UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadSize(), readCdcTrim ? 3 : 2);
+    UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadSize(), 2);
 }
 
 void TPartitionFixture::SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> step, TMaybe<ui64> txId,
                                             TInstant endWriteTimestamp, TMaybe<ui64> mirroredOffset,
-                                            TMaybe<TRowVersion> lastEmittedHeartbeat,
-                                            const std::optional<NKikimrPQ::TCdcReplicationTrim>& cdcTrim)
+                                            TMaybe<TRowVersion> lastEmittedHeartbeat)
 {
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -1131,7 +1101,7 @@ void TPartitionFixture::SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> 
     // NKikimrPQ::TPartitionMeta
     //
     auto read = event->Record.AddReadResult();
-    if (endWriteTimestamp || mirroredOffset.Defined() || lastEmittedHeartbeat.Defined() || cdcTrim) {
+    if (endWriteTimestamp || mirroredOffset.Defined() || lastEmittedHeartbeat.Defined()) {
         read->SetStatus(NKikimrProto::OK);
 
         NKikimrPQ::TPartitionMeta meta;
@@ -1173,16 +1143,6 @@ void TPartitionFixture::SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> 
         read->SetValue(out);
     } else {
         read->SetStatus(NKikimrProto::NODATA);
-    }
-
-    if (cdcTrim) {
-        auto* read = event->Record.AddReadResult();
-        if (cdcTrim->HasTxId()) {
-            read->SetStatus(NKikimrProto::OK);
-            read->SetValue(cdcTrim->SerializeAsString());
-        } else {
-            read->SetStatus(NKikimrProto::NODATA);
-        }
     }
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
@@ -1534,7 +1494,10 @@ void TPartitionFixture::AssertStaleMetaKvHasTxKey(
 
 void TPartitionFixture::SendChangePartitionConfig(const TConfigParams& config)
 {
-    auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, NHelpers::MakeConfig(config));
+    auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, MakeConfig(config.Version,
+                                                                                        config.Consumers,
+                                                                                        1,
+                                                                                        config.MeteringMode));
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -3466,7 +3429,7 @@ TActorId TPartitionFixture::StartCdcMirrorer() {
         mirrorer = ev->Sender;
         ev.Reset();
     });
-    Config.SetVersion(2);
+    Config.SetVersion(Config.GetVersion() + 1);
     Config.MutableCdcReplication();
     Config.MutablePartitionConfig()->MutableMirrorFrom()->SetMirrorConsumerOffsets(true);
     SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
@@ -3502,14 +3465,12 @@ Y_UNIT_TEST_F(DisabledCdcReplicationDiscardsBufferedOffsets, TPartitionFixture)
 }
 
 Y_UNIT_TEST_F(StoppedCdcMirrorerRejectsQueuedMultipartWrite, TPartitionFixture) {
+    Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
     const TConfigParams config{.Version = 1, .Consumers = {{.Consumer = "reader"}}};
     auto* partition = CreatePartition({
         .Partition = TPartitionId{0}, .Begin = 0, .End = 10, .Config = config, .FillHead = true,
     }, config);
-    const auto mirrorer = StartCdcMirrorer();
-
-    SendSetOffset(1, "reader", 7, "");
-    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "reader", .Offset = 7}}}});
+    StartCdcMirrorer();
 
     constexpr ui32 partSize = 300_KB;
     TVector<TEvPQ::TEvWrite::TMsg> parts;
@@ -3525,14 +3486,20 @@ Y_UNIT_TEST_F(StoppedCdcMirrorerRejectsQueuedMultipartWrite, TPartitionFixture) 
     }
     auto write = MakeHolder<TEvPQ::TEvWrite>(2, 0, "", 10, std::move(parts), false, std::nullopt,
         TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked);
-    write->MirrorerActor = mirrorer;
-    Ctx->Runtime->Send(ActorId, mirrorer, write.Release());
+    write->FromMirrorer = true;
+    SendEvent(write.Release());
+    auto quota = WaitForRequestQuotaAndHoldApproveWriteQuota();
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteInflightSize(*partition), 2 * partSize);
 
-    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableDstTopicReplicationDisabled(true);
-    Ctx->Runtime->Send(ActorId, mirrorer, new TEvPQ::TEvReplicationData());
+    Config.SetVersion(Config.GetVersion() + 1);
+    Config.MutablePartitionConfig()->ClearMirrorFrom();
+    SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    WaitCmdWrite();
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProxyResponse({.Cookie = 1});
+    WaitPartitionConfigChanged();
+    StartCdcMirrorer();
+
+    SendApproveWriteQuota(std::move(quota));
     for (ui16 partNo = 0; partNo < 2; ++partNo) {
         WaitErrorResponse({.Cookie = 2, .ErrorCode = NPersQueue::NErrorCode::ERROR, .Error = "CDC mirroring has stopped"});
     }
@@ -3634,152 +3601,6 @@ Y_UNIT_TEST_F(WriteWithoutSourceHeartbeatsEmitsNoHeartbeat, TPartitionFixture)
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProxyResponse({.Cookie = 1, .Status = NMsgBusProxy::MSTATUS_OK, .SeqNo = 1});
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 11);
-}
-
-Y_UNIT_TEST_F(CdcReplicationTrimPersistsCutAndDeletesData, TPartitionFixture) {
-    constexpr ui64 mirroredOffset = 20;
-    TConfigParams config{
-        .Version = 1,
-        .Consumers = {{.Consumer = "reader", .Offset = mirroredOffset}, {.Consumer = "rewind", .Offset = 5}},
-        .CdcReplicationSourceConsumer = "source",
-        .Important = true,
-    };
-    auto* partition = CreatePartition({
-        .Partition = TPartitionId{0}, .Begin = 0, .End = 10, .Config = config, .FillHead = true,
-        .MirroredOffset = mirroredOffset,
-    }, config);
-
-    config.Version = 2;
-    config.CdcReplicationTrimTxId = 42;
-    SendChangePartitionConfig(config);
-    auto kv = GrabStaleMetaKvRequest("CDC trim must persist");
-    NKikimrPQ::TCdcReplicationTrim trim;
-    NKikimrPQ::TPartitionMeta meta;
-    for (const auto& cmd : kv->Record.GetCmdWrite()) {
-        const TStringBuf key = cmd.GetKey();
-        if (key.EndsWith("/cdc-trim")) {
-            UNIT_ASSERT(trim.ParseFromString(cmd.GetValue()));
-        } else if (key.front() == TKeyPrefix::TypeMeta) {
-            UNIT_ASSERT(meta.ParseFromString(cmd.GetValue()));
-        }
-    }
-    UNIT_ASSERT_VALUES_EQUAL(trim.GetTxId(), 42);
-    UNIT_ASSERT_VALUES_EQUAL(trim.GetOffset(), mirroredOffset);
-    UNIT_ASSERT_VALUES_EQUAL(meta.GetStartOffset(), mirroredOffset);
-    UNIT_ASSERT_VALUES_EQUAL(meta.GetEndOffset(), mirroredOffset);
-    UNIT_ASSERT_VALUES_EQUAL(meta.GetMirroredOffset(), mirroredOffset);
-    for (const auto type : {TKeyPrefix::TypeData, TKeyPrefix::TypeTmpData}) {
-        const auto [from, to] = MakeKeyPrefixRange(type, TPartitionId{0});
-        UNIT_ASSERT(AnyOf(kv->Record.GetCmdDeleteRange(), [&](const auto& command) {
-            const auto& range = command.GetRange();
-            return range.GetFrom() == TStringBuf(from.Data(), from.Size()) && range.GetIncludeFrom()
-                && range.GetTo() == TStringBuf(to.Data(), to.Size()) && !range.GetIncludeTo();
-        }));
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), 0);
-    // Earliest still resolves to zero while the trim write is in flight.
-    Ctx->Runtime->Send(ActorId, Ctx->Edge, new TEvPQ::TEvResetOffsetRequest(
-        "topic", "rewind", 0, NKikimrPQ::TEvResetOffsetRequest::kEarliest));
-
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitPartitionConfigChanged();
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), mirroredOffset);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), mirroredOffset);
-
-    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "rewind", .Offset = mirroredOffset}}}});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    auto reset = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(TDuration::Seconds(5));
-    UNIT_ASSERT(reset);
-    UNIT_ASSERT_VALUES_EQUAL(reset->GetStatus(), Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "rewind")->Offset, mirroredOffset);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "reader")->Offset, mirroredOffset);
-
-    SendEvent(new TEvents::TEvPoisonPill());
-    config.Consumers.back().Offset = mirroredOffset;
-    partition = CreatePartition({
-        .Partition = TPartitionId{0}, .Begin = meta.GetStartOffset(), .End = meta.GetEndOffset(),
-        .Config = config, .NoDataKeys = true, .MirroredOffset = meta.GetMirroredOffset(),
-        .CdcReplicationTrimOffset = trim.GetOffset(),
-    }, config);
-    const auto committed = TPartitionTestWrapper::GetUserInfo(*partition, "reader")->Offset;
-    UNIT_ASSERT_VALUES_EQUAL(committed, mirroredOffset);
-
-    SendWrite(1, 0, "", Nothing(), "native", false, 1, true);
-    auto nativeWrite = GrabStaleMetaKvRequest("first native write must persist");
-    auto blobCache = Ctx->Runtime->AddObserver<TEvPQ::TEvBlobRequest>([&](auto& ev) {
-        if (ev->Sender != ActorId) {
-            return;
-        }
-        auto& request = *ev->Get();
-        for (auto& blob : request.Blobs) {
-            const auto& writes = nativeWrite->Record.GetCmdWrite();
-            const auto it = FindIf(writes, [&](const auto& cmd) { return cmd.GetKey() == blob.Key.ToString(); });
-            UNIT_ASSERT(it != writes.end());
-            blob.RawValue = it->GetValue();
-        }
-        SendEvent(new TEvPQ::TEvBlobResponse(request.Cookie, std::move(request.Blobs)));
-        ev.Reset();
-    });
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProxyResponse({.Cookie = 1, .Status = NMsgBusProxy::MSTATUS_OK, .SeqNo = 1});
-
-    SendEvent(MakeTestRead(2, committed, 1, "reader").Release());
-    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(5));
-    UNIT_ASSERT(response);
-    const auto& read = response->Response->GetPartitionResponse().GetCmdReadResult();
-    UNIT_ASSERT_VALUES_EQUAL(read.ResultSize(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(read.GetResult(0).GetOffset(), mirroredOffset);
-    UNIT_ASSERT_VALUES_EQUAL(read.GetResult(0).GetData(), "native");
-}
-
-Y_UNIT_TEST_F(CdcReplicationTrimReplayPreservesNativeDataAfterRestart, TPartitionFixture) {
-    TConfigParams config{
-        .Version = 2,
-        .Consumers = {{.Consumer = "reader", .Offset = 3}},
-        .CdcReplicationSourceConsumer = "source",
-        .CdcReplicationTrimTxId = 42,
-        .Important = true,
-    };
-    // Restart with the durable trim at 10 and the first native message at 10.
-    const TPartitionId partitionId{0};
-    auto* partition = CreatePartition({
-        .Partition = partitionId, .Begin = 10, .End = 11,
-        .PlanStep = StaleReplayMetaPlanStep, .TxId = StaleReplayMetaTxId,
-        .Config = config, .FillHead = true, .CdcReplicationTrimOffset = 10,
-    }, config);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "reader")->Offset, 3);
-
-    auto attachment = NHelpers::MakeConfig(config);
-    attachment.SetVersion(1);
-    attachment.MutableCdcReplication()->ClearTrimTxId();
-    NKikimrPQ::TBootstrapConfig producers;
-    producers.AddExplicitMessageGroups()->SetId("source:shard");
-
-    auto tx = MakeStaleSerializedTxBody(partitionId, 1, 1);
-    tx.SetKind(NKikimrPQ::TTransaction::KIND_CONFIG);
-    SendCommitTx(1, 1, {
-        .SerializedTx = std::move(tx),
-        .TabletConfig = std::move(attachment),
-        .BootstrapConfig = std::move(producers),
-        .PartitionsData = NKikimrPQ::TPartitions{},
-    });
-    auto kv = GrabStaleMetaKvRequest("CDC attachment retry must persist its transaction");
-    AssertStaleMetaKvHasTxKey(*kv, 1, partitionId.OriginalPartitionId, "CDC attachment replay");
-    for (const auto& cmd : kv->Record.GetCmdWrite()) {
-        UNIT_ASSERT(cmd.GetKey() != "_config" && cmd.GetKey().front() != TKeyPrefix::TypeInfo);
-    }
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitCommitTxDone({.TxId = 1, .Partition = partitionId});
-
-    config.Version = 3;
-    SendChangePartitionConfig(config);
-    WaitCmdWrite({.MetaStartOffset = 10, .MetaEndOffset = 11});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitPartitionConfigChanged();
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), 10);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 11);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "reader")->Offset, 3);
 }
 
 Y_UNIT_TEST_F(ReplicationDataSentOnlyForSessionStartAndChangedOffsets, TPartitionFixture)
@@ -9667,72 +9488,6 @@ void AddBodyKeyToEncoder(
     const TKey key = TKey::ForBody(TKeyPrefix::TypeData, partitionId, offset, partNo, count, internalPartsCount);
     encoder.DataKeysBody.push_back(TDataKey{key, size, timestamp, 0, MakeTestBlobKeyToken()});
     encoder.BodySize += size;
-}
-
-Y_UNIT_TEST_F(CdcReplicationTrimRejectsQueuedMultipartRead, TPartitionFixture) {
-    TConfigParams config{.Version = 1, .Consumers = {{.Consumer = "reader", .Offset = 1}},
-        .CdcReplicationSourceConsumer = "source", .Important = true};
-    Ctx->Runtime->GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
-    const TPartitionId partition{0};
-    auto* actor = CreatePartition({.Partition = partition, .Begin = 0, .End = 1, .Config = config}, config);
-    auto& body = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
-    body.DataKeysBody.clear();
-    body.BodySize = 0;
-    std::array<TString, 2> packed;
-    for (ui16 part = 0; part < packed.size(); ++part) {
-        auto data = MakeMultipartBodyReadBlob(1, part, 2, 300_KB, 'a' + part);
-        packed[part] = SerializePackedBatchForReadBodyTest(TBatch::FromBlobs(0, {std::move(data)}));
-        AddBodyKeyToEncoder(body, partition, 0, packed[part].size(), TInstant::Now(), part, part == 1, part == 0);
-        body.DataKeysBody.back().CumulativeSize = body.BodySize - packed[part].size();
-    }
-
-    SendEvent(MakeTestRead(16, 0, 1, "reader").Release());
-    auto request = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
-    UNIT_ASSERT(request);
-    UNIT_ASSERT_VALUES_EQUAL(request->Blobs.size(), packed.size());
-    for (ui16 part = 0; part < packed.size(); ++part) {
-        UNIT_ASSERT_VALUES_EQUAL(request->Blobs[part].PartNo, part);
-        request->Blobs[part].RawValue = packed[part];
-    }
-    SendEvent(new TEvPQ::TEvBlobResponse(request->Cookie, std::move(request->Blobs)));
-    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(5));
-    UNIT_ASSERT(response);
-    const auto& result = response->Response->GetPartitionResponse().GetCmdReadResult();
-    UNIT_ASSERT_VALUES_EQUAL(result.ResultSize(), 1);
-    const auto& firstPart = result.GetResult(0);
-    UNIT_ASSERT_VALUES_EQUAL(firstPart.GetPartNo(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(firstPart.GetTotalParts(), 2);
-
-    constexpr ui64 quotaCookie = 17, blobCookie = 18;
-    TBlockEvents<TEvPQ::TEvApproveReadQuota> approvals(*Ctx->Runtime, [](const auto& ev) {
-        return ev->Get()->ReadRequest->Get()->Cookie == quotaCookie;
-    });
-    for (ui64 cookie : {quotaCookie, blobCookie}) {
-        auto read = MakeTestRead(cookie, firstPart.GetOffset(), 1, "reader");
-        read->PartNo = firstPart.GetPartNo() + 1;
-        SendEvent(read.Release());
-    }
-    Ctx->Runtime->WaitFor("multipart read quota approval", [&] { return !approvals.empty(); }, TDuration::Seconds(5));
-    auto pending = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
-    UNIT_ASSERT(pending);
-    UNIT_ASSERT_VALUES_EQUAL(pending->Blobs.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(pending->Blobs.front().PartNo, 1);
-    pending->Blobs.front().RawValue = packed[1];
-
-    config.Version = 2;
-    config.CdcReplicationTrimTxId = 42;
-    SendChangePartitionConfig(config);
-    GrabStaleMetaKvRequest("CDC trim must persist");
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitPartitionConfigChanged();
-
-    SendEvent(new TEvPQ::TEvBlobResponse(pending->Cookie, std::move(pending->Blobs)));
-    WaitErrorResponse({.Cookie = blobCookie, .ErrorCode = NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET});
-    approvals.Stop().Unblock();
-    WaitErrorResponse({.Cookie = quotaCookie, .ErrorCode = NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET});
-    const auto* reader = TPartitionTestWrapper::GetUserInfo(*actor, "reader");
-    UNIT_ASSERT_VALUES_EQUAL(reader->ActiveReads, 0);
-    UNIT_ASSERT_VALUES_EQUAL(reader->ReadsInQuotaQueue, 0);
 }
 
 void AddHeadKeyWithPartNo(

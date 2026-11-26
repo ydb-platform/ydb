@@ -278,7 +278,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         }
 
         if constexpr (TTraits::HasSourcePath) {
-            if (settings.items_size() == 0) { // expand all source path by default
+            if (settings.items_size() == 0 && !IsExcludedFromExport(CommonSourcePath)) { // expand all source path by default
                 paths.emplace_back(CommonSourcePath);
                 ExportItems.insert({CommonSourcePath, TExportItemInfo{}});
             }
@@ -576,7 +576,9 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
     bool IsExcludedFromExport(const TString& exportPath) const {
         const char* path = exportPath.c_str();
-        if (HasCommonSourcePathPrefix(exportPath)) {
+        if (exportPath == CommonSourcePath) {
+            path += CommonSourcePath.size(); // The source root has an empty relative path.
+        } else if (HasCommonSourcePathPrefix(exportPath)) {
             path += CommonSourcePath.size() + 1; // prefix + /
         }
         for (const auto& regexp : ExcludeRegexps) {

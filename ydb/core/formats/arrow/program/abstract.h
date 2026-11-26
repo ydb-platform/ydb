@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/program/index_check/index_check.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
@@ -57,49 +58,6 @@ public:
             return std::max<ui64>(blobsSize, rawSize);
         }
     }
-};
-
-class TIndexCheckOperation {
-public:
-    enum class EOperation: ui32 {
-        Equals,
-        StartsWith,
-        EndsWith,
-        Contains,
-        Less,
-        Greater,
-        LessOrEqual,
-        GreaterOrEqual,
-    };
-
-private:
-    const EOperation Operation;
-    YDB_READONLY(bool, CaseSensitive, true);
-
-public:
-    TString GetSignalId() const {
-        return TStringBuilder() << Operation << "::" << (CaseSensitive ? 1 : 0);
-    }
-
-    TString DebugString() const {
-        return TStringBuilder() << "{" << Operation << "," << CaseSensitive << "}";
-    }
-
-    EOperation GetOperation() const {
-        return Operation;
-    }
-
-    TIndexCheckOperation(const EOperation op, const bool caseSensitive)
-        : Operation(op)
-        , CaseSensitive(caseSensitive)
-    {
-    }
-
-    explicit operator size_t() const {
-        return (size_t)Operation;
-    }
-
-    bool operator==(const TIndexCheckOperation& op) const = default;
 };
 
 using IChunkedArray = NAccessor::IChunkedArray;

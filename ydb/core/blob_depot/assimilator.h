@@ -18,6 +18,7 @@ namespace NKikimr::NBlobDepot {
                 EvUpdateBytesCopiedQ,
                 EvRetryAssimilate,
                 EvRestartScanDataForCopying,
+                EvRetryHotWrite,
             };
         };
 
@@ -55,6 +56,11 @@ namespace NKikimr::NBlobDepot {
         bool ResumeScanDataForCopyingInFlight = false;
         // source reads or destination channel allocation failed in this pass, so wait before trying those blobs again
         bool CopyRetryNeeded = false;
+        struct TBlockedCopy {
+            TLogoBlobID Id;
+            TRope Buffer;
+        };
+        std::optional<TBlockedCopy> HotWriteBlockedBlob;
         TBackoffTimer CopyRetryBackoff{10, 5000};
 
         std::optional<TLogoBlobID> LastPlanScannedKey;
@@ -94,6 +100,8 @@ namespace NKikimr::NBlobDepot {
         void ScanDataForCopying();
         void HandleResumeScanDataForCopying();
         void RestartScanDataForCopying();
+        bool TryCopyBlob(const TLogoBlobID& source, TRope& buffer, ui64 batchId);
+        void RetryHotWrite();
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
         void HandleTxComplete(TAutoPtr<IEventHandle> ev);
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);

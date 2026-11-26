@@ -809,7 +809,8 @@ Y_UNIT_TEST_SUITE(Donor) {
             };
 
             runtime->WrapInActorContext(edge, [&] {
-                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(logoBlobId, buffer, TInstant::Max()));
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(logoBlobId, buffer, TInstant::Max(),
+                    NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticDefault, /*issueKeepFlag=*/ true));
             });
             auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
@@ -880,6 +881,57 @@ Y_UNIT_TEST_SUITE(Donor) {
             UNIT_ASSERT(requestVdiskNotYet);
             UNIT_ASSERT(fastRequestToDonor);
         }
+
+        // Model the acceptor knowing the Keep was released while the donor still has the old Keep.
+        const auto acceptor = env.GetGroupInfo(groupId)->GetVDiskId(TVDiskIdShort(vdiskId));
+        env.WithQueueId(acceptor, NKikimrBlobStorage::GetFastRead, [&](TActorId queueId) {
+            for (bool indexOnly : {false, true}) {
+                const TLogoBlobID id = indexOnly ? logoBlobId : vdiskLogoBlobId;
+                bool sawNotYet = false;
+                env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                    if (ev->GetTypeRewrite() == TEvBlobStorage::EvEnrichNotYet) {
+                        auto& enrich = *ev->Get<TEvBlobStorage::TEvEnrichNotYet>();
+                        const auto& query = enrich.Query->Get()->Record;
+                        if (VDiskIDFromVDiskID(query.GetVDiskID()) == acceptor && query.ExtremeQueriesSize() == 1 &&
+                                LogoBlobIDFromLogoBlobID(query.GetExtremeQueries(0).GetId()) == id) {
+                            UNIT_ASSERT_VALUES_EQUAL(enrich.Result->Record.ResultSize(), 1);
+                            auto& item = *enrich.Result->Record.MutableResult(0);
+                            UNIT_ASSERT_VALUES_EQUAL(item.GetStatus(), NKikimrProto::NOT_YET);
+                            item.ClearKeep();
+                            item.SetDoNotKeep(true);
+                            sawNotYet = true;
+                        }
+                    }
+                    return true;
+                };
+
+                const TActorId readEdge = runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
+                const auto makeQuery = indexOnly ? &TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery
+                    : &TEvBlobStorage::TEvVGet::CreateExtremeDataQuery;
+                const ui64 cookie = 42;
+                auto query = makeQuery(acceptor, TInstant::Max(), NKikimrBlobStorage::FastRead,
+                    TEvBlobStorage::TEvVGet::EFlags::None, {}, {{id, 0, 0, &cookie}}, std::nullopt);
+                runtime->Send(new IEventHandle(queueId, readEdge, query.release()), queueId.NodeId());
+                const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(readEdge);
+                env.Runtime->FilterFunction = {};
+
+                UNIT_ASSERT(sawNotYet);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.ResultSize(), 1);
+                const auto& item = res->Get()->Record.GetResult(0);
+                UNIT_ASSERT_VALUES_EQUAL(item.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(item.GetCookie(), cookie);
+                UNIT_ASSERT_VALUES_EQUAL(LogoBlobIDFromLogoBlobID(item.GetBlobID()), id);
+                UNIT_ASSERT(item.GetDoNotKeep() && !item.GetKeep());
+                if (indexOnly) {
+                    UNIT_ASSERT(!res->Get()->HasBlob(item));
+                    UNIT_ASSERT_VALUES_EQUAL(item.PartsSize(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(item.GetParts(0), vdiskLogoBlobId.PartId());
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(res->Get()->GetBlobSize(item), info->Type.PartSize(vdiskLogoBlobId));
+                }
+            }
+        });
 
         // Check disk request AsyncRead from donor for replication
         env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {

@@ -2,7 +2,7 @@
 
 #include "yql_s3_actor_stats_interface.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
+#include <ydb/library/yql/dq/actors/common/dq_schedulable.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/system/guard.h>

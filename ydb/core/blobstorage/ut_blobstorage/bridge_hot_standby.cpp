@@ -35,14 +35,19 @@ namespace {
     }
 
     TEnvironmentSetup::TSettings MakeSettings() {
-        return {
-            .NodeCount = 16,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetBridgedLocation,
-            .SelfManagementConfig = true,
-            .NumPiles = 2,
-            .AutomaticBootstrap = true,
-        };
+        return MakeLocalPileFirstSettings(false);
+    }
+
+    using TGet = TEvBlobStorage::TEvGet;
+    using TGetResult = TEvBlobStorage::TEvGetResult;
+
+    std::unique_ptr<TGetResult> ReadFromStandbyNode(TEnvironmentSetup& env, ui32 groupId, std::unique_ptr<TGet> get) {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(9, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] { SendToBSProxy(edge, groupId, get.release()); });
+        auto res = env.WaitForEdgeActorEvent<TGetResult>(edge, true, env.Runtime->GetClock() + TDuration::Seconds(10));
+        UNIT_ASSERT_C(res, "bridge read from standby node timed out");
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->GroupId, groupId);
+        return std::unique_ptr<TGetResult>(res->Release().Release());
     }
 
     ui32 PrepareStandby(TEnvironmentSetup& env) {
@@ -159,6 +164,206 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
 
     Y_UNIT_TEST(ErrorDoesNotAffectClient) { TestStandbyFailure(NKikimrProto::ERROR); }
     Y_UNIT_TEST(RaceDoesNotRestartClient) { TestStandbyFailure(NKikimrProto::RACE); }
+
+    Y_UNIT_TEST(LocalStandbyReadsHitsAndFallsBackForMissingBlobs) {
+        TEnvironmentSetup env(MakeLocalPileFirstSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        const TString localData = "standby";
+        const TString remoteData = "required";
+        const TLogoBlobID localId(100500, 1, 1, 0, localData.size(), 0);
+        const TLogoBlobID remoteId(100500, 1, 2, 0, remoteData.size(), 0);
+        const TLogoBlobID missingId(100500, 1, 3, 0, 1, 0);
+        PutToPileGroup(env, piles[1], 9, localId, localData);
+        PutToPileGroup(env, piles[0], 1, remoteId, remoteData, true);
+
+        ui32 standbyReads = 0;
+        bool delayedStandbyReply = false;
+        TActorId standbyGetSender;
+        std::vector<TLogoBlobID> requiredQueries;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet && ev->HasEvent()) {
+                const auto *get = ev->Get<TGet>();
+                if (get->ForceGroupGeneration && get->Queries[0].Id.TabletID() == localId.TabletID()) {
+                    if (ev->Recipient == MakeBlobStorageProxyID(piles[1])) {
+                        UNIT_ASSERT_VALUES_EQUAL(get->Deadline, TInstant::Max());
+                        ++standbyReads;
+                        standbyGetSender = ev->Sender;
+                    } else if (ev->Recipient == MakeBlobStorageProxyID(piles[0])) {
+                        for (ui32 i = 0; i < get->QuerySize; ++i) {
+                            requiredQueries.push_back(get->Queries[i].Id);
+                        }
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult && ev->HasEvent() &&
+                    ev->GetRecipientRewrite() == standbyGetSender && ev->Get<TGetResult>()->GroupId == piles[1]) {
+                auto *res = ev->Get<TGetResult>();
+                for (ui32 i = 0; i < res->ResponseSz; ++i) {
+                    auto& item = res->Responses[i];
+                    if (item.Id == localId) {
+                        item.Keep = res->ResponseSz == 1;
+                        item.DoNotKeep = !item.Keep;
+                    } else if (item.Id == remoteId) {
+                        item.Status = NKikimrProto::ERROR;
+                        item.DoNotKeep = true;
+                    } else if (item.Id == missingId) {
+                        item.Keep = true;
+                    }
+                }
+                if (res->ResponseSz == 1 && !delayedStandbyReply) {
+                    // The bridge must wait for this local hit even when the reply takes a few seconds.
+                    delayedStandbyReply = true;
+                    env.Runtime->Schedule(TDuration::Seconds(2), ev.release(), nullptr, nodeId);
+                    return false;
+                }
+            }
+            return true;
+        };
+        auto hit = ReadFromStandbyNode(env, groupId, std::make_unique<TGet>(localId, 0, 0, TInstant::Max(),
+            NKikimrBlobStorage::FastRead));
+        CheckGetResult(*hit, localData);
+        UNIT_ASSERT(!hit->Responses[0].Keep);
+        UNIT_ASSERT(!hit->Responses[0].DoNotKeep);
+        UNIT_ASSERT(delayedStandbyReply);
+        UNIT_ASSERT_VALUES_EQUAL(standbyReads, 1);
+        UNIT_ASSERT(requiredQueries.empty());
+
+        TArrayHolder<TGet::TQuery> queries(new TGet::TQuery[3]);
+        queries[0].Set(remoteId, 1, 3);
+        queries[1].Set(localId, 2, 4);
+        queries[2].Set(missingId);
+        auto res = ReadFromStandbyNode(env, groupId, std::make_unique<TGet>(queries, 3, TInstant::Max(),
+            NKikimrBlobStorage::FastRead));
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL(standbyReads, 2);
+        UNIT_ASSERT_VALUES_EQUAL(requiredQueries.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(requiredQueries[0], remoteId);
+        UNIT_ASSERT_VALUES_EQUAL(requiredQueries[1], missingId);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res->ResponseSz, 3);
+        UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].Id, remoteId);
+        UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].Buffer.ConvertToString(), remoteData.substr(1, 3));
+        UNIT_ASSERT(res->Responses[0].Keep);
+        UNIT_ASSERT(!res->Responses[0].DoNotKeep);
+        UNIT_ASSERT_VALUES_EQUAL(res->Responses[1].Id, localId);
+        UNIT_ASSERT_VALUES_EQUAL(res->Responses[1].Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Responses[1].Buffer.ConvertToString(), localData.substr(2, 4));
+        UNIT_ASSERT(!res->Responses[1].Keep);
+        UNIT_ASSERT(!res->Responses[1].DoNotKeep);
+        UNIT_ASSERT_VALUES_EQUAL(res->Responses[2].Id, missingId);
+        UNIT_ASSERT_VALUES_EQUAL(res->Responses[2].Status, NKikimrProto::NODATA);
+        UNIT_ASSERT(!res->Responses[2].Keep);
+        UNIT_ASSERT(!res->Responses[2].DoNotKeep);
+    }
+
+    Y_UNIT_TEST(LocalStandbyPartialHitCompletesWhenTrustedPileHasRemainingBlob) {
+        TEnvironmentSetup env(MakeLocalPileFirstSettings(true, 3));
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        const TString localData = "standby";
+        const TString remoteData = "required";
+        const TLogoBlobID localId(100500, 1, 1, 0, localData.size(), 0);
+        const TLogoBlobID remoteId(100500, 1, 2, 0, remoteData.size(), 0);
+        PutToPileGroup(env, piles[1], 9, localId, localData);
+        PutToPileGroup(env, piles[0], 1, remoteId, remoteData);
+
+        std::unique_ptr<IEventHandle> held;
+        ui32 heldNode = 0;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet && ev->Recipient == MakeBlobStorageProxyID(piles[2])) {
+                const auto *get = ev->Get<TGet>();
+                UNIT_ASSERT_VALUES_EQUAL(get->QuerySize, 1);
+                UNIT_ASSERT_VALUES_EQUAL(get->Queries[0].Id, remoteId);
+                UNIT_ASSERT(!held);
+                held = std::move(ev);
+                heldNode = nodeId;
+                return false;
+            }
+            return true;
+        };
+        TArrayHolder<TGet::TQuery> queries(new TGet::TQuery[2]);
+        queries[0].Set(localId);
+        queries[1].Set(remoteId);
+        auto res = ReadFromStandbyNode(env, groupId, std::make_unique<TGet>(queries, 2, TInstant::Max(),
+            NKikimrBlobStorage::FastRead));
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT(held);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res->ResponseSz, 2);
+        UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].Buffer.ConvertToString(), localData);
+        UNIT_ASSERT_VALUES_EQUAL(res->Responses[1].Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Responses[1].Buffer.ConvertToString(), remoteData);
+        env.Runtime->Send(held.release(), heldNode);
+        env.Sim(TDuration::MilliSeconds(100));
+    }
+
+    Y_UNIT_TEST(LocalStandbyFallsBackOnFailure) {
+        TEnvironmentSetup env(MakeLocalPileFirstSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        const TString data = "required";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        PutToPileGroup(env, piles[0], 1, id, data);
+
+        for (const auto failure : {NKikimrProto::ERROR, NKikimrProto::RACE, NKikimrProto::DEADLINE}) {
+            ui32 standbyReads = 0;
+            ui32 requiredReads = 0;
+            env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet && ev->HasEvent() && ev->Get<TGet>()->Queries[0].Id == id) {
+                    if (ev->Recipient == MakeBlobStorageProxyID(piles[1])) {
+                        ++standbyReads;
+                        auto error = ev->Get<TGet>()->MakeErrorResponse(failure, "standby failure",
+                            TGroupId::FromValue(piles[1]));
+                        error->RacingGeneration = Max<ui32>();
+                        env.Runtime->Send(new IEventHandle(ev->Sender, ev->Recipient, error.release(), 0, ev->Cookie), nodeId);
+                        return false;
+                    }
+                    requiredReads += ev->Recipient == MakeBlobStorageProxyID(piles[0]) && ev->Get<TGet>()->ForceGroupGeneration;
+                }
+                return true;
+            };
+            auto res = ReadFromStandbyNode(env, groupId, std::make_unique<TGet>(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::FastRead));
+            env.Runtime->FilterFunction = {};
+            CheckGetResult(*res, data);
+            UNIT_ASSERT_VALUES_EQUAL(standbyReads, 1);
+            UNIT_ASSERT_VALUES_EQUAL(requiredReads, 1);
+        }
+    }
+
+    Y_UNIT_TEST(LocalStandbySkipsMetadataAndFencedReads) {
+        TEnvironmentSetup env(MakeLocalPileFirstSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        const TString data = "standby";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        PutToPileGroup(env, piles[1], 9, id, data, true);
+
+        ui32 standbyReads = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            standbyReads += ev->GetTypeRewrite() == TEvBlobStorage::EvGet && ev->HasEvent() &&
+                ev->Recipient == MakeBlobStorageProxyID(piles[1]) && ev->Get<TGet>()->Queries[0].Id == id;
+            return true;
+        };
+        auto check = [&](auto configure) {
+            auto get = std::make_unique<TGet>(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead);
+            configure(*get);
+            auto res = ReadFromStandbyNode(env, groupId, std::move(get));
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
+            UNIT_ASSERT_VALUES_EQUAL(res->ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Responses[0].Status, NKikimrProto::NODATA, res->ToString());
+            UNIT_ASSERT_VALUES_EQUAL(standbyReads, 0);
+        };
+        check([](TGet& get) { get.IsIndexOnly = true; });
+        check([](TGet& get) { get.MustRestoreFirst = true; });
+        check([](TGet& get) { get.Decommission = true; });
+        check([&](TGet& get) { get.ReaderTabletData.emplace(id.TabletID(), 1); });
+        check([&](TGet& get) { get.ForceBlockTabletData.emplace(id.TabletID(), 1); });
+        check([&](TGet& get) { get.TabletId = id.TabletID(); get.AcquireBlockedGeneration = true; });
+        env.Runtime->FilterFunction = {};
+    }
 
     Y_UNIT_TEST(RejoinRecoversMissedWrites) {
         TEnvironmentSetup env(MakeSettings());

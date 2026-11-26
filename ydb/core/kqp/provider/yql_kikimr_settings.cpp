@@ -1,5 +1,6 @@
 #include "yql_kikimr_settings.h"
 
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
@@ -161,6 +162,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, MaxSequentialReadsInFlight);
 
     REGISTER_SETTING(*this, KMeansTreeSearchTopSize);
+    REGISTER_SETTING(*this, HNSWEfSearch).Lower(1U).Upper(NKikimr::NKMeans::MaxHnswEfSearch);
     REGISTER_SETTING(*this, HybridSearchFactor);
     REGISTER_SETTING(*this, HybridSearchK);
     REGISTER_SETTING(*this, DisableCheckpoints);

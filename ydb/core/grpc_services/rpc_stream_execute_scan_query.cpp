@@ -9,7 +9,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/kqp/common/events/stream.h>
-#include <ydb/core/kqp/query_plan/query_plan.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/ydb_table_impl.pb.h>
@@ -320,10 +319,10 @@ private:
 
             if (reportStats) {
                 if (kqpResponse.HasQueryStats()) {
-
-                    record.MutableResponse()->SetQueryPlan(reportPlan
-                        ? SerializeAnalyzePlan(kqpResponse.GetQueryStats(), false)
-                        : "");
+                    // The session actor serializes the plan using the optimizer that compiled the query.
+                    if (!reportPlan) {
+                        record.MutableResponse()->ClearQueryPlan();
+                    }
 
                     FillQueryStats(*response.mutable_result()->mutable_query_stats(), kqpResponse);
                 } else if (reportPlan) {

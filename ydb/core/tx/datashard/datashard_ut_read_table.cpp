@@ -2,6 +2,15 @@
 #include "datashard_active_transaction.h"
 #include "datashard_ut_read_table.h"
 
+#include "datashard_ut_common_kqp.h"
+#include <ydb/core/formats/factory.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/tx/schemeshard/index/build_index.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <util/generic/scope.h>
+#include <util/system/unaligned_mem.h>
+
 #include <ydb/core/testlib/actors/block_events.h>
 
 namespace NKikimr {
@@ -732,5 +741,1183 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots)
+
+} // namespace NKikimr
+
+namespace NKikimr {
+namespace {
+
+using namespace NDataShard;
+using namespace NDataShard::NKqpHelpers;
+using namespace NDataShardReadTableTest;
+
+using TProjection = TVector<TString>;
+using TRow = TVector<ui32>;
+using TRows = TVector<TRow>;
+
+enum class ERead { Iterator, HeadIterator, PointIterator, Columns, KqpScan, ReadTable, MiniKQL };
+enum class EColumnState { Building, Ready, Absent };
+
+// The fixture only uses Nullable(UInt32) columns in ClickHouse native blocks.
+class TNativeBlockReader {
+public:
+    explicit TNativeBlockReader(TStringBuf data) : Data(data) {}
+
+    template<class T>
+    T Pod() {
+        UNIT_ASSERT(Data.size() >= sizeof(T));
+        const auto value = ReadUnaligned<T>(Data.data());
+        Data.Skip(sizeof(T));
+        return value;
+    }
+
+    ui64 VarUInt() {
+        ui64 result = 0;
+        for (ui32 shift = 0; shift < 64; shift += 7) {
+            const auto byte = Pod<ui8>();
+            result |= ui64(byte & 0x7f) << shift;
+            if (!(byte & 0x80)) {
+                return result;
+            }
+        }
+        UNIT_FAIL("Invalid native block VarUInt");
+        return 0;
+    }
+
+    TString String() {
+        const auto size = VarUInt();
+        UNIT_ASSERT(Data.size() >= size);
+        TString result(Data.SubStr(0, size));
+        Data.Skip(size);
+        return result;
+    }
+
+    TRows Read(const TProjection& projection) {
+        TRows result;
+        while (!Data.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(VarUInt(), 1); // is_overflows
+            UNIT_ASSERT_VALUES_EQUAL(Pod<ui8>(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(VarUInt(), 2); // bucket_num
+            UNIT_ASSERT_VALUES_EQUAL(Pod<i32>(), -1);
+            UNIT_ASSERT_VALUES_EQUAL(VarUInt(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(VarUInt(), projection.size());
+            const auto count = VarUInt();
+            const auto offset = result.size();
+            result.resize(offset + count, TRow(projection.size()));
+            for (size_t column = 0; column < projection.size(); ++column) {
+                UNIT_ASSERT_VALUES_EQUAL(String(), projection[column]);
+                UNIT_ASSERT_VALUES_EQUAL(String(), "Nullable(UInt32)");
+                for (size_t row = 0; row < count; ++row) {
+                    UNIT_ASSERT_VALUES_EQUAL(Pod<ui8>(), 0); // NULL bitmap
+                }
+                for (size_t row = 0; row < count; ++row) {
+                    result[offset + row][column] = Pod<ui32>();
+                }
+            }
+        }
+        return result;
+    }
+
+private:
+    TStringBuf Data;
+};
+
+class TBuildingColumnFixture {
+public:
+    explicit TBuildingColumnFixture(bool keyOnly = false) {
+        Tests::TServerSettings settings(PortManager.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false);
+        settings.FeatureFlags.SetEnableAddColumsWithDefaults(true);
+        settings.Formats = new TFormatFactory;
+        Server = new Tests::TServer(settings);
+        Sender = Runtime().AllocateEdgeActor();
+        InitRoot(Server, Sender);
+        TShardedTableOptions options;
+        if (keyOnly) {
+            options.Columns({{"key", "Uint32", true, false}});
+            ExistingColumns = {"key"};
+        }
+        auto [shards, tableId] = CreateShardedTable(Server, Sender, "/Root", "Table", options);
+        TableId = tableId;
+        ExecSQL(Server, Sender, keyOnly
+            ? "UPSERT INTO `/Root/Table` (key) VALUES (1), (2);"
+            : "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10), (2, 20);");
+        RememberColumns(Schema(shards.at(0)));
+    }
+
+    TTestActorRuntime& Runtime() { return *Server->GetRuntime(); }
+
+    TVector<ui64> Shards() { return GetTableShards(Server, Sender, "/Root/Table"); }
+
+    NKikimrSchemeOp::TTableDescription Schema(ui64 shard) {
+        return GetTables(Server, shard).first.begin()->second.GetDescription();
+    }
+
+    void RememberColumns(const NKikimrSchemeOp::TTableDescription& schema) {
+        for (const auto& column : schema.GetColumns()) {
+            ColumnIds[column.GetName()] = column.GetId();
+        }
+    }
+
+    ui32 Value(ui32 key, const TString& name) const {
+        if (name == "key") { return key; }
+        if (name == "value") { return Values.at(key); }
+        if (name == "extra") { return 42; }
+        UNIT_ASSERT_VALUES_EQUAL(name, "other");
+        return 73;
+    }
+
+    TRows Expected(const TProjection& projection, const TVector<ui32>& keys) const {
+        TRows rows;
+        for (const auto key : keys) {
+            auto& row = rows.emplace_back();
+            for (const auto& column : projection) {
+                row.push_back(Value(key, column));
+            }
+        }
+        return rows;
+    }
+
+    void AssertRows(TRows actual, const TProjection& projection, const TVector<ui32>& keys) const {
+        auto expected = Expected(projection, keys);
+        // Protocols may return different row orders; preserve column order and multiplicity.
+        Sort(actual);
+        Sort(expected);
+        UNIT_ASSERT_VALUES_EQUAL(actual.size(), expected.size());
+        for (size_t row = 0; row < expected.size(); ++row) {
+            UNIT_ASSERT_VALUES_EQUAL(actual[row].size(), projection.size());
+            for (size_t column = 0; column < projection.size(); ++column) {
+                UNIT_ASSERT_VALUES_EQUAL_C(actual[row][column], expected[row][column],
+                    "row " << row << ", column " << projection[column]);
+            }
+        }
+    }
+
+    TVector<ui32> KeysInShard(const NKikimrSchemeOp::TTableDescription& schema) const {
+        TSerializedCellVec begin(schema.GetPartitionRangeBegin());
+        TSerializedCellVec end(schema.GetPartitionRangeEnd());
+        TVector<ui32> result;
+        for (auto key : Keys) {
+            if (!begin.GetCells().empty() && !begin.GetCells()[0].IsNull()) {
+                const auto bound = begin.GetCells()[0].AsValue<ui32>();
+                if (key < bound || (key == bound && !schema.GetPartitionRangeBeginIsInclusive())) { continue; }
+            }
+            if (!end.GetCells().empty() && !end.GetCells()[0].IsNull()) {
+                const auto bound = end.GetCells()[0].AsValue<ui32>();
+                if (key > bound || (key == bound && !schema.GetPartitionRangeEndIsInclusive())) { continue; }
+            }
+            result.push_back(key);
+        }
+        return result;
+    }
+
+    TString RejectedColumn(const TProjection& projection, EColumnState state) const {
+        if (state != EColumnState::Ready) {
+            for (const auto& name : projection) {
+                if (name == "extra" || name == "other") { return name; }
+            }
+        }
+        return {};
+    }
+
+    static void AppendCells(TRows& rows, TConstArrayRef<TCell> cells, size_t count) {
+        UNIT_ASSERT_VALUES_EQUAL(cells.size(), count);
+        auto& row = rows.emplace_back();
+        for (const auto& cell : cells) {
+            UNIT_ASSERT(!cell.IsNull());
+            UNIT_ASSERT_VALUES_EQUAL(cell.Size(), sizeof(ui32));
+            row.push_back(cell.AsValue<ui32>());
+        }
+    }
+
+    TRows DecodeResultSet(const TString& data, const TProjection& projection, bool orderedColumns = true) {
+        Ydb::ResultSet proto;
+        UNIT_ASSERT(proto.ParseFromString(data));
+        return DecodeResultSet(proto, projection, orderedColumns);
+    }
+
+    TRows DecodeResultSet(const Ydb::ResultSet& proto, const TProjection& projection, bool orderedColumns = true) {
+        NYdb::TResultSet result(proto);
+        TProjection names;
+        for (const auto& column : result.GetColumnsMeta()) { names.emplace_back(column.Name); }
+        if (orderedColumns) { UNIT_ASSERT(names == projection); }
+        auto expected = projection;
+        Sort(names);
+        Sort(expected);
+        UNIT_ASSERT(names == expected);
+        TRows rows;
+        NYdb::TResultSetParser parser(result);
+        while (parser.TryNextRow()) {
+            auto& row = rows.emplace_back();
+            for (const auto& name : projection) {
+                auto& value = parser.ColumnParser(name);
+                const bool optional = value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional;
+                if (optional) { value.OpenOptional(); UNIT_ASSERT(!value.IsNull()); }
+                UNIT_ASSERT(value.GetKind() == NYdb::TTypeParser::ETypeKind::Primitive);
+                UNIT_ASSERT(value.GetPrimitiveType() == NYdb::EPrimitiveType::Uint32);
+                row.push_back(value.GetUint32());
+                if (optional) { value.CloseOptional(); }
+            }
+        }
+        return rows;
+    }
+
+    TRows ReadShard(ERead read, ui64 shard, const TProjection& projection,
+        EColumnState state, const TRowVersion& snapshot)
+    {
+        auto& runtime = Runtime();
+        const auto schema = Schema(shard);
+        const auto badColumn = RejectedColumn(projection, state);
+        const auto sender = runtime.AllocateEdgeActor();
+        TRows rows;
+        switch (read) {
+        case ERead::Iterator:
+        case ERead::HeadIterator:
+        case ERead::PointIterator: {
+            auto request = GetBaseReadRequest(TableId, schema, ++ReadId,
+                NKikimrDataEvents::FORMAT_CELLVEC, snapshot);
+            request->Record.ClearColumns();
+            for (const auto& name : projection) { request->Record.AddColumns(ColumnIds.at(name)); }
+            if (read == ERead::HeadIterator || read == ERead::PointIterator) {
+                // Cover Head reads without a schema version, including ReadRows point reads.
+                request->Record.MutableTableId()->ClearSchemaVersion();
+                request->Record.ClearSnapshot();
+            }
+            if (read == ERead::PointIterator) {
+                for (const auto key : KeysInShard(schema)) { AddKeyQuery(*request, {key}); }
+            } else {
+                AddFullRangeQuery(*request);
+            }
+            runtime.SendToPipe(shard, sender, request.release());
+            auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(sender);
+            const auto& result = *response->Get();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Record.GetStatus().GetCode(), badColumn
+                ? Ydb::StatusIds::SCHEME_ERROR : Ydb::StatusIds::SUCCESS, result.Record.DebugString());
+            if (badColumn) {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetRowsCount(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(result.Record.GetStatus().IssuesSize(), 1);
+                const auto& issue = result.Record.GetStatus().GetIssues(0);
+                UNIT_ASSERT_VALUES_EQUAL(issue.severity(), ui32(NYql::TSeverityIds::S_ERROR));
+                const TString reason = state == EColumnState::Building
+                    ? TString(TStringBuilder() << "Cannot read column '" << badColumn << "' ("
+                        << ColumnIds.at(badColumn) << "): column build is in progress")
+                    : TString(TStringBuilder() << "Unknown column: " << ColumnIds.at(badColumn));
+                UNIT_ASSERT_VALUES_EQUAL(issue.message(), TStringBuilder()
+                    << reason << " (shard# " << shard
+                    << " node# " << ResolveTablet(runtime, shard).NodeId()
+                    << " state# " << DatashardStateName(TShardState::Ready) << ")");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.Record.GetStatus().IssuesSize(), 0);
+                UNIT_ASSERT(result.Record.GetFinished());
+                for (size_t i = 0; i < result.GetRowsCount(); ++i) {
+                    AppendCells(rows, result.GetCells(i), projection.size());
+                }
+            }
+            break;
+        }
+        case ERead::Columns: {
+            auto request = MakeHolder<TEvDataShard::TEvReadColumnsRequest>();
+            request->Record.SetTableId(TableId.PathId.LocalPathId);
+            request->Record.SetSnapshotStep(snapshot.Step);
+            request->Record.SetSnapshotTxId(snapshot.TxId);
+            request->Record.SetFromKeyInclusive(true);
+            request->Record.SetMaxRows(1); // Decode multiple native blocks too.
+            for (const auto& name : projection) { request->Record.AddColumns(name); }
+            runtime.SendToPipe(shard, sender, request.Release());
+            auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadColumnsResponse>(sender);
+            const auto& result = response->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), badColumn
+                ? NKikimrTxDataShard::TError::SCHEME_ERROR : 0, result.DebugString());
+            if (badColumn) {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetErrorDescription(), "Unknown column: " + badColumn);
+                UNIT_ASSERT(result.GetBlocks().empty());
+            } else {
+                UNIT_ASSERT(result.GetErrorDescription().empty());
+                UNIT_ASSERT(result.GetEndOfShard());
+                rows = TNativeBlockReader(result.GetBlocks()).Read(projection);
+            }
+            break;
+        }
+        case ERead::KqpScan: {
+            auto request = MakeHolder<TEvDataShard::TEvKqpScan>();
+            auto& record = request->Record;
+            record.SetTxId(++ReadId);
+            record.SetScanId(ReadId);
+            record.SetLocalPathId(TableId.PathId.LocalPathId);
+            record.SetTablePath("/Root/Table");
+            record.SetSchemaVersion(schema.GetTableSchemaVersion());
+            for (const auto& name : projection) {
+                record.AddColumnTags(ColumnIds.at(name));
+                record.AddColumnTypes(NScheme::NTypeIds::Uint32);
+                record.AddColumnTypeInfos();
+            }
+            auto* range = record.AddRanges();
+            range->SetFromInclusive(true);
+            range->SetToInclusive(true);
+            record.MutableSnapshot()->SetStep(snapshot.Step);
+            record.MutableSnapshot()->SetTxId(snapshot.TxId);
+            record.SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+            runtime.SendToPipe(shard, sender, request.Release());
+            TAutoPtr<IEventHandle> handle;
+            const auto [error, init] = runtime.GrabEdgeEventsRethrow<
+                NKqp::TEvKqpCompute::TEvScanError, NKqp::TEvKqpCompute::TEvScanInitActor>(handle);
+            if (badColumn) {
+                UNIT_ASSERT_C(error != nullptr, "KQP scan accepted a hidden column");
+                UNIT_ASSERT(!init);
+                UNIT_ASSERT_VALUES_EQUAL(error->Record.GetStatus(), Ydb::StatusIds::ABORTED);
+                UNIT_ASSERT_VALUES_EQUAL(error->Record.GetTabletId(), shard);
+                UNIT_ASSERT_VALUES_EQUAL(error->Record.IssuesSize(), 1);
+                const auto& issue = error->Record.GetIssues(0);
+                UNIT_ASSERT_VALUES_EQUAL(issue.issue_code(), ui32(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH));
+                TStringBuilder expected;
+                expected << "TxId: " << ReadId << ".";
+                if (state == EColumnState::Building) {
+                    expected << " Cannot read table '/Root/Table' column '" << badColumn << "' ("
+                        << ColumnIds.at(badColumn) << ") at " << shard << ": column build is in progress";
+                } else {
+                    expected << " Cant find table '/Root/Table' column " << ColumnIds.at(badColumn) << " at " << shard;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(issue.message(), expected);
+            } else {
+                UNIT_ASSERT_C(init != nullptr, (error ? error->Record.DebugString() : "Missing scan init"));
+                const auto actor = ActorIdFromProto(init->Record.GetScanActorId());
+                for (;;) {
+                    runtime.Send(new IEventHandle(actor, sender, new NKqp::TEvKqpCompute::TEvScanDataAck(1_MB)), 0, true);
+                    auto response = runtime.GrabEdgeEventRethrow<NKqp::TEvKqpCompute::TEvScanData>(sender);
+                    for (const auto& row : response->Get()->Rows) { AppendCells(rows, row, projection.size()); }
+                    if (response->Get()->Finished) { break; }
+                }
+            }
+            break;
+        }
+        case ERead::ReadTable: {
+            // Exercise the raw protocol with the same registered snapshot as the
+            // other readers, including successful projections and streaming acks.
+            NKikimrTxDataShard::TDataTransaction tx;
+            tx.SetImmediate(true);
+            tx.SetReadOnly(true);
+            tx.SetStreamResponse(true);
+            ActorIdToProto(sender, tx.MutableSink());
+            auto& scan = *tx.MutableReadTableTransaction();
+            scan.MutableTableId()->SetOwnerId(TableId.PathId.OwnerId);
+            scan.MutableTableId()->SetTableId(TableId.PathId.LocalPathId);
+            scan.SetSnapshotStep(snapshot.Step);
+            scan.SetSnapshotTxId(snapshot.TxId);
+            scan.SetApiVersion(NKikimrTxUserProxy::TReadTableTransaction::YDB_V1);
+            scan.MutableRange()->SetFromInclusive(true);
+            scan.MutableRange()->SetToInclusive(true);
+            for (const auto& name : projection) {
+                auto& column = *scan.AddColumns();
+                column.SetId(ColumnIds.at(name));
+                column.SetName(name);
+                column.SetTypeId(NScheme::NTypeIds::Uint32);
+            }
+            runtime.SendToPipe(shard, sender, new TEvDataShard::TEvProposeTransaction(
+                NKikimrTxDataShard::TX_KIND_SCAN, sender, ++ReadId, tx.SerializeAsString(), TTxFlags::Immediate));
+            TAutoPtr<IEventHandle> handle;
+            const auto [result, clearance] = runtime.GrabEdgeEventsRethrow<
+                TEvDataShard::TEvProposeTransactionResult, TEvTxProcessing::TEvStreamClearanceRequest>(handle);
+            if (badColumn) {
+                UNIT_ASSERT_C(result != nullptr, "ReadTable accepted a hidden column");
+                UNIT_ASSERT(!clearance);
+                UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(result->Record.ErrorSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(result->Record.GetError(0).GetKind(), NKikimrTxDataShard::TError::SCHEME_CHANGED);
+                const TString reason = state == EColumnState::Building
+                    ? TString(TStringBuilder() << "ReadTable cannot read column '" << badColumn << "' ("
+                        << ColumnIds.at(badColumn) << "): column build is in progress")
+                    : TString(TStringBuilder() << "ReadTable cannot find column " << badColumn << " ("
+                        << ColumnIds.at(badColumn) << ")");
+                UNIT_ASSERT_VALUES_EQUAL(result->Record.GetError(0).GetReason(), reason);
+                UNIT_ASSERT(result->Record.GetTxResult().empty());
+                break;
+            }
+            UNIT_ASSERT(clearance != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(clearance->Record.GetTxId(), ReadId);
+            UNIT_ASSERT_VALUES_EQUAL(clearance->Record.GetShardId(), shard);
+            auto cleared = MakeHolder<TEvTxProcessing::TEvStreamClearanceResponse>();
+            cleared->Record.SetTxId(ReadId);
+            cleared->Record.SetCleared(true);
+            runtime.Send(new IEventHandle(handle->Sender, sender, cleared.Release(), 0, handle->Cookie), 0, true);
+            ui64 sequence = 1;
+            for (;;) {
+                const auto [data, quota, release] = runtime.GrabEdgeEventsRethrow<
+                    TEvDataShard::TEvProposeTransactionResult, TEvTxProcessing::TEvStreamQuotaRequest,
+                    TEvTxProcessing::TEvStreamQuotaRelease>(handle);
+                if (release) { UNIT_ASSERT_VALUES_EQUAL(release->Record.GetTxId(), ReadId); continue; }
+                if (quota) {
+                    UNIT_ASSERT_VALUES_EQUAL(quota->Record.GetTxId(), ReadId);
+                    auto response = MakeHolder<TEvTxProcessing::TEvStreamQuotaResponse>();
+                    response->Record.SetTxId(ReadId);
+                    response->Record.SetMessageSizeLimit(1_MB);
+                    response->Record.SetMessageRowsLimit(1);
+                    response->Record.SetReservedMessages(1);
+                    runtime.Send(new IEventHandle(handle->Sender, sender, response.Release(), 0, handle->Cookie), 0, true);
+                    continue;
+                }
+                UNIT_ASSERT(data != nullptr);
+                const auto& record = data->Record;
+                UNIT_ASSERT_VALUES_EQUAL(record.GetTxId(), ReadId);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetOrigin(), shard);
+                UNIT_ASSERT_VALUES_EQUAL(record.ErrorSize(), 0);
+                if (record.GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE) {
+                    UNIT_ASSERT(record.GetTxResult().empty());
+                    break;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrTxDataShard::TEvProposeTransactionResult::RESPONSE_DATA);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetApiVersion(), ui32(NKikimrTxUserProxy::TReadTableTransaction::YDB_V1));
+                UNIT_ASSERT_VALUES_EQUAL(record.GetDataSeqNo(), sequence++);
+                auto part = DecodeResultSet(record.GetTxResult(), projection);
+                UNIT_ASSERT_VALUES_EQUAL(part.size(), 1);
+                rows.insert(rows.end(), part.begin(), part.end());
+                auto ack = MakeHolder<TEvTxProcessing::TEvStreamDataAck>();
+                runtime.Send(new IEventHandle(handle->Sender, sender, ack.Release()), 0, true);
+            }
+            break;
+        }
+        case ERead::MiniKQL: {
+            for (const auto key : KeysInShard(schema)) {
+                auto [body, engine] = CompileSelectRow(schema, projection, shard, key);
+                runtime.SendToPipe(shard, sender, new TEvDataShard::TEvProposeTransaction(
+                    NKikimrTxDataShard::TX_KIND_DATA, sender, ++ReadId, body, snapshot, TTxFlags::Immediate));
+                auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvProposeTransactionResult>(sender);
+                const auto& result = response->Get()->Record;
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), badColumn
+                    ? NKikimrTxDataShard::TEvProposeTransactionResult::ERROR
+                    : NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE, result.DebugString());
+                if (badColumn) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.ErrorSize(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetError(0).GetKind(), NKikimrTxDataShard::TError::SCHEME_ERROR);
+                    if (state == EColumnState::Building) {
+                        // MiniKQL structs order columns by name.
+                        const TString column = Find(projection, "extra") != projection.end() ? "extra" : "other";
+                        UNIT_ASSERT_VALUES_EQUAL(result.GetError(0).GetReason(), TStringBuilder()
+                            << "Cannot read column '" << column << "' (" << ColumnIds.at(column)
+                            << ") of table " << TableId.PathId << ": column build is in progress");
+                    }
+                    UNIT_ASSERT(result.GetTxResult().empty());
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(result.ErrorSize(), 0);
+                    engine->AddShardReply(shard, result.GetTxResult());
+                    engine->FinalizeOriginReplies(shard);
+                    engine->BuildResult();
+                    UNIT_ASSERT(engine->GetStatus() == NMiniKQL::IEngineFlat::EStatus::Complete);
+                    NKikimrMiniKQL::TResult value;
+                    UNIT_ASSERT(engine->FillResultValue(value) == NMiniKQL::IEngineFlat::EResult::Ok);
+                    UNIT_ASSERT_VALUES_EQUAL(value.GetType().GetStruct().MemberSize(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(value.GetType().GetStruct().GetMember(0).GetName(), "result");
+                    const auto& resultType = value.GetType().GetStruct().GetMember(0).GetType();
+                    UNIT_ASSERT(resultType.GetKind() == NKikimrMiniKQL::Optional);
+                    const auto& selectedType = resultType.GetOptional().GetItem();
+                    UNIT_ASSERT(selectedType.GetKind() == NKikimrMiniKQL::Optional);
+                    UNIT_ASSERT(selectedType.GetOptional().GetItem().GetKind() == NKikimrMiniKQL::Struct);
+                    const auto& rowType = selectedType.GetOptional().GetItem().GetStruct();
+                    UNIT_ASSERT_VALUES_EQUAL(value.GetValue().StructSize(), 1);
+                    UNIT_ASSERT(value.GetValue().GetStruct(0).HasOptional());
+                    const auto& selected = value.GetValue().GetStruct(0).GetOptional();
+                    UNIT_ASSERT(selected.HasOptional());
+                    const auto& rowValue = selected.GetOptional();
+                    UNIT_ASSERT_VALUES_EQUAL(rowType.MemberSize(), projection.size());
+                    UNIT_ASSERT_VALUES_EQUAL(rowValue.StructSize(), projection.size());
+                    TRow row;
+                    for (const auto& name : projection) {
+                        bool found = false;
+                        for (size_t i = 0; i < rowType.MemberSize(); ++i) {
+                            if (rowType.GetMember(i).GetName() == name) {
+                                const auto& field = rowValue.GetStruct(i);
+                                UNIT_ASSERT(field.HasOptional());
+                                UNIT_ASSERT(field.GetOptional().HasUint32());
+                                row.push_back(field.GetOptional().GetUint32());
+                                found = true;
+                                break;
+                            }
+                        }
+                        UNIT_ASSERT_C(found, name);
+                    }
+                    rows.push_back(std::move(row));
+                }
+            }
+            break;
+        }
+        }
+        return rows;
+    }
+
+    void CheckReadTable(const TProjection& projection, EColumnState state) {
+        const auto badColumn = RejectedColumn(projection, state);
+        TProjection expectedProjection = projection;
+        if (projection.empty()) {
+            expectedProjection = ExistingColumns;
+            if (state == EColumnState::Ready) { expectedProjection.insert(expectedProjection.end(), {"extra", "other"}); }
+        }
+        TRows rows;
+        NKikimrTxUserProxy::TEvProposeTransactionStatus error;
+        auto observer = Runtime().AddObserver<TEvTxUserProxy::TEvProposeTransactionStatus>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetStatus() == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResponseData) {
+                auto part = DecodeResultSet(record.GetSerializedReadTableResponse(), expectedProjection, !projection.empty());
+                rows.insert(rows.end(), part.begin(), part.end());
+            } else if (record.GetStatus() != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
+                error = record;
+            }
+        });
+        auto settings = MakeReadTableSettings("/Root/Table", true);
+        settings.Columns = projection;
+        TReadTableState reader(Server, settings);
+        reader.All();
+        UNIT_ASSERT_VALUES_EQUAL_C(reader.IsError, bool(badColumn), error.DebugString());
+        if (badColumn) {
+            UNIT_ASSERT(rows.empty());
+            UNIT_ASSERT_VALUES_EQUAL(error.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError);
+            UNIT_ASSERT_VALUES_EQUAL(ui32(error.GetStatusCode()), ui32(NKikimrIssues::TStatusIds::SCHEME_ERROR));
+            TProjection missing;
+            for (const auto& name : projection) {
+                if (name == "extra" || name == "other") { missing.push_back(name); }
+            }
+            Sort(missing);
+            UNIT_ASSERT_VALUES_EQUAL(error.IssuesSize(), missing.size());
+            for (size_t i = 0; i < error.IssuesSize(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(error.GetIssues(i).issue_code(), ui32(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR));
+                UNIT_ASSERT_VALUES_EQUAL(error.GetIssues(i).message(), "Unresolved column: '" + missing[i] + "'");
+            }
+        } else {
+            UNIT_ASSERT(!error.HasStatus());
+            AssertRows(rows, expectedProjection, Keys);
+        }
+    }
+
+    void CheckProjection(ERead read, const TProjection& projection, EColumnState state, const TRowVersion& snapshot) {
+        TRows rows;
+        for (const auto shard : Shards()) {
+            auto part = ReadShard(read, shard, projection, state, snapshot);
+            rows.insert(rows.end(), part.begin(), part.end());
+        }
+        if (read == ERead::ReadTable) {
+            CheckReadTable(projection, state);
+        }
+        if (RejectedColumn(projection, state)) {
+            UNIT_ASSERT(rows.empty());
+        } else {
+            AssertRows(rows, projection, Keys);
+        }
+    }
+
+    void CheckReadRows(const TProjection& projection, EColumnState state) {
+        using TEvRequest = NGRpcService::TGrpcRequestNoOperationCall<
+            Ydb::Table::ReadRowsRequest, Ydb::Table::ReadRowsResponse>;
+        Ydb::Table::ReadRowsRequest request;
+        request.set_path("/Root/Table");
+        auto* keys = request.mutable_keys();
+        auto* member = keys->mutable_type()->mutable_list_type()->mutable_item()->mutable_struct_type()->add_members();
+        member->set_name("key");
+        member->mutable_type()->set_type_id(Ydb::Type::UINT32);
+        for (const auto key : Keys) {
+            keys->mutable_value()->add_items()->add_items()->set_uint32_value(key);
+        }
+        for (const auto& name : projection) { request.add_columns(name); }
+        const auto response = Runtime().WaitFuture(NRpcService::DoLocalRpc<TEvRequest>(
+            std::move(request), "/Root", Nothing(), Runtime().GetActorSystem(0)));
+        const auto badColumn = RejectedColumn(projection, state);
+        UNIT_ASSERT_VALUES_EQUAL_C(response.status(), badColumn
+            ? Ydb::StatusIds::SCHEME_ERROR : Ydb::StatusIds::SUCCESS, response.DebugString());
+        if (badColumn) {
+            UNIT_ASSERT(!response.has_result_set());
+            UNIT_ASSERT_VALUES_EQUAL(response.issues_size(), 1);
+            const auto& issue = response.issues(0);
+            UNIT_ASSERT_VALUES_EQUAL(issue.issue_code(), ui32(NKikimrIssues::TIssuesIds::DEFAULT_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(issue.severity(), ui32(NYql::TSeverityIds::S_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(issue.message(), "Unknown result column: " + badColumn);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(response.issues_size(), 0);
+            UNIT_ASSERT(response.has_result_set());
+            auto expected = projection;
+            if (projection.empty()) {
+                expected = ExistingColumns;
+                if (state == EColumnState::Ready) { expected.insert(expected.end(), {"extra", "other"}); }
+            }
+            AssertRows(DecodeResultSet(response.result_set(), expected, !projection.empty()), expected, Keys);
+        }
+    }
+
+    void CheckReadRowsInvariants(EColumnState state) {
+        CheckReadRows({}, state);
+        CheckReadRows({"value", "key"}, state);
+        for (const auto& projection : TVector<TProjection>{
+                {"extra"}, {"other"}, {"value", "extra", "key"}, {"other", "key", "extra", "value"}}) {
+            CheckReadRows(projection, state);
+        }
+    }
+
+    void CheckDescribeTable(EColumnState state) {
+        using TEvRequest = NGRpcService::TGrpcRequestOperationCall<
+            Ydb::Table::DescribeTableRequest, Ydb::Table::DescribeTableResponse>;
+        Ydb::Table::DescribeTableRequest request;
+        request.set_path("/Root/Table");
+        const auto response = Runtime().WaitFuture(NRpcService::DoLocalRpc<TEvRequest>(
+            std::move(request), "/Root", Nothing(), Runtime().GetActorSystem(0)));
+        const auto& operation = response.operation();
+        UNIT_ASSERT(operation.ready());
+        UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), Ydb::StatusIds::SUCCESS, response.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(operation.issues_size(), 0);
+        Ydb::Table::DescribeTableResult result;
+        UNIT_ASSERT(operation.result().UnpackTo(&result));
+        UNIT_ASSERT_VALUES_EQUAL(result.primary_key_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.primary_key(0), "key");
+        TProjection names;
+        for (const auto& column : result.columns()) {
+            names.push_back(column.name());
+            UNIT_ASSERT(column.type().has_optional_type());
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(column.type().optional_type().item().type_id()), static_cast<int>(Ydb::Type::UINT32));
+            if (column.name() == "extra" || column.name() == "other") {
+                UNIT_ASSERT(column.has_from_literal());
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(column.from_literal().type().type_id()), static_cast<int>(Ydb::Type::UINT32));
+                UNIT_ASSERT_VALUES_EQUAL(column.from_literal().value().uint32_value(), Value(0, column.name()));
+            }
+        }
+        auto expected = ExistingColumns;
+        if (state == EColumnState::Ready) {
+            expected.push_back("extra");
+            expected.push_back("other");
+        }
+        Sort(names);
+        Sort(expected);
+        UNIT_ASSERT_C(names == expected, result.DebugString());
+    }
+
+    // Reused without weakening expectations across every build/lifecycle transition.
+    void CheckInvariants(const TVector<ERead>& reads, EColumnState state) {
+        for (auto shard : Shards()) {
+            const auto schema = Schema(shard);
+            RememberColumns(schema);
+            THashSet<TString> names;
+            for (const auto& column : schema.GetColumns()) {
+                names.insert(column.GetName());
+                UNIT_ASSERT_VALUES_EQUAL(column.GetIsBuildInProgress(),
+                    state == EColumnState::Building && (column.GetName() == "extra" || column.GetName() == "other"));
+            }
+            THashSet<TString> expected = {"key", "value"};
+            if (state != EColumnState::Absent) { expected.insert("extra"); expected.insert("other"); }
+            UNIT_ASSERT(names == expected);
+        }
+        const auto snapshot = CreateVolatileSnapshot(Server, {"/Root/Table"});
+        for (auto read : reads) {
+            CheckProjection(read, {"value", "key"}, state, snapshot);
+            for (const auto& projection : TVector<TProjection>{
+                    {"extra"}, {"other"}, {"value", "extra", "key"}, {"other", "key", "extra", "value"}}) {
+                CheckProjection(read, projection, state, snapshot);
+            }
+        }
+        CheckReadTable({}, state);
+        CheckDescribeTable(state);
+        CheckReadRowsInvariants(state);
+    }
+
+    void CheckInvariants(ERead read, EColumnState state) {
+        CheckInvariants(TVector<ERead>{read}, state);
+    }
+
+    void CheckInvariants(EColumnState state) {
+        CheckInvariants({ERead::Iterator, ERead::HeadIterator, ERead::PointIterator, ERead::Columns,
+            ERead::KqpScan, ERead::ReadTable, ERead::MiniKQL}, state);
+    }
+
+    std::pair<TString, TAutoPtr<NMiniKQL::IEngineFlat>> CompileSelectRow(
+        const NKikimrSchemeOp::TTableDescription& schema, const TProjection& projection, ui64 shardId, ui32 key)
+    {
+        using namespace NMiniKQL;
+        using TResolver = NYql::IDbSchemeResolver;
+        TMockDbSchemeResolver resolver;
+        TResolver::TTableResult table(TResolver::TTableResult::Ok);
+        table.Table.TableName = "Table";
+        table.TableId.Reset(new TTableId(TableId.PathId, schema.GetTableSchemaVersion()));
+        table.KeyColumnCount = 1;
+        for (const auto& [name, id] : ColumnIds) {
+            table.Columns.emplace(name, TResolver::TTableResult::TColumn{
+                id, name == "key" ? 0 : -1, NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), 0, EColumnTypeConstraint::Nullable});
+        }
+        resolver.AddTable(table);
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment env(alloc);
+        alloc.Release();
+        Y_DEFER { alloc.Acquire(); };
+        TStringBuilder columns;
+        for (const auto& name : projection) { columns << "'" << name << " "; }
+        auto* registry = Runtime().GetAppData().FunctionRegistry;
+        auto compiled = NYql::ConvertToMiniKQL(NYql::ParseText(TStringBuilder()
+            << "((let row '('('key (Uint32 '" << key << ")))) (let columns '(" << columns << ")) "
+            << "(return (AsList (SetResult 'result (SelectRow 'Table row columns)))))"),
+            registry, &env, &resolver).GetValueSync();
+        UNIT_ASSERT_C(compiled.Node.GetNode(), compiled.Errors.ToString());
+        auto engine = CreateEngineFlat(TEngineFlatSettings(IEngineFlat::EProtocol::V1,
+            registry, *TAppData::RandomProvider, *TAppData::TimeProvider));
+        UNIT_ASSERT(engine->SetProgram(SerializeRuntimeNode(compiled.Node, env)) == IEngineFlat::EResult::Ok);
+        for (auto& key : engine->GetDbKeys()) {
+            key->Status = TKeyDesc::EStatus::Ok;
+            key->Partitioning = std::make_shared<TPartitioning>(TVector<TKeyDesc::TPartitionInfo>{shardId});
+        }
+        UNIT_ASSERT(engine->PrepareShardPrograms() == IEngineFlat::EResult::Ok);
+        IEngineFlat::TShardData shard;
+        UNIT_ASSERT(engine->GetAffectedShard(0, shard) == IEngineFlat::EResult::Ok);
+        engine->AfterShardProgramsExtracted();
+        NKikimrTxDataShard::TDataTransaction tx;
+        tx.SetMiniKQL(shard.Program);
+        tx.SetImmediate(true);
+        tx.SetReadOnly(true);
+        return {tx.SerializeAsString(), std::move(engine)};
+    }
+
+    void InsertDuringBuild() {
+        ExecSQL(Server, Sender, "UPSERT INTO `/Root/Table` (key, value) VALUES (3, 30);");
+        Keys.push_back(3);
+        Values.emplace(3, 30);
+    }
+
+    void UpdateAndDeleteDuringBuild() {
+        ExecSQL(Server, Sender,
+            "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 111);"
+            "DELETE FROM `/Root/Table` WHERE key = 2;");
+        Values.at(1) = 111;
+        const auto deleted = Find(Keys, 2);
+        UNIT_ASSERT(deleted != Keys.end());
+        Keys.erase(deleted);
+        Values.erase(2);
+    }
+
+    void RestartDataShards() {
+        for (auto shard : Shards()) { RebootTablet(Runtime(), shard, Sender); }
+    }
+
+    void RestartSchemeShard() { RebootTablet(Runtime(), TableId.PathId.OwnerId, Sender); }
+
+    void CheckSplitLocked(ui64 shard, ui32 key, ui64 lockOwner) {
+        SetSplitMergePartCountLimit(&Runtime(), -1);
+        const auto before = Shards();
+        const auto sender = Runtime().AllocateEdgeActor();
+        const auto txId = ++ReadId;
+        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TableId.PathId.OwnerId);
+        auto& modify = *request->Record.AddTransaction();
+        modify.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
+        auto& desc = *modify.MutableSplitMergeTablePartitions();
+        desc.SetTablePath("/Root/Table");
+        desc.AddSourceTabletId(shard);
+        desc.AddSplitBoundary()->MutableKeyPrefix()->AddTuple()->MutableOptional()->SetUint32(key);
+        Runtime().SendToPipe(TableId.PathId.OwnerId, sender, request.Release());
+        const auto response = Runtime().GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender);
+        const auto& record = response->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), NKikimrScheme::StatusMultipleModifications, record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(record.GetTxId(), txId);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetSchemeshardId(), TableId.PathId.OwnerId);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetReason(), TStringBuilder()
+            << "path '" << TPathId(TableId.PathId.OwnerId, TableId.PathId.LocalPathId)
+            << "' has been locked by tx: " << lockOwner);
+        UNIT_ASSERT(Shards() == before);
+    }
+
+    void Split(ui64 shard, ui32 key) {
+        SetSplitMergePartCountLimit(&Runtime(), -1);
+        const auto before = Shards();
+        WaitTxNotification(Server, Sender, AsyncSplitTable(Server, Sender, "/Root/Table", shard, key));
+        const auto after = Shards();
+        UNIT_ASSERT_VALUES_EQUAL(after.size(), before.size() + 1);
+        UNIT_ASSERT(Find(after, shard) == after.end());
+    }
+
+    void PrimeShardDescriptionCache() {
+        auto* ss = dynamic_cast<NSchemeShard::TSchemeShard*>(Runtime().FindActor(ResolveTablet(Runtime(), TableId.PathId.OwnerId)));
+        UNIT_ASSERT(ss);
+        const TPathId pathId(TableId.PathId.OwnerId, TableId.PathId.LocalPathId);
+        auto table = ss->Tables.at(pathId);
+        table->FillDescriptionCache(ss->PathsById.at(pathId));
+        UNIT_ASSERT(table->TableDescription.HasPathId());
+        THashSet<TString> building;
+        for (const auto& column : table->TableDescription.GetColumns()) {
+            if (column.GetIsBuildInProgress()) { building.insert(column.GetName()); }
+        }
+        UNIT_ASSERT((building == THashSet<TString>{"extra", "other"}));
+    }
+
+    void CheckSchemeShardColumns(EColumnState state) {
+        const auto sender = Runtime().AllocateEdgeActor();
+        Runtime().SendToPipe(TableId.PathId.OwnerId, sender, new TEvSchemeShard::TEvDescribeScheme("/Root/Table"));
+        const auto response = Runtime().GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(sender);
+        const auto description = response->Get()->GetRecord();
+        UNIT_ASSERT_VALUES_EQUAL(description.GetStatus(), NKikimrScheme::StatusSuccess);
+        THashSet<TString> names;
+        for (const auto& column : description.GetPathDescription().GetTable().GetColumns()) { names.insert(column.GetName()); }
+        THashSet<TString> expected = {"key", "value"};
+        if (state != EColumnState::Absent) { expected.insert("extra"); expected.insert("other"); }
+        UNIT_ASSERT(names == expected);
+    }
+
+    TPortManager PortManager;
+    Tests::TServer::TPtr Server;
+    TActorId Sender;
+    TTableId TableId;
+    ui64 ReadId = 100000;
+    TVector<ui32> Keys = {1, 2};
+    THashMap<ui32, ui32> Values = {{1, 10}, {2, 20}};
+    TProjection ExistingColumns = {"key", "value"};
+    THashMap<TString, ui32> ColumnIds;
+};
+
+class TColumnBuild {
+public:
+    explicit TColumnBuild(TBuildingColumnFixture& fixture)
+        : Fixture(fixture)
+        , Uploads(fixture.Runtime())
+        , Finalization(fixture.Runtime(), [](const auto& event) {
+            if (event->Get()->Record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) { return false; }
+            NKikimrTxDataShard::TFlatSchemeTransaction tx;
+            UNIT_ASSERT(tx.ParseFromString(event->Get()->Record.GetTxBody()));
+            return tx.HasFinalizeBuildIndex();
+        })
+        , Completion(fixture.Runtime().AddObserver<TEvSchemeShard::TEvNotifyTxCompletionResult>([this](auto& event) {
+            if (event->Get()->Record.GetTxId() == BuildId) { Complete = true; }
+        }))
+        , Lock(fixture.Runtime().AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([this](auto& event) {
+            for (const auto& tx : event->Get()->Record.GetTransaction()) {
+                if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateLock
+                        && tx.GetWorkingDir() == "/Root" && tx.GetLockConfig().GetName() == "Table") {
+                    LockOwner = tx.GetLockConfig().GetLockTxId();
+                }
+            }
+        }))
+        , Responses(fixture.Runtime().AddObserver<TEvDataShard::TEvUploadRowsResponse>([this](auto& event) {
+            if (CheckingBatches) {
+                UNIT_ASSERT_VALUES_EQUAL_C(event->Get()->Record.GetStatus(), ui32(NKikimrTxDataShard::TError::OK), event->Get()->Record.DebugString());
+                ++Acknowledged;
+            }
+        }))
+    {
+        BuildId = ++fixture.ReadId;
+        NKikimrIndexBuilder::TIndexBuildSettings settings;
+        settings.set_source_path("/Root/Table");
+        settings.set_max_shards_in_flight(2);
+        settings.MutableScanSettings()->SetMaxBatchRows(1);
+        settings.MutableScanSettings()->SetMaxBatchBytes(1);
+        for (const auto& name : TProjection{"extra", "other"}) {
+            auto* column = settings.mutable_column_build_operation()->add_column();
+            column->SetColumnName(name);
+            auto* literal = column->mutable_default_from_literal();
+            literal->mutable_type()->set_type_id(Ydb::Type::UINT32);
+            literal->mutable_value()->set_uint32_value(fixture.Value(0, name));
+        }
+        const auto sender = fixture.Runtime().AllocateEdgeActor();
+        fixture.Runtime().SendToPipe(fixture.TableId.PathId.OwnerId, sender,
+            new NSchemeShard::TEvIndexBuilder::TEvCreateRequest(BuildId, "/Root", std::move(settings)));
+        const auto response = fixture.Runtime().GrabEdgeEventRethrow<NSchemeShard::TEvIndexBuilder::TEvCreateResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS, response->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.IssuesSize(), 0);
+        WatchCompletion();
+        WaitForUpload();
+        UNIT_ASSERT(LockOwner);
+        fixture.RememberColumns(fixture.Schema(fixture.Shards().at(0)));
+    }
+
+    void WatchCompletion() {
+        const auto sender = Fixture.Runtime().AllocateEdgeActor();
+        Fixture.Runtime().SendToPipe(Fixture.TableId.PathId.OwnerId, sender,
+            new TEvSchemeShard::TEvNotifyTxCompletion(BuildId));
+    }
+
+    void WaitForUpload() {
+        Fixture.Runtime().WaitFor("backfill batch", [&] { return !Uploads.empty() || Complete; });
+        UNIT_ASSERT_C(!Uploads.empty(), GetState().DebugString());
+    }
+
+    void CommitBatch(ui32 key) {
+        WaitForUpload();
+        const auto& request = Uploads.front()->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(request.RowsSize(), 1);
+        TSerializedCellVec cells(request.GetRows(0).GetKeyColumns());
+        UNIT_ASSERT_VALUES_EQUAL(cells.GetCells().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cells.GetCells()[0].AsValue<ui32>(), key);
+        UNIT_ASSERT_VALUES_EQUAL(request.GetRowScheme().ValueColumnIdsSize(), 2);
+        TSerializedCellVec values(request.GetRows(0).GetValueColumns());
+        UNIT_ASSERT_VALUES_EQUAL(values.GetCells().size(), 2);
+        for (size_t i = 0; i < values.GetCells().size(); ++i) {
+            const auto id = request.GetRowScheme().GetValueColumnIds(i);
+            const TString name = id == Fixture.ColumnIds.at("extra") ? "extra" : "other";
+            UNIT_ASSERT_VALUES_EQUAL(id, Fixture.ColumnIds.at(name));
+            UNIT_ASSERT(!values.GetCells()[i].IsNull());
+            UNIT_ASSERT_VALUES_EQUAL(values.GetCells()[i].AsValue<ui32>(), Fixture.Value(key, name));
+        }
+        const auto before = Acknowledged;
+        Uploads.Unblock(1);
+        Fixture.Runtime().WaitFor("committed backfill batch", [&] { return Acknowledged > before; });
+        UNIT_ASSERT_VALUES_EQUAL(Acknowledged, before + 1);
+    }
+
+    void WaitForFinalization() {
+        WatchCompletion(); // SchemeShard restart loses in-memory subscriptions.
+        CheckingBatches = false;
+        Uploads.Stop().Unblock();
+        Fixture.Runtime().WaitFor("blocked finalization", [&] { return !Finalization.empty() || Complete; });
+        UNIT_ASSERT_C(!Finalization.empty(), GetState().DebugString());
+    }
+
+    void Finish() {
+        Finalization.Stop().Unblock();
+        Fixture.Runtime().WaitFor("completed column build", [&] { return Complete; });
+        UNIT_ASSERT_VALUES_EQUAL(GetState().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+    }
+
+    void Cancel() {
+        CheckingBatches = false;
+        auto& runtime = Fixture.Runtime();
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(Fixture.TableId.PathId.OwnerId, sender,
+            new NSchemeShard::TEvIndexBuilder::TEvCancelRequest(++Fixture.ReadId, "/Root", BuildId));
+        const auto response = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvIndexBuilder::TEvCancelResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS, response->Get()->Record.DebugString());
+        Finalization.Stop().Unblock();
+        runtime.WaitFor("cancelled column build", [&] { return Complete; });
+        UNIT_ASSERT_VALUES_EQUAL(GetState().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLED);
+        Uploads.Stop();
+        Uploads.clear(); // Requests owned by the cancelled scanner must not be replayed.
+    }
+
+    NKikimrIndexBuilder::TIndexBuild GetState() {
+        auto& runtime = Fixture.Runtime();
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(Fixture.TableId.PathId.OwnerId, sender,
+            new NSchemeShard::TEvIndexBuilder::TEvGetRequest("/Root", BuildId));
+        const auto response = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvIndexBuilder::TEvGetResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS, response->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.IssuesSize(), 0);
+        return response->Get()->Record.GetIndexBuild();
+    }
+
+    TBuildingColumnFixture& Fixture;
+    TBlockEvents<TEvDataShard::TEvUploadRowsRequest> Uploads;
+    TBlockEvents<TEvDataShard::TEvProposeTransaction> Finalization;
+    TTestActorRuntime::TEventObserverHolder Completion;
+    TTestActorRuntime::TEventObserverHolder Lock;
+    TTestActorRuntime::TEventObserverHolder Responses;
+    ui64 BuildId = 0;
+    ui64 LockOwner = 0;
+    size_t Acknowledged = 0;
+    bool CheckingBatches = true;
+    bool Complete = false;
+};
+
+void TestBuildingColumn(ERead read, bool restart = false) {
+    TBuildingColumnFixture fixture;
+    fixture.CheckReadTable({}, EColumnState::Absent);
+    fixture.CheckDescribeTable(EColumnState::Absent);
+    TColumnBuild build(fixture);
+    fixture.CheckInvariants(read, EColumnState::Building); // no uploads yet
+    build.CommitBatch(1);
+    fixture.CheckInvariants(read, EColumnState::Building);
+    fixture.InsertDuringBuild();
+    fixture.CheckInvariants(read, EColumnState::Building);
+    if (restart) {
+        fixture.RestartDataShards();
+        fixture.CheckInvariants(read, EColumnState::Building);
+    } else {
+        build.CommitBatch(2);
+        fixture.CheckInvariants(read, EColumnState::Building);
+    }
+    build.WaitForFinalization();
+    fixture.CheckInvariants(read, EColumnState::Building); // all uploads committed, schema still building
+    build.Finish();
+    fixture.CheckInvariants(read, EColumnState::Ready);
+    fixture.RestartDataShards();
+    fixture.CheckInvariants(read, EColumnState::Ready);
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(DataShardBuildingColumns) {
+    Y_UNIT_TEST(PreserveBuildFlagInSchemaDelta) {
+        NKikimrSchemeOp::TTableDescription schema;
+        schema.SetName("Table");
+        schema.SetPath("/Root/Table");
+        auto* key = schema.AddColumns();
+        key->SetId(1);
+        key->SetName("key");
+        key->SetTypeId(NScheme::NTypeIds::Uint32);
+        schema.AddKeyColumnIds(1);
+        auto* extra = schema.AddColumns();
+        extra->SetId(2);
+        extra->SetName("extra");
+        extra->SetTypeId(NScheme::NTypeIds::Uint32);
+        extra->SetIsBuildInProgress(true);
+        TUserTable table(1000, schema, 0);
+
+        NKikimrSchemeOp::TTableDescription delta;
+        delta.SetName("Table");
+        auto* column = delta.AddColumns();
+        column->SetId(2);
+        column->SetName("extra");
+        TUserTable altered(table, delta);
+        altered.GetSchema(schema);
+        UNIT_ASSERT(schema.GetColumns(1).GetIsBuildInProgress());
+
+        TUserTable restored(1000, schema, 0);
+        restored.SetPath("/Root/Table");
+        restored.GetSchema(schema);
+        UNIT_ASSERT(schema.GetColumns(1).GetIsBuildInProgress());
+
+        column->SetIsBuildInProgress(false);
+        TUserTable ready(restored, delta);
+        ready.GetSchema(schema);
+        UNIT_ASSERT(!schema.GetColumns(1).GetIsBuildInProgress());
+    }
+
+    Y_UNIT_TEST(ReadIterator) { TestBuildingColumn(ERead::Iterator); }
+    Y_UNIT_TEST(HeadReadIterator) { TestBuildingColumn(ERead::HeadIterator); }
+    Y_UNIT_TEST(PointReadIterator) { TestBuildingColumn(ERead::PointIterator); }
+    Y_UNIT_TEST(ReadIteratorAfterReboot) { TestBuildingColumn(ERead::Iterator, true); }
+    Y_UNIT_TEST(ReadColumns) { TestBuildingColumn(ERead::Columns); }
+    Y_UNIT_TEST(KqpScan) { TestBuildingColumn(ERead::KqpScan); }
+    Y_UNIT_TEST(ReadTable) { TestBuildingColumn(ERead::ReadTable); }
+    Y_UNIT_TEST(SelectRow) { TestBuildingColumn(ERead::MiniKQL); }
+
+    Y_UNIT_TEST_TWIN(ReadRowsDuringBackfill, Cancel) {
+        TBuildingColumnFixture fixture;
+        fixture.CheckReadRowsInvariants(EColumnState::Absent);
+        TColumnBuild build(fixture);
+        fixture.CheckReadRowsInvariants(EColumnState::Building);
+        build.CommitBatch(1);
+        fixture.CheckReadRowsInvariants(EColumnState::Building);
+        if constexpr (Cancel) {
+            build.Cancel();
+        } else {
+            build.CommitBatch(2);
+            fixture.CheckReadRowsInvariants(EColumnState::Building);
+            build.WaitForFinalization();
+            fixture.CheckReadRowsInvariants(EColumnState::Building);
+            build.Finish();
+        }
+        const auto state = Cancel ? EColumnState::Absent : EColumnState::Ready;
+        fixture.CheckReadRowsInvariants(state);
+        fixture.RestartSchemeShard();
+        fixture.RestartDataShards();
+        fixture.CheckReadRowsInvariants(state);
+    }
+
+    Y_UNIT_TEST_TWIN(ConcurrentRowChangesDuringBackfill, Cancel) {
+        TBuildingColumnFixture fixture;
+        TColumnBuild build(fixture);
+        fixture.CheckInvariants(EColumnState::Building);
+        build.CommitBatch(1);
+        fixture.InsertDuringBuild();
+        fixture.UpdateAndDeleteDuringBuild();
+        fixture.CheckInvariants(EColumnState::Building);
+        if constexpr (Cancel) {
+            build.Cancel();
+            fixture.CheckSchemeShardColumns(EColumnState::Absent);
+        } else {
+            // The queued upload still contains deleted key 2 from the build snapshot.
+            build.CommitBatch(2);
+            fixture.CheckInvariants(EColumnState::Building);
+            build.WaitForFinalization();
+            fixture.CheckInvariants(EColumnState::Building);
+            build.Finish();
+        }
+        const auto state = Cancel ? EColumnState::Absent : EColumnState::Ready;
+        fixture.CheckInvariants(state);
+        fixture.RestartSchemeShard();
+        fixture.RestartDataShards();
+        fixture.CheckInvariants(state);
+    }
+
+    Y_UNIT_TEST(ReadTableImplicitKeyOnlyDuringBackfill) {
+        TBuildingColumnFixture fixture(true);
+        fixture.CheckReadTable({}, EColumnState::Absent);
+        fixture.CheckDescribeTable(EColumnState::Absent);
+        TColumnBuild build(fixture);
+        const auto checkBuilding = [&] {
+            fixture.CheckReadTable({}, EColumnState::Building);
+            fixture.CheckReadTable({"key", "extra", "other"}, EColumnState::Building);
+            fixture.CheckDescribeTable(EColumnState::Building);
+        };
+        checkBuilding();
+        build.CommitBatch(1);
+        checkBuilding();
+        build.CommitBatch(2);
+        checkBuilding();
+        build.WaitForFinalization();
+        checkBuilding();
+        build.Finish();
+        fixture.CheckReadTable({}, EColumnState::Ready);
+        fixture.CheckDescribeTable(EColumnState::Ready);
+        fixture.RestartSchemeShard();
+        fixture.RestartDataShards();
+        fixture.CheckReadTable({}, EColumnState::Ready);
+        fixture.CheckDescribeTable(EColumnState::Ready);
+    }
+
+    Y_UNIT_TEST(SchemeShardRestartDuringBackfill) {
+        TBuildingColumnFixture fixture;
+        TColumnBuild build(fixture);
+        build.CommitBatch(1);
+        fixture.InsertDuringBuild();
+        fixture.CheckInvariants(EColumnState::Building);
+        fixture.RestartSchemeShard();
+        fixture.CheckInvariants(EColumnState::Building);
+        build.WaitForFinalization();
+        fixture.CheckInvariants(EColumnState::Building);
+        build.Finish();
+        fixture.CheckInvariants(EColumnState::Ready);
+        fixture.RestartSchemeShard();
+        fixture.RestartDataShards();
+        fixture.CheckInvariants(EColumnState::Ready);
+    }
+
+    Y_UNIT_TEST(ShardDescriptionCacheAfterFinalization) {
+        TBuildingColumnFixture fixture;
+        TColumnBuild build(fixture);
+        build.CommitBatch(1);
+        fixture.InsertDuringBuild();
+        fixture.CheckInvariants(EColumnState::Building);
+        // Populate the actual cache used for creating split destinations, while
+        // both column flags are still true. A path description uses another cache.
+        fixture.PrimeShardDescriptionCache();
+        build.WaitForFinalization();
+        fixture.CheckInvariants(EColumnState::Building);
+        build.Finish();
+        fixture.CheckInvariants(EColumnState::Ready);
+        fixture.Split(fixture.Shards().at(0), 2);
+        fixture.CheckInvariants(EColumnState::Ready);
+        fixture.RestartDataShards();
+        fixture.CheckInvariants(EColumnState::Ready);
+    }
+
+    Y_UNIT_TEST(SplitRejectedDuringBackfillThenAllowedAfterFinalization) {
+        TBuildingColumnFixture fixture;
+        TColumnBuild build(fixture);
+        build.CommitBatch(1);
+        fixture.InsertDuringBuild();
+        fixture.CheckInvariants(EColumnState::Building);
+        fixture.CheckSplitLocked(fixture.Shards().at(0), 2, build.LockOwner);
+        fixture.CheckInvariants(EColumnState::Building);
+        build.WaitForFinalization();
+        fixture.CheckInvariants(EColumnState::Building);
+        build.Finish();
+        fixture.CheckInvariants(EColumnState::Ready);
+        fixture.Split(fixture.Shards().at(0), 2);
+        fixture.CheckInvariants(EColumnState::Ready);
+        fixture.RestartSchemeShard();
+        fixture.RestartDataShards();
+        fixture.CheckInvariants(EColumnState::Ready);
+    }
+
+    Y_UNIT_TEST(CancelAfterPartialBackfill) {
+        TBuildingColumnFixture fixture;
+        TColumnBuild build(fixture);
+        build.CommitBatch(1);
+        fixture.InsertDuringBuild();
+        fixture.CheckInvariants(EColumnState::Building);
+        build.Cancel();
+        fixture.CheckSchemeShardColumns(EColumnState::Absent);
+        fixture.CheckInvariants(EColumnState::Absent);
+        fixture.RestartSchemeShard();
+        fixture.RestartDataShards();
+        fixture.CheckSchemeShardColumns(EColumnState::Absent);
+        fixture.CheckInvariants(EColumnState::Absent);
+    }
+}
 
 } // namespace NKikimr

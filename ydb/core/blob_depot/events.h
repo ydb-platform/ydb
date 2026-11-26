@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/library/actors/core/event.h>
-#include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/protos/blob_depot.pb.h>
 
@@ -31,12 +30,8 @@ namespace NKikimr {
             EvPushMetrics,
             EvPrepareWriteS3,
             EvPrepareWriteS3Result,
-            EvRetiredS3SweepComplete = EvPrepareWriteS3Result + 3,
-        };
-
-        struct TEvRetiredS3SweepComplete : TEventLocal<TEvRetiredS3SweepComplete, EvRetiredS3SweepComplete> {
-            const bool Success;
-            explicit TEvRetiredS3SweepComplete(bool success) : Success(success) {}
+            EvHotWriteCredit,
+            EvHotWriteCreditResult,
         };
 
 #define BLOBDEPOT_PARAM_ARG(ARG) std::optional<std::decay_t<decltype(Record.Get##ARG())>> param##ARG,
@@ -84,6 +79,8 @@ namespace NKikimr {
         BLOBDEPOT_EVENT_PB(EvPushMetrics, BytesRead, BytesWritten);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvPrepareWriteS3);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvPrepareWriteS3Result);
+        BLOBDEPOT_EVENT_PB_NO_ARGS(EvHotWriteCredit);
+        BLOBDEPOT_EVENT_PB_NO_ARGS(EvHotWriteCreditResult);
 
         template<typename TEvent>
         struct TResponseFor {};
@@ -97,6 +94,7 @@ namespace NKikimr {
         template<> struct TResponseFor<TEvCommitBlobSeq>  { using Type = TEvCommitBlobSeqResult; };
         template<> struct TResponseFor<TEvResolve>        { using Type = TEvResolveResult; };
         template<> struct TResponseFor<TEvPrepareWriteS3> { using Type = TEvPrepareWriteS3Result; };
+        template<> struct TResponseFor<TEvHotWriteCredit>  { using Type = TEvHotWriteCreditResult; };
 
         template<typename TRequestEvent, typename... TArgs>
         static auto MakeResponseFor(TEventHandle<TRequestEvent>& ev, TArgs&&... args) {

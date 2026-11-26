@@ -37,6 +37,4 @@ namespace NKikimr::NBlobDepot {
     IActor* CreateBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings, ui64 tabletId,
         std::shared_ptr<TS3BalancerEndpoint> lastEndpoint = {});
 
-    IActor* CreateRetiredS3Sweep(TActorId parent, ui64 tabletId, const NKikimrBlobDepot::TBlobDepotConfig& config);
-
 } // NKikimr::NBlobDepot

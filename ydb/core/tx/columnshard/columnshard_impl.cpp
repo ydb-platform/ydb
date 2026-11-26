@@ -1225,16 +1225,6 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-    if (!record.HasTxId()) {
-        // not a forced compaction of this protocol (an older schemeshard): NOT_NEEDED, FAILED would be retried forever
-        YDB_LOG_WARN("Forced compaction request without an id",
-            {"tablet", TabletID()},
-            {"pathId", pathId},
-            {"requestedFrom", ev->Sender});
-        reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
-        return;
-    }
-
     if (!TablesManager.HasPrimaryIndex()) {
         YDB_LOG_WARN("Forced compaction failed, no primary index",
             {"tablet", TabletID()},
@@ -1256,16 +1246,21 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-    if (ForcedCompactionTxId != record.GetTxId()) {
+    // no id (a pre-upgrade schemeshard): a plain compaction, a retry of the operation being served if there is one, a
+    // new operation otherwise; an id on top of it is a new operation
+    const std::optional<ui64> txId = record.HasTxId() ? std::optional<ui64>(record.GetTxId()) : std::nullopt;
+    const bool cascade = txId && record.GetCascade();
+    const bool isRetry = txId ? ForcedCompactionTxId == txId : ForcedCompactionWaiter.has_value();
+    if (!isRetry) {
         // a new operation, not a retry (the schemeshard repeats the request until answered; a retry must not touch the
         // rewrite): CASCADE targets the current schema, a plain operation turns off the rewrite of a cancelled CASCADE
-        ForcedCompactionTxId = record.GetTxId();
-        if (record.GetCascade()) {
+        ForcedCompactionTxId = txId;
+        if (cascade) {
             engine.SetSchemeNeedActualization(true);
         } else if (ForcedCompactionActualizeSchema) {
             engine.SetSchemeNeedActualization(false);
         }
-        ForcedCompactionActualizeSchema = record.GetCascade();
+        ForcedCompactionActualizeSchema = cascade;
     }
 
     // the latest request supersedes the held one: a cancelled operation's waiter must not answer for the next

@@ -404,6 +404,7 @@ protected:
     void SendGetWriteInfo(bool skipSrcIdInfo);
     void ShadowPartitionCountersTest(bool isFirstClass);
     void TestRestoreReadSessionActor(bool hasDataRequest);
+    void TestOffsetsSnapshotSendInterval(bool clientModificationsEnabled);
 
     void TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration, bool ignoreQuotaDeadline);
     void TestWriteSubDomainOutOfSpace_DeadlineWork(bool ignoreQuotaDeadline);
@@ -3585,6 +3586,80 @@ Y_UNIT_TEST_F(ReplicationDataSentOnlyForSessionStartAndChangedOffsets, TPartitio
     UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 3);
     UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("other"), 4);
     Ctx->Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
+}
+
+void TPartitionFixture::TestOffsetsSnapshotSendInterval(bool clientModificationsEnabled)
+{
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableSourceTopicMutateRestricted(false);
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableClientModifications(clientModificationsEnabled);
+
+    const TConfigParams initialConfig{.Version = 1, .Consumers = {
+        {.Consumer = "reader", .Offset = 1}, {.Consumer = "other", .Offset = 4},
+        {.Consumer = "replication"}}};
+    CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+        .Config = initialConfig, .FillHead = true}, initialConfig);
+    Config.SetVersion(2);
+    GetConsumer(Config, "replication")->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
+    SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitPartitionConfigChanged();
+
+    TVector<NKikimrPQ::TReplicationDataPayload> payloads;
+    Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == TEvPersQueue::TEvReplicationData::EventType) {
+            auto& payload = payloads.emplace_back();
+            UNIT_ASSERT(payload.ParseFromString(event->Get<TEvPersQueue::TEvReplicationData>()->Record.GetPayload()));
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    const auto readSessionActor = Ctx->Runtime->AllocateEdgeActor();
+    auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(101, "replication", 0, "replication-session",
+        1, 1, 1, Ctx->Edge, TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION);
+    event->ReadSessionActor = readSessionActor;
+    SendEvent(event.Release());
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 101});
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 1);
+
+    ui64 cookie = 102;
+    auto persistUnchangedOffset = [&] {
+        SendSetOffset(cookie, "reader", 1, "");
+        WaitCmdWrite();
+        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        WaitProxyResponse({.Cookie = cookie});
+        ++cookie;
+        Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+    };
+
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::Seconds(2));
+    persistUnchangedOffset();
+    if (clientModificationsEnabled) {
+        UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 1);
+
+        Ctx->Runtime->AdvanceCurrentTime(TDuration::Seconds(29));
+        persistUnchangedOffset();
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("other"), 4);
+    Ctx->Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
+}
+
+Y_UNIT_TEST_F(ReplicationDataFullSnapshotUsesRegularInterval, TPartitionFixture)
+{
+    TestOffsetsSnapshotSendInterval(true);
+}
+
+Y_UNIT_TEST_F(ReplicationDataFullSnapshotUsesShortIntervalWhenClientModificationsDisabled, TPartitionFixture)
+{
+    TestOffsetsSnapshotSendInterval(false);
 }
 
 void TPartitionFixture::TestReplicateOffsetClampedToStart(bool important)

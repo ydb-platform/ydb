@@ -1,6 +1,6 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
-#include "../s3_put_timeout.h"
+#include "../config.h"
 #include "../s3_router.h"
 #include "../s3_router_events.h"
 
@@ -109,6 +109,18 @@ public:
         ++Replies;
     }
 };
+
+void SetStallingEndpoint(NKikimrSchemeOp::TS3Settings& settings, ui16 port) {
+    settings.SetEndpoint(TStringBuilder() << "127.0.0.1:" << port);
+    settings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+    settings.SetBucket("test-bucket");
+    settings.SetAccessKey("access-key");
+    settings.SetSecretKey("secret-key");
+    settings.SetRegion("ru-central1");
+    settings.SetUseVirtualAddressing(false);
+    settings.SetHttpRequestTimeoutMs(0);
+    settings.SetRequestTimeoutMs(0);
+}
 
 class TStallingS3Server {
     TInetStreamSocket Listener;
@@ -322,15 +334,7 @@ void WaitReal(TTestActorRuntime& runtime, TCondition condition, TDuration timeou
 TActorId MakeStallingRouter(TTestActorRuntime& runtime, TStallingS3Server& server, ui16 balancerPort = 0) {
     NKikimrBlobDepot::TS3BackendSettings settings;
     auto* s3 = settings.MutableSettings();
-    s3->SetEndpoint(TStringBuilder() << "127.0.0.1:" << server.GetPort());
-    s3->SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
-    s3->SetBucket("test-bucket");
-    s3->SetAccessKey("access-key");
-    s3->SetSecretKey("secret-key");
-    s3->SetRegion("ru-central1");
-    s3->SetUseVirtualAddressing(false);
-    s3->SetHttpRequestTimeoutMs(0);
-    s3->SetRequestTimeoutMs(0);
+    SetStallingEndpoint(*s3, server.GetPort());
     s3->SetExecutorThreadsCount(1);
     if (balancerPort) {
         s3->SetEndpoint("s3.example.com");
@@ -448,6 +452,36 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
             latencySamples += snapshot->Value(i);
         }
         UNIT_ASSERT(latencySamples > 0);
+    }
+
+    Y_UNIT_TEST(StoppedScannerReleasesOnlyItsQueuedLists) {
+        using namespace NWrappers::NExternalStorage;
+        TTestActorRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        NKikimrBlobDepot::TS3BackendSettings settings;
+        settings.MutableSettings()->SetBucket("test-bucket");
+        settings.SetBalancerHost(TStringBuilder() << "127.0.0.1:" << PickFreePort());
+        const auto router = runtime.Register(CreateBlobDepotS3Router(std::move(settings), 12345));
+        const auto stopped = runtime.AllocateEdgeActor();
+        const auto live = runtime.AllocateEdgeActor();
+        auto list = [&](TActorId sender) {
+            runtime.Send(new IEventHandle(router, sender, new TEvListObjectsRequest(Aws::S3::Model::ListObjectsRequest()
+                .WithBucket("test-bucket").WithPrefix("vg/"))), 0, true);
+        };
+
+        list(live);
+        for (size_t i = 0; i < 255; ++i) {
+            list(stopped);
+        }
+        runtime.Send(new IEventHandle(router, stopped, new TEvents::TEvGone), 0, true);
+        for (size_t i = 0; i < 256; ++i) {
+            list(live);
+        }
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        auto replies = runtime.CaptureMailboxEvents(live.Hint(), live.NodeId());
+        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(replies.front()->GetTypeRewrite(), TEvListObjectsResponse::EventType);
+        UNIT_ASSERT(!replies.front()->Get<TEvListObjectsResponse>()->IsSuccess());
     }
 
     Y_UNIT_TEST(FiveXxTriggersRefresh) {

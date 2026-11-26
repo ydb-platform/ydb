@@ -1306,11 +1306,6 @@ void TBlobStorageController::PassAway() {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
         }
     }
-    for (const auto& [groupId, info] : RetiredS3Namespaces) {
-        if (info.SchedulerId) {
-            Send(info.SchedulerId, new TEvents::TEvPoison);
-        }
-    }
     if (CmsPipe) {
         NTabletPipe::CloseAndForgetClient(SelfId(), CmsPipe);
     }

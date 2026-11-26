@@ -10,13 +10,17 @@ namespace {
 
 using TCounts = std::array<ui32, 3>;
 
-enum class ERead { Range, Index, Get, Restore };
+enum class ERead { Range, Index, Get, Restore, VerifyKeep };
+enum class EGcFlags { None, KeepFirst, DoNotKeepFirst, KeepInIndexOnly, KeepOnData };
 
 void CheckRead(ERead operation, const TMirror3dcGroupState& realms, const TCounts& copies,
         const TCounts& failures, NKikimrProto::EReplyStatus expected, bool phantomCheck = false,
-        bool expectRestore = false, bool expectBlobError = false) {
+        bool expectRestore = false, bool expectBlobError = false, EGcFlags gcFlags = EGcFlags::None) {
     const bool range = operation == ERead::Range;
+    const bool verify = operation == ERead::VerifyKeep;
     ui32 writes = 0;
+    bool sentKeep = false;
+    bool sentDoNotKeep = false;
     TTestBasicRuntime runtime;
     runtime.SetDispatchTimeout(TDuration::Seconds(10));
     SetupRuntime(runtime);
@@ -44,7 +48,8 @@ void CheckRead(ERead operation, const TMirror3dcGroupState& realms, const TCount
         runtime.Send(new IEventHandle(env.RealProxyActorId, state.EdgeActor, query.release()), 0, true);
     } else {
         auto query = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, TInstant::Max(),
-            NKikimrBlobStorage::FastRead, operation != ERead::Get, operation == ERead::Index);
+            NKikimrBlobStorage::FastRead, operation != ERead::Get, operation == ERead::Index || verify);
+        query->VerifyKeepFlags = verify;
         query->PhantomCheck = phantomCheck;
         runtime.Send(new IEventHandle(env.RealProxyActorId, state.EdgeActor, query.release()), 0, true);
     }
@@ -54,7 +59,8 @@ void CheckRead(ERead operation, const TMirror3dcGroupState& realms, const TCount
             TEvBlobStorage::TEvRangeResult, TEvBlobStorage::TEvGetResult>(handle);
         if (get) {
             const auto vdisk = VDiskIDFromVDiskID(get->Record.GetVDiskID());
-            UNIT_ASSERT(IsReadable(realms.FailRealmStates[vdisk.FailRealm]));
+            UNIT_ASSERT(IsReadable(realms.FailRealmStates[vdisk.FailRealm]) || (verify && env.Info->IsWriteTargetRealm(vdisk.FailRealm)));
+            UNIT_ASSERT(!verify || get->Record.GetIndexOnly());
             const ui32 disk = env.Info->GetIdxInSubgroup(vdisk, id.Hash());
             TEvBlobStorage::TEvVGet::TPtr request(
                 static_cast<TEventHandle<TEvBlobStorage::TEvVGet>*>(handle.Release()));
@@ -77,8 +83,26 @@ void CheckRead(ERead operation, const TMirror3dcGroupState& realms, const TCount
                 reply->Get()->AddResult(present ? NKikimrProto::OK : NKikimrProto::NODATA,
                     id, &cookie, &raw, &local, false, false);
             }
+            if (gcFlags == EGcFlags::KeepOnData) {
+                for (auto& item : *reply->Get()->Record.MutableResult()) {
+                    item.SetKeep(item.GetStatus() == NKikimrProto::OK);
+                }
+            } else if (gcFlags != EGcFlags::None) {
+                const bool keep = gcFlags == EGcFlags::KeepInIndexOnly ? get->Record.GetIndexOnly()
+                    : gcFlags == EGcFlags::KeepFirst ? !sentKeep : sentDoNotKeep;
+                for (auto& item : *reply->Get()->Record.MutableResult()) {
+                    if (keep) {
+                        item.SetKeep(true);
+                        sentKeep = true;
+                    } else {
+                        item.SetDoNotKeep(true);
+                        sentDoNotKeep = true;
+                    }
+                }
+            }
             runtime.Send(reply.Release());
         } else if (put) {
+            UNIT_ASSERT(!verify);
             const auto vdisk = VDiskIDFromVDiskID(put->Record.GetVDiskID());
             UNIT_ASSERT(realms.FailRealmStates[vdisk.FailRealm] != TDataCenterState::EXCLUDED);
             TEvBlobStorage::TEvVPut::TPtr request(
@@ -97,12 +121,19 @@ void CheckRead(ERead operation, const TMirror3dcGroupState& realms, const TCount
         } else {
             UNIT_ASSERT(!range && indexResult);
             UNIT_ASSERT_VALUES_EQUAL_C(indexResult->Status,
-                expected == NKikimrProto::NODATA || expectBlobError ? NKikimrProto::OK : expected,
+                verify || expected == NKikimrProto::NODATA || expectBlobError ? NKikimrProto::OK : expected,
                 "operation# " << static_cast<ui32>(operation) << " ErrorReason# " << indexResult->ErrorReason);
             if (indexResult->Status == NKikimrProto::OK) {
                 UNIT_ASSERT_VALUES_EQUAL(indexResult->ResponseSz, 1);
                 UNIT_ASSERT_VALUES_EQUAL(indexResult->Responses[0].Status, expected);
-                if (expected == NKikimrProto::OK && operation != ERead::Index && !phantomCheck) {
+                if (gcFlags == EGcFlags::KeepOnData) {
+                    UNIT_ASSERT(indexResult->Responses[0].Keep && !indexResult->Responses[0].DoNotKeep);
+                } else if (gcFlags != EGcFlags::None) {
+                    UNIT_ASSERT(sentKeep && sentDoNotKeep);
+                    UNIT_ASSERT(!indexResult->Responses[0].Keep);
+                    UNIT_ASSERT(indexResult->Responses[0].DoNotKeep);
+                }
+                if (expected == NKikimrProto::OK && operation != ERead::Index && !verify && !phantomCheck) {
                     UNIT_ASSERT_VALUES_EQUAL(indexResult->Responses[0].Buffer.ConvertToString(), data);
                 }
                 if (phantomCheck && expected == NKikimrProto::NODATA) {
@@ -159,6 +190,35 @@ void CheckPut(const TMirror3dcGroupState& realms, const TCounts& failures, NKiki
 } // namespace
 
 Y_UNIT_TEST_SUITE(TDSProxyIndexRestoreGet) {
+    Y_UNIT_TEST(DoNotKeepOverridesKeepAcrossDisks) {
+        const TMirror3dcGroupState normal{NKikimrBlobStorage::TGroupState::NORMAL,
+            {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}};
+        for (const auto operation : {ERead::Get, ERead::Index}) {
+            for (const auto flags : {EGcFlags::KeepFirst, EGcFlags::DoNotKeepFirst}) {
+                CheckRead(operation, normal, {}, {}, NKikimrProto::NODATA, false, false, false, flags);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(RestoreReadDoNotKeepOverridesIndexKeep) {
+        const TMirror3dcGroupState solo{NKikimrBlobStorage::TGroupState::DC_SOLO_INV1,
+            {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}};
+        CheckRead(ERead::Index, solo, {1, 0, 0}, {}, NKikimrProto::OK, false, true, false,
+            EGcFlags::KeepInIndexOnly);
+    }
+
+    Y_UNIT_TEST(KeepCheckUsesMetadataQuorum) {
+        const TMirror3dcGroupState normal{NKikimrBlobStorage::TGroupState::NORMAL,
+            {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}};
+        CheckRead(ERead::VerifyKeep, normal, {1, 1, 1}, {}, NKikimrProto::OK, false, false, false, EGcFlags::KeepOnData);
+
+        const TMirror3dcGroupState recovery{NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1,
+            {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}};
+        CheckRead(ERead::VerifyKeep, recovery, {1, 0, 0}, {}, NKikimrProto::OK, false, false, false, EGcFlags::KeepFirst);
+        CheckRead(ERead::VerifyKeep, recovery, {}, {}, NKikimrProto::NODATA);
+        CheckRead(ERead::VerifyKeep, recovery, {1, 0, 0}, {}, NKikimrProto::UNKNOWN);
+    }
+
     Y_UNIT_TEST(RestartPreservesForceBlockTabletData) {
         TTestBasicRuntime runtime(1, false);
         runtime.SetDispatchTimeout(TDuration::Seconds(10));

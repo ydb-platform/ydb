@@ -251,10 +251,6 @@ namespace NKikimr::NBsController {
                     storageConfig ? &storageConfig.value() : nullptr);
                 State->CheckConsistency();
 
-                TString m;
-                google::protobuf::TextFormat::Printer printer;
-                printer.SetSingleLineMode(true);
-                printer.PrintToString(Cmd, &m);
                 YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "Generic command",
                     {"marker", "BSCA02"},
                     {"uniqueId", State->UniqueId},

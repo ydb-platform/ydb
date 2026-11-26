@@ -46,6 +46,7 @@
 #include <util/generic/hash_multi_map.h>
 
 #include <array>
+#include <list>
 #include <unordered_map>
 
 inline IOutputStream& operator <<(IOutputStream& o, NKikimr::TErasureType::EErasureSpecies p) {
@@ -1683,30 +1684,6 @@ public:
         }
     };
 
-    enum class EBlobDepotClaim { GroupName, LogicalPrefix, PhysicalPrefix, AmbiguousBucket, RetiredPrefix };
-    using TBlobDepotClaim = std::tuple<EBlobDepotClaim, TString, TString>; // kind, bucket, name or normalized prefix
-    using TBlobDepotOwners = std::map<TBlobDepotClaim, std::set<TGroupId>>;
-
-    struct TRetiredS3Namespace {
-        using Table = Schema::RetiredS3Namespaces;
-        ui64 BlobDepotId = 0;
-        TString S3Config;
-        TMaybe<TInstant> NextS3Sweep;
-        Table::ESweepPhase Phase = Table::AwaitingOwnership;
-        TActorId SchedulerId;
-
-        NKikimrBlobDepot::TBlobDepotConfig GetConfig() const;
-
-        template<typename T>
-        static void Apply(TBlobStorageController*, T&& callback) {
-            static TTableAdapter<Table, TRetiredS3Namespace,
-                Table::BlobDepotId, Table::S3Config, Table::NextS3Sweep, Table::SweepPhase> adapter(
-                    &TRetiredS3Namespace::BlobDepotId, &TRetiredS3Namespace::S3Config,
-                    &TRetiredS3Namespace::NextS3Sweep, &TRetiredS3Namespace::Phase);
-            callback(&adapter);
-        }
-    };
-
     struct TConfigValidationInfo {
         enum class ESource {
             Distconf,
@@ -1755,11 +1732,6 @@ private:
     TMap<TBoxStoragePoolId, TStoragePoolInfo> StoragePools;
     std::set<std::pair<TBoxStoragePoolId, TGroupId>> StoragePoolGroups;
     TMap<TGroupId, TBlobDepotDeleteQueueInfo> BlobDepotDeleteQueue;
-    using TRetiredS3Namespaces = TMap<TGroupId, TRetiredS3Namespace>;
-    TRetiredS3Namespaces RetiredS3Namespaces;
-
-    TBlobDepotOwners BlobDepotOwners;
-    void RebuildBlobDepotOwners();
     ui64 NextOperationLogIndex = 1;
     TActorId StatProcessorActorId;
     bool SelfHealEnable = false;
@@ -2107,12 +2079,18 @@ private:
     void RenderGroupTable(IOutputStream& out, std::function<void()> callback);
     void RenderGroupRow(IOutputStream& out, const TGroupInfo& group);
 
+    static TString DescribeStartupEvent(const IEventHandle& ev) {
+        // Configuration requests can contain credentials.
+        return ev.GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType
+            ? TString("TEvControllerConfigRequest") : ev.ToString();
+    }
+
     void Enqueue(STFUNC_SIG) override {
         YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Enqueue",
             {"marker", "BSC04"},
             {"tabletId", TabletID()},
             {"type", ev->GetTypeRewrite()},
-            {"event", ev->ToString()});
+            {"event", DescribeStartupEvent(*ev)});
         InitQueue.push_back(ev);
     }
 
@@ -2712,7 +2690,7 @@ public:
         YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "StateInit event",
             {"marker", "BSC05"},
             {"type", ev->GetTypeRewrite()},
-            {"event", ev->ToString()});
+            {"event", DescribeStartupEvent(*ev)});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvNodeWardenStorageConfig, Handle);
@@ -2857,7 +2835,6 @@ public:
             {"marker", "BSC09"});
         Become(&TThis::StateWork);
 
-        RebuildBlobDepotOwners();
         SubscribeToFeatureFlags();
 
         ValidateInternalState();
@@ -2895,19 +2872,13 @@ public:
             StartVirtualGroupDeleteMachine(groupId, info);
         }
 
-        for (auto& [groupId, info] : RetiredS3Namespaces) {
-            if (!BlobDepotDeleteQueue.contains(groupId)) {
-                StartRetiredS3Cleanup(groupId, info);
-            }
-        }
-
         for (; !InitQueue.empty(); InitQueue.pop_front()) {
             TAutoPtr<IEventHandle> &ev = InitQueue.front();
             YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Dequeue",
                 {"marker", "BSC08"},
                 {"tabletId", TabletID()},
                 {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString()});
+                {"event", DescribeStartupEvent(*ev)});
             StateWork(ev);
         }
 
@@ -2997,8 +2968,6 @@ public:
     // VIRTUAL GROUP MANAGEMENT
 
     class TVirtualGroupSetupMachine;
-    class TRetiredS3Cleanup;
-    void StartRetiredS3Cleanup(TGroupId groupId, TRetiredS3Namespace& info);
 
     void CommitVirtualGroupUpdates(TConfigState& state);
 

@@ -1285,18 +1285,29 @@ ui64 TPipeline::GetScanTxCompleteLag(ui64 timecastStep) const
     return GetTxCompleteLag(EOperationKind::ReadTable, timecastStep);
 }
 
-void TPipeline::ProposeTx(TOperation::TPtr op, const TStringBuf &txBody, TTransactionContext &txc, const TActorContext &ctx)
+void TPipeline::ProposeTx(TActiveTransaction& op, TTransactionContext& txc, const TActorContext& ctx)
+{
+    ProposeTxImpl(op, txc, ctx);
+}
+
+void TPipeline::ProposeTx(TWriteOperation& op, TTransactionContext& txc, const TActorContext& ctx)
+{
+    ProposeTxImpl(op, txc, ctx);
+}
+
+template <typename TOp>
+void TPipeline::ProposeTxImpl(TOp& op, TTransactionContext& txc, const TActorContext& ctx)
 {
     NIceDb::TNiceDb db(txc.DB);
-    SetProposed(op->GetTxId(), op->GetTarget());
-    if (!op->HasVolatilePrepareFlag()) {
-        PreserveSchema(db, op->GetMaxStep());
+    SetProposed(op.GetTxId(), op.GetTarget());
+    if (!op.HasVolatilePrepareFlag()) {
+        PreserveSchema(db, op.GetMaxStep());
     }
-    Self->TransQueue.ProposeTx(db, op, op->GetTarget(), txBody);
+    Self->TransQueue.ProposeTx(db, op, op.GetTarget());
 
-    if (Self->IsStopping() && op->GetTarget()) {
+    if (Self->IsStopping() && op.GetTarget()) {
         // Send notification if we prepared a tx while shard was stopping
-        op->OnStopping(*Self, ctx);
+        op.OnStopping(*Self, ctx);
     }
 }
 

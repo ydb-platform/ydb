@@ -2,7 +2,8 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/tx.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 

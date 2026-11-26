@@ -2,7 +2,8 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/public/events.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>

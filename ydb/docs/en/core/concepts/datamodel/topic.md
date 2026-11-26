@@ -30,7 +30,7 @@ Currently, reducing the number of partitions in a topic is only supported by del
 There are two types of partitions:
 
 - **Active.** All partitions by default; both writing and reading are supported.
-- **Inactive.** Only reading is possible from them. Inactive partitions appear after a partition split when [auto-partitioning](#autopartitioning) is enabled. Inactive partitions are automatically deleted when all messages from such a partition have been deleted after the retention period expires.
+- **Inactive.** Only reading is possible from them. Inactive partitions appear after a partition split when [auto-partitioning](#autopartitioning) is enabled. Messages from an inactive partition are deleted when the retention period expires, while the partition itself remains in the topic.
 
 ### Offset {#offset}
 
@@ -60,7 +60,7 @@ The initial number of partitions is specified when creating the topic. When manu
 
 The topic has auto-partitioning 'up' enabled, meaning that when the write speed increases, the number of partitions increases. When the write speed decreases, the number of partitions remains unchanged.
 
-Algorithm for increasing the number of partitions: if within a specified time the write speed to a partition exceeds the specified threshold (as a percentage of the maximum write speed to the partition), that partition is split into two. The original partition becomes inactive, and data can only be read from it. When the message retention period for that partition expires and all messages are deleted, the partition itself is also deleted. The two new child partitions become active, and both reading and writing are possible in them.
+Algorithm for increasing the number of partitions: if within a specified time the write speed to a partition exceeds the specified threshold (as a percentage of the maximum write speed to the partition), that partition is split into two. The original partition becomes inactive, and data can only be read from it. Messages from the original partition are deleted when the retention period expires, while the partition itself remains in the topic in an inactive state. The two new child partitions become active, and both reading and writing are possible in them.
 
 #### Pause (PAUSED)
 

@@ -340,6 +340,13 @@ bool TActiveTransaction::BuildSchemeTx()
     }
 
     if (SchemeTx->HasAlterTable()) {
+        const auto& alter = SchemeTx->GetAlterTable();
+        const bool detachesReplica = alter.HasReplicationConfig()
+            && alter.GetReplicationConfig().GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE;
+        if (alter.ActivateCdcStreamsSize() && !detachesReplica) {
+            return false;
+        }
+
         SchemeTxType = TSchemaOperation::ETypeAlter;
         count++;
     }
@@ -427,20 +434,6 @@ bool TActiveTransaction::BuildSchemeTx()
     if (SchemeTx->HasTruncateTable()) {
         SchemeTxType = TSchemaOperation::ETypeTruncate;
         count++;
-    }
-
-    const bool activatesCdc = SchemeTx->HasAlterTable()
-        && SchemeTx->GetAlterTable().ActivateCdcStreamsSize();
-    if (activatesCdc != (GetKind() == EOperationKind::CdcHandoff)) {
-        return false;
-    }
-    if (activatesCdc) {
-        const auto& alter = SchemeTx->GetAlterTable();
-        if (!alter.HasReplicationConfig()
-            || alter.GetReplicationConfig().GetMode() != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE)
-        {
-            return false;
-        }
     }
 
     return count == 1;

@@ -254,11 +254,13 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
             stopped->ReplicationConfig.Mode = TReplicationConfig::REPLICATION_MODE_NONE;
             if (alterTableTx.ActivateCdcStreamsSize()) {
                 stopped->SetTableSchemaVersion(version);
+                // SchemeShard checks that each stream is Disabled before proposing the ALTER.
+                // The table ALTER excludes concurrent stream changes until all shards finish.
                 for (const auto& id : alterTableTx.GetActivateCdcStreams()) {
                     const auto streamId = TPathId::FromProto(id);
-                    const auto stream = stopped->CdcStreams.find(streamId);
-                    Y_ENSURE(stream != stopped->CdcStreams.end());
-                    Y_ENSURE(stream->second.State == NKikimrSchemeOp::ECdcStreamStateDisabled);
+                    const auto* stream = stopped->CdcStreams.FindPtr(streamId);
+                    Y_ENSURE(stream);
+                    Y_ENSURE(stream->State == NKikimrSchemeOp::ECdcStreamStateDisabled);
                     stopped->SwitchCdcStreamState(streamId, NKikimrSchemeOp::ECdcStreamStateReady);
                 }
             }
@@ -298,10 +300,8 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     TDataShardLocksDb locksDb(DataShard, txc);
     DataShard.ReplaceUserTable(tableId, newInfo, locksDb);
 
-    // Activation already installed this version before offset cleanup, including on restart.
     if (newInfo->NeedSchemaSnapshots()
-        && (!alterTableTx.ActivateCdcStreamsSize()
-            || !DataShard.GetSchemaSnapshotManager().FindSnapshot(TSchemaSnapshotKey(tableId, version))))
+        && !DataShard.GetSchemaSnapshotManager().FindSnapshot(TSchemaSnapshotKey(tableId, version)))
     {
         DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
     }

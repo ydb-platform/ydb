@@ -28,12 +28,15 @@ void ParsePQTabletConfig(NKikimrPQ::TPQTabletConfig& config,
 }
 
 bool SanitizeCdcReplication(NKikimrPQ::TPQTabletConfig& config, bool allowCdcReplication) {
-    if (config.HasCdcReplication()
-            && (!allowCdcReplication || config.GetReplicationSourceConsumer().empty())) {
-        config.ClearCdcReplication();
-        return true;
+    if (!config.HasCdcReplication()) {
+        return false;
     }
-    return false;
+    if (allowCdcReplication && !config.GetReplicationSourceConsumer().empty()) {
+        return false;
+    }
+
+    config.ClearCdcReplication();
+    return true;
 }
 
 void FillPartition(NKikimrPQ::TPQTabletConfig::TPartition& partition, const TTopicTabletInfo::TTopicPartitionInfo* pq, ui64 tabletId) {

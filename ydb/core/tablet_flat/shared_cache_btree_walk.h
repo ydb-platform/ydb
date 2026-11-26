@@ -1,31 +1,43 @@
 #pragma once
 
 #include "flat_bio_eggs.h"
-#include "shared_cache_events.h"
+#include "flat_sausage_gut.h"
 
 #include <ydb/core/base/blobstorage.h>
 
 #include <ydb/library/actors/core/actorid.h>
 
 #include <util/generic/array_ref.h>
+#include <util/generic/function_ref.h>
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
 
 #include <optional>
+#include <utility>
+
+namespace NKikimr::NTable::NPage {
+class TBtreeIndexNode;
+}
 
 namespace NKikimr::NSharedCache {
 
 struct TCollection;
 class TSharedCachePages;
 
+using TPageLocation = NTable::NPage::TPageLocation;
+
 using TPendingInMemoryPages = THashMap<TLogoBlobID, TSet<NTable::NPage::TPageLocation>>;
 
 // One B-tree being walked by the cache itself, one index level at a time in write order.
 struct TCacheBTreeWalk {
+    void PrepareIndexBatch();
+    static TVector<TPageLocation> ReadChildren(const NTable::NPage::TBtreeIndexNode& node, bool childrenAreData);
+    bool AppendNodeDataPages(bool queueDataPages, TFunctionRef<bool()> flush);
+
     TActorId Owner;
-    NSharedCache::TEvAttach::TBtreeSeed Seed;
+    NPageCollection::TBtreeSeed Seed;
 
     TVector<TPageLocation> CurrentLevel;
     TVector<TPageLocation> NextLevel;
@@ -55,6 +67,38 @@ enum class EWalkControllerState {
 };
 
 struct TWalkRun {
+    enum class EAdvanceResult {
+        Pending,
+        Invalid,
+        Draining,
+    };
+
+    template <class TAdvanceWalk>
+    EAdvanceResult Advance(TAdvanceWalk&& advanceWalk) {
+        if (State != EWalkRunState::Walking || !std::exchange(NeedsAdvance, false)) {
+            return EAdvanceResult::Pending;
+        }
+
+        bool pending = false;
+        bool failed = false;
+        for (auto& walk : Walks) {
+            if (!walk.Done) {
+                advanceWalk(walk);
+            }
+            failed |= walk.Invalid;
+            pending |= !walk.Done;
+        }
+
+        if (failed) {
+            return EAdvanceResult::Invalid;
+        }
+        if (pending) {
+            return EAdvanceResult::Pending;
+        }
+        State = EWalkRunState::Draining;
+        return EAdvanceResult::Draining;
+    }
+
     ui32 FetchesInFlight = 0;
     EWalkRunState State = EWalkRunState::Walking;
     bool NeedsAdvance = true;
@@ -62,7 +106,10 @@ struct TWalkRun {
 };
 
 struct TWalkCollectionState {
-    TMap<TActorId, TVector<TEvAttach::TBtreeSeed>> SeedsByOwner;
+    void UpdateWalkIndex(const TLogoBlobID& collectionId, THashMap<TLogoBlobID, TVector<TLogoBlobID>>& walksByIndex);
+    bool StartWalkRun();
+
+    TMap<TActorId, TVector<NPageCollection::TBtreeSeed>> SeedsByOwner;
     TLogoBlobID IndexCollectionId;
     std::optional<TWalkRun> Run;
     EWalkControllerState ControllerState = EWalkControllerState::Idle;
@@ -92,7 +139,7 @@ public:
     {
     }
 
-    void UpdateSeeds(TCollection& collection, const TActorId& owner, TVector<TEvAttach::TBtreeSeed> seeds,
+    void UpdateSeeds(TCollection& collection, const TActorId& owner, TVector<NPageCollection::TBtreeSeed> seeds,
         bool replayStickyWalk = false);
 
     bool HasActiveWalks() const {
@@ -121,7 +168,6 @@ private:
     };
 
     TWalkCollectionState& State(const TLogoBlobID& collectionId);
-    void UpdateWalkIndex(TCollection& collection);
     TVector<TLogoBlobID> GetWalkCollections(const TLogoBlobID& indexCollectionId) const;
     void StartWalkRun(TCollection& collection);
     void FinishWalkRun(TCollection& collection);
@@ -151,7 +197,6 @@ private:
     ui64 ActiveRunCount = 0;
     // A queued data-page batch yields; another actor turn must continue discovery.
     bool ContinuationNeeded = false;
-    static constexpr ui64 MaxWalkBatchBytes = NTabletFlatExecutor::NBlockIO::BlockSize;
 };
 
 } // namespace NKikimr::NSharedCache

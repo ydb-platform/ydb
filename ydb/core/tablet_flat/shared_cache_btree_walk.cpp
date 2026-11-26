@@ -9,6 +9,10 @@
 
 namespace NKikimr::NSharedCache {
 
+namespace {
+    constexpr ui64 MaxWalkBatchBytes = NTabletFlatExecutor::NBlockIO::BlockSize;
+}
+
 TWalkCollectionState& TCacheBTreeWalkController::State(const TLogoBlobID& collectionId) {
     return States[collectionId];
 }
@@ -24,12 +28,14 @@ void TCacheBTreeWalkController::EraseCollection(const TLogoBlobID& collectionId)
     States.erase(collectionId);
 }
 
-void TCacheBTreeWalkController::UpdateWalkIndex(TCollection& collection) {
+void TWalkCollectionState::UpdateWalkIndex(
+    const TLogoBlobID& collectionId, THashMap<TLogoBlobID, TVector<TLogoBlobID>>& walksByIndex)
+{
     TLogoBlobID indexCollectionId;
     // Check every owner; production owners have at most two seeds (current and historic).
-    for (const auto& [_, seeds] : State(collection.Id).SeedsByOwner) {
+    for (const auto& [_, seeds] : SeedsByOwner) {
         for (const auto& seed : seeds) {
-            Y_ENSURE(seed.DataCollectionId == collection.Id);
+            Y_ENSURE(seed.DataCollectionId == collectionId);
             if (!indexCollectionId) {
                 indexCollectionId = seed.IndexCollectionId;
             } else {
@@ -38,25 +44,25 @@ void TCacheBTreeWalkController::UpdateWalkIndex(TCollection& collection) {
         }
     }
 
-    if (indexCollectionId == State(collection.Id).IndexCollectionId) {
+    if (indexCollectionId == IndexCollectionId) {
         return;
     }
 
-    if (State(collection.Id).IndexCollectionId) {
-        auto* walkCollections = WalkCollectionsByIndex.FindPtr(State(collection.Id).IndexCollectionId);
+    if (IndexCollectionId) {
+        auto* walkCollections = walksByIndex.FindPtr(IndexCollectionId);
         Y_ENSURE(walkCollections);
-        auto it = Find(*walkCollections, collection.Id);
+        auto it = Find(*walkCollections, collectionId);
         Y_ENSURE(it != walkCollections->end());
         walkCollections->erase(it);
         if (walkCollections->empty()) {
-            WalkCollectionsByIndex.erase(State(collection.Id).IndexCollectionId);
+            walksByIndex.erase(IndexCollectionId);
         }
     }
     if (indexCollectionId) {
-        WalkCollectionsByIndex[indexCollectionId].push_back(collection.Id);
+        walksByIndex[indexCollectionId].push_back(collectionId);
     }
 
-    State(collection.Id).IndexCollectionId = indexCollectionId;
+    IndexCollectionId = indexCollectionId;
 }
 
 TVector<TLogoBlobID> TCacheBTreeWalkController::GetWalkCollections(const TLogoBlobID& indexCollectionId) const {
@@ -66,18 +72,18 @@ TVector<TLogoBlobID> TCacheBTreeWalkController::GetWalkCollections(const TLogoBl
     return {};
 }
 
-void TCacheBTreeWalkController::StartWalkRun(TCollection& collection) {
-    if (State(collection.Id).Run || State(collection.Id).ControllerState != EWalkControllerState::Pending) {
-        return;
+bool TWalkCollectionState::StartWalkRun() {
+    if (Run || ControllerState != EWalkControllerState::Pending) {
+        return false;
     }
-    State(collection.Id).ControllerState = EWalkControllerState::Idle;
+    ControllerState = EWalkControllerState::Idle;
 
-    if (!State(collection.Id).SeedsByOwner) {
-        return;
+    if (!SeedsByOwner) {
+        return false;
     }
 
     TWalkRun run;
-    for (const auto& [owner, seeds] : State(collection.Id).SeedsByOwner) {
+    for (const auto& [owner, seeds] : SeedsByOwner) {
         for (const auto& seed : seeds) {
             run.Walks.push_back(TCacheBTreeWalk{
                 .Owner = owner,
@@ -85,7 +91,14 @@ void TCacheBTreeWalkController::StartWalkRun(TCollection& collection) {
             });
         }
     }
-    State(collection.Id).Run.emplace(std::move(run));
+    Run.emplace(std::move(run));
+    return true;
+}
+
+void TCacheBTreeWalkController::StartWalkRun(TCollection& collection) {
+    if (!State(collection.Id).StartWalkRun()) {
+        return;
+    }
     ++ActiveRunCount;
     WalkRunsInProgress.insert(collection.Id);
     AdvanceNeeded = true;
@@ -156,7 +169,7 @@ void TCacheBTreeWalkController::UpdateSeeds(TCollection& collection, const TActo
         State(collection.Id).SeedsByOwner.erase(owner);
     }
     State(collection.Id).ControllerState = EWalkControllerState::Pending;
-    UpdateWalkIndex(collection);
+    State(collection.Id).UpdateWalkIndex(collection.Id, WalkCollectionsByIndex);
     CancelWalkRun(collection);
 }
 
@@ -203,6 +216,34 @@ void TCacheBTreeWalkController::InvalidateDataCollection(const TLogoBlobID& coll
             InvalidateWalkRun(*collection);
         }
     }
+}
+
+void TCacheBTreeWalk::PrepareIndexBatch() {
+    if (Next >= BatchEnd) {
+        ui64 batchBytes = 0;
+        BatchEnd = Next;
+        while (BatchEnd < CurrentLevel.size()) {
+            const ui64 pageSize = CurrentLevel[BatchEnd].Size;
+            if (BatchEnd > Next && pageSize > MaxWalkBatchBytes - batchBytes) {
+                break;
+            }
+
+            batchBytes += pageSize;
+            ++BatchEnd;
+            if (batchBytes >= MaxWalkBatchBytes) {
+                break;
+            }
+        }
+    }
+}
+
+TVector<TPageLocation> TCacheBTreeWalk::ReadChildren(const NTable::NPage::TBtreeIndexNode& node, bool childrenAreData) {
+    TVector<TPageLocation> children;
+    children.reserve(node.GetChildrenCount());
+    for (NTable::NPage::TRecIdx pos : xrange(node.GetChildrenCount())) {
+        children.push_back(std::get<NTable::NPage::TPageLocation>(node.GetChild(pos, childrenAreData)));
+    }
+    return children;
 }
 
 void TCacheBTreeWalkController::AdvanceWalk(TCacheBTreeWalk& walk, const TLogoBlobID& walkCollectionId) {
@@ -252,22 +293,7 @@ void TCacheBTreeWalkController::AdvanceWalk(TCacheBTreeWalk& walk, const TLogoBl
             continue;
         }
 
-        if (walk.Next >= walk.BatchEnd) {
-            ui64 batchBytes = 0;
-            walk.BatchEnd = walk.Next;
-            while (walk.BatchEnd < walk.CurrentLevel.size()) {
-                const ui64 pageSize = walk.CurrentLevel[walk.BatchEnd].Size;
-                if (walk.BatchEnd > walk.Next && pageSize > MaxWalkBatchBytes - batchBytes) {
-                    break;
-                }
-
-                batchBytes += pageSize;
-                ++walk.BatchEnd;
-                if (batchBytes >= MaxWalkBatchBytes) {
-                    break;
-                }
-            }
-        }
+        walk.PrepareIndexBatch();
 
         const TPageLocation location = walk.CurrentLevel[walk.Next];
         auto* page = indexCollection->PageSet.FindPage(location.Offset);
@@ -306,11 +332,7 @@ void TCacheBTreeWalkController::AdvanceWalk(TCacheBTreeWalk& walk, const TLogoBl
         Y_DEBUG_ABORT_UNLESS(ref.IsUsed(), "walked B-tree page cannot be used");
         NTable::NPage::TBtreeIndexNode node(TPinnedPageRef(ref).GetData(), /*v2Format=*/true);
 
-        TVector<TPageLocation> children;
-        children.reserve(node.GetChildrenCount());
-        for (NTable::NPage::TRecIdx pos : xrange(node.GetChildrenCount())) {
-            children.push_back(std::get<NTable::NPage::TPageLocation>(node.GetChild(pos, childrenAreData)));
-        }
+        auto children = TCacheBTreeWalk::ReadChildren(node, childrenAreData);
 
         if (childrenAreData) {
             walk.PendingDataPages = std::move(children);
@@ -377,38 +399,44 @@ TCacheBTreeWalkController::EBatchResult TCacheBTreeWalkController::FlushDataPage
     return queued ? EBatchResult::Queued : EBatchResult::Flushed;
 }
 
-bool TCacheBTreeWalkController::AddNodeDataPagesToBatch(TCacheBTreeWalk& walk, TCollection& dataCollection) {
-    const bool queueDataPages =
-        walk.Seed.QueueDataPages && dataCollection.GetCacheMode() == ECacheMode::TryKeepInMemory;
-    if (!walk.Seed.Sticky && !queueDataPages) {
-        walk.PendingDataPages.clear();
+bool TCacheBTreeWalk::AppendNodeDataPages(bool queueDataPages, TFunctionRef<bool()> flush) {
+    if (!Seed.Sticky && !queueDataPages) {
+        PendingDataPages.clear();
         return true;
     }
 
     ui64 nodeBytes = 0;
-    for (const auto& location : walk.PendingDataPages) {
+    for (const auto& location : PendingDataPages) {
         nodeBytes += location.Size;
     }
 
-    if (walk.DataPageBatch &&
-        (walk.DataPageBatchBytes >= MaxWalkBatchBytes || nodeBytes > MaxWalkBatchBytes - walk.DataPageBatchBytes))
+    if (DataPageBatch &&
+        (DataPageBatchBytes >= MaxWalkBatchBytes || nodeBytes > MaxWalkBatchBytes - DataPageBatchBytes))
     {
-        if (FlushDataPageBatch(walk, dataCollection) != EBatchResult::Flushed) {
+        if (!flush()) {
             return false;
         }
     }
 
-    walk.DataPageBatch.reserve(walk.DataPageBatch.size() + walk.PendingDataPages.size());
-    for (auto& location : walk.PendingDataPages) {
-        walk.DataPageBatch.push_back(std::move(location));
+    DataPageBatch.reserve(DataPageBatch.size() + PendingDataPages.size());
+    for (auto& location : PendingDataPages) {
+        DataPageBatch.push_back(std::move(location));
     }
-    walk.DataPageBatchBytes += nodeBytes;
-    walk.PendingDataPages.clear();
+    DataPageBatchBytes += nodeBytes;
+    PendingDataPages.clear();
 
-    if (walk.DataPageBatchBytes >= MaxWalkBatchBytes) {
-        return FlushDataPageBatch(walk, dataCollection) == EBatchResult::Flushed;
+    if (DataPageBatchBytes >= MaxWalkBatchBytes) {
+        return flush();
     }
     return true;
+}
+
+bool TCacheBTreeWalkController::AddNodeDataPagesToBatch(TCacheBTreeWalk& walk, TCollection& dataCollection) {
+    const bool queueDataPages =
+        walk.Seed.QueueDataPages && dataCollection.GetCacheMode() == ECacheMode::TryKeepInMemory;
+    return walk.AppendNodeDataPages(queueDataPages, [&] {
+        return FlushDataPageBatch(walk, dataCollection) == EBatchResult::Flushed;
+    });
 }
 
 void TCacheBTreeWalkController::AppendPageToNotify(
@@ -458,24 +486,12 @@ void TCacheBTreeWalkController::Advance() {
         auto* collection = Host.FindWalkCollection(id);
         Y_ENSURE(collection && State(collection->Id).Run);
         auto& run = *State(collection->Id).Run;
-        if (run.State != EWalkRunState::Walking || !std::exchange(run.NeedsAdvance, false)) {
-            continue;
-        }
-
-        bool pending = false;
-        bool failed = false;
-        for (auto& walk : run.Walks) {
-            if (!walk.Done) {
-                AdvanceWalk(walk, collection->Id);
-            }
-            failed |= walk.Invalid;
-            pending |= !walk.Done;
-        }
-
-        if (failed) {
+        const auto result = run.Advance([&](TCacheBTreeWalk& walk) {
+            AdvanceWalk(walk, collection->Id);
+        });
+        if (result == TWalkRun::EAdvanceResult::Invalid) {
             invalid.push_back(id);
-        } else if (!pending) {
-            run.State = EWalkRunState::Draining;
+        } else if (result == TWalkRun::EAdvanceResult::Draining) {
             RunsToFinish.insert(id);
         }
     }

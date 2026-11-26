@@ -12,6 +12,8 @@ ENV(YDB_ENABLE_SIGNAL_BACKTRACE=1)
 TEST_SRCS(
     test_compatibility.py
     test_iam.py
+    test_partitions.py
+    test_scalar_topic_write.py
     test_rescaling.py
     test_streaming.py
     test_streaming_aggregation.py

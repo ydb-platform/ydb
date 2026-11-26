@@ -1279,22 +1279,27 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         });
 
         bool maintenanceStatusSeen = false;
-        auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
-            const auto& request = event->Get()->Record;
-            for (const auto& command : request.GetRequest().GetCommand()) {
-                if (command.HasUpdateDriveStatus()) {
-                    const auto& update = command.GetUpdateDriveStatus();
-                    ui32 nodeId = update.GetHostKey().GetNodeId();
-                    ui32 pdiskId = update.GetPDiskId();
 
-                    if (id.NodeId == nodeId && id.DiskId == pdiskId) {
-                        if (update.GetMaintenanceStatus() == NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED) {
-                            maintenanceStatusSeen = true;
+        auto createObserver = [&maintenanceStatusSeen](TPDiskID id, NKikimrBlobStorage::TMaintenanceStatus::E expectedStatus) {
+            return [id, expectedStatus, &maintenanceStatusSeen](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+                const auto& request = event->Get()->Record;
+                for (const auto& command : request.GetRequest().GetCommand()) {
+                    if (command.HasUpdateDriveStatus()) {
+                        const auto& update = command.GetUpdateDriveStatus();
+                        ui32 nodeId = update.GetHostKey().GetNodeId();
+                        ui32 pdiskId = update.GetPDiskId();
+
+                        if (id.NodeId == nodeId && id.DiskId == pdiskId) {
+                            if (update.GetMaintenanceStatus() == expectedStatus) {
+                                maintenanceStatusSeen = true;
+                            }
                         }
                     }
                 }
-            }
-        });
+            };
+        };
+
+        auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>(createObserver(id, NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED));
 
         // Set node as faulty which should trigger LONG_TERM_MAINTENANCE_PLANNED status
         env.SetNodeFaulty(id.NodeId, true);
@@ -1304,22 +1309,8 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         UNIT_ASSERT_C(maintenanceStatusSeen, "Maintenance status LONG_TERM_MAINTENANCE_PLANNED should have been sent");
 
         maintenanceStatusSeen = false;
-        observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
-            const auto& request = event->Get()->Record;
-            for (const auto& command : request.GetRequest().GetCommand()) {
-                if (command.HasUpdateDriveStatus()) {
-                    const auto& update = command.GetUpdateDriveStatus();
-                    ui32 nodeId = update.GetHostKey().GetNodeId();
-                    ui32 pdiskId = update.GetPDiskId();
 
-                    if (id.NodeId == nodeId && id.DiskId == pdiskId) {
-                        if (update.GetMaintenanceStatus() == NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST) {
-                            maintenanceStatusSeen = true;
-                        }
-                    }
-                }
-            }
-        });
+        observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>(createObserver(id, NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST));
 
         // Reset faulty marker on the node
         env.SetNodeFaulty(id.NodeId, false);
@@ -1329,6 +1320,144 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         UNIT_ASSERT_C(maintenanceStatusSeen, "Maintenance status NO_REQUEST should have been sent after removing faulty marker");
         logObserverHolder.Remove();
         UNIT_ASSERT_C(maintenanceOnlyReasonSeen, "Maintenance-only status changes must have a meaningful reason");
+    }
+
+    Y_UNIT_TEST(MaintenanceStatusPreservedAfterRestart) {
+        NKikimrCms::TCmsConfig cmsConfig;
+        TTestEnv env(8, 4, cmsConfig);
+
+        const TPDiskID id = env.PDiskId(0, 0);
+        const auto maintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
+
+        // Maintenance is set independently in BSC; CMS has no faulty marker.
+        env.SetBscMaintenanceStatus(id, maintenanceStatus);
+
+        auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+            if (event->Sender != env.GetSentinelActor()) {
+                return;
+            }
+            for (const auto& command : event->Get()->Record.GetRequest().GetCommand()) {
+                if (!command.HasUpdateDriveStatus()) {
+                    continue;
+                }
+                const auto& update = command.GetUpdateDriveStatus();
+                if (update.GetHostKey().GetNodeId() == id.NodeId
+                        && update.GetPDiskId() == id.DiskId
+                        && update.GetMaintenanceStatus() != NKikimrBlobStorage::TMaintenanceStatus::NOT_SET) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(update.GetMaintenanceStatus(), maintenanceStatus,
+                        "Sentinel must preserve maintenance set independently in BSC");
+                }
+            }
+        });
+
+        // Refresh an already known disk, then exercise a drive-status update and
+        // its acknowledgement without changing the maintenance request.
+        env.UpdateConfig();
+        env.CheckMaintenanceStatus(id, maintenanceStatus);
+        env.SetPDiskState({id}, ErrorStates[0], EPDiskStatus::INACTIVE);
+        env.SimulateSleep(TDuration::Seconds(1));
+        env.CheckMaintenanceStatus(id, maintenanceStatus);
+
+        env.RestartSentinel();
+        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal);
+        env.SimulateSleep(TDuration::Seconds(1));
+        env.CheckMaintenanceStatus(id, maintenanceStatus);
+
+        observerHolder.Remove();
+    }
+
+    Y_UNIT_TEST(MaintenanceStatusClearedAfterFaultyMarker) {
+        NKikimrCms::TCmsConfig cmsConfig;
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::MAINTENANCE);
+        cmsConfig.MutableSentinelConfig()->SetDefaultStateLimit(1);
+        TTestEnv env(8, 4, cmsConfig);
+
+        const TPDiskID id = env.PDiskId(0, 0);
+        const auto maintenanceStatus = EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
+        env.SetBscMaintenanceStatus(id, maintenanceStatus);
+
+        auto expectedMaintenanceStatus = maintenanceStatus;
+        bool maintenanceCleared = false;
+        auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+            if (event->Sender != env.GetSentinelActor()) {
+                return;
+            }
+            for (const auto& command : event->Get()->Record.GetRequest().GetCommand()) {
+                if (!command.HasUpdateDriveStatus()) {
+                    continue;
+                }
+                const auto& update = command.GetUpdateDriveStatus();
+                if (update.GetHostKey().GetNodeId() == id.NodeId
+                        && update.GetPDiskId() == id.DiskId
+                        && update.GetMaintenanceStatus() != EMaintenanceStatus::NOT_SET) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(update.GetMaintenanceStatus(), expectedMaintenanceStatus,
+                        "Unexpected maintenance request during the faulty-marker cycle");
+                    maintenanceCleared |= update.GetMaintenanceStatus() == EMaintenanceStatus::NO_REQUEST;
+                }
+            }
+        });
+
+        env.UpdateConfig();
+        env.CheckMaintenanceStatus(id, maintenanceStatus);
+
+        // Enter CMS maintenance while also changing the drive from ACTIVE to INACTIVE.
+        env.SetNodeFaulty(id.NodeId, true);
+        env.SetPDiskState({id}, ErrorStates[0], EPDiskStatus::INACTIVE);
+        env.SimulateSleep(TDuration::Seconds(1));
+        env.CheckMaintenanceStatus(id, maintenanceStatus, maintenanceStatus);
+
+        // Once CMS requests maintenance, withdrawing that request clears the shared BSC flag.
+        expectedMaintenanceStatus = EMaintenanceStatus::NO_REQUEST;
+        env.SetNodeFaulty(id.NodeId, false);
+        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
+        env.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(maintenanceCleared, "CMS must clear maintenance after removing its faulty marker");
+        env.CheckMaintenanceStatus(id, EMaintenanceStatus::NO_REQUEST);
+
+        observerHolder.Remove();
+    }
+
+    Y_UNIT_TEST(MaintenanceStatusRestoredAfterBscReset) {
+        NKikimrCms::TCmsConfig cmsConfig;
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::MAINTENANCE);
+        TTestEnv env(8, 4, cmsConfig);
+
+        const TPDiskID id = env.PDiskId(0, 0);
+        const auto maintenanceStatus = EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
+        bool maintenanceRequested = false;
+        auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+            if (event->Sender != env.GetSentinelActor()) {
+                return;
+            }
+            for (const auto& command : event->Get()->Record.GetRequest().GetCommand()) {
+                if (!command.HasUpdateDriveStatus()) {
+                    continue;
+                }
+                const auto& update = command.GetUpdateDriveStatus();
+                if (update.GetHostKey().GetNodeId() == id.NodeId
+                        && update.GetPDiskId() == id.DiskId
+                        && update.GetMaintenanceStatus() == maintenanceStatus) {
+                    maintenanceRequested = true;
+                }
+            }
+        });
+
+        env.SetNodeFaulty(id.NodeId, true);
+        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal);
+        env.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(maintenanceRequested, "CMS must request maintenance for the faulty marker");
+        env.CheckMaintenanceStatus(id, maintenanceStatus, maintenanceStatus);
+
+        // BSC reports a manual reset while CMS's faulty marker and drive state stay unchanged.
+        maintenanceRequested = false;
+        env.SetBscMaintenanceStatus(id, EMaintenanceStatus::NO_REQUEST);
+        env.UpdateConfig();
+        env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal);
+        env.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(maintenanceRequested, "CMS must restore its maintenance request after a BSC reset");
+        env.CheckMaintenanceStatus(id, maintenanceStatus, maintenanceStatus);
+
+        observerHolder.Remove();
     }
 } // TSentinelTests
 

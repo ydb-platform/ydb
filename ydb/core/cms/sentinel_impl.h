@@ -40,7 +40,9 @@ public:
 
     bool IsInitialDeploymentGracePeriod() const;
 
-    void SetMaintenanceStatus(EMaintenanceStatus::E status);
+    void SetTargetMaintenanceStatus(EMaintenanceStatus::E status);
+
+    EMaintenanceStatus::E GetTargetMaintenanceStatus() const;
 
 private:
     const ui32& DefaultStateLimit;
@@ -51,7 +53,7 @@ private:
     mutable EPDiskState PrevState = State;
     ui64 StateCounter;
     TMaybe<EPDiskStatus> ForcedStatus;
-    EMaintenanceStatus::E MaintenanceStatus = EMaintenanceStatus::NOT_SET;
+    EMaintenanceStatus::E TargetMaintenanceStatus = EMaintenanceStatus::NOT_SET;
     mutable bool HadBadStateRecently = false;
 
     TInstant CMSFirstBootTimestamp;
@@ -123,8 +125,10 @@ struct TPDiskInfo
 
     EPDiskStatus ActualStatus = EPDiskStatus::ACTIVE;
     EPDiskStatus PrevStatus = EPDiskStatus::UNKNOWN;
+    // From BSC.
     EMaintenanceStatus::E ActualMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
-    EMaintenanceStatus::E PrevMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
+    // CMS already requested to set. 
+    EMaintenanceStatus::E InFlightMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
     TInstant LastStatusChange;
     bool StatusChangeFailed = false;
     // means that this pdisk status change last time was the reason of whole request failure

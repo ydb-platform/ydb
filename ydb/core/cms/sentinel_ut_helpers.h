@@ -65,17 +65,71 @@ class TTestEnv: public TCmsTestEnv {
 
     void WaitForSentinelBoot() {
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvSentinel::TEvConfigUpdated::EventType);
-        options.FinalEvents.emplace_back(TEvSentinel::TEvStateUpdated::EventType);
+        options.FinalEvents.emplace_back([this](IEventHandle& ev) {
+            return ev.GetRecipientRewrite() == Sentinel
+                && ev.GetTypeRewrite() == TEvSentinel::TEvConfigUpdated::EventType;
+        });
+        options.FinalEvents.emplace_back([this](IEventHandle& ev) {
+            return ev.GetRecipientRewrite() == Sentinel
+                && ev.GetTypeRewrite() == TEvSentinel::TEvStateUpdated::EventType;
+        });
         UNIT_ASSERT(DispatchEvents(options));
     }
 
 public:
+    void RestartSentinel() {
+        Send(new IEventHandle(Sentinel, TActorId(), new TEvents::TEvPoisonPill));
+        WaitFor("Sentinel termination", [this] { return !FindActor(Sentinel); }, TDuration::Seconds(1));
+        EnableScheduleForActor(Sentinel, false);
+
+        Sentinel = Register(CreateSentinel(State));
+        EnableScheduleForActor(Sentinel, true);
+        WaitForSentinelBoot();
+    }
+
     void UpdateConfig() {
         Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateConfig));
         TDispatchOptions options;
         options.FinalEvents.emplace_back(TEvSentinel::TEvConfigUpdated::EventType);
         UNIT_ASSERT(DispatchEvents(options));
+    }
+
+    void SetBscMaintenanceStatus(const TPDiskID& id, EMaintenanceStatus::E status) {
+        TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+        auto* config = TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig();
+        for (auto& pdisk : *config->MutablePDisk()) {
+            if (pdisk.GetNodeId() == id.NodeId && pdisk.GetPDiskId() == id.DiskId) {
+                pdisk.SetMaintenanceStatus(status);
+                return;
+            }
+        }
+        UNIT_FAIL("Target PDisk is missing from BSC config");
+    }
+
+    void CheckMaintenanceStatus(const TPDiskID& id, EMaintenanceStatus::E expectedActual,
+            TMaybe<EMaintenanceStatus::E> expectedDesired = {}) {
+        const auto edge = AllocateEdgeActor();
+        auto request = MakeHolder<TEvCms::TEvGetSentinelStateRequest>();
+        request->Record.SetShow(NKikimrCms::TGetSentinelStateRequest::ALL);
+        auto* range = request->Record.AddRanges();
+        range->SetBegin(id.NodeId);
+        range->SetEnd(id.NodeId);
+        Send(new IEventHandle(Sentinel, edge, request.Release()));
+
+        const auto response = GrabEdgeEventRethrow<TEvCms::TEvGetSentinelStateResponse>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+        for (const auto& pdisk : response->Get()->Record.GetPDisks()) {
+            if (pdisk.GetId().GetNodeId() == id.NodeId && pdisk.GetId().GetDiskId() == id.DiskId) {
+                UNIT_ASSERT_VALUES_EQUAL_C(pdisk.GetInfo().GetMaintenanceStatus(), static_cast<ui32>(expectedActual),
+                    "Unexpected BSC maintenance status in Sentinel");
+                if (expectedDesired) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(pdisk.GetInfo().GetDesiredMaintenanceStatus(), static_cast<ui32>(*expectedDesired),
+                        "Unexpected CMS maintenance target");
+                }
+                return;
+            }
+        }
+        UNIT_FAIL("Target PDisk is missing from Sentinel state");
     }
 
     TSet<TPDiskID> GetSentinelPDisks() {
@@ -245,23 +299,19 @@ public:
     }
 
     void SetNodeFaulty(ui32 nodeId, bool faulty) {
+        // Config refreshes must report the same markers as the direct notification.
+        auto& markers = State->ClusterInfo->AllNodes().at(nodeId)->Markers;
+        markers.clear();
         if (faulty) {
-            auto v = TVector<NCms::TEvSentinel::TEvUpdateHostMarkers::THostMarkers>();
-            v.push_back({
-                .NodeId = nodeId,
-                .Markers = {NKikimrCms::EMarker::MARKER_DISK_FAULTY},
-            });
-
-            Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateHostMarkers(std::move(v))));
-        } else {
-            auto v = TVector<NCms::TEvSentinel::TEvUpdateHostMarkers::THostMarkers>();
-            v.push_back({
-                .NodeId = nodeId,
-                .Markers = {},
-            });
-
-            Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateHostMarkers(std::move(v))));
+            markers.insert(NKikimrCms::EMarker::MARKER_DISK_FAULTY);
         }
+
+        auto v = TVector<NCms::TEvSentinel::TEvUpdateHostMarkers::THostMarkers>();
+        v.push_back({
+            .NodeId = nodeId,
+            .Markers = markers,
+        });
+        Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateHostMarkers(std::move(v))));
     }
 
     void SetPDiskState(const TSet<TPDiskID>& pdisks, EPDiskState state) {

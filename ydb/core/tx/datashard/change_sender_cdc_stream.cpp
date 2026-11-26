@@ -1,4 +1,5 @@
 #include "cdc_aggregated_heartbeats.h"
+#include "cdc_stream_key_range.h"
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
 #include "change_record.h"
@@ -8,6 +9,7 @@
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
 #include <ydb/core/change_exchange/util.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/config.pb.h>
@@ -44,6 +46,28 @@ static THolder<IChangeRecordSerializer> CreateCdcStreamSerializer(const TUserTab
         .CompressionLevel = stream.CompressionLevel,
     }));
 }
+
+namespace {
+
+TVector<ui64> MakeIntersectingPartitionIds(const TVector<TKeyDesc::TPartitionInfo>& partitions,
+        const TSerializedTableRange& shardKeyRange, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    const auto shardRange = MakeKeyRange(shardKeyRange.From, shardKeyRange.To);
+    TVector<ui64> partitionIds;
+    TPartitionKeyRange partitionRange;
+    for (const auto& partition : partitions) {
+        partitionRange.ToBound.Clear();
+        if (partition.Range && !partition.Range->EndKeyPrefix.GetCells().empty()) {
+            partitionRange.ToBound = partition.Range->EndKeyPrefix;
+        }
+        if (KeyRangesIntersect(partitionRange, shardRange, keyTypes)) {
+            partitionIds.push_back(partition.ShardId);
+        }
+        partitionRange.FromBound = partitionRange.ToBound;
+    }
+    return partitionIds;
+}
+
+} // anonymous
 
 class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderPartition> {
 
@@ -134,6 +158,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
             cmd.SetIgnoreQuotaDeadline(true);
 
             Serializer->Serialize(cmd, record);
+            if (WriteRowKeys && record.GetKind() == TChangeRecord::EKind::CdcDataChange) {
+                cmd.SetChoosePartitionKey(TSerializedCellVec::Serialize(record.GetKey()));
+            }
 
             Pending.push_back(seqNo);
         }
@@ -290,6 +317,7 @@ public:
         , ShardId(shardId)
         , SourceId(ToString(DataShard.TabletId))
         , Serializer(CreateCdcStreamSerializer(stream, DataShard.TabletId))
+        , WriteRowKeys(stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange)
     {
     }
 
@@ -316,6 +344,7 @@ private:
     const ui64 ShardId;
     const TString SourceId;
     THolder<IChangeRecordSerializer> Serializer;
+    const bool WriteRowKeys;
 
     TActorId Writer;
     i64 MaxSeqNo = 0;
@@ -533,9 +562,11 @@ class TCdcChangeSenderMain
 
     /// ResolveTopic
 
-    void ResolveTopic() {
+    void ResolveTopic(bool syncVersion = false) {
         auto request = MakeHolder<TNavigate>();
-        request->ResultSet.emplace_back(MakeNavigateEntry(TopicPathId, TNavigate::OpTopic));
+        auto& entry = request->ResultSet.emplace_back(MakeNavigateEntry(TopicPathId, TNavigate::OpTopic));
+        entry.SyncVersion = syncVersion;
+        SyncingTopicVersion = syncVersion;
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
         Become(&TThis::StateResolveTopic);
@@ -584,8 +615,15 @@ class TCdcChangeSenderMain
             return;
         }
 
+        if (Stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange && !entry.PQGroupInfo->Schema) {
+            return LogCritAndRetry("Empty schema for key range heartbeats");
+        }
+
         const auto topicVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
         if (TopicVersion && TopicVersion == topicVersion) {
+            if (Stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange && !SyncingTopicVersion) {
+                return ResolveTopic(true);
+            }
             CreateSenders();
             return Become(&TThis::StateMain);
         }
@@ -611,7 +649,10 @@ class TCdcChangeSenderMain
         Y_ENSURE(entry.PQGroupInfo->Partitioning);
         KeyDesc->Partitioning = std::make_shared<TPartitioning>(entry.PQGroupInfo->Partitioning);
 
-        if (topicAutoPartitioning) {
+        const bool shouldUseKeyRangeHeartbeats = ShouldUseKeyRangeHeartbeats(Stream.HeartbeatMode, entry.PQGroupInfo->Schema);
+        if (shouldUseKeyRangeHeartbeats) {
+            SetPartitionResolver(CreateDefaultPartitionResolver(*KeyDesc.Get()));
+        } else if (topicAutoPartitioning) {
             Y_ENSURE(entry.PQGroupInfo->PartitionChooser);
             SetPartitionResolver(new TBoundaryPartitionResolver(entry.PQGroupInfo->PartitionChooser));
         } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format) {
@@ -620,7 +661,9 @@ class TCdcChangeSenderMain
             SetPartitionResolver(new TMd5PartitionResolver(KeyDesc->GetPartitions().size()));
         }
 
-        CreateSenders(NChangeExchange::MakePartitionIds(KeyDesc->GetPartitions()));
+        CreateSenders(shouldUseKeyRangeHeartbeats
+            ? MakeIntersectingPartitionIds(KeyDesc->GetPartitions(), ShardKeyRange, entry.PQGroupInfo->Schema)
+            : NChangeExchange::MakePartitionIds(KeyDesc->GetPartitions()));
         Become(&TThis::StateMain);
     }
 
@@ -734,11 +777,12 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_CDC_ACTOR_MAIN;
     }
 
-    explicit TCdcChangeSenderMain(const TDataShardId& dataShard, const TPathId& streamPathId, const TUserTable::TCdcStream& stream)
+    explicit TCdcChangeSenderMain(const TDataShardId& dataShard, const TPathId& streamPathId, const TUserTable::TCdcStream& stream, const TSerializedTableRange& shardKeyRange)
         : TActorBootstrapped()
         , TChangeSender(this, this, this, this, dataShard.ActorId)
         , StreamPathId(streamPathId)
         , DataShard(dataShard)
+        , ShardKeyRange(shardKeyRange)
         , TopicVersion(0)
     {
         if (stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated) {
@@ -786,10 +830,12 @@ public:
 private:
     const TPathId StreamPathId;
     const TDataShardId DataShard;
+    const TSerializedTableRange ShardKeyRange;
 
     TUserTable::TCdcStream Stream;
     TPathId TopicPathId;
     ui64 TopicVersion;
+    bool SyncingTopicVersion = false;
     THolder<NKikimr::TKeyDesc> KeyDesc;
     THashMap<ui32, ui64> PartitionToShard;
 
@@ -797,8 +843,8 @@ private:
 
 }; // TCdcChangeSenderMain
 
-IActor* CreateCdcStreamChangeSender(const TDataShardId& dataShard, const TPathId& streamPathId, const TUserTable::TCdcStream& stream) {
-    return new TCdcChangeSenderMain(dataShard, streamPathId, stream);
+IActor* CreateCdcStreamChangeSender(const TDataShardId& dataShard, const TPathId& streamPathId, const TUserTable::TCdcStream& stream, const TSerializedTableRange& shardKeyRange) {
+    return new TCdcChangeSenderMain(dataShard, streamPathId, stream, shardKeyRange);
 }
 
 }

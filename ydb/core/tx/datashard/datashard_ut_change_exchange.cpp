@@ -14,6 +14,7 @@
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -4225,11 +4226,40 @@ Y_UNIT_TEST_SUITE(Cdc) {
         IndexStream(NKikimrSchemeOp::EIndexTypeGlobalUnique, InitialScan);
     }
 
-    void InitialScanTopicSplitRecovery(bool topicAutoPartitioning, bool rebootPq, bool pauseAutoPartitioning = false, bool delayedPrepared = false) {
+    TCdcStream WithKeyRangeHeartbeats(TCdcStream streamDesc) {
+        streamDesc.UserAttributes["__async_replication"] =
+            R"({"id":"1","path":"/Root/replica","supports_key_range_autopartitioning":true})";
+        return streamDesc;
+    }
+
+    bool HasResolvedAfterUpdate(const TVector<std::pair<TString, TString>>& records, const TString& expected = {}) {
+        bool update = false;
+        for (const auto& [_, data] : records) {
+            if (expected.empty() ? data.Contains("\"update\"") : AreJsonsEqual(data, expected)) {
+                update = true;
+            } else if (update && data.Contains("\"resolved\"")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool HasKey(const TVector<std::pair<TString, TString>>& records, const TString& key) {
+        return AnyOf(records, [&](const auto& record) {
+            return record.second.Contains("\"key\":[" + key + "]");
+        });
+    }
+
+    enum class EScanTopicMode { Fixed, Auto, KeyRange, KeyRangeWithFlagDisabledDuringScan };
+
+    void InitialScanTopicSplitRecovery(EScanTopicMode mode, bool rebootPq, bool pauseAutoPartitioning = false, bool delayedPrepared = false) {
+        const bool keyRange = mode == EScanTopicMode::KeyRange || mode == EScanTopicMode::KeyRangeWithFlagDisabledDuringScan;
+        const bool topicAutoPartitioning = mode != EScanTopicMode::Fixed;
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
             .SetDomainName("Root")
+            .SetEnableCdcKeyRangeHeartbeats(keyRange)
             .SetEnableChangefeedInitialScan(true)
         );
         auto& runtime = *server->GetRuntime();
@@ -4244,10 +4274,17 @@ Y_UNIT_TEST_SUITE(Cdc) {
         auto blockScans = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanRequest>([&](auto& ev) {
             scans.emplace_back(ev.Release());
         });
-        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
-            WithTopicAutoPartitioning(topicAutoPartitioning,
-                WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson)))));
+        auto stream = WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson));
+        if (keyRange) {
+            stream = WithKeyRangeHeartbeats(WithResolvedTimestamps(TDuration::Seconds(3), std::move(stream)));
+        } else {
+            stream = WithTopicAutoPartitioning(topicAutoPartitioning, std::move(stream));
+        }
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table", stream));
         WaitFor(runtime, [&]{ return !scans.empty(); }, "initial scan request");
+        if (mode == EScanTopicMode::KeyRangeWithFlagDisabledDuringScan) {
+            runtime.GetAppData().FeatureFlags.SetEnableCdcKeyRangeHeartbeats(false);
+        }
         const auto schemeShard = scans.front()->Get<TEvDataShard::TEvCdcStreamScanRequest>()
             ->Record.GetTablePathId().GetOwnerId();
 
@@ -4321,13 +4358,19 @@ Y_UNIT_TEST_SUITE(Cdc) {
             }
         });
 
-        AsyncSend(runtime, schemeShard, InternalTransaction(AlterPQGroupRequest(splitTxId, "/Root/Table/Stream", R"(
+        auto* request = InternalTransaction(AlterPQGroupRequest(splitTxId, "/Root/Table/Stream", R"(
             Name: "streamImpl"
-            Split {
-                Partition: 0
-                SplitBoundary: 'a'
-            }
-        )")));
+            Split { Partition: 0 SplitBoundary: 'a' }
+        )"));
+        if (keyRange) {
+            const auto desc = DescribePrivatePath(runtime, schemeShard, "/Root/Table/Stream");
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetCdcStreamDescription().GetHeartbeatMode(),
+                NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange);
+            const ui32 bound = 4;
+            request->Record.MutableTransaction(0)->MutableAlterPersQueueGroup()->MutableSplit(0)
+                ->SetSplitBoundary(TSerializedCellVec::Serialize({TCell::Make(bound)}));
+        }
+        AsyncSend(runtime, schemeShard, request);
         TestModificationResults(runtime, splitTxId, {topicAutoPartitioning
             ? NKikimrScheme::StatusAccepted : NKikimrScheme::StatusInvalidParameter});
 
@@ -4416,7 +4459,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 const auto topic = GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream");
                 for (const auto& partition : topic.GetPartitions()) {
                     for (const auto& record : GetRecords(runtime, edgeActor, "/Root/Table/Stream", partition.GetPartitionId())) {
-                        actual.push_back(record.second);
+                        if (!keyRange || !record.second.Contains("\"resolved\"")) {
+                            actual.push_back(record.second);
+                        }
                     }
                 }
                 UNIT_ASSERT_C(actual.size() <= expected.size(), "Unexpected or duplicated CDC records");
@@ -4461,6 +4506,15 @@ Y_UNIT_TEST_SUITE(Cdc) {
             UNIT_ASSERT_C(!GetRecords(runtime, edgeActor, "/Root/Table/Stream", 1).empty(), "Left child must serve CDC records");
             UNIT_ASSERT_C(!GetRecords(runtime, edgeActor, "/Root/Table/Stream", 2).empty(), "Right child must serve CDC records");
         }
+        if (keyRange) {
+            auto read = [&](ui32 id) { return GetRecords(runtime, edgeActor, "/Root/Table/Stream", id); };
+            WaitFor(runtime, [&] {
+                return HasResolvedAfterUpdate(read(1), R"({"update":{"value":11},"key":[1]})")
+                    && HasResolvedAfterUpdate(read(2), R"({"update":{"value":80},"key":[8]})");
+            }, "resolved after updates in both KeyRange children");
+            UNIT_ASSERT(HasKey(read(1), "1") && !HasKey(read(1), "8"));
+            UNIT_ASSERT(HasKey(read(2), "8") && !HasKey(read(2), "1"));
+        }
         if (!topicAutoPartitioning) {
             checkDisabledScaling();
         }
@@ -4469,6 +4523,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
             UNIT_ASSERT_VALUES_EQUAL(describe.GetStatus(), NKikimrScheme::StatusSuccess);
             UNIT_ASSERT(describe.GetPathDescription().HasCdcStreamDescription());
             if (describe.GetPathDescription().GetCdcStreamDescription().GetState() == NKikimrSchemeOp::ECdcStreamStateReady) {
+                if (keyRange) {
+                    UNIT_ASSERT_VALUES_EQUAL(describe.GetPathDescription().GetCdcStreamDescription().GetHeartbeatMode(),
+                        NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange);
+                }
                 return;
             }
             runtime.SimulateSleep(TDuration::MilliSeconds(100));
@@ -4477,23 +4535,31 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     Y_UNIT_TEST(InitialScanTopicSplitAfterSchemeShardRecovery) {
-        InitialScanTopicSplitRecovery(true, false);
+        InitialScanTopicSplitRecovery(EScanTopicMode::Auto, false);
+    }
+
+    Y_UNIT_TEST(InitialScanKeyRangeTopicSplitAfterParticipantRecovery) {
+        InitialScanTopicSplitRecovery(EScanTopicMode::KeyRange, true);
+    }
+
+    Y_UNIT_TEST(InitialScanKeyRangeSurvivesFlagDisableAndSplitRecovery) {
+        InitialScanTopicSplitRecovery(EScanTopicMode::KeyRangeWithFlagDisabledDuringScan, true);
     }
 
     Y_UNIT_TEST(InitialScanTopicSplitAfterParticipantRecovery) {
-        InitialScanTopicSplitRecovery(true, true);
+        InitialScanTopicSplitRecovery(EScanTopicMode::Auto, true);
     }
 
     Y_UNIT_TEST(InitialScanTopicSplitDisabledAfterRecovery) {
-        InitialScanTopicSplitRecovery(false, false);
+        InitialScanTopicSplitRecovery(EScanTopicMode::Fixed, false);
     }
 
     Y_UNIT_TEST(InitialScanTopicSplitPausedAfterRecovery) {
-        InitialScanTopicSplitRecovery(true, true, true);
+        InitialScanTopicSplitRecovery(EScanTopicMode::Auto, true, true);
     }
 
     Y_UNIT_TEST(InitialScanTopicSplitDelayedPreparedBeforePropose) {
-        InitialScanTopicSplitRecovery(true, false, false, true);
+        InitialScanTopicSplitRecovery(EScanTopicMode::Auto, false, false, true);
     }
 
     Y_UNIT_TEST(InitialScanDebezium) {
@@ -6550,6 +6616,345 @@ Y_UNIT_TEST_SUITE(Cdc) {
         for (ui32 i = 1; i < records.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(records[i][0].second, records[0][0].second);
         }
+    }
+
+    auto ForceKeyRangeHeartbeatMode(TTestActorRuntime& runtime) {
+        return runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([](auto& ev) {
+            if (!ev->Get()->Request) {
+                return;
+            }
+            for (auto& entry : ev->Get()->Request->ResultSet) {
+                if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindCdcStream || !entry.CdcStreamInfo) {
+                    continue;
+                }
+                auto info = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TCdcStreamInfo>(*entry.CdcStreamInfo);
+                info->Description.SetHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange);
+                entry.CdcStreamInfo = info;
+            }
+        });
+    }
+
+    Y_UNIT_TEST(ShouldDeliverChangesAndHeartbeatsOnlyToOwnPartitionWhenKeyRangeHeartbeats) {
+        // given
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions().Shards(2));
+
+        THashMap<ui32, THashSet<TString>> partitionToHeartbeatSources;
+        auto observeHeartbeats = runtime.AddObserver<TEvPersQueue::TEvRequest>([&](auto& ev) {
+            const auto& request = ev->Get()->Record.GetPartitionRequest();
+            for (const auto& write : request.GetCmdWrite()) {
+                if (write.HasHeartbeat()) {
+                    partitionToHeartbeatSources[request.GetPartition()].insert(write.GetSourceId());
+                }
+            }
+        });
+
+        auto forceKeyRangeHeartbeatMode = ForceKeyRangeHeartbeatMode(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        // when
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (3000000000, 20);
+        )");
+
+        // then
+        TVector<TVector<std::pair<TString, TString>>> records(2);
+        for (ui32 attempt = 0; attempt < 60 && !(HasKey(records[0], "1") && HasKey(records[1], "3000000000") && partitionToHeartbeatSources.size() == 2); ++attempt) {
+            SimulateSleep(server, TDuration::Seconds(1));
+            for (ui32 i = 0; i < records.size(); ++i) {
+                records[i] = GetRecords(runtime, edgeActor, "/Root/Table/Stream", i);
+            }
+        }
+
+        UNIT_ASSERT(HasKey(records[0], "1"));
+        UNIT_ASSERT(!HasKey(records[0], "3000000000"));
+        UNIT_ASSERT(HasKey(records[1], "3000000000"));
+        UNIT_ASSERT(!HasKey(records[1], "1"));
+        UNIT_ASSERT_VALUES_EQUAL(partitionToHeartbeatSources.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(partitionToHeartbeatSources[0].size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(partitionToHeartbeatSources[1].size(), 1);
+        UNIT_ASSERT_VALUES_UNEQUAL(*partitionToHeartbeatSources[0].begin(), *partitionToHeartbeatSources[1].begin());
+    }
+
+    Y_UNIT_TEST(ShouldDeliverChangesOnlyToOwnPartitionWhenKeyRangeHeartbeatsUseCompositeKey) {
+        // given
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions()
+            .Shards(2)
+            .Columns({
+                {"id", "Uint32", true, false},
+                {"name", "Utf8", true, false},
+                {"value", "Uint32", false, false},
+            }));
+
+        auto forceKeyRangeHeartbeatMode = ForceKeyRangeHeartbeatMode(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        // when
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (id, name, value) VALUES
+            (1u, "b"u, 10u),
+            (2147483647u, "zz"u, 20u),
+            (3000000000u, "a"u, 30u);
+        )");
+
+        // then
+        TVector<TVector<std::pair<TString, TString>>> records(2);
+        for (ui32 attempt = 0; attempt < 60 && !(HasKey(records[0], R"(2147483647,"zz")") && HasKey(records[1], R"(3000000000,"a")")); ++attempt) {
+            SimulateSleep(server, TDuration::Seconds(1));
+            for (ui32 i = 0; i < records.size(); ++i) {
+                records[i] = GetRecords(runtime, edgeActor, "/Root/Table/Stream", i);
+            }
+        }
+
+        UNIT_ASSERT(HasKey(records[0], R"(1,"b")"));
+        UNIT_ASSERT(HasKey(records[0], R"(2147483647,"zz")"));
+        UNIT_ASSERT(!HasKey(records[0], R"(3000000000,"a")"));
+        UNIT_ASSERT(HasKey(records[1], R"(3000000000,"a")"));
+        UNIT_ASSERT(!HasKey(records[1], R"(1,"b")"));
+        UNIT_ASSERT(!HasKey(records[1], R"(2147483647,"zz")"));
+    }
+
+    TString SerializeUint32Key(ui32 value) {
+        const TVector<TCell> cells = {TCell::Make<ui32>(value)};
+        return TSerializedCellVec::Serialize(cells);
+    }
+
+    Y_UNIT_TEST(ShouldPassRowKeyToTopicWhenKeyRangeHeartbeats) {
+        // given
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions());
+
+        TVector<TString> rowKeys;
+        bool heartbeatHasRowKey = false;
+        auto observeWrites = runtime.AddObserver<TEvPersQueue::TEvRequest>([&](auto& ev) {
+            for (const auto& write : ev->Get()->Record.GetPartitionRequest().GetCmdWrite()) {
+                if (write.HasHeartbeat()) {
+                    heartbeatHasRowKey |= write.HasChoosePartitionKey();
+                } else if (write.HasData()) {
+                    rowKeys.push_back(write.GetChoosePartitionKey());
+                }
+            }
+        });
+
+        auto forceKeyRangeHeartbeatMode = ForceKeyRangeHeartbeatMode(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        // when
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20);
+        )");
+
+        // then
+        for (ui32 attempt = 0; attempt < 60 && rowKeys.size() < 2; ++attempt) {
+            SimulateSleep(server, TDuration::Seconds(1));
+        }
+        for (ui32 attempt = 0; attempt < 10; ++attempt) {
+            SimulateSleep(server, TDuration::Seconds(1));
+        }
+
+        Sort(rowKeys);
+        UNIT_ASSERT_VALUES_EQUAL(rowKeys, TVector<TString>({SerializeUint32Key(1), SerializeUint32Key(2)}));
+        UNIT_ASSERT(!heartbeatHasRowKey);
+    }
+
+    bool IsSourceRegistered(TTestActorRuntime& runtime, const TActorId& sender, ui32 partitionId, ui64 dataShardId) {
+        auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto& record = *request->Record.MutablePartitionRequest();
+        record.SetPartition(partitionId);
+        record.MutableCmdGetMaxSeqNo()->AddSourceId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(dataShardId)));
+        ForwardToTablet(runtime, ResolvePqTablet(runtime, sender, "/Root/Table/Stream", partitionId), sender, request.Release());
+
+        auto response = runtime.GrabEdgeEventRethrow<TEvPersQueue::TEvResponse>(sender);
+        const auto& result = response->Get()->Record.GetPartitionResponse().GetCmdGetMaxSeqNoResult().GetSourceIdInfo();
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+        return result.Get(0).GetState() == NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED;
+    }
+
+    Y_UNIT_TEST(ShouldRegisterSplitChildrenOnlyInPartitionsOfTheirRangeWhenKeyRangeHeartbeats) {
+        // given
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions().Shards(2));
+
+        auto forceKeyRangeHeartbeatMode = ForceKeyRangeHeartbeatMode(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        const auto shards = GetTableShards(server, edgeActor, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2);
+
+        // when
+        WaitTxNotification(server, edgeActor, AsyncSplitTable(server, edgeActor, "/Root/Table", shards.at(1), 3000000000u));
+
+        // then
+        TVector<ui64> children;
+        for (const auto shard : GetTableShards(server, edgeActor, "/Root/Table")) {
+            if (Find(shards, shard) == shards.end()) {
+                children.push_back(shard);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(children.size(), 2);
+
+        for (const auto child : children) {
+            for (ui32 attempt = 0; attempt < 60 && !IsSourceRegistered(runtime, edgeActor, 1, child); ++attempt) {
+                SimulateSleep(server, TDuration::Seconds(1));
+            }
+            UNIT_ASSERT_C(IsSourceRegistered(runtime, edgeActor, 1, child), child);
+            UNIT_ASSERT_C(!IsSourceRegistered(runtime, edgeActor, 0, child), child);
+        }
+    }
+
+    Y_UNIT_TEST(ShouldRegisterMergeChildOnlyByParentOfEachPartitionWhenKeyRangeHeartbeats) {
+        // given
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions().Shards(2));
+
+        auto forceKeyRangeHeartbeatMode = ForceKeyRangeHeartbeatMode(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        const auto parents = GetTableShards(server, edgeActor, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(parents.size(), 2);
+
+        THashMap<TString, THashSet<ui32>> parentToPartitions;
+        bool childRegisteredWithoutKeyRange = false;
+        auto observeSplitCommands = runtime.AddObserver<TEvPersQueue::TEvRequest>([&](auto& ev) {
+            const auto& request = ev->Get()->Record.GetPartitionRequest();
+            if (!request.HasCmdSplitMessageGroup()) {
+                return;
+            }
+            const auto& cmd = request.GetCmdSplitMessageGroup();
+            for (const auto& group : cmd.GetDeregisterGroups()) {
+                parentToPartitions[group.GetId()].insert(request.GetPartition());
+            }
+            for (const auto& group : cmd.GetRegisterGroups()) {
+                childRegisteredWithoutKeyRange |= !group.HasPartitionKeyRange();
+            }
+        });
+
+        // when
+        WaitTxNotification(server, edgeActor, AsyncMergeTable(server, edgeActor, "/Root/Table", parents));
+
+        // then
+        const auto children = GetTableShards(server, edgeActor, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(children.size(), 1);
+        const auto child = children.at(0);
+
+        for (ui32 partitionId : {0u, 1u}) {
+            for (ui32 attempt = 0; attempt < 60 && !IsSourceRegistered(runtime, edgeActor, partitionId, child); ++attempt) {
+                SimulateSleep(server, TDuration::Seconds(1));
+            }
+            UNIT_ASSERT_C(IsSourceRegistered(runtime, edgeActor, partitionId, child), partitionId);
+        }
+
+        UNIT_ASSERT_EQUAL(parentToPartitions[NPQ::NSourceIdEncoding::EncodeSimple(ToString(parents.at(0)))], THashSet<ui32>({0}));
+        UNIT_ASSERT_EQUAL(parentToPartitions[NPQ::NSourceIdEncoding::EncodeSimple(ToString(parents.at(1)))], THashSet<ui32>({1}));
+        UNIT_ASSERT(!childRegisteredWithoutKeyRange);
+    }
+
+    Y_UNIT_TEST(ShouldResolveTopicWithSyncVersionWhenPartitionWriterFailsAndKeyRangeHeartbeats) {
+        // given
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions());
+
+        auto forceKeyRangeHeartbeatMode = ForceKeyRangeHeartbeatMode(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+        for (ui32 attempt = 0; attempt < 60 && !HasKey(GetRecords(runtime, edgeActor, "/Root/Table/Stream", 0), "1"); ++attempt) {
+            SimulateSleep(server, TDuration::Seconds(1));
+        }
+
+        ui32 syncTopicResolves = 0;
+        auto observeResolves = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySet>([&](auto& ev) {
+            for (const auto& entry : ev->Get()->Request->ResultSet) {
+                if (entry.Operation == NSchemeCache::TSchemeCacheNavigate::OpTopic && entry.SyncVersion) {
+                    ++syncTopicResolves;
+                }
+            }
+        });
+
+        // when
+        RebootTablet(runtime, ResolvePqTablet(runtime, edgeActor, "/Root/Table/Stream", 0), edgeActor);
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (2, 20);");
+
+        // then
+        bool delivered = false;
+        for (ui32 attempt = 0; attempt < 60 && !(delivered && syncTopicResolves); ++attempt) {
+            SimulateSleep(server, TDuration::Seconds(1));
+            delivered = HasKey(GetRecords(runtime, edgeActor, "/Root/Table/Stream", 0), "2");
+        }
+
+        UNIT_ASSERT(delivered);
+        UNIT_ASSERT_VALUES_UNEQUAL(syncTopicResolves, 0);
     }
 
     Y_UNIT_TEST(InitialScanAndResolvedTimestamps) {

@@ -125,16 +125,18 @@ bool TController::CanCommitIndexBuilds(const TRowVersion& version) const {
 
 class TController::TTxIndexBuild: public TTxBase {
     TVector<std::pair<ui64, THolder<TEvService::TEvIndexBuildProgressResult>>> Checkpoints;
-    TVector<std::pair<ui64, THolder<TEvService::TEvTxIdResult>>> Assignments;
+    struct TAssignmentReply {
+        ui32 NodeId;
+        ui64 WorkerCookie;
+        THolder<TEvService::TEvTxIdResult> Event;
+    };
+    TVector<TAssignmentReply> Assignments;
     TVector<std::pair<ui64, TVector<TString>>> Commits;
 
     ui64 Allocate(const TRowVersion& end, NIceDb::TNiceDb& db) {
         const ui64 txId = Self->AllocatedTxIds.front();
         Self->AllocatedTxIds.pop_front();
-        db.Table<Schema::TxIds>().Key(end.Step, end.TxId).Update(
-            NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
-        );
-        Self->AssignedTxIds.emplace(end, txId);
+        Self->SaveAssignment(db, end, {txId, end.Step});
         return txId;
     }
 
@@ -178,7 +180,7 @@ class TController::TTxIndexBuild: public TTxBase {
 
         const auto& last = *Self->AssignedTxIds.rbegin();
         return last.first > join
-            && last.second != Self->CommittingTxId;
+            && last.second.WriteTxId != Self->CommittingTxId;
     }
 
     void Assign(NIceDb::TNiceDb& db) {
@@ -204,24 +206,17 @@ class TController::TTxIndexBuild: public TTxBase {
             bool blocked = false;
             for (const auto& v : (*it)->Get()->Record.GetVersions()) {
                 const auto version = TRowVersion::FromProto(v);
-                auto end = IntervalEnd(version, interval);
+                const auto requestedEnd = IntervalEnd(version, interval);
+                auto end = requestedEnd;
                 const auto join = TRowVersion::FromProto(build.GetJoinVersion());
                 const bool global = build.GetPhase() != TBuild::FILLING && version >= join;
                 ui64 txId = 0;
                 if (global) {
                     auto assigned = Self->AssignedTxIds.lower_bound(end);
                     if (assigned != Self->AssignedTxIds.end()) {
-                        end = assigned->first;
-                        txId = assigned->second;
+                        txId = Self->CoverEarlierInterval(db, assigned->first, end);
                     } else if (CanReuseLastGlobalAssignment(join)) {
-                        auto node = Self->AssignedTxIds.extract(Self->AssignedTxIds.rbegin()->first);
-                        db.Table<Schema::TxIds>().Key(node.key().Step, node.key().TxId).Delete();
-                        node.key() = end;
-                        txId = node.mapped();
-                        db.Table<Schema::TxIds>().Key(end.Step, end.TxId).Update(
-                            NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
-                        );
-                        Self->AssignedTxIds.insert(std::move(node));
+                        txId = Self->ExtendLastAssignment(db, end);
                     } else if (!Self->AllocatedTxIds.empty() && Self->AssignedTxIds.size() < MaxOpenTxIds + 1) {
                         txId = Allocate(end, db);
                     }
@@ -233,7 +228,6 @@ class TController::TTxIndexBuild: public TTxBase {
                     for (const auto& assigned : build.GetAssignments()) {
                         if (TRowVersion::FromProto(assigned.GetVersion()) >= end) {
                             txId = assigned.GetWriteTxId();
-                            end = TRowVersion::FromProto(assigned.GetVersion());
                             break;
                         }
                     }
@@ -271,13 +265,15 @@ class TController::TTxIndexBuild: public TTxBase {
                 }
 
                 auto& assigned = *reply->Record.AddVersionTxIds();
-                end.ToProto(assigned.MutableVersion());
+                const TRowVersion requestedBegin(requestedEnd.Step - interval, 0);
+                const bool beforeJoin = !global && build.GetPhase() != TBuild::FILLING;
+                (beforeJoin ? Min(requestedEnd, join) : requestedEnd).ToProto(assigned.MutableVersion());
+                (global ? Max(requestedBegin, join) : requestedBegin).ToProto(assigned.MutableBegin());
                 assigned.SetTxId(txId);
-                (global ? join : TRowVersion::Min()).ToProto(assigned.MutableBegin());
             }
 
             if (reply->Record.VersionTxIdsSize()) {
-                Assignments.emplace_back((*it)->Sender.NodeId(), std::move(reply));
+                Assignments.push_back({(*it)->Sender.NodeId(), (*it)->Cookie, std::move(reply)});
             }
 
             if (blocked) {
@@ -418,8 +414,8 @@ public:
         for (auto& [node, ev] : Checkpoints) {
             ctx.Send(MakeReplicationServiceId(node), std::move(ev));
         }
-        for (auto& [node, ev] : Assignments) {
-            ctx.Send(MakeReplicationServiceId(node), std::move(ev));
+        for (auto& reply : Assignments) {
+            ctx.Send(MakeReplicationServiceId(reply.NodeId), std::move(reply.Event), 0, reply.WorkerCookie);
         }
         for (auto& [txId, paths] : Commits) {
             ctx.Send(MakeTxProxyID(), MakeCommitProposal(txId, paths).Release(), 0, txId);

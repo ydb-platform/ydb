@@ -218,7 +218,8 @@ class TController::TTxInit: public TTxBase {
                 rowset.GetValue<Schema::TxIds::VersionTxId>()
             );
 
-            auto res = Self->AssignedTxIds.emplace(version, txId);
+            const ui64 firstEndStep = rowset.GetValueOrDefault<Schema::TxIds::FirstEndStep>(0);
+            auto res = Self->AssignedTxIds.emplace(version, TAssignedTxId{txId, firstEndStep});
             Y_VERIFY_S(res.second, "Duplicate version: " << version);
 
             if (!rowset.Next()) {
@@ -240,6 +241,23 @@ class TController::TTxInit: public TTxBase {
                 rowset.GetValue<Schema::ProcessedSourceOffsets::WorkerId>());
             const auto nextOffset = rowset.GetValue<Schema::ProcessedSourceOffsets::NextOffset>();
             Self->ProcessedSourceOffsets[id] = {nextOffset, nextOffset};
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool LoadExitedWorkers(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<Schema::ExitedWorkers>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            Self->ExitedWorkers.insert(TWorkerId(
+                rowset.GetValue<Schema::ExitedWorkers::ReplicationId>(),
+                rowset.GetValue<Schema::ExitedWorkers::TargetId>(),
+                rowset.GetValue<Schema::ExitedWorkers::WorkerId>()));
             if (!rowset.Next()) {
                 return false;
             }
@@ -345,6 +363,7 @@ class TController::TTxInit: public TTxBase {
             && LoadSrcStreams(db)
             && LoadTxIds(db)
             && LoadWorkers(db)
+            && LoadExitedWorkers(db)
             && LoadSchemaBarrierWorkers(db)
             && LoadIndexBuildWorkers(db)
             && LoadProcessedSourceOffsets(db);

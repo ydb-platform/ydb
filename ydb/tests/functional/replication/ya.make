@@ -32,6 +32,7 @@ ENDIF()
 END()
 
 RECURSE_FOR_TESTS(
+    key_range
     rollback
     topic
 )

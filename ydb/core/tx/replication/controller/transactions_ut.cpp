@@ -1,10 +1,12 @@
 #include "controller_impl.h"
 
 #include <ydb/core/base/hive.h>
+#include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/replication/ut_helpers/mock_service.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 
@@ -271,6 +273,53 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
         env.CommitStatus(txId, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
         UNIT_ASSERT_VALUES_EQUAL(env.Count(), 0);
         UNIT_ASSERT_VALUES_EQUAL(env.SdkTransactions(true).value().Assigned.size(), 0);
+    }
+
+    void CheckCoalescedAssignmentsAfterAnEarlierCommit(bool reboot) {
+        TTransactionsEnv env;
+        const auto first = env.Assign(1);
+        const auto middle = env.Assign(29999);
+        env.Assign(39999);
+        env.Assign(49999);
+        const auto last = env.Assign(59999);
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(69999), last);
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(19999), middle);
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 5);
+
+        env.HoldCommits();
+        env.Heartbeat();
+        UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender(), TDuration::Seconds(30)));
+        env.CommitStatus(first, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 4);
+        if (reboot) {
+            env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
+            env.Handshake();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(59999), last);
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(19999), middle);
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 4);
+    }
+
+    Y_UNIT_TEST(KeepsCoalescedAssignmentsAfterAnEarlierCommit) {
+        CheckCoalescedAssignmentsAfterAnEarlierCommit(false);
+    }
+
+    Y_UNIT_TEST(RestoresCoalescedAssignmentsAfterAnEarlierCommit) {
+        CheckCoalescedAssignmentsAfterAnEarlierCommit(true);
+    }
+
+    Y_UNIT_TEST(RestoresPreviouslyMergedIntervalsFromLegacyUpperBound) {
+        TTransactionsEnv env;
+        const auto id = env.Assign(55000);
+        NKikimrMiniKQL::TResult result;
+        UNIT_ASSERT_VALUES_EQUAL(LocalQuery(env.GetRuntime(), env.TabletId, R"((
+            (let key '('('VersionStep (Uint64 '60000)) '('VersionTxId (Uint64 '0))))
+            (return (AsList (UpdateRow 'TxIds key '('('FirstEndStep (Null))))))
+        ))", result), NKikimrProto::OK);
+        env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
+        env.Handshake();
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(35000), id);
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 1);
     }
 
     Y_UNIT_TEST(RestoresAssignedTransactionsAfterRestart) {

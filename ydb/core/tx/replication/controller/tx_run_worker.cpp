@@ -23,7 +23,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Event->Get()->Record;
         Id = TWorkerId::Parse(record.GetWorker());
-        if (!Self->IsValidWorker(Id)) {
+        if (!Self->IsValidWorker(Id) || Self->ExitedWorkers.contains(Id) || Self->ExitingWorkers.contains(Id)) {
             return true;
         }
 
@@ -90,11 +90,16 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        // Once any worker leaves, the persisted worker set is no longer
-        // complete. Keep schema reports blocked until
-        // the next registration pass recreates it.
-        db.Table<Schema::Targets>().Key(Id.ReplicationId(), Id.TargetId()).Update(
-            NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
+        if (Self->ExitingWorkers.contains(Id)) {
+            db.Table<Schema::ExitedWorkers>().Key(Id.ReplicationId(), Id.TargetId(), Id.WorkerId()).Update();
+        } else {
+            // Once any worker leaves, the persisted worker set is no longer
+            // complete. Keep schema reports blocked until
+            // the next registration pass recreates it.
+            db.Table<Schema::Targets>().Key(Id.ReplicationId(), Id.TargetId()).Update(
+                NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
+            Self->DeleteExitedWorkers(Id.ReplicationId(), Id.TargetId(), db);
+        }
         db.Table<Schema::Workers>().Key(Id.ReplicationId(), Id.TargetId(), Id.WorkerId()).Delete();
         Remove = true;
         return true;
@@ -106,7 +111,12 @@ public:
         }
 
         Self->RemoveQueue.erase(Id);
-        Self->CompleteWorkerSets.erase(std::make_pair(Id.ReplicationId(), Id.TargetId()));
+        const bool exited = Self->ExitingWorkers.erase(Id);
+        if (exited) {
+            Self->ExitedWorkers.insert(Id);
+        } else {
+            Self->CompleteWorkerSets.erase(std::make_pair(Id.ReplicationId(), Id.TargetId()));
+        }
 
         const auto worker = Self->Workers.find(Id);
         if (worker != Self->Workers.end() && worker->second.HasHeartbeat()) {
@@ -135,6 +145,10 @@ public:
         Self->TabletCounters->Simple()[COUNTER_WORKERS] = Self->Workers.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = Self->WorkersWithHeartbeat.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_PENDING_HEARTBEAT] = Self->PendingHeartbeats.size();
+
+        if (exited) {
+            Self->RemoveEndedWorkers(ctx);
+        }
 
         const auto replication = Self->Find(Id.ReplicationId());
         if (!replication) {

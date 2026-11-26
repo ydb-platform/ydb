@@ -45,7 +45,7 @@ bool TController::HasFreshHeartbeatQuorum(const TSchemaBarrier& barrier) const {
 
 bool TController::HasPendingTargetFlushTxId(const TSchemaBarrier& barrier) const {
     return AnyOf(AssignedTxIds, [&barrier](const auto& assigned) {
-        return ::Find(barrier.TargetFlushTxIds, assigned.second) != barrier.TargetFlushTxIds.end();
+        return ::Find(barrier.TargetFlushTxIds, assigned.second.WriteTxId) != barrier.TargetFlushTxIds.end();
     });
 }
 
@@ -192,7 +192,7 @@ public:
             return true;
         }
 
-        Self->CommittingTxId = Self->AssignedTxIds.begin()->second;
+        Self->CommittingTxId = Self->AssignedTxIds.begin()->second.WriteTxId;
         CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
 
         return true;
@@ -224,6 +224,10 @@ public:
             if (!Self->HasPendingAlter(replicationId)) {
                 ctx.Send(ctx.SelfID, new TEvPrivate::TEvResumeDeferredAlter(replicationId));
             }
+        }
+
+        if (HadHeartbeats) {
+            Self->RemoveEndedWorkers(ctx);
         }
 
         if (Self->PendingHeartbeats) {
@@ -270,7 +274,7 @@ public:
 
         auto it = Self->AssignedTxIds.begin();
         Y_ABORT_UNLESS(it != Self->AssignedTxIds.end());
-        Y_ABORT_UNLESS(it->second == Self->CommittingTxId);
+        Y_ABORT_UNLESS(it->second.WriteTxId == Self->CommittingTxId);
 
         const auto& record = Status->Get()->Record;
         const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
@@ -332,7 +336,7 @@ public:
             return true;
         }
 
-        Self->CommittingTxId = Self->AssignedTxIds.begin()->second;
+        Self->CommittingTxId = Self->AssignedTxIds.begin()->second.WriteTxId;
         CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
 
         return true;

@@ -49,6 +49,7 @@ SRCS(
     build_index/secondary_index.cpp
     cdc_aggregated_heartbeats.cpp
     cdc_stream_heartbeat.cpp
+    cdc_stream_key_range.cpp
     cdc_stream_scan.cpp
     change_collector_cdc_stream.cpp
     change_record_cdc_serializer.cpp
@@ -482,6 +483,7 @@ PEERDIR(
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
     ydb/core/kqp/runtime/scheduler
+    ydb/core/persqueue/public/partition_key_range
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme

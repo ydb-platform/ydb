@@ -838,6 +838,7 @@ namespace NKikimr::NStorage {
         TBindQueue StaticBindQueue;
         THashMap<TActorId, TActorId> DynamicConfigSubscribers; // <session id> -> <actor id>
         ui32 ConnectedToStaticNode = 0;
+        ui32 LastStaticNodeWithoutQuorum = 0; // may still reach the target quorum for a DC change
         TActorId StaticNodeSessionId;
         bool ReconnectScheduled = false;
         THashSet<ui32> ConnectedDynamicNodes;

@@ -453,6 +453,7 @@ message TEvNodeConfigInvokeOnRoot {
         TRollbackBridge RollbackBridge = 33;
         TDataCenterStates ApplyDataCenterStates = 34;
         TEnableDataCenterQuorum EnableDataCenterQuorum = 35;
+        TDataCenterStates.TDataCenter SetDataCenterState = 36;
     }
 }
 

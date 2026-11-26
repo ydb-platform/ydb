@@ -138,6 +138,43 @@ namespace NKikimr::NStorage {
         return changed;
     }
 
+    bool TInvokeRequestHandlerActor::IsDataCenterStateUpdate() const {
+        const TInvokeExternalOperation *op = std::get_if<TInvokeExternalOperation>(&Query);
+        return op && (op->Command.HasApplyDataCenterStates() || op->Command.HasSetDataCenterState());
+    }
+
+    void TInvokeRequestHandlerActor::SetDataCenterState(const NKikimrBlobStorage::TDataCenterStates::TDataCenter& change) {
+        using NKikimrBlobStorage::TDataCenterState;
+        if (!Self->StorageConfig) {
+            throw TExNoQuorum() << "No storage configuration is available";
+        }
+        if (Self->IsBridged() || !Self->SelfManagementEnabled || !Self->StorageConfig->GetDataCenterQuorumEnabled()) {
+            throw TExError() << "SetDataCenterState requires an ordinary self-managed cluster with DC quorum enabled";
+        }
+        if (change.GetName().empty() || !change.HasState()
+                || (change.GetState() != TDataCenterState::INCLUDED && change.GetState() != TDataCenterState::EXCLUDED)) {
+            throw TExError() << "A data center name and INCLUDED or EXCLUDED state are required";
+        }
+        if (std::ranges::none_of(Self->StorageConfig->GetAllNodes(), [&](const auto& node) {
+                return node.GetLocation().GetDataCenter() == change.GetName();
+            })) {
+            throw TExError() << "Unknown data center: " << change.GetName();
+        }
+
+        NKikimrBlobStorage::TDataCenterStates target = Self->StorageConfig->GetDataCenterStates();
+        for (NKikimrBlobStorage::TDataCenterStates::TDataCenter& dc : *target.MutableDataCenter()) {
+            if (dc.GetName() == change.GetName()) {
+                dc.SetState(change.GetState());
+                return ApplyDataCenterStates(target);
+            }
+        }
+        // Omitted data centers are already included.
+        if (change.GetState() == TDataCenterState::EXCLUDED) {
+            *target.AddDataCenter() = change;
+        }
+        ApplyDataCenterStates(target);
+    }
+
     void TInvokeRequestHandlerActor::ApplyDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& command) {
         // The caller arbitrates DC membership. The target voters may be reachable after the old quorum is lost.
         bool targetQuorum = Self->StorageConfig && Self->StorageConfig->GetDataCenterQuorumEnabled()
@@ -170,8 +207,7 @@ namespace NKikimr::NStorage {
     }
 
     bool TInvokeRequestHandlerActor::IsRequestedDataCenterChange(const NKikimrBlobStorage::TStorageConfig& pending) const {
-        const TInvokeExternalOperation *op = std::get_if<TInvokeExternalOperation>(&Query);
-        if (!op || !op->Command.HasApplyDataCenterStates() || !ProposedStorageConfig.GetDataCenterQuorumEnabled()
+        if (!IsDataCenterStateUpdate() || !ProposedStorageConfig.GetDataCenterQuorumEnabled()
                 || !pending.HasPrevConfig() || TStorageConfigMeta(pending.GetPrevConfig()) != TStorageConfigMeta(*Self->StorageConfig)
                 || TStorageConfigMeta(ProposedStorageConfig) != TStorageConfigMeta(*Self->StorageConfig)) {
             return false;

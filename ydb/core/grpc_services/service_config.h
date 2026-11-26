@@ -9,6 +9,8 @@ namespace NKikimr::NGRpcService {
 
     void DoReplaceConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
 
+    void DoSetDataCenterState(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
+
     void DoFetchConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
 
     void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);

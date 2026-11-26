@@ -256,6 +256,8 @@ namespace NKikimr::NStorage {
         void AdvanceGeneration();
         void StartDataCenterReconciliation();
         void SendDataCenterSnapshot();
+        bool IsDataCenterStateUpdate() const;
+        void SetDataCenterState(const NKikimrBlobStorage::TDataCenterStates::TDataCenter& change);
         void ApplyDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& command);
         void PromoteStaticGroup(const TPromoteStaticGroup& op);
         void QueryConfig(const TQuery::TQueryConfig& request);

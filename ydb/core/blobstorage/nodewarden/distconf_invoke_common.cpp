@@ -174,6 +174,9 @@ namespace NKikimr::NStorage {
                         return StartProposition(&config);
                     }
 
+                    case TQuery::kSetDataCenterState:
+                        return SetDataCenterState(op.Command.GetSetDataCenterState());
+
                     case TQuery::kApplyDataCenterStates:
                         return ApplyDataCenterStates(op.Command.GetApplyDataCenterStates());
 
@@ -412,7 +415,7 @@ namespace NKikimr::NStorage {
                                                  bool allowConflictingGenerationAdvance) {
         const TInvokeExternalOperation *op = std::get_if<TInvokeExternalOperation>(&Query);
         bool useTargetQuorum = Self->StorageConfig && Self->StorageConfig->GetDataCenterQuorumEnabled()
-            && !Self->IsBridged() && op && op->Command.HasApplyDataCenterStates();
+            && !Self->IsBridged() && IsDataCenterStateUpdate();
         bool activating = op && op->Command.HasEnableDataCenterQuorum();
         if (!Self->StorageConfig || (!Self->Scepter && !useTargetQuorum)) {
             throw TExRace() << "No working root for configuration recovery";
@@ -662,7 +665,7 @@ namespace NKikimr::NStorage {
             throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
         } else if (RecoveryProposition && !RecoveringAuthorizedDcChange && !std::holds_alternative<TCollectConfigsAndPropose>(Query)) {
             Finish(TResult::RACE, "Configuration was recovered; retry the original operation");
-        } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query); op && op->Command.HasApplyDataCenterStates()) {
+        } else if (IsDataCenterStateUpdate()) {
             StartDataCenterReconciliation();
         } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
                    op && op->Command.HasReplaceStorageConfig() && ControllerOp == EControllerOp::OTHER
@@ -932,14 +935,18 @@ namespace NKikimr::NStorage {
             return;
         }
         if (const auto& record = ev->Get()->Record; !IsSelfStatic && (record.HasQueryBridgeRollbackStatus() ||
-                record.HasRollbackBridge())) {
-            if (ConnectedToStaticNode && StaticNodeSessionId) {
-                // dynamic nodes have no binding of their own, the static node they are subscribed to forwards it
-                ForwardInvokeOnRoot(std::move(ev), ConnectedToStaticNode);
+                record.HasRollbackBridge() || record.HasSetDataCenterState())) {
+            ui32 nodeId = StaticNodeSessionId ? ConnectedToStaticNode : 0;
+            if (!nodeId && record.HasSetDataCenterState()) {
+                // The dynamic config subscription is dropped when the old quorum is lost.
+                nodeId = LastStaticNodeWithoutQuorum;
+            }
+            if (nodeId) {
+                ForwardInvokeOnRoot(std::move(ev), nodeId);
             } else {
                 auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
                 response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM);
-                response->Record.SetErrorReason("No static node connection for the rollback of the bridged cluster");
+                response->Record.SetErrorReason("No static node connection to forward the configuration request");
                 SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
             }
             return;

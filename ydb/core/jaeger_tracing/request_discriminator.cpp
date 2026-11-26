@@ -68,6 +68,7 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"RateLimiter.AcquireResource", ERequestType::RATELIMITER_ACQUIRE_RESOURCE},
 
     {"Config.ReplaceConfig", ERequestType::CONFIG_REPLACECONFIG},
+    {"Config.SetDataCenterState", ERequestType::CONFIG_SETDATACENTERSTATE},
     {"Config.FetchConfig", ERequestType::CONFIG_FETCHCONFIG},
     {"Config.Bootstrap", ERequestType::CONFIG_BOOTSTRAP},
 

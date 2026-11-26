@@ -151,6 +151,8 @@ using TEvReplaceStorageConfigRequest =
 using TEvFetchStorageConfigRequest =
     TGrpcRequestOperationCall<Ydb::Config::FetchConfigRequest,
         Ydb::Config::FetchConfigResponse>;
+using TEvSetDataCenterStateRequest = TGrpcRequestOperationCall<Ydb::Config::SetDataCenterStateRequest,
+    Ydb::Config::SetDataCenterStateResponse>;
 using TEvBootstrapClusterRequest =
     TGrpcRequestOperationCall<Ydb::Config::BootstrapClusterRequest,
         Ydb::Config::BootstrapClusterResponse,
@@ -701,6 +703,87 @@ void DoReplaceConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&)
 
 void DoFetchConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TFetchStorageConfigRequest(p.release()));
+}
+
+class TSetDataCenterStateRequest : public TRpcOperationRequestActor<TSetDataCenterStateRequest, TEvSetDataCenterStateRequest> {
+    using TBase = TRpcOperationRequestActor<TSetDataCenterStateRequest, TEvSetDataCenterStateRequest>;
+
+public:
+    using TBase::TBase;
+
+    void Bootstrap(const TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
+        if (!IsAdministrator(AppData(), Request().GetInternalToken().Get())) {
+            return Reply(Ydb::StatusIds::UNAUTHORIZED, "Cluster administrator privileges are required",
+                NKikimrIssues::TIssuesIds::ACCESS_DENIED, ctx);
+        }
+        if (!IsDomainDatabaseOrEmpty(Request().GetDatabaseName())) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Specify the domain database or omit the database",
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+        }
+        const Ydb::Config::SetDataCenterStateRequest& request = *GetProtoRequest();
+        if (request.data_center().empty()) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "A data center name is required", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+        }
+
+        auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        NKikimrBlobStorage::TDataCenterStates::TDataCenter *change = ev->Record.MutableSetDataCenterState();
+        change->SetName(request.data_center());
+        switch (request.state()) {
+            case Ydb::Config::SetDataCenterStateRequest::INCLUDED:
+                change->SetState(NKikimrBlobStorage::TDataCenterState::INCLUDED);
+                break;
+            case Ydb::Config::SetDataCenterStateRequest::EXCLUDED:
+                change->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+                break;
+            default:
+                return Reply(Ydb::StatusIds::BAD_REQUEST, "Specify INCLUDED or EXCLUDED",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+        }
+        Become(&TSetDataCenterStateRequest::StateFunc);
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release(), IEventHandle::FlagTrackDelivery);
+    }
+
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
+            HFunc(TEvents::TEvUndelivered, Handle);
+            default:
+                return TBase::StateFuncBase(ev);
+        }
+    }
+
+    void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev, const TActorContext& ctx) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        const TResult& result = ev->Get()->Record;
+        Ydb::StatusIds::StatusCode status;
+        switch (result.GetStatus()) {
+            case TResult::OK:
+                return Reply(Ydb::StatusIds::SUCCESS, ctx);
+            case TResult::NO_QUORUM:
+                status = Ydb::StatusIds::UNAVAILABLE;
+                break;
+            case TResult::RACE:
+                status = Ydb::StatusIds::ABORTED;
+                break;
+            case TResult::ERROR:
+                status = Ydb::StatusIds::PRECONDITION_FAILED;
+                break;
+            default:
+                status = Ydb::StatusIds::INTERNAL_ERROR;
+                break;
+        }
+        Reply(status, result.GetErrorReason(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr, const TActorContext& ctx) {
+        Reply(Ydb::StatusIds::UNAVAILABLE, "The distributed configuration keeper is unavailable",
+            NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, ctx);
+    }
+};
+
+void DoSetDataCenterState(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::Register(new TSetDataCenterStateRequest(p.release()));
 }
 
 void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {

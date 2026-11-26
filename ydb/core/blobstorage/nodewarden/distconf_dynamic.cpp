@@ -5,6 +5,9 @@
 namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::ApplyStaticNodeIds(const std::vector<ui32>& nodeIds) {
+        if (LastStaticNodeWithoutQuorum && std::ranges::find(nodeIds, LastStaticNodeWithoutQuorum) == nodeIds.end()) {
+            LastStaticNodeWithoutQuorum = 0;
+        }
         StaticBindQueue.Update(nodeIds);
         ConnectToStaticNode();
     }
@@ -63,6 +66,7 @@ namespace NKikimr::NStorage {
         if (record.HasConfig()) {
             ApplyStorageConfig(record.GetConfig());
         }
+        LastStaticNodeWithoutQuorum = record.GetNoQuorum() ? ConnectedToStaticNode : 0;
         if (record.GetNoQuorum()) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, StaticNodeSessionId, SelfId(),
                 nullptr, 0));

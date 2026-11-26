@@ -3,6 +3,7 @@
 ###
 
 import allure
+import json
 import os
 import re
 import time
@@ -117,3 +118,26 @@ def force_datashard_compact_legacy(tables: list[str], timeout: float, threads: i
     with ThreadPool(threads) as pool:
         for _ in pool.imap_unordered(process_task, generate_tasks()):
             pass
+
+
+def column_compaction_query(tables):
+    return ' UNION ALL '.join(
+        f"""SELECT {json.dumps(table)} AS table_path, COUNT(*) AS pending
+            FROM `{table}/.sys/primary_index_optimizer_stats`
+            WHERE CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.weight") AS Uint64) > 0"""
+        for table in tables
+    )
+
+
+def wait_column_compaction(tables, execute_query, *, timeout=None, interval=1):
+    deadline = None if timeout is None else time.monotonic() + timeout
+    while tables:
+        remaining = None if deadline is None else deadline - time.monotonic()
+        if remaining is not None and remaining <= 0:
+            raise TimeoutError(f'Compaction timed out for {", ".join(tables)}')
+        rows = execute_query(column_compaction_query(tables), remaining)
+        pending = {row['table_path']: row['pending'] for row in rows}
+        tables = [table for table in tables if pending[table]]
+        if tables:
+            delay = interval if deadline is None else min(interval, max(0, deadline - time.monotonic()))
+            time.sleep(delay)

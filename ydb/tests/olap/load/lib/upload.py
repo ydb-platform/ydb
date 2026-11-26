@@ -2,6 +2,7 @@ from __future__ import annotations
 from .conftest import LoadSuiteBase
 from .tpch import TpchSuiteBase
 from time import time, sleep
+from ydb.tests.olap.lib.compaction import wait_column_compaction
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.fill_tables import Dataset, TableFiller
 from ydb.tests.olap.lib.workload_result import Iteration, WorkloadRunResult
@@ -102,23 +103,6 @@ class UploadClusterBase(UploadSuiteBase):
         })
 
     @classmethod
-    def __compaction_complete_for_table(cls, table_full_path: str) -> bool:
-        sth = ScenarioTestHelper(None)
-        result = sth.execute_query(f'''
-            SELECT COUNT(*)
-            FROM `{table_full_path}/.sys/primary_index_optimizer_stats`
-            WHERE CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.weight") AS Uint64) > 0
-        ''')
-        return result[0].rows[0][0] == 0
-
-    @classmethod
-    def __compaction_complete(cls) -> bool:
-        for table in YdbCluster.get_tables(cls.get_path()):
-            if not cls.__compaction_complete_for_table(table):
-                return False
-        return True
-
-    @classmethod
     @allure.step
     def __stats_ready_for_table(cls,  table_full_path: str) -> bool:
         def __max_e_rows(node: dict):
@@ -152,8 +136,12 @@ class UploadClusterBase(UploadSuiteBase):
     @classmethod
     @allure.step
     def wait_compaction(cls):
-        while not cls.__compaction_complete():
-            sleep(1)
+        helper = ScenarioTestHelper(None)
+
+        def execute_query(query, _remaining):
+            return helper.execute_query(query)[0].rows
+
+        wait_column_compaction(YdbCluster.get_tables(cls.get_path()), execute_query)
 
     @classmethod
     def before_import_data(cls):
@@ -224,7 +212,7 @@ class UploadTpchBase(UploadClusterBase):
 
     @classmethod
     def import_data(cls):
-        cls.filler.fill([cls.dataset], initialize=False)
+        cls.filler.fill([cls.dataset], initialize=False, compaction_timeout=0)
 
     @classmethod
     def do_teardown_class(cls) -> None:

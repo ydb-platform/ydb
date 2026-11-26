@@ -18,6 +18,7 @@ from uuid import uuid4
 
 import requests
 
+from .compaction import wait_column_compaction
 from .remote_execution import is_localhost
 from .ydb_cluster import YdbCluster
 
@@ -263,7 +264,32 @@ class TableFiller:
             for job in jobs:
                 job.result()
 
-    def fill(self, datasets: list[Dataset], *, initialize=True):
+    def _wait_compaction(self, dataset: Dataset, timeout: float):
+        cli = [self.cli, '-e', YdbCluster.ydb_endpoint, '-d', self.database, *self.auth]
+        path = f'{self.database}/{dataset.path.strip("/")}'
+        entries = json.loads(run_on(
+            '', cli + ['scheme', 'ls', '--format', 'json', '-l', '-R', path],
+            capture=True, timeout=60,
+        ).stdout)
+        if isinstance(entries, dict):
+            tables = [path] if entries['type'] == 'column-table' else []
+        else:
+            tables = [f'{path}/{entry["path"]}' for entry in entries if entry['type'] == 'column-table']
+        if not tables:
+            return
+
+        def execute_query(query, remaining):
+            result = run_on('', cli + ['sql', '--format', 'json-unicode-array', '-s', query],
+                            capture=True, timeout=min(60, remaining))
+            return json.loads(result.stdout)
+
+        LOGGER.info('Waiting for compaction of %s (%d column tables)', path, len(tables))
+        wait_column_compaction(tables, execute_query, timeout=timeout, interval=5)
+        LOGGER.info('Compaction complete for %s', path)
+
+    def fill(self, datasets: list[Dataset], *, initialize=True, compaction_timeout=3600):
+        if compaction_timeout < 0:
+            raise ValueError('Compaction timeout must be nonnegative')
         paths = sorted(Path(dataset.path.strip('/')).parts for dataset in datasets)
         if not paths or not paths[0] or any(b[:len(a)] == a for a, b in zip(paths, paths[1:])):
             raise ValueError('Specify datasets with distinct, non-overlapping table paths')
@@ -285,6 +311,10 @@ class TableFiller:
                 jobs.append(executor.submit(self._fill, dataset, f'{run_id}-{index}', dataset_resources))
             for job in jobs:
                 job.result()
+            if compaction_timeout:
+                jobs = [executor.submit(self._wait_compaction, dataset, compaction_timeout) for dataset in datasets]
+                for job in jobs:
+                    job.result()
 
 
 def main():
@@ -298,6 +328,8 @@ def main():
                         help='SSH host with optional gRPC endpoint. Repeat for explicit static nodes')
     parser.add_argument('--resource-parts', type=int, default=16)
     parser.add_argument('--attempts', type=int, default=3)
+    parser.add_argument('--compaction-timeout', type=int, default=3600,
+                        help='Seconds to wait for column table compaction (default: 3600)')
     auth = parser.add_mutually_exclusive_group()
     auth.add_argument('--sa-key-file', default='')
     auth.add_argument('--token-file', default='')
@@ -314,6 +346,8 @@ def main():
             if url.scheme not in ('grpc', 'grpcs') or not url.hostname:
                 parser.error(f'Expected a grpc:// or grpcs:// endpoint for {host}')
         static_nodes[host] = endpoint or args.endpoint
+    if args.compaction_timeout <= 0:
+        parser.error('Compaction timeout must be positive')
     if args.mon_port < 0:
         parser.error('Monitoring port must be nonnegative')
     try:
@@ -333,4 +367,4 @@ def main():
     YdbCluster.reset(args.endpoint, args.database.lstrip('/'), args.mon_port, None)
     with TableFiller(args.cli, static_nodes=static_nodes, key_file=args.sa_key_file, token_file=args.token_file,
                      resource_parts=args.resource_parts, attempts=args.attempts) as filler:
-        filler.fill(datasets)
+        filler.fill(datasets, compaction_timeout=args.compaction_timeout)

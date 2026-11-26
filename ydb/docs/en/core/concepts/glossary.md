@@ -913,9 +913,9 @@ An example of a fail domain is a set of disks connected to a single server, sinc
 
 Failures at the fail domain level are automatically handled by {{ ydb-short-name }} without stopping the cluster.
 
-#### Distributed storage channel {#channel}
+#### Tablet channel {#channel}
 
-**Distributed storage channel**, **DS channel**, or **channel** is a logical connection between a [tablet](#tablet) and a [storage group](#storage-group). A tablet can write data to different channels, and each channel maps to a specific storage group. Having multiple channels allows a tablet to:
+**Tablet channel**, **Distributed storage channel**, **DS channel**, or **channel** is a logical connection between a [tablet](#tablet) and a [storage group](#storage-group). A tablet can write data to different channels, and each channel maps to a specific storage group. Having multiple channels allows a tablet to:
 
 * Write more data than a single storage group can hold.
 * Store different [LogoBlob](#logoblob)s in different storage groups, with different properties, such as error correction coding or on different media (HDD, SSD, NVMe).

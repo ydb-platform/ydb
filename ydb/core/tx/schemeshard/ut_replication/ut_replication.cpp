@@ -1158,4 +1158,40 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
     }
 
+    Y_UNIT_TEST(PerItemIssueReachesTheDescribeResult) {
+        NKikimrReplication::TEvDescribeReplicationResult record;
+        record.SetStatus(NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
+        record.MutableConnectionParams()->SetDatabase("/MyRoot");
+
+        auto& broken = *record.AddTargets();
+        broken.SetId(1);
+        broken.SetSrcPath("/MyRoot/src1");
+        broken.SetDstPath("/MyRoot/dst1");
+        auto& brokenIssue = *broken.AddIssues();
+        brokenIssue.set_severity(static_cast<uint32_t>(NYdb::NIssue::ESeverity::Error));
+        brokenIssue.set_message("Cannot attach destination table '/MyRoot/dst1'");
+
+        auto& healthy = *record.AddTargets();
+        healthy.SetId(2);
+        healthy.SetSrcPath("/MyRoot/src2");
+        healthy.SetDstPath("/MyRoot/dst2");
+
+        Ydb::Replication::DescribeReplicationResult proto;
+        FillReplicationDescription(proto, record);
+        UNIT_ASSERT_VALUES_EQUAL(proto.items_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(proto.items(0).issues_size(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(proto.items(0).issues(0).message(), "Cannot attach destination table");
+        // Not the protobuf default of 0, which renders as Fatal: one broken item is not fatal.
+        UNIT_ASSERT_VALUES_EQUAL(proto.items(0).issues(0).severity(),
+            static_cast<uint32_t>(NYdb::NIssue::ESeverity::Error));
+        UNIT_ASSERT_VALUES_EQUAL(proto.items(1).issues_size(), 0);
+
+        const NYdb::NReplication::TReplicationDescription description(proto);
+        const auto& items = description.GetItems();
+        UNIT_ASSERT_VALUES_EQUAL(items.size(), 2);
+        UNIT_ASSERT(!items[0].Issues.Empty());
+        UNIT_ASSERT_STRING_CONTAINS(items[0].Issues.ToOneLineString(), "Cannot attach destination table");
+        UNIT_ASSERT(items[1].Issues.Empty());
+    }
+
 } // TReplicationTests

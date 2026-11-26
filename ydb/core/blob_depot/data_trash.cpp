@@ -15,6 +15,7 @@ namespace NKikimr::NBlobDepot {
             record.MoveToTrash(this, it->second);
             records.insert(&record);
             InFlightTrashSize -= it->second.BlobSize();
+            HotBytesPendingTrashCommit -= it->second.BlobSize();
             AllInFlightTrashBlobs.erase(it->second);
         }
         InFlightTrashBlobs.erase(first, last);
@@ -25,12 +26,18 @@ namespace NKikimr::NBlobDepot {
 
         auto [s3first, s3last] = InFlightTrashS3.equal_range(cookie);
         for (auto it = s3first; it != s3last; ++it) {
-            Self->S3Manager->AddTrashToCollect(it->second);
-            InFlightTrashSize -= it->second.Len;
+            const auto& [locator, watchForLatePut] = it->second;
+            if (watchForLatePut) {
+                Self->S3Manager->RunPutProbe();
+            }
+            Self->S3Manager->AddTrashToCollect(locator);
+            InFlightTrashSize -= locator.Len;
         }
         InFlightTrashS3.erase(s3first, s3last);
 
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_IN_FLIGHT_TRASH_SIZE] = InFlightTrashSize;
+        Self->ScheduleHotWriteAdmission();
+        Self->S3Manager->MaybeScheduleCooling();
     }
 
     void TData::HandleTrash(TRecordsPerChannelGroup& record) {

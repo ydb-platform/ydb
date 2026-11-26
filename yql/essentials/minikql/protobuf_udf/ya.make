@@ -15,6 +15,11 @@ PEERDIR(
     yt/yt_proto/yt/formats
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    .*
+)
+
 END()
 
 RECURSE_FOR_TESTS(

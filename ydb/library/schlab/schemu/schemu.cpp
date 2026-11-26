@@ -77,7 +77,7 @@ bool TSchEmu::GenJob(double &outTimeToNextReqMs) {
         cbs.CurBudget = cbs.MaxBudget;
         cbs.Period = 2000ull;
 
-        Scheduler->AddCbs(ownerIdx, gateIdx, cbs, timeNs);
+        Scheduler->AddCbs(ownerIdx, gateIdx, std::move(cbs), timeNs);
         TimeMs += 0.000001;
         timeNs = MsToNs(TimeMs);
     }
@@ -106,7 +106,7 @@ void TSchEmu::Emulate(double durationMs) {
             double genTimeStepMs = Max(timeToNextReqMs, 1.0);
 
             ui64 timeNs = MsToNs(TimeMs);
-            TIntrusivePtr<TJob> job = Scheduler->SelectJob(timeNs);
+            auto* job = Scheduler->SelectJob(timeNs);
             if (job) {
                 double jobCost = (double)job->Cost;
                 double jobDurationMs = NsToMs(jobCost);

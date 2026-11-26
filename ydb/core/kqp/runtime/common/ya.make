@@ -1,6 +1,7 @@
 YQL_LIBRARY()
 
 SRCS(
+    kqp_compute_column.h
     kqp_compute_context.cpp
     kqp_program_builder.cpp
 )

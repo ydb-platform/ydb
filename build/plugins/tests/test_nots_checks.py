@@ -153,7 +153,24 @@ def test_library_configure_preserves_regular_build_script_behavior(
 
 @pytest.mark.parametrize("hermetic", [False, True])
 @pytest.mark.parametrize("check_type", ["lint", "test"])
-def test_ts_check_preserves_data_and_runs_user_recipes_after_setup(monkeypatch, hermetic, check_type):
+@pytest.mark.parametrize("common_hooks", [False, True])
+def test_ts_check_preserves_data_and_runs_user_recipes_after_setup(
+    monkeypatch, tmp_path, hermetic, check_type, common_hooks
+):
+    from build.plugins.lib.nots.package_manager import PackageManager, common_config
+
+    monkeypatch.setitem(sys.modules, "lib.nots.package_manager.common_config", common_config)
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / "package.json").write_text("{}")
+    if common_hooks:
+        (project / "nots.yaml").write_text("nots: {commonConfigPath: ../common.yaml}\npnpmfile: [local.cjs]\n")
+        (tmp_path / "common.yaml").write_text(
+            "pnpmfile: [shared.mjs]\npatchedDependencies: {example: shared.patch}\n"
+        )
+        (project / "local.cjs").write_text("exports.hooks = {};\n")
+        (tmp_path / "shared.mjs").write_text("export const hooks = {};\n")
+        (tmp_path / "shared.patch").write_text("dummy patch")
     image = "docker://registry.yandex.net/test@sha256:" + "a" * 64 + "=test:latest"
     policy = "arcadia/devtools/frontend_build_platform/nots/tier0-settings/src/settings.yaml"
     values = {
@@ -176,16 +193,12 @@ def test_ts_check_preserves_data_and_runs_user_recipes_after_setup(monkeypatch, 
         set=lambda pair: values.update([pair]),
         enabled=lambda _: False,
         set_property=lambda pair: records.append(pair),
+        ondata=lambda paths: values.update(TEST_DATA_VALUE=values["TEST_DATA_VALUE"] + " " + " ".join(paths)),
         on_setup_extract_node_modules_layer_recipe=lambda _: append_recipe("extract-node-modules-layer"),
         on_setup_install_node_modules_recipe=lambda _: append_recipe("install-node-modules"),
         on_setup_extract_output_tars_recipe=lambda _: append_recipe("extract-outputs"),
     )
-    pm = SimpleNamespace(
-        module_path="app",
-        sources_path="app",
-        get_local_peers_from_package_json=lambda: [],
-        load_package_json_from_dir=lambda _: SimpleNamespace(data={}),
-    )
+    pm = PackageManager("$B", "$B/app", str(project), module_path="app", sources_root=str(tmp_path))
     monkeypatch.setattr(nots, "_create_pm", lambda _: pm)
     monkeypatch.setattr(nots, "_use_hermetic_node_modules", lambda _: hermetic)
     monkeypatch.setattr(nots, "_create_erm_json", lambda _: "{}")
@@ -211,7 +224,14 @@ def test_ts_check_preserves_data_and_runs_user_recipes_after_setup(monkeypatch, 
     record = records[0][1]
     if check_type == "test":
         assert nots.df.deserialize_list(record[nots.df.DockerImage.KEY]) == [image]
-    expected_data = ["arcadia/app/fixture.json"] + ([] if hermetic else [policy])
+    expected_data = ["arcadia/app/fixture.json"]
+    if not hermetic:
+        if common_hooks:
+            expected_data.extend(
+                "arcadia/" + filename
+                for filename in ["app/local.cjs", "app/nots.yaml", "common.yaml", "shared.mjs", "shared.patch"]
+            )
+        expected_data.append(policy)
     assert nots.df.deserialize_list(record[nots.df.TestData.KEY]) == expected_data
     setup = "extract-node-modules-layer" if hermetic else "install-node-modules"
     assert base64.b64decode(record[nots.df.TestRecipes.KEY]).decode().split() == [

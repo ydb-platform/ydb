@@ -1,6 +1,7 @@
 #include "kqp_schedulable_task.h"
 
 #include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr::NKqp::NScheduler {
 
@@ -17,7 +18,7 @@ TSchedulableTask::~TSchedulableTask() {
     --Query->CpuMaxDemand;
 }
 
-void TSchedulableTask::RegisterForResume(const TActorId& actorId) {
+void TSchedulableTask::RegisterForResume(const NActors::TActorId& actorId) {
     Y_ENSURE(!Iterator);
     Iterator = Query->AddTask(shared_from_this());
     ActorId = actorId;

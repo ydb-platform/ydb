@@ -431,6 +431,56 @@ private:
 
 } // namespace
 
+Y_UNIT_TEST_SUITE(TransferWriterFactory) {
+
+Y_UNIT_TEST(MockCompilationServiceStopsOnPoison) {
+    TTestBasicRuntime runtime;
+    runtime.Initialize(TAppPrepare().Unwrap());
+    const auto edge = runtime.AllocateEdgeActor();
+
+    // The test runtime installs MockTransferWriterFactory by default.
+    const auto& factory = runtime.GetAppData().TransferWriterFactory;
+    UNIT_ASSERT(factory);
+    const auto service = runtime.Register(factory->CreateCompilationService());
+    UNIT_ASSERT(runtime.FindActor(service));
+
+    runtime.Send(new IEventHandle(service, edge, new TEvents::TEvPoison()), 0, true);
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return !runtime.FindActor(service); };
+    runtime.DispatchEvents(options, TDuration::Seconds(5));
+    UNIT_ASSERT(!runtime.FindActor(service));
+}
+
+Y_UNIT_TEST(CompilationServiceCompilesProgram) {
+    TTestBasicRuntime runtime;
+    runtime.Initialize(TAppPrepare().Unwrap());
+    const auto edge = runtime.AllocateEdgeActor();
+    TTransferWriterFactory factory;
+    const auto service = runtime.Register(factory.CreateCompilationService());
+
+    TAutoPtr<TNavigate> nav(new TNavigate());
+    FillOkTable(nav->ResultSet.emplace_back());
+    const auto sql = TStringBuilder() << DefaultLambda()
+        << "SELECT * FROM (SELECT $__ydb_transfer_lambda(TableRow()) AS "
+        << SystemColumns::Root << " FROM Input) FLATTEN BY " << SystemColumns::Root << ";";
+    auto holder = CreateProgramHolder(BuildScheme(nav), sql);
+    constexpr ui64 cookie = 42;
+    runtime.Send(new IEventHandle(service, edge,
+        new TEvRowDispatcher::TEvPurecalcCompileRequest(holder, {}), 0, cookie));
+
+    const auto response = runtime.GrabEdgeEvent<TEvRowDispatcher::TEvPurecalcCompileResponse>(edge, TDuration::Seconds(10));
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL(response->Cookie, cookie);
+    UNIT_ASSERT_C(response->Get()->Status == NYql::NDqProto::StatusIds::SUCCESS, response->Get()->Issues.ToString());
+    UNIT_ASSERT(response->Get()->ProgramHolder.Get() == holder.Get());
+    UNIT_ASSERT(holder->GetProgram());
+
+    runtime.Send(new IEventHandle(service, edge, new TEvents::TEvPoison()));
+    UNIT_ASSERT(!runtime.FindActor(service));
+}
+
+} // Y_UNIT_TEST_SUITE(TransferWriterFactory)
+
 Y_UNIT_TEST_SUITE(TransferWriter) {
 
 Y_UNIT_TEST(EmptyNavigateResultLeaves) {

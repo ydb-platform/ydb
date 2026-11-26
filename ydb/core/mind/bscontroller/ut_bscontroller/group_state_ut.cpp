@@ -6,6 +6,7 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/map.h>
 
 using namespace NActors;
 using namespace NKikimr;
@@ -68,23 +69,40 @@ public:
             disks.insert(disk.ActorId);
         }
         for (ui32 index = 0; index < requests; ++index) {
-            TEvBlobStorage::TEvVStatus::TPtr request = Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVStatus>(disks);
-            TVDiskID disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
-            UNIT_ASSERT_VALUES_EQUAL(disk.GroupGeneration, Info.Generation);
-            const bool available = !status.FailSecondRealm || disk.FailRealm != 1 || disk.FailDomain != 0;
-            if (!available || (status.OnlyFirstRealm && disk.FailRealm != 0)) {
-                --disk.GroupGeneration;
-            }
-            const TVDiskIdShort diskId(disk);
-            const bool replicated = status.Replicated && available && status.ReplicatingRealm != disk.FailRealm;
-            const auto replyStatus = status.ErrorDisk == diskId ? NKikimrProto::ERROR : NKikimrProto::OK;
-            std::unique_ptr<TEvBlobStorage::TEvVStatusResult> result =
-                std::make_unique<TEvBlobStorage::TEvVStatusResult>(replyStatus, disk, true, replicated, false, 1);
-            if (status.DurabilityReplicated) {
-                result->Record.SetDurabilityReplicated(*status.DurabilityReplicated && available);
-            }
-            Runtime.Send(new IEventHandle(request->Sender, request->Recipient, result.release(), 0, request->Cookie), 0, true);
+            ReplyStatus(*Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVStatus>(disks), status);
         }
+    }
+
+    TMap<TVDiskIdShort, IEventHandle::TPtr> CaptureStatusRound() {
+        TMap<TVDiskIdShort, IEventHandle::TPtr> requests;
+        for (const auto& disk : Info.VDisks) {
+            auto events = Runtime.CaptureMailboxEvents(disk.ActorId.Hint(), disk.ActorId.NodeId());
+            const bool excluded = IsExcluded(Info.States[disk.Id.FailRealm]);
+            UNIT_ASSERT_VALUES_EQUAL(events.size(), excluded ? 0u : 1u);
+            if (!excluded) {
+                UNIT_ASSERT_VALUES_EQUAL(events.front()->GetTypeRewrite(), TEvBlobStorage::TEvVStatus::EventType);
+                requests.emplace(TVDiskIdShort(disk.Id), std::move(events.front()));
+            }
+        }
+        return requests;
+    }
+
+    void ReplyStatus(const IEventHandle& request, const TVDiskReplicationStatus& status = {}) {
+        TVDiskID disk = VDiskIDFromVDiskID(request.CastAsLocal<TEvBlobStorage::TEvVStatus>()->Record.GetVDiskID());
+        UNIT_ASSERT_VALUES_EQUAL(disk.GroupGeneration, Info.Generation);
+        const bool available = !status.FailSecondRealm || disk.FailRealm != 1 || disk.FailDomain != 0;
+        if (!available || (status.OnlyFirstRealm && disk.FailRealm != 0)) {
+            --disk.GroupGeneration;
+        }
+        const TVDiskIdShort diskId(disk);
+        const bool replicated = status.Replicated && available && status.ReplicatingRealm != disk.FailRealm;
+        const auto replyStatus = status.ErrorDisk == diskId ? NKikimrProto::ERROR : NKikimrProto::OK;
+        std::unique_ptr<TEvBlobStorage::TEvVStatusResult> result =
+            std::make_unique<TEvBlobStorage::TEvVStatusResult>(replyStatus, disk, true, replicated, false, 1);
+        if (status.DurabilityReplicated) {
+            result->Record.SetDurabilityReplicated(*status.DurabilityReplicated && available);
+        }
+        Runtime.Send(new IEventHandle(request.Sender, request.Recipient, result.release(), 0, request.Cookie), 0, true);
     }
 
     void AssertNoRequests() {
@@ -125,12 +143,15 @@ public:
         Runtime.PushMailboxEventsFront(Warden.Hint(), Warden.NodeId(), events);
     }
 
-    TMirror3dcGroupConfiguration GetProposal(ui32 groupId = 42) {
+    TMirror3dcGroupConfiguration GetProposal(ui32 groupId = 42, ui64* cookie = nullptr) {
         auto event = Runtime.GrabEdgeEventRethrow<TEvGroupState::TEvPropose>(Controller);
         UNIT_ASSERT_VALUES_EQUAL(event->Sender, Actor);
         const auto& proposal = *event->Get();
         UNIT_ASSERT_VALUES_EQUAL(proposal.GroupId, groupId);
         UNIT_ASSERT_VALUES_EQUAL(proposal.Generation, Info.Generation);
+        if (cookie) {
+            *cookie = event->Cookie;
+        }
         return proposal.Next;
     }
 };
@@ -218,19 +239,94 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
 
     Y_UNIT_TEST(SoloRecoveryPendingWaitsForRecoveringVDiskStartup) {
         using S = NKikimrBlobStorage::TGroupState;
+        const TVDiskIdShort included3(0, 2, 0);
+        const TVDiskIdShort recovering1(1, 0, 0);
+        const TVDiskIdShort recovering2(1, 1, 0);
+        const TVDiskIdShort recovering3(1, 2, 0);
         for (auto [pending, ready] : {std::pair{S::DC_SOLO_RECOVERY_INV1_PENDING, S::DC_SOLO_RECOVERY_INV1},
                 std::pair{S::DC_SOLO_RECOVERY_INV2_PENDING, S::DC_SOLO_RECOVERY_INV2}}) {
             TGroupStateFixture fixture;
             fixture.Update(3, pending, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED});
-            TVDiskReplicationStatus status;
-            status.ReplicatingRealm = 1;
-            fixture.ReplyRound(6, status);
+            fixture.Runtime.SimulateSleep(TDuration::Seconds(6));
+            auto first = fixture.CaptureStatusRound();
+            // Every disk replies, but R3 has not finished replicating.
+            for (const auto& [disk, request] : first) {
+                TVDiskReplicationStatus status;
+                status.Replicated = disk != recovering3;
+                status.DurabilityReplicated = status.Replicated;
+                fixture.ReplyStatus(*request, status);
+            }
+
+            fixture.Runtime.SimulateSleep(TDuration::Seconds(5));
             fixture.AssertNoProposal();
-            fixture.AssertNoRepair();
-            fixture.ReplyRound(3);
+            auto second = fixture.CaptureStatusRound();
+            // R1 and R2 stop, and only R3 replies in Recovering.
+            for (const auto& [disk, request] : second) {
+                if (disk != recovering1 && disk != recovering2) {
+                    fixture.ReplyStatus(*request);
+                }
+            }
+
+            fixture.Runtime.SimulateSleep(TDuration::Seconds(5));
+            fixture.AssertNoProposal();
+            auto third = fixture.CaptureStatusRound();
+            // R1's reply to the previous round arrives after this round starts.
+            fixture.ReplyStatus(*second.at(recovering1));
+            for (const auto& [disk, request] : third) {
+                if (disk != recovering1) {
+                    fixture.ReplyStatus(*request);
+                }
+            }
+
+            fixture.Runtime.SimulateSleep(TDuration::Seconds(5));
+            fixture.AssertNoProposal();
+            auto healthy = fixture.CaptureStatusRound();
+            for (const auto& [disk, request] : healthy) {
+                // INV2 can finish the round with two Included replies.
+                if (pending != S::DC_SOLO_RECOVERY_INV2_PENDING || disk != included3) {
+                    fixture.ReplyStatus(*request);
+                }
+            }
             auto proposal = fixture.GetProposal();
             UNIT_ASSERT(proposal.State == ready);
             UNIT_ASSERT(proposal.Realms == fixture.Info.States);
+            fixture.AssertNoRepair();
+        }
+    }
+
+    Y_UNIT_TEST(SoloRecoveryPendingRepollsBeforeRetryingProposal) {
+        using S = NKikimrBlobStorage::TGroupState;
+        const TVDiskIdShort included1(0, 0, 0);
+        for (auto [pending, ready] : {std::pair{S::DC_SOLO_RECOVERY_INV1_PENDING, S::DC_SOLO_RECOVERY_INV1},
+                std::pair{S::DC_SOLO_RECOVERY_INV2_PENDING, S::DC_SOLO_RECOVERY_INV2}}) {
+            TGroupStateFixture fixture;
+            fixture.Update(3, pending, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED});
+            fixture.ReplyRound(6);
+            ui64 cookie = 0;
+            UNIT_ASSERT(fixture.GetProposal(42, &cookie).State == ready);
+            // The controller finishes the attempt without committing a new generation.
+            fixture.Runtime.Send(new IEventHandle(fixture.Actor, fixture.Controller,
+                new TEvGroupState::TEvProposalResult, 0, cookie), 0, true);
+
+            fixture.Runtime.SimulateSleep(TDuration::Seconds(6));
+            fixture.AssertNoProposal();
+            auto retry = fixture.CaptureStatusRound();
+            // Recovering is ready, but Included has lost quorum since the first attempt.
+            for (const auto& [disk, request] : retry) {
+                if (disk == included1 || IsRecovering(fixture.Info.States[disk.FailRealm])) {
+                    fixture.ReplyStatus(*request);
+                }
+            }
+
+            fixture.Runtime.SimulateSleep(TDuration::Seconds(5));
+            fixture.AssertNoProposal();
+            auto healthy = fixture.CaptureStatusRound();
+            for (const auto& request : healthy) {
+                fixture.ReplyStatus(*request.second);
+            }
+            ui64 retryCookie = 0;
+            UNIT_ASSERT(fixture.GetProposal(42, &retryCookie).State == ready);
+            UNIT_ASSERT_VALUES_UNEQUAL(cookie, retryCookie);
             fixture.AssertNoRepair();
         }
     }

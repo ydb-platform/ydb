@@ -13,7 +13,11 @@
 
 namespace NKikimr {
 
-static arrow::MemoryPool* ArrowAllocator = nullptr;
+namespace {
+
+arrow::MemoryPool* ArrowAllocator = nullptr;
+
+} // namespace
 
 void SetArrowAllocator(arrow::MemoryPool* allocator) {
     // TODO: check that we didn't already used the MKQL allocator

@@ -991,6 +991,8 @@ public:                                                                         
             void InitCounters() {
                 COUNTER_INIT(DiskTimeAvailableCtr, false);
                 COUNTER_INIT(DiskTimeFairShareNs, false);
+                COUNTER_INIT(BurstDetector_greenMs, true);
+                COUNTER_INIT(BurstDetector_redMs, true);
                 ReadDiskCost.InitDefragDiskCost();
             }
 
@@ -999,6 +1001,8 @@ public:                                                                         
 
             COUNTER_DEF(DiskTimeAvailableCtr);
             COUNTER_DEF(DiskTimeFairShareNs);
+            COUNTER_DEF(BurstDetector_greenMs);
+            COUNTER_DEF(BurstDetector_redMs);
         };
 
         class TScrubGroup : public TBase {

@@ -46,6 +46,7 @@
 #include <util/generic/hash_multi_map.h>
 
 #include <array>
+#include <list>
 #include <unordered_map>
 
 inline IOutputStream& operator <<(IOutputStream& o, NKikimr::TErasureType::EErasureSpecies p) {
@@ -2078,12 +2079,18 @@ private:
     void RenderGroupTable(IOutputStream& out, std::function<void()> callback);
     void RenderGroupRow(IOutputStream& out, const TGroupInfo& group);
 
+    static TString DescribeStartupEvent(const IEventHandle& ev) {
+        // Configuration requests can contain credentials.
+        return ev.GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType
+            ? TString("TEvControllerConfigRequest") : ev.ToString();
+    }
+
     void Enqueue(STFUNC_SIG) override {
         YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Enqueue",
             {"marker", "BSC04"},
             {"tabletId", TabletID()},
             {"type", ev->GetTypeRewrite()},
-            {"event", ev->ToString()});
+            {"event", DescribeStartupEvent(*ev)});
         InitQueue.push_back(ev);
     }
 
@@ -2683,7 +2690,7 @@ public:
         YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "StateInit event",
             {"marker", "BSC05"},
             {"type", ev->GetTypeRewrite()},
-            {"event", ev->ToString()});
+            {"event", DescribeStartupEvent(*ev)});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvNodeWardenStorageConfig, Handle);
@@ -2871,7 +2878,7 @@ public:
                 {"marker", "BSC08"},
                 {"tabletId", TabletID()},
                 {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString()});
+                {"event", DescribeStartupEvent(*ev)});
             StateWork(ev);
         }
 

@@ -11,6 +11,7 @@
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/wrappers/fake_storage.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -46,6 +47,89 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpRboOlap) {
+
+    Y_UNIT_TEST(SimpleQueryOlapStats) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
+
+        auto client = kikimr.GetTableClient();
+
+        {
+            TStreamExecScanQuerySettings settings;
+            settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT `resource_id`, `timestamp`
+                FROM `/Root/olapStore/olapTable`
+                ORDER BY `resource_id`, `timestamp`
+            )", settings).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            NJson::TJsonValue jsonStat;
+            CollectRows(it, &jsonStat);
+            UNIT_ASSERT(!jsonStat.IsNull());
+            const TString plan = jsonStat.GetStringRobust();
+            Cerr << plan << Endl;
+            UNIT_ASSERT(plan.find("NodesScanShards") == TString::npos);
+        }
+
+        {
+            TStreamExecScanQuerySettings settings;
+            settings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT `resource_id`, `timestamp`
+                FROM `/Root/olapStore/olapTable`
+                ORDER BY `resource_id`, `timestamp`
+            )", settings).GetValueSync();
+            NJson::TJsonValue jsonStat;
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CollectRows(it, &jsonStat);
+            const TString plan = jsonStat.GetStringRobust();
+            Cerr << plan << Endl;
+            UNIT_ASSERT(plan.find("NodesScanShards") != TString::npos);
+        }
+    }
+
+    Y_UNIT_TEST(StatsSysViewOrderByPKWithLimit) {
+        constexpr ui64 portionsCount = 3;
+        constexpr ui64 limit = 3;
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        for (ui64 i = 0; i < portionsCount; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+        const TString sysViewPath = "/Root/olapStore/olapTable/.sys/primary_index_stats";
+        UNIT_ASSERT_VALUES_EQUAL(ExecuteScanQuery(tableClient, "SELECT DISTINCT PortionId FROM `" + sysViewPath + "`").size(), portionsCount);
+        NYdb::NTable::TStreamExecScanQuerySettings scanSettings;
+        scanSettings.CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Full);
+        for (const TStringBuf direction : {"ASC"sv, "DESC"sv}) {
+            const TString query = TStringBuilder()
+                << "SELECT PathId, TabletId, PortionId FROM `" << sysViewPath << "` ORDER BY PathId " << direction
+                << ", TabletId " << direction << ", PortionId " << direction << " LIMIT " << limit;
+            auto stream = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(stream.IsSuccess(), stream.GetIssues().ToString());
+            const auto result = CollectStreamResult(stream);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.RowsCount, limit, direction);
+            UNIT_ASSERT(result.QueryStats);
+            // Count rows entering KQP, before its own TopSort and LIMIT can hide a missing pushdown.
+            AssertTableStats(*result.QueryStats, sysViewPath, {.ExpectedReads = limit});
+        }
+    }
 
     Y_UNIT_TEST_TWIN(ExplainSharedStageOnce, Analyze) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);

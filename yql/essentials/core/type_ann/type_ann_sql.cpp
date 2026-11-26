@@ -6366,21 +6366,32 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
                 return IGraphTransformer::TStatus::Repeat;
             }
 
-            ui32 testExprType;
-            bool convertToPg;
-            if (!ExtractPgType(lambda->GetTypeAnn(), testExprType, convertToPg, lambda->Pos(), ctx.Expr, isUniversal)) {
-                return IGraphTransformer::TStatus::Error;
-            }
+            if (isYql) {
+                if (RemoveOptionalType(lambda->GetTypeAnn())->GetKind() == ETypeAnnotationKind::Universal) {
+                    input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                    return IGraphTransformer::TStatus::Ok;
+                }
 
-            if (isUniversal) {
-                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
-                return IGraphTransformer::TStatus::Ok;
-            }
+                if (!IsNull(*lambda) && !EnsureSpecificDataType(*lambda, EDataSlot::Bool, ctx.Expr, /*allowOptional=*/true)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else {
+                ui32 testExprType;
+                bool convertToPg;
+                if (!ExtractPgType(lambda->GetTypeAnn(), testExprType, convertToPg, lambda->Pos(), ctx.Expr, isUniversal)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
 
-            if (testExprType && testExprType != NPg::LookupType("bool").TypeId) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Expected pg bool, but got " << NPg::LookupType(testExprType).Name));
-                return IGraphTransformer::TStatus::Error;
+                if (isUniversal) {
+                    input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                    return IGraphTransformer::TStatus::Ok;
+                }
+
+                if (testExprType && testExprType != NPg::LookupType("bool").TypeId) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                        TStringBuilder() << "Expected pg bool, but got " << NPg::LookupType(testExprType).Name));
+                    return IGraphTransformer::TStatus::Error;
+                }
             }
 
             if (isYql) {

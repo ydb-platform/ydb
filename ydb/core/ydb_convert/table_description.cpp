@@ -1160,6 +1160,13 @@ void FillColumnDescriptionImpl(TYdbProto& out,
     }
 
     for (const auto& column : in.GetColumns()) {
+        // DescribeTable exposes ready columns and has no public build-state field.
+        // Other output protos retain the full schema for schema-copying and system-view flows.
+        if constexpr (std::is_same_v<TYdbProto, Ydb::Table::DescribeTableResult>) {
+            if (column.GetIsBuildInProgress()) {
+                continue;
+            }
+        }
         auto newColumn = out.add_columns();
         Ydb::Type* columnType = AddColumn(newColumn, column);
 

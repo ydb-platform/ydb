@@ -17,4 +17,18 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
         ydb/core/blobstorage/ut_blobstorage/lib
     )
 
+    IF (OS_WINDOWS)
+        CFLAGS(
+            -DKIKIMR_DISABLE_S3_OPS
+        )
+    ELSE()
+        PEERDIR(
+            ydb/core/wrappers/ut_helpers
+            ydb/library/actors/http
+            ydb/library/aws_init
+        )
+    ENDIF()
+
+    YQL_LAST_ABI_VERSION()
+
 END()

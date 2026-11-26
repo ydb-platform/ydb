@@ -533,6 +533,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<BoxId, StoragePoolId, Filter>;
     };
 
+    // Table 137 was used for retired BlobDepot S3 namespaces.
 
     using TTables = SchemaTables<
         Node,

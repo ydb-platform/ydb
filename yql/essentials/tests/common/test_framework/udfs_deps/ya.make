@@ -51,4 +51,9 @@ PEERDIR(
 
 ENDIF()
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    logos/libs/testy/yql_lite
+)
+
 END()

@@ -36,6 +36,11 @@ SRCS(
     reopen.h
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    contrib/libs/leveldb
+)
+
 END()
 
 RECURSE(

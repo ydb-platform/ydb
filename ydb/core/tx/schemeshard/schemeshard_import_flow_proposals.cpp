@@ -13,7 +13,7 @@
 #include <ydb/core/persqueue/public/schema/schema_propose.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
-#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
+#include <ydb/core/tablet_flat/base/bloom_filter_defaults.h>
 #include <ydb/core/ydb_convert/kesus_description.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>

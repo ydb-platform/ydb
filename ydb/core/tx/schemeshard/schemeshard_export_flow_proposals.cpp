@@ -134,13 +134,13 @@ static bool HasMaterializedIndexData(NKikimrSchemeOp::EIndexType type) {
 }
 
 TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetadata(TSchemeShard* ss, const TPathId& tablePathId,
-    bool encrypted, NKikimrSchemeOp::TExportMetadata::TSchemaMappingItem* mapping)
+    bool encrypted, const NKikimrSchemeOp::TExportIndexIVs* selectedImplTables)
 {
     auto description = GetDescription(ss, tablePathId);
     auto& table = *description.MutableTable();
-    if (mapping) {
+    if (selectedImplTables) {
         THashSet<TStringBuf> planned;
-        for (const auto& [path, iv] : mapping->GetIndexIVs().GetIVs()) {
+        for (const auto& [path, iv] : selectedImplTables->GetIVs()) {
             planned.insert(TStringBuf(path).Before('/'));
         }
         // An index added since the export items were selected has no data item.
@@ -149,18 +149,7 @@ TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetadata(TSch
             return HasMaterializedIndexData(index.GetType()) && !planned.contains(index.GetName());
         });
     }
-    auto indexes = GetTableIndexesExportMetadata(table, encrypted);
-    if (indexes.IsSuccess() && mapping) {
-        auto* snapshot = mapping->MutableIndexExportSnapshot();
-        snapshot->Clear();
-        auto& savedTable = *snapshot->MutableTable()->MutableTable();
-        *savedTable.MutableTableIndexes() = table.GetTableIndexes();
-        if (AppData()->FeatureFlags.GetEnableChangefeedsExport()) {
-            *savedTable.MutableCdcStreams() = table.GetCdcStreams();
-            FillChangefeedTopics(ss, table, *snapshot);
-        }
-    }
-    return indexes;
+    return GetTableIndexesExportMetadata(table, encrypted);
 }
 
 static TConclusion<TString> ComputeIndexItemSuffix(
@@ -343,35 +332,15 @@ static void FillIndexExportSettings(NKikimrSchemeOp::TBackupTask& task, const TE
     }
     const auto* mapping = itemIdx < exportInfo.ExportMetadata.SchemaMappingSize()
         ? &exportInfo.ExportMetadata.GetSchemaMapping(itemIdx) : nullptr;
-    if (mapping && mapping->HasIndexExportPrefixes()) {
-        *task.MutableIndexExportPrefixes() = mapping->GetIndexExportPrefixes();
-    }
+    const bool hasIndexPlan = mapping && mapping->HasIndexExportPrefixes();
+    THashSet<TStringBuf> plannedIndexes;
     auto& table = *task.MutableTable()->MutableTable();
-    const bool hasFrozenIndexes = mapping && mapping->HasIndexExportSnapshot();
-    if (hasFrozenIndexes) {
-        // Older receivers derive prefixes from these existing fields.
-        // Keep their inputs consistent with the frozen index prefixes,
-        // even if changefeeds or indexes were added in the meantime.
-        const auto& snapshot = mapping->GetIndexExportSnapshot();
-        // A KMeans build can publish its detected settings after index prefixes have been frozen.
-        THashMap<TPathId, const NKikimrSchemeOp::TVectorIndexKmeansTreeDescription*> readyKMeans;
-        for (const auto& current : table.GetTableIndexes()) {
-            if (current.HasVectorIndexKmeansTreeDescription() && current.GetState() == NKikimrSchemeOp::EIndexStateReady) {
-                readyKMeans.emplace(TPathId(current.GetPathOwnerId(), current.GetLocalPathId()),
-                    &current.GetVectorIndexKmeansTreeDescription());
-            }
+    if (hasIndexPlan) {
+        *task.MutableIndexExportPrefixes() = mapping->GetIndexExportPrefixes();
+        for (const auto& index : mapping->GetIndexExportPrefixes().GetIndexes()) {
+            plannedIndexes.insert(TStringBuf(index.GetImplTablePrefix()).Before('/'));
         }
 
-        auto indexes = snapshot.GetTable().GetTable().GetTableIndexes();
-        for (auto& saved : indexes) {
-            if (!saved.HasVectorIndexKmeansTreeDescription()) {
-                continue;
-            }
-            const auto it = readyKMeans.find(TPathId(saved.GetPathOwnerId(), saved.GetLocalPathId()));
-            if (it != readyKMeans.end()) {
-                *saved.MutableVectorIndexKmeansTreeDescription() = *it->second;
-            }
-        }
         auto& partitionConfig = *table.MutablePartitionConfig();
         const auto& copiedConfig = copiedTable.GetPartitionConfig();
         if (copiedConfig.HasEnableFilterByKey()) {
@@ -383,20 +352,18 @@ static void FillIndexExportSettings(NKikimrSchemeOp::TBackupTask& task, const TE
         table.MutableColumns()->CopyFrom(copiedTable.GetColumns());
         table.MutableKeyColumnNames()->CopyFrom(copiedTable.GetKeyColumnNames());
         table.MutableKeyColumnIds()->CopyFrom(copiedTable.GetKeyColumnIds());
-        table.MutableTableIndexes()->Swap(&indexes);
-        table.MutableCdcStreams()->CopyFrom(snapshot.GetTable().GetTable().GetCdcStreams());
-        task.MutableChangefeedUnderlyingTopics()->CopyFrom(snapshot.GetChangefeedUnderlyingTopics());
     }
-    // Older DataShards derive the list from the scheme even when the materialization plan is empty.
-    const bool emptyPlan = task.HasIndexExportPrefixes() && !task.GetIndexExportPrefixes().IndexesSize();
-    const auto useCopiedIndex = [hasFrozenIndexes](const auto& index) {
+    const auto useCopiedIndex = [hasIndexPlan](const auto& index) {
         const auto type = index.GetType();
-        return type == NKikimrSchemeOp::EIndexTypeGlobalHnsw || (hasFrozenIndexes
+        return type == NKikimrSchemeOp::EIndexTypeGlobalHnsw || (hasIndexPlan
             && (type == NKikimrSchemeOp::EIndexTypeGlobalAsync || TTableIndexInfo::IsLocalIndex(type)));
     };
     auto& indexes = *table.MutableTableIndexes();
+    // The plan, including an empty one, determines which materialized indexes
+    // have data items.
     EraseIf(indexes, [&](const auto& index) {
-        return useCopiedIndex(index) || (emptyPlan && HasMaterializedIndexData(index.GetType()));
+        return useCopiedIndex(index) || (hasIndexPlan && HasMaterializedIndexData(index.GetType())
+            && !plannedIndexes.contains(index.GetName()));
     });
     for (const auto& index : copiedTable.GetTableIndexes()) {
         if (useCopiedIndex(index)) {
@@ -463,7 +430,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     const auto& ttl = task.GetTable().GetTable().GetTTLSettings();
     if (ttl.HasEnabled() && item.ParentIdx == Max<ui32>()
             && itemIdx < exportInfo.ExportMetadata.SchemaMappingSize()
-            && exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).HasIndexExportSnapshot()) {
+            && exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).HasIndexExportPrefixes()) {
         const auto copyPath = exportPath.Child(ToString(itemIdx));
         const auto& columns = ss->Tables.at(copyPath.Base()->PathId)->Columns;
         THashMap<TString, ui32> columnIds;

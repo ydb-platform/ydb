@@ -746,7 +746,7 @@ private:
                     continue;
                 }
 
-                const auto indexes = GetTableIndexesExportMetadata(Self, parentItem.SourcePathId, true, &mapping);
+                const auto indexes = GetTableIndexesExportMetadata(Self, parentItem.SourcePathId, true, &mapping.GetIndexIVs());
                 if (!indexes) {
                     issues = indexes.GetErrorMessage();
                     return false;

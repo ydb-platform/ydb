@@ -13594,7 +13594,7 @@ public:
 
 private:
     void AddChangefeed(const char* name);
-    NBackup::TMetadata CheckBackup(bool changefeedBeforeBackup, bool legacyChangefeedsDisabled);
+    NBackup::TMetadata CheckBackup(bool changefeedBeforeBackup, int indexPrefixOffset);
 
     TBackupStorage Storage;
     TTestBasicRuntime Runtime;
@@ -13748,10 +13748,11 @@ NBackup::TMetadata TMaterializedIndexBackup::ExportTables(EIndexExportEvent even
     if (legacyDataShard) {
         UNIT_ASSERT(proposalsWithoutIndexPrefixes > 0);
     }
-    return CheckBackup(changefeedBeforeBackup, legacyChangefeedsDisabled);
+    const int indexPrefixOffset = legacyChangefeedsDisabled ? -1 : int(legacyDataShard && changefeedBeforeBackup);
+    return CheckBackup(changefeedBeforeBackup, indexPrefixOffset);
 }
 
-NBackup::TMetadata TMaterializedIndexBackup::CheckBackup(bool changefeedBeforeBackup, bool legacyChangefeedsDisabled) {
+NBackup::TMetadata TMaterializedIndexBackup::CheckBackup(bool changefeedBeforeBackup, int indexPrefixOffset) {
     THashSet<TString> fileIVs;
     THashMap<TString, NBackup::TEncryptionIV> metadataIVs;
     const auto readBackupFile = [&](const TString& path) {
@@ -13776,7 +13777,7 @@ NBackup::TMetadata TMaterializedIndexBackup::CheckBackup(bool changefeedBeforeBa
         UNIT_ASSERT_VALUES_EQUAL(DescribePath(Runtime, "/MyRoot/Table")
             .GetPathDescription().GetTable().CdcStreamsSize(), 2);
         UNIT_ASSERT(metadata.GetChangefeeds());
-        UNIT_ASSERT_VALUES_EQUAL(metadata.GetChangefeeds()->size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetChangefeeds()->size(), 2);
     }
     const auto checkSchema = [&](const TString& prefix) {
         const auto content = readBackupFile(prefix + "/scheme.pb");
@@ -13796,7 +13797,7 @@ NBackup::TMetadata TMaterializedIndexBackup::CheckBackup(bool changefeedBeforeBa
         checkSchema(prefix);
         readMetadata(prefix);
         if (Encrypted) {
-            UNIT_ASSERT_VALUES_EQUAL(index.ExportPrefix, Sprintf("%03u", expectedIndexPrefixNumber - (legacyChangefeedsDisabled ? 1 : 0)));
+            UNIT_ASSERT_VALUES_EQUAL(index.ExportPrefix, Sprintf("%03u", expectedIndexPrefixNumber + indexPrefixOffset));
             ++expectedIndexPrefixNumber;
         }
         UNIT_ASSERT_C(tablePrefixes.insert(index.ExportPrefix).second, index.ExportPrefix);
@@ -14565,7 +14566,7 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Restored/vector_idx/indexImplPostingTable"), 200);
     }
 
-    Y_UNIT_TEST(DropAsyncIndexAndLocalBloomBeforeEncryptedTableCopy) {
+    Y_UNIT_TEST_FLAG(DropAsyncIndexAndLocalBloomDuringEncryptedExport, BeforeCopy) {
         TBackupStorage storage(true);
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
@@ -14595,10 +14596,15 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         const ui64 exportId = ++txId;
         TBlockEvents<TMetadataUploaded> uploaded(runtime, [&](const auto& ev) {
             const auto* result = dynamic_cast<TMetadataUploaded*>(ev->GetBase());
-            return result && result->ExportId == exportId;
+            return BeforeCopy && result && result->ExportId == exportId;
+        });
+        ui64 copyTxId = 0;
+        auto observer = ObserveTableCopy(runtime, copyTxId);
+        TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> copied(runtime, [&](const auto& ev) {
+            return !BeforeCopy && copyTxId && ev->Get()->Record.GetTxId() == copyTxId;
         });
         TestExport(runtime, exportId, "/MyRoot", storage.ExportRequest({{"/MyRoot/Table", "backup"}}));
-        runtime.WaitFor("index descriptions persisted before copy", [&] { return !uploaded.empty(); });
+        runtime.WaitFor("export paused before backup", [&] { return BeforeCopy ? !uploaded.empty() : !copied.empty(); });
         TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(TableName: "Table" IndexName: "old_bloom")");
         env.TestWaitNotification(runtime, txId);
         TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(TableName: "Table" IndexName: "by_old")");
@@ -14606,25 +14612,35 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(Name: "Table" DropColumns { Name: "old_value" })");
         env.TestWaitNotification(runtime, txId);
         uploaded.Stop().Unblock();
+        copied.Stop().Unblock();
         env.TestWaitNotification(runtime, exportId);
         TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
         Ydb::Table::CreateTableRequest table;
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(storage.ReadEncrypted("backup/scheme.pb.enc").first, &table));
-        UNIT_ASSERT_VALUES_EQUAL(table.indexes_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(table.indexes_size(), BeforeCopy ? 2 : 4);
         UNIT_ASSERT(AnyOf(table.indexes(), [](const auto& index) {
             return index.name() == "by_stable" && index.has_global_async_index();
         }));
         UNIT_ASSERT(AnyOf(table.indexes(), [](const auto& index) {
             return index.name() == "by_region" && index.has_global_index();
         }));
-        UNIT_ASSERT(!AnyOf(table.columns(), [](const auto& column) { return column.name() == "old_value"; }));
+        UNIT_ASSERT_VALUES_EQUAL(AnyOf(table.columns(), [](const auto& column) { return column.name() == "old_value"; }), !BeforeCopy);
+        UNIT_ASSERT_VALUES_EQUAL(AnyOf(table.indexes(), [](const auto& index) {
+            return index.name() == "old_bloom" && index.has_local_bloom_filter_index();
+        }), !BeforeCopy);
 
         TestImport(runtime, ++txId, "/MyRoot", storage.ImportRequest(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO, {"/MyRoot/Restored"}));
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Restored/by_stable"),
             {NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync), NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+        if (!BeforeCopy) {
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Restored/by_old"),
+                {NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync), NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Restored/old_bloom"),
+                {NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter)});
+        }
     }
 
     Y_UNIT_TEST(EncryptedIndexExportReportsSchemeConversionError) {
@@ -14819,27 +14835,17 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
         ConfigureIndexBackup(runtime, true);
         ui64 txId = 100;
-        const TString boundary(192 * 1024, 'x');
-        for (const char* name : {"First", "Second"}) {
-            TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
-                TableDescription {
-                    Name: "%s"
-                    Columns { Name: "id" Type: "Uint32" }
-                    Columns { Name: "value" Type: "Utf8" }
-                    KeyColumnNames: ["id"]
-                }
-                IndexDescription {
-                    Name: "by_value" Type: EIndexTypeGlobal KeyColumnNames: ["value"]
-                    IndexImplTableDescriptions {
-                        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "a%s" } } } }
-                        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "b%s" } } } }
-                        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "c%s" } } } }
-                    }
-                }
-            )", name, boundary.c_str(), boundary.c_str(), boundary.c_str()));
-            env.TestWaitNotification(runtime, txId);
-        }
-        // Each snapshot fits in the 1 MiB payload budget, the two together exceed it.
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "id" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription { Name: "by_value" Type: EIndexTypeGlobal KeyColumnNames: ["value"] }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
         TControlWrapper limit;
         TControlBoard::RegisterSharedControl(limit, runtime.GetAppData().Icb->TabletControls.MaxCommitRedoMB);
         limit.Reset(2, 1, 4096);
@@ -14847,12 +14853,24 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
             TestExport(runtime, ++txId, "/MyRoot", storage.ExportRequest(items));
             env.TestWaitNotification(runtime, txId);
         };
-        runExport({{"/MyRoot/First", "first"}, {"/MyRoot/Second", "second"}});
+        // The destinations fit in the request, but are persisted in both the settings and mapping.
+        TString directory;
+        for (ui32 i = 0; i < 12; ++i) {
+            directory += TString(240, 'x') + "/";
+        }
+        runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+        TVector<std::pair<TString, TString>> items{{"/MyRoot/Table", "backup"}};
+        for (ui32 i = 0; i < 200; ++i) {
+            const TString name = TStringBuilder() << "View" << i;
+            TestCreateView(runtime, ++txId, "/MyRoot", Sprintf(R"(Name: "%s" QueryText: "SELECT 1")", name.c_str()));
+            env.TestWaitNotification(runtime, txId);
+            items.emplace_back("/MyRoot/" + name, directory + name);
+        }
+        runExport(items);
         const auto result = TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
         UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(result.GetResponse().GetEntry().GetIssues()),
             "Encrypted index export metadata exceeds the maximum SchemeShard commit size");
-        limit = 256;
-        runExport({{"/MyRoot/First", "first"}});
+        runExport({{"/MyRoot/Table", "backup"}});
         TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
 

@@ -129,6 +129,28 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         UNIT_ASSERT_VALUES_EQUAL(f.Scheduler->GetTotalCpuLimit(), 1);
     }
 
+    Y_UNIT_TEST(FractionalShareSurvivesUserPoolCapacityDrop) {
+        TCpuLimitFixture f;
+        f.AddPool("a", -1, 85);
+        f.AddPool("b", -1, 15);
+        const auto a = f.AddDemand("a", 1, 8);
+        const auto b = f.AddDemand("b", 2, 8);
+        f.Tick(8);
+        UNIT_ASSERT_VALUES_EQUAL(b->GetSnapshot()->GetParent()->GetCpuGuarantee(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(b->GetSnapshot()->CpuFairShare, 1);
+
+        // The balance from the 8-CPU snapshot survives the policy update.
+        for (ui64 expectedB : {1, 0}) {
+            f.Tick(4);
+            const auto* poolA = a->GetSnapshot()->GetParent();
+            const auto* poolB = b->GetSnapshot()->GetParent();
+            UNIT_ASSERT_VALUES_EQUAL(poolA->GetCpuGuarantee(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(poolB->GetCpuGuarantee(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(poolA->CpuFairShare + poolB->CpuFairShare, 4);
+            UNIT_ASSERT_VALUES_EQUAL(poolB->CpuFairShare, expectedB);
+        }
+    }
+
     Y_UNIT_TEST(ResizeRetriesDesiredPercentagesAfterSiblingRemoval) {
         TCpuLimitFixture f;
         f.Tick(2);

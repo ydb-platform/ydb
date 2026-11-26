@@ -7,6 +7,8 @@
 namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
     struct TTreeElement : public virtual TTreeElementBase<ETreeType::SNAPSHOT>, public TStaticAttributes {
+        const std::weak_ptr<NDynamic::TTreeElement> Origin;
+
         ui64 CpuFairShare = 0;
 
         std::atomic<ui64> CpuMaxDemand = 0;
@@ -21,8 +23,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
         ui64 MemoryDemand = 0;
         ui64 MemoryUsage = 0;
 
-        explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {})
-            : TTreeElementBase(id), TStaticAttributes(attrs) {}
+        explicit TTreeElement(const std::shared_ptr<NDynamic::TTreeElement>& origin, const TStaticAttributes& attrs = {});
 
         ui64 GetChildrenCpuGuarantee() const;
 
@@ -40,11 +41,9 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
     class TQuery : public TTreeElement, public NHdrf::TQuery<ETreeType::SNAPSHOT>, public std::enable_shared_from_this<TQuery> {
     public:
-        TQuery(const TQueryId& queryId, const NDynamic::TQueryPtr& query);
+        explicit TQuery(const NDynamic::TQueryPtr& origin);
 
         void UpdateBottomUp(ui64 totalCpuLimit, TDuration period) override;
-
-        std::weak_ptr<NDynamic::TQuery> Origin; // TODO: why public?
 
         ui64 CpuUsage = 0;
         ui64 CpuThrottle = 0;
@@ -59,7 +58,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
     class TPool : public TTreeElement, public NHdrf::TPool<ETreeType::SNAPSHOT> {
     public:
-        TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const NStatic::TPoolPtr& pool = {});
+        TPool(const NDynamic::TPoolPtr& origin, const std::optional<TPoolCounters>& counters, const NStatic::TPoolPtr& pool = {});
 
         const TStaticAttributes& GetConfiguredAttributes() const {
             static const TStaticAttributes defaults;
@@ -74,17 +73,17 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
     // The memory of the default pool is not limited by the pool itself. Always a child of its database.
     class TDefaultPool : public TPool {
     public:
-        TDefaultPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const NStatic::TPoolPtr& pool = {});
+        TDefaultPool(const NDynamic::TPoolPtr& origin, const std::optional<TPoolCounters>& counters, const NStatic::TPoolPtr& pool = {});
     };
 
     class TDatabase : public TPool {
     public:
-        explicit TDatabase(const TDatabaseId& id, const NStatic::TPoolPtr& pool = {});
+        explicit TDatabase(const NDynamic::TPoolPtr& origin, const NStatic::TPoolPtr& pool = {});
     };
 
     class TRoot : public TPool {
     public:
-        explicit TRoot(const NStatic::TRootPtr& tree, TMonotonic timestamp = TMonotonic::Now());
+        TRoot(const NDynamic::TPoolPtr& origin, const NStatic::TRootPtr& tree, TMonotonic timestamp = TMonotonic::Now());
 
         bool IsRoot() const final {
             return true;

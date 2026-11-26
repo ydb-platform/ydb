@@ -169,6 +169,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             std::unique_ptr<NHdrf::NSnapshot::TTreeElement> snapshot(element->TakeSnapshot());
             UNIT_ASSERT(snapshot);
             UNIT_ASSERT(snapshot->GetId() == element->GetId());
+            UNIT_ASSERT_VALUES_EQUAL(snapshot->Origin.lock().get(), element);
             if (element == root.get()) {
                 const auto* rootSnapshot = dynamic_cast<const NHdrf::NSnapshot::TRoot*>(snapshot.get());
                 UNIT_ASSERT(rootSnapshot);
@@ -187,6 +188,15 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
                 UNIT_ASSERT_VALUES_EQUAL(snapshot->GetMemoryLimit(), NHdrf::Infinity());
             }
         }
+    }
+
+    Y_UNIT_TEST(SnapshotKeepsIdAfterOriginExpires) {
+        auto query = std::make_shared<NHdrf::NDynamic::TQuery>(42, &kDefaultDelayParams, false);
+        const auto snapshot = std::make_shared<NHdrf::NSnapshot::TQuery>(query);
+        query.reset();
+
+        UNIT_ASSERT(snapshot->Origin.expired());
+        UNIT_ASSERT_VALUES_EQUAL(std::get<NHdrf::TQueryId>(snapshot->GetId()), 42);
     }
 
     Y_UNIT_TEST(SnapshotUsesOnlyRuntimePathsAndPreservesThemAfterConfigRemoval) {
@@ -864,58 +874,72 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT_VALUES_EQUAL(pool2->CpuFairShare, 7);
     }
 
-    Y_UNIT_TEST(RoundingLossIsDistributed) {
-        /*
-            Scenario:
-            - 1 database with 3 pools with equal weights, all of them demand more than the CPU limit
-            - The proportion of each pool is 8/3 = 2.67 - rounded down it's 2, and the 2 CPUs lost on rounding
-              are given to the first two pools, so the whole CPU limit is distributed
-            - With more pools than CPUs every CPU is still distributed, one per pool - but the ties are always
-              resolved in the same order, so the last pools get nothing while the contention lasts
-        */
+    Y_UNIT_TEST_TWIN(RoundingLossIsDistributed, MorePoolsThanCpu) {
         constexpr ui64 kCpuLimit = 8;
+        const size_t poolCount = MorePoolsThanCpu ? 10 : 3;
 
         auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
         TComputeScheduler scheduler(counters, options);
-        scheduler.SetTotalCpuLimit(kCpuLimit);
+        scheduler.SetTotalCpuLimit(0); // No rounding during the registration snapshots.
 
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
-        auto addPools = [&](size_t count) {
-            for (size_t i = 0; i < count; ++i) {
-                const NHdrf::TQueryId queryId = queries.size();
-                const TString poolId = "pool" + ToString(queryId);
-                scheduler.AddOrUpdatePool(databaseId, poolId, {});
-                auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId));
-                tasks.emplace_back(CreateDemandTasks(query, kCpuLimit));
-            }
-        };
+        for (size_t i = 0; i < poolCount; ++i) {
+            const TString poolId = "pool" + ToString(i);
+            scheduler.AddOrUpdatePool(databaseId, poolId, {});
+            auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, i));
+            tasks.emplace_back(CreateDemandTasks(query, kCpuLimit));
+        }
+        scheduler.SetTotalCpuLimit(kCpuLimit);
 
-        auto checkFairShares = [&](const std::vector<ui64>& expected) {
+        std::vector<ui64> accumulated(poolCount);
+        for (size_t tick = 0; tick < poolCount; ++tick) {
             scheduler.UpdateFairShare();
 
             ui64 total = 0;
-            for (size_t i = 0; i < queries.size(); ++i) {
-                auto* pool = queries[i]->GetSnapshot()->GetParent();
-                UNIT_ASSERT_VALUES_EQUAL_C(pool->CpuFairShare, expected.at(i), "Wrong fair-share for pool " << i);
-                total += pool->CpuFairShare;
+            for (size_t i = 0; i < poolCount; ++i) {
+                const auto share = queries[i]->GetSnapshot()->GetParent()->CpuFairShare;
+                accumulated[i] += share;
+                total += share;
             }
             UNIT_ASSERT_VALUES_EQUAL_C(total, kCpuLimit, "Nothing is lost on rounding");
-        };
+        }
+        for (const auto total : accumulated) {
+            UNIT_ASSERT_VALUES_EQUAL_C(total, kCpuLimit, "Equal weights get equal shares across snapshots");
+        }
+    }
 
-        addPools(3);
-        checkFairShares({3, 3, 2});
-        checkFairShares({3, 3, 2}); // the same on every snapshot
+    Y_UNIT_TEST(FractionalFairShareAccumulatesWithUnequalWeights) {
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TComputeScheduler scheduler(counters, TOptions{.DelayParams = kDefaultDelayParams});
+        scheduler.SetTotalCpuLimit(0);
 
-        addPools(7);
-        checkFairShares({1, 1, 1, 1, 1, 1, 1, 1, 0, 0});
-        checkFairShares({1, 1, 1, 1, 1, 1, 1, 1, 0, 0});
+        scheduler.AddOrUpdatePool("db", "a", {.Weight = 3});
+        scheduler.AddOrUpdatePool("db", "b", {.Weight = 2});
+        const auto a = scheduler.AddOrUpdateQuery("db", "a", 1);
+        const auto b = scheduler.AddOrUpdateQuery("db", "b", 2);
+        const auto tasksA = CreateDemandTasks(a, 1);
+        const auto tasksB = CreateDemandTasks(b, 1);
+        scheduler.SetTotalCpuLimit(1);
+
+        ui64 totalA = 0;
+        ui64 totalB = 0;
+        for (size_t tick = 0; tick < 5; ++tick) {
+            scheduler.UpdateFairShare();
+            const auto shareA = a->GetSnapshot()->CpuFairShare;
+            const auto shareB = b->GetSnapshot()->CpuFairShare;
+            UNIT_ASSERT_VALUES_EQUAL(shareA + shareB, 1);
+            totalA += shareA;
+            totalB += shareB;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(totalA, 3);
+        UNIT_ASSERT_VALUES_EQUAL(totalB, 2);
     }
 
     /* Scenario:
@@ -1668,7 +1692,8 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
               rounded down it's 2 for each, and the 2 CPUs lost on rounding are given to the first two pools
             - Updating the first pool's weight to 2 once again redistribute FairShares: its proportion
               2/5 * 10 = 4 exceeds its demand, so it takes exactly 3 and the remaining 7 is split
-              between the other three pools, giving 7/3 = 2 (rounded down) to each and the lost 1 CPU to the second pool
+              between the other three pools, giving 7/3 = 2 (rounded down) to each and the lost 1 CPU to the third pool,
+              which rounded down in the previous snapshot
         */
         constexpr ui64 kCpuLimit = 10;
         constexpr size_t kNQueries = 3;
@@ -1741,7 +1766,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         scheduler->AddOrUpdatePool(databaseId, "pool1", {.Weight = 2});
 
-        checkFairShares({3, 3, 2, 2});
+        checkFairShares({3, 2, 3, 2});
 
         databaseSnapshot = queries[0]->GetSnapshot()->GetParent()->GetParent();
         UNIT_ASSERT(databaseSnapshot);
@@ -2749,6 +2774,61 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpComputeSchedulerHierarchy) {
+
+    Y_UNIT_TEST(CpuRemainsUpdatedByFairShareCalculation) {
+        THierarchy h(2);
+        const auto tasksA1 = CreateDemandTasks(h.Query1, 1);
+        const auto tasksA2 = CreateDemandTasks(h.Query2, 1);
+        const auto tasksB = CreateDemandTasks(h.Query3, 1);
+        const auto* poolA1 = h.Query1->GetParent();
+        const auto* poolA2 = h.Query2->GetParent();
+
+        const auto snapshot = NHdrf::NSnapshot::TRootPtr(h.Root->TakeSnapshot());
+        UNIT_ASSERT_VALUES_EQUAL(poolA1->CpuRemains, 0.0);
+        UNIT_ASSERT_VALUES_EQUAL(poolA2->CpuRemains, 0.0);
+
+        snapshot->Update(h.Root->GetSnapshot());
+        UNIT_ASSERT_VALUES_EQUAL(poolA1->CpuRemains, -0.5);
+        UNIT_ASSERT_VALUES_EQUAL(poolA2->CpuRemains, 0.5);
+
+        h.Root->SetSnapshot(snapshot);
+        h.UpdateFairShare();
+        UNIT_ASSERT_VALUES_EQUAL(h.PoolA1()->CpuFairShare, 0);
+        UNIT_ASSERT_VALUES_EQUAL(h.PoolA2()->CpuFairShare, 1);
+    }
+
+    Y_UNIT_TEST_TWIN(CpuRemainsSurvivesIdleSnapshot, LimitAncestor) {
+        THierarchy h(2);
+        const auto tasksA1 = CreateDemandTasks(h.Query1, 1);
+        auto tasksA2 = CreateDemandTasks(h.Query2, 1);
+        const auto tasksB = CreateDemandTasks(h.Query3, 1);
+
+        h.UpdateFairShare();
+        const auto* poolA2 = h.Query2->GetParent();
+        UNIT_ASSERT_VALUES_EQUAL(poolA2->CpuRemains, 0.5);
+
+        const auto config = h.Root->GetStaticTree();
+        if (LimitAncestor) {
+            auto blocked = config->Clone();
+            blocked->CpuLimit = 0;
+            h.Root->SetStaticTree(std::move(blocked));
+        } else {
+            ShrinkDemand(tasksA2, 0);
+        }
+
+        h.UpdateFairShare();
+        UNIT_ASSERT_VALUES_EQUAL(h.PoolA2()->CpuMaxDemand.load(), LimitAncestor ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(h.PoolA2()->CpuFairShare, 0);
+        UNIT_ASSERT_VALUES_EQUAL(poolA2->CpuRemains, 0.5);
+
+        if (LimitAncestor) {
+            h.Root->SetStaticTree(config);
+        } else {
+            tasksA2 = CreateDemandTasks(h.Query2, 1);
+        }
+        h.UpdateFairShare();
+        UNIT_ASSERT_VALUES_EQUAL(h.PoolA2()->CpuFairShare, 1);
+    }
 
     Y_UNIT_TEST(ActualDemandIsSummedUp) {
         /*

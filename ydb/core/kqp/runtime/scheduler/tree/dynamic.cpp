@@ -49,7 +49,7 @@ TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, bool initial
 }
 
 NSnapshot::TQuery* TQuery::TakeSnapshot() {
-    auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), shared_from_this());
+    auto* newQuery = new NSnapshot::TQuery(shared_from_this());
 
     newQuery->CpuMaxDemand = TakeCpuMaxDemand();
 
@@ -75,7 +75,7 @@ NSnapshot::TQuery* TQuery::TakeSnapshot() {
 }
 
 void TQuery::InitSnapshot(const NSnapshot::TPool& pool) {
-    auto snapshot = std::make_shared<NSnapshot::TQuery>(std::get<TQueryId>(GetId()), shared_from_this());
+    auto snapshot = std::make_shared<NSnapshot::TQuery>(shared_from_this());
 
     snapshot->CpuMaxDemand = TakeCpuMaxDemand();
     snapshot->CpuFairShare = pool.CpuFairShare > 0 ? pool.CpuFairShare : GetAllowMinFairShare();
@@ -259,8 +259,8 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
     return newPool;
 }
 
-NSnapshot::TPool* TPool::CreateSnapshot(const NStatic::TPoolPtr& pool) const {
-    return new NSnapshot::TPool(std::get<TPoolId>(GetId()), Counters, pool);
+NSnapshot::TPool* TPool::CreateSnapshot(const NStatic::TPoolPtr& pool) {
+    return new NSnapshot::TPool(shared_from_this(), Counters, pool);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -273,8 +273,8 @@ TDefaultPool::TDefaultPool(const TPoolId& id, const NMonitoring::TDynamicCounter
 {
 }
 
-NSnapshot::TPool* TDefaultPool::CreateSnapshot(const NStatic::TPoolPtr& pool) const {
-    return new NSnapshot::TDefaultPool(std::get<TPoolId>(GetId()), Counters, pool);
+NSnapshot::TPool* TDefaultPool::CreateSnapshot(const NStatic::TPoolPtr& pool) {
+    return new NSnapshot::TDefaultPool(shared_from_this(), Counters, pool);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -289,7 +289,7 @@ TDatabase::TDatabase(const TDatabaseId& id)
 
 NSnapshot::TDatabase* TDatabase::TakeSnapshot() {
     const auto staticPool = GetStaticPool();
-    auto* newDatabase = new NSnapshot::TDatabase(std::get<TDatabaseId>(GetId()), staticPool);
+    auto* newDatabase = new NSnapshot::TDatabase(shared_from_this(), staticPool);
     ForEachChild<TPool>([&](TPool* pool, size_t) {
         newDatabase->AddPool(NSnapshot::TPoolPtr(pool->TakeSnapshot()));
     });
@@ -326,7 +326,7 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
 NSnapshot::TRoot* TRoot::TakeSnapshot() {
     // The scheduler holds its tree lock until all children have captured the same static version.
     const auto tree = GetStaticTree();
-    auto* newRoot = new NSnapshot::TRoot(tree, TimeProvider ? TimeProvider->Now() : TMonotonic::Now());
+    auto* newRoot = new NSnapshot::TRoot(shared_from_this(), tree, TimeProvider ? TimeProvider->Now() : TMonotonic::Now());
     const ui64 totalCpuLimit = tree->TotalCpuLimit;
     const ui64 totalMemoryLimit = tree->TotalMemoryLimit;
 

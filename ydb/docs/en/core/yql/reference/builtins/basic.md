@@ -344,7 +344,7 @@ Builds a `Callable` given a function name and optional `external user types`, `R
 * `Udf(Foo::Bar)(1, 2, 'abc')` — Call udf `Foo::Bar`.
 * `Udf(Foo::Bar, Int32, @@{"device":"AHCI"}@@ as TypeConfig)(1, 2, 'abc')` — Call udf `Foo::Bar` with additional type `Int32` and specified `TypeConfig`.
 * `Udf(Foo::Bar, "1e9+7" as RunConfig)(1, 'extended' As Precision)` — Call udf `Foo::Bar` with specified `RunConfig` and named parameters.
-* `Udf(Foo::Bar, $parent as Depends)` — Call udf `Foo::Bar` with specified computation dependency on specified node - since version [YQL 2025.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.03.md).
+* `Udf(Foo::Bar, $parent as Depends)(1)` — Call udf `Foo::Bar` with specified computation dependency on specified node - since version [YQL 2025.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.03.md).
 
 {% if feature_mapreduce %}
 
@@ -361,7 +361,7 @@ You can also specify additional settings as named arguments; their type must be 
 ### Signatures
 
 ```yql
-Udf(Callable[, T1, T2, ..., T_N][, V1 as TypeConfig][,V2 as RunConfig]])->Callable
+Udf(Callable[, T1, T2, ..., T_N][, V1 as TypeConfig][,V2 as RunConfig])->Callable
 ```
 
 Where `T1`, `T2`, etc. are additional (`external`) user types.
@@ -1135,7 +1135,7 @@ SELECT Block(($arg)->{
 
 `EvaluateExpr` evaluates an expression during query compilation and substitutes the result as a literal. Constant expressions are supported in both Query Service and Table Service. For example, you can precompute a value for a filter or a row limit.
 
-The only argument must be evaluable during compilation: it cannot depend on column values of the current row or parameters declared with `DECLARE`. A parameter cannot be used inside `EvaluateExpr` even when its value is supplied with the query. This restriction applies to both APIs.
+The only argument must be evaluable during compilation: it cannot depend on column values of the current row or parameters declared with `DECLARE`. Supplying the parameter at execution time does not make its value available during compilation. This restriction applies to both APIs.
 
 `EvaluateAtom` evaluates names, such as a table name in a [named expression](../syntax/expressions.md#named-nodes). Dynamic name support depends on the API: use Query Service; Table Service does not support `EvaluateAtom`.
 

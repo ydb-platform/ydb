@@ -11,7 +11,7 @@ The `Ip::Ipv4FromUint32` and `Ip::Ipv4ToUint32` functions are available since ve
 * `Ip::SubnetFromString(String{Flags:AutoMap}) -> String?` - From a human-readable representation of subnet to a binary representation.
 * `Ip::ToString(String{Flags:AutoMap}) -> String?` - From a binary representation to a human-readable representation.
 * `Ip::Ipv4ToUint32(String{Flags:AutoMap}) -> Uint32?` - From a binary representation of IPv4 to a Uint32. Address `A.B.C.D` corresponds to integer `A << 24 | B << 16 | C << 8 | D`. IPv6 is not supported.
-* `Ip::SubnetToString(String{Flags:AutoMap}) -> String?` - From a binary representation of subnet to a human-readable representation.
+* `Ip::SubnetToString(String{Flags:AutoMap}) -> String` - From a binary representation of subnet to a human-readable representation.
 * `Ip::IsIPv4(String?) -> Bool`
 * `Ip::IsIPv6(String?) -> Bool`
 * `Ip::IsEmbeddedIPv4(String?) -> Bool`

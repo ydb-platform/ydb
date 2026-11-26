@@ -173,7 +173,7 @@ SELECT Math::SwapBytes(Uint16("1")); -- 256
 * `Math::RoundToNearest() -> Tagged<Uint32, MathRoundingMode>` &mdash; округление в сторону ближайшего представимого значения
 * `Math::RoundTowardZero() -> Tagged<Uint32, MathRoundingMode>` &mdash; округление в сторону нуля
 * `Math::RoundUpward() -> Tagged<Uint32, MathRoundingMode>` &mdash; округление в сторону положительной бесконечности
-* `Math::NearbyInt(AutoMap<Double>, Tagged<Uint32, MathRoundingMode>) -> Optional<Int64>` &mdash; округление до ближайшего целого значения
+* `Math::NearbyInt(AutoMap<Double>, Tagged<Uint32, MathRoundingMode>) -> Optional<Int64>`
 
 Функция `Math::NearbyInt` округляет первый аргумент до целого числа в соответствии с режимом, заданным вторым аргументом.
 

@@ -95,11 +95,11 @@ SimplePg::date_part(Utf8?,Interval64?) -> Double?
 Аргументы:
 
 * Компонента, возможные [значения](https://www.postgresql.org/docs/16/functions-datetime.html#FUNCTIONS-DATETIME-EXTRACT);
-* Таймстемп.
+* Таймстемп или интервал.
 
 Извлекает из таймстемпа или интервала заданную компоненту.
 Оригинальная [документация](https://www.postgresql.org/docs/16/functions-datetime.html).
-Аналог - [DateTime::Get](datetime.md#get).
+Аналог - [DateTime::Get...](datetime.md#get).
 
 ### Примеры
 
@@ -126,7 +126,7 @@ SimplePg::date_trunc(Utf8?,Timestamp64?) -> Timestamp64?
 
 Округляет таймстемп на начало заданного масштаба.
 Оригинальная [документация](https://www.postgresql.org/docs/16/functions-datetime.html).
-Аналог - [DateTime::StartOf](datetime.md#startof) и т.п..
+Аналог - [DateTime::StartOfYear](datetime.md#startof) и т.п..
 
 ### Примеры
 
@@ -203,7 +203,7 @@ SimplePg::round(Double?,[Int32?]) -> Double?
 * Значение с плавающей точкой;
 * Опциональное число знаков после запятой (по умолчанию - 0).
 
-Округляет значение до заданного количества десятичных знаков. Используется округление от нуля.
+Округляет значение до заданного количества десятичных знаков. При равном расстоянии до двух ближайших значений выбирается значение дальше от нуля.
 Оригинальная [документация](https://www.postgresql.org/docs/16/functions-math.html).
 См. также [Math::Round](math.md), у которой другие правила округления: например, `SimplePg::round(-2.5)` возвращает `-3`, а `Math::Round(-2.5)` возвращает `-2`.
 

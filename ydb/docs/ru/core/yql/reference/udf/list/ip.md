@@ -11,7 +11,7 @@
 * `Ip::SubnetFromString(String{Flags:AutoMap}) -> String?` - из человекочитаемого представления подсети в бинарное.
 * `Ip::ToString(String{Flags:AutoMap}) -> String?` - из бинарного представления в человекочитаемое.
 * `Ip::Ipv4ToUint32(String{Flags:AutoMap}) -> Uint32?` - из бинарного представления IPv4 в Uint32. Адрес `A.B.C.D` соответствует целому числу `A << 24 | B << 16 | C << 8 | D`. IPv6 не поддерживается.
-* `Ip::SubnetToString(String{Flags:AutoMap}) -> String?` - из бинарного представления подсети в человекочитаемое.
+* `Ip::SubnetToString(String{Flags:AutoMap}) -> String` - из бинарного представления подсети в человекочитаемое.
 * `Ip::IsIPv4(String?) -> Bool`
 * `Ip::IsIPv6(String?) -> Bool`
 * `Ip::IsEmbeddedIPv4(String?) -> Bool`

@@ -43,7 +43,7 @@ Arguments:
 
 Parses the date according to the format string.
 Original [documentation](https://www.postgresql.org/docs/16/functions-formatting.html).
-Equivalent to [DateTime::Parse64](datetime.md#parse).
+See also [DateTime::Parse64](datetime.md#parse).
 
 ### Examples
 
@@ -71,7 +71,7 @@ Arguments:
 
 Formats the value according to the format string.
 Original [documentation](https://www.postgresql.org/docs/16/functions-formatting.html).
-Equivalent to [DateTime::Format](datetime.md#format).
+See also [DateTime::Format](datetime.md#format).
 
 ### Examples
 
@@ -95,11 +95,11 @@ Available since version [YQL 2025.04](https://github.com/ydb-platform/ydb/blob/7
 Arguments:
 
 * Component, possible [values](https://www.postgresql.org/docs/16/functions-datetime.html#FUNCTIONS-DATETIME-EXTRACT);
-* Timestamp.
+* Timestamp or interval.
 
 Extracts the specified component from a timestamp or interval.
 Original [documentation](https://www.postgresql.org/docs/16/functions-datetime.html).
-Equivalent to [DateTime::Get](datetime.md#get).
+See also [DateTime::Get...](datetime.md#get).
 
 ### Examples
 
@@ -126,7 +126,7 @@ Arguments:
 
 Rounds the timestamp to the start of the specified scale.
 Original [documentation](https://www.postgresql.org/docs/16/functions-datetime.html).
-Equivalent to [DateTime::StartOf](datetime.md#startof), etc.
+See also [DateTime::StartOfYear](datetime.md#startof), etc.
 
 ### Examples
 
@@ -203,7 +203,7 @@ Arguments:
 * Floating-point value;
 * Optional number of decimal places (default - 0).
 
-Rounds a value to the specified number of decimal places. Rounding away from zero is used.
+Rounds a value to the specified number of decimal places. Ties are rounded away from zero.
 Original [documentation](https://www.postgresql.org/docs/16/functions-math.html).
 See also [Math::Round](math.md), which uses different rounding semantics: for example, `SimplePg::round(-2.5)` returns `-3`, whereas `Math::Round(-2.5)` returns `-2`.
 

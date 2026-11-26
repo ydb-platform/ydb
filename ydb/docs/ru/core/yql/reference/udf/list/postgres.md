@@ -291,6 +291,8 @@ FROM (VALUES ('a'p),('b'p),('c'p)) as a(x); -- 'a'p,'a,b'p,'a,b,c'p
 
 {% endnote %}
 
+<a id="logicheskie-operacii"></a>
+
 ## Логические операции {#logic-operations}
 
 Для выполнения логических операций используются функции `PgAnd`, `PgOr`, `PgNot`:

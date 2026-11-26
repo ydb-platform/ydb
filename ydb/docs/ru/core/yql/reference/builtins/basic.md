@@ -403,7 +403,7 @@ FROM my_table;
 * `Udf(Foo::Bar)(1, 2, 'abc')` — Вызов udf `Foo::Bar`.
 * `Udf(Foo::Bar, Int32, @@{"device":"AHCI"}@@ as TypeConfig)(1, 2, 'abc')` — Вызов udf `Foo::Bar` с дополнительным типом `Int32` и указанным `TypeConfig`.
 * `Udf(Foo::Bar, "1e9+7" as RunConfig)(1, 'extended' As Precision)` — Вызов udf `Foo::Bar` с указанным `RunConfig` и именованными параметрами.
-* `Udf(Foo::Bar, $parent as Depends)` — Вызов udf `Foo::Bar` с указанием зависимости вычисления от заданного узла - с версии [YQL 2025.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.03.md).
+* `Udf(Foo::Bar, $parent as Depends)(1)` — Вызов udf `Foo::Bar` с указанием зависимости вычисления от заданного узла - с версии [YQL 2025.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.03.md).
 
 {% if feature_mapreduce %}
 
@@ -420,7 +420,7 @@ FROM my_table;
 ### Сигнатуры
 
 ```yql
-Udf(Callable[, T1, T2, ..., T_N][, V1 as TypeConfig][,V2 as RunConfig]])->Callable
+Udf(Callable[, T1, T2, ..., T_N][, V1 as TypeConfig][,V2 as RunConfig])->Callable
 ```
 
 Где `T1`, `T2`, и т. д. -- дополнительные (`external`) пользовательские типы.
@@ -1372,7 +1372,7 @@ SELECT Block(($arg)->{
 
 `EvaluateExpr` вычисляет выражение во время компиляции запроса и подставляет результат как литерал. Константные выражения поддерживаются как в Query Service, так и в Table Service. Например, можно заранее вычислить значение для фильтра или ограничения числа строк.
 
-Единственный аргумент функции должен быть вычислим во время компиляции: он не может зависеть от значений колонок текущей строки или параметров, объявленных через `DECLARE`. Параметр нельзя использовать внутри `EvaluateExpr`, даже если его значение передано при выполнении запроса. Это ограничение действует в обоих API.
+Единственный аргумент функции должен быть вычислим во время компиляции: он не может зависеть от значений колонок текущей строки или параметров, объявленных через `DECLARE`. Передача значения параметра при выполнении запроса не делает его доступным при компиляции. Это ограничение действует в обоих API.
 
 `EvaluateAtom` используется для вычисления имён, например имени таблицы в [именованном выражении](../syntax/expressions.md#named-nodes). Поддержка динамических имён зависит от API: используйте Query Service; Table Service не поддерживает `EvaluateAtom`.
 

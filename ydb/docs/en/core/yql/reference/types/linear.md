@@ -37,9 +37,9 @@ An exception is the state argument of [`ListFold`](../builtins/list.md#listfold)
 
 ### Linear values in conditional expressions {#linear-in-if}
 
-The same `Linear` value must be passed to both mutually exclusive branches of [`IF`](../builtins/basic.md#if). Only one branch is evaluated at runtime, so the value is used exactly once on every execution path. The same rule applies to `IF_STRICT`.
+If [`IF`](../builtins/basic.md#if) returns a `Linear<T>` value directly, both branches must return the same linear value. Only one branch is evaluated at runtime, so the value is used exactly once on every execution path. The same rule applies to `IF_STRICT`.
 
-Static verification requires both branches to contain the same set of linear values.
+If both branches return tuple literals containing linear values, static verification requires them to contain the same set of linear values, but the order may differ.
 
 If symmetric use of linear values cannot be guaranteed statically, use `DynamicLinear<T>`.
 

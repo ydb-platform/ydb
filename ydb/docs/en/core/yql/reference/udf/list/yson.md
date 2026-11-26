@@ -146,7 +146,7 @@ Yson::IsUtf8(Resource<'Yson2.Node'>{Flags:AutoMap}) -> bool
 
 Checking that the current node has the appropriate type. The Entity is `#`.
 
-The `Yson::IsUtf8` function is available starting with version [YQL 2026.01](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2026.01.md#yson-module). It returns success only on nodes obtained after `Yson::ParseJson`/`Yson::ParseJsonDecodeUtf8` or if the string node was constructed using `Yson::From` from the `Utf8` type.
+The `Yson::IsUtf8` function is available starting with version [YQL 2026.01](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2026.01.md#yson-module). It returns true for string nodes marked as Utf8, for example those obtained after `Yson::ParseJson`/`Yson::ParseJsonDecodeUtf8` or if the string node was constructed using `Yson::From` from the `Utf8` type.
 
 ## Yson::GetLength
 

@@ -77,7 +77,7 @@ PRAGMA RelativePathPrefix = "folder";
 SELECT * FROM test;
 ```
 
-{% if feature_bulk_tables %}
+{% if feature_bulk_tables and backend_name != "YDB" %}
 
 ### UseTablePrefixForEach {#use-table-prefix-for-each}
 

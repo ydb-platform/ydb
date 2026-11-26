@@ -130,7 +130,7 @@ SELECT
 
 Available since version [YQL 2026.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2026.03.md#datetime-module).
 
-Creates an internal date-time representation. Unspecified or NULL components default to year 1970, month 1, day 1, and zero for all remaining components. An unspecified time zone uses GMT. `Timezone` is accepted only as a named argument. Returns NULL for invalid components or invalid dates.
+Creates an internal date-time representation. Unspecified or NULL components default to year 1970, month 1, day 1, and zero for all remaining components. An unspecified or unknown time zone uses GMT. `Timezone` is accepted only as a named argument. Returns NULL for invalid numeric components or invalid dates.
 
 ### List of functions
 

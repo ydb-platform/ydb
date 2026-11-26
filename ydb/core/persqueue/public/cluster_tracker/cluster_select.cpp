@@ -1,6 +1,7 @@
 #include "cluster_select.h"
 
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
 #include <util/string/split.h>
@@ -92,6 +93,23 @@ TVector<TString> ParseFnxClusterCsv(TStringBuf csv) {
     return names;
 }
 
+absl::flat_hash_map<TString, ui64> ParseClusterWeightsCsv(TStringBuf csv) {
+    absl::flat_hash_map<TString, ui64> weights;
+    for (const auto& pair : ParseFnxClusterCsv(csv)) {
+        TStringBuf name, value;
+        if (!TStringBuf(pair).TrySplit(':', name, value)) {
+            continue;
+        }
+        const TString cluster = StripString(TString(name));
+        ui64 weight = 0;
+        if (cluster.empty() || !TryFromString(StripString(value), weight)) {
+            continue;
+        }
+        weights[cluster] = weight;
+    }
+    return weights;
+}
+
 const TVector<TClustersList::TCluster>& TClustersList::GetClusters(TStringBuf authority) const {
     const TString host = NormalizeDiscoveryHost(authority);
     if (const auto it = ClustersByBalancer.find(host); it != ClustersByBalancer.end()) {
@@ -122,11 +140,12 @@ TString MakeListClustersQuery(TStringBuf clusterTablePath, TStringBuf versionTab
 TString MakeListAccountsQuery(TStringBuf accountTablePath) {
     // Version is per account row. Pages are ordered by name so a truncated result can continue
     // from $from instead of being published as the full table.
+    // By-name parsing: writeWeights is absent until CM migrates the table.
     return Sprintf(
         R"(
                --!syntax_v1
                DECLARE $from AS Utf8;
-               SELECT A.name, A.readClusters, A.writeClusters, A.version FROM `%s` AS A
+               SELECT A.* FROM `%s` AS A
                WHERE A.name > $from
                ORDER BY A.name;
             )", TString(accountTablePath).c_str());

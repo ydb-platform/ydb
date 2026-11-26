@@ -15,6 +15,9 @@ TString AccountNameFromDatabase(TStringBuf database);
 
 TVector<TString> ParseFnxClusterCsv(TStringBuf csv);
 
+// "cluster:weight" pairs separated by `,` or `;`. Malformed pairs are skipped.
+absl::flat_hash_map<TString, ui64> ParseClusterWeightsCsv(TStringBuf csv);
+
 // `tableName` next to the Cluster table: `.../Cluster` -> `.../<tableName>`.
 TString SiblingTablePath(TStringBuf clusterTablePath, TStringBuf tableName);
 

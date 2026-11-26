@@ -790,8 +790,8 @@ namespace {
         TStringBuf reason;
         if (!config.FeatureFlags.GetEnableDefaultFromExpression()) {
             reason = "DEFAULT expressions are disabled";
-        } else if (!config.GetEnableIndexStreamWrite()) {
-            reason = "DEFAULT expressions require EnableIndexStreamWrite";
+        } else if (!config.GetEnableIndexStreamWrite() || !config.GetEnableCompileTimeDefaults()) {
+            reason = "DEFAULT expressions require EnableIndexStreamWrite and EnableCompileTimeDefaults";
         } else {
             return true;
         }

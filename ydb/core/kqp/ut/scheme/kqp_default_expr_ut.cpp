@@ -1,8 +1,10 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/change_exchange/change_exchange.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/grpc_services/service_table.h>
 #include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -239,6 +241,26 @@ public:
         }
         RestartSchemeShard(tablePath);
         Session = Db.GetSession().GetValueSync().GetSession();
+    }
+
+    void DisableCompileTimeDefaults() {
+        auto& server = Kikimr.GetTestServer();
+        auto& runtime = *server.GetRuntime();
+        auto appConfig = *server.GetSettings().AppConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(false);
+
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto nodeId = runtime.GetNodeId();
+        for (const auto service : {MakeKqpCompileServiceID(nodeId), MakeKqpProxyID(nodeId)}) {
+            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            *request->Record.MutableConfig() = appConfig;
+            runtime.Send(service, edge, request.Release());
+            UNIT_ASSERT(runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edge, TDuration::Seconds(30)));
+        }
+
+        auto session = RunCall([&] { return Db.GetSession().ExtractValueSync(); });
+        UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+        Session = session.GetSession();
     }
 
     TVector<NJson::TJsonValue> ReadChangefeedMessages(size_t expectedCount) {
@@ -951,13 +973,22 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Rejects(ValueTableDDL(), "DEFAULT expressions are disabled");
     }
 
-    Y_UNIT_TEST_TWIN(ExpressionDefaultsRequireIndexStreamWrite, EnableCompileTimeDefaults) {
+    Y_UNIT_TEST_QUAD(ExpressionDefaultsRequireWriteSettings, EnableIndexStreamWrite, EnableCompileTimeDefaults) {
         auto appConfig = DefaultExprAppConfig();
         auto* config = appConfig.MutableTableServiceConfig();
-        config->SetEnableIndexStreamWrite(false);
+        config->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
         config->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
         TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
-        const TString error = "DEFAULT expressions require EnableIndexStreamWrite";
+
+        if constexpr (EnableIndexStreamWrite && EnableCompileTimeDefaults) {
+            fixture.Exec(ValueTableDDL());
+            AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+            fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT RandomNumber(1);");
+            AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), "RandomNumber(1)");
+            return;
+        }
+
+        const TString error = "DEFAULT expressions require EnableIndexStreamWrite and EnableCompileTimeDefaults";
 
         fixture.Rejects(ValueTableDDL(), error);
         fixture.Exec(DefaultExprDDL("v Uint64 DEFAULT 7ul"));
@@ -1590,9 +1621,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST_TWIN(UpsertOmittedKeysWithCompileTimeDefaults, EnableCompileTimeDefaults) {
-        auto appConfig = DefaultExprAppConfig();
-        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
-        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        TTestFixture fixture;
         fixture.Exec(TStringBuilder() << R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL DEFAULT 1,
@@ -1603,6 +1632,11 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             );
         )");
 
+        if constexpr (!EnableCompileTimeDefaults) {
+            fixture.DisableCompileTimeDefaults();
+            fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT RandomNumber(1);", "EnableCompileTimeDefaults");
+        }
+
         fixture.Exec("UPSERT INTO TestTable (other) VALUES (10);");
         fixture.Check("SELECT k, part, other, v FROM TestTable;", "[[1;2u;[10];[42u]]]");
         fixture.Exec("UPSERT INTO TestTable (k, part, v) VALUES (1, 2ul, 7ul);");
@@ -1611,11 +1645,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST_TWIN(MixedDefaultsWithIndexedReturning, EnableCompileTimeDefaults) {
-        auto appConfig = DefaultExprAppConfig();
-        auto* config = appConfig.MutableTableServiceConfig();
-        config->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
-        config->SetEnableIndexStreamWrite(true);
-        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        TTestFixture fixture;
         fixture.Exec(TStringBuilder() << R"(
             CREATE TABLE TestTable (
                 id Serial,
@@ -1626,6 +1656,10 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
                 INDEX idx_expr GLOBAL SYNC ON (expr) COVER (tag, literal)
             );
         )");
+
+        if constexpr (!EnableCompileTimeDefaults) {
+            fixture.DisableCompileTimeDefaults();
+        }
 
         const TString expected = "[[1;10;[42u];[8u]]]";
         fixture.Check("UPSERT INTO TestTable (tag) VALUES (10) RETURNING id, tag, expr, literal;", expected);

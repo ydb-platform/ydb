@@ -51,6 +51,8 @@ PEERDIR_FROM_POLICY(
     statbox/qb4/udfs/enum_based
     statbox/uv
     classifieds/vsdwh/tools/ci/jobs/yql_udf/parser
+    logos/projects/ads/mldwh/querygen
+    toloka/analytics/programs/yql_parser
 )
 
 END()

@@ -134,8 +134,8 @@ public:
         context.SS->ClearDescribePathCaches(tablePath);
         context.OnComplete.PublishToSchemeBoard(OperationId, txState->TargetPathId);
 
-        // Apply index metadata, index path id is kept in BuildIndexId.
-        const auto indexPathId = TPathId(txState->TargetPathId.OwnerId, ui64(txState->BuildIndexId));
+        // Apply index metadata. The index path is kept in SourcePathId.
+        const TPathId indexPathId = txState->SourcePathId;
         auto indexPath = context.SS->PathsById.at(indexPathId);
         TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(indexPathId);
         auto index = context.SS->Indexes.at(indexPathId);
@@ -330,6 +330,9 @@ public:
 
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, tablePathId);
+        // Grab the index path before CreateTx acquires SourcePathRef on it, so that
+        // a failed Propose rolls its DbRefCount back together with the path snapshot.
+        context.MemChanges.GrabPath(context.SS, indexPath.Base()->PathId);
         context.MemChanges.GrabNewTableSnapshot(context.SS, tablePathId, OperationId.GetTxId());
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
         context.MemChanges.GrabIndex(context.SS, indexPath.Base()->PathId);
@@ -361,11 +364,11 @@ public:
             }
         }
 
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxPrepareVectorIndex, tablePathId);
+        // Keep the full index TPathId in SourcePathId: index and table owner may differ
+        // if the table is a migrated table with a newly created index
+        TTxState& txState = context.SS->CreateTx(
+            OperationId, TTxState::TxPrepareVectorIndex, tablePathId, indexPath.Base()->PathId);
         txState.State = TTxState::CreateParts;
-        // Remember the index this operation was created for. BuildIndexId is not
-        // used by PrepareVectorIndex otherwise and is persisted with the tx state.
-        txState.BuildIndexId = TTxId(ui64(indexPath.Base()->PathId.LocalPathId));
 
         TTableInfo::TPtr table = context.SS->Tables.at(tablePathId);
         for (auto splitTx: table->GetSplitOpsInFlight()) {

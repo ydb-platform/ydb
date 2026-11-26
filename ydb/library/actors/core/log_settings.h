@@ -2,14 +2,14 @@
 
 #include "log_iface.h"
 
-#include <map>
-#include <memory>
-
 #include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
 
-#include <util/generic/vector.h>
 #include <util/digest/murmur.h>
+#include <util/generic/vector.h>
 #include <util/random/easy.h>
+
+#include <map>
+#include <memory>
 
 namespace NActors {
     namespace NStructuredLog {

@@ -269,11 +269,10 @@ void TExecutor::Broken(EBrokenReason reason) {
     return PassAway();
 }
 
-void TExecutor::RecreatePrivateCache()
+void TExecutor::ReRegisterPageCollections()
 {
     // Sticky notifications from the old cache may have been discarded during boot.
-    const bool replayStickyWalks = bool(PrivatePageCache);
-    PrivatePageCache = MakeHolder<TPrivatePageCache>();
+    const bool replayStickyWalks = PageCache.PrepareRegistration();
 
     Stats->PacksMetaBytes = 0;
 
@@ -475,7 +474,7 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
     PendingBlobQueue.Config.NoDataCounter = GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true);
 
     ReadResourceProfile();
-    RecreatePrivateCache();
+    ReRegisterPageCollections();
     ReflectSchemeSettings();
 
     UpdateCachePagesForDatabase();
@@ -526,7 +525,7 @@ void TExecutor::Active(const TActorContext &ctx) {
     PendingBlobQueue.Config.NoDataCounter = GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true);
 
     ReadResourceProfile();
-    RecreatePrivateCache();
+    ReRegisterPageCollections();
     ReflectSchemeSettings();
 
     UpdateCachePagesForDatabase();
@@ -689,7 +688,8 @@ void TExecutor::PlanTransactionActivation() {
     }
 }
 
-void TExecutor::TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad, TVector<NSharedCache::TEvResult::TLoaded>&& loadedPages, TPrivatePageCache::TPageCollection* pageCollection) {
+void TExecutor::TryActivateWaitingTransaction(
+    TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad, NActors::IEventBase* result) {
     Y_ENSURE(waitPad);
     Y_ENSURE(waitPad->PendingRequests);
     --waitPad->PendingRequests;
@@ -700,13 +700,7 @@ void TExecutor::TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPa
     }
     TTransactionWaitPad& transaction = *it->second;
 
-    if (pageCollection) {
-        auto &pinnedCollection = transaction.Seat->Pinned[pageCollection->Id];
-        for (auto& loaded : loadedPages) {
-            auto inserted = pinnedCollection.insert(std::make_pair(loaded.Offset, TPrivatePageCache::TPinnedPage(std::move(loaded.Page))));
-            Y_ENSURE(inserted.second);
-        }
-    }
+    PageCache.AdoptLoadedPages(*transaction.Seat, result);
 
     if (waitPad->PendingRequests) {
         LogWaitingTransaction(transaction);
@@ -759,7 +753,7 @@ bool IsStickySlot(const NTable::TPartStore& partStore, ui32 slot, const TVector<
 
 // The shared cache walks a group's B-tree when one of its collections is in memory or it is sticky.
 TVector<NSharedCache::TEvAttach::TBtreeSeed> MakeBtreeSeeds(const NTable::TPartStore& partStore,
-    size_t groupIndex, const TVector<bool>& stickyGroups)
+    size_t groupIndex, const TVector<bool>& stickyGroups, const TVector<ECacheMode>& collectionModes)
 {
     const auto& indexes = partStore.IndexPages;
     if (!indexes.HasBTree()) {
@@ -775,8 +769,8 @@ TVector<NSharedCache::TEvAttach::TBtreeSeed> MakeBtreeSeeds(const NTable::TPartS
 
     const bool sticky = stickyGroups[groupIndex];
     const bool indexSticky = IsStickySlot(partStore, indexSlot, stickyGroups);
-    const bool keepIndexPages = partStore.PageCollections[indexSlot]->GetCacheMode() == ECacheMode::TryKeepInMemory;
-    const bool keepDataPages = partStore.PageCollections[dataSlot]->GetCacheMode() == ECacheMode::TryKeepInMemory;
+    const bool keepIndexPages = collectionModes[indexSlot] == ECacheMode::TryKeepInMemory;
+    const bool keepDataPages = collectionModes[dataSlot] == ECacheMode::TryKeepInMemory;
     if (!keepIndexPages && !keepDataPages && !sticky && !indexSticky) {
         return {};
     }
@@ -825,6 +819,17 @@ TVector<bool> MakeStickyGroups(const NTable::TPartView& partView, const THashSet
 
 } // namespace
 
+TVector<ECacheMode> TExecutor::GetPartStoreCacheModes(
+    const NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes) {
+    const auto* partStore = partView.As<NTable::TPartStore>();
+    TVector<ECacheMode> collectionModes(partStore->GetPageCollectionCount(), ECacheMode::Regular);
+    for (ui32 slot : xrange(partStore->Slots.SlotsCount())) {
+        const size_t groupIndex = partStore->Slots.SlotLeaderGroup(slot);
+        collectionModes[slot] = GetCacheMode(partView->Scheme->Groups[groupIndex].Columns, cacheModes);
+    }
+    return collectionModes;
+}
+
 void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
     const THashSet<NTable::TTag>& stickyColumns, bool replayStickyWalks)
 {
@@ -838,44 +843,37 @@ void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, c
             Stats->PacksMetaBytes += pack->Meta.Raw.size();
     }
 
-    for (ui32 slot : xrange(partStore->Slots.SlotsCount())) {
-        partStore->PageCollections[slot]->SetCacheMode(
-            GetCacheMode(partView->Scheme->Groups[partStore->Slots.SlotLeaderGroup(slot)].Columns, cacheModes)
-        );
-    }
+    auto collectionModes = GetPartStoreCacheModes(partView, cacheModes);
+    PageCache.PrepareCollectionModes(*partStore, collectionModes, stickyGroups);
 
     // B-tree seeds of a group are attached with the page collection of its data pages
     TVector<TVector<NSharedCache::TEvAttach::TBtreeSeed>> slotSeeds(partStore->GetPageCollectionCount());
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
         auto& seeds = slotSeeds.at(partStore->DataSlot(NTable::NPage::TGroupId(groupIndex)));
-        for (auto& seed : MakeBtreeSeeds(*partStore, groupIndex, stickyGroups)) {
+        for (auto& seed : MakeBtreeSeeds(*partStore, groupIndex, stickyGroups, collectionModes)) {
             seeds.push_back(std::move(seed));
         }
     }
 
-    for (size_t slot = 0; slot < partStore->PageCollections.size(); ++slot) {
-        auto& cache = partStore->PageCollections[slot];
+    const auto send = [this](THolder<IEventBase> event) {
+        Send(MakeSharedPageCacheId(), std::move(event));
+    };
+    for (size_t slot = 0; slot < partStore->GetPageCollectionCount(); ++slot) {
         auto seeds = std::move(slotSeeds[slot]);
         const bool replayStickyWalk = replayStickyWalks && std::any_of(seeds.begin(), seeds.end(), [](const auto& seed) {
             return seed.Sticky || seed.IndexCollectionSticky;
         });
-        AddPageCollection(cache, std::move(seeds), replayStickyWalk);
+        PageCache.RegisterCollection(*partStore, slot, collectionModes[slot], std::move(seeds), replayStickyWalk, send);
     }
 
-    if (const auto &blobs = partStore->Pseudo)
-        AddPageCollection(blobs);
+    if (partStore->GetPseudoPageCollection())
+        PageCache.RegisterPseudoCollection(*partStore, send);
 }
 
-void TExecutor::AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection,
-    TVector<NSharedCache::TEvAttach::TBtreeSeed> btreeSeeds, bool replayStickyWalk)
-{
-    auto syncPages = PrivatePageCache->AddPageCollection(pageCollection);
-    Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode(),
-        std::move(btreeSeeds), replayStickyWalk));
-
-    if (syncPages) {
-        Send(MakeSharedPageCacheId(), new NSharedCache::TEvSync(std::move(syncPages)));
-    }
+TPageCacheStats TExecutor::GetPageCollectionStats() const {
+    TPageCacheStats stats;
+    PageCache.ReadStats(stats);
+    return stats;
 }
 
 void TExecutor::DropPartStorePageCollections(const NTable::TPart &part)
@@ -898,13 +896,11 @@ void TExecutor::DropPartStorePageCollections(const NTable::TPart &part)
 
 void TExecutor::DropPageCollection(const TLogoBlobID &pageCollectionId)
 {
-    auto pageCollection = PrivatePageCache->GetPageCollection(pageCollectionId);
-
-    PrivatePageCache->DropPageCollection(pageCollection);
+    auto request = PageCache.DetachCollection(pageCollectionId);
 
     // Note: Shared Cache will send TEvResult with NKikimrProto::RACE status
     // it activates all transactions that are waiting for being dropped page collection
-    Send(MakeSharedPageCacheId(), new NSharedCache::TEvDetach(pageCollectionId));
+    Send(MakeSharedPageCacheId(), std::move(request));
 }
 
 void TExecutor::UpdateCachePagesForDatabase(bool pendingOnly) {
@@ -925,7 +921,7 @@ void TExecutor::UpdateCachePagesForDatabase(bool pendingOnly) {
                     UpdateCacheModesForPartStore(partView, cacheModes, stickyColumns);
                 }
                 if (requestStickyColumns) {
-                    RequestStickyPagesForPartStore(partView, stickyColumns);
+                    RequestStickyPagesForPartStore(partView, cacheModes, stickyColumns);
                 }
             }
         }
@@ -942,9 +938,7 @@ TExecutorCaches TExecutor::CleanupState() {
         BootLogic->Cancel();
         caches = BootLogic->DetachCaches();
     } else {
-        if (PrivatePageCache) {
-            caches.PageCollections = PrivatePageCache->DetachPrivatePageCache();
-        }
+        PageCache.CaptureForRestart(caches);
         if (Database) {
             Database->EnumerateTxStatusParts([&caches](const TIntrusiveConstPtr<NTable::TTxStatusPart>& txStatus) {
                 caches.TxStatusCaches[txStatus->Label] = txStatus->TxStatusPage->GetRaw();
@@ -1635,20 +1629,13 @@ void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const 
 
     auto* partStore = partView.As<NTable::TPartStore>();
     const auto stickyGroups = MakeStickyGroups(partView, stickyColumns);
-    TVector<bool> modeChanged(partStore->PageCollections.size(), false);
-
-    for (ui32 slot : xrange(partStore->Slots.SlotsCount())) {
-        const size_t groupIndex = partStore->Slots.SlotLeaderGroup(slot);
-        ECacheMode cacheMode = GetCacheMode(partView->Scheme->Groups[groupIndex].Columns, cacheModes);
-        auto* pageCollection = partStore->PageCollections[slot].Get();
-
-        modeChanged[slot] = PrivatePageCache->UpdateCacheMode(cacheMode, pageCollection);
-    }
+    auto collectionModes = GetPartStoreCacheModes(partView, cacheModes);
+    const auto modeChanged = PageCache.UpdateCollectionModes(*partStore, collectionModes, stickyGroups);
 
     // A separate descriptor page collection has no data pages to attach B-tree seeds with
     if (const ui32 slot = partStore->DescriptorSlot(); slot != partStore->DataSlot({ }) && modeChanged[slot]) {
-        auto* pageCollection = partStore->PageCollections[slot].Get();
-        Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode()));
+        const auto& pageCollection = partStore->GetPageCollectionRef(slot);
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection, collectionModes[slot]));
     }
 
     // A group is re-seeded when the mode of the collection with its data or index pages changes.
@@ -1658,30 +1645,35 @@ void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const 
             continue;
         }
 
-        auto* pageCollection = partStore->PageCollections[partStore->DataSlot(groupId)].Get();
-        Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode(),
-            MakeBtreeSeeds(*partStore, groupIndex, stickyGroups)));
+        const ui32 slot = partStore->DataSlot(groupId);
+        const auto& pageCollection = partStore->GetPageCollectionRef(slot);
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection, collectionModes[slot],
+            MakeBtreeSeeds(*partStore, groupIndex, stickyGroups, collectionModes)));
     }
 }
 
-void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns) {
+void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView,
+    const THashMap<NTable::TTag, ECacheMode>& cacheModes, const THashSet<NTable::TTag>& stickyColumns) {
     Y_DEBUG_ABORT_UNLESS(stickyColumns);
 
     auto partStore = partView.As<NTable::TPartStore>();
     const auto stickyGroups = MakeStickyGroups(partView, stickyColumns);
+    auto collectionModes = GetPartStoreCacheModes(partView, cacheModes);
+    PageCache.ReadCollectionModes(*partStore, collectionModes, stickyGroups);
 
     // The V2 trees are not enumerable from the part, so the shared cache walks the sticky groups.
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
         const NTable::NPage::TGroupId groupId(groupIndex);
-        auto* pageCollection = partStore->PageCollections[partStore->DataSlot(groupId)].Get();
-        if (auto seeds = MakeBtreeSeeds(*partStore, groupIndex, stickyGroups); seeds) {
-            Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection,
-                pageCollection->GetCacheMode(), std::move(seeds)));
+        const ui32 slot = partStore->DataSlot(groupId);
+        const auto& pageCollection = partStore->GetPageCollectionRef(slot);
+        if (auto seeds = MakeBtreeSeeds(*partStore, groupIndex, stickyGroups, collectionModes); seeds) {
+            Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection,
+                collectionModes[slot], std::move(seeds)));
         }
 
         if (stickyGroups[groupIndex]) {
             Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
-                NBlockIO::EPriority::Bkgr, pageCollection->PageCollection, partStore->GetPages(partStore->DataSlot(groupId), groupId)),
+                NBlockIO::EPriority::Bkgr, pageCollection, partStore->GetPages(partStore->DataSlot(groupId), groupId)),
                 0, ui64(ERequestTypeCookie::StickyPages));
         }
     }
@@ -1689,9 +1681,9 @@ void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView, cons
     // A separate descriptor page collection has no data pages and is sticky with the main group, as page
     // collection 0 of the old layout, so V1 indexes kept in it stay in memory
     if (const ui32 slot = partStore->DescriptorSlot(); slot != partStore->DataSlot({ }) && IsStickySlot(*partStore, slot, stickyGroups)) {
-        auto* pageCollection = partStore->PageCollections[slot].Get();
+        const auto& pageCollection = partStore->GetPageCollectionRef(slot);
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
-            NBlockIO::EPriority::Bkgr, pageCollection->PageCollection, partStore->GetPages(slot, { })),
+            NBlockIO::EPriority::Bkgr, pageCollection, partStore->GetPages(slot, { })),
             0, ui64(ERequestTypeCookie::StickyPages));
     }
 }
@@ -1753,7 +1745,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
         Y_ENSURE(stage && stage->PartView, "Missing bundle result in part switch");
         AddPartStorePageCollections(stage->PartView, cacheModes, stickyColumns);
         if (stickyColumns) {
-            RequestStickyPagesForPartStore(stage->PartView, stickyColumns);
+            RequestStickyPagesForPartStore(stage->PartView, cacheModes, stickyColumns);
         }
         newParts.push_back(std::move(stage->PartView));
     }
@@ -2450,7 +2442,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, ITransactionPages& pages, TTran
     auto waitPad = MakeIntrusive<TTransactionWaitPad>(seat);
     TransactionWaitPads[waitPad.Get()] = waitPad;
 
-    auto toLoad = pages.ObtainToLoad();
+    auto toLoad = PageCache.PreparePageRequests(*seat, pages, *waitPad);
     for (auto &[pageCollectionId, locations] : toLoad) {
         Y_DEBUG_ABORT_UNLESS(locations);
 
@@ -2460,11 +2452,10 @@ void TExecutor::PostponeTransaction(TSeat* seat, ITransactionPages& pages, TTran
                 << " pages " << locations;
         }
 
-        auto request = new NSharedCache::TEvRequest(NBlockIO::EPriority::Fast, PrivatePageCache->GetPageCollection(pageCollectionId)->PageCollection, std::move(locations));
-        request->TraceId = waitPad->GetWaitingTraceId();
-        request->WaitPad = waitPad;
+        auto request = PageCache.MakeTransactionRequest(
+            pageCollectionId, std::move(locations), waitPad, waitPad->GetWaitingTraceId());
         ++waitPad->PendingRequests;
-        Send(MakeSharedPageCacheId(), request, 0, ui64(ERequestTypeCookie::Transaction));
+        Send(MakeSharedPageCacheId(), std::move(request), 0, ui64(ERequestTypeCookie::Transaction));
     }
 
     if (auto logl = Logger->Log(ELnLev::Debug)) {
@@ -3350,15 +3341,15 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
     case ERequestTypeCookie::StickyPages:
     case ERequestTypeCookie::TryKeepInMemPages:
         {
-            TPrivatePageCache::TPageCollection *pageCollection = PrivatePageCache->FindPageCollection(msg->PageCollection->Label());
-            if (!pageCollection) {
+            const auto result = PageCache.ProcessLoadedPages(*msg, requestType == ERequestTypeCookie::StickyPages);
+            if (result == EPageResultStatus::Ignored) {
                 if (requestType == ERequestTypeCookie::Transaction) {
-                    TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);
+                    TryActivateWaitingTransaction(std::move(msg->WaitPad), nullptr);
                 }
                 return;
             }
 
-            if (msg->Status != NKikimrProto::OK) { // collection is still active but we got bs error. no choice then die
+            if (result == EPageResultStatus::Error) { // collection is still active but we got bs error. no choice then die
                 if (auto logl = Logger->Log(ELnLev::Error)) {
                     logl << NFmt::Do(*this) << " Broken on page collection request error " << NFmt::Do(*ev->Get());
                 }
@@ -3370,17 +3361,8 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 return Broken(EBrokenReason::Storage);
             }
 
-            if (requestType == ERequestTypeCookie::StickyPages) {
-                for (auto& loaded : msg->Pages) {
-                    PrivatePageCache->AddStickyPage(loaded.Offset, loaded.Size, std::move(loaded.Page), pageCollection);
-                }
-            } else { // requestType == ERequestTypeCookie::Transaction or ERequestTypeCookie::TryKeepInMemPages
-                for (auto& loaded : msg->Pages) {
-                    PrivatePageCache->AddPage(loaded.Offset, loaded.Size, loaded.Page, pageCollection);
-                }
-                if (requestType == ERequestTypeCookie::Transaction) {
-                    TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);
-                }
+            if (requestType == ERequestTypeCookie::Transaction) {
+                TryActivateWaitingTransaction(std::move(msg->WaitPad), msg);
             }
         }
         return;
@@ -3448,24 +3430,12 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 }
 
 void TExecutor::Handle(NSharedCache::TEvUpdated::TPtr &ev) {
-    const auto *msg = ev->Get();
-
-    for (auto &kv : msg->DroppedPages) {
-        if (auto *pageCollection = PrivatePageCache->FindPageCollection(kv.first)) {
-            for (auto offset : kv.second) {
-                PrivatePageCache->DropPage(offset, pageCollection);
-            }
-        }
-    }
+    PageCache.ProcessCacheUpdate(*ev->Get());
 }
 
 void TExecutor::Handle(NSharedCache::TEvStickyCollectionPages::TPtr &ev) {
-    const auto *msg = ev->Get();
-
-    if (auto *pageCollection = PrivatePageCache->FindPageCollection(msg->CollectionId)) {
-        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
-            NBlockIO::EPriority::Bkgr, pageCollection->PageCollection, msg->Locations),
-            0, ui64(ERequestTypeCookie::StickyPages));
+    if (auto request = PageCache.MakeStickyPageRequest(*ev->Get())) {
+        Send(MakeSharedPageCacheId(), std::move(request), 0, ui64(ERequestTypeCookie::StickyPages));
     }
 }
 
@@ -4248,8 +4218,7 @@ void TExecutor::UpdateUsedTabletMemory() {
     UsedTabletMemory = 50_KB;
 
     // Count the number of bytes that can't be offloaded right now:
-    if (PrivatePageCache) {
-        const auto &stats = PrivatePageCache->GetStats();
+    if (TPageCacheStats stats; PageCache.ReadStats(stats)) {
         UsedTabletMemory += stats.StickyBytes;
         UsedTabletMemory += stats.TryKeepInMemoryBytes;
     }
@@ -4356,8 +4325,7 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
                 Counters->Simple()[TExecutorCounters::GC_BARRIERS_ACTIVE].Set(gcInfo.BarriersSetSize);
             }
 
-            if (PrivatePageCache) {
-                const auto &stats = PrivatePageCache->GetStats();
+            if (TPageCacheStats stats; PageCache.ReadStats(stats)) {
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_COLLECTIONS].Set(stats.PageCollections);
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_SHARED_BODY].Set(stats.SharedBodyBytes);
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_STICKY].Set(stats.StickyBytes);
@@ -4989,11 +4957,12 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
             if (CompactionLogic)
                 CompactionLogic->OutputHtml(str, *scheme, cgi);
 
+            const auto stats = GetPageCollectionStats();
             TAG(TH3) {str << "Page collection cache:";}
-            DIV_CLASS("row") {str << "Total collections: " << PrivatePageCache->GetStats().PageCollections; }
-            DIV_CLASS("row") {str << "Total bytes in shared cache: " << PrivatePageCache->GetStats().SharedBodyBytes; }
-            DIV_CLASS("row") {str << "Total bytes marked as sticky: " << PrivatePageCache->GetStats().StickyBytes; }
-            DIV_CLASS("row") {str << "Total bytes for try-keep-in-memory mode: " << PrivatePageCache->GetStats().TryKeepInMemoryBytes; }
+            DIV_CLASS("row") {str << "Total collections: " << stats.PageCollections; }
+            DIV_CLASS("row") {str << "Total bytes in shared cache: " << stats.SharedBodyBytes; }
+            DIV_CLASS("row") {str << "Total bytes marked as sticky: " << stats.StickyBytes; }
+            DIV_CLASS("row") {str << "Total bytes for try-keep-in-memory mode: " << stats.TryKeepInMemoryBytes; }
             DIV_CLASS("row") {str << "Total bytes currently in use: " << TransactionPagesMemory; }
 
             if (GcLogic) {

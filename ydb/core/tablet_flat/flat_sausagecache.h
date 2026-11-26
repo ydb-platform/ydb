@@ -26,12 +26,7 @@ public:
 
     struct TPageCollection;
 
-    struct TStats {
-        ui64 PageCollections = 0;
-        ui64 SharedBodyBytes = 0;
-        ui64 StickyBytes = 0;
-        ui64 TryKeepInMemoryBytes = 0;
-    };
+    using TStats = TPageCacheStats;
 
     struct TPage : TNonCopyable {
         const TPageOffset Offset;
@@ -167,19 +162,48 @@ private:
     TStats Stats;
 };
 
+struct TExecutorCaches {
+    THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TPageCollection>> PageCollections;
+    THashMap<TLogoBlobID, TSharedData> TxStatusCaches;
+};
+
 // The holder stays stable when boot recreates the private cache
 class TPrivatePageCacheBackend final : public IExecutorPageCache {
 public:
-    explicit TPrivatePageCacheBackend(const THolder<TPrivatePageCache>& cache) noexcept
+    explicit TPrivatePageCacheBackend(THolder<TPrivatePageCache>& cache) noexcept
         : Cache_(cache)
     {}
 
+    bool PrepareRegistration() override;
+    void CaptureForRestart(TExecutorCaches& caches) const override;
+    void PrepareCollectionModes(
+        const NTable::TPartStore& partStore, TVector<ECacheMode>& modes, const TVector<bool>& stickyGroups) override;
+    TVector<bool> UpdateCollectionModes(
+        const NTable::TPartStore& partStore, TVector<ECacheMode>& modes, const TVector<bool>& stickyGroups) override;
+    void ReadCollectionModes(const NTable::TPartStore& partStore, TVector<ECacheMode>& modes,
+        const TVector<bool>& stickyGroups) const override;
+    void RegisterCollection(const NTable::TPartStore& partStore, ui32 slot, ECacheMode cacheMode,
+        TVector<NPageCollection::TBtreeSeed> btreeSeeds, bool replayStickyWalk, TPageCacheEventSender send) override;
+    void RegisterPseudoCollection(const NTable::TPartStore& partStore, TPageCacheEventSender send) override;
+    THolder<NActors::IEventBase> DetachCollection(const TLogoBlobID& collectionId) override;
     std::unique_ptr<TSeat> MakeSeat(ui64 uniqueId, TAutoPtr<ITransaction> transaction) override;
     void WithTransactionPages(NTable::TDatabase& database, TSeat& seat,
         TFunctionRef<void(ITransactionPages&, TTransactionEnv&)> execute) override;
+    THolder<NActors::IEventBase> MakeTransactionRequest(const TLogoBlobID& collectionId,
+        TVector<NTable::NPage::TPageLocation> locations, TIntrusivePtr<NPageCollection::TPagesWaitPad> waitPad,
+        NWilson::TTraceId traceId) override;
+    void ProcessCacheUpdate(const NActors::IEventBase& update) override;
+    THolder<NActors::IEventBase> MakeStickyPageRequest(const NActors::IEventBase& notification) override;
+    EPageResultStatus ProcessLoadedPages(NActors::IEventBase& result, bool sticky) override;
+    bool AdoptLoadedPages(TSeat& seat, NActors::IEventBase* result) override;
     void ReleasePins(TSeat& seat) override;
+    bool ReadStats(TPageCacheStats& stats) const noexcept override;
 
 private:
-    const THolder<TPrivatePageCache>& Cache_;
+    void RegisterCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection>& pageCollection,
+        ECacheMode cacheMode, TVector<NPageCollection::TBtreeSeed> btreeSeeds, bool replayStickyWalk,
+        TPageCacheEventSender send);
+
+    THolder<TPrivatePageCache>& Cache_;
 };
 }}

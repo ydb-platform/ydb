@@ -90,6 +90,10 @@ public:
         return PageCollections.at(slot)->PageCollection;
     }
 
+    const NPageCollection::IPageCollection* GetPseudoPageCollection() const noexcept {
+        return Pseudo ? Pseudo->PageCollection.Get() : nullptr;
+    }
+
     const NPageCollection::IPageCollection* GetPageCollection(ui32 slot) const override
     {
         Y_ENSURE(slot < PageCollections.size());

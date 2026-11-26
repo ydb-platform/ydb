@@ -4,9 +4,20 @@
 #include <ydb/core/protos/shared_cache.pb.h>
 #include <util/system/unaligned_mem.h>
 
+namespace NKikimr {
+struct TAppData;
+}
+
+namespace NKikimrConfig {
+class TAppConfig;
+}
+
 namespace NKikimr::NSharedCache {
 
 using TSharedCacheConfig = NKikimrSharedCache::TSharedCacheConfig;
+
+TSharedCacheConfig ResolveSharedCacheConfig(
+    const NKikimrConfig::TAppConfig& config, const TAppData* fallback = nullptr);
 
 IActor* CreateSharedPageCache(
     const TSharedCacheConfig& config,

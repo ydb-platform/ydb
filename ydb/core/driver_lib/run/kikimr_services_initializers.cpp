@@ -1515,13 +1515,7 @@ TSharedCacheInitializer::TSharedCacheInitializer(const TKikimrRunConfig& runConf
 void TSharedCacheInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData) {
-    NKikimrSharedCache::TSharedCacheConfig config;
-    if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasSharedCacheConfig()) {
-        config.MergeFrom(Config.GetBootstrapConfig().GetSharedCacheConfig());
-    }
-    if (Config.HasSharedCacheConfig()) {
-        config.MergeFrom(Config.GetSharedCacheConfig());
-    }
+    const auto config = NSharedCache::ResolveSharedCacheConfig(Config);
 
     auto* actor = NSharedCache::CreateSharedPageCache(config, appData->Counters);
     setup->LocalServices.emplace_back(NSharedCache::MakeSharedPageCacheId(0),

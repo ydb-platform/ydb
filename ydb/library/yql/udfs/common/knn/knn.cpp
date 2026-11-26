@@ -458,6 +458,37 @@ public:
     }
 };
 
+SIMPLE_STRICT_UDF(TVectorFormatError, TOptional<TUtf8>(char*, ui8, ui32)) {
+    const auto data = TStringBuf(args[0].AsStringRef());
+    const auto format = static_cast<EFormat>(args[1].Get<ui8>());
+    const auto dimensions = args[2].Get<ui32>();
+    size_t elementSize;
+    switch (format) {
+        case EFormat::FloatVector:
+            elementSize = sizeof(float);
+            break;
+        case EFormat::Float16Vector:
+        case EFormat::BFloat16Vector:
+            elementSize = sizeof(TFloat16);
+            break;
+        case EFormat::Uint8Vector:
+        case EFormat::Int8Vector:
+        case EFormat::Float8E4M3Vector:
+        case EFormat::Float8E5M2Vector:
+        case EFormat::BitVector:
+        case EFormat::Uint4Vector:
+        case EFormat::Int4Vector:
+            elementSize = 1;
+            break;
+        default:
+            return valueBuilder->NewString("Unknown vector format");
+    }
+    if (NKnnVectorSerialization::IsExpectedFormat(data, format, dimensions, elementSize)) {
+        return {};
+    }
+    return valueBuilder->NewString(NKnnVectorSerialization::FormatError(data, format, dimensions, elementSize));
+}
+
 // TODO IR for Distance functions?
 
 SIMPLE_MODULE(TKnnModule,
@@ -472,6 +503,7 @@ SIMPLE_MODULE(TKnnModule,
               TToBinaryStringUint8,
               TToBinaryStringBit,
               TFloatFromBinaryString,
+              TVectorFormatError,
               TInnerProductSimilarity,
               TCosineSimilarity,
               TCosineDistance,

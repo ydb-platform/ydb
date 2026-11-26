@@ -121,7 +121,7 @@ class AbstractKiKiMRTest(object):
 
     @classmethod
     def setup_class(cls):
-        nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
+        nodes_count = max(9 if cls.erasure == Erasure.MIRROR_3_DC else 1, cls.erasure.min_fail_domains)
         configurator = KikimrConfigGenerator(cls.erasure,
                                              nodes=nodes_count,
                                              use_in_memory_pdisks=False,
@@ -200,6 +200,14 @@ class TestConfigWithMetadataBlock(TestKiKiMRWithMetadata):
 
 class TestConfigWithoutMetadataBlock(TestKiKiMRWithoutMetadata):
     erasure = Erasure.BLOCK_4_2
+
+
+class TestConfigWithMetadataBlock82(TestKiKiMRWithMetadata):
+    erasure = Erasure.BLOCK_8_2
+
+
+class TestConfigWithoutMetadataBlock82(TestKiKiMRWithoutMetadata):
+    erasure = Erasure.BLOCK_8_2
 
 
 class TestConfigWithMetadataMirrorMax(TestKiKiMRWithMetadata):

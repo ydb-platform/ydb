@@ -277,19 +277,21 @@ class RestartToAnotherVersionFixture(CompatibilityReadinessMixin):
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
         self.http_proxy_endpoint = "http://%s:%s" % ('localhost', self.cluster.nodes[1].http_proxy_port)
 
-        if tenant_db is not None:
-            with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:
-                self.database_path = db_path
+        self.driver = None
+        try:
+            if tenant_db is not None:
+                with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:
+                    self.database_path = db_path
+                    self.driver = self.create_driver()
+                    yield
+            else:
+                self.database_path = "/Root"
                 self.driver = self.create_driver()
                 yield
-        else:
-            self.database_path = "/Root"
-            self.driver = self.create_driver()
-            yield
-
-        self.stop_driver()
-        # Kill: graceful drain can SIGSEGV after the test body already passed.
-        self.cluster.stop(kill=True)
+        finally:
+            self.stop_driver()
+            # Kill: graceful drain can SIGSEGV after the test body already passed.
+            self.cluster.stop(kill=True)
 
     def change_cluster_version(self):
         self.current_binary_paths_index = (self.current_binary_paths_index + 1) % len(self.all_binary_paths)
@@ -362,18 +364,20 @@ class MixedClusterFixture:
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
         self.http_proxy_endpoint = "http://%s:%s" % ('localhost', self.cluster.nodes[1].http_proxy_port)
 
-        if tenant_db is not None:
-            with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:
-                self.database_path = db_path
+        self.driver = None
+        try:
+            if tenant_db is not None:
+                with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:
+                    self.database_path = db_path
+                    self.driver = self.create_driver()
+                    yield
+            else:
+                self.database_path = "/Root"
                 self.driver = self.create_driver()
                 yield
-        else:
-            self.database_path = "/Root"
-            self.driver = self.create_driver()
-            yield
-
-        self.stop_driver()
-        self.cluster.stop()
+        finally:
+            self.stop_driver()
+            self.cluster.stop()
 
 
 all_binary_combinations_rolling = [
@@ -432,18 +436,20 @@ class RollingUpgradeAndDowngradeFixture(CompatibilityReadinessMixin):
         self.endpoint = self.endpoints[0]
         self.http_proxy_endpoint = self.http_proxy_endpoints[0]
 
-        if tenant_db is not None:
-            with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:
-                self.database_path = db_path
+        self.driver = None
+        try:
+            if tenant_db is not None:
+                with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:
+                    self.database_path = db_path
+                    self.driver = self.create_driver()
+                    yield
+            else:
+                self.database_path = "/Root"
                 self.driver = self.create_driver()
                 yield
-        else:
-            self.database_path = "/Root"
-            self.driver = self.create_driver()
-            yield
-
-        self.stop_driver()
-        self.cluster.stop()
+        finally:
+            self.stop_driver()
+            self.cluster.stop()
 
     def roll(self):
         all_nodes = [(id, n, "node") for id, n in self.cluster.nodes.items()] + \

@@ -56,11 +56,9 @@ namespace NKikimr::NBlobDepot {
         agent.InvalidateStepRequests.clear();
         agent.PushCallbacks.clear();
 
-        for (TS3Locator locator : agent.S3WritesInFlight) {
-            // they were not in InFlightTrashS3, so we just have to delete them
-            S3Manager->AddTrashToCollect(locator);
-        }
         if (const ui32 numAbandoned = agent.S3WritesInFlight.size()) {
+            Data->DiscardAgentS3Puts({agent.S3WritesInFlight.begin(), agent.S3WritesInFlight.end()},
+                TData::ES3PutOutcome::MayArriveLate);
             // The agent is never going to commit or discard these writes now. Their slots have to be given back
             // explicitly: otherwise they stay occupied for the rest of this tablet generation and, once enough of
             // them leak, TEvPrepareWriteS3 from *every* agent gets queued in PendingPrepareWrites forever.

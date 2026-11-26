@@ -582,6 +582,14 @@ public:
                 return AddOffsetsToTransaction();
         }
 
+        if (QueryState->GetDisablePgCompatibility()) {
+            try {
+                TQueryData::ValidateNoPgParameters(QueryState->GetYdbParameters());
+            } catch (const yexception& e) {
+                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << e.what();
+            }
+        }
+
         QueryState->UpdateTempTablesState(TempTablesState);
 
         QueryClassifier = TryCreateQueryClassifier();
@@ -903,8 +911,10 @@ public:
 
         auto txCtx = GetTxContextForCompilation();
 
+        auto query = BuildQueryId(txCtx);
+
         // quick path
-        if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId(), txCtx, QuickPathWarmupAttribution()) && !QueryState->CompileResult->NeedToSplit) {
+        if (QueryState->TryGetFromCache(*QueryCache, query, Counters, SelfId(), QuickPathWarmupAttribution()) && !QueryState->CompileResult->NeedToSplit) {
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             // even if we have successfully compilation result, it doesn't mean anything
@@ -924,7 +934,7 @@ public:
         // TODO: in some cases we could reply right here (e.g. there is uid and query is missing), but
         // for extra sanity we make extra hop to the compile service, which might handle the issue better
 
-        auto ev = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings, txCtx);
+        auto ev = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings, std::move(query), txCtx);
         YDB_LOG_DEBUG("Sending CompileQuery request",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
@@ -937,7 +947,7 @@ public:
     void CompileSplittedQuery() {
         YQL_ENSURE(QueryState);
         auto txCtx = GetTxContextForCompilation();
-        auto ev = QueryState->BuildCompileSplittedRequest(CompilationCookie, GUCSettings, txCtx);
+        auto ev = QueryState->BuildCompileSplittedRequest(CompilationCookie, GUCSettings, GetEncodedGUCSettings(), txCtx);
         YDB_LOG_DEBUG("Sending CompileSplittedQuery request",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
@@ -971,7 +981,7 @@ public:
             }
 
             auto txCtx = GetTxContextForCompilation();
-            auto ev = QueryState->BuildReCompileRequest(CompilationCookie, GUCSettings, txCtx);
+            auto ev = QueryState->BuildReCompileRequest(CompilationCookie, GUCSettings, BuildQueryId(txCtx), txCtx);
             Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
                 QueryState->KqpSessionSpan.GetTraceId());
             return;
@@ -998,7 +1008,7 @@ public:
             if (QueryState->CompileResult->NeedToSplit) {
                 if (!QueryState->HasTxControl()) {
                     YQL_ENSURE(QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE || QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN);
-                    auto ev = QueryState->BuildSplitRequest(CompilationCookie, GUCSettings);
+                    auto ev = QueryState->BuildSplitRequest(CompilationCookie, GUCSettings, GetEncodedGUCSettings());
                     Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
                         QueryState->KqpSessionSpan.GetTraceId());
                 } else {
@@ -2480,6 +2490,7 @@ public:
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
         request.SaveQueryPhysicalGraph = allowSaveState && QueryState->SaveQueryPhysicalGraph;
+        request.CompiledWithPgCompatibilityDisabled = request.SaveQueryPhysicalGraph && QueryState->GetDisablePgCompatibility();
         request.QueryPhysicalGraph = allowSaveState ? QueryState->QueryPhysicalGraph : nullptr;
         YDB_LOG_DEBUG("Sending to Executer",
             {"marker", "KQPSA"},
@@ -2653,10 +2664,22 @@ public:
     void HandleNoop(T&) {
     }
 
+    const TKqpEncodedGUC& GetEncodedGUCSettings() {
+        return EncodedGUCSettings.Get(*GUCSettings);
+    }
+
+    // Encodes GUC settings only when the query needs a key.
+    TMaybe<TKqpQueryId> BuildQueryId(TKqpTransactionContext* txCtx) {
+        if (!QueryState->NeedQueryId()) {
+            return {};
+        }
+        return QueryState->BuildQueryId(GetEncodedGUCSettings(), txCtx);
+    }
+
     void InvalidateQuery() {
         if (QueryState->CompileResult) {
             auto invalidateEv = MakeHolder<TEvKqp::TEvCompileInvalidateRequest>(
-                QueryState->CompileResult->Uid, Settings.DbCounters);
+                QueryState->CompileResult, Settings.DbCounters);
 
             Send(MakeKqpCompileServiceID(SelfId().NodeId()), invalidateEv.Release());
         }
@@ -4598,6 +4621,7 @@ private:
     std::shared_ptr<std::atomic<bool>> CompilationCookie;
 
     TGUCSettings::TPtr GUCSettings;
+    TKqpEncodedGUCSettings EncodedGUCSettings;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
     TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };

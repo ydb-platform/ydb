@@ -268,6 +268,8 @@ namespace NKikimr {
                 Y_VERIFY_S(myItem.Status == NKikimrProto::UNKNOWN, VCtx->VDiskLogPrefix);
                 myItem.Parts = std::move(item.Parts);
                 myItem.PartsMask = item.PartsMask;
+                myItem.Keep |= item.Keep;
+                myItem.DoNotKeep |= item.DoNotKeep;
                 if (item.Status != NKikimrProto::NODATA) { // we keep trying to fetch NODATA's till deadline
                     myItem.Status = item.Status;
                     if (myItem.Status == NKikimrProto::OK && WriteRestoredParts) {

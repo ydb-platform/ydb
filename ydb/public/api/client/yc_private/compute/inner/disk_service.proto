@@ -2,11 +2,16 @@ syntax = "proto3";
 
 package yandex.cloud.priv.compute.v1.inner;
 
+import "ydb/public/api/client/yc_private/compute/export.proto";
+
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/compute/inner;compute";
 
 service DiskService {
   // Create iam-token for encrypted disk
   rpc CreateToken(CreateTokenRequest) returns (CreateTokenResponse);
+
+  rpc GetExportCredentials(GetExportCredentialsRequest)
+      returns (GetExportCredentialsResponse);
 }
 
 message CreateTokenRequest {
@@ -18,3 +23,13 @@ message CreateTokenResponse {
   string token = 1;
 }
 
+message GetExportCredentialsRequest {
+  // Compute export task ID passed to Disk Manager in x-task-id.
+  string task_id = 1;
+  string snapshot_id = 2;
+  string image_id = 3;
+}
+
+message GetExportCredentialsResponse {
+  yandex.cloud.priv.compute.v1.ExportS3Credentials credentials = 1;
+}

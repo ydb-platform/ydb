@@ -9,6 +9,7 @@ SRCS(
     fetch_steps.cpp
     fetched_data.cpp
     fetching.cpp
+    index_fetching.cpp
     iterator.cpp
     source.cpp
 )
@@ -18,10 +19,14 @@ PEERDIR(
     ydb/core/formats/arrow/accessor/plain
     ydb/core/formats/arrow/accessor/sub_columns
     ydb/core/formats/arrow/filter
+    ydb/core/formats/arrow/program
+    ydb/core/tx/columnshard/blobs_reader
+    ydb/core/tx/columnshard/engines/reader/common
     ydb/core/tx/columnshard/engines/reader/tracing
     ydb/core/tx/columnshard/engines/scheme
+    ydb/core/tx/columnshard/engines/scheme/indexes/abstract
+    ydb/core/tx/columnshard/engines/storage/indexes/portions
     ydb/core/tx/columnshard/engines/storage/indexes/skip_index
-    ydb/core/tx/columnshard/engines/reader/common
     ydb/core/tx/limiter/grouped_memory/usage
     ydb/core/util/evlog
     yql/essentials/minikql

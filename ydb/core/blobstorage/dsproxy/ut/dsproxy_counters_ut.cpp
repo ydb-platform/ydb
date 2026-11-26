@@ -30,6 +30,21 @@ void SetLogPriorities(TTestBasicRuntime &runtime) {
 
 Y_UNIT_TEST_SUITE(DSProxyCounters) {
 
+Y_UNIT_TEST(MultiGetByteCountsAboveFourGiB) {
+    constexpr ui32 blobSize = 1 << 20;
+    constexpr ui32 count = 4097;
+    const TRope data(TString(blobSize, 'x'));
+    TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries(new TEvBlobStorage::TEvGet::TQuery[count]);
+    TEvBlobStorage::TEvGetResult result(NKikimrProto::OK, count, 1u);
+    for (ui32 i = 0; i < count; ++i) {
+        queries[i].Set(TLogoBlobID(100500, 1, i + 1, 0, blobSize, 0));
+        result.Responses[i].Buffer = data;
+    }
+    const ui64 bytes = ui64(count) * blobSize;
+    UNIT_ASSERT_VALUES_EQUAL(TEvBlobStorage::TEvGet::CountRequestBytes({queries.Get(), count}), bytes);
+    UNIT_ASSERT_VALUES_EQUAL(result.PayloadSizeBytes(), bytes);
+}
+
 Y_UNIT_TEST(PutGeneratedSubrequestBytes) {
     NKikimr::TBlobStorageGroupType erasure = TErasureType::Erasure4Plus2Block;
     TTestBasicRuntime runtime(1, false);

@@ -9,25 +9,25 @@ private:
     std::optional<NArrow::NHash::TXX64> HashCalcer;
 protected:
     std::vector<ui64> CalcHashes(const std::shared_ptr<arrow::Table>& table) const {
-        AFL_VERIFY(!!HashCalcer);
+        YDB_LOG_VERIFY(!!HashCalcer);
         return HashCalcer->ExecuteToVector(table);
     }
 
     virtual std::set<TString> DoGetColumnNames() const final {
-        AFL_VERIFY(!!HashCalcer);
+        YDB_LOG_VERIFY(!!HashCalcer);
         auto columnsVector = HashCalcer->GetColumnNames();
         return std::set<TString>(columnsVector.begin(), columnsVector.end());
     }
     NKikimrSchemeOp::THashShardingInfo SerializeHashingToProto() const {
         NKikimrSchemeOp::THashShardingInfo proto;
-        AFL_VERIFY(!!HashCalcer);
+        YDB_LOG_VERIFY(!!HashCalcer);
         for (auto&& i : HashCalcer->GetColumnNames()) {
             proto.AddColumnNames(i);
         }
         return proto;
     }
     TConclusionStatus DeserializeHashingFromProto(const NKikimrSchemeOp::THashShardingInfo& proto) {
-        AFL_VERIFY(!HashCalcer);
+        YDB_LOG_VERIFY(!HashCalcer);
         if (proto.GetColumnNames().empty()) {
             return TConclusionStatus::Fail("no column names for THashGranuleSharding in proto");
         }
@@ -70,7 +70,7 @@ protected:
         for (auto&& i : proto.GetHashSharding().GetColumns()) {
             ShardingColumns.emplace_back(i);
         }
-        AFL_VERIFY(!HashCalcer);
+        YDB_LOG_VERIFY(!HashCalcer);
         HashCalcer.emplace(ShardingColumns, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, Seed);
         return TConclusionStatus::Success();
     }
@@ -89,7 +89,7 @@ public:
     }
 
     virtual std::vector<ui64> MakeHashes(const std::shared_ptr<arrow::RecordBatch>& batch) const {
-        AFL_VERIFY(!!HashCalcer);
+        YDB_LOG_VERIFY(!!HashCalcer);
         return HashCalcer->Execute(batch).value_or(Default<std::vector<ui64>>());
     }
 

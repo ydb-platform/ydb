@@ -26,6 +26,7 @@ SRCS(
 PEERDIR(
     yql/essentials/public/fastcheck/abi/interface
     yql/essentials/public/fastcheck/abi/serialization
+    yql/essentials/public/sql_meta
     yql/essentials/public/udf_meta/interface
 )
 

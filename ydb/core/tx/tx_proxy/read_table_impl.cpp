@@ -638,6 +638,9 @@ private:
 
             for (auto &entry : res.Columns) {
                 auto& col = entry.second;
+                if (col.IsBuildInProgress) {
+                    continue;
+                }
                 const bool selected = !projection || colNameToPos.contains(col.Name);
                 const bool isVirtualGenerated = col.IsDefaultFromExpression()
                     && col.DefaultExpression && !col.DefaultExpression->Stored;

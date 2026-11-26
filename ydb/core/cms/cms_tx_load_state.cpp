@@ -295,6 +295,7 @@ public:
         Self->Become(&TCms::StateWork);
         NKikimrCms::TVersionInfo versionInfo;
         versionInfo.SetSupportWalleDrainData(true);
+        versionInfo.SetSupportDDiskDiagnostics(true);
         Self->SignalTabletActive(ctx, versionInfo.SerializeAsString());
         Self->SchedulePermissionsCleanup(ctx);
         Self->ScheduleNotificationsCleanup(ctx);

@@ -240,6 +240,8 @@ NYql::NLog::TFormatter Formatter(const NYql::NProto::TLoggingConfig& config) {
             return NYql::NLog::LegacyFormat;
         case NYql::NProto::TLoggingConfig_TFormat::kJsonFormat:
             return NYql::NLog::JsonFormat;
+        case NYql::NProto::TLoggingConfig_TFormat::kLegacyFormatWithYtTimestamp:
+            return NYql::NLog::LegacyFormatWithYtTimestamp;
         case NYql::NProto::TLoggingConfig_TFormat::FORMAT_NOT_SET:
             return NYql::NLog::LegacyFormat;
     }

@@ -6780,6 +6780,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         const auto shards = GetTableShards(server, edgeActor, "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2);
+        SetSplitMergePartCountLimit(&runtime, -1);
 
         // when
         WaitTxNotification(server, edgeActor, AsyncSplitTable(server, edgeActor, "/Root/Table", shards.at(1), 3000000000u));
@@ -6823,6 +6824,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         const auto parents = GetTableShards(server, edgeActor, "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(parents.size(), 2);
+        SetSplitMergePartCountLimit(&runtime, -1);
 
         THashMap<TString, THashSet<ui32>> parentToPartitions;
         bool childRegisteredWithoutKeyRange = false;

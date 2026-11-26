@@ -408,6 +408,41 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionCleanup) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionRead) {
+    Y_UNIT_TEST(LegacyMiniKqlRejectsRetainedSnapshotBelowLowWatermark) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        const auto snapshot = test.WriteVersion(1);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        test.WriteVersion(2);
+        runtime.SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry({snapshot}, {test.TableA});
+        test.RunCleanup();
+        UNIT_ASSERT(snapshot < test.GetCleanupBoundary(test.ShardA));
+        const auto retained = test.ReadSnapshot(test.ShardA, test.TableA, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(retained.get()), "1, 1\n");
+
+        // Use the same version for the legacy read that normally acquires a fresh one.
+        auto useRetainedSnapshot = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_DATA) {
+                auto* mvcc = record.MutableMvccSnapshot();
+                mvcc->SetStep(snapshot.Step);
+                mvcc->SetTxId(snapshot.TxId);
+            }
+        });
+        Tests::TClient client(test.Server->GetSettings());
+        Tests::TClient::TFlatQueryOptions options;
+        NKikimrClient::TResponse response;
+        client.FlatQueryRaw(&runtime, R"(
+            (
+                (let key '('('key (Uint32 '1))))
+                (return (AsList (SetResult 'row (SelectRow '/Root/table-a key '('value)))))
+            )
+        )", options, response);
+        UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), NMsgBusProxy::MSTATUS_ERROR, response.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS(response.GetDataShardErrors(), "[SNAPSHOT_NOT_EXIST]");
+    }
+
     Y_UNIT_TEST(DelayedFirstReadSurvivesCompactionAndRestart) {
         TSnapshotRetentionTest test;
         const auto snapshot = test.WriteVersion(1);

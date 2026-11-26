@@ -1041,11 +1041,12 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             auto type = GetShowCreateType(content.Settings().Ref());
             YQL_ENSURE(!type.empty());
 
+            const auto rewritten = GetSetting(content.Ref(), "sysViewRewritten");
             auto sysViewRewrittenValue = Build<TCoNameValueTuple>(ctx, node.Pos())
                 .Name()
                     .Build("sysViewRewritten")
                 .Value<TCoAtom>()
-                    .Value(key.GetTablePath())
+                    .Value(rewritten ? TString(rewritten->Tail().Content()) : key.GetTablePath())
                     .Build()
                 .Done();
 
@@ -1124,7 +1125,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             YQL_ENSURE(!path.empty(), "Unexpected empty path for SHOW CREATE " << pathType.to_upper());
 
             auto tempTablePath = tablesData->GetTempTablePath(path);
-            if (tempTablePath) {
+            if (tempTablePath && pathType != "StreamingQuery") {
                 path = tempTablePath.value();
             }
 

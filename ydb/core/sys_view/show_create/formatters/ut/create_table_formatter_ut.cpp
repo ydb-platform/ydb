@@ -515,14 +515,14 @@ Y_UNIT_TEST_SUITE(CreateTableFormatter) {
 
     Y_UNIT_TEST(TemporaryTableAndEscapedNames) {
         auto table = MakeTableDescription();
-        AddIndex(table, EIndexTypeGlobalAsync, "index with spaces");
+        AddIndex(table, EIndexTypeGlobalAsync, "index with spaces\\`\x01z");
 
         TCreateTableFormatter formatter(true);
         AssertQueryEqual(formatter.Format("table with spaces", "/Root/table with spaces", table, true, {}, {}), R"(
             CREATE TEMPORARY TABLE `table with spaces` (
                 `key` Uint64, `value` String, `cover` Uint32, PRIMARY KEY (`key`)
             );
-            ALTER TABLE `table with spaces` ADD INDEX `index with spaces` GLOBAL ASYNC ON (`value`);
+            ALTER TABLE `table with spaces` ADD INDEX `index with spaces\\``\x01z` GLOBAL ASYNC ON (`value`);
         )");
     }
 }

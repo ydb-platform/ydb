@@ -92,6 +92,7 @@ def get_ydb_config(request, enable_fq_connector=None):
 
     for flag in (
         "enable_streaming_aggregation_advanced",
+        "enable_streaming_query_read_from",
         "enable_streaming_query_scheme_operations",
         "enable_streaming_query_state_recompute",
         "enable_shared_reading_structured_json_parsing",

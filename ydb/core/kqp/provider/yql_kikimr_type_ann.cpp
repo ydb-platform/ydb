@@ -436,7 +436,7 @@ private:
         return TStatus::Error;
     }
 
-    TStatus HandleRead(TExprBase node, TExprContext& ctx) override {
+    TStatus HandleRead(TExprBase node, TExprNode::TPtr&, TExprContext& ctx) override {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Failed to annotate Read!, IO rewrite should handle this"));
         return TStatus::Error;
     }

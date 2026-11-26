@@ -193,6 +193,72 @@ Y_UNIT_TEST_SUITE(KqpSchemeStreamingQuery) {
         UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
     }
 
+    Y_UNIT_TEST(ShowCreateStreamingQuery) {
+        auto kikimr = SetupStreamingSource(/* enableStreamingQueries */ true, /* enableStateRecompute */ true);
+        auto db = kikimr->GetQueryClient();
+        const auto execute = [&](const TString& sql) {
+            auto result = db.ExecuteQuery(sql, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), sql << "\n" << result.GetIssues().ToString());
+            return result;
+        };
+        const auto show = [&](TStringBuf path = "MyFolder/MyQuery") -> TString {
+            auto result = execute(TStringBuilder() << "SHOW CREATE STREAMING QUERY `" << path << "`");
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            TResultSetParser row(result.GetResultSet(/* resultIndex */ 0));
+            UNIT_ASSERT_VALUES_EQUAL(row.RowsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(row.ColumnsCount(), 3);
+            UNIT_ASSERT(row.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(*row.ColumnParser("Path").GetOptionalUtf8(), "MyFolder/MyQuery");
+            UNIT_ASSERT_VALUES_EQUAL(*row.ColumnParser("PathType").GetOptionalUtf8(), "StreamingQuery");
+            return *row.ColumnParser("CreateQuery").GetOptionalUtf8();
+        };
+        const TString body = " AS DO BEGIN\n    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic -- copy events\nEND DO;";
+        execute("CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (RUN = FALSE)" + body);
+        UNIT_ASSERT_VALUES_EQUAL(show(), "CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (\n    RUN = FALSE\n)" + body);
+        execute("$start = Timestamp('2025-05-04T23:59:59.123456Z'); "
+            "ALTER STREAMING QUERY `MyFolder/MyQuery` SET (CHECKPOINT_INTERVAL = 'PT3S', READ_FROM = $start + Interval('PT1S'))");
+        const auto evaluatedDdl = show("/Root/MyFolder/MyQuery");
+        UNIT_ASSERT_VALUES_EQUAL(evaluatedDdl, "CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (\n    RUN = FALSE,\n"
+            "    CHECKPOINT_INTERVAL = 'PT3S',\n    READ_FROM = Timestamp('2025-05-05T00:00:00.123456Z')\n)" + body);
+        execute("DROP STREAMING QUERY `MyFolder/MyQuery`");
+        execute(evaluatedDdl);
+        UNIT_ASSERT_VALUES_EQUAL(show(), evaluatedDdl);
+
+        const std::vector<TString> positions = {
+            "READ_FROM = EARLIEST",
+            "READ_FROM = LATEST",
+            "READ_FROM = Timestamp('2025-05-04T11:30:34.336938Z'),\n    OUTPUT_FROM = Timestamp('2025-05-05T00:00:00.123456Z')",
+            "OUTPUT_FROM = Timestamp('2105-12-31T23:59:59.999999Z')",
+        };
+
+        for (const auto& position : positions) {
+            execute(TString("ALTER STREAMING QUERY `MyFolder/MyQuery` SET (CHECKPOINT_INTERVAL = 'PT3S', ") +
+                "RESOURCE_POOL = 'sales_pool', WATERMARK_LATE_EVENTS_POLICY = ADJUST, " + position + ")");
+            const auto ddl = show();
+            UNIT_ASSERT_STRING_CONTAINS(ddl, "CHECKPOINT_INTERVAL = 'PT3S'");
+            UNIT_ASSERT_STRING_CONTAINS(ddl, "RESOURCE_POOL = 'sales_pool'");
+            UNIT_ASSERT_STRING_CONTAINS(ddl, "WATERMARK_LATE_EVENTS_POLICY = 'adjust'");
+            UNIT_ASSERT_STRING_CONTAINS(ddl, position);
+            execute("DROP STREAMING QUERY `MyFolder/MyQuery`");
+            execute(ddl);
+            UNIT_ASSERT_VALUES_EQUAL(show(), ddl);
+        }
+
+        execute(R"sql(ALTER STREAMING QUERY `MyFolder/MyQuery` SET (RESOURCE_POOL = "ops'\"\\\x01zone"))sql");
+        const auto poolDdl = show();
+
+        for (const TString& lexer : { "", "--!ansi_lexer\n" }) {
+            execute("DROP STREAMING QUERY `MyFolder/MyQuery`");
+            execute(lexer + poolDdl);
+            CheckObjectProperties(*kikimr->GetTestServer().GetRuntime(), "/Root/MyFolder/MyQuery", {{ "resource_pool", "ops'\"\\\x01zone" }});
+        }
+
+        execute("CREATE TABLE MyTable (id Uint64, PRIMARY KEY (id))");
+        const auto mismatch = db.ExecuteQuery("SHOW CREATE STREAMING QUERY MyTable", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(mismatch.GetStatus(), EStatus::BAD_REQUEST, mismatch.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(mismatch.GetIssues().ToString(), "expected: StreamingQuery, found: Table");
+    }
+
     Y_UNIT_TEST(StreamingQueryReadFrom) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();

@@ -1,86 +1,89 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 #include <ydb/core/util/lz4_data_generator.h>
 
 Y_UNIT_TEST_SUITE(GarbageCollection) {
-    // Hive deletes a tablet for good with a Max<ui32>() generation block followed by a Max/Max hard barrier.
-    // With EnableCollectByCompleteDeletionBlock the block alone collects the data, otherwise it waits for
-    // the barrier as it always did.
-    void TestCompleteDeletionBlock(bool collectByCompleteDeletionBlock) {
-        TFeatureFlags featureFlags;
-        featureFlags.SetEnableCollectByCompleteDeletionBlock(collectByCompleteDeletionBlock);
+    void TestCompleteDeletionBlock(bool dropBarriers) {
         TEnvironmentSetup env({
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .FeatureFlags = featureFlags,
+            .VDiskReplPausedAtStart = true,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
         });
         auto& runtime = env.Runtime;
-
+        for (ui32 nodeId : runtime->GetNodes()) {
+            runtime->GetNode(nodeId)->AppData->FeatureFlags.SetEnableCollectByCompleteDeletionBlock(dropBarriers);
+        }
         env.CreateBoxAndPool(1, 1);
-        auto info = env.GetGroupInfo(env.GetGroups().front());
+        const auto info = env.GetGroupInfo(env.GetGroups().front());
 
-        const ui64 tabletId = 1;
-        const ui8 channel = 0;
         const TString data = FastGenDataForLZ4(1000);
-        const TLogoBlobID id(tabletId, 1, 1, channel, data.size(), 0);
-        // node restarts kill edge actors, so each request gets its own one
-        auto newEdge = [&] { return runtime->AllocateEdgeActor(1, __FILE__, __LINE__); };
+        const TLogoBlobID id(1, 1, 1, 0, data.size(), 0);
+        const TLogoBlobID part(id, 1);
+        const auto vdiskId = info->GetVDiskInSubgroup(0, id.Hash());
+        const auto vdisk = info->GetActorId(vdiskId);
+        const auto [nodeId, pdiskId, vslotId] = DecomposeVDiskServiceId(vdisk);
 
-        TActorId edge = newEdge();
+        // Lose the only copy of the part. Its owner learns the ingress again through sync.
+        env.PutBlob(vdiskId, part, data);
+        env.WaitForSync(info, id);
+        env.CheckBlob(vdisk, vdiskId, part, data);
+        env.StopNode(nodeId);
+        env.PDiskMockStates.at({nodeId, pdiskId}).Reset();
+        runtime->GetNode(nodeId)->AppData->FeatureFlags.SetEnableCollectByCompleteDeletionBlock(dropBarriers);
+        env.StartNode(nodeId);
+        env.WaitForSync(info, id);
+        env.CheckBlob(vdisk, vdiskId, part, data, NKikimrProto::NOT_YET);
+
+        const auto edge = runtime->AllocateEdgeActor(1);
+        const ui32 max = Max<ui32>();
         runtime->WrapInActorContext(edge, [&] {
-            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
-        });
-        UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false)->Get()->Status,
-            NKikimrProto::OK);
-
-        auto compactAndCheck = [&](NKikimrProto::EReplyStatus expected) {
-            env.Sim(TDuration::Seconds(10)); // let it get spread and synced
-            for (const auto& vdisk : info->GetVDisks()) {
-                env.CompactVDisk(info->GetActorId(vdisk.VDiskIdShort));
-            }
-            const TActorId edge = newEdge();
-            runtime->WrapInActorContext(edge, [&] {
-                SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
-                    NKikimrBlobStorage::FastRead));
-            });
-            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
-            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
-            UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
-            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Status, expected);
-        };
-
-        compactAndCheck(NKikimrProto::OK);
-
-        edge = newEdge();
-        runtime->WrapInActorContext(edge, [&] {
-            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvBlock(tabletId, Max<ui32>(), TInstant::Max()));
+            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvBlock(id.TabletID(), max, TInstant::Max()));
         });
         UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(edge, false)->Get()->Status,
             NKikimrProto::OK);
+        env.Sim(TDuration::Seconds(10));
+        env.CheckBlob(vdisk, vdiskId, part, data, NKikimrProto::NODATA);
 
-        const auto expectedAfterBlock = collectByCompleteDeletionBlock ? NKikimrProto::NODATA : NKikimrProto::OK;
-        compactAndCheck(expectedAfterBlock);
-
-        // after a restart the deleted tablets are taken from the blocks database, not from the incoming block
-        for (const auto& vdisk : info->GetVDisks()) {
-            env.RestartNode(info->GetActorId(vdisk.VDiskIdShort).NodeId());
-        }
-        compactAndCheck(expectedAfterBlock);
-
-        edge = newEdge();
         runtime->WrapInActorContext(edge, [&] {
-            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(tabletId, Max<ui32>(), Max<ui32>(),
-                channel, true, Max<ui32>(), Max<ui32>(), nullptr, nullptr, TInstant::Max(), false, true));
+            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), max, max,
+                id.Channel(), true, max, max, nullptr, nullptr, TInstant::Max(), false, true));
         });
-        UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge, false)->Get()->Status,
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge)->Get()->Status,
             NKikimrProto::OK);
+        env.Sim(TDuration::Seconds(10));
+        for (const auto& disk : info->GetVDisks()) {
+            env.SyncQuery<TEvCompactVDiskResult, TEvCompactVDisk>(info->GetActorId(disk.VDiskIdShort),
+                Mask(EHullDbType::Blocks) | Mask(EHullDbType::Barriers));
+        }
 
-        compactAndCheck(NKikimrProto::NODATA);
+        // Restart with barrier removal disabled. The LogoBlobs index still contains the missing part.
+        env.StopNode(nodeId);
+        runtime->GetNode(nodeId)->AppData->FeatureFlags.SetEnableCollectByCompleteDeletionBlock(false);
+        env.StartNode(nodeId);
+        env.Sim(TDuration::Seconds(10));
+        const TKeyBarrier barrier(id.TabletID(), id.Channel(), max, max, true);
+        env.WithQueueId(vdiskId, NKikimrBlobStorage::GetFastRead, [&](TActorId queue) {
+            auto res = env.SyncQuery<TEvBlobStorage::TEvVGetBarrierResult, TEvBlobStorage::TEvVGetBarrier>(queue,
+                vdiskId, barrier, barrier, nullptr, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.KeysSize(), dropBarriers ? 0 : 1);
+        });
+        UNIT_ASSERT(env.Dump(vdisk, vdiskId).Contains(id.ToString()));
+        env.CheckBlob(vdisk, vdiskId, part, data, NKikimrProto::NODATA);
+
+        runtime->Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, vdisk, {}, nullptr, 0), nodeId);
+        env.Sim(TDuration::Minutes(2));
+        auto status = env.SyncQuery<TEvBlobStorage::TEvVStatusResult, TEvBlobStorage::TEvVStatus>(vdisk, vdiskId);
+        UNIT_ASSERT_VALUES_EQUAL(status->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT(status->Record.GetReplicated());
+        env.CompactVDisk(vdisk);
+        UNIT_ASSERT(!env.Dump(vdisk, vdiskId).Contains(id.ToString()));
     }
 
-    Y_UNIT_TEST(CompleteDeletionBlockCollectsData) {
+    Y_UNIT_TEST(CompleteDeletionBlockSurvivesBarrierRemovalRollback) {
         TestCompleteDeletionBlock(true);
     }
 
-    Y_UNIT_TEST(CompleteDeletionBlockWaitsForBarrierWhenDisabled) {
+    Y_UNIT_TEST(CompleteDeletionBlockRetainsHardBarrierWhenDisabled) {
         TestCompleteDeletionBlock(false);
     }
 

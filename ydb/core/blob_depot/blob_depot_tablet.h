@@ -110,7 +110,7 @@ namespace NKikimr::NBlobDepot {
         TControlWrapper S3MaxObjectsToDeleteAtOnce = 10;
 
         // EnableCollectByCompleteDeletionBlock, taken once at tablet start
-        bool CollectByCompleteDeletionBlock = false;
+        bool DropBarriersOnTabletDeletion = false;
 
         bool IsDataCoolingEnabled() const { return bool(CoolingIndex); }
 
@@ -306,7 +306,7 @@ namespace NKikimr::NBlobDepot {
                 TControlBoard::RegisterSharedControl(S3MaxDeletesInFlight, controls.S3MaxDeletesInFlight);
                 TControlBoard::RegisterSharedControl(S3MaxObjectsToDeleteAtOnce, controls.S3MaxObjectsToDeleteAtOnce);
             }
-            CollectByCompleteDeletionBlock = AppData()->FeatureFlags.GetEnableCollectByCompleteDeletionBlock();
+            DropBarriersOnTabletDeletion = AppData()->FeatureFlags.GetEnableCollectByCompleteDeletionBlock();
             Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 1;
             ExecuteTxInitSchema();

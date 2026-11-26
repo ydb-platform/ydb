@@ -677,8 +677,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }, TTestData::Items());
     }
 
-    // Automatic cleanup adds reboot points; split them to stay within the test timeout.
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelOnSingleShardTableWithChangefeed, 8, 2, false, IsFs) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelOnSingleShardTableWithChangefeed, 2, 1, false, IsFs) {
         CancelExport<IsFs>(t, {
             TTestData::Table(),
             TTestData::Changefeed()

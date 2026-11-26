@@ -123,9 +123,6 @@ static TKikimrRunner GetKikimrWithJoinSettings(
 
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
-    // These tests assert Map and BlockHash plan names. Scalar hash join replaces both names.
-    appConfig.MutableTableServiceConfig()->SetUseScalarHashJoin(false);
-    appConfig.MutableTableServiceConfig()->SetUseScalarHashJoinForMap(false);
     appConfig.MutableTableServiceConfig()->SetEnableOrderOptimizaionFSM(true);
     appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());
     if (!useCBO) {
@@ -366,9 +363,10 @@ private:
 
         bool containsLookupOrMap =
             (joinLower.find("lookup") != std::string::npos) ||
-            (joinLower.find("map") != std::string::npos);
+            (joinLower.find("map") != std::string::npos) ||
+            (joinLower.find("scalarhash") != std::string::npos);
 
-        UNIT_ASSERT_C(containsLookupOrMap, TStringBuilder{} << joinLower << " isn't map or lookup join, but expected to be!");
+        UNIT_ASSERT_C(containsLookupOrMap, TStringBuilder{} << joinLower << " isn't a lookup or broadcast hash join, but expected to be!");
     }
 };
 
@@ -847,18 +845,18 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST_TWIN(TestJoinHint1, ColumnStore) {
-        CheckJoinCardinality("queries/test_join_hint1.sql", "stats/basic.json", "InnerJoin (BlockHash)", 10e6, false, ColumnStore);
+        CheckJoinCardinality("queries/test_join_hint1.sql", "stats/basic.json", "InnerJoin (ScalarHash)", 10e6, false, ColumnStore);
     }
 
     Y_UNIT_TEST_TWIN(TestJoinHint1BlockHash, ColumnStore) {
-        CheckJoinCardinality("queries/test_join_hint1_block_hash.sql", "stats/basic.json", "InnerJoin (BlockHash)", 10e6, false, ColumnStore);
+        CheckJoinCardinality("queries/test_join_hint1_block_hash.sql", "stats/basic.json", "InnerJoin (ScalarHash)", 10e6, false, ColumnStore);
     }
     
     Y_UNIT_TEST(BytesHintForceGraceJoin) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/bytes_hint_force_grace_join.sql", "stats/basic.json", false, true, true);
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"R", "S"});
-        UNIT_ASSERT_C(join.Join == "InnerJoin (BlockHash)", join.Join);
+        UNIT_ASSERT_C(join.Join == "InnerJoin (ScalarHash)", join.Join);
     }
 
     Y_UNIT_TEST_TWIN(ShuffleEliminationOneJoin, EnableSeparationComputeActorsFromRead) {
@@ -938,7 +936,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto joinFinder = TFindJoinWithLabels(plan);
         {
             auto join = joinFinder.Find({"partsupp", "lineitem"});
-            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (BlockHash)");
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (ScalarHash)");
             UNIT_ASSERT(!join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
         }
@@ -998,15 +996,15 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto joinFinder = TFindJoinWithLabels(plan);
         {
             auto join = joinFinder.Find({"customer", "customer_address"});
-            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Map)");
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (ScalarHash)");
         }
         {
             auto join = joinFinder.Find({"customer_demographics", "customer", "customer_address"});
-            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Map)");
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (ScalarHash)");
         }
         {
             auto join = joinFinder.Find({"customer_demographics", "customer", "customer_address", "store_sales"});
-            UNIT_ASSERT_EQUAL(join.Join, "LeftSemiJoin (BlockHash)");
+            UNIT_ASSERT_EQUAL(join.Join, "LeftSemiJoin (ScalarHash)");
             UNIT_ASSERT(join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
         }
@@ -1020,10 +1018,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
         auto joinFinder = TFindJoinWithLabels(plan);
 
-        // Inner join: nation (25 rows) is broadcast -> MapJoin.
+        // Inner join: nation (25 rows) is broadcast -> ScalarHash.
         {
             auto join = joinFinder.Find({"nation", "customer"});
-            UNIT_ASSERT_C(join.Join == "InnerJoin (Map)", join.Join);
+            UNIT_ASSERT_C(join.Join == "InnerJoin (ScalarHash)", join.Join);
         }
 
         // Outer join: the (nation join customer) output inherits customer's c_custkey partitioning.
@@ -1045,16 +1043,16 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto [plan, _] =  ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch9.sql", "stats/tpch100s.json", false, true);
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"nation"}, TFindJoinWithLabels::PartialMatch);
-        UNIT_ASSERT_C(join.Join == "InnerJoin (Map)", join.Join);
+        UNIT_ASSERT_C(join.Join == "InnerJoin (ScalarHash)", join.Join);
     }
 
     Y_UNIT_TEST(OltpJoinTypeHintCBOTurnOFF) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/oltp_join_type_hint_cbo_turnoff.sql", "stats/basic.json", false, false, false);
         auto joinFinder = TFindJoinWithLabels(plan);
-        UNIT_ASSERT(joinFinder.Find({"R", "S"}).Join == "InnerJoin (BlockHash)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T"}).Join == "InnerJoin (Map)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U"}).Join == "InnerJoin (BlockHash)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U", "V"}).Join == "InnerJoin (Map)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S"}).Join == "InnerJoin (ScalarHash)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S", "T"}).Join == "InnerJoin (ScalarHash)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U"}).Join == "InnerJoin (ScalarHash)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U", "V"}).Join == "InnerJoin (ScalarHash)");
     }
 
     Y_UNIT_TEST_TWIN(TestJoinOrderHintsSimple, ColumnStore) {

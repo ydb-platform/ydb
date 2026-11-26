@@ -182,7 +182,7 @@ bool SeqnoViolation(TMaybe<i16> lastEpoch, ui64 lastSeqNo, TMaybe<i16> messageEp
 TDuration TPartition::GetOffsetsSnapshotSendInterval(const TActorContext& ctx) const {
     const auto& featureFlags = AppData(ctx)->FeatureFlags;
     bool isTopicMutateDisabled = featureFlags.GetEnableSourceTopicMutateRestricted() ||
-        featureFlags.GetEnableClientModifications() ||
+        !featureFlags.GetEnableClientModifications() ||
         Config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED ||
         Config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE;
 

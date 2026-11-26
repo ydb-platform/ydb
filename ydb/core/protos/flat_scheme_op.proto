@@ -1492,6 +1492,9 @@ message TInitiateBuildIndexMainTable {
 // Takes a snapshot of the main table and switches the vector index to WriteOnly.
 message TPrepareVectorIndex {
     optional string IndexName = 1;
+
+    // Autodetected vector index settings to be persisted with the WriteOnly state.
+    optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 2;
 }
 
 message TBuildIndexOutcome {

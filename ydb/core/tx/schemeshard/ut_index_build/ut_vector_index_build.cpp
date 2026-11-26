@@ -1264,6 +1264,78 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
     }
 
+    Y_UNIT_TEST(VectorIndexAutodetectPublishesSettingsOnWriteOnly) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableConsistentVectorIndexBuild(true);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        // Hold the build in the delta scan, i.e. right after the index is switched to
+        // WriteOnly. This is the window where KQP starts maintaining the index.
+        TBlockEvents<TEvDataShard::TEvDeltaKMeansResponse> deltaBlocker(runtime);
+
+        ui64 buildIndexTx = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            // Use TBuildIndexConfig for the boilerplate, then clear vector_type/vector_dimension
+            // to test the autodetection code path
+            auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
+            });
+            auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->Mutableglobal_vector_kmeans_tree_index();
+            kmeansSettings->mutable_vector_settings()->mutable_settings()->clear_vector_type();
+            kmeansSettings->mutable_vector_settings()->mutable_settings()->clear_vector_dimension();
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+
+        runtime.WaitFor("delta", [&]{ return deltaBlocker.size(); });
+
+        // The detected settings must be published together with the WriteOnly state,
+        // otherwise writes compiled in this window fail in the vector resolver.
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateWriteOnly),
+            NLs::KMeansTreeDescription(
+                Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8,
+                4, 4, 2)});
+
+        deltaBlocker.Stop().Unblock();
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+            NLs::KMeansTreeDescription(
+                Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8,
+                4, 4, 2)});
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+    }
+
     Y_UNIT_TEST(PrefixedVectorIndexAutodetect) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

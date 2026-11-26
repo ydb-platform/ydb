@@ -346,6 +346,19 @@ public:
             TTableIndexInfo::TPtr newIndexData = indexData->CreateNextVersion();
             Y_ABORT_UNLESS(newIndexData);
             newIndexData->State = TTableIndexInfo::EState::EIndexStateWriteOnly;
+
+            // Publish autodetected vector index settings at the same time with WriteOnly
+            // to enable correct index updates.
+            if (prepareOp.HasVectorIndexKmeansTreeDescription()) {
+                const auto& settings = prepareOp.GetVectorIndexKmeansTreeDescription().GetSettings();
+                if (auto* description = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&newIndexData->SpecializedIndexDescription)) {
+                    *description->MutableSettings() = settings;
+                } else if (auto* description = std::get_if<NKikimrSchemeOp::THnswIndexDescription>(&newIndexData->SpecializedIndexDescription)) {
+                    *description->MutableSettings() = settings;
+                } else {
+                    Y_ABORT("Unexpected specialized index description for vector index");
+                }
+            }
         }
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxPrepareVectorIndex, tablePathId);

@@ -14,6 +14,10 @@
 namespace NKikimr::NKqp {
 namespace {
 
+void AssertKafkaSuccess(RdKafka::ErrorCode status) {
+    UNIT_ASSERT_C(status == RdKafka::ERR_NO_ERROR, RdKafka::err2str(status));
+}
+
 // A Kafka protocol server listening on TCP, shared by producer and SQL readers.
 // No mocked gateway or read session is injected into the query execution path.
 class TKafkaCluster {
@@ -26,7 +30,8 @@ public:
         UNIT_ASSERT_C(Owner, error);
         Cluster = rd_kafka_mock_cluster_new(Owner, 3);
         UNIT_ASSERT(Cluster);
-        UNIT_ASSERT_VALUES_EQUAL(rd_kafka_mock_topic_create(Cluster, Topic, 2, 1), RD_KAFKA_RESP_ERR_NO_ERROR);
+        const auto status = rd_kafka_mock_topic_create(Cluster, Topic, 2, 1);
+        UNIT_ASSERT_C(status == RD_KAFKA_RESP_ERR_NO_ERROR, rd_kafka_err2str(status));
         Producer = CreateClient<RdKafka::Producer>();
     }
 
@@ -43,10 +48,10 @@ public:
     void Write(TStringBuf prefix) {
         for (int partition = 0; partition < 2; ++partition) {
             const auto value = fmt::format("{}-{}", prefix, partition);
-            UNIT_ASSERT_VALUES_EQUAL(Producer->produce(Topic, partition, RdKafka::Producer::RK_MSG_COPY, const_cast<char*>(value.data()),
-                                         value.size(), nullptr, 0, 0, nullptr), RdKafka::ERR_NO_ERROR);
+            AssertKafkaSuccess(Producer->produce(
+                Topic, partition, RdKafka::Producer::RK_MSG_COPY, const_cast<char*>(value.data()), value.size(), nullptr, 0, 0, nullptr));
         }
-        UNIT_ASSERT_VALUES_EQUAL(Producer->flush(10000), RdKafka::ERR_NO_ERROR);
+        AssertKafkaSuccess(Producer->flush(10000));
     }
 
     void WaitCommitted(ui64 nextOffset) const {
@@ -67,7 +72,7 @@ public:
             }
             return ready;
         });
-        UNIT_ASSERT_VALUES_EQUAL(consumer->close(), RdKafka::ERR_NO_ERROR);
+        AssertKafkaSuccess(consumer->close());
     }
 
     static constexpr const char* Topic = "streaming-input";
@@ -78,11 +83,11 @@ private:
     std::unique_ptr<T> CreateClient() const {
         std::unique_ptr<RdKafka::Conf> config(RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL));
         std::string error;
-        UNIT_ASSERT_VALUES_EQUAL(config->set("bootstrap.servers", std::string(Brokers()), error), RdKafka::Conf::CONF_OK);
-        UNIT_ASSERT_VALUES_EQUAL(config->set("enable.metrics.push", "false", error), RdKafka::Conf::CONF_OK);
+        UNIT_ASSERT_C(config->set("bootstrap.servers", std::string(Brokers()), error) == RdKafka::Conf::CONF_OK, error);
+        UNIT_ASSERT_C(config->set("enable.metrics.push", "false", error) == RdKafka::Conf::CONF_OK, error);
         if constexpr (std::is_same_v<T, RdKafka::KafkaConsumer>) {
-            UNIT_ASSERT_VALUES_EQUAL(config->set("group.id", Group, error), RdKafka::Conf::CONF_OK);
-            UNIT_ASSERT_VALUES_EQUAL(config->set("enable.auto.commit", "false", error), RdKafka::Conf::CONF_OK);
+            UNIT_ASSERT_C(config->set("group.id", Group, error) == RdKafka::Conf::CONF_OK, error);
+            UNIT_ASSERT_C(config->set("enable.auto.commit", "false", error) == RdKafka::Conf::CONF_OK, error);
         }
         std::unique_ptr<T> client(T::create(config.get(), error));
         UNIT_ASSERT_C(client, error);

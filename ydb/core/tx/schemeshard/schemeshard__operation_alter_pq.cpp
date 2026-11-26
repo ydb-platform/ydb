@@ -2,6 +2,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
+#include "common/validation.h"
 
 #include <library/cpp/containers/absl/flat_hash_set.h>
 #include <library/cpp/containers/top_keeper/top_keeper.h>
@@ -30,13 +31,8 @@ bool IsTableKeyStrictlyInsidePartition(const TString& key, const TMaybe<TTopicTa
         const TTopicTabletInfo::TKeySchema& keyTypes)
 {
     TSerializedCellVec cells;
-    if (!TSerializedCellVec::TryParse(key, cells) || cells.GetCells().size() != keyTypes.size()) {
+    if (!TSerializedCellVec::TryParse(key, cells) || !NValidation::IsValidTableKey(cells.GetCells(), keyTypes)) {
         return false;
-    }
-    for (size_t i = 0; i < keyTypes.size(); ++i) {
-        if (NScheme::HasUnexpectedValueSize(cells.GetCells()[i], keyTypes[i])) {
-            return false;
-        }
     }
 
     auto compareWith = [&](const TString& bound) {
@@ -1039,13 +1035,13 @@ public:
             if (alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy()) {
                 size_t activePartitionCount = CountTopicActivePartitions(topic);
                 auto requestedMinPartitionCount = alter.GetPQTabletConfig().GetPartitionStrategy().GetMinPartitionCount();
-                if (requestedMinPartitionCount > activePartitionCount) {
-                    if (tabletConfig.GetSplitByPartitionKey()) {
-                        errStr = "Increasing the minimum partition count is not supported for topics split by partition key";
-                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-                        return result;
-                    }
-
+                const bool splitByPartitionKey = tabletConfig.GetSplitByPartitionKey();
+                if (splitByPartitionKey && requestedMinPartitionCount > tabletConfig.GetPartitionStrategy().GetMinPartitionCount()) {
+                    errStr = "Increasing the minimum partition count is not supported for topics split by partition key";
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                    return result;
+                }
+                if (!splitByPartitionKey && requestedMinPartitionCount > activePartitionCount) {
                     // select exisisting active partitions for split
                     auto numPartitionsToSplit = requestedMinPartitionCount - activePartitionCount;
                     struct TPartitionsComparer {

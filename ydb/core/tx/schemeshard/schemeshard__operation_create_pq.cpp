@@ -402,6 +402,18 @@ public:
         bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
         Y_ABORT_UNLESS(parseOk);
 
+        if (parentPath.Base()->IsCdcStream()) {
+            const auto it = context.SS->CdcStreams.find(parentPath.Base()->PathId);
+            Y_ABORT_UNLESS(it != context.SS->CdcStreams.end());
+            const auto& stream = it->second->AlterData ? it->second->AlterData : it->second;
+            const bool keyRangeHeartbeats = stream->HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
+            if (keyRangeHeartbeats != config.GetSplitByPartitionKey()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "SplitByPartitionKey must match the key range heartbeat mode of the CDC stream");
+                return result;
+            }
+        }
+
         const PQGroupReserve reserve(config, partitionsToCreate);
 
         {

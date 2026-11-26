@@ -47,9 +47,10 @@ public:
         return grpc::Status::OK;
     }
 
-    grpc::Status MakeDirectory(grpc::ServerContext*, const Ydb::Scheme::MakeDirectoryRequest* request, Ydb::Scheme::MakeDirectoryResponse* response) override {
+    grpc::Status MakeDirectory(grpc::ServerContext* context, const Ydb::Scheme::MakeDirectoryRequest* request, Ydb::Scheme::MakeDirectoryResponse* response) override {
         ++ContentCalls;
         CHECK_EXP(request->path() == Target + "/orders", "Incorrect content target: " << request->path());
+        CheckClientMetadata(context, "x-ydb-database", Target);
         response->mutable_operation()->set_ready(true);
         response->mutable_operation()->set_status(Ydb::StatusIds::SUCCESS);
         return grpc::Status::OK;
@@ -126,9 +127,10 @@ Y_UNIT_TEST_F(DatabaseRestoreUsesOneTarget, TDatabaseRestoreFixture) {
             scheme.ClearExpectations();
             scheme.RootLookups = scheme.PermissionsCalls = scheme.ContentCalls = 0;
             const TString database = relative ? "tenant" : scheme.Target;
-            scheme.ExpectedDatabase = database;
+            const TString sourceDatabase = TEST_DATABASE + "/source";
+            scheme.ExpectedDatabase = sourceDatabase;
             scheme.ExpectListDirectory("/").ExpectChild("/", TString(TStringBuf(TEST_DATABASE).SubStr(1)), Ydb::Scheme::Entry::DATABASE);
-            NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(GetAddress()).SetDatabase(database));
+            NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(GetAddress()).SetDatabase(sourceDatabase));
             TClient client(driver);
             const auto result = client.RestoreDatabase(path.GetPath(), TRestoreDatabaseSettings().Database(database).WithContent(withContent));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);

@@ -853,14 +853,15 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
     }
 
     if (settings.WithContent_) {
-        ExistingEntries.emplace(dbPath, ESchemeEntryType::SubDomain);
+        TRestoreClient dbRestoreClient(dbDriver, Log);
+        dbRestoreClient.ExistingEntries.emplace(dbPath, ESchemeEntryType::SubDomain);
         TRestoreSettings restoreSettings;
         restoreSettings.ReplaceSysACL(true);
-        auto restoreResult = RestoreFolder(fsPath, dbPath, restoreSettings);
-        if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
+        auto restoreResult = dbRestoreClient.RestoreFolder(fsPath, dbPath, restoreSettings);
+        if (auto result = dbRestoreClient.DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
             restoreResult = result;
         }
-        if (auto result = RestorePendingConsumers(); !result.IsSuccess()) {
+        if (auto result = dbRestoreClient.RestorePendingConsumers(); !result.IsSuccess()) {
             restoreResult = result;
         }
         return restoreResult;

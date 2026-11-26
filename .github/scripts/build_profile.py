@@ -56,6 +56,8 @@ def portable_reproduction_args(args, profile_args=()):
     # Preserve only compiler options understood by the shared profiles.
     value_options = {"--build", "--sanitize"}
     definitions = {"HARDENING", "CFLAGS", "DEBUGINFO_LINES_ONLY"}
+    # Profile definitions are already public; retain their effective overrides too.
+    definitions.update(arg[2:].split("=", 1)[0] for arg in profile_args if arg.startswith("-D"))
     result = []
     index = 0
     while index < len(args):

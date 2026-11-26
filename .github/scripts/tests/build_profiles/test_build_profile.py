@@ -77,6 +77,22 @@ class BuildProfilesTest(unittest.TestCase):
             profile + ['-DHARDENING=no'],
         )
 
+    def test_reproduction_overrides_profile_definitions(self):
+        profile = ['--build=release', '-DDEFAULT_ALLOCATOR=MIM']
+        for overrides, expected in [
+            (['-DDEFAULT_ALLOCATOR=SYSTEM'], ['-DDEFAULT_ALLOCATOR=SYSTEM']),
+            (['-D', 'DEFAULT_ALLOCATOR=SYSTEM'], ['-DDEFAULT_ALLOCATOR=SYSTEM']),
+            (['-D', 'DEFAULT_ALLOCATOR'], ['-DDEFAULT_ALLOCATOR']),
+            (['-DDEFAULT_ALLOCATOR=SYSTEM', '-DDEFAULT_ALLOCATOR=MIM'],
+             ['-DDEFAULT_ALLOCATOR=SYSTEM', '-DDEFAULT_ALLOCATOR=MIM']),
+        ]:
+            with self.subTest(overrides=overrides):
+                self.assertEqual(
+                    shlex.split(build_profile.portable_reproduction_args(
+                        overrides + ['-DOTHER_TOKEN=secret', '--test-env=TOKEN=secret'], profile)),
+                    profile + expected,
+                )
+
     def test_reproduction_definition_forms_and_order(self):
         args = ['-DHARDENING=yes', '-D', 'HARDENING=no',
                 '-D', 'CFLAGS=-one -two', '-DCFLAGS=-three',
@@ -100,12 +116,17 @@ class BuildProfilesTest(unittest.TestCase):
 
     def test_workflow_presets_resolve(self):
         # Public presets used by the workflow matrices and choice inputs.
-        presets = ['release', 'debug', 'relwithdebinfo', 'release-asan', 'release-tsan', 'release-msan']
+        presets = ['release', 'debug', 'relwithdebinfo', 'profile', 'release-asan', 'release-tsan', 'release-msan']
         with patch.object(build_profile, 'PROFILE_PATH', PROFILES):
             for name in presets:
                 with self.subTest(name=name):
                     resolved = build_profile.resolve_profile(name)
                     self.assertTrue(resolved['args'])
+                    output = Path(self.tmp.name) / name
+                    subprocess.run([sys.executable, str(SCRIPT), name, '--output-dir', str(output)],
+                                   cwd=ROOT, check=True, capture_output=True, text=True)
+                    self.assertEqual((output / 'args').read_text().splitlines(), resolved['args'])
+                    self.assertEqual((output / 'sanitize').read_text(), resolved['sanitize'] + '\n')
                     expected = {'release-asan': 'address', 'release-tsan': 'thread', 'release-msan': 'memory'}
                     if name in expected:
                         self.assertEqual(resolved['sanitize'], expected[name])

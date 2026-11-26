@@ -1,3 +1,4 @@
+#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
@@ -53,6 +54,7 @@ private:
     TVersionedIndex VersionedIndex;
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     std::optional<TTieringActualizer> Actualizer;
+    const NColumnShard::TEngineLogsCounters Counters;
 
     YDB_READONLY_DEF(std::shared_ptr<TController>, Controller);
 
@@ -62,6 +64,14 @@ public:
     {
         VersionedIndex.AddIndex(TSnapshot(1, 1), Cache->GetOrInsertIndexInfo(MakeTestIndexInfo(Cache, 1, false)));
         Actualizer.emplace(TestPathId, VersionedIndex, Storages);
+    }
+
+    const NColumnShard::TEngineLogsCounters& GetCounters() const {
+        return Counters;
+    }
+
+    const std::shared_ptr<NDataLocks::TManager>& GetDataLocksManager() const {
+        return DataLocksManager;
     }
 
     TRWAddress MakeAddress(const TString& targetTier) const {
@@ -89,8 +99,7 @@ public:
     // Builds the context the way StartTtl does: a fresh one per round, sharing the tablet-wide controller.
     TTieringProcessContext MakeProcessContext() const {
         TSaverContext saverContext(Storages);
-        return TTieringProcessContext(
-            MemoryLimit, saverContext, DataLocksManager, VersionedIndex, NColumnShard::TEngineLogsCounters(), Controller);
+        return TTieringProcessContext(MemoryLimit, saverContext, DataLocksManager, VersionedIndex, Counters, Controller);
     }
 
     // Queues a portion at T - insertedAgo, with its pk holding T - insertedAgo - ageOnInsert. The queue key is
@@ -177,6 +186,34 @@ Y_UNIT_TEST_SUITE(TTieringProcessContextTests) {
             TTieringProcessContext::EAddPortionResult::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(context.GetTasks().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(context.GetTasks().begin()->first, env.MakeAddress(Tier2));
+    }
+
+    Y_UNIT_TEST(RWProgressCountsDataLocksOnly) {
+        TTestEnv env;
+        const auto skipped = env.GetCounters().GetDeriviative("Actualization/Skip/RWProgress/Count");
+        const auto before = skipped->Val();
+        auto portion = env.MakePortion(TDuration::Zero());
+        auto guard = env.GetDataLocksManager()->RegisterLock(std::make_shared<NDataLocks::TListPortionsLock>(
+            "test_compaction", std::vector<std::shared_ptr<TPortionInfo>>{ portion }, NDataLocks::ELockCategory::Compaction));
+
+        auto context = env.MakeProcessContext();
+        UNIT_ASSERT_EQUAL(context.AddPortion(portion, env.MakeEvictionFeatures(Tier2), TDuration::Zero()),
+            TTieringProcessContext::EAddPortionResult::PORTION_LOCKED);
+        UNIT_ASSERT_VALUES_EQUAL(skipped->Val(), before + 1);
+        UNIT_ASSERT(context.GetTasks().empty());
+
+        // Reconsidering a portion in the same pass does not encounter the lock again.
+        UNIT_ASSERT_EQUAL(context.AddPortion(portion, env.MakeEvictionFeatures(Tier2), TDuration::Zero()),
+            TTieringProcessContext::EAddPortionResult::PORTION_LOCKED);
+        UNIT_ASSERT_VALUES_EQUAL(skipped->Val(), before + 1);
+        UNIT_ASSERT(context.GetTasks().empty());
+
+        guard->Release(*env.GetDataLocksManager());
+        auto nextContext = env.MakeProcessContext();
+        UNIT_ASSERT_EQUAL(nextContext.AddPortion(portion, env.MakeEvictionFeatures(Tier2), TDuration::Zero()),
+            TTieringProcessContext::EAddPortionResult::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(nextContext.GetTasks().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(skipped->Val(), before + 1);
     }
 
     Y_UNIT_TEST(FirstTaskIsNotBuiltForAddressAtLimit) {

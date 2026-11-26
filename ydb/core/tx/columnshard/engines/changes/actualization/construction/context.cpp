@@ -25,6 +25,7 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
         return EAddPortionResult::PORTION_LOCKED;
     }
     if (DataLocksManager->IsLocked(*info, NDataLocks::ELockCategory::Actualization)) {
+        Counters.OnActualizationSkipRWProgress();
         return EAddPortionResult::PORTION_LOCKED;
     }
 

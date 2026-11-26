@@ -1,5 +1,6 @@
 #include "schemeshard_export_flow_proposals.h"
 
+#include "schemeshard_table_scheme_snapshot.h"
 #include "schemeshard_path_describer.h"
 #include "schemeshard_xxport__helpers.h"
 
@@ -15,6 +16,7 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::EXPORT
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -67,6 +69,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
         desc.SetOmitIndexes(!exportInfo.IncludeIndexData);
         desc.SetOmitFollowers(true);
         desc.SetIsBackup(true);
+        desc.SetCaptureTableSchemeSnapshot(exportInfo.Kind == TExportInfo::EKind::S3 || exportInfo.Kind == TExportInfo::EKind::FS);
     }
 
     return propose;
@@ -175,13 +178,38 @@ TString ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportI
     return ComputeIndexItemPath(ss, exportInfo.Items.at(itemIdx), itemIdx, exportInfo, settings);
 }
 
-void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& description,
-        const TPathId& exportItemPathId) {
+static const NKikimrSchemeOp::TBackupTask* FindTableSchemeSnapshot(TSchemeShard* ss, const TPath& path) {
+    if (!path.IsResolved() || path.IsDeleted()) {
+        return nullptr;
+    }
+
+    const TPathId pathId = path.Base()->PathId;
+    if (path->IsColumnTable() && ss->ColumnTables.contains(pathId)) {
+        return &ss->ColumnTables.at(pathId).GetPtr()->BackupSettings;
+    }
+    if (path->IsTable() && ss->Tables.contains(pathId)) {
+        return &ss->Tables.at(pathId)->BackupSettings;
+    }
+    return nullptr;
+}
+
+static bool FillSetValForSequences(
+    TSchemeShard* ss,
+    NKikimrSchemeOp::TTableDescription& description,
+    const TPathId& exportItemPathId, TString& error)
+{
     NKikimrSchemeOp::TDescribeOptions opts;
     opts.SetReturnSetVal(true);
+    opts.SetShowPrivateTable(true);
 
     auto pathDescription = DescribePath(ss, TlsActivationContext->AsActorContext(), exportItemPathId, opts);
-    auto tableDescription = pathDescription->GetRecord().GetPathDescription().GetTable();
+    const auto& record = pathDescription->GetRecord();
+    if (record.GetStatus() != NKikimrScheme::StatusSuccess || !record.GetPathDescription().HasTable()) {
+        error = TStringBuilder() << "Cannot describe backup table sequences: " << exportItemPathId
+            << ", reason: " << record.GetReason();
+        return false;
+    }
+    const auto& tableDescription = record.GetPathDescription().GetTable();
 
     THashMap<TString, NKikimrSchemeOp::TSequenceDescription::TSetVal> setValForSequences;
 
@@ -197,38 +225,75 @@ void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription
             *sequenceDescription.MutableSetVal() = it->second;
         }
     }
+    return true;
 }
 
-void FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc, const TPathId& exportItemPathId) {
-    auto copiedPath = GetDescription(ss, exportItemPathId);
+static bool FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc,
+        const TPathId& exportItemPathId, TString& error) {
+    const auto copiedPath = GetDescription(ss, exportItemPathId);
+    if (!copiedPath.HasTable()) {
+        error = "Consistent copy does not contain a row table description";
+        return false;
+    }
     const auto& copiedTable = copiedPath.GetTable();
-
     *desc.MutableSplitBoundary() = copiedTable.GetSplitBoundary();
     *desc.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedTable.GetPartitionConfig().GetPartitioningPolicy();
+    return true;
 }
 
-void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, const TPath& sourcePath, const TPath& exportItemPath) {
-    if (!sourcePath.IsResolved() || (!sourcePath->IsColumnTable() && !exportItemPath.IsResolved())) {
-        return;
-    }
-
-    auto sourceDescription = GetDescription(ss, sourcePath.Base()->PathId);
-    if (sourceDescription.HasTable()) {
-        FillSetValForSequences(
-            ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
-        FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
-        for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
-            auto cdcPathDesc =  GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
-            for (const auto& child : cdcPathDesc.GetChildren()) {
-                if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
-                    *task.AddChangefeedUnderlyingTopics() =
-                        GetDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
-                }
-            }
+static bool FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task,
+        const TPath& sourcePath, const TPath& exportItemPath, bool allowMissingSource, TString& error) {
+    error.clear();
+    const auto* snapshot = FindTableSchemeSnapshot(ss, exportItemPath);
+    NKikimrSchemeOp::TBackupTask legacySnapshot;
+    if (!snapshot || !snapshot->HasTable()) {
+        // Preserve recovery of exports whose copies predate scheme snapshots.
+        if (allowMissingSource && (!sourcePath.IsResolved() || sourcePath.IsDeleted())) {
+            return true;
         }
+        if (!sourcePath.IsResolved() || sourcePath.IsDeleted()) {
+            error = "Source table is not available and the table scheme snapshot is missing";
+            return false;
+        }
+        if (!allowMissingSource) {
+            YDB_LOG_WARN("TExport: table scheme snapshot is missing, using live source scheme as legacy fallback",
+                {"sourcePath", sourcePath.PathString()},
+                {"exportItemPath", exportItemPath.PathString()},
+            );
+        }
+        if (!MakeTableSchemeSnapshot(ss, TlsActivationContext->AsActorContext(), sourcePath.Base()->PathId, legacySnapshot, error)) {
+            return false;
+        }
+        snapshot = &legacySnapshot;
+    }
+    if (!exportItemPath.IsResolved() || exportItemPath.IsDeleted()) {
+        error = "Export table path is not resolved";
+        return false;
     }
 
-    task.MutableTable()->CopyFrom(sourceDescription);
+    auto description = snapshot->GetTable();
+    if (exportItemPath->IsTable()) {
+        if (!description.HasTable() || !description.GetTable().ColumnsSize()) {
+            error = "Table scheme snapshot does not contain a row table description";
+            return false;
+        }
+        if (description.GetTable().GetCdcStreams().size() != snapshot->GetChangefeedUnderlyingTopics().size()) {
+            error = "Table scheme snapshot does not contain all changefeed topics";
+            return false;
+        }
+        if (!FillSetValForSequences(ss, *description.MutableTable(), exportItemPath.Base()->PathId, error)
+            || !FillPartitioning(ss, *description.MutableTable(), exportItemPath.Base()->PathId, error)) {
+            return false;
+        }
+    } else if (!description.HasColumnTableDescription()
+        || !description.GetColumnTableDescription().GetSchema().ColumnsSize()) {
+        error = "Table scheme snapshot does not contain a column table description";
+        return false;
+    }
+
+    task.MutableTable()->Swap(&description);
+    task.MutableChangefeedUnderlyingTopics()->CopyFrom(snapshot->GetChangefeedUnderlyingTopics());
+    return true;
 }
 
 template <typename TSettings>
@@ -251,7 +316,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo,
-    ui32 itemIdx
+    ui32 itemIdx,
+    TString& error
 ) {
     Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
     const auto& item = exportInfo.Items[itemIdx];
@@ -270,7 +336,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         modifyScheme.SetWorkingDir(exportPath.PathString());
         task.SetTableName(ToString(itemIdx));
 
-        FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)));
+        if (!FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss),
+                exportPath.Child(ToString(itemIdx)), exportInfo.Kind == TExportInfo::EKind::YT, error)) {
+            return nullptr;
+        }
     } else {
         auto parentPath = exportPath.Child(ToString(item.ParentIdx));
 
@@ -287,7 +356,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         modifyScheme.SetWorkingDir(parentPath.PathString());
         task.SetTableName(childName);
 
-        FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), parentPath.Child(childName));
+        if (!FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss),
+                parentPath.Child(childName), exportInfo.Kind == TExportInfo::EKind::YT, error)) {
+            return nullptr;
+        }
     }
 
     task.SetNeedToBill(!exportInfo.UserSID || !ss->SystemBackupSIDs.contains(*exportInfo.UserSID));
@@ -378,7 +450,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             auto& backupSettings = *task.MutableFSSettings();
             backupSettings.SetBasePath(exportSettings.base_path());
             backupSettings.SetPath(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
-            
+
             // TODO: Parquet format support for FS will be added after public API approval
 
             if (const auto compression = exportSettings.compression()) {
@@ -500,3 +572,5 @@ void PrepareDropping(TSchemeShard* ss, TExportInfo& exportInfo, NIceDb::TNiceDb&
 
 } // NSchemeShard
 } // NKikimr
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

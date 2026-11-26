@@ -3931,6 +3931,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TTxId WaitTxId = InvalidTxId;
     THashSet<TTxId> DependencyTxIds; // volatile set of concurrent tx(s)
     TString Issue;
+    TString RecoveryError; // volatile diagnostic from loading persisted state
 
     TDeque<ui32> PendingItems;
     TDeque<ui32> PendingDropItems;

@@ -276,6 +276,7 @@ void TBaseCloudAuthRequestProxy::ProcessAuthorizationResult(const TEvTicketParse
         }
     } else {
         UserSID_ = result.Token->GetUserSID();
+        SanitizedToken_ = result.Token->GetSanitizedToken();
     }
 
     MaskedToken_ = NKikimr::MaskIAMTicket(IamToken_);
@@ -472,6 +473,7 @@ void TBaseCloudAuthRequestProxy::ProposeStaticCreds(TProto& req) {
     req.MutableAuth()->SetUserSID(UserSID_);
     req.MutableAuth()->SetAuthType(AuthType_);
     req.MutableAuth()->SetMaskedToken(MaskedToken_);
+    req.MutableAuth()->SetSanitizedToken(SanitizedToken_);
     req.MutableAuth()->SetSourceAddress(SourceAddress_);
 }
 
@@ -544,7 +546,7 @@ void TCloudAuthRequestProxy::ChangeCounters(std::function<void()> func) {
 
 void THttpProxyAuthRequestProxy::DoReply() {
     auto response = Error_.Empty()
-        ? MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(CloudId_, FolderId_, UserSID_)
+        ? MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(CloudId_, FolderId_, UserSID_, SanitizedToken_)
         : MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(Error_.GetRef());
 
     Send(Requester_, response.Release());

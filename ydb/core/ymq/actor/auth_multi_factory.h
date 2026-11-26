@@ -142,6 +142,7 @@ protected:
     TString FolderId_;
     TString CloudId_;
     TString MaskedToken_;
+    TString SanitizedToken_;
     TString UserSID_;
     TString AuthType_;
     TString ResourceId_;

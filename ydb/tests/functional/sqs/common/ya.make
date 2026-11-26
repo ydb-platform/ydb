@@ -5,6 +5,7 @@ ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 TEST_SRCS(
     test_account_actions.py
     test_acl.py
+    test_audit.py
     test_counters.py
     test_garbage_collection.py
     test_multiplexing_tables_format.py

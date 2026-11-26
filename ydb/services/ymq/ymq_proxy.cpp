@@ -14,12 +14,13 @@
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
-#include <util/folder/path.h>
 #include <ydb/core/ymq/actor/auth_factory.h>
 
 #include <ydb/library/http_proxy/error/error.h>
 
 #include <ydb/services/ymq/rpc_params.h>
+
+#include <util/folder/path.h>
 
 #include "utils.h"
 #include "ydb/core/ymq/actor/log.h"
@@ -134,6 +135,7 @@ namespace NKikimr::NYmq::V1 {
         , UserSid(GetMetaValue(request, USER_SID))
         , RequestId(GetMetaValue(request, REQUEST_ID))
         , SecurityToken(GetMetaValue(request, SECURITY_TOKEN))
+        , SanitizedToken(GetMetaValue(request, SANITIZED_TOKEN))
         , SourceAddress(GetMetaValue(request, SOURCE_ADDRESS))
         {
         }
@@ -155,6 +157,7 @@ namespace NKikimr::NYmq::V1 {
             request->MutableAuth()->SetUserName(CloudId);
             request->MutableAuth()->SetFolderId(FolderId);
             request->MutableAuth()->SetUserSID(UserSid);
+            request->MutableAuth()->SetSanitizedToken(SanitizedToken);
             request->MutableAuth()->SetSourceAddress(SourceAddress);
 
             if (SecurityToken) {
@@ -177,6 +180,7 @@ namespace NKikimr::NYmq::V1 {
         const TString UserSid;
         const TString RequestId;
         const TString SecurityToken;
+        const TString SanitizedToken;
 
     protected:
         const TString SourceAddress;

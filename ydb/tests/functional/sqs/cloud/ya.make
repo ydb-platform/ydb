@@ -1,6 +1,7 @@
 PY3TEST()
 
 TEST_SRCS(
+    test_audit.py
     test_common.py
     test_yandex_cloud_mode.py
     test_yandex_cloud_queue_counters.py
@@ -22,6 +23,8 @@ DEPENDS(
 )
 
 PEERDIR(
+    contrib/python/grpcio
+    ydb/public/api/client/yc_private/resourcemanager
     ydb/tests/library
     ydb/tests/library/sqs
     contrib/python/xmltodict

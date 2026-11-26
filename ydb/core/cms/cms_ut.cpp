@@ -17,6 +17,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <limits>
+#include <optional>
 #include <util/string/printf.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
 
@@ -158,15 +159,21 @@ TString SendWalleHttpRequest(TCmsTestEnv &env, HTTP_METHOD method, const TString
     return response->Answer;
 }
 
-void CheckWalleHttpTask(const TString &response, const TString &status, ui32 nodeId) {
+NJson::TJsonValue ReadWalleHttpTask(const TString &response, ui32 nodeId) {
     UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 200"), response);
     const auto bodyOffset = response.find("\r\n\r\n");
     UNIT_ASSERT(bodyOffset != TString::npos);
     NJson::TJsonValue json;
     UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(response).SubStr(bodyOffset + 4), &json, true));
-    UNIT_ASSERT_VALUES_EQUAL_C(json["status"].GetString(), status, response);
+    UNIT_ASSERT_C(!json["status"].GetString().empty(), response);
     UNIT_ASSERT_VALUES_EQUAL(json["hosts"].GetArray().size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(json["hosts"][0].GetString(), ToString(nodeId));
+    return json;
+}
+
+void CheckWalleHttpTask(const TString &response, const TString &status, ui32 nodeId) {
+    const auto json = ReadWalleHttpTask(response, nodeId);
+    UNIT_ASSERT_VALUES_EQUAL_C(json["status"].GetString(), status, response);
 }
 
 TString MakeWalleDrainDataJson(ui32 nodeId, const TString &drainData = "true",
@@ -183,6 +190,199 @@ void SetVDisksMoved(TCmsTestEnv &env, const TTestEnvOpts &opts, ui32 nodeId, boo
         node.VDiskStateInfo.clear();
     }
     env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+}
+
+void CheckWalleDrainPolicyMatchesOrdinaryRequest(TCmsTestEnv &env, ui32 nodeId,
+    const TString &expectedStatus = {}, bool blockedByGroup = false) {
+    // Dry runs compare both requests against the same placement and existing permissions.
+    const TString uri = "/api/walle/v11/tasks?dry_run=true";
+    const auto ordinaryResponse = SendWalleHttpRequest(env, HTTP_METHOD_POST, uri,
+        MakeWalleDrainDataJson(nodeId, "false", "redeploy", "ordinary"));
+    const auto ordinary = ReadWalleHttpTask(ordinaryResponse, nodeId);
+    if (!expectedStatus.empty()) {
+        UNIT_ASSERT_VALUES_EQUAL_C(ordinary["status"].GetString(), expectedStatus, ordinaryResponse);
+    }
+
+    const auto policyResponse = SendWalleHttpRequest(env, HTTP_METHOD_POST, uri,
+        MakeWalleDrainDataJson(nodeId, "true", "redeploy", "policy",
+            R"({"allow_static_vdisks_to_remain":true})"));
+    const auto policy = ReadWalleHttpTask(policyResponse, nodeId);
+    UNIT_ASSERT_VALUES_EQUAL_C(policy["status"].GetString(), ordinary["status"].GetString(),
+        ordinaryResponse + "\n" + policyResponse);
+    if (blockedByGroup) {
+        // An unrelated node limit or StateStorage check must not make this test pass.
+        for (const auto &reply : {ordinary, policy}) {
+            const auto &reason = reply["message"].GetString();
+            UNIT_ASSERT_C(reason.Contains("Issue in affected group"), reason);
+            UNIT_ASSERT_C(reason.Contains("too many unavailable vdisks"), reason);
+        }
+    }
+}
+
+TTestEnvOpts WalleStaticGroupTestOptions(bool mirror3dc) {
+    TTestEnvOpts opts(mirror3dc ? 18 : 16);
+    opts.UseMirror3dcErasure = mirror3dc;
+    opts.DataCenterCount = mirror3dc ? 3 : 1;
+    return opts.WithSentinel();
+}
+
+void TestWalleDrainPolicyStaticGroupAvailability(bool mirror3dc) {
+    TCmsTestEnv env(WalleStaticGroupTestOptions(mirror3dc));
+    const auto first = env.GetNodeId(0);
+    const TString policy = R"({"allow_static_vdisks_to_remain":true})";
+
+    // Model the CMS-visible state when automatic static relocation is unavailable:
+    // the static VDisks stay in place throughout maintenance requests.
+    CheckWalleDrainPolicyMatchesOrdinaryRequest(env, first, "ok");
+    CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+        MakeWalleDrainDataJson(first, "true", "redeploy", "first", policy)), "ok", first);
+    for (ui32 peer : {1, 2}) {
+        CheckWalleDrainPolicyMatchesOrdinaryRequest(env, env.GetNodeId(peer), "in-process", true);
+    }
+    env.RestartCms();
+    for (ui32 peer : {1, 2}) {
+        CheckWalleDrainPolicyMatchesOrdinaryRequest(env, env.GetNodeId(peer), "in-process", true);
+    }
+    env.CheckWalleRemoveTask("first");
+    CheckWalleDrainPolicyMatchesOrdinaryRequest(env, env.GetNodeId(1), "ok");
+
+    auto &vdisk = TFakeNodeWhiteboardService::Info.at(first).VDiskStateInfo.begin()->second;
+    vdisk.SetVDiskState(NKikimrWhiteboard::PDiskError);
+    for (ui32 peer : {1, 2}) {
+        CheckWalleDrainPolicyMatchesOrdinaryRequest(env, env.GetNodeId(peer), "in-process", true);
+    }
+    vdisk.SetVDiskState(NKikimrWhiteboard::OK);
+    CheckWalleDrainPolicyMatchesOrdinaryRequest(env, env.GetNodeId(1), "ok");
+    env.CheckWalleListTasks(0);
+}
+
+TVDiskID StartStaticVDiskRelocation(ui32 groupId, ui32 source, ui32 target) {
+    TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+    auto &config = *TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig();
+    const ui32 targetPDisk = TFakeNodeWhiteboardService::Info.at(target).PDiskStateInfo.begin()->first;
+    constexpr ui32 targetSlot = 2000;
+    std::optional<NKikimrBlobStorage::TBaseConfig::TVSlot> donorSlot;
+    std::optional<TVDiskID> relocatedId;
+
+    // Model QueryBaseConfig + Whiteboard after a static group generation change.
+    // This does not exercise BSC's decision to initiate the relocation.
+    for (auto &slot : *config.MutableVSlot()) {
+        if (slot.GetGroupId() != groupId) {
+            continue;
+        }
+        const auto nodeId = slot.GetVSlotId().GetNodeId();
+        const TVDiskID oldId(groupId, slot.GetGroupGeneration(), slot.GetFailRealmIdx(),
+            slot.GetFailDomainIdx(), slot.GetVDiskIdx());
+        const TVDiskID newId(groupId, oldId.GroupGeneration + 1, oldId);
+        auto &whiteboard = TFakeNodeWhiteboardService::Info.at(nodeId).VDiskStateInfo;
+        auto state = whiteboard.at(oldId);
+        slot.SetGroupGeneration(newId.GroupGeneration);
+        VDiskIDFromVDiskID(newId, state.MutableVDiskId());
+
+        if (nodeId == source) {
+            UNIT_ASSERT(!donorSlot);
+            donorSlot = slot;
+            donorSlot->SetGroupGeneration(oldId.GroupGeneration);
+            whiteboard.at(oldId).SetDonorMode(true);
+            slot.MutableVSlotId()->SetNodeId(target);
+            slot.MutableVSlotId()->SetPDiskId(targetPDisk);
+            slot.MutableVSlotId()->SetVSlotId(targetSlot);
+            state.SetPDiskId(targetPDisk);
+            state.SetVDiskSlotId(targetSlot);
+            state.SetReplicated(false);
+            TFakeNodeWhiteboardService::Info.at(target).VDiskStateInfo.emplace(newId, state);
+            relocatedId = newId;
+        } else {
+            whiteboard.erase(oldId);
+            whiteboard.emplace(newId, state);
+        }
+    }
+    UNIT_ASSERT(donorSlot);
+    UNIT_ASSERT(relocatedId);
+    bool updatedGroup = false;
+    for (auto &group : *config.MutableGroup()) {
+        if (group.GetGroupId() == groupId) {
+            updatedGroup = true;
+            group.SetGroupGeneration(relocatedId->GroupGeneration);
+            for (auto &slotId : *group.MutableVSlotId()) {
+                if (slotId.GetNodeId() == source) {
+                    slotId.SetNodeId(target);
+                    slotId.SetPDiskId(targetPDisk);
+                    slotId.SetVSlotId(targetSlot);
+                }
+            }
+        }
+    }
+    UNIT_ASSERT(updatedGroup);
+    // The old static slot may remain as a donor, outside the current group membership.
+    config.AddVSlot()->CopyFrom(*donorSlot);
+    return *relocatedId;
+}
+
+void FinishStaticVDiskRelocation(ui32 source, ui32 target, const TVDiskID &relocatedId) {
+    TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+    TFakeNodeWhiteboardService::Info.at(target).VDiskStateInfo.at(relocatedId).SetReplicated(true);
+    auto &config = *TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig();
+    ui32 removedDonors = 0;
+    for (int i = config.VSlotSize() - 1; i >= 0; --i) {
+        const auto &slot = config.GetVSlot(i);
+        if (slot.GetGroupId() == relocatedId.GroupID.GetRawId()
+            && slot.GetVSlotId().GetNodeId() == source
+            && slot.GetGroupGeneration() < relocatedId.GroupGeneration) {
+            const TVDiskID donorId(slot.GetGroupId(), slot.GetGroupGeneration(), slot.GetFailRealmIdx(),
+                slot.GetFailDomainIdx(), slot.GetVDiskIdx());
+            UNIT_ASSERT_VALUES_EQUAL(TFakeNodeWhiteboardService::Info.at(source).VDiskStateInfo.erase(donorId), 1);
+            config.MutableVSlot()->DeleteSubrange(i, 1);
+            ++removedDonors;
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(removedDonors, 1);
+}
+
+void TestWalleDrainPolicyDuringStaticRelocation(bool mirror3dc) {
+    TCmsTestEnv env(WalleStaticGroupTestOptions(mirror3dc));
+    const auto source = env.GetNodeId(0);
+    const auto peer = env.GetNodeId(1);
+    const auto target = env.GetNodeId(mirror3dc ? 9 : 8);
+    const TString policy = R"({"allow_static_vdisks_to_remain":true})";
+    CheckWalleDrainPolicyMatchesOrdinaryRequest(env, source, "ok");
+    CheckWalleDrainPolicyMatchesOrdinaryRequest(env, peer, "ok");
+
+    const auto relocatedId = StartStaticVDiskRelocation(0, source, target);
+    // The new copy is not replicated. Taking another member must be blocked by the group.
+    CheckWalleDrainPolicyMatchesOrdinaryRequest(env, peer, "in-process", true);
+    // Compare the donor host too; parity with the ordinary request alone is not a
+    // proof that stopping a donor during relocation is safe in BlobStorage.
+    CheckWalleDrainPolicyMatchesOrdinaryRequest(env, source);
+    env.RestartCms();
+    CheckWalleDrainPolicyMatchesOrdinaryRequest(env, peer, "in-process", true);
+    CheckWalleDrainPolicyMatchesOrdinaryRequest(env, source);
+
+    // A pending task must survive restart and become approved once replication finishes.
+    const auto pendingResponse = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+        MakeWalleDrainDataJson(peer, "true", "redeploy", "pending", policy));
+    CheckWalleHttpTask(pendingResponse, "in-process", peer);
+    UNIT_ASSERT_C(ReadWalleHttpTask(pendingResponse, peer)["message"].GetString()
+        .Contains("too many unavailable vdisks"), pendingResponse);
+    env.RestartCms();
+    CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/pending"),
+        "in-process", peer);
+
+    FinishStaticVDiskRelocation(source, target, relocatedId);
+    CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/pending"), "ok", peer);
+    env.CheckWalleRemoveTask("pending");
+    CheckWalleDrainPolicyMatchesOrdinaryRequest(env, peer, "ok");
+    CheckWalleDrainPolicyMatchesOrdinaryRequest(env, source, "ok");
+
+    // A permission on the new member must still protect the static group.
+    CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+        MakeWalleDrainDataJson(target, "true", "redeploy", "target", policy)), "ok", target);
+    CheckWalleDrainPolicyMatchesOrdinaryRequest(env, peer, "in-process", true);
+    env.RestartCms();
+    CheckWalleDrainPolicyMatchesOrdinaryRequest(env, peer, "in-process", true);
+    env.CheckWalleRemoveTask("target");
+    CheckWalleDrainPolicyMatchesOrdinaryRequest(env, peer, "ok");
+    env.CheckWalleListTasks(0);
 }
 
 } // anonymous namespace
@@ -3712,6 +3912,26 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction"),
             "ok", nodeId);
         env.CheckWalleRemoveTask("eviction");
+    }
+
+    Y_UNIT_TEST(WalleDrainPolicyStaticGroupAvailabilityBlock42)
+    {
+        TestWalleDrainPolicyStaticGroupAvailability(false);
+    }
+
+    Y_UNIT_TEST(WalleDrainPolicyStaticGroupAvailabilityMirror3dc)
+    {
+        TestWalleDrainPolicyStaticGroupAvailability(true);
+    }
+
+    Y_UNIT_TEST(WalleDrainPolicyDuringStaticRelocationBlock42)
+    {
+        TestWalleDrainPolicyDuringStaticRelocation(false);
+    }
+
+    Y_UNIT_TEST(WalleDrainPolicyDuringStaticRelocationMirror3dc)
+    {
+        TestWalleDrainPolicyDuringStaticRelocation(true);
     }
 
     Y_UNIT_TEST(WalleDrainDataDryRun)

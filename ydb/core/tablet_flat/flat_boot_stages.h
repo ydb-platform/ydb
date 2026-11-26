@@ -43,10 +43,14 @@ namespace NBoot {
 
         }
 
+        void HandlePageCacheReady() {
+            Execute();
+        }
+
     private: /* IStep, boot logic DSL actor interface   */
         void Start() override
         {
-            Execute();
+            Logic->WaitForPageCache(this);
         }
 
         void HandleStep(TIntrusivePtr<IStep>) override

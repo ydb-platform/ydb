@@ -1,3 +1,4 @@
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tablet_flat/flat_part_loader.h>
 #include <ydb/core/tablet_flat/flat_part_index_iter_iface.h>
 #include <ydb/core/tablet_flat/flat_part_writer.h>
@@ -8,9 +9,11 @@
 #include <ydb/core/tablet_flat/test/libs/table/wrap_part.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_wreck.h>
+#include <ydb/core/testlib/actor_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/map.h>
 #include <util/string/join.h>
 
 namespace NKikimr {
@@ -437,6 +440,7 @@ namespace {
         TSet<ui32> FetchedSlots;
         ui32 CreatedParts = 0;
         ui32 SavedReplies = 0;
+        TMap<ui32, TVector<bool>> IndexSelections;
     };
 
     class TTrackedLoaderEnv : public NTable::TLoader::TLoaderEnv {
@@ -454,6 +458,11 @@ namespace {
         void Save(NActors::IEventBase& event) override {
             ++Stats.SavedReplies;
             TLoaderEnv::Save(event);
+        }
+
+        void SetSkipBTreeIndexV1Shadow(ui32 slot, bool skip) override {
+            Stats.IndexSelections[slot].push_back(skip);
+            TLoaderEnv::SetSkipBTreeIndexV1Shadow(slot, skip);
         }
 
     private:
@@ -552,6 +561,25 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
+    Y_UNIT_TEST(MetadataRestoreCanBeInitializedWhenRawIOIsRequested) {
+        const auto bundlePart = WriteBundlePart(SeparateLayouts.front(), EIndex::V2);
+        const auto& packet = *CheckedCast<const NPageCollection::TPageCollection*>(
+            bundlePart.Result.PageCollections[0].PageCollection.Get());
+        NPageCollection::TLargeGlobIdRestoreState restore;
+        restore = NPageCollection::TLargeGlobIdRestoreState(packet.LargeGlobId);
+        UNIT_ASSERT(!restore);
+        size_t offset = 0;
+        for (const auto& id : restore.GetBlobs()) {
+            restore.Apply(id, TString(packet.Meta.Raw.data() + offset, id.BlobSize()));
+            offset += id.BlobSize();
+        }
+        UNIT_ASSERT(restore);
+        const auto data = restore.ExtractSharedData();
+        UNIT_ASSERT_VALUES_EQUAL(data.size(), packet.Meta.Raw.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            TStringBuf(data.data(), data.size()), TStringBuf(packet.Meta.Raw.data(), packet.Meta.Raw.size()));
+    }
+
     Y_UNIT_TEST(LegacyMetadataPhaseOwnsProgressAndCancellation) {
         struct THost {
             void LoadRawMetadata(ui32 slot, const NPageCollection::TLargeGlobId&) {
@@ -592,14 +620,14 @@ Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
         THost host;
         const TMetadataLoadContext context(host, nullptr, {}, 19, NTabletFlatExecutor::NBlockIO::EPriority::Fast);
         NTable::TLoader loader(std::move(environment), std::move(components));
-        loader.BeginMetadata(context);
+        UNIT_ASSERT(loader.BeginMetadata(context));
         UNIT_ASSERT(written[0].PageCollection->SkipBTreeIndexV1Shadow());
         const auto requested = host.Slots;
         UNIT_ASSERT_VALUES_EQUAL(requested.size(), written.size() - 2);
         for (ui32 index = 0; index < requested.size(); ++index) {
             UNIT_ASSERT_VALUES_EQUAL(requested[index], index + 2);
         }
-        loader.BeginMetadata(context);
+        UNIT_ASSERT(!loader.BeginMetadata(context));
         UNIT_ASSERT(host.Slots == requested);
         UNIT_ASSERT(!loader.MetadataReady());
         for (ui32 index = requested.size(); index--;) {
@@ -611,7 +639,7 @@ Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
         UNIT_ASSERT(loader.MetadataReady());
         loader.CancelMetadata();
         loader.CancelMetadata();
-        loader.BeginMetadata(context);
+        UNIT_ASSERT(!loader.BeginMetadata(context));
         UNIT_ASSERT(!loader.MetadataReady());
         UNIT_ASSERT(host.Slots == requested);
         UNIT_ASSERT(loader.SaveMetadata(2, raw[2]) == EMetadataLoadResult::Ignored);
@@ -638,9 +666,10 @@ Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
                 , Ready(std::move(ready))
             {}
 
-            void BeginMetadata(TArrayRef<TPageCollectionComponents>, const TMetadataLoadContext&,
+            bool BeginMetadata(TArrayRef<TPageCollectionComponents>, const TMetadataLoadContext&,
                 TFunctionRef<bool()> prepareRoot) override {
                 Outer = prepareRoot();
+                return true;
             }
 
             EMetadataLoadResult AcceptMetadata(ui32 slot, const NTabletFlatExecutor::TPageCacheMetadataResult&,
@@ -651,8 +680,14 @@ Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
                 return EMetadataLoadResult::Pending;
             }
 
+            void SetSkipBTreeIndexV1Shadow(ui32 slot, bool skip) override {
+                PreviousSelections.emplace_back(slot, GetCollection(slot)->SkipBTreeIndexV1Shadow());
+                TLoaderEnv::SetSkipBTreeIndexV1Shadow(slot, skip);
+            }
+
             bool Outer = false;
             TPageCollectionComponents Ready;
+            TVector<std::pair<ui32, bool>> PreviousSelections;
         };
 
         const auto bundlePart = WriteBundlePart(SeparateLayouts.front(), EIndex::V2WithV1Shadow);
@@ -680,10 +715,15 @@ Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
         loader.BeginMetadata(context);
         UNIT_ASSERT(metadata->Outer);
         UNIT_ASSERT(!metadata->GetCollection(0)->SkipBTreeIndexV1Shadow());
+        UNIT_ASSERT_VALUES_EQUAL(metadata->PreviousSelections.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(metadata->PreviousSelections.front().first, 0);
+        UNIT_ASSERT(metadata->PreviousSelections.front().second);
         TEvents::TEvWakeup event;
         const NTabletFlatExecutor::TPageCacheMetadataResult result;
         UNIT_ASSERT(loader.AcceptMetadata(1, result, event, context) == EMetadataLoadResult::Pending);
         UNIT_ASSERT(metadata->GetCollection(1)->SkipBTreeIndexV1Shadow() == expectedSelection);
+        UNIT_ASSERT_VALUES_EQUAL(metadata->PreviousSelections.back().first, 1);
+        UNIT_ASSERT(metadata->PreviousSelections.back().second);
     }
 
     Y_UNIT_TEST(PrepareRootBeforeOtherCollectionsArrive) {
@@ -731,14 +771,27 @@ Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
     }
 
     Y_UNIT_TEST(InjectedEnvironmentCreatesPartAndSavesReplies) {
+        TActorSystemStub actorSystem;
+        actorSystem.AppData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        actorSystem.AppData.FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
         const auto& layout = SeparateLayouts.front();
-        const auto bundlePart = WriteBundlePart(layout, EIndex::V2);
+        const auto bundlePart = WriteBundlePart(layout, EIndex::V2WithV1Shadow);
         TLoadStats stats;
         const auto part = LoadBundlePart(bundlePart, true, false, stats, 0, {}, true, true);
         CheckLoadedPart(bundlePart, part, layout, "injected loader environment");
         UNIT_ASSERT_VALUES_EQUAL(stats.CreatedParts, 1);
         UNIT_ASSERT(stats.Fetches > 0);
         UNIT_ASSERT_VALUES_EQUAL(stats.SavedReplies, stats.Fetches);
+        const auto* store = part.As<NTable::TPartStore>();
+        UNIT_ASSERT_VALUES_EQUAL(stats.IndexSelections.size(), store->Slots.SlotsCount());
+        bool skipped = false;
+        for (ui32 slot : xrange(store->Slots.SlotsCount())) {
+            const auto& selections = stats.IndexSelections.at(slot);
+            UNIT_ASSERT_VALUES_EQUAL(selections.size(), 1);
+            UNIT_ASSERT(selections.front() == store->GetPageCollection(slot)->SkipBTreeIndexV1Shadow());
+            skipped |= selections.front();
+        }
+        UNIT_ASSERT(skipped);
     }
 
     Y_UNIT_TEST(Load) {

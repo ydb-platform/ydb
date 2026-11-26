@@ -40,7 +40,9 @@
 #include <util/thread/singleton.h>
 
 #include <map>
+#include <memory>
 #include <optional>
+#include <type_traits>
 #include <variant>
 
 namespace NKikimr {
@@ -90,63 +92,69 @@ struct TPendingPartSwitch {
 
     using TLargeGlobLoaders = TList<TLargeGlobLoader>;
 
-    struct TMetaStage {
-        NTable::TPartComponents PartComponents;
-        TLargeGlobLoaders Loaders;
-
-        explicit TMetaStage(NTable::TPartComponents&& pc)
-            : PartComponents(std::move(pc))
-        {
-            for (size_t idx = 0; idx < PartComponents.PageCollectionComponents.size(); ++idx) {
-                if (!PartComponents.PageCollectionComponents[idx].RawMeta) {
-                    Loaders.emplace_back(idx, PartComponents.PageCollectionComponents[idx].LargeGlobId);
-                }
-            }
-        }
-
-        bool Finished() const {
-            return !Loaders;
-        }
-
-        bool Accept(TLargeGlobLoaders::iterator it, const TLogoBlobID& id, TString body) {
-            if (it->Accept(id, std::move(body))) {
-                PartComponents.PageCollectionComponents[it->Index].RawMeta = it->Finish();
-                Loaders.erase(it);
-                return !Loaders;
-            }
-
-            return false;
-        }
-    };
-
     struct TLoaderStage {
         NTable::TLoader Loader;
+        TLargeGlobLoaders Loaders;
         const NPageCollection::IPageCollection* Fetching = nullptr;
 
         TLoaderStage(THolder<NTable::IPartLoaderEnv> environment, NTable::TPartComponents&& pc)
             : Loader(std::move(environment), std::move(pc))
         { }
-    };
 
-    struct TResultStage {
-        NTable::TPartView PartView;
-
-        explicit TResultStage(NTable::TPartView&& partView)
-            : PartView(std::move(partView))
-        { }
+        bool Accept(TLargeGlobLoaders::iterator it, const TLogoBlobID& id, TString body) {
+            if (it->Accept(id, std::move(body))) {
+                const auto result = Loader.SaveMetadata(it->Index, it->Finish());
+                Loaders.erase(it);
+                Y_ENSURE(result != NTable::EMetadataLoadResult::Error, "Empty collection metadata");
+                return result == NTable::EMetadataLoadResult::Ready;
+            }
+            return false;
+        }
     };
 
     struct TNewBundle {
-        std::variant<TMetaStage, TLoaderStage, TResultStage> Stage;
+        TNewBundle(THolder<NTable::IPartLoaderEnv> environment, NTable::TPartComponents pc)
+            : Load(std::move(environment), std::move(pc))
+        {}
 
-        explicit TNewBundle(NTable::TPartComponents pc)
-            : Stage(std::in_place_type<TMetaStage>, std::move(pc))
-        { }
+        TNewBundle(const TNewBundle&) = delete;
+        TNewBundle& operator=(const TNewBundle&) = delete;
 
-        template<class T>
-        inline T* GetStage() {
-            return std::get_if<T>(&Stage);
+        ~TNewBundle() {
+            if (Stage == EStage::Loading) {
+                std::destroy_at(&Load);
+            } else {
+                std::destroy_at(&Result);
+            }
         }
+
+        TLoaderStage* GetLoaderStage() noexcept {
+            return Stage == EStage::Loading ? &Load : nullptr;
+        }
+
+        NTable::TPartView* GetResult() noexcept {
+            return Stage == EStage::Result ? &Result : nullptr;
+        }
+
+        void SetResult(NTable::TPartView&& partView) noexcept {
+            static_assert(std::is_nothrow_move_constructible_v<NTable::TPartView>);
+            Y_DEBUG_ABORT_UNLESS(Stage == EStage::Loading);
+            std::destroy_at(&Load);
+            std::construct_at(&Result, std::move(partView));
+            Stage = EStage::Result;
+        }
+
+    private:
+        enum class EStage : ui8 {
+            Loading,
+            Result,
+        };
+
+        union {
+            TLoaderStage Load;
+            NTable::TPartView Result;
+        };
+        EStage Stage = EStage::Loading;
     };
 
     struct TTxStatusLoadStage {
@@ -263,6 +271,8 @@ struct TPendingPartSwitch {
     TVector<TIntrusiveConstPtr<NTable::TColdPart>> NewColdParts;
     TPendingBlobs PendingBlobs;
     size_t PendingLoads = 0;
+    size_t PendingParts = 0;
+    TIntrusivePtr<IPageMetadataWorkingSet> MetadataWorkingSet;
 
     TVector<TChangedBundle> Changed;
     TVector<TBundleDelta> Deltas;
@@ -502,6 +512,16 @@ class TExecutor
     bool HasYellowCheckInFly = false;
 
     TDeque<TPendingPartSwitch> PendingPartSwitches;
+    TIntrusivePtr<IPageMetadataWorkingSet> ActiveMetadataWorkingSet;
+    struct TPartMetadataIO;
+
+    struct TPendingMetadataLoad {
+        TPendingPartSwitch* Switch;
+        TPendingPartSwitch::TNewBundle* Bundle;
+        ui32 Slot;
+    };
+
+    THashMap<const void*, TPendingMetadataLoad> PendingMetadataLoads;
     size_t ReadyPartSwitches = 0;
 
     ui64 UsedTabletMemory = 0;
@@ -537,6 +557,11 @@ class TExecutor
     void UtilizeSubset(const NTable::TSubset&, const NTable::NFwd::TSeen&,
         THashSet<TLogoBlobID> reusedBundles, TLogCommit *commit);
     void UtilizeSubset(const NTable::TSubset&, TLogCommit *commit);
+    TPendingPartSwitch& NewPartSwitch(ui32 step);
+    void ActivateMetadataWorkingSet(TPendingPartSwitch& partSwitch);
+    void StartPendingMetadata();
+    void CancelPendingMetadata() noexcept;
+    void HandlePartMetadata(const TPageCacheMetadataResult& metadata, NActors::IEventHandle& ev);
     bool PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPartComponents &&pc);
     bool PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPartSwitch::TNewBundle &bundle);
     bool PrepareExternalTxStatus(TPendingPartSwitch &partSwitch, const NPageCollection::TLargeGlobId &dataId, NTable::TEpoch epoch, const TString &data);

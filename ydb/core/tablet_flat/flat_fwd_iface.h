@@ -37,6 +37,13 @@ namespace NFwd {
         virtual THolder<NActors::IEventBase> MakeRequest(
             NTabletFlatExecutor::NBlockIO::EPriority priority, TFetch fetch) const = 0;
         virtual THolder<IPartLoaderEnv> MakeLoaderEnvironment() const = 0;
+
+        // One working set covers the existing subset, cold loaders and newly discovered collections
+        virtual TIntrusivePtr<NTabletFlatExecutor::IPageMetadataWorkingSet> MetadataWorkingSet() const {
+            return {};
+        }
+
+        // Include physical and Pseudo identities in the backend's metadata group
         virtual void AddCold(const TPartView& partView) = 0;
         virtual bool MayProgress() const = 0;
         virtual void Save(NActors::IEventBase& event) = 0;

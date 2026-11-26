@@ -81,6 +81,11 @@ namespace NTabletFlatExecutor {
         return MakePrivateWrittenPageCache(*AppData()->SharedCachePages);
     }
 
+    bool IExecutorPageCache::BeginPartMetadata(
+        NTable::TLoader& loader, const NTable::TMetadataLoadContext& context, bool) const {
+        return loader.BeginMetadata(context);
+    }
+
     bool TPrivatePageCacheBackend::PrepareRegistration() {
         const bool replayStickyWalks = bool(Cache_);
         Cache_ = MakeHolder<TPrivatePageCache>();

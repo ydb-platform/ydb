@@ -46,6 +46,7 @@ TExecutorBootLogic::TExecutorBootLogic(IOps *ops, IExecutorPageCache& pageCache,
 
 TExecutorBootLogic::~TExecutorBootLogic()
 {
+    PageCacheWaiter.Drop();
     CancelMetadataLoads();
     LoadBlobQueue.Clear();
 
@@ -171,6 +172,20 @@ void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches cac
 
         /* The rest of ... are produced on TStages::FinalizeLogicObjects() */
     }
+}
+
+void TExecutorBootLogic::WaitForPageCache(NBoot::TStages* step) {
+    auto request = PageCache.Protocol().MakeReadyRequest();
+    if (!request) {
+        step->HandlePageCacheReady();
+        return;
+    }
+    if (MetadataCancelled) {
+        return;
+    }
+    Y_ENSURE(!PageCacheWaiter, "Page-cache readiness is already pending");
+    PageCacheWaiter = step;
+    Ops->Send(NSharedCache::MakeSharedPageCacheId(), request.Release(), 0, BootAttempt);
 }
 
 void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
@@ -317,7 +332,14 @@ void TExecutorBootLogic::SeenBlob(const TLogoBlobID& id) {
 
 TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandle &ev)
 {
-    if (auto *msg = ev.CastAsLocal<TEvBlobStorage::TEvGetResult>()) {
+    if (PageCache.Protocol().EventKind(ev.GetTypeRewrite()) == EPageCacheEvent::Ready) {
+        if (MetadataCancelled || ev.Cookie != BootAttempt || !PageCacheWaiter) {
+            return OpResultUnhandled;
+        }
+        PageCacheWaiter.Get()->HandlePageCacheReady();
+        PageCacheWaiter.Drop();
+        Steps->Execute();
+    } else if (auto *msg = ev.CastAsLocal<TEvBlobStorage::TEvGetResult>()) {
         if (!LoadBlobQueue.ProcessResult(msg))
             return OpResultBroken;
 
@@ -420,6 +442,7 @@ TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() {
 }
 
 void TExecutorBootLogic::Cancel() {
+    PageCacheWaiter.Drop();
     CancelMetadataLoads();
     if (LeaseWaiter) {
         Ops->Send(LeaseWaiter, new TEvents::TEvPoison);

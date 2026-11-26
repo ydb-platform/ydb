@@ -80,6 +80,7 @@ private:
     TAutoPtr<NBoot::TResult> Result_;
     TAutoPtr<NBoot::TRoot> Steps;
     TActorId LeaseWaiter;
+    TIntrusivePtr<NBoot::TStages> PageCacheWaiter;
 
     const ui64 BootAttempt;
     TMonotonic BootTimestamp;
@@ -109,6 +110,7 @@ private:
     void StartLeaseWaiter(TMonotonic bootTimestamp, const TEvTablet::TDependencyGraph& graph);
     ui32 GetBSGroupFor(const TLogoBlobID &logo) const;
     ui32 GetBSGroupID(ui32 channel, ui32 generation);
+    void WaitForPageCache(NBoot::TStages* step);
     void LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs>);
     bool LoadMetadata(NBoot::IStep* step, ui32 slot, const NPageCollection::TLargeGlobId& descriptor,
         const void* request, THolder<NActors::IEventBase> event);

@@ -7,6 +7,7 @@
 #include "util_fmt_abort.h"
 #include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
 #include <ydb/core/util/pb.h>
+#include <util/generic/bitmap.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/stream/mem.h>
@@ -30,7 +31,7 @@ namespace NTable {
         template <class THost>
         TMetadataLoadContext(THost& host, NActors::TActorSystem* system, NActors::TActorId replyTo, ui64 cookie,
             NTabletFlatExecutor::NBlockIO::EPriority priority,
-            NTabletFlatExecutor::IPageMetadataLoadGroup* group = nullptr) noexcept
+            NTabletFlatExecutor::IPageMetadataWorkingSet* workingSet = nullptr) noexcept
             : Host_(&host)
             , LoadRaw_(&InvokeLoadRaw<THost>)
             , SendRequest_(&InvokeSendRequest<THost>)
@@ -39,7 +40,7 @@ namespace NTable {
             , ReplyTo(replyTo)
             , Cookie(cookie)
             , Priority(priority)
-            , Group(group)
+            , MetadataWorkingSet(workingSet)
         {}
 
         void LoadRaw(ui32 slot, const NPageCollection::TLargeGlobId& id) const {
@@ -81,8 +82,8 @@ namespace NTable {
         const NActors::TActorId ReplyTo;
         const ui64 Cookie;
         const NTabletFlatExecutor::NBlockIO::EPriority Priority;
-        // The environment retains the group if it needs it beyond this call
-        NTabletFlatExecutor::IPageMetadataLoadGroup* const Group;
+        // The environment retains the working set if it needs it beyond this call
+        NTabletFlatExecutor::IPageMetadataWorkingSet* const MetadataWorkingSet;
     };
 
     struct TLoaderFetch : TMoveOnly {
@@ -95,9 +96,10 @@ namespace NTable {
     };
 
     struct IPartLoaderEnv : public IPages {
+        // Returns true only when this call starts the metadata phase
         // The root callback publishes the frozen selection for all available slots
         // Invoke it after each arriving collection once slot 0 is available; do not retain it
-        virtual void BeginMetadata(TArrayRef<TPageCollectionComponents> components, const TMetadataLoadContext& context,
+        virtual bool BeginMetadata(TArrayRef<TPageCollectionComponents> components, const TMetadataLoadContext& context,
             TFunctionRef<bool()> prepareRoot) = 0;
         virtual EMetadataLoadResult SaveMetadata(
             TArrayRef<TPageCollectionComponents> components, ui32 slot, TSharedData data) = 0;
@@ -113,6 +115,8 @@ namespace NTable {
         virtual void ResizeCollections(ui32 count) = 0;
         virtual bool HasCollection(ui32 slot) const noexcept = 0;
         virtual const TIntrusiveConstPtr<NPageCollection::IPageCollection>& GetCollection(ui32 slot) const = 0;
+        // Apply the shared index choice with backend accounting
+        virtual void SetSkipBTreeIndexV1Shadow(ui32 slot, bool skip) = 0;
         virtual void PrepareCollection(ui32 slot, TPageCollectionComponents& components, bool outer) = 0;
         virtual void Initialize(TPartSlots slots) = 0;
         virtual TPartStore* CreatePart(TPart::TParams params, TPart::TStat stat) = 0;
@@ -121,6 +125,79 @@ namespace NTable {
         virtual void EnsureNoNeedPages() const = 0;
         virtual TLoaderFetch GetFetch() = 0;
         virtual void Save(NActors::IEventBase& event) = 0;
+    };
+
+    class TPartLoaderPages : public IPartLoaderEnv {
+    public:
+        TResult Locate(const TMemTable*, ui64, ui32) override {
+            Y_TABLET_ERROR("IPages::Locate(TMemTable*, ...) shouldn't be used here");
+        }
+
+        TResult Locate(const TPart*, ui64, ELargeObj) override {
+            Y_TABLET_ERROR("IPages::Locate(TPart*, ...) shouldn't be used here");
+        }
+
+        void EnsureNoNeedPages() const override {
+            for (const auto& needPages : NeedPages) {
+                Y_ENSURE(!needPages);
+            }
+        }
+
+        TLoaderFetch GetFetch() override {
+            return BuildFetch([](TLoaderFetch&) {
+            });
+        }
+
+    protected:
+        TPartLoaderPages() = default;
+
+        explicit TPartLoaderPages(TPartSlots slots)
+            : Slots(slots)
+            , NeedPages(Slots.SlotsCount())
+        {}
+
+        ui32 DataSlot(const TPart* part, TGroupId groupId) const {
+            Y_ENSURE(part == Part, "Unsupported part");
+            return Slots.DataSlot(groupId);
+        }
+
+        ui32 IndexSlot(const TPart* part, TGroupId groupId) const {
+            Y_ENSURE(part == Part, "Unsupported part");
+            return Slots.IndexSlot(groupId);
+        }
+
+        void RecordMissingPage(ui32 slot, const TPageLocation& location) {
+            auto [it, inserted] = NeedPages[slot].emplace(location);
+            Y_DEBUG_ABORT_UNLESS(inserted || *it == location);
+        }
+
+        // One slot per fetch. The stage is run again after the reply to request any other slots
+        template <class TPrepare>
+        TLoaderFetch BuildFetch(TPrepare prepare) {
+            for (ui32 slot : xrange(NeedPages.size())) {
+                if (const auto& needPages = NeedPages[slot]) {
+                    TLoaderFetch fetch{ .Pages = TVector<TPageLocation>(needPages.begin(), needPages.end()) };
+                    std::sort(fetch.Pages.begin(), fetch.Pages.end());
+                    prepare(fetch);
+                    FetchSlot = slot;
+                    fetch.PageCollection = GetCollection(slot);
+                    return fetch;
+                }
+            }
+            return {};
+        }
+
+        struct TPageLocationByOffsetEq {
+            bool operator()(const TPageLocation& a, const TPageLocation& b) const noexcept {
+                return a.Offset == b.Offset;
+            }
+        };
+
+        const TPart* Part = nullptr;
+        TPartSlots Slots{ 0 };
+        // Dedup by offset while keeping Size and Type for the fetch request
+        TVector<THashSet<TPageLocation, NPage::TPageLocationByOffsetHash, TPageLocationByOffsetEq>> NeedPages;
+        ui32 FetchSlot = Max<ui32>();
     };
 
     class TLoader {
@@ -141,14 +218,14 @@ namespace NTable {
         using IEnv = IPartLoaderEnv;
 
         // Legacy cache environment retained as the default implementation
-        struct TLoaderEnv : public IEnv {
+        struct TLoaderEnv : public TPartLoaderPages {
             enum class EMetadataState : ui8 {
                 Idle,
                 Loading,
                 Cancelled,
             };
 
-            void BeginMetadata(TArrayRef<TPageCollectionComponents> components, const TMetadataLoadContext& context,
+            bool BeginMetadata(TArrayRef<TPageCollectionComponents> components, const TMetadataLoadContext& context,
                 TFunctionRef<bool()> prepareRoot) override;
             EMetadataLoadResult SaveMetadata(
                 TArrayRef<TPageCollectionComponents> components, ui32 slot, TSharedData data) override;
@@ -178,7 +255,6 @@ namespace NTable {
 
             explicit TLoaderEnv(TVector<TIntrusivePtr<TPageCollection>> pageCollections)
                 : PageCollections(std::move(pageCollections))
-                , Slots(0)
             {}
 
             ui32 GetCollectionCount() const noexcept override {
@@ -197,28 +273,21 @@ namespace NTable {
                 return Collections()[slot]->PageCollection;
             }
 
+            void SetSkipBTreeIndexV1Shadow(ui32 slot, bool skip) override {
+                GetCollection(slot)->SetSkipBTreeIndexV1Shadow(skip);
+            }
+
             void PrepareCollection(ui32 slot, TPageCollectionComponents& components, bool outer) override;
             void Initialize(TPartSlots slots) override;
             TPartStore* CreatePart(TPart::TParams params, TPart::TStat stat) override;
             void Save(NActors::IEventBase& event) override;
 
             TLoaderEnv(TVector<TIntrusivePtr<TPageCollection>> pageCollections, TPartSlots slots)
-                : PageCollections(std::move(pageCollections))
-                , Slots(slots)
+                : TPartLoaderPages(slots)
+                , PageCollections(std::move(pageCollections))
                 , SavedPages(Slots.SlotsCount())
-                , NeedPages(Slots.SlotsCount())
             {
                 Y_ENSURE(PageCollections.size() >= Slots.SlotsCount());
-            }
-
-            TResult Locate(const TMemTable*, ui64, ui32) override
-            {
-                Y_TABLET_ERROR("IPages::Locate(TMemTable*, ...) shouldn't be used here");
-            }
-
-            TResult Locate(const TPart*, ui64, ELargeObj) override
-            {
-                Y_TABLET_ERROR("IPages::Locate(TPart*, ...) shouldn't be used here");
             }
 
             void ProvidePart(const TPart* part) override
@@ -229,14 +298,12 @@ namespace NTable {
 
             const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
             {
-                Y_ENSURE(part == Part, "Unsupported part");
-                return TryGetSlotPage(Slots.DataSlot(groupId), location);
+                return TryGetSlotPage(DataSlot(part, groupId), location);
             }
 
             const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
             {
-                Y_ENSURE(part == Part, "Unsupported part");
-                return TryGetSlotPage(Slots.IndexSlot(groupId), location);
+                return TryGetSlotPage(IndexSlot(part, groupId), location);
             }
 
             /**
@@ -262,38 +329,9 @@ namespace NTable {
                 if (savedPage != savedPages.end()) {
                     return &savedPage->second;
                 } else {
-                    auto [it, inserted] = NeedPages[slot].emplace(location);
-                    Y_DEBUG_ABORT_UNLESS(inserted || *it == location);
+                    RecordMissingPage(slot, location);
                     return nullptr;
                 }
-            }
-
-            void EnsureNoNeedPages() const override
-            {
-                for (const auto& needPages : NeedPages) {
-                    Y_ENSURE(!needPages);
-                }
-            }
-
-            /**
-             * Returns missing pages of a single page collection: only one fetch may be outstanding and its pages
-             * are saved before the next fetch. Pages of other page collections are requested by the next fetches
-             * when the stage is run again, so stages must be safe to re-run
-             */
-            TFetch GetFetch() override
-            {
-                for (ui32 slot : xrange(NeedPages.size())) {
-                    if (const auto& needPages = NeedPages[slot]) {
-                        TVector<TPageLocation> pages(needPages.begin(), needPages.end());
-                        std::sort(pages.begin(), pages.end());
-                        FetchSlot = slot;
-                        return {
-                            .PageCollection = Collections()[slot]->PageCollection,
-                            .Pages = std::move(pages)
-                        };
-                    }
-                }
-                return {};
             }
 
             void Save(NSharedCache::TEvResult::TLoaded&& loaded)
@@ -304,7 +342,7 @@ namespace NTable {
                 EPage pageType = it->Type;
                 needPages.erase(it);
 
-                bool sticky = NeedIn(pageType) || pageType == EPage::FlatIndex;
+                bool sticky = ShouldKeepSticky(pageType);
                 AddSavedPage(FetchSlot, loaded.Offset, loaded.Page);
                 if (sticky) {
                     Collections()[FetchSlot]->AddStickyPage(loaded.Offset, loaded.Size, std::move(loaded.Page));
@@ -324,23 +362,12 @@ namespace NTable {
                 SavedPagesRefs.emplace_back(std::move(page));
             }
 
-            struct TPageLocationByOffsetEq {
-                bool operator()(const TPageLocation& a, const TPageLocation& b) const noexcept {
-                    return a.Offset == b.Offset;
-                }
-            };
-
             EMetadataState MetadataState = EMetadataState::Idle;
             size_t MetadataRemaining = 0;
-            const TPart* Part = nullptr;
             TVector<TIntrusivePtr<TPageCollection>> PageCollections;
             TVector<TIntrusivePtr<TPageCollection>> RetainedCollections;
-            TPartSlots Slots;
             TVector<THashMap<TPageOffset, TSharedData>> SavedPages;
             TVector<NSharedCache::TSharedPageRef> SavedPagesRefs;
-            // Dedup by offset — keep Size/Type for the fetch request
-            TVector<THashSet<TPageLocation, NPage::TPageLocationByOffsetHash, TPageLocationByOffsetEq>> NeedPages;
-            ui32 FetchSlot = Max<ui32>(); // page collection of the last fetch
         };
 
         struct TRunOptions {
@@ -357,7 +384,7 @@ namespace NTable {
         TLoader(THolder<IEnv> environment, TPartComponents components);
         ~TLoader();
 
-        void BeginMetadata(const TMetadataLoadContext& context);
+        bool BeginMetadata(const TMetadataLoadContext& context);
         EMetadataLoadResult SaveMetadata(ui32 slot, TSharedData data);
         EMetadataLoadResult AcceptMetadata(ui32 slot, const NTabletFlatExecutor::TPageCacheMetadataResult& result,
             NActors::IEventBase& event, const TMetadataLoadContext& context);
@@ -371,7 +398,7 @@ namespace NTable {
         }
 
         // Prepare the layout from slot 0 before other collection metadata arrives
-        // Descriptor index flags are applied when all collection metadata is available
+        // Index flags are published separately through the environment
         void PrepareRoot();
 
         bool HasOuterCollection() const {
@@ -434,6 +461,10 @@ namespace NTable {
                 || page == EPage::Schem2 || page == EPage::Bloom
                 || page == EPage::GarbageStats
                 || page == EPage::TxIdStats;
+        }
+
+        static constexpr bool ShouldKeepSticky(EPage page) noexcept {
+            return NeedIn(page) || page == EPage::FlatIndex;
         }
 
         TPartView Result()
@@ -503,6 +534,7 @@ namespace NTable {
         }
 
         bool PrepareMetadataRoot();
+        void ApplyIndexSelection();
         void StageParseMeta();
         TFetch StageCreatePartView(bool preloadIndex);
         TFetch StageSliceBounds();
@@ -536,7 +568,7 @@ namespace NTable {
         TRowVersion MinRowVersion;
         TRowVersion MaxRowVersion;
         TPartLayout PartLayout;
-        TVector<NPage::TGroupId> StrippedV1Shadows; // groups with a stripped V1 shadow of the V2 b-tree index
+        TDynBitMap StrippedV1ShadowSlots;
         NProto::TRoot Root;
         TPartView PartView;
         THolder<IEnv> LoaderEnv;

@@ -31,7 +31,10 @@ struct TPagesWaitPad;
 namespace NKikimr::NTable {
 class TDatabase;
 class TPartStore;
+class TLoader;
+class TMetadataLoadContext;
 struct IPartLoaderEnv;
+struct TPageCollectionComponents;
 enum class EMetadataLoadResult;
 }
 
@@ -125,6 +128,7 @@ enum class EPageCacheEvent {
     Result,
     Updated,
     StickyPages,
+    Ready,
 };
 
 enum class EPageCacheResultKind {
@@ -152,11 +156,16 @@ struct TPageCacheMetadataResult {
     const void* Request = nullptr;
     NKikimrProto::EReplyStatus Status = NKikimrProto::OK;
     TStringBuf Error;
+    TLogoBlobID CollectionId;
 };
 
-class IPageMetadataLoadGroup : public TThrRefBase {
+class IPageMetadataWorkingSet : public TThrRefBase {
 public:
-    virtual ~IPageMetadataLoadGroup() = default;
+    virtual ~IPageMetadataWorkingSet() = default;
+    // Publish new collection identities to outstanding metadata loads in one update
+    virtual void AddCollections(TConstArrayRef<NTable::TPageCollectionComponents> components) = 0;
+    // Loaders account for completed parts when their Pseudo collections are known
+    virtual void AddPart(const NTable::TPartStore& part) = 0;
 };
 
 enum class EPageResultStatus {
@@ -172,6 +181,11 @@ public:
 
     virtual EPageCacheEvent EventKind(ui32 eventType) const noexcept = 0;
     virtual TPageCacheResult ReadResult(NActors::IEventBase& event) const = 0;
+
+    // An empty request lets boot continue immediately
+    virtual THolder<NActors::IEventBase> MakeReadyRequest() const {
+        return {};
+    }
 
     virtual bool ReadMetadataResult(NActors::IEventHandle&, TPageCacheMetadataResult&) const {
         return false;
@@ -221,6 +235,12 @@ public:
     virtual void WithTransactionPages(
         NTable::TDatabase& database, TSeat& seat, TFunctionRef<void(ITransactionPages&, TTransactionEnv&)> execute) = 0;
 
+    virtual TIntrusivePtr<IPageMetadataWorkingSet> MakeMetadataWorkingSet() const {
+        return {};
+    }
+
+    virtual bool BeginPartMetadata(
+        NTable::TLoader& loader, const NTable::TMetadataLoadContext& context, bool frontStep) const;
     virtual const IPageCacheProtocol& Protocol() const noexcept = 0;
 
     THolder<NActors::IEventBase> MakeUnregisterRequest() const {

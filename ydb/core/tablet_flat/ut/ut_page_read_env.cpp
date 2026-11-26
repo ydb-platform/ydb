@@ -126,6 +126,8 @@ Y_UNIT_TEST_SUITE(TLegacyPageReadEnv) {
         UNIT_ASSERT(!cache);
         TPageCacheStats stats;
         UNIT_ASSERT(!pageCache.ReadStats(stats));
+        UNIT_ASSERT(!pageCache.Protocol().MakeReadyRequest());
+        UNIT_ASSERT(!pageCache.MakeMetadataWorkingSet());
 
         NTable::TDatabase database;
         ui32 calls = 0;

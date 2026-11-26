@@ -132,69 +132,121 @@ namespace NOps {
 
     private:
         class TColdPartLoader : public ::NActors::TActorBootstrapped<TColdPartLoader> {
+            friend class NTable::TMetadataLoadContext;
+
         public:
             TColdPartLoader(TActorId owner, TIntrusiveConstPtr<TColdPartStore> part, EPriority readPriority,
-                THolder<NTable::IPartLoaderEnv> environment)
+                THolder<NTable::IPartLoaderEnv> environment, TIntrusivePtr<IPageMetadataWorkingSet> metadataWorkingSet)
                 : Owner(owner)
                 , Part(std::move(part))
                 , ReadPriority(readPriority)
                 , PageCacheProtocol(environment->Protocol())
+                , MetadataWorkingSet(std::move(metadataWorkingSet))
                 , LoaderEnv(std::move(environment))
             { }
 
             void Bootstrap() {
-                PageCollectionLoaders.reserve(Part->LargeGlobIds.size());
-                for (ui64 slot = 0; slot < Part->LargeGlobIds.size(); ++slot) {
-                    const ui32 group = Part->LargeGlobIds[slot].Group;
-                    auto& loader = PageCollectionLoaders.emplace_back(Part->LargeGlobIds[slot]);
-                    for (const auto& blobId : loader.GetBlobs()) {
-                        Send(Owner, new TEvPrivate::TEvLoadBlob(blobId, group), 0, slot);
-                    }
+                TVector<NTable::TPageCollectionComponents> components(Part->LargeGlobIds.size());
+                for (ui32 slot = 0; slot < Part->LargeGlobIds.size(); ++slot) {
+                    components[slot].LargeGlobId = Part->LargeGlobIds[slot];
                 }
-                Components.resize(PageCollectionLoaders.size());
-                // Copy LargeGlobId into each component now (filled in Handle when blob is loaded)
-                for (ui64 slot = 0; slot < Part->LargeGlobIds.size(); ++slot) {
-                    Components[slot].LargeGlobId = Part->LargeGlobIds[slot];
-                }
-                ComponentsLeft = Components.size();
-                Become(&TThis::StateLoadPageCollections);
-            }
-
-        private:
-            STRICT_STFUNC(StateLoadPageCollections, {
-                sFunc(TEvents::TEvPoison, PassAway);
-                hFunc(TEvPrivate::TEvBlobLoaded, Handle);
-            });
-
-            void Handle(TEvPrivate::TEvBlobLoaded::TPtr& ev) {
-                auto* msg = ev->Get();
-                ui64 slot = ev->Cookie;
-                Y_ENSURE(slot < Components.size());
-                Y_ENSURE(slot < PageCollectionLoaders.size());
-                Y_ENSURE(!Components[slot].RawMeta);
-                auto& loader = PageCollectionLoaders[slot];
-                if (loader.Apply(msg->BlobId, std::move(msg->Body))) {
-                    Components[slot].RawMeta = loader.ExtractSharedData();
-                    Y_ENSURE(ComponentsLeft > 0);
-                    if (0 == --ComponentsLeft) {
-                        PageCollectionLoaders.clear();
-                        StartLoader();
-                    }
-                }
-            }
-
-        private:
-            void StartLoader() {
-                Y_ENSURE(!Loader);
                 NTable::TPartComponents parts{
-                    .PageCollectionComponents = std::move(Components),
+                    .PageCollectionComponents = std::move(components),
                     .Legacy = Part->Legacy,
                     .Opaque = Part->Opaque,
                     .Epoch = Part->Epoch,
                 };
                 Loader.emplace(std::move(LoaderEnv), std::move(parts));
-                Become(&TThis::StateLoadPart);
+                Become(&TThis::StateLoadPageCollections);
+                Loader->BeginMetadata(MetadataContext());
+                if (Loader->MetadataReady()) {
+                    StartLoader();
+                }
+            }
 
+        private:
+            STFUNC(StateLoadPageCollections) {
+                STFUNC_BODY(
+                    {
+                        sFunc(TEvents::TEvPoison, PassAway);
+                        hFunc(TEvPrivate::TEvBlobLoaded, Handle);
+                    },
+                    { HandleMetadata(ev); });
+            }
+
+            void Handle(TEvPrivate::TEvBlobLoaded::TPtr& ev) {
+                auto* msg = ev->Get();
+                const ui64 slot = ev->Cookie;
+                Y_ENSURE(slot < PageCollectionLoaders.size());
+                auto& loader = PageCollectionLoaders[slot];
+                Y_ENSURE(!loader, "Duplicate metadata blob result");
+                if (loader.Apply(msg->BlobId, std::move(msg->Body))) {
+                    const auto result = Loader->SaveMetadata(slot, loader.ExtractSharedData());
+                    if (result == NTable::EMetadataLoadResult::Error) {
+                        return Fail();
+                    }
+                    if (result == NTable::EMetadataLoadResult::Ready) {
+                        StartLoader();
+                    }
+                }
+            }
+
+            void HandleMetadata(TAutoPtr<NActors::IEventHandle>& ev) {
+                TPageCacheMetadataResult metadata;
+                if (!PageCacheProtocol.ReadMetadataResult(*ev, metadata)) {
+                    const ui32 etype = ev->GetTypeRewrite();
+                    STFUNC_STRICT_UNHANDLED_MSG_HANDLER;
+                    return;
+                }
+                try {
+                    const auto result = Loader->AcceptMetadata(ev->Cookie, metadata, *ev->GetBase(), MetadataContext());
+                    if (result == NTable::EMetadataLoadResult::Error) {
+                        return Fail();
+                    }
+                    if (result == NTable::EMetadataLoadResult::Ready) {
+                        StartLoader();
+                    }
+                } catch (const yexception&) {
+                    return Fail();
+                }
+            }
+
+            NTable::TMetadataLoadContext MetadataContext() {
+                return { *this, TActivationContext::ActorSystem(), SelfId(), 0, ReadPriority,
+                    MetadataWorkingSet.Get() };
+            }
+
+            void LoadRawMetadata(ui32 slot, const NPageCollection::TLargeGlobId& descriptor) {
+                if (PageCollectionLoaders.empty()) {
+                    PageCollectionLoaders.resize(Part->LargeGlobIds.size());
+                }
+                Y_ENSURE(slot < PageCollectionLoaders.size());
+                auto& loader = PageCollectionLoaders[slot];
+                loader = NPageCollection::TLargeGlobIdRestoreState(descriptor);
+                for (const auto& blobId : loader.GetBlobs()) {
+                    Send(Owner, new TEvPrivate::TEvLoadBlob(blobId, descriptor.Group), 0, slot);
+                }
+            }
+
+            bool SendMetadataRequest(ui32 slot, const void*, THolder<NActors::IEventBase> event) {
+                Send(MakeSharedPageCacheId(), std::move(event), 0, slot);
+                return true;
+            }
+
+            void SendMetadataUpdate(THolder<NActors::IEventBase> event) {
+                Send(MakeSharedPageCacheId(), std::move(event));
+            }
+
+            void Fail() {
+                Send(Owner, new TEvPrivate::TEvPartFailed(Part->Label));
+                PassAway();
+            }
+
+        private:
+            void StartLoader() {
+                Y_ENSURE(Loader && Loader->MetadataReady());
+                PageCollectionLoaders.clear();
+                Become(&TThis::StateLoadPart);
                 RunLoader();
             }
 
@@ -251,6 +303,11 @@ namespace NOps {
             }
 
             void PassAway() override {
+                if (Loader) {
+                    Loader->CancelMetadata();
+                } else if (LoaderEnv) {
+                    LoaderEnv->CancelMetadata();
+                }
                 Send(MakeSharedPageCacheId(), PageCacheProtocol.MakeUnregisterRequest());
                 TActorBootstrapped::PassAway();
             }
@@ -260,10 +317,9 @@ namespace NOps {
             TIntrusiveConstPtr<TColdPartStore> Part;
             EPriority ReadPriority;
             const IPageCacheProtocol& PageCacheProtocol;
+            TIntrusivePtr<IPageMetadataWorkingSet> MetadataWorkingSet;
             THolder<NTable::IPartLoaderEnv> LoaderEnv;
-            TVector<NTable::TPageCollectionComponents> Components;
             TVector<NPageCollection::TLargeGlobIdRestoreState> PageCollectionLoaders;
-            size_t ComponentsLeft = 0;
             std::optional<NTable::TLoader> Loader;
             size_t ReadsLeft = 0;
         };
@@ -335,7 +391,8 @@ namespace NOps {
                 // Create a loader for this new part
                 TIntrusiveConstPtr<TColdPartStore> partStore = dynamic_cast<TColdPartStore*>(const_cast<TColdPart*>(part.Get()));
                 Y_ENSURE(partStore, "Cannot load unsupported part " << NFmt::Do(*part));
-                ColdPartLoaders[label] = RegisterWithSameMailbox(new TColdPartLoader(SelfId(), std::move(partStore), Args.ReadPrio, Cache->MakeLoaderEnvironment()));
+                ColdPartLoaders[label] = RegisterWithSameMailbox(new TColdPartLoader(SelfId(), std::move(partStore),
+                    Args.ReadPrio, Cache->MakeLoaderEnvironment(), Cache->MetadataWorkingSet()));
             }
 
             // Return empty TPartView to signal loader is still in progress

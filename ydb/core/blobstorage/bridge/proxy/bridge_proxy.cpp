@@ -2,6 +2,7 @@
 #include "bridge_proxy_counters.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/blobstorage/bridge/keep_check.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/util/stlog.h>
@@ -270,7 +271,7 @@ namespace NKikimr {
                 TRcBuf Buffer;
                 TBridgePileId ReadFrom;
                 TDynBitMap WriteTo;
-                bool Keep = false;
+                TDynBitMap KeepSources;
                 bool DoNotKeep = false;
 
                 TRestoreItem() = default;
@@ -280,8 +281,10 @@ namespace NKikimr {
                     , Buffer(buffer)
                 {}
 
-                void MergeKeepFlags(const auto& response) {
-                    Keep |= response.Keep;
+                void MergeKeepFlags(const auto& response, TBridgePileId pile) {
+                    if (response.Keep) {
+                        KeepSources.Set(pile.GetPileIndex());
+                    }
                     DoNotKeep |= response.DoNotKeep;
                 }
             };
@@ -613,7 +616,7 @@ namespace NKikimr {
                         Y_ABORT_UNLESS(response.Buffer.size() == response.Id.BlobSize());
                         item.Buffer = static_cast<TRcBuf>(response.Buffer);
                         // Either read may see a DoNotKeep that the other misses.
-                        item.MergeKeepFlags(response);
+                        item.MergeKeepFlags(response, pile.BridgePileId);
                         DropRestoreTargetsOutOfDataQuorum(self, item);
                         if (item.WriteTo.Empty()) {
                             return IssueNextRestoreGet(self); // the piles to restore have left while the blob was read
@@ -667,7 +670,7 @@ namespace NKikimr {
                             item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
                             RestoreIndex = Min(RestoreIndex, i);
                         }
-                        item.MergeKeepFlags(current);
+                        item.MergeKeepFlags(current, pile.BridgePileId);
                     }
                 } else if (!payload.IsGetFallback && completeTrustedResponse) {
                     // Use the trusted pile's payload and retain the GC flags already observed.
@@ -839,6 +842,13 @@ namespace NKikimr {
             void IssueRestorePut(TThis& self, size_t index) {
                 auto& item = RestoreQueue[index];
 
+                const auto& state = Info->Group->GetBridgeGroupState();
+                TVector<NBridge::TKeepCheckPile> sources;
+                if (!item.DoNotKeep) {
+                    Y_FOR_EACH_BIT(i, item.KeepSources) {
+                        sources.emplace_back(*NBridge::GetGroupPile(state, TBridgePileId::FromPileIndex(i)));
+                    }
+                }
                 Y_FOR_EACH_BIT(i, item.WriteTo) {
                     const auto bridgePileId = TBridgePileId::FromPileIndex(i);
                     NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog;
@@ -848,6 +858,8 @@ namespace NKikimr {
 
                     Y_ABORT_UNLESS(item.Id);
                     Y_ABORT_UNLESS(item.Buffer.size() == item.Id.BlobSize());
+                    const auto replyTo = sources.empty() ? self.SelfId() : self.Register(NBridge::CreateKeepCheckActor(
+                        self.SelfId(), sources, *NBridge::GetGroupPile(state, bridgePileId), {item.Id}, /*waitForCheck=*/false));
                     self.SendQuery(shared_from_this(), bridgePileId, std::make_unique<TEvBlobStorage::TEvPut>(
                         TEvBlobStorage::TEvPut::TParameters{
                             .BlobId = item.Id,
@@ -857,9 +869,9 @@ namespace NKikimr {
                             .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
                             .WriteSource = TWriteSource::BridgeProxyRestorePut,
                             .DataKind = DataKind,
-                            .IssueKeepFlag = item.Keep && !item.DoNotKeep,
+                            .IssueKeepFlag = !sources.empty(),
                             .IgnoreBlock = true,
-                        }), {.Index = index});
+                        }), {.Index = index}, replyTo);
                 }
 
                 IsRestoring = true;
@@ -974,7 +986,7 @@ namespace NKikimr {
                                 auto& item = getRestoreItem(*sourceIt);
                                 item.ReadFrom = pile.BridgePileId;
                                 item.WriteTo |= Processed;
-                                item.MergeKeepFlags(*sourceIt);
+                                item.MergeKeepFlags(*sourceIt, pile.BridgePileId);
                             }
                             itemsToAdd.push_back(std::move(*sourceIt));
                             ++sourceIt;
@@ -984,7 +996,7 @@ namespace NKikimr {
                             // the flag seen by any pile goes with the restored copy, as the pile we read from may not
                             // know it
                             if (MustRestoreFirst) {
-                                RestoreQueue[RestoreQueueIndex.at(targetIt->Id)].MergeKeepFlags(*sourceIt);
+                                RestoreQueue[RestoreQueueIndex.at(targetIt->Id)].MergeKeepFlags(*sourceIt, pile.BridgePileId);
                             }
                             if (targetIt->Buffer != sourceIt->Buffer && !divergedId) {
                                 divergedId.emplace(targetIt->Id);
@@ -1711,7 +1723,7 @@ namespace NKikimr {
         }
 
         void SendQuery(std::shared_ptr<TRequest> request, TBridgePileId bridgePileId, std::unique_ptr<IEventBase> ev,
-                TRequestPayload&& payload = {}) {
+                TRequestPayload&& payload = {}, TActorId replyTo = {}) {
             const auto *groupPileInfo = NBridge::GetGroupPile(request->Info->Group->GetBridgeGroupState(),
                 bridgePileId);
             Y_ABORT_UNLESS(groupPileInfo);
@@ -1733,21 +1745,22 @@ namespace NKikimr {
             const auto [it1, inserted1] = request->CookiesInFlight.insert(cookie);
             Y_DEBUG_ABORT_UNLESS(inserted1);
 
-            DispatchSubrequest(groupId, std::move(ev), cookie, request->Span.GetTraceId());
+            DispatchSubrequest(groupId, std::move(ev), cookie, request->Span.GetTraceId(), replyTo ? replyTo : SelfId());
             ++request->ResponsesPending;
         }
 
-        void DispatchSubrequest(TGroupId groupId, std::unique_ptr<IEventBase> ev, ui64 cookie, NWilson::TTraceId traceId) {
+        void DispatchSubrequest(TGroupId groupId, std::unique_ptr<IEventBase> ev, ui64 cookie, NWilson::TTraceId traceId,
+                TActorId replyTo) {
             // send event; inline pile is served by inner proxy, as the service id of this group points to us
             if (groupId == GroupId && !InnerProxyId) {
                 // the inline pile has been removed (with its DS proxy) while the request was running against the group
                 // configuration having it; the subrequests the inner proxy was running got errors when it stopped, and so
                 // do the ones issued afterwards (like restore writes)
-                ReplyWithError(*ev, SelfId(), cookie, "inline pile has been removed from the cluster");
+                ReplyWithError(*ev, replyTo, cookie, "inline pile has been removed from the cluster");
             } else if (groupId == GroupId) {
-                Send(InnerProxyId, ev.release(), 0, cookie, std::move(traceId));
+                TActivationContext::Send(new IEventHandle(InnerProxyId, replyTo, ev.release(), 0, cookie, nullptr, std::move(traceId)));
             } else {
-                SendToBSProxy(SelfId(), groupId, ev.release(), cookie, std::move(traceId));
+                SendToBSProxy(replyTo, groupId, ev.release(), cookie, std::move(traceId));
             }
         }
 
@@ -1868,7 +1881,7 @@ namespace NKikimr {
                 (Restarts, write.Restarts), (GroupPileInfo, *part));
             const auto [it, inserted] = BackgroundWritesInFlight.emplace(cookie, std::move(write));
             Y_DEBUG_ABORT_UNLESS(inserted);
-            DispatchSubrequest(groupId, std::move(ev), cookie, std::move(traceId));
+            DispatchSubrequest(groupId, std::move(ev), cookie, std::move(traceId), SelfId());
         }
 
         void FinishBackgroundWrite(TBackgroundWrite& write) {

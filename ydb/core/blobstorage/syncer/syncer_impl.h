@@ -103,6 +103,7 @@ namespace NKikimr::NGroupSyncer {
         void IssueQuery(TGroupId groupId, std::unique_ptr<IEventBase> ev, TQueryPayload queryPayload = {},
             ui64 quoterBytes = 0);
         void SendQuery(std::unique_ptr<IEventHandle> handle, ui64 quoterBytes);
+        void DispatchQuery(std::unique_ptr<IEventHandle> handle);
         void ProcessQuotaQueue();
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);

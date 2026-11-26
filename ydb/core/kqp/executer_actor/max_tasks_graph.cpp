@@ -10,6 +10,11 @@
 namespace NKikimr::NKqp {
 
 namespace {
+    // Task memory can grow during execution; reserve a bit more than the estimate.
+    ui64 PlacementMemoryCost(ui64 memory) {
+        return static_cast<ui64>(memory * 1.2);
+    }
+
     size_t Total(const std::vector<size_t>& perNode) {
         return std::accumulate(perNode.begin(), perNode.end(), size_t{0});
     }
@@ -278,14 +283,31 @@ void TMaxTasksGraph::PinTopStageLocally(const TPlacementParams& params, TNodeIdx
         return;
     }
 
+    // The collector pin is optional. Account for mandatory pins before using the local budget.
+    auto budget = NodeResources[executer];
+    for (const auto& group : Groups) {
+        const ui64 memory = PlacementMemoryCost(group.ColumnCost.Memory);
+        for (const auto& node : group.ColumnNodes) {
+            if (node == executer) {
+                budget.RemainsMemory -= std::min(budget.RemainsMemory, memory);
+                budget.RemainsTasks -= std::min(budget.RemainsTasks, group.ColumnCost.Tasks);
+            }
+        }
+    }
+
     for (const auto& stage : Stages) {
         if (stage.Tasks.empty() || stageLevel(stage) != *maxLevel) {
             continue;
         }
         auto& group = Groups[stage.Group];
+        const ui64 memory = PlacementMemoryCost(group.ColumnCost.Memory);
         for (size_t columnIdx = 0; columnIdx < stage.Tasks.size(); ++columnIdx) {
-            if (!group.ColumnNodes[columnIdx]) {
-                group.ColumnNodes[columnIdx] = executer; // free column of the collector stage -> executer node.
+            if (!group.ColumnNodes[columnIdx] &&
+                memory <= budget.RemainsMemory && group.ColumnCost.Tasks <= budget.RemainsTasks)
+            {
+                group.ColumnNodes[columnIdx] = executer;
+                budget.RemainsMemory -= memory;
+                budget.RemainsTasks -= group.ColumnCost.Tasks;
             }
         }
     }
@@ -311,13 +333,6 @@ bool TMaxTasksGraph::DistributeByResources(const TPlacementParams& params, std::
 }
 
 bool TMaxTasksGraph::DistributeByResourcesOnNodes(const std::vector<bool>& allowedNodes) {
-    // Task memory can grow during execution; reserve a bit more than the estimate (mirrors KqpPlanner).
-    constexpr double memoryOverflow = 1.2;
-
-    const auto memoryCost = [&](const TGroup& group) {
-        return static_cast<ui64>(group.ColumnCost.Memory * memoryOverflow);
-    };
-
     // Working per-node budget, started from the snapshot and pre-charged with the already-pinned columns. Pinned columns
     // charge their own node even if it is outside allowedNodes (their placement is fixed).
     std::vector<ui64> freeMemory(NodesCount());
@@ -334,7 +349,7 @@ bool TMaxTasksGraph::DistributeByResourcesOnNodes(const std::vector<bool>& allow
         for (size_t columnIdx = 0; columnIdx < group.ColumnNodes.size(); ++columnIdx) {
             if (const auto& node = group.ColumnNodes[columnIdx]) {
                 const TNodeIdx n = *node;
-                freeMemory[n] -= std::min(freeMemory[n], memoryCost(group));
+                freeMemory[n] -= std::min(freeMemory[n], PlacementMemoryCost(group.ColumnCost.Memory));
                 freeTasks[n] -= std::min<ui32>(freeTasks[n], group.ColumnCost.Tasks);
                 tasksOnNode[n] += group.ColumnCost.Tasks;
             } else {
@@ -353,7 +368,7 @@ bool TMaxTasksGraph::DistributeByResourcesOnNodes(const std::vector<bool>& allow
     std::vector<TNodeIdx> placement(freeColumns.size()); // chosen node per free column; applied only if all fit.
     for (size_t i = 0; i < freeColumns.size(); ++i) {
         const auto& group = Groups[freeColumns[i].first];
-        const ui64 memNeed = memoryCost(group);
+        const ui64 memNeed = PlacementMemoryCost(group.ColumnCost.Memory);
         const ui32 taskNeed = group.ColumnCost.Tasks;
 
         // A real column always holds at least one task; zero means EstimateTasksResources hasn't run (e.g. unit tests),

@@ -25,9 +25,11 @@ public:
         ui64 RemainsMemory = 0;
         ui32 RemainsComputeActors = 0;
         TVector<ui64> Tasks;
+        size_t FixedTaskCount = 0;
+
         bool operator < (const TNodeDesc& item) const {
-            return std::tuple(-(i32)Tasks.size(), RemainsMemory, RemainsComputeActors)
-                < std::tuple(-(i32)item.Tasks.size(), item.RemainsMemory, item.RemainsComputeActors);
+            return std::tuple(-i64(FixedTaskCount + Tasks.size()), RemainsMemory, RemainsComputeActors)
+                < std::tuple(-i64(item.FixedTaskCount + item.Tasks.size()), item.RemainsMemory, item.RemainsComputeActors);
         }
 
         std::optional<IKqpPlannerStrategy::TResult> BuildResult() {
@@ -90,7 +92,9 @@ public:
         return result;
     }
 
-    TNodesManager(const TVector<const NKikimrKqp::TKqpNodeResources*>& nodeResources) {
+    TNodesManager(const TVector<const NKikimrKqp::TKqpNodeResources*>& nodeResources,
+        const TVector<TTaskResourceEstimation>& tasks, const IKqpPlannerStrategy::TFixedAssignments& fixedAssignments)
+    {
         for (auto& node : nodeResources) {
             if (!node->GetAvailableComputeActors()) {
                 continue;
@@ -103,6 +107,27 @@ public:
                 {}
                 });
         }
+        if (!fixedAssignments.empty()) {
+            // Fixed tasks on nodes outside this pass's candidates stay there; they do not spend a candidate's budget.
+            THashMap<ui64, TNodeDesc*> nodesById;
+            nodesById.reserve(Nodes.size());
+            for (auto& node : Nodes) {
+                nodesById.emplace(node.NodeId, &node);
+            }
+            for (const auto& task : tasks) {
+                if (const auto* nodeId = fixedAssignments.FindPtr(task.TaskId)) {
+                    if (const auto* entry = nodesById.FindPtr(*nodeId)) {
+                        auto& node = **entry;
+                        const ui64 memory = task.TotalMemoryLimit * TASK_MEMORY_ESTIMATION_OVERFLOW;
+                        node.RemainsMemory -= Min(node.RemainsMemory, memory);
+                        if (node.RemainsComputeActors) {
+                            --node.RemainsComputeActors;
+                        }
+                        ++node.FixedTaskCount;
+                    }
+                }
+            }
+        }
         std::make_heap(Nodes.begin(), Nodes.end());
     }
 };
@@ -111,14 +136,18 @@ class TKqpGreedyPlanner : public IKqpPlannerStrategy {
 public:
     ~TKqpGreedyPlanner() override {}
 
-    TVector<TResult> Plan(const TVector<const NKikimrKqp::TKqpNodeResources*>& nodeResources,
-        const TVector<TTaskResourceEstimation>& tasks) override
+    std::optional<TVector<TResult>> Plan(const TVector<const NKikimrKqp::TKqpNodeResources*>& nodeResources,
+        const TVector<TTaskResourceEstimation>& tasks, const TFixedAssignments& fixedAssignments) override
     {
         TVector<TResult> result;
-        TNodesManager nodes(nodeResources);
+        TNodesManager nodes(nodeResources, tasks, fixedAssignments);
 
         for (const auto& taskEstimation : tasks) {
-            auto node = nodes.PopOptimalNodeWithLimits(taskEstimation.TotalMemoryLimit * TASK_MEMORY_ESTIMATION_OVERFLOW, 1);
+            if (fixedAssignments.contains(taskEstimation.TaskId)) {
+                continue;
+            }
+            const ui64 memory = taskEstimation.TotalMemoryLimit * TASK_MEMORY_ESTIMATION_OVERFLOW;
+            auto node = nodes.PopOptimalNodeWithLimits(memory, 1);
             if (!node) {
                 if (LogFunc) {
                     TStringBuilder err;
@@ -127,7 +156,7 @@ public:
 
                     LogFunc(err);
                 }
-                return result;
+                return std::nullopt;
             } else {
                 if (LogFunc) {
                     LogFunc(TStringBuilder() << "Schedule task: " << taskEstimation.TaskId
@@ -135,7 +164,7 @@ public:
                         << "to node #" << node->NodeId << ". "
                         << "Remains memory: " << node->RemainsMemory << ", ca: " << node->RemainsComputeActors);
                 }
-                node->RemainsMemory -= taskEstimation.TotalMemoryLimit * TASK_MEMORY_ESTIMATION_OVERFLOW;
+                node->RemainsMemory -= memory;
                 node->Tasks.emplace_back(taskEstimation.TaskId);
                 --node->RemainsComputeActors;
                 nodes.PushNode(std::move(*node));
@@ -161,10 +190,10 @@ class TKqpMockEmptyPlanner : public IKqpPlannerStrategy {
 public:
     ~TKqpMockEmptyPlanner() override {}
 
-    TVector<TResult> Plan(const TVector<const NKikimrKqp::TKqpNodeResources*>&,
-        const TVector<TTaskResourceEstimation>&) override
+    std::optional<TVector<TResult>> Plan(const TVector<const NKikimrKqp::TKqpNodeResources*>&,
+        const TVector<TTaskResourceEstimation>&, const TFixedAssignments&) override
     {
-        return {};
+        return std::nullopt;
     }
 };
 
@@ -179,4 +208,3 @@ THolder<IKqpPlannerStrategy> CreateKqpMockEmptyPlanner() {
 }
 
 } // namespace NKikimr::NKqp
-

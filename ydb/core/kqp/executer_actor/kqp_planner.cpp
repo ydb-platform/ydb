@@ -459,21 +459,23 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         }
     }
 
-    THashMap<ui64, ui64> alreadyAssigned;
-    for(auto& [nodeId, tasks] : TasksPerNode) {
-        for(ui64 taskId: tasks) {
-            alreadyAssigned.emplace(taskId, nodeId);
+    const ui64 selfNodeId = ExecuterId.NodeId();
+    IKqpPlannerStrategy::TFixedAssignments fixedAssignments;
+    for (const auto& [nodeId, tasks] : TasksPerNode) {
+        for (ui64 taskId : tasks) {
+            fixedAssignments.emplace(taskId, nodeId);
         }
     }
 
     if (deepestTasks.size() <= placingOptions.MaxNonParallelTopStageExecutionLimit) {
         // looks like the merge / union all connection
-        for(ui64 taskId: deepestTasks) {
-            auto [it, success] = alreadyAssigned.emplace(taskId, ExecuterId.NodeId());
-            if (success) {
-                TasksPerNode[ExecuterId.NodeId()].push_back(taskId);
-                TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = ExecuterId.NodeId();
-            }
+        for (ui64 taskId : deepestTasks) {
+            fixedAssignments.emplace(taskId, selfNodeId);
+        }
+    }
+    for (ui64 taskId : UnassignedTasks) {
+        if (!fixedAssignments.contains(taskId) && NeedToRunLocally(TasksGraph.GetTask(taskId))) {
+            fixedAssignments.emplace(taskId, selfNodeId);
         }
     }
 
@@ -492,7 +494,6 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
                                                                                                       {"ctx", *UserRequestContext},
                                                                                                       {"msg", msg}); });
 
-    ui64 selfNodeId = ExecuterId.NodeId();
     TString selfNodeDC;
 
     TVector<const NKikimrKqp::TKqpNodeResources*> allNodes;
@@ -514,40 +515,39 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         }
     }
 
-    TVector<IKqpPlannerStrategy::TResult> plan;
+    std::optional<TVector<IKqpPlannerStrategy::TResult>> plan;
 
     if (!executerDcNodes.empty() && placingOptions.PreferLocalDatacenterExecution) {
-        plan = planner->Plan(executerDcNodes, ResourceEstimations);
+        plan = planner->Plan(executerDcNodes, ResourceEstimations, fixedAssignments);
     }
 
-    if (plan.empty()) {
-        plan = planner->Plan(allNodes, ResourceEstimations);
+    if (!plan) {
+        plan = planner->Plan(allNodes, ResourceEstimations, fixedAssignments);
     }
 
-    if (plan.empty()) {
-        LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { YDB_LOG_ERROR("Memory statistics after failed task planning",
-                                                                                                          {"txId", TxId},
-                                                                                                          {"ctx", *UserRequestContext},
-                                                                                                          {"msg", msg}); });
+    if (!plan) {
+        LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) {
+            YDB_LOG_ERROR("Memory statistics after failed task planning",
+                {"txId", TxId},
+                {"ctx", *UserRequestContext},
+                {"msg", msg});
+        });
 
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             TStringBuilder() << "Not enough resources to execute query. " << "TraceId: " << UserRequestContext->TraceId);
         return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release());
     }
 
-    for (auto& group : plan) {
-        for(ui64 taskId: group.TaskIds) {
-            auto [it, success] = alreadyAssigned.emplace(taskId, group.NodeId);
-            if (success) {
-                if (NeedToRunLocally(TasksGraph.GetTask(taskId))) {
-                    const ui64 selfNodeId = ExecuterId.NodeId();
-                    TasksPerNode[selfNodeId].push_back(taskId);
-                    TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = selfNodeId;
-                } else {
-                    TasksPerNode[group.NodeId].push_back(taskId);
-                    TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = group.NodeId;
-                }
-            }
+    for (ui64 taskId : UnassignedTasks) {
+        if (const auto* nodeId = fixedAssignments.FindPtr(taskId)) {
+            TasksPerNode[*nodeId].push_back(taskId);
+            TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = *nodeId;
+        }
+    }
+    for (const auto& group : *plan) {
+        for (ui64 taskId : group.TaskIds) {
+            TasksPerNode[group.NodeId].push_back(taskId);
+            TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = group.NodeId;
         }
     }
 

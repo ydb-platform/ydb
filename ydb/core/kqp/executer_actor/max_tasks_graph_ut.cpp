@@ -90,6 +90,48 @@ TTestGraph InitGraph(size_t maxChannelsCount, size_t snapshotSize) {
 
 Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
 
+    void CheckSkipResultPinWithoutBudget(bool hasLocalSlot) {
+        constexpr ui32 localId = 1;
+        constexpr ui32 peerId = 2;
+        TVector<NKikimrKqp::TKqpNodeResources> snapshot(2);
+        snapshot[0].SetNodeId(localId);
+        snapshot[0].SetTotalMemory(hasLocalSlot ? 0 : 10_MB);
+        snapshot[0].SetAvailableComputeActors(hasLocalSlot ? 1 : 0);
+        snapshot[1].SetNodeId(peerId);
+        snapshot[1].SetTotalMemory(10_MB);
+        snapshot[1].SetAvailableComputeActors(2);
+
+        NKqpProto::TKqpPhyTx txProto;
+        txProto.AddStages();
+        txProto.AddStages()->MutableProgram()->MutableSettings()->SetStageLevel(1);
+        const IKqpGateway::TPhysicalTxData tx(std::make_shared<TKqpPhyTxHolder>(nullptr, &txProto, nullptr, nullptr), nullptr);
+        TStageInfo root(MakeStageId(0, 0), 0, 0, TStageInfoMeta(tx));
+        TStageInfo result(MakeStageId(0, 1), 0, 0, TStageInfoMeta(tx));
+        TMaxTasksGraph graph(1000, {.MkqlLightProgramMemoryLimit = 1_MB});
+        graph.AddNodes(snapshot);
+        graph.AddStage(root, TMaxTasksGraph::ANY, {});
+        graph.AddStage(result, TMaxTasksGraph::ANY, {root.Id});
+        graph.AddTask(MakeTask(root.Id), std::nullopt);
+        graph.AddTask(MakeTask(result.Id), std::nullopt);
+        graph.EstimateTasksResources();
+        graph.DistributeTasksToNodes({
+            .ExecuterNodeId = localId,
+            .LocalMemory = snapshot[0].GetTotalMemory(),
+            .LocalExecutionUnits = snapshot[0].GetAvailableComputeActors(),
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(graph.GetStageTasksCount(root.Id, peerId), 1);
+        UNIT_ASSERT_VALUES_EQUAL(graph.GetStageTasksCount(result.Id, peerId), 1);
+    }
+
+    Y_UNIT_TEST(SkipResultPinWithoutSlot) {
+        CheckSkipResultPinWithoutBudget(false);
+    }
+
+    Y_UNIT_TEST(SkipResultPinWithoutMemory) {
+        CheckSkipResultPinWithoutBudget(true);
+    }
+
     Y_UNIT_TEST(SingleStageSingleNodeNoShrink) {
         auto graph = InitGraph(1000, 1);
 

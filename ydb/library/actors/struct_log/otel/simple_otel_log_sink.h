@@ -9,6 +9,9 @@ class TSimpleOtelLogSink : public TBaseOtelLogSink {
 public:
     explicit TSimpleOtelLogSink(TBaseOtelLogSink::TOtelSettings settings);
 
+    static TStringBuf GetSinkDestinationName() {
+        return "simple-otel";
+    }
 protected:
     void FillLogRecordAttributes(
         google::protobuf::RepeatedPtrField<otel_common_v1::KeyValue>& attrs,

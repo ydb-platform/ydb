@@ -59,9 +59,8 @@ private:
 template <typename TLogClass>
 class TSimpleOtelLogWriter : public TBaseOtelLogWriter<TLogClass, NActors::NStructuredLog::TSimpleOtelLogSink> {
 public:
-    template <typename TArg>
-    TSimpleOtelLogWriter(TArg&& arg)
-        : TBaseOtelLogWriter<TLogClass, NActors::NStructuredLog::TSimpleOtelLogSink>(std::forward<TArg>(arg))
+    explicit TSimpleOtelLogWriter(const NActors::NStructuredLog::TBaseOtelLogSink::TOtelSettings& settings)
+        : TBaseOtelLogWriter<TLogClass, NActors::NStructuredLog::TSimpleOtelLogSink>(settings)
     {
     }
 };
@@ -69,9 +68,10 @@ public:
 template <typename TLogClass>
 class TFullOtelLogWriter : public TBaseOtelLogWriter<TLogClass, NActors::NStructuredLog::TFullOtelLogSink> {
 public:
-    explicit TFullOtelLogWriter(NActors::NStructuredLog::TBaseOtelLogSink::TOtelSettings settings)
+
+    explicit TFullOtelLogWriter(const NActors::NStructuredLog::TBaseOtelLogSink::TOtelSettings& settings)
         : TBaseOtelLogWriter<TLogClass, NActors::NStructuredLog::TFullOtelLogSink>(
-              std::move(settings), TString{TLogClass::GetOtelLogType()})
+              std::move(settings), TString{TLogClass::GetSinkSourceName()})
     {
     }
 };

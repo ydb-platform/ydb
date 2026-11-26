@@ -56,9 +56,10 @@ public:
 
 class TDataShardTliEventLog {
 public:
-    static TStringBuf GetOtelLogType() {
+    static TStringBuf GetSinkSourceName() {
         return "tli-datashard";
     }
+
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto notNull = TEventLogColumn::TDatabaseSettings::NotNull();
@@ -94,7 +95,7 @@ public:
 
 class TSessionTliEventLog {
 public:
-    static TStringBuf GetOtelLogType() {
+    static TStringBuf GetSinkSourceName() {
         return "tli-session";
     }
 

@@ -7,7 +7,11 @@ namespace NActors::NStructuredLog {
 /// OTLP log sink with structured fields mapped to log record attributes.
 class TFullOtelLogSink : public TBaseOtelLogSink {
 public:
-    TFullOtelLogSink(TBaseOtelLogSink::TOtelSettings settings, TString logType = "debug");
+    explicit TFullOtelLogSink(TBaseOtelLogSink::TOtelSettings settings, TString logType = "debug");
+
+    static TStringBuf GetSinkDestinationName() {
+        return "full-otel";
+    }
 
 protected:
     void FillLogRecordAttributes(
@@ -19,15 +23,6 @@ protected:
         google::protobuf::RepeatedPtrField<otel_common_v1::KeyValue>& attrs) override;
 
     const TString LogType;
-};
-
-/// Full debug log stream (source `full`) to full-otel.
-class TDebugFullOtelLogSink : public TFullOtelLogSink {
-public:
-    explicit TDebugFullOtelLogSink(TBaseOtelLogSink::TOtelSettings settings)
-        : TFullOtelLogSink(std::move(settings), "debug")
-    {
-    }
 };
 
 }  // namespace NActors::NStructuredLog

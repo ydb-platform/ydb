@@ -16,6 +16,10 @@ namespace NEventLog {
 
 class TBaseColumnShardLogWriter : public TBaseEventLogWriter {
 public:
+    static TStringBuf GetSinkDestinationName() {
+        return "local-db";
+    }
+
     struct TDatabaseSettings {
         TString DatabasePath;
         TString StoreName;

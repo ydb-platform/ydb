@@ -9,9 +9,11 @@ namespace NKikimr::NKqp::NEventLog {
 
 class TKqpEventLog {
 public:
-    static TStringBuf GetOtelLogType() {
+
+    static TStringBuf GetSinkSourceName() {
         return "kqp-requests";
     }
+
 
     static TString GetMessageText() {
         return "KQP request processed";

@@ -66,9 +66,10 @@ public:
 
 class TSchemeShardEventLog {
 public:
-    static TStringBuf GetOtelLogType() {
+    static TStringBuf GetSinkSourceName() {
         return "audit-schemeshard";
     }
+
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto result = TAuditEventLogCommon::GetColumns();
@@ -112,9 +113,10 @@ public:
 
 class TGrpcProxyEventLog {
 public:
-    static TStringBuf GetOtelLogType() {
+    static TStringBuf GetSinkSourceName() {
         return "audit-grpc-proxy";
     }
+
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
@@ -147,9 +149,10 @@ public:
 
 class TGrpcConnEventLog {
 public:
-    static TStringBuf GetOtelLogType() {
+    static TStringBuf GetSinkSourceName() {
         return "audit-grpc-conn";
     }
+
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         return TAuditEventLogCommon::GetColumns();
@@ -162,9 +165,10 @@ public:
 
 class TGrpcLoginEventLog {
 public:
-    static TStringBuf GetOtelLogType() {
+    static TStringBuf GetSinkSourceName() {
         return "audit-grpc-login";
     }
+
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
@@ -183,9 +187,10 @@ public:
 
 class TMonitoringEventLog {
 public:
-    static TStringBuf GetOtelLogType() {
+    static TStringBuf GetSinkSourceName() {
         return "audit-monitoring";
     }
+
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
@@ -207,9 +212,10 @@ public:
 
 class TAuditServiceEventLog {
 public:
-    static TStringBuf GetOtelLogType() {
+    static TStringBuf GetSinkSourceName() {
         return "audit-heartbeat";
     }
+
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         return TAuditEventLogCommon::GetColumns();
@@ -222,9 +228,10 @@ public:
 
 class TBscEventLog {
 public:
-    static TStringBuf GetOtelLogType() {
+    static TStringBuf GetSinkSourceName() {
         return "audit-bsc";
     }
+
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto result = TAuditEventLogCommon::GetColumns();
@@ -243,9 +250,10 @@ public:
 
 class TDistconfEventLog {
 public:
-    static TStringBuf GetOtelLogType() {
+    static TStringBuf GetSinkSourceName() {
         return "audit-distconf";
     }
+
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto result = TAuditEventLogCommon::GetColumns();
@@ -264,9 +272,10 @@ public:
 
 class TWebLoginEventLog {
 public:
-    static TStringBuf GetOtelLogType() {
+    static TStringBuf GetSinkSourceName() {
         return "audit-web-login";
     }
+
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         return TAuditEventLogCommon::GetColumns();
@@ -279,9 +288,10 @@ public:
 
 class TConsoleEventLog {
 public:
-    static TStringBuf GetOtelLogType() {
+    static TStringBuf GetSinkSourceName() {
         return "audit-console";
     }
+
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto result = TAuditEventLogCommon::GetColumns();

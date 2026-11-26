@@ -353,77 +353,46 @@ NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateLogSink(const NKiki
         destination = defaultSink->GetDestination();
     }
 
-#define CHECK_SINK(EventSource, Dest, Class, GetSettings) if (eventSource == EventSource && destination == Dest) {        \
+#define TRY_CREATE_SINK(EventSource, Dest, Class, GetSettings) if (eventSource == EventSource && destination == Dest) {        \
         auto settings = GetSettings(sink, defaultSink);                                                                   \
         return std::make_shared<Class>(settings);                                                                         \
     }
 
-    // Columnshard event logs
-    {
-        using namespace NKqp::NEventLog;
-        CHECK_SINK("kqp-requests", "local-db", NToColumnShard::TKqpEventLogWriter, GetColumnShardDatabaseSettings);
+    // Common logs to otel
+    TRY_CREATE_SINK("full", "simple-otel", NActors::NStructuredLog::TSimpleOtelLogSink, GetBaseOtelSettings);
+    TRY_CREATE_SINK("full", "full-otel", NActors::NStructuredLog::TFullOtelLogSink, GetBaseOtelSettings);
 
-        CHECK_SINK("tli-datashard", "local-db", NToColumnShard::TDataShardTliEventLogWriter, GetColumnShardDatabaseSettings);
-        CHECK_SINK("tli-session", "local-db", NToColumnShard::TSessionTliEventLogWriter, GetColumnShardDatabaseSettings);
+    // Create event sinks
+    #define TRY_CREATE_EVENT_SINK(TemplateClass, LogClass, GetSettings) \
+        TRY_CREATE_SINK(LogClass :: GetSinkSourceName(), TemplateClass <LogClass> :: GetSinkDestinationName(), TemplateClass <LogClass>, GetSettings);
 
-        CHECK_SINK("audit-schemeshard", "local-db", NAudit::NToColumnShard::TSchemeShardEventLogWriter, GetColumnShardDatabaseSettings);
-        CHECK_SINK("audit-grpc-proxy", "local-db", NAudit::NToColumnShard::TGrpcProxyEventLogWriter, GetColumnShardDatabaseSettings);
-        CHECK_SINK("audit-grpc-conn", "local-db", NAudit::NToColumnShard::TGrpcConnEventLogWriter, GetColumnShardDatabaseSettings);
-        CHECK_SINK("audit-grpc-login", "local-db", NAudit::NToColumnShard::TGrpcLoginEventLogWriter, GetColumnShardDatabaseSettings);
-        CHECK_SINK("audit-monitoring", "local-db", NAudit::NToColumnShard::TMonitoringEventLogWriter, GetColumnShardDatabaseSettings);
-        CHECK_SINK("audit-heartbeat", "local-db", NAudit::NToColumnShard::TAuditServiceEventLogWriter, GetColumnShardDatabaseSettings);
-        CHECK_SINK("audit-bsc", "local-db", NAudit::NToColumnShard::TBscEventLogWriter, GetColumnShardDatabaseSettings);
-        CHECK_SINK("audit-distconf", "local-db", NAudit::NToColumnShard::TDistconfEventLogWriter, GetColumnShardDatabaseSettings);
-        CHECK_SINK("audit-web-login", "local-db", NAudit::NToColumnShard::TWebLoginEventLogWriter, GetColumnShardDatabaseSettings);
-        CHECK_SINK("audit-console", "local-db", NAudit::NToColumnShard::TConsoleEventLogWriter, GetColumnShardDatabaseSettings);
-    }
+    #define TRY_CREATE_EVENT_SINKS(TemplateClass, GetSettings)                                                \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::TKqpEventLog, GetSettings);                     \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::TDataShardTliEventLog, GetSettings);            \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::TSessionTliEventLog, GetSettings);              \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TSchemeShardEventLog, GetSettings);     \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TGrpcProxyEventLog, GetSettings);       \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TGrpcConnEventLog, GetSettings);        \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TGrpcLoginEventLog, GetSettings);       \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TMonitoringEventLog, GetSettings);      \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TAuditServiceEventLog, GetSettings);    \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TBscEventLog, GetSettings);             \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TDistconfEventLog, GetSettings);        \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TWebLoginEventLog, GetSettings);        \
+        TRY_CREATE_EVENT_SINK(TemplateClass, NKqp::NEventLog::NAudit::TConsoleEventLog, GetSettings);
 
-    CHECK_SINK("full", "simple-otel", NActors::NStructuredLog::TSimpleOtelLogSink, GetBaseOtelSettings);
-    CHECK_SINK("full", "full-otel", NActors::NStructuredLog::TDebugFullOtelLogSink, GetBaseOtelSettings);
+    // Write event logs to columnshard
+    TRY_CREATE_EVENT_SINKS(NKqp::NEventLog::TColumnShardLogWriter, GetColumnShardDatabaseSettings);
 
-    // simple otel event logs
-    {
-        using namespace NKqp::NEventLog;
-        using namespace NToSimpleOtel;
-        CHECK_SINK("kqp-requests", "simple-otel", TKqpEventLogWriter, GetBaseOtelSettings);
+    // Write event logs to columnshard otel (simple form)
+    TRY_CREATE_EVENT_SINKS(NKqp::NEventLog::TSimpleOtelLogWriter, GetBaseOtelSettings);
 
-        CHECK_SINK("tli-datashard", "simple-otel", TDataShardTliEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("tli-session", "simple-otel", TSessionTliEventLogWriter, GetBaseOtelSettings);
+    // Write event logs to columnshard otel (full form)
+    TRY_CREATE_EVENT_SINKS(NKqp::NEventLog::TFullOtelLogWriter, GetBaseOtelSettings);
 
-        CHECK_SINK("audit-schemeshard", "simple-otel", NAudit::NToSimpleOtel::TSchemeShardEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-grpc-proxy", "simple-otel", NAudit::NToSimpleOtel::TGrpcProxyEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-grpc-conn", "simple-otel", NAudit::NToSimpleOtel::TGrpcConnEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-grpc-login", "simple-otel", NAudit::NToSimpleOtel::TGrpcLoginEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-monitoring", "simple-otel", NAudit::NToSimpleOtel::TMonitoringEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-heartbeat", "simple-otel", NAudit::NToSimpleOtel::TAuditServiceEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-bsc", "simple-otel", NAudit::NToSimpleOtel::TBscEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-distconf", "simple-otel", NAudit::NToSimpleOtel::TDistconfEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-web-login", "simple-otel", NAudit::NToSimpleOtel::TWebLoginEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-console", "simple-otel", NAudit::NToSimpleOtel::TConsoleEventLogWriter, GetBaseOtelSettings);
-    }
-
-    // full otel event logs
-    {
-        using namespace NKqp::NEventLog;
-        using namespace NToFullOtel;
-        CHECK_SINK("kqp-requests", "full-otel", TKqpEventLogWriter, GetBaseOtelSettings);
-
-        CHECK_SINK("tli-datashard", "full-otel", TDataShardTliEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("tli-session", "full-otel", TSessionTliEventLogWriter, GetBaseOtelSettings);
-
-        CHECK_SINK("audit-schemeshard", "full-otel", NAudit::NToFullOtel::TSchemeShardEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-grpc-proxy", "full-otel", NAudit::NToFullOtel::TGrpcProxyEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-grpc-conn", "full-otel", NAudit::NToFullOtel::TGrpcConnEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-grpc-login", "full-otel", NAudit::NToFullOtel::TGrpcLoginEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-monitoring", "full-otel", NAudit::NToFullOtel::TMonitoringEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-heartbeat", "full-otel", NAudit::NToFullOtel::TAuditServiceEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-bsc", "full-otel", NAudit::NToFullOtel::TBscEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-distconf", "full-otel", NAudit::NToFullOtel::TDistconfEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-web-login", "full-otel", NAudit::NToFullOtel::TWebLoginEventLogWriter, GetBaseOtelSettings);
-        CHECK_SINK("audit-console", "full-otel", NAudit::NToFullOtel::TConsoleEventLogWriter, GetBaseOtelSettings);
-    }
-
-#undef CHECK_SINK
+#undef TRY_CREATE_SINK
+#undef TRY_CREATE_EVENT_SINK
+#undef TRY_CREATE_EVENT_SINKS
     return nullptr;
 }
 

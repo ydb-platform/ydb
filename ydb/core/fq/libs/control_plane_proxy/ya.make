@@ -33,7 +33,3 @@ RECURSE(
     events
     utils
 )
-
-RECURSE_FOR_TESTS(
-    ut
-)

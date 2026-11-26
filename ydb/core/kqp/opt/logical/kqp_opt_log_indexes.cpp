@@ -2,6 +2,7 @@
 #include "kqp_opt_log_impl.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/common/kqp_expr_helpers.h>
@@ -17,6 +18,8 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/algorithm.h>
+
+#include <span>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -162,7 +165,7 @@ bool CanPushTopSort(const TCoTopBase& node, const TKikimrTableDescription& index
 }
 
 bool IsVectorIndexMetricCompatible(const TIndexDescription& indexDesc, TStringBuf methodName, bool ascending, TString* expectedUsage = nullptr) {
-    YQL_ENSURE(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree, "Unsupported index type");
+    YQL_ENSURE(TIndexDescription::IsVectorIndex(indexDesc.Type), "Unsupported index type");
 
     const auto& col = indexDesc.KeyColumns.back();
     const auto& desc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
@@ -208,8 +211,61 @@ bool IsVectorIndexMetricCompatible(const TIndexDescription& indexDesc, TStringBu
     return mismatch("a valid vector metric in the index definition");
 }
 
-bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lambdaBody, const TCoTopBase& top, TString& error) {
-    Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
+struct THnswDistanceOperands {
+    TMaybeNode<TCoApply> Apply;
+    TVector<TCoFlatMap> Maps;
+    ui32 EmbeddingArg = 0;
+    const TExprNode* EmbeddingBinding = nullptr;
+    bool HasNullableGuard = false;
+};
+
+THnswDistanceOperands MatchHnswDistanceOperands(const TExprBase& body, const TCoArguments& args, TStringBuf column) {
+    THnswDistanceOperands match;
+    auto expr = body;
+    while (const auto map = expr.Maybe<TCoFlatMap>()) {
+        match.Maps.push_back(map.Cast());
+        expr = map.Cast().Lambda().Body();
+    }
+    const auto apply = expr.Maybe<TCoApply>();
+    if (!apply || apply.Cast().Args().Count() != 3) {
+        return {};
+    }
+
+    for (ui32 arg = 1; arg < 3; ++arg) {
+        auto operand = TExprBase(apply.Cast().Ref().ChildPtr(arg));
+        const TExprNode* binding = nullptr;
+        for (auto it = match.Maps.rbegin(); it != match.Maps.rend(); ++it) {
+            if (operand.Raw() == it->Lambda().Args().Arg(0).Raw()) {
+                binding = operand.Raw();
+                operand = it->Input();
+            }
+        }
+        const auto member = operand.Maybe<TCoMember>();
+        if (member && member.Cast().Name().Value() == column && member.Cast().Struct().Raw() == args.Arg(0).Raw()) {
+            match.Apply = apply;
+            match.EmbeddingArg = arg;
+            match.EmbeddingBinding = binding;
+            auto target = apply.Cast().Ref().ChildPtr(3 - arg);
+            for (auto it = match.Maps.rbegin(); it != match.Maps.rend(); ++it) {
+                const auto* mapArg = it->Lambda().Args().Arg(0).Raw();
+                if (mapArg == binding) {
+                    continue;
+                }
+                if (FindNode(target, [&](const TExprNode::TPtr& node) { return node.Get() == mapArg; })) {
+                    target = it->Input().Ptr();
+                } else {
+                    match.HasNullableGuard = true;
+                }
+            }
+            return match;
+        }
+    }
+    return {};
+}
+
+bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TCoArguments& lambdaArgs,
+    const TExprBase& lambdaBody, const TCoTopBase& top, TString& error) {
+    Y_ASSERT(TIndexDescription::IsVectorIndex(indexDesc.Type));
     // TODO(mbkkt) We need to account top.Count(), but not clear what to if it's value is runtime?
     const auto& col = indexDesc.KeyColumns.back();
     auto checkMember = [&] (const TExprBase& expr) {
@@ -239,6 +295,11 @@ bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lamb
         const auto methodName = udf.Cast().MethodName().Value();
         return IsVectorIndexMetricCompatible(indexDesc, methodName, asc, &error);
     };
+    if (indexDesc.Type == TIndexDescription::EType::GlobalSyncHnsw) {
+        const auto match = MatchHnswDistanceOperands(lambdaBody, lambdaArgs, col);
+        return match.Apply && checkUdf(match.Apply.Cast(), false);
+    }
+
     // lambdaBody may be:
     // 1) Knn::Distance(Member(input row, 'embedding'), expression) where input row = freearg0.
     // 2) FlatMap(<freearg0>, lambda freearg0: Knn::Distance(Member(freearg0, 'embedding'), <expression>))
@@ -249,16 +310,10 @@ bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lamb
         auto flatMapInput = flatMap.Input();
         auto member = flatMapInput.Maybe<TCoMember>();
         if (member && member.Cast().Struct().Maybe<TCoArgument>()) {
-            if (member.Cast().Name().Value() == col) {
-                // First case
-                return checkUdf(flatMap.Lambda().Body(), false);
-            } else {
-                // Other column
-                return false;
-            }
+            return member.Cast().Name().Value() == col && checkUdf(flatMap.Lambda().Body(), false);
         }
-        // Not a member of incoming argument - check inner lambda
         auto inner = flatMap.Lambda().Body();
+
         if (inner.Maybe<TCoFlatMap>()) {
             auto innerMap = inner.Cast<TCoFlatMap>();
             auto innerMapInput = innerMap.Input();
@@ -309,7 +364,7 @@ struct TReadMatch {
                 return {};
             }
 
-            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            if (TIndexDescription::IsVectorIndex(indexDesc->Type)) {
                 return {};
             }
 
@@ -329,7 +384,7 @@ struct TReadMatch {
                 return {};
             }
 
-            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            if (TIndexDescription::IsVectorIndex(indexDesc->Type)) {
                 return {};
             }
 
@@ -347,7 +402,7 @@ struct TReadMatch {
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
         YQL_ENSURE(tableDesc.Metadata);
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
-        if (indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+        if (!TIndexDescription::IsVectorIndex(indexDesc->Type)) {
             return {};
         }
 
@@ -454,13 +509,15 @@ struct TReadMatch {
         return false;
     }
 
-    TExprBase BuildRead(TExprContext& ctx, TKqpTable tableMeta, TCoAtomList columns) const {
+    TExprBase BuildRead(TExprContext& ctx, TKqpTable tableMeta, TCoAtomList columns,
+        const TMaybeNode<TCoNameValueTupleList>& settings = {}) const
+    {
         if (Read) {
             return Build<TKqlReadTable>(ctx, Pos())
                 .Table(tableMeta)
                 .Range(Read.Range().Cast())
                 .Columns(columns)
-                .Settings(Settings())
+                .Settings(settings ? settings.Cast() : Settings())
                 .Done();
         }
 
@@ -469,7 +526,7 @@ struct TReadMatch {
                 .Table(tableMeta)
                 .Ranges(ReadRanges.Ranges().Cast())
                 .Columns(columns)
-                .Settings(Settings())
+                .Settings(settings ? settings.Cast() : Settings())
                 .ExplainPrompt(ReadRanges.ExplainPrompt().Cast())
                 .Done();
         }
@@ -582,6 +639,56 @@ auto LevelLambdaFrom(
     const TIndexDescription& indexDesc, TExprContext& ctx, TPositionHandle pos, TNodeOnNodeOwnedMap& replaces,
     const TExprBase& fromArgs, const TExprBase& fromBody, TExprNode::TPtr& targetVectorExpr)
 {
+    if (indexDesc.Type == TIndexDescription::EType::GlobalSyncHnsw) {
+        const auto match = MatchHnswDistanceOperands(fromBody, TCoArguments(fromArgs.Ptr()), indexDesc.KeyColumns.back());
+        YQL_ENSURE(match.Apply);
+        const auto apply = match.Apply.Cast();
+        const auto target = TExprBase(apply.Ref().ChildPtr(3 - match.EmbeddingArg));
+        auto targetExpr = target.Ptr();
+        bool optionalTarget = target.Ref().GetTypeAnn()->IsOptionalOrNull();
+        // Strip the tag on the vector value before rebuilding its optional
+        // maps. Untag around an optional map aliases its MiniKQL IfPresent.
+        if (const auto* type = RemoveOptionalType(target.Ref().GetTypeAnn());
+            type->GetKind() == ETypeAnnotationKind::Tagged)
+        {
+            const auto tag = ctx.NewAtom(pos, type->Cast<TTaggedExprType>()->GetTag());
+            if (optionalTarget) {
+                const auto item = ctx.NewArgument(pos, "vector");
+                targetExpr = ctx.NewCallable(pos, "Map", {targetExpr,
+                    ctx.NewLambda(pos, ctx.NewArguments(pos, {item}), ctx.NewCallable(pos, "Untag", {item, tag}))});
+            } else {
+                targetExpr = ctx.NewCallable(pos, "Untag", {targetExpr, tag});
+            }
+        }
+        const auto row = TCoArguments(fromArgs.Ptr()).Arg(0);
+        const auto centroid = Build<TCoMember>(ctx, pos)
+            .Struct(row)
+            .Name().Build(NTableIndex::NKMeans::CentroidColumn)
+            .Done();
+        auto levelBody = ctx.ChangeChild(apply.Ref(), match.EmbeddingArg, centroid.Ptr());
+
+        for (auto it = match.Maps.rbegin(); it != match.Maps.rend(); ++it) {
+            const auto arg = it->Lambda().Args().Arg(0);
+            if (FindNode(targetExpr, [&](const TExprNode::TPtr& node) { return node.Get() == arg.Raw(); })) {
+                if (targetExpr.Get() == arg.Raw()) {
+                    targetExpr = it->Input().Ptr();
+                } else {
+                    targetExpr = ctx.NewCallable(pos, optionalTarget ? "FlatMap" : "Map", {
+                        it->Input().Ptr(), ctx.DeepCopyLambda(it->Lambda().Ref(), TExprNode::TPtr(targetExpr))});
+                }
+                optionalTarget = true;
+            }
+            if (arg.Raw() == match.EmbeddingBinding) {
+                levelBody = ctx.ReplaceNode(std::move(levelBody), arg.Ref(), centroid.Ptr());
+            } else {
+                levelBody = ctx.ChangeChild(it->Ref(), TCoFlatMap::idx_Lambda,
+                    ctx.DeepCopyLambda(it->Lambda().Ref(), std::move(levelBody)));
+            }
+        }
+        targetVectorExpr = std::move(targetExpr);
+        return NewLambdaFrom(ctx, pos, replaces, fromArgs.Ref(), TExprBase(levelBody)).Ptr();
+    }
+
     auto newLambda = NewLambdaFrom(ctx, pos, replaces, *fromArgs.Raw(), fromBody);
     replaces.clear();
     auto args = newLambda.Args().Ptr();
@@ -840,7 +947,7 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TKikimrTableDescription& tableDesc, const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
 {
-    Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
+    Y_ASSERT(TIndexDescription::IsVectorIndex(indexDesc.Type));
     const auto* levelTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Name);
     const auto* postingTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Name);
     YQL_ENSURE(!implTable.Next->Next);
@@ -935,11 +1042,106 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     return TExprBase{read};
 }
 
+struct THnswReadColumns {
+    TVector<TCoAtom> Covered;
+    TVector<TCoAtom> Missing;
+};
+
+THnswReadColumns SplitHnswReadColumns(const TCoAtomList& columns, const TKikimrTableMetadata& posting) {
+    THnswReadColumns result;
+    for (const auto& column : columns) {
+        auto& output = posting.Columns.contains(column.StringValue()) ? result.Covered : result.Missing;
+        output.push_back(column);
+    }
+    return result;
+}
+
+TExprBase LookupHnswRows(const TKqpTable& table, std::span<const TString> keys, const TCoAtomList& columns,
+    const TExprBase& rows, TExprContext& ctx, TPositionHandle pos, bool uniqueKeys = false)
+{
+    const auto row = ctx.NewArgument(pos, "row");
+    TExprNode::TListType keyMembers;
+    for (const auto& key : keys) {
+        keyMembers.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, key),
+            ctx.NewCallable(pos, "Member", {row, ctx.NewAtom(pos, key)})}));
+    }
+    const auto input = ctx.NewCallable(pos, "Map", {rows.Ptr(),
+        ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), ctx.NewList(pos, {
+            row, ctx.NewCallable(pos, "Just", {ctx.NewCallable(pos, "AsStruct", std::move(keyMembers))})}))});
+    TKqpStreamLookupSettings lookupSettings;
+    lookupSettings.Strategy = EStreamLookupStrategyType::LookupJoinRows;
+    lookupSettings.AllowNullKeysPrefixSize = keys.size();
+    lookupSettings.LookupJoinUniqueKeys = uniqueKeys;
+    return Build<TKqlStreamLookupTable>(ctx, pos)
+        .Table(table)
+        .LookupKeys(TExprBase(input))
+        .Columns(columns)
+        .Settings(lookupSettings.BuildNode(ctx, pos))
+        .Done();
+}
+
+// Flatten matching lookups while retaining values from the left row.
+template <typename TBuildRow>
+TExprBase MapMatchedHnswRows(const TExprBase& joined, TBuildRow buildRow,
+    TExprContext& ctx, TPositionHandle pos)
+{
+    const auto joinArg = ctx.NewArgument(pos, "joinedRow");
+    const auto right = ctx.NewArgument(pos, "rightRow");
+    const auto left = ctx.NewCallable(pos, "Nth", {joinArg, ctx.NewAtom(pos, "0")});
+    const auto mainBody = ctx.NewCallable(pos, "Just", {buildRow(left, right)});
+    const auto joinBody = ctx.NewCallable(pos, "FlatMap", {
+        ctx.NewCallable(pos, "Nth", {joinArg, ctx.NewAtom(pos, "1")}),
+        ctx.NewLambda(pos, ctx.NewArguments(pos, {right}), TExprNode::TPtr(mainBody))});
+    return TExprBase(ctx.NewCallable(pos, "FlatMap", {joined.Ptr(),
+        ctx.NewLambda(pos, ctx.NewArguments(pos, {joinArg}), TExprNode::TPtr(joinBody))}));
+}
+
+TExprBase LookupMissingHnswColumns(const TKqpTable& table, const TKikimrTableMetadata& main,
+    const TCoAtomList& columns, const TVector<TCoAtom>& lookupColumns,
+    const TExprBase& rows, TExprContext& ctx, TPositionHandle pos)
+{
+    const auto missing = Build<TCoAtomList>(ctx, pos).Add(lookupColumns).Done();
+    const auto joined = LookupHnswRows(table, main.KeyColumnNames, missing, rows, ctx, pos);
+    THashSet<TStringBuf> missingNames;
+    for (const auto& column : missing) {
+        missingNames.insert(column.Value());
+    }
+    return MapMatchedHnswRows(joined, [&](const auto& posting, const auto& mainRow) {
+        TExprNode::TListType members;
+        for (const auto& column : columns) {
+            members.push_back(ctx.NewList(pos, {column.Ptr(), ctx.NewCallable(pos, "Member", {
+                missingNames.contains(column.Value()) ? mainRow : posting, column.Ptr()})}));
+        }
+        return ctx.NewCallable(pos, "AsStruct", std::move(members));
+    }, ctx, pos);
+}
+
+TExprBase BuildHnswSearchRead(const TKqlReadTableVectorIndex& search, const TIndexDescription& index,
+    const TKqpOptimizeContext& kqpCtx, TExprContext& ctx)
+{
+    if (index.Type != TIndexDescription::EType::GlobalSyncHnsw) {
+        return search;
+    }
+    const auto& main = *GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, search.Table().Path()).Metadata;
+    const auto postingPath = TStringBuilder() << main.Name << "/" << index.Name << "/" << NTableIndex::NKMeans::PostingTable;
+    const auto& posting = *kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, postingPath).Metadata;
+    const auto [covered, missing] = SplitHnswReadColumns(search.Columns(), posting);
+    if (missing.empty()) {
+        return search;
+    }
+
+    const auto pos = search.Pos();
+    const auto coveredColumns = MergeColumns(Build<TCoAtomList>(ctx, pos).Add(covered).Done(),
+        main.KeyColumnNames, ctx);
+    auto postingSearch = TExprBase(ctx.ChangeChild(search.Ref(), TKqlReadTableVectorIndex::idx_Columns, coveredColumns.Ptr()));
+    return LookupMissingHnswColumns(search.Table(), main, search.Columns(), missing, postingSearch, ctx, pos);
+}
+
 TExprBase DoRewriteTopSortOverKMeansTreeToVectorSearch(
     const TReadMatch& match, const TMaybeNode<TCoFlatMap>& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
-    TExprContext& ctx, const TIndexDescription& indexDesc)
+    TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, const TIndexDescription& indexDesc)
 {
-    YQL_ENSURE(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree, "expected a kmeans-tree vector index");
+    YQL_ENSURE(TIndexDescription::IsVectorIndex(indexDesc.Type), "expected a distributed vector index");
 
     const auto pos = match.Pos();
 
@@ -964,13 +1166,14 @@ TExprBase DoRewriteTopSortOverKMeansTreeToVectorSearch(
         columns.push_back(Build<TCoAtom>(ctx, pos).Value(embeddingColumn).Done());
     }
 
-    TExprNode::TPtr read = Build<TKqlReadTableVectorIndex>(ctx, pos)
+    const auto search = Build<TKqlReadTableVectorIndex>(ctx, pos)
         .Table(match.Table())
         .Index(ctx.NewAtom(pos, indexDesc.Name))
         .Columns<TCoAtomList>().Add(columns).Build()
         .TopK(top.Count())
         .TargetVector(TExprBase{targetVector})
-        .Done().Ptr();
+        .Done();
+    auto read = BuildHnswSearchRead(search, indexDesc, kqpCtx, ctx).Ptr();
 
     if (flatMap) {
         read = Build<TCoFlatMap>(ctx, flatMap.Cast().Pos())
@@ -982,6 +1185,321 @@ TExprBase DoRewriteTopSortOverKMeansTreeToVectorSearch(
     VectorTopMain(ctx, top, read);
 
     return TExprBase{read};
+}
+
+// The extracted target can contain its own lambdas, but it must not
+// reference a row argument outside the target expression.
+bool HasFreeArguments(const TExprNode::TPtr& expr) {
+    TNodeSet bound;
+    VisitExpr(expr, [&](const TExprNode::TPtr& node) {
+        if (node->IsLambda()) {
+            for (const auto& arg : node->Head().Children()) {
+                bound.insert(arg.Get());
+            }
+        }
+        return true;
+    });
+    return bool(FindNode(expr, [&](const TExprNode::TPtr& node) {
+        return node->IsArgument() && !bound.contains(node.Get());
+    }));
+}
+
+// Restrict how the expression can consume the input row. Direct field
+// accesses are sufficient for predicate pushdown and for composing the sort key.
+template<typename TCheck>
+bool CheckRowMembers(const TExprNode::TPtr& expr, const TExprNode* row, TCheck check) {
+    bool supported = true;
+    VisitExpr(expr, [&](const TExprNode::TPtr& node) {
+        if (!supported || node.Get() == row) {
+            supported = false;
+            return false;
+        }
+        if (const auto member = TMaybeNode<TCoMember>(node); member && member.Cast().Struct().Raw() == row) {
+            supported = check(member.Cast());
+            return false;
+        }
+        return true;
+    });
+    return supported;
+}
+
+TMaybeNode<TCoLambda> GetCoveredHnswSortKey(const TCoLambda& filter, const TCoOptionalIf& conditional,
+    const TCoLambda& key, const TKikimrTableMetadata& posting, TExprContext& ctx)
+{
+    const auto row = filter.Args().Arg(0);
+    const auto covered = [&](const TCoMember& member) {
+        return posting.Columns.contains(member.Name().StringValue());
+    };
+    if (!CheckRowMembers(conditional.Predicate().Ptr(), row.Raw(), covered)) {
+        return {};
+    }
+
+    const auto projected = conditional.Value();
+    TNodeOnNodeOwnedMap replacements;
+    if (projected.Raw() == row.Raw()) {
+        if (!CheckRowMembers(key.Body().Ptr(), key.Args().Arg(0).Raw(), covered)) {
+            return {};
+        }
+        replacements.emplace(key.Args().Arg(0).Raw(), row.Ptr());
+    } else {
+        const auto fields = projected.Maybe<TCoAsStruct>();
+        if (!fields || !CheckRowMembers(key.Body().Ptr(), key.Args().Arg(0).Raw(), [&](const TCoMember& member) {
+            for (const auto& field : fields.Cast()) {
+                if (field.Item(0).Cast<TCoAtom>().Value() == member.Name().Value()) {
+                    const auto value = field.Item(1).Ptr();
+                    if (!CheckRowMembers(value, row.Raw(), covered)) {
+                        return false;
+                    }
+                    replacements.emplace(member.Raw(), value);
+                    return true;
+                }
+            }
+            return false;
+        })) {
+            return {};
+        }
+    }
+
+    auto sortKey = ctx.ReplaceNodes(key.Body().Ptr(), replacements);
+    if (sortKey->HasSideEffects() || FindNode(sortKey, [](const auto& node) {
+        return TCoNonDeterministicBase::Match(node.Get()) && !IsQueryBoundNonDeterministic(*node);
+    })) {
+        // The winning rows are projected and sorted again after the lookup.
+        return {};
+    }
+    return NewLambdaFrom(ctx, key.Pos(), replacements, filter.Args().Ref(), TExprBase(sortKey));
+}
+
+TExprBase DeduplicateHnswPostings(const TExprBase& rows, const TKikimrTableDescription& main,
+    const TCoAtomList& columns, TExprContext& ctx, TPositionHandle pos)
+{
+    // Group by the full primary key. Covered values are identical across
+    // a row's postings; SOME preserves them without using them as hash keys.
+    // Aggregate lowers to the distributed grouping pipeline.
+    const THashSet<TString> keyColumns(main.Metadata->KeyColumnNames.begin(),
+        main.Metadata->KeyColumnNames.end());
+    TExprNode::TListType handlers;
+    for (const auto& column : columns) {
+        if (keyColumns.contains(TString(column.Value()))) {
+            continue;
+        }
+        handlers.push_back(ctx.Builder(pos)
+            .List()
+                .Atom(0, column.Value())
+                .Callable(1, "AggApply")
+                    .Atom(0, "some")
+                    .Callable(1, "ListItemType").Callable(0, "TypeOf").Add(0, rows.Ptr()).Seal().Seal()
+                    .Lambda(2).Param("row").Callable("Member").Arg(0, "row").Atom(1, column.Value()).Seal().Seal()
+                .Seal()
+            .Seal().Build());
+    }
+    return TExprBase(ctx.NewCallable(pos, "Aggregate", {
+        rows.Ptr(), BuildKeyColumnsList(main, pos, ctx).Ptr(),
+        ctx.NewList(pos, std::move(handlers)), ctx.NewList(pos, {})}));
+}
+
+bool IsFrozenHnsw(const TIndexDescription& index) {
+    if (index.Type != TIndexDescription::EType::GlobalSyncHnsw) {
+        return false;
+    }
+    const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(
+        index.SpecializedIndexDescription).GetSettings();
+    return settings.has_autoupdate() && !settings.autoupdate();
+}
+
+TExprBase ValidateHnswTarget(const TIndexDescription& index, const TCoTopBase& top,
+    const TExprNode::TPtr& target, TExprContext& ctx, TPositionHandle pos)
+{
+    const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(
+        index.SpecializedIndexDescription).GetSettings().settings();
+
+    const auto empty = ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "")});
+    const auto bytes = ctx.NewCallable(pos, "Coalesce", {target, empty});
+
+    const auto format = ctx.NewCallable(pos, "Uint8", {ctx.NewAtom(pos, ToString(static_cast<ui32>(NKMeans::GetVectorFormat(settings))))});
+    const auto dimension = ctx.NewCallable(pos, "Uint32", {ctx.NewAtom(pos, ToString(settings.vector_dimension()))});
+    const auto udf = ctx.NewCallable(pos, "Udf", {ctx.NewAtom(pos, "Knn.VectorFormatError")});
+    const auto diagnostic = ctx.NewCallable(pos, "Apply", {udf, bytes, format, dimension});
+    const auto messagePrefix = ctx.NewCallable(pos, "Utf8", {ctx.NewAtom(pos, "Target vector has invalid format: ")});
+    const auto emptyMessage = ctx.NewCallable(pos, "Utf8", {ctx.NewAtom(pos, "")});
+    const auto diagnosticText = ctx.NewCallable(pos, "Coalesce", {diagnostic, emptyMessage});
+    const auto validLimit = Build<TKqpEnsure>(ctx, pos)
+        .Value(top.Count())
+        .Predicate(ctx.NewCallable(pos, "Not", {ctx.NewCallable(pos, "Exists", {diagnostic})}))
+        .IssueCode().Build(ToString(static_cast<ui32>(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST)))
+        .Message(ctx.NewCallable(pos, "Concat", {messagePrefix, diagnosticText}))
+        .Done();
+
+    const auto zero = ctx.NewCallable(pos, "Uint64", {ctx.NewAtom(pos, "0")});
+    const auto emptyLimit = ctx.NewCallable(pos, "==", {top.Count().Ptr(), zero});
+    const auto emptyTarget = ctx.NewCallable(pos, "==", {bytes, empty});
+    return TExprBase(ctx.NewCallable(pos, "If", {emptyLimit, zero,
+        ctx.NewCallable(pos, "If", {emptyTarget, zero, validLimit.Ptr()})}));
+}
+
+TExprBase ReadWithHnswTarget(const TReadMatch& match, const TKikimrTableDescription& table,
+    const TCoAtomList& columns, const TExprBase& validatedLimit, TExprContext& ctx)
+{
+    const auto pos = match.Pos();
+    const auto tableNode = BuildTableMeta(*table.Metadata, pos, ctx);
+    const auto zero = Build<TCoUint64>(ctx, pos).Literal().Build("0").Done();
+    const auto usable = ctx.NewCallable(pos, "!=", {validatedLimit.Ptr(), zero.Ptr()});
+    if (!match.FullScan()) {
+        // Preserve an existing key range. The limit is independent of the rows.
+        const auto all = Build<TCoUint64>(ctx, pos).Literal().Build(ToString(Max<ui64>())).Done();
+        return Build<TCoTake>(ctx, pos)
+            .Input(match.BuildRead(ctx, tableNode, columns))
+            .Count(ctx.NewCallable(pos, "If", {usable, all.Ptr(), zero.Ptr()}))
+            .Done();
+    }
+
+    TExprNode::TListType boundaryItems;
+    for (const auto& key : table.Metadata->KeyColumnNames) {
+        const auto* type = ctx.MakeType<TOptionalExprType>(table.GetColumnType(key));
+        boundaryItems.push_back(ctx.NewCallable(pos, "Nothing", {ExpandType(pos, *type, ctx)}));
+    }
+    boundaryItems.push_back(Build<TCoInt32>(ctx, pos).Literal().Build("0").Done().Ptr());
+    const auto boundary = ctx.NewList(pos, std::move(boundaryItems));
+    const auto fullRange = ctx.NewCallable(pos, "AsRange", {ctx.NewList(pos, {boundary, boundary})});
+    const auto ranges = ctx.NewCallable(pos, "RangeFinalize", {
+        ctx.NewCallable(pos, "If", {usable, fullRange, ctx.NewCallable(pos, "RangeEmpty", {})})});
+    return Build<TKqlReadTableRanges>(ctx, pos)
+        .Table(tableNode)
+        .Columns(columns)
+        .Ranges(ranges)
+        .Settings(match.Settings())
+        .ExplainPrompt(TKqpReadTableExplainPrompt().BuildNode(ctx, pos))
+        .Done();
+}
+
+TExprBase ReadHnswPrefix(const TReadMatch& match, const TKikimrTableDescription& prefix,
+    const TKikimrTableDescription& main, const TCoAtomList& columns, const TCoLambda& filter, const TExprBase& validatedLimit,
+    TExprContext& ctx, TTypeAnnotationContext& typesCtx, const TKqpOptimizeContext& kqpCtx)
+{
+    if (match.FullScan() && kqpCtx.Config->GetOptPredicateExtract() != EOptionalFlag::Disabled) {
+        TPredicateExtractorSettings settings;
+        settings.HaveNextValueCallable = true;
+        if (const auto maxRanges = kqpCtx.Config->GetExtractPredicateRangesLimit()) {
+            settings.MaxRanges = maxRanges;
+        }
+        if (kqpCtx.QueryCtx->RuntimeParameterSizeLimitSatisfied && kqpCtx.QueryCtx->RuntimeParameterSizeLimit > 0) {
+            settings.ExternalParameterMaxSize = kqpCtx.QueryCtx->RuntimeParameterSizeLimit;
+        }
+        auto extractor = MakePredicateRangeExtractor(settings);
+        THashSet<TString> possibleKeys;
+        YQL_ENSURE(main.SchemeNode);
+        const auto& mainType = *main.SchemeNode->Cast<TStructExprType>();
+        TVector<const TItemExprType*> fields(mainType.GetItems().begin(), mainType.GetItems().end());
+        const auto& keys = prefix.Metadata->KeyColumnNames;
+        for (const auto& key : keys) {
+            if (!mainType.FindItem(key)) {
+                fields.push_back(ctx.MakeType<TItemExprType>(key, prefix.GetColumnType(key)));
+            }
+        }
+        // The predicate is typed against the base row, and range boundaries
+        // must also include the prefix table's generated key suffix.
+        Sort(fields, TStructExprType::TItemLess{});
+        const auto* rowType = ctx.MakeType<TStructExprType>(fields);
+        if (extractor->Prepare(filter.Ptr(), *rowType, possibleKeys, ctx, typesCtx)) {
+            auto range = extractor->BuildComputeNode(keys, ctx, typesCtx);
+            if (range.ComputeNode) {
+                const auto pos = match.Pos();
+                const auto zero = Build<TCoUint64>(ctx, pos).Literal().Build("0").Done();
+                const auto usable = ctx.NewCallable(pos, "!=", {validatedLimit.Ptr(), zero.Ptr()});
+                YQL_ENSURE(range.ComputeNode->IsCallable("RangeFinalize"));
+                auto ranges = ctx.NewCallable(pos, "RangeFinalize", {
+                    ctx.NewCallable(pos, "If", {usable, range.ComputeNode->HeadPtr(),
+                        ctx.NewCallable(pos, "RangeEmpty", {})})});
+                TKqpReadTableExplainPrompt prompt;
+                for (size_t i = 0; i < range.UsedPrefixLen; ++i) {
+                    prompt.UsedKeyColumns.push_back(keys[i]);
+                }
+                prompt.SetPointPrefixLen(range.PointPrefixLen);
+                if (range.ExpectedMaxRanges) {
+                    prompt.SetExpectedMaxRanges(*range.ExpectedMaxRanges);
+                }
+                return Build<TKqlReadTableRanges>(ctx, pos)
+                    .Table(BuildTableMeta(*prefix.Metadata, pos, ctx))
+                    .Columns(columns)
+                    .Ranges(ranges)
+                    .Settings(match.Settings())
+                    .ExplainPrompt(prompt.BuildNode(ctx, pos))
+                    .Done();
+            }
+        }
+    }
+    return ReadWithHnswTarget(match, prefix, columns, validatedLimit, ctx);
+}
+
+TExprBase RewriteFilteredHnswScan(const TReadMatch& match, const TMaybeNode<TCoFlatMap>& flatMap,
+    const TExprNode::TPtr& target, bool usesOriginalEmbedding, const TCoTopBase& top,
+    TExprContext& ctx, const TKikimrTableDescription& tableDesc,
+    const TKikimrTableDescription& posting, const TIndexDescription& indexDesc)
+{
+    // Scan index members exactly so WHERE runs before LIMIT.
+    const auto pos = match.Pos();
+    const auto [coveredColumns, lookupColumns] = SplitHnswReadColumns(match.Columns(), *posting.Metadata);
+    const auto columns = MergeColumns(Build<TCoAtomList>(ctx, pos).Add(coveredColumns).Done(),
+        tableDesc.Metadata->KeyColumnNames, ctx);
+    const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(
+        indexDesc.SpecializedIndexDescription).GetSettings();
+    auto rows = usesOriginalEmbedding && target && !HasFreeArguments(target)
+        ? ReadWithHnswTarget(match, posting, columns, ValidateHnswTarget(indexDesc, top, target, ctx, pos), ctx)
+        : match.BuildRead(ctx, BuildTableMeta(*posting.Metadata, pos, ctx), columns);
+
+    if (settings.overlap_clusters() > 1) {
+        rows = DeduplicateHnswPostings(rows, tableDesc, columns, ctx, pos);
+    }
+
+    // A frozen posting may outlive its base row. Resolve those rows before
+    // LIMIT so a dangling key cannot consume a winning slot.
+    if ((!settings.has_autoupdate() || settings.autoupdate()) && !lookupColumns.empty() && flatMap) {
+        const auto filter = flatMap.Cast().Lambda();
+        if (const auto conditional = filter.Body().Maybe<TCoOptionalIf>()) {
+            const auto optional = conditional.Cast();
+            if (const auto key = GetCoveredHnswSortKey(filter, optional, top.KeySelectorLambda(), *posting.Metadata, ctx)) {
+                const auto row = filter.Args().Arg(0);
+                TNodeOnNodeOwnedMap replacements;
+                const auto predicate = ctx.NewCallable(pos, "OptionalIf", {optional.Predicate().Ptr(), row.Ptr()});
+                auto eligible = Build<TCoFlatMap>(ctx, pos)
+                    .Input(rows)
+                    .Lambda(NewLambdaFrom(ctx, pos, replacements, filter.Args().Ref(), TExprBase(predicate)))
+                    .Done();
+                auto winners = Build<TCoTopBase>(ctx, pos)
+                    .CallableName(top.Ref().Content())
+                    .Input(eligible)
+                    .Count(top.Count())
+                    .SortDirections(top.SortDirections())
+                    .KeySelectorLambda(key.Cast())
+                    .Done();
+                auto fetched = LookupMissingHnswColumns(match.Table(), *tableDesc.Metadata,
+                    match.Columns(), lookupColumns, winners, ctx, pos);
+                auto read = Build<TCoMap>(ctx, pos)
+                    .Input(fetched)
+                    .Lambda(NewLambdaFrom(ctx, pos, replacements, filter.Args().Ref(), optional.Value()))
+                    .Done().Ptr();
+                // The distributed lookup may reorder the winning rows.
+                VectorTopMain(ctx, top, read);
+                return TExprBase(read);
+            }
+        }
+    }
+
+    if (!lookupColumns.empty()) {
+        rows = LookupMissingHnswColumns(match.Table(), *tableDesc.Metadata, match.Columns(),
+            lookupColumns, rows, ctx, pos);
+    } else {
+        rows = Build<TCoExtractMembers>(ctx, pos).Input(rows).Members(match.Columns()).Done();
+    }
+    auto read = rows.Ptr();
+    if (flatMap) {
+        read = Build<TCoFlatMap>(ctx, flatMap.Cast().Pos())
+            .Input(read)
+            .Lambda(ctx.DeepCopyLambda(flatMap.Cast().Lambda().Ref()))
+            .Done().Ptr();
+    }
+    VectorTopMain(ctx, top, read);
+    return TExprBase(read);
 }
 
 template<typename T>
@@ -1011,12 +1529,251 @@ TExprBase FilterLeafRows(const TExprBase& read, TExprContext& ctx, TPositionHand
         .Done();
 }
 
+bool PreservesVectorSortColumn(const TMaybeNode<TCoFlatMap>& flatMap, TStringBuf column) {
+    if (!flatMap) {
+        return true;
+    }
+    const auto lambda = flatMap.Cast().Lambda();
+    const auto body = lambda.Body();
+    const auto value = body.Maybe<TCoJust>() ? body.Cast<TCoJust>().Input()
+        : body.Maybe<TCoOptionalIf>() ? body.Cast<TCoOptionalIf>().Value() : body;
+    const auto row = lambda.Args().Arg(0);
+    if (value.Raw() == row.Raw()) {
+        return true;
+    }
+    if (const auto fields = value.Maybe<TCoAsStruct>()) {
+        for (const auto& field : fields.Cast()) {
+            if (field.Item(0).Cast<TCoAtom>().Value() == column) {
+                const auto member = field.Item(1).Maybe<TCoMember>();
+                return member && member.Cast().Struct().Raw() == row.Raw() && member.Cast().Name().Value() == column;
+            }
+        }
+    }
+    return false;
+}
+
+TCoAtomList GetPrefixedVectorReadColumns(const TReadMatch& match, const TIndexDescription& index,
+    const TCoLambda& lambda, const TCoOptionalIf& conditional, TExprContext& ctx)
+{
+    const auto prefixEnd = index.KeyColumns.end() - 1;
+    THashSet<TStringBuf> projected;
+    if (!CheckRowMembers(conditional.Value().Ptr(), lambda.Args().Arg(0).Raw(), [&](const TCoMember& member) {
+        projected.insert(member.Name().Value());
+        return true;
+    })) {
+        return match.Columns();
+    }
+
+    TVector<TCoAtom> columns;
+    for (const auto& column : match.Columns()) {
+        if (projected.contains(column.Value())
+                || std::find(index.KeyColumns.begin(), prefixEnd, column.Value()) == prefixEnd) {
+            columns.push_back(column);
+        }
+    }
+    return Build<TCoAtomList>(ctx, match.Pos()).Add(columns).Done();
+}
+
+size_t GetPrefixedVectorLevelTop(const TCoLambda& filter, const TKikimrTableDescription& main,
+    const TVector<TString>& prefixKeys, bool withOverlap, TExprContext& ctx,
+    TTypeAnnotationContext& typesCtx, const TKqpOptimizeContext& kqpCtx)
+{
+    TPredicateExtractorSettings settings;
+    settings.MergeAdjacentPointRanges = false;
+    settings.HaveNextValueCallable = true;
+    settings.BuildLiteralRange = true;
+    if (kqpCtx.QueryCtx->RuntimeParameterSizeLimitSatisfied && kqpCtx.QueryCtx->RuntimeParameterSizeLimit > 0) {
+        settings.ExternalParameterMaxSize = kqpCtx.QueryCtx->RuntimeParameterSizeLimit;
+    }
+    auto extractor = MakePredicateRangeExtractor(settings);
+    THashSet<TString> possibleKeys;
+    YQL_ENSURE(main.SchemeNode);
+    size_t groups = 1;
+    if (extractor->Prepare(filter.Ptr(), *main.SchemeNode, possibleKeys, ctx, typesCtx)) {
+        const auto range = extractor->BuildComputeNode(prefixKeys, ctx, typesCtx);
+        if (range.PointPrefixLen >= prefixKeys.size() && range.ExpectedMaxRanges.Defined()) {
+            groups = std::max<size_t>(1, *range.ExpectedMaxRanges);
+        }
+    }
+    return GetKMeansTreeSearchTopSize(kqpCtx, withOverlap) * groups;
+}
+
+TExprBase ReadBoundedHnswRows(const TExprBase& parents, const TKqpTable& table,
+    const TKikimrTableMetadataPtr& main, const TCoAtomList& columns,
+    const TCoAtom& parent, const TKqpStreamLookupSettings& settings, TExprContext& ctx, TPositionHandle pos)
+{
+    const auto groups = Build<TDqPrecompute>(ctx, pos).Input(parents).Done();
+    const auto byParent = ctx.Builder(pos)
+        .Callable("ToDict")
+            .Add(0, groups.Ptr())
+            .Lambda(1).Param("group").Callable("Member").Arg(0, "group").Add(1, parent.Ptr()).Seal().Seal()
+            .Lambda(2).Param("group").Arg("group").Seal()
+            .List(3).Atom(0, "Hashed").Atom(1, "One").Seal()
+        .Seal().Build();
+    const auto row = ctx.NewArgument(pos, "group");
+    const auto key = ctx.NewCallable(pos, "AsStruct", {
+        ctx.NewList(pos, {parent.Ptr(), ctx.NewCallable(pos, "Member", {row, parent.Ptr()})})});
+    auto read = ctx.NewCallable(pos, "Map", {
+        groups.Ptr(), ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), TExprNode::TPtr(key))});
+    VectorReadWithPushdown(ctx, pos, table, main, columns, settings, read);
+    const auto postingRow = ctx.NewArgument(pos, "posting");
+    const auto prefix = ctx.NewCallable(pos, "Unwrap", {ctx.NewCallable(pos, "Lookup", {
+        byParent, ctx.NewCallable(pos, "Member", {postingRow, parent.Ptr()})})});
+    return TExprBase(ctx.NewCallable(pos, "Map", {read,
+        ctx.NewLambda(pos, ctx.NewArguments(pos, {postingRow}), ctx.NewList(pos, {prefix, postingRow}))}));
+}
+
+// Frozen prefixes and postings describe the same indexed rows. Retain the
+// matched prefix through traversal, and resolve missing base rows before top-K.
+TExprBase RewritePrefixedHnswWithStoredPrefix(const TReadMatch& match, const TCoFlatMap& flatMap,
+    const TCoOptionalIf& conditional, const TCoTopBase& top, const TExprNode::TPtr& target,
+    const TExprNode::TPtr& levelLambda,
+    const TIndexDescription& index, const TKikimrTableDescription& main,
+    const TKikimrTableDescription& level, const TKikimrTableDescription& posting,
+    const TKikimrTableDescription& prefix, bool bounded, TExprContext& ctx,
+    TTypeAnnotationContext& typesCtx, const TKqpOptimizeContext& kqpCtx)
+{
+    const auto pos = match.Pos();
+    const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(
+        index.SpecializedIndexDescription).GetSettings();
+    const auto prefixColumns = BuildPrefixColumnsList(index, pos, ctx);
+    const std::span<const TString> prefixKeys(index.KeyColumns.data(), index.KeyColumns.size() - 1);
+    const THashSet<TStringBuf> prefixNames(prefixKeys.begin(), prefixKeys.end());
+    const auto validation = target ? ValidateHnswTarget(index, top, target, ctx, pos) : top.Count();
+
+    // Normalize both direct posting groups and level-tree roots to lookup keys.
+    const auto parent = ctx.NewAtom(pos, NTableIndex::NKMeans::ParentColumn);
+    const auto id = ctx.NewAtom(pos, NTableIndex::NKMeans::IdColumn);
+    const auto row = ctx.NewArgument(pos, "prefixRow");
+    const auto root = ctx.NewCallable(pos, "AddMember", {row, parent, ctx.NewCallable(pos, "Member", {row, id})});
+    const auto predicate = ctx.ReplaceNode(conditional.Predicate().Ptr(), flatMap.Lambda().Args().Arg(0).Ref(), row);
+    const auto prefixRead = target
+        ? ReadHnswPrefix(match, prefix, main, prefixColumns, flatMap.Lambda(), validation, ctx, typesCtx, kqpCtx)
+        : match.BuildRead(ctx, BuildTableMeta(*prefix.Metadata, pos, ctx), prefixColumns);
+    const auto roots = TExprBase(ctx.NewCallable(pos, "FlatMap", {prefixRead.Ptr(),
+        ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), ctx.NewCallable(pos, "OptionalIf", {predicate, root}))}));
+
+    const TVector<TString> parentKey{TString(NTableIndex::NKMeans::ParentColumn)};
+    const auto levelTable = BuildTableMeta(*level.Metadata, pos, ctx);
+    const auto levelColumns = Build<TCoAtomList>(ctx, pos).Add(TCoAtom(id)).Done();
+    const auto centroid = ctx.NewAtom(pos, NTableIndex::NKMeans::CentroidColumn);
+    TKqpStreamLookupSettings levelLookup;
+    TExprNode::TPtr levelLimit;
+    if (bounded) {
+        YQL_ENSURE(target && levelLambda);
+        const auto levelTop = GetPrefixedVectorLevelTop(flatMap.Lambda(), main,
+            TVector<TString>(prefixKeys.begin(), prefixKeys.end()), settings.overlap_clusters() > 1, ctx, typesCtx, kqpCtx);
+        levelLimit = Build<TCoUint64>(ctx, pos).Literal().Build(ToString(levelTop)).Done().Ptr();
+        levelLookup.Strategy = EStreamLookupStrategyType::LookupRows;
+        levelLookup.VectorTopColumn = NTableIndex::NKMeans::CentroidColumn;
+        levelLookup.VectorTopIndex = index.Name;
+        levelLookup.VectorTopTarget = target;
+        levelLookup.VectorTopLimit = levelLimit;
+    }
+    auto leaves = FilterLeafRows<TCoCmpLess>(roots, ctx, pos);
+    for (ui32 depth = 0; depth < std::max<ui32>(1, settings.levels()); ++depth) {
+        const auto remap = [&](const auto& group, const auto& child) {
+            return ctx.NewCallable(pos, "AddMember", {
+                ctx.NewCallable(pos, "RemoveMember", {group, parent}), parent,
+                ctx.NewCallable(pos, "Member", {child, id})});
+        };
+        if (bounded) {
+            const auto columns = Build<TCoAtomList>(ctx, pos).Add(TCoAtom(parent)).Add(TCoAtom(id)).Add(TCoAtom(centroid)).Done();
+            const auto children = ReadBoundedHnswRows(leaves, levelTable, main.Metadata, columns,
+                TCoAtom(parent), levelLookup, ctx, pos);
+            const auto candidate = ctx.NewArgument(pos, "candidate");
+            const auto candidateRow = ctx.NewCallable(pos, "Nth", {candidate, ctx.NewAtom(pos, "1")});
+            const auto lambda = TCoLambda(levelLambda);
+            const auto score = ctx.ReplaceNode(lambda.Body().Ptr(), lambda.Args().Arg(0).Ref(), candidateRow);
+            const auto winners = ctx.NewCallable(pos, "Top", {
+                children.Ptr(), levelLimit, top.SortDirections().Ptr(),
+                ctx.NewLambda(pos, ctx.NewArguments(pos, {candidate}), TExprNode::TPtr(score))});
+            const auto child = ctx.NewArgument(pos, "child");
+            const auto group = ctx.NewCallable(pos, "Nth", {child, ctx.NewAtom(pos, "0")});
+            const auto levelRow = ctx.NewCallable(pos, "Nth", {child, ctx.NewAtom(pos, "1")});
+            leaves = TExprBase(ctx.NewCallable(pos, "Map", {winners,
+                ctx.NewLambda(pos, ctx.NewArguments(pos, {child}), remap(group, levelRow))}));
+        } else {
+            const auto joined = LookupHnswRows(levelTable, parentKey, levelColumns, leaves, ctx, pos);
+            leaves = MapMatchedHnswRows(joined, remap, ctx, pos);
+        }
+    }
+    leaves = Build<TCoUnionAll>(ctx, pos)
+        .Add(leaves)
+        .Add(FilterLeafRows<TCoCmpGreaterOrEqual>(roots, ctx, pos))
+        .Done();
+
+    const auto projected = GetPrefixedVectorReadColumns(match, index, flatMap.Lambda(), conditional, ctx);
+    const auto columns = MergeColumns(projected, main.Metadata->KeyColumnNames, ctx);
+    TVector<TCoAtom> stored;
+    TVector<TCoAtom> postingColumns;
+    TVector<TCoAtom> missing;
+    for (const auto& column : columns) {
+        if (prefixNames.contains(column.Value())) {
+            stored.push_back(column);
+        } else if (posting.Metadata->Columns.contains(column.StringValue())) {
+            stored.push_back(column);
+            postingColumns.push_back(column);
+        } else {
+            missing.push_back(column);
+        }
+    }
+    const auto postingTable = BuildTableMeta(*posting.Metadata, pos, ctx);
+    const auto buildRow = [&](const auto& group, const auto& postingRow) {
+        TExprNode::TListType members;
+        for (const auto& column : stored) {
+            members.push_back(ctx.NewList(pos, {column.Ptr(), ctx.NewCallable(pos, "Member", {
+                prefixNames.contains(column.Value()) ? group : postingRow, column.Ptr()})}));
+        }
+        return ctx.NewCallable(pos, "AsStruct", std::move(members));
+    };
+    const auto readColumns = Build<TCoAtomList>(ctx, pos).Add(postingColumns).Done();
+    TExprBase rows = [&]() -> TExprBase {
+        if (bounded) {
+            YQL_ENSURE(missing.empty());
+            TKqpStreamLookupSettings lookup;
+            lookup.Strategy = EStreamLookupStrategyType::LookupRows;
+            lookup.VectorTopColumn = index.KeyColumns.back();
+            lookup.VectorTopIndex = index.Name;
+            lookup.VectorTopTarget = target;
+            lookup.VectorTopLimit = validation.Ptr();
+            lookup.VectorTopDistinct = settings.overlap_clusters() > 1;
+            const auto parentColumn = TCoAtom(parent);
+            const auto candidates = ReadBoundedHnswRows(leaves, postingTable, main.Metadata,
+                MergeColumns(readColumns, parentKey, ctx), parentColumn, lookup, ctx, pos);
+            const auto candidate = ctx.NewArgument(pos, "candidate");
+            const auto group = ctx.NewCallable(pos, "Nth", {candidate, ctx.NewAtom(pos, "0")});
+            const auto postingRow = ctx.NewCallable(pos, "Nth", {candidate, ctx.NewAtom(pos, "1")});
+            return TExprBase(ctx.NewCallable(pos, "Map", {candidates.Ptr(),
+                ctx.NewLambda(pos, ctx.NewArguments(pos, {candidate}), buildRow(group, postingRow))}));
+        }
+        // Each leaf ID belongs to one prefix and occurs once in the lookup stream.
+        const auto joined = LookupHnswRows(postingTable, parentKey, readColumns, leaves, ctx, pos, /*uniqueKeys=*/true);
+        return MapMatchedHnswRows(joined, buildRow, ctx, pos);
+    }();
+    if (settings.overlap_clusters() > 1) {
+        rows = DeduplicateHnswPostings(rows, main, Build<TCoAtomList>(ctx, pos).Add(stored).Done(), ctx, pos);
+    }
+    if (!missing.empty()) {
+        rows = LookupMissingHnswColumns(match.Table(), *main.Metadata, projected, missing, rows, ctx, pos);
+    } else {
+        rows = Build<TCoExtractMembers>(ctx, pos).Input(rows).Members(projected).Done();
+    }
+    TNodeOnNodeOwnedMap replaces;
+    auto read = Build<TCoMap>(ctx, pos)
+        .Input(rows)
+        .Lambda(NewLambdaFrom(ctx, pos, replaces, flatMap.Lambda().Args().Ref(), conditional.Value()))
+        .Done().Ptr();
+    VectorTopMain(ctx, top, read);
+    return TExprBase(read);
+}
+
 TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     const TReadMatch& match, const TCoFlatMap& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
     TExprContext& ctx, TTypeAnnotationContext& typesCtx, const TKqpOptimizeContext& kqpCtx,
     const TKikimrTableDescription& tableDesc, const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
 {
-    Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
+    Y_ASSERT(TIndexDescription::IsVectorIndex(indexDesc.Type));
     Y_ASSERT(indexDesc.KeyColumns.size() > 1);
     const auto* levelTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Name);
     const auto* postingTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Name);
@@ -1039,89 +1796,24 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
             NTableIndex::NKMeans::IdColumn,
             NTableIndex::NKMeans::CentroidColumn});
     const auto prefixColumns = BuildPrefixColumnsList(indexDesc, pos, ctx);
-    auto mainColumns = match.Columns();
-
-    THashSet<TStringBuf> prefixColumnSet;
-    for (size_t i = 0; i < indexDesc.KeyColumns.size()-1; i++) {
-        prefixColumnSet.insert(indexDesc.KeyColumns[i]);
-    }
-    bool prefixInResult = false;
+    const auto filter = flatMap.Lambda();
+    const auto conditional = filter.Body().Cast<TCoOptionalIf>();
+    const auto mainColumns = GetPrefixedVectorReadColumns(match, indexDesc, filter, conditional, ctx);
     TNodeOnNodeOwnedMap replaces;
-    TMaybeNode<TCoLambda> mainLambda;
-    const auto prefixLambda = [&] {
-        auto newLambda = NewLambdaFrom(ctx, pos, replaces, flatMap.Lambda().Args().Ref(), flatMap.Lambda().Body());
-        auto optionalIf = newLambda.Body().Cast<TCoOptionalIf>();
-        auto oldValue = optionalIf.Value().Maybe<TCoAsStruct>();
-        if (!oldValue) {
-            // SELECT *
-            prefixInResult = true;
-            return newLambda.Ptr();
-        }
-        // SELECT specific fields
-        auto args = newLambda.Args();
-        mainLambda = NewLambdaFrom(ctx, pos, replaces, args.Ref(), oldValue.Cast());
-        auto arg0 = mainLambda.Cast().Args().Arg(0).Raw();
-        VisitExpr(mainLambda.Cast().Ptr(), [&](const TExprNode::TPtr& node) {
-            if (const auto maybeMember = TMaybeNode<TCoMember>(node)) {
-                const auto member = maybeMember.Cast();
-                if (member.Struct().Raw() == arg0 &&
-                    prefixColumnSet.contains(member.Name().Value())) {
-                    prefixInResult = true;
-                    return false;
-                }
-            }
-            return true;
-        });
-
-        replaces.clear();
-        replaces.emplace(oldValue.Raw(), args.Arg(0).Ptr());
-        return ctx.NewLambda(pos,
-            args.Ptr(),
-            ctx.ReplaceNodes(TExprNode::TListType{optionalIf.Ptr()}, replaces));
-    }();
+    const auto prefixLambda = NewLambdaFrom(ctx, pos, replaces, filter.Args().Ref(),
+        TExprBase(ctx.ChangeChild(conditional.Ref(), TCoOptionalIf::idx_Value, filter.Args().Arg(0).Ptr())));
     TExprNode::TPtr targetVector;
     const auto levelLambda = LevelLambdaFrom(indexDesc, ctx, pos, replaces, lambdaArgs, lambdaBody, targetVector);
-    if (!prefixInResult) {
-        // Remove prefix columns from main table read if we don't need them
-        TVector<TCoAtom> filteredColumns;
-        for (const auto& col: mainColumns) {
-            if (!prefixColumnSet.contains(col.Value())) {
-                filteredColumns.push_back(col);
-            }
-        }
-        mainColumns = Build<TCoAtomList>(ctx, pos)
-            .Add(filteredColumns)
-            .Done();
-    }
+    const bool hnsw = indexDesc.Type == TIndexDescription::EType::GlobalSyncHnsw;
+    const auto validatedLimit = hnsw ? ValidateHnswTarget(indexDesc, top, targetVector, ctx, pos) : top.Count();
 
     TVector<TString> prefixKeys;
     for (size_t i = 0; i < indexDesc.KeyColumns.size() - 1; ++i) {
         prefixKeys.push_back(indexDesc.KeyColumns[i]);
     }
 
-    size_t numPrefixGroups = 1;
-    {
-        THashSet<TString> possibleKeys;
-        TPredicateExtractorSettings predSettings;
-        predSettings.MergeAdjacentPointRanges = false;
-        predSettings.HaveNextValueCallable = true;
-        predSettings.BuildLiteralRange = true;
-        if (kqpCtx.QueryCtx->RuntimeParameterSizeLimitSatisfied &&
-            kqpCtx.QueryCtx->RuntimeParameterSizeLimit > 0)
-        {
-            predSettings.ExternalParameterMaxSize = kqpCtx.QueryCtx->RuntimeParameterSizeLimit;
-        }
-        auto extractor = MakePredicateRangeExtractor(predSettings);
-        YQL_ENSURE(tableDesc.SchemeNode);
-        if (extractor->Prepare(flatMap.Lambda().Ptr(), *tableDesc.SchemeNode, possibleKeys, ctx, typesCtx)) {
-            auto buildResult = extractor->BuildComputeNode(prefixKeys, ctx, typesCtx);
-            if (buildResult.PointPrefixLen >= prefixKeys.size() && buildResult.ExpectedMaxRanges.Defined()) {
-                numPrefixGroups = std::max<size_t>(1, *buildResult.ExpectedMaxRanges);
-            }
-        }
-    }
-
-    auto read = match.BuildRead(ctx, prefixTable, prefixColumns).Ptr();
+    auto read = hnsw ? ReadHnswPrefix(match, *prefixTableDesc, tableDesc, prefixColumns, filter, validatedLimit, ctx, typesCtx, kqpCtx).Ptr()
+                     : match.BuildRead(ctx, prefixTable, prefixColumns).Ptr();
 
     read = Build<TCoFlatMap>(ctx, pos)
         .Input(read)
@@ -1140,8 +1832,8 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
     const bool withOverlap = kmeansDesc.settings().overlap_clusters() > 1;
 
-    const auto levelTop = GetKMeansTreeSearchTopSize(kqpCtx, withOverlap);
-    const auto levelTopTotal = levelTop * numPrefixGroups;
+    const auto levelTopTotal = GetPrefixedVectorLevelTop(filter, tableDesc, prefixKeys,
+        withOverlap, ctx, typesCtx, kqpCtx);
 
     TKqpStreamLookupSettings firstLevelSettings;
     firstLevelSettings.Strategy = EStreamLookupStrategyType::LookupRows;
@@ -1149,6 +1841,12 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     firstLevelSettings.VectorTopIndex = indexDesc.Name;
     firstLevelSettings.VectorTopTarget = targetVector;
     firstLevelSettings.VectorTopLimit = ctx.Builder(pos).Callable("Uint64").Atom(0, std::to_string(levelTopTotal), TNodeFlags::Default).Seal().Build();
+    if (hnsw) {
+        const auto zero = Build<TCoUint64>(ctx, pos).Literal().Build("0").Done();
+        firstLevelSettings.VectorTopLimit = ctx.NewCallable(pos, "If", {
+            ctx.NewCallable(pos, "!=", {validatedLimit.Ptr(), zero.Ptr()}),
+            firstLevelSettings.VectorTopLimit, zero.Ptr()});
+    }
     auto firstLevelSettingsNode = firstLevelSettings.BuildNode(ctx, pos);
     auto levelRows = Build<TKqlStreamLookupTable>(ctx, pos)
         .Table(levelTable)
@@ -1178,14 +1876,14 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopIndex = indexDesc.Name;
     settings.VectorTopTarget = targetVector;
-    settings.VectorTopLimit = top.Count().Ptr();
+    settings.VectorTopLimit = validatedLimit.Ptr();
     settings.VectorTopDistinct = withOverlap;
     VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, read);
 
-    if (mainLambda) {
+    if (conditional.Value().Raw() != filter.Args().Arg(0).Raw()) {
         read = Build<TCoMap>(ctx, flatMap.Pos())
             .Input(read)
-            .Lambda(mainLambda.Cast())
+            .Lambda(NewLambdaFrom(ctx, pos, replaces, filter.Args().Ref(), conditional.Value()))
         .Done().Ptr();
     }
 
@@ -1203,7 +1901,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTreeToVectorSearch(
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
 {
-    YQL_ENSURE(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree, "expected a kmeans-tree vector index");
+    YQL_ENSURE(TIndexDescription::IsVectorIndex(indexDesc.Type), "expected a distributed vector index");
     YQL_ENSURE(indexDesc.KeyColumns.size() > 1, "expected a prefixed vector index");
 
     const auto* prefixTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Next->Name);
@@ -1243,8 +1941,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTreeToVectorSearch(
         .Done();
 
     // Build the actor's input rows: {__target: targetVector, __ydb_parent: __ydb_id}.
-    // No TDqPrecompute here: a separate precompute phase would acquire locks, which
-    // conflict with the follower read of the immutable prefix table.
+    // Stream prefix rows in the search snapshot.
     auto rowArg = Build<TCoArgument>(ctx, pos).Name("idRow").Done();
     TExprNode::TPtr prefixRows = Build<TCoMap>(ctx, pos)
         .Input(filtered)
@@ -1266,72 +1963,27 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTreeToVectorSearch(
             .Build()
         .Done().Ptr();
 
-    // The predicate is fully applied to the prefix table read above, and every row under a
-    // matching group's root carries that group's prefix, so it is not reapplied here. Doing
-    // so would force the prefix columns into the read, and the posting table does not store
-    // them -- which costs a covering index its covering property.
-    THashSet<TStringBuf> prefixColumnSet;
-    for (size_t i = 0; i + 1 < indexDesc.KeyColumns.size(); ++i) {
-        prefixColumnSet.insert(indexDesc.KeyColumns[i]);
-    }
+    const auto filter = flatMap.Lambda();
+    const auto columns = MergeColumns(GetPrefixedVectorReadColumns(match, indexDesc, filter, optionalIf, ctx),
+        TVector<TString>{indexDesc.KeyColumns.back()}, ctx);
+    const auto validatedLimit = indexDesc.Type == TIndexDescription::EType::GlobalSyncHnsw
+        ? ValidateHnswTarget(indexDesc, top, targetVector, ctx, pos) : top.Count();
 
-    TNodeOnNodeOwnedMap projectionReplaces;
-    TMaybeNode<TCoLambda> mainLambda;
-    // SELECT * passes the row through as is, so the prefix columns stay in the result.
-    bool prefixInResult = true;
-    if (const auto asStruct = optionalIf.Value().Maybe<TCoAsStruct>()) {
-        mainLambda = NewLambdaFrom(ctx, pos, projectionReplaces, flatMap.Lambda().Args().Ref(), asStruct.Cast());
-        const auto* rowArgRaw = mainLambda.Cast().Args().Arg(0).Raw();
-        prefixInResult = false;
-        VisitExpr(mainLambda.Cast().Ptr(), [&](const TExprNode::TPtr& node) {
-            if (const auto maybeMember = TMaybeNode<TCoMember>(node)) {
-                const auto member = maybeMember.Cast();
-                if (member.Struct().Raw() == rowArgRaw && prefixColumnSet.contains(member.Name().Value())) {
-                    prefixInResult = true;
-                    return false;
-                }
-            }
-            return true;
-        });
-    }
-
-    // Read columns: the main columns the projection references, plus the embedding the actor
-    // ranks on. Prefix columns are dropped unless the projection itself returns them.
-    THashSet<TStringBuf> present;
-    TVector<TCoAtom> columns;
-    for (const auto& col : match.Columns()) {
-        if (!prefixInResult && prefixColumnSet.contains(col.Value())) {
-            continue;
-        }
-        columns.push_back(col);
-        present.insert(col.Value());
-    }
-    auto ensureColumn = [&](TStringBuf name) {
-        if (present.insert(name).second) {
-            columns.push_back(Build<TCoAtom>(ctx, pos).Value(name).Done());
-        }
-    };
-    ensureColumn(indexDesc.KeyColumns.back());
-    if (prefixInResult) {
-        for (size_t i = 0; i + 1 < indexDesc.KeyColumns.size(); ++i) {
-            ensureColumn(indexDesc.KeyColumns[i]);
-        }
-    }
-
-    TExprNode::TPtr read = Build<TKqlReadTableVectorIndex>(ctx, pos)
+    const auto search = Build<TKqlReadTableVectorIndex>(ctx, pos)
         .Table(match.Table())
         .Index(ctx.NewAtom(pos, indexDesc.Name))
-        .Columns<TCoAtomList>().Add(columns).Build()
-        .TopK(top.Count())
+        .Columns(columns)
+        .TopK(validatedLimit)
         .TargetVector(TExprBase{targetVector})
         .PrefixRows(TExprBase{prefixRows})
-        .Done().Ptr();
+        .Done();
+    auto read = BuildHnswSearchRead(search, indexDesc, kqpCtx, ctx).Ptr();
 
     // Reapply the original projection on the search result rows.
-    if (mainLambda) {
+    if (optionalIf.Value().Raw() != filter.Args().Arg(0).Raw()) {
         read = Build<TCoMap>(ctx, flatMap.Pos())
             .Input(read)
-            .Lambda(mainLambda.Cast())
+            .Lambda(NewLambdaFrom(ctx, pos, replaces, filter.Args().Ref(), optionalIf.Value()))
         .Done().Ptr();
     }
 
@@ -1348,7 +2000,7 @@ TExprBase KqpRewriteIndexRead(const TExprBase& node, TExprContext& ctx, const TK
         const auto indexName = indexRead.Index().Value();
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
         // TODO(mbkkt) instead of ensure should be warning and main table read?
-        YQL_ENSURE(indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree,
+        YQL_ENSURE(!TIndexDescription::IsVectorIndex(indexDesc->Type),
             "index read doesn't support vector index: " << indexName);
 
         return DoRewriteIndexRead(indexRead, ctx, tableDesc, implTable, {});
@@ -1369,7 +2021,7 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
     const auto indexName = streamLookupIndex.Index().Value();
     auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
     // TODO(mbkkt) instead of ensure should be warning and main table lookup?
-    YQL_ENSURE(indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree,
+    YQL_ENSURE(!TIndexDescription::IsVectorIndex(indexDesc->Type),
         "stream lookup doesn't support vector index: " << indexName);
 
     const bool isCovered = CheckIndexCovering(streamLookupIndex.Columns(), implTable);
@@ -3239,8 +3891,8 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             }
 
             auto checkVectorIndex = [&](const TIndexDescription& idx) -> TMaybe<TString> {
-                if (idx.Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                    return TStringBuilder() << "index '" << idx.Name << "' is not a vector kmeans-tree index";
+                if (!TIndexDescription::IsVectorIndex(idx.Type)) {
+                    return TStringBuilder() << "index '" << idx.Name << "' is not a distributed vector index";
                 }
                 return Nothing();
             };
@@ -3283,7 +3935,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                 const TIndexDescription* unboundPrefixedIndex = nullptr;
                 for (const auto& idx : tableDesc.Metadata->Indexes) {
                     if (idx.State == TIndexDescription::EIndexState::Ready
-                        && idx.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
+                        && TIndexDescription::IsVectorIndex(idx.Type)
                         && idx.KeyColumns.back() == b.ScoredColumn
                         && IsVectorIndexMetricCompatible(idx, knnMethodName, !b.IsSimilarity))
                     {
@@ -3914,6 +4566,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
 
     TKqpStreamLookupSettings lookupSettings;
     lookupSettings.Strategy = EStreamLookupStrategyType::LookupJoinRows;
+    lookupSettings.AllowNullKeysPrefixSize = pkColumns.size();
     const auto joined = Build<TKqlStreamLookupTable>(ctx, pos)
         .Table(mainTableMeta)
         .LookupKeys(TExprBase(lookupInput))
@@ -3998,7 +4651,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
 // The simplest way is to match TopSort or Take over TKqlReadTableIndex.
 // Additionally if there is TopSort or Take over filter, and filter depends only on columns available in index,
 // we also push copy of filter through TKqlLookupTable.
-TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
+TMaybeNode<TExprBase> KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
                                         const TKqpOptimizeContext& kqpCtx, const TParentsMap& parentsMap) {
     if (!node.Maybe<TCoTopBase>()) {
         return node;
@@ -4013,7 +4666,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, readTableIndex.Table().Path());
         const auto indexName = readTableIndex.Index().Value();
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
-        YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
+        YQL_ENSURE(TIndexDescription::IsVectorIndex(indexDesc->Type));
 
         auto reject = [&] (std::string_view because) {
             auto message = TStringBuilder{} << "Given predicate is not suitable for used index: "
@@ -4023,17 +4676,70 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             ctx.AddWarning(issue);
             return node;
         };
+        const bool hnsw = indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw;
+        auto rejectHnsw = [&](TString message) -> TMaybeNode<TExprBase> {
+            auto issue = TIssue(ctx.GetPosition(readTableIndex.Pos()), std::move(message));
+            SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST, issue);
+            ctx.AddError(issue);
+            return {};
+        };
+        auto extractTarget = [&](const TExprBase& args, const TExprBase& body) {
+            TNodeOnNodeOwnedMap replaces;
+            TExprNode::TPtr target;
+            LevelLambdaFrom(*indexDesc, ctx, readTableIndex.Pos(), replaces, args, body, target);
+            return target;
+        };
         auto lambdaArgs = topBase.KeySelectorLambda().Args();
         auto lambdaBody = topBase.KeySelectorLambda().Body();
         TString error;
-        bool canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase, error);
+        bool canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaArgs, lambdaBody, topBase, error);
         if (indexDesc->KeyColumns.size() > 1) {
             if (!canUseVectorIndex) {
                 return reject(TStringBuilder() << "sorting must contain distance: "
                     << error << ", reference distance from projection not supported yet");
             }
-            if (!maybeFlatMap.Lambda().Body().Maybe<TCoOptionalIf>()) {
+            const auto conditional = maybeFlatMap.Lambda().Body().Maybe<TCoOptionalIf>();
+            if (!conditional) {
                 return reject("only simple conditions supported for now");
+            }
+            if (hnsw) {
+                const auto& keys = indexDesc->KeyColumns;
+                const auto& filter = maybeFlatMap.Cast().Lambda();
+                if (!CheckRowMembers(conditional.Cast().Predicate().Ptr(), filter.Args().Arg(0).Raw(),
+                    [&](const TCoMember& member) {
+                        return std::find(keys.begin(), keys.end() - 1, member.Name().Value()) != keys.end() - 1;
+                    })) {
+                    return rejectHnsw("Prefixed HNSW search supports predicates on index prefix columns only");
+                }
+                const bool usesOriginalEmbedding = PreservesVectorSortColumn(maybeFlatMap, keys.back());
+                const auto operands = MatchHnswDistanceOperands(lambdaBody, lambdaArgs, keys.back());
+                TNodeOnNodeOwnedMap replaces;
+                TExprNode::TPtr target;
+                const auto levelLambda = LevelLambdaFrom(*indexDesc, ctx, readTableIndex.Pos(), replaces,
+                    lambdaArgs, lambdaBody, target);
+                const bool scalarTarget = target && !HasFreeArguments(target);
+                const bool canPushDown = usesOriginalEmbedding && scalarTarget && !operands.HasNullableGuard;
+                if (!canPushDown || IsFrozenHnsw(*indexDesc)) {
+                    const auto& posting = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable->Next->Name);
+                    const auto columns = GetPrefixedVectorReadColumns(readTableIndex, *indexDesc, filter, conditional.Cast(), ctx);
+                    if (!canPushDown || !CheckIndexCovering(columns, posting.Metadata)) {
+                        const auto& level = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable->Name);
+                        const auto& prefix = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable->Next->Next->Name);
+                        const bool coveredByIndex = canPushDown && AllOf(columns, [&](const TCoAtom& column) {
+                            return posting.Metadata->Columns.contains(column.StringValue())
+                                || prefix.Metadata->Columns.contains(column.StringValue());
+                        });
+                        return RewritePrefixedHnswWithStoredPrefix(readTableIndex, maybeFlatMap.Cast(), conditional.Cast(),
+                            topBase, usesOriginalEmbedding && scalarTarget ? target : nullptr, levelLambda,
+                            *indexDesc, tableDesc, level, posting, prefix, coveredByIndex, ctx, typesCtx, kqpCtx);
+                    }
+                }
+            }
+            if (!hnsw) {
+                const auto target = extractTarget(lambdaArgs, lambdaBody);
+                if (!target || HasFreeArguments(target)) {
+                    return reject("prefixed vector search requires a row-independent target vector");
+                }
             }
             if (kqpCtx.Config->GetEnableVectorSearchActor()) {
                 return DoRewriteTopSortOverPrefixedKMeansTreeToVectorSearch(readTableIndex, maybeFlatMap.Cast(), lambdaArgs, lambdaBody, topBase,
@@ -4047,7 +4753,11 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             if (!argument) {
                 return reject(TStringBuilder() << "sorting must contain distance: " << error);
             }
-            auto asStruct = maybeFlatMap.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
+            const auto body = maybeFlatMap.Lambda().Body();
+            auto asStruct = body.Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
+            if (!asStruct && indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw) {
+                asStruct = body.Maybe<TCoOptionalIf>().Value().Maybe<TCoAsStruct>();
+            }
             if (!asStruct) {
                 return reject("only simple projection with distance referenced in sorting supported for now");
             }
@@ -4075,17 +4785,38 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
                     continue;
                 }
                 lambdaBody = TExprBase{argChildren[1]};
-                canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase, error);
+                lambdaArgs = maybeFlatMap.Cast().Lambda().Args();
+                canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaArgs, lambdaBody, topBase, error);
                 break;
             }
             if (!canUseVectorIndex) {
                 return reject(TStringBuilder() << "projection or sorting must contain distance: " << error);
             }
-            lambdaArgs = maybeFlatMap.Cast().Lambda().Args();
         }
-        if (kqpCtx.Config->GetEnableVectorSearchActor()) {
+        const bool changesCardinality = maybeFlatMap && !maybeFlatMap.Cast().Lambda().Body().Maybe<TCoJust>();
+        const auto* posting = hnsw ? &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable->Next->Name) : nullptr;
+        const auto target = extractTarget(lambdaArgs, lambdaBody);
+        if (!hnsw && (!target || HasFreeArguments(target))) {
+            return reject("vector search requires a row-independent target vector");
+        }
+        const bool usesOriginalEmbedding = lambdaArgs.Raw() != topBase.KeySelectorLambda().Args().Raw()
+            || PreservesVectorSortColumn(maybeFlatMap, indexDesc->KeyColumns.back());
+        const bool hasNullableGuard = hnsw && MatchHnswDistanceOperands(
+            lambdaBody, lambdaArgs, indexDesc->KeyColumns.back()).HasNullableGuard;
+        if (hnsw && (changesCardinality || !usesOriginalEmbedding || !target || HasFreeArguments(target) || hasNullableGuard
+                || (IsFrozenHnsw(*indexDesc) && !CheckIndexCovering(readTableIndex.Columns(), posting->Metadata)))) {
+            if (!readTableIndex.FullScan()) {
+                return rejectHnsw("Exact HNSW search requires a full index scan");
+            }
+            return RewriteFilteredHnswScan(readTableIndex, maybeFlatMap, target, usesOriginalEmbedding, topBase, ctx,
+                tableDesc, *posting, *indexDesc);
+        }
+        // Unprefixed HNSW uses the actor's all-partition search;
+        // the legacy lookup chain only implements k-means cluster traversal.
+        if (kqpCtx.Config->GetEnableVectorSearchActor()
+                || indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw) {
             return DoRewriteTopSortOverKMeansTreeToVectorSearch(readTableIndex, maybeFlatMap, lambdaArgs, lambdaBody, topBase,
-                                                                ctx, *indexDesc);
+                                                                ctx, kqpCtx, *indexDesc);
         }
         return DoRewriteTopSortOverKMeansTree(readTableIndex, maybeFlatMap, lambdaArgs, lambdaBody, topBase,
                                               ctx, kqpCtx, tableDesc, *indexDesc, *implTable);
@@ -4169,7 +4900,7 @@ TExprBase KqpRewriteFlatMapOverIndexRead(const TExprBase& node, TExprContext& ct
     const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
     const auto indexName = read.Index().Value();
     auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
-    if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+    if (TIndexDescription::IsVectorIndex(indexDesc->Type)) {
         // TODO(mbkkt) some warning?
         return node;
     }
@@ -4244,7 +4975,7 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
     const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, readTableIndex.Table().Path());
     const auto indexName = readTableIndex.Index().Value();
     auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
-    if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+    if (TIndexDescription::IsVectorIndex(indexDesc->Type)) {
         // TODO(mbkkt) some warning?
         return node;
     }

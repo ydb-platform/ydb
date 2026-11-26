@@ -5,15 +5,16 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/grpc/server
     ydb/core/base
     ydb/core/grpc_services
+    ydb/core/grpc_services/base
     ydb/core/grpc_streaming
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
+    ydb/library/actors/core
+    ydb/library/grpc/server
     ydb/public/api/grpc
-    ydb/public/api/grpc/draft
-    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/client/resources
 )
 
 END()

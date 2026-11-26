@@ -53,7 +53,7 @@ EExecutionStatus TStoreWriteUnit::Execute(TOperation::TPtr op,
         Pipeline.RegisterDistributedWrites(op, txc.DB);
     }
 
-    Pipeline.ProposeTx(op, writeOp->GetTxBody(), txc, ctx);
+    Pipeline.ProposeTx(*writeOp, txc, ctx);
 
     if (!op->HasVolatilePrepareFlag()) {
         writeOp->ClearTxBody();

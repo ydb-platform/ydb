@@ -26,6 +26,7 @@ public:
     // virtual void UnpackApply(const TPackResult& packed, std::function<void(const char*)>);
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
     virtual void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) = 0;
+    virtual const TVector<ui32>& GetInnerColumns(ui32 inputColumn) const = 0;
 };
 
 IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(

@@ -25,15 +25,23 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/getopt
-    library/cpp/svnversion
-    ydb/library/persqueue/tests
+    contrib/libs/grpc
+    library/cpp/json
+    library/cpp/logger
+    ydb/core/mon
+    ydb/core/persqueue/public/cluster_tracker
+    ydb/core/tablet
     ydb/core/testlib/default
+    ydb/library/persqueue/tests
+    ydb/library/persqueue/topic_parser
     ydb/public/api/grpc
-    ydb/public/sdk/cpp/src/client/resources
+    ydb/public/api/grpc/draft
+    ydb/public/api/protos
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
+    ydb/public/sdk/cpp/src/client/resources
     ydb/public/sdk/cpp/src/client/table
-    ydb/services/persqueue_v1
+    ydb/public/sdk/cpp/src/library/persqueue/obfuscate
+    ydb/services/persqueue_v1/actors
 )
 
 YQL_LAST_ABI_VERSION()

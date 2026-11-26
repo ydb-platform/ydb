@@ -2,7 +2,7 @@
 
 #include "fwd.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
+#include <ydb/library/yql/dq/actors/common/dq_schedulable.h>
 
 namespace NKikimr::NKqp::NScheduler {
 

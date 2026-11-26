@@ -38,6 +38,7 @@ SRCS(main.cpp)
 # the tool must not depend on the machinery it implements.
 RUN_PROGRAM(
     library/python/runtime_py3/stage0pycc
+    --ya-start-command-file
         mod=${PYRES_ENCODINGS}/__init__.py ${ARCADIA_ROOT}/${PYRES_ENCODINGS}/__init__.py encodings.pyc
         mod=${PYRES_ENCODINGS}/aliases.py ${ARCADIA_ROOT}/${PYRES_ENCODINGS}/aliases.py encodings.aliases.pyc
         mod=${PYRES_ENCODINGS}/ascii.py ${ARCADIA_ROOT}/${PYRES_ENCODINGS}/ascii.py encodings.ascii.pyc
@@ -160,6 +161,7 @@ RUN_PROGRAM(
         mod=${PYRES_ENCODINGS}/utf_8_sig.py ${ARCADIA_ROOT}/${PYRES_ENCODINGS}/utf_8_sig.py encodings.utf_8_sig.pyc
         mod=${PYRES_ENCODINGS}/uu_codec.py ${ARCADIA_ROOT}/${PYRES_ENCODINGS}/uu_codec.py encodings.uu_codec.pyc
         mod=${PYRES_ENCODINGS}/zlib_codec.py ${ARCADIA_ROOT}/${PYRES_ENCODINGS}/zlib_codec.py encodings.zlib_codec.pyc
+    --ya-end-command-file
     IN
         ${ARCADIA_ROOT}/${PYRES_ENCODINGS}/__init__.py
         ${ARCADIA_ROOT}/${PYRES_ENCODINGS}/aliases.py

@@ -6,7 +6,7 @@
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/keys.h>
 #include <ydb/core/sys_view/common/registry.h>
-#include <ydb/core/sys_view/common/scan_actor_base_impl.h>
+#include <ydb/core/sys_view/scan/scan_actor_base_impl.h>
 #include <ydb/core/sys_view/service/query_history.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 

@@ -95,7 +95,6 @@ class TBufferedYsonWriter
 public:
     static constexpr int DefaultIndent = 4;
 
-    //! Initializes an instance.
     /*!
      *  \param stream A stream for writing the YSON data to.
      *  \param format A format used for encoding the data.
@@ -111,7 +110,6 @@ public:
 
     ~TBufferedYsonWriter() override;
 
-    // IYsonConsumer overrides.
     void OnStringScalar(TStringBuf value) override;
     void OnInt64Scalar(i64 value) override;
     void OnUint64Scalar(ui64 value) override;

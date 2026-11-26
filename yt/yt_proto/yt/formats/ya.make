@@ -16,4 +16,10 @@ SRCS(
     yamr.proto
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    "library/.*/(n)?yt"
+    library/cpp/dolbilo/proto_yt
+)
+
 END()

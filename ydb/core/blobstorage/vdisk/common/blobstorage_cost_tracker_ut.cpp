@@ -4,10 +4,59 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr {
+namespace {
+
+struct TTestClock final : ITimeProvider {
+    TInstant Time;
+
+    TInstant Now() override {
+        return Time;
+    }
+};
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TBlobStorageCostTrackerTest) {
+    Y_UNIT_TEST(PublishesBurstDurationsAcrossIdlePolls) {
+        const TIntrusivePtr<TTestClock> clock = MakeIntrusive<TTestClock>();
+        clock->Time = TInstant::Seconds(10);
+        TCostMetricsParameters parameters;
+        parameters.TimeProvider = clock;
+        const TIntrusivePtr<NMonitoring::TDynamicCounters> counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TBsCostTracker tracker(TBlobStorageGroupType::ErasureNone, NPDisk::DEVICE_TYPE_ROT, counters, parameters);
+        const TIntrusivePtr<NMonitoring::TDynamicCounters> group = counters->FindSubgroup("subsystem", "advancedCost");
+        const NMonitoring::TDynamicCounters::TCounterPtr green = group->FindCounter("BurstDetector_greenMs");
+        const NMonitoring::TDynamicCounters::TCounterPtr red = group->FindCounter("BurstDetector_redMs");
+        UNIT_ASSERT(green && green->ForDerivative());
+        UNIT_ASSERT(red && red->ForDerivative());
+        UNIT_ASSERT(!group->FindCounter("BurstDetector_state"));
+        UNIT_ASSERT(!group->FindCounter("BurstDetector_count"));
+
+        tracker.UpdatePDiskParameters(2, 4);
+        tracker.CountRequest(350'000'000); // 200 ms maximum debt at a refill rate of 500 ms/s
+        clock->Time = TInstant::Seconds(12);
+        tracker.PublishBurstCounters();
+        UNIT_ASSERT_VALUES_EQUAL(green->Val(), 1600);
+        UNIT_ASSERT_VALUES_EQUAL(red->Val(), 400);
+
+        clock->Time = TInstant::Seconds(13);
+        tracker.PublishBurstCounters();
+        tracker.PublishBurstCounters();
+        UNIT_ASSERT_VALUES_EQUAL(green->Val(), 2600);
+        UNIT_ASSERT_VALUES_EQUAL(red->Val(), 400);
+
+        parameters.BurstThresholdNs = 25'000'000;
+        tracker.CountRequest(10'000'000'000);
+        clock->Time = TInstant::Seconds(14);
+        tracker.PublishBurstCounters();
+        // The first charge under the new capacity can create only 50 ms of debt.
+        UNIT_ASSERT_VALUES_EQUAL(green->Val(), 3500);
+        UNIT_ASSERT_VALUES_EQUAL(red->Val(), 500);
+    }
+
     Y_UNIT_TEST(ContextRegistersOnlyAdvancedCost) {
         auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);

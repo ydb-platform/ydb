@@ -22,6 +22,7 @@
 #include "data_sharing/source/events/control.h"
 #include "data_sharing/source/events/transfer.h"
 #include "engines/reader/transaction/scan_gate.h"
+#include "loading/deferred_portion_loader.h"
 #include "local_db_backup/events.h"
 #include "maintenance/cut_history/find_empty_history_intervals.h"
 #include "normalizer/abstract/abstract.h"
@@ -199,6 +200,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;
     friend class TTxInit;
+    friend class TTxLoadPortionsBatch;
     friend class TTxCleanupSchemasWithnoData;
     friend class TTxInitSchema;
     friend class TTxUpdateSchema;
@@ -314,7 +316,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPrefetchPortionsMetadata::TPtr& ev);
-    void Handle(TEvPrivate::TEvSetLoadedKeyRanges::TPtr& ev);
 
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
@@ -392,6 +393,11 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void CleanupActors(const TActorContext& ctx);
     void BecomeBroken(const TActorContext& ctx);
     void TrySwitchToWork(const TActorContext& ctx);
+
+    void StartDeferredPortionLoading(const TActorContext& ctx);
+    void ContinueDeferredPortionLoading(const TActorContext& ctx);
+    void OnPortionsBatchLoaded(TDeferredPortionLoader::TBatch&& batch, const TActorContext& ctx);
+    void OnAllPortionsLoaded(const TActorContext& ctx);
 
     bool IsAnyChannelYellowStop() const {
         return Executor()->GetStats().IsAnyChannelYellowStop;
@@ -491,6 +497,7 @@ private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     std::shared_ptr<NOlap::NBackground::TSessionsManager> BackgroundSessionsManager;
     std::shared_ptr<NOlap::NDataLocks::TManager> DataLocksManager;
+    std::shared_ptr<TShardDataStats> DataStats;
 
     ui64 PrioritizationClientId = 0;
 
@@ -547,8 +554,10 @@ private:
     THashMap<ui64, TInstant> ScanTxInFlight;
     NOlap::NReader::TScanGate ScanGate;
     std::optional<TWriteGate> WriteGate;
+    TDeferredPortionLoader DeferredPortionLoader;
     TBackgroundController BackgroundController;
     std::unique_ptr<TFindEmptyHistoryIntervals> FindEmptyHistoryIntervals;
+    std::optional<ui32> FirstGCBarrierGeneration;
     TSettings Settings;
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
@@ -573,7 +582,7 @@ private:
 
     std::optional<TForcedCompactionWaiter> ForcedCompactionWaiter;
     // the forced compaction served (TEvCompactTable::TxId): the same id again is a retry, another one a new forced
-    // compaction
+    // compaction; nullopt also for an operation started without an id
     std::optional<ui64> ForcedCompactionTxId;
     bool ForcedCompactionActualizeSchema = false;   // its Cascade: the reply also waits for the rewrite
     void FinishForcedCompactionActualization();
@@ -649,12 +658,6 @@ private:
     void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);
     void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);
 
-    // We assume that all the blob storage groups for a database have the same layout (erasure, etc.)
-    std::optional<NKikimr::TBlobStorageGroupType> BlobStorageLayout;
-    const std::optional<NKikimr::TBlobStorageGroupType>& GetBlobStorageLayout();
-
-    ui64 NormalizeSmallBlobsCount(const ui64 rawCount);
-
 public:
     ui64 TabletTxCounter = 0;
 
@@ -667,6 +670,7 @@ public:
     }
 
     void OnFirstGC(ui32 completedBarrierGeneration, const TActorContext& ctx);
+    void TryStartFindEmptyHistoryIntervals(const TActorContext& ctx);
 
     void EnqueueProgressTx(const TActorContext& ctx, const ui64 continueTxId = 0);
 

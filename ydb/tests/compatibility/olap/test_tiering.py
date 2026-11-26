@@ -6,6 +6,7 @@ import uuid
 import boto3
 import pytest
 
+from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -16,11 +17,14 @@ class TieringTestBase(RestartToAnotherVersionFixture):
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self, tree):
-        if (tree or self.requires_prefix_alter) and min(self.versions) < (26, 4):
+        yield from self.setup_tiering_cluster(enable_tree=tree or self.requires_prefix_alter)
+
+    def setup_tiering_cluster(self, enable_tree, **cluster_options):
+        if enable_tree and min(self.versions) < (26, 4):
             pytest.skip("Tiering object key tree is only available since 26-4")
 
         flags = ["enable_tiering_in_column_shard", "enable_external_data_sources"]
-        if tree or self.requires_prefix_alter:
+        if enable_tree:
             flags.append("enable_tiering_object_key_tree")
         disabled_flags = ["enable_real_system_view_paths"] if self.versions[0] > self.versions[1] else []
         yield from self.setup_cluster(
@@ -42,6 +46,7 @@ class TieringTestBase(RestartToAnotherVersionFixture):
                 "TX_COLUMNSHARD_BLOBS_TIER": LogLevels.DEBUG,
             },
             query_service_config={"available_external_data_sources": ["ObjectStorage"]},
+            **cluster_options,
         )
 
     def query(self, sql):
@@ -90,6 +95,27 @@ class TieringTestBase(RestartToAnotherVersionFixture):
 
     def tier_target(self, prefix):
         return f"`{self.database_path}/tier`" + (f".`{prefix}`" if prefix is not None else "")
+
+    def alter_prefix(self, prefix):
+        self.query(f"""
+            ALTER TABLE tiered SET TTL Interval("PT1S")
+            TO EXTERNAL DATA SOURCE {self.tier_target(prefix)} ON ts;
+        """)
+
+    def set_tiering_actualization(self, enabled):
+        self.query(f"""
+            ALTER OBJECT `{self.database_path}/tiered` (TYPE TABLE) SET (
+                ACTION=UPSERT_OPTIONS, TIERING_NEED_ACTUALIZATION=`{str(enabled).lower()}`
+            );
+        """)
+
+    def wait_migrated(self, bucket, prefix):
+        def all_objects_migrated():
+            keys = [obj.key for obj in bucket.objects.all()]
+            return keys and all(key.startswith(prefix + "/") for key in keys)
+
+        self.wait_for(all_objects_migrated, f"Tier objects did not migrate to {prefix}/")
+        self.check_keys(self.active_keys(bucket), prefix)
 
     def write_rows(self, offset=0, count=10000):
         columns = ydb.BulkUpsertColumns()
@@ -199,10 +225,7 @@ class TestTieringPrefixAlter(TieringTestBase):
         self.check_keys(preserved_keys, prefix)
 
         for prefix in ("archive/new", "", None, "archive/last"):
-            self.query(f"""
-                ALTER TABLE tiered SET TTL Interval("PT1S")
-                TO EXTERNAL DATA SOURCE {self.tier_target(prefix)} ON ts;
-            """)
+            self.alter_prefix(prefix)
             if prefix == "archive/new":
                 self.change_cluster_version()
                 self.check_rows(rows)
@@ -241,3 +264,72 @@ class TestTieringPrefixAlter(TieringTestBase):
                       "Expired rows from historical prefixes were not deleted")
         self.wait_for(lambda: not list(bucket.objects.all()),
                       "Objects from historical prefixes were not collected after TTL deletion")
+
+
+class TestTieringPrefixActualization(TieringTestBase):
+    @pytest.fixture(autouse=True)
+    def setup(self, base_setup):
+        yield from self.setup_tiering_cluster(enable_tree=True, nodes=3, erasure=Erasure.NONE)
+
+    def test_prefix_actualization_survives_restart(self):
+        bucket = self.create_table("archive/original")
+        rows = self.write_rows()
+        self.wait_evicted(len(rows))
+        self.check_keys(self.active_keys(bucket), "archive/original")
+
+        self.set_tiering_actualization(True)
+        self.change_cluster_version()
+        self.alter_prefix("archive/migrated")
+        self.wait_migrated(bucket, "archive/migrated")
+        self.check_rows(rows)
+
+        self.set_tiering_actualization(False)
+        preserved_keys = self.active_keys(bucket)
+        self.change_cluster_version()
+        self.alter_prefix("archive/last")
+        rows += self.write_rows(offset=len(rows))
+        self.wait_evicted(len(rows))
+        keys = self.active_keys(bucket)
+        assert preserved_keys <= keys, preserved_keys - keys
+        self.check_keys(keys - preserved_keys, "archive/last")
+        self.check_rows(rows)
+
+
+class TestTieringActualizationLegacy(TieringTestBase):
+    @pytest.fixture(autouse=True)
+    def setup(self, base_setup):
+        if not min(self.versions) < (26, 4) <= max(self.versions):
+            pytest.skip("Requires a version on each side of tiering prefix support")
+        yield from self.setup_tiering_cluster(enable_tree=False, nodes=3, erasure=Erasure.NONE)
+
+    def test_prefix_actualization_with_legacy_flat_tier(self):
+        bucket = self.create_table(None)
+        rows = self.write_rows()
+        self.wait_evicted(len(rows))
+        flat_keys = self.active_keys(bucket)
+        self.check_keys(flat_keys, None)
+
+        if self.versions[0] >= (26, 4):
+            self.set_tiering_actualization(True)
+            self.change_cluster_version()
+            self.check_rows(rows)
+            rows += self.write_rows(offset=len(rows))
+            self.wait_evicted(len(rows))
+            self.check_keys(self.active_keys(bucket) - flat_keys, None)
+
+        # Only the upgraded binary can admit a TTL with an explicit prefix.
+        self.config.yaml_config["feature_flags"]["enable_tiering_object_key_tree"] = True
+        self.change_cluster_version()
+        self.check_rows(rows)
+        self.alter_prefix("archive/migrated")
+        if self.versions[0] < (26, 4):
+            # The legacy schema has no opt-in. New evictions use the prefix immediately.
+            rows += self.write_rows(offset=len(rows))
+            self.wait_evicted(len(rows))
+            keys = self.active_keys(bucket)
+            assert flat_keys <= keys, flat_keys - keys
+            self.check_keys(keys - flat_keys, "archive/migrated")
+            self.set_tiering_actualization(True)
+
+        self.wait_migrated(bucket, "archive/migrated")
+        self.check_rows(rows)

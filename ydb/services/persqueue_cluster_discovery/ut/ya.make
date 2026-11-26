@@ -9,10 +9,14 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/http
+    ydb/core/base
+    ydb/core/kqp/common
+    ydb/core/mind/address_classification
+    ydb/core/persqueue/public/cluster_tracker
     ydb/core/testlib/default
+    ydb/library/actors/http
     ydb/public/api/grpc
-    ydb/services/persqueue_cluster_discovery
+    ydb/public/api/grpc/draft
 )
 
 YQL_LAST_ABI_VERSION()

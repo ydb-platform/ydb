@@ -36,4 +36,12 @@ IF (NOT CATBOOST_OPENSOURCE)
     )
 ENDIF()
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    contrib/deprecated/python/mypy/tests/arcadia
+    contrib/deprecated/python/mypy/tests/mypy
+    contrib/deprecated/python/mypy/tests/typeshed
+    "contrib/python/.*/(_?)test(s?)"
+)
+
 END()

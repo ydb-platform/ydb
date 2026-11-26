@@ -11,5 +11,5 @@
 Ресурсы используют:
 
 - `ya tool bun` — через `formula` в `build/tools/tools/bun.tool.json`;
-- сборки с `TS_USE_BUN()` — через корневой [ya.make](ya.make);
+- сборщик nots и его пользовательские скрипты — через корневой [ya.make](ya.make);
 - `nots/cli` — через `ya tool bun`.

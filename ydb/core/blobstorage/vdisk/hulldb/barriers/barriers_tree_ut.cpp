@@ -1,7 +1,7 @@
 #include "barriers_tree.h"
 #include "barriers_essence.h"
 #include <util/random/fast.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <util/stream/null.h>
 
@@ -63,7 +63,7 @@ namespace NKikimr {
             TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure4Plus2Block, 1, 4);
             TVDiskID vdisk0(0, 1, 0, 0 /*domain*/, 0 /*vdisk*/);
             TIngressCachePtr cache0 = TIngressCache::Create(info.PickTopology(), vdisk0);
-            NBarriers::TTree tree(cache0, VDiskLogPrefix);
+            NBarriers::TTree tree(cache0, VDiskLogPrefix, true);
             TWriter writer;
             TMaybe<NBarriers::TCurrentBarrier> soft;
             TMaybe<NBarriers::TCurrentBarrier> hard;
@@ -83,7 +83,7 @@ namespace NKikimr {
 
         Y_UNIT_TEST(MemViewSnapshots) {
             TWriter writer;
-            NBarriers::TMemView memView(writer.GetCache0(), VDiskLogPrefix, true);
+            NBarriers::TMemView memView(writer.GetCache0(), VDiskLogPrefix, true, true);
             TMaybe<NBarriers::TCurrentBarrier> soft;
             TMaybe<NBarriers::TCurrentBarrier> hard;
 
@@ -112,9 +112,9 @@ namespace NKikimr {
             UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead());
         }
 
-        Y_UNIT_TEST(CompleteTabletDeletionDropsBarriersKeepsBlobsUnneeded) {
+        Y_UNIT_TEST_TWIN(CompleteTabletDeletion, dropBarriers) {
             TWriter writer;
-            NBarriers::TMemView memView(writer.GetCache0(), VDiskLogPrefix, true);
+            NBarriers::TMemView memView(writer.GetCache0(), VDiskLogPrefix, true, dropBarriers);
             TMaybe<NBarriers::TCurrentBarrier> soft;
             TMaybe<NBarriers::TCurrentBarrier> hard;
 
@@ -145,15 +145,18 @@ namespace NKikimr {
 
             NBarriers::TMemViewSnap snap = memView.GetSnapshot();
             UNIT_ASSERT(snap.IsTabletDeleted(tabletId));
-            // the barrier records are gone, and no barrier is made up in their place
             snap.GetBarrier(tabletId, channel, soft, hard);
-            UNIT_ASSERT(soft.Empty() && hard.Empty());
+            UNIT_ASSERT(hard.Empty());
+            if (dropBarriers) {
+                UNIT_ASSERT(soft.Empty());
+            } else {
+                UNIT_ASSERT(soft && *soft == NBarriers::TCurrentBarrier(15, 2, 14, 200));
+            }
             snap.GetBarrier(tabletId, 0, soft, hard);
             UNIT_ASSERT(soft.Empty() && hard.Empty());
 
-            // ...yet nothing of this tablet is kept, on any channel, barriers included
             NGcOpt::TBarriersEssence essence(snap, writer.GetGType());
-            UNIT_ASSERT(!essence.Keep(currentSoft, barrierMemRec, {}, false, true).KeepIndex);
+            UNIT_ASSERT_VALUES_EQUAL(essence.Keep(currentSoft, barrierMemRec, {}, false, true).KeepIndex, !dropBarriers);
             UNIT_ASSERT(!essence.Keep(oldSoft, barrierMemRec, {}, false, true).KeepIndex);
             UNIT_ASSERT(!essence.Keep(blobBelow, blobMemRec, {}, false, true).KeepIndex);
             UNIT_ASSERT(!essence.Keep(blobAbove, blobMemRec, {}, false, true).KeepIndex);
@@ -167,7 +170,7 @@ namespace NKikimr {
 
         Y_UNIT_TEST(MarkTabletsDeletedBulk) {
             TWriter writer;
-            NBarriers::TMemView memView(writer.GetCache0(), VDiskLogPrefix, true);
+            NBarriers::TMemView memView(writer.GetCache0(), VDiskLogPrefix, true, true);
             TMaybe<NBarriers::TCurrentBarrier> soft;
             TMaybe<NBarriers::TCurrentBarrier> hard;
 
@@ -210,7 +213,7 @@ namespace NKikimr {
 
         Y_UNIT_TEST(MarkTabletDeletedIgnoresLaterBarriers) {
             TWriter writer;
-            NBarriers::TTree tree(writer.GetCache0(), VDiskLogPrefix);
+            NBarriers::TTree tree(writer.GetCache0(), VDiskLogPrefix, true);
             TMaybe<NBarriers::TCurrentBarrier> soft;
             TMaybe<NBarriers::TCurrentBarrier> hard;
 

@@ -119,6 +119,10 @@ namespace NKikimr::NStorage {
         });
     }
 
+    bool TDistributedConfigKeeper::IsCurrentStateStorageSelfHealActor(TActorId actorId) const {
+        return StateStorageSelfHealActor == actorId && TlsActivationContext->Mailbox.FindActor(actorId.LocalId());
+    }
+
     void TInvokeRequestHandlerActor::SelfHealNodesStateUpdate(const TQuery::TSelfHealNodesStateUpdate& cmd) {
         RunCommonChecks();
         // A regular Sentinel push also satisfies the current root's refresh.
@@ -357,7 +361,7 @@ namespace NKikimr::NStorage {
                 {"targetConfig", targetConfig});
             auto *op = std::get_if<TInvokeExternalOperation>(&Query);
             Y_ABORT_UNLESS(op);
-            Self->StateStorageSelfHealActor = Register(new TStateStorageReassignNodeSelfhealActor(op->Sender, op->Cookie
+            Self->StateStorageSelfHealActor = RegisterWithSameMailbox(new TStateStorageReassignNodeSelfhealActor(op->Sender, op->Cookie
                 , TDuration::Seconds(waitForConfigStep), nodesToReplace.begin()->first, std::get<2>(nodesToReplace.begin()->second)
                 , needReconfigSS == ReconfigType::ONE_NODE, needReconfigSSB == ReconfigType::ONE_NODE, needReconfigSB == ReconfigType::ONE_NODE));
             Finish(TResult::OK, std::nullopt);
@@ -423,7 +427,7 @@ namespace NKikimr::NStorage {
 
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
-        Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(op->Sender, op->Cookie,
+        Self->StateStorageSelfHealActor = RegisterWithSameMailbox(new TStateStorageSelfhealActor(op->Sender, op->Cookie,
             TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), prepareCurrentConfig));
         Finish(TResult::OK, std::nullopt);
     }

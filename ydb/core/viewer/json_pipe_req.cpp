@@ -104,6 +104,11 @@ void IViewer::DeleteOldSharedCacheData() {
     SharedCacheState->ClearOld();
 }
 
+std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse> IViewer::GetCachedStoragePools(bool& needUpdate) {
+    TDuration age;
+    return SharedCacheState->StoragePools.GetFromCache(age, needUpdate);
+}
+
 void IViewer::UpdateSharedCacheData(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse> ev) {
     std::visit(TOverloaded{
         [&](const std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse>& r) { SharedCacheState->StorageGroups.UpdateCache(r); },

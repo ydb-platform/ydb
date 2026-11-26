@@ -18,19 +18,24 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/getopt
-    library/cpp/svnversion
-    ydb/core/security/certificate_check/test_utils
+    library/cpp/digest/md5
+    library/cpp/json
     ydb/core/persqueue/ut/common
+    ydb/core/security/certificate_check/test_utils
     ydb/core/testlib/default
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/public/sdk/cpp/src/library/kafka
-    ydb/public/sdk/cpp/src/library/grpc/client
-    ydb/public/sdk/cpp/src/client/topic
-    ydb/services/datastreams
-
+    ydb/public/api/grpc/draft
+    ydb/public/sdk/cpp/src/client/datastreams
+    ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
+    ydb/public/sdk/cpp/src/client/types
+    ydb/public/sdk/cpp/src/library/kafka
+    ydb/services/lib/sharding
+    ydb/services/ydb
 )
 
 YQL_LAST_ABI_VERSION()

@@ -1,5 +1,7 @@
 #include "syncer.h"
 #include "syncer_impl.h"
+#include <ydb/core/base/counters.h>
+#include <ydb/core/blobstorage/bridge/keep_check.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/util/stlog.h>
 
@@ -21,6 +23,8 @@ namespace NKikimr::NGroupSyncer {
     }
 
     void TSyncerActor::Bootstrap() {
+        PayloadBytesWritten = GetServiceCounters(AppData()->Counters, "bridge|nodewarden")
+            ->GetSubgroup("mode", Reconcile ? "reconcile" : "sync")->GetCounter("SyncPayloadBytesWritten", true);
         LogId = TStringBuilder() << SelfId() << Info->GroupID << '{' << SourceGroupId << "->" << TargetGroupId << '}';
 
         const auto& state = Info->Group->GetBridgeGroupState();
@@ -221,6 +225,8 @@ namespace NKikimr::NGroupSyncer {
             if (missingData) {
                 CountToCopy(blobId);
                 CountedToCopy.insert(blobId);
+            } else {
+                ++UnverifiedTargetBlobs;
             }
             if (sourceItem->Keep || sourceItem->DoNotKeep) {
                 SourceBlobFlags.emplace(blobId, TSourceBlobFlags{sourceItem->Keep, sourceItem->DoNotKeep});
@@ -340,9 +346,6 @@ namespace NKikimr::NGroupSyncer {
         MERGE(Blobs)
 #undef MERGE
 
-        if (ScansBlobs()) {
-            SyncerDataStats->ScanFinished = true;
-        }
         finish();
         Finished = true;
         CheckIfDone();
@@ -402,6 +405,9 @@ namespace NKikimr::NGroupSyncer {
     void TSyncerActor::CheckIfDone() {
         ProcessRestoreQueue();
 
+        if (Finished && ScansBlobs() && !UnverifiedTargetBlobs && !SyncerDataStats->ScanFinished.load(std::memory_order_relaxed)) {
+            SyncerDataStats->ScanFinished = true;
+        }
         if (Finished && !QueriesInFlight) {
             Y_VERIFY_S(Payloads.empty() && RestoreQueue.empty() && AbsenceQueue.empty(), " Payloads.size# "
                 << Payloads.size() << " RestoreQueue.size# " << RestoreQueue.size()
@@ -520,8 +526,29 @@ namespace NKikimr::NGroupSyncer {
             QuotaQueue.emplace_back(std::move(handle), quoterBytes);
             ProcessQuotaQueue();
         } else {
-            TActivationContext::Send(handle.release());
+            DispatchQuery(std::move(handle));
         }
+    }
+
+    void TSyncerActor::DispatchQuery(std::unique_ptr<IEventHandle> handle) {
+        TVector<TLogoBlobID> kept;
+        if (handle->GetTypeRewrite() == TEvBlobStorage::EvPut) {
+            const auto& put = *handle->Get<TEvBlobStorage::TEvPut>();
+            if (put.IssueKeepFlag) {
+                kept.push_back(put.Id);
+            }
+        } else if (handle->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbage) {
+            const auto& gc = *handle->Get<TEvBlobStorage::TEvCollectGarbage>();
+            if (gc.Keep) {
+                kept = *gc.Keep;
+            }
+        }
+        if (!kept.empty()) {
+            const auto& state = Info->Group->GetBridgeGroupState();
+            handle->Sender = Register(NBridge::CreateKeepCheckActor(SelfId(), {*NBridge::FindGroupPileByGroupId(state, SourceGroupId)},
+                *NBridge::FindGroupPileByGroupId(state, TargetGroupId), std::move(kept), /*waitForCheck=*/true));
+        }
+        TActivationContext::Send(handle.release());
     }
 
     void TSyncerActor::ProcessQuotaQueue() {
@@ -535,7 +562,7 @@ namespace NKikimr::NGroupSyncer {
                 WaitingForQuota = true;
                 Schedule(timeout, new TEvents::TEvWakeup);
             } else {
-                TActivationContext::Send(handle.release());
+                DispatchQuery(std::move(handle));
                 QuotaQueue.pop_front();
             }
         }
@@ -545,7 +572,7 @@ namespace NKikimr::NGroupSyncer {
         Y_ABORT_UNLESS(WaitingForQuota && !QuotaQueue.empty());
         WaitingForQuota = false;
         auto& [handle, quoterBytes] = QuotaQueue.front();
-        TActivationContext::Send(handle.release());
+        DispatchQuery(std::move(handle));
         QuotaQueue.pop_front();
         ProcessQuotaQueue();
     }
@@ -575,6 +602,7 @@ namespace NKikimr::NGroupSyncer {
         const bool success = status == NKikimrProto::OK;
         OnQueryFinished(ev->Cookie, success);
         if (success) {
+            *PayloadBytesWritten += msg.Id.BlobSize();
             SyncerDataStats->BytesDone += msg.Id.BlobSize();
             ++SyncerDataStats->BlobsDone;
             CountCopied(msg.Id);
@@ -642,10 +670,16 @@ namespace NKikimr::NGroupSyncer {
         } else if (msg.GroupId == TargetGroupId.GetRawId()) { // it was an index query for checking target blob
             std::unique_ptr<TVector<TLogoBlobID>> keep;
             for (size_t i = 0; i < msg.ResponseSz; ++i) {
-                if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
+                const auto& r = msg.Responses[i];
+                const bool counted = CountedToCopy.erase(r.Id);
+                if (!counted && (r.Status == NKikimrProto::OK || r.Status == NKikimrProto::NODATA)) {
+                    Y_DEBUG_ABORT_UNLESS(UnverifiedTargetBlobs);
+                    --UnverifiedTargetBlobs;
+                }
+                if (r.Status == NKikimrProto::OK) {
                     // blob exists and okay; its redundancy has been restored; its keep flag was synced earlier, unless
                     // the blob has been written since then without it, as the bridge proxy restoring it may do
-                    if (CountedToCopy.erase(r.Id)) {
+                    if (counted) {
                         CountCopied(r.Id); // it has been written since the scan
                     }
                     const auto sourceFlags = TakeSourceBlobFlags(r.Id);
@@ -659,7 +693,7 @@ namespace NKikimr::NGroupSyncer {
                     ++SyncerDataStats->BlobsDone;
                 } else if (r.Status == NKikimrProto::NODATA) {
                     // we have to query this blob and do full rewrite -- there was no data for it
-                    if (!CountedToCopy.erase(r.Id)) {
+                    if (!counted) {
                         CountToCopy(r.Id); // the target has a record of the blob, but its data can't be read
                     }
                     // the rate limits traffic between piles, and the read brings about one copy of the blob data across
@@ -667,7 +701,6 @@ namespace NKikimr::NGroupSyncer {
                         NKikimrBlobStorage::AsyncRead), {}, r.Id.BlobSize());
                 } else if (r.Status == NKikimrProto::ERROR) {
                     SourceBlobFlags.erase(r.Id);
-                    CountedToCopy.erase(r.Id);
                     SyncerDataStats->BytesError += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsError;
                     errorReason = "TEvGet from target group failed with ERROR";

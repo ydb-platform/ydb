@@ -71,9 +71,7 @@ public:
         CopyNodeLocation(nodeBrokerRequest->Record.MutableLocation(), request->location());
         nodeBrokerRequest->Record.SetFixedNodeId(request->fixed_node_id());
         if (request->has_path()) {
-            nodeBrokerRequest->Record.SetPath(AppData(ctx)->FeatureFlags.GetEnableRelativePaths()
-                ? PrependDomainIfNeeded("/" + dinfo->GetDomain()->Name, request->path())
-                : request->path());
+            nodeBrokerRequest->Record.SetPath(request->path());
         }
         nodeBrokerRequest->Record.SetAuthorizedByCertificate(IsNodeAuthorizedByCertificate);
 

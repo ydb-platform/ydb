@@ -173,7 +173,7 @@ Y_UNIT_TEST(CompilationCacheHitMissCounters) {
         UNIT_ASSERT(!response->Get()->Stats.FromCache);
         UNIT_ASSERT_VALUES_EQUAL(result.Uid, uid);
         UNIT_ASSERT(result.Query);
-        UNIT_ASSERT_VALUES_EQUAL(result.Query->DisablePgCompatibility, disablePgCompatibility);
+        UNIT_ASSERT_VALUES_EQUAL(result.Query->DisablePgCompatibility(), disablePgCompatibility);
         check(0, 0);
     };
     recompile(Nothing(), true);
@@ -188,7 +188,7 @@ Y_UNIT_TEST(CompilationCacheHitMissCounters) {
 
     TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin", text,
         TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings);
-    query->DisablePgCompatibility = true;
+    query->SetDisablePgCompatibility(true);
     flags.SetDisablePgCompatibility(true);
     appData.UpdateRuntimeFlags(flags);
     auto sendByUid = [&](const TString& cachedUid) {

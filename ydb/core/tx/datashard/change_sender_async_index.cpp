@@ -5,7 +5,7 @@
 #include "datashard_impl.h"
 
 #include <ydb/core/change_exchange/change_sender.h>
-#include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 

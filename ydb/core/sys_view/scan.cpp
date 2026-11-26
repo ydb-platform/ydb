@@ -1,4 +1,4 @@
-#include "scan.h"
+#include "factory.h"
 
 #include <ydb/core/kqp/common/events/scan.h>
 
@@ -38,6 +38,20 @@ namespace NKikimr {
 namespace NSysView {
 
 using NKikimrSysView::ESysViewType;
+
+namespace {
+
+THolder<NActors::IActor> CreateSystemViewScanImpl(const NActors::TActorId& ownerId, ui32 scanId,
+    const TString& database, const TMaybe<NKikimrSysView::TSysViewDescription>& sysViewInfo,
+    const TTableId& tableId, const TString& tablePath,
+    TVector<TSerializedTableRange> ranges, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse);
+
+THolder<NActors::IActor> CreateSystemViewScanImpl(const NActors::TActorId& ownerId, ui32 scanId,
+    const TString& database, const TMaybe<NKikimrSysView::TSysViewDescription>& sysViewInfo,
+    const TTableId& tableId, const TString& tablePath,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse);
 
 class TSysViewRangesReader : public TActor<TSysViewRangesReader> {
 public:
@@ -98,7 +112,7 @@ public:
         Y_DEBUG_ABORT_UNLESS(ack->Sender == OwnerId);
         if (!ScanActorId) {
             if (CurrentRange < Ranges.size()) {
-                auto actor = CreateSystemViewScan(
+                auto actor = CreateSystemViewScanImpl(
                     SelfId(), ScanId, Database, SysViewInfo, TableId, TablePath, Ranges[CurrentRange].ToTableRange(),
                     Columns, UserToken, Reverse);
                 ScanActorId = Register(actor.Release());
@@ -176,7 +190,7 @@ private:
     TMaybe<TActorId> ScanActorId;
 };
 
-THolder<NActors::IActor> CreateSystemViewScan(
+THolder<NActors::IActor> CreateSystemViewScanImpl(
     const NActors::TActorId& ownerId,
     ui32 scanId,
     const TString& database,
@@ -189,7 +203,7 @@ THolder<NActors::IActor> CreateSystemViewScan(
     bool reverse
 ) {
     if (ranges.size() == 1) {
-        return CreateSystemViewScan(ownerId, scanId, database, sysViewInfo, tableId, tablePath, ranges[0].ToTableRange(),
+        return CreateSystemViewScanImpl(ownerId, scanId, database, sysViewInfo, tableId, tablePath, ranges[0].ToTableRange(),
                                     columns, std::move(userToken), reverse);
     } else {
         return MakeHolder<TSysViewRangesReader>(ownerId, scanId, database, sysViewInfo, tableId, tablePath, ranges,
@@ -197,7 +211,7 @@ THolder<NActors::IActor> CreateSystemViewScan(
     }
 }
 
-THolder<NActors::IActor> CreateSystemViewScan(
+THolder<NActors::IActor> CreateSystemViewScanImpl(
     const NActors::TActorId& ownerId,
     ui32 scanId,
     const TString& database,
@@ -287,6 +301,35 @@ THolder<NActors::IActor> CreateSystemViewScan(
     default:
         return {};
     }
+}
+
+class TSystemViewScanFactory final : public ISystemViewScanFactory {
+public:
+    THolder<NActors::IActor> Create(const NActors::TActorId& ownerId, ui32 scanId,
+        const TString& database, const TMaybe<NKikimrSysView::TSysViewDescription>& sysViewInfo,
+        const TTableId& tableId, const TString& tablePath,
+        TVector<TSerializedTableRange> ranges, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse) const override
+    {
+        return CreateSystemViewScanImpl(ownerId, scanId, database, sysViewInfo, tableId, tablePath,
+            std::move(ranges), columns, std::move(userToken), reverse);
+    }
+
+    THolder<NActors::IActor> Create(const NActors::TActorId& ownerId, ui32 scanId,
+        const TString& database, const TMaybe<NKikimrSysView::TSysViewDescription>& sysViewInfo,
+        const TTableId& tableId, const TString& tablePath,
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse) const override
+    {
+        return CreateSystemViewScanImpl(ownerId, scanId, database, sysViewInfo, tableId, tablePath,
+            tableRange, columns, std::move(userToken), reverse);
+    }
+};
+
+} // namespace
+
+ISystemViewScanFactory* CreateSystemViewScanFactory() {
+    return new TSystemViewScanFactory;
 }
 
 } // NSysView

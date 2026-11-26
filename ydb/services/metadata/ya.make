@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/base
     ydb/library/actors/core
     ydb/services/metadata/abstract
     ydb/services/metadata/manager

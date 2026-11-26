@@ -41,6 +41,7 @@ struct TKqpRunScriptActorSettings {
     TIntrusivePtr<TKqpCounters> Counters;
     bool SaveQueryPhysicalGraph = false;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
+    std::optional<bool> DisablePgCompatibility;
     bool DisableDefaultTimeout = false;
     TString CheckpointId;
     TString StreamingQueryPath;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_query_result.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 
 namespace NKikimr {
@@ -94,11 +95,14 @@ namespace NKikimr {
                 const ui64 index = item.GetCookie();
                 Y_DEBUG_ABORT_UNLESS(UnresolvedItems[index]);
 
-                if (item.GetStatus() == NKikimrProto::OK /* || item.GetStatus() == NKikimrProto::ERROR */) {
-                    auto *res = result.MutableResult(index);
+                auto *res = result.MutableResult(index);
 
+                if (item.GetStatus() == NKikimrProto::OK) {
+                    const bool keep = res->GetKeep();
+                    const bool doNotKeep = res->GetDoNotKeep();
                     std::optional<ui64> cookie = res->HasCookie() ? std::make_optional(res->GetCookie()) : std::nullopt;
                     res->CopyFrom(item);
+                    MergeVGetKeepFlags(*res, keep, doNotKeep);
                     res->ClearPayload();
                     if (ev->Get()->HasBlob(item)) {
                         Result->SetBlobData(*res, ev->Get()->GetBlobData(item));
@@ -109,9 +113,9 @@ namespace NKikimr {
                         res->ClearCookie();
                     }
 
-                    if (res->GetStatus() == NKikimrProto::OK) {
-                        UnresolvedItems[index] = false;
-                    }
+                    UnresolvedItems[index] = false;
+                } else {
+                    MergeVGetKeepFlags(*res, item.GetKeep(), item.GetDoNotKeep());
                 }
             }
             Step();

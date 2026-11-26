@@ -33,8 +33,8 @@ namespace NKikimr::NBlobDepot {
         void RemoveHotKey(const TKey& key, ui32 generation, ui64 sequence);
         void AddHotKey(const TKey& key, const TData::TValue& value);
         void UpdateSourceRetry(const TKey& key, const TData::TValue* value);
-        bool HasWork();
-        TPack SelectPack(TMonotonic now, TSchedule schedule);
+        bool HasWork(ui64 waitingBytes);
+        TPack SelectPack(ui64 waitingBytes, TMonotonic now, TSchedule schedule);
         void FinishPack(const TPack& pack, std::optional<size_t> failedSource, TMonotonic now);
 
     private:
@@ -66,7 +66,7 @@ namespace NKikimr::NBlobDepot {
         };
         std::optional<TPendingHotPack> PendingHotPack;
 
-        TPack SelectHotPack(ui64 needed, TMonotonic now, TSchedule schedule);
+        TPack SelectHotPack(ui64 needed, bool urgent, TMonotonic now, TSchedule schedule);
         TPack SelectCoolingPack(ui64 hotBytesNeeded, TMonotonic now, TSchedule schedule);
     };
 

@@ -653,6 +653,10 @@ document.addEventListener("DOMContentLoaded", ready);
                         KEYVALUE_UP("Data, bytes", "data", FormatByteSize(Data->GetTotalStoredDataSize()));
                         KEYVALUE_UP("Data in S3, bytes", "data_s3", FormatByteSize(Data->GetTotalS3DataSize()));
                         KEYVALUE_UP("Live S3 ranges, bytes", "s3_live_range_bytes", FormatByteSize(Data->GetTotalS3LiveBytes()));
+                        KEYVALUE_UP("Hot write credits, bytes", "hot_write_credit_bytes", FormatByteSize(
+                            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_HOT_WRITE_CREDIT_BYTES].Get()));
+                        KEYVALUE_UP("Hot write waiters", "hot_write_waiters",
+                            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_HOT_WRITE_WAITERS].Get());
                         KEYVALUE_UP("Cooling uploads in flight", "cooling_uploads_in_flight",
                             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_COOLING_UPLOADS_IN_FLIGHT].Get());
                         KEYVALUE_UP("Cooling upload failures", "cooling_upload_failures",
@@ -942,6 +946,8 @@ document.addEventListener("DOMContentLoaded", ready);
             {"data", formatSize(Data->GetTotalStoredDataSize())},
             {"data_s3", formatSize(Data->GetTotalS3DataSize())},
             {"s3_live_range_bytes", formatSize(Data->GetTotalS3LiveBytes())},
+            {"hot_write_credit_bytes", formatSize(TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_HOT_WRITE_CREDIT_BYTES].Get())},
+            {"hot_write_waiters", TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_HOT_WRITE_WAITERS].Get()},
             {"cooling_uploads_in_flight", TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_COOLING_UPLOADS_IN_FLIGHT].Get()},
             {"cooling_upload_failures", TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_COOLING_UPLOAD_FAILURES].Get()},
             {"trash_in_flight", formatSize(Data->GetInFlightTrashSize())},

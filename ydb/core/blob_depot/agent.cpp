@@ -52,6 +52,7 @@ namespace NKikimr::NBlobDepot {
         // it before releasing the write slots below, because that release runs the pending-write drain and it must
         // not dispatch a request bound to the connection we are tearing down.
         S3Manager->DropPendingPrepareWrites(agent.Connection->PipeServerId);
+        DropHotWriteCredits(agent);
 
         agent.InvalidateStepRequests.clear();
         agent.PushCallbacks.clear();
@@ -117,6 +118,9 @@ namespace NKikimr::NBlobDepot {
         auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, Executor()->Generation());
         record->SetSpaceColor(agent.LastPushedSpaceColor);
         record->SetApproximateFreeSpaceShare(agent.LastPushedApproximateFreeSpaceShare);
+        if (IsHotWriteAdmissionEnabled()) {
+            record->SetHotWriteCreditEpoch(agent.LastConnectionSequence);
+        }
 
         for (const auto& [k, v] : ChannelKinds) {
             auto *proto = record->AddChannelKinds();

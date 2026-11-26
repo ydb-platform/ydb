@@ -32,8 +32,8 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    bool TCoolingIndex::HasWork() {
-        const bool hotWork = !HotKeys.empty() && Data.GetTotalStoredDataSize() > HotTargetBytes;
+    bool TCoolingIndex::HasWork(ui64 waitingBytes) {
+        const bool hotWork = !HotKeys.empty() && (Data.GetTotalStoredDataSize() > HotTargetBytes || waitingBytes);
         if (!hotWork) {
             PendingHotPack.reset();
             HotSelectionAfter.reset();
@@ -103,7 +103,7 @@ namespace NKikimr::NBlobDepot {
         return pack;
     }
 
-    TCoolingIndex::TPack TCoolingIndex::SelectHotPack(ui64 needed, TMonotonic now, TSchedule schedule) {
+    TCoolingIndex::TPack TCoolingIndex::SelectHotPack(ui64 needed, bool urgent, TMonotonic now, TSchedule schedule) {
         TPack pack;
         if (needed > HotBytesInFlight) {
             const ui64 bytesToCool = needed - HotBytesInFlight;
@@ -111,7 +111,7 @@ namespace NKikimr::NBlobDepot {
                 PendingHotPack = TPendingHotPack{now + TDuration::Seconds(1), TargetObjectBytes, MaxKeysPerCoolingPack};
             }
             auto& pending = *PendingHotPack;
-            const bool flush = now >= pending.FlushAt;
+            const bool flush = urgent || now >= pending.FlushAt;
             if (flush || HotSelectionAfter || bytesToCool >= pending.SelectionBytes || HotKeys.size() >= pending.SelectionKeys) {
                 pack = SelectCoolingPack(bytesToCool, now, schedule);
                 if (pack.SelectionLimited) {
@@ -143,10 +143,12 @@ namespace NKikimr::NBlobDepot {
         return pack;
     }
 
-    TCoolingIndex::TPack TCoolingIndex::SelectPack(TMonotonic now, TSchedule schedule) {
+    TCoolingIndex::TPack TCoolingIndex::SelectPack(ui64 waitingBytes, TMonotonic now, TSchedule schedule) {
         const ui64 hotBytes = Data.GetTotalStoredDataSize();
         const ui64 targetExcess = hotBytes - Min(hotBytes, HotTargetBytes);
-        TPack pack = SelectHotPack(targetExcess, now, schedule);
+        const bool urgent = waitingBytes != 0;
+        const ui64 needed = Max(targetExcess, waitingBytes);
+        TPack pack = SelectHotPack(needed, urgent, now, schedule);
         if (pack.Items.empty()) {
             return {};
         }

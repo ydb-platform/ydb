@@ -50,6 +50,7 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvBlobDepot::TEvCollectGarbage, BarrierServer->Handle);
             hFunc(TEvBlobDepot::TEvPushNotifyResult, Handle);
             hFunc(TEvBlobDepot::TEvPrepareWriteS3, Handle);
+            hFunc(TEvBlobDepot::TEvHotWriteCredit, Handle);
 
             default:
                 Y_ABORT();
@@ -157,6 +158,7 @@ namespace NKikimr::NBlobDepot {
                 fFunc(TEvBlobDepot::EvPushNotifyResult, handleFromAgentPipe);
                 fFunc(TEvBlobDepot::EvCollectGarbage, handleFromAgentPipe);
                 fFunc(TEvBlobDepot::EvPrepareWriteS3, handleFromAgentPipe);
+                fFunc(TEvBlobDepot::EvHotWriteCredit, handleFromAgentPipe);
 
                 fFunc(TEvPrivate::EvDeliver, handleDelivery);
 
@@ -175,6 +177,8 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
                 cFunc(TEvPrivate::EvCheckExpiredAgents, HandleCheckExpiredAgents);
+                cFunc(TEvPrivate::EvRunHotWriteAdmission, RunHotWriteAdmission);
+                fFunc(TEvPrivate::EvWakeHotWriteAdmission, WakeHotWriteAdmission);
 
                 cFunc(TEvPrivate::EvCommitCertainKeys, Data->HandleCommitCertainKeys);
                 cFunc(TEvPrivate::EvDoGroupMetricsExchange, DoGroupMetricsExchange);
@@ -208,6 +212,13 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::PassAway() {
+        // An unlimited-deadline restore waiting for space can have no other event in flight.
+        for (const auto& [key, eventType] : InternalHotWriteWaiters) {
+            const TActorId actor = key.second;
+            if (actor != SelfId() && actor != GroupAssimilatorId) {
+                TActivationContext::Send(new IEventHandle(eventType, 0, actor, SelfId(), nullptr, 0));
+            }
+        }
         for (const TActorId& actorId : {GroupAssimilatorId, CopyBlobActorId}) {
             if (actorId) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
@@ -229,7 +240,13 @@ namespace NKikimr::NBlobDepot {
                     {"id", GetLogId()}, {"error", *error});
             } else {
                 const auto& async = s3.GetAsyncMode();
-                CoolingIndex = std::make_unique<TCoolingIndex>(*Data, TabletID(), async.GetHotTargetBytes(),
+                ui64 hotTargetBytes = async.GetHotTargetBytes();
+                if (async.HasThrottleStartBytes()) {
+                    // Admission throttles at the threshold itself, so leave headroom below it.
+                    const ui64 start = async.GetThrottleStartBytes();
+                    hotTargetBytes = Min(hotTargetBytes, start ? start - 1 : 0);
+                }
+                CoolingIndex = std::make_unique<TCoolingIndex>(*Data, TabletID(), hotTargetBytes,
                     async.GetTargetObjectBytes());
             }
         }

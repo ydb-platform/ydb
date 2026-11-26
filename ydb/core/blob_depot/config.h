@@ -52,6 +52,18 @@ namespace NKikimr::NBlobDepot {
         if (!settings.HasSettings() || settings.GetSettings().GetBucket().empty()) {
             return "AsyncMode requires S3 settings with a bucket";
         }
+        if (async.HasMaxPendingBytes() && async.GetMaxPendingBytes() <= async.GetHotTargetBytes()) {
+            return "MaxPendingBytes must be greater than HotTargetBytes";
+        }
+        if (async.HasMaxPendingBytes() && async.GetMaxPendingBytes() < MaxWriteCreditBytes) {
+            return "MaxPendingBytes must accommodate a maximum-sized blob and its footer";
+        }
+        if (async.HasThrottleStartBytes() || async.HasThrottleMaxBytesPerSecond()) {
+            if (!async.HasMaxPendingBytes() || !async.HasThrottleStartBytes() ||
+                    async.GetThrottleStartBytes() >= async.GetMaxPendingBytes() || !async.GetThrottleMaxBytesPerSecond()) {
+                return "Throttling requires ThrottleStartBytes below MaxPendingBytes and a positive ThrottleMaxBytesPerSecond";
+            }
+        }
         if (!async.GetUploadPutsInFlight() || !async.GetTargetObjectBytes()) {
             return "UploadPutsInFlight and TargetObjectBytes must be positive";
         }

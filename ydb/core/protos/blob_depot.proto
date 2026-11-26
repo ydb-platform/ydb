@@ -108,6 +108,7 @@ message TEvRegisterAgentResult {
     // everything at or below these steps -- free ids and writes still in flight alike -- before it resumes serving
     // queries, because the tablet may already have garbage collected the blobs behind them.
     repeated TEvPushNotify.TInvalidatedStep InvalidatedSteps = 8;
+    optional uint64 HotWriteCreditEpoch = 9;
 }
 
 message TEvAllocateIds {
@@ -154,6 +155,7 @@ message TEvPushNotify {
     repeated TInvalidatedStep InvalidatedSteps = 2;
     optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColor = 3;
     optional float ApproximateFreeSpaceShare = 4;
+    optional bool RecallHotWriteCredits = 5;
 }
 
 message TEvPushNotifyResult {
@@ -206,6 +208,7 @@ message TEvCommitBlobSeq {
         optional bool IgnoreBlock = 9;
         // The SDK retried this S3 PUT; an earlier attempt may still complete after the mapping is collected.
         optional bool S3PutMayArriveLate = 10;
+        optional uint64 HotWriteCreditEpoch = 11;
     }
 
     repeated TItem Items = 1;
@@ -313,4 +316,20 @@ message TEvPrepareWriteS3Result {
     }
 
     repeated TItem Items = 1;
+}
+
+message TEvHotWriteCredit {
+    optional uint64 Epoch = 1;
+    optional uint64 ReturnBytes = 2;
+    // Returning credit without requesting a grant does not require a reply.
+    optional uint64 MinBytes = 3;
+    optional uint64 DeadlineUs = 4;
+    optional bool FailOnSlowDown = 5;
+}
+
+message TEvHotWriteCreditResult {
+    optional uint64 Epoch = 1;
+    optional uint64 GrantedBytes = 2;
+    optional NKikimrProto.EReplyStatus Status = 3;
+    optional string ErrorReason = 4;
 }

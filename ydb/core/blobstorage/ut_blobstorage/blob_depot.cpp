@@ -11,6 +11,7 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
+#include <ydb/core/blob_depot/blob_limits.h>
 #include <ydb/core/blob_depot/s3_router_events.h>
 #include <ydb/core/blob_depot/schema.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
@@ -1120,6 +1121,26 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         return result->Get()->Status;
     }
 
+    bool IsBlobDepotRouterRequest(TTestActorSystem& runtime, const IEventHandle& event, ui64 tabletId) {
+        const auto recipient = event.GetRecipientRewrite();
+        return recipient.NodeId() && recipient == runtime.GetNode(recipient.NodeId())->ActorSystem->LookupLocalService(
+            MakeBlobDepotS3RouterID(tabletId));
+    }
+
+    ui64 GetUnfinishedPutWatchCount(TEnvironmentSetup& env, ui64 tabletId) {
+        const auto sender = env.Runtime->AllocateEdgeActor(1);
+        env.Runtime->SendToPipe(tabletId, sender, new TEvTablet::TEvGetCounters, 0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        const auto reply = env.WaitForEdgeActorEvent<TEvTablet::TEvGetCountersResponse>(sender);
+        for (const auto& counter : reply->Get()->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
+            if (counter.GetName() == "BlobDepot/Cooling/UnfinishedPutWatches") {
+                return counter.GetValue();
+            }
+        }
+        UNIT_FAIL("missing BlobDepot/Cooling/UnfinishedPutWatches counter");
+        return 0;
+    }
+
     NKikimrBlobDepot::TEvResolveResult WaitForPublishedS3Range(TEnvironmentSetup& env, const TActorId& reader,
             ui32 groupId, TLogoBlobID first, TLogoBlobID second) {
         auto& runtime = *env.Runtime;
@@ -1309,10 +1330,22 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         const TString bucketName = "cooling-flag-toggle";
         NKikimrBlobDepot::TS3BackendSettings::TAsyncMode async;
         async.SetTargetObjectBytes(8);
+        async.SetMaxPendingBytes(MaxWriteCreditBytes);
         const ui32 group = CreateS3VirtualGroup(env, bucketName, &async);
         const auto edge = env.Runtime->AllocateEdgeActor(1);
         const TLogoBlobID id(100500, 1, 1, 0, 8, 0);
+        bool requestedCredit = false;
+        auto observeCredit = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobDepot::EvHotWriteCredit &&
+                    ev->Get<TEvBlobDepot::TEvHotWriteCredit>()->Record.HasMinBytes()) {
+                requestedCredit = true;
+            }
+            return true;
+        };
+        env.Runtime->FilterFunction = observeCredit;
         PutToS3VirtualGroup(env, edge, group, id, "hot-data");
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT(!requestedCredit);
         const auto& bucket = Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket(bucketName);
         UNIT_ASSERT_VALUES_EQUAL(ReadFromS3VirtualGroup(env, edge, group, id), "hot-data");
         UNIT_ASSERT_VALUES_EQUAL(bucket.GetSize(), 0);
@@ -1323,6 +1356,10 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         WaitForPublishedS3Range(env, reader, group, id, id);
         UNIT_ASSERT_VALUES_EQUAL(bucket.GetSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(ReadFromS3VirtualGroup(env, reader, group, id), "hot-data");
+        env.Runtime->FilterFunction = observeCredit;
+        PutToS3VirtualGroup(env, reader, group, TLogoBlobID(100500, 1, 2, 0, 8, 0), "new-data");
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT(requestedCredit);
     }
 
     Y_UNIT_TEST(AsyncS3ConfirmedRouteChangePreservesPublishedData) {
@@ -1773,6 +1810,149 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         UNIT_ASSERT_VALUES_EQUAL(CheckS3VirtualGroupIntegrity(env, checker, groupId, small), NKikimrProto::OK);
     }
 
+    Y_UNIT_TEST(AsyncS3RejectsLimitsBelowOneMaximumWrite) {
+        TEnvironmentSetup env(MakeCoolingTestSettings());
+        const TString bucket = "async-write-limit";
+        CreateS3VirtualGroup(env, bucket);
+        NKikimrBlobDepot::TS3BackendSettings::TAsyncMode async;
+        async.SetMaxPendingBytes(MaxWriteCreditBytes - 1);
+        const auto rejected = TryReconfigureS3Group(env, MakeS3Settings(bucket, &async));
+        UNIT_ASSERT(!rejected.GetSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.GetErrorDescription(), "maximum-sized blob");
+        async.SetMaxPendingBytes(MaxWriteCreditBytes);
+        ReconfigureS3Group(env, MakeS3Settings(bucket, &async));
+    }
+
+    Y_UNIT_TEST(AsyncS3CoolsBelowThrottleStart) {
+        TEnvironmentSetup env(MakeCoolingTestSettings());
+        NKikimrBlobDepot::TS3BackendSettings::TAsyncMode async;
+        async.SetMaxPendingBytes(MaxWriteCreditBytes);
+        async.SetHotTargetBytes(32);
+        async.SetThrottleStartBytes(16);
+        async.SetThrottleMaxBytesPerSecond(64);
+        async.SetTargetObjectBytes(16);
+        const ui32 group = CreateS3VirtualGroup(env, "throttle-target", &async);
+        const auto edge = env.Runtime->AllocateEdgeActor(1);
+        const TLogoBlobID id(100500, 1, 1, 0, 16, 0);
+        const TString data(16, 'x');
+        PutToS3VirtualGroup(env, edge, group, id, data);
+        WaitForPublishedS3Range(env, edge, group, id, id);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromS3VirtualGroup(env, edge, group, id), data);
+    }
+
+    Y_UNIT_TEST(AsyncS3AdmissionWaitsForDurableMapping) {
+        using namespace NWrappers::NExternalStorage;
+        TEnvironmentSetup env(MakeCoolingTestSettings());
+        NKikimrBlobDepot::TS3BackendSettings::TAsyncMode async;
+        async.SetMaxPendingBytes(MaxWriteCreditBytes);
+        async.SetHotTargetBytes(8);
+        async.SetTargetObjectBytes(MaxBlobSize);
+        const TString bucketName = "async-admission";
+        const ui32 groupId = CreateS3VirtualGroup(env, bucketName, &async);
+        const auto tablet = WaitForS3VirtualGroup(env, groupId);
+        const auto& bucket = Singleton<TFakeExternalStorage>()->GetBucket(bucketName);
+        const auto first = env.Runtime->AllocateEdgeActor(1);
+        const auto second = env.Runtime->AllocateEdgeActor(2);
+        const TString firstValue(MaxBlobSize, 'h');
+        const TString waitingValue(32, 'w');
+        const TLogoBlobID firstId(100500, 1, 1, 0, firstValue.size(), 0);
+        const TLogoBlobID finiteHead(100500, 1, 2, 0, waitingValue.size(), 0);
+        const TLogoBlobID unlimitedHead(100500, 1, 3, 0, waitingValue.size(), 0);
+        const TLogoBlobID finiteTail(100500, 1, 4, 0, waitingValue.size(), 0);
+
+        std::unique_ptr<IEventHandle> uploadReply;
+        ui32 uploadReplyNode = 0;
+        ui32 uploadRequests = 0;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvPutObjectRequest::EventType && IsBlobDepotRouterRequest(*env.Runtime, *ev, tablet)) {
+                ++uploadRequests;
+            } else if (ev->GetTypeRewrite() == TEvPutObjectResponse::EventType && !uploadReply) {
+                uploadReplyNode = nodeId;
+                uploadReply = std::move(ev);
+                return false;
+            }
+            return true;
+        };
+
+        PutToS3VirtualGroup(env, first, groupId, firstId, firstValue);
+        WaitForS3Condition(env, [&] { return bool(uploadReply); });
+        UNIT_ASSERT_VALUES_EQUAL(bucket.GetSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromS3VirtualGroup(env, second, groupId, firstId, 0, 8), firstValue.substr(0, 8));
+
+        auto send = [&](TLogoBlobID id, TInstant deadline) {
+            env.Runtime->WrapInActorContext(second, [&] {
+                SendToBSProxy(second, groupId, new TEvBlobStorage::TEvPut(id, waitingValue, deadline));
+            });
+        };
+        auto wait = [&](TDuration timeout) {
+            return env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(second, false, env.Runtime->GetClock() + timeout);
+        };
+        auto expectTimeout = [&](TLogoBlobID id) {
+            const auto result = wait(TDuration::Seconds(4));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_EQUAL(result->Get()->Id, id);
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::TIMEOUT, result->Get()->ToString());
+        };
+
+        send(finiteHead, env.Runtime->GetClock() + TDuration::Seconds(2));
+        UNIT_ASSERT(!wait(TDuration::MilliSeconds(200)));
+        expectTimeout(finiteHead);
+
+        send(unlimitedHead, TInstant::Max());
+        send(finiteTail, env.Runtime->GetClock() + TDuration::Seconds(2));
+        expectTimeout(finiteTail);
+
+        // A slow successful PUT keeps its slot and hot-write charge until it can publish.
+        UNIT_ASSERT(!wait(TDuration::Seconds(320)));
+        UNIT_ASSERT_VALUES_EQUAL(uploadRequests, 1);
+        env.Runtime->FilterFunction = {};
+        env.Runtime->Send(uploadReply.release(), uploadReplyNode);
+
+        const auto put = wait(TDuration::Seconds(10));
+        UNIT_ASSERT(put);
+        UNIT_ASSERT_EQUAL(put->Get()->Id, unlimitedHead);
+        UNIT_ASSERT_VALUES_EQUAL_C(put->Get()->Status, NKikimrProto::OK, put->Get()->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromS3VirtualGroup(env, second, groupId, firstId, 0, 8), firstValue.substr(0, 8));
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromS3VirtualGroup(env, second, groupId, unlimitedHead), waitingValue);
+    }
+
+    Y_UNIT_TEST(AsyncS3TimedOutPutReleasesCreditAndCollectsLateObject) {
+        TEnvironmentSetup env(MakeCoolingTestSettings());
+        NKikimrBlobDepot::TS3BackendSettings::TAsyncMode async;
+        async.SetMaxPendingBytes(MaxWriteCreditBytes);
+        async.SetTargetObjectBytes(MaxBlobSize);
+        const TString bucketName = "async-put-timeout";
+        const auto group = CreateS3VirtualGroup(env, bucketName, &async);
+        const auto tablet = WaitForS3VirtualGroup(env, group);
+        const auto writer = env.Runtime->AllocateEdgeActor(1);
+        const auto waiter = env.Runtime->AllocateEdgeActor(2);
+        const TString body(MaxBlobSize, 'h');
+        // The credit ceiling includes room for a footer, even when this data channel omits it.
+        const TString waitingBody(MaxWriteCreditBytes - body.size() + 1, 'w');
+        const TLogoBlobID hot(100500, 1, 1, 0, body.size(), 0);
+        const TLogoBlobID next(100500, 1, 2, 0, waitingBody.size(), 0);
+        const auto delayed = DelayCoolingPut(env, writer, group, hot, body);
+        env.Runtime->WrapInActorContext(waiter, [&] {
+            SendToBSProxy(waiter, group, new TEvBlobStorage::TEvPut(next, waitingBody, TInstant::Max()));
+        });
+        auto wait = [&](TDuration duration) {
+            return env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(waiter, false,
+                env.Runtime->GetClock() + duration);
+        };
+        UNIT_ASSERT(!wait(TDuration::Seconds(1)));
+        const auto reply = wait(TDuration::Minutes(11));
+        UNIT_ASSERT(reply);
+        UNIT_ASSERT_EQUAL(reply->Get()->Id, next);
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Status, NKikimrProto::OK, reply->Get()->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(GetUnfinishedPutWatchCount(env, tablet), 1);
+
+        auto& bucket = Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->MutableBucket(bucketName);
+        bucket.PutObject(delayed.Key, delayed.Body);
+        WaitForS3Condition(env, [&] { return !bucket.GetObject(delayed.Key); });
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromS3VirtualGroup(env, writer, group, hot, 0, 4), "hhhh");
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromS3VirtualGroup(env, waiter, group, next), waitingBody);
+    }
+
     Y_UNIT_TEST(AsyncS3ReplayDuringRecoveryPreservesSibling) {
         using namespace NWrappers::NExternalStorage;
 
@@ -1865,26 +2045,6 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         UNIT_ASSERT_VALUES_EQUAL(ReadFromS3VirtualGroup(env, newReader, groupId, single), singleBody);
         UNIT_ASSERT(bucket.GetObject(packed));
         runtime.FilterFunction = {};
-    }
-
-    bool IsBlobDepotRouterRequest(TTestActorSystem& runtime, const IEventHandle& event, ui64 tabletId) {
-        const auto recipient = event.GetRecipientRewrite();
-        return recipient.NodeId() && recipient == runtime.GetNode(recipient.NodeId())->ActorSystem->LookupLocalService(
-            MakeBlobDepotS3RouterID(tabletId));
-    }
-
-    ui64 GetUnfinishedPutWatchCount(TEnvironmentSetup& env, ui64 tabletId) {
-        const auto sender = env.Runtime->AllocateEdgeActor(1);
-        env.Runtime->SendToPipe(tabletId, sender, new TEvTablet::TEvGetCounters, 0,
-            TTestActorSystem::GetPipeConfigWithRetries());
-        const auto reply = env.WaitForEdgeActorEvent<TEvTablet::TEvGetCountersResponse>(sender);
-        for (const auto& counter : reply->Get()->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
-            if (counter.GetName() == "BlobDepot/Cooling/UnfinishedPutWatches") {
-                return counter.GetValue();
-            }
-        }
-        UNIT_FAIL("missing BlobDepot/Cooling/UnfinishedPutWatches counter");
-        return 0;
     }
 
     Y_UNIT_TEST(AsyncS3RestartsBeforePublishing) {

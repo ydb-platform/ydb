@@ -301,7 +301,7 @@ namespace NKikimr::NBlobDepot {
     };
 
     void TS3Manager::MaybeScheduleCooling() {
-        if (WrapperId && Self->CoolingIndex && Self->Data->IsLoaded() && Self->CoolingIndex->HasWork()) {
+        if (WrapperId && Self->CoolingIndex && Self->Data->IsLoaded() && Self->CoolingIndex->HasWork(Self->GetHotWriteCoolingBytesNeeded())) {
             ScheduleCooling(TActivationContext::Monotonic());
         }
     }
@@ -341,7 +341,7 @@ namespace NKikimr::NBlobDepot {
         if (CoolingObjectsInFlight.size() >= concurrency) {
             return;
         }
-        auto pack = Self->CoolingIndex->SelectPack(now,
+        auto pack = Self->CoolingIndex->SelectPack(Self->GetHotWriteCoolingBytesNeeded(), now,
             [this](TMonotonic when) { ScheduleCooling(when); });
         if (pack.Items.empty()) {
             return;

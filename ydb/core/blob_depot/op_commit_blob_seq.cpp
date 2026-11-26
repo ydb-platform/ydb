@@ -85,6 +85,13 @@ namespace NKikimr::NBlobDepot {
                     // Older agents cannot report whether an earlier SDK attempt may still arrive.
                     const bool s3PutMayArriveLate = !item.HasS3PutMayArriveLate() || item.GetS3PutMayArriveLate();
                     auto *responseItem = responseRecord->AddItems();
+                    ui64 hotWriteCharge = 0;
+                    Y_DEFER {
+                        if (hotWriteCharge) {
+                            agent.HotWriteCreditBytes -= hotWriteCharge;
+                            Self->ReleaseHotWriteCredits(hotWriteCharge);
+                        }
+                    };
 
                     auto finishWithError = [&](NKikimrProto::EReplyStatus status, const TString& errorReason) {
                         responseItem->SetStatus(status);
@@ -99,6 +106,22 @@ namespace NKikimr::NBlobDepot {
                             }
                         }
                     };
+
+                    if (Self->IsHotWriteAdmissionEnabled() && !item.GetCommitNotify()) {
+                        const auto& locator = item.GetBlobLocator();
+                        const ui64 dataBytes = locator.GetTotalDataLen();
+                        const ui64 footerBytes = locator.GetFooterLen();
+                        if (!item.HasBlobLocator() || item.HasS3Locator() || !dataBytes || dataBytes > MaxBlobSize ||
+                                footerBytes > sizeof(TVirtualGroupBlobFooter) ||
+                                item.GetHotWriteCreditEpoch() != agent.LastConnectionSequence ||
+                                dataBytes + footerBytes > agent.HotWriteCreditBytes) {
+                            finishWithError(NKikimrProto::ERROR, "invalid hot write credit");
+                            continue;
+                        }
+                        // The agent has transferred these bytes to this commit. Even a rejected commit consumes
+                        // its credit. A successful commit transfers the credit to the live-byte count.
+                        hotWriteCharge = dataBytes + footerBytes;
+                    }
 
                     if (!TData::TValue::Validate(item)) {
                         finishWithError(NKikimrProto::ERROR, "TEvCommitBlobSeq item protobuf is not valid");

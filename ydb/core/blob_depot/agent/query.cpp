@@ -8,8 +8,9 @@
 namespace NKikimr::NBlobDepot {
 
     namespace {
-        TInstant GetActiveQueryDeadline(IEventHandle& ev) {
+        TInstant GetActiveQueryDeadline(IEventHandle& ev, bool includePut) {
             switch (ev.GetTypeRewrite()) {
+                case TEvBlobStorage::EvPut: return includePut ? ev.Get<TEvBlobStorage::TEvPut>()->Deadline : TInstant::Max();
                 case TEvBlobStorage::EvGet: return ev.Get<TEvBlobStorage::TEvGet>()->Deadline;
                 case TEvBlobStorage::EvRange: return ev.Get<TEvBlobStorage::TEvRange>()->Deadline;
                 case TEvBlobStorage::EvDiscover: return ev.Get<TEvBlobStorage::TEvDiscover>()->Deadline;
@@ -264,7 +265,7 @@ namespace NKikimr::NBlobDepot {
         , Received(received)
         , QueryId(RandomNumber<ui64>())
         , StartTime(TActivationContext::Monotonic())
-        , Deadline(GetActiveQueryDeadline(*Event))
+        , Deadline(GetActiveQueryDeadline(*Event, agent.HotWriteCreditEpoch != 0))
         , DeadlineMonotonic(Deadline == TInstant::Max() ? TMonotonic::Max()
             : StartTime + (Deadline - TActivationContext::Now()))
         , QueryWatchdogMapIter(agent.QueryWatchdogMap.emplace(Min(StartTime + WatchdogDuration, DeadlineMonotonic), this))
@@ -449,6 +450,9 @@ namespace NKikimr::NBlobDepot {
         TIntrusiveListItem<TQuery, TExecutingQueries>::Unlink();
         TIntrusiveListItem<TQuery, TPendingBlockChecks>::Unlink();
         TIntrusiveListItem<TQuery, TPendingId>::Unlink();
+        if (Agent.RemoveHotWriteCreditWaiter(this)) {
+            Agent.ProcessHotWriteCreditQueue();
+        }
         Agent.DeletePendingQueries.PushBack(this);
         TRequestSender::ClearRequestsInFlight();
 

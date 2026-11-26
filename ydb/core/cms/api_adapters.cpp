@@ -725,7 +725,7 @@ class TCreateMaintenanceTask
         }
         const auto status = ev->Get()->Record.GetStatus();
         if (status != NKikimrProto::OK) {
-            Reply(Ydb::StatusIds::GENERIC_ERROR, "Cordon failed");
+            return Reply(Ydb::StatusIds::GENERIC_ERROR, "Cordon failed");
         }
         CheckPendingHiveActions();
     }
@@ -1088,35 +1088,37 @@ class TDropMaintenanceTask
         ++Requests;
     }
 
+    void UndoHiveAction(const NKikimrCms::TAction& action) {
+        if (action.GetType() == NKikimrCms::TAction::DRAIN_NODE ||
+            action.GetType() == NKikimrCms::TAction::CORDON_NODE)
+        {
+            const ui32 nodeId = FromString(action.GetHost());
+            NTabletPipe::SendData(SelfId(), HivePipe(SelfId()), new TEvHive::TEvSetDown(nodeId, false));
+            ++Requests;
+        }
+    }
+
     void MaybeDropPermissionsInCms() {
         if (Requests > 0) {
             return;
         }
 
+        // Re-read: the scheduled request could have been granted more permissions before it was rejected
+        auto cmsState = GetCmsState();
+        auto it = cmsState->MaintenanceTasks.find(GetTaskUid());
+        if (it == cmsState->MaintenanceTasks.end() || it->second.Permissions.empty()) {
+            return Reply(Ydb::StatusIds::SUCCESS);
+        }
+
         auto cmsRequest = MakeHolder<TEvCms::TEvManagePermissionRequest>();
         cmsRequest->Record.SetUser(User);
         cmsRequest->Record.SetCommand(NKikimrCms::TManagePermissionRequest::REJECT);
-        cmsRequest->Record.MutablePermissions()->Assign(Permissions.begin(), Permissions.end());
+        for (const auto& id : it->second.Permissions) {
+            cmsRequest->Record.AddPermissions(id);
+        }
 
         Send(CmsActorId, std::move(cmsRequest));
         ++Requests;
-    }
-
-    void DropPermissions(const TTaskInfo& task) {
-        Permissions.assign(task.Permissions.begin(), task.Permissions.end());
-
-        for (const auto& id : Permissions) {
-            const auto& permission = GetCmsState()->Permissions.at(id);
-            if (permission.Action.GetType() == NKikimrCms::TAction::DRAIN_NODE ||
-                permission.Action.GetType() == NKikimrCms::TAction::CORDON_NODE) 
-            {
-                const ui32 nodeId = FromString(permission.Action.GetHost());
-                NTabletPipe::SendData(SelfId(), HivePipe(SelfId()), new TEvHive::TEvSetDown(nodeId, false));
-                ++Requests;
-            }
-        }
-
-        MaybeDropPermissionsInCms();
     }
 
 public:
@@ -1136,13 +1138,19 @@ public:
 
         const auto& task = it->second;
         User = task.Owner;
-        if (cmsState->ScheduledRequests.contains(task.RequestId)) {
+        for (const auto& id : task.Permissions) {
+            UndoHiveAction(cmsState->Permissions.at(id).Action);
+        }
+        // Hive actions are sent for all actions when the task is created, including the ones still pending
+        if (auto rit = cmsState->ScheduledRequests.find(task.RequestId); rit != cmsState->ScheduledRequests.end()) {
+            for (const auto& action : rit->second.Request.GetActions()) {
+                UndoHiveAction(action);
+            }
             DropRequest(task);
-        } else {
-            DropPermissions(task);
         }
 
         Become(&TThis::StateWork);
+        MaybeDropPermissionsInCms();
     }
 
     const TString& GetTaskUid() const {
@@ -1151,41 +1159,44 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvCms::TEvManageRequestResponse, HandleDropRequest);
-            hFunc(TEvCms::TEvManagePermissionResponse, Handle<TEvCms::TEvManagePermissionResponse>);
+            hFunc(TEvCms::TEvManageRequestResponse, Handle);
+            hFunc(TEvCms::TEvManagePermissionResponse, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvHive::TEvSetDownReply, Handle);
         }
     }
 
-    void HandleDropRequest(TEvCms::TEvManageRequestResponse::TPtr& ev) {
-        --Requests;
-        auto cmsState = GetCmsState();
-        if (cmsState->MaintenanceTasks.contains(GetTaskUid())) {
-            DropPermissions(cmsState->MaintenanceTasks.at(GetTaskUid()));
-        } else {
-            Handle<TEvCms::TEvManageRequestResponse>(ev);
+    // Returns false if it replied with an error
+    bool CheckCmsStatus(const NKikimrCms::TStatus& status) {
+        switch (status.GetCode()) {
+        case NKikimrCms::TStatus::OK:
+            return true;
+        case NKikimrCms::TStatus::WRONG_REQUEST:
+            Reply(Ydb::StatusIds::BAD_REQUEST, status.GetReason());
+            return false;
+        default:
+            Reply(Ydb::StatusIds::INTERNAL_ERROR, status.GetReason());
+            return false;
         }
     }
 
-    template <typename TEvResponse>
-    void Handle(typename TEvResponse::TPtr& ev) {
-        const auto& record = ev->Get()->Record;
+    void Handle(TEvCms::TEvManageRequestResponse::TPtr& ev) {
+        --Requests;
+        if (CheckCmsStatus(ev->Get()->Record.GetStatus())) {
+            MaybeDropPermissionsInCms();
+        }
+    }
 
-        switch (record.GetStatus().GetCode()) {
-        case NKikimrCms::TStatus::OK:
-            return MaybeReply();
-        case NKikimrCms::TStatus::WRONG_REQUEST:
-            return Reply(Ydb::StatusIds::BAD_REQUEST, record.GetStatus().GetReason());
-        default:
-            return Reply(Ydb::StatusIds::INTERNAL_ERROR, record.GetStatus().GetReason());
+    void Handle(TEvCms::TEvManagePermissionResponse::TPtr& ev) {
+        if (CheckCmsStatus(ev->Get()->Record.GetStatus())) {
+            Reply(Ydb::StatusIds::SUCCESS);
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        Reply(Ydb::StatusIds::UNAVAILABLE, "Hive request failed");
         THiveInteractor::Close(SelfId());
+        Reply(Ydb::StatusIds::UNAVAILABLE, "Hive request failed");
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev) {
@@ -1205,12 +1216,6 @@ public:
         }
     }
 
-    void MaybeReply() {
-        if (--Requests == 0) {
-            return Reply(Ydb::StatusIds::SUCCESS);
-        }
-    }
-
     void PassAway() override {
         THiveInteractor::Shutdown(TActivationContext::AsActorContext());
         TBase::PassAway();
@@ -1218,7 +1223,6 @@ public:
 
 private:
     i64 Requests = 0;
-    std::vector<TString> Permissions;
     TString User;
 
 }; // TDropMaintenanceTask

@@ -41,6 +41,7 @@ message TStorageConfig { // contents of storage metadata
     NKikimrBridge.TClusterStateDetails ClusterStateDetails = 17; // history of unsynced state changes
     NKikimrBridge.TBridgeRollbackRecord BridgeRollback = 18; // set when the bridged cluster has been rolled back
     TDataCenterStates DataCenterStates = 19;
+    bool DataCenterQuorumEnabled = 20; // activated after all static keepers report support
 }
 
 message TPDiskMetadataRecord {
@@ -94,6 +95,7 @@ message TEvNodeConfigUnbind {
 message TEvNodeConfigScatter {
     message TCollectConfigs {
         bool MetadataOnly = 1;
+        bool CheckDataCenterQuorumSupport = 2;
     }
 
     message TProposeStorageConfig {
@@ -142,6 +144,7 @@ message TEvNodeConfigGather {
         repeated TDiskIdentifier NoMetadata = 4;
         repeated TDiskIdentifier Errors = 5;
         bool MetadataOnly = 6;
+        repeated uint32 DataCenterQuorumCapableNodeIds = 7;
     }
 
     message TProposeStorageConfig {
@@ -402,6 +405,8 @@ message TEvNodeConfigInvokeOnRoot {
     // Read the static-node connectivity of the top of this binding component, even without global quorum.
     message TQueryPileConnectivity {}
 
+    message TEnableDataCenterQuorum {}
+
     // Report how far the rollback of the bridge mode has gone: whether the cluster still has its cluster state, and
     // which nodes still run with BridgeConfig.
     message TQueryBridgeRollbackStatus {}
@@ -447,6 +452,7 @@ message TEvNodeConfigInvokeOnRoot {
         TQueryBridgeRollbackStatus QueryBridgeRollbackStatus = 32;
         TRollbackBridge RollbackBridge = 33;
         TDataCenterStates ApplyDataCenterStates = 34;
+        TEnableDataCenterQuorum EnableDataCenterQuorum = 35;
     }
 }
 

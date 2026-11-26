@@ -428,6 +428,7 @@ namespace NKikimr::NStorage {
             ui64 ConfigRecoveryGeneration;
             bool AdvancesConflictingGeneration = false;
             bool RecoveryProposition = false;
+            bool RecoveringAuthorizedDcChange = false;
             std::vector<TNodeIdentifier> AddedOrChangedNodeIdentifiers; // identifiers of added nodes or changed endpoints
         };
         std::optional<TProposition> CurrentProposition;
@@ -686,7 +687,7 @@ namespace NKikimr::NStorage {
 
         std::optional<TString> StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev,
-            bool advancesConflictingGeneration = false, bool recoveryProposition = false);
+            bool advancesConflictingGeneration = false, bool recoveryProposition = false, bool recoveringAuthorizedDcChange = false);
 
         void CheckForConfigUpdate();
 

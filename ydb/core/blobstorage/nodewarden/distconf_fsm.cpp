@@ -350,6 +350,17 @@ namespace NKikimr::NStorage {
         return true;
     }
 
+    // Activation is itself a configuration decision. A keeper collecting under either rule must see it.
+    static bool HasPropositionQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> disks,
+            const TNodeWardenConfig& nwConfig, bool mindPrev, TStringStream *out = nullptr) {
+        const NKikimrBlobStorage::TStorageConfig& prev = config.GetPrevConfig();
+        if (config.GetDataCenterQuorumEnabled() && config.HasPrevConfig() && !prev.GetDataCenterQuorumEnabled()
+                && !HasConfigQuorum(prev, disks, TBridgePileId(), nwConfig, false, out)) {
+            return false;
+        }
+        return HasConfigQuorum(config, disks, TBridgePileId(), nwConfig, mindPrev, out);
+    }
+
     TDistributedConfigKeeper::TProcessCollectConfigsResult TDistributedConfigKeeper::ProcessCollectConfigs(
             TEvGather::TCollectConfigs *res, std::optional<TString> selfAssemblyUUID, bool dryRun,
             bool allowConflictingGenerationAdvance, const NKikimrBlobStorage::TStorageConfig *collectionQuorumConfig) {
@@ -550,7 +561,7 @@ namespace NKikimr::NStorage {
                     && IsBootstrapProposition(r.Config) && !ValidateConfig(r.Config)
                     && HasDiskQuorum(r.Config, *havingDisksPtr, TBridgePileId(), *Cfg, nullptr, "bootstrap");
                 if (published || bootstrapQuorum
-                    || HasConfigQuorum(r.Config, *havingDisksPtr, TBridgePileId(), *Cfg, false)) {
+                    || HasPropositionQuorum(r.Config, *havingDisksPtr, *Cfg, false)) {
                     admittedConfigs.insert(meta);
                     const ui64 generation = r.Config.GetGeneration();
                     auto& [committed, configPtr] = configsWithQuorum[generation];
@@ -630,7 +641,7 @@ namespace NKikimr::NStorage {
                     }
                 });
                 if (requiredParents.contains(meta)
-                    || HasConfigQuorum(config, possibleDisks, TBridgePileId(), *Cfg, false)) {
+                    || HasPropositionQuorum(config, possibleDisks, *Cfg, false)) {
                     if (const auto error = ValidateConfig(config)) {
                         return {.ErrorReason = TStringBuilder() << "Invalid possibly chosen configuration: " << *error};
                     }
@@ -816,7 +827,7 @@ namespace NKikimr::NStorage {
 
     bool TDistributedConfigKeeper::IsPropositionCurrent(const TProposition& proposition) const {
         if (proposition.RecoveryProposition) {
-            return !Binding && (Scepter || IsBridged())
+            return !Binding && (Scepter || IsBridged() || proposition.RecoveringAuthorizedDcChange)
                 && proposition.ConfigRecoveryGeneration == ConfigRecoveryGeneration;
         }
         return IsBridged() || ((!ConfigRecoveryRequired || IsConflictingGenerationAdvance(proposition))
@@ -849,7 +860,7 @@ namespace NKikimr::NStorage {
         if (!IsPropositionCurrent(proposition)) {
             finishWithError("Configuration changed while proposing; configuration recovery is required");
             ScheduleConfigRecovery();
-        } else if (TStringStream err; HasConfigQuorum(proposition.StorageConfig, successfulDisks, TBridgePileId(),
+        } else if (TStringStream err; HasPropositionQuorum(proposition.StorageConfig, successfulDisks,
                 *Cfg, proposition.MindPrev, &err)) {
             // apply configuration and spread it
             if (advancesConflict || proposition.RecoveryProposition) {
@@ -1186,6 +1197,9 @@ namespace NKikimr::NStorage {
         TEvGather::TCollectConfigs local;
         local.Swap(response);
         auto *self = local.AddNodes();
+        if (request.GetCheckDataCenterQuorumSupport()) {
+            local.AddDataCenterQuorumCapableNodeIds(SelfNode.NodeId());
+        }
         self->MutableBaseConfig()->CopyFrom(*BaseConfig);
         SelfNode.Serialize(self->AddNodeIds());
 
@@ -1247,6 +1261,9 @@ namespace NKikimr::NStorage {
         auto addResponse = [&](const TEvGather::TCollectConfigs& cc, bool localConfigsValidated) {
             if (!metadataOnly && cc.GetMetadataOnly()) {
                 return;
+            }
+            if (request.GetCheckDataCenterQuorumSupport()) {
+                response->MutableDataCenterQuorumCapableNodeIds()->MergeFrom(cc.GetDataCenterQuorumCapableNodeIds());
             }
             THashSet<TNodeIdentifier> nodesToIgnore;
             for (const auto& item : cc.GetNodes()) {
@@ -1438,7 +1455,7 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> TDistributedConfigKeeper::StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev,
-            bool advancesConflictingGeneration, bool recoveryProposition) {
+            bool advancesConflictingGeneration, bool recoveryProposition, bool recoveringAuthorizedDcChange) {
         // ensure we are not proposing any other config right now
         Y_ABORT_UNLESS(!CurrentProposition);
 
@@ -1512,6 +1529,7 @@ namespace NKikimr::NStorage {
             .ConfigRecoveryGeneration = ConfigRecoveryGeneration,
             .AdvancesConflictingGeneration = advancesConflictingGeneration,
             .RecoveryProposition = recoveryProposition,
+            .RecoveringAuthorizedDcChange = recoveringAuthorizedDcChange,
         });
 
         Y_ABORT_UNLESS(StorageConfig);

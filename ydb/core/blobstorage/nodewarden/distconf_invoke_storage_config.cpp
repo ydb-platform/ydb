@@ -865,7 +865,7 @@ namespace NKikimr::NStorage {
                 }
                 DataCenterPreflight = false;
                 NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId);
-                return StartProposition(&ProposedStorageConfig, /*mindPrev=*/ Self->IsBridged());
+                return StartProposition(&ProposedStorageConfig, /*mindPrev=*/ Self->IsBridged() || !ProposedStorageConfig.GetDataCenterQuorumEnabled());
             }
             return Finish(TResult::OK, std::nullopt, [&](TResult *result) {
                 *result->MutableAppliedDataCenterStates() = response.GetAppliedDataCenterStates();

@@ -140,20 +140,56 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::ApplyDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& command) {
         // The caller arbitrates DC membership. The target voters may be reachable after the old quorum is lost.
-        RunCommonChecks(/*requireScepter=*/ Self->IsBridged() || !Self->SelfManagementEnabled || !Self->IsSelfStatic);
-        ProposedStorageConfig = *Self->StorageConfig;
+        bool targetQuorum = Self->StorageConfig && Self->StorageConfig->GetDataCenterQuorumEnabled()
+            && !Self->IsBridged() && Self->SelfManagementEnabled && Self->IsSelfStatic;
+        RunCommonChecks(/*requireScepter=*/ !targetQuorum);
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        bool changed;
         try {
-            if (!ApplyStaticDataCenterStates(&ProposedStorageConfig, command)) {
-                return StartDataCenterReconciliation();
-            }
+            changed = ApplyStaticDataCenterStates(&config, command);
         } catch (const yexception& error) {
             throw TExError() << error.what();
         }
+        if (!changed) {
+            if (targetQuorum) {
+                return CollectConfig([this, base = TStorageConfigMeta(config)](TProcessCollectConfigsResult&& result) {
+                    if (base != TStorageConfigMeta(*result.RecoveredConfig)) {
+                        throw TExRace() << "Configuration was recovered; retry the DC state update";
+                    }
+                    StartDataCenterReconciliation();
+                });
+            }
+            return StartDataCenterReconciliation();
+        }
+        ProposedStorageConfig = std::move(config);
         if (Self->StorageConfig->HasDataCenterStates() && Self->Scepter) {
             DataCenterPreflight = true;
             return StartDataCenterReconciliation();
         }
-        StartProposition(&ProposedStorageConfig, /*mindPrev=*/ Self->IsBridged());
+        StartProposition(&ProposedStorageConfig, /*mindPrev=*/ !targetQuorum);
+    }
+
+    bool TInvokeRequestHandlerActor::IsRequestedDataCenterChange(const NKikimrBlobStorage::TStorageConfig& pending) const {
+        const TInvokeExternalOperation *op = std::get_if<TInvokeExternalOperation>(&Query);
+        if (!op || !op->Command.HasApplyDataCenterStates() || !ProposedStorageConfig.GetDataCenterQuorumEnabled()
+                || !pending.HasPrevConfig() || TStorageConfigMeta(pending.GetPrevConfig()) != TStorageConfigMeta(*Self->StorageConfig)
+                || TStorageConfigMeta(ProposedStorageConfig) != TStorageConfigMeta(*Self->StorageConfig)) {
+            return false;
+        }
+        // Compare the whole proposed change, allowing equivalent orderings of the named DCs.
+        if (ParseDataCenterStates(pending.GetDataCenterStates()) != ParseDataCenterStates(ProposedStorageConfig.GetDataCenterStates())) {
+            return false;
+        }
+        NKikimrBlobStorage::TStorageConfig expected = ProposedStorageConfig;
+        *expected.MutableDataCenterStates() = pending.GetDataCenterStates();
+        expected.SetGeneration(pending.GetGeneration());
+        *expected.MutablePrevConfig() = *Self->StorageConfig;
+        expected.MutablePrevConfig()->ClearPrevConfig();
+        if (TDistributedConfigKeeper::TransformConfigBeforeCommit(&expected)) {
+            return false;
+        }
+        TDistributedConfigKeeper::UpdateFingerprint(&expected);
+        return expected.GetFingerprint() == pending.GetFingerprint();
     }
 
     void TDistributedConfigKeeper::RefreshStaticGroupRepairs() {

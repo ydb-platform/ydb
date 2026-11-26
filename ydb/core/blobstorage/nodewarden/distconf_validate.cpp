@@ -198,6 +198,9 @@ namespace NKikimr::NStorage {
                 << " proposed# " << proposed.GetGeneration();
         }
 
+        if (current.GetDataCenterQuorumEnabled() && !proposed.GetDataCenterQuorumEnabled()) {
+            return "DC quorum activation cannot be removed";
+        }
         if (current.HasDataCenterStates() && !proposed.HasDataCenterStates()) {
             return "DC state snapshot cannot be removed";
         }

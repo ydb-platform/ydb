@@ -161,6 +161,19 @@ namespace NKikimr::NStorage {
                     {"selfId", SelfId()},
                     {"command", op.Command});
                 switch (op.Command.GetRequestCase()) {
+                    case TQuery::kEnableDataCenterQuorum: {
+                        RunCommonChecks();
+                        if (Self->IsBridged() || !Self->SelfManagementEnabled) {
+                            throw TExError() << "DC quorum requires an ordinary self-managed cluster";
+                        }
+                        if (Self->StorageConfig->GetDataCenterQuorumEnabled()) {
+                            return Finish(TResult::OK, std::nullopt);
+                        }
+                        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+                        config.SetDataCenterQuorumEnabled(true);
+                        return StartProposition(&config);
+                    }
+
                     case TQuery::kApplyDataCenterStates:
                         return ApplyDataCenterStates(op.Command.GetApplyDataCenterStates());
 
@@ -337,6 +350,9 @@ namespace NKikimr::NStorage {
                 || !before || !after || *before != *after) {
             throw TExError() << "Use ApplyDataCenterStates to change DC availability";
         }
+        if (current.GetDataCenterQuorumEnabled() != proposed.GetDataCenterQuorumEnabled()) {
+            throw TExError() << "Use EnableDataCenterQuorum to activate DC quorum";
+        }
         CheckStaticGroupStateUpdate(proposed);
         StartProposition(request->MutableConfig());
     }
@@ -395,14 +411,17 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback,
                                                  bool allowConflictingGenerationAdvance) {
         const TInvokeExternalOperation *op = std::get_if<TInvokeExternalOperation>(&Query);
-        bool useTargetQuorum = !Self->IsBridged() && op && op->Command.HasApplyDataCenterStates();
+        bool useTargetQuorum = Self->StorageConfig && Self->StorageConfig->GetDataCenterQuorumEnabled()
+            && !Self->IsBridged() && op && op->Command.HasApplyDataCenterStates();
+        bool activating = op && op->Command.HasEnableDataCenterQuorum();
         if (!Self->StorageConfig || (!Self->Scepter && !useTargetQuorum)) {
             throw TExRace() << "No working root for configuration recovery";
         }
         TEvScatter task;
-        task.MutableCollectConfigs();
+        task.MutableCollectConfigs()->SetCheckDataCenterQuorumSupport(activating);
         const ui64 recoveryGeneration = Self->ConfigRecoveryGeneration;
-        IssueScatterTask(std::move(task), [this, recoveryGeneration, callback = std::move(callback), allowConflictingGenerationAdvance, useTargetQuorum]
+        IssueScatterTask(std::move(task), [this, recoveryGeneration, callback = std::move(callback),
+                                           allowConflictingGenerationAdvance, useTargetQuorum, activating]
                                         (TEvGather *res) {
             if (recoveryGeneration != Self->ConfigRecoveryGeneration) {
                 throw TExRace() << "Configuration changed while collecting configs";
@@ -410,8 +429,19 @@ namespace NKikimr::NStorage {
             if (!res->HasCollectConfigs()) {
                 throw TExError() << "Incorrect CollectConfigs response";
             }
+            if (activating) {
+                const auto& reported = res->GetCollectConfigs().GetDataCenterQuorumCapableNodeIds();
+                THashSet<ui32> capable(reported.begin(), reported.end());
+                for (const NKikimrBlobStorage::TNodeIdentifier& node : Self->StorageConfig->GetAllNodes()) {
+                    if (!capable.contains(node.GetNodeId())) {
+                        throw TExError() << "Static node " << node.GetNodeId() << " has not reported DC quorum support";
+                    }
+                }
+            }
+            // A no-op checks the current membership before acknowledging the snapshot.
+            const auto *target = useTargetQuorum && ProposedStorageConfig.GetGeneration() ? &ProposedStorageConfig : nullptr;
             auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true,
-                                                     allowConflictingGenerationAdvance, useTargetQuorum ? &ProposedStorageConfig : nullptr);
+                                                     allowConflictingGenerationAdvance, target);
             if (result.ErrorReason || result.IsDistconfDisabledQuorum || !result.RecoveredConfig) {
                 throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable configuration");
             }
@@ -431,9 +461,12 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::StartRecoveryProposition(TProcessCollectConfigsResult& result) {
         Y_ABORT_UNLESS(result.RequiresRecoveryProposition && result.ConfigToPropose && result.PropositionBase);
-        // IsPropositionCurrent requires a working root to commit a non-bridge recovery proposition.
         if (!Self->IsBridged() && !Self->Scepter) {
-            throw TExRace() << "No working root to recover the pending configuration";
+            if (TStorageConfigMeta(*result.RecoveredConfig) != TStorageConfigMeta(*Self->StorageConfig)
+                    || !IsRequestedDataCenterChange(*result.ConfigToPropose)) {
+                throw TExRace() << "No working root to recover an unrelated pending configuration";
+            }
+            RecoveringAuthorizedDcChange = true;
         }
         RecoveryProposition = true;
         StartPropositionImpl(&*result.ConfigToPropose, false, &*result.PropositionBase, false);
@@ -605,7 +638,7 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
-                                      SelfId(), mindPrev, AdvancesConflictingGeneration, RecoveryProposition);
+                                      SelfId(), mindPrev, AdvancesConflictingGeneration, RecoveryProposition, RecoveringAuthorizedDcChange);
         if (error) {
             YDB_LOG_DEBUG("Config update validation failed",
                 {"marker", "NWDC78"},
@@ -627,7 +660,7 @@ namespace NKikimr::NStorage {
 
         if (msg.ErrorReason) {
             throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
-        } else if (RecoveryProposition && !std::holds_alternative<TCollectConfigsAndPropose>(Query)) {
+        } else if (RecoveryProposition && !RecoveringAuthorizedDcChange && !std::holds_alternative<TCollectConfigsAndPropose>(Query)) {
             Finish(TResult::RACE, "Configuration was recovered; retry the original operation");
         } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query); op && op->Command.HasApplyDataCenterStates()) {
             StartDataCenterReconciliation();

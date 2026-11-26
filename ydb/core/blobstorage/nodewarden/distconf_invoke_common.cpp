@@ -394,8 +394,8 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback,
                                                  bool allowConflictingGenerationAdvance) {
-        const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
-        const bool useTargetQuorum = !Self->IsBridged() && op && op->Command.HasApplyDataCenterStates();
+        const TInvokeExternalOperation *op = std::get_if<TInvokeExternalOperation>(&Query);
+        bool useTargetQuorum = !Self->IsBridged() && op && op->Command.HasApplyDataCenterStates();
         if (!Self->StorageConfig || (!Self->Scepter && !useTargetQuorum)) {
             throw TExRace() << "No working root for configuration recovery";
         }

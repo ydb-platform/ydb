@@ -43,13 +43,13 @@ namespace NKikimr::NStorage {
         THashSet<ui32> nodes;
         if (HasDataCenterPolicy(config)) {
             THashSet<TString> dataCenters;
-            for (const auto& dc : config.GetDataCenterStates().GetDataCenter()) {
+            for (const NKikimrBlobStorage::TDataCenterStates::TDataCenter& dc : config.GetDataCenterStates().GetDataCenter()) {
                 if (dc.GetState() != NKikimrBlobStorage::TDataCenterState::INCLUDED) {
                     dataCenters.insert(dc.GetName());
                 }
             }
             if (!dataCenters.empty()) {
-                for (const auto& node : config.GetAllNodes()) {
+                for (const NKikimrBlobStorage::TNodeIdentifier& node : config.GetAllNodes()) {
                     if (dataCenters.contains(node.GetLocation().GetDataCenter())) {
                         nodes.insert(node.GetNodeId());
                     }
@@ -66,7 +66,7 @@ namespace NKikimr::NStorage {
             return std::nullopt;
         }
 
-        const auto nonVotingNodes = GetNonVotingNodes(config);
+        THashSet<ui32> nonVotingNodes = GetNonVotingNodes(config);
         size_t numNodes = 0;
         size_t numSuccessful = 0;
         for (const auto& node : config.GetAllNodes()) {
@@ -133,7 +133,7 @@ namespace NKikimr::NStorage {
         THashMap<ui32, std::tuple<const NKikimrBlobStorage::TNodeIdentifier&, TBridgePileId, TNodeLocation>> nodeMap;
         THashSet<std::tuple<ui32, TString>> allDrives; // only drives from mandatory piles
         bool error = false;
-        const auto nonVotingNodes = GetNonVotingNodes(config);
+        THashSet<ui32> nonVotingNodes = GetNonVotingNodes(config);
         EnumerateConfigDrives(config, 0, [&](const NKikimrBlobStorage::TNodeIdentifier& node, const auto& drive) {
             if (nonVotingNodes.contains(node.GetNodeId())) {
                 return;
@@ -286,7 +286,7 @@ namespace NKikimr::NStorage {
         }
 
         // Only voters can confirm a static group's placement for this configuration.
-        const auto nonVotingNodes = GetNonVotingNodes(config);
+        THashSet<ui32> nonVotingNodes = GetNonVotingNodes(config);
         for (const auto& [node, path, guid] : successful) {
             if (nonVotingNodes.contains(node.NodeId())) {
                 continue;
@@ -330,7 +330,7 @@ namespace NKikimr::NStorage {
             if (!hasOwnVDisks) {
                 continue;
             }
-            const bool hasQuorum = HasDataCenterPolicy(config) && info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+            bool hasQuorum = HasDataCenterPolicy(config) && info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
                 ? TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(*info, ~group.Confirmed)
                 : info->GetQuorumChecker().CheckQuorumForGroup(group.Confirmed);
             if (!hasQuorum) {

@@ -4536,50 +4536,51 @@ selector_config: []
     }
 
     Y_UNIT_TEST(DataCenterQuorumCanCommitSecondExclusionOnSurvivingDc) {
-        using TRole = NKikimrBlobStorage::TDataCenterState;
-        using TState = NKikimrBlobStorage::TGroupState;
+        using NKikimrBlobStorage::TDataCenterState;
+        using NKikimrBlobStorage::TDataCenterStates;
+        using NKikimrBlobStorage::TGroupState;
         TCommitConfirmationFixture fixture;
         fixture.UseMirror3dcGroup();
 
-        auto& base = fixture.Config;
-        auto* excluded = base.MutableDataCenterStates()->AddDataCenter();
+        NKikimrBlobStorage::TStorageConfig& base = fixture.Config;
+        TDataCenterStates::TDataCenter* excluded = base.MutableDataCenterStates()->AddDataCenter();
         excluded->SetName("dc-3");
-        excluded->SetState(TRole::EXCLUDED);
-        auto* group = base.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0);
-        group->SetMirror3dcState(TState::DC_FAILURE_INV1);
-        group->MutableRings(2)->SetState(TRole::EXCLUDED);
+        excluded->SetState(TDataCenterState::EXCLUDED);
+        NKikimrBlobStorage::TGroupInfo* group = base.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0);
+        group->SetMirror3dcState(TGroupState::DC_FAILURE_INV1);
+        group->MutableRings(2)->SetState(TDataCenterState::EXCLUDED);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&base);
         *fixture.Metadata(1).MutableCommittedStorageConfig() = base;
 
-        auto& runtime = fixture.Runtime;
+        TTestActorSystem& runtime = fixture.Runtime;
         runtime.FilterFunction = [](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             SetMetadataDiskGuid(nodeId, *ev);
             return true;
         };
         runtime.Start();
-        const TActorId keeper = RegisterKeeper(runtime, base, 1, fixture.State);
-        const auto current = QueryKeeper(runtime, keeper);
+        TActorId keeper = RegisterKeeper(runtime, base, 1, fixture.State);
+        NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult current = QueryKeeper(runtime, keeper);
         UNIT_ASSERT(!current.HasScepter());
         UNIT_ASSERT_VALUES_EQUAL(current.GetQueryConfig().GetConfig().GetFingerprint(), base.GetFingerprint());
-        const TActorId client = runtime.AllocateEdgeActor(1);
+        TActorId client = runtime.AllocateEdgeActor(1);
         std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
         runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             SetMetadataDiskGuid(nodeId, *ev);
             return !CaptureInvokeResult(*ev, client, response);
         };
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        auto* target = request->Record.MutableApplyDataCenterStates();
+        TDataCenterStates* target = request->Record.MutableApplyDataCenterStates();
         *target = base.GetDataCenterStates();
-        auto* dc = target->AddDataCenter();
+        TDataCenterStates::TDataCenter* dc = target->AddDataCenter();
         dc->SetName("dc-2");
-        dc->SetState(TRole::EXCLUDED);
+        dc->SetState(TDataCenterState::EXCLUDED);
         runtime.Send(new IEventHandle(keeper, client, request.release()), 1);
         auto committed = [&] { return fixture.Metadata(1).GetCommittedStorageConfig().GetGeneration() > base.GetGeneration(); };
         UNIT_ASSERT_C(SimUntil(runtime, [&] { return committed() || response; }) && committed(),
             (response ? response->DebugString() : "target quorum did not commit"));
-        const auto& saved = fixture.Metadata(1).GetCommittedStorageConfig();
+        const NKikimrBlobStorage::TStorageConfig& saved = fixture.Metadata(1).GetCommittedStorageConfig();
         UNIT_ASSERT_VALUES_EQUAL(saved.GetPrevConfig().GetFingerprint(), base.GetFingerprint());
-        UNIT_ASSERT(saved.GetBlobStorageConfig().GetServiceSet().GetGroups(0).GetMirror3dcState() == TState::DC_SOLO_INV1);
+        UNIT_ASSERT(saved.GetBlobStorageConfig().GetServiceSet().GetGroups(0).GetMirror3dcState() == TGroupState::DC_SOLO_INV1);
     }
 
     Y_UNIT_TEST(StaticDataCenterOperationWaitsForBscSnapshotAck) {
@@ -4993,29 +4994,30 @@ selector_config: []
     }
 
     Y_UNIT_TEST(DataCenterQuorumCountsOnlyIncludedVoters) {
-        using TState = NKikimrBlobStorage::TDataCenterState;
+        using NKikimrBlobStorage::TDataCenterState;
+        using NKikimrBlobStorage::TDataCenterStates;
         // Three drives in each of dc-1 and dc-2, one in dc-3.
-        auto config = MakeStorageConfig(7);
+        NKikimrBlobStorage::TStorageConfig config = MakeStorageConfig(7);
         for (ui32 i = 0; i < 6; ++i) {
             config.MutableAllNodes(i)->MutableLocation()->SetDataCenter(i < 3 ? "dc-1" : "dc-2");
         }
         config.MutableAllNodes(6)->MutableLocation()->SetDataCenter("dc-3");
-        auto* dc = config.MutableDataCenterStates()->AddDataCenter();
+        TDataCenterStates::TDataCenter* dc = config.MutableDataCenterStates()->AddDataCenter();
         dc->SetName("dc-3");
-        for (auto state : {TState::EXCLUDED, TState::RECOVERING}) {
+        for (TDataCenterState::EState state : {TDataCenterState::EXCLUDED, TDataCenterState::RECOVERING}) {
             dc->SetState(state);
             UNIT_ASSERT(!HasTestConfigQuorum(config, {1, 2, 3, 4, 7}));
             UNIT_ASSERT(!HasQuorum(config, {1, 2, 3, 4, 7}));
             UNIT_ASSERT(HasTestConfigQuorum(config, {1, 2, 4, 5}));
         }
-        dc->SetState(TState::INCLUDED);
+        dc->SetState(TDataCenterState::INCLUDED);
         UNIT_ASSERT(HasTestConfigQuorum(config, {1, 2, 7}));
 
-        dc->SetState(TState::EXCLUDED);
-        for (auto name : {"dc-1", "dc-2"}) {
-            auto* entry = config.MutableDataCenterStates()->AddDataCenter();
+        dc->SetState(TDataCenterState::EXCLUDED);
+        for (const char* name : {"dc-1", "dc-2"}) {
+            TDataCenterStates::TDataCenter* entry = config.MutableDataCenterStates()->AddDataCenter();
             entry->SetName(name);
-            entry->SetState(TState::EXCLUDED);
+            entry->SetState(TDataCenterState::EXCLUDED);
         }
         UNIT_ASSERT(!HasTestConfigQuorum(config, {1, 2, 3, 4, 5, 6, 7}));
         UNIT_ASSERT(!HasQuorum(config, {1, 2, 3, 4, 5, 6, 7}));

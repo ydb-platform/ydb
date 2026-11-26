@@ -76,6 +76,40 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         }
     }
 
+    Y_UNIT_TEST(RejectsGeneratedColumns) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns {
+                Name: "stored"
+                Type: "Uint32"
+                DefaultFromExpression { ExprText: "key + 1u" Stored: true DependencyColumnNames: ["key"] }
+            }
+            Columns {
+                Name: "virtual"
+                Type: "Uint32"
+                DefaultFromExpression { ExprText: "key + 1u" Stored: false DependencyColumnNames: ["key"] }
+            }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (const char* column : {"stored", "virtual"}) {
+            const auto response = TestSetColumnConstraint(runtime, ++txId,
+                TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", {column});
+            UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), Ydb::StatusIds::BAD_REQUEST, response.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(response.GetIssues().size(), 1);
+            UNIT_ASSERT_STRING_CONTAINS(response.GetIssues(0).message(), "SET NOT NULL on GENERATED column");
+        }
+        TestCheckColumnsNotNull(runtime, "/MyRoot/Table", {{"stored", false}, {"virtual", false}});
+    }
+
     Y_UNIT_TEST(BasicRequestThreeDataShards) {
         TTestBasicRuntime runtime;
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);

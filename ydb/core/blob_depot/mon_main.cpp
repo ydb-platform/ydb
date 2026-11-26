@@ -473,6 +473,7 @@ namespace NKikimr::NBlobDepot {
                                     BD_MON_TABLE_ROW("Cooling enabled", Self->IsDataCoolingEnabled() ? "yes" : "no");
                                     BD_MON_TABLE_ROW("HotTargetBytes", FormatByteSize(asyncMode.GetHotTargetBytes()));
                                     BD_MON_TABLE_ROW("TargetObjectBytes", FormatByteSize(asyncMode.GetTargetObjectBytes()));
+                                    BD_MON_TABLE_ROW("RepackBelowLivePercent", asyncMode.GetRepackBelowLivePercent());
                                     BD_MON_TABLE_ROW("UploadPutsInFlight", asyncMode.GetUploadPutsInFlight());
                                 }
 

@@ -490,6 +490,7 @@ namespace NKikimr::NBlobDepot {
         TClosedIntervalSet<TKey> LoadedKeys; // keys that are already scanned and loaded in the local database
         THashMap<TLogoBlobID, ui32> RefCountBlobs;
         struct TS3PartialReferences {
+            std::map<TKey, ui32> Keys;
             THashMap<std::pair<ui32, ui32>, ui32> Ranges;
             ui32 RefCount = 0;
             ui64 LiveBytes = 0;
@@ -518,11 +519,11 @@ namespace NKikimr::NBlobDepot {
         bool S3ReferencesLoaded = false;
         void CheckPendingS3References(NTabletFlatExecutor::TTransactionContext& txc, void* cookie);
         enum class ES3ReferenceAction { Add, Remove, Discard };
-        void UpdateS3Reference(const NKikimrBlobDepot::TValueChain& link, TS3Locator locator,
+        void UpdateS3Reference(const TKey& key, const NKikimrBlobDepot::TValueChain& link, TS3Locator locator,
             ES3ReferenceAction action,
             std::vector<TS3ObjectKey>* unreferenced = nullptr);
         template<typename TLocal>
-        bool AccountValueChain(const TValueChain& chain, ES3ReferenceAction action,
+        bool AccountValueChain(const TKey& key, const TValueChain& chain, ES3ReferenceAction action,
             TLocal&& accountLocal, std::vector<TS3ObjectKey>* unreferenced = nullptr);
         void UpdateS3Counters();
         THashMap<std::tuple<ui8, ui32>, TRecordsPerChannelGroup> RecordsPerChannelGroup;
@@ -910,6 +911,7 @@ namespace NKikimr::NBlobDepot {
         ui64 GetTotalS3DataSize() const { return TotalS3DataSize; }
         ui64 GetTotalS3LiveBytes() const { return TotalS3LiveBytes; }
         bool IsS3ObjectReferenced(const TS3Locator& locator) const;
+        const std::map<TKey, ui32>& GetS3PartialKeys(const TS3ObjectKey& key) const;
 
         void RenderMainPage(IOutputStream& s);
 

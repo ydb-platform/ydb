@@ -193,9 +193,11 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(mirrored.Producer, first.Producer);
         UNIT_ASSERT_VALUES_EQUAL(mirrored.SeqNo, first.SeqNo);
         CheckOffsets(1);
+        UNIT_ASSERT(DescribeTopicDataLag(Destination, "/Root/replication", DestinationFeed) == 0);
 
         Scheme(Destination, "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'PAUSED');");
         WaitForState(NKikimrReplication::TReplicationState::kPaused);
+        UNIT_ASSERT(!DescribeTopicDataLag(Destination, "/Root/replication", DestinationFeed));
         Execute(Source, "UPSERT INTO `/Root/source` (key, value) VALUES (2u, 20u);");
 
         Scheme(Destination, "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'STANDBY');");

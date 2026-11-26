@@ -321,12 +321,14 @@ struct TEvPrivate {
 
     struct TEvDescribeTargetsResult: public TEventLocal<TEvDescribeTargetsResult, EvDescribeTargetsResult> {
         using TResult = THashMap<ui64, std::optional<NYdb::NTable::TDescribeTableResult>>;
+        using TTopicLags = THashMap<ui64, std::optional<ui64>>;
 
         const TActorId Sender;
         const ui64 ReplicationId;
         TResult Result;
+        TTopicLags TopicLags;
 
-        explicit TEvDescribeTargetsResult(const TActorId& sender, ui64 rid, TResult&& result);
+        explicit TEvDescribeTargetsResult(const TActorId& sender, ui64 rid, TResult&& result, TTopicLags&& topicLags);
         TString ToString() const override;
     };
 

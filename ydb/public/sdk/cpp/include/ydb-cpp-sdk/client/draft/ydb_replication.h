@@ -88,10 +88,12 @@ public:
 
     const std::optional<TDuration>& GetLag() const;
     const std::optional<float>& GetInitialScanProgress() const;
+    const std::optional<uint64_t>& GetTopicDataLagOffsets() const;
 
 private:
     std::optional<TDuration> Lag_;
     std::optional<float> InitialScanProgress_;
+    std::optional<uint64_t> TopicDataLagOffsets_;
 };
 
 class TRunningState {

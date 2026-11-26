@@ -248,10 +248,11 @@ TString TEvPrivate::TEvRemoveWorker::ToString() const {
     << " }";
 }
 
-TEvPrivate::TEvDescribeTargetsResult::TEvDescribeTargetsResult(const TActorId& sender, ui64 rid, TResult&& result)
+TEvPrivate::TEvDescribeTargetsResult::TEvDescribeTargetsResult(const TActorId& sender, ui64 rid, TResult&& result, TTopicLags&& topicLags)
     : Sender(sender)
     , ReplicationId(rid)
     , Result(std::move(result))
+    , TopicLags(std::move(topicLags))
 {
 }
 

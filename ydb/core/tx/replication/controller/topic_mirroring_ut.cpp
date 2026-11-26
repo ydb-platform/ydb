@@ -698,9 +698,12 @@ Y_UNIT_TEST_SUITE(TopicMirroring) {
         UNIT_ASSERT_VALUES_EQUAL(test.GetSourceConsumerOffset(), appOffset);
 
         test.CheckBacklog(1, end);
+        UNIT_ASSERT(!DescribeTopicDataLag(test.Destination, "/Root/replication", "/Root/topic", false));
+        UNIT_ASSERT(DescribeTopicDataLag(test.Destination, "/Root/replication", "/Root/topic") == end - 1);
         mirrorReader.Resume();
         test.ReadBack(backlog, 1);
         test.WaitForOffsets(end, appOffset);
+        UNIT_ASSERT(DescribeTopicDataLag(test.Destination, "/Root/replication", "/Root/topic") == 0);
         UNIT_ASSERT_VALUES_EQUAL(test.GetSourceConsumerOffset(), appOffset);
     }
 

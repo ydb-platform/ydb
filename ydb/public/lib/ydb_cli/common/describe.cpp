@@ -1063,6 +1063,7 @@ int TDescribeLogic::PrintReplicationResponsePretty(const NYdb::NReplication::TDe
         if (options.ShowStats) {
             columnNames.push_back("Lag");
             columnNames.push_back("Progress");
+            columnNames.push_back("Topic data lag (offsets)");
         }
 
         TPrettyTable table(columnNames, TPrettyTableConfig().WithoutRowDelimiters());
@@ -1075,7 +1076,8 @@ int TDescribeLogic::PrintReplicationResponsePretty(const NYdb::NReplication::TDe
             if (options.ShowStats) {
                 row
                     .Column(4, ValueOr(item.Stats.GetLag(), "n/a"))
-                    .Column(5, ProgressOr(item.Stats.GetInitialScanProgress(), "n/a"));
+                    .Column(5, ProgressOr(item.Stats.GetInitialScanProgress(), "n/a"))
+                    .Column(6, ValueOr(item.Stats.GetTopicDataLagOffsets(), "n/a"));
             }
         }
         Out << Endl << "Items:" << Endl << table;

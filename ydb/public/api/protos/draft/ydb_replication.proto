@@ -81,6 +81,11 @@ message DescribeReplicationResult {
     message Stats {
         optional google.protobuf.Duration lag = 1;
         optional float initial_scan_progress = 2;
+        // Maximum partition offset distance from the sampled source end to the destination end.
+        // Available per mirrored topic or changefeed with include_stats when all partitions are comparable.
+        // Zero covers the sampled ends. Consumer commits, changes not yet emitted into a changefeed,
+        // and writes after the sample are outside this measurement.
+        optional uint64 topic_data_lag_offsets = 3;
     }
 
     message Item {

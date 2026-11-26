@@ -45,6 +45,8 @@ private:
     YDB_ACCESSOR(bool, IndexWriteControllerEnabled, true);
     mutable TAtomicCounter IndexWriteControllerBrokeCount;
     std::set<EBackground> DisabledBackgrounds;
+    std::optional<ui32> PortionBatchesLimit;
+    TAtomicCounter PortionBatchesLoaded = 0;
 
     TMutex ActiveTabletsMutex;
 
@@ -254,7 +256,14 @@ protected:
 
     virtual bool IsBackgroundEnabled(const EBackground id) const override {
         TGuard<TMutex> g(Mutex);
+        if (id == EBackground::PortionLoading && PortionBatchesLimit && PortionBatchesLoaded.Val() >= *PortionBatchesLimit) {
+            return false;
+        }
         return !DisabledBackgrounds.contains(id);
+    }
+
+    virtual void OnPortionsBatchLoaded(const ui64 /*tabletId*/) override {
+        PortionBatchesLoaded.Inc();
     }
 
     virtual TDuration DoGetActualizationTasksLag(const TDuration d) const override {
@@ -325,6 +334,16 @@ protected:
     }
 
 public:
+    // deferred portion loading stops after this many batches over the whole test; a periodic wakeup resumes it
+    void SetPortionBatchesLimit(const std::optional<ui32> limit) {
+        TGuard<TMutex> g(Mutex);
+        PortionBatchesLimit = limit;
+    }
+
+    ui32 GetPortionBatchesLoaded() const {
+        return PortionBatchesLoaded.Val();
+    }
+
     virtual bool CheckPortionsToMergeOnCompaction(const ui64 /*memoryAfterAdd*/, const ui32 currentSubsetsCount) override {
         return currentSubsetsCount > 1;
     }

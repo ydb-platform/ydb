@@ -14,6 +14,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/index/index.h>
+#include <ydb/core/tx/columnshard/engines/storage/data_stats/shard_data_stats.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
@@ -24,105 +25,9 @@ class TPortionsLoadContext;
 }
 
 class TGranulesStorage;
-class TGranulesStat;
 class TColumnChunkLoadContext;
 class TVersionedIndex;
-
-class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
-private:
-    friend class TGranuleMeta;
-
-public:
-    void AddPortion(const TPortionInfo& info) {
-        ColumnPortionsSize += info.GetColumnBlobBytes();
-        TotalPortionsSize += info.GetTotalBlobBytes();
-        MetadataMemoryPortionsSize += info.GetMetadataMemorySize();
-        RecordsCount += info.GetRecordsCount();
-        ++PortionsCount;
-    }
-
-    void RemovePortion(const TPortionInfo& info) {
-        MetadataMemoryPortionsSize -= info.GetMetadataMemorySize();
-        Y_ABORT_UNLESS(MetadataMemoryPortionsSize >= 0);
-        ColumnPortionsSize -= info.GetColumnBlobBytes();
-        Y_ABORT_UNLESS(ColumnPortionsSize >= 0);
-        TotalPortionsSize -= info.GetTotalBlobBytes();
-        Y_ABORT_UNLESS(TotalPortionsSize >= 0);
-        RecordsCount -= info.GetRecordsCount();
-        Y_ABORT_UNLESS(RecordsCount >= 0);
-        --PortionsCount;
-        Y_ABORT_UNLESS(PortionsCount >= 0);
-    }
-};
-
-class TGranuleAdditiveSummary {
-private:
-    TDataClassSummary Inserted;
-    TDataClassSummary Compacted;
-    friend class TGranuleMeta;
-
-public:
-    const TDataClassSummary& GetInserted() const {
-        return Inserted;
-    }
-
-    const TDataClassSummary& GetCompacted() const {
-        return Compacted;
-    }
-
-    ui64 GetMetadataMemoryPortionsSize() const {
-        return Inserted.GetMetadataMemoryPortionsSize() + Compacted.GetMetadataMemoryPortionsSize();
-    }
-
-    ui64 GetGranuleSize() const {
-        return Inserted.GetTotalPortionsSize() + Compacted.GetTotalPortionsSize();
-    }
-
-    ui64 GetActivePortionsCount() const {
-        return Inserted.GetPortionsCount() + Compacted.GetPortionsCount();
-    }
-
-    class TEditGuard: TNonCopyable {
-    private:
-        const NColumnShard::TGranuleDataCounters& Counters;
-        TGranuleAdditiveSummary& Owner;
-
-    public:
-        TEditGuard(const NColumnShard::TGranuleDataCounters& counters, TGranuleAdditiveSummary& owner)
-            : Counters(counters)
-            , Owner(owner)
-        {
-        }
-
-        ~TEditGuard() {
-            Counters.OnPortionsDataRefresh(Owner.GetInserted(), Owner.GetCompacted());
-        }
-
-        void AddPortion(const TPortionInfo& info) {
-            if (info.GetPortionType() == EPortionType::Written) {
-                Owner.Inserted.AddPortion(info);
-            } else {
-                Owner.Compacted.AddPortion(info);
-            }
-        }
-
-        void RemovePortion(const TPortionInfo& info) {
-            if (info.GetPortionType() == EPortionType::Written) {
-                Owner.Inserted.RemovePortion(info);
-            } else {
-                Owner.Compacted.RemovePortion(info);
-            }
-        }
-    };
-
-    TEditGuard StartEdit(const NColumnShard::TGranuleDataCounters& counters) {
-        return TEditGuard(counters, *this);
-    }
-
-    TString DebugString() const {
-        return TStringBuilder() << "inserted:(" << Inserted.DebugString() << ");other:(" << Compacted.DebugString() << "); ";
-    }
-};
+class TColumnEngineForLogs;
 
 class TGranuleMeta: TNonCopyable {
 private:
@@ -132,16 +37,12 @@ private:
     THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>> InsertedPortionsById;
     THashMap<TInsertWriteId, std::shared_ptr<TPortionDataAccessor>> InsertedAccessors;
     std::unique_ptr<PortionIntervalTree::TPortionIntervalTree> IntervalTree;
-    mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
-
-    void RebuildAdditiveMetrics() const;
 
     mutable bool AllowInsertionFlag = false;
     const TInternalPathId PathId;
     std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const NColumnShard::TGranuleDataCounters Counters;
-    NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
-    std::shared_ptr<TGranulesStat> Stats;
+    std::shared_ptr<NColumnShard::TShardDataStats> DataStats;
     std::shared_ptr<IStoragesManager> StoragesManager;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> OptimizerPlanner;
     std::shared_ptr<NDataAccessorControl::IMetadataMemoryManager> MetadataMemoryManager;
@@ -153,7 +54,6 @@ private:
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
     void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, const bool onLoad = false);
-    void OnAdditiveSummaryChange() const;
 
     TConclusion<std::shared_ptr<TPortionInfo>> GetInnerPortion(const TPortionInfo::TConstPtr& portion) const {
         if (!portion) {
@@ -170,8 +70,6 @@ private:
         return it->second;
     }
 
-    bool DataAccessorConstructed = false;
-
 public:
     std::vector<TCSMetadataRequest> CollectMetadataRequests() {
         return ActualizationIndex->CollectMetadataRequests(Portions);
@@ -181,8 +79,8 @@ public:
         return *OptimizerPlanner;
     }
 
-    std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
-    bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
+    std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, TColumnEngineForLogs& engine);
+    bool TestingLoad(IDbWrapper& db, TColumnEngineForLogs& engine);
 
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& GetDataAccessorsManager() const {
         return DataAccessorsManager;
@@ -324,15 +222,6 @@ public:
         return result;
     }
 
-    void OnAfterPortionsLoad() {
-        for (auto&& i : Portions) {
-            OnAfterChangePortion(i.second, true);
-        }
-        if (ActualizationIndex->IsStarted()) {
-            RefreshScheme();
-        }
-    }
-
     void PrefetchPortionsMetadata() {
         if (!MetadataMemoryManager->NeedPrefetch() || Portions.empty()) {
             return;
@@ -345,17 +234,8 @@ public:
         DataAccessorsManager->AskData(request);
     }
 
-    void AddLoadedPortionsToOptimizer() {
-        std::vector<std::shared_ptr<TPortionInfo>> portions;
-        for (auto&& [_, portion] : Portions) {
-            if (!portion->HasRemoveSnapshot()) {
-                portions.emplace_back(portion);
-            }
-        }
-        OptimizerPlanner->AddLoadedPortions(portions);
-    }
-
-    const TGranuleAdditiveSummary& GetAdditiveSummary() const;
+    const NColumnShard::TDataStatsByStorage& GetDataStats() const;
+    void RefreshDataCounters() const;
 
     NStorageOptimizer::TOptimizationPriority GetCompactionPriority() const {
         return OptimizerPlanner->GetUsefulMetric();
@@ -382,12 +262,22 @@ public:
     TString DebugString() const {
         return TStringBuilder() << "(granule:" << GetPathId() << ";"
                                 << "path_id:" << GetPathId() << ";"
-                                << "size:" << GetAdditiveSummary().GetGranuleSize() << ";"
+                                << "size:" << (GetDataStats().GetWritten() + GetDataStats().GetCompacted()).GetBlobBytes() << ";"
                                 << "portions_count:" << Portions.size() << ";"
                                 << ")";
     }
 
+    bool LoadsChunksAtStart() const {
+        return MetadataMemoryManager->LoadsChunksAtStart();
+    }
+
     void UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& portion);
+    void AddPortionsToOptimizer(const std::vector<std::shared_ptr<TPortionInfo>>& activePortions);
+    // One batch of deferred loading, in the order of the index; returns the committed portions it added
+    std::vector<std::shared_ptr<TPortionInfo>> AddPortionsLoadedInBatch(
+        const std::vector<std::shared_ptr<TPortionInfo>>& portions, TLoadedKeyRanges&& loadedKeyRanges);
+    // the portions without a remove snapshot
+    std::vector<std::shared_ptr<TPortionInfo>> GetActivePortions() const;
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;

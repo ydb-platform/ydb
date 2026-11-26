@@ -46,8 +46,6 @@ namespace NKikimr::NBlobDepot {
             ConnectToBlobDepot();
         }
 
-        HandleQueryWatchdog();
-        HandlePendingEventQueueWatchdog();
         HandlePushMetrics();
     }
 

@@ -1,0 +1,5 @@
+LIBRARY()
+
+GENERATE_ENUM_SERIALIZATION(statement_kind.h)
+
+END()

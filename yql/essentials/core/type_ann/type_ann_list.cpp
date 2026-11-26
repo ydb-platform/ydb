@@ -3381,7 +3381,8 @@ namespace {
                 return nullptr;
             }
             const auto itemType = input.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-            if (itemType->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+            if (itemType->GetKind() == ETypeAnnotationKind::UniversalStruct ||
+                itemType->GetKind() == ETypeAnnotationKind::Universal) {
                 isUniversal = true;
                 return nullptr;
             }

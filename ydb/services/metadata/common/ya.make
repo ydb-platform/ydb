@@ -6,10 +6,13 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/services/metadata/initializer
-    ydb/services/metadata/abstract
-    ydb/services/bg_tasks/abstract
+    library/cpp/time_provider
+    ydb/core/base
     ydb/core/tx/scheme_cache
+    ydb/library/actors/core
+    ydb/library/services
+    ydb/services/metadata/abstract
+    ydb/services/metadata/initializer
 )
 
 YQL_LAST_ABI_VERSION()

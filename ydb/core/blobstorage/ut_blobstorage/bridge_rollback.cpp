@@ -787,6 +787,46 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         checker.CheckAll();
     }
 
+    Y_UNIT_TEST(RepeatedRollbackWaitsForCommittedMarker) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        std::vector<std::unique_ptr<IEventHandle>> heldWrites;
+        TEnvironmentSetup env(MakeUnbridgedSettings());
+        TDataChecker checker(env);
+        ConvertCluster(env, checker);
+
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType) {
+                const auto& config = ev->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record.GetCommittedStorageConfig();
+                if (NBridge::IsRollbackPending(config.GetClusterStateDetails())) {
+                    heldWrites.push_back(std::move(ev));
+                    return false;
+                }
+            }
+            return true;
+        };
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        for (ui64 cookie : {1, 2}) {
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            request->Record.MutableRollbackBridge();
+            env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), edge, request.release(), 0, cookie), 1);
+        }
+        auto first = env.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(first->Cookie, 1u);
+        UNIT_ASSERT_EQUAL_C(first->Get()->Record.GetStatus(), TResult::NO_QUORUM, first->Get()->Record.DebugString());
+        UNIT_ASSERT(!heldWrites.empty());
+        auto early = env.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge, false,
+            env.Runtime->GetClock() + TDuration::Seconds(1));
+        UNIT_ASSERT_C(!early, early->Get()->Record.DebugString());
+        env.Runtime->FilterFunction = {};
+        for (auto& ev : heldWrites) {
+            const ui32 nodeId = ev->GetRecipientRewrite().NodeId();
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        auto retry = env.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(retry->Cookie, 2u);
+        UNIT_ASSERT_EQUAL_C(retry->Get()->Record.GetStatus(), TResult::OK, retry->Get()->Record.DebugString());
+    }
+
     // the cluster bridged with several piles from the very beginning has no original pile to get back to
     Y_UNIT_TEST(NativeBridgedClusterRefused) {
         TEnvironmentSetup env({

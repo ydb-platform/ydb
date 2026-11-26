@@ -285,7 +285,7 @@ public:
 void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseConfig *config, const TTestEnvOpts &options, TInstant now, ui32 vdiskPerPdisk = 4)
 {
     constexpr ui32 MIRROR_3DC_VDISKS_COUNT = 9;
-    constexpr ui32 BLOCK_4_2_VDISKS_COUNT = 8;
+    const ui32 blockVDisksCount = TBlobStorageGroupType(options.BlockErasure).BlobSubgroupSize();
 
     ui32 pdisks = options.VDisks;
 
@@ -294,8 +294,8 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
     ui32 numGroups;
     if (options.UseMirror3dcErasure)
         numGroups = numNodes * vdisksPerNode / MIRROR_3DC_VDISKS_COUNT;
-    else if (numNodes >= BLOCK_4_2_VDISKS_COUNT)
-        numGroups = numNodes * vdisksPerNode / BLOCK_4_2_VDISKS_COUNT;
+    else if (numNodes >= blockVDisksCount)
+        numGroups = numNodes * vdisksPerNode / blockVDisksCount;
     else
         numGroups = numNodes * vdisksPerNode;
 
@@ -322,8 +322,8 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
         group.SetGroupGeneration(1);
         if (options.UseMirror3dcErasure)
             group.SetErasureSpecies("mirror-3-dc");
-        else if (numNodes >= BLOCK_4_2_VDISKS_COUNT)
-            group.SetErasureSpecies("block-4-2");
+        else if (numNodes >= blockVDisksCount)
+            group.SetErasureSpecies(TErasureType::ErasureSpeciesName(options.BlockErasure));
         else
             group.SetErasureSpecies("none");
     }
@@ -351,8 +351,8 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
         if (options.UseMirror3dcErasure) {
             ui32 groupNodesSize = MIRROR_3DC_VDISKS_COUNT / maxOneGroupVdisksPerNode;
             groupShift = (nodeIndex / groupNodesSize) * groupsPerNode;
-        } else if (numNodes >= BLOCK_4_2_VDISKS_COUNT) {
-            ui32 groupNodesSize = BLOCK_4_2_VDISKS_COUNT / maxOneGroupVdisksPerNode;
+        } else if (numNodes >= blockVDisksCount) {
+            ui32 groupNodesSize = blockVDisksCount / maxOneGroupVdisksPerNode;
             groupShift = (nodeIndex / groupNodesSize) * groupsPerNode;
         } else {
             groupShift = nodeIndex * groupsPerNode;
@@ -411,7 +411,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
                     groupId,
                     1,
                     (ui8)failRealm,
-                    (ui8)(nodeIndex % BLOCK_4_2_VDISKS_COUNT),
+                    (ui8)(nodeIndex % blockVDisksCount),
                     (ui8)(vdiskId % maxOneGroupVdisksPerNode)
                 };
 
@@ -431,7 +431,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
                 vdiskConfig.SetGroupId(groupId);
                 vdiskConfig.SetGroupGeneration(1);
                 vdiskConfig.SetFailRealmIdx(failRealm);
-                vdiskConfig.SetFailDomainIdx(nodeIndex % BLOCK_4_2_VDISKS_COUNT);
+                vdiskConfig.SetFailDomainIdx(nodeIndex % blockVDisksCount);
                 vdiskConfig.SetVDiskIdx(vdiskId % maxOneGroupVdisksPerNode);
 
                 config->MutableGroup(groupIdx)->AddVSlotId()
@@ -445,8 +445,8 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             proxyGroup.SetGroupGeneration(1);
             if (options.UseMirror3dcErasure)
                 proxyGroup.SetErasureSpecies("mirror-3-dc");
-            else if (numNodes >= BLOCK_4_2_VDISKS_COUNT)
-                proxyGroup.SetErasureSpecies("block-4-2");
+            else if (numNodes >= blockVDisksCount)
+                proxyGroup.SetErasureSpecies(TErasureType::ErasureSpeciesName(options.BlockErasure));
             else
                 proxyGroup.SetErasureSpecies("none");
             TGroupID fullGroupId(EGroupConfigurationType::Dynamic, i % options.PileCount, i + 10000);

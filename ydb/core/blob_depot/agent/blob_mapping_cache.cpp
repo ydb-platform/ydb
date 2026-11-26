@@ -14,6 +14,16 @@ namespace NKikimr::NBlobDepot {
         {}
     };
 
+    void TBlobDepotAgent::TBlobMappingCache::CheckRouteRevision(TCachedKeyItem& entry) {
+        if (entry.RouteRevision != RouteRevision) {
+            // Invalidate lazily so removing S3 does not scan the whole cache on the agent mailbox.
+            if (AnyOf(entry.Value.Chain, [](const auto& link) { return link.S3Locator.has_value(); })) {
+                entry.Value = {};
+            }
+            entry.RouteRevision = RouteRevision;
+        }
+    }
+
     void TBlobDepotAgent::TBlobMappingCache::HandleResolveResult(ui64 tag, const NKikimrBlobDepot::TEvResolveResult& msg,
             TRequestContext::TPtr context) {
         YDB_LOG_DEBUG("HandleResolveResult",
@@ -47,6 +57,7 @@ namespace NKikimr::NBlobDepot {
                 TStringBuf keyBuf = key;
                 const auto [it, inserted] = Cache.try_emplace(std::move(key), keyBuf);
                 auto& [key_, entry] = *it;
+                CheckRouteRevision(entry);
 
                 YDB_LOG_DEBUG("HandleResolveResult success",
                     {"marker", "BDA44"},
@@ -121,12 +132,24 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
+    void TBlobDepotAgent::TBlobMappingCache::RefreshAfterMissing(const TString& key, const TResolvedValue& stale,
+            const TResolvedValue& current) {
+        if (const auto it = Cache.find(key); it != Cache.end()) {
+            CheckRouteRevision(it->second);
+            auto& cached = it->second.Value;
+            if (cached.Defined && cached == stale) {
+                cached = current;
+            }
+        }
+    }
+
     const TResolvedValue *TBlobDepotAgent::TBlobMappingCache::ResolveKey(TString key, TQuery *query,
             TRequestContext::TPtr context, bool mustRestoreFirst, NKikimrBlobStorage::TDataKind::E dataKind) {
         // obtain entry in the cache
         const TStringBuf keyBuf = key;
         const auto [it, inserted] = Cache.try_emplace(std::move(key), keyBuf);
         auto& entry = it->second;
+        CheckRouteRevision(entry);
 
         YDB_LOG_DEBUG("ResolveKey",
             {"marker", "BDA45"},

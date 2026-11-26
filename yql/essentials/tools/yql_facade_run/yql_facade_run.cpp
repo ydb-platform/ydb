@@ -205,6 +205,8 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     }
 
     THashSet<TString> sqlFlags;
+    TString qstorageDir = ".";
+    bool qstorageCrashAware = false;
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
@@ -418,9 +420,10 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
             });
     }
     if (EnableQPlayer) {
-        opts.AddLongOption("qstorage-dir", "Directory for QStorage").RequiredArgument("DIR").Handler1T<TString>([this](const TString& dir) {
-            QPlayerStorage_ = MakeFileQStorage(dir);
-        });
+        opts.AddLongOption("qstorage-dir", "Directory for QStorage").RequiredArgument("DIR").StoreResult(&qstorageDir);
+        opts.AddLongOption("qstorage-crash-aware", "Flush captured QStorage records and index after each write, before commit")
+            .NoArgument()
+            .SetFlag(&qstorageCrashAware);
         opts.AddLongOption("op-id", "QStorage operation id").StoreResult(&OperationId).DefaultValue("dummy_op");
         opts.AddLongOption("capture", "Write query metadata to QStorage").NoArgument().Handler0([this]() {
             if (EQPlayerMode::None != QPlayerMode) {
@@ -485,10 +488,15 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         LangVer = *ProjectSettings.LangVer;
     }
 
+    if (qstorageCrashAware && QPlayerMode != EQPlayerMode::Capture) {
+        throw yexception() << "qstorage-crash-aware requires capture or capture-full";
+    }
     if (QPlayerMode != EQPlayerMode::None) {
-        if (!QPlayerStorage_) {
-            QPlayerStorage_ = MakeFileQStorage(".");
-        }
+        const TFileQStorageSettings settings{
+            .BufferUntilCommit = !qstorageCrashAware,
+            .AlwaysFlushIndex = qstorageCrashAware,
+        };
+        QPlayerStorage_ = MakeFileQStorage(qstorageDir, settings);
         if (EQPlayerMode::Replay == QPlayerMode) {
             try {
                 auto reader = QPlayerStorage_->MakeReader(OperationId, {});

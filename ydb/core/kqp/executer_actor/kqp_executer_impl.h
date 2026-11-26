@@ -21,6 +21,7 @@
 #include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/executer_actor/kqp_streaming_helper.h>
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
@@ -2077,14 +2078,22 @@ protected:
     }
 
     void ProcessStreamingQueryCounters() {
-        if (!StreamingQuery) {
+        const auto context = TasksGraph.GetMeta().UserRequestContext;
+        if (!AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() || !context || context->StreamingQueryPath.empty()) {
             return;
         }
-        const auto now = TInstant::Now();
-        if (StreamingQuery->NeedsCountersUpdate(now)) {
+        if (!StreamingQueryCounters) {
+            StreamingQueryCounters = MakeStreamingQueryCounters(Counters->Counters->GetKqpCounters(), context->StreamingQueryPath);
+        }
+        auto now = TInstant::Now();
+        if (!LastStreamingQueryUpdateCounters) {
+            LastStreamingQueryUpdateCounters = now + TDuration::Seconds(10);
+        }
+        if (LastStreamingQueryUpdateCounters + StreamingQueryUpdateCountersPeriod <= now) {
             TAggExecStat stats;
             Stats->ExportAggExecStats(&stats);
-            StreamingQuery->UpdateCounters(stats, now);
+            StreamingQueryCounters->Update(stats);
+            LastStreamingQueryUpdateCounters = now;
         }
     }
 
@@ -2104,6 +2113,7 @@ protected:
     std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant LastProgressStats;
     std::optional<TMonotonic> LastCurrentQueryStatsReport;
+    TInstant LastStreamingQueryUpdateCounters;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;
     TMaybe<TInstant> CancelAt;
@@ -2173,6 +2183,7 @@ protected:
     std::unique_ptr<IKqpStreamingQueryController> StreamingQuery;
     TActorId StreamingQueryNodesManagerId;
     TActorId CheckpointCoordinatorId;
+    TIntrusivePtr<IStreamingQueryCounters> StreamingQueryCounters;
 
     bool NewRboEnabled = false;
 

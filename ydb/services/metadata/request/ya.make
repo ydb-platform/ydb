@@ -8,12 +8,17 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/core
     ydb/core/base
-    ydb/core/grpc_services/local_rpc
-    ydb/core/grpc_services/base
     ydb/core/grpc_services
+    ydb/core/grpc_services/base
+    ydb/core/grpc_services/local_rpc
+    ydb/core/protos
+    ydb/library/accessor
+    ydb/library/aclib
+    ydb/library/actors/core
+    ydb/library/conclusion
     ydb/public/api/protos
+    yql/essentials/public/issue
 )
 
 END()

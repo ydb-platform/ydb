@@ -1,5 +1,13 @@
 YQL_LIBRARY()
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    yql/udfs/antirobot/decrypt_hypocrisy_fingerprint$
+    yql/udfs/dj/fs_module/dj_fs$
+    yql/udfs/dj/fs_module/dj_fs_test$
+    yql/udfs/modadvert/bigmod
+)
+
 PEERDIR(
     library/cpp/deprecated/enum_codegen
     library/cpp/containers/stack_vector

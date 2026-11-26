@@ -84,14 +84,9 @@ Ydb::Topic::CreateTopicRequest BuildTopicMirrorRequest(const NYdb::NTopic::TTopi
     Ydb::Topic::CreateTopicRequest request;
     description.SerializeTo(request);
 
+    // Mirroring uses the effective read quota reported by the source.
     const auto& source = NYdb::TProtoAccessor::GetProto(description);
     request.set_partition_total_read_speed_bytes_per_second(source.partition_total_read_speed_bytes_per_second());
-    request.set_partition_write_burst_messages(source.partition_write_burst_messages());
-    request.set_partition_total_read_speed_messages_per_second(source.partition_total_read_speed_messages_per_second());
-    request.set_content_based_deduplication(source.content_based_deduplication());
-    request.set_partition_write_speed_messages_per_second(source.partition_write_speed_messages_per_second());
-    request.set_partition_read_without_consumer_speed_bytes_per_second(source.partition_read_without_consumer_speed_bytes_per_second());
-    request.set_partition_read_without_consumer_speed_messages_per_second(source.partition_read_without_consumer_speed_messages_per_second());
 
     request.mutable_attributes()->erase("_ydb_replication_consumer");
     // Source write restrictions must not block writes by the destination mirrorer.

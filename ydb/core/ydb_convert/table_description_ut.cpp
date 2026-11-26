@@ -44,6 +44,48 @@ Ydb::Table::ColumnMeta NullDefaultColumn(const TString& typeText, bool notNull, 
 }
 
 Y_UNIT_TEST_SUITE(ConvertTableDescription) {
+    Y_UNIT_TEST_TWIN(DescribeTableBuildingColumns, Finalized) {
+        NKikimrSchemeOp::TTableDescription schema;
+        const auto addColumn = [&](ui32 id, const TString& name, bool building) {
+            auto* column = schema.AddColumns();
+            column->SetId(id);
+            column->SetName(name);
+            column->SetType("Uint32");
+            column->SetIsBuildInProgress(building && !Finalized);
+            return column;
+        };
+        addColumn(1, "key", false)->SetNotNull(true);
+        auto* extra = addColumn(2, "extra", true);
+        extra->MutableDefaultFromLiteral()->mutable_type()->set_type_id(Ydb::Type::UINT32);
+        extra->MutableDefaultFromLiteral()->mutable_value()->set_uint32_value(42);
+        addColumn(3, "value", false);
+        auto* other = addColumn(4, "other", true);
+        other->MutableDefaultFromLiteral()->mutable_type()->set_type_id(Ydb::Type::UINT32);
+        other->MutableDefaultFromLiteral()->mutable_value()->set_uint32_value(73);
+        schema.AddKeyColumnIds(1);
+
+        Ydb::Table::DescribeTableResult result;
+        NKikimrMiniKQL::TType splitKeyType;
+        FillColumnDescription(result, splitKeyType, schema);
+
+        UNIT_ASSERT_VALUES_EQUAL(result.columns_size(), Finalized ? 4 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(result.columns(0).name(), "key");
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(result.columns(0).type().type_id()), static_cast<int>(Ydb::Type::UINT32));
+        const auto& value = result.columns(Finalized ? 2 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(value.name(), "value");
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(value.type().optional_type().item().type_id()), static_cast<int>(Ydb::Type::UINT32));
+        if constexpr (Finalized) {
+            UNIT_ASSERT_VALUES_EQUAL(result.columns(1).name(), "extra");
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(result.columns(1).from_literal().type().type_id()), static_cast<int>(Ydb::Type::UINT32));
+            UNIT_ASSERT_VALUES_EQUAL(result.columns(1).from_literal().value().uint32_value(), 42);
+            UNIT_ASSERT_VALUES_EQUAL(result.columns(3).name(), "other");
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(result.columns(3).from_literal().type().type_id()), static_cast<int>(Ydb::Type::UINT32));
+            UNIT_ASSERT_VALUES_EQUAL(result.columns(3).from_literal().value().uint32_value(), 73);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(1).GetIsBuildInProgress(), !Finalized);
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(3).GetIsBuildInProgress(), !Finalized);
+    }
+
     NKikimrSchemeOp::TModifyScheme BuildInternalAlter(const NKikimrKqp::TKqpAlterTableRequest& request) {
         NKikimrSchemeOp::TModifyScheme result;
         auto status = Ydb::StatusIds::SUCCESS;

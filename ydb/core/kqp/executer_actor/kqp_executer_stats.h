@@ -6,8 +6,6 @@
 #include <optional>
 
 #include "kqp_tasks_graph.h"
-
-#include <ydb/core/kqp/common/kqp_execution_stats.h>
 #include <ydb/core/kqp/common/simple/current_query_stats.h>
 
 #include <ydb/core/protos/query_stats.pb.h>
@@ -407,6 +405,17 @@ struct TQueryTableStats {
     ui64 AffectedPartitionsUniqueCount = 0;
 
     void Resize(ui32 taskCount);
+};
+
+struct TAggExecStat {
+    ui64 CpuTimeMs = 0;
+    ui64 DurationSeconds = 0;
+    ui64 MemoryUsageBytes = 0;
+    ui64 TasksCount = 0;
+    ui64 InputBytes = 0;
+    ui64 OutputBytes = 0;
+    ui64 HopInputEventsCount = 0;
+    ui64 HopLateEventsCount = 0;
 };
 
 struct TQueryExecutionStats {

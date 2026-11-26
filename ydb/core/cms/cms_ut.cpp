@@ -17,6 +17,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <limits>
+#include <util/generic/algorithm.h>
 #include <util/string/printf.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
 
@@ -146,24 +147,38 @@ void SetRunningSysTablet(ui32 nodeId, bool running) {
     }
 }
 
-TString SendWalleHttpRequest(TCmsTestEnv &env, HTTP_METHOD method, const TString &uri, const TString &body = {}) {
+TString SendCmsHttpRequest(TCmsTestEnv& env, HTTP_METHOD method, const TString& uri, const TString& body,
+        auto createHandler) {
     TFakeMonHttpRequest httpRequest(method, uri, {}, body);
     const auto edge = env.AllocateEdgeActor();
     NMon::TEvHttpInfo::TPtr event = static_cast<NMon::TEvHttpInfo::THandle*>(new IEventHandle(
         TActorId(), edge, new NMon::TEvHttpInfo(httpRequest)));
-    env.Register(CreateWalleApiHandler(event));
+    env.Register(createHandler(event));
     TAutoPtr<IEventHandle> handle;
-    const auto *response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
+    const auto* response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
     UNIT_ASSERT(response);
     return response->Answer;
 }
 
-void CheckWalleHttpTask(const TString &response, const TString &status, ui32 nodeId) {
+TString SendWalleHttpRequest(TCmsTestEnv& env, HTTP_METHOD method, const TString& uri, const TString& body = {}) {
+    return SendCmsHttpRequest(env, method, uri, body, CreateWalleApiHandler);
+}
+
+TString SendDDiskHttpRequest(TCmsTestEnv& env, const TString& uri) {
+    return SendCmsHttpRequest(env, HTTP_METHOD_GET, uri, {}, [](auto& event) { return new TJsonProxyDDisk(event); });
+}
+
+NJson::TJsonValue ParseHttpOkJson(const TString& response) {
     UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 200"), response);
     const auto bodyOffset = response.find("\r\n\r\n");
-    UNIT_ASSERT(bodyOffset != TString::npos);
+    UNIT_ASSERT_C(bodyOffset != TString::npos, response);
     NJson::TJsonValue json;
     UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(response).SubStr(bodyOffset + 4), &json, true));
+    return json;
+}
+
+void CheckWalleHttpTask(const TString &response, const TString &status, ui32 nodeId) {
+    const auto json = ParseHttpOkJson(response);
     UNIT_ASSERT_VALUES_EQUAL_C(json["status"].GetString(), status, response);
     UNIT_ASSERT_VALUES_EQUAL(json["hosts"].GetArray().size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(json["hosts"][0].GetString(), ToString(nodeId));
@@ -488,6 +503,242 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(disks.DisksSize(), 0);
     }
 
+    Y_UNIT_TEST(DDiskHttpRequiresCmsSupport)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool();
+        constexpr ui64 tabletId = 1001;
+        UNIT_ASSERT_VALUES_EQUAL(env.AllocateDDiskBlockGroup(tabletId, 1).GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(env.AllocateDDiskBlockGroup(tabletId + 1, 1).GetStatus(), NKikimrProto::OK);
+        env.WaitForDDiskInfo(tabletId + 1, 1);
+        env.WaitForDDiskInfo(tabletId, 1);
+
+        const TString layoutUri = "/api/json/ddisk/tablet?tablet_id=" + ToString(tabletId);
+        const TVector<TString> diagnosticsUris = {
+            "/api/json/ddisk/tablets?groups_only=1&fields_required=TabletId",
+            "/api/json/ddisk/tablets?only_problems=1&fields_required=TabletId",
+            "/api/json/ddisk/tablets?sort_by=degrade&fields_required=TabletId",
+            "/api/json/ddisk/tablets?fields_required=UnavailableDDiskCount",
+            "/api/json/ddisk/disks?inventory=1&fields_required=DiskId",
+            "/api/json/ddisk/disks?only_problems=1&include_component_problems=1&fields_required=DiskId",
+            "/api/json/ddisk/disks?node_id=1&fields_required=DiskId",
+            "/api/json/ddisk/disks?fields_required=DDiskStatus",
+            layoutUri + "&include_health=1",
+            "/api/json/ddisk/disks?inventory=1&tablet_id=" + ToString(tabletId) + "&node_id=1&pdisk_id=1&group_by=state&limit=0",
+        };
+        NKikimrCms::TVersionInfo legacyVersion;
+        legacyVersion.SetSupportWalleDrainData(true);
+        TString version;
+        ui32 requests = 0;
+        auto events = env.AddObserver<>([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTabletPipe::EvClientConnected) {
+                auto* msg = ev->Get<TEvTabletPipe::TEvClientConnected>();
+                if (msg->TabletId == MakeCmsID()) {
+                    msg->VersionInfo = version;
+                }
+            } else if (ev->GetTypeRewrite() == TEvCms::EvDDiskTabletListRequest
+                    || ev->GetTypeRewrite() == TEvCms::EvDDiskInfoGetRequest
+                    || ev->GetTypeRewrite() == TEvCms::EvDDiskDiskListRequest) {
+                ++requests;
+            }
+        });
+        for (const TString& unsupported : {TString(), legacyVersion.SerializeAsString(), TString("\xff")}) {
+            version = unsupported;
+            for (const auto& uri : diagnosticsUris) {
+                const auto response = SendDDiskHttpRequest(env, uri);
+                UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 503"), response);
+                UNIT_ASSERT_C(response.Contains("CMS does not support DDisk diagnostics"), response);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(requests, 0);
+
+        version = legacyVersion.SerializeAsString();
+        const auto layout = ParseHttpOkJson(SendDDiskHttpRequest(env, layoutUri));
+        UNIT_ASSERT_VALUES_EQUAL(layout["Status"].GetString(), "OK");
+        UNIT_ASSERT_VALUES_EQUAL(layout["TabletId"].GetUInteger(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(layout["Groups"].GetArray().size(), 1);
+        UNIT_ASSERT(!layout.Has("Slots"));
+
+        // Older list responses contain only TotalCount. The proxy can recover
+        // UnfilteredCount for a paginated request without a row filter.
+        auto oldTablets = env.AddObserver<TEvCms::TEvDDiskTabletListResponse>([](auto& ev) {
+            ev->Get()->Record.ClearUnfilteredCount();
+        });
+        auto oldDisks = env.AddObserver<TEvCms::TEvDDiskDiskListResponse>([](auto& ev) {
+            ev->Get()->Record.ClearUnfilteredCount();
+        });
+        auto checkPage = [&](const TString& uri, const TString& rows, const TString& id) {
+            const auto page = ParseHttpOkJson(SendDDiskHttpRequest(env, uri));
+            UNIT_ASSERT_VALUES_EQUAL(page["Status"]["Code"].GetString(), "OK");
+            UNIT_ASSERT_VALUES_EQUAL(page["FieldsAvailable"].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(page["FieldsAvailable"][0].GetString(), id);
+            UNIT_ASSERT(page["TotalCount"].GetUInteger() > 1);
+            UNIT_ASSERT_VALUES_EQUAL(page["UnfilteredCount"].GetUInteger(), page["TotalCount"].GetUInteger());
+            UNIT_ASSERT_VALUES_EQUAL(page[rows].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(page[rows][0].GetMap().size(), 1);
+            UNIT_ASSERT(page[rows][0].Has(id));
+            return page[rows][0][id];
+        };
+        const auto tablet = checkPage("/api/json/ddisk/tablets?offset=1&limit=1&fields_required=TabletId",
+            "Tablets", "TabletId");
+        UNIT_ASSERT_VALUES_EQUAL(tablet.GetUInteger(), tabletId + 1);
+        const auto disk = checkPage("/api/json/ddisk/disks?offset=1&limit=1&fields_required=DiskId",
+            "Disks", "DiskId");
+        UNIT_ASSERT(disk["NodeId"].GetUInteger() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(requests, 3);
+
+        const auto countsPage = ParseHttpOkJson(SendDDiskHttpRequest(env,
+            "/api/json/ddisk/disks?include_tablet_ids=0&fields_required=DDiskTabletCount,PersistentBufferTabletCount"));
+        const auto disksWithIds = env.RequestDDiskDiskList();
+        UNIT_ASSERT(disksWithIds.DisksSize() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(countsPage["Disks"].GetArray().size(), disksWithIds.DisksSize());
+        for (size_t i = 0; i < disksWithIds.DisksSize(); ++i) {
+            const auto& row = countsPage["Disks"][i];
+            UNIT_ASSERT(row.Has("DiskId"));
+            UNIT_ASSERT(row.Has("DDiskTabletCount") && row.Has("PersistentBufferTabletCount"));
+            UNIT_ASSERT(!row.Has("DDiskTabletIds") && !row.Has("PersistentBufferTabletIds"));
+            UNIT_ASSERT_VALUES_EQUAL(row["DDiskTabletCount"].GetUInteger(), disksWithIds.GetDisks(i).DDiskTabletIdsSize());
+            UNIT_ASSERT_VALUES_EQUAL(row["PersistentBufferTabletCount"].GetUInteger(), disksWithIds.GetDisks(i).PersistentBufferTabletIdsSize());
+        }
+
+        const TString filteredUri = "/api/json/ddisk/tablets?filter=1001&fields_required=TabletId";
+        const auto filtered = ParseHttpOkJson(SendDDiskHttpRequest(env, filteredUri));
+        UNIT_ASSERT(!filtered.Has("UnfilteredCount"));
+        UNIT_ASSERT_VALUES_EQUAL(filtered["TotalCount"].GetUInteger(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(filtered["Tablets"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(filtered["Tablets"][0]["TabletId"].GetUInteger(), tabletId);
+
+        const TString diskProblemsUri = "/api/json/ddisk/disks?only_problems=1&fields_required=DiskId";
+        const auto diskProblemsWithoutCount = ParseHttpOkJson(SendDDiskHttpRequest(env, diskProblemsUri));
+        UNIT_ASSERT(!diskProblemsWithoutCount.Has("UnfilteredCount"));
+        UNIT_ASSERT(diskProblemsWithoutCount.Has("TotalCount"));
+        UNIT_ASSERT_VALUES_EQUAL(diskProblemsWithoutCount["TotalCount"].GetUInteger(), 0);
+        oldTablets.Remove();
+        oldDisks.Remove();
+        const auto diskProblems = ParseHttpOkJson(SendDDiskHttpRequest(env, diskProblemsUri));
+        UNIT_ASSERT_VALUES_EQUAL(diskProblems["TotalCount"].GetUInteger(), 0);
+        UNIT_ASSERT(diskProblems["UnfilteredCount"].GetUInteger() > 0);
+        const auto filteredPage = ParseHttpOkJson(SendDDiskHttpRequest(env, filteredUri));
+        UNIT_ASSERT_VALUES_EQUAL(filteredPage["TotalCount"].GetUInteger(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(filteredPage["UnfilteredCount"].GetUInteger(), 2);
+
+        events.Remove();
+        const auto response = SendDDiskHttpRequest(env, "/api/json/ddisk/tablets");
+        UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 200"), response);
+    }
+
+    Y_UNIT_TEST(DDiskHttpTimeoutRange)
+    {
+        TCmsTestEnv env(8);
+        for (const TString timeout : {"0", "30001", "invalid"}) {
+            const auto response = SendDDiskHttpRequest(env, "/api/json/ddisk/tablets?timeout=" + timeout);
+            UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
+            UNIT_ASSERT_C(response.Contains("timeout"), response);
+            UNIT_ASSERT_C(response.Contains("30000"), response);
+        }
+        const auto response = SendDDiskHttpRequest(env, "/api/json/ddisk/tablets?timeout=1");
+        UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 200") || response.StartsWith("HTTP/1.1 408"), response);
+    }
+
+    Y_UNIT_TEST(DDiskComponentHealthConsistency)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(1);
+        const auto pdisk = env.PDiskId(0, 0);
+        constexpr ui64 tabletId = 3201;
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            auto& info = TFakeNodeWhiteboardService::Info.at(pdisk.NodeId);
+            info.PDiskStateInfo.at(pdisk.DiskId).SetState(TPDiskState::Normal);
+            for (ui32 slot = 100; slot <= 102; ++slot) {
+                auto& sample = info.DDiskStateInfo.emplace_back();
+                sample.SetPDiskId(pdisk.DiskId);
+                sample.SetDDiskSlotId(slot);
+                sample.SetDDiskStatus(slot == 102 ? TDDiskStateInfo::Broken : TDDiskStateInfo::Ready);
+                sample.SetPersistentBufferStatus(slot == 102 ? TDDiskStateInfo::Ready : TDDiskStateInfo::Broken);
+                if (slot != 102) {
+                    sample.SetPersistentBufferStatusReason("buffer failure");
+                }
+            }
+        }
+        auto layout = env.AddObserver<TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (record.GetTabletId() != tabletId) {
+                return;
+            }
+            record.ClearGroups();
+            auto* group = record.AddGroups();
+            group->SetDirectBlockGroupId(1);
+            for (ui32 slot = 100; slot <= 102; ++slot) {
+                auto* id = slot == 101 ? group->AddPersistentBufferDDiskId() : group->AddDDiskId();
+                id->SetNodeId(pdisk.NodeId);
+                id->SetPDiskId(pdisk.DiskId);
+                id->SetDDiskSlotId(slot);
+            }
+            group->AddDDiskId(); // Unallocated slots do not fail.
+        });
+        UNIT_ASSERT_VALUES_EQUAL(env.AllocateDDiskBlockGroup(tabletId, 1).GetStatus(), NKikimrProto::OK);
+        env.WaitForDDiskInfo(tabletId, 1);
+        NKikimrCms::TDDiskTabletListRequest tabletsRequest;
+        tabletsRequest.SetOnlyProblems(true);
+        const auto tablets = env.RequestDDiskTabletList(tabletsRequest);
+        UNIT_ASSERT_VALUES_EQUAL(tablets.TabletsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tablets.GetTablets(0).GetUnavailableDDiskCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tablets.GetTablets(0).GetUnavailablePersistentBufferCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tablets.GetTablets(0).GetDegrade(), 1);
+        const auto detail = env.RequestDDiskInfo(tabletId, true);
+        UNIT_ASSERT_VALUES_EQUAL(detail.SlotsSize(), 3);
+        const auto* buffer = FindIfPtr(detail.GetSlots(), [](const auto& slot) {
+            return slot.GetDDiskSlotId() == 101;
+        });
+        UNIT_ASSERT(buffer);
+        UNIT_ASSERT(buffer->GetPersistentBufferStatus() == TDDiskStateInfo::Broken);
+        UNIT_ASSERT_VALUES_EQUAL(buffer->GetPersistentBufferStatusReason(), "buffer failure");
+        NKikimrCms::TDDiskDiskListRequest disksRequest;
+        disksRequest.SetTabletId(tabletId);
+        disksRequest.SetOnlyProblems(true);
+        disksRequest.SetIncludeComponentProblems(true);
+        disksRequest.SetLimit(0);
+        const auto disks = env.RequestDDiskDiskList(disksRequest);
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetTotalCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetUnfilteredCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(disks.DisksSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetDisks(0).GetDiskId().GetDDiskSlotId(), 101);
+        UNIT_ASSERT(disks.GetDisks(0).GetAvailable());
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetDisks(0).GetState(), "Normal");
+        UNIT_ASSERT(disks.GetDisks(0).GetPersistentBufferStatus() == TDDiskStateInfo::Broken);
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetDisks(0).GetPersistentBufferStatusReason(), "buffer failure");
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetDisks(1).GetDiskId().GetDDiskSlotId(), 102);
+        const TString problemsUri = "/api/json/ddisk/disks?only_problems=1";
+        auto problemCount = [&](const TString& uri) {
+            const auto json = ParseHttpOkJson(SendDDiskHttpRequest(env, uri));
+            UNIT_ASSERT_VALUES_EQUAL(json["Status"]["Code"].GetString(), "OK");
+            return json["TotalCount"].GetUInteger();
+        };
+        UNIT_ASSERT_VALUES_EQUAL(problemCount(problemsUri), 0);
+        UNIT_ASSERT_VALUES_EQUAL(problemCount(problemsUri + "&include_component_problems=1"), 2);
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            TFakeNodeWhiteboardService::Info.at(pdisk.NodeId).DDiskStateInfo.clear();
+        }
+        // Missing component reports retain the existing unknown-is-available policy.
+        UNIT_ASSERT_VALUES_EQUAL(env.RequestDDiskTabletList(tabletsRequest).GetTotalCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.RequestDDiskDiskList(disksRequest).GetTotalCount(), 0);
+        const auto detailWithoutSamples = env.RequestDDiskInfo(tabletId, true);
+        UNIT_ASSERT_VALUES_EQUAL(detailWithoutSamples.SlotsSize(), 3);
+        for (const auto& slot : detailWithoutSamples.GetSlots()) {
+            UNIT_ASSERT(!slot.HasDDiskStatus());
+            UNIT_ASSERT(!slot.HasPersistentBufferStatus());
+            UNIT_ASSERT_VALUES_EQUAL(slot.GetPDiskState(), "Normal");
+        }
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            TFakeNodeWhiteboardService::Info.at(pdisk.NodeId).PDiskStateInfo.at(pdisk.DiskId).SetState(TPDiskState::DeviceIoError);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(problemCount(problemsUri), 3);
+        UNIT_ASSERT_VALUES_EQUAL(problemCount(problemsUri + "&include_component_problems=1"), 3);
+    }
+
     Y_UNIT_TEST(DDiskTabletListDegrade)
     {
         for (bool swapRoles : {false, true}) {
@@ -569,19 +820,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             // Exercise the HTTP parameter mapping through the actual proxy and CMS.
             auto checkHttpOrder = [&](const TString& params, std::initializer_list<ui64> expectedIds,
                     bool checkProjection = false) {
-                TFakeMonHttpRequest httpRequest(HTTP_METHOD_GET,
-                    "/api/json/ddisk/tablets?" + params, {}, "");
-                const auto edge = env.AllocateEdgeActor();
-                NMon::TEvHttpInfo::TPtr event = static_cast<NMon::TEvHttpInfo::THandle*>(new IEventHandle(
-                    TActorId(), edge, new NMon::TEvHttpInfo(httpRequest)));
-                env.Register(new TJsonProxyDDisk(event));
-                TAutoPtr<IEventHandle> handle;
-                const auto* response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
-                UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 200"), response->Answer);
-                NJson::TJsonValue json;
-                const size_t bodyOffset = response->Answer.find("\r\n\r\n");
-                UNIT_ASSERT(bodyOffset != TString::npos);
-                UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(response->Answer).SubStr(bodyOffset + 4), &json, true));
+                const auto response = SendDDiskHttpRequest(env, "/api/json/ddisk/tablets?" + params);
+                const auto json = ParseHttpOkJson(response);
                 UNIT_ASSERT_VALUES_EQUAL(json["Status"]["Code"].GetString(), "OK");
                 const auto& tablets = json["Tablets"].GetArray();
                 UNIT_ASSERT_VALUES_EQUAL(tablets.size(), expectedIds.size());
@@ -1468,9 +1708,11 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
     }
 
-    Y_UNIT_TEST(RequestRestartServicesPartial)
+    void TestRequestRestartServicesPartial(TErasureType::EErasureSpecies erasure)
     {
-        TCmsTestEnv env(8);
+        TTestEnvOpts opts(TBlobStorageGroupType(erasure).BlobSubgroupSize());
+        opts.BlockErasure = erasure;
+        TCmsTestEnv env(opts);
 
         auto rec = env.CheckPermissionRequest
             ("user", true, false, false, true, TStatus::ALLOW_PARTIAL,
@@ -1485,6 +1727,16 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(action1.ServicesSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(action1.GetServices(0), "storage");
         UNIT_ASSERT_VALUES_EQUAL(action1.GetDuration(), 60000000);
+    }
+
+    Y_UNIT_TEST(RequestRestartServicesPartial)
+    {
+        TestRequestRestartServicesPartial(TErasureType::Erasure4Plus2Block);
+    }
+
+    Y_UNIT_TEST(RequestRestartServicesPartialBlock82)
+    {
+        TestRequestRestartServicesPartial(TErasureType::Erasure8Plus2Block);
     }
 
     Y_UNIT_TEST(RequestRestartServicesRejectSecond)
@@ -1643,9 +1895,11 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckRejectPermission("user", id + "-bad", false, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(RequestReplaceDevices)
+    void TestRequestReplaceDevices(TErasureType::EErasureSpecies erasure)
     {
-        TCmsTestEnv env(8);
+        TTestEnvOpts opts(TBlobStorageGroupType(erasure).BlobSubgroupSize());
+        opts.BlockErasure = erasure;
+        TCmsTestEnv env(opts);
 
         env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_DEVICE,
                                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, "/dev/bad/device/path"));
@@ -1719,6 +1973,16 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW,
                                    MakeAction(TAction::REPLACE_DEVICES, 1, 60000000,
                                               "vdisk-3-1-0-1-0", "vdisk-3-1-0-5-0"));
+    }
+
+    Y_UNIT_TEST(RequestReplaceDevices)
+    {
+        TestRequestReplaceDevices(TErasureType::Erasure4Plus2Block);
+    }
+
+    Y_UNIT_TEST(RequestReplaceDevicesBlock82)
+    {
+        TestRequestReplaceDevices(TErasureType::Erasure8Plus2Block);
     }
 
     Y_UNIT_TEST(RequestReplaceDevicePDisk)
@@ -2555,27 +2819,31 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
     }
 
-    void TestAvailabilityMode(EAvailabilityMode mode, bool disconnectNodes)
+    void TestAvailabilityMode(EAvailabilityMode mode, bool disconnectNodes,
+            TErasureType::EErasureSpecies erasure)
     {
         Y_ABORT_UNLESS(mode == MODE_KEEP_AVAILABLE
                  || mode == MODE_FORCE_RESTART);
 
-        TCmsTestEnv env(8);
+        const ui32 nodes = TBlobStorageGroupType(erasure).BlobSubgroupSize();
+        TTestEnvOpts opts(nodes);
+        opts.BlockErasure = erasure;
+        TCmsTestEnv env(opts);
         env.AdvanceCurrentTime(TDuration::Minutes(3));
 
         auto res1 = env.ExtractPermissions
             (env.CheckPermissionRequest("user", false, false, false,
                                         true, mode, TStatus::ALLOW,
-                                        MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)));
+                                        MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(nodes - 2), 60000000)));
         if (disconnectNodes) {
-            TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
+            TFakeNodeWhiteboardService::Info[env.GetNodeId(nodes - 2)].Connected = false;
         }
 
         env.CheckPermissionRequest("user", false, false, false,
                                    true, mode, TStatus::ALLOW,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(nodes - 1), 60000000));
         if (disconnectNodes) {
-            TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+            TFakeNodeWhiteboardService::Info[env.GetNodeId(nodes - 1)].Connected = false;
         }
 
         env.CheckPermissionRequest("user", false, false, false,
@@ -2585,6 +2853,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             return;
         }
 
+        env.RestartCms();
+        env.CheckListPermissions("user", 2);
         env.CheckDonePermission("user", res1.second[0]);
 
         env.CheckPermissionRequest("user", false, false, false,
@@ -2594,7 +2864,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             return;
         }
 
-        TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = true;
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(nodes - 2)].Connected = true;
 
         env.CheckPermissionRequest("user", false, false, false,
                                    true, mode, TStatus::ALLOW,
@@ -2603,22 +2873,71 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(TestKeepAvailableMode)
     {
-        TestAvailabilityMode(MODE_KEEP_AVAILABLE, false);
+        TestAvailabilityMode(MODE_KEEP_AVAILABLE, false, TErasureType::Erasure4Plus2Block);
     }
 
     Y_UNIT_TEST(TestForceRestartMode)
     {
-        TestAvailabilityMode(MODE_FORCE_RESTART, false);
+        TestAvailabilityMode(MODE_FORCE_RESTART, false, TErasureType::Erasure4Plus2Block);
     }
 
     Y_UNIT_TEST(TestKeepAvailableModeDisconnects)
     {
-        TestAvailabilityMode(MODE_KEEP_AVAILABLE, true);
+        TestAvailabilityMode(MODE_KEEP_AVAILABLE, true, TErasureType::Erasure4Plus2Block);
     }
 
     Y_UNIT_TEST(TestForceRestartModeDisconnects)
     {
-        TestAvailabilityMode(MODE_FORCE_RESTART, true);
+        TestAvailabilityMode(MODE_FORCE_RESTART, true, TErasureType::Erasure4Plus2Block);
+    }
+
+    Y_UNIT_TEST(TestKeepAvailableModeBlock82)
+    {
+        TestAvailabilityMode(MODE_KEEP_AVAILABLE, false, TErasureType::Erasure8Plus2Block);
+    }
+
+    Y_UNIT_TEST(TestForceRestartModeBlock82)
+    {
+        TestAvailabilityMode(MODE_FORCE_RESTART, false, TErasureType::Erasure8Plus2Block);
+    }
+
+    Y_UNIT_TEST(TestKeepAvailableModeDisconnectsBlock82)
+    {
+        TestAvailabilityMode(MODE_KEEP_AVAILABLE, true, TErasureType::Erasure8Plus2Block);
+    }
+
+    Y_UNIT_TEST(TestForceRestartModeDisconnectsBlock82)
+    {
+        TestAvailabilityMode(MODE_FORCE_RESTART, true, TErasureType::Erasure8Plus2Block);
+    }
+
+    void TestBlockParityMaxAvailability(TErasureType::EErasureSpecies erasure)
+    {
+        TTestEnvOpts opts(TBlobStorageGroupType(erasure).BlobSubgroupSize());
+        opts.BlockErasure = erasure;
+        TCmsTestEnv env(opts);
+        auto result = env.ExtractPermissions(env.CheckPermissionRequest("user", false, false, false,
+            true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(opts.NodeCount - 1), 60000000, "storage")));
+        env.RestartCms();
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY,
+            TStatus::DISALLOW_TEMP,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(opts.NodeCount - 2), 60000000, "storage"));
+        env.CheckDonePermission("user", result.second[0]);
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(opts.NodeCount - 1)].Connected = false;
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY,
+            TStatus::DISALLOW_TEMP,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(opts.NodeCount - 2), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(BlockParityMaxAvailabilityBlock42)
+    {
+        TestBlockParityMaxAvailability(TErasureType::Erasure4Plus2Block);
+    }
+
+    Y_UNIT_TEST(BlockParityMaxAvailabilityBlock82)
+    {
+        TestBlockParityMaxAvailability(TErasureType::Erasure8Plus2Block);
     }
 
     void TestKeepAvailabileModeScheduled(bool disconnectNodes)

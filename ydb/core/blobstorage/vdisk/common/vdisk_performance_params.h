@@ -4,6 +4,7 @@
 
 #include "defs.h"
 
+#include <library/cpp/time_provider/time_provider.h>
 #include <ydb/library/pdisk_io/device_type.h>
 #include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 
@@ -19,6 +20,7 @@ struct TCostMetricsParameters {
     TCostMetricsParameters(ui64 defaultBurstThresholdMs = 100);
     TControlWrapper BurstThresholdNs;
     TControlWrapper DiskTimeAvailableScale;
+    TIntrusivePtr<ITimeProvider> TimeProvider;
 };
 
 using TCostMetricsParametersByMedia = TStackVec<TCostMetricsParameters, 3>;

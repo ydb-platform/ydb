@@ -1,7 +1,6 @@
 #pragma once
 #include "kqp_compute.h"
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <ydb/core/tablet_flat/flat_table_column.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 namespace NKikimrTxDataShard {

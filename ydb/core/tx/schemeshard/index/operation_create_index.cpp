@@ -119,13 +119,11 @@ public:
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         // An internal backup copy preserves a ready index without starting an index build.
-        if (tableIndexCreation.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+        if (tableIndexCreation.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw && !context.SS->EnableHnswIndex
                 && !(internal && parentPath.IsResolved() && parentPath.IsBackupTable()
                     && tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexStateReady)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                context.SS->EnableHnswIndex
-                    ? "HNSW index implementation is not available yet (SQL support)"
-                    : "HNSW index support is disabled (EnableHnswIndex)");
+                "HNSW index support is disabled (EnableHnswIndex)");
             return result;
         }
 

@@ -38,7 +38,7 @@ bool IsMetadataServiceQuery(const TKqpQueryState& state) {
 
 TString SafeExtractQueryText(const TKqpQueryState& state) {
     if (state.CompileResult && state.CompileResult->Query) {
-        return state.CompileResult->Query->Text;
+        return state.CompileResult->Query->Text();
     }
     if (state.PreparedQuery) {
         return state.PreparedQuery->GetText();

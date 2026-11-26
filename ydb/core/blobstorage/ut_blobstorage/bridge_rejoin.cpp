@@ -532,7 +532,7 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
             return id;
         };
-        put(1000);
+        const TLogoBlobID checkedId = put(1000);
         put(100_KB);
         mark("disconnecting");
         NBridgeTest::SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
@@ -581,6 +581,27 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             UNIT_ASSERT_VALUES_EQUAL(poolCounter("SyncGroupsNotEstimated"), 0);
             return info;
         };
+        auto databaseMetrics = [&](bool complete = true) {
+            NKikimrBridge::TStorageQuery query;
+            query.SetView(NKikimrBridge::TStorageQuery::DATABASES);
+            query.SetGroupByStoragePool(true);
+            query.SetStoragePool(env.StoragePoolName);
+            query.SetPileName("pile_2");
+            query.SetIncludeSyncMetrics(true);
+            const auto report = NBridgeTest::QueryStorageDiagnostics(env, query);
+            UNIT_ASSERT_C(report.GetStatus() == Ydb::StatusIds::SUCCESS, report.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(report.GetDatabases().databases_size(), 1);
+            const auto& row = report.GetDatabases().databases(0);
+            UNIT_ASSERT_VALUES_EQUAL(row.pile_name(), "pile_2");
+            UNIT_ASSERT_VALUES_EQUAL(row.storage_pools_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(row.storage_pools(0).name(), env.StoragePoolName);
+            UNIT_ASSERT_VALUES_EQUAL(row.groups().syncing(), 1);
+            UNIT_ASSERT(row.has_remaining_bytes());
+            UNIT_ASSERT(row.has_remaining_bytes_complete());
+            UNIT_ASSERT_VALUES_EQUAL(row.remaining_bytes_complete(), complete);
+            UNIT_ASSERT(row.has_copy_bytes_per_second());
+            return row;
+        };
 
         // syncers of the target finishing their stages successfully are held, so that stages advance one at a time;
         // the syncer of the data stage can't read the target, so the estimate is all BSC has; the data copied is held
@@ -588,6 +609,8 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         const TActorId targetProxyId = MakeBlobStorageProxyID(target);
         bool holdAssimilation = false;
         std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> heldAssimilation;
+        bool holdTargetCheck = false;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> heldTargetChecks;
         bool holdPuts = true;
         std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> heldPuts;
         std::optional<NKikimrBlobStorage::TEvControllerUpdateSyncerState::TSyncer> lastTargetProgress;
@@ -623,6 +646,18 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
                     ev->Recipient == targetProxyId) {
                 heldAssimilation.emplace_back(nodeId, std::move(ev));
                 return false;
+            } else if (holdTargetCheck && ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult) {
+                auto* msg = ev->Get<TEvBlobStorage::TEvGetResult>();
+                if (msg->GroupId == target.GetRawId() && msg->Status == NKikimrProto::OK) {
+                    for (ui32 i = 0; i < msg->ResponseSz; ++i) {
+                        auto& result = msg->Responses[i];
+                        if (result.Id == checkedId && result.Status == NKikimrProto::OK) {
+                            result.Status = NKikimrProto::NODATA;
+                            heldTargetChecks.emplace_back(nodeId, std::move(ev));
+                            return false;
+                        }
+                    }
+                }
             } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut && holdPuts) {
                 if (const auto *msg = ev->Get<TEvBlobStorage::TEvPut>();
                         msg->WriteSource == TWriteSource::SyncerMergePut && msg->Id.TabletID() == tabletId) {
@@ -713,12 +748,23 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         // the syncer of the data stage finds the same with its own scan
         mark("scanning");
         holdAssimilation = false;
+        holdTargetCheck = true;
         release(heldAssimilation);
-        NBridgeTest::WaitUntil(env, [&] { return heldPuts.size() == 3; }, "copies of the missing blobs",
+        NBridgeTest::WaitUntil(env, [&] {
+            return !heldTargetChecks.empty() && lastTargetProgress && lastTargetProgress->GetBlobsTotal() >= step;
+        }, "target check after the blob index scan", TDuration::Seconds(1), 120);
+        UNIT_ASSERT_VALUES_EQUAL(databaseMetrics(false).remaining_bytes(), expected);
+        holdTargetCheck = false;
+        expected += checkedId.BlobSize();
+        release(heldTargetChecks);
+        NBridgeTest::WaitUntil(env, [&] { return heldPuts.size() == 4; }, "copies of the missing blobs",
             TDuration::Seconds(1), 120);
         env.Sim(TDuration::Seconds(11)); // NodeWarden reports the progress every 10 s
         const auto scanned = checkRemaining(expected);
         UNIT_ASSERT_VALUES_EQUAL(scanned.GetBridgeSyncCopyBytesPerSecond(), 0);
+        const auto scannedDatabase = databaseMetrics();
+        UNIT_ASSERT_VALUES_EQUAL(scannedDatabase.remaining_bytes(), expected);
+        UNIT_ASSERT_VALUES_EQUAL(scannedDatabase.copy_bytes_per_second(), 0);
         UNIT_ASSERT(scanned.HasBridgeSyncLastProgressTimestamp());
         const ui64 scanProgress = scanned.GetBridgeSyncLastProgressTimestamp();
         UNIT_ASSERT_GT(scanProgress, stageProgress);
@@ -756,7 +802,11 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         UNIT_ASSERT_GT(info.GetBridgeSyncLastProgressTimestamp(), scanProgress);
         UNIT_ASSERT_GT(info.GetBridgeSyncCopyBytesPerSecond(), 0);
         UNIT_ASSERT_LE(info.GetBridgeSyncCopyBytesPerSecond(), expected);
-        UNIT_ASSERT_GT(poolCounter("SyncBytesPerSecond"), 0);
+        const auto poolRate = poolCounter("SyncBytesPerSecond");
+        UNIT_ASSERT_GT(poolRate, 0);
+        const auto copiedDatabase = databaseMetrics();
+        UNIT_ASSERT_VALUES_EQUAL(copiedDatabase.remaining_bytes(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(copiedDatabase.copy_bytes_per_second(), poolRate);
         UNIT_ASSERT_VALUES_EQUAL(poolCounter("SyncBytesCopied"), expected);
 
         mark("waiting without new progress");

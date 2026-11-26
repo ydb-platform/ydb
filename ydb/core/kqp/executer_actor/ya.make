@@ -12,6 +12,7 @@ SRCS(
     kqp_planner_strategy.cpp
     kqp_scan_executer.cpp
     kqp_scheme_executer.cpp
+    kqp_streaming_helper.cpp
     kqp_table_resolver.cpp
     kqp_tasks_graph.cpp
     kqp_tasks_validate.cpp
@@ -39,6 +40,7 @@ PEERDIR(
     ydb/core/kqp/predictor
     ydb/core/kqp/query_compiler
     ydb/core/kqp/rm_service
+    ydb/core/kqp/runtime/scheduler
     ydb/core/kqp/topics
     ydb/core/kqp/tracing
     ydb/core/protos

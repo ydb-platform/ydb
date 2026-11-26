@@ -5429,6 +5429,31 @@ state: STATE_ENABLED
         gen.Check();
     }
 
+    Y_UNIT_TEST(SourceDatabaseRecordedForRowTable) {
+        auto request = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port());
+
+        Run(Runtime(), Env(), TVector<TString>{
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, request, Ydb::StatusIds::SUCCESS);
+
+        const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/metadata.json"));
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSourceDatabase(), "/MyRoot");
+    }
+
     Y_UNIT_TEST(SchemaMapping) {
         RunS3({
             R"(

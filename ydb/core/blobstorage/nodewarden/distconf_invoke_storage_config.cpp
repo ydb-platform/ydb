@@ -860,9 +860,12 @@ namespace NKikimr::NStorage {
             }
             DataCenterReconciliationDeadline = {};
             if (DataCenterPreflight) {
+                if (TStorageConfigMeta(ProposedStorageConfig) != TStorageConfigMeta(*Self->StorageConfig)) {
+                    throw TExRace() << "Configuration changed during DC state reconciliation";
+                }
                 DataCenterPreflight = false;
                 NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId);
-                return StartProposition(&ProposedStorageConfig);
+                return StartProposition(&ProposedStorageConfig, /*mindPrev=*/ Self->IsBridged());
             }
             return Finish(TResult::OK, std::nullopt, [&](TResult *result) {
                 *result->MutableAppliedDataCenterStates() = response.GetAppliedDataCenterStates();

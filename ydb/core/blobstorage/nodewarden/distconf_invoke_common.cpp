@@ -394,13 +394,15 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback,
                                                  bool allowConflictingGenerationAdvance) {
-        if (!Self->StorageConfig || !Self->Scepter) {
+        const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        const bool useTargetQuorum = !Self->IsBridged() && op && op->Command.HasApplyDataCenterStates();
+        if (!Self->StorageConfig || (!Self->Scepter && !useTargetQuorum)) {
             throw TExRace() << "No working root for configuration recovery";
         }
         TEvScatter task;
         task.MutableCollectConfigs();
         const ui64 recoveryGeneration = Self->ConfigRecoveryGeneration;
-        IssueScatterTask(std::move(task), [this, recoveryGeneration, callback = std::move(callback), allowConflictingGenerationAdvance]
+        IssueScatterTask(std::move(task), [this, recoveryGeneration, callback = std::move(callback), allowConflictingGenerationAdvance, useTargetQuorum]
                                         (TEvGather *res) {
             if (recoveryGeneration != Self->ConfigRecoveryGeneration) {
                 throw TExRace() << "Configuration changed while collecting configs";
@@ -409,11 +411,19 @@ namespace NKikimr::NStorage {
                 throw TExError() << "Incorrect CollectConfigs response";
             }
             auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true,
-                                                     allowConflictingGenerationAdvance);
+                                                     allowConflictingGenerationAdvance, useTargetQuorum ? &ProposedStorageConfig : nullptr);
             if (result.ErrorReason || result.IsDistconfDisabledQuorum || !result.RecoveredConfig) {
                 throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable configuration");
             }
+            if (useTargetQuorum && (result.RecoveredConfig->GetGeneration() < Self->StorageConfig->GetGeneration()
+                    || (result.RecoveredConfig->GetGeneration() == Self->StorageConfig->GetGeneration()
+                        && TStorageConfigMeta(*result.RecoveredConfig) != TStorageConfigMeta(*Self->StorageConfig)))) {
+                throw TExRace() << "The target quorum has not recovered the current configuration";
+            }
             if (result.RequiresRecoveryProposition) {
+                if (!Self->Scepter) {
+                    throw TExRace() << "A pending proposition must be recovered before changing DC availability";
+                }
                 return StartRecoveryProposition(result);
             }
             if (!result.RequiresGenerationAdvance) {

@@ -1,5 +1,6 @@
 #include "distconf_quorum.h"
 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
@@ -34,6 +35,30 @@ namespace NKikimr::NStorage {
         return res;
     }
 
+    static bool HasDataCenterPolicy(const NKikimrBlobStorage::TStorageConfig& config) {
+        return !config.HasClusterState() && config.HasDataCenterStates();
+    }
+
+    static THashSet<ui32> GetNonVotingNodes(const NKikimrBlobStorage::TStorageConfig& config) {
+        THashSet<ui32> nodes;
+        if (HasDataCenterPolicy(config)) {
+            THashSet<TString> dataCenters;
+            for (const auto& dc : config.GetDataCenterStates().GetDataCenter()) {
+                if (dc.GetState() != NKikimrBlobStorage::TDataCenterState::INCLUDED) {
+                    dataCenters.insert(dc.GetName());
+                }
+            }
+            if (!dataCenters.empty()) {
+                for (const auto& node : config.GetAllNodes()) {
+                    if (dataCenters.contains(node.GetLocation().GetDataCenter())) {
+                        nodes.insert(node.GetNodeId());
+                    }
+                }
+            }
+        }
+        return nodes;
+    }
+
     static std::optional<bool> HasBootstrapNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config,
                                                       const THashSet<TNodeIdentifier>& successfulNodes,
                                                       TStringStream *out) {
@@ -41,11 +66,15 @@ namespace NKikimr::NStorage {
             return std::nullopt;
         }
 
+        const auto nonVotingNodes = GetNonVotingNodes(config);
+        size_t numNodes = 0;
         size_t numSuccessful = 0;
         for (const auto& node : config.GetAllNodes()) {
-            numSuccessful += successfulNodes.contains(TNodeIdentifier(node));
+            if (!nonVotingNodes.contains(node.GetNodeId())) {
+                ++numNodes;
+                numSuccessful += successfulNodes.contains(TNodeIdentifier(node));
+            }
         }
-        const size_t numNodes = config.AllNodesSize();
         const bool hasQuorum = numSuccessful > numNodes - numSuccessful;
         if (!hasQuorum && out) {
             *out << " config:no-node-majority:" << numSuccessful << '/' << numNodes;
@@ -70,6 +99,9 @@ namespace NKikimr::NStorage {
                     successfulDisks.emplace_back(node, drive.GetPath(), std::nullopt /* don't care about guids here */);
                 }
             });
+            if (HasDataCenterPolicy(config)) {
+                return HasConfigQuorum(config, successfulDisks, singleBridgePileId, nwConfig, false, out);
+            }
             if (auto q = HasStorageQuorum(config, successfulDisks, singleBridgePileId, nwConfig, true, out, "config")) {
                 return *q;
             }
@@ -101,7 +133,11 @@ namespace NKikimr::NStorage {
         THashMap<ui32, std::tuple<const NKikimrBlobStorage::TNodeIdentifier&, TBridgePileId, TNodeLocation>> nodeMap;
         THashSet<std::tuple<ui32, TString>> allDrives; // only drives from mandatory piles
         bool error = false;
+        const auto nonVotingNodes = GetNonVotingNodes(config);
         EnumerateConfigDrives(config, 0, [&](const NKikimrBlobStorage::TNodeIdentifier& node, const auto& drive) {
+            if (nonVotingNodes.contains(node.GetNodeId())) {
+                return;
+            }
             TNodeLocation location(node.GetLocation());
             const auto bridgePileId = ResolveNodePileId(registry, location);
             if (!bridgePileId) {
@@ -249,8 +285,12 @@ namespace NKikimr::NStorage {
             }
         }
 
-        // process responded nodes
+        // Only voters can confirm a static group's placement for this configuration.
+        const auto nonVotingNodes = GetNonVotingNodes(config);
         for (const auto& [node, path, guid] : successful) {
+            if (nonVotingNodes.contains(node.NodeId())) {
+                continue;
+            }
             const auto key = std::make_tuple(node.NodeId(), path, guid);
             const auto [begin, end] = confirm.equal_range(key);
             for (auto it = begin; it != end; ++it) {
@@ -287,7 +327,13 @@ namespace NKikimr::NStorage {
                 });
             }
             const bool hasOwnVDisks = !info->IsBridged() || info->IsInlinePile(); // bridge proxy group doesn't have them
-            if (hasOwnVDisks && !info->GetQuorumChecker().CheckQuorumForGroup(group.Confirmed)) {
+            if (!hasOwnVDisks) {
+                continue;
+            }
+            const bool hasQuorum = HasDataCenterPolicy(config) && info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+                ? TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(*info, ~group.Confirmed)
+                : info->GetQuorumChecker().CheckQuorumForGroup(group.Confirmed);
+            if (!hasQuorum) {
                 badGroups.insert(groupId);
             }
         }

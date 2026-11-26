@@ -139,21 +139,21 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::ApplyDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& command) {
-        RunCommonChecks();
-        auto config = *Self->StorageConfig;
+        // The caller arbitrates DC membership. The target voters may be reachable after the old quorum is lost.
+        RunCommonChecks(/*requireScepter=*/ Self->IsBridged() || !Self->SelfManagementEnabled || !Self->IsSelfStatic);
+        ProposedStorageConfig = *Self->StorageConfig;
         try {
-            if (!ApplyStaticDataCenterStates(&config, command)) {
+            if (!ApplyStaticDataCenterStates(&ProposedStorageConfig, command)) {
                 return StartDataCenterReconciliation();
             }
         } catch (const yexception& error) {
             throw TExError() << error.what();
         }
-        if (Self->StorageConfig->HasDataCenterStates()) {
-            ProposedStorageConfig = std::move(config);
+        if (Self->StorageConfig->HasDataCenterStates() && Self->Scepter) {
             DataCenterPreflight = true;
             return StartDataCenterReconciliation();
         }
-        StartProposition(&config);
+        StartProposition(&ProposedStorageConfig, /*mindPrev=*/ Self->IsBridged());
     }
 
     void TDistributedConfigKeeper::RefreshStaticGroupRepairs() {

@@ -1164,15 +1164,21 @@ private:
             wideBuffer.resize(AllocatedHolder->OutputWideType->GetElementsCount());
         }
         bool dataConsumed = false;
+        ui64 fetchIndex = 0;
         while (AllocatedHolder->Output->GetFillLevel() == NoLimit) {
             NUdf::TUnboxedValue value;
             NUdf::EFetchStatus fetchStatus = NUdf::EFetchStatus::Finish;
             if (!AllocatedHolder->ResultStreamFinished && !AllocatedHolder->Output->IsEarlyFinished()) {
+                LOG(TStringBuilder() << "task: " << TaskId << ", before " << (isWide ? "WideFetch" : "Fetch")
+                    << ", fetchIndex: " << fetchIndex);
                 if (isWide) {
                     fetchStatus = AllocatedHolder->ResultStream.WideFetch(wideBuffer.data(), wideBuffer.size());
                 } else {
                     fetchStatus = AllocatedHolder->ResultStream.Fetch(value);
                 }
+                LOG(TStringBuilder() << "task: " << TaskId << ", after " << (isWide ? "WideFetch" : "Fetch")
+                    << ", fetchIndex: " << fetchIndex << ", fetchStatus: " << static_cast<ui32>(fetchStatus));
+                ++fetchIndex;
             }
 
             switch (fetchStatus) {

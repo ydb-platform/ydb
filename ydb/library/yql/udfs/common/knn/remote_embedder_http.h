@@ -10,11 +10,11 @@ namespace NKnn {
 struct TRemoteEmbedderHttpResponse {
     ui32 Status;
     TString Body;
-    bool TooLarge = false;
+    bool InvalidResponse = false;
 };
 
 NThreading::TFuture<TRemoteEmbedderHttpResponse> PostRemoteEmbedderRequest(
-    TString host, ui16 port, bool useTls, TString request);
+    TString host, ui16 port, bool useTls, TString request, TDuration timeout = TDuration::Seconds(60));
 NThreading::TFuture<void> WaitBeforeRemoteEmbedderRequest(TDuration delay);
 
 } // namespace NKnn

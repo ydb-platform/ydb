@@ -53,8 +53,12 @@ rows; output order and the exact `PassThrough` type and value are preserved.
 `MaxRetries` counts additional attempts after the initial request. Transport
 errors, HTTP 408, 429 and 5xx responses are retried with exponential backoff
 starting at 100 ms and capped at 10 seconds. Other HTTP failures and malformed
-successful responses are returned immediately. Requests have a 10-second
-connection timeout and a 60-second socket timeout.
+successful responses are returned immediately. The transport accepts identity
+encoding and limits each attempt to 60 seconds, including up to 10 seconds
+for TCP connection establishment. Each scalar call or stream batch has a
+two-minute deadline across attempts, backoff and rate-limit waits. A
+rate-limit wait that exceeds the remaining budget fails the query.
+Serialized embeddings are limited to 16 MiB per batch.
 
 `BatchSize` must be positive. A batch holds at most 1,024 rows and has a 1 MiB
 budget for text and estimated retained values. A row above that budget fails
@@ -69,7 +73,8 @@ on the calling thread. A full worker or timer queue fails the query.
 NULL or zero disables throttling. As no model-specific tokenizer is available,
 the limiter conservatively estimates one token per input byte (at least one per
 text), then accounts for any larger `usage.prompt_tokens` reported by the
-server. Requests, including retries, are spaced by that token budget. The first
+server. A usage adjustment of two minutes or more makes the response invalid.
+Requests, including retries, are spaced by that token budget. The first
 batch can be sent immediately, including a batch larger than one second's
 budget. This is an estimate, not an exact model token count or a cluster-wide
 quota.

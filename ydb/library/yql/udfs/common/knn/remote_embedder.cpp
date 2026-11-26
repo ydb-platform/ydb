@@ -14,6 +14,8 @@
 #include <util/string/ascii.h>
 
 #include <algorithm>
+#include <array>
+#include <utility>
 #include <cmath>
 #include <optional>
 
@@ -28,6 +30,9 @@ constexpr ui32 TransportError = 0;
 constexpr ui32 InvalidResponse = 502;
 constexpr size_t MaxBatchRows = 1024;
 constexpr size_t MaxBatchBytes = 1024 * 1024;
+constexpr size_t MaxEmbeddingBytes = 16 * 1024 * 1024;
+constexpr auto BatchTimeout = TDuration::Minutes(2);
+constexpr auto AttemptTimeout = TDuration::Seconds(60);
 
 bool IsSafeHttpRequestPart(TStringBuf part) {
     return std::ranges::none_of(part, [](unsigned char c) {
@@ -38,6 +43,200 @@ bool IsSafeHttpRequestPart(TStringBuf part) {
 struct TBatchResult {
     ui32 Status = TransportError;
     TVector<TString> Embeddings;
+};
+
+// Keep only the response fields needed to validate and serialize the batch.
+class TEmbeddingResponseParser final : public NJson::TJsonCallbacks {
+public:
+    explicit TEmbeddingResponseParser(size_t count)
+        : Embeddings(count)
+    {}
+
+    bool Complete() const {
+        return SeenData_ && RowCount_ == Embeddings.size();
+    }
+
+    TVector<TString> Embeddings;
+    ui64 PromptTokens = 0;
+
+private:
+    enum class EField { Ignore, Root, Data, Item, Index, Embedding, Coordinate, Usage, PromptTokens };
+
+    EField NextField() {
+        if (!Depth_) {
+            return EField::Root;
+        }
+        switch (Stack_[Depth_ - 1]) {
+            case EField::Data: return EField::Item;
+            case EField::Embedding: return EField::Coordinate;
+            default: return std::exchange(Key_, EField::Ignore);
+        }
+    }
+
+    bool OnMapKey(const TStringBuf& key) override {
+        Key_ = EField::Ignore;
+        switch (Stack_[Depth_ - 1]) {
+            case EField::Root:
+                if (key == "data") {
+                    Key_ = EField::Data;
+                } else if (key == "usage") {
+                    Key_ = EField::Usage;
+                }
+                break;
+            case EField::Item:
+                if (key == "index") {
+                    Key_ = EField::Index;
+                } else if (key == "embedding") {
+                    Key_ = EField::Embedding;
+                }
+                break;
+            case EField::Usage:
+                if (key == "prompt_tokens") {
+                    Key_ = EField::PromptTokens;
+                }
+                break;
+            default:
+                break;
+        }
+        return true;
+    }
+
+    bool Push(EField field) {
+        if (Depth_ == Stack_.size()) {
+            return false;
+        }
+        Stack_[Depth_++] = field;
+        return true;
+    }
+
+    bool OnOpenMap() override {
+        const auto field = NextField();
+        switch (field) {
+            case EField::Item:
+                if (RowCount_ == Embeddings.size()) {
+                    return false;
+                }
+                Index_.reset();
+                CurrentEmbedding_.clear();
+                [[fallthrough]];
+            case EField::Root:
+            case EField::Usage:
+                return Push(field);
+            case EField::Ignore:
+            case EField::PromptTokens:
+                return Push(EField::Ignore);
+            default:
+                return false;
+        }
+    }
+
+    bool OnOpenArray() override {
+        const auto field = NextField();
+        switch (field) {
+            case EField::Data:
+                return !std::exchange(SeenData_, true) && Push(field);
+            case EField::Embedding:
+                if (!CurrentEmbedding_.empty() || RemainingBytes_ < HeaderLen || !Push(field)) {
+                    return false;
+                }
+                RemainingBytes_ -= HeaderLen;
+                Serializer_.emplace(&EmbeddingOutput_);
+                return true;
+            case EField::Ignore:
+            case EField::Usage:
+            case EField::PromptTokens:
+                return Push(EField::Ignore);
+            default:
+                return false;
+        }
+    }
+
+    bool OnCloseMap() override {
+        if (Stack_[--Depth_] != EField::Item) {
+            return true;
+        }
+        if (!Index_ || CurrentEmbedding_.empty() || !Embeddings[*Index_].empty()) {
+            return false;
+        }
+        Embeddings[*Index_] = std::move(CurrentEmbedding_);
+        ++RowCount_;
+        return true;
+    }
+
+    bool OnCloseArray() override {
+        if (Stack_[--Depth_] != EField::Embedding) {
+            return true;
+        }
+        const auto size = CurrentEmbedding_.size();
+        if (!size || (VectorBytes_ && size != VectorBytes_)) {
+            return false;
+        }
+        VectorBytes_ = size;
+        Serializer_->Finish();
+        Serializer_.reset();
+        return true;
+    }
+
+    bool AddCoordinate(double value) {
+        const auto coordinate = static_cast<float>(value);
+        if (!std::isfinite(coordinate) || RemainingBytes_ < sizeof(coordinate)) {
+            return false;
+        }
+        RemainingBytes_ -= sizeof(coordinate);
+        Serializer_->HandleElement(coordinate);
+        return true;
+    }
+
+    bool Integer(double numeric, std::optional<ui64> unsignedValue) {
+        switch (const auto field = NextField()) {
+            case EField::Index:
+                if (Index_ || !unsignedValue || *unsignedValue >= Embeddings.size()) {
+                    return false;
+                }
+                Index_ = *unsignedValue;
+                return true;
+            case EField::Coordinate:
+                return AddCoordinate(numeric);
+            case EField::PromptTokens:
+                PromptTokens = unsignedValue.value_or(0);
+                return true;
+            default:
+                return CanIgnore(field);
+        }
+    }
+
+    static bool CanIgnore(EField field) {
+        return field == EField::Ignore || field == EField::Usage || field == EField::PromptTokens;
+    }
+
+    bool OnInteger(long long value) override {
+        return Integer(value, value >= 0 ? std::optional<ui64>(value) : std::nullopt);
+    }
+
+    bool OnUInteger(unsigned long long value) override {
+        return Integer(value, value);
+    }
+
+    bool OnDouble(double value) override {
+        const auto field = NextField();
+        return field == EField::Coordinate ? AddCoordinate(value) : CanIgnore(field);
+    }
+
+    bool OnNull() override { return CanIgnore(NextField()); }
+    bool OnBoolean(bool) override { return CanIgnore(NextField()); }
+    bool OnString(const TStringBuf&) override { return CanIgnore(NextField()); }
+
+    std::array<EField, 16> Stack_;
+    size_t Depth_ = 0;
+    EField Key_ = EField::Ignore;
+    bool SeenData_ = false;
+    size_t RowCount_ = 0;
+    size_t RemainingBytes_ = MaxEmbeddingBytes;
+    size_t VectorBytes_ = 0;
+    std::optional<size_t> Index_;
+    TString CurrentEmbedding_;
+    TStringOutput EmbeddingOutput_{CurrentEmbedding_};
+    std::optional<NKnnVectorSerialization::TSerializer<float>> Serializer_;
 };
 
 // Each invocation owns its retry budget and rate limiter.
@@ -103,35 +302,56 @@ private:
         const TString body = NJson::WriteJson(request);
         const TString httpRequest = TStringBuilder()
             << "POST " << Path_ << " HTTP/1.1\r\nHost: " << Authority_
-            << "\r\nConnection: close\r\nContent-Type: application/json\r\nAuthorization: " << Authorization_
+            << "\r\nConnection: close\r\nAccept-Encoding: identity\r\nContent-Type: application/json\r\nAuthorization: " << Authorization_
             << "\r\nContent-Length: " << body.size() << "\r\n\r\n" << body;
+        const auto deadline = TMonotonic::Now() + BatchTimeout;
         for (ui64 attempt = 0; ; ++attempt) {
-            Throttle(estimatedTokens);
+            Y_ENSURE(Throttle(estimatedTokens, deadline), "RemoteEmbedder: rate-limit wait exceeds the batch deadline");
             NKnn::ValidateRemoteEmbedderDestination(SecretName_, DialHost_, Port_, UseTls_);
-            const auto response = NKnn::PostRemoteEmbedderRequest(DialHost_, Port_, UseTls_, httpRequest).ExtractValueSync();
+            const auto now = TMonotonic::Now();
+            if (now >= deadline) {
+                return {TransportError, {}};
+            }
+            auto pending = NKnn::PostRemoteEmbedderRequest(
+                DialHost_, Port_, UseTls_, httpRequest, Min(deadline - now, AttemptTimeout));
+            if (!pending.Wait(deadline - now)) {
+                return {TransportError, {}};
+            }
+            const auto response = pending.ExtractValue();
             const auto status = response.Status;
             if (status >= 200 && status < 300) {
                 return ParseResponse(response.Body, count, status, estimatedTokens);
             }
-            if (response.TooLarge || attempt >= MaxRetries_
+            if (response.InvalidResponse || attempt >= MaxRetries_
                 || !(status == TransportError || status == 408 || status == 429 || status >= 500)) {
                 return {status, {}};
             }
-            NKnn::WaitBeforeRemoteEmbedderRequest(
-                TDuration::MilliSeconds(Min<ui64>(10000, 100ULL << Min<ui64>(attempt, 7)))).GetValueSync();
+            const auto delay = TDuration::MilliSeconds(Min<ui64>(10000, 100ULL << Min<ui64>(attempt, 7)));
+            if (!Wait(delay, deadline)) {
+                return {status, {}};
+            }
         }
     }
 
-    void Throttle(ui64 tokens) {
+    static bool Wait(TDuration delay, TMonotonic deadline) {
+        const auto now = TMonotonic::Now();
+        return now < deadline && delay < deadline - now
+            && NKnn::WaitBeforeRemoteEmbedderRequest(delay).Wait(deadline - now);
+    }
+
+    bool Throttle(ui64 tokens, TMonotonic deadline) {
         if (!TokensPerSecond_) {
-            return;
+            return true;
         }
         auto now = TMonotonic::Now();
         if (NextRequest_ > now) {
-            NKnn::WaitBeforeRemoteEmbedderRequest(NextRequest_ - now).GetValueSync();
+            if (!Wait(NextRequest_ - now, deadline)) {
+                return false;
+            }
             now = TMonotonic::Now();
         }
         NextRequest_ = now + TokenDuration(tokens);
+        return true;
     }
 
     TDuration TokenDuration(ui64 tokens) const {
@@ -141,41 +361,21 @@ private:
     }
 
     TBatchResult ParseResponse(TStringBuf body, size_t count, ui32 status, ui64 estimatedTokens) {
-        NJson::TJsonValue response;
+        TEmbeddingResponseParser parser(count);
         NJson::TJsonReaderConfig config;
         config.UseIterativeParser = true;
-        config.MaxDepth = 16;
-        if (!NJson::ReadJsonTree(body, &config, &response) || !response["data"].IsArray() || response["data"].GetArray().size() != count) {
+        TMemoryInput input(body.data(), body.size());
+        if (!NJson::ReadJson(&input, &config, &parser) || !parser.Complete()) {
             return {InvalidResponse, {}};
         }
-        const auto& usage = response["usage"]["prompt_tokens"];
-        if (TokensPerSecond_ && usage.IsUInteger() && usage.GetUInteger() > estimatedTokens) {
-            NextRequest_ += TokenDuration(usage.GetUInteger() - estimatedTokens);
-        }
-        TBatchResult result{status, TVector<TString>(count)};
-        size_t dimensions = 0;
-        for (const auto& item : response["data"].GetArray()) {
-            const auto& index = item["index"];
-            const auto& embedding = item["embedding"];
-            if (!index.IsUInteger() || index.GetUInteger() >= count || !embedding.IsArray() || embedding.GetArray().empty()) {
+        if (TokensPerSecond_ && parser.PromptTokens > estimatedTokens) {
+            const auto extraTokens = parser.PromptTokens - estimatedTokens;
+            if (extraTokens >= TokensPerSecond_ * BatchTimeout.Seconds()) {
                 return {InvalidResponse, {}};
             }
-            auto& output = result.Embeddings[index.GetUInteger()];
-            if (!output.empty() || (dimensions && dimensions != embedding.GetArray().size())) {
-                return {InvalidResponse, {}};
-            }
-            dimensions = embedding.GetArray().size();
-            TStringOutput stream(output);
-            NKnnVectorSerialization::TSerializer<float> serializer(&stream);
-            for (const auto& coordinate : embedding.GetArray()) {
-                const double value = coordinate.GetDoubleRobust();
-                if (!(coordinate.IsInteger() || coordinate.IsUInteger() || coordinate.IsDouble()) || !std::isfinite(value) || !std::isfinite(static_cast<float>(value))) {
-                    return {InvalidResponse, {}};
-                }
-                serializer.HandleElement(value);
-            }
+            NextRequest_ += TokenDuration(extraTokens);
         }
-        return result;
+        return {status, std::move(parser.Embeddings)};
     }
 
     TString Model_;

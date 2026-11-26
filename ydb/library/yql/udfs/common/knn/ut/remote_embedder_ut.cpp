@@ -313,8 +313,8 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
         TPortManager ports;
         const auto port = ports.GetPort();
         NMock::TMockServer server(port, [&] { return new TSlowReply(entered, release); });
-        auto request = NKnn::PostRemoteEmbedderRequest("localhost", port, false,
-            "POST /embeddings HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        const TString post = "POST /embeddings HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        auto request = NKnn::PostRemoteEmbedderRequest("localhost", port, false, post);
         UNIT_ASSERT(entered.WaitT(TDuration::Seconds(5)));
         UNIT_ASSERT(!request.HasValue());
         const auto timer = NKnn::WaitBeforeRemoteEmbedderRequest(TDuration::MilliSeconds(10));
@@ -323,6 +323,16 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
         UNIT_ASSERT(!request.HasValue());
         release.Signal();
         UNIT_ASSERT_VALUES_EQUAL(request.ExtractValueSync().Status, HTTP_NO_CONTENT);
+
+        entered.Reset();
+        release.Reset();
+        auto timedRequest = NKnn::PostRemoteEmbedderRequest("localhost", port, false, post, TDuration::Seconds(2));
+        const bool reachedServer = entered.WaitT(TDuration::Seconds(3));
+        const bool completed = timedRequest.Wait(TDuration::Seconds(3));
+        release.Signal();
+        UNIT_ASSERT(reachedServer);
+        UNIT_ASSERT(completed);
+        UNIT_ASSERT_VALUES_EQUAL(timedRequest.ExtractValue().Status, 0);
     }
 
     Y_UNIT_TEST(ScalarRequestAndBinaryEmbedding) {
@@ -496,6 +506,23 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
             UNIT_ASSERT_VALUES_EQUAL(EmbeddingSize(result), 0);
             UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
         }
+    }
+
+    Y_UNIT_TEST(RejectUnsupportedContentEncodingWithoutRetry) {
+        TServer server({{.Status = HTTP_OK, .Body = {}, .RawResponse =
+            "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}"}});
+        TSetup setup;
+        const auto result = setup.Scalar(server, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetElement(1).Get<ui32>(), 502);
+        UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
+    }
+
+    Y_UNIT_TEST(ReadsEmbeddingBeforeIndexAndSkipsUnknownFields) {
+        TServer server({{HTTP_OK, R"({"model":"test","data":[{"embedding":[5,-0.25],"extra":[{},[1]],"index":0}]})"}});
+        TSetup setup;
+        const auto result = setup.Scalar(server);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetElement(1).Get<ui32>(), 200);
+        CheckEmbedding(result, 5);
     }
 
     Y_UNIT_TEST(AcceptsChunkedResponseWithExtensionAndTrailer) {

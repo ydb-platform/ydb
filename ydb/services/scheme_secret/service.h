@@ -99,6 +99,7 @@ private:
     struct TResponseContext {
         using TIncomingOrderId = ui64;
         THashMultiMap<TString, TIncomingOrderId> Secrets;
+        THashMap<TString, TPathId> AuthorizedPaths;
         NThreading::TPromise<NKqp::TEvDescribeSecretsResponse::TDescription> Result;
         size_t FilledSecretsCnt = 0;
     };
@@ -141,7 +142,8 @@ private:
     void SendSchemeCacheRequests(const TEvResolveSecret& ev, const ui64 requestId);
     void SendSchemeShardRequest(const TEvResolveSecret& ev, const ui64 requestId, const TString& secretPath);
     bool LocalCacheHasActualVersion(const TVersionedSecret& secret, const ui64& cacheSecretVersion);
-    bool LocalCacheHasActualObject(const TVersionedSecret& secret, const ui64& cacheSecretPathId);
+    bool LocalCacheHasActualObject(const TVersionedSecret& secret, const TPathId& authorizedPath);
+    void ReplySecretChanged(ui64 requestId, const TString& secretName);
     bool HandleSchemeCacheErrorsIfAny(const ui64& requestId, NSchemeCache::TSchemeCacheNavigate& result);
     bool HandleSchemeShardErrorsIfAny(const ui64& requestId, const NKikimrScheme::TEvDescribeSchemeResult& record);
     void FillResponseIfFinished(const ui64& requestId, const TResponseContext& responseCtx);

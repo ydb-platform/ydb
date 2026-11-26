@@ -1,12 +1,13 @@
 #include "remote_embedder_http.h"
 
-#include <library/cpp/http/io/compression.h>
+#include <library/cpp/http/io/headers.h>
+#include <library/cpp/http/io/stream.h>
 #include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/openssl/io/stream.h>
 #include <library/cpp/threading/future/async.h>
 #include <library/cpp/time_provider/monotonic.h>
 
-#include <util/generic/hash_set.h>
+#include <util/generic/hash.h>
 #include <util/generic/singleton.h>
 #include <util/generic/scope.h>
 #include <util/network/socket.h>
@@ -28,6 +29,7 @@ namespace NKnn {
 namespace {
 
 constexpr size_t HttpWorkers = 8;
+constexpr size_t DnsWorkers = 2;
 constexpr size_t MaxQueuedRequests = 64;
 constexpr size_t MaxQueuedTimers = 128;
 constexpr size_t MaxResponseBytes = 16 * 1024 * 1024;
@@ -134,6 +136,12 @@ TRemoteEmbedderHttpResponse ReadResponse(IInputStream& socketInput) {
 
     TStringInput metadataInput(metadata);
     const THttpHeaders headers(&metadataInput);
+    for (const auto& header : headers) {
+        if (AsciiEqualsIgnoreCase(header.Name(), "Content-Encoding")
+            && !AsciiEqualsIgnoreCase(StripString(header.Value()), "identity")) {
+            return {502, {}, true};
+        }
+    }
     const auto* transferEncoding = headers.FindHeader("Transfer-Encoding");
     const auto* contentLength = headers.FindHeader("Content-Length");
 
@@ -152,18 +160,8 @@ TRemoteEmbedderHttpResponse ReadResponse(IInputStream& socketInput) {
     } else if (contentLength) {
         body = &fixedBody;
     }
-    THolder<IInputStream> decoder;
-    if (const auto* encoding = headers.FindHeader("Content-Encoding")) {
-        if (const auto* factory = TCompressionCodecFactory::Instance().FindDecoder(encoding->Value())) {
-            decoder = (*factory)(body);
-        }
-    }
     TBoundedResponse response;
-    TransferData(decoder ? decoder.Get() : body, &response);
-    if (decoder && chunked) {
-        char ch;
-        Y_ENSURE(!chunkedBody.Read(&ch, 1), "Extra data after the compressed HTTP body");
-    }
+    TransferData(body, &response);
     Y_ENSURE(!fixedBody.Left(), "Truncated HTTP body");
     return {status, response.ExtractBody()};
 }
@@ -172,6 +170,7 @@ class TRemoteEmbedderHttpExecutor {
 public:
     TRemoteEmbedderHttpExecutor()
     {
+        Resolvers_.Start(DnsWorkers, MaxQueuedRequests);
         Workers_.Start(HttpWorkers, MaxQueuedRequests);
         Timer_ = std::thread([this] { RunTimers(); });
     }
@@ -180,28 +179,26 @@ public:
         {
             std::lock_guard lock(Mutex_);
             Stopping_ = true;
-            for (auto* socket : ActiveSockets_) {
-                try {
-                    socket->ShutDown(SHUT_RDWR);
-                } catch (const std::exception&) {
-                    // A peer can close the socket before shutdown reaches it.
-                }
+            for (const auto& [socket, _] : ActiveSockets_) {
+                ShutdownSocket(*socket);
             }
         }
         Ready_.notify_one();
         Timer_.join();
         Workers_.Stop();
+        Resolvers_.Stop();
         for (auto& [_, promise] : Timers_) {
             promise.SetException("RemoteEmbedder: HTTP executor is shutting down");
         }
     }
 
-    NThreading::TFuture<TRemoteEmbedderHttpResponse> Post(TString host, ui16 port, bool useTls, TString request) {
+    NThreading::TFuture<TRemoteEmbedderHttpResponse> Post(TString host, ui16 port, bool useTls, TString request, TDuration timeout) {
+        const auto deadline = NMonotonic::TMonotonic::Now() + timeout;
         std::lock_guard lock(Mutex_);
         Y_ENSURE(!Stopping_, "RemoteEmbedder: HTTP executor is shutting down");
         return NThreading::Async(
-            [this, host = std::move(host), port, useTls, request = std::move(request)] {
-                return PostOnce(host, port, useTls, request);
+            [this, host = std::move(host), port, useTls, request = std::move(request), deadline] {
+                return PostOnce(host, port, useTls, request, deadline);
             }, Workers_);
     }
 
@@ -219,40 +216,78 @@ public:
     }
 
 private:
+    static void ShutdownSocket(TSocket& socket) {
+        try {
+            socket.ShutDown(SHUT_RDWR);
+        } catch (const std::exception&) {
+            // The peer may have already closed the connection.
+        }
+    }
+
     void EnsureRunning() {
         std::lock_guard lock(Mutex_);
         Y_ENSURE(!Stopping_, "RemoteEmbedder: HTTP executor is shutting down");
     }
 
-    TRemoteEmbedderHttpResponse PostOnce(const TString& host, ui16 port, bool useTls, const TString& request) {
+    TRemoteEmbedderHttpResponse PostOnce(const TString& host, ui16 port, bool useTls, const TString& request,
+        NMonotonic::TMonotonic deadline)
+    {
         EnsureRunning();
         using TVerifyCert = TOpenSslClientIO::TOptions::TVerifyCert;
         try {
             // Each attempt owns a fresh connection and cannot implicitly resend a POST.
-            TSocket socket(TNetworkAddress(host, port), TDuration::Seconds(10));
-            socket.SetSocketTimeout(60, 0);
+            const auto start = NMonotonic::TMonotonic::Now();
+            if (start >= deadline) {
+                return {0, {}};
+            }
+            // The system resolver is synchronous. Isolate it from the HTTP pool
+            // and skip queued lookups that have already expired.
+            auto resolved = NThreading::Async([host, port, deadline] {
+                Y_ENSURE(NMonotonic::TMonotonic::Now() < deadline, "RemoteEmbedder: DNS deadline expired");
+                return TNetworkAddress(host, port);
+            }, Resolvers_);
+            if (!resolved.Wait(deadline - start)) {
+                return {0, {}};
+            }
+            const auto address = resolved.ExtractValue();
+            const auto now = NMonotonic::TMonotonic::Now();
+            if (now >= deadline) {
+                return {0, {}};
+            }
+            TSocket socket(address, Min(deadline - now, TDuration::Seconds(10)));
             {
                 std::lock_guard lock(Mutex_);
                 Y_ENSURE(!Stopping_, "RemoteEmbedder: HTTP executor is shutting down");
-                ActiveSockets_.insert(&socket);
+                if (NMonotonic::TMonotonic::Now() >= deadline) {
+                    return {0, {}};
+                }
+                ActiveSockets_.emplace(&socket, deadline);
             }
             Y_DEFER {
                 std::lock_guard lock(Mutex_);
                 ActiveSockets_.erase(&socket);
             };
+            Ready_.notify_one();
             TSocketInput socketInput(socket);
             TSocketOutput socketOutput(socket);
+            const auto exchange = [&](IInputStream& input, IOutputStream& output) {
+                output.Write(request);
+                output.Flush();
+                auto response = ReadResponse(input);
+                // A timeout-driven shutdown may otherwise look like the end
+                // of a response whose body is delimited by connection close.
+                if (NMonotonic::TMonotonic::Now() >= deadline) {
+                    return TRemoteEmbedderHttpResponse{0, {}};
+                }
+                return response;
+            };
             if (useTls) {
                 TOpenSslClientIO::TOptions options;
                 options.VerifyCert_ = TVerifyCert{host};
                 TOpenSslClientIO tls(&socketInput, &socketOutput, options);
-                tls.Write(request);
-                tls.Flush();
-                return ReadResponse(tls);
+                return exchange(tls, tls);
             }
-            socketOutput.Write(request);
-            socketOutput.Flush();
-            return ReadResponse(socketInput);
+            return exchange(socketInput, socketOutput);
         } catch (const TResponseTooLarge&) {
             return {502, {}, true};
         } catch (const std::exception&) {
@@ -265,12 +300,23 @@ private:
     void RunTimers() {
         std::unique_lock lock(Mutex_);
         while (!Stopping_) {
-            if (Timers_.empty()) {
+            const auto now = NMonotonic::TMonotonic::Now();
+            for (auto it = ActiveSockets_.begin(); it != ActiveSockets_.end();) {
+                if (it->second <= now) {
+                    ShutdownSocket(*it->first);
+                    ActiveSockets_.erase(it++);
+                } else {
+                    ++it;
+                }
+            }
+            auto deadline = Timers_.empty() ? NMonotonic::TMonotonic::Max() : Timers_.begin()->first;
+            for (const auto& [_, socketDeadline] : ActiveSockets_) {
+                deadline = Min(deadline, socketDeadline);
+            }
+            if (deadline == NMonotonic::TMonotonic::Max()) {
                 Ready_.wait(lock);
                 continue;
             }
-            const auto deadline = Timers_.begin()->first;
-            const auto now = NMonotonic::TMonotonic::Now();
             if (now < deadline) {
                 const auto delay = Min(deadline - now, TDuration::Hours(1));
                 Ready_.wait_for(lock, std::chrono::microseconds(delay.MicroSeconds()));
@@ -283,9 +329,10 @@ private:
         }
     }
 
+    TThreadPool Resolvers_;
     TThreadPool Workers_;
     std::mutex Mutex_;
-    THashSet<TSocket*> ActiveSockets_;
+    THashMap<TSocket*, NMonotonic::TMonotonic> ActiveSockets_;
     std::condition_variable Ready_;
     std::multimap<NMonotonic::TMonotonic, NThreading::TPromise<void>> Timers_;
     bool Stopping_ = false;
@@ -295,9 +342,9 @@ private:
 } // namespace
 
 NThreading::TFuture<TRemoteEmbedderHttpResponse> PostRemoteEmbedderRequest(
-    TString host, ui16 port, bool useTls, TString request)
+    TString host, ui16 port, bool useTls, TString request, TDuration timeout)
 {
-    return Singleton<TRemoteEmbedderHttpExecutor>()->Post(std::move(host), port, useTls, std::move(request));
+    return Singleton<TRemoteEmbedderHttpExecutor>()->Post(std::move(host), port, useTls, std::move(request), timeout);
 }
 
 NThreading::TFuture<void> WaitBeforeRemoteEmbedderRequest(TDuration delay) {

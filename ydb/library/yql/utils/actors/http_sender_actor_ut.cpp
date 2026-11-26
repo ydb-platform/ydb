@@ -49,13 +49,8 @@ struct TTestBootstrap {
     {
         auto sender = Runtime->AllocateEdgeActor();
         auto req = NHttp::THttpOutgoingRequest::CreateRequestGet("124");
-<<<<<<< HEAD
-        auto request = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(req);
-        Runtime->Send(new IEventHandle(HttpSenderActorId, sender, request.release()));
-=======
         auto request = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(req, allowConnectionReuse);
-        Runtime.Send(new IEventHandle(HttpSenderActorId, sender, request.release()));
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
+        Runtime->Send(new IEventHandle(HttpSenderActorId, sender, request.release()));
     }
 
     template<typename T>
@@ -68,12 +63,9 @@ struct TTestBootstrap {
 
     void HandleHttpProxyOutgoing(std::unique_ptr<NHttp::THttpIncomingResponse>&& response, bool allowConnectionReuse = false) {
         auto [_, event] = Grab<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>();
-<<<<<<< HEAD
-        auto t = NHttp::THttpIncomingResponse(event->Request);
-=======
         UNIT_ASSERT(event);
         UNIT_ASSERT_VALUES_EQUAL(event->AllowConnectionReuse, allowConnectionReuse);
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
+        auto t = NHttp::THttpIncomingResponse(event->Request);
 
         NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest();
 

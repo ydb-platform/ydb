@@ -9,11 +9,8 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-<<<<<<< HEAD
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
-=======
 #include <ydb/library/yql/providers/solomon/common/constants.h>
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/actors/http_sender_actor.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -59,12 +56,7 @@ using namespace NKikimr::NMiniKQL;
 
 namespace {
 
-<<<<<<< HEAD
-const ui64 MaxMetricsPerRequest = 1000; // Max allowed count is 10000
-const ui64 MaxRequestsInflight = 3;
-=======
 static_assert(NSo::NConstants::MaxSensorsPerRow <= NSo::NConstants::DefaultWriteMaxPointsPerRequest);
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
 
 const auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolicy(
     [](const NHttp::TEvHttpProxy::TEvHttpIncomingResponse* resp){
@@ -109,7 +101,6 @@ class TDqSolomonWriteActor : public NActors::TActor<TDqSolomonWriteActor>, publi
 public:
     static constexpr char ActorName[] = "DQ_SOLOMON_WRITE_ACTOR";
 
-<<<<<<< HEAD
     TDqSolomonWriteActor(
         ui64 outputIndex,
         TCollectStatsLevel statsLevel,
@@ -119,14 +110,9 @@ public:
         NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+        std::shared_ptr<TScopedAlloc> alloc,
         i64 freeSpace,
         bool enableStreamingQueriesCounters)
-=======
-    TDqSolomonWriteActor(ui64 outputIndex, TCollectStatsLevel statsLevel, const TTxId& txId, ui64 taskId, TDqSolomonWriteParams&& writeParams,
-        NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks, const ::NMonitoring::TDynamicCounterPtr& counters,
-        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider, std::shared_ptr<TScopedAlloc> alloc, i64 freeSpace,
-        bool enableStreamingQueriesCounters, bool enableCountersPerTask)
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
         : TActor<TDqSolomonWriteActor>(&TDqSolomonWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TxId(txId)
@@ -140,15 +126,10 @@ public:
         , Callbacks(callbacks)
         , Metrics(counters, TxId, taskId, enableStreamingQueriesCounters)
         , FreeSpace(freeSpace)
-<<<<<<< HEAD
+        , Alloc(std::move(alloc))
         , UserMetricsEncoder(
             WriteParams.Shard.GetScheme(),
             WriteParams.Shard.GetClusterType() == NSo::NProto::ESolomonClusterType::CT_MONITORING)
-=======
-        , Alloc(std::move(alloc))
-        ,
-        UserMetricsEncoder(WriteParams.Shard.GetScheme(), WriteParams.Shard.GetClusterType() == NSo::NProto::ESolomonClusterType::CT_MONITORING)
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
         , CredentialsProvider(credentialsProvider)
     {
         YQL_ENSURE(Alloc, "Solomon sink requires a MiniKQL allocator");
@@ -171,15 +152,11 @@ public:
 
 public:
     void SendData(
-<<<<<<< HEAD
         NKikimr::NMiniKQL::TUnboxedValueBatch&& batch,
-        i64,
+        i64 dataSize,
         const TMaybe<NDqProto::TCheckpoint>& checkpoint,
         bool finished) override
     {
-=======
-        NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 dataSize, const TMaybe<NDqProto::TCheckpoint>& checkpoint, bool finished) override {
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
         YQL_ENSURE(!batch.IsWide(), "Wide streams are not supported");
         SINK_LOG_T("Got " << batch.RowCount() << " items to send. Checkpoint: " << checkpoint.Defined()
                    << ". Send queue: " << SendingBuffer.size() << ". Inflight: " << InflightBuffer.size()
@@ -222,15 +199,7 @@ public:
             SendingBuffer.emplace(*checkpoint);
         }
 
-<<<<<<< HEAD
-        while (TryToSendNextBatch()) {}
-
-        if (FreeSpace <= 0) {
-            ShouldNotifyNewFreeSpace = true;
-        }
-=======
         SendPendingBatches();
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
 
         CheckFinished();
     };
@@ -357,20 +326,12 @@ private:
 
         HandleSuccessSolomonResponse(*res->HttpIncomingResponse->Get(), ev->Cookie);
 
-<<<<<<< HEAD
-        while (TryToSendNextBatch()) {}
-    }
-
-    // IActor & IDqComputeActorAsyncOutput
-    void PassAway() override { // Is called from Compute Actor
-=======
         SendPendingBatches();
     }
 
     // IActor & IDqComputeActorAsyncOutput
-    void PassAway() override {   // Is called from Compute Actor
+    void PassAway() override { // Is called from Compute Actor
         ClearPendingBatches();
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
         for (const auto& [_, metricsInflight] : InflightBuffer) {
             Send(metricsInflight.HttpSenderId, new TEvents::TEvPoison());
         }
@@ -394,22 +355,9 @@ private:
                 WriteParams.Shard.GetClusterType());
     }
 
-<<<<<<< HEAD
-    void PushMetricsToBuffer(ui64& metricsCount) {
-        try {
-            auto data = UserMetricsEncoder.Encode();
-            SINK_LOG_T("Push " << data.size() << " bytes of data to buffer");
-
-            FreeSpace -= data.size();
-            SendingBuffer.emplace(TMetricsToSend { std::move(data), metricsCount });
-        } catch (const yexception& e) {
-            TIssues issues { TIssue(TStringBuilder() << "Error while encoding solomon metrics: " << e.what()) };
-            Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
-=======
     void ClearPendingBatches() {
         if (SendingBuffer.empty()) {
             return;
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
         }
         auto guard = Guard(*Alloc);
         while (!SendingBuffer.empty()) {
@@ -685,7 +633,6 @@ private:
 
 } // anonymous namespace
 
-<<<<<<< HEAD
 std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(
     NYql::NSo::NProto::TDqSolomonShard&& settings,
     ui64 outputIndex,
@@ -696,15 +643,9 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    std::shared_ptr<TScopedAlloc> alloc,
     i64 freeSpace,
     bool enableStreamingQueriesCounters)
-=======
-std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(NYql::NSo::NProto::TDqSolomonShard&& settings,
-    ui64 outputIndex, TCollectStatsLevel statsLevel, const TTxId& txId, ui64 taskId, const THashMap<TString, TString>& secureParams,
-    NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks, const ::NMonitoring::TDynamicCounterPtr& counters,
-    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, std::shared_ptr<TScopedAlloc> alloc, i64 freeSpace,
-    bool enableStreamingQueriesCounters, bool enableCountersPerTask)
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -716,7 +657,6 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
     auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
     auto credentialsProvider = credentialsProviderFactory->CreateProvider();
 
-<<<<<<< HEAD
     TDqSolomonWriteActor* actor = new TDqSolomonWriteActor(
         outputIndex,
         statsLevel,
@@ -726,14 +666,10 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
         callbacks,
         counters,
         credentialsProvider,
+        std::move(alloc),
         freeSpace,
         enableStreamingQueriesCounters);
     return {actor, actor};
-=======
-    TDqSolomonWriteActor* actor = new TDqSolomonWriteActor(outputIndex, statsLevel, txId, taskId, std::move(params), callbacks, counters,
-        credentialsProvider, std::move(alloc), freeSpace, enableStreamingQueriesCounters, enableCountersPerTask);
-    return { actor, actor };
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
 }
 
 void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters) {
@@ -748,7 +684,6 @@ void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, ISecuredServ
                 txId = taskParamsIt->second;
             }
 
-<<<<<<< HEAD
             return CreateDqSolomonWriteActor(
                 std::move(settings),
                 args.OutputIndex,
@@ -759,13 +694,9 @@ void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, ISecuredServ
                 args.Callback,
                 counters,
                 credentialsFactory,
+                std::move(args.Alloc),
                 DqSolomonDefaultFreeSpace,
                 enableStreamingQueriesCounters);
-=======
-            return CreateDqSolomonWriteActor(std::move(settings), args.OutputIndex, args.StatsLevel, txId, args.TaskId, args.SecureParams,
-                args.Callback, counters, credentialsFactory, std::move(args.Alloc), DqSolomonDefaultFreeSpace, enableStreamingQueriesCounters,
-                enableCountersPerTask);
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
         });
 }
 

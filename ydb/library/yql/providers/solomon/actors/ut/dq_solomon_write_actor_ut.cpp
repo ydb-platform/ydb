@@ -4,14 +4,11 @@
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 #include <ydb/library/yql/providers/solomon/common/constants.h>
 
-<<<<<<< HEAD
-=======
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/yexception.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -42,7 +39,7 @@ public:
     }
 };
 
-class TBatchingCredentialsFactory final: public IStructuredTokenCredentialsFactory {
+class TBatchingCredentialsFactory final: public ISecuredServiceAccountCredentialsFactory {
     class TProviderFactory final: public NYdb::ICredentialsProviderFactory {
     public:
         explicit TProviderFactory(std::shared_ptr<TBatchingCredentialsProvider> provider)
@@ -64,7 +61,7 @@ public:
     {
     }
 
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, bool) override {
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
         return std::make_shared<TProviderFactory>(Provider);
     }
 
@@ -112,9 +109,6 @@ struct TBatchingCallbacks final: IDqComputeActorAsyncOutput::ICallbacks {
 
     void OnAsyncOutputStateSaved(TSinkState&&, ui64, const NDqProto::TCheckpoint& checkpoint) override {
         Checkpoints.push_back(checkpoint.GetId());
-    }
-
-    void OnAsyncOutputStateCommitted(ui64, const NDqProto::TCheckpoint&) override {
     }
 
     void OnAsyncOutputFinished(ui64) override {
@@ -185,9 +179,13 @@ struct TBatchingFixture {
                 sensor.SetIndex(i + 2);
                 sensor.SetDataTypeId(NUdf::TDataType<ui64>::Id);
             }
+            settings.MutableToken()->SetName("batching-token");
+            const THashMap<TString, TString> secureParams = {
+                {"batching-token", ComposeStructuredTokenJsonForServiceAccount("batching-account", "batching-signature", "")}
+            };
             auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             auto [output, actor] =
-                CreateDqSolomonWriteActor(std::move(settings), 0, TCollectStatsLevel::None, "batching-test", 0, {}, &Callbacks, counters,
+                CreateDqSolomonWriteActor(std::move(settings), 0, TCollectStatsLevel::None, "batching-test", 0, secureParams, &Callbacks, counters,
                     std::make_shared<TBatchingCredentialsFactory>(Credentials), std::shared_ptr<TScopedAlloc>(&compute.Alloc, [](TScopedAlloc*) {
                     }), freeSpace);
             compute.InitAsyncOutput(output, actor);
@@ -415,8 +413,6 @@ void TestWriteBigBatch(bool isCloud) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
-<<<<<<< HEAD
-=======
     Y_UNIT_TEST(OutOfOrderRepliesPreserveCheckpointBoundary) {
         for (const auto clusterType : { NSo::NProto::CT_SOLOMON, NSo::NProto::CT_MONIUM, NSo::NProto::CT_MONITORING }) {
             TBatchingFixture fixture(clusterType);
@@ -992,15 +988,6 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
         }
     }
 
-    Y_UNIT_TEST(TestWriteDateTimestampMonitoring) {
-        TestWriteDateTimestamp(true);
-    }
-
-    Y_UNIT_TEST(TestWriteDateTimestampSolomon) {
-        TestWriteDateTimestamp(false);
-    }
-
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
     Y_UNIT_TEST(TestWriteFormat) {
         const TSolomonLocation location = {.ProjectId = "cloudId1", .FolderId = "folderId1", .Service = "custom", .IsCloud = true};
         CleanupSolomon(location);

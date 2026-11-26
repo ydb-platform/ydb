@@ -1,12 +1,7 @@
 #include "yql_solomon_config.h"
 
-<<<<<<< HEAD
-=======
 #include <ydb/library/yql/providers/solomon/common/constants.h>
 
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
-
->>>>>>> c1f375ab9d5 (YQ-5870 solomon batching (#60221))
 namespace NYql {
 
 using namespace NCommon;

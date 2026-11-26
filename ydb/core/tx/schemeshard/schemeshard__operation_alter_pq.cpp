@@ -345,13 +345,7 @@ public:
                     alterConfig.SetReplicationSourceConsumer(consumer);
                 }
 
-                auto& cdc = *alterConfig.MutableCdcReplication();
-                const auto& previous = tabletConfig->GetCdcReplication();
-                if (cdc.HasTrimTxId() && cdc.GetTrimTxId() != previous.GetTrimTxId()) {
-                    errStr = "Cannot set a CDC trim token directly in the tablet config";
-                    return nullptr;
-                }
-                cdc.CopyFrom(previous);
+                alterConfig.MutableCdcReplication()->CopyFrom(tabletConfig->GetCdcReplication());
             } else if (alterConfig.HasCdcReplication()) {
                 errStr = "CDC replication settings require a managed changefeed";
                 return nullptr;
@@ -734,8 +728,6 @@ public:
             return result;
         }
 
-        const bool trimRequested = alter.HasTrimCdcReplicationTxId();
-        const auto& previousCdc = tabletConfig.GetCdcReplication();
         const auto& oldPartition = tabletConfig.GetPartitionConfig();
         const auto& newPartition = newTabletConfig.GetPartitionConfig();
         const bool stopped = !oldPartition.HasMirrorFrom() && !newPartition.HasMirrorFrom();
@@ -744,24 +736,7 @@ public:
                 || oldPartition.HasMirrorFrom() != newPartition.HasMirrorFrom()
                 || !MessageDifferencer::Equals(oldPartition.GetMirrorFrom(), newPartition.GetMirrorFrom()));
 
-        if (managedCdcTopic && previousCdc.HasTrimTxId() && newPartition.HasMirrorFrom()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot restart CDC mirroring after trim");
-            return result;
-        }
-
-        if (trimRequested && (!managedCdcTopic || !alter.GetTrimCdcReplicationTxId() || !stopped
-            || (previousCdc.HasTrimTxId() && previousCdc.GetTrimTxId() != alter.GetTrimCdcReplicationTxId())))
-        {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Trim requires a stopped managed CDC topic and a stable request ID");
-            return result;
-        }
-
-        if (trimRequested && (tabletConfig.GetEnableCompactification() || newTabletConfig.GetEnableCompactification())) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "CDC trim requires key compaction to be disabled");
-            return result;
-        }
-
-        if (attachCdcTopic || trimRequested || configureManagedMirror) {
+        if (attachCdcTopic || configureManagedMirror) {
             const auto tablePath = streamPath.Parent();
             const auto checks = tablePath.Check();
             checks
@@ -791,7 +766,7 @@ public:
                 || stream->State != NKikimrSchemeOp::ECdcStreamStateDisabled)
             {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "Managed CDC attachment, mirroring, and trim require a Disabled stream and the current replica table owner");
+                    "Managed CDC attachment and mirroring require a Disabled stream and the current replica table owner");
                 return result;
             }
 
@@ -809,11 +784,6 @@ public:
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "Managed CDC attachment requires a stopped topic");
             return result;
-        }
-
-        if (trimRequested) {
-            newTabletConfig.MutableCdcReplication()->SetTrimTxId(alter.GetTrimCdcReplicationTxId());
-            Y_PROTOBUF_SUPPRESS_NODISCARD newTabletConfig.SerializeToString(&alterData->TabletConfig);
         }
 
         // do not change if not set

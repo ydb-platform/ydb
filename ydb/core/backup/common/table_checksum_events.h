@@ -102,7 +102,7 @@ struct TEvTableChecksum {
         {}
     };
 
-    // Echoes the cookie of the terminal operation after its snapshot cleanup
+    // Reports executor idleness using the latest nonzero stop cookie
     struct TEvImportChecksumIdle : NActors::TEventLocal<TEvImportChecksumIdle, EvImportChecksumIdle> {};
 };
 

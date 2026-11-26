@@ -79,7 +79,8 @@ namespace {
                 UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), NKikimrProto::OK, record.ShortDebugString());
                 UNIT_ASSERT_VALUES_EQUAL(record.ResultSize(), 1);
                 const auto& item = record.GetResult(0);
-                UNIT_ASSERT_VALUES_EQUAL_C(item.GetStatus(), NKikimrProto::NODATA, item.ShortDebugString());
+                UNIT_ASSERT_C(item.GetStatus() == NKikimrProto::NODATA ||
+                    (!item.GetDoNotKeep() && item.GetStatus() == NKikimrProto::OK), item.ShortDebugString());
                 count += item.GetDoNotKeep();
             });
         }
@@ -93,23 +94,52 @@ namespace {
             TStringBuilder() << "barrier in effect in GroupId# " << pileGroupId, TDuration::Seconds(1), 300);
     }
 
-    void CollectGarbage(TEnvironmentSetup& env, TEvBlobStorage::TEvCollectGarbage *request,
-            std::optional<ui32> pileGroupId = std::nullopt, ui32 groupId = 0) {
-        std::unique_ptr<TEvBlobStorage::TEvCollectGarbageResult> res;
-        if (pileGroupId) {
-            const ui32 nodeId = env.GetGroupInfo(*pileGroupId)->GetActorId(0).NodeId();
-            res = QueryPileGroup<TEvBlobStorage::TEvCollectGarbageResult>(env, *pileGroupId, nodeId, request);
-        } else {
-            const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-            env.Runtime->WrapInActorContext(edge, [&] {
-                SendToBSProxy(edge, groupId, request);
-            });
-            res.reset(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge, false)->Release().Release());
-        }
+    void CollectGarbage(TEnvironmentSetup& env, ui32 groupId, TEvBlobStorage::TEvCollectGarbage *request) {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] { SendToBSProxy(edge, groupId, request); });
+        const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+    }
+
+    void ReleaseKeepDurably(TEnvironmentSetup& env, ui32 groupId, const TLogoBlobID& id, ui32 counter,
+            std::optional<ui32> collectStep = {}) {
+        auto request = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(id.TabletID(), id.Generation(), counter,
+            id.Channel(), collectStep.has_value(), collectStep ? id.Generation() : 0, collectStep.value_or(0),
+            nullptr, new TVector<TLogoBlobID>{id}, TInstant::Max(), true);
+        request->RetainDoNotKeep = true;
+        CollectGarbage(env, groupId, request.release());
+    }
+
+    void CollectGarbageInPile(TEnvironmentSetup& env, ui32 pileGroupId, TEvBlobStorage::TEvCollectGarbage *request) {
+        const ui32 nodeId = env.GetGroupInfo(pileGroupId)->GetActorId(0).NodeId();
+        const auto res = QueryPileGroup<TEvBlobStorage::TEvCollectGarbageResult>(env, pileGroupId, nodeId, request);
         UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
     }
 
     enum class ERepairRead { Get, Range, Discover };
+
+    TActorId StartRestoreGet(TEnvironmentSetup& env, ui32 groupId, const TLogoBlobID& id) {
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::FastRead, /*mustRestoreFirst=*/ true));
+        });
+        return edge;
+    }
+
+    void CheckGetRacingWithRelease(const TEvBlobStorage::TEvGetResult& result, const TLogoBlobID& id,
+            const TString& data) {
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Status, NKikimrProto::OK, result.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.ResponseSz, 1);
+        const auto& item = result.Responses[0];
+        UNIT_ASSERT_VALUES_EQUAL(item.Id, id);
+        if (item.Status == NKikimrProto::OK) {
+            UNIT_ASSERT_VALUES_EQUAL(item.Buffer.ConvertToString(), data);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(item.Status, NKikimrProto::NODATA, result.ToString());
+        }
+    }
+
     void CheckSyncerCopiesDoNotKeep(bool dropReadFlag) {
         TEnvironmentSetup env(MakeTwoPileSettings());
         env.CreatePool();
@@ -122,8 +152,7 @@ namespace {
         const TString data = "blob whose Keep has been released";
         const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
         PutToPileGroup(env, pileGroups[0], 1, id, data, true);
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, false, 0, 0,
-            nullptr, new TVector<TLogoBlobID>{id}, TInstant::Max(), false), {}, groupId);
+        ReleaseKeepDurably(env, groupId, id, 0);
 
         ui32 numDropped = 0;
         if (dropReadFlag) {
@@ -154,8 +183,8 @@ namespace {
         for (ui32 pile : {0, 1}) {
             PutToPileGroup(env, pileGroups[pile], 1 + 8 * pile, probe, data);
         }
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 1, 0, true, 1, 10,
-            nullptr, nullptr, TInstant::Max(), false), {}, groupId);
+        CollectGarbage(env, groupId, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 1, 0, true, 1, 10,
+            nullptr, nullptr, TInstant::Max(), false));
         for (ui32 pile : {0, 1}) {
             WaitForBarrierInEffect(env, pileGroups[pile], 1 + 8 * pile, probe, data);
             WaitForBarrierInEffect(env, pileGroups[pile], 1 + 8 * pile, id, data);
@@ -184,8 +213,8 @@ namespace {
 
         SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
         env.Sim(TDuration::Seconds(30));
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10,
-            nullptr, nullptr, TInstant::Max(), false), {}, groupId);
+        CollectGarbage(env, groupId, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10,
+            nullptr, nullptr, TInstant::Max(), false));
         WaitForBarrierInEffect(env, pileGroups[0], 1, id, data);
         if (threePiles) {
             WaitForBarrierInEffect(env, pileGroups[2], 17, id, data);
@@ -260,8 +289,8 @@ namespace {
         for (ui32 pile : {0, 1, 2}) {
             PutToPileGroup(env, pileGroups[pile], 1 + 8 * pile, probe, data);
         }
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10, nullptr, nullptr,
-            TInstant::Max(), false), {}, groupId);
+        CollectGarbage(env, groupId, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10, nullptr, nullptr,
+            TInstant::Max(), false));
         for (ui32 pile : {0, 1, 2}) {
             WaitForBarrierInEffect(env, pileGroups[pile], 1 + 8 * pile, probe, data);
         }
@@ -522,6 +551,50 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         CheckSyncerCopiesDoNotKeep(false);
     }
 
+    Y_UNIT_TEST_TWIN(SoftGCReclaimsOrdinaryReleases, bridged) {
+        TEnvironmentSetup env(bridged ? MakeTwoPileSettings() : MakeUnbridgedSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const ui32 physicalGroup = bridged ? GetPileGroups(env, groupId).front() : groupId;
+        const auto info = env.GetGroupInfo(physicalGroup);
+        const ui32 node = info->GetActorId(0).NodeId();
+        const TString data = "kept through soft GC";
+        const TLogoBlobID durable(100500, 1, 1, 0, data.size(), 0);
+        const TLogoBlobID live(100500, 1, 2, 0, data.size(), 0);
+        ui32 counter = 0;
+        PutToPileGroup(env, physicalGroup, node, durable, data);
+        PutToPileGroup(env, physicalGroup, node, live, data);
+        CollectGarbage(env, groupId, new TEvBlobStorage::TEvCollectGarbage(live.TabletID(), 1, counter++, 0,
+            true, 1, live.Step(), new TVector<TLogoBlobID>{durable, live}, nullptr, TInstant::Max(), true));
+        ReleaseKeepDurably(env, groupId, durable, counter++);
+        WaitForBarrierInEffect(env, physicalGroup, node, durable, data);
+
+        // A stable FlatExecutor channel releases previously kept blobs in subsequent batches and only advances soft GC.
+        for (ui32 step = 3; step <= 6; ++step) {
+            const TLogoBlobID retired(live.TabletID(), 1, step, 0, data.size(), 0);
+            PutToPileGroup(env, physicalGroup, node, retired, data);
+            CollectGarbage(env, groupId, new TEvBlobStorage::TEvCollectGarbage(live.TabletID(), 1, counter++, 0,
+                true, 1, step, new TVector<TLogoBlobID>{retired}, nullptr, TInstant::Max(), true, TWriteSource::FlatCollectGarbage));
+            UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, physicalGroup, node, retired, data), NKikimrProto::OK);
+            CollectGarbage(env, groupId, new TEvBlobStorage::TEvCollectGarbage(live.TabletID(), 1, counter++, 0,
+                true, 1, step, nullptr, new TVector<TLogoBlobID>{retired}, TInstant::Max(), true, TWriteSource::FlatCollectGarbage));
+            WaitForBarrierInEffect(env, physicalGroup, node, retired, data);
+            WaitUntil(env, [&] {
+                CompactPileGroup(env, physicalGroup);
+                return CountVDisksWithDoNotKeep(env, physicalGroup, retired) == 0 &&
+                    CountVDisksWithDoNotKeep(env, physicalGroup, durable) == (bridged ? info->GetTotalVDisksNum() : 0);
+            }, "soft GC compacts each ordinary release while preserving the requested bridge release");
+            UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, physicalGroup, node, live, data), NKikimrProto::OK);
+        }
+
+        CollectGarbage(env, groupId, TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(live.TabletID(), 1,
+            counter, 0, 1, durable.Step(), TInstant::Max()).Release());
+        WaitUntil(env, [&] {
+            CompactPileGroup(env, physicalGroup);
+            return CountVDisksWithDoNotKeep(env, physicalGroup, durable) == 0;
+        }, "covering hard barrier reclaims the retained release");
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, physicalGroup, node, live, data), NKikimrProto::OK);
+    }
+
     Y_UNIT_TEST(SyncerCopiesCompactedReleaseToEmptyPile) {
         TEnvironmentSetup env(MakeTwoPileSettings());
         const ui32 groupId = CreatePoolAndGetGroup(env);
@@ -532,9 +605,29 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         PutToPileGroup(env, piles[0], 1, id, data, true);
         PutToPileGroup(env, piles[1], 9, probe, data);
 
+        std::unique_ptr<IEventHandle> repair;
+        ui32 repairNode = 0;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut && ev->Recipient == MakeBlobStorageProxyID(piles[1])) {
+                const auto& put = *ev->Get<TEvBlobStorage::TEvPut>();
+                if (put.Id == id && put.WriteSource == TWriteSource::BridgeProxyRestorePut) {
+                    UNIT_ASSERT(put.IssueKeepFlag && put.ForceGroupGeneration);
+                    repairNode = nodeId;
+                    repair = std::move(ev);
+                    return false;
+                }
+            }
+            return true;
+        };
+        const auto reader = StartRestoreGet(env, groupId, id);
+        std::unique_ptr<IEventHandle> readerReply;
+        auto *readerActor = dynamic_cast<TTestActorSystem::TEdgeActor*>(env.Runtime->GetActor(reader));
+        UNIT_ASSERT(readerActor);
+        readerActor->WaitForEvent(&readerReply);
+        WaitUntil(env, [&] { return bool(repair); }, "repair PUT issued before disconnect");
+        env.Runtime->FilterFunction = {};
         SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10,
-            nullptr, new TVector<TLogoBlobID>{id}, TInstant::Max(), false), {}, groupId);
+        ReleaseKeepDurably(env, groupId, id, 0, 10);
         WaitForBarrierInEffect(env, piles[0], 1, id, data);
         CompactPileGroup(env, piles[0]);
 
@@ -554,14 +647,113 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
 
         RejoinPile(env, 1);
         WaitForBarrierInEffect(env, piles[1], 9, probe, data);
+        const ui32 numTargetDisks = env.GetGroupInfo(piles[1])->GetTotalVDisksNum();
+        WaitUntil(env, [&] { return CountVDisksWithDoNotKeep(env, piles[1], id) == numTargetDisks; },
+            "the rejoined pile receives the source release");
         CompactPileGroup(env, piles[1]);
-        // A repair begun before GC may still arrive after the target has caught up.
-        PutToPileGroup(env, piles[1], 9, id, data, true);
+        UNIT_ASSERT_VALUES_EQUAL(CountVDisksWithDoNotKeep(env, piles[1], id), numTargetDisks);
+        const auto generation = *repair->Get<TEvBlobStorage::TEvPut>()->ForceGroupGeneration;
+        UNIT_ASSERT_LT(generation, env.GetGroupInfo(piles[1])->GroupGeneration);
+        const auto sender = repair->Sender;
+        const ui64 cookie = repair->Cookie;
+        bool fenced = false;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvPutResult && ev->Recipient == sender && ev->Cookie == cookie) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvBlobStorage::TEvPutResult>()->Status, NKikimrProto::RACE);
+                fenced = true;
+            }
+            return true;
+        };
+        ResendEvent(env, repairNode, std::move(repair));
+        WaitUntil(env, [&] { return fenced && readerReply; }, "old generation repair is fenced and the reader finished");
+        env.Runtime->FilterFunction = {};
+        readerActor->StopWaitingForEvent();
+        CheckGetRacingWithRelease(*readerReply->Get<TEvBlobStorage::TEvGetResult>(), id, data);
+        env.Runtime->DestroyActor(reader);
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, id, data), NKikimrProto::NODATA);
     }
 
     Y_UNIT_TEST(SyncerKeepsDoNotKeepFromAssimilation) {
         CheckSyncerCopiesDoNotKeep(true);
+    }
+
+    Y_UNIT_TEST(StandbyKeepArrivingAfterReconciliation) {
+        TEnvironmentSetup env(MakeLocalPileFirstSettings(false));
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto piles = GetPileGroups(env, groupId);
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::HOT_STANDBY);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 target = piles[1];
+        const ui32 generation = env.GetGroupInfo(target)->GroupGeneration;
+        const TString data = "standby writes held until after soft GC";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        const TLogoBlobID probe(100500, 1, 2, 0, data.size(), 0);
+        PutToPileGroup(env, target, 9, probe, data);
+
+        std::unique_ptr<IEventHandle> heldPut, heldKeep;
+        ui32 putNode = 0, keepNode = 0;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->Recipient == MakeBlobStorageProxyID(target) && ev->HasEvent()) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut && ev->Get<TEvBlobStorage::TEvPut>()->Id == id) {
+                    UNIT_ASSERT(!heldPut);
+                    putNode = nodeId;
+                    heldPut = std::move(ev);
+                    return false;
+                } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbage) {
+                    const auto& gc = *ev->Get<TEvBlobStorage::TEvCollectGarbage>();
+                    if (gc.RecordGeneration == 1 && gc.Keep && !gc.Keep->empty() && gc.Keep->front() == id) {
+                        UNIT_ASSERT(!heldKeep);
+                        keepNode = nodeId;
+                        heldKeep = std::move(ev);
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        });
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge)->Get()->Status,
+            NKikimrProto::OK);
+        CollectGarbage(env, groupId, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, false, 0, 0,
+            new TVector<TLogoBlobID>{id}, nullptr, TInstant::Max(), false));
+        UNIT_ASSERT(heldPut && heldKeep);
+        env.Runtime->FilterFunction = {};
+        ReleaseKeepDurably(env, groupId, id, 1, 10);
+        WaitForBarrierInEffect(env, target, 9, probe, data);
+        const ui32 numDisks = env.GetGroupInfo(target)->GetTotalVDisksNum();
+        WaitUntil(env, [&] { return CountVDisksWithDoNotKeep(env, target, id) == numDisks; },
+            "standby reconciliation copies the explicit release to the empty target");
+        CompactPileGroup(env, target);
+
+        // Both physical requests were sent before GC. Steady-state reconciliation leaves their generation valid.
+        UNIT_ASSERT_VALUES_EQUAL(env.GetGroupInfo(target)->GroupGeneration, generation);
+        const auto sender = heldPut->Sender;
+        const ui64 putCookie = heldPut->Cookie;
+        const ui64 keepCookie = heldKeep->Cookie;
+        UNIT_ASSERT_VALUES_EQUAL(heldKeep->Sender, sender);
+        bool putDone = false, keepDone = false;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->Recipient == sender && ev->HasEvent()) {
+                if (ev->Cookie == putCookie && ev->GetTypeRewrite() == TEvBlobStorage::EvPutResult) {
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvBlobStorage::TEvPutResult>()->Status, NKikimrProto::OK);
+                    putDone = true;
+                } else if (ev->Cookie == keepCookie && ev->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbageResult) {
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvBlobStorage::TEvCollectGarbageResult>()->Status, NKikimrProto::OK);
+                    keepDone = true;
+                }
+            }
+            return true;
+        };
+        env.Runtime->Send(heldKeep.release(), keepNode);
+        env.Runtime->Send(heldPut.release(), putNode);
+        WaitUntil(env, [&] { return putDone && keepDone; }, "both delayed standby writes complete");
+        env.Runtime->FilterFunction = {};
+        CompactPileGroup(env, target);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, target, 9, id, data), NKikimrProto::NODATA);
+        UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::HOT_STANDBY);
     }
 
     Y_UNIT_TEST(ReleaseScanRequiresGCQuorum) {
@@ -570,8 +762,7 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         const ui32 pile = GetPileGroups(env, groupId)[0];
         const auto info = env.GetGroupInfo(pile);
         const TLogoBlobID id(100500, 1, 1, 0, 10, 0);
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, false, 0, 0,
-            nullptr, new TVector<TLogoBlobID>{id}, TInstant::Max(), false), {}, groupId);
+        ReleaseKeepDurably(env, groupId, id, 0);
         const auto mode = TIngress::IngressMode(info->Type);
         const ui32 numDisks = info->GetTotalVDisksNum();
         for (const auto& [numExplicit, unavailable] : {std::pair{1u, false}, {numDisks - 1, false}, {numDisks - 1, true}}) {
@@ -797,8 +988,8 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         });
         auto put = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
         UNIT_ASSERT_VALUES_EQUAL_C(put->Get()->Status, NKikimrProto::OK, put->Get()->ToString());
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, false, 0, 0,
-            new TVector<TLogoBlobID>{id}, nullptr, TInstant::Max(), false), {}, groupId);
+        CollectGarbage(env, groupId, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, false, 0, 0,
+            new TVector<TLogoBlobID>{id}, nullptr, TInstant::Max(), false));
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[1], 9, id, data), NKikimrProto::NODATA);
 
         state = RELEASED;
@@ -811,8 +1002,8 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         for (ui32 pile : {0, 1}) {
             PutToPileGroup(env, pileGroups[pile], 1 + 8 * pile, probe, data);
         }
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 1, 0, true, 1, 10,
-            nullptr, nullptr, TInstant::Max(), false), {}, groupId);
+        CollectGarbage(env, groupId, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 1, 0, true, 1, 10,
+            nullptr, nullptr, TInstant::Max(), false));
         for (ui32 pile : {0, 1}) {
             WaitForBarrierInEffect(env, pileGroups[pile], 1 + 8 * pile, probe, data);
             UNIT_ASSERT_VALUES_EQUAL_C(ReadFromPileGroup(env, pileGroups[pile], 1 + 8 * pile, id, data),
@@ -838,8 +1029,8 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         const TLogoBlobID probe(100500, 1, 2, 0, data.size(), 0);
         PutToPileGroup(env, pileGroups[0], 1, id, data);
         PutToPileGroup(env, pileGroups[0], 1, probe, data);
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10,
-            new TVector<TLogoBlobID>{id}, nullptr, TInstant::Max(), false), {}, groupId);
+        CollectGarbage(env, groupId, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10,
+            new TVector<TLogoBlobID>{id}, nullptr, TInstant::Max(), false));
         WaitForBarrierInEffect(env, pileGroups[0], 1, probe, data);
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[0], 1, id, data), NKikimrProto::OK);
 
@@ -888,8 +1079,8 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         for (ui32 pile : {0, 1}) {
             PutToPileGroup(env, pileGroups[pile], 1 + 8 * pile, probe, data);
         }
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10,
-            new TVector<TLogoBlobID>{id}, nullptr, TInstant::Max(), false), {}, groupId);
+        CollectGarbage(env, groupId, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10,
+            new TVector<TLogoBlobID>{id}, nullptr, TInstant::Max(), false));
         for (ui32 pile : {0, 1}) {
             WaitForBarrierInEffect(env, pileGroups[pile], 1 + 8 * pile, probe, data);
             UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[pile], 1 + 8 * pile, id, data), NKikimrProto::OK);
@@ -920,10 +1111,10 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         for (ui32 pile : {0, 1}) {
             PutToPileGroup(env, pileGroups[pile], 1 + 8 * pile, probe, data);
         }
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, false, 0, 0,
-            new TVector<TLogoBlobID>{id}, nullptr, TInstant::Max(), false), pileGroups[0]);
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 1, 0, true, 1, 10, nullptr, nullptr,
-            TInstant::Max(), false), {}, groupId);
+        CollectGarbageInPile(env, pileGroups[0], new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, false, 0, 0,
+            new TVector<TLogoBlobID>{id}, nullptr, TInstant::Max(), false));
+        CollectGarbage(env, groupId, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 1, 0, true, 1, 10, nullptr, nullptr,
+            TInstant::Max(), false));
         for (ui32 pile : {0, 1}) {
             WaitForBarrierInEffect(env, pileGroups[pile], 1 + 8 * pile, probe, data);
         }
@@ -1104,34 +1295,73 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
             held = std::move(ev);
             return false;
         };
-        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-        env.Runtime->WrapInActorContext(edge, [&] {
-            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
-                NKikimrBlobStorage::FastRead, /*mustRestoreFirst=*/ true));
-        });
+        const auto edge = StartRestoreGet(env, groupId, id);
         WaitUntil(env, [&] { return sawSourceKeep && held; }, "repair in progress");
         env.Runtime->FilterFunction = {};
 
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10,
-            nullptr, new TVector<TLogoBlobID>{id}, TInstant::Max(), false), {}, groupId);
+        const auto targetInfo = env.GetGroupInfo(target);
+        const auto laggingDisk = targetInfo->GetVDiskInSubgroup(0, id.Hash());
+        const ui32 laggingNode = targetInfo->GetActorId(targetInfo->GetOrderNumber(laggingDisk)).NodeId();
+        std::vector<std::unique_ptr<IEventHandle>> delayedUpdates;
+        bool heldRelease = false;
+        if (delayPut) {
+            env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+                if (nodeId != laggingNode) {
+                    return true;
+                }
+                switch (ev->GetTypeRewrite()) {
+                    case TEvBlobStorage::EvVCollectGarbage: {
+                        const auto *recipient = env.Runtime->GetActor(ev->GetRecipientRewrite());
+                        if (!recipient || recipient->GetActivityType() != NKikimrServices::TActivity::BS_SKELETON_FRONT) {
+                            return true;
+                        }
+                        const auto& record = ev->Get<TEvBlobStorage::TEvVCollectGarbage>()->Record;
+                        if (!record.DoNotKeepSize() || record.GetTabletId() != id.TabletID() ||
+                                VDiskIDFromVDiskID(record.GetVDiskID()) != laggingDisk) {
+                            return true;
+                        }
+                        heldRelease = true;
+                        break;
+                    }
+                    case TEvBlobStorage::EvVSyncResult:
+                    case TEvBlobStorage::EvVSyncFullResult:
+                        break;
+                    default:
+                        return true;
+                }
+                delayedUpdates.emplace_back(std::move(ev));
+                return false;
+            };
+        }
+        ReleaseKeepDurably(env, groupId, id, 0, 10);
         WaitForBarrierInEffect(env, pileGroups[0], 1, id, data);
         WaitForBarrierInEffect(env, target, 9, probe, data);
-        WaitUntil(env, [&] { return CountVDisksWithDoNotKeep(env, target, id) == numTargetDisks; },
-            "release on every target VDisk");
+        const ui32 releasedDisks = numTargetDisks - (delayPut ? 1 : 0);
+        WaitUntil(env, [&] { return CountVDisksWithDoNotKeep(env, target, id) == releasedDisks; },
+            "release reaches the participating VDisks");
         CompactPileGroup(env, target);
-        UNIT_ASSERT_VALUES_EQUAL(CountVDisksWithDoNotKeep(env, target, id), numTargetDisks);
+        UNIT_ASSERT_VALUES_EQUAL(CountVDisksWithDoNotKeep(env, target, id), releasedDisks);
 
         env.Runtime->Send(held.release(), heldNode);
         const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->ResponseSz, 1);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Id, id);
-        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, target, 9, id, data), NKikimrProto::NODATA);
+        CheckGetRacingWithRelease(*result->Get(), id, data);
+        if (delayPut) {
+            UNIT_ASSERT(heldRelease);
+            env.Runtime->FilterFunction = {};
+            for (auto& update : delayedUpdates) {
+                env.Runtime->Send(update.release(), laggingNode);
+            }
+            WaitUntil(env, [&] { return CountVDisksWithDoNotKeep(env, target, id) == numTargetDisks; },
+                "the lagging VDisk applies the release after the repair");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, target, 9, id, data), NKikimrProto::NODATA);
+        }
         CompactPileGroup(env, target);
         UNIT_ASSERT_VALUES_EQUAL(CountVDisksWithDoNotKeep(env, target, id), numTargetDisks);
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, target, 9, id, data), NKikimrProto::NODATA);
 
-        CollectGarbage(env, TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(id.TabletID(), 1, 1, 0, 1, 10,
-            TInstant::Max()).Release(), {}, groupId);
+        CollectGarbage(env, groupId, TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(id.TabletID(), 1, 1, 0, 1, 10,
+            TInstant::Max()).Release());
         WaitUntil(env, [&] {
             CompactPileGroup(env, target);
             return CountVDisksWithDoNotKeep(env, target, id) == 0;
@@ -1146,8 +1376,7 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         const TString data = "kept blob on the recovering pile";
         const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
         PutToPileGroup(env, pile, 9, id, data, true);
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10,
-            nullptr, new TVector<TLogoBlobID>{id}, TInstant::Max(), false), {}, groupId);
+        ReleaseKeepDurably(env, groupId, id, 0, 10);
         WaitForBarrierInEffect(env, pile, 9, id, data);
         CompactPileGroup(env, pile);
         UNIT_ASSERT_VALUES_EQUAL(CountVDisksWithDoNotKeep(env, pile, id), info->GetTotalVDisksNum());
@@ -1196,8 +1425,8 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         PutToPileGroup(env, piles[0], 1, id, data, true);
         PutToPileGroup(env, piles[1], 9, probe, data);
         // The target received a Keep for the blob but has no parts. Anubis releases its local phantom.
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, false, 0, 0,
-            new TVector<TLogoBlobID>{id}, nullptr, TInstant::Max(), false), piles[1]);
+        CollectGarbageInPile(env, piles[1], new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, false, 0, 0,
+            new TVector<TLogoBlobID>{id}, nullptr, TInstant::Max(), false));
         for (ui32 i = 0; i < target->GetTotalVDisksNum(); ++i) {
             const auto serviceId = target->GetActorId(i);
             const auto edge = env.Runtime->AllocateEdgeActor(serviceId.NodeId(), __FILE__, __LINE__);
@@ -1208,19 +1437,15 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
         }
         UNIT_ASSERT_VALUES_EQUAL(CountVDisksWithDoNotKeep(env, piles[1], id), target->GetTotalVDisksNum());
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 1, 0, true, 1, 10,
-            nullptr, nullptr, TInstant::Max(), false), {}, groupId);
+        CollectGarbage(env, groupId, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 1, 0, true, 1, 10,
+            nullptr, nullptr, TInstant::Max(), false));
         WaitForBarrierInEffect(env, piles[1], 9, probe, data);
         WaitUntil(env, [&] {
             CompactPileGroup(env, piles[1]);
             return CountVDisksWithDoNotKeep(env, piles[1], id) == 0;
         }, "compaction reclaiming the target's local phantom");
 
-        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-        env.Runtime->WrapInActorContext(edge, [&] {
-            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
-                NKikimrBlobStorage::FastRead, /*mustRestoreFirst=*/ true));
-        });
+        const auto edge = StartRestoreGet(env, groupId, id);
         CheckGetResult(*env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge)->Get(), data);
         CompactPileGroup(env, piles[1]);
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, id, data), NKikimrProto::OK);
@@ -1257,8 +1482,8 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         const TLogoBlobID probe(100500, 1, 2, 0, data.size(), 0);
         PutToPileGroup(env, pileGroups[0], 1, id, data, true);
         PutToPileGroup(env, pileGroups[0], 1, probe, data);
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10, nullptr, nullptr,
-            TInstant::Max(), false), {}, groupId);
+        CollectGarbage(env, groupId, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10, nullptr, nullptr,
+            TInstant::Max(), false));
         WaitForBarrierInEffect(env, pileGroups[0], 1, probe, data);
 
         // hold the check of the blob in pile 1 the syncer makes at the data stage
@@ -1314,8 +1539,8 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         for (ui32 pile : {0, 1}) {
             PutToPileGroup(env, pileGroups[pile], 1 + 8 * pile, probe, data);
         }
-        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(probe.TabletID(), 1, 0, 0, true, 1, 10, nullptr, nullptr,
-            TInstant::Max(), false), {}, groupId);
+        CollectGarbage(env, groupId, new TEvBlobStorage::TEvCollectGarbage(probe.TabletID(), 1, 0, 0, true, 1, 10, nullptr, nullptr,
+            TInstant::Max(), false));
         for (ui32 pile : {0, 1}) {
             WaitForBarrierInEffect(env, pileGroups[pile], 1 + 8 * pile, probe, data);
         }

@@ -113,9 +113,7 @@ namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TBlobStorageIngress) {
         Y_UNIT_TEST(ExplicitDoNotKeepEncoding) {
-            for (const auto species : {TErasureType::ErasureNone, TErasureType::Erasure4Plus2Block,
-                    TErasureType::ErasureMirror3dc, TErasureType::Erasure4Plus3Block, TErasureType::Erasure3Plus3Block,
-                    TErasureType::ErasureMirror3of4, TErasureType::Erasure8Plus2Block}) {
+            auto checkEncoding = [](TErasureType::EErasureSpecies species) {
                 const TBlobStorageGroupType type(species);
                 const auto mode = TIngress::IngressMode(type);
                 TIngress legacy;
@@ -139,7 +137,12 @@ namespace NKikimr {
                 kept.Merge(TIngress(withPart.Raw()));
                 UNIT_ASSERT(kept.HasExplicitDoNotKeep(mode));
                 UNIT_ASSERT(!kept.KeepUnconditionally(mode));
+            };
+            for (const auto& [species, name] : TErasureType::ErasureNames) {
+                checkEncoding(species);
             }
+            // This historical on-disk format has no selectable erasure name.
+            checkEncoding(TErasureType::Erasure3Plus3Block);
         }
 
         Y_UNIT_TEST(Block82AllThirtyValidPlacementsAndInvalidMainPlacements) {

@@ -2249,7 +2249,9 @@ struct TEvBlobStorage {
         bool IsMonitored = true;
 
         bool IgnoreBlock = false;
-        bool ExplicitDoNotKeep = false; // the bridged blob owner's release, including a copy of its stored flag
+        // In a bridged group, retain these DoNotKeep flags across soft GC so a delayed Keep cannot revive the blob.
+        // Owners opting in must issue covering hard barriers to reclaim the per-blob index entries.
+        bool RetainDoNotKeep = false;
 
         bool Decommission = false;
 
@@ -2271,7 +2273,7 @@ struct TEvBlobStorage {
             , IsMultiCollectAllowed(origin.IsMultiCollectAllowed)
             , IsMonitored(origin.IsMonitored)
             , IgnoreBlock(origin.IgnoreBlock)
-            , ExplicitDoNotKeep(origin.ExplicitDoNotKeep)
+            , RetainDoNotKeep(origin.RetainDoNotKeep)
             , Decommission(origin.Decommission)
             , WriteSource(origin.WriteSource)
         {}
@@ -2348,6 +2350,9 @@ struct TEvBlobStorage {
             str << " Hard# " << (Hard ? "true" : "false");
             str << " IsMultiCollectAllowed# " << IsMultiCollectAllowed;
             str << " IsMonitored# " << IsMonitored;
+            if (RetainDoNotKeep) {
+                str << " RetainDoNotKeep# true";
+            }
             if (Keep.Get()) {
                 str << " KeepSize# " << Keep->size() << " {";
                 for (ui32 i = 0; i < Keep->size(); ++i) {
@@ -2636,13 +2641,21 @@ struct TEvBlobStorage {
             bool HasData = true;
             // The scan found only release records for data already covered by the soft barrier.
             bool CollectedDoNotKeep = false;
-            // An explicit logical release was observed, as distinct from a VDisk's local phantom flag.
+            // The owner requested retention of this release across soft GC.
             bool ExplicitDoNotKeep = false;
             // The scan reached a physical GC quorum and every responding GC recipient in the subgroup has the release.
             bool ExplicitDoNotKeepQuorum = false;
 
             // Masks of subgroup positions holding each part, populated for a placement scan.
             TStackVec<ui16, TBlobStorageGroupType::MaxTotalParts> PartDisks{};
+
+            void MergeFlags(const TBlob& other) {
+                Keep |= other.Keep;
+                DoNotKeep |= other.DoNotKeep;
+                HasData |= other.HasData;
+                CollectedDoNotKeep &= other.CollectedDoNotKeep;
+                ExplicitDoNotKeep |= other.ExplicitDoNotKeep;
+            }
 
             TString ToString() const {
                 TStringStream str;
@@ -2663,6 +2676,12 @@ struct TEvBlobStorage {
                 }
                 if (CollectedDoNotKeep) {
                     s << " (collected)";
+                }
+                if (ExplicitDoNotKeep) {
+                    s << " (explicit DoNotKeep)";
+                }
+                if (ExplicitDoNotKeepQuorum) {
+                    s << " (DoNotKeep quorum)";
                 }
             }
 

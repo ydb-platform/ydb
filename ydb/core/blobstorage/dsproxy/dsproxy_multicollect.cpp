@@ -31,7 +31,7 @@ class TBlobStorageGroupMultiCollectRequest : public TBlobStorageGroupRequestActo
     const bool Collect;
     const bool Decommission;
     const bool IgnoreBlock;
-    const bool ExplicitDoNotKeep;
+    const bool RetainDoNotKeep;
     const TWriteSource WriteSource;
 
     ui64 FlagRequestsInFlight;
@@ -108,7 +108,7 @@ public:
         , Collect(params.Common.Event->Collect)
         , Decommission(params.Common.Event->Decommission)
         , IgnoreBlock(params.Common.Event->IgnoreBlock)
-        , ExplicitDoNotKeep(params.Common.Event->ExplicitDoNotKeep)
+        , RetainDoNotKeep(params.Common.Event->RetainDoNotKeep)
         , WriteSource(params.Common.Event->WriteSource)
         , FlagRequestsInFlight(0)
         , CollectRequestsInFlight(0)
@@ -156,7 +156,7 @@ public:
             isCollect, CollectGeneration, CollectStep, keepPart.release(), doNotKeepPart.release(), Deadline, false,
             WriteSource, Hard, IgnoreBlock));
         ev->Decommission = Decommission; // retain decommission flag
-        ev->ExplicitDoNotKeep = ExplicitDoNotKeep;
+        ev->RetainDoNotKeep = RetainDoNotKeep;
         DSP_LOG_DEBUG_S("BPMC3", "SendRequest idx# " << idx
             << " withCollect# " << withCollect
             << " isCollect# " << isCollect

@@ -110,11 +110,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
 
         bool Merge(const TBlob& other) {
             if (Id == other.Id) {
-                Keep |= other.Keep;
-                DoNotKeep |= other.DoNotKeep;
-                HasData |= other.HasData;
-                CollectedDoNotKeep &= other.CollectedDoNotKeep;
-                ExplicitDoNotKeep |= other.ExplicitDoNotKeep;
+                MergeFlags(other);
                 ExplicitDoNotKeepDisks |= other.ExplicitDoNotKeepDisks;
                 for (ui32 part = 0; part < PartDisks.size(); ++part) {
                     PartDisks[part] |= other.PartDisks[part];

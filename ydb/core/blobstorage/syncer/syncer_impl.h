@@ -120,6 +120,7 @@ namespace NKikimr::NGroupSyncer {
         void ProcessRestoreQueue();
         TSourceBlobFlags TakeSourceBlobFlags(const TLogoBlobID& id);
         bool ScansBlobs() const; // whether the current step merges blobs
+        bool CopiesDoNotKeep() const;
         void CountToCopy(const TLogoBlobID& id);
         void CountCopied(const TLogoBlobID& id);
 

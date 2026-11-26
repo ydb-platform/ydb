@@ -1,55 +1,13 @@
 #include "blobstorage_anubisfinder.h"
-// FIXME: snapshot is enough
-#include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullmergeits.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_SYNCER
 
 namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
-    // TLevelSliceSnapshotForwardIteratorWithStopper
-    // It's a TLevelSliceSnapshot::TForwardIterator with ability to stop
-    // before the end of the database via provided TStopper. We use it split
-    // a whole job to a number of quantums.
-    ////////////////////////////////////////////////////////////////////////////
-    template <class TKey, class TMemRec, class TStopper>
-    class TLevelSliceSnapshotForwardIteratorWithStopper
-        : public ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>::TForwardIterator
-    {
-    public:
-        using TLevelIndexSnapshot = typename ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>;
-        using TBase = typename TLevelIndexSnapshot::TForwardIterator;
-
-        TLevelSliceSnapshotForwardIteratorWithStopper(TStopper *stopper,
-                                                      const THullCtxPtr &settings,
-                                                      const TLevelIndexSnapshot *snap)
-            : TBase(settings, snap)
-            , Stopper(stopper)
-        {}
-
-        bool Valid() const {
-            return TBase::Valid() && !Stopper->Enough();
-        }
-
-        void Next() {
-            TBase::Next();
-            if (TBase::Valid()) {
-                Stopper->SetPos(TBase::GetCurKey());
-            }
-        }
-
-    private:
-        TStopper *Stopper;
-    };
-
-    ////////////////////////////////////////////////////////////////////////////
     // TAnubisCandidatesFinder
     ////////////////////////////////////////////////////////////////////////////
     class TAnubisCandidatesFinder {
     public:
-        using TLogoBlobsIt = typename TLogoBlobsSnapshot::TForwardIterator;
-        using TIndexRecordMerger = ::NKikimr::TIndexRecordMerger<TKeyLogoBlob, TMemRecLogoBlob>;
-
-
         TAnubisCandidatesFinder(const TIntrusivePtr<THullCtx> &hullCtx,
                                 const TLogoBlobID &pos,
                                 TLogoBlobsSnapshot &&logoBlobsSnap,
@@ -69,49 +27,15 @@ namespace NKikimr {
             // free barriers snapshot
             BarriersSnap.Destroy();
 
-            // the subset we processing
-            TLogoBlobsIt subsIt(HullCtx, &LogoBlobsSnap);
-            subsIt.Seek(Pos);
-            // for the whole level index
-            TLogoBlobsIt dbIt(HullCtx, &LogoBlobsSnap);
-
-
-            //////////////// HANDLERS /////////////////////////////////////////
-            auto newItem = [] (const TLogoBlobsIt &subsIt, const TIndexRecordMerger &subsMerger) {
-                Y_UNUSED(subsIt);
-                Y_UNUSED(subsMerger);
-            };
-
-            auto doMerge = [this, &brs, &candidates] (const TLogoBlobsIt &subsIt,
-                                                      const TLogoBlobsIt &dbIt,
-                                                      const TIndexRecordMerger &subsMerger,
-                                                      const TIndexRecordMerger &dbMerger) {
-                Y_UNUSED(subsIt);
-                Y_UNUSED(subsMerger);
-                // calculate keep status
-                bool allowKeepFlags = HullCtx->AllowKeepFlags;
-                NGc::TKeepStatus keep = brs->Keep(dbIt.GetCurKey(), dbMerger.GetMemRec(), {}, allowKeepFlags,
-                    true /*allowGarbageCollection*/);
+            TLogoBlobsSnapshot::TIndexForwardIterator it(HullCtx, &LogoBlobsSnap);
+            for (it.Seek(Pos); it.Valid() && !candidates.Enough(); it.Next()) {
+                const auto key = it.GetCurKey();
+                const auto keep = brs->Keep(key, it.GetMemRec(), {}, HullCtx->AllowKeepFlags, true);
                 if (keep.KeepData && !keep.KeepByBarrier) {
-                    // Only a live Keep can be a phantom. A retained DoNotKeep has already released it.
-                    candidates.AddCandidate(dbIt.GetCurKey().LogoBlobID());
+                    candidates.AddCandidate(key.LogoBlobID());
                 }
-            };
-
-            auto crash = [this] (const TLogoBlobsIt &subsIt, const TLogoBlobsIt &dbIt) {
-                TStringStream str;
-                str << MergeIteratorWithWholeDbDefaultCrashReport(HullCtx->VCtx->VDiskLogPrefix,
-                                                                  subsIt, dbIt);
-                return str.Str();
-            };
-
-            // run process of finding candidates
-            MergeIteratorWithWholeDb<TLogoBlobsIt, TLogoBlobsIt, TIndexRecordMerger>(HullCtx->VCtx->Top->GType,
-                                                                                     subsIt,
-                                                                                     dbIt,
-                                                                                     newItem,
-                                                                                     doMerge,
-                                                                                     crash);
+            }
+            candidates.SetPos(it.Valid() ? it.GetCurKey().LogoBlobID() : Max<TLogoBlobID>());
             candidates.FinishTime = TAppData::TimeProvider->Now();
             return candidates;
         }

@@ -622,7 +622,7 @@ message TEvVCollectGarbage {
     optional bool NotifyIfNotReady = 9;
     optional TMsgQoS MsgQoS = 10;
     optional uint32 WriteSourceOp = 14;
-    optional bool ExplicitDoNotKeep = 15; // these releases came from the owner of the bridged group
+    optional bool ExplicitDoNotKeep = 15; // the owner of the bridged group opted to retain these releases through soft GC
 }
 
 message TEvVCollectGarbageResult {

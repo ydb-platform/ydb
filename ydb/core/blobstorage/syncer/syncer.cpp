@@ -102,6 +102,10 @@ namespace NKikimr::NGroupSyncer {
             (Stage != NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP || Step != 1);
     }
 
+    bool TSyncerActor::CopiesDoNotKeep() const {
+        return Reconcile || Stage != NKikimrBridge::TGroupState::WRITE_KEEP;
+    }
+
     void TSyncerActor::CountToCopy(const TLogoBlobID& id) {
         SyncerDataStats->BytesToCopy += id.BlobSize();
     }
@@ -242,7 +246,7 @@ namespace NKikimr::NGroupSyncer {
 
             const auto& [blobId] = key;
 
-            if (sourceItem && sourceItem->DoNotKeep && (Reconcile || Stage != NKikimrBridge::TGroupState::WRITE_KEEP)) {
+            if (sourceItem && sourceItem->DoNotKeep && CopiesDoNotKeep()) {
                 if (sourceItem->ExplicitDoNotKeep) {
                     // A single VDisk can report an unconfirmed release. Repair missing flags on reachable target replicas.
                     if (!targetItem || !targetItem->ExplicitDoNotKeepQuorum) {
@@ -320,7 +324,7 @@ namespace NKikimr::NGroupSyncer {
                     false, 0u, 0u, flags.Keep.empty() ? nullptr : new TVector<TLogoBlobID>(std::move(flags.Keep)),
                     flags.DoNotKeep.empty() ? nullptr : new TVector<TLogoBlobID>(std::move(flags.DoNotKeep)),
                     TInstant::Max(), true, TWriteSource::SyncerMergeGC, false, true);
-                ev->ExplicitDoNotKeep = explicitDoNotKeep;
+                ev->RetainDoNotKeep = explicitDoNotKeep;
                 IssueQuery(true, std::move(ev));
             }
         };
@@ -762,7 +766,7 @@ namespace NKikimr::NGroupSyncer {
         // is the only one left uncharged, unless the syncer gets stopped between pages.
         auto request = std::make_unique<TEvBlobStorage::TEvAssimilate>(state.SkipBlocksUpTo, state.SkipBarriersUpTo,
             state.SkipBlobsUpTo, /*ignoreDecommitState=*/ true, /*reverse=*/ true);
-        request->IncludeCollectedDoNotKeep = ScansBlobs() && (Reconcile || Stage != NKikimrBridge::TGroupState::WRITE_KEEP);
+        request->IncludeCollectedDoNotKeep = ScansBlobs() && CopiesDoNotKeep();
         IssueQuery(toTargetGroup, std::move(request), TQueryPayload{.ToTargetGroup = toTargetGroup},
             std::exchange(state.UnchargedReplyBytes, 0));
 

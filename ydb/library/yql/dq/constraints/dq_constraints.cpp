@@ -219,6 +219,11 @@ TStatus ConstraintDqScalarHashJoin(const TExprNode::TPtr& input, TExprContext& c
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Streaming inputs are not supported for " << input->Content()));
         return TStatus::Error;
     }
+    // The physical node has the same shape as map join. The core does not, so uniqueness stays on the physical node,
+    // which is what stage building sees.
+    if (TDqPhyScalarHashJoin::Match(input.Get())) {
+        return ConstraintDqJoin(input, ctx);
+    }
     return TStatus::Ok;
 }
 

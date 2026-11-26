@@ -75,6 +75,20 @@ void TStagePredictor::Scan(const NYql::TExprNode::TPtr& stageNode) {
             }
         } else if (node.Maybe<NYql::NNodes::TCoMapJoinCore>()) {
             HasMapJoinFlag = true;
+        } else if (node.Maybe<NYql::NNodes::TDqPhyScalarHashJoin>() || node.Maybe<NYql::NNodes::TDqScalarHashJoinCore>()) {
+            // Only the broadcast map-join replacement is a heavy map join. Shuffle scalar hash join
+            // replaces block hash join and must not change scan threads or task placement.
+            const auto settings = node.Maybe<NYql::NNodes::TDqPhyScalarHashJoin>()
+                ? node.Cast<NYql::NNodes::TDqPhyScalarHashJoin>().Settings()
+                : node.Cast<NYql::NNodes::TDqScalarHashJoinCore>().Settings();
+            if (settings) {
+                for (const auto& setting : settings.Cast()) {
+                    if (setting.Name().Value() == "MapJoin") {
+                        HasMapJoinFlag = true;
+                        break;
+                    }
+                }
+            }
         } else if (const auto maybeWatermarkGenerator = node.Maybe<NYql::NNodes::TDqPhyWatermarkGenerator>()) {
             HasWatermarkGeneratorFlag = true;
 

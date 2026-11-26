@@ -613,7 +613,9 @@ void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TKqpStatsStore* 
     resStats->Labels = std::make_shared<TVector<TString>>();
     resStats->Labels->insert(resStats->Labels->begin(), unionOfLabels.begin(), unionOfLabels.end());
 
-    if (auto maybeMapJoin = TMaybeNode<TDqPhyMapJoin>(inputNode.Raw())) {
+    // Map join probes the left input in order. Scalar hash join is that operator when the right side is
+    // the build side, so the left order survives the same way. A hash shuffle has already cleared it.
+    if (TMaybeNode<TDqPhyMapJoin>(inputNode.Raw()) || TMaybeNode<TDqPhyScalarHashJoin>(inputNode.Raw())) {
         resStats->SortingOrderings = leftStats->SortingOrderings;
     }
 

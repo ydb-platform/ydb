@@ -521,6 +521,8 @@ TDqJoinBase DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, co
     auto rightFilteredInput = BuildSkipNullKeys(ctx, join.Pos(), rightInput, rightFilterKeys);
 
     if (useScalarHashJoin) {
+        // MapJoin marks the broadcast replacement. Shuffle scalar hash join does not carry it,
+        // so the stage stays as heavy as the block hash join it replaced.
         return Build<TDqPhyScalarHashJoin>(ctx, join.Pos())
             .LeftInput(leftFilteredInput)
             .LeftLabel(join.LeftLabel())
@@ -531,7 +533,11 @@ TDqJoinBase DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, co
             .LeftJoinKeyNames(join.LeftJoinKeyNames())
             .RightJoinKeyNames(join.RightJoinKeyNames())
             .Settings()
-            .Build()
+                .Add<TCoNameValueTuple>()
+                    .Name().Build("MapJoin")
+                    .Value<TCoAtom>().Build("true")
+                    .Build()
+                .Build()
             .Done();
     } else if (useGraceCore) {
         auto flags = Build<TCoAtomList>(ctx, join.Pos())

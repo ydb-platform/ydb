@@ -15,10 +15,13 @@ TDumpClient::TDumpClient(const TDriver& driver, const std::shared_ptr<TLog>& log
 TDumpResult TDumpClient::Dump(const TString& dbPath, const TString& fsPath, const TDumpSettings& settings) {
     try {
         NBackup::SetLog(Log);
+        const TString database = settings.Database_.empty() && !dbPath.empty() && !dbPath.StartsWith('/')
+            ? TString(Driver.GetConfig().GetDatabase())
+            : settings.Database_;
         NBackup::BackupFolder(
             Driver,
-            settings.Database_,
-            dbPath == "/" ? RelPathFromAbsolute(settings.Database_, dbPath) : dbPath,
+            database,
+            dbPath == "/" ? RelPathFromAbsolute(database, dbPath) : dbPath,
             fsPath,
             settings.ExclusionPatterns_,
             settings.SchemaOnly_,

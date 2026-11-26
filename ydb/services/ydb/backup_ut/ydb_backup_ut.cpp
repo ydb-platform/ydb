@@ -2876,7 +2876,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     Y_UNIT_TEST(RestoreViewToDifferentDatabase) {
-        TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server;
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableRelativePaths(true);
+        TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server(config);
 
         constexpr const char* alice = "/Root/tenants/alice";
         constexpr const char* bob = "/Root/tenants/bob";
@@ -2904,8 +2906,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        const TString view = JoinFsPaths(alice, "view");
-        const TString table = JoinFsPaths(alice, "a", "b", "c", "table");
+        const TString view = JoinFsPaths(alice, "src", "view");
+        const TString table = JoinFsPaths(alice, "src", "a", "b", "c", "table");
         const TString restoredView = JoinFsPaths(bob, "view");
 
         TestViewReferenceTableIsPreserved(
@@ -2914,7 +2916,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             restoredView.c_str(),
             aliceSession,
             bobSession,
-            CreateBackupLambda(aliceDriver, pathToBackup, alice, alice),
+            CreateBackupLambda(aliceDriver, pathToBackup, "src", ""),
             CreateRestoreLambda(bobDriver, pathToBackup, bob),
             false
         );

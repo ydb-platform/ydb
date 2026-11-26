@@ -5,12 +5,12 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/api/grpc
-    ydb/library/grpc/server
     ydb/core/grpc_services
     ydb/core/grpc_services/base
-    ydb/core/kesus/tablet
-    ydb/core/blobstorage
+    ydb/core/jaeger_tracing
+    ydb/library/actors/core
+    ydb/library/grpc/server
+    ydb/public/api/grpc
 )
 
 END()

@@ -1385,6 +1385,15 @@ namespace NKikimr::NBsController {
             }
         }
 
+        std::vector<TString> TBlobStorageController::TStoragePoolInfo::GetTargetDataCenters() const {
+            if (!SerializedTargetDataCenters) {
+                return {};
+            }
+            NKikimrBlobStorage::TStoragePoolTargetDataCenters targets;
+            Y_ABORT_UNLESS(targets.ParseFromString(*SerializedTargetDataCenters));
+            return {targets.GetName().begin(), targets.GetName().end()};
+        }
+
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TDefineStoragePool *pb, const TBoxStoragePoolId &id, const TStoragePoolInfo &pool) {
             pb->SetBoxId(std::get<0>(id));
             pb->SetStoragePoolId(std::get<1>(id));
@@ -1442,6 +1451,9 @@ namespace NKikimr::NBsController {
 
             pb->SetKind(pool.Kind);
             pb->SetBridgeMode(pool.BridgeMode);
+            if (pool.SerializedTargetDataCenters) {
+                Y_ABORT_UNLESS(pb->MutableTargetDataCenters()->ParseFromString(*pool.SerializedTargetDataCenters));
+            }
             pb->SetNumGroups(pool.NumGroups);
             pb->SetRandomizeGroupMapping(pool.RandomizeGroupMapping);
             if (pool.DefaultGroupSizeInUnits != 0) {

@@ -172,6 +172,11 @@ message TStoragePoolPileOverrides {
     optional uint64 StorageConfigGeneration = 2; // StorageConfig the rules were adopted from; always set
 }
 
+message TStoragePoolTargetDataCenters {
+    // Distinct physical DataCenter names from host locations, independent of current inventory.
+    repeated string Name = 1;
+}
+
 message TDefineStoragePool {
     message TExistingGroups {
         repeated uint32 GroupId = 1;
@@ -195,6 +200,9 @@ message TDefineStoragePool {
     // Resolved at creation from this field or the cluster default; readback returns the stored mode.
     // Omitted updates preserve it, and changing it is not allowed.
     optional bool BridgeMode = 16;
+    // Restricts new physical group layouts. Omission on create means unrestricted;
+    // omission on update preserves the stored set. Use DefineStoragePoolTargetDataCenters to reset.
+    TStoragePoolTargetDataCenters TargetDataCenters = 17;
 
     // item's generation to prevent concurrent modification
     uint64 ItemConfigGeneration = 100;
@@ -224,6 +232,18 @@ message TUpdateStoragePoolSettings {
     TStoragePoolSettings Settings = 3;
     // names of TStoragePoolSettings fields to reset, so the pool inherits the global value again
     repeated string Reset = 4;
+}
+
+message TDefineStoragePoolTargetDataCenters {
+    message TResetToUnrestricted {}
+
+    uint64 BoxId = 1;
+    uint64 StoragePoolId = 2;
+    uint64 ItemConfigGeneration = 3;
+    oneof Policy {
+        TStoragePoolTargetDataCenters TargetDataCenters = 4;
+        TResetToUnrestricted ResetToUnrestricted = 5;
+    }
 }
 
 message TReadStoragePool {
@@ -826,6 +846,7 @@ message TConfigRequest {
             TDeleteSpecificGroups DeleteSpecificGroups = 62;
             TUpdateStoragePoolSettings UpdateStoragePoolSettings = 63;
             TChangeStoragePoolBridgeMode ChangeStoragePoolBridgeMode = 64;
+            TDefineStoragePoolTargetDataCenters DefineStoragePoolTargetDataCenters = 69;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

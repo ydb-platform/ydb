@@ -353,6 +353,8 @@ struct Schema : NIceDb::Schema {
         struct VDiskHeapAllocatorNumLeadingDisks : Column<29, NScheme::NTypeIds::Uint32> {};
 
         struct PersistentBufferAllocationMode : Column<30, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+        // Canonical TStoragePoolTargetDataCenters. Null permits placement in any datacenter.
+        struct TargetDataCenters : Column<31, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<BoxId, StoragePoolId>;
 
@@ -360,7 +362,8 @@ struct Schema : NIceDb::Schema {
             DomainLevelBegin, DomainLevelEnd, NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain,
             VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
             Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping,
-            DefaultGroupSizeInUnits, BridgeMode, DDisk, VDiskHeapAllocatorNumLeadingDisks, PersistentBufferAllocationMode>;
+            DefaultGroupSizeInUnits, BridgeMode, DDisk, VDiskHeapAllocatorNumLeadingDisks, PersistentBufferAllocationMode,
+            TargetDataCenters>;
     };
 
     struct BoxStoragePoolUser : Table<121> {

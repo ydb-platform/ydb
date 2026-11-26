@@ -94,17 +94,15 @@ namespace NKikimr::NBsController {
         ui32 GetDomainLevelBegin() const { return DomainLevelBegin; }
         ui32 GetDomainLevelEnd() const { return DomainLevelEnd; }
 
-        void AllocateGroup(TGroupMapper &mapper, TGroupId groupId, TGroupMapper::TGroupDefinition &group,
-                TGroupMapper::TGroupConstraintsDefinition& constrainsts,
-                const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TGroupMapper::TForbiddenPDisks forbid,
-                ui32 groupSizeInUnits, i64 requiredSpace, TGroupMapper::TPileScope pileScope) const {
+        void AllocateGroup(TGroupMapper& mapper, TGroupMapper::TAllocationRequest request,
+                TGroupMapper::TGroupDefinition& group) const {
             TGroupMapperError error;
             for (const bool requireOperational : {true, false}) {
-                if (mapper.AllocateGroup(groupId.GetRawId(), group, constrainsts, replacedDisks, forbid, groupSizeInUnits, requiredSpace,
-                        requireOperational, pileScope, error)) {
+                request.RequireOperational = requireOperational;
+                if (mapper.AllocateGroup(request, group, error)) {
                     return;
                 }
-            };
+            }
             TExFitGroupError errorException;
             errorException << "failed to allocate group: " << error.ErrorMessage;
             errorException.GroupMapperError = std::move(error);

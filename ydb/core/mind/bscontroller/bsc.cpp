@@ -1456,6 +1456,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineGroupState:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateStoragePoolSettings:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kChangeStoragePoolBridgeMode:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineStoragePoolTargetDataCenters:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

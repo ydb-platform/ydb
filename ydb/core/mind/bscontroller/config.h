@@ -484,6 +484,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TDeleteStoragePool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TUpdateStoragePoolSettings& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TChangeStoragePoolBridgeMode& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TDefineStoragePoolTargetDataCenters& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TProposeStoragePools& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReassignGroupDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMoveGroups& cmd, TStatus& status);

@@ -1422,6 +1422,9 @@ public:
         Table::DDisk::Type DDisk = false;
         Table::PersistentBufferAllocationMode::Type PersistentBufferAllocationMode = NKikimrBlobStorage::BALANCED;
         TMaybe<Table::VDiskHeapAllocatorNumLeadingDisks::Type> VDiskHeapAllocatorNumLeadingDisks;
+        std::optional<TString> SerializedTargetDataCenters;
+
+        std::vector<TString> GetTargetDataCenters() const;
 
         void SetGroupGeometry(const NKikimrBlobStorage::TGroupGeometry& geometry) {
             RealmLevelBegin = geometry.GetRealmLevelBegin();
@@ -1543,6 +1546,7 @@ public:
                     Table::DDisk,
                     Table::VDiskHeapAllocatorNumLeadingDisks,
                     Table::PersistentBufferAllocationMode,
+                    Table::TargetDataCenters,
                     TInlineTable<TUserIds, Schema::BoxStoragePoolUser>
                 > adapter(
                     &TStoragePoolInfo::Name,
@@ -1573,6 +1577,7 @@ public:
                     &TStoragePoolInfo::DDisk,
                     &TStoragePoolInfo::VDiskHeapAllocatorNumLeadingDisks,
                     &TStoragePoolInfo::PersistentBufferAllocationMode,
+                    &TStoragePoolInfo::SerializedTargetDataCenters,
                     &TStoragePoolInfo::UserIds
                 );
             callback(&adapter);

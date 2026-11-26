@@ -139,7 +139,6 @@ class TController::TTxIndexBuild: public TTxBase {
             NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
         );
         Self->AssignedTxIds.emplace(end, txId);
-        Self->StartWriteTx(db, end, txId);
         return txId;
     }
 
@@ -177,7 +176,7 @@ class TController::TTxIndexBuild: public TTxBase {
     }
 
     bool CanReuseLastGlobalAssignment(const TRowVersion& join) const {
-        if (Self->AssignedTxIds.size() < MaxOpenTxIds) {
+        if (Self->CountOpenWriteTxIds() < MaxOpenTxIds) {
             return false;
         }
 
@@ -217,18 +216,13 @@ class TController::TTxIndexBuild: public TTxBase {
                     auto assigned = Self->AssignedTxIds.lower_bound(end);
                     if (assigned != Self->AssignedTxIds.end()) {
                         txId = assigned->second;
-                        Self->AddWriteTxInterval(db, assigned->first, txId, end);
+                        if (assigned->first != end) {
+                            Self->AddWriteTxAlias(db, end, txId);
+                        }
                     } else if (CanReuseLastGlobalAssignment(join)) {
-                        auto node = Self->AssignedTxIds.extract(Self->AssignedTxIds.rbegin()->first);
-                        db.Table<Schema::TxIds>().Key(node.key().Step, node.key().TxId).Delete();
-                        node.key() = end;
-                        txId = node.mapped();
-                        db.Table<Schema::TxIds>().Key(end.Step, end.TxId).Update(
-                            NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
-                        );
-                        Self->MoveWriteTx(db, end, txId);
-                        Self->AssignedTxIds.insert(std::move(node));
-                    } else if (!Self->AllocatedTxIds.empty() && Self->AssignedTxIds.size() < MaxOpenTxIds + 1) {
+                        txId = Self->AssignedTxIds.rbegin()->second;
+                        Self->AddWriteTxAlias(db, end, txId);
+                    } else if (!Self->AllocatedTxIds.empty() && Self->CountOpenWriteTxIds() < MaxOpenTxIds + 1) {
                         txId = Allocate(end, db);
                     }
                 } else {

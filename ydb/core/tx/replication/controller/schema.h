@@ -144,10 +144,9 @@ struct TControllerSchema: NIceDb::Schema {
         struct VersionStep: Column<1, NScheme::NTypeIds::Uint64> {};
         struct VersionTxId: Column<2, NScheme::NTypeIds::Uint64> {};
         struct WriteTxId: Column<3, NScheme::NTypeIds::Uint64> {};
-        struct FirstIntervalEndStep: Column<4, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<VersionStep, VersionTxId>;
-        using TColumns = TableColumns<VersionStep, VersionTxId, WriteTxId, FirstIntervalEndStep>;
+        using TColumns = TableColumns<VersionStep, VersionTxId, WriteTxId>;
     };
 
     struct Workers: Table<6> {

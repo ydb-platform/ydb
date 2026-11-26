@@ -49,6 +49,26 @@ bool TController::HasPendingTargetFlushTxId(const TSchemaBarrier& barrier) const
     });
 }
 
+TRowVersion TController::GetWriteTxEnd(ui64 writeTxId) const {
+    TRowVersion end = TRowVersion::Min();
+    for (const auto& [version, assignedTxId] : AssignedTxIds) {
+        if (assignedTxId == writeTxId) {
+            end = version;
+        }
+    }
+    return end;
+}
+
+void TController::EraseWriteTx(NIceDb::TNiceDb& db, ui64 writeTxId) {
+    EraseNodesIf(AssignedTxIds, [&](const auto& assigned) {
+        if (assigned.second != writeTxId) {
+            return false;
+        }
+        db.Table<Schema::TxIds>().Key(assigned.first.Step, assigned.first.TxId).Delete();
+        return true;
+    });
+}
+
 bool TController::BlocksGlobalCommit(const TSchemaBarrier& barrier) const {
     switch (barrier.Phase) {
     case ESchemaBarrierPhase::FlushingTarget:
@@ -184,16 +204,18 @@ public:
         }
 
         Y_ABORT_UNLESS(!Self->WorkersByHeartbeat.empty());
-        if (Self->WorkersByHeartbeat.begin()->first < Self->AssignedTxIds.begin()->first) {
+        const auto writeTxId = Self->AssignedTxIds.begin()->second;
+        const auto writeTxEnd = Self->GetWriteTxEnd(writeTxId);
+        if (Self->WorkersByHeartbeat.begin()->first < writeTxEnd) {
             return true; // version has not been changed
         }
 
-        if (!Self->CanCommitIndexBuilds(Self->AssignedTxIds.begin()->first)) {
+        if (!Self->CanCommitIndexBuilds(writeTxEnd)) {
             return true;
         }
 
-        Self->CommittingTxId = Self->AssignedTxIds.begin()->second;
-        CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
+        Self->CommittingTxId = writeTxId;
+        CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(writeTxEnd));
 
         return true;
     }
@@ -271,6 +293,7 @@ public:
         auto it = Self->AssignedTxIds.begin();
         Y_ABORT_UNLESS(it != Self->AssignedTxIds.end());
         Y_ABORT_UNLESS(it->second == Self->CommittingTxId);
+        const auto writeTxEnd = Self->GetWriteTxEnd(Self->CommittingTxId);
 
         const auto& record = Status->Get()->Record;
         const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
@@ -281,7 +304,7 @@ public:
             Self->TabletCounters->Cumulative()[COUNTER_ERROR_COMMITTING_CHANGES] += 1;
 
             if (!Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
-                CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
+                CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(writeTxEnd));
             } else {
                 Self->CommittingTxId = 0;
             }
@@ -292,20 +315,19 @@ public:
 
         for (auto& [key, build] : Self->IndexBuilds) {
             const bool joining = build.GetPhase() == NKikimrReplication::TIndexBuildState::JOINING;
-            if (joining && it->first >= TRowVersion::FromProto(build.GetJoinVersion())) {
+            if (joining && writeTxEnd >= TRowVersion::FromProto(build.GetJoinVersion())) {
                 build.SetPhase(NKikimrReplication::TIndexBuildState::MAKING_READY);
                 Self->SaveIndexBuild(db, key, build);
             }
         }
         auto& frontier = Self->CommittedVersions[replication->GetId()];
-        frontier = Max(frontier, it->first);
+        frontier = Max(frontier, writeTxEnd);
         db.Table<Schema::Replications>().Key(replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::CommittedStep>(frontier.Step),
             NIceDb::TUpdate<Schema::Replications::CommittedTxId>(frontier.TxId)
         );
-        db.Table<Schema::TxIds>().Key(it->first.Step, it->first.TxId).Delete();
-        Self->WriteTxIntervals.Complete(it->second);
-        it = Self->AssignedTxIds.erase(it);
+        Self->EraseWriteTx(db, Self->CommittingTxId);
+        it = Self->AssignedTxIds.begin();
         Self->CommittingTxId = 0;
         if (Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
             return true;
@@ -325,16 +347,17 @@ public:
             return true;
         }
 
-        if (Self->WorkersByHeartbeat.begin()->first < it->first) {
+        const auto nextWriteTxEnd = Self->GetWriteTxEnd(it->second);
+        if (Self->WorkersByHeartbeat.begin()->first < nextWriteTxEnd) {
             return true;
         }
 
-        if (!Self->CanCommitIndexBuilds(Self->AssignedTxIds.begin()->first)) {
+        if (!Self->CanCommitIndexBuilds(nextWriteTxEnd)) {
             return true;
         }
 
-        Self->CommittingTxId = Self->AssignedTxIds.begin()->second;
-        CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
+        Self->CommittingTxId = it->second;
+        CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(nextWriteTxEnd));
 
         return true;
     }
@@ -343,7 +366,7 @@ public:
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
-        Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->AssignedTxIds.size();
+        Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->CountOpenWriteTxIds();
 
         if (CommitProposal && !Self->ReplicationsWithSourceOffsetMismatch.empty()) {
             Self->CommittingTxId = 0;

@@ -5849,7 +5849,10 @@ Y_UNIT_TEST_SUITE(IndexBuild) {
         TIndexBuildTestEnv env;
         const auto worker = env.StartIndexBuild();
         env.ReportProgress(worker, 1, TRowVersion(200, 10));
-        env.AssertBuildPhase(worker, NKikimrReplication::TIndexBuildState::JOINING);
+        UNIT_ASSERT(WaitFor([&] {
+            return ReadIndexBuild(env, env.Info.ControllerId, worker).GetPhase()
+                == NKikimrReplication::TIndexBuildState::JOINING;
+        }));
         const auto join = TRowVersion::FromProto(ReadIndexBuild(env, env.Info.ControllerId, worker).GetJoinVersion());
         const auto later = env.RequestTxId(worker, join.Step + 35000);
 

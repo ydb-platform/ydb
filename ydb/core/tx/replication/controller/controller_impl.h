@@ -9,7 +9,6 @@
 #include "session_info.h"
 #include "sys_params.h"
 #include "worker_lag_expiry_queue.h"
-#include "write_tx_intervals.h"
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/defs.h>
@@ -203,9 +202,10 @@ private:
     bool IsHeartbeatParticipant(const TWorkerId& id) const;
     size_t CountHeartbeatParticipants() const;
     void AllocateTxIds(const TActorContext& ctx);
-    void StartWriteTx(NIceDb::TNiceDb& db, const TRowVersion& key, ui64 writeTxId);
-    void MoveWriteTx(NIceDb::TNiceDb& db, const TRowVersion& key, ui64 writeTxId);
-    void AddWriteTxInterval(NIceDb::TNiceDb& db, const TRowVersion& key, ui64 writeTxId, const TRowVersion& intervalEnd);
+    size_t CountOpenWriteTxIds() const;
+    void AddWriteTxAlias(NIceDb::TNiceDb& db, const TRowVersion& version, ui64 writeTxId);
+    TRowVersion GetWriteTxEnd(ui64 writeTxId) const;
+    void EraseWriteTx(NIceDb::TNiceDb& db, ui64 writeTxId);
     TVector<TString> GetCommitTablePaths(const TRowVersion& version) const;
     bool CanCommitIndexBuilds(const TRowVersion& version) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
@@ -383,7 +383,6 @@ private:
     bool IndexBuildTxInFlight = false;
     TMap<ui64, TRowVersion> CommittedVersions; // Completed global frontier per replication.
     TMap<TRowVersion, ui64> AssignedTxIds; // tx ids assigned to version
-    TWriteTxIntervals WriteTxIntervals;
     TMap<TRowVersion, THashSet<ui32>> PendingTxId;
     bool AssignTxIdInFlight = false;
 

@@ -143,8 +143,8 @@ struct TTransactionsEnv: TEnv<> {
         return result->Get()->Record.GetVersionTxIds(0).GetTxId();
     }
 
-    void Heartbeat() {
-        auto* heartbeat = new TEvService::TEvHeartbeat(TRowVersion(10000, 0));
+    void Heartbeat(ui64 step = 10000) {
+        auto* heartbeat = new TEvService::TEvHeartbeat(TRowVersion(step, 0));
         heartbeat->Record.MutableWorker()->CopyFrom(Worker);
         SendAsync(Controller, heartbeat);
     }
@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
         UNIT_ASSERT_VALUES_EQUAL(env.SdkTransactions(true).value().Assigned.size(), 0);
     }
 
-    void CheckExtendedTxIdReusedForItsFirstInterval(bool restart) {
+    Y_UNIT_TEST(ShouldReuseExtendedTxIdForItsFirstIntervalAfterEarlierCommit) {
         // given
         TTransactionsEnv env;
         const auto first = env.Assign(1);
@@ -287,10 +287,6 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
         env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
         env.CommitStatus(first, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
         UNIT_ASSERT_VALUES_EQUAL(env.Count(), 4);
-        if (restart) {
-            env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
-            env.Handshake();
-        }
 
         // when
         const auto repeated = env.Assign(49999);
@@ -299,27 +295,108 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
         UNIT_ASSERT_VALUES_EQUAL(repeated, last);
     }
 
-    Y_UNIT_TEST(ShouldReuseExtendedTxIdForItsFirstIntervalAfterEarlierCommit) {
-        CheckExtendedTxIdReusedForItsFirstInterval(false);
+    TVector<ui64> FoldLaterIntervalAtLimit(TTransactionsEnv& env) {
+        TVector<ui64> txIds;
+        for (const ui64 step : {1, 19999, 29999, 39999, 49999}) {
+            txIds.push_back(env.Assign(step));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(59999), txIds.back());
+        return txIds;
     }
 
-    Y_UNIT_TEST(ShouldReuseExtendedTxIdForItsFirstIntervalAfterRestart) {
-        CheckExtendedTxIdReusedForItsFirstInterval(true);
+    void CommitHeldWriteTxs(TTransactionsEnv& env, const TVector<ui64>& txIds) {
+        for (const auto txId : txIds) {
+            UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender(), TDuration::Seconds(30)));
+            env.CommitStatus(txId, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+        }
     }
 
-    Y_UNIT_TEST(ShouldAllocateFreshTxIdForEarlierIntervalAfterRestart) {
+    Y_UNIT_TEST(ShouldNotCommitFoldedTxIdBeforeItsLastInterval) {
         // given
         TTransactionsEnv env;
-        env.Assign(1);
-        const auto later = env.Assign(29999);
+        const auto txIds = FoldLaterIntervalAtLimit(env);
+        env.HoldCommits();
+        env.Heartbeat(40000);
+        CommitHeldWriteTxs(env, TVector<ui64>(txIds.begin(), txIds.end() - 1));
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 1);
+
+        // when
+        env.Heartbeat(50000);
+
+        // then
+        UNIT_ASSERT(!env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender(), TDuration::Seconds(1)));
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 1);
+    }
+
+    Y_UNIT_TEST(ShouldRemoveAllKeysOfFoldedTxIdWhenItIsCommitted) {
+        // given
+        TTransactionsEnv env;
+        const auto txIds = FoldLaterIntervalAtLimit(env);
+        env.HoldCommits();
+        env.Heartbeat(60000);
+        CommitHeldWriteTxs(env, TVector<ui64>(txIds.begin(), txIds.end() - 1));
+        UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender(), TDuration::Seconds(30)));
+
+        // when
+        env.CommitStatus(txIds.back(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 0);
+        env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
+        env.Handshake();
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 0);
+    }
+
+    Y_UNIT_TEST(ShouldCountDistinctWriteTxsAgainstOpenLimit) {
+        // given
+        TTransactionsEnv env;
+        const auto txIds = FoldLaterIntervalAtLimit(env);
+        env.HoldCommits();
+        env.Heartbeat();
+        CommitHeldWriteTxs(env, {txIds.front()});
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 4);
+
+        // when
+        const auto later = env.Assign(69999);
+
+        // then
+        UNIT_ASSERT_VALUES_UNEQUAL(later, txIds.back());
+    }
+
+    Y_UNIT_TEST(ShouldReuseFoldedTxIdForLaterIntervalAfterRestart) {
+        // given
+        TTransactionsEnv env;
+        const auto txIds = FoldLaterIntervalAtLimit(env);
+        env.HoldCommits();
+        env.Heartbeat();
+        CommitHeldWriteTxs(env, {txIds.front()});
         env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
         env.Handshake();
 
         // when
-        const auto earlier = env.Assign(19999);
+        const auto repeated = env.Assign(59999);
 
         // then
-        UNIT_ASSERT_VALUES_UNEQUAL(earlier, later);
+        UNIT_ASSERT_VALUES_EQUAL(repeated, txIds.back());
+    }
+
+    Y_UNIT_TEST(ShouldReuseFoldedTxIdForIntervalBetweenItsKeys) {
+        // given
+        TTransactionsEnv env;
+        TVector<ui64> txIds;
+        for (const ui64 step : {1, 19999, 29999, 39999, 49999}) {
+            txIds.push_back(env.Assign(step));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(79999), txIds.back());
+        env.HoldCommits();
+        env.Heartbeat();
+        CommitHeldWriteTxs(env, {txIds.front()});
+
+        // when
+        const auto between = env.Assign(65000);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(between, txIds.back());
     }
 
     Y_UNIT_TEST(ShouldReuseLaterTxIdForMergedIntervalAfterEarlierCommit) {

@@ -206,3 +206,22 @@ message BootstrapClusterResponse {
 }
 
 message BootstrapClusterResult {}
+
+message SetDataCenterStateRequest {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        INCLUDED = 1;
+        EXCLUDED = 2;
+    }
+
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Physical data center name from the cluster configuration.
+    string data_center = 2;
+    // Other data centers retain their current membership.
+    State state = 3;
+}
+
+message SetDataCenterStateResponse {
+    // Success confirms that the target configuration was committed and acknowledged by the storage controller.
+    Ydb.Operations.Operation operation = 1;
+}

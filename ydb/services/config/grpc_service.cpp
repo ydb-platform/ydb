@@ -55,6 +55,7 @@ void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         nullptr)
 
     SETUP_BS_METHOD(ReplaceConfig, DoReplaceConfig, RLMODE(Rps), CONFIG_REPLACECONFIG, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_BS_METHOD(SetDataCenterState, DoSetDataCenterState, RLMODE(Rps), CONFIG_SETDATACENTERSTATE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_BS_METHOD(FetchConfig, DoFetchConfig, RLMODE(Rps), CONFIG_FETCHCONFIG, TAuditMode::NonModifying());
     SETUP_BOOTSTRAP_CLUSTER_METHOD(BootstrapCluster, DoBootstrapCluster, RLMODE(Rps), CONFIG_BOOTSTRAP, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 

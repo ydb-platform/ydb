@@ -2484,8 +2484,13 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         return true;
     }
 
-    void CheckRootAfterNodeLoss(bool loseStorageQuorum) {
-        const auto config = MakeStorageConfig(3, 1, {loseStorageQuorum ? 2u : 1u});
+    void CheckRootAfterNodeLoss(bool loseStorageQuorum, bool emptyDcPolicy = false) {
+        NKikimrBlobStorage::TStorageConfig config = MakeStorageConfig(3, 1, {loseStorageQuorum ? 2u : 1u});
+        if (emptyDcPolicy) {
+            config.SetDataCenterQuorumEnabled(true);
+            config.MutableDataCenterStates();
+            NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        }
         const auto initial = MakeStorageConfig(3, 0);
         TNodeWardenTestState state;
         state.RequiredRootNodeId = 1;
@@ -2536,6 +2541,10 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
 
     Y_UNIT_TEST(ConfigQuorumLossKeepsEstablishedRoot) {
         CheckRootAfterNodeLoss(false);
+    }
+
+    Y_UNIT_TEST(DataCenterQuorumEmptyPolicyKeepsEstablishedRoot) {
+        CheckRootAfterNodeLoss(false, true);
     }
 
     Y_UNIT_TEST(StorageQuorumLossStillReleasesRoot) {
@@ -4535,9 +4544,136 @@ selector_config: []
         UNIT_ASSERT(!SimUntil(runtime, [&] { return currentGeneration() != promoted.GetGeneration(); }, TDuration::Seconds(15)));
     }
 
-    Y_UNIT_TEST(StaticDataCenterOperationWaitsForBscSnapshotAck) {
+    enum class EDcChangeScenario { Exclusion, SingleDcExclusion, DynamicDcExclusion, MatchingProposal, UnrelatedProposal, NoChange };
+
+    void CheckDataCenterChangeOnSurvivingDc(EDcChangeScenario scenario) {
+        using NKikimrBlobStorage::TDataCenterState;
+        using NKikimrBlobStorage::TDataCenterStates;
+        using NKikimrBlobStorage::TGroupState;
+        TCommitConfirmationFixture fixture(false, 4);
+        fixture.UseMirror3dcGroup();
+
+        NKikimrBlobStorage::TStorageConfig& base = fixture.Config;
+        base.SetDataCenterQuorumEnabled(true);
+        TDataCenterStates::TDataCenter* excluded = base.MutableDataCenterStates()->AddDataCenter();
+        excluded->SetName("dc-3");
+        excluded->SetState(TDataCenterState::EXCLUDED);
+        NKikimrBlobStorage::TGroupInfo* group = base.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0);
+        group->SetMirror3dcState(TGroupState::DC_FAILURE_INV1);
+        group->MutableRings(2)->SetState(TDataCenterState::EXCLUDED);
+        // The first two drives can be read. The third might contain the same pending proposal.
+        for (ui32 disk : {2, 3}) {
+            auto *drive = base.MutableBlobStorageConfig()->MutableDefineHostConfig(0)->AddDrive();
+            drive->SetPath("/dev/disk1_" + std::to_string(disk));
+            drive->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&base);
+        *fixture.Metadata(1).MutableCommittedStorageConfig() = base;
+        *fixture.State.Metadata[{1, "/dev/disk1_2"}].MutableCommittedStorageConfig() = base;
+
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        TDataCenterStates* target = request->Record.MutableApplyDataCenterStates();
+        *target = base.GetDataCenterStates();
+        if (scenario != EDcChangeScenario::NoChange) {
+            TDataCenterStates::TDataCenter* dc = target->AddDataCenter();
+            dc->SetName("dc-2");
+            dc->SetState(TDataCenterState::EXCLUDED);
+        }
+        if (scenario == EDcChangeScenario::SingleDcExclusion || scenario == EDcChangeScenario::DynamicDcExclusion) {
+            TDataCenterStates::TDataCenter change = target->GetDataCenter(1);
+            *request->Record.MutableSetDataCenterState() = std::move(change);
+        }
+        NKikimrBlobStorage::TStorageConfig pending;
+        if (scenario == EDcChangeScenario::MatchingProposal || scenario == EDcChangeScenario::UnrelatedProposal) {
+            pending = MakeNextConfig(base);
+            UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&pending, *target));
+            if (scenario == EDcChangeScenario::UnrelatedProposal) {
+                pending.MutableSelfManagementConfig()->SetAutomaticBootstrap(true);
+            }
+            UNIT_ASSERT(!NStorage::TDistributedConfigKeeper::TransformConfigBeforeCommit(&pending));
+            NStorage::TDistributedConfigKeeper::UpdateFingerprint(&pending);
+            *fixture.Metadata(1).MutableProposedStorageConfig() = pending;
+        }
+
+        TTestActorSystem& runtime = fixture.Runtime;
+        runtime.Start();
+        TActorId client = runtime.AllocateEdgeActor(1);
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        bool sawNoQuorum = false;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadata::EventType
+                    && ev->Get<NStorage::TEvNodeWardenReadMetadata>()->Path.EndsWith("_3")) {
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, new NStorage::TEvNodeWardenReadMetadataResult(
+                    std::nullopt, NPDisk::EPDiskMetadataOutcome::ERROR, {}), 0, ev->Cookie), nodeId);
+                return false;
+            }
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenDynamicConfigPush::EventType) {
+                sawNoQuorum |= ev->Get<NStorage::TEvNodeWardenDynamicConfigPush>()->Record.GetNoQuorum();
+            }
+            SetMetadataDiskGuid(nodeId, *ev);
+            return !CaptureInvokeResult(*ev, client, response);
+        };
+        TActorId keeper = RegisterKeeper(runtime, base, 1, fixture.State);
+        UNIT_ASSERT(!QueryKeeper(runtime, keeper).HasScepter());
+        if (scenario == EDcChangeScenario::DynamicDcExclusion) {
+            // The dynamic node only knows the surviving static seed, which refused its subscription.
+            keeper = RegisterKeeper(runtime, MakeStorageConfig(1), 4, fixture.State, {}, nullptr, nullptr, "dynamic");
+            UNIT_ASSERT(SimUntil(runtime, [&] { return sawNoQuorum; }));
+        }
+        runtime.Send(new IEventHandle(keeper, client, request.release()), keeper.NodeId());
+        auto committed = [&] { return fixture.Metadata(1).GetCommittedStorageConfig().GetGeneration() > base.GetGeneration(); };
+        if (scenario == EDcChangeScenario::NoChange || scenario == EDcChangeScenario::UnrelatedProposal) {
+            UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
+            using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+            UNIT_ASSERT_C(response->GetStatus() == (scenario == EDcChangeScenario::NoChange ? TResult::NO_QUORUM : TResult::RACE),
+                response->DebugString());
+            UNIT_ASSERT(!committed());
+            return;
+        }
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return committed() || response; }) && committed(),
+            (response ? response->DebugString() : "target quorum did not commit"));
+        const NKikimrBlobStorage::TStorageConfig& saved = fixture.Metadata(1).GetCommittedStorageConfig();
+        if (scenario == EDcChangeScenario::MatchingProposal) {
+            UNIT_ASSERT_VALUES_EQUAL(saved.GetFingerprint(), pending.GetFingerprint());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(saved.GetPrevConfig().GetFingerprint(), base.GetFingerprint());
+        UNIT_ASSERT(saved.GetBlobStorageConfig().GetServiceSet().GetGroups(0).GetMirror3dcState() == TGroupState::DC_SOLO_INV1);
+    }
+
+    Y_UNIT_TEST(DataCenterQuorumCanCommitSecondExclusionOnSurvivingDc) {
+        CheckDataCenterChangeOnSurvivingDc(EDcChangeScenario::Exclusion);
+    }
+
+    Y_UNIT_TEST(DataCenterQuorumDynamicNodeForwardsAfterOldQuorumLoss) {
+        CheckDataCenterChangeOnSurvivingDc(EDcChangeScenario::DynamicDcExclusion);
+    }
+
+    Y_UNIT_TEST(DataCenterQuorumSingleDcExclusionUsesTargetVoters) {
+        CheckDataCenterChangeOnSurvivingDc(EDcChangeScenario::SingleDcExclusion);
+    }
+
+    Y_UNIT_TEST(DataCenterQuorumRetriesMatchingPartialProposal) {
+        CheckDataCenterChangeOnSurvivingDc(EDcChangeScenario::MatchingProposal);
+    }
+
+    Y_UNIT_TEST(DataCenterQuorumRejectsUnrelatedPartialProposal) {
+        CheckDataCenterChangeOnSurvivingDc(EDcChangeScenario::UnrelatedProposal);
+    }
+
+    Y_UNIT_TEST(DataCenterQuorumNoOpRequiresFreshQuorum) {
+        CheckDataCenterChangeOnSurvivingDc(EDcChangeScenario::NoChange);
+    }
+
+    void CheckDataCenterSnapshotAck(bool singleDc) {
         TCommitConfirmationFixture fixture;
         fixture.UseMirror3dcGroup();
+        if (singleDc) {
+            fixture.Config.SetDataCenterQuorumEnabled(true);
+            NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+            for (ui32 id : {1, 2, 3}) {
+                *fixture.Metadata(id).MutableCommittedStorageConfig() = fixture.Config;
+            }
+        }
         fixture.Start();
         auto& runtime = fixture.Runtime;
         TActorId tablet = runtime.Register(new TIgnoreActor, 1);
@@ -4581,7 +4717,7 @@ selector_config: []
             runtime.Send(new IEventHandle(handler, tablet, result.release()), 1);
         };
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        auto *dc = request->Record.MutableApplyDataCenterStates()->AddDataCenter();
+        auto *dc = singleDc ? request->Record.MutableSetDataCenterState() : request->Record.MutableApplyDataCenterStates()->AddDataCenter();
         dc->SetName("dc-3");
         dc->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
         runtime.Send(new IEventHandle(fixture.Root(), client, request.release()), 1);
@@ -4600,7 +4736,13 @@ selector_config: []
         response.reset();
         TString previousSnapshot = snapshot.SerializeAsString();
         request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        request->Record.MutableApplyDataCenterStates(); // return the pending DC
+        if (singleDc) {
+            dc = request->Record.MutableSetDataCenterState();
+            dc->SetName("dc-3");
+            dc->SetState(NKikimrBlobStorage::TDataCenterState::INCLUDED);
+        } else {
+            request->Record.MutableApplyDataCenterStates(); // return the pending DC
+        }
         runtime.Send(new IEventHandle(fixture.Root(), client, request.release()), 1);
         UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 3; }));
         UNIT_ASSERT_VALUES_EQUAL(snapshot.SerializeAsString(), previousSnapshot); // first acknowledge the prior snapshot
@@ -4614,7 +4756,22 @@ selector_config: []
         UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
         UNIT_ASSERT_VALUES_EQUAL(ui32(response->GetStatus()), ui32(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK));
         UNIT_ASSERT(response->HasAppliedDataCenterStates());
-        UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().DataCenterSize(), 0);
+        if (singleDc) {
+            UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().DataCenterSize(), 1);
+            const auto& included = response->GetAppliedDataCenterStates().GetDataCenter(0);
+            UNIT_ASSERT_VALUES_EQUAL(included.GetName(), "dc-3");
+            UNIT_ASSERT(included.GetState() == NKikimrBlobStorage::TDataCenterState::INCLUDED);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().DataCenterSize(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(StaticDataCenterOperationWaitsForBscSnapshotAck) {
+        CheckDataCenterSnapshotAck(false);
+    }
+
+    Y_UNIT_TEST(DataCenterQuorumSingleDcExclusionAndInclusionWaitForBsc) {
+        CheckDataCenterSnapshotAck(true);
     }
 
     Y_UNIT_TEST(UpdateConfigCannotPromoteStaticMirror3dcGroup) {
@@ -4943,6 +5100,129 @@ selector_config: []
         }
         return NStorage::HasConfigQuorum(config, disks, TBridgePileId(),
             *MakeNodeWardenConfig(config, bridge), true);
+    }
+
+    Y_UNIT_TEST(DataCenterQuorumNoOpDetectsNewerCommittedSnapshot) {
+        using NKikimrBlobStorage::TDataCenterState;
+        using NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        TCommitConfirmationFixture fixture(true);
+        fixture.Config.SetDataCenterQuorumEnabled(true);
+        fixture.Config.MutableDataCenterStates();
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 id : {1, 2, 3}) {
+            *fixture.Metadata(id).MutableCommittedStorageConfig() = fixture.Config;
+        }
+        fixture.Start(true);
+        TActorId root = fixture.Root();
+        NKikimrBlobStorage::TStorageConfig newer = MakeNextConfig(fixture.Config);
+        NKikimrBlobStorage::TDataCenterStates::TDataCenter *dc = newer.MutableDataCenterStates()->AddDataCenter();
+        dc->SetName("dc-2");
+        dc->SetState(TDataCenterState::EXCLUDED);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&newer);
+        for (ui32 id : {1, 2, 3}) {
+            *fixture.Metadata(id).MutableCommittedStorageConfig() = newer;
+        }
+        TActorId client = fixture.Runtime.AllocateEdgeActor(root.NodeId());
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableApplyDataCenterStates();
+        fixture.Runtime.Send(new IEventHandle(root, client, request.release()), root.NodeId());
+        auto reply = fixture.Runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(client);
+        UNIT_ASSERT_C(reply->Get()->Record.GetStatus() == TEvNodeConfigInvokeOnRootResult::RACE, reply->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, root).GetQueryConfig().GetConfig().GetFingerprint(), newer.GetFingerprint());
+    }
+
+    Y_UNIT_TEST(DataCenterQuorumActivationNeedsLegacyWriteQuorum) {
+        TCommitConfirmationFixture fixture(true);
+        for (ui32 id : {1, 2, 3}) {
+            TString name = "dc-" + std::to_string(id);
+            fixture.Config.MutableAllNodes(id - 1)->MutableLocation()->SetDataCenter(name);
+            if (id != 1) {
+                auto *dc = fixture.Config.MutableDataCenterStates()->AddDataCenter();
+                dc->SetName(name);
+                dc->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+            }
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 id : {1, 2, 3}) {
+            *fixture.Metadata(id).MutableCommittedStorageConfig() = fixture.Config;
+        }
+        fixture.Start(true);
+        NKikimrBlobStorage::TStorageConfig activation = MakeNextConfig(fixture.Config);
+        activation.SetDataCenterQuorumEnabled(true);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&activation);
+        TCollectedConfigs collected = MakeCollectedConfigs(fixture.Config, {1, 2, 3});
+        AddCollectedConfig(collected, fixture.Config, {1, 2, 3});
+        AddCollectedConfig(collected, activation, {1}, false);
+        auto result = ProcessCollectedConfigs(fixture, collected, true);
+        UNIT_ASSERT_C(!result.ErrorReason, result.ErrorReason.value_or(""));
+        UNIT_ASSERT(result.RecoveredConfig && !result.RecoveredConfig->GetDataCenterQuorumEnabled());
+        UNIT_ASSERT(!result.RequiresRecoveryProposition);
+        AddCollectedConfig(collected, activation, {2}, false);
+        result = ProcessCollectedConfigs(fixture, collected, true);
+        UNIT_ASSERT_C(!result.ErrorReason, result.ErrorReason.value_or(""));
+        UNIT_ASSERT(result.RecoveredConfig && result.RecoveredConfig->GetDataCenterQuorumEnabled());
+    }
+
+    Y_UNIT_TEST(DataCenterQuorumActivationRequiresEveryStaticKeeper) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        TCommitConfirmationFixture fixture(true);
+        fixture.Start(true);
+        TActorId root = fixture.Root();
+        TActorId client = fixture.Runtime.AllocateEdgeActor(root.NodeId());
+        bool hideCapability = true;
+        fixture.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (hideCapability && ev->GetTypeRewrite() == NStorage::TEvNodeConfigGather::EventType) {
+                auto& record = ev->Get<NStorage::TEvNodeConfigGather>()->Record;
+                if (record.HasCollectConfigs()) {
+                    record.MutableCollectConfigs()->ClearDataCenterQuorumCapableNodeIds();
+                }
+            }
+            return true;
+        };
+        for (bool supported : {false, true}) {
+            hideCapability = !supported;
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            request->Record.MutableEnableDataCenterQuorum();
+            fixture.Runtime.Send(new IEventHandle(root, client, request.release()), root.NodeId());
+            auto reply = fixture.Runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(client, false);
+            UNIT_ASSERT(reply);
+            UNIT_ASSERT_C(reply->Get()->Record.GetStatus() == (supported ? TResult::OK : TResult::ERROR),
+                reply->Get()->Record.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, root).GetQueryConfig().GetConfig().GetDataCenterQuorumEnabled(), supported);
+        }
+    }
+
+    Y_UNIT_TEST(DataCenterQuorumCountsOnlyIncludedVoters) {
+        using NKikimrBlobStorage::TDataCenterState;
+        using NKikimrBlobStorage::TDataCenterStates;
+        // Three drives in each of dc-1 and dc-2, one in dc-3.
+        NKikimrBlobStorage::TStorageConfig config = MakeStorageConfig(7);
+        for (ui32 i = 0; i < 6; ++i) {
+            config.MutableAllNodes(i)->MutableLocation()->SetDataCenter(i < 3 ? "dc-1" : "dc-2");
+        }
+        config.MutableAllNodes(6)->MutableLocation()->SetDataCenter("dc-3");
+        TDataCenterStates::TDataCenter* dc = config.MutableDataCenterStates()->AddDataCenter();
+        dc->SetName("dc-3");
+        dc->SetState(TDataCenterState::EXCLUDED);
+        UNIT_ASSERT(HasTestConfigQuorum(config, {1, 2, 7})); // legacy quorum until explicit activation
+        config.SetDataCenterQuorumEnabled(true);
+        for (TDataCenterState::EState state : {TDataCenterState::EXCLUDED, TDataCenterState::RECOVERING}) {
+            dc->SetState(state);
+            UNIT_ASSERT(!HasTestConfigQuorum(config, {1, 2, 3, 4, 7}));
+            UNIT_ASSERT(!HasQuorum(config, {1, 2, 3, 4, 7}));
+            UNIT_ASSERT(HasTestConfigQuorum(config, {1, 2, 4, 5}));
+        }
+        dc->SetState(TDataCenterState::INCLUDED);
+        UNIT_ASSERT(HasTestConfigQuorum(config, {1, 2, 7}));
+
+        dc->SetState(TDataCenterState::EXCLUDED);
+        for (const char* name : {"dc-1", "dc-2"}) {
+            TDataCenterStates::TDataCenter* entry = config.MutableDataCenterStates()->AddDataCenter();
+            entry->SetName(name);
+            entry->SetState(TDataCenterState::EXCLUDED);
+        }
+        UNIT_ASSERT(!HasTestConfigQuorum(config, {1, 2, 3, 4, 5, 6, 7}));
+        UNIT_ASSERT(!HasQuorum(config, {1, 2, 3, 4, 5, 6, 7}));
     }
 
     void CheckAcknowledgedUpdateSurvivesQuorumTurnover(bool fragmentWithChild) {

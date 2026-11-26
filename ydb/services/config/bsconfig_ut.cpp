@@ -938,6 +938,52 @@ config:
         CheckClusterConfigAccess(server.GetChannel(), "user@builtin", /*allowed*/ true);
     }
 
+    Y_UNIT_TEST(SetDataCenterStateRoutesAdminRequestsToDistconf) {
+        using TRequest = Ydb::Config::SetDataCenterStateRequest;
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        TServerWithAuth server({}, {}, false);
+        ConfigureAuth(server, {"root@builtin"}, false);
+        auto& runtime = *server.GetRuntime();
+        auto stub = Ydb::Config::V1::ConfigService::NewStub(server.GetChannel());
+        std::vector<NKikimrBlobStorage::TDataCenterStates::TDataCenter> forwarded;
+        TResult::EStatus distconfStatus = TResult::OK;
+        auto observer = runtime.AddObserver<NStorage::TEvNodeConfigInvokeOnRoot>([&](auto& ev) {
+            if (ev->Get()->Record.HasSetDataCenterState()) {
+                forwarded.push_back(ev->Get()->Record.GetSetDataCenterState());
+                auto reply = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+                reply->Record.SetStatus(distconfStatus);
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, reply.release(), 0, ev->Cookie));
+                ev.Reset();
+            }
+        });
+        auto call = [&](TString token, TString name, TRequest::State state, Ydb::StatusIds::StatusCode expected) {
+            Dispatched(runtime, [&] {
+                grpc::ClientContext ctx;
+                ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, token);
+                TRequest request;
+                request.set_data_center(name);
+                request.set_state(state);
+                Ydb::Config::SetDataCenterStateResponse response;
+                grpc::Status status = stub->SetDataCenterState(&ctx, request, &response);
+                UNIT_ASSERT_C(status.ok(), status.error_message());
+                UNIT_ASSERT_CHECK_STATUS(response.operation(), expected);
+            });
+        };
+        call("user@builtin", "dc-2", TRequest::EXCLUDED, Ydb::StatusIds::UNAUTHORIZED);
+        call("root@builtin", "", TRequest::EXCLUDED, Ydb::StatusIds::BAD_REQUEST);
+        call("root@builtin", "dc-2", TRequest::STATE_UNSPECIFIED, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT(forwarded.empty());
+
+        call("root@builtin", "dc-2", TRequest::EXCLUDED, Ydb::StatusIds::SUCCESS);
+        distconfStatus = TResult::NO_QUORUM;
+        call("root@builtin", "dc-2", TRequest::INCLUDED, Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT_VALUES_EQUAL(forwarded.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(forwarded[0].GetName(), "dc-2");
+        UNIT_ASSERT(forwarded[0].GetState() == NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        UNIT_ASSERT_VALUES_EQUAL(forwarded[1].GetName(), "dc-2");
+        UNIT_ASSERT(forwarded[1].GetState() == NKikimrBlobStorage::TDataCenterState::INCLUDED);
+    }
+
     Y_UNIT_TEST(SeedNodeFetchAllowedForRegistrationSid) {
         TServerWithAuth server;
         ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);

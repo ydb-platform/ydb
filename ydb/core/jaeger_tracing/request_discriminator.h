@@ -146,6 +146,8 @@ enum class ERequestType: size_t {
 
     TOPIC_RESETOFFSET,
 
+    CONFIG_SETDATACENTERSTATE,
+
     REQUEST_TYPES_CNT, // Add new types above this line
 };
 

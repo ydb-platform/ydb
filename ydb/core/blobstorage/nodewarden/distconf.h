@@ -52,6 +52,10 @@ namespace NKikimr::NStorage {
             SetFingerprint(config.GetFingerprint());
         }
 
+        bool IsSameOrNewerThan(const TStorageConfigMeta& base) const {
+            return *this == base || GetGeneration() > base.GetGeneration();
+        }
+
         friend bool operator ==(const TStorageConfigMeta& x, const TStorageConfigMeta& y) {
             return x.GetGeneration() == y.GetGeneration()
                 && x.GetFingerprint() == y.GetFingerprint();
@@ -424,6 +428,7 @@ namespace NKikimr::NStorage {
             ui64 ConfigRecoveryGeneration;
             bool AdvancesConflictingGeneration = false;
             bool RecoveryProposition = false;
+            bool RecoveringAuthorizedDcChange = false;
             std::vector<TNodeIdentifier> AddedOrChangedNodeIdentifiers; // identifiers of added nodes or changed endpoints
         };
         std::optional<TProposition> CurrentProposition;
@@ -682,7 +687,7 @@ namespace NKikimr::NStorage {
 
         std::optional<TString> StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev,
-            bool advancesConflictingGeneration = false, bool recoveryProposition = false);
+            bool advancesConflictingGeneration = false, bool recoveryProposition = false, bool recoveringAuthorizedDcChange = false);
 
         void CheckForConfigUpdate();
 
@@ -833,6 +838,7 @@ namespace NKikimr::NStorage {
         TBindQueue StaticBindQueue;
         THashMap<TActorId, TActorId> DynamicConfigSubscribers; // <session id> -> <actor id>
         ui32 ConnectedToStaticNode = 0;
+        ui32 LastStaticNodeWithoutQuorum = 0; // may still reach the target quorum for a DC change
         TActorId StaticNodeSessionId;
         bool ReconnectScheduled = false;
         THashSet<ui32> ConnectedDynamicNodes;

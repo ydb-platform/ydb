@@ -5,7 +5,7 @@ import operator
 import time
 from typing import Callable
 
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, get_sensors, counter_nodes
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
 import ydb.issues
 import os
@@ -1249,7 +1249,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
 
         options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
 
-        path = f"{kikimr.get_database_name()}/{query_name}"
+        path = f"/Root/{query_name}"
         try:
             kikimr.ydb_client.query(f"""
                 CREATE STREAMING QUERY {query_name} AS DO BEGIN
@@ -1276,8 +1276,8 @@ class TestJoinYdbStreaming(StreamingTestBase):
 
         hits = 0
         miss = 0
-        for node_index in counter_nodes(kikimr.cluster):
-            sensors = get_sensors(kikimr.cluster, node_index, "kqp")
+        for node_index in kikimr.cluster.nodes:
+            sensors = self.get_sensors(kikimr, node_index, "kqp")
             for component in ["Lookup", "LookupSrc"]:
                 componentSensors = sensors.find_sensors(
                     labels={

@@ -34,7 +34,8 @@ TBlobStorageController::TGroupPolicyStepResult TBlobStorageController::GetGroupP
         }
     }
     using NKikimrBlobStorage::TGroupState;
-    if (group.TargetInvariant == TGroupState::INVARIANT_2) {
+    const TStoragePoolInfo& pool = StoragePools.at(group.StoragePoolId);
+    if (pool.TargetInvariant.GetOrElse(TGroupState::NO_INVARIANT) == TGroupState::INVARIANT_2) {
         if (current.State == TGroupState::DC_FAILURE_INV1) {
             return MakeMirror3dcGroupConfiguration(TGroupState::DC_FAILURE_INV2_PENDING, current.Realms);
         }

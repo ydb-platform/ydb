@@ -101,7 +101,6 @@ message TDataCenterStates {
 message TFailRealmStates {
     repeated TDataCenterState.EState State = 1;
     optional TGroupState.EState GroupState = 2;
-    optional TGroupState.ETargetInvariant TargetInvariant = 3;
 }
 
 message TFailRealmInfo {

@@ -293,9 +293,6 @@ public:
                     if (states.HasGroupState()) {
                         group.Mirror3dcState = states.GetGroupState();
                     }
-                    if (states.HasTargetInvariant()) {
-                        group.TargetInvariant = states.GetTargetInvariant();
-                    }
                     if (states.StateSize()) {
                         Y_ABORT_UNLESS(states.StateSize() == 3);
                         group.FailRealmStates.emplace();

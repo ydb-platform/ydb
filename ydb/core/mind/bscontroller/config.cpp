@@ -682,6 +682,14 @@ namespace NKikimr::NBsController {
                     TStoragePoolInfo::UpdatePDiskFilters(txc.DB,
                         previous ? &previous->second.PDiskFilters : nullptr,
                         current ? &current->second.PDiskFilters : nullptr);
+                    if (previous && current && previous->second.TargetInvariant != current->second.TargetInvariant) {
+                        const auto& groups = state.StoragePoolGroups.Get();
+                        const TBoxStoragePoolId& poolId = current->first;
+                        for (auto it = groups.lower_bound({poolId, TGroupId::Zero()});
+                                it != groups.end() && it->first == poolId; ++it) {
+                            state.GroupStateUpdates.insert(it->second.GetRawId());
+                        }
+                    }
                 }
             }
             if (state.Nodes.Changed()) {
@@ -789,9 +797,6 @@ namespace NKikimr::NBsController {
                     }
                     if (overlay->second->Mirror3dcState) {
                         states.SetGroupState(*overlay->second->Mirror3dcState);
-                    }
-                    if (overlay->second->TargetInvariant) {
-                        states.SetTargetInvariant(*overlay->second->TargetInvariant);
                     }
                     db.Table<Schema::Group>().Key(overlay->first.GetRawId())
                         .Update<Schema::Group::FailRealmStates>(states);
@@ -1504,6 +1509,9 @@ namespace NKikimr::NBsController {
             if (pool.VDiskHeapAllocatorNumLeadingDisks) {
                 pb->SetVDiskHeapAllocatorNumLeadingDisks(*pool.VDiskHeapAllocatorNumLeadingDisks);
             }
+            if (pool.TargetInvariant) {
+                pb->SetTargetInvariant(*pool.TargetInvariant);
+            }
         }
 
         bool TBlobStorageController::TStoragePoolInfo::LoadPDiskFilters(NIceDb::TNiceDb& db,
@@ -1710,9 +1718,6 @@ namespace NKikimr::NBsController {
             pb->SetGroupGeneration(group.Generation);
             if (group.Mirror3dcState) {
                 pb->SetMirror3dcState(*group.Mirror3dcState);
-            }
-            if (group.TargetInvariant) {
-                pb->SetTargetInvariant(*group.TargetInvariant);
             }
             pb->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies));
             if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {

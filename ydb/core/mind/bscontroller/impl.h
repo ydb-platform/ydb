@@ -737,7 +737,6 @@ public:
         // Persisted with the group generation by CommitConfigUpdates.
         std::optional<std::array<NKikimrBlobStorage::TDataCenterState::EState, 3>> FailRealmStates;
         std::optional<EMirror3dcGroupState> Mirror3dcState;
-        std::optional<NKikimrBlobStorage::TGroupState::ETargetInvariant> TargetInvariant;
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
 
@@ -1435,6 +1434,7 @@ public:
         Table::DDisk::Type DDisk = false;
         Table::PersistentBufferAllocationMode::Type PersistentBufferAllocationMode = NKikimrBlobStorage::BALANCED;
         TMaybe<Table::VDiskHeapAllocatorNumLeadingDisks::Type> VDiskHeapAllocatorNumLeadingDisks;
+        TMaybe<Table::TargetInvariant::Type> TargetInvariant;
 
         void SetGroupGeometry(const NKikimrBlobStorage::TGroupGeometry& geometry) {
             RealmLevelBegin = geometry.GetRealmLevelBegin();
@@ -1556,6 +1556,7 @@ public:
                     Table::DDisk,
                     Table::VDiskHeapAllocatorNumLeadingDisks,
                     Table::PersistentBufferAllocationMode,
+                    Table::TargetInvariant,
                     TInlineTable<TUserIds, Schema::BoxStoragePoolUser>
                 > adapter(
                     &TStoragePoolInfo::Name,
@@ -1586,6 +1587,7 @@ public:
                     &TStoragePoolInfo::DDisk,
                     &TStoragePoolInfo::VDiskHeapAllocatorNumLeadingDisks,
                     &TStoragePoolInfo::PersistentBufferAllocationMode,
+                    &TStoragePoolInfo::TargetInvariant,
                     &TStoragePoolInfo::UserIds
                 );
             callback(&adapter);

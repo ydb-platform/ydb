@@ -278,6 +278,7 @@ namespace NKikimr::NBsController {
             }
             // retain some fields; TStoragePoolSettings are changed by UpdateStoragePoolSettings only
             storagePool.VDiskHeapAllocatorNumLeadingDisks = cur.VDiskHeapAllocatorNumLeadingDisks;
+            storagePool.TargetInvariant = cur.TargetInvariant;
             cur = std::move(storagePool); // update existing storage pool
         }
         Fit.PoolsAndGroups.emplace(id, std::nullopt);
@@ -383,11 +384,29 @@ namespace NKikimr::NBsController {
         }
         settings.MergeFrom(cmd.GetSettings());
 
+        using NKikimrBlobStorage::TGroupState;
+        if (cmd.GetSettings().HasTargetInvariant()) {
+            if (it->second.ErasureSpecies != TErasureType::ErasureMirror3dc || it->second.BridgeMode) {
+                throw TExError() << "TargetInvariant requires an ordinary mirror-3-dc pool";
+            }
+            if (!TGroupState::ETargetInvariant_IsValid(settings.GetTargetInvariant())) {
+                throw TExError() << "unknown TargetInvariant for StoragePoolId# " << id;
+            }
+        }
+        TMaybe<TGroupState::ETargetInvariant> targetInvariant;
+        if (settings.HasTargetInvariant()) {
+            targetInvariant = settings.GetTargetInvariant();
+        }
         const TMaybe<ui32> numLeadingDisks = settings.HasVDiskHeapAllocatorNumLeadingDisks()
             ? MakeMaybe(settings.GetVDiskHeapAllocatorNumLeadingDisks())
             : Nothing();
-        if (numLeadingDisks != it->second.VDiskHeapAllocatorNumLeadingDisks) {
-            StoragePools.Unshare().at(id).VDiskHeapAllocatorNumLeadingDisks = numLeadingDisks;
+        bool heapSettingChanged = numLeadingDisks != it->second.VDiskHeapAllocatorNumLeadingDisks;
+        if (targetInvariant != it->second.TargetInvariant || heapSettingChanged) {
+            TStoragePoolInfo& pool = StoragePools.Unshare().at(id);
+            pool.TargetInvariant = targetInvariant;
+            pool.VDiskHeapAllocatorNumLeadingDisks = numLeadingDisks;
+        }
+        if (heapSettingChanged) {
             HeapAllocatorNumLeadingDisksChanged.insert(id);
         }
     }
@@ -1306,15 +1325,6 @@ namespace NKikimr::NBsController {
             if (definition.HasExpectedGroupGeneration() && definition.GetExpectedGroupGeneration() != group->Generation) {
                 throw TExGroupGenerationMismatch(definition.GetGroupId(),
                     definition.GetExpectedGroupGeneration(), group->Generation);
-            }
-            if (definition.HasTargetInvariant()) {
-                if (!NKikimrBlobStorage::TGroupState::ETargetInvariant_IsValid(definition.GetTargetInvariant())) {
-                    throw TExError() << "unknown target invariant for GroupId# " << groupId;
-                }
-                Groups.FindForUpdate(groupId)->TargetInvariant = definition.GetTargetInvariant();
-                if (!definition.HasGroupState() && !definition.FailRealmStatesSize()) {
-                    continue; // A controller-only target update keeps the published group generation.
-                }
             }
             if (!definition.HasGroupState()) {
                 throw TExError() << "GroupId# " << groupId << " must define the group state";

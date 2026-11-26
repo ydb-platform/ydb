@@ -140,6 +140,8 @@ public:
 
     virtual bool Insert(const TKqpCompileResult::TConstPtr& compileResult, TPreCboSnapshotPtr snapshot = {}, ui64 accesses = 0) = 0;
 
+    virtual void CountSnapshotAccesses(const TQueryCacheSnapshotRecord&, ui64) {}
+
     // Idempotent; no-op once the window is closed.
     virtual void MarkWarmupInsert(const TString& uid) = 0;
 

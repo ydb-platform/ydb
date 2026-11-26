@@ -329,7 +329,11 @@ Y_UNIT_TEST_SUITE(KqpQueryCache) {
         cache->Insert(MakeResult("c", "SELECT c"));
         UNIT_ASSERT(!cache->FindByUid("a", false));
 
+        const auto touched = LastTouched(*cache, "b");
         cache->AttachReplayMessage("b", "replay b");
+        if (V2) {
+            UNIT_ASSERT_VALUES_EQUAL(LastTouched(*cache, "b"), touched);
+        }
         clock.Clock->Advance(TDuration::Seconds(5));
         UNIT_ASSERT_VALUES_EQUAL(cache->EraseExpiredQueries(), 1);
         UNIT_ASSERT(!cache->FindByUid("b", false));
@@ -458,10 +462,10 @@ Y_UNIT_TEST_SUITE(KqpQueryCacheSnapshots) {
         UNIT_ASSERT_VALUES_EQUAL(Row(cache, "s").GetAccessCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(Row(cache, "p").GetAccessCount(), 2);
 
-        // With temp tables a snapshot is never resumed. By text it is a miss; by uid the record
-        // still comes back for its query, to compile from scratch. Neither counts.
+        // A cold compile in a session with temp tables still needs the original UID.
         auto tempTables = SomeTempTables();
-        UNIT_ASSERT(!lookup.ByText(cache, "SELECT s", user, false, tempTables));
+        UNIT_ASSERT(lookup.ByText(cache, "SELECT s", user, false, tempTables).GetSnapshot());
+        UNIT_ASSERT(!lookup.ByText(cache, "SELECT s", user, true, tempTables));
         UNIT_ASSERT(lookup.ByUid(cache, "s", user, false, tempTables).GetSnapshot());
         UNIT_ASSERT_VALUES_EQUAL(Row(cache, "s").GetAccessCount(), 1);
 
@@ -477,6 +481,35 @@ Y_UNIT_TEST_SUITE(KqpQueryCacheSnapshots) {
         clock.Clock->Advance(TDuration::Seconds(5));
         UNIT_ASSERT_VALUES_EQUAL(cache.EraseExpiredQueries(), 1);
         UNIT_ASSERT(!cache.LookupByUid("s", false));
+    }
+
+    Y_UNIT_TEST(WarmupWindowCountsFirstHitAndSubsequentMisses) {
+        TClockFixture clock;
+        TLookupFixture lookup;
+        auto cache = CreateKqpQueryCache(true, 2, TDuration::Zero());
+        auto plan = MakeResult("p", "SELECT p");
+        cache->Insert(plan);
+        const auto find = [&](const TString& text, EWarmupAttributionMode mode) {
+            return lookup.ByText(*cache, text, "user@builtin", false, nullptr, mode);
+        };
+
+        using EMode = EWarmupAttributionMode;
+        UNIT_ASSERT(!find("miss", EMode::Client));
+        UNIT_ASSERT_VALUES_EQUAL(lookup.Counters->WarmupMissesInWindow->Val(), 0);
+        UNIT_ASSERT(find("SELECT p", EMode::Warmup));
+        UNIT_ASSERT(find("SELECT p", EMode::Client));
+        UNIT_ASSERT(find("SELECT p", EMode::Client));
+        UNIT_ASSERT_VALUES_EQUAL(lookup.Counters->WarmupHitsInWindow->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(lookup.Counters->WarmupSavedCompileMs->Val(), plan->CompilationDuration.MilliSeconds());
+        UNIT_ASSERT(!find("miss", EMode::Client));
+        UNIT_ASSERT_VALUES_EQUAL(lookup.Counters->WarmupMissesInWindow->Val(), 1);
+
+        clock.Clock->Advance(TKqpQueryCache::WarmupObservationWindow);
+        UNIT_ASSERT(!find("miss", EMode::Client));
+        UNIT_ASSERT(find("SELECT p", EMode::Warmup));
+        UNIT_ASSERT(find("SELECT p", EMode::Client));
+        UNIT_ASSERT_VALUES_EQUAL(lookup.Counters->WarmupHitsInWindow->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(lookup.Counters->WarmupMissesInWindow->Val(), 1);
     }
 
     // Snapshots have their own byte budget: one that does not fit is stored as its plan.

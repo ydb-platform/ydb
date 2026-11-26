@@ -591,10 +591,13 @@ namespace {
         // Otherwise warmup on other nodes would take its own work for popular queries.
         Y_UNIT_TEST_TWIN(WarmupAccessCount, CompileCacheV2) {
             TWarmupTestParams params;
+            params.UseRealThreads = false;
             params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0", "user1"};
 
-            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            auto settings = MakeWarmupTestSettings(params);
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryUseLlvm(false);
+            TKikimrRunner kikimr(settings);
             TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
             const auto before = GetLocalCacheAccessCounts(env.Runtime, env.NodeId, "/Root");
 

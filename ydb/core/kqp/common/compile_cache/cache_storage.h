@@ -8,25 +8,9 @@
 
 namespace NKikimr::NKqp {
 
-// Values of a cache budget. 0 means no limit. Which of them a cache enforces is decided at compile
-// time by its policy type (see TCacheStorage); the values come at construction.
-struct TCacheLimits {
-    size_t MaxEntries = 0;
-    ui64 MaxBytes = 0;
-    ui64 MaxEntryBytes = 0;     // a value bigger than this is not admitted at all
-};
-
-// LRU + TTL over TLRUList with a budget chosen at compile time by TPolicy:
-//   static ui64 Size(const TValue&)        accounted size of a value, in bytes
-//   static constexpr bool LimitEntries     enforce TCacheLimits::MaxEntries
-//   static constexpr bool LimitBytes       enforce TCacheLimits::MaxBytes
-//   static constexpr bool LimitEntryBytes  enforce TCacheLimits::MaxEntryBytes (admission)
-// The checks a policy turns off are not compiled in. Total bytes are always tracked.
-//
-// Not thread-safe; the owner locks and maintains its own indexes from the dropped entries. Every
-// operation that removes entries appends them to a caller-provided `dropped` buffer: the owner
-// passes one buffer through all layers and destroys the values after it releases its lock.
-template <typename TKey, typename TValue, typename TPolicy>
+// The owner holds the lock and destroys dropped values after unlocking.
+// Weight is immutable while the value is stored.
+template <typename TKey, typename TValue, typename TWeight = TUniformSizeProvider<TValue>>
 class TCacheStorage {
 public:
     struct TEvicted {
@@ -35,71 +19,44 @@ public:
     };
     using TDropped = TVector<TEvicted>;
 
-    // ttl == Zero disables expiry. The list itself is unbounded; the budget is enforced here.
-    TCacheStorage(const TCacheLimits& limits, TDuration ttl)
-        : Limits(limits)
-        , Ttl(ttl)
-        , List(Max<size_t>())
+    TCacheStorage(size_t maxSize, TDuration ttl)
+        : Ttl(ttl)
+        , List(maxSize)
     {}
 
-    // Borrows the stored value until this key is removed/replaced or the storage is cleared. A
-    // mutation through the pointer that changes TPolicy::Size must be followed by Reaccount().
-    // An expired entry is a miss.
-    TValue* Find(const TKey& key, bool promote, TInstant now) {
-        return Find(key, [promote](const TValue&) { return promote; }, now);
+    TValue* Find(const TKey& key, bool promote, TInstant now, TDropped& dropped) {
+        return Find(key, [promote](const TValue&) { return promote; }, now, dropped);
     }
 
     template <typename TShouldPromote>
-    TValue* Find(const TKey& key, TShouldPromote shouldPromote, TInstant now) {
+    TValue* Find(const TKey& key, TShouldPromote shouldPromote, TInstant now, TDropped& dropped) {
         auto it = Index.find(key);
         if (it == Index.end()) {
             return nullptr;
         }
         TItem& item = Mutable(*it);
-        if (HasTtl() && item.Value.ExpiredAt <= now) {
+        if (Expired(item, now)) {
+            List.Erase(&item);
+            dropped.push_back(Drop(it));
             return nullptr;
         }
         if (shouldPromote(item.Value.Value)) {
-            Touch(item, now);
+            item.Value.TouchedAt = TouchTime(now);
+            List.Promote(&item);
         }
         return &item.Value.Value;
     }
 
-    // Replaces under the same key and appends the replaced entry (if any) and everything evicted by
-    // the budget to `dropped`. Returns whether the value was admitted: a value the policy rejects
-    // is not stored, and the old entry under the key is dropped anyway since it is superseded.
-    bool Insert(const TKey& key, TValue value, TInstant now, TDropped& dropped) {
+    // Only removals due to capacity count as evictions.
+    size_t Insert(const TKey& key, TValue value, TInstant now, TDropped& dropped) {
         Erase(key, dropped);
-        const ui64 bytes = TPolicy::Size(value);
-        if (!Admits(bytes)) {
-            return false;
+        const size_t before = dropped.size();
+        auto [it, inserted] = Index.emplace(key, TEntry{std::move(value), TouchTime(now)});
+        Y_ABORT_UNLESS(inserted);
+        for (auto* item = List.Insert(&Mutable(*it)); item; item = List.RemoveIfOverflown()) {
+            dropped.push_back(Drop(Index.find(item->Key)));
         }
-        auto inserted = Index.emplace(key, TEntry{std::move(value), ExpiryAfterTouch(now), bytes});
-        Y_ABORT_UNLESS(inserted.second);
-        TItem* item = &Mutable(*inserted.first);
-        Y_ABORT_UNLESS(!List.Insert(item));   // the list has no budget of its own
-        TotalBytes += bytes;
-        EvictOverBudget(item, dropped);
-        return true;
-    }
-
-    // Updates byte accounting after a mutation, preserving LRU order and expiry.
-    // Returns whether the updated entry survived admission and budget eviction.
-    bool Reaccount(const TKey& key, TDropped& dropped) {
-        auto it = Index.find(key);
-        if (it == Index.end()) {
-            return false;
-        }
-        TItem& item = Mutable(*it);
-        const ui64 bytes = TPolicy::Size(item.Value.Value);
-        TotalBytes = TotalBytes - item.Value.Bytes + bytes;
-        item.Value.Bytes = bytes;
-        if (!Admits(bytes)) {
-            List.Erase(&item);
-            dropped.push_back(Drop(it));
-            return false;
-        }
-        return EvictOverBudget(&item, dropped);
+        return dropped.size() - before;
     }
 
     bool Erase(const TKey& key, TDropped& dropped) {
@@ -112,28 +69,12 @@ public:
         return true;
     }
 
-    // Drops the entry if it exists and is past its TTL; the hit path uses it to retire an
-    // expired entry on access instead of serving it or leaving it to the next sweep.
-    bool EraseIfExpired(const TKey& key, TInstant now, TDropped& dropped) {
-        if (!HasTtl()) {
-            return false;
-        }
-        auto it = Index.find(key);
-        if (it == Index.end() || it->Value.ExpiredAt > now) {
-            return false;
-        }
-        List.Erase(&Mutable(*it));
-        dropped.push_back(Drop(it));
-        return true;
-    }
-
-    // Sweeps expired entries oldest first; returns how many were appended.
     size_t EraseExpired(TInstant now, TDropped& dropped) {
         if (!HasTtl()) {
             return 0;
         }
         const size_t before = dropped.size();
-        while (List.GetSize() && List.GetOldest()->Value.ExpiredAt <= now) {
+        while (List.GetSize() && Expired(*List.GetOldest(), now)) {
             TItem* item = List.GetOldest();
             List.Erase(item);
             dropped.push_back(Drop(Index.find(item->Key)));
@@ -141,111 +82,69 @@ public:
         return dropped.size() - before;
     }
 
-    // Empties the storage. The values are moved into `graveyard` so that their destructors run
-    // wherever the caller chooses (outside the owner's lock).
-    void Clear(TVector<TValue>& graveyard) {
-        graveyard.reserve(graveyard.size() + Index.size());
+    void Clear(TVector<TValue>& dropped) {
+        dropped.reserve(dropped.size() + Index.size());
         for (const TItem& item : Index) {
-            graveyard.push_back(std::move(Mutable(item).Value.Value));
+            dropped.push_back(std::move(Mutable(item).Value.Value));
         }
         Index.clear();   // item destructors unlink from the list; counters need the reset below
-        List = TList(Max<size_t>());
-        TotalBytes = 0;
+        List = TList(List.GetMaxSize());
     }
 
-    // Visits every entry as f(key, value) in no particular order; expired entries included.
     template <typename F>
     void ForEach(F&& f) const {
         for (const TItem& item : Index) {
-            f(item.Key, item.Value.Value);
+            f(item.Key, item.Value.Value, item.Value.TouchedAt);
         }
     }
 
     bool HasTtl() const { return Ttl != TDuration::Zero(); }
     size_t Size() const { return Index.size(); }
-    ui64 GetTotalBytes() const { return TotalBytes; }
+    size_t TotalWeight() const { return List.GetTotalSize(); }
 
 private:
     struct TEntry {
         TValue Value;
-        TInstant ExpiredAt;
-        ui64 Bytes = 0;     // as accounted in TotalBytes; the value may have changed since
+        TInstant TouchedAt;
     };
 
-    using TList = TLRUList<TKey, TEntry>;
+    struct TEntryWeight {
+        size_t operator()(const TEntry& entry) const { return TWeight{}(entry.Value); }
+    };
+
+    using TList = TLRUList<TKey, TEntry, TEntryWeight>;
     using TItem = typename TList::TItem;
 
-    // Lookups go by TKey directly; no temporary TItem with a copied key and an empty value.
     using TIndex = THashSet<TItem, typename TItem::THash, typename TItem::TEqualTo>;
 
-    // THashSet hands out its elements as const because the key feeds the hash. The list links and
-    // the entry live in the same item and change in place; the key never does, so the set stays
-    // valid. TCache in library/cpp/cache does the same.
+    // Only the key participates in the hash.
     static TItem& Mutable(const TItem& item) {
         return const_cast<TItem&>(item);
     }
 
-    // Callers sample the clock before locking. Keep expiry times ordered as entries reach the LRU tail.
-    TInstant ExpiryAfterTouch(TInstant now) {
+    // Callers sample the clock before locking. Keep expiry ordered along the LRU.
+    TInstant TouchTime(TInstant now) {
         LastTouch = Max(LastTouch, now);
-        return LastTouch + Ttl;
+        return LastTouch;
     }
 
-    void Touch(TItem& item, TInstant now) {
-        item.Value.ExpiredAt = ExpiryAfterTouch(now);
-        List.Promote(&item);
+    bool Expired(const TItem& item, TInstant now) const {
+        return HasTtl() && item.Value.TouchedAt + Ttl <= now;
     }
 
-    bool Admits(ui64 bytes) const {
-        if constexpr (TPolicy::LimitEntryBytes) {
-            return !Limits.MaxEntryBytes || bytes <= Limits.MaxEntryBytes;
-        } else {
-            Y_UNUSED(bytes);
-            return true;
-        }
-    }
-
-    bool OverBudget() const {
-        bool over = false;
-        if constexpr (TPolicy::LimitEntries) {
-            over = over || (Limits.MaxEntries && Index.size() > Limits.MaxEntries);
-        }
-        if constexpr (TPolicy::LimitBytes) {
-            over = over || (Limits.MaxBytes && TotalBytes > Limits.MaxBytes);
-        }
-        return over;
-    }
-
-    // Keep the newest entry, even if it alone exceeds the total byte budget.
-    bool EvictOverBudget(const TItem* updated, TDropped& dropped) {
-        while (OverBudget() && List.GetSize() > 1) {
-            TItem* oldest = List.GetOldest();
-            if (oldest == updated) {
-                updated = nullptr;
-            }
-            List.Erase(oldest);
-            dropped.push_back(Drop(Index.find(oldest->Key)));
-        }
-        return updated != nullptr;
-    }
-
-    // The item must already be unlinked from the list.
     TEvicted Drop(typename TIndex::iterator it) {
         Y_ABORT_UNLESS(it != Index.end());
         TItem& item = Mutable(*it);
-        TotalBytes -= item.Value.Bytes;
         TEvicted evicted{item.Key, std::move(item.Value.Value)};
         Index.erase(it);
         return evicted;
     }
 
-    const TCacheLimits Limits;
     const TDuration Ttl;
 
     TIndex Index;
     TList List;
     TInstant LastTouch = TInstant::Zero();
-    ui64 TotalBytes = 0;
 };
 
 } // namespace NKikimr::NKqp

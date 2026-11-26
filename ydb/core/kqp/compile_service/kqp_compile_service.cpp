@@ -827,7 +827,10 @@ private:
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 bool canJoinPrepare = !compileRequest.RevalidatePgCompatibility;
-                if (!hasTempTablesNameClashes && !skipRevalidationCacheUpdate && !(compileRequest.SourceSnapshot && compileRequest.HasTempTables())) {
+                const bool bypassSnapshot = compileRequest.SourceSnapshot && compileRequest.HasTempTables();
+                if (bypassSnapshot && !isStale) {
+                    QueryCache->CountSnapshotAccesses(*compileRequest.SourceSnapshot, RequestsQueue.CountClientPlanDeliveries(compileRequest));
+                } else if (!hasTempTablesNameClashes && !bypassSnapshot && !skipRevalidationCacheUpdate) {
                     if (isStale) {
                         YDB_LOG_DEBUG_CTX(ctx, "Skipped caching compile result from stale config generation",
                             {"queryUid", compileResult->Uid},
@@ -845,7 +848,7 @@ private:
 
                 if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
                     QueryReplayBackend->Collect(*ev->Get()->ReplayMessage);
-                    if (!isStale && !skipRevalidationCacheUpdate) {
+                    if (!isStale && !bypassSnapshot && !skipRevalidationCacheUpdate) {
                         QueryCache->AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
                     }
                 }
@@ -927,9 +930,7 @@ private:
             return; // The source entry expired, was invalidated or was replaced while compiling.
         }
         if (current) {
-            if (!source || source->Snapshot != snapshot || accesses) {
-                QueryCache->Replace(compileResult, snapshot, accesses);
-            }
+            QueryCache->Replace(compileResult, snapshot, accesses);
             // Warmup re-validated an already-cached entry: keep client hit attribution.
             if (isWarmupCompilation) {
                 QueryCache->MarkWarmupInsert(compileResult->Uid);

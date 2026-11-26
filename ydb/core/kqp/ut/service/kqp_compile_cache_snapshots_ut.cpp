@@ -271,19 +271,22 @@ Y_UNIT_TEST_SUITE(KqpCompileCacheSnapshots) {
     }
 
     // A session with temp tables neither takes nor stores a snapshot: it compiles from scratch.
-    Y_UNIT_TEST(SnapshotSkippedWithTempTables) {
+    Y_UNIT_TEST(TempTablesPreservePreparedSnapshot) {
         TSnapshotFixture f(true);
 
         f.Output = std::make_shared<TFakeSnapshot>();
         f.Send();
         const TString uid = f.Receive(false)->Uid;
 
+        f.Output = nullptr;
         f.Send("root@builtin", SomeTempTables());
-        const TString tempUid = f.Receive(false)->Uid;
-        UNIT_ASSERT_VALUES_UNEQUAL(tempUid, uid);
+        UNIT_ASSERT_VALUES_EQUAL(f.Receive(false)->Uid, uid);
+        UNIT_ASSERT_VALUES_EQUAL(f.Row(uid).GetAccessCount(), 2);
 
+        f.SendByUid(uid);
+        UNIT_ASSERT_VALUES_EQUAL(f.Receive(false)->Uid, uid);
         f.Send();
-        UNIT_ASSERT_VALUES_EQUAL(f.Receive(true)->Uid, tempUid);
+        UNIT_ASSERT_VALUES_EQUAL(f.Receive(true)->Uid, uid);
     }
 
     // A session takes only plans from the cache: with a snapshot record the query is compiled again.

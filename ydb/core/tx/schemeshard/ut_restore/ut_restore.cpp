@@ -2230,8 +2230,8 @@ value {
     }
 
     // Imports the backup of ExportTableToParquet as /MyRoot/Restored, expecting success, and
-    // checks that the restored table has the keys of the original one.
-    void ImportParquetAndCheckKeys(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, ui16 port) {
+    // checks that the original and the restored table both have the keys 1..rowCount.
+    void ImportParquetAndCheckKeys(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, ui16 port, ui32 rowCount) {
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"
@@ -2245,9 +2245,17 @@ value {
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
 
-        const auto original = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key"});
-        const auto restored = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, "Restored", {"key"}, {"key"});
-        NKqp::CompareYson(original, restored);
+        TStringBuilder expected;
+        expected << "[[[[";
+        for (ui32 key = 1; key <= rowCount; ++key) {
+            if (key > 1) {
+                expected << ";";
+            }
+            expected << "[[\"" << key << "\"]]";
+        }
+        expected << "];%false]]]";
+        NKqp::CompareYson(expected, ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key"}));
+        NKqp::CompareYson(expected, ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, "Restored", {"key"}, {"key"}));
     }
 
     std::shared_ptr<parquet::FileMetaData> ParquetMetadata(const TString& data) {
@@ -2304,20 +2312,22 @@ value {
         // With statistics the footer would be 1.5 MB.
         UNIT_ASSERT_LT(metadata->size(), 128_KB);
 
-        ImportParquetAndCheckKeys(runtime, env, txId, port);
+        ImportParquetAndCheckKeys(runtime, env, txId, port, rowCount);
     }
 
     // A raised upload batch makes larger S3 parts, not larger row groups: those are also cut
     // at an eighth of the restore read buffer, so a restore with the same buffer reads the
-    // backup. Otherwise the 12 MB of rows below would be one row group, which restore rejects
-    // against an 8 MB buffer.
+    // backup. Otherwise the 20 MB of rows below would be one row group, which restore rejects
+    // against a 16 MB buffer.
     Y_UNIT_TEST(ExportImportParquetWithRaisedBackupBatch) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
         runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
         runtime.GetAppData().DataShardConfig.SetBackupBytesBatchSize(64_MB);
-        runtime.GetAppData().DataShardConfig.SetRestoreReadBufferSizeLimit(8_MB);
+        // The buffer must hold a read batch (8 MB) next to the footer; export cuts row groups at
+        // an eighth of it, 2 MB.
+        runtime.GetAppData().DataShardConfig.SetRestoreReadBufferSizeLimit(16_MB);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -2329,7 +2339,7 @@ value {
         env.TestWaitNotification(runtime, txId);
 
         // Distinct values encode about as they are, so a row group is about its cell bytes.
-        const ui32 rowCount = 96;
+        const ui32 rowCount = 160; // 20 MB of rows
         TString value(128_KB, 'x');
         for (ui32 key = 1; key <= rowCount; ++key) {
             const TString keyText = TStringBuilder() << key;
@@ -2347,13 +2357,13 @@ value {
         const auto* data = s3Mock.GetData().FindPtr("/Backup1/data_00.parquet");
         UNIT_ASSERT(data);
         const auto metadata = ParquetMetadata(*data);
-        // Row groups of 1 MB are 7 rows: 14 of them.
-        UNIT_ASSERT_GE(metadata->num_row_groups(), 12);
+        // Row groups of 2 MB are 15 rows: 11 of them.
+        UNIT_ASSERT_GE(metadata->num_row_groups(), 10);
         for (int i = 0; i < metadata->num_row_groups(); ++i) {
-            UNIT_ASSERT_LE_C(static_cast<ui64>(metadata->RowGroup(i)->total_byte_size()), 1_MB + 64_KB, "row group " << i);
+            UNIT_ASSERT_LE_C(static_cast<ui64>(metadata->RowGroup(i)->total_byte_size()), 2_MB + 64_KB, "row group " << i);
         }
 
-        ImportParquetAndCheckKeys(runtime, env, txId, port);
+        ImportParquetAndCheckKeys(runtime, env, txId, port, rowCount);
     }
 
     Y_UNIT_TEST_FLAG(ZeroLengthEncryptedFileTreatedAsCorrupted, EnableDataShardDirectPartImport) {

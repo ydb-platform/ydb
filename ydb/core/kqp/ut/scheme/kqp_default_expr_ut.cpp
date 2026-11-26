@@ -3479,6 +3479,34 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING v;", "[[[7u]]]");
     }
 
+    Y_UNIT_TEST_TWIN(ReplicationChangefeedRejectsExpressionDefault, ExistingChangefeed) {
+        TTestFixture fixture;
+        fixture.Exec(ValueTableDDL());
+        auto sessionResult = fixture.Runner().GetTableClient().CreateSession().ExtractValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+
+        NYdb::NTable::TChangefeedDescription changefeed("feed", NYdb::NTable::EChangefeedMode::Updates,
+            NYdb::NTable::EChangefeedFormat::Json);
+        const auto addChangefeed = [&] {
+            return session.AlterTable("/Root/TestTable",
+                NYdb::NTable::TAlterTableSettings().AppendAddChangefeeds(changefeed)).ExtractValueSync();
+        };
+        if (ExistingChangefeed) {
+            const auto created = addChangefeed();
+            UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        }
+
+        changefeed.AddAttribute("__async_replication", R"({"id":"1","path":"/Root/Replication"})");
+        const auto rejected = addChangefeed();
+        UNIT_ASSERT_VALUES_EQUAL_C(rejected.GetStatus(), EStatus::PRECONDITION_FAILED, rejected.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(), "replication changefeed on a table with DEFAULT expressions");
+
+        const auto described = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+        UNIT_ASSERT_C(described.IsSuccess(), described.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(described.GetTableDescription().GetChangefeedDescriptions().size(), ExistingChangefeed ? 1u : 0u);
+    }
+
     // Literal defaults retain their metadata kind when replacing an expression.
     Y_UNIT_TEST(SetLiteralDefaultOverExprColumn) {
         TTestFixture fixture;

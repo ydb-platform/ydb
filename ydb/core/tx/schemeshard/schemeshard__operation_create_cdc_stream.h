@@ -21,7 +21,8 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     const TString& tableName,
     const TString& streamName,
     bool acceptExisted,
-    bool internal = false);
+    bool internal = false,
+    bool isAsyncReplication = false);
 
 void DoCreateStreamImpl(
     TVector<ISubOperation::TPtr>& result,

@@ -8,6 +8,8 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
@@ -1093,11 +1095,24 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     const TString& tableName,
     const TString& streamName,
     bool acceptExisted,
-    bool internal)
+    bool internal,
+    bool isAsyncReplication)
 {
     const auto tablePath = workingDirPath.Child(tableName, TPath::TSplitChildTag{});
     if (auto reject = RejectOnTablePathChecks(context, opId, tablePath, internal)) {
         return reject;
+    }
+
+    // An existing changefeed can return success on a bootstrap retry.
+    if (isAsyncReplication) {
+        const auto& table = context.SS->Tables.at(tablePath.Base()->PathId);
+        for (const auto& [_, column] : table->Columns) {
+            NKikimrSchemeOp::TDefaultExpressionColumnDescription expression;
+            if (!column.IsDropped() && column.TryGetDefaultExpression(expression) && expression.GetWritable()) {
+                return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
+                    << "Cannot create a replication changefeed on a table with DEFAULT expressions. Column: " << column.Name);
+            }
+        }
     }
 
     const auto streamPath = tablePath.Child(streamName);
@@ -1148,8 +1163,12 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     const auto& streamDesc = op.GetStreamDescription();
     const auto& streamName = streamDesc.GetName();
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+    const bool isAsyncReplication = AnyOf(streamDesc.GetUserAttributes(), [](const auto& attribute) {
+        return attribute.GetKey() == ATTR_ASYNC_REPLICATION;
+    });
 
-    const auto checksResult = DoNewStreamPathChecks(context, opId, workingDirPath, tableName, streamName, acceptExisted, tx.GetInternal());
+    const auto checksResult = DoNewStreamPathChecks(
+        context, opId, workingDirPath, tableName, streamName, acceptExisted, tx.GetInternal(), isAsyncReplication);
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
         return {std::get<ISubOperation::TPtr>(checksResult)};
     }

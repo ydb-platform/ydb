@@ -8,6 +8,8 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
+#include <yt/yql/providers/ytflow/integration/interface/yql_ytflow_integration.h>
+#include <yt/yql/providers/ytflow/integration/interface/yql_ytflow_optimization.h>
 
 namespace NYql {
 namespace {

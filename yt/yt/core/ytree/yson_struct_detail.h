@@ -143,16 +143,12 @@ struct IYsonStructMeta
     virtual void LoadStruct(
         TYsonStructBase* target,
         INodePtr node,
-        bool postprocess,
-        bool setDefaults,
-        const std::function<NYPath::TYPath()>& pathGetter) const = 0;
+        const TYsonStructLoadOptions& options) const = 0;
 
     virtual void LoadStruct(
         TYsonStructBase* target,
         NYson::TYsonPullParserCursor* cursor,
-        bool postprocess,
-        bool setDefaults,
-        const std::function<NYPath::TYPath()>& pathGetter) const = 0;
+        const TYsonStructLoadOptions& options) const = 0;
 
     virtual IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* target) const = 0;
 
@@ -196,16 +192,12 @@ public:
     void LoadStruct(
         TYsonStructBase* target,
         INodePtr node,
-        bool postprocess,
-        bool setDefaults,
-        const std::function<NYPath::TYPath()>& pathGetter) const override;
+        const TYsonStructLoadOptions& options) const override;
 
     void LoadStruct(
         TYsonStructBase* target,
         NYson::TYsonPullParserCursor* cursor,
-        bool postprocess,
-        bool setDefaults,
-        const std::function<NYPath::TYPath()>& pathGetter) const override;
+        const TYsonStructLoadOptions& options) const override;
 
     IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* target) const override;
 

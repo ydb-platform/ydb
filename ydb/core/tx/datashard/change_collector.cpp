@@ -198,7 +198,8 @@ IDataShardChangeCollector* CreateChangeCollector(
         IDataShardUserDb& userDb,
         IDataShardChangeGroupProvider& groupProvider,
         NTable::TDatabase& db,
-        const TUserTable& table)
+        const TUserTable& table,
+        EAsyncIndexKeySizePolicy indexKeySizePolicy)
 {
     const bool hasAsyncIndexes = table.HasAsyncIndexes();
     const bool hasCdcStreams = table.HasCdcStreams();
@@ -210,7 +211,7 @@ IDataShardChangeCollector* CreateChangeCollector(
     auto proxy = MakeHolder<TChangeCollectorProxy>(&dataShard, db, groupProvider);
 
     if (hasAsyncIndexes) {
-        proxy->AddUnderlying(MakeHolder<TAsyncIndexChangeCollector>(&dataShard, userDb, *proxy));
+        proxy->AddUnderlying(MakeHolder<TAsyncIndexChangeCollector>(&dataShard, userDb, *proxy, indexKeySizePolicy));
     }
 
     if (hasCdcStreams) {

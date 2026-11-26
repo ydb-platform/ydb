@@ -6,10 +6,10 @@ Run directory (YDBD_MOCK_RUN_DIR, default ~/ydbd_mock_work/run):
     endpoint_map.json   label -> 127.0.0.1:port, for the CLI shim
     cluster.json        how to respawn an instance
     macros.json         faults set by macros, cleared by `heal`
-    pids/<pile>.pid
-    state/<pile>/replica.json
-    logs/<pile>.log             instance stdout and stderr
-    logs/<pile>.events.jsonl    event log, survives a kill
+    pids/<encoded pile>.pid
+    state/<encoded pile>/replica.json
+    logs/<encoded pile>.log             instance stdout and stderr
+    logs/<encoded pile>.events.jsonl    event log, survives a kill
 """
 import argparse
 import asyncio
@@ -137,7 +137,7 @@ class Cluster:
 
     def pid(self, pile: str) -> typing.Optional[int]:
         try:
-            with open(self.path("pids", "%s.pid" % pile)) as f:
+            with open(self.path("pids", "%s.pid" % self.topology.pile_file_name(pile))) as f:
                 return int(f.read().strip())
         except (OSError, ValueError):
             return None
@@ -164,22 +164,30 @@ class Cluster:
         os.makedirs(self.path("logs"), exist_ok=True)
         os.makedirs(self.path("pids"), exist_ok=True)
         mode = "w" if truncate_logs else "a"
-        log = open(self.path("logs", "%s.log" % pile), mode)
         argv = list(config["argv_prefix"]) + [
             "run",
             "--topology", self.path("topology.yaml"),
             "--pile=%s" % pile,
-            "--state-dir", self.path("state", pile),
-            "--log-events", self.path("logs", "%s.events.jsonl" % pile),
+            "--state-dir", self.path("state", self.topology.pile_file_name(pile)),
+            "--log-events", self.path("logs", "%s.events.jsonl" % self.topology.pile_file_name(pile)),
             "--log-level", config.get("log_level", "INFO"),
         ]
         env = dict(os.environ)
         env["PYTHONDONTWRITEBYTECODE"] = "1"
-        proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                start_new_session=True, env=env)
-        log.close()
-        with open(self.path("pids", "%s.pid" % pile), "w") as f:
-            f.write("%d\n" % proc.pid)
+        proc = None
+        try:
+            with open(self.path("logs", "%s.log" % self.topology.pile_file_name(pile)), mode) as log:
+                proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                        start_new_session=True, env=env)
+            with open(self.path("pids", "%s.pid" % self.topology.pile_file_name(pile)), "w") as f:
+                f.write("%d\n" % proc.pid)
+        except BaseException:
+            if proc is not None:
+                if proc.poll() is None:
+                    proc.kill()
+                proc.wait()
+                _remove_pid_file(self, pile)
+            raise
         return proc
 
     def wait_responsive(self, piles: typing.Sequence[str], procs: typing.Dict[str, subprocess.Popen],
@@ -207,7 +215,7 @@ class Cluster:
 
     def log_tail(self, pile: str, lines: int = 20) -> str:
         try:
-            with open(self.path("logs", "%s.log" % pile)) as f:
+            with open(self.path("logs", "%s.log" % self.topology.pile_file_name(pile))) as f:
                 return "".join(f.readlines()[-lines:])
         except OSError:
             return "(no log)"
@@ -283,6 +291,14 @@ class Cluster:
 
     def record_macro(self, entry: dict) -> None:
         macros = self._macros()
+        if entry.get("kind") == "keeper_split":
+            pile = entry["pile"]
+            previous = [macro for macro in macros
+                        if macro.get("kind") == "keeper_split" and macro.get("pile") == pile]
+            if previous:
+                entry = previous[0]  # A retry must retain the original pre-fault snapshot.
+            macros = [macro for macro in macros
+                      if not (macro.get("kind") == "keeper_split" and macro.get("pile") == pile)]
         if entry not in macros:
             macros.append(entry)
         self._save_macros(macros)
@@ -296,6 +312,7 @@ def _print(obj) -> None:
 
 
 def cmd_up(cluster: Cluster, args) -> int:
+    """Start a cluster, rolling back only this invocation's children on any startup failure."""
     run = cluster.run
     if args.topology:
         topology = Topology.load(args.topology)
@@ -310,9 +327,11 @@ def cmd_up(cluster: Cluster, args) -> int:
             control_base_port=args.control_base_port, grpc_base_port=args.grpc_base_port)
     from ydb.apps.bridge_skipper.ydbd_mock.lib import instance
     instance.apply_overrides(topology, args.set or [])
-    piles_to_check = set(topology.pile_names)
     if os.path.exists(cluster.path("topology.yaml")):
-        piles_to_check.update(cluster.piles())
+        piles_to_check = cluster.piles()
+    else:
+        cluster._topo = topology
+        piles_to_check = topology.pile_names
     for name in sorted(piles_to_check):
         if cluster.alive(name):
             raise SupervisorError("pile %s is already running (pid %s); run `cluster down` first" % (
@@ -322,8 +341,8 @@ def cmd_up(cluster: Cluster, args) -> int:
         os.makedirs(cluster.path(sub), exist_ok=True)
     if args.fresh:
         for name in topology.pile_names:
-            for path in (cluster.path("state", name, "replica.json"),
-                         cluster.path("logs", "%s.events.jsonl" % name)):
+            for path in (cluster.path("state", topology.pile_file_name(name), "replica.json"),
+                         cluster.path("logs", "%s.events.jsonl" % topology.pile_file_name(name))):
                 if os.path.exists(path):
                     os.remove(path)
     topology.save(cluster.path("topology.yaml"))
@@ -344,27 +363,27 @@ def cmd_up(cluster: Cluster, args) -> int:
         for name in topology.pile_names:
             procs[name] = cluster.spawn(name, truncate_logs=True)
         cluster.wait_responsive(topology.pile_names, procs)
-    except SupervisorError:
+        _print({
+            "ready": True,
+            "cluster": topology.cluster_name,
+            "instances": [{
+                "pile": p.name, "pid": procs[p.name].pid, "control": p.control_endpoint,
+                "nodes": [{"id": n.node_id, "label": n.label, "endpoint": n.endpoint} for n in p.nodes],
+            } for p in topology.piles],
+        })
+    except BaseException:
         for name, proc in procs.items():
             if proc.poll() is None:
                 proc.kill()
             proc.wait()
             _remove_pid_file(cluster, name)
         raise
-    _print({
-        "ready": True,
-        "cluster": topology.cluster_name,
-        "instances": [{
-            "pile": p.name, "pid": procs[p.name].pid, "control": p.control_endpoint,
-            "nodes": [{"id": n.node_id, "label": n.label, "endpoint": n.endpoint} for n in p.nodes],
-        } for p in topology.piles],
-    })
     return 0
 
 
 def _remove_pid_file(cluster: Cluster, pile: str) -> None:
     try:
-        os.remove(cluster.path("pids", "%s.pid" % pile))
+        os.remove(cluster.path("pids", "%s.pid" % cluster.topology.pile_file_name(pile)))
     except OSError:
         pass
 
@@ -444,7 +463,7 @@ def cmd_state(cluster: Cluster, args) -> int:
 def read_events(cluster: Cluster, pile: str) -> typing.List[dict]:
     out = []
     try:
-        with open(cluster.path("logs", "%s.events.jsonl" % pile)) as f:
+        with open(cluster.path("logs", "%s.events.jsonl" % cluster.topology.pile_file_name(pile))) as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -690,9 +709,18 @@ def cmd_keeper_split(cluster: Cluster, args) -> int:
     # what was already unavailable before the macro is not the macro's to undo
     already = [n["label"] for n in cluster.request(pile, "GET", "/state")["nodes"]
                if n["faults"].get("unavailable")]
-    cluster.request(pile, "POST", "/control", {"all": True, "op": "unavailable", "on": True})
-    cluster.record_macro({"kind": "keeper_split", "pile": pile, "already": already})
-    _scenario(cluster, "keeper_split", pile)
+    progress = _MutationReport("keeper_split", [pile])
+    # A lost fault reply must remain undoable by a later heal.
+    progress.step("record", "supervisor", lambda: cluster.record_macro(
+        {"kind": "keeper_split", "pile": pile, "already": already}))
+    progress.data["recorded_intent"] = True
+    progress.data["recovery"] = "keeper-split intent remains recorded: revive re-applies it; cluster heal undoes it"
+    try:
+        progress.step("keeper_faults", pile, lambda: cluster.request(
+            pile, "POST", "/control", {"all": True, "op": "unavailable", "on": True}))
+        progress.step("scenario", "supervisor", lambda: _scenario(cluster, "keeper_split", pile))
+    except PartialMutationError as error:
+        raise PartialMutationError("%s; %s" % (error, progress.data["recovery"]), progress.data) from error
     return 0
 
 
@@ -943,6 +971,10 @@ def build_http_app(cluster: Cluster, supervisor_id: typing.Optional[str] = None)
 
     app = web.Application(middlewares=[errors], client_max_size=1024 * 1024)
 
+    async def index(request):
+        from ydb.apps.bridge_skipper.ydbd_mock.lib.control_ui import PAGE
+        return web.Response(text=PAGE, content_type="text/html")
+
     async def manifest(request):
         return web.json_response(cluster.manifest(identity))
 
@@ -979,6 +1011,7 @@ def build_http_app(cluster: Cluster, supervisor_id: typing.Optional[str] = None)
                 raise asyncio.CancelledError
         return web.json_response(out, status=200 if out.get("ok", True) else 207)
 
+    app.router.add_get("/", index)
     app.router.add_get("/api/v1/manifest", manifest)
     app.router.add_get("/api/v1/state", state)
     app.router.add_get("/api/v1/events", events)
@@ -997,6 +1030,30 @@ def cmd_serve(cluster: Cluster, args) -> int:
             raise SupervisorError("supervisor control has no authentication; use a loopback host or --allow-remote")
     cluster.topology   # validate before starting the HTTP server
     web.run_app(build_http_app(cluster), host=args.host, port=args.port, access_log=None)
+    return 0
+
+
+def cmd_skipper(cluster: Cluster, args) -> int:
+    """Launch the C++ controller with direct node addresses and a state directory per mock session."""
+    topo = cluster.topology
+    if topo.tls:
+        raise SupervisorError("skipper launcher supports plaintext mock topology; use a custom skipper config for TLS")
+    manifest = cluster.manifest()
+    config = {
+        "cluster_id": manifest["cluster_id"],
+        "endpoints": {pile.name: ["grpc://" + node.endpoint for node in pile.nodes] for pile in topo.piles},
+        "http": {"listen": args.listen},
+    }
+    config_dir = cluster.path("bridge_skipper", manifest["cluster_id"])
+    os.makedirs(config_dir, exist_ok=True)
+    config_path = os.path.join(config_dir, "config.json")
+    with open(config_path, "w") as output:
+        json.dump(config, output, indent=2)
+    state_dir = args.state_dir or config_dir
+    try:
+        os.execv(args.binary, [args.binary, "--config", config_path, "--state-dir", state_dir])
+    except OSError as error:
+        raise SupervisorError("cannot launch bridge_skipper: %s" % error) from error
     return 0
 
 
@@ -1086,11 +1143,32 @@ def build_parser() -> argparse.ArgumentParser:
                    ).set_defaults(fn=cmd_reset)
     sub.add_parser("endpoints", help="print the label -> endpoint map").set_defaults(fn=cmd_endpoints)
     sub.add_parser("manifest", help="print versioned logical identities and dial endpoints").set_defaults(fn=cmd_manifest)
+    skipper = sub.add_parser("skipper", help="launch the C++ bridge_skipper against this mock cluster")
+    skipper.add_argument("--binary", required=True, help="path to the built bridge_skipper executable")
+    skipper.add_argument("--listen", default="127.0.0.1:8080")
+    skipper.add_argument("--state-dir", default=None, help="override the state directory per mock session")
+    skipper.set_defaults(fn=cmd_skipper)
     serve = sub.add_parser("serve", help="serve the cluster Lab HTTP API in the foreground")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=21999)
     serve.add_argument("--allow-remote", action="store_true")
     serve.set_defaults(fn=cmd_serve)
+    lab = sub.add_parser("lab", help="run mocks, bridge_skipper and the mock-control UI; Ctrl-C stops all")
+    lab.add_argument("--binary", required=True, help="path to the built bridge_skipper executable")
+    lab.add_argument("--skipper-port", type=int, default=8080)
+    lab.add_argument("--control-port", type=int, default=21999)
+    lab.add_argument("--topology", default=None)
+    lab.add_argument("--piles", default="pile1,pile2")
+    lab.add_argument("--nodes-per-pile", type=int, default=3)
+    lab.add_argument("--control-base-port", type=int, default=22000)
+    lab.add_argument("--grpc-base-port", type=int, default=22100)
+    lab.add_argument("--fresh", action="store_true", help="start with fresh mock replicas")
+
+    def run_lab(cluster, args):
+        from ydb.apps.bridge_skipper.ydbd_mock.lib import lab
+        return lab.main(cluster, args)
+
+    lab.set_defaults(fn=run_lab)
     return parser
 
 

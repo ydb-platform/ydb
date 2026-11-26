@@ -2,6 +2,8 @@
 
 `generate.py` reads protobuf sources from the checked-out repository, compiles a descriptor set, validates flag references in documentation, and adds a generated block to the `default` preset in `ydb/docs/presets.yaml`. PR previews and release builds run it before Diplodoc. The local `ydb/docs/build.sh` entry point runs it too.
 
+Set the repository variable `FEATURE_FLAG_DEFAULTS_ENABLED` to `false` to skip the generator in PR previews and release builds. While it is `false`, changes only to protobuf files or the registered C++ header skip the documentation build and release. Changes to documentation or its workflows still build, and manual workflow runs still build without the generator.
+
 Install the pinned dependencies and run:
 
 ```bash

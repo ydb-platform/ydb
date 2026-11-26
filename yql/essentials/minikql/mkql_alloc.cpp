@@ -1,17 +1,47 @@
+#include "defs.h"
 #include "mkql_alloc.h"
+#ifndef MKQL_DISABLE_UDF_SERVICE_DISPATCH
+    #include "mkql_udf_service.h"
+#endif
 
 #include <yql/essentials/public/udf/udf_value.h>
-
-#include <arrow/memory_pool.h>
 
 #include <util/system/align.h>
 #include <util/generic/scope.h>
 
 #include <tuple>
 
+namespace NKikimr {
+
+namespace {
+
+arrow::MemoryPool* ArrowAllocator = nullptr;
+
+} // namespace
+
+void SetArrowAllocator(arrow::MemoryPool* allocator) {
+    // TODO: check that we didn't already used the MKQL allocator
+    MKQL_ENSURE(allocator, "Arrow allocator must not be null");
+    MKQL_ENSURE(!ArrowAllocator || ArrowAllocator == allocator, "Arrow allocator is already set to a different pool");
+    ArrowAllocator = allocator;
+}
+
+arrow::MemoryPool* GetArrowAllocator() {
+    return ArrowAllocator;
+}
+
+} // namespace NKikimr
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
+
+arrow::MemoryPool* GetArrowAllocatorForAllocation() {
+    if (auto* pool = GetArrowAllocator(); pool) {
+        return pool;
+    }
+    return IsDefaultAllocatorUsed() ? arrow::default_memory_pool() : nullptr;
+}
 
 // NOLINTNEXTLINE(modernize-avoid-c-arrays)
 ui8 ZeroSizeObject alignas(ArrowAlignment)[0];
@@ -85,7 +115,7 @@ void TAllocState::CleanupArrowList(TListEntry* root) {
                 break;
 
             case EMkqlArrowPageKind::DefaultPoolBlock: {
-                auto pool = arrow::default_memory_pool();
+                auto pool = GetArrowAllocatorForAllocation();
                 Y_ABORT_UNLESS(pool);
                 NYql::NUdf::SanitizerMakeRegionAccessible(header, fullSize);
                 pool->Free(reinterpret_cast<uint8_t*>(header), static_cast<int64_t>(fullSize));
@@ -210,6 +240,10 @@ void TScopedAlloc::Acquire() {
         }
         PrevState_ = TlsAllocState;
         TlsAllocState = &MyState_;
+#ifndef MKQL_DISABLE_UDF_SERVICE_DISPATCH
+        UdfSymbolsExchange_ = GetUdfServiceSymbolsExchange();
+        PreviousUdfSymbols_ = UdfSymbolsExchange_(&GetUdfServiceSymbols());
+#endif
         PgAcquireThreadContext(MyState_.MainContext);
     } else {
         Y_ABORT_UNLESS(TlsAllocState == &MyState_, "Mismatch allocator in thread");
@@ -226,6 +260,11 @@ void TScopedAlloc::Release() {
             PgAcquireThreadContext(PrevState_->MainContext);
         }
         PrevState_ = nullptr;
+#ifndef MKQL_DISABLE_UDF_SERVICE_DISPATCH
+        UdfSymbolsExchange_(PreviousUdfSymbols_);
+        UdfSymbolsExchange_ = nullptr;
+        PreviousUdfSymbols_ = nullptr;
+#endif
     }
 }
 
@@ -348,7 +387,8 @@ void* MKQLArrowAllocateImpl(ui64 size) {
         return reinterpret_cast<void*>(ZeroSizeObject);
     }
 
-    if (!TAllocState::IsDefaultArrowAllocatorUsed()) {
+    auto* pool = GetArrowAllocatorForAllocation();
+    if (pool == nullptr) {
         if (size <= ArrowSizeForArena) {
             return MKQLArrowAllocateOnArena(size);
         }
@@ -362,9 +402,7 @@ void* MKQLArrowAllocateImpl(ui64 size) {
     }
 
     void* ptr;
-    if (TAllocState::IsDefaultArrowAllocatorUsed()) {
-        auto pool = arrow::default_memory_pool();
-        Y_ENSURE(pool);
+    if (pool != nullptr) {
         uint8_t* res;
         if (!pool->Allocate(fullSize, &res).ok()) {
             // NOLINTNEXTLINE(hicpp-exception-baseclass)
@@ -378,7 +416,7 @@ void* MKQLArrowAllocateImpl(ui64 size) {
 
     auto* header = (TMkqlArrowHeader*)ptr;
     NYql::NUdf::SanitizerMakeRegionAccessible(header, sizeof(TMkqlArrowHeader));
-    header->Kind = TAllocState::IsDefaultArrowAllocatorUsed() ? EMkqlArrowPageKind::DefaultPoolBlock : EMkqlArrowPageKind::MkqlPoolBlock;
+    header->Kind = pool != nullptr ? EMkqlArrowPageKind::DefaultPoolBlock : EMkqlArrowPageKind::MkqlPoolBlock;
     header->Size = size;
     header->Offset = 0;
     header->UseCount = 0;
@@ -423,7 +461,7 @@ void MKQLArrowFreeImpl(const void* mem, ui64 size) {
         return;
     }
 
-    if (!TAllocState::IsDefaultArrowAllocatorUsed()) {
+    if (GetArrowAllocator() == nullptr && !IsDefaultAllocatorUsed()) {
         if (size <= ArrowSizeForArena) {
             MKQLArrowFreeOnArena(mem);
             return;
@@ -447,7 +485,7 @@ void MKQLArrowFreeImpl(const void* mem, ui64 size) {
     }
 
     if (fromDefaultPool) {
-        auto pool = arrow::default_memory_pool();
+        auto pool = GetArrowAllocatorForAllocation();
         Y_ABORT_UNLESS(pool);
         NYql::NUdf::SanitizerMakeRegionAccessible(reinterpret_cast<void*>(header), fullSize);
         pool->Free(reinterpret_cast<uint8_t*>(header), static_cast<int64_t>(fullSize));
@@ -496,7 +534,7 @@ void MKQLArrowUntrack(const void* mem) {
     // this buffer shrinks original capacity and if it's too small it may wrongly choose the branch for arena page untracking.
     auto it = state->ArrowBuffers.find(mem);
     if (it == state->ArrowBuffers.end()) {
-        if (!TAllocState::IsDefaultArrowAllocatorUsed()) {
+        if (GetArrowAllocator() == nullptr && !IsDefaultAllocatorUsed()) {
             auto* page = (TMkqlArrowHeader*)TAllocState::GetPageStart(mem);
 
             auto it = state->ArrowBuffers.find(page);

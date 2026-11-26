@@ -6,10 +6,11 @@ SIZE(MEDIUM)
 IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:2)
 ELSE()
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 PEERDIR(
+    ydb/core/security/sasl
     ydb/core/tx/replication/ut_helpers
     ydb/core/tx/replication/ydb_proxy/local_proxy
     ydb/public/sdk/cpp/src/client/topic

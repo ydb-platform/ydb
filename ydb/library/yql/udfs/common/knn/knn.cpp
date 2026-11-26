@@ -40,6 +40,20 @@ using TUint8Vector = TTagged<const char*, TagUint8Vector>;
 static constexpr const char TagBitVector[] = "BitVector";
 using TBitVector = TTagged<const char*, TagBitVector>;
 
+static constexpr const char TagUint4Vector[] = "Uint4Vector";
+using TUint4Vector = TTagged<const char*, TagUint4Vector>;
+static constexpr const char TagInt4Vector[] = "Int4Vector";
+using TInt4Vector = TTagged<const char*, TagInt4Vector>;
+
+// Saturating conversion accepts the corresponding byte-sized integer lists.
+SIMPLE_STRICT_UDF(TToBinaryStringUint4, TUint4Vector(TAutoMap<TListType<ui8>>)) {
+    return TKnnVectorSerializer<TUint4, ui8>::Serialize(valueBuilder, args[0]);
+}
+
+SIMPLE_STRICT_UDF(TToBinaryStringInt4, TInt4Vector(TAutoMap<TListType<i8>>)) {
+    return TKnnVectorSerializer<TInt4, i8>::Serialize(valueBuilder, args[0]);
+}
+
 SIMPLE_STRICT_UDF(TToBinaryStringFloat, TFloatVector(TAutoMap<TListType<float>>)) {
     return TKnnVectorSerializer<float>::Serialize(valueBuilder, args[0]);
 }
@@ -264,9 +278,9 @@ public:
 
         auto argType = argsTuple.GetElementType(0);
         auto argTag = GetArg(*typeInfoHelper, argType, builder);
-        if (!ValidTag(argTag, {TagStoredVector, TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagFloat8E4M3Vector, TagFloat8E5M2Vector, TagInt8Vector, TagUint8Vector, TagBitVector})) {
+        if (!ValidTag(argTag, {TagStoredVector, TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagFloat8E4M3Vector, TagFloat8E5M2Vector, TagUint4Vector, TagInt4Vector, TagInt8Vector, TagUint8Vector, TagBitVector})) {
             TStringBuilder sb;
-            sb << "A result from 'ToBinaryString[Float|Float16|BFloat16|Float8E4M3|Float8E5M2|Int8|Uint8|Bit]' is expected as an argument but got '";
+            sb << "A result from 'ToBinaryString[Float|Float16|BFloat16|Float8E4M3|Float8E5M2|Uint4|Int4|Int8|Uint8|Bit]' is expected as an argument but got '";
             TTypePrinter(*typeInfoHelper, argsTuple.GetElementType(0)).Out(sb.Out);
             sb << "'";
             builder.SetError(std::move(sb));
@@ -275,7 +289,7 @@ public:
 
         builder.UserType(userType);
         builder.Args(1)->Add(argType).Flags(ICallablePayload::TArgumentFlags::AutoMap);
-        const bool optionalResult = !(ValidTag(argTag, {TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagFloat8E4M3Vector, TagFloat8E5M2Vector, TagInt8Vector, TagUint8Vector, TagBitVector}) && argType == argsTuple.GetElementType(0));
+        const bool optionalResult = !(ValidTag(argTag, {TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagFloat8E4M3Vector, TagFloat8E5M2Vector, TagUint4Vector, TagInt4Vector, TagInt8Vector, TagUint8Vector, TagBitVector}) && argType == argsTuple.GetElementType(0));
         if (!optionalResult) {
             builder.Returns<TListType<float>>().IsStrict();
         } else {
@@ -321,10 +335,10 @@ public:
         auto arg1Type = argsTuple.GetElementType(1);
         auto arg1Tag = Base::GetArg(*typeInfoHelper, arg1Type, builder);
 
-        if (!Base::ValidTag(arg0Tag, {TagStoredVector, TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagFloat8E4M3Vector, TagFloat8E5M2Vector, TagInt8Vector, TagUint8Vector, TagBitVector}) ||
-            !Base::ValidTag(arg1Tag, {TagStoredVector, TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagFloat8E4M3Vector, TagFloat8E5M2Vector, TagInt8Vector, TagUint8Vector, TagBitVector})) {
+        if (!Base::ValidTag(arg0Tag, {TagStoredVector, TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagFloat8E4M3Vector, TagFloat8E5M2Vector, TagUint4Vector, TagInt4Vector, TagInt8Vector, TagUint8Vector, TagBitVector}) ||
+            !Base::ValidTag(arg1Tag, {TagStoredVector, TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagFloat8E4M3Vector, TagFloat8E5M2Vector, TagUint4Vector, TagInt4Vector, TagInt8Vector, TagUint8Vector, TagBitVector})) {
             TStringBuilder sb;
-            sb << "Both arguments are expected to be results from 'ToBinaryString[Float|Float16|BFloat16|Float8E4M3|Float8E5M2|Int8|Uint8|Bit]' but got '";
+            sb << "Both arguments are expected to be results from 'ToBinaryString[Float|Float16|BFloat16|Float8E4M3|Float8E5M2|Uint4|Int4|Int8|Uint8|Bit]' but got '";
             TTypePrinter(*typeInfoHelper, argsTuple.GetElementType(0)).Out(sb.Out);
             sb << "' and '";
             TTypePrinter(*typeInfoHelper, argsTuple.GetElementType(1)).Out(sb.Out);
@@ -444,6 +458,37 @@ public:
     }
 };
 
+SIMPLE_STRICT_UDF(TVectorFormatError, TOptional<TUtf8>(char*, ui8, ui32)) {
+    const auto data = TStringBuf(args[0].AsStringRef());
+    const auto format = static_cast<EFormat>(args[1].Get<ui8>());
+    const auto dimensions = args[2].Get<ui32>();
+    size_t elementSize;
+    switch (format) {
+        case EFormat::FloatVector:
+            elementSize = sizeof(float);
+            break;
+        case EFormat::Float16Vector:
+        case EFormat::BFloat16Vector:
+            elementSize = sizeof(TFloat16);
+            break;
+        case EFormat::Uint8Vector:
+        case EFormat::Int8Vector:
+        case EFormat::Float8E4M3Vector:
+        case EFormat::Float8E5M2Vector:
+        case EFormat::BitVector:
+        case EFormat::Uint4Vector:
+        case EFormat::Int4Vector:
+            elementSize = 1;
+            break;
+        default:
+            return valueBuilder->NewString("Unknown vector format");
+    }
+    if (NKnnVectorSerialization::IsExpectedFormat(data, format, dimensions, elementSize)) {
+        return {};
+    }
+    return valueBuilder->NewString(NKnnVectorSerialization::FormatError(data, format, dimensions, elementSize));
+}
+
 // TODO IR for Distance functions?
 
 SIMPLE_MODULE(TKnnModule,
@@ -452,10 +497,13 @@ SIMPLE_MODULE(TKnnModule,
               TToBinaryStringBFloat16,
               TToBinaryStringFloat8E4M3,
               TToBinaryStringFloat8E5M2,
+              TToBinaryStringUint4,
+              TToBinaryStringInt4,
               TToBinaryStringInt8,
               TToBinaryStringUint8,
               TToBinaryStringBit,
               TFloatFromBinaryString,
+              TVectorFormatError,
               TInnerProductSimilarity,
               TCosineSimilarity,
               TCosineDistance,

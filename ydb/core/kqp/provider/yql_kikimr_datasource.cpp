@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/protos/kqp_lookup_source.pb.h>
+#include <ydb/library/table_digest/aggregate.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
@@ -24,12 +25,29 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 
+#include <library/cpp/resource/resource.h>
+
 #include <util/generic/is_in.h>
 #include <util/generic/scope.h>
 
 #include <algorithm>
 
 namespace NYql {
+
+bool ValidateExternalTablePgCompatibility(const TKikimrTableMetadata& metadata, bool disablePgCompatibility, TExprContext& ctx, TPositionHandle pos) {
+    if (disablePgCompatibility) {
+        for (const auto& [name, column] : metadata.Columns) {
+            if (column.TypeInfo.GetTypeId() == NKikimr::NScheme::NTypeIds::Pg) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_UNSUPPORTED,
+                    TStringBuilder() << "PostgreSQL compatibility is disabled for external table '" << metadata.Name
+                        << "' because its schema contains PostgreSQL column '" << name << "' of type '" << column.Type
+                        << "' (DisablePgCompatibility feature flag is on)"));
+                return false;
+            }
+        }
+    }
+    return true;
+}
 
 TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content) {
     TExprNode::TListType items;
@@ -61,10 +79,108 @@ bool IsShowCreate(const TExprNode& read) {
     return !GetShowCreateSetting(*read.Child(TKiReadTable::idx_Settings)).empty();
 }
 
+TExprNode::TPtr BuildChecksum(const TExprNode::TPtr& input, TStringBuf algorithm, const TExprNode::TPtr& prefixes,
+                             TTypeAnnotationContext& types, TExprContext& ctx) {
+    const auto pos = input->Pos();
+    const TString library = "/lib/ydb/digest.sql";
+    auto modules = types.Modules->CreateMutableChild();
+    if (!modules->AddFromMemory(library, NResource::Find(library), ctx, /*syntaxVersion=*/1, /*packageVersion=*/0)
+        || !modules->Link(ctx)) {
+        return nullptr;
+    }
+
+    const auto* exports = modules->GetModule(library);
+    YQL_ENSURE(exports);
+    const auto* symbol = exports->Symbols().FindPtr("$DigestFactory");
+    YQL_ENSURE(symbol);
+    TNodeOnNodeOwnedMap clones;
+    auto factory = ctx.DeepCopy(**symbol, exports->ExprCtx(), clones, /*internStrings=*/true, /*copyTypes=*/false);
+
+    auto row = ctx.NewArgument(pos, "row");
+    auto value = ctx.NewCallable(pos, "RemoveSystemMembers", {row});
+    if (prefixes->ChildrenSize()) {
+        value = ctx.NewCallable(pos, "RemovePrefixMembers", {value, prefixes});
+    }
+    auto extractor = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}),
+                                   ctx.NewCallable(pos, "PersistableRepr", {value}));
+    factory = ctx.NewCallable(pos, "Apply", {factory, ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, algorithm)})});
+    auto itemType = ctx.NewCallable(pos, "ListItemType", {ctx.NewCallable(pos, "TypeOf", {input})});
+    auto traits = ctx.NewCallable(pos, "Apply", {factory, itemType, extractor});
+    auto handler = ctx.NewList(pos, {ctx.NewAtom(pos, "digest"), traits});
+    auto aggregate = ctx.NewCallable(pos, "Aggregate", {
+        input, ctx.NewList(pos, {}), ctx.NewList(pos, {handler}), ctx.NewList(pos, {})
+    });
+
+    auto result = ctx.NewArgument(pos, "row");
+    auto project = ctx.NewLambda(pos, ctx.NewArguments(pos, {result}),
+                                 ctx.NewCallable(pos, "Member", {result, ctx.NewAtom(pos, "digest")}));
+    ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+    return ctx.NewCallable(pos, "Map", {aggregate, project});
+}
+
+TExprNode::TPtr RewriteChecksumTable(const TExprNode::TPtr& input, TTypeAnnotationContext& types, TExprContext& ctx) {
+    if (!EnsureArgsCount(*input, 4, ctx) || !EnsureTuple(*input->Child(3), ctx)) {
+        return nullptr;
+    }
+    const auto pos = input->Pos();
+    auto settings = input->ChildPtr(3);
+    TStringBuf algorithm = "CityHash64";
+    if (const auto option = GetSetting(*settings, "algorithm")) {
+        if (!EnsureTupleSize(*option, 2, ctx) || !EnsureAtom(*option->Child(1), ctx)) {
+            return nullptr;
+        }
+        algorithm = option->Child(1)->Content();
+    }
+    try {
+        NDigest::ParseAlgorithm(algorithm);
+    } catch (const yexception&) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+            << "Unsupported CHECKSUM TABLE algorithm: " << algorithm));
+        return nullptr;
+    }
+
+    auto prefixes = ctx.NewList(pos, {});
+    if (const auto option = GetSetting(*settings, "systemcolumnprefixes")) {
+        if (!EnsureTupleSize(*option, 2, ctx) || !EnsureTuple(*option->Child(1), ctx)) {
+            return nullptr;
+        }
+        prefixes = option->ChildPtr(1);
+        for (const auto& prefix : prefixes->Children()) {
+            if (!EnsureAtom(*prefix, ctx)) {
+                return nullptr;
+            }
+        }
+    }
+    settings = RemoveSetting(*RemoveSetting(*settings, "algorithm", ctx), "systemcolumnprefixes", ctx);
+    auto read = ctx.NewCallable(pos, "Read!", {
+        input->ChildPtr(0), input->ChildPtr(1), input->ChildPtr(2), ctx.NewCallable(pos, "Void", {}), settings
+    });
+    auto checksum = BuildChecksum(ctx.NewCallable(pos, "Right!", {read}), algorithm, prefixes, types, ctx);
+    if (!checksum) {
+        return nullptr;
+    }
+    ctx.Step.Repeat(TExprStep::DiscoveryIO)
+            .Repeat(TExprStep::Epochs)
+            .Repeat(TExprStep::Intents)
+            .Repeat(TExprStep::LoadTablesMetadata)
+            .Repeat(TExprStep::RewriteIO);
+    return ctx.NewCallable(pos, "Cons!", {ctx.NewCallable(pos, "Left!", {read}), checksum});
+}
+
 class TKiSourceIntentDeterminationTransformer: public TKiSourceVisitorTransformer {
 public:
-    TKiSourceIntentDeterminationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx)
-        : SessionCtx(sessionCtx) {}
+    TKiSourceIntentDeterminationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types)
+        : SessionCtx(sessionCtx)
+        , Types(types)
+    {}
+
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        if (input->IsCallable(TKiChecksumTable::CallableName())) {
+            output = RewriteChecksumTable(input, Types, ctx);
+            return output ? TStatus::Repeat : TStatus::Error;
+        }
+        return TKiSourceVisitorTransformer::DoTransform(input, output, ctx);
+    }
 
 private:
     TStatus HandleKiRead(TKiReadBase node, TExprContext& ctx) override {
@@ -173,6 +289,7 @@ private:
 
 private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    TTypeAnnotationContext& Types;
 };
 
 class TKiSourceLoadTableMetadataTransformer : public TGraphTransformerBase {
@@ -597,7 +714,7 @@ public:
         , GUCSettings(gucSettings)
         , ConfigurationTransformer(new TKikimrConfigurationTransformer(sessionCtx, types))
         , IntentDeterminationTransformer(CreateSqlPathAliasesTransformer(sessionCtx,
-            new TKiSourceIntentDeterminationTransformer(sessionCtx)))
+            new TKiSourceIntentDeterminationTransformer(sessionCtx, types)))
         , LoadTableMetadataTransformer(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx, types, externalSourceFactory, isInternalCall))
         , TypeAnnotationTransformer(CreateKiSourceTypeAnnotationTransformer(sessionCtx, types))
         , CallableExecutionTransformer(CreateKiSourceCallableExecutionTransformer(gateway, sessionCtx, types))
@@ -715,7 +832,8 @@ public:
 
         if (node.IsCallable(TKiReadTable::CallableName()) ||
             node.IsCallable(TKiReadTableScheme::CallableName()) ||
-            node.IsCallable(TKiReadTableList::CallableName()))
+            node.IsCallable(TKiReadTableList::CallableName()) ||
+            node.IsCallable(TKiChecksumTable::CallableName()))
         {
             return TKiDataSource(node.ChildPtr(1)).Category() == KikimrProviderName;
         }
@@ -882,6 +1000,10 @@ public:
                     if (!databaseType) {
                         ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder()
                             << "Unknown source type for external table \"" << tablePath << "\""));
+                        return nullptr;
+                    }
+                    if (!ValidateExternalTablePgCompatibility(*tableDesc.Metadata,
+                            SessionCtx->Config().FeatureFlags.GetDisablePgCompatibility(), ctx, read->Child(2)->Pos())) {
                         return nullptr;
                     }
                     const auto& source = ExternalSourceFactory->GetOrCreate(*databaseType);

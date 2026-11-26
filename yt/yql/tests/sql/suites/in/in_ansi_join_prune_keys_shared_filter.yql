@@ -1,0 +1,12 @@
+PRAGMA config.flags('OptimizerFlags', 'EmitPruneKeys');
+PRAGMA yt.LateFuseOperations = 'true';
+PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+USE plato;
+
+-- Keep both consumers so CSE can share their non-null filter with NOT IN.
+SELECT Unwrap(key) AS key FROM Dict WHERE key IS NOT NULL;
+SELECT key FROM Dict WHERE key IS NOT NULL;
+
+-- NULL in Dict makes this branch empty. Its right input should reuse the filter.
+SELECT optkey FROM Input WHERE optkey NOT IN (SELECT key FROM Dict);

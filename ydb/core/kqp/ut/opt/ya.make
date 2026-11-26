@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 SIZE(MEDIUM)
 
 SRCS(
@@ -24,6 +24,7 @@ SRCS(
     kqp_peephole_ut.cpp
     kqp_partitions_by_keys_sort_ut.cpp
     kqp_constant_folding_ut.cpp
+    kqp_pg_map_join_ut.cpp
 )
 
 PEERDIR(

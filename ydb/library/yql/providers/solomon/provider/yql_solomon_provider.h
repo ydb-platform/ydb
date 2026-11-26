@@ -10,7 +10,6 @@
 namespace NYql {
 
 constexpr i32 SolomonMaxLabelsCount = 16;
-constexpr i32 SolomonMaxSensorsCount = 50;
 
 struct TSolomonState: public TThrRefBase {
     using TPtr = TIntrusivePtr<TSolomonState>;
@@ -18,12 +17,7 @@ struct TSolomonState: public TThrRefBase {
 public:
     explicit TSolomonState(bool strictConfigValidation = false);
 
-    bool IsRtmrMode() const {
-        return SupportRtmrMode;
-    }
-
 public:
-    bool SupportRtmrMode = true;
     bool WriteThroughDqIntegration = false;
 
     ISolomonGateway::TPtr Gateway;
@@ -36,8 +30,8 @@ public:
     ui32 ExecutorPoolId = 0;
 };
 
-TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway,
-    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, bool supportRtmrMode = true, bool useYtflowEngine = false);
+TDataProviderInitializer GetSolomonDataProviderInitializer(
+    ISolomonGateway::TPtr gateway, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, bool useYtflowEngine = false);
 
 TIntrusivePtr<IDataProvider> CreateSolomonDataSource(TSolomonState::TPtr state);
 TIntrusivePtr<IDataProvider> CreateSolomonDataSink(TSolomonState::TPtr state);

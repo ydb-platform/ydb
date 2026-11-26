@@ -23,6 +23,8 @@ namespace NSequenceProxy {
             EvSetValResult,
             EvGetSequence,
             EvGetSequenceResult,
+            EvAdvanceSequence,
+            EvAdvanceSequenceResult,
             EvEnd,
         };
 
@@ -141,6 +143,50 @@ namespace NSequenceProxy {
                 , Cache(ev.Cache)
                 , Increment(ev.Increment)
                 , Cycle(ev.Cycle)
+            { }
+        };
+
+        // Moves a sequence past the specified range of values: the sequence is advanced so that
+        // everything within [ObservedMin, ObservedMax] counts as already handed out.
+        struct TEvAdvanceSequence : public TEventLocal<TEvAdvanceSequence, EvAdvanceSequence> {
+            TString Database;
+            std::variant<TString, TPathId> Path;
+            i64 ObservedMin = 0;
+            i64 ObservedMax = 0;
+
+            TEvAdvanceSequence(const TString& database, const TString& path, i64 observedMin, i64 observedMax)
+                : Database(database)
+                , Path(path)
+                , ObservedMin(observedMin)
+                , ObservedMax(observedMax)
+            { }
+
+            TEvAdvanceSequence(const TString& database, const TPathId& pathId, i64 observedMin, i64 observedMax)
+                : Database(database)
+                , Path(pathId)
+                , ObservedMin(observedMin)
+                , ObservedMax(observedMax)
+            { }
+        };
+
+        struct TEvAdvanceSequenceResult : public TEventLocal<TEvAdvanceSequenceResult, EvAdvanceSequenceResult> {
+            Ydb::StatusIds::StatusCode Status;
+            NYql::TIssues Issues;
+            TPathId PathId;
+            // State after the advance, useful for logging and tests.
+            i64 NextValue = 0;
+            bool NextUsed = false;
+
+            TEvAdvanceSequenceResult(const TPathId& pathId, i64 nextValue, bool nextUsed)
+                : Status(Ydb::StatusIds::SUCCESS)
+                , PathId(pathId)
+                , NextValue(nextValue)
+                , NextUsed(nextUsed)
+            { }
+
+            TEvAdvanceSequenceResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
+                : Status(status)
+                , Issues(issues)
             { }
         };
     };

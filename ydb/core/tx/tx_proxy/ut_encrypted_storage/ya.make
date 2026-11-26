@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/tx_proxy)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(

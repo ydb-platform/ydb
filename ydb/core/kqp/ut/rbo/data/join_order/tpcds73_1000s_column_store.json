@@ -34,13 +34,13 @@
                               },
                               {
                                 "op_name":"TableFullScan",
-                                "table":"store"
+                                "table":"date_dim"
                               }
                             ]
                         },
                         {
                           "op_name":"TableFullScan",
-                          "table":"date_dim"
+                          "table":"store"
                         }
                       ]
                   }

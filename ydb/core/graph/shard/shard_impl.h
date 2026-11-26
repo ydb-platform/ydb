@@ -8,7 +8,7 @@
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/graph/shard/protos/counters_shard.pb.h>
 #include <ydb/core/graph/api/events.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/console.h>
 #include "backends.h"
 
 namespace NKikimr {

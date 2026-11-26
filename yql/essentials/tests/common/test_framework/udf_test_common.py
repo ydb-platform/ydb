@@ -129,7 +129,6 @@ def facade_runner(prov, cfg_dir, binary=None, secure_params={}, patch_cfg_file=N
             langver=langver,
             secure_params=secure_params,
             patch_cfg_file=patch_cfg_file,
-            ignore_extra_config=yql_utils.get_param('UDF_IGNORE_EXTRA_CONFIG') == '1',
         )
 
     return make
@@ -143,9 +142,15 @@ def canonize_results(case, res, xfail, canonize_ast, diff_tool):
     with open(os.path.join(yql_utils.yql_output_path(), case + '.results.txt'), 'w') as f:
         f.write(res.results)
 
-    to_canonize = (
-        [res.std_err] if xfail else [yatest.common.canonical_file(res.results_file, local=True, diff_tool=diff_tool)]
-    )
+    if xfail:
+        # Use the same source path prefix in diagnostics in both repositories.
+        stderr = res.std_err.replace(
+            "Error: contrib/ydb/",
+            "Error: ydb/",
+        )
+        to_canonize = [stderr]
+    else:
+        to_canonize = [yatest.common.canonical_file(res.results_file, local=True, diff_tool=diff_tool)]
     if canonize_ast:
         to_canonize += canonize_opt(res)
     return to_canonize

@@ -185,8 +185,6 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("partial_peer_probing_timeouts", &TThis::PartialPeerProbingTimeouts)
         .Default();
-    registrar.Parameter("io_consumed_report_window", &TThis::IoConsumedReportWindow)
-        .Default(TDuration::Minutes(5));
     registrar.Parameter("io_fair_share_weight", &TThis::IoFairShareWeight)
         .Default();
 
@@ -280,6 +278,8 @@ void TErasureReaderConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("enable_auto_repair", &TThis::EnableAutoRepair)
         .Default(true);
+    registrar.Parameter("enable_session_failure_history", &TThis::EnableSessionFailureHistory)
+        .Default(false);
     registrar.Parameter("replication_reader_speed_limit_per_sec", &TThis::ReplicationReaderSpeedLimitPerSec)
         .Default(5_MB);
     registrar.Parameter("slow_reader_expiration_timeout", &TThis::SlowReaderExpirationTimeout)
@@ -368,8 +368,6 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("preallocate_disk_space", &TThis::PreallocateDiskSpace)
         .Default(false);
-    registrar.Parameter("io_consumed_report_window", &TThis::IoConsumedReportWindow)
-        .Default(TDuration::Minutes(1));
     registrar.Parameter("io_fair_share_weight", &TThis::IoFairShareWeight)
         .Default();
 

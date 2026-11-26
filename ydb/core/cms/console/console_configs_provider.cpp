@@ -10,6 +10,9 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 
+#include <util/stream/str.h>
+#include <util/ysaveload.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
 namespace NKikimr::NConsole {
@@ -414,14 +417,39 @@ void TConfigsProvider::Die(const TActorContext &ctx)
 
 void TConfigsProvider::ClearState()
 {
+    ClearNodeConfigCache();
+    NodeConfigCacheRegistry.Reset();
+    NodeConfigCacheValidatorStates.clear();
     ConfigIndex.Clear();
     SubscriptionIndex.Clear();
+}
+
+void TConfigsProvider::ClearNodeConfigCache()
+{
+    NodeConfigCache.Clear();
+    *Counters.NodeConfigCacheBytes = 0;
+    *Counters.NodeConfigCacheEntries = 0;
+}
+
+TConfigsProvider::TValidatorStates TConfigsProvider::GetValidatorStates(const TValidatorsRegistry::TPtr& registry)
+{
+    TValidatorStates states;
+    if (registry) {
+        for (const auto& [_, validator] : registry->GetValidators()) {
+            states.emplace_back(validator, validator->GetState());
+        }
+    }
+    return states;
 }
 
 void TConfigsProvider::ApplyConfigModifications(const TConfigModifications &modifications,
                                                 const TActorContext &ctx)
 {
     YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: applying config midifications");
+
+    if (!modifications.IsEmpty()) {
+        ClearNodeConfigCache();
+    }
 
     TSubscriptionSet subscriptions;
     TInMemorySubscriptionSet inMemorySubscriptions;
@@ -1118,18 +1146,53 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, con
 {
     auto &rec = ev->Get()->Record;
 
-    auto response = MakeHolder<TEvConsole::TEvGetNodeConfigResponse>();
-    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
-
     THashSet<ui32> kinds;
     for (auto &kind : rec.GetItemKinds())
         kinds.insert(kind);
 
     auto config = ConfigIndex.GetNodeConfig(rec.GetNode(), kinds);
+    const bool serveYaml = rec.HasServeYaml() && rec.GetServeYaml() &&
+        rec.HasYamlApiVersion() && rec.GetYamlApiVersion() == 1;
+    const bool hasDatabaseYaml = serveYaml && DatabaseYamlConfigs.contains(rec.GetNode().GetTenant());
+    TString key;
+    TStringOutput keyStream(key);
+    Save(&keyStream, serveYaml);
+    Save(&keyStream, hasDatabaseYaml);
+    if (hasDatabaseYaml) {
+        Save(&keyStream, rec.GetNode().GetTenant());
+    }
+    // Preserve kind boundaries and merge order, including the response's version order.
+    for (const auto& [kind, items] : config->ConfigItems) {
+        Save(&keyStream, kind);
+        Save(&keyStream, items.size());
+        for (const auto& item : items) {
+            Save(&keyStream, item->Id);
+            Save(&keyStream, item->Generation);
+        }
+    }
+
+    auto registry = Config.EnableValidationOnNodeConfigRequest ? TValidatorsRegistry::Instance() : nullptr;
+    auto validatorStates = GetValidatorStates(registry);
+    if (registry != NodeConfigCacheRegistry || validatorStates != NodeConfigCacheValidatorStates) {
+        ClearNodeConfigCache();
+        NodeConfigCacheRegistry = registry;
+        NodeConfigCacheValidatorStates = std::move(validatorStates);
+    }
+
+    if (auto it = NodeConfigCache.Find(key); it != NodeConfigCache.End()) {
+        ++*Counters.NodeConfigCacheHits;
+        YDB_LOG_TRACE_CTX(ctx, "Send cached node config");
+        ctx.Send(new IEventHandle(TEvConsole::EvGetNodeConfigResponse, 0,
+            ev->Sender, ctx.SelfID, it->Data, ev->Cookie));
+        return;
+    }
+    ++*Counters.NodeConfigCacheMisses;
+
+    auto response = MakeHolder<TEvConsole::TEvGetNodeConfigResponse>();
+    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
     config->ComputeConfig(*response->Record.MutableConfig(), true);
 
-    if (Config.EnableValidationOnNodeConfigRequest) {
-        auto registry = TValidatorsRegistry::Instance();
+    if (registry) {
         TVector<Ydb::Issue::IssueMessage> issues;
         if (!registry->CheckConfig({}, response->Record.GetConfig(), issues)) {
             response->Record.ClearConfig();
@@ -1148,7 +1211,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, con
     YDB_LOG_TRACE_CTX(ctx, "Send",
         {"ev", response->Record.ShortDebugString()});
 
-    if (rec.HasServeYaml() && rec.GetServeYaml() && rec.HasYamlApiVersion() && rec.GetYamlApiVersion() == 1) {
+    if (serveYaml) {
         response->Record.SetMainYamlConfig(MainYamlConfig);
 
         for (auto &[id, config] : VolatileYamlConfigs) {
@@ -1162,7 +1225,26 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, con
         }
     }
 
-    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    const size_t keySize = key.capacity() + sizeof(TCachedNodeConfig);
+    const bool validatorsUnchanged = !registry ||
+        (registry == TValidatorsRegistry::Instance() && GetValidatorStates(registry) == NodeConfigCacheValidatorStates);
+    if (validatorsUnchanged && keySize < MAX_NODE_CONFIG_CACHE_BYTES &&
+        response->CalculateSerializedSize() <= MAX_NODE_CONFIG_CACHE_BYTES - keySize) {
+        TAllocChunkSerializer serializer;
+        Y_ABORT_UNLESS(response->SerializeToArcadiaStream(&serializer));
+        auto data = serializer.Release(response->CreateSerializationInfo(false));
+        const size_t entrySize = keySize + data->GetSize();
+        if (NodeConfigCache.Size() >= MAX_NODE_CONFIG_CACHE_ENTRIES) {
+            NodeConfigCache.Erase(NodeConfigCache.FindOldest());
+        }
+        NodeConfigCache.Insert(std::move(key), TCachedNodeConfig{data, entrySize});
+        *Counters.NodeConfigCacheBytes = NodeConfigCache.TotalSize();
+        *Counters.NodeConfigCacheEntries = NodeConfigCache.Size();
+        ctx.Send(new IEventHandle(TEvConsole::EvGetNodeConfigResponse, 0,
+            ev->Sender, ctx.SelfID, std::move(data), ev->Cookie));
+    } else {
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
 }
 
 void TConfigsProvider::Handle(TEvConsole::TEvListConfigSubscriptionsRequest::TPtr &ev, const TActorContext &ctx)
@@ -1233,12 +1315,14 @@ void TConfigsProvider::Handle(TEvPrivate::TEvSenderDied::TPtr &ev, const TActorC
 void TConfigsProvider::Handle(TEvPrivate::TEvSetConfig::TPtr &ev, const TActorContext &ctx)
 {
     Y_UNUSED(ctx);
+    ClearNodeConfigCache();
     Config = std::move(ev->Get()->Config);
 }
 
 void TConfigsProvider::Handle(TEvPrivate::TEvSetConfigs::TPtr &ev, const TActorContext &ctx)
 {
     Y_UNUSED(ctx);
+    ClearNodeConfigCache();
     Y_ABORT_UNLESS(ConfigIndex.IsEmpty());
     for (auto &pr : ev->Get()->ConfigItems)
         ConfigIndex.AddItem(pr.second);
@@ -1279,6 +1363,7 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateSubscriptions::TPtr &ev, cons
 }
 
 void TConfigsProvider::Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const TActorContext &ctx) {
+    ClearNodeConfigCache();
     DatabaseYamlConfigs = ev->Get()->DatabaseYamlConfigs;
     if (!ev->Get()->ChangedDatabase) {
         MainYamlConfig = ev->Get()->MainYamlConfig;

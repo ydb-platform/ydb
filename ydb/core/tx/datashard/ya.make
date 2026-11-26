@@ -1,6 +1,8 @@
 YQL_LIBRARY()
 
 SRCS(
+    hnsw_index/hnsw_index_build_unit.cpp
+    hnsw_index/hnsw_index_build_unit.h
     datashard.h
     datashard__engine_host.h
     datashard__lock_rows.h
@@ -10,6 +12,8 @@ SRCS(
     datashard_direct_transaction.h
     datashard_failpoints.h
     datashard_impl.h
+    hnsw_index/datashard_hnsw.cpp
+    hnsw_index/hnsw_index_build_actor.cpp
     datashard_kqp.h
     datashard_locks_db.h
     datashard_outreadset.h
@@ -32,12 +36,18 @@ SRCS(
     read_iterator.h
     read_table_scan.h
     setup_sys_locks.h
+    build_index/table_range_reader.h
+    build_index/vector_resolve_actor.h
+    build_index/delta_kmeans.cpp
     build_index/filter_kmeans.cpp
     build_index/fulltext.cpp
     build_index/fulltext_dict.cpp
+    build_index/table_range_reader.cpp
+    build_index/vector_resolve_actor.cpp
     build_index/recompute_kmeans.cpp
     build_index/reshuffle_kmeans.cpp
     build_index/secondary_index.cpp
+    cdc_aggregated_heartbeats.cpp
     cdc_stream_heartbeat.cpp
     cdc_stream_scan.cpp
     change_collector_cdc_stream.cpp
@@ -51,6 +61,7 @@ SRCS(
     datashard__init.cpp
     datashard_active_transaction.cpp
     datashard_change_sending.cpp
+    datashard_database_freeze.cpp
     datashard_outreadset.cpp
     datashard_s3_uploads.cpp
     datashard_snapshots.cpp
@@ -455,25 +466,34 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     library/cpp/monlib/service/pages
+    library/cpp/streams/zstd
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
     ydb/core/actorlib_impl
     ydb/core/backup/common
     ydb/core/base
-    ydb/library/json_index
     ydb/core/change_exchange
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
+    ydb/core/io_formats/cell_maker
+    ydb/core/io_formats/json
     ydb/core/io_formats/ydb_dump
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
+    ydb/core/kqp/runtime/scheduler
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
     ydb/core/split
     ydb/core/tablet
     ydb/core/tablet_flat
-    ydb/core/tx/long_tx_service/public
+    ydb/core/tablet_flat/base
+    ydb/core/tx/cdc_aggregator/public
+    ydb/core/tx/datashard/hnsw_index
+    ydb/core/tx/datashard/snapshot_retention
     ydb/core/tx/locks
+    ydb/core/tx/long_tx_service/public
     ydb/core/tx/sequenceproxy/public
     ydb/core/util
     ydb/core/wrappers
@@ -484,18 +504,17 @@ PEERDIR(
     ydb/library/actors/http
     ydb/library/backup/proto
     ydb/library/chunks_limiter
+    ydb/library/json_index
     ydb/library/protobuf_printer
     ydb/library/yql/dq/actors/compute
-    yql/essentials/types/binary_json
-    yql/essentials/types/dynumber
+    ydb/public/api/protos
+    ydb/services/lib/sharding
     yql/essentials/core/minsketch
     yql/essentials/parser/pg_wrapper/interface
-    ydb/public/api/protos
     yql/essentials/parser/pg_wrapper/interface
-    ydb/services/lib/sharding
+    yql/essentials/types/binary_json
+    yql/essentials/types/dynumber
     yql/essentials/types/uuid
-    ydb/core/io_formats/cell_maker
-    ydb/core/io_formats/json
 )
 
 IF (OS_WINDOWS)
@@ -517,24 +536,34 @@ ELSE()
     PEERDIR(
         contrib/libs/apache/arrow
         ydb/core/formats/arrow
+        ydb/library/table_digest
     )
 ENDIF()
 
 END()
 
+RECURSE(
+    hnsw_index
+)
+
 RECURSE_FOR_TESTS(
+    hnsw_index/ut
     build_index/ut
+    snapshot_retention
     ut_bloom_filter
     ut_borrowed_compaction
     ut_change_collector
     ut_change_exchange
     ut_compaction
+    ut_database_freeze
     ut_disk_quotas
     ut_direct_restore
     ut_erase_rows
+    ut_erase_rows_proxy
     ut_export
     ut_external_blobs
     ut_followers
+    ut_hnsw_index
     ut_incremental_backup
     ut_incremental_restore_scan
     ut_import_s3_engine

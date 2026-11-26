@@ -20,6 +20,7 @@ SRCS(
     api/distributed_file_client.cpp
     api/etc_client.cpp
     api/file_client.cpp
+    api/flow_client.cpp
     api/journal_client.cpp
     api/not_implemented_client.cpp
     api/operation_client.cpp
@@ -184,6 +185,7 @@ SRCS(
     queue_client/helpers.cpp
     queue_client/partition_reader.cpp
     queue_client/producer_client.cpp
+    queue_client/queue_export.cpp
     queue_client/queue_rowset.cpp
 
     ypath/rich_constrained.cpp

@@ -13,7 +13,7 @@ if __name__ == "__main__":
     parser.add_argument("--http_endpoint", default="http://localhost:8765", help="An endpoint to be used")
     parser.add_argument("--database", default="/Root", help="A database to connect")
     parser.add_argument("--path", default="olap_workload", help="A path prefix for tables")
-    parser.add_argument("--config_name", default="StateStorage", help="Can be StateStorage / StateStorageBoard / SchemeBoard")
+    parser.add_argument("--config_name", default="StateStorage", help="Can be StateStorage / StateStorageBoard / SchemeBoard / All")
     parser.add_argument("--duration", default=10 ** 9, type=lambda x: int(x), help="A duration of workload in seconds.")
     args = parser.parse_args()
 

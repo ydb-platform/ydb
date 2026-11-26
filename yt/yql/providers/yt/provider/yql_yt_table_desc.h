@@ -19,7 +19,7 @@
 
 namespace NYql {
 
-class TQContext;
+struct TTypeAnnotationContext;
 
 enum class TYtTableIntent: ui32 {
     Read        = 1 << 0,
@@ -61,9 +61,9 @@ struct TYtViewDescription {
     const TTypeAnnotationNode* RowType = nullptr; // Filled only if scheme requested
 
     bool Fill(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion,
-        const TString& viewId, const TQContext& qContext, TExprContext& ctx,
-        IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-        bool enableViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags);
+        const TString& viewId, TExprContext& ctx,
+        TTypeAnnotationContext& types,
+        bool enableViewIsolation, const NSQLTranslation::TSqlFlags& sqlFlags);
     void CleanupCompiledSQL();
 };
 
@@ -85,13 +85,13 @@ struct TYtTableDescriptionBase {
     bool IgnoreTypeV3 = false;
 
     bool Fill(const TString& provider, const TString& cluster, const TString& table, const TStructExprType* type,
-        const TString& viewSql, ui16 syntaxVersion, const TQContext& qContext, const THashMap<TString, TString>& metaAttrs, TExprContext& ctx,
-        IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-        bool enableViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags);
+        const TString& viewSql, ui16 syntaxVersion, const THashMap<TString, TString>& metaAttrs, TExprContext& ctx,
+        TTypeAnnotationContext& types,
+        bool enableViewIsolation, const NSQLTranslation::TSqlFlags& sqlFlags);
     void CleanupCompiledSQL();
     bool FillViews(const TString& provider, const TString& cluster, const TString& table, const THashMap<TString, TString>& metaAttrs,
-        const TQContext& qContext, TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-        bool enableViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags);
+        TExprContext& ctx, TTypeAnnotationContext& types,
+        bool enableViewIsolation, const NSQLTranslation::TSqlFlags& sqlFlags);
 };
 
 }

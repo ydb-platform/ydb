@@ -243,7 +243,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
         {.IgnoreSortOrder = false}).first);
 }
 
-TEST_F(TTableSchemaCompatibilityTest, TestCheckTableSchemaCompatibility)
+TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibility)
 {
     EXPECT_EQ(ESchemaCompatibility::Incompatible,
         CheckTableSchemaCompatibility(

@@ -312,9 +312,6 @@ TString TTransactionState::TWritePromise::NextString(TDuration simTimeout) {
     } else {
         res << "ERROR: " << status;
     }
-    if (msg->Record.GetIsDuplicate()) {
-        res << " (duplicate)";
-    }
     return res;
 }
 

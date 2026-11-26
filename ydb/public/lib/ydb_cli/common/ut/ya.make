@@ -19,12 +19,14 @@ SRCS(
     oidc_token_cache_ut.cpp
     pg_dump_parser_ut.cpp
     print_utils_ut.cpp
+    query_plan_ut.cpp
     recursive_remove_ut.cpp
     scheme_query_utils_ut.cpp
     sys_ut.cpp
     tabbed_table_ut.cpp
     tx_mode_utils_ut.cpp
     utf8_utils_ut.cpp
+    yt_ut.cpp
 )
 
 END()

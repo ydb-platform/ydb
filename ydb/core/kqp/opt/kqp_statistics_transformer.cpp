@@ -687,11 +687,11 @@ public:
                     value = TExprBase(listPtr->ChildPtr(2)->ChildPtr(1));
                 }
                 if (OlapCompSigns.contains(compSign)) {
-                    resSelectivity = this->ComputeInequalitySelectivity(member, value, false, OlapCompStrToEInequalityPredicate[compSign]);
+                    resSelectivity = this->ComputeInequalitySelectivity(member, value, OlapCompStrToEInequalityPredicate[compSign]);
                 } else if (compSign == "eq") {
-                    resSelectivity = this->ComputeEqualitySelectivity(member, value, false);
+                    resSelectivity = this->ComputeEqualitySelectivity(member, value);
                 } else if (compSign == "neq") {
-                    resSelectivity = 1 - this->ComputeEqualitySelectivity(member, value, false);
+                    resSelectivity = 1 - this->ComputeEqualitySelectivity(member, value);
                 } else if (RegexpSigns.contains(compSign)) {
                     return 0.5;
                 }

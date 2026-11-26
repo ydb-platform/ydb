@@ -947,28 +947,20 @@ NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& re
     return appConfig;
 }
 
-TMaybe<NKikimrConfig::TAppConfig> GetActualDynConfig(
+NKikimrConfig::TAppConfig GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
-    const TMaybe<NKikimrConfig::TAppConfig>& regularConfig,
+    const NKikimrConfig::TAppConfig& regularConfig,
     IConfigUpdateTracer& ConfigUpdateTracer)
 {
-    if (yamlConfig.GetYamlConfigEnabled()) {
-        for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; kind = NextValidKind(kind)) {
-            if (HasCorrespondingManagedKind(kind, yamlConfig)) {
-                ConfigUpdateTracer.AddUpdate(kind, TConfigItemInfo::EUpdateKind::ReplaceConfigWithConsoleProto);
-            } else {
-                ConfigUpdateTracer.AddUpdate(kind, TConfigItemInfo::EUpdateKind::ReplaceConfigWithConsoleYaml);
-            }
-        }
-
-        return yamlConfig;
-    }
-
+    using EUpdateKind = TConfigItemInfo::EUpdateKind;
+    const bool useYaml = yamlConfig.GetYamlConfigEnabled();
     for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; kind = NextValidKind(kind)) {
-        ConfigUpdateTracer.AddUpdate(kind, TConfigItemInfo::EUpdateKind::ReplaceConfigWithConsoleProto);
+        const auto source = useYaml && !HasCorrespondingManagedKind(kind, regularConfig)
+            ? EUpdateKind::ReplaceConfigWithConsoleYaml
+            : EUpdateKind::ReplaceConfigWithConsoleProto;
+        ConfigUpdateTracer.AddUpdate(kind, source);
     }
-
-    return regularConfig;
+    return useYaml ? yamlConfig : regularConfig;
 }
 
 void UpdateConfigUpdateTracer(
@@ -992,7 +984,8 @@ NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& grpcSettings, con
             config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
         }
     }
-    config.SetDatabase(database);
+    // Bootstrap clients address a known domain; domain_path in the RPC remains its bare name.
+    config.SetDatabase(CanonizePath(TString(database)));
     if (authToken) {
         config.SetAuthToken(authToken.value());
     }

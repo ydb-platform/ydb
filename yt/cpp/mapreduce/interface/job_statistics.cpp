@@ -84,7 +84,7 @@ public:
         result->Count += other.Count;
     }
 
-    static void ParseNode(const TNode& node, TState2TaskName2Data* output)
+    static TJobStatistics::TDataEntry ParseSummary(const TNode& node)
     {
         auto getInt = [] (const TNode& theNode, TStringBuf key) {
             const auto& nodeAsMap = theNode.AsMap();
@@ -99,6 +99,16 @@ public:
             return valueNode.AsInt64();
         };
 
+        return {
+            .Max = getInt(node, "max"),
+            .Min = getInt(node, "min"),
+            .Sum = getInt(node, "sum"),
+            .Count = getInt(node, "count"),
+        };
+    }
+
+    static void ParseNode(const TNode& node, TState2TaskName2Data* output)
+    {
         for (const auto& [stateStr, taskName2DataNode] : node.AsMap()) {
             EJobState state;
             if (!TryFromString(stateStr, state)) {
@@ -106,17 +116,32 @@ public:
             }
             for (const auto& [taskName, dataNode] : taskName2DataNode.AsMap()) {
                 auto fixedTaskName = FixTaskName(taskName);
-                auto& data = (*output)[state][fixedTaskName.Get()];
-                data.Max = getInt(dataNode, "max");
-                data.Min = getInt(dataNode, "min");
-                data.Sum = getInt(dataNode, "sum");
-                data.Count = getInt(dataNode, "count");
+                (*output)[state][fixedTaskName.Get()] = ParseSummary(dataNode);
             }
         }
     }
 
     static void ParseNode(const TNode& node, const TString& curPath, TName2State2TaskName2Data* output)
     {
+        if (node.IsList()) {
+            auto& states = (*output)[curPath];
+            for (const auto& entry : node.AsList()) {
+                const auto& tags = entry["tags"];
+                EJobState state;
+                if (!TryFromString(tags["job_state"].AsString(), state)) {
+                    continue;
+                }
+                auto taskName = FixTaskName(tags["job_type"].AsString());
+                auto summary = ParseSummary(entry["summary"]);
+                auto& tasks = states[state];
+                auto [it, inserted] = tasks.emplace(taskName.Get(), summary);
+                if (!inserted) {
+                    Aggregate(&it->second, summary);
+                }
+            }
+            return;
+        }
+
         Y_ABORT_UNLESS(node.IsMap());
 
         for (const auto& [key, value] : node.AsMap()) {

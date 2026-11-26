@@ -15,6 +15,7 @@ PEERDIR(
 
     # TODO(prime@:) remove this, once dependency cycle with yt/core is resolved
     yt/yt_proto/yt/core
+    library/cpp/containers/absl
 )
 
 END()

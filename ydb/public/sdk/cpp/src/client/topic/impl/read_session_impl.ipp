@@ -120,9 +120,6 @@ void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(std::optional<uin
         return;
     }
     if (auto sessionShared = callbackContext->LockShared()) {
-        if (commitOffset.has_value()) {
-            SetFirstNotReadOffset(commitOffset.value());
-        }
         sessionShared->ConfirmPartitionStreamCreate(this, readOffset, commitOffset, maxOffset);
     }
 }
@@ -401,17 +398,15 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
     TDeferredActions<UseMigrationProtocol> deferred;
     {
         std::lock_guard guard(Lock);
+        if (Aborting) {
+            return false;
+        }
         connectContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
         if (!connectContext || !connectTimeoutContext) {
             return false;
         }
 
-        if (Aborting) {
-            Cancel(connectContext);
-            Cancel(connectTimeoutContext);
-            return false;
-        }
         if (Processor) {
             Processor->Cancel();
         }
@@ -739,7 +734,7 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::IsActualPartitionStrea
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream,
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamCreate(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream,
     std::optional<ui64> readOffset, std::optional<ui64> commitOffset, std::optional<ui64> maxOffset) {
     TStringBuilder offsetLogStr;
     if (commitOffset) {
@@ -764,6 +759,10 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
                 << GetPartitionStreamId(partitionStream)
         );
         return;
+    }
+
+    if (commitOffset) {
+        partitionStream->SetFirstNotReadOffset(*commitOffset);
     }
 
     TClientMessage<UseMigrationProtocol> req;
@@ -1551,7 +1550,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(
     TDeferredActions<false> deferred;
     with_lock (Lock) {
         Ydb::Topic::StreamDirectReadMessage::DirectReadResponse response;
-        if (!responses->Dequeue(&response)) {
+        if (Aborting || !responses->Dequeue(&response)) {
             return;
         }
 
@@ -1692,11 +1691,17 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     NextPartitionStreamId += PartitionStreamIdStep;
     PartitionStreams.insert_or_assign(partitionSessionId, partitionStream);
 
+    std::optional<uint64_t> retainedStartOffset;
+    if (msg.has_retained_start_offset()) {
+        retainedStartOffset = msg.retained_start_offset();
+    }
+
     // Send event to user.
     bool pushRes = EventsQueue->PushEvent(
         partitionStream,
         TReadSessionEvent::TStartPartitionSessionEvent(
-            partitionStream, msg.committed_offset(), msg.partition_offsets().end()),
+            partitionStream, msg.committed_offset(), msg.partition_offsets().start(),
+            msg.partition_offsets().end(), retainedStartOffset),
         deferred);
 
     if (!pushRes) {
@@ -2106,6 +2111,11 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortSession(TASession
     TDeferredActions<UseMigrationProtocol> deferred;
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Closing session to cluster: " << closeEvent.DebugString());
 
+    {
+        std::lock_guard guard(Lock);
+        AbortImpl(&deferred);
+    }
+
     EventsQueue->Close(closeEvent, deferred);
 }
 
@@ -2118,7 +2128,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl(TDeferredAct
         Aborting = true;
         CallCloseCallbackImpl(deferred);
 
-        // Cancel(ClientContext); // Don't cancel, because this is used only as factory for other contexts.
         Cancel(ConnectContext);
         Cancel(ConnectTimeoutContext);
         Cancel(ConnectDelayContext);
@@ -2126,6 +2135,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl(TDeferredAct
         if (Processor) {
             Processor->Cancel();
         }
+        ConnectContext.reset();
+        ConnectTimeoutContext.reset();
+        ConnectDelayContext.reset();
 
         if constexpr (!UseMigrationProtocol) {
             if (DirectReadSessionManager) {
@@ -2133,6 +2145,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl(TDeferredAct
                 DirectReadSessionManager.reset();
             }
         }
+        Cancel(ClientContext);
+        ClientContext.reset();
     }
 
     if (deferred) {

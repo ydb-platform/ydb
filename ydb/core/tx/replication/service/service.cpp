@@ -9,21 +9,26 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
-#include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 #include <ydb/core/protos/counters_replication.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/core/transfer/transfer_writer.h>
+#include <ydb/core/tx/replication/common/transfer_writer_stats.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <library/cpp/openssl/crypto/sha.h>
+
+#include <util/digest/multi.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/set.h>
 #include <util/generic/map.h>
 #include <util/generic/size_literals.h>
 
+#include <util/string/hex.h>
+
 #include <tuple>
+#include <variant>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_SERVICE
 
@@ -219,7 +224,8 @@ public:
             return; // old controller: do not authorize further source commits
         }
         const auto id = GetWorkerId(ev->Sender);
-        AFL_VERIFY_DEBUG(HasWorker(id))("worker", id);
+        YDB_LOG_VERIFY_DEBUG(HasWorker(id),
+            {"worker", id});
         auto& record = ev->Get()->Record;
         id.Serialize(*record.MutableWorker());
         ctx.Send(ev->Forward(ActorId));
@@ -295,6 +301,7 @@ public:
         IndexBuildWorkers.erase(id);
         PendingIndexTxIds.erase(id);
         DataEnded.erase(id);
+        RemoveWorkerHeartbeat(id);
         Workers.erase(it);
     }
 
@@ -309,6 +316,7 @@ public:
         IndexBuildWorkers.erase(it->second);
         PendingIndexTxIds.erase(it->second);
         DataEnded.erase(it->second);
+        RemoveWorkerHeartbeat(it->second);
         Workers.erase(it->second);
 
         PendingStatsValues.erase(it->second);
@@ -531,6 +539,18 @@ public:
     }
 
 private:
+    void RemoveWorkerHeartbeat(const TWorkerId& id) {
+        const auto version = Workers.at(id).Heartbeat;
+        WorkersWithHeartbeat.erase(id);
+        const auto it = WorkersByHeartbeat.find(version);
+        if (it != WorkersByHeartbeat.end()) {
+            it->second.erase(id);
+            if (it->second.empty()) {
+                WorkersByHeartbeat.erase(it);
+            }
+        }
+    }
+
     static void SendTxIdResult(IActorOps* ops, const TActorId& recipient, const TMap<TRowVersion, ui64>& result) {
         auto ev = MakeHolder<TEvService::TEvTxIdResult>();
 
@@ -563,14 +583,49 @@ private:
 
 }; // TSessionInfo
 
-struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
+struct TStaticCredentialsKey {
+    TString User;
+    TString PasswordFingerprint;
+
+    bool operator==(const TStaticCredentialsKey&) const = default;
+
+    size_t Hash() const {
+        return MultiHash(User, PasswordFingerprint);
+    }
+};
+
+struct TOAuthCredentialsKey {
+    TString TokenFingerprint;
+
+    bool operator==(const TOAuthCredentialsKey&) const = default;
+
+    size_t Hash() const {
+        return THash<TString>()(TokenFingerprint);
+    }
+};
+
+struct TIamCredentialsKey {
+    TString ServiceAccountId;
+    TString ResourceId;
+
+    bool operator==(const TIamCredentialsKey&) const = default;
+
+    size_t Hash() const {
+        return MultiHash(ServiceAccountId, ResourceId);
+    }
+};
+
+using TCredentialsKey = std::variant<TStaticCredentialsKey, TOAuthCredentialsKey, TIamCredentialsKey>;
+
+struct TConnectionParams: std::tuple<TString, TString, bool, TString, TCredentialsKey> {
     explicit TConnectionParams(
             const TString& endpoint,
             const TString& database,
             bool ssl,
             const TString& caCert,
-            const TString& user)
-        : std::tuple<TString, TString, bool, TString, TString>(endpoint, database, ssl, caCert, user)
+            TCredentialsKey credentials)
+        : std::tuple<TString, TString, bool, TString, TCredentialsKey>(
+            endpoint, database, ssl, caCert, std::move(credentials))
     {
     }
 
@@ -590,6 +645,17 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
         return std::get<3>(*this);
     }
 
+    size_t Hash() const {
+        const auto& credentials = std::get<4>(*this);
+        return MultiHash(Endpoint(), Database(), EnableSsl(), CaCert(), credentials.index(),
+            std::visit([](const auto& key) { return key.Hash(); }, credentials));
+    }
+
+    static TString FingerprintCredential(const TString& credential) {
+        const auto digest = NOpenSsl::NSha256::Calc(credential.data(), credential.size());
+        return HexEncode(digest.data(), digest.size());
+    }
+
     static TConnectionParams FromProto(const NKikimrReplication::TConnectionParams& params) {
         const auto& endpoint = params.GetEndpoint();
         const auto& database = params.GetDatabase();
@@ -598,11 +664,14 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
 
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
-            return TConnectionParams(endpoint, database, ssl, caCert, params.GetStaticCredentials().GetUser());
+            return TConnectionParams(endpoint, database, ssl, caCert, TStaticCredentialsKey{
+                params.GetStaticCredentials().GetUser(), FingerprintCredential(params.GetStaticCredentials().GetPassword())});
         case NKikimrReplication::TConnectionParams::kOAuthToken:
-            return TConnectionParams(endpoint, database, ssl, caCert, params.GetOAuthToken().GetToken());
+            return TConnectionParams(endpoint, database, ssl, caCert, TOAuthCredentialsKey{
+                FingerprintCredential(params.GetOAuthToken().GetToken())});
         case NKikimrReplication::TConnectionParams::kIamCredentials:
-            return TConnectionParams(endpoint, database, ssl, caCert, params.GetIamCredentials().GetServiceAccountId());
+            return TConnectionParams(endpoint, database, ssl, caCert, TIamCredentialsKey{
+                params.GetIamCredentials().GetServiceAccountId(), params.GetIamCredentials().GetResourceId()});
         default:
             Y_ABORT("Unexpected credentials");
         }
@@ -613,7 +682,11 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
 } // NKikimr::NReplication::NService
 
 template <>
-struct THash<NKikimr::NReplication::NService::TConnectionParams> : THash<std::tuple<TString, TString, bool, TString, TString>> {};
+struct THash<NKikimr::NReplication::NService::TConnectionParams> {
+    size_t operator()(const NKikimr::NReplication::NService::TConnectionParams& params) const {
+        return params.Hash();
+    }
+};
 
 namespace NKikimr::NReplication {
 
@@ -707,6 +780,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             .AutoCommit(autoCommit)
             .ReportStats(reportStats)
             .FailOnDataLoss(failOnDataLoss)
+            .CheckStatusForDataLoss(failOnDataLoss && AppData()->ReplicationConfig.GetEnableStatusBasedDataLossDetection())
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path(settings.GetTopicPath())
                 .AppendPartitionIds(settings.GetTopicPartitionId())
@@ -740,9 +814,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             const ITransferWriterFactory* transferWriterFactory)
     {
         if (!CompilationService) {
-            CompilationService = Register(
-                NFq::NRowDispatcher::CreatePurecalcCompileService({}, MakeIntrusive<NMonitoring::TDynamicCounters>())
-            );
+            CompilationService = Register(transferWriterFactory->CreateCompilationService());
         }
 
         return [

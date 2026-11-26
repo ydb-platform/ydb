@@ -102,7 +102,7 @@ Y_UNIT_TEST(DispatcherNameNormalization) {
         NCommon::TConfSetting<bool> Value;
     };
     for (const bool normalizeSettingNames : {false, true}) {
-        NCommon::TDispatcher<TTestSettings> dispatcher("", false, normalizeSettingNames);
+        NCommon::TDispatcher<TTestSettings> dispatcher("", /*strictConfigValidation=*/false, normalizeSettingNames);
         dispatcher.AddSetting("TestSetting", &TTestSettings::Value);
         for (const auto name : {"TestSetting", "TESTSETTING", "test_setting"}) {
             const bool matches = normalizeSettingNames || TStringBuf(name) == "TestSetting";

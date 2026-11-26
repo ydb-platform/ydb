@@ -59,7 +59,11 @@ TString NormalizePathValue(TStringBuf key, TStringBuf value, const std::function
         return JoinSeq(',', paths);
     }
     if (!value.empty() && (key == "database" || key == "database_path" || key == "tenant")) {
-        return normalizer(CanonizePath(TString(value)));
+        TString database(value);
+        if (AppData()->FeatureFlags.GetEnableRelativePaths()) {
+            database = PrependDomainIfNeeded("/" + AppData()->DomainsInfo->GetDomain()->Name, database);
+        }
+        return normalizer(CanonizePath(database));
     }
     return normalizer(value);
 }
@@ -348,6 +352,7 @@ public:
                     {"/viewer/netinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/topicinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/storage_usage", {EViewerEndpointAccessType::Viewer}},
+                    {"/storage/nbs", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/pqconsumerinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/tabletcounters", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/labeledcounters", {EViewerEndpointAccessType::Viewer}},

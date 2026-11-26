@@ -1,0 +1,16 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT item
+FROM AsTable([<|s: <|items: [1, 2]|>, items: [9, 10]|>]) AS x
+FLATTEN LIST BY (s.items AS item)
+ORDER BY item;
+
+SELECT item
+FROM AsTable([<|s: <|items: [1, 2]|>|>]) AS x
+FLATTEN LIST BY s.items AS item
+ORDER BY item;
+
+SELECT item
+FROM AsTable([<|s: <|items: ListCreate(Int32)|>, items: [9, 10]|>]) AS x
+FLATTEN LIST BY (s.items AS item)
+ORDER BY item;

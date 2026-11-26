@@ -34,12 +34,13 @@ TString MakeConsumerPath(const TString& consumer);
     }
 
 
-#define CHECK_VALID_AND_RETURN(result)    \
-    if (!Valid) {                         \
-        return TString();                 \
-    } else {                              \
-        AFL_ENSURE(!result.empty())("original_topic", OriginalTopic); \
-        return result;                    \
+#define CHECK_VALID_AND_RETURN(result)          \
+    if (!Valid) {                               \
+        return TString();                       \
+    } else {                                    \
+        YDB_LOG_ENSURE(!result.empty(),         \
+            {"originalTopic", OriginalTopic});  \
+        return result;                          \
     }
 
 class TTopicNameConverter;
@@ -59,13 +60,13 @@ class TDiscoveryConverter {
 
 private:
     void BuildForFederation(const TStringBuf& databaseBuf, TStringBuf topicPath);
-    void BuildFstClassNames();
+    void BuildFstClassNames(bool enableRelativePaths);
     [[nodiscard]] bool BuildFromFederationPath(const TString& rootPrefix);
     [[nodiscard]] bool BuildFromShortModernName();
 
 protected:
     TDiscoveryConverter() = default;
-    static TDiscoveryConverterPtr ForFstClass(const TString& topic, const TString& database);
+    static TDiscoveryConverterPtr ForFstClass(const TString& topic, const TString& database, bool enableRelativePaths);
     static TDiscoveryConverterPtr ForFederation(const TString& topic, const TString& dc, const TString& localDc,
                                                 const TString& database, const TString& pqNormalizedPrefix);
 
@@ -113,6 +114,10 @@ public:
      */
     const TMaybe<TString>& GetSecondaryPath(const TString& databasePath);
 
+    // Metacache second lookup: LbRoot/account + modern name, including -mirrored-from-<dc>.
+    // Empty when that fallback does not apply.
+    TMaybe<TString> TrySecondaryDiscoveryPath(const TString& lbRoot);
+
     /**
     Only for special cases.
     */
@@ -122,14 +127,18 @@ public:
     }
 
     void RestorePrimaryPath() {
-        AFL_ENSURE(!OriginalPath.empty())("original_path", OriginalPath)("primary_path", PrimaryPath);
+        YDB_LOG_ENSURE(!OriginalPath.empty(),
+            {"originalPath", OriginalPath},
+            {"primaryPath", PrimaryPath});
         PrimaryPath = OriginalPath;
         OriginalPath.clear();
     }
 
     // Only for control plane
     const TString& GetFullModernName() const {
-        AFL_ENSURE(!FullModernName.empty())("original_topic", OriginalTopic)("primary_path", PrimaryPath);
+        YDB_LOG_ENSURE(!FullModernName.empty(),
+            {"originalTopic", OriginalTopic},
+            {"primaryPath", PrimaryPath});
         return FullModernName;
     }
 
@@ -193,6 +202,7 @@ protected:
                         const TString& ydbDatabaseRootOverride,
                         const TMaybe<TString>& clientsideNameOverride = {});
 public:
+    using TDiscoveryConverter::GetDatabase;
 
     static TTopicConverterPtr ForFirstClass(const NKikimrPQ::TPQTabletConfig& pqTabletConfig);
 
@@ -317,10 +327,11 @@ public:
     }
 
     TDiscoveryConverterPtr MakeDiscoveryConverter(
-            const TString& topic, TMaybe<bool> isInLocalDc, const TString& dc = TString(), const TString& database = TString()
+            const TString& topic, TMaybe<bool> isInLocalDc, const TString& dc = TString(), const TString& database = TString(),
+            bool enableRelativePaths = false
     ) {
         if (NoDcMode) {
-            return TDiscoveryConverter::ForFstClass(topic, database);
+            return TDiscoveryConverter::ForFstClass(topic, database, enableRelativePaths);
         } else {
             TString localDc;
             if (!IsLocalDc.Defined()) {
@@ -397,8 +408,10 @@ public:
                           const TVector<TString>& clusters = {});
 
     void UpdateClusters(const TVector<TString>& clusters);
-    TTopicsToConverter GetReadTopicsList(const THashSet<TString>& clientTopics, bool onlyLocal, const TString& database) const;
-    TDiscoveryConverterPtr GetWriteTopicConverter(const TString& clientName, const TString& database);
+    TTopicsToConverter GetReadTopicsList(const THashSet<TString>& clientTopics, bool onlyLocal, const TString& database,
+                                       bool enableRelativePaths = false) const;
+    TDiscoveryConverterPtr GetWriteTopicConverter(const TString& clientName, const TString& database,
+                                                bool enableRelativePaths = false);
     TConverterFactoryPtr GetConverterFactory() const;
 
     TString GetLocalCluster() const { return ConverterFactory->GetLocalCluster(); }

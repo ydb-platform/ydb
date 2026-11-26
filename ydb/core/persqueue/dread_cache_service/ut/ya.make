@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/persqueue)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(

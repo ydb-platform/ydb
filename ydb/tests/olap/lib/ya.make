@@ -13,7 +13,13 @@ PY3_LIBRARY()
         ydb_cli.py
     )
 
+    RESOURCE_FILES(
+        PREFIX ydb/tests/olap/lib/
+        allure-html-plugin/static/styles.css
+    )
+
     PEERDIR(
+        library/python/resource
         contrib/python/allure-pytest
         contrib/python/allure-python-commons
         contrib/python/PyYAML

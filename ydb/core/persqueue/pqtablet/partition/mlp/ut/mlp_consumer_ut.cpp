@@ -963,6 +963,93 @@ Y_UNIT_TEST(DelayedMessageNotReadableUntilDeadline) {
     }
 }
 
+Y_UNIT_TEST(DisabledInflightMutationStopsFetchingButAllowsDraining) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    auto setDisabled = [&](bool disabled) {
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetEnableMLPConsumerInFlightMutateDisabled(disabled);
+        }
+    };
+    setDisabled(false);
+
+    const auto status = CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    const size_t bufferedMessages = TStorage::TStorageSettings{}.MinMessages;
+    WriteMany(setup, "/Root/topic1", 0, /*messageSize=*/64, bufferedMessages);
+
+    // Fill the normal read-ahead window before adding the extra message, so
+    // no fetch already in flight can bring it into the consumer's storage.
+    const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+    size_t inflightMessages = 0;
+    do {
+        auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+        inflightMessages = state->Messages.size();
+    } while (inflightMessages < bufferedMessages && TInstant::Now() < deadline);
+    UNIT_ASSERT_VALUES_EQUAL(inflightMessages, bufferedMessages);
+
+    setup->Write("/Root/topic1", "outside-inflight", 0);
+    auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+    UNIT_ASSERT_VALUES_EQUAL(state->Messages.size(), bufferedMessages);
+    for (const auto& message : state->Messages) {
+        UNIT_ASSERT_C(message.Offset < bufferedMessages, message.Offset);
+        UNIT_ASSERT_VALUES_EQUAL(message.Status, static_cast<ui32>(TStorage::EMessageStatus::Unprocessed));
+    }
+
+    setDisabled(true);
+
+    auto read = [&](TDuration waitTime = TDuration::Seconds(1)) {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = waitTime,
+            .ProcessingTimeout = TDuration::Minutes(5),
+            .MaxNumberOfMessage = 10,
+        });
+        auto response = GetReadResponse(runtime, waitTime + TDuration::Seconds(10));
+        UNIT_ASSERT_C(response, "MLP read timed out");
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+        return response;
+    };
+
+    THashSet<ui64> receivedOffsets;
+    while (receivedOffsets.size() < bufferedMessages) {
+        auto response = read();
+        UNIT_ASSERT_C(!response->Messages.empty(), "Buffered messages must remain readable");
+        TCommitterSettings commit{
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+        };
+        for (const auto& message : response->Messages) {
+            UNIT_ASSERT_VALUES_EQUAL(message.MessageId.PartitionId, 0);
+            UNIT_ASSERT_C(message.MessageId.Offset < bufferedMessages, message.MessageId.Offset);
+            UNIT_ASSERT_C(receivedOffsets.insert(message.MessageId.Offset).second, message.MessageId.Offset);
+            commit.Messages.push_back(message.MessageId);
+        }
+        // Free capacity: the extra message must be blocked by the feature flag,
+        // not by a full inflight window or locks on previously read messages.
+        CreateCommitterActor(runtime, std::move(commit));
+        auto committed = GetChangeResponse(runtime);
+        UNIT_ASSERT(committed);
+        UNIT_ASSERT_VALUES_EQUAL_C(committed->Status, Ydb::StatusIds::SUCCESS, committed->ErrorDescription);
+        UNIT_ASSERT_VALUES_EQUAL(committed->Messages.size(), response->Messages.size());
+        for (const auto& message : committed->Messages) {
+            UNIT_ASSERT_C(message.Status == EOperationResult::Success, message.MessageId.Offset);
+        }
+    }
+
+    UNIT_ASSERT(read()->Messages.empty());
+
+    // The same unread message becomes available when fetching is enabled again.
+    setDisabled(false);
+    auto response = read(TDuration::Seconds(10));
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages.front().MessageId.Offset, bufferedMessages);
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages.front().Data, "outside-inflight");
+}
+
 Y_UNIT_TEST(FetchThrottledAtMinMessages) {
     // Consumer skips fetch once InflightMessageCount >= MinMessages (100).
     auto setup = CreateSetup();

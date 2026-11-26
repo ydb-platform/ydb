@@ -1,4 +1,4 @@
-#include "kqp_rbo_test_helpers.h"
+#include "kqp_rbo_copy_helpers.h"
 
 #include <ydb/core/kqp/opt/rbo/copy_logical_subtree.h>
 
@@ -8,23 +8,7 @@ namespace NKikimr::NKqp {
 namespace {
 
 using NTests::TIdTestContext;
-
-void AssertFreshGraph(IOperator& original, IOperator& copy, TPlanProps& props) {
-    THashSet<const IOperator*> originals;
-    TUnorderedIUs originalOutputs;
-    for (const auto& item : IterateSubtree(&original)) {
-        originals.insert(item.Current);
-        originalOutputs.UnionWith(item.Current->GetOutputIUs());
-    }
-    for (const auto& item : IterateSubtree(&copy)) {
-        UNIT_ASSERT(!originals.contains(item.Current));
-        UNIT_ASSERT(!originalOutputs.HasAny(item.Current->GetOutputIUs()));
-        UNIT_ASSERT(!item.Current->Type);
-        UNIT_ASSERT(!item.Current->Props.StageId);
-        UNIT_ASSERT(item.Current->Parents.empty());
-    }
-    NTests::AssertIdInvariants(copy, props);
-}
+using NTests::AssertFreshGraph;
 
 void AssertSortKeys(const TSortIUs& original, const TSortIUs& copy, const TSubstitutions& renames) {
     UNIT_ASSERT_VALUES_EQUAL(original.Items().size(), copy.Items().size());
@@ -387,61 +371,8 @@ Y_UNIT_TEST_SUITE(KqpRboCopy) {
         NTests::AssertIdInvariants(*copy, f.Props);
     }
 
-    Y_UNIT_TEST(CopiesEffectBindingsWithoutChangingStorageNames) {
-        TIdTestContext f;
-        const auto source = f.Id("input"), result = f.Id("returned");
-        auto read = f.Read({source});
-        TEffectOptions options;
-        options.Columns = TVector<TString>{"Key"};
-        options.ReturningColumns = TVector<TString>{"Key"};
-        options.OnConflict = "revert";
-        options.IsBatch = true;
-        auto effect = MakeIntrusive<TOpTableEffect>(read, f.Pos, read->TableCallable, EEffectType::UpsertRows,
-            options, TOrderedIUs<TString>{{source, "Key"}}, TOrderedIUs<TString>{{result, "Key"}, {result, "KeyAgain"}});
 
-        TSubstitutions renames;
-        auto copy = effect->Copy(f.Props.InfoUnitRegistry, renames);
-        UNIT_ASSERT(copy);
-        AssertFreshGraph(*effect, *copy, f.Props);
-        auto& copiedEffect = CastOperator<TOpTableEffect>(*copy);
-        UNIT_ASSERT(copiedEffect.Table == effect->Table);
-        UNIT_ASSERT(copiedEffect.EffectType == effect->EffectType);
-        UNIT_ASSERT(copiedEffect.Options.Columns == options.Columns);
-        UNIT_ASSERT(copiedEffect.Options.ReturningColumns == options.ReturningColumns);
-        UNIT_ASSERT(copiedEffect.Options.OnConflict == options.OnConflict);
-        UNIT_ASSERT(copiedEffect.Options.IsBatch == options.IsBatch);
-        UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetColumns().Items()[0].first, renames.At(source));
-        UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetColumns().Items()[0].second, "Key");
-        UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetReturningColumns().Items().size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetReturningColumns().Items()[0].first, renames.At(result));
-        UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetReturningColumns().Items()[1].first, renames.At(result));
-        UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetReturningColumns().Items()[0].second, "Key");
-        UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetReturningColumns().Items()[1].second, "KeyAgain");
-        UNIT_ASSERT_VALUES_EQUAL(effect->GetColumns().Items()[0].first, source);
-        UNIT_ASSERT(effect->GetOutputIUs() == TUnorderedIUs{result});
-    }
 
-    Y_UNIT_TEST(ReplicateExpansionDoesNotDuplicateEffects) {
-        TIdTestContext f;
-        f.Config->_KqpEnableSpilling = false;
-        const auto key = f.Id("Key"), result = f.Id("result");
-        auto read = f.Read({key});
-        auto effect = MakeIntrusive<TOpTableEffect>(read, f.Pos, read->TableCallable, EEffectType::InsertRows,
-            TEffectOptions{}, TOrderedIUs<TString>{{key, "Key"}}, TOrderedIUs<TString>{{result, "Key"}});
-        auto hub = TReplicate::Create(effect, f.Pos, f.Props.InfoUnitRegistry);
-        auto left = hub->AddOutput(), right = hub->AddOutput();
-        auto join = MakeIntrusive<TOpJoin>(left, right, f.Pos, "Cross", TJoinIUs{});
-        auto root = f.Root(join, {{result, "result"}});
-        TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TExpandReplicateRule>());
-
-        TRuleBasedStage("Expand Replicate", std::move(rules)).RunStage(*root, f.RboCtx);
-
-        UNIT_ASSERT(join->GetLeftInput() == left);
-        UNIT_ASSERT(join->GetRightInput() == right);
-        UNIT_ASSERT(hub->GetInput() == effect);
-        NTests::AssertIdInvariants(*root, root->PlanProps);
-    }
 
     Y_UNIT_TEST(CopiesSubplanCallsWithTheirOwnCapturesAndResultBindings) {
         for (const auto kind : {ESubplanType::EXPR, ESubplanType::IN_SUBPLAN, ESubplanType::EXISTS}) {

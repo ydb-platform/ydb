@@ -1,4 +1,5 @@
 #include "yql_module_helpers.h"
+#include "yql_expr_optimize.h"
 
 #include <library/cpp/iterator/enumerate.h>
 
@@ -74,6 +75,34 @@ TExprNode::TPtr ImportDeeplyCopied(
         /*deepClones=*/clones,
         /*internStrings=*/true,
         /*copyTypes=*/false);
+}
+
+TExprNode::TPtr ImportCached(
+    const TPosition& position,
+    const TString& path,
+    const TString& name,
+    TExprContext& ctx,
+    TTypeAnnotationContext& types)
+{
+    TExprContext* source = nullptr;
+    const auto* symbol = ImportFreezed(position, path, name, ctx, types, &source);
+    if (!symbol) {
+        return nullptr;
+    }
+
+    if (const auto cached = ctx.LazyBindings.find(symbol->Get()); cached != ctx.LazyBindings.end()) {
+        return cached->second;
+    }
+    auto result = ctx.DeepCopy(**symbol, *source, ctx.LazyBindingClones,
+                               /*internStrings=*/true, /*copyTypes=*/false);
+    ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+    const auto status = ExpandApplyNoRepeat(result, result, ctx, types);
+    if (status == IGraphTransformer::TStatus::Error) {
+        return nullptr;
+    }
+    YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
+    ctx.LazyBindings.emplace(symbol->Get(), result);
+    return result;
 }
 
 } // namespace NYql

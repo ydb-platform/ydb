@@ -191,7 +191,8 @@ public:
 
         for (const auto& vdisk : Info->GetVDisks()) {
             const auto vd = Info->GetVDiskId(vdisk.OrderNumber);
-            if (Info->GetFailRealmState(vd.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+            if (!Info->IsWriteTargetRealm(vd.FailRealm)) {
+                QuorumTracker.ExcludeDisk(vd);
                 continue;
             }
             SendCollectGarbageRequest(vd);

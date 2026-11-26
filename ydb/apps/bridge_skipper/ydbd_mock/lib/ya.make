@@ -6,6 +6,8 @@ PY_SRCS(
     config_yaml.py
     connectivity.py
     control_api.py
+    control_ui.py
+    lab.py
     events.py
     faults.py
     followups.py

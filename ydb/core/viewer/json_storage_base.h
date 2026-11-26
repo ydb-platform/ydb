@@ -6,6 +6,7 @@
 #include "viewer_pdiskinfo.h"
 #include "viewer_helper.h"
 #include "wb_merge.h"
+#include <ydb/core/base/path.h>
 
 template<>
 struct std::hash<NKikimrBlobStorage::TVSlotId> {
@@ -141,6 +142,9 @@ protected:
 public:
     void Bootstrap() override {
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
+        if (FilterTenant && AppData()->FeatureFlags.GetEnableRelativePaths()) {
+            FilterTenant = PrependDomainIfNeeded("/" + domains->GetDomain()->Name, FilterTenant);
+        }
 
         if (FilterTenant.empty()) {
             RequestConsoleListTenants();

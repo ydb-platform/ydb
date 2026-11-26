@@ -1,20 +1,30 @@
 RECURSE(
+    abi_impl
     decimal
     fastcheck
+    fastcheck/abi/impl
+    fastcheck/impl
     issue
     langver
     purecalc
     result_format
+    sql_meta
     sql_format
     sql_format/abi/impl
     sql_format/impl
+    sql_inspect
+    sql_inspect/abi/impl
+    sql_inspect/impl
     types
     udf
     udf_meta
+    utf8
 )
 
 IF (OS_LINUX AND ARCH_X86_64 AND SANITIZER_TYPE != "undefined")
     RECURSE(
+        fastcheck/abi/fat
         sql_format/abi/fat
+        sql_inspect/abi/fat
     )
 ENDIF()

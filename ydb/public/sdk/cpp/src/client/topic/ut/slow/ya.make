@@ -1,6 +1,8 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
-REQUIREMENTS(ram:32 cpu:4)
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/tests/coverage.inc)
+
+REQUIREMENTS(ram:32 cpu:2)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

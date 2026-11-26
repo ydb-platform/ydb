@@ -1,6 +1,7 @@
 #include "grpc_pq_schema.h"
 
 #include "actors/schema_actors.h"
+#include "actors/commit_offset_actor.h"
 #include "actors/read_session_actor.h"
 #include "actors/reset_offset_actor.h"
 
@@ -169,6 +170,11 @@ IActor* TEvDescribeConsumerRequest::CreateRpcActor(NKikimr::NGRpcService::IReque
 template<>
 IActor* TEvDescribePartitionRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     return NGRpcProxy::V1::NTopic::CreateDescribePartitionActor(msg);
+}
+
+template<>
+IActor* TEvCommitOffsetRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new NGRpcProxy::V1::TCommitOffsetActor(msg);
 }
 
 }

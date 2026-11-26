@@ -4,10 +4,9 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/grpc_services/rpc_request_base.h>
-#include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
-#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -73,7 +72,10 @@ public:
             return;
         }
 
-        Register(NKqp::CreateGetScriptExecutionResultActor(SelfId(), GetDatabaseName(), ExecutionId, GetUserSID(*Request), req->result_set_index(), RowsOffset, req->rows_limit(), req->rows_limit() ? 0 : MAX_SIZE_LIMIT, Request->GetDeadline()));
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvFetchScriptResultsRequest(
+            GetDatabaseName(), ExecutionId, GetUserSID(*Request), req->result_set_index(), RowsOffset,
+            req->rows_limit(), req->rows_limit() ? 0 : MAX_SIZE_LIMIT, Request->GetDeadline()),
+            IEventHandle::FlagTrackDelivery);
 
         Become(&TFetchScriptResultsRPC::StateFunc);
     }
@@ -81,7 +83,12 @@ public:
 private:
     STRICT_STFUNC(StateFunc,
         hFunc(NKqp::TEvFetchScriptResultsResponse, Handle);
+        hFunc(TEvents::TEvUndelivered, Handle);
     )
+
+    void Handle(TEvents::TEvUndelivered::TPtr&) {
+        Reply(Ydb::StatusIds::UNAVAILABLE, "KQP proxy is unavailable");
+    }
 
     void Handle(NKqp::TEvFetchScriptResultsResponse::TPtr& ev) {
         Ydb::Query::FetchScriptResultsResponse resp;

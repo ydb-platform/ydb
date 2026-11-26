@@ -92,10 +92,6 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         } else {
             for (auto&& [_, i] : indexes.GetIndexes()) {
                 auto proto = i.GetIndexMeta().SerializeToProto();
-                if (proto.HasMaxIndex() && proto.GetMaxIndex().GetColumnId() == column->GetId()) {
-                    correct = true;
-                    break;
-                }
                 if (proto.HasMinMaxIndex() && proto.GetMinMaxIndex().GetColumnId() == column->GetId()) {
                     const TString& storageId = proto.GetStorageId();
                     if (storageId != NKikimr::NOlap::NBlobOperations::TGlobal::LocalMetadataStorageId || proto.GetInheritPortionStorage()) {
@@ -147,7 +143,7 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         }
         {
             auto* findExternalDataSource = context.SS->ExternalDataSources.FindPtr(tierPath->PathId);
-            AFL_VERIFY(findExternalDataSource);
+            YDB_LOG_VERIFY(findExternalDataSource);
             NKikimrSchemeOp::TExternalDataSourceDescription proto;
             (*findExternalDataSource)->FillProto(proto, false);
             if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(proto); status.IsFail()) {

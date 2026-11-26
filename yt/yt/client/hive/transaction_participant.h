@@ -4,6 +4,8 @@
 
 #include <yt/yt/client/api/public.h>
 
+#include <yt/yt/client/hydra/public.h>
+
 #include <yt/yt/client/transaction_client/public.h>
 
 #include <yt/yt/core/rpc/public.h>
@@ -35,7 +37,7 @@ struct ITransactionParticipant
 
     virtual ETransactionParticipantState GetState() const = 0;
 
-    virtual TFuture<void> PrepareTransaction(
+    virtual TFuture<NHydra::TCausalTime> PrepareTransaction(
         TTransactionId transactionId,
         TTimestamp prepareTimestamp,
         NApi::TClusterTag prepareTimestampClusterTag,
@@ -43,22 +45,26 @@ struct ITransactionParticipant
         const std::vector<TCellId>& cellIdsToSyncWith,
         const NRpc::TAuthenticationIdentity& identity,
         NTransactionClient::TTransactionSignature expectedPrepareSignature,
-        int targetCommitApprovalCount) = 0;
-    virtual TFuture<void> RecordCommitTimestamp(
+        int targetCommitApprovalCount,
+        NHydra::TCausalTime causalTime) = 0;
+    virtual TFuture<NHydra::TCausalTime> RecordCommitTimestamp(
         TTransactionId transactionId,
         TTimestamp commitTimestamp,
         NApi::TClusterTag commitTimestampClusterTag,
-        const NRpc::TAuthenticationIdentity& identity) = 0;
-    virtual TFuture<void> CommitTransaction(
+        const NRpc::TAuthenticationIdentity& identity,
+        NHydra::TCausalTime causalTime) = 0;
+    virtual TFuture<NHydra::TCausalTime> CommitTransaction(
         TTransactionId transactionId,
         TTimestamp commitTimestamp,
         NApi::TClusterTag commitTimestampClusterTag,
         bool stronglyOrdered,
-        const NRpc::TAuthenticationIdentity& identity) = 0;
-    virtual TFuture<void> AbortTransaction(
+        const NRpc::TAuthenticationIdentity& identity,
+        NHydra::TCausalTime causalTime) = 0;
+    virtual TFuture<NHydra::TCausalTime> AbortTransaction(
         TTransactionId transactionId,
         bool stronglyOrdered,
-        const NRpc::TAuthenticationIdentity& identity) = 0;
+        const NRpc::TAuthenticationIdentity& identity,
+        NHydra::TCausalTime causalTime) = 0;
 
     virtual TFuture<void> CheckAvailability() = 0;
 };

@@ -2,6 +2,7 @@
 #include "utils.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -40,8 +41,32 @@ bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.GetPartitionConfig().HasMirrorFrom();
 }
 
+bool ReplicationEnabled(const NKikimrPQ::TPQTabletConfig& config) {
+    return MirroringEnabled(config) && config.GetPartitionConfig().GetMirrorFrom().GetMirrorConsumerOffsets();
+}
+
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.has_partitionstrategy() && config.partitionstrategy().has_partitionstrategytype() && config.partitionstrategy().partitionstrategytype() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
+}
+
+std::optional<TWriteModeError> GetWriteModeError(const NKikimrPQ::TPQTabletConfig& config) {
+    switch (config.GetWriteMode()) {
+        case NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE:
+            return std::nullopt;
+        case NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE:
+            return TWriteModeError{
+                .Code = NPersQueue::NErrorCode::ERROR,
+                .Status = Ydb::StatusIds::UNAVAILABLE,
+                .Reason = "Write to topic is temporarily disabled",
+            };
+        case NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED:
+            return TWriteModeError{
+                .Code = NPersQueue::NErrorCode::BAD_REQUEST,
+                .Status = Ydb::StatusIds::BAD_REQUEST,
+                .Reason = "Write to topic is prohibited",
+            };
+    }
+    return std::nullopt;
 }
 
 size_t CountActivePartitions(const ::google::protobuf::RepeatedPtrField< ::NKikimrPQ::TPQTabletConfig_TPartition >& partitions) {
@@ -130,6 +155,13 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
         consumer->SetReadFromTimestampsMs(0);
         consumer->SetImportant(true);
     }
+}
+
+TString NormalizeDlqTopicPath(const TString& dlq, const TString& database) {
+    if (dlq.empty() || dlq.StartsWith("sqs://")) {
+        return dlq;
+    }
+    return NormalizePath(CanonizePath(database), CanonizePath(dlq));
 }
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {

@@ -168,7 +168,7 @@ namespace NKikimr {
         NKikimrBlobStorage::TEvVGetResult GetIndex(const TLogoBlobID& id,
                 NKikimrBlobStorage::EGetHandleClass prio = NKikimrBlobStorage::EGetHandleClass::FastRead) {
             auto query = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(VDiskId, TInstant::Max(), prio,
-                TEvBlobStorage::TEvVGet::EFlags::None, Nothing(), {id.FullID()});
+                TEvBlobStorage::TEvVGet::EFlags::ShowInternals, Nothing(), {id.FullID()});
             return ExecuteQuery<TEvBlobStorage::TEvVGetResult>(std::unique_ptr<IEventBase>(query.release()),
                 GetQueueId(prio));
         }

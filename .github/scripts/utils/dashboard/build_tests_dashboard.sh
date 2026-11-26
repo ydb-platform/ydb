@@ -5,7 +5,8 @@
 #
 # Expects env: CURRENT_PUBLIC_DIR, CURRENT_REPORT, RESOURCES_JSONL, RETRY, YA_MAKE_OUT_DIR,
 # DASHBOARD_SANITIZER (optional), BUILD_PRESET, RUNNER_NAME, PR_NUMBER,
-# BRANCH_NAME, ORIGINAL_HEAD, PUBLIC_DIR_URL, GITHUB_REPOSITORY.
+# PR_TITLE (optional), BRANCH_NAME, ORIGINAL_HEAD, PUBLIC_DIR_URL, GITHUB_REPOSITORY.
+# Optional: GITHUB_TOKEN — used to resolve PR_TITLE when missing.
 
 TESTS_METRICS_DIR="$CURRENT_PUBLIC_DIR/tests_metrics"
 mkdir -p "$TESTS_METRICS_DIR"
@@ -30,28 +31,57 @@ TRY_LINKS=""
 for i in $(seq 1 "$RETRY"); do TRY_LINKS="${TRY_LINKS}try_$i/tests_metrics/dashboard.html,"; done
 TRY_LINKS="${TRY_LINKS%,}"
 
-if timeout 120 python3 .github/scripts/utils/dashboard/test_metrics/tests_resource_dashboard.py \
-  --report "$CURRENT_REPORT" \
-  --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-  --top-n 500 \
-  --out-html "$TESTS_METRICS_DIR/dashboard.html" \
-  --out-trace "$TESTS_METRICS_DIR/trace.json" \
-  --out-stats "$TESTS_METRICS_DIR/stats.json" \
-  --resources-jsonl "$RESOURCES_JSONL" \
-  --build-preset "$BUILD_PRESET" \
-  --runner "${RUNNER_NAME}" \
-  --pr "${PR_NUMBER}" \
-  --branch "${BRANCH_NAME}" \
-  --commit "${ORIGINAL_HEAD}" \
-  --artifacts-url "${PUBLIC_DIR_URL}" \
-  --try-links "$TRY_LINKS" \
-  --repo "${GITHUB_REPOSITORY}" \
-  --repo-root . \
+# Resolve PR title when CI only passed the number (e.g. workflow_dispatch).
+if [ -z "${PR_TITLE:-}" ] && [ -n "${PR_NUMBER:-}" ] && [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
+  PR_TITLE="$(
+    curl --retry 3 --retry-delay 2 --fail -sS \
+      -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+      -H "Accept: application/vnd.github+json" \
+      -H "X-GitHub-Api-Version: 2022-11-28" \
+      "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+      | python3 -c 'import json,sys; print(json.load(sys.stdin).get("title") or "")' \
+      2>/dev/null || true
+  )"
+fi
+if [ -n "${PR_TITLE:-}" ]; then
+  # Equals form so titles starting with '-' are not parsed as options.
+  DASHBOARD_ARGS+=(--pr-title="$PR_TITLE")
+fi
+
+# Large Regression-run_Large evlogs are ~100MB / 12h; 120s is too tight and also
+# must survive missing report.json (disk-full / aborted ya make).
+DASHBOARD_TIMEOUT_SEC="${DASHBOARD_TIMEOUT_SEC:-900}"
+DASHBOARD_CMD=(
+  python3 .github/scripts/utils/dashboard/test_metrics/tests_resource_dashboard.py
+  --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl"
+  --top-n 500
+  --out-html "$TESTS_METRICS_DIR/dashboard.html"
+  --out-trace "$TESTS_METRICS_DIR/trace.json"
+  --out-stats "$TESTS_METRICS_DIR/stats.json"
+  --resources-jsonl "$RESOURCES_JSONL"
+  --build-preset "$BUILD_PRESET"
+  --runner "${RUNNER_NAME}"
+  --pr "${PR_NUMBER}"
+  --branch "${BRANCH_NAME}"
+  --commit "${ORIGINAL_HEAD}"
+  --artifacts-url "${PUBLIC_DIR_URL}"
+  --report-url "${CURRENT_PUBLIC_DIR_URL}/ya-test.html"
+  --try-links "$TRY_LINKS"
+  --repo "${GITHUB_REPOSITORY}"
+  --repo-root .
+)
+# Pass --report only when the file exists; otherwise the builder falls back to
+# evlog-only timeline (still useful for host overlays + activity).
+if [ -n "${CURRENT_REPORT:-}" ] && [ -f "$CURRENT_REPORT" ]; then
+  DASHBOARD_CMD+=(--report "$CURRENT_REPORT")
+fi
+if timeout "$DASHBOARD_TIMEOUT_SEC" "${DASHBOARD_CMD[@]}" \
   "${DASHBOARD_ARGS[@]}" > "$TESTS_METRICS_DIR/dashboard_build.log" 2>&1; then
   rm -f "$TESTS_METRICS_DIR/dashboard_build.log"
 else
   mv "$TESTS_METRICS_DIR/dashboard_build.log" "$TESTS_METRICS_DIR/dashboard_error.log"
   rm -f "$TESTS_METRICS_DIR/dashboard.html" \
+    "$TESTS_METRICS_DIR/dashboard_data.json" \
     "$TESTS_METRICS_DIR/trace.json" \
     "$TESTS_METRICS_DIR/stats.json" \
     "$TESTS_METRICS_DIR/dashboard_suggestions.json" \

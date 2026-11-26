@@ -46,41 +46,18 @@ public:
         const auto& request = eraseTx->GetRequest();
         auto mvccVersion = DataShard.GetMvccVersion(op.Get());
 
-        if (eraseTx->HasDependents()) {
-            NMiniKQL::TEngineHostCounters engineHostCounters;
-            TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), mvccVersion, engineHostCounters, TAppData::TimeProvider->Now());
-            TDataShardChangeGroupProvider groupProvider(DataShard, txc.DB, /* distributed tx group */ 0);
-            THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())};
+        // Both the main table and its synchronous index tables may have CDC streams.
+        NMiniKQL::TEngineHostCounters engineHostCounters;
+        TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), mvccVersion, engineHostCounters, TAppData::TimeProvider->Now());
+        TDataShardChangeGroupProvider groupProvider(DataShard, txc.DB, /* distributed tx group */ 0);
+        THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())};
 
+        if (eraseTx->HasDependents()) {
             auto presentRows = TDynBitMap().Set(0, request.KeyColumnsSize());
             if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), mvccVersion, op->GetGlobalTxId(),
                     &userDb, &groupProvider, changeCollector.Get()))
             {
                 return EExecutionStatus::Restart;
-            }
-
-            if (!userDb.GetVolatileReadDependencies().empty()) {
-                for (ui64 txId : userDb.GetVolatileReadDependencies()) {
-                    op->AddVolatileDependency(txId);
-                    bool ok = DataShard.GetVolatileTxManager().AttachBlockedOperation(txId, op->GetTxId());
-                    Y_ENSURE(ok, "Unexpected failure to attach " << *op << " to volatile tx " << txId);
-                }
-
-                if (txc.DB.HasChanges()) {
-                    txc.DB.RollbackChanges();
-                }
-                return EExecutionStatus::Continue;
-            }
-
-            if (Pipeline.AddLockDependencies(op, guardLocks)) {
-                if (txc.DB.HasChanges()) {
-                    txc.DB.RollbackChanges();
-                }
-                return EExecutionStatus::Continue;
-            }
-
-            if (changeCollector) {
-                op->ChangeRecords() = std::move(changeCollector->GetCollected());
             }
         } else if (eraseTx->HasDependencies()) {
             THashMap<ui64, TDynBitMap> presentRows;
@@ -96,20 +73,39 @@ public:
                     Y_ENSURE(presentRows.contains(rs.Origin));
 
                     auto confirmedRows = DeserializeBitMap<TDynBitMap>(body.GetConfirmedRows());
-                    if (!Execute(txc, request, presentRows.at(rs.Origin), confirmedRows, mvccVersion, op->GetGlobalTxId())) {
+                    if (!Execute(txc, request, presentRows.at(rs.Origin), confirmedRows, mvccVersion, op->GetGlobalTxId(),
+                            &userDb, &groupProvider, changeCollector.Get()))
+                    {
                         return EExecutionStatus::Restart;
                     }
                 }
             }
-
-            if (Pipeline.AddLockDependencies(op, guardLocks)) {
-                if (txc.DB.HasChanges()) {
-                    txc.DB.RollbackChanges();
-                }
-                return EExecutionStatus::Continue;
-            }
         } else {
             Y_ENSURE(false, "Invalid distributed erase tx: " << eraseTx->GetBody().ShortDebugString());
+        }
+
+        if (!userDb.GetVolatileReadDependencies().empty()) {
+            for (ui64 txId : userDb.GetVolatileReadDependencies()) {
+                op->AddVolatileDependency(txId);
+                bool ok = DataShard.GetVolatileTxManager().AttachBlockedOperation(txId, op->GetTxId());
+                Y_ENSURE(ok, "Unexpected failure to attach " << *op << " to volatile tx " << txId);
+            }
+
+            if (txc.DB.HasChanges()) {
+                txc.DB.RollbackChanges();
+            }
+            return EExecutionStatus::Continue;
+        }
+
+        if (Pipeline.AddLockDependencies(op, guardLocks)) {
+            if (txc.DB.HasChanges()) {
+                txc.DB.RollbackChanges();
+            }
+            return EExecutionStatus::Continue;
+        }
+
+        if (changeCollector) {
+            op->ChangeRecords() = std::move(changeCollector->GetCollected());
         }
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
@@ -123,9 +119,9 @@ public:
     bool Execute(TTransactionContext& txc, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
             const TDynBitMap& presentRows, const TDynBitMap& confirmedRows, const TRowVersion& mvccVersion,
             ui64 globalTxId,
-            TDataShardUserDb* userDb = nullptr,
-            TDataShardChangeGroupProvider* groupProvider = nullptr,
-            IDataShardChangeCollector* changeCollector = nullptr)
+            TDataShardUserDb* userDb,
+            TDataShardChangeGroupProvider* groupProvider,
+            IDataShardChangeCollector* changeCollector)
     {
         const ui64 tableId = request.GetTableId();
         const TTableId fullTableId(DataShard.GetPathOwnerId(), tableId);
@@ -196,6 +192,7 @@ public:
 
             if (!volatileDependencies.empty() || volatileOrdered) {
                 txc.DB.UpdateTx(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId);
+                DataShard.UpdateHnswIndex(tableInfo.LocalTid, NTable::ERowOp::Erase, keyCells.GetCells(), {}, txc.DB, mvccVersion, globalTxId);
                 DataShard.GetConflictsCache().GetTableCache(tableInfo.LocalTid).AddUncommittedWrite(keyCells.GetCells(), globalTxId, txc.DB);
                 if (!commitAdded && userDb) {
                     // Make sure we see our own changes on further iterations
@@ -204,6 +201,7 @@ public:
                 }
             } else {
                 txc.DB.Update(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, mvccVersion);
+                DataShard.UpdateHnswIndex(tableInfo.LocalTid, NTable::ERowOp::Erase, keyCells.GetCells(), {}, txc.DB, mvccVersion);
                 DataShard.GetConflictsCache().GetTableCache(tableInfo.LocalTid).RemoveUncommittedWrites(keyCells.GetCells(), txc.DB);
             }
         }

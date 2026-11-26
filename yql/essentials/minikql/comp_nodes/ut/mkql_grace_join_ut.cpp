@@ -1,8 +1,9 @@
 #include "mkql_computation_node_ut.h"
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_counting_test_stream.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 
 #include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 
@@ -2071,76 +2072,12 @@ Y_UNIT_TEST_LLVM_SPILLING(TestExclusion1) {
 constexpr std::string_view LeftStreamName = "LeftTestStream";
 constexpr std::string_view RightStreamName = "RightTestStream";
 
-struct TTestStreamParams {
-    ui64 MaxAllowedNumberOfFetches;
-    ui64 StreamSize;
-};
-
-class TTestStreamWrapper: public TMutableComputationNode<TTestStreamWrapper> {
-    using TBaseComputation = TMutableComputationNode<TTestStreamWrapper>;
-
-public:
-    class TStreamValue: public TComputationValue<TStreamValue> {
-    public:
-        using TBase = TComputationValue<TStreamValue>;
-
-        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, TTestStreamParams& params)
-            : TBase(memInfo)
-            , CompCtx_(compCtx)
-            , Params_(params)
-        {
-        }
-
-    private:
-        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            ++TotalFetches_;
-
-            UNIT_ASSERT_LE(TotalFetches_, Params_.MaxAllowedNumberOfFetches);
-
-            if (TotalFetches_ > Params_.StreamSize) {
-                return NUdf::EFetchStatus::Finish;
-            }
-
-            NUdf::TUnboxedValue* items = nullptr;
-            result = CompCtx_.HolderFactory.CreateDirectArrayHolder(2, items);
-            items[0] = NUdf::TUnboxedValuePod(TotalFetches_);
-            items[1] = MakeString(ToString(TotalFetches_) * 5);
-
-            return NUdf::EFetchStatus::Ok;
-        }
-
-        TComputationContext& CompCtx_;
-        TTestStreamParams& Params_;
-        ui64 TotalFetches_ = 0;
-    };
-
-    TTestStreamWrapper(TComputationMutables& mutables, TTestStreamParams& params)
-        : TBaseComputation(mutables)
-        , Params_(params)
-    {
-    }
-
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(ctx, Params_);
-    }
-
-private:
-    void RegisterDependencies() const final {
-    }
-
-    TTestStreamParams& Params_;
-};
-
-IComputationNode* WrapTestStream(const TComputationNodeFactoryContext& ctx, TTestStreamParams& params) {
-    return new TTestStreamWrapper(ctx.Mutables, params);
-}
-
-TComputationNodeFactory GetNodeFactory(TTestStreamParams& leftParams, TTestStreamParams& rightParams) {
+TComputationNodeFactory GetNodeFactory(NTest::TTestStreamParams& leftParams, NTest::TTestStreamParams& rightParams) {
     return [&leftParams, &rightParams](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         if (callable.GetType()->GetName() == LeftStreamName) {
-            return WrapTestStream(ctx, leftParams);
+            return NTest::WrapTestStream(ctx, leftParams);
         } else if (callable.GetType()->GetName() == RightStreamName) {
-            return WrapTestStream(ctx, rightParams);
+            return NTest::WrapTestStream(ctx, rightParams);
         }
         return GetBuiltinFactory()(callable, ctx);
     };
@@ -2181,8 +2118,8 @@ void RunGraceJoinEmptyCaseTest(EJoinKind joinKind, bool emptyLeft, bool emptyRig
         }
     }
 
-    TTestStreamParams leftParams(maxExpectedFetchesFromLeftStream, leftStreamSize);
-    TTestStreamParams rightParams(maxExpectedFetchesFromRightStream, rightStreamSize);
+    NTest::TTestStreamParams leftParams(maxExpectedFetchesFromLeftStream, leftStreamSize);
+    NTest::TTestStreamParams rightParams(maxExpectedFetchesFromRightStream, rightStreamSize);
     TSetup<false> setup(GetNodeFactory(leftParams, rightParams));
     TProgramBuilder& pb = *setup.PgmBuilder;
 

@@ -2,12 +2,41 @@
 
 namespace NKikimr::NPQ {
 
+namespace {
+
+ui64 GetEffectiveReplicationOffset(ui64 offset, ui64 startOffset, const TUserInfoBase& userInfo) {
+    return ImporantOrExtendedAvailabilityPeriod(userInfo) ? Max(offset, startOffset) : offset;
+}
+
+} // namespace
+
 void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
-    if (PendingReplicationData) {
+    if (AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled()) {
+        LOG_W("Replication is disabled for topic");
+
+        DestroyMirrorer();
+
         return;
     }
 
-    PendingReplicationData.emplace(std::move(ev));
+    if (PendingReplicationData) {
+        auto& pending = *(*PendingReplicationData)->Get();
+        for (const auto& [consumer, offset] : ev->Get()->OffsetsByConsumers) {
+            if (offset > static_cast<ui64>(Max<i64>())) {
+                continue;
+            }
+
+            pending.OffsetsByConsumers[consumer] = offset;
+        }
+        if (const auto& mirroredOffset = ev->Get()->MirroredOffset; mirroredOffset.Defined()) {
+            pending.MirroredOffset = pending.MirroredOffset.Defined()
+                ? Max(*pending.MirroredOffset, *mirroredOffset) : *mirroredOffset;
+        }
+    } else {
+        PendingReplicationData.emplace(std::move(ev));
+    }
+
+    ReplicationDataNeedsApply = true;
     UpdatePendingUsersFromReplicationData();
     if (InitDone) {
         ProcessTxsAndUserActs(ctx);
@@ -19,6 +48,7 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
         return;
     }
 
+    ReplicationDataNeedsApply = false;
     const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
     const auto mirroredOffset = (*PendingReplicationData)->Get()->MirroredOffset;
     if (mirroredOffset.Defined()) {
@@ -26,20 +56,38 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
     }
 
     for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
-        if (!GetConsumer(config, consumer) || offset > static_cast<ui64>(Max<i64>())) {
+        auto* consumerConfig = GetConsumer(config, consumer);
+        if (!consumerConfig || !consumerConfig->GetReplicateOffsets() || offset > static_cast<ui64>(Max<i64>())) {
             continue;
         }
-        auto& userInfo = GetOrCreatePendingUser(consumer);
-        if (const auto* committed = UsersInfoStorage->GetIfExists(consumer)) {
-            userInfo.Offset = Max(userInfo.Offset, committed->Offset);
+
+        if (consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+            continue;
+        } else if (consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+            if (auto it = MLPConsumers.find(consumer); it != MLPConsumers.end()) {
+                auto request = MakeHolder<TEvPQ::TEvMLPPurgeRequest>(
+                    TopicName(), consumer, Partition.OriginalPartitionId);
+                request->Record.SetToOffset(offset);
+                Send(it->second.ActorId, request.Release());
+            }
+            continue;
         }
-        userInfo.Offset = Max(userInfo.Offset, static_cast<i64>(offset));
+
+        auto& userInfo = GetOrCreatePendingUser(consumer);
+        userInfo.Offset = static_cast<i64>(GetEffectiveReplicationOffset(offset, GetStartOffset(), userInfo));
     }
 }
 
-void TPartition::CompleteReplicationDataWrite(const TActorContext& ctx) {
+void TPartition::CompleteReplicationDataWrite(const TActorContext&) {
     if (!PendingReplicationData) {
         return;
+    }
+
+    // Updates merged during the KV write have not been applied yet. In
+    // particular, MLP offsets are not checked below.
+    if (ReplicationDataNeedsApply) {
+        UpdatePendingUsersFromReplicationData();
+        return; // OnHandleWriteResponse starts the next persist cycle.
     }
 
     const auto mirroredOffset = (*PendingReplicationData)->Get()->MirroredOffset;
@@ -52,26 +100,54 @@ void TPartition::CompleteReplicationDataWrite(const TActorContext& ctx) {
 
     const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
 
-    // Replication may replay older snapshots; acknowledge the greatest valid offset.
-    y_absl::flat_hash_map<TString, ui64> expectedOffsets;
     for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
-        if (!GetConsumer(config, consumer) || offset > static_cast<ui64>(Max<i64>())) {
+        const auto* consumerConfig = GetConsumer(config, consumer);
+        // Replication consumers are excluded from applying incoming offsets above.
+        // MLP progress is applied by TEvMLPPurgeRequest, not by the streaming commit offset.
+        if (!consumerConfig
+            || !consumerConfig->GetReplicateOffsets()
+            || consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
+            || consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP
+            || offset > static_cast<ui64>(Max<i64>())) {
             continue;
         }
-        auto& expected = expectedOffsets[consumer];
-        expected = Max(expected, offset);
-    }
-    for (const auto& [consumer, offset] : expectedOffsets) {
+
         const auto* userInfo = UsersInfoStorage->GetIfExists(consumer);
-        if (!userInfo || userInfo->Offset < 0 || static_cast<ui64>(userInfo->Offset) < offset) {
+        if (!userInfo || userInfo->Offset < 0
+            || static_cast<ui64>(userInfo->Offset) != GetEffectiveReplicationOffset(offset, GetStartOffset(), *userInfo))
+        {
             UpdatePendingUsersFromReplicationData();
             return; // OnHandleWriteResponse starts the next persist cycle.
         }
     }
 
-    const auto& event = *PendingReplicationData;
-    ctx.Send(event->Sender, new TEvPQ::TEvReplicationDataAck(), 0, event->Cookie);
     PendingReplicationData.reset();
+}
+
+void TPartition::RestoreReadSessionActor(TUserInfo& userInfo, const TString& sessionId,
+                                       const TActorId& readSessionActor, const TActorContext& ctx) {
+    if (userInfo.ReadSessionActor || !readSessionActor || userInfo.Session != sessionId) {
+        return;
+    }
+
+    // A session change may already be waiting for its KV write to complete.
+    if (auto* pending = GetPendingUserIfExists(userInfo.User)) {
+        if (pending->Session != sessionId || pending->Generation != userInfo.Generation
+            || pending->Step != userInfo.Step
+            || (pending->ReadSessionActor && pending->ReadSessionActor != readSessionActor)) {
+            return;
+        }
+        pending->ReadSessionActor = readSessionActor;
+    }
+    userInfo.ReadSessionActor = readSessionActor;
+
+    LOG_D("Restored read session actor",
+        {"consumer", userInfo.User},
+        {"readSessionActor", readSessionActor});
+
+    if (userInfo.Type == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+        SendOffsetsToReplicationConsumer(ctx);
+    }
 }
 
 void TPartition::SendOffsetsToReplicationConsumer(const TActorContext& ctx, TConstArrayRef<const TUserInfo*> userInfos) {
@@ -88,7 +164,7 @@ void TPartition::SendOffsetsToReplicationConsumer(const TActorContext& ctx, TCon
     const TString payload = replicationData.SerializeAsString();
     for (const auto& [consumer, info] : UsersInfoStorage->ViewAll()) {
         if (info.Type != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
-            || info.Session.empty() || !info.PipeClient) {
+            || info.Session.empty() || !info.ReadSessionActor) {
             continue;
         }
         auto event = MakeHolder<TEvPersQueue::TEvReplicationData>();
@@ -98,8 +174,7 @@ void TPartition::SendOffsetsToReplicationConsumer(const TActorContext& ctx, TCon
         event->Record.SetStep(info.Step);
         event->Record.SetPayload(payload);
         event->Record.SetPartitionSessionId(info.PartitionSessionId);
-        ActorIdToProto(info.PipeClient, event->Record.MutablePipeClient());
-        ctx.Send(TabletActorId, event.Release());
+        ctx.Send(info.ReadSessionActor, event.Release());
     }
 }
 

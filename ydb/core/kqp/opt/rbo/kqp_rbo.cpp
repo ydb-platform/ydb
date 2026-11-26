@@ -1,3 +1,4 @@
+#include "explain/kqp_explain_context.h"
 #include "kqp_rbo.h"
 #include "traces/kqp_rbo_rule_trace.h"
 #include "kqp_plan_conversion_utils.h"
@@ -16,6 +17,7 @@ bool HasProperty(ui32 props, ui32 property) {
 }
 
 std::pair<NJson::TJsonValue, NJson::TJsonValue> BuildPlans(const TVector<TIntrusivePtr<TOpRoot>>& roots) {
+    TExplainContext explain;
     ui64 counter = 0;
     ui32 operatorIdx = 0;
     THashMap<IOperator*, ui32> operatorIds;
@@ -23,8 +25,8 @@ std::pair<NJson::TJsonValue, NJson::TJsonValue> BuildPlans(const TVector<TIntrus
     TVector<NJson::TJsonValue> explainJsons;
 
     for (auto & rootPtr : roots) {
-        executionJsons.push_back(rootPtr->GetExecutionJson(counter, operatorIdx, operatorIds));
-        explainJsons.push_back(rootPtr->GetExplainJson(counter, operatorIds));
+        executionJsons.push_back(rootPtr->GetExecutionJson(counter, operatorIdx, operatorIds, 0, &explain));
+        explainJsons.push_back(rootPtr->GetExplainJson(counter, operatorIds, 0, &explain));
     }
 
     if (roots.size()==1) {
@@ -62,10 +64,34 @@ bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext
         return false;
     }
 
-    const auto* previous = input.get();
+    const auto previous = input;
+    const auto previousStage = input->Props.StageId;
+    const auto previousBindings = input->Props.StageInputEdges;
+    const auto parents = input->Parents;
     input = SimpleMatchAndApply(input, ctx, props);
     Y_ENSURE(input, "Rule returned a null plan");
-    return input.get() != previous;
+    // A pushdown moves the physical boundary from the old operator's input
+    // to its parent's input. Preserve its exact edge, including parallel ports.
+    if (previousStage && input->Props.StageId && previousStage != input->Props.StageId) {
+        for (const auto& [parent, childIndex] : parents) {
+            if (!parent || parent->Props.StageId != previousStage) {
+                continue;
+            }
+            const TStageEdge* boundary = nullptr;
+            for (const auto binding : previousBindings) {
+                if (binding) {
+                    const auto& edge = props.StageGraph.GetEdge(*binding);
+                    if (edge.Producer().Id() == *input->Props.StageId) {
+                        Y_ENSURE(!boundary, "Ambiguous stage boundary transfer");
+                        boundary = &edge;
+                    }
+                }
+            }
+            Y_ENSURE(boundary, "Missing stage boundary to transfer");
+            props.BindStageInput(*parent, childIndex, *boundary);
+        }
+    }
+    return input.get() != previous.Get();
 }
 
 TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::unique_ptr<IRule>>&& rules)
@@ -213,11 +239,11 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoo
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
     auto& ctx = rboCtx.ExprCtx;
     auto* trace = rboCtx.GetCompileTrace();
-    int stageCounter = 0;
+    auto stageIds = std::make_shared<TStageIdAllocator>();
 
     for (auto & rootPtr : roots) {
         auto & root = *rootPtr;
-        root.PlanProps.StageGraph.StageCounter = stageCounter;
+        root.PlanProps.StageGraph.SetIdAllocator(stageIds);
         SubmitInitialPlanTrace(root, rboCtx);
 
         if (needToLog) {
@@ -258,7 +284,6 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoo
             YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
         }
 
-        stageCounter = root.PlanProps.StageGraph.StageCounter;
     }
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";

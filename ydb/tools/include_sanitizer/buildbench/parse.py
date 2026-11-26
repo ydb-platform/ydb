@@ -5,7 +5,8 @@ Three independent sources, joined on the ``<digest>`` key that
 
 ``<digest>.pstat``
     clang's own ``-fproc-stat-report`` CSV: one line per subprocess the
-    driver spawned, ``"tool","output",wall_us,user_us,peak_rss_kb``.
+    driver spawned, ``"tool","output",cpu_us,user_us,peak_rss_kb``.
+    The first time is total CPU time (user + system), not elapsed time.
 
 ``<digest>.perf``
     ``perf stat -x,`` output: hardware counters, chiefly instructions
@@ -46,7 +47,7 @@ _PERF_NON_VALUES = ("<not counted>", "<not supported>", "<not-counted>")
 class ProcStat:
     """Resource usage of one compile, as measured by the clang driver."""
 
-    wall_us: int = 0
+    cpu_us: int = 0
     user_us: int = 0
     peak_rss_kb: int = 0
     subprocesses: int = 0
@@ -55,8 +56,9 @@ class ProcStat:
 def parse_procstat(path: Path) -> Optional[ProcStat]:
     """Parse a ``-fproc-stat-report`` file, or None if unusable.
 
-    The driver may report several subprocesses for one compile. They run
-    sequentially, so times add up while peak memory is a maximum.
+    The driver may report several subprocesses for one compile. CPU times
+    add up while peak memory is a maximum. Elapsed compiler time comes
+    from the time trace's ExecuteCompiler event, not this report.
     """
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -68,12 +70,12 @@ def parse_procstat(path: Path) -> Optional[ProcStat]:
         if len(row) < 5:
             continue
         try:
-            wall_us = int(float(row[2]))
+            cpu_us = int(float(row[2]))
             user_us = int(float(row[3]))
             peak_rss_kb = int(float(row[4]))
         except (TypeError, ValueError):
             continue
-        out.wall_us += wall_us
+        out.cpu_us += cpu_us
         out.user_us += user_us
         out.peak_rss_kb = max(out.peak_rss_kb, peak_rss_kb)
         out.subprocesses += 1
@@ -183,7 +185,7 @@ class TuCost:
     tu: str
     compiles: int = 0
     user_us: int = 0
-    wall_us: int = 0
+    cpu_us: int = 0
     peak_rss_kb: int = 0
     instructions: float = 0.0
     execute_us: int = 0
@@ -194,7 +196,7 @@ class TuCost:
         return {
             "compiles": self.compiles,
             "user_us": self.user_us,
-            "wall_us": self.wall_us,
+            "cpu_us": self.cpu_us,
             "peak_rss_kb": self.peak_rss_kb,
             "instructions": self.instructions,
             "execute_us": self.execute_us,
@@ -240,7 +242,7 @@ def collect_tu_costs(ps_dir: Optional[Path] = None,
             stat = parse_procstat(ps_dir / f"{digest}.pstat")
             if stat:
                 cost.user_us += stat.user_us
-                cost.wall_us += stat.wall_us
+                cost.cpu_us += stat.cpu_us
                 cost.peak_rss_kb = max(cost.peak_rss_kb, stat.peak_rss_kb)
 
         if perf_dir:

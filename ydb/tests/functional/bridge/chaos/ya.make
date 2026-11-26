@@ -10,13 +10,9 @@ SIZE(LARGE)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 TIMEOUT(3600)
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(IAM_TOKEN="")
-DEPENDS(
-    ydb/apps/ydbd
-    ydb/apps/ydb
-)
 
 PEERDIR(
     ydb/tests/library

@@ -22,7 +22,9 @@ std::vector<TString> TPredicate::ColumnNames() const {
 
 NArrow::NMerger::TSortableBatchPosition TPredicate::CutNulls(
     const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 rowIdx, const std::shared_ptr<arrow::Schema>& pkSchema) {
-    AFL_VERIFY((i64)rowIdx < batch->num_rows())("idx", rowIdx)("count", batch->num_rows());
+    YDB_LOG_VERIFY((i64)rowIdx < batch->num_rows(),
+        {"idx", rowIdx},
+        {"count", batch->num_rows()});
     std::vector<std::string> colsNotNull;
     for (const auto& field : pkSchema->field_names()) {
         if (batch->GetColumnByName(field)->IsNull(rowIdx)) {
@@ -30,12 +32,12 @@ NArrow::NMerger::TSortableBatchPosition TPredicate::CutNulls(
         }
         colsNotNull.emplace_back(field);
     }
-    AFL_VERIFY(colsNotNull.size());
+    YDB_LOG_VERIFY(colsNotNull.size());
     return NArrow::NMerger::TSortableBatchPosition(batch, rowIdx, colsNotNull, std::vector<std::string>(), false);
 }
 
 bool TPredicate::IsEqualSchema(const std::shared_ptr<arrow::Schema>& schema) const {
-    AFL_VERIFY(schema);
+    YDB_LOG_VERIFY(schema);
     return Batch.IsSameSortingSchema(*schema);
 }
 

@@ -7,7 +7,7 @@
 #
 # YDBD_MOCK_IMPL=venv (default) runs `python -m ydb.apps.bridge_skipper.ydbd_mock`
 # from the virtualenv; YDBD_MOCK_IMPL=ya runs the binary built by
-#   ./ya make --build relwithdebinfo ydb/apps/bridge_skipper/ydbd_mock
+#   Build ydb/apps/bridge_skipper/ydbd_mock using the checkout build instructions.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

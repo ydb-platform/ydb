@@ -116,8 +116,8 @@ bool TPDisk::InitCommonLogger() {
         }
         CommonLogger->SwitchToNewChunk(TReqId(TReqId::InitCommonLoggerSwitchToNewChunk, 0), nullptr);
 
-        // Log chunk can be collected as soon as no one needs it
-        ChunkState[chunkIdx].CommitState = TChunkState::DATA_COMMITTED;
+        // The full log chunk is released like any other committed log chunk as soon as no one needs it
+        ChunkState[chunkIdx].CommitState = TChunkState::LOG_COMMITTED;
     }
     bool isOk = LogNonceJump(InitialPreviousNonce);
     return isOk;
@@ -1471,7 +1471,7 @@ void TPDisk::DeleteChunk(ui32 chunkIdx, TOwner owner) {
         Y_VERIFY_S(state.OwnerId == owner, PCtx->PDiskLogPrefix); // TODO DELETE
         state.OwnerId = OwnerUnallocated;
         state.CommitState = TChunkState::FREE;
-        Keeper.PushFreeOwnerChunk(owner, chunkIdx);
+        ReturnChunkToFreeList(owner, chunkIdx);
         break;
     case TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE:
         // Mark chunk as quarantine, so it will be released through default quarantine way

@@ -40,7 +40,7 @@
 
 {% note info %}
 
-В настоящий момент {{ ydb-short-name }} не поддерживает хранение `Tagged` типов и поэтому перед сохранением бинарного представления векторов нужно извлечь `String` с помощью функции [Untag](../../builtins/basic#as-tagged).
+В настоящий момент {{ ydb-short-name }} не поддерживает хранение `Tagged` типов и поэтому перед сохранением бинарного представления векторов нужно извлечь `String` с помощью функции [Untag](../../builtins/basic.md#as-tagged).
 
 {% endnote %}
 
@@ -54,8 +54,12 @@
 Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
 Knn::ToBinaryStringFloat16(List<Float>{Flags:AutoMap})->Tagged<String, "Float16Vector">
 Knn::ToBinaryStringBFloat16(List<Float>{Flags:AutoMap})->Tagged<String, "BFloat16Vector">
+Knn::ToBinaryStringFloat8E4M3(List<Float>{Flags:AutoMap})->Tagged<String, "Float8E4M3Vector">
+Knn::ToBinaryStringFloat8E5M2(List<Float>{Flags:AutoMap})->Tagged<String, "Float8E5M2Vector">
 Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
 Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
+Knn::ToBinaryStringUint4(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint4Vector">
+Knn::ToBinaryStringInt4(List<Int8>{Flags:AutoMap})->Tagged<String, "Int4Vector">
 Knn::ToBinaryStringBit(List<Double>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::ToBinaryStringBit(List<Float>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::ToBinaryStringBit(List<Uint8>{Flags:AutoMap})->Tagged<String, "BitVector">
@@ -67,24 +71,40 @@ Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 
 Функции сериализации векторных данных преобразуют массив элементов в байтовую строку следующего формата:
 
-- **Основная часть** — непрерывный массив элементов ([knn-serializer.h](https://github.com/ydb-platform/ydb/blob/0b506f56e399e0b4e6a6a4267799da68a3164bf7/ydb/library/yql/udfs/common/knn/knn-serializer.h#L19))
-- **Тип** — 1 байт в конце строки, обозначающий тип данных ([knn-defines.h](https://github.com/ydb-platform/ydb/blob/24026648dd7463d58e1470aa8981b17677116e7c/ydb/library/yql/udfs/common/knn/knn-defines.h#L5)):
+- **Основная часть** — непрерывный массив элементов ([knn-serializer-shared.h](https://github.com/ydb-platform/ydb/blob/4b6ee4f96913d1f7e21f7674fca6ab4abb1bc091/ydb/library/yql/udfs/common/knn/knn-serializer-shared.h))
+- **Тип** — 1 байт в конце строки, обозначающий тип данных ([knn-defines.h](https://github.com/ydb-platform/ydb/blob/4b6ee4f96913d1f7e21f7674fca6ab4abb1bc091/ydb/library/yql/udfs/common/knn/knn-defines.h)):
   - `1` — `Float` (4 байта на элемент);
   - `2` — `Uint8` (1 байт на элемент);
   - `3` — `Int8` (1 байт на элемент);
   - `4` — `Float16` (2 байта на элемент, [IEEE-754 binary16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format));
   - `5` — `BFloat16` (2 байта на элемент, [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format));
+  - `6`: `Float8E4M3` (1 байт на элемент, [E4M3FN](https://en.wikipedia.org/wiki/Minifloat#Machine_learning));
+  - `7`: `Float8E5M2` (1 байт на элемент, [E5M2](https://en.wikipedia.org/wiki/Minifloat#Machine_learning));
+  - `8`: `Uint4` (4 бита на элемент);
+  - `9`: `Int4` (4 бита на элемент);
   - `10` — `Bit` (1 бит на элемент).
 
 Например, вектор из 5 элементов типа `Float` сериализуется в строку длиной 21 байт: 4 байта × 5 элементов (основная часть) + 1 байт (тип) = 21 байт.
 
 Формат `Bit` содержит дополнительный байт перед маркером типа с количеством неиспользованных битов в последнем байте данных.
 
+Форматы `Uint4` и `Int4` упаковывают две координаты в один байт: первая занимает младшие четыре бита, вторая занимает старшие четыре бита. `Int4` использует дополнительный код.
+
+Дополнительный байт перед маркером типа хранит число неиспользованных четырёхбитных позиций: `0` при чётной размерности и `1` при нечётной. При нечётной размерности неиспользованные старшие четыре бита последнего байта данных должны быть нулевыми.
+
+Длина сериализованного вектора из `N` координат составляет `ceil(N / 2) + 2` байта. Например, пять координат занимают пять байт: три байта данных, один байт с числом неиспользованных позиций и один байт типа.
+
 #### Детали имплементации {#functions-convert-details}
 
 `ToBinaryStringFloat16` и `ToBinaryStringBFloat16` округляют координаты `Float` до ближайшего представимого значения, при равенстве расстояний — до чётного. `FloatFromBinaryString` преобразует их обратно в `Float`. Для векторных индексов с такими форматами укажите `vector_type=float16` или `vector_type=bfloat16`.
 
 `ToBinaryStringBit` преобразует в `1` все координаты, которые больше `0`. Остальные координаты преобразуются в `0`.
+
+`ToBinaryStringFloat8E4M3` и `ToBinaryStringFloat8E5M2` преобразуют `List<Float>` в E4M3FN (максимальное конечное значение по модулю 448) и E5M2 (57344) соответственно без масштабирования. Обе функции округляют до ближайшего представимого значения, при равенстве расстояний — до чётного, ограничивают переполнение и бесконечности максимальным конечным значением с тем же знаком и преобразуют входные NaN в каноническое представление NaN. Вычисления выполняются в `Float`. Для векторных индексов укажите `vector_type="float8_e4m3"` или `vector_type="float8_e5m2"`.
+
+`ToBinaryStringInt4` и `ToBinaryStringUint4` преобразуют `List<Int8>` и `List<Uint8>` в упакованные 4-битные векторы, ограничивая координаты диапазонами [-8, 7] и [0, 15] соответственно без масштабирования. Функции расстояния и сходства возвращают `NULL` для некорректных упакованных данных. Для векторных индексов укажите `vector_type="int4"` или `vector_type="uint4"`.
+
+`FloatFromBinaryString` декодирует эти форматы в `List<Float>` с квантованными координатами. Сериализуйте векторы запросов в тот же формат, что и хранимые векторы.
 
 ### Функции расстояния и сходства {#functions-distance}
 
@@ -121,7 +141,7 @@ Knn::EuclideanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 
 {% note info %}
 
-Все функции расстояния и сходства поддерживают перегрузки с аргументами одного из типов `Tagged<String, "FloatVector">`, `Tagged<String, "Float16Vector">`, `Tagged<String, "BFloat16Vector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
+Все функции расстояния и сходства поддерживают перегрузки с аргументами одного из типов `Tagged<String, "FloatVector">`, `Tagged<String, "Float16Vector">`, `Tagged<String, "BFloat16Vector">`, `Tagged<String, "Float8E4M3Vector">`, `Tagged<String, "Float8E5M2Vector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "Uint4Vector">`, `Tagged<String, "Int4Vector">`, `Tagged<String, "BitVector">`.
 
 Если оба аргумента `Tagged`, то значение тега должно совпадать, иначе запрос завершится с ошибкой.
 
@@ -278,7 +298,23 @@ $facts = AsList(
 
 ML модель может выполнять квантование или это можно сделать вручную с помощью YQL.
 
-Ниже приведен пример квантования в YQL.
+Ниже приведены примеры квантования в YQL.
+
+#### Float -> FP8 {#approximate-vector-search-scalar-quantization-fp8}
+
+```yql
+$vector = Knn::ToBinaryStringFloat8E4M3([1.0625f, 2.0f]);
+SELECT Knn::FloatFromBinaryString($vector); -- [1.0, 2.0]
+```
+
+#### Int8/Uint8 -> Int4/Uint4 {#approximate-vector-search-scalar-quantization-int4}
+
+```yql
+$signed = Knn::ToBinaryStringInt4([-128t, -9t, 8t, 127t]);
+$unsigned = Knn::ToBinaryStringUint4([0ut, 15ut, 16ut, 255ut]);
+SELECT Knn::FloatFromBinaryString($signed); -- [-8.0, -8.0, 7.0, 7.0]
+SELECT Knn::FloatFromBinaryString($unsigned); -- [0.0, 15.0, 15.0, 15.0]
+```
 
 #### Float -> Int8 {#approximate-vector-search-scalar-quantization-map}
 

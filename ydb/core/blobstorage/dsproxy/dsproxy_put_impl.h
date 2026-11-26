@@ -60,6 +60,7 @@ private:
         bool IgnoreBlock = false;
         bool AlreadyEncrypted = false;
         bool IsZeroEntry = false;
+        bool IsProxySubrequest = false;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks;
         TWriteSource WriteSource;
         NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
@@ -67,27 +68,24 @@ private:
         std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
         TInstant Deadline;
 
-        TBlobInfo(TLogoBlobID id, TRope&& buffer, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
-                NLWTrace::TOrbit&& orbit, bool issueKeepFlag, bool ignoreBlock, bool alreadyEncrypted, bool isZeroEntry,
-                std::vector<std::pair<ui64, ui32>> extraBlockChecks, TWriteSource writeSource,
-                NKikimrBlobStorage::TDataKind::E dataKind, bool single,
-                std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay, TInstant deadline)
-            : BlobId(id)
-            , Buffer(std::move(buffer))
+        TBlobInfo(TEvBlobStorage::TEvPut&& msg, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId, bool single)
+            : BlobId(msg.Id)
+            , Buffer(std::move(msg.Buffer))
             , BufferSize(Buffer.size())
             , Recipient(recipient)
             , Cookie(cookie)
-            , Orbit(std::move(orbit))
-            , IssueKeepFlag(issueKeepFlag)
-            , IgnoreBlock(ignoreBlock)
-            , AlreadyEncrypted(alreadyEncrypted)
-            , IsZeroEntry(isZeroEntry)
-            , ExtraBlockChecks(std::move(extraBlockChecks))
-            , WriteSource(writeSource)
-            , DataKind(dataKind)
+            , Orbit(std::move(msg.Orbit))
+            , IssueKeepFlag(msg.IssueKeepFlag)
+            , IgnoreBlock(msg.IgnoreBlock)
+            , AlreadyEncrypted(msg.AlreadyEncrypted)
+            , IsZeroEntry(msg.IsZeroEntry)
+            , IsProxySubrequest(msg.IsProxySubrequest)
+            , ExtraBlockChecks(std::move(msg.ExtraBlockChecks))
+            , WriteSource(msg.WriteSource)
+            , DataKind(msg.DataKind)
             , Span(single ? NWilson::TSpan() : NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Put.Blob"))
-            , ExecutionRelay(std::move(executionRelay))
-            , Deadline(deadline)
+            , ExecutionRelay(std::move(msg.ExecutionRelay))
+            , Deadline(msg.Deadline)
         {}
 
         void Output(IOutputStream& s) const {
@@ -139,11 +137,7 @@ public:
         , History(Info)
     {
         BlobMap.emplace(ev->Id, Blobs.size());
-        Blobs.emplace_back(ev->Id, std::move(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
-            ev->IssueKeepFlag, ev->IgnoreBlock, ev->AlreadyEncrypted, ev->IsZeroEntry,std::move(ev->ExtraBlockChecks), ev->WriteSource,
-            ev->DataKind, true,
-            std::move(ev->ExecutionRelay),
-            ev->Deadline);
+        Blobs.emplace_back(std::move(*ev), recipient, cookie, std::move(traceId), /*single=*/ true);
 
         auto& blob = Blobs.back();
         LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID.GetRawId(), blob.BlobId.ToString(), Tactic,
@@ -174,10 +168,7 @@ public:
             Y_ABORT_UNLESS(msg.HandleClass == putHandleClass);
             Y_ABORT_UNLESS(msg.Tactic == tactic);
             BlobMap.emplace(msg.Id, Blobs.size());
-            Blobs.emplace_back(msg.Id, std::move(msg.Buffer), ev->Sender, ev->Cookie, std::move(ev->TraceId),
-                std::move(msg.Orbit), msg.IssueKeepFlag, msg.IgnoreBlock, msg.AlreadyEncrypted, msg.IsZeroEntry,
-                std::move(msg.ExtraBlockChecks),
-                msg.WriteSource, msg.DataKind, false, std::move(msg.ExecutionRelay), msg.Deadline);
+            Blobs.emplace_back(std::move(msg), ev->Sender, ev->Cookie, std::move(ev->TraceId), /*single=*/ false);
 
             auto& blob = Blobs.back();
             LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID.GetRawId(), blob.BlobId.ToString(), Tactic,

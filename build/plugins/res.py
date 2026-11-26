@@ -2,7 +2,6 @@ import json
 import os
 import ymake
 
-YA_CONF_JSON_NAME = "ya.conf.json"
 DEFAULT_FORMULA_PATH_TMPL = "build/external_resources/{}/resources.json"
 
 
@@ -99,20 +98,12 @@ def ALL_RESOURCE_FILES_FROM_DIRS(unit: ymake.Unit, *args: str):
 
 
 @ymake.macro
-def _YA_TOOLS_CONF(unit: ymake.Unit, conf_dir: str):
+def _YA_TOOLS_CONF(unit: ymake.Unit, conf_dir: str, *tools: str):
     conf_dir = conf_dir.rstrip("/")
     conf_abs_path = unit.resolve('$S/' + conf_dir)
     if not os.path.isdir(conf_abs_path):
         ymake.report_configure_error('Directory "{}" not found'.format(conf_abs_path))
         return
-
-    conf_file = conf_dir + "/" + YA_CONF_JSON_NAME
-    conf_abs_file = conf_abs_path + "/" + YA_CONF_JSON_NAME
-    if not os.path.isfile(conf_abs_file):
-        ymake.report_configure_error('File "{}" not found'.format(conf_abs_file))
-        return
-
-    unit.onresource_files(["STRIP", conf_dir + "/", conf_file])
 
     resource_files = []
     formulas = set()
@@ -152,15 +143,6 @@ def _YA_TOOLS_CONF(unit: ymake.Unit, conf_dir: str):
         for name, bottle in config["bottles"].items():
             add_formula(bottle["formula"], 'bottle "{}" in "{}"'.format(name, config_file))
 
-    with open(conf_abs_file) as f:
-        conf = json.load(f)
-
-    if "simple_tools" in conf:
-        for name, info in conf["simple_tools"].items():
-            formula = DEFAULT_FORMULA_PATH_TMPL.format(info.get("resource", name))
-            add_formula(formula, 'simple tool "{}" in "{}"'.format(name, conf_abs_file))
-    add_bottle_formulas(conf, conf_abs_file)
-
     tools_dir = conf_abs_path + "/tools/tools"
 
     def add_tool_formula(tool_file):
@@ -184,14 +166,28 @@ def _YA_TOOLS_CONF(unit: ymake.Unit, conf_dir: str):
     if os.path.isfile(tier_file):
         add_resource_file(tier_file)
 
-    if os.path.isdir(tools_dir):
+    tool_files = []
+    if tools:
+        for tool_name in sorted(set(tools)):
+            if "/" in tool_name or "\\" in tool_name:
+                ymake.report_configure_error('Tool name "{}" must not contain path separators'.format(tool_name))
+                continue
+
+            tool_file = tools_dir + "/" + tool_name + ".tool.json"
+            if not os.path.isfile(tool_file):
+                ymake.report_configure_error('Tool config "{}" is not found'.format(tool_file))
+                continue
+            tool_files.append(tool_file)
+    elif os.path.isdir(tools_dir):
         for root, dirs, files in os.walk(tools_dir):
             dirs.sort()
             for filename in sorted(files):
                 if filename.endswith(".tool.json"):
-                    tool_file = root + "/" + filename
-                    add_resource_file(tool_file)
-                    add_tool_formula(tool_file)
+                    tool_files.append(root + "/" + filename)
+
+    for tool_file in tool_files:
+        add_resource_file(tool_file)
+        add_tool_formula(tool_file)
 
     toolchains_dir = conf_abs_path + "/tools/toolchains"
     if os.path.isdir(toolchains_dir):

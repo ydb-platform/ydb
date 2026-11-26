@@ -108,6 +108,10 @@ protected:
     ETabletRole TabletRole;
     TInstant VolatileStateChangeTime;
     TInstant LastBalancerDecisionTime;
+    // Stamp of the last balancer run that counted this tablet and the bit set of the counters
+    // (TBalancerRunStats::ETabletCounter) it was counted in, see MarkCountedByBalancerRun.
+    ui32 BalancerRunId = 0;
+    ui16 BalancerRunCounted = 0;
 
 public:
     static TString EVolatileStateName(EVolatileState value) {
@@ -134,7 +138,23 @@ public:
         return VolatileStateChangeTime;
     }
 
-    bool IsGoodForBalancer(TInstant now) const;
+    bool IsAllowedByBalancerPolicy() const; // balancer policy allows moves and the tablet type is not in the ignore list
+    bool IsInBalancerCooldown(TInstant now) const; // moved by the balancer too recently
+
+    // Returns true the first time balancer run runId marks this tablet with the given counter bit, false on
+    // repeats within the same run. Lets a run count a tablet once per counter without a per-run map of tablets.
+    bool MarkCountedByBalancerRun(ui32 runId, ui8 counterBit) {
+        if (BalancerRunId < runId) { // stamped by an older run, ids only grow
+            BalancerRunId = runId;
+            BalancerRunCounted = 0;
+        }
+        const ui16 mask = static_cast<ui16>(1) << counterBit;
+        if (BalancerRunCounted & mask) {
+            return false;
+        }
+        BalancerRunCounted |= mask;
+        return true;
+    }
 
     void MakeBalancerDecision(TInstant now) {
         LastBalancerDecisionTime = now;
@@ -152,6 +172,9 @@ public:
 
 protected:
     TMetrics ResourceValues; // current values of various metrics
+    ui64 ProtoMetricsRevision = 0;
+    ui64 PersistedProtoMetricsRevision = 0;
+    void MarkProtoMetricsDirty();
     TTabletMetricsAggregates ResourceMetricsAggregates;
     TResourceNormalizedValues ResourceNormalizedValues;
     // Estimated share of the node's total usage caused by this tablet, including load it causes
@@ -171,6 +194,7 @@ public:
     bool IsBackup = false;
     TNodeId FailedNodeId = 0; // last time we tried to start the tablet, we failed on this node
     TInstant BootTime;
+    ui64 BootAttemptId = 0;
     TNodeFilter NodeFilter;
     bool InWaitQueue = false;
     bool UpdateMetricsEnqueued = false;
@@ -257,6 +281,10 @@ public:
     bool IsPinnedToNode() const;
 
     void UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics);
+    // Named resources describe the current incarnation of the tablet: on restart the work follows the tablet,
+    // but its values become an estimate until the new incarnation reports them
+    void CarryOverNamedResources();
+    void DropExpiredNamedResourceEstimates();
     TResourceRawValues GetResourceCurrentValues() const;
     TResourceRawValues GetResourceMaximumValues() const;
     i64 GetCounterValue() const;
@@ -306,6 +334,20 @@ public:
         return ResourceValues;
     }
 
+    bool IsProtoMetricsDirty() const {
+        return ProtoMetricsRevision != PersistedProtoMetricsRevision;
+    }
+
+    ui64 GetProtoMetricsRevision() const {
+        return ProtoMetricsRevision;
+    }
+
+    void ConfirmProtoMetricsPersistence(ui64 revision) {
+        if (ProtoMetricsRevision == revision) {
+            PersistedProtoMetricsRevision = revision;
+        }
+    }
+
     void InitTabletMetrics() {
         UpdateResourceUsage({});
     }
@@ -320,6 +362,7 @@ public:
 
     // ONLY for use in unit tests
     TMetrics& GetMutableResourceValues() {
+        MarkProtoMetricsDirty();
         return ResourceValues;
     }
 
@@ -341,4 +384,3 @@ private:
 
 } // NHive
 } // NKikimr
-

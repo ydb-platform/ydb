@@ -55,7 +55,7 @@ public:
 
     void Bootstrap() {
         if (!TempTablesState.NeedCleaning) {
-            AFL_ENSURE(TempTablesState.TempTables.empty());
+            YDB_LOG_ENSURE(TempTablesState.TempTables.empty());
             Finish();
             return;
         }

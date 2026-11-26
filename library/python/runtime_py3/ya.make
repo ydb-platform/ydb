@@ -32,6 +32,9 @@ SRCS(
     GLOBAL runtime_reg_py3.cpp
 )
 
+# Assembles the static resfs table out of pyres_pack objects of all linked python libraries
+LD_PLUGIN(pyres_ld_plugin.py)
+
 PY_SRCS(
     entry_points.py
 )
@@ -52,6 +55,8 @@ RUN_PROGRAM(
 )
 ARCHIVE(NAME __res.pyc.inc DONTCOMPRESS __res.pyc)
 ARCHIVE(NAME sitecustomize.pyc.inc DONTCOMPRESS sitecustomize.pyc)
+
+INCLUDE(${ARCADIA_ROOT}/library/python/runtime_py3/peerdir_policy.inc)
 
 END()
 

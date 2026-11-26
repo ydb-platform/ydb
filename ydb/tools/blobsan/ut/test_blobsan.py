@@ -24,11 +24,14 @@ class Snapshot:
     VDisk indexes are group order numbers; known nodes are subgroup positions.
     Part indexes are zero-based. Barrier keys contain tablet, channel/hard bits,
     record generation and counter; values contain collect generation/step and ingress.
+    memrec maps VDisk index to (type, id, offset, size); blobs of these VDisks are streamed
+    as key + TMemRecLogoBlob (FullMemRec blocks), other VDisks use legacy key + ingress blocks.
     """
 
     def __init__(self, local_realms=(0,), keep=0, barrier=None, quorum=True, known_full=True, indexes=TWO_REALMS,
                  known_nodes=None, local_parts=None, keep_flags=None, blob_indexes=None, barrier_indexes=None,
-                 barriers=None, known_per_disk=None, subgroup_order=SUBGROUP_ORDER, part_count=3, blob_channel=0):
+                 barriers=None, known_per_disk=None, subgroup_order=SUBGROUP_ORDER, part_count=3, blob_channel=0,
+                 memrec=None):
         self.parameters = dict(local_realms=tuple(local_realms), keep=keep, barrier=barrier, quorum=quorum,
                                known_full=known_full, indexes=tuple(indexes))
         for name, value in dict(known_nodes=known_nodes, local_parts=local_parts, keep_flags=keep_flags,
@@ -42,6 +45,9 @@ class Snapshot:
             self.parameters['part_count'] = part_count
         if blob_channel:
             self.parameters['blob_channel'] = blob_channel
+        if memrec is not None:
+            self.parameters['memrec'] = memrec
+        self.memrec = memrec
 
         if known_nodes is None:
             known_nodes = tuple(range(len(subgroup_order))) if known_full else (0,)
@@ -95,7 +101,13 @@ class Snapshot:
         records = []
         for index, node, blobs, barriers in self.records:
             blocks = b''
-            if blobs:
+            if blobs and index in (self.memrec or {}):
+                # FullMemRec is bit 10 of the block header bitfield.
+                blocks += struct.pack('<IIQ', len(blobs), 1 << 10, 0)
+                blob_type, blob_id, offset, size = self.memrec[index]
+                for key, ingress in blobs:
+                    blocks += struct.pack('<QQQQIII', *key, ingress, blob_type | blob_id << 2, offset, size)
+            elif blobs:
                 blocks += struct.pack('<IIQ', len(blobs), 0, 0)
                 for key, ingress in blobs:
                     blocks += struct.pack('<QQQQ', *key, ingress)
@@ -143,6 +155,41 @@ class TestBlobSan:
     def test_stdout_dump(self):
         data = snapshot(keep=1, barrier='soft', local_realms=(0, 1))
         result = f'Snapshot: {data!r}\n\n' + self._trace(['mirror-3-dc'], data, capture_stdout=True)
+        return self._canonical_file('output.txt', result + '\n')
+
+    def test_stdout_dump_full_memrec(self):
+        # VDisks 6 and 0 come from legacy nodes; VDisk 7 has two consecutive full records;
+        # every LogoBlob block is followed by a barrier block.
+        memrec = {
+            7: (0, 10, 4096, 100),     # DiskBlob
+            1: (1, 11, 8192, 100),     # HugeBlob
+            8: (2, 0, 3, 300),         # ManyHugeBlobs: outbound is not streamed
+            2: (3, 1, 2, 100),         # MemBlob
+        }
+        data = snapshot(keep=1, barrier='soft', local_realms=(0, 1), memrec=memrec, keep_flags={7: (1, 0)})
+        result = f'Snapshot: {data!r}\n\n' + self._trace(['mirror-3-dc'], data, capture_stdout=True)
+
+        stdout = result.split('Stdout: ', 1)[1].split('\nStderr: ', 1)[0].splitlines()
+        blobs = {}
+        barriers = set()
+        for line in stdout:
+            group, vdisk, database, *_ = line.split()
+            assert group == '1'
+            if database == 'A':
+                blobs.setdefault(int(vdisk), []).append(line.split('}', 1)[1])
+            else:
+                assert database == 'C' and 'Key# [1 0 2 1 soft] MemRec# {CollectGen: 1 CollectStep: 1' in line
+                barriers.add(int(vdisk))
+        disk = ' Type# Disk Data# {ChunkIdx: 10 Offset: 4096 Size: 100}'
+        assert blobs == {
+            7: [disk, disk],
+            1: [' Type# Huge Data# {ChunkIdx: 11 Offset: 8192 Size: 100}'],
+            8: [' Type# ManyHuge Size# 300'],
+            2: [' Type# Mem Size# 100'],
+            6: [''],
+            0: [''],
+        }
+        assert barriers == set(TWO_REALMS)
         return self._canonical_file('output.txt', result + '\n')
 
     def test_barrier_reporting(self):

@@ -142,7 +142,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         }
 
         while (!rowset.EndOfSet()) {
-            AFL_VERIFY(readyPortions.emplace(TPortionAddress(TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>()),
+            YDB_LOG_VERIFY(readyPortions.emplace(TPortionAddress(TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>()),
                 rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>())).second);
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");

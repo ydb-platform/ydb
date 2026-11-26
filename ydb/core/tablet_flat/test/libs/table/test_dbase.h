@@ -376,7 +376,7 @@ namespace NTest {
                 Base = new TDatabase{ };
 
                 for (const auto &it: RedoLog)
-                    Base->RollUp(it->Stamp, it->Scheme, it->Redo, it->Annex);
+                    Base->RollUp(it->Stamp, it->Scheme, it->Redo, it->Annex, { });
 
                 UNIT_ASSERT(serial == Base->Head().Serial);
             }

@@ -1,4 +1,11 @@
-/* syntax version 1 */
+$rows = [
+    <|ftztimestamp: Just(TzTimestamp("1970-01-01T05:00:00.000000,Europe/Moscow"))|>,
+    <|ftztimestamp: Just(TzTimestamp("2018-12-15T01:02:03.456789,Europe/Moscow"))|>,
+    <|ftztimestamp: Just(TzTimestamp("2105-12-31T16:23:45.000000,GMT"))|>,
+    <|ftztimestamp: Just(TzTimestamp("2106-01-01T01:00:00.000000,Europe/Moscow"))|>,
+    <|ftztimestamp: Just(TzTimestamp("2019-07-24T12:00:00,Europe/Moscow"))|>,
+];
+
 $format = DateTime::Format("%Y-%m-%d %H:%M:%S %Z");
 
 select
@@ -9,28 +16,23 @@ select
     $format(DateTime::EndOfMonth(Date('2024-02-02')))
 into result `Normal cases`;
 
-$tsMin = '1970-01-01T00:00:00.000000';
-$tsMax = '2105-12-31T23:59:59.999999';
-$tsBelow = '1969-12-31T23:59:59.999999';
-$tsAbove = '2106-01-01T00:00:00.000000';
-
-select $format(cast($tsMin || 'Z' as Timestamp))
-    , $format(DateTime::EndOfMonth(cast($tsMin || 'Z' as Timestamp)))
-    , $format(DateTime::EndOfMonth(cast($tsMin || ',Atlantic/Madeira' as Timestamp)))
+select $format(CAST('1970-01-01T00:00:00.000000Z' AS Timestamp))
+    , $format(DateTime::EndOfMonth(CAST('1970-01-01T00:00:00.000000Z' AS Timestamp)))
+    , $format(DateTime::EndOfMonth(cast('1970-01-01T00:00:00.000000,Atlantic/Madeira' as Timestamp)))
 into result `Minimal timestamp value`;
 
-select $format(cast($tsMax || 'Z' as Timestamp))
-    , $format(DateTime::EndOfMonth(cast($tsMax || 'Z' as Timestamp)))
-    , $format(DateTime::EndOfMonth(cast('2105-12-12T00:00:00Z' as Timestamp)))
-    , $format(DateTime::EndOfMonth(cast($tsMax || ',Atlantic/Azores' as Timestamp)))
+select $format(CAST('2105-12-31T23:59:59.999999Z' AS Timestamp))
+    , $format(DateTime::EndOfMonth(CAST('2105-12-31T23:59:59.999999Z' AS Timestamp)))
+    , $format(DateTime::EndOfMonth(CAST('2105-12-12T00:00:00Z' AS Timestamp)))
+    , $format(DateTime::EndOfMonth(cast('2105-12-31T23:59:59.999999,Atlantic/Azores' as Timestamp)))
 into result `Maximum timestamp value`;
 
-select $format(cast($tsBelow || ',Atlantic/Azores' as TzTimestamp))
-    , $format(DateTime::EndOfMonth(cast($tsBelow || ',Atlantic/Azores' as TzTimestamp)))
+select $format(CAST('1969-12-31T23:59:59.999999,Atlantic/Azores' AS TzTimestamp))
+    , $format(DateTime::EndOfMonth(CAST('1969-12-31T23:59:59.999999,Atlantic/Azores' AS TzTimestamp)))
 into result `Timestamp below minimum`;
 
-select $format(cast($tsAbove || ',Atlantic/Madeira' as TzTimestamp))
-    , $format(DateTime::EndOfMonth(cast($tsAbove || ',Atlantic/Madeira' as TzTimestamp)))
+select $format(cast('2106-01-01T00:00:00.000000,Atlantic/Madeira' as TzTimestamp))
+    , $format(DateTime::EndOfMonth(cast('2106-01-01T00:00:00.000000,Atlantic/Madeira' as TzTimestamp)))
 into result `Timestamp above maximum`;
 
 $check = ($arg) -> {
@@ -49,13 +51,11 @@ $check = ($arg) -> {
 };
 
 $typeDispatcher = ($row) -> {
-    $tm = $row.tm;
+    $tm = $row.ftztimestamp;
     return <|
         explicit: $check(DateTime::Split($tm)),
         implicit: $check($tm),
     |>;
 };
 
-$input = SELECT CAST(ftztimestamp as TzTimestamp) as tm FROM Input;
-
-PROCESS $input USING $typeDispatcher(TableRow()) into result `Other cases`;
+PROCESS AS_TABLE($rows) USING $typeDispatcher(TableRow()) into result `Other cases`;

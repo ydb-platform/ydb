@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
@@ -15,6 +15,7 @@ ENDIF()
 SRCS(
     common.cpp
     datastreams_history_replay_ut.cpp
+    datastreams_json_parsing_ut.cpp
     datastreams_checkpoints_ut.cpp
     datastreams_queries_restart_ut.cpp
     datastreams_table_mode_ut.cpp
@@ -31,7 +32,7 @@ PEERDIR(
     library/cpp/protobuf/interop
     library/cpp/threading/local_executor
     ydb/core/base
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/fq/libs/checkpoint_storage/events
     ydb/core/fq/libs/ydb
     ydb/core/kqp
@@ -57,7 +58,7 @@ PEERDIR(
     yql/essentials/udfs/common/yson2
 )
 
-ENV(YDB_FEATURE_FLAGS="enable_topic_deferred_publish")
+ENV(YDB_FEATURE_FLAGS="enable_topic_deferred_publish,enable_relative_paths")
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)

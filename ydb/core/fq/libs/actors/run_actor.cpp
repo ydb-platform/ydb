@@ -2106,7 +2106,7 @@ private:
         {
             auto solomonConfig = gatewaysConfig.GetSolomon();
             auto solomonGateway = NYql::CreateSolomonGateway(solomonConfig);
-            dataProvidersInit.push_back(GetSolomonDataProviderInitializer(solomonGateway, Params.CredentialsFactory, false));
+            dataProvidersInit.push_back(GetSolomonDataProviderInitializer(solomonGateway, Params.CredentialsFactory));
         }
 
         SessionId = TStringBuilder() << Params.QueryId << '#' << Params.ResultId << '#' << Params.Scope.ToString() << '#' << Params.Owner << '#'

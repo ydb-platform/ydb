@@ -613,7 +613,11 @@ namespace NKikimr::NPQ {
             }
 
             TValueL1 value = it->second;
-            Cache.erase(it);
+            RemoveBlob(it);
+
+            if (auto dest = Cache.find(newBlob); dest != Cache.end()) {
+                RemoveBlob(dest);
+            }
 
             Cache[newBlob] = value;
             Counters.Inc(value);

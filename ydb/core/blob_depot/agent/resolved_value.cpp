@@ -1,5 +1,7 @@
 #include "resolved_value.h"
 
+#include <ydb/core/blobstorage/base/utility.h>
+
 namespace NKikimr::NBlobDepot {
 
     TResolvedValue::TLink::TLink(const NKikimrBlobDepot::TResolvedValueChain& link)
@@ -22,6 +24,11 @@ namespace NKikimr::NBlobDepot {
             Y_VERIFY_S(length, SingleLineProto(link));
             SubrangeEnd = *length;
         }
+    }
+
+    bool TResolvedValue::TLink::IsRangeValid() const {
+        const ui32 length = Blob ? std::get<0>(*Blob).BlobSize() : S3Locator ? S3Locator->Len : 0;
+        return SubrangeBegin < SubrangeEnd && SubrangeEnd <= length;
     }
 
     void TResolvedValue::TLink::Output(IOutputStream& s) const {

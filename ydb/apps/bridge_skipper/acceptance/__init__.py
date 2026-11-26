@@ -1,0 +1,1 @@
+"""Executable Skipper acceptance tests."""

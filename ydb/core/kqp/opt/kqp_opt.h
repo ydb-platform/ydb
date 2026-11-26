@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/kqp/common/compile_cache/types.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
@@ -10,6 +11,7 @@
 #include <library/cpp/json/writer/json_value.h>
 
 #include <util/generic/ptr.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
 #include <optional>
@@ -31,6 +33,9 @@ class TCompileTrace;
 
 namespace NOpt {
 
+// Filters and projections preserve row order unless a projection replaces a sort key.
+bool OlapProcessPreservesSorting(const NYql::TExprNode::TPtr& lambda, const THashSet<TString>& sortColumns);
+
 struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     TKqpOptimizeContext(const TString& cluster, const TIntrusivePtr<NYql::TKikimrConfiguration>& config,
         const TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx, const TIntrusivePtr<NYql::TKikimrTablesData>& tables,
@@ -50,6 +55,8 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     NKikimr::NKqp::TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
     NKikimr::NKqp::TKqpStatsStore KqpStats;
     NKikimr::NKqp::TCBOOptimizerStats CBOStats;
+    NKikimr::NKqp::TOptimizerInput OptimizerInput;
+    NKikimr::NKqp::TOptimizerCacheOutput CacheOutput;
     NYql::TExprNode::TPtr RboTraceAstBeforeRewriteSelect;
     NYql::TExprNode::TPtr RboTraceAstAfterRewriteSelect;
     

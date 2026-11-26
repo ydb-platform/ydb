@@ -22,6 +22,7 @@ struct TAggregateFunction {
     TVector<TStringBuf> YqlNames;
     TStringBuf PreprocessorBinding;
     TStringBuf PostprocessorBinding;
+    bool HasNullTreatment = false;
 };
 
 const TAggregateFunction& GetAggregateFunction(TStringBuf name);

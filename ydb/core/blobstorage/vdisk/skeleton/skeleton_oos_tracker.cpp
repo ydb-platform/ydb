@@ -107,16 +107,7 @@ namespace NKikimr {
             MonGroup.VDiskSlotUsagePerMille() = static_cast<ui32>(msg->VDiskSlotUsage * 10);  // percent -> permille
             MonGroup.VDiskRawUsagePerMille() = static_cast<ui32>(msg->VDiskRawUsage * 10);  // percent -> permille
 
-            auto spaceColor = StatusFlagToSpaceColor(msg->StatusFlags);
-            MonGroup.CapacityAlertGreen() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::GREEN) ? 1 : 0;
-            MonGroup.CapacityAlertCyan() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::CYAN) ? 1 : 0;
-            MonGroup.CapacityAlertLightYellow() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW) ? 1 : 0;
-            MonGroup.CapacityAlertYellow() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::YELLOW) ? 1 : 0;
-            MonGroup.CapacityAlertLightOrange() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_ORANGE) ? 1 : 0;
-            MonGroup.CapacityAlertPreOrange() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::PRE_ORANGE) ? 1 : 0;
-            MonGroup.CapacityAlertOrange() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::ORANGE) ? 1 : 0;
-            MonGroup.CapacityAlertRed() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::RED) ? 1 : 0;
-            MonGroup.CapacityAlertBlack() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::BLACK) ? 1 : 0;
+            MonGroup.CapacityAlert(StatusFlagToSpaceColor(msg->StatusFlags));
 
             if (msg->NumOwners > 0 && VCtx->CostTracker) {
                 VCtx->CostTracker->UpdatePDiskParameters(msg->NumOwners, msg->ExpectedSlotCount);

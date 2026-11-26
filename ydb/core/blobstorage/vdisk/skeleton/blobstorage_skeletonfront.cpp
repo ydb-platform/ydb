@@ -3,6 +3,7 @@
 #include "blobstorage_skeletonerr.h"
 #include "blobstorage_skeleton.h"
 #include "skeleton_vrestore_part.h"
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/base/html.h>
@@ -753,6 +754,7 @@ namespace NKikimr {
         NMonGroup::TCounterGroup CounterGroup;
         TVDiskIncarnationGuid VDiskIncarnationGuid;
         bool HasUnreadableBlobs = false;
+        bool OnlyPhantomsRemain = false; // as reported by Skeleton along with the VDisk status
         TInstant LastSanitizeTime = TInstant::Zero();
         TInstant LastSanitizeWithErrorTime = TInstant::Zero();
         ui64 NextUniqueMessageId = 1;
@@ -894,7 +896,8 @@ namespace NKikimr {
             StartTimestamp = TActivationContext::Monotonic();
             TimerGroup.SkeletonFrontUptimeSeconds() = 0;
             CounterGroup.VDiskCount() = 1;
-            Become(&TThis::StateLocalRecoveryInProgress);
+            Become(GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)
+                ? &TThis::StateDatabaseError : &TThis::StateLocalRecoveryInProgress);
         }
 
         bool Sanitize(const TActorContext &ctx) {
@@ -1224,7 +1227,10 @@ namespace NKikimr {
             NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E replicationStatus =
                     NKikimrWhiteboard::TVDiskDetailedReplicationStatus::Replicated;
             if (!replicated) {
-                if (!ReplMonGroup.ReplIsHoldingToken()) {
+                if (OnlyPhantomsRemain) {
+                    // the last replication pass has finished with only phantom-like blobs unreplicated
+                    replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::PhantomsOnly;
+                } else if (!ReplMonGroup.ReplIsHoldingToken()) {
                     replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::WaitingForToken;
                 } else if (!unreplicatedNonPhantoms && unreplicatedPhantoms) {
                     replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::PhantomsOnly;
@@ -1232,9 +1238,14 @@ namespace NKikimr {
                     replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::InProgress;
                 }
             }
+            // the VDisk may be shown as replicated one when only phantom-like blobs remain, but NodeWarden is always
+            // told the truth
+            const bool reportReplicated = replicated ||
+                (OnlyPhantomsRemain && AppData()->FeatureFlags.GetReportPhantomsOnlyVDisksAsReady());
             // send a message to Whiteboard
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(state, outOfSpaceFlags,
-                replicated, unreplicatedPhantoms, unreplicatedNonPhantoms, replicationStatus, unsyncedVDisks, light, HasUnreadableBlobs);
+                reportReplicated, unreplicatedPhantoms, unreplicatedNonPhantoms, replicationStatus, unsyncedVDisks, light,
+                HasUnreadableBlobs);
             if (ReplMonGroup.ReplUnreplicatedVDisks()) {
                 const i64 a = ReplMonGroup.ReplWorkUnitsDone();
                 const i64 b = ReplMonGroup.ReplWorkUnitsRemaining();
@@ -1287,9 +1298,23 @@ namespace NKikimr {
             SetReceivedTime(ev);
             TInstant now = TAppData::TimeProvider->Now();
             FillInCostSettingsAndTimestampIfApplicable(ev->Get()->Record, now);
-            Reply(ev, ctx, NKikimrProto::VDISK_ERROR_STATE, "VDisk is in error state", now);
-            // NOTE: VDisk is in StateDatabaseError state, it means recovery failed.
-            //       VDisk returns VDISK_ERROR_STATE status to all requests (outside).
+            if (GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)) {
+                const NKikimrBlobStorage::TVDiskID* targetId = nullptr;
+                if constexpr (requires { ev->Get()->Record.GetVDiskID(); }) {
+                    targetId = &ev->Get()->Record.GetVDiskID();
+                } else if constexpr (requires { ev->Get()->Record.GetTargetVDiskID(); }) {
+                    targetId = &ev->Get()->Record.GetTargetVDiskID();
+                }
+                if (targetId) {
+                    const TVDiskID target = VDiskIDFromVDiskID(*targetId);
+                    if (target.SameExceptGeneration(SelfVDiskId) && target.GroupGeneration != SelfVDiskId.GroupGeneration) {
+                        return Reply(ev, ctx, NKikimrProto::RACE, "group generation mismatch", now);
+                    }
+                }
+                Reply(ev, ctx, NKikimrProto::ERROR, "VDisk fail realm is excluded", now);
+            } else {
+                Reply(ev, ctx, NKikimrProto::VDISK_ERROR_STATE, "VDisk is in error state", now);
+            }
         }
 
         template <class TEventPtr>
@@ -1305,6 +1330,14 @@ namespace NKikimr {
 
         void DatabaseErrorHandle(TEvBlobStorage::TEvMonStreamQuery::TPtr& ev, const TActorContext& ctx) {
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("ERROR"), 0, ev->Cookie);
+        }
+
+        void DatabaseErrorHandle(TEvBlobStorage::TEvVCheckReadiness::TPtr& ev, const TActorContext& ctx) {
+            if (GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)) {
+                HandleCheckReadiness(ev, ctx);
+            } else {
+                Reply(ev, ctx, NKikimrProto::VDISK_ERROR_STATE, "VDisk is in error state", TAppData::TimeProvider->Now());
+            }
         }
 
         void DatabaseNotReadyHandle(TEvBlobStorage::TEvMonStreamQuery::TPtr& ev, const TActorContext& ctx) {
@@ -1874,7 +1907,7 @@ namespace NKikimr {
             if (!GInfo->CheckScope(TKikimrScopeId(ev->OriginScopeId), ctx, true)) {
                 return DatabaseAccessDeniedHandle(ev, ctx);
             }
-            auto aid = Register(CreateVRestorePartActor(SelfVDiskId, SelfId(), SkeletonId, Config, Top, ev));
+            auto aid = Register(CreateVRestorePartActor(SelfVDiskId, SelfId(), SkeletonId, Config, GInfo, ev));
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
@@ -1890,9 +1923,6 @@ namespace NKikimr {
             extQueue.Completed(ctx, msgCtx, event);
             TIntQueueClass &intQueue = GetIntQueue(msgCtx.IntQueueId);
             intQueue.Completed(ctx, msgCtx, *this);
-            if (VCtx->CostTracker) {
-                VCtx->CostTracker->CountPDiskResponse();
-            }
             if (!ev->Get()->DoNotResend) {
                 TActivationContext::Send(event.release());
             }
@@ -2058,6 +2088,11 @@ namespace NKikimr {
             UpdateWhiteboard(ctx);
         }
 
+        void Handle(TEvStatusUpdate::TPtr ev, const TActorContext& ctx) {
+            OnlyPhantomsRemain = ev->Get()->OnlyPhantomsRemain;
+            UpdateWhiteboard(ctx);
+        }
+
         void Handle(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate::TPtr ev, const TActorContext& ctx) {
             auto& record = ev->Get()->Record;
             VDiskIDFromVDiskID(SelfVDiskId, record.MutableVDiskId());
@@ -2159,11 +2194,13 @@ namespace NKikimr {
             fFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
             HFunc(TEvReportScrubStatus, Handle)
+            HFunc(TEvStatusUpdate, Handle)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
             fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
         )
 
         STRICT_STFUNC(StateDatabaseError,
+            IgnoreFunc(TEvFrontRecoveryStatus)
             HFunc(TEvBlobStorage::TEvVMovedPatch, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVPatchStart, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVPatchDiff, DatabaseErrorHandle)
@@ -2205,6 +2242,7 @@ namespace NKikimr {
             fFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
             HFunc(TEvReportScrubStatus, Handle)
+            HFunc(TEvStatusUpdate, Handle)
             IgnoreFunc(TEvVDiskRequestCompleted)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
             fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
@@ -2246,6 +2284,13 @@ namespace NKikimr {
             std::is_same_v<TEv, TEvBlobStorage::TEvVSync> ||
             std::is_same_v<TEv, TEvBlobStorage::TEvVSyncFull>
         );
+
+        template <typename TEv>
+        static constexpr bool IsClientWrite = std::is_same_v<TEv, TEvBlobStorage::TEvVPut>
+            || std::is_same_v<TEv, TEvBlobStorage::TEvVMultiPut>
+            || std::is_same_v<TEv, TEvBlobStorage::TEvVBlock>
+            || std::is_same_v<TEv, TEvBlobStorage::TEvVCollectGarbage>
+            || IsPatchEvent<TEv>;
 
         template<typename TEventType>
         void CheckExecute(TAutoPtr<TEventHandle<TEventType>>& ev, const TActorContext& ctx) {
@@ -2290,6 +2335,8 @@ namespace NKikimr {
             }
             if (!GInfo->CheckScope(TKikimrScopeId(ev->OriginScopeId), ctx, true)) {
                 DatabaseAccessDeniedHandle(ev, ctx);
+            } else if (IsClientWrite<TEventType> && !GInfo->IsWriteTargetRealm(SelfVDiskId.FailRealm)) {
+                return Reply(ev, ctx, NKikimrProto::ERROR, "realm is not a write target", ctx.Now());
             } else if (Config->BaseInfo.ReadOnly && !IsReadOnlyCompatible<TEventType>) {
                 YDB_LOG_INFO_CTX_COMP(ctx, BS_SKELETON, "Blocking request incompatible with",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
@@ -2385,6 +2432,7 @@ namespace NKikimr {
             fFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
             HFunc(TEvReportScrubStatus, Handle)
+            HFunc(TEvStatusUpdate, Handle)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
             fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
             hFunc(TEvMinHugeBlobSizeUpdate, Handle)

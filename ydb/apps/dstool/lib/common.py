@@ -585,7 +585,7 @@ def invoke_grpc(
         ('grpc.max_receive_message_length', 256 << 20),  # 256 MiB
     ]
     if connection_params.debug:
-        p = ', '.join('<<< %s >>>' % text_format.MessageToString(param, as_one_line=True) for param in params)
+        p = ', '.join('<<< %s >>>' % text_format.MessageToString(_bsc_request_for_display(param), as_one_line=True) for param in params)
         print('INFO: issuing %s(%s) @%s:%d protocol %s' % (func, p, endpoint.host, endpoint.grpc_port,
               endpoint.protocol), file=sys.stderr)
 
@@ -672,15 +672,22 @@ def fetch_storage_state(storage_pools=False, groups=False, vdisks=False, pdisks=
     return result
 
 
+def _bsc_request_for_display(request):
+    if isinstance(request, kikimr_msgbus.TBlobStorageConfigRequest):
+        result = type(request)()
+        result.CopyFrom(request)
+        result.ClearField('SecurityToken')
+        return result
+    return request
+
+
 def invoke_grpc_bsc_request(request, endpoint=None):
     bs_request = kikimr_msgbus.TBlobStorageConfigRequest(Domain=connection_params.domain, Request=request)
     if connection_params.token is not None:
         bs_request.SecurityToken = connection_params.token
     bs_response = invoke_grpc('BlobStorageConfig', bs_request, endpoint=endpoint)
     if bs_response.Status != 1:
-        # remove security token from error message
-        bs_request.SecurityToken = ''
-        request_s = text_format.MessageToString(bs_request, as_one_line=True)
+        request_s = text_format.MessageToString(_bsc_request_for_display(bs_request), as_one_line=True)
         response_s = text_format.MessageToString(bs_response, as_one_line=True)
         raise QueryError('Failed to gRPC-query blob storage controller; request: %s; response: %s' % (request_s, response_s))
     return bs_response.BlobStorageConfigResponse
@@ -845,6 +852,8 @@ def create_bsc_request(args):
         request.AllowUnusableDisks = True
     if hasattr(args, 'ignore_degraded_group_check') and args.ignore_degraded_group_check:
         request.IgnoreDegradedGroupsChecks = True
+    if hasattr(args, 'treat_phantoms_only_vdisks_as_working') and args.treat_phantoms_only_vdisks_as_working:
+        request.TreatPhantomsOnlyVDisksAsWorking = True
     if hasattr(args, 'ignore_disintegrated_group_check') and args.ignore_disintegrated_group_check:
         request.IgnoreDisintegratedGroupsChecks = args.ignore_disintegrated_group_check
     if hasattr(args, 'ignore_failure_model_group_check') and args.ignore_failure_model_group_check:
@@ -1489,6 +1498,9 @@ def add_allow_unusable_pdisks_option(p):
 
 def add_ignore_degraded_group_check_option(p):
     p.add_argument('--ignore-degraded-group-check', action='store_true', help='Ignore results of DEGRADED group checks')
+    p.add_argument('--treat-phantoms-only-vdisks-as-working', action='store_true',
+                   help='Treat REPLICATING VDisks with only phantom-like blobs remaining as working ones in group checks; '
+                        'use only when these blobs are known to be phantoms')
 
 
 def add_ignore_disintegrated_group_check_option(p):
@@ -1543,7 +1555,7 @@ def print_result(format: str, status: str, description: str = None, file=None):
 
 def print_request_result(args, request, response):
     success = is_successful_bsc_response(response)
-    error_reason = 'Request has failed: \n{0}\n{1}\n'.format(request, response)
+    error_reason = 'Request has failed: \n{0}\n{1}\n'.format(_bsc_request_for_display(request), response)
     print_status(args, success, error_reason)
 
 

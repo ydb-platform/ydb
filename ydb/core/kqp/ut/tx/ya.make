@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 SIZE(MEDIUM)
 
 SRCS(
@@ -26,6 +26,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp
+    ydb/core/kqp/common/simple
     ydb/core/kqp/ut/common
     ydb/core/tx/columnshard/hooks/testing
     yql/essentials/sql/pg_dummy

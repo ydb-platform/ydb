@@ -62,6 +62,11 @@ public:
             | EYtSettingType::DoNotFailOnInvalidSchema | EYtSettingType::XLock
             | EYtSettingType::UserSchema | EYtSettingType::UserColumns
             | EYtSettingType::ExtraColumns | EYtSettingType::IgnoreTypeV3;
+
+        if (State_->Types->EngineType == EEngineType::Ytflow) {
+            acceptedSettings |= EYtSettingType::Consumer;
+        }
+
         for (auto path: read.Arg(2).Cast<TExprList>()) {
             if (auto table = path.Maybe<TYtPath>().Table()) {
                 if (!TYtTableInfo::Validate(table.Cast().Ref(), acceptedSettings, ctx)) {

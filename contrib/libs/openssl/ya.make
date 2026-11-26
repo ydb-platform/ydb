@@ -35,7 +35,6 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-PROVIDES(openssl)
 
 NO_LTO()
 

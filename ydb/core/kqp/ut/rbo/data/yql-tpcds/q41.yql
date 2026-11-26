@@ -7,14 +7,14 @@ PRAGMA AnsiImplicitCrossJoin;
 SELECT DISTINCT
     (i_product_name)
 FROM
-    `/Root/test/ds/item` i1
+    `item` i1
 WHERE
     i_manufact_id BETWEEN 742 AND 742 + 40
     AND (
         SELECT
             Count(*) AS item_cnt
         FROM
-            `/Root/test/ds/item`
+            `item`
         WHERE
             (
                 i_manufact == i1.i_manufact

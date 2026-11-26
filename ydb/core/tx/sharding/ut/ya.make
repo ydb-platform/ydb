@@ -1,9 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/tiering)
 
-FORK_SUBTESTS()
-
-SPLIT_FACTOR(5)
-
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

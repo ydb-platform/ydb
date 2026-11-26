@@ -51,6 +51,56 @@ namespace {
 
 Y_UNIT_TEST_SUITE(NKMeans) {
 
+    Y_UNIT_TEST(AssignmentOnlyDoesNotAllocateAccumulators) {
+        TString error;
+        const auto settings = MakeCosineSettings(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 3);
+        auto assign = CreateClusters(settings, 0, error, EClustersMode::AssignOnly);
+        auto recompute = CreateClusters(settings, 0, error);
+        UNIT_ASSERT_C(assign && recompute, error);
+        const auto first = SerializeVector<float>({1, 0, 0});
+        const auto second = SerializeVector<float>({0, 1, 0});
+        UNIT_ASSERT(assign->SetClusters(TVector<TString>{first, second}));
+        UNIT_ASSERT(recompute->SetClusters(TVector<TString>{first, second}));
+        UNIT_ASSERT(assign->GetNextClusterSizes().empty());
+        UNIT_ASSERT_VALUES_EQUAL(recompute->GetNextClusterSizes().size(), 2);
+        UNIT_ASSERT(assign->FindCluster(first) == recompute->FindCluster(first));
+        UNIT_ASSERT(assign->FindCluster(second) == recompute->FindCluster(second));
+        UNIT_ASSERT_EXCEPTION(assign->AggregateToCluster(0, {first.data(), first.size()}), yexception);
+        UNIT_ASSERT_EXCEPTION(assign->RecomputeClusters(), yexception);
+        recompute->AggregateToCluster(0, {first.data(), first.size()});
+        UNIT_ASSERT_VALUES_EQUAL(recompute->GetNextClusterSizes()[0], 1);
+        recompute->RecomputeClusters();
+    }
+
+    Y_UNIT_TEST(EmptyIndexCentroidsKeepLegacyCompatibility) {
+        for (const auto vectorType : {
+                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16,
+                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16,
+                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3,
+                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2,
+                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8,
+                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8,
+                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT}) {
+            TString error;
+            auto clusters = CreateClusters(MakeCosineSettings(vectorType, 3), 0, error);
+            UNIT_ASSERT_C(clusters, error);
+
+            const TString empty = clusters->GetEmptyRow();
+            TString legacy = empty;
+            const size_t trailerSize = vectorType == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT ? 2 : 1;
+            // Older empty indexes used space-filled coordinates with the same format and padding trailer.
+            for (size_t i = 0; i + trailerSize < legacy.size(); ++i) {
+                legacy[i] = ' ';
+            }
+
+            UNIT_ASSERT(clusters->SetClusters(TVector<TString>{legacy}));
+            UNIT_ASSERT(clusters->FindCluster(empty) == 0u);
+            UNIT_ASSERT(clusters->SetClusters(TVector<TString>{empty}));
+            UNIT_ASSERT(clusters->FindCluster(legacy) == 0u);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(HalfVectorSettings, BFloat16) {
         using T = std::conditional_t<BFloat16, TBFloat16, TFloat16>;
         const auto vectorType = BFloat16

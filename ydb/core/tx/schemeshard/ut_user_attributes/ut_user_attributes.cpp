@@ -237,6 +237,94 @@ Y_UNIT_TEST_SUITE(TSchemeShardUserAttrsTest) {
         TestMkDir(runtime, txId++, "/MyRoot", "DirD", {NKikimrScheme::StatusInvalidParameter}, AlterUserAttrs(dirDAttrs));
     }
 
+    Y_UNIT_TEST(OmitBackup) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )", {NKikimrScheme::StatusAccepted}, AlterUserAttrs({{"__omit_backup", "true"}}));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::UserAttrsEqual({{"__omit_backup", "true"}}),
+        });
+
+        for (const TString value : {"yes", "false", ""}) {
+            TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusInvalidParameter},
+                AlterUserAttrs({{"__omit_backup", value}}));
+        }
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", AlterUserAttrs({}, {"__omit_backup"}));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::UserAttrsEqual({})});
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", AlterUserAttrs({{"__omit_backup", "true"}}));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::UserAttrsEqual({{"__omit_backup", "true"}}),
+        });
+
+        TestCreateView(runtime, ++txId, "/MyRoot", R"(Name: "View" QueryText: "SELECT 1")");
+        env.TestWaitNotification(runtime, txId);
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "View", AlterUserAttrs({{"__omit_backup", "true"}}));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/View"), {
+            NLs::UserAttrsEqual({{"__omit_backup", "true"}}),
+        });
+    }
+
+    Y_UNIT_TEST(OmitBackupRejectsDirectoryLikeObjects) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        const auto attrs = AlterUserAttrs({{"__omit_backup", "true"}});
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "Rejected", {NKikimrScheme::StatusInvalidParameter}, attrs);
+        TestMkDir(runtime, ++txId, "/MyRoot", "Dir");
+        env.TestWaitNotification(runtime, txId);
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "Dir", {NKikimrScheme::StatusInvalidParameter}, attrs);
+        TestUserAttrs(runtime, ++txId, "", "MyRoot", {NKikimrScheme::StatusInvalidParameter}, attrs);
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(Name: "Database")",
+            {NKikimrScheme::StatusInvalidParameter}, attrs);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir"), {NLs::UserAttrsEqual({})});
+    }
+
+    Y_UNIT_TEST(OmitBackupChangefeedRemovalPreservesReplicationMarker) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+                Name: "Feed"
+                Mode: ECdcStreamModeUpdate
+                Format: ECdcStreamFormatJson
+                UserAttributes { Key: "__async_replication" Value: "{}" }
+                UserAttributes { Key: "__omit_backup" Value: "true" }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestUserAttrs(runtime, ++txId, "/MyRoot/Table", "Feed", AlterUserAttrs({}, {"__omit_backup"}));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Feed"), {
+            NLs::UserAttrsEqual({{"__async_replication", "{}"}}),
+        });
+        TestUserAttrs(runtime, ++txId, "/MyRoot/Table", "Feed", AlterUserAttrs({{"__omit_backup", "true"}}));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Feed"), {
+            NLs::UserAttrsEqual({{"__async_replication", "{}"}, {"__omit_backup", "true"}}),
+        });
+    }
+
     // Regression test for a bug where dropping a tenant while AlterUserAttributes is
     // in-flight (after Propose, before the coordinator plan is applied) left orphaned
     // UserAttributesAlterData rows in the local database.

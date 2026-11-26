@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/runtime/kqp_compute.h>
+#include <ydb/core/kqp/runtime/common/kqp_compute_context.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <ydb/library/actors/core/actorsystem_fwd.h>

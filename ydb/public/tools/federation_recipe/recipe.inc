@@ -7,6 +7,7 @@ DEPENDS(
 )
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+ENV(YDB_TEST_DISABLE_MLOCK=1)
 
 USE_RECIPE(
     ydb/public/tools/federation_recipe/federation_recipe

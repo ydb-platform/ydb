@@ -1,4 +1,4 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include "kqp_effects_helpers.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -7,17 +7,6 @@ namespace NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
-
-namespace {
-
-NKikimrConfig::TAppConfig NewRboAppConfig() {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
-    appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
-    return appConfig;
-}
-
-} // namespace
 
 Y_UNIT_TEST_SUITE(KqpInplaceUpdateNewRbo) {
 
@@ -72,14 +61,15 @@ void Test(
     TParams&& params,
     const TString& expectedResult,
     std::function<void(const Ydb::TableStats::QueryStats&)>&& check,
-    const std::function<void(TSession& session)>& prepareTable = &PrepareTable
+    const std::function<void(TSession& session)>& prepareTable = &PrepareTable,
+    std::optional<bool> disablePgCompatibility = std::nullopt
 ) {
     auto setting = NKikimrKqp::TKqpSetting();
     setting.SetName("_KqpAllowUnsafeCommit");
     setting.SetValue("true");
 
     // source read and stream lookup use iterator interface, that doesn't use datashard transactions
-    auto kikimr = DefaultKikimrRunner({setting}, NewRboAppConfig());
+    auto kikimr = NewRboKikimrRunner({setting}, disablePgCompatibility);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -362,7 +352,7 @@ Y_UNIT_TEST(BigRow) {
     unsafeCommitSetting.SetValue("true");
 
     // source read use iterator interface, that doesn't use datashard transactions
-    auto kikimr = DefaultKikimrRunner({keysLimitSetting, unsafeCommitSetting}, NewRboAppConfig());
+    auto kikimr = NewRboKikimrRunner({keysLimitSetting, unsafeCommitSetting});
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -430,7 +420,7 @@ Y_UNIT_TEST(SingleRowPgNotNull) {
             UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
             ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
         },
-        &PreparePgTable);
+        &PreparePgTable, /* disablePgCompatibility */ false);
 }
 
 } // suite

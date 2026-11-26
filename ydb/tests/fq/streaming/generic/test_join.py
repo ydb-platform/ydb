@@ -1,6 +1,7 @@
 import json
 import pytest
 import logging
+import operator
 import time
 from typing import Callable
 
@@ -1250,7 +1251,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
 
         options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
 
-        # path = f"{kikimr.get_database_name()}/{query_name}" # TODO YQ-5684
+        path = f"{kikimr.get_database_name()}/{query_name}"
         try:
             kikimr.ydb_client.query(f"""
                 CREATE STREAMING QUERY {query_name} AS DO BEGIN
@@ -1282,14 +1283,16 @@ class TestJoinYdbStreaming(StreamingTestBase):
                 componentSensors = sensors.find_sensors(
                     labels={
                         "subsystem": "DqLookup",
-                        # "tx_id": path, # TODO: YQ-5684
+                        "tx_id": path,
                         "component": component,
                     },
                     key_label="sensor",
+                    combine=operator.add,
                 )
                 for k in componentSensors:
-                    # .tx_id[{path}] # TODO: YQ-5684
-                    logging.debug(f'node[{node_index}].component[{component}].{k} = {componentSensors[k]}')
+                    logging.debug(
+                        f'node[{node_index}].tx_id[{path}].component[{component}].{k} = {componentSensors[k]}'
+                    )
                 if component == "Lookup":
                     hits += componentSensors.get("Hits", 0)
                     miss += componentSensors.get("Miss", 0)
@@ -1338,7 +1341,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
 
         # 3. Create TOKEN-auth external data source.
         # (shared_reading with local topics is not implemented, hence use eds)
-        create_source(kikimr, source_name, secret_name, endpoint, shared_reading=True)
+        create_source(kikimr, source_name, secret_name, endpoint, shared_reading=False)
 
         options = ()
         streamlookup_hint = Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else ''
@@ -1358,12 +1361,14 @@ class TestJoinYdbStreaming(StreamingTestBase):
                             user Int32,
                             skip Bool
                         )
-                        , WATERMARK = $event_time(`ts`) - Interval('PT3S')
-                        , WATERMARK_GRANULARITY = 'PT2S'
-                        {idle_clause}
                     )            ;
-            $input =
-                SELECT e.*, $event_time(ts) AS event_time FROM $input AS e WHERE skip IS DISTINCT FROM true;
+            $input = SELECT e.*, $event_time(ts) AS event_time FROM $input AS e;
+            $input = SELECT * FROM $input WITH (
+                        WATERMARK = event_time - Interval('PT3S'),
+                        WATERMARK_GRANULARITY = 'PT2S'
+                        {idle_clause}
+            );
+            $input = SELECT * FROM $input WHERE skip IS DISTINCT FROM true;
             $enriched = SELECT event_time, ts, u.data as uid
                 FROM
                     $input as e
@@ -1439,6 +1444,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
                 componentSensors = sensors.find_sensors(
                     labels={"operation": query_id, "component": component},
                     key_label="sensor",
+                    combine=operator.add,
                 )
                 for k in componentSensors:
                     print(

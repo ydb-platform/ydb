@@ -13,7 +13,7 @@ bool TBackupTranslation::StoreStringSettingsEntry(
 
     const TString key = to_lower(id.Name);
     if (result.find(key) != result.end()) {
-        Ctx_.Error() << to_upper(key) << " duplicate keys";
+        Ctx_.Error(id.Pos) << to_upper(key) << " duplicate keys";
         return false;
     }
 
@@ -22,7 +22,7 @@ bool TBackupTranslation::StoreStringSettingsEntry(
             return StoreString(*value, result[key], Ctx_, to_upper(key));
 
         default:
-            Ctx_.Error() << to_upper(key) << " value should be a string literal";
+            Ctx_.Error(*value) << to_upper(key) << " value should be a string literal";
             return false;
     }
 

@@ -317,9 +317,17 @@ void TPrintable<TCommitOffsetAcknowledgementEvent>::DebugString(TStringBuilder& 
 
 TStartPartitionSessionEvent::TStartPartitionSessionEvent(TPartitionSession::TPtr partitionSession, uint64_t committedOffset,
                                                          uint64_t endOffset)
+    : TStartPartitionSessionEvent(std::move(partitionSession), committedOffset, committedOffset, endOffset, std::nullopt) {
+}
+
+TStartPartitionSessionEvent::TStartPartitionSessionEvent(TPartitionSession::TPtr partitionSession, uint64_t committedOffset,
+                                                         uint64_t readOffset, uint64_t endOffset,
+                                                         std::optional<uint64_t> retainedStartOffset)
     : TPartitionSessionAccessor(std::move(partitionSession))
     , CommittedOffset(committedOffset)
-    , EndOffset(endOffset) {
+    , ReadOffset(readOffset)
+    , EndOffset(endOffset)
+    , RetainedStartOffset(retainedStartOffset) {
 }
 
 void TStartPartitionSessionEvent::Confirm(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset) {

@@ -17,7 +17,7 @@ using TTypeWriter = std::function<TString(const TTypeAnnotationNode*)>;
 struct TPartialAnnotationConfig {
     bool IsLibrary = false;
     TLangVersion LangVer = MinLangVersion;
-    const IUdfMeta* UdfMeta = nullptr;
+    const TUdfMeta* UdfMeta = nullptr;
     TConfigProviderFactory ConfigProviderFactory;
     TTypeParser TypeParser;
     TTypeWriter TypeWriter;

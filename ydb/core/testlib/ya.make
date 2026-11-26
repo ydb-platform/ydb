@@ -35,6 +35,7 @@ PEERDIR(
     ydb/core/client
     ydb/core/client/metadata
     ydb/core/client/minikql_compile
+    ydb/core/client/scheme_cache_lib
     ydb/core/client/server
     ydb/core/cms/console
     ydb/core/driver_lib/run
@@ -53,6 +54,7 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/federated_query
     ydb/core/kqp/proxy_service
+    ydb/core/kqp/runtime/scheduler
     ydb/core/kqp/script_executions/finalization
     ydb/core/metering
     ydb/core/mind
@@ -63,6 +65,7 @@ PEERDIR(
     ydb/core/path_aliasing
     ydb/core/persqueue
     ydb/core/persqueue/deferred_publish
+    ydb/core/persqueue/public/write_sessions_quoter
     ydb/core/protos
     ydb/core/security
     ydb/core/security/ldap_auth_provider
@@ -73,6 +76,8 @@ PEERDIR(
     ydb/core/test_tablet
     ydb/core/testlib/actors
     ydb/core/testlib/basics
+    ydb/core/testlib/tablet_helpers
+    ydb/core/tx/cdc_aggregator/tablet
     ydb/core/tx/columnshard
     ydb/core/tx/conveyor/service
     ydb/core/tx/conveyor/usage
@@ -151,4 +156,5 @@ RECURSE(
     default
     grpc_request
     pg
+    tablet_helpers
 )

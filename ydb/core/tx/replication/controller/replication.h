@@ -38,6 +38,7 @@ public:
         Table,
         IndexTable,
         Transfer,
+        Topic,
     };
 
     enum class EDstState: ui8 {
@@ -47,7 +48,8 @@ public:
         Done,
         Removing,
         Paused,
-        Attaching,
+        Attaching, // Deprecated.
+        WaitingImport,
         Error = Max<ui8>()
     };
 
@@ -76,6 +78,7 @@ public:
             virtual ETargetKind GetKind() const = 0;
             virtual const TString& GetSrcPath() const = 0;
             virtual const TString& GetDstPath() const = 0;
+            virtual bool GetSrcIsImpl() const = 0;
         };
 
         virtual ~ITarget() = default;
@@ -97,11 +100,10 @@ public:
 
         virtual const TPathId& GetDstPathId() const = 0;
         virtual void SetDstPathId(const TPathId& value) = 0;
-        virtual const TPathId& GetPendingDstPathId() const = 0;
-        virtual void SetPendingDstPathId(const TPathId& value) = 0;
 
         virtual const TString& GetStreamName() const = 0;
         virtual void SetStreamName(const TString& value) = 0;
+        virtual TString BuildStreamConsumerName() const = 0;
         virtual const TString& GetStreamConsumerName() const = 0;
         virtual void SetStreamConsumerName(const TString& value) = 0;
         virtual TString GetStreamPath() const = 0;
@@ -131,6 +133,8 @@ public:
         virtual void Shutdown(const TActorContext& ctx) = 0;
 
         virtual void UpdateConfig(const NKikimrReplication::TReplicationConfig&) = 0;
+
+        virtual TString GetSrcIndexPath() const = 0;
 
     protected:
         virtual IActor* CreateWorkerRegistar(const TActorContext& ctx) const = 0;
@@ -210,5 +214,14 @@ private:
     std::optional<TDropOp> DropOp;
 
 }; // TReplication
+
+// Whether the replication takes over its destination tables as they are: they already exist and
+// already hold the data, so the controller demotes them in place instead of creating anything.
+bool IsSwitchover(const NKikimrReplication::TReplicationConfig& config);
+
+// The state a replication is created in. One without an initial scan waits paused until its
+// destination tables have been filled and handed over; a switchover has nothing to wait for,
+// because its tables already hold the data, so it starts working once they are demoted.
+TReplication::EState InitialReplicationState(const NKikimrReplication::TReplicationConfig& config);
 
 }

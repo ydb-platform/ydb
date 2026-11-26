@@ -1,5 +1,6 @@
 #include "yql_solomon_provider_impl.h"
 
+#include <ydb/library/yql/providers/solomon/common/constants.h>
 #include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
@@ -44,36 +45,34 @@ private:
             return TStatus::Error;
         }
 
-        if (!State_->IsRtmrMode()) {
-            const auto writeInput = write.Input().Ptr();
-            const auto inputPos = writeInput->Pos();
-            if (const auto maybeTuple = TMaybeNode<TExprList>(writeInput)) {
-                const auto tuple = maybeTuple.Cast();
+        const auto writeInput = write.Input().Ptr();
+        const auto inputPos = writeInput->Pos();
+        if (const auto maybeTuple = TMaybeNode<TExprList>(writeInput)) {
+            const auto tuple = maybeTuple.Cast();
 
-                TVector<TExprBase> values;
-                values.reserve(tuple.Size());
-                for (const auto& value : tuple) {
-                    if (!EnsureStructType(value.Ref(), ctx)) {
-                        return TStatus::Error;
-                    }
-
-                    values.emplace_back(value);
+            TVector<TExprBase> values;
+            values.reserve(tuple.Size());
+            for (const auto& value : tuple) {
+                if (!EnsureStructType(value.Ref(), ctx)) {
+                    return TStatus::Error;
                 }
 
-                const auto list = Build<TCoAsList>(ctx, writeInput->Pos()).Add(std::move(values)).Done();
-
-                input.Ptr()->ChildRef(TSoWriteToShard::idx_Input) = list.Ptr();
-                return TStatus::Repeat;
+                values.emplace_back(value);
             }
 
-            const TTypeAnnotationNode* inputItemType = nullptr;
-            if (!EnsureNewSeqType<true, true, true>(inputPos, *writeInput->GetTypeAnn(), ctx, &inputItemType)) {
-                return TStatus::Error;
-            }
+            const auto list = Build<TCoAsList>(ctx, writeInput->Pos()).Add(std::move(values)).Done();
 
-            if (!ValidateWriteTypeAnnotation(inputPos, inputItemType, ctx)) {
-                return TStatus::Error;
-            }
+            input.Ptr()->ChildRef(TSoWriteToShard::idx_Input) = list.Ptr();
+            return TStatus::Repeat;
+        }
+
+        const TTypeAnnotationNode* inputItemType = nullptr;
+        if (!EnsureNewSeqType<true, true, true>(inputPos, *writeInput->GetTypeAnn(), ctx, &inputItemType)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateWriteTypeAnnotation(inputPos, inputItemType, ctx)) {
+            return TStatus::Error;
         }
 
         input.Ptr()->SetTypeAnn(write.World().Ref().GetTypeAnn());
@@ -81,8 +80,6 @@ private:
     }
 
     TStatus HandleSoShard(TExprBase input, TExprContext& ctx) {
-        YQL_ENSURE(!State_->IsRtmrMode(), "SoShard can't be used in rtmr mode");
-
         if (!EnsureMinMaxArgsCount(input.Ref(), 5, 6, ctx)) {
             return TStatus::Error;
         }
@@ -138,7 +135,7 @@ private:
         return TStatus::Ok;
     }
 
-    static TStatus HandleInsert(TExprBase input, TExprContext& ctx) {
+    TStatus HandleInsert(TExprBase input, TExprContext& ctx) {
         if (!EnsureArgsCount(input.Ref(), 4U, ctx)) {
             return TStatus::Error;
         }
@@ -171,7 +168,7 @@ private:
         return TStatus::Ok;
     }
 
-    static bool ValidateWriteTypeAnnotation(TPositionHandle position, const TTypeAnnotationNode* inputItemType, TExprContext& ctx) {
+    bool ValidateWriteTypeAnnotation(TPositionHandle position, const TTypeAnnotationNode* inputItemType, TExprContext& ctx) {
         if (!EnsureStructType(position, *inputItemType, ctx)) {
             return false;
         }
@@ -238,9 +235,18 @@ private:
             return false;
         }
 
-        if (sensorMembers > SolomonMaxSensorsCount) {
+        if (sensorMembers > NSo::NConstants::MaxSensorsPerRow) {
+            ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Max sensors count is " << NSo::NConstants::MaxSensorsPerRow
+                                                                            << " but " << sensorMembers << " were provided"));
+            return false;
+        }
+
+        const ui64 maxPointsPerRequest =
+            State_->Configuration->WriteMaxPointsPerRequest.Get().GetOrElse(NSo::NConstants::DefaultWriteMaxPointsPerRequest);
+        if (sensorMembers > maxPointsPerRequest) {
             ctx.AddError(TIssue(ctx.GetPosition(position),
-                TStringBuilder() << "Max sensors count is " << SolomonMaxSensorsCount << " but " << sensorMembers << " were provided"));
+                TStringBuilder() << "solomon.WriteMaxPointsPerRequest must be at least the number of sensors in a row (" << sensorMembers
+                                 << "), got " << maxPointsPerRequest));
             return false;
         }
 

@@ -11,6 +11,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
+#include <ydb/library/persqueue/topic_parser/counters.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
@@ -85,13 +86,14 @@ private:
         // extract DC/producer metadata. ResolveName is only for FCC (literal modern path).
         TString path;
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            auto resolved = NNameResolver::ResolveName(database, Settings.Strategy->GetTopicName());
+            auto resolved = NNameResolver::ResolveName(database, Settings.Strategy->GetTopicName(), {}, {}, Settings.EnableRelativePaths);
             if (!resolved) {
                 return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, TString{resolved.error()});
             }
             path = std::move(resolved->Path);
         } else {
             path = NormalizePath(database, CanonizePath(Settings.Strategy->GetTopicName()));
+            NPersQueue::CountTopicPathWithDatabasePrefix(database, Settings.Strategy->GetTopicName(), path);
         }
 
         auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();

@@ -3,12 +3,18 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
+# This executable's debug sections exceed DWARF32 relocation limits.
+# Strip only this test executable, retaining debug information in libraries.
+IF (OS_LINUX)
+    LDFLAGS(-Wl,--strip-debug)
+ENDIF()
+
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
     REQUIREMENTS(cpu:4)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 SRCS(
@@ -25,11 +31,13 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/zstd
     ydb/public/sdk/cpp/src/client/import
     yql/essentials/types/binary_json
     library/cpp/threading/local_executor
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/core/tx/replication/service
     ydb/public/lib/ydb_cli/dump/util
     ydb/library/yql/udfs/common/knn
     ydb/services/workload_manager/ut/common

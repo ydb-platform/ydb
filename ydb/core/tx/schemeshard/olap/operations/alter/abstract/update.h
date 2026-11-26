@@ -13,7 +13,7 @@ private:
 
     template <class TInitializer>
     TConclusionStatus InitializeOnce(TInitializer&& initializer) {
-        AFL_VERIFY(!Initialized);
+        YDB_LOG_VERIFY(!Initialized);
         auto result = initializer();
         if (result.IsSuccess()) {
             Initialized = true;
@@ -35,22 +35,22 @@ public:
     virtual NKikimrTxColumnShard::ETransactionKind GetShardTransactionKind() const = 0;
 
     std::set<ui64> GetShardIds() const {
-        AFL_VERIFY(Initialized);
+        YDB_LOG_VERIFY(Initialized);
         return DoGetShardIds();
     }
 
     TString GetShardTxBodyString(const ui64 tabletId, const TMessageSeqNo& seqNo) const {
-        AFL_VERIFY(Initialized);
+        YDB_LOG_VERIFY(Initialized);
         return DoGetShardTxBodyString(tabletId, seqNo);
     }
 
     TConclusionStatus Start(const TUpdateStartContext& context) {
-        AFL_VERIFY(Initialized);
+        YDB_LOG_VERIFY(Initialized);
         return DoStart(context);
     }
 
     TConclusionStatus Finish(const TUpdateFinishContext& context) {
-        AFL_VERIFY(Initialized);
+        YDB_LOG_VERIFY(Initialized);
         return DoFinish(context);
     }
 

@@ -3,11 +3,11 @@ items:
     href: index.md
   - name: Установка
     href: install.md
+  - name: Подключение и аутентификация
+    href: connect.md
   - name: Глобальные опции
     href: global-options.md
   - name: Список устройств
     href: device-list.md
   - name: Заполнение PDisk
     href: pdisk-populate.md
-  - name: Изменение режима пула bridge
-    href: pool-set-bridge-mode.md

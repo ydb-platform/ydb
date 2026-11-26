@@ -15,6 +15,7 @@
 #include <ydb/services/lib/actors/type_definitions.h>
 
 #include <util/generic/guid.h>
+#include <util/generic/maybe.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -80,6 +81,7 @@ struct TEvPQProxy {
         EvAlterTopicResponse,
         EvParentCommitedToFinish,
         EvUpdateReadMetrics,
+        EvReadWindowExhausted,
         EvEnd,
     };
 
@@ -455,12 +457,13 @@ struct TEvPQProxy {
 
     struct TEvPartitionStatus : public NActors::TEventLocal<TEvPartitionStatus, EvPartitionStatus> {
         TEvPartitionStatus(const TPartitionId& partition,
-                           const ui64 offset, const ui64 endOffset, const ui64 writeTimestampEstimateMs, ui64 nodeId, ui64 generation,
+                           const ui64 offset, TMaybe<ui64> retainedStartOffset, const ui64 endOffset, const ui64 writeTimestampEstimateMs, ui64 nodeId, ui64 generation,
                            const TExplicitType<bool> clientHasAnyCommits,
                            const TExplicitType<ui64> readOffset,
                            const TExplicitType<bool> init = true)
             : Partition(partition)
             , Offset(offset)
+            , RetainedStartOffset(std::move(retainedStartOffset))
             , EndOffset(endOffset)
             , ClientHasAnyCommits(clientHasAnyCommits)
             , WriteTimestampEstimateMs(writeTimestampEstimateMs)
@@ -472,6 +475,7 @@ struct TEvPQProxy {
 
         TPartitionId Partition;
         ui64 Offset;
+        TMaybe<ui64> RetainedStartOffset;
         ui64 EndOffset;
         bool ClientHasAnyCommits;
         ui64 WriteTimestampEstimateMs;
@@ -619,9 +623,10 @@ struct TEvPQProxy {
     };
 
     struct TEvReadingFinished : public TEventLocal<TEvReadingFinished, EvReadingFinished> {
-        TEvReadingFinished(const TString& topic, ui32 partitionId, bool first, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32> childPartitionIds, ui64 endOffset)
+        TEvReadingFinished(const TString& topic, ui32 partitionId, ui64 assignId, bool first, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32> childPartitionIds, ui64 endOffset)
             : Topic(topic)
             , PartitionId(partitionId)
+            , AssignId(assignId)
             , FirstMessage(first)
             , AdjacentPartitionIds(std::move(adjacentPartitionIds))
             , ChildPartitionIds(std::move(childPartitionIds))
@@ -630,12 +635,30 @@ struct TEvPQProxy {
 
         TString Topic;
         ui32 PartitionId;
+        ui64 AssignId;
         bool FirstMessage;
 
         std::vector<ui32> AdjacentPartitionIds;
         std::vector<ui32> ChildPartitionIds;
 
         ui64 EndOffset;
+    };
+
+    // Reading stopped because the client's max_offset was reached. Unlike
+    // TEvReadingFinished this does NOT mean the partition is closed by
+    // auto-partitioning: the partition is still alive and writable. The read
+    // balancer must not be notified; the partition stays locked to the session
+    // until the session is closed.
+    struct TEvReadWindowExhausted : public TEventLocal<TEvReadWindowExhausted, EvReadWindowExhausted> {
+        TEvReadWindowExhausted(const TString& topic, ui32 partitionId, ui64 assignId)
+            : Topic(topic)
+            , PartitionId(partitionId)
+            , AssignId(assignId)
+        {}
+
+        TString Topic;
+        ui32 PartitionId;
+        ui64 AssignId;
     };
 };
 

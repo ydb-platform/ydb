@@ -23,9 +23,11 @@
 namespace NKikimr {
 namespace NKqp {
 
+class TExplainContext;
+
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, DependentJoin, Aggregate, GroupingSets, Window, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, TableEffect, Root, Replicate };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, DependentJoin, Aggregate, GroupingSets, Window, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, TableEffect, Root, Replicate, Sequencer };
 
 // clang-format off
 #define PHASE_ENUM(X) \
@@ -114,7 +116,9 @@ struct TPhysicalOpProps {
         Analysis.Clear();
     }
 
-    std::optional<int> StageId;
+    std::optional<TStageId> StageId;
+    // Physical boundary bindings, indexed by operator child.
+    TVector<std::optional<TStageEdgeId>> StageInputEdges;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
 
@@ -141,6 +145,7 @@ struct TPhysicalOpProps {
 private:
     void CopyPhysicalFrom(const TPhysicalOpProps& other) {
         StageId = other.StageId;
+        StageInputEdges = other.StageInputEdges;
         Algorithm = other.Algorithm;
         OrderEnforcer = other.OrderEnforcer;
         Metadata = other.Metadata;
@@ -322,9 +327,9 @@ public:
     virtual bool PruneOutputs(const TUnorderedIUs& liveOut, TExprContext& ctx);
 
     virtual TString GetExplainName() const = 0;
-    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) = 0;
+    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) = 0;
 
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry);
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr);
 
     const TTypeAnnotationNode* GetTypeAnn() const {
         return Type;
@@ -546,7 +551,7 @@ public:
     void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
     TString GetExplainName() const override { return "Replicate"; }
-    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
+    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
 
 private:
     friend class TReplicate;
@@ -574,10 +579,10 @@ public:
         Y_ENSURE(Input || Columns.Empty(), "A unit source cannot define columns");
     }
 
-    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
+    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     virtual TString GetExplainName() const override { return "EmptySource"; }
     const TUnorderedIUs& GetOutputIUs() override { return Columns; }
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
@@ -621,7 +626,7 @@ public:
         TString MainTable;
         // The ranges as a single KqlKeyRange with literal or parameter bounds, when they are known at compile
         // time. A row storage read passes it to the source as is, so the ranges are not computed in a separate
-        // transaction. ComputeNode describes the same ranges.
+        // transaction, and explain shows it. ComputeNode describes the same ranges.
         TExprNode::TPtr LiteralRange;
 
         // The prefix computed for a particular table, by its path.
@@ -642,7 +647,8 @@ public:
     // Reconstruction preserves the supplied bindings; it never allocates IDs.
     TOpRead(const TString& alias, TUnorderedIUs columns, const NYql::EStorageType storageType,
             const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, std::optional<TRangeInfo> ranges,
-            const std::optional<TExpression>& originalPredicate, const ESortDir sortDirection, const TPhysicalOpProps& props, TPositionHandle pos);
+            const std::optional<TExpression>& originalPredicate, const ESortDir sortDirection, const TPhysicalOpProps& props, TPositionHandle pos,
+            bool requireSortedRead = false);
 
     const TUnorderedIUs& GetColumns() const Y_LIFETIME_BOUND { return Columns_; }
     TUnorderedIUs& GetColumns() Y_LIFETIME_BOUND { return Columns_; }
@@ -656,9 +662,9 @@ public:
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     bool PruneOutputs(const TUnorderedIUs& liveOut, TExprContext& ctx) override;
     // Names are resolved from the current registry only for presentation.
-    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
+    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     virtual TString GetExplainName() const override { return RangeInfo.has_value() ? "TableRangeScan" : "TableFullScan"; }
-    NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
+    NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -681,6 +687,11 @@ public:
     // Bound to the pre-program input row, also using IDs.
     std::optional<TExpression> OriginalPredicate;
     ESortDir SortDir{ESortDir::None};
+    bool RequireSortedRead = false;
+    // VIEW PRIMARY KEY, or automatic index selection disabled: the read stays on the main table, rules do not
+    // redirect it to an index. Indexes are chosen before other rules rebuild the read, so the import, the copy and
+    // the range pushdown keep it.
+    bool ForcePrimary = false;
     std::optional<TRangeInfo> RangeInfo;
 
 protected:
@@ -740,8 +751,8 @@ public:
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
     void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
-    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
-    NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
+    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
+    NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     TString GetExplainName() const override { return "Map"; }
 
     const TMapIUs& GetMapElements() const Y_LIFETIME_BOUND { return MapElements; }
@@ -791,7 +802,7 @@ public:
     bool RebindCaptures(const TSubstitutions& substitutions);
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
     void PropagateLiveness(ILivenessContext& ctx) override;
-    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
+    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     TString GetExplainName() const override { return "AddDependencies"; }
 
 protected:
@@ -829,8 +840,8 @@ public:
     void PropagateLiveness(ILivenessContext& ctx) override;
     bool PruneOutputs(const TUnorderedIUs& liveOut, TExprContext& ctx) override;
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
-    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
-    NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
+    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
+    NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     TString GetExplainName() const override { return "Aggregate"; }
     void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -883,7 +894,7 @@ public:
         return GroupingSets;
     }
 
-    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
+    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     // This op is not present is explain, but we have to define a function, because it's a pure virtual.
     virtual TString GetExplainName() const override { return "GroupingSets"; }
 
@@ -985,8 +996,8 @@ public:
     TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
     void PropagateLiveness(ILivenessContext& ctx) override;
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
-    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
-    NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
+    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
+    NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     TString GetExplainName() const override { return "Window"; }
     void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
 
@@ -1021,8 +1032,8 @@ public:
     const TUnorderedIUs& GetOutputIUs() override { return GetInput()->GetOutputIUs(); }
     TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
     const TUnorderedIUs& GetUniqueRawInputIUs() const override { return FilterExpr.GetRawInputIUs(); }
-    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
+    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     virtual TString GetExplainName() const override { return "Filter"; }
 
     virtual TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
@@ -1081,8 +1092,8 @@ public:
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
 
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
-    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
+    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     virtual TString GetExplainName() const override { return "Join"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -1118,7 +1129,7 @@ public:
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
-    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
+    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     virtual TString GetExplainName() const override { return "DependentJoin"; }
 
     TIntrusivePtr<IOperator>& GetDomain() Y_LIFETIME_BOUND { return GetLeftInput(); }
@@ -1158,8 +1169,8 @@ public:
     }
     void PropagateLiveness(ILivenessContext& ctx) override;
     bool PruneOutputs(const TUnorderedIUs& liveOut, TExprContext& ctx) override;
-    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
-    NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
+    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
+    NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     TString GetExplainName() const override { return "UnionAll"; }
     void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -1187,8 +1198,8 @@ public:
     virtual TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
-    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
+    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     virtual TString GetExplainName() const override { return "Limit"; }
 
     virtual TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
@@ -1200,9 +1211,14 @@ public:
     TExpression GetLimitCond() const { return LimitCond; }
     bool HasOffset() const { return OffsetCond.has_value(); }
     std::optional<TExpression> GetOffsetCond() const { return OffsetCond; }
+    // The number of input rows this limit consumes: the rows it returns and the rows its offset skips.
+    TExpression GetInputRowsLimit(TExprContext& ctx, TPlanProps& props) const;
 
     // Make private.
     TExpression LimitCond;
+    // Whether the rows of the limit depend on the order of its input. A limit of a select without ORDER BY
+    // takes any rows, so the order of a subquery below it is not needed.
+    bool OrderedInput = true;
 
 protected:
     TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
@@ -1217,6 +1233,7 @@ private:
 
 class TOpSort: public IUnaryOperator {
 public:
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     const TUnorderedIUs& GetOutputIUs() override { return GetInput()->GetOutputIUs(); }
     TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, TSortIUs keys,
         std::optional<TExpression> limit = std::nullopt);
@@ -1228,8 +1245,8 @@ public:
     TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
     void PropagateLiveness(ILivenessContext& ctx) override;
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
-    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
-    NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
+    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
+    NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     EOpPhase GetSortPhase() const { return SortPhase; }
     void SetSortPhase(EOpPhase phase) { SortPhase = phase; }
     const TSortIUs& GetSortElements() const Y_LIFETIME_BOUND { return SortElements; }
@@ -1275,8 +1292,8 @@ public:
     TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
     TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
     void PropagateLiveness(ILivenessContext& ctx) override;
-    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
-    NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
+    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
+    NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     TString GetExplainName() const override { return IsJoin() ? "TableLookupJoin" : "TableLookup"; }
     void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     bool IsJoin() const { return Strategy == ELookupStrategy::LookupJoinRows; }
@@ -1328,12 +1345,13 @@ private:
  ***/
 class TOpIndexLookupJoin: public IUnaryOperator {
 public:
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
     TOpIndexLookupJoin(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TString& joinKind, TJoinIUs joinKeys);
     void PropagateLiveness(ILivenessContext& ctx) override;
 
-    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
+    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     virtual TString GetExplainName() const override { return "IndexLookupJoin"; }
 
     TOpTableLookup& GetTableLookup() Y_LIFETIME_BOUND;
@@ -1370,7 +1388,7 @@ public:
     const TIntrusivePtr<IOperator>& GetChild(size_t index) const override;
 
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
-    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
+    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     virtual TString GetExplainName() const override { return "CBOTree"; }
 
 
@@ -1401,10 +1419,40 @@ enum class EEffectType : ui32 {
     DeleteRowsIndex
 };
 
+// Allocates sequence/default values once per input row. Generated columns are
+// owned definitions; input columns are forwarded uses with fixed storage labels.
+// This is a rewrite barrier: it must not be copied, duplicated, or pushed across
+// operators that change which rows consume sequence values. CopyImpl therefore
+// keeps IOperator's non-copyable default; replication must share its output.
+class TOpSequencer: public IUnaryOperator {
+public:
+    TOpSequencer(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table,
+        TOrderedIUs<TString> inputColumns, TOrderedIUs<TString> generatedColumns);
+    TString GetExplainName() const override { return "Sequencer"; }
+    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
+    TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
+    void RenameUsedIUs(const TSubstitutions& substitutions) override;
+    void PropagateLiveness(ILivenessContext& ctx) override;
+    const TOrderedIUs<TString>& GetInputColumns() const Y_LIFETIME_BOUND { return InputColumns_; }
+    const TOrderedIUs<TString>& GetGeneratedColumns() const Y_LIFETIME_BOUND { return GeneratedColumns_; }
+
+    TExprNode::TPtr Table;
+
+protected:
+    void ComputeOutputIUs() override;
+
+private:
+    TOrderedIUs<TString> InputColumns_;
+    TOrderedIUs<TString> GeneratedColumns_;
+};
+
 struct TEffectOptions {
-    std::optional<TVector<TString>> Columns;
-    std::optional<TVector<TString>> ReturningColumns;
-    std::optional<TVector<TString>> DefaultColumns;
+    // Write-row columns are input uses; returning columns are output definitions.
+    // Destination labels stay fixed when input IUs are renamed.
+    TOrderedIUs<TString> Columns;
+    TOrderedIUs<TString> ReturningColumns;
+    // Input attributes whose supplied defaults apply only when inserting a row.
+    TUnorderedIUs DefaultColumns;
     std::optional<TString> OnConflict;
     std::optional<bool> IsBatch;
     std::optional<TVector<TExprNode::TPtr>> Settings;
@@ -1413,28 +1461,24 @@ struct TEffectOptions {
 class TOpTableEffect: public IUnaryOperator {
 public:
     TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table,
-        EEffectType type, TEffectOptions options, TOrderedIUs<TString> columns, TOrderedIUs<TString> returning);
+        EEffectType type, TEffectOptions options);
     TString GetExplainName() const override;
     TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
-    const TUnorderedIUs& GetOutputIUs() override { return ReturningColumns_.Unordered(); }
-    const TOrderedIUs<TString>& GetColumns() const Y_LIFETIME_BOUND { return Columns_; }
-    const TOrderedIUs<TString>& GetReturningColumns() const Y_LIFETIME_BOUND { return ReturningColumns_; }
+    const TUnorderedIUs& GetOutputIUs() override { return Options.ReturningColumns.Unordered(); }
+    const TOrderedIUs<TString>& GetColumns() const Y_LIFETIME_BOUND { return Options.Columns; }
+    const TOrderedIUs<TString>& GetReturningColumns() const Y_LIFETIME_BOUND { return Options.ReturningColumns; }
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
     void PropagateLiveness(ILivenessContext& ctx) override;
-    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
-    TExprNode::TPtr BuildSettings(TExprContext& ctx);
+    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
+    TExprNode::TPtr BuildSettings(TExprContext& ctx, ui64 priority);
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
 
     TExprNode::TPtr Table;
     EEffectType EffectType;
-    const TEffectOptions Options; // Storage settings; these names are not IU identity.
+    TEffectOptions Options;
 
 protected:
     TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
-
-private:
-    // Target names and positions are fixed; only the input bindings can change.
-    TOrderedIUs<TString> Columns_;
-    const TOrderedIUs<TString> ReturningColumns_;
 };
 
 // End-of-traversal sentinel for TOpIterator
@@ -1694,14 +1738,14 @@ public:
     const TOrderedIUs<TString>& GetColumns() const Y_LIFETIME_BOUND { return Columns_; }
     const TVector<TString>& GetQueryColumns() const Y_LIFETIME_BOUND { return QueryColumns_; }
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
-    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
+    virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain = nullptr) override;
     virtual TString GetExplainName() const override { return "Root"; }
 
     void ComputeParents();
     IGraphTransformer::TStatus ComputeTypes(TRBOContext& ctx);
 
     TString PlanToString(TExprContext& ctx, ui32 printOptions = 0x0);
-    void PlanToStringRec(IOperator* op, TExprContext& ctx, TStringBuilder& builder, int ntabs, ui32 printOptions = 0x0) const;
+    void PlanToStringRec(IOperator* op, TExprContext& ctx, TStringBuilder& builder, int ntabs, ui32 printOptions = 0x0, TExplainContext* explain = nullptr) const;
 
     void ComputePlanMetadata(TRBOContext& ctx);
     void ComputePlanStatistics(TRBOContext& ctx);
@@ -1727,8 +1771,8 @@ public:
         return TOpTraversal(Iterate(order).begin());
     }
 
-    NJson::TJsonValue GetExecutionJson(ui64 & nodeCounter, ui32& operatorIdx, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00);
-    NJson::TJsonValue GetExplainJson(ui64 & nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00);
+    NJson::TJsonValue GetExecutionJson(ui64 & nodeCounter, ui32& operatorIdx, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00, TExplainContext* explain = nullptr);
+    NJson::TJsonValue GetExplainJson(ui64 & nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00, TExplainContext* explain = nullptr);
 
     TPlanProps PlanProps;
     TExprNode::TPtr Node;
@@ -1738,7 +1782,7 @@ private:
     // redirect an entry to an equivalent input ID, including repeated IDs.
     TOrderedIUs<TString> Columns_;
     // YQL's optional result hints are distinct from the actual output schema.
-    // In particular, an empty hint list must remain empty at export.
+    // An empty hint list does not override the resolved order in Columns_.
     const TVector<TString> QueryColumns_;
 
 protected:

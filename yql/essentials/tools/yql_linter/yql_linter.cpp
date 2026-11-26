@@ -1,10 +1,8 @@
 #include <yql/essentials/public/fastcheck/linter.h>
-#include <yql/essentials/public/fastcheck/utils.h>
 #include <yql/essentials/public/udf_meta/udf_meta.h>
 #include <yql/essentials/utils/tty.h>
 
 #include <library/cpp/getopt/last_getopt.h>
-#include <google/protobuf/arena.h>
 
 #include <library/cpp/colorizer/output.h>
 
@@ -96,12 +94,12 @@ int Run(int argc, char** argv) {
     checkReq.Syntax = FromString<NYql::NFastCheck::ESyntax>(syntaxStr);
     checkReq.ClusterMode = FromString<NYql::NFastCheck::EClusterMode>(clusterModeStr);
     checkReq.ClusterSystem = clusterSystem;
-    std::unique_ptr<NYql::IUdfMeta> udfMeta;
+    TMaybe<NYql::TUdfMeta> udfMeta;
     if (customUdf) {
         TFileInput filterFile(customUdf);
         auto content = filterFile.ReadAll();
-        udfMeta = NYql::NFastCheck::LoadUdfMeta(content);
-        checkReq.UdfMeta = udfMeta.get();
+        udfMeta.ConstructInPlace(NYql::NFastCheck::LoadUdfMeta(content));
+        checkReq.UdfMeta = udfMeta.Get();
     }
 
     auto checkResp = NYql::NFastCheck::RunChecks(checkReq);

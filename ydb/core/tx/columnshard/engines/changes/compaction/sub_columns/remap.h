@@ -72,21 +72,21 @@ public:
         const std::vector<TDictStats::TRTStatsValue>& statsByKeyIndex, const TSettings& settings, const ui32 recordsCount) const;
 
     void RegisterColumnStats(const TDictStats& resultColumnStats) {
-        AFL_VERIFY(!ColumnStatsRegistered);
+        YDB_LOG_VERIFY(!ColumnStatsRegistered);
         ColumnStatsRegistered = true;
         for (ui32 i = 0; i < resultColumnStats.GetColumnsCount(); ++i) {
-            AFL_VERIFY(ResultColumnKeyIndex.emplace(resultColumnStats.GetColumnName(i), i).second);
+            YDB_LOG_VERIFY(ResultColumnKeyIndex.emplace(resultColumnStats.GetColumnName(i), i).second);
         }
     }
 
     void StartSourceChunk(const ui32 sourceIdx, const TDictStats& sourceColumnStats, const TDictStats& sourceOtherStats);
 
     TRemapInfo RemapIndex(const ui32 sourceIdx, const ui32 sourceKeyIndex, const bool isColumnKey) const {
-        AFL_VERIFY(sourceIdx < RemapInfo.size());
-        AFL_VERIFY(RemapInfo[sourceIdx].size() == 2);
-        AFL_VERIFY(sourceKeyIndex < RemapInfo[sourceIdx][isColumnKey ? 1 : 0].size());
+        YDB_LOG_VERIFY(sourceIdx < RemapInfo.size());
+        YDB_LOG_VERIFY(RemapInfo[sourceIdx].size() == 2);
+        YDB_LOG_VERIFY(sourceKeyIndex < RemapInfo[sourceIdx][isColumnKey ? 1 : 0].size());
         auto result = RemapInfo[sourceIdx][isColumnKey ? 1 : 0][sourceKeyIndex];
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 };

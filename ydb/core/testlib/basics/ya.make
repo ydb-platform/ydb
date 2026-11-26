@@ -15,15 +15,20 @@ PEERDIR(
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/nodewarden
     ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/subsystem
+    ydb/core/blobstorage/subsystem/mock
     ydb/core/client/server
     ydb/core/control
     ydb/core/formats
+    # Link counters used by SchemeShard and KQP runtime; a reverse PEERDIR would form a cycle.
+    ydb/core/kqp/counters
     ydb/core/mind
     ydb/core/node_whiteboard
     ydb/core/quoter
     ydb/core/statistics/service
     ydb/core/tablet_flat
     ydb/core/testlib/actors
+    ydb/core/testlib/basics/core
     ydb/core/tx/columnshard
     ydb/core/tx/general_cache
     ydb/core/tx/scheme_board
@@ -51,6 +56,7 @@ ENDIF()
 END()
 
 RECURSE(
+    core
     default
     pg
 )

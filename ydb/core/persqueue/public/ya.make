@@ -31,6 +31,7 @@ RECURSE(
     fetcher
     ru_quoter
     list_topics
+    metrics
     mlp
     nameresolver
     partition_index_generator
@@ -38,5 +39,6 @@ RECURSE(
     reset_offset
     schema
     write_meta
+    write_sessions_quoter
     cloud_events
 )

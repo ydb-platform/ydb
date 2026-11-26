@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp/executer_actor)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:2)
 FORK_SUBTESTS()
 SPLIT_FACTOR(8)
 
@@ -9,12 +9,14 @@ SRCS(
     kqp_compute_actor_creation_ut.cpp
     kqp_executer_stats_ut.cpp
     kqp_executer_ut.cpp
+    kqp_planner_ut.cpp
     kqp_tasks_graph_ut.cpp
     max_tasks_graph_ut.cpp
 )
 
 PEERDIR(
     ydb/core/kqp/common
+    ydb/core/kqp/runtime/scheduler
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
 )

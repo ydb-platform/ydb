@@ -15,7 +15,6 @@ from google.protobuf import struct_pb2
 
 from . import table
 
-
 try:
     from ydb.public.api.protos import ydb_value_pb2
 except ImportError:

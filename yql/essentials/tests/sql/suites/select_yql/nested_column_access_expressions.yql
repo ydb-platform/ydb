@@ -1,0 +1,19 @@
+PRAGMA YqlSelect = 'force';
+
+$rows = [<|x: <|a: 1|>|>];
+
+SELECT x.a AS member, SUM(x.a) AS sum
+FROM AS_TABLE($rows)
+GROUP BY x
+HAVING SUM(x.a) > 0;
+
+SELECT ROW_NUMBER() OVER (PARTITION BY x.a ORDER BY x.a) AS row_number
+FROM AS_TABLE($rows);
+
+SELECT x.a AS member
+FROM AS_TABLE($rows) AS s
+WHERE EXISTS (
+    SELECT t.a
+    FROM AS_TABLE([<|a: 1|>]) AS t
+    WHERE t.a = s.x.a
+);

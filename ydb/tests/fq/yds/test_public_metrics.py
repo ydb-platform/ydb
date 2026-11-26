@@ -1,146 +1,113 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
-import pytest
-import time
+import json
 
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-
-import ydb.public.api.protos.draft.fq_pb2 as fq
+from ydb.tests.library.common.wait_for import wait_for
 
 
-class TestPublicMetrics(TestYdsBase):
-    @yq_v1
-    def test_select_limit(self, kikimr, client):
-        self.init_topics("public_select_limit", create_output=False)
+def check_running_metrics(io, query, input_bytes):
+    last_metrics = {}
 
-        sql = R'''
-            SELECT * FROM myyds1.`{input_topic}` LIMIT 2;
-            '''.format(
-            input_topic=self.input_topic,
+    def available():
+        nonlocal last_metrics
+        last_metrics = io.metrics(query)
+        expected = {
+            'streaming.query.tasks.count',
+            'streaming.query.cpu.usage.milliseconds',
+            'streaming.query.memory.usage.bytes',
+            'streaming.query.input.bytes',
+            'streaming.query.output.bytes',
+            'streaming.query.uptime.seconds',
+        }
+        return (
+            expected <= last_metrics.keys()
+            and last_metrics['streaming.query.tasks.count'] > 0
+            and last_metrics['streaming.query.cpu.usage.milliseconds'] > 0
+            and last_metrics['streaming.query.memory.usage.bytes'] > 0
+            and last_metrics['streaming.query.input.bytes'] >= input_bytes
+            and last_metrics['streaming.query.output.bytes'] >= input_bytes
+            and last_metrics['streaming.query.uptime.seconds'] >= 0
         )
 
-        cloud_id = "mock_cloud"
-        folder_id = "my_folder"
+    assert wait_for(available, timeout_seconds=120, step_seconds=0.5), last_metrics
 
-        client.create_yds_connection("myyds1", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
 
-        self.write_stream(["A", "B"])
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+def check_finished_plan(io, query, input_bytes):
+    rows = io.kikimr.ydb_client.query(f"""
+        SELECT Plan, StartedAt, FinishedAt FROM `.sys/streaming_queries` WHERE Path = '{query}';
+    """)[0].rows
+    assert len(rows) == 1, rows
+    plan = json.loads(rows[0]['Plan'])
 
-        metrics = kikimr.compute_plane.get_sensors(1, "yq_public")
-        assert (
-            metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.running_tasks"}
-            )
-            == 0
-        )
-        assert (
-            metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.cpu_usage_us"}
-            )
-            > 0
-        )
-        assert (
-            metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.memory_usage_bytes"}
-            )
-            > 0
-        )
-        assert (
-            metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.input_bytes"}
-            )
-            > 0
-        )
-        assert (
-            metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.output_bytes"}
-            )
-            is None
-        )
-        assert (
-            metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.uptime_seconds"}
-            )
-            >= 0
-        )
+    def stages(node):
+        if isinstance(node, dict):
+            if isinstance(node.get('Stats'), dict):
+                yield node['Stats']
+            for value in node.values():
+                yield from stages(value)
+        elif isinstance(node, list):
+            for value in node:
+                yield from stages(value)
 
-    @yq_v1
-    @pytest.mark.parametrize("stats_mode", ["STATS_MODE_FULL"])
-    def test_select_unlimited(self, kikimr, client):
-        self.init_topics("public_select_unlimited")
+    stats = list(stages(plan))
+    for name, minimum in (
+        ('CpuTimeUs', 1),
+        ('MaxMemoryUsage', 1),
+        ('IngressBytes', input_bytes),
+        ('EgressBytes', input_bytes),
+    ):
+        values = [stage.get(name, {}).get('Sum', 0) for stage in stats]
+        assert any(value >= minimum for value in values), (name, minimum, values, plan)
+    assert rows[0]['StartedAt'] is not None and rows[0]['FinishedAt'] is not None, rows
+    assert rows[0]['FinishedAt'] >= rows[0]['StartedAt'], rows
 
-        sql = R'''
-            INSERT INTO myyds2.`{output_topic}`
-            SELECT * FROM myyds2.`{input_topic}`;
-            '''.format(
-            input_topic=self.input_topic,
-            output_topic=self.output_topic,
-        )
 
-        cloud_id = "mock_cloud"
-        folder_id = "my_folder"
+class TestPublicMetrics:
+    def test_select_limit(self, ydb_topics):
+        io = ydb_topics('public_select_limit')
+        query = io.start(f"""
+            PRAGMA ydb.OptValidateStreamingCheckpoints = 'FALSE';
+            INSERT INTO {io.output} SELECT Data FROM {io.input} LIMIT 2;
+        """)
+        first = 'A' * (64 * 1024)
+        io.write([first])
+        assert io.read(1) == [first]
+        # KQP removes the metric group on completion, so observe the values
+        # while the limited query is still running, then verify their cleanup.
+        check_running_metrics(io, query, len(first))
+        io.write(['finish'])
+        assert io.read(1) == ['finish']
+        assert wait_for(
+            lambda: io.state(query)['Status'] == 'COMPLETED', timeout_seconds=120, step_seconds=0.5
+        ), io.state(query)
+        io.wait_actor_count('KQP_COMPUTE_ACTOR', 0)
+        check_finished_plan(io, query, len(first))
+        assert wait_for(lambda: not io.metrics(query), timeout_seconds=120, step_seconds=0.5), io.metrics(query)
 
-        client.create_yds_connection("myyds2", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+    def test_select_unlimited(self, ydb_topics):
+        io = ydb_topics('public_select_unlimited')
+        query = io.start(f'INSERT INTO {io.output} SELECT Data FROM {io.input};')
+        data = [symbol * (64 * 1024) for symbol in ('A', 'B', 'C', 'D')]
+        io.write(data)
+        assert io.read(len(data)) == data
+        check_running_metrics(io, query, sum(map(len, data)))
+        io.stop(query)
+        io.wait_actor_count('KQP_COMPUTE_ACTOR', 0)
+        check_finished_plan(io, query, sum(map(len, data)))
+        assert wait_for(lambda: not io.metrics(query), timeout_seconds=120, step_seconds=0.5), io.metrics(query)
 
-        data = ["A", "B", "C", "D"]
-        self.write_stream(data)
-        assert self.read_stream(len(data)) == data
-
-        time.sleep(5)  # TODO: fix and remove
-        client.abort_query(query_id)
-        client.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)
-
-        metrics = kikimr.compute_plane.get_sensors(1, "yq_public")
-        assert (
-            metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.running_tasks"}
-            )
-            == 0
-        )
-        assert (
-            metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.cpu_usage_us"}
-            )
-            > 0
-        )
-        assert (
-            metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.memory_usage_bytes"}
-            )
-            > 0
-        )
-        assert (
-            metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.input_bytes"}
-            )
-            > 0
-        )
-        assert (
-            metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.output_bytes"}
-            )
-            > 0
-        )
-        assert (
-            metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.uptime_seconds"}
-            )
-            >= 0
-        )
-        # TODO: rows must be fixed in YQ-2592
-        # assert metrics.find_sensor({"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id,
-        #                             "name": "query.source_input_records"}) > 0
-        # assert metrics.find_sensor({"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id,
-        #                             "name": "query.sink_output_records"}) > 0
-        # assert metrics.find_sensor(
-        #     {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.late_events"}) == 0
+    def test_ingress_bytes(self, ydb_topics):
+        io = ydb_topics('ingress_bytes')
+        query = io.start(f'INSERT INTO {io.output} SELECT Data FROM {io.input};')
+        data = ['1' * (1024 * 1024)]
+        for _ in range(15):
+            io.write(data)
+        assert io.read(15) == data * 15
+        assert wait_for(
+            lambda: io.metrics(query).get('streaming.query.input.bytes', 0) >= 15 * 1024 * 1024,
+            timeout_seconds=120,
+            step_seconds=0.5,
+        ), io.metrics(query)
+        io.stop(query)
+        check_finished_plan(io, query, 15 * 1024 * 1024)

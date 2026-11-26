@@ -5,7 +5,7 @@
 namespace NSQLTranslationV1 {
 
 TNodePtr TSessionTranslation::ParseSessionId(const TRule_kill_session_stmt::TBlock3& target) {
-    const auto pos = Ctx_.Pos();
+    const auto pos = Ctx_.Position(target);
     TNodePtr sessionId;
     switch (target.Alt_case()) {
         case TRule_kill_session_stmt::TBlock3::kAlt1:
@@ -28,8 +28,7 @@ TNodePtr TSessionTranslation::ParseSessionId(const TRule_kill_session_stmt::TBlo
 
 TNodePtr TSessionTranslation::Build(const TRule_kill_session_stmt& rule) {
     Ctx_.BodyPart();
-    Ctx_.Token(rule.GetToken1());
-    const auto pos = Ctx_.Pos();
+    const auto pos = Ctx_.Position(rule);
     auto sessionId = ParseSessionId(rule.GetBlock3());
     if (!sessionId) {
         return nullptr;

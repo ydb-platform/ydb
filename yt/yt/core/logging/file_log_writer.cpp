@@ -280,6 +280,20 @@ private:
             }
 
             if (File_) {
+#ifdef _linux_
+                if (Config_->TryEvictPageCacheOnFileClose) {
+                    try {
+                        File_->FlushCache();
+                        File_->EvictCache();
+                    } catch (const std::exception& ex) {
+                        YT_TLOG_ERROR("Failed to flush log file cache. Ignored")
+                            .With("FileName", FileName_)
+                            .With(ex);
+                    } catch (...) {
+                        YT_ABORT();
+                    }
+                }
+#endif
                 File_->Close();
                 File_.reset();
             }

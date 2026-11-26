@@ -405,6 +405,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AddPruneKeys(TExprBase 
             continue;
         }
 
+        if (IsEmpty(section.Ref(), *State_->Types)) {
+            YQL_CLOG(DEBUG, Core) << "Skip PruneKeys for empty YtEquiJoin input";
+            children.push_back(input.Ptr());
+            continue;
+        }
+
         if (IsAlreadyDistinct(section.Ref(), columns)) {
             children.push_back(input.Ptr());
             continue;

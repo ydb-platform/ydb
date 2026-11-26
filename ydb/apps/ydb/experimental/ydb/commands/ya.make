@@ -21,6 +21,7 @@ PEERDIR(
     library/cpp/protobuf/util
     library/cpp/threading/future
     ydb/apps/ydb/commands
+    ydb/library/workload/imdb
     ydb/public/api/protos
     ydb/public/lib/fq
     ydb/public/lib/json_value

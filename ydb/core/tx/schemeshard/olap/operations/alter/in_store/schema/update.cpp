@@ -5,7 +5,7 @@ namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
 void TInStoreSchemaUpdate::InitializeSchemaPreset(const TInStoreTable& table, const TOlapStoreInfo& storeInfo) {
     const auto& tableInfo = table.GetTableInfoVerified();
-    AFL_VERIFY(tableInfo.Description.HasSchemaPresetId());
+    YDB_LOG_VERIFY(tableInfo.Description.HasSchemaPresetId());
     const ui32 presetId = tableInfo.Description.GetSchemaPresetId();
     const auto& preset = storeInfo.GetPresetVerified(presetId);
     SchemaPreset = storeInfo.GetDescription().GetSchemaPresets(preset.GetProtoIndex());
@@ -66,7 +66,7 @@ void TInStoreSchemaUpdate::FillToShardTx(NKikimrTxColumnShard::TAlterTable& shar
     auto& alterBody = TargetInStoreTable->GetTableInfoVerified();
     *shardAlter.MutableTtlSettings() = alterBody.Description.GetTtlSettings();
 
-    AFL_VERIFY(!!SchemaPreset);
+    YDB_LOG_VERIFY(!!SchemaPreset);
     *shardAlter.MutableSchemaPreset() = *SchemaPreset;
 
     if (alterBody.Description.HasSchemaPresetVersionAdj()) {

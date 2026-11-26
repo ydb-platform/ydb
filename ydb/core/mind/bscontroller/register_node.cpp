@@ -300,7 +300,7 @@ public:
         Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead, /*comprehensive=*/ true);
         Self->SerializeSyncers(nodeId, &Response->Record, groupIDsToRead);
 
-        Self->ReadGroups(groupIDsToRead, false, Response.get(), nodeId);
+        Self->ReadGroups(groupIDsToRead, true, Response.get(), nodeId);
         Y_ABORT_UNLESS(groupIDsToRead.empty());
 
         Self->ReadGroups(groupsToDiscard, true, Response.get(), nodeId);
@@ -419,6 +419,9 @@ public:
                 Y_ABORT_UNLESS(node);
                 Y_ABORT_UNLESS(!node->Registered);
                 node->Registered = true;
+                // a share taken in Execute may be older than the one already sent to the node during the commit
+                Self->FillBridgeSyncNodeRate(nodeId, &Response->Record);
+                Self->OnStandbyWriterRegistered(nodeId, &Response->Record);
                 Self->SendInReply(*Request, std::move(Response));
                 Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
             }
@@ -637,6 +640,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     node.InterconnectSessionId = {};
     node.Registered = false;
     DatabaseSpace.UnsubscribeNode(nodeId);
+    OnStandbyWriterLost(nodeId);
 
     for (const TGroupId groupId : std::exchange(node.WaitingForGroups, {})) {
         if (TGroupInfo *group = FindGroup(groupId)) {
@@ -697,6 +701,9 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     node.LastDisconnectTimestamp = now;
     node.DisconnectedTimestampMono = mono;
     Execute(new TTxUpdateNodeDisconnectTimestamp(nodeId, this));
+    if (!StandbySealingTargets.empty()) {
+        ProcessSyncers(); // the seals waiting for the node stop waiting in a while
+    }
 }
 
 void TBlobStorageController::EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo) {

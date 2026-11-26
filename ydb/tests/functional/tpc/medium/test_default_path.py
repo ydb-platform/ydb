@@ -11,7 +11,7 @@ class TestDefaultPath(FunctionalTestBase):
 
     def test_tpcds(self):
         self.run_cli(['workload', 'tpcds', 'init'])
-        self.run_cli(['workload', 'tpcds', 'import', 'generator', '--scale=0.1'])
+        self.run_cli(['workload', 'tpcds', 'import', 'generator', '--scale=0.1', '--tables', 'store_sales,date_dim,store,customer'])
         self.run_cli(['workload', 'tpcds', 'run', '--scale=0.1', '--include', '1'])
         self.run_cli(['workload', 'tpcds', 'clean'])
 

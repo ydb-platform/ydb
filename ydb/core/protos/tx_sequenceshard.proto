@@ -153,6 +153,32 @@ message TEvUpdateSequenceResult {
     uint64 MovedTo = 5; // moved to a different sequence shard
 }
 
+message TEvAdvanceSequence {
+    NKikimrProto.TPathID PathId = 1;
+    // Range of sequence values observed in a batch of rows.
+    // One request should never wrap around the sequence range.
+    // If you need wrapping, you should send two separate messages.
+    sint64 ObservedMin = 2;
+    sint64 ObservedMax = 3;
+}
+
+message TEvAdvanceSequenceResult {
+    enum EStatus {
+        UNKNOWN = 0;
+        SUCCESS = 1;
+        PIPE_OUTDATED = 2;
+        SEQUENCE_NOT_FOUND = 3;
+        SEQUENCE_FROZEN = 4;
+        SEQUENCE_MOVED = 5;
+    }
+
+    EStatus Status = 1;
+    uint64 Origin = 2;
+    uint64 MovedTo = 3; // moved to a different sequence shard
+    sint64 NextValue = 4; // next value after advance
+    bool NextUsed = 5;
+}
+
 message TEvFreezeSequence {
     NKikimrProto.TPathID PathId = 1;
     uint64 TxId = 2;

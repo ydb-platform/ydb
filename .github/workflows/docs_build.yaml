@@ -13,6 +13,7 @@ on:
       - '.github/workflows/docs_build.yaml'
       - '.github/workflows/docs_build_core.yaml'
       - '.github/workflows/docs_release.yaml'
+      - '.github/workflows/docs_release_core.yaml'
   workflow_dispatch:
     inputs:
       pull_number:

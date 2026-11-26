@@ -21,9 +21,10 @@
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/plan2svg/plan2svg.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_type_annotation.h>
@@ -36,14 +37,17 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
+#include <library/cpp/xml/document/xml-document.h>
 
 #include <util/string/split.h>
 
 #include <algorithm>
 #include <array>
 #include <ctime>
+#include <limits>
 #include <optional>
 #include <regex>
 #include <fstream>
@@ -133,6 +137,8 @@ TString ExecuteExplainAnalyze(NYdb::NQuery::TSession& session, const TString& qu
     result.GetIssues().PrintTo(Cerr);
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
     auto plan = TString{*result.GetStats()->GetPlan()};
+    UNIT_ASSERT_C(!plan.Contains("\"RuntimeStatsType\""), plan);
+    UNIT_ASSERT_C(!plan.Contains("\"UseStageStats\""), plan);
     PrintPlan(plan, /*analyzeMode=*/true);
     return plan;
 }
@@ -269,6 +275,62 @@ using namespace NYqlTests;
 
 Y_UNIT_TEST_SUITE(KqpRboYql) {
 
+    Y_UNIT_TEST_TWIN(ExplainPlanRenderers, NewRbo) {
+        using NYdb::NConsoleClient::EDataFormat;
+        using NYdb::NConsoleClient::TQueryPlanPrinter;
+
+        auto appConfig = CreateExplainPlanTestAppConfig();
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        CreateExplainPlanTestTables(kikimr);
+        BulkUpsertExplainPlanTestRows(kikimr);
+        auto session = CreateQuerySession(kikimr);
+
+        const TVector<TString> queries = {
+            "SELECT a, b FROM `/Root/t1` WHERE a > 5 ORDER BY b DESC, a ASC LIMIT 5;",
+            "SELECT b, COUNT(DISTINCT a) AS n, SUM(a) AS s FROM `/Root/t1` GROUP BY b ORDER BY b;",
+            "SELECT a, SUM(b) OVER (PARTITION BY c ORDER BY a ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) AS s FROM `/Root/t1`;",
+            "SELECT a FROM `/Root/t1` UNION ALL SELECT a FROM `/Root/t2`;",
+        };
+        for (const auto& query : queries) {
+            for (const bool analyze : {false, true}) {
+                const TString plan = analyze ? ExecuteExplainAnalyze(session, query) : ExecuteExplain(session, query);
+                NJson::TJsonValue original;
+                UNIT_ASSERT(NJson::ReadJsonTree(plan, &original));
+
+                for (const auto format : {EDataFormat::Pretty, EDataFormat::PrettyTable,
+                    EDataFormat::JsonUnicode, EDataFormat::JsonBase64, EDataFormat::JsonBase64Simplify,
+                    EDataFormat::Svg})
+                {
+                    TStringStream output;
+                    TQueryPlanPrinter(format, analyze, output).Print(plan);
+                    if (format == EDataFormat::Svg) {
+                        UNIT_ASSERT_C(output.Str().StartsWith("<svg"), query);
+                        UNIT_ASSERT_C(output.Str().Contains("t1"), query);
+                        NXml::TDocument document(output.Str(), NXml::TDocument::String);
+                        Y_UNUSED(document);
+                    } else if (format == EDataFormat::Pretty || format == EDataFormat::PrettyTable) {
+                        UNIT_ASSERT_C(output.Str().Contains("t1"), query);
+                    } else {
+                        NJson::TJsonValue printed;
+                        UNIT_ASSERT_C(NJson::ReadJsonTree(output.Str(), &printed), query);
+                        const auto& expected = format == EDataFormat::JsonBase64Simplify
+                            ? original.GetMapSafe().at("SimplifiedPlan") : original;
+                        UNIT_ASSERT_VALUES_EQUAL_C(printed, expected, query);
+                    }
+                }
+
+                NPlan2Svg::TPlanVisualizer visualizer;
+                visualizer.LoadPlans(plan, /*simplified=*/true);
+                const auto svg = visualizer.PrintSvg();
+                UNIT_ASSERT_C(svg.StartsWith("<svg"), query);
+                UNIT_ASSERT_C(svg.Contains("t1"), query);
+                NXml::TDocument document(svg, NXml::TDocument::String);
+                Y_UNUSED(document);
+            }
+        }
+    }
+
     Y_UNIT_TEST(ExplainAnalyze) {
         TExplainPlanTestContext testContext;
         auto& session = testContext.GetSession();
@@ -346,8 +408,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(leftRead, plan);
         UNIT_ASSERT_C(rightRead, plan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*leftRead, "E-Rows"), "123", plan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*rightRead, "E-Rows"), "456", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(leftRead->GetMapSafe().at("E-Rows").GetDoubleSafe(), 123, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(rightRead->GetMapSafe().at("E-Rows").GetDoubleSafe(), 456, plan);
     }
 
     Y_UNIT_TEST(ExplainOriginalRowsHints) {
@@ -377,9 +439,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(readR, plan);
         UNIT_ASSERT_C(readS, plan);
         UNIT_ASSERT_C(readT, plan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readR, "E-Rows"), "2000000000", plan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readS, "E-Rows"), "3000000000", plan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readT, "E-Rows"), "777", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(readR->GetMapSafe().at("E-Rows").GetDoubleSafe(), 2000000000, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(readS->GetMapSafe().at("E-Rows").GetDoubleSafe(), 3000000000, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(readT->GetMapSafe().at("E-Rows").GetDoubleSafe(), 777, plan);
     }
 
     Y_UNIT_TEST(ExplainOriginalRowsHintsOldRbo) {
@@ -430,18 +492,19 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto simplifiedSortPlan = GetSimplifiedPlan(sortPlan);
         const auto* topSortOp = FindOperatorByStringField(simplifiedSortPlan, "Name", "TopSort");
         UNIT_ASSERT_C(topSortOp, sortPlan);
-        const auto topSortBy = GetStringField(*topSortOp, "TopSortBy");
-        UNIT_ASSERT_C(topSortBy.Contains("t1.a desc nulls first"), sortPlan);
-        UNIT_ASSERT_C(topSortBy.Contains("t1.b asc nulls first"), sortPlan);
+        NJson::TJsonValue expectedSort;
+        UNIT_ASSERT(NJson::ReadJsonTree(R"([
+            {"Column":"t1.a","Ascending":false,"NullsFirst":true},
+            {"Column":"t1.b","Ascending":true,"NullsFirst":true}
+        ])", &expectedSort));
+        UNIT_ASSERT_VALUES_EQUAL_C((*topSortOp)["TopSortBy"], expectedSort, sortPlan);
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*topSortOp, "Limit"), "5", sortPlan);
 
         const auto* mergeConnection = FindConnectionNode(simplifiedSortPlan, "Merge");
         UNIT_ASSERT_C(mergeConnection, sortPlan);
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*mergeConnection, "Node Type"), "Merge", sortPlan);
-        const auto mergeSortBy = GetStringField(*mergeConnection, "SortBy");
-        UNIT_ASSERT_C(mergeSortBy.Contains("t1.a desc nulls first"), sortPlan);
-        UNIT_ASSERT_C(mergeSortBy.Contains("t1.b asc nulls first"), sortPlan);
-        UNIT_ASSERT_C(mergeConnection->GetMapSafe().contains("SortColumns"), sortPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C((*mergeConnection)["SortBy"], expectedSort, sortPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C((*mergeConnection)["SortColumns"], expectedSort, sortPlan);
     }
 
     Y_UNIT_TEST(ExplainReadPushdown) {
@@ -454,14 +517,24 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             order by t1.a desc
             limit 5;
         )");
-        const auto simplifiedPushedReadPlan = GetSimplifiedPlan(pushedReadPlan);
-        const auto* readOp = FindOperatorByStringField(simplifiedPushedReadPlan, "Table", "t1");
-        UNIT_ASSERT_C(readOp, pushedReadPlan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Storage"), "Column", pushedReadPlan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "SortDirection"), "desc", pushedReadPlan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Limit"), "5", pushedReadPlan);
-        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a"), pushedReadPlan);
-        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "b"), pushedReadPlan);
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(pushedReadPlan, &planJson, true), pushedReadPlan);
+        for (const auto* planField : {"Plan", "SimplifiedPlan"}) {
+            const auto* readOp = FindOperatorByStringField(planJson.GetMapSafe().at(planField), "Table", "t1");
+            UNIT_ASSERT_C(readOp, pushedReadPlan);
+            UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Path"), "/Root/t1", pushedReadPlan);
+            for (const auto* field : {"E-Rows", "E-Size", "E-Cost"}) {
+                UNIT_ASSERT_C((*readOp)[field].IsDouble() || (*readOp)[field].IsUInteger() || (*readOp)[field].IsInteger(), pushedReadPlan);
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Storage"), "Column", pushedReadPlan);
+            UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "SortDirection"), "desc", pushedReadPlan);
+            UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Limit"), "5", pushedReadPlan);
+            UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a"), pushedReadPlan);
+            UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "b"), pushedReadPlan);
+            UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "Columns", "t1.a"), pushedReadPlan);
+            UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "Columns", "t1.b"), pushedReadPlan);
+            UNIT_ASSERT_VALUES_EQUAL_C(readOp->GetMapSafe().at("Columns").GetArraySafe().size(), 2, pushedReadPlan);
+        }
     }
 
     Y_UNIT_TEST(ExplainRangePushdown) {
@@ -476,8 +549,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(readOp, plan);
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Table"), "t1", plan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRangesKeys", "a"), plan);
-        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a (5, +∞)"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRanges", "({a: 5}, {a: +∞})"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a"), plan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "b"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "Columns", "t1.a"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "Columns", "t1.b"), plan);
         UNIT_ASSERT_C(!readOp->GetMapSafe().contains("Predicate"), plan);
         UNIT_ASSERT_C(!readOp->GetMapSafe().contains("ReadRangesPointPrefixLen"), plan);
 
@@ -488,11 +564,329 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto simplifiedDisjointPlan = GetSimplifiedPlan(disjointPlan);
         const auto* disjointReadOp = FindOperatorByStringField(simplifiedDisjointPlan, "Name", "TableRangeScan");
         UNIT_ASSERT_C(disjointReadOp, disjointPlan);
-        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadColumns", "a (-∞, 5)"), disjointPlan);
-        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadColumns", "a [10, +∞)"), disjointPlan);
+        // Two ranges are not a literal range, so they are computed from the ranges expression.
+        UNIT_ASSERT_VALUES_EQUAL_C(disjointReadOp->GetMapSafe().at("ReadRanges").GetArraySafe().size(), 2, disjointPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadRanges", "({a: -∞}, {a: 5})"), disjointPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadRanges", "[{a: 10}, {a: +∞})"), disjointPlan);
+        UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("ReadRangesExpression"), disjointPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadRangesKeys", "a"), disjointPlan);
         UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadColumns", "b"), disjointPlan);
         UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("Predicate"), disjointPlan);
         UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("ReadRangesPointPrefixLen"), disjointPlan);
+
+        // A parameter has no value at compile time, so the ranges are described by the structure of the expression.
+        auto parameterPlan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            DECLARE $p AS Int64;
+            SELECT t1.a, t1.b FROM `/Root/t1` AS t1 WHERE t1.a < $p OR t1.a >= 10;
+        )");
+        const auto simplifiedParameterPlan = GetSimplifiedPlan(parameterPlan);
+        const auto* parameterReadOp = FindOperatorByStringField(simplifiedParameterPlan, "Name", "TableRangeScan");
+        UNIT_ASSERT_C(parameterReadOp, parameterPlan);
+        UNIT_ASSERT_C(!parameterReadOp->GetMapSafe().contains("ReadRanges"), parameterPlan);
+        const auto expression = GetStringField(*parameterReadOp, "ReadRangesExpression");
+        UNIT_ASSERT_C(expression.StartsWith("a ∈ ") && expression.Contains("$p") && expression.Contains("[10, +∞)"), parameterPlan);
+    }
+
+    Y_UNIT_TEST(ExplainRangeNonDeterministic) {
+        TExplainPlanTestContext testContext;
+        auto tableSession = testContext.GetKikimr().GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto schema = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/range_review` (a Int64 NOT NULL, PRIMARY KEY (a));
+            CREATE TABLE `/Root/range_clock` (a Timestamp NOT NULL, PRIMARY KEY (a));
+        )").GetValueSync();
+        UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+        const TStringBuf queries[] = {
+            "SELECT * FROM `/Root/range_review` WHERE a < CAST(RandomNumber(1) % 1000000ul AS Int64) OR a = -1;",
+            "SELECT * FROM `/Root/range_review` WHERE a < CAST(YQL::RandomNumber() % 1000000ul AS Int64) OR a = -1;",
+            "SELECT * FROM `/Root/range_clock` WHERE a < CurrentUtcTimestamp() OR a = Timestamp('2000-01-01T00:00:00Z');",
+        };
+        for (const auto query : queries) {
+            const auto plan = ExecuteExplain(testContext.GetSession(), TStringBuilder() << "PRAGMA YqlSelect = 'force'; " << query);
+            const auto simplified = GetSimplifiedPlan(plan);
+            const auto* read = FindOperatorByStringField(simplified, "Name", "TableRangeScan");
+            UNIT_ASSERT_C(read, plan);
+            UNIT_ASSERT_C(!read->GetMapSafe().contains("ReadRanges"), query << ": " << plan);
+            UNIT_ASSERT_C(read->GetMapSafe().contains("ReadRangesExpression"), query << ": " << plan);
+        }
+    }
+
+    Y_UNIT_TEST(ExplainRangeEvaluationLimits) {
+        TExplainPlanTestContext testContext;
+        struct TCase {
+            size_t Count;
+            size_t Step;
+            bool Evaluated;
+        };
+        // Adjacent inputs can merge below the display limit; disjoint outputs and oversized inputs fall back.
+        for (const auto test : {TCase{256, 1, true}, TCase{257, 1, false}, TCase{21, 2, false}}) {
+            TStringBuilder query;
+            query << "PRAGMA YqlSelect = 'force'; SELECT * FROM `/Root/t1` WHERE a IN (";
+            for (size_t i = 0; i < test.Count; ++i) {
+                if (i) {
+                    query << ',';
+                }
+                query << i * test.Step;
+            }
+            query << ");";
+            const auto plan = ExecuteExplain(testContext.GetSession(), query);
+            const auto simplified = GetSimplifiedPlan(plan);
+            const auto* read = FindOperatorByStringField(simplified, "Name", "TableRangeScan");
+            UNIT_ASSERT_C(read, plan);
+            UNIT_ASSERT_VALUES_EQUAL_C(read->GetMapSafe().contains("ReadRanges"), test.Evaluated, plan);
+            UNIT_ASSERT_VALUES_EQUAL_C(read->GetMapSafe().contains("ReadRangesExpression"), !test.Evaluated, plan);
+            if (test.Evaluated) {
+                UNIT_ASSERT_C(StringArrayFieldContains(*read, "ReadRanges", "[{a: 0}, {a: 256})"), plan);
+            }
+        }
+    }
+
+    // Exact expectations for every supported case from the range-display showcase.
+    Y_UNIT_TEST(ExplainRangeDisplayShowcase) {
+        TExplainPlanTestContext testContext;
+        auto tableSession = testContext.GetKikimr().GetTableClient().CreateSession().GetValueSync().GetSession();
+        const std::pair<TStringBuf, TStringBuf> tables[] = {
+            {"sc_row", "(a Int64 NOT NULL, b Int64 NOT NULL, c Int64, PRIMARY KEY (a, b))"},
+            {"sc_col", "(a Int64 NOT NULL, b Int64 NOT NULL, c Int64, PRIMARY KEY (a, b)) WITH (STORE = column)"},
+            {"sc_projection", "(a Int32 NOT NULL, b Int32 NOT NULL, c Int32, PRIMARY KEY (a, b))"},
+            {"sc_triple", "(a Int32 NOT NULL, b Int32 NOT NULL, c Int32 NOT NULL, PRIMARY KEY (a, b, c))"},
+            {"sc_idx", "(a Int64 NOT NULL, c Int64, PRIMARY KEY (a), INDEX idx GLOBAL ON (c))"},
+            {"sc_nullable", "(k Int64, v Int64, PRIMARY KEY (k))"},
+            {"sc_str", "(s String NOT NULL, v Int64, PRIMARY KEY (s))"},
+            {"sc_utf8", "(u Utf8 NOT NULL, v Int64, PRIMARY KEY (u))"},
+            {"sc_i8", "(k Int8 NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_u32", "(k Uint32 NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_dec", "(k Decimal(10, 2) NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_date", "(k Date NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_dt", "(k Datetime NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_ts", "(k Timestamp NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_interval", "(k Interval NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_uuid", "(k Uuid NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_bool", "(k Bool NOT NULL, v Int64, PRIMARY KEY (k))"},
+        };
+        for (const auto& [name, schema] : tables) {
+            auto result = tableSession.ExecuteSchemeQuery(TStringBuilder() << "CREATE TABLE `/Root/" << name << "` " << schema << ";").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), name << ": " << result.GetIssues().ToString());
+        }
+
+        struct TCase {
+            TStringBuf Title;
+            TStringBuf Table;
+            TStringBuf Query;
+            TVector<TString> Ranges;
+            TStringBuf Expression;
+            bool FullScan = false;
+        };
+        const TCase cases[] = {
+            {"Point on the whole key", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 AND b = 10;", {"[{a: 1, b: 10}, {a: 1, b: 10}]"}},
+            {"Range on the second key column", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 AND b >= 10 AND b < 20;", {"[{a: 1, b: 10}, {a: 1, b: 20})"}},
+            {"Key prefix", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1;", {"({a: 1, b: -∞}, {a: 1, b: +∞})"}},
+            {"Greater than", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a > 5;", {"({a: 5, b: +∞}, {a: +∞, b: +∞})"}},
+            {"Closed interval", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a >= 5 AND a <= 10;", {"({a: 5, b: -∞}, {a: 10, b: +∞})"}},
+            {"BETWEEN", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a BETWEEN 5 AND 10;", {"({a: 5, b: -∞}, {a: 10, b: +∞})"}},
+            {"Disjoint ranges from OR", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a < 5 OR a >= 10;", {"({a: -∞, b: -∞}, {a: 5, b: -∞})", "({a: 10, b: -∞}, {a: +∞, b: +∞})"}},
+            {"Not equal", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a != 5;", {"({a: -∞, b: -∞}, {a: 5, b: -∞})", "({a: 5, b: +∞}, {a: +∞, b: +∞})"}},
+            {"IN", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3);", {"({a: 1, b: -∞}, {a: 4, b: -∞})"}},
+            {"IN times a point", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2) AND b = 7;", {"[{a: 1, b: 7}, {a: 1, b: 7}]", "[{a: 2, b: 7}, {a: 2, b: 7}]"}},
+            {"IN times BETWEEN", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2) AND b BETWEEN 10 AND 20;", {"[{a: 1, b: 10}, {a: 1, b: 20}]", "[{a: 2, b: 10}, {a: 2, b: 20}]"}},
+            {"OR of composite conditions", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE (a = 1 AND b < 5) OR (a = 3 AND b >= 10);", {"({a: 1, b: -∞}, {a: 1, b: 5})", "[{a: 3, b: 10}, {a: 3, b: +∞})"}},
+            {"Overlapping ranges merge", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a < 5 OR a < 7 OR a = 20;", {"({a: -∞, b: -∞}, {a: 7, b: -∞})", "({a: 20, b: -∞}, {a: 20, b: +∞})"}},
+            {"A column after a range goes to the filter", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a > 1 AND b = 5;", {"({a: 1, b: +∞}, {a: +∞, b: +∞})"}},
+            {"A non-key condition goes to the filter", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 AND b > 5 AND c = 7;", {"({a: 1, b: 5}, {a: 1, b: +∞})"}},
+            {"OR across key columns", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 OR b = 2;", {}, "", true},
+            {"Tuple IN in key order", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE (a, b) IN ((1, 10), (2, 20));", {"[{a: 1, b: 10}, {a: 1, b: 10}]", "[{a: 2, b: 20}, {a: 2, b: 20}]"}},
+            {"Tuple IN in another order", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE (b, a) IN ((10, 1), (20, 2));", {"[{a: 1, b: 10}, {a: 1, b: 10}]", "[{a: 2, b: 20}, {a: 2, b: 20}]"}},
+            {"IN with 15 values", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);", {"({a: 1, b: -∞}, {a: 16, b: -∞})"}},
+            {"IN with 25 values merges to one range", "sc_row",
+             "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25);", {"({a: 1, b: -∞}, {a: 26, b: -∞})"}},
+            {"Product of IN lists: 24 inputs merge to three ranges", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3) AND b IN (1, 2, 3, 4, 5, 6, 7, 8);", {"[{a: 1, b: 1}, {a: 1, b: 9})", "[{a: 2, b: 1}, {a: 2, b: 9})", "[{a: 3, b: 1}, {a: 3, b: 9})"}},
+
+            {"Parameter: literal range", "sc_row", "DECLARE $a AS Int64; SELECT * FROM `/Root/sc_row` WHERE a = $a;", {"({a: $a, b: -∞}, {a: $a, b: +∞})"}},
+            {"Parameters: literal interval", "sc_row", "DECLARE $lo AS Int64; DECLARE $hi AS Int64; SELECT * FROM `/Root/sc_row` WHERE a >= $lo AND a < $hi;", {"({a: $lo, b: -∞}, {a: $hi, b: -∞})"}},
+            {"Parameter in a multi-range read", "sc_row", "DECLARE $hi AS Int64; SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2) AND b >= 10 AND b < $hi;", {}, "a ∈ {1, 2} × b ∈ [10, $hi)"},
+            {"Parameter in OR", "sc_row", "DECLARE $p AS Int64; SELECT * FROM `/Root/sc_row` WHERE a < $p OR a >= 10;", {}, "a ∈ (-∞, $p) ∪ [10, +∞)"},
+            {"IN over a list parameter", "sc_row", "DECLARE $list AS List<Int64>; SELECT * FROM `/Root/sc_row` WHERE a IN $list;", {}, "in_ranges(a, $list, limit=10000)"},
+            {"Tuple IN over a parameter", "sc_row", "DECLARE $pairs AS List<Tuple<Int64, Int64>>; SELECT * FROM `/Root/sc_row` WHERE (a, b) IN $pairs;", {}, "in_ranges((a, b), $pairs, limit=10000)"},
+            {"Tuple IN over a parameter in another order", "sc_row", "DECLARE $pairs AS List<Tuple<Int64, Int64>>; SELECT * FROM `/Root/sc_row` WHERE (b, a) IN $pairs;", {}, "in_ranges((b, a), $pairs, limit=10000)"},
+            {"IN over a transformed list parameter", "sc_row", "DECLARE $list AS List<Int64>; SELECT * FROM `/Root/sc_row` WHERE a IN ListTake($list, 1);", {}, "in_ranges(a, f1($list), limit=10000)"},
+            {"Condition that does not depend on the row", "sc_row", "DECLARE $flag AS Bool; SELECT * FROM `/Root/sc_row` WHERE a = 1 OR $flag;", {}, "a ∈ {1} ∪ if($flag, a ∈ (-∞, +∞), ∅)"},
+
+            {"Fraction on an integer key: equal", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1.5;", {}, "a ∈ {1.5}"},
+            {"Fraction on an integer key: less", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a < 2.5;", {}, "", true},
+            {"Value above Int8: less", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k < 300;", {"({k: -∞}, {k: 127}]"}},
+            {"Value above Int8: greater", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k > 300;", {}},
+            {"Value above Int8: equal", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k = 300;", {}},
+            {"Value above Int8: not equal", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k != 300;", {"({k: -∞}, {k: +∞})"}},
+            {"Uint32 key", "sc_u32", "SELECT * FROM `/Root/sc_u32` WHERE k > 4000000000;", {"({k: 4000000000}, {k: +∞})"}},
+
+            {"Nullable key: less", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k < 5;", {"({k: NULL}, {k: 5})"}},
+            {"Nullable key: IS NULL", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k IS NULL;", {"[{k: NULL}, {k: NULL}]"}},
+            {"Nullable key: IS NOT NULL", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k IS NOT NULL;", {"({k: NULL}, {k: +∞})"}},
+            {"Nullable key: value or NULL", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k = 5 OR k IS NULL;", {"[{k: NULL}, {k: NULL}]", "[{k: 5}, {k: 5}]"}},
+
+            {"String: point", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s = 'abc';", {"[{s: \"abc\"}, {s: \"abc\"}]"}},
+            {"String: interval", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s >= 'abc' AND s < 'abd';", {"[{s: \"abc\"}, {s: \"abd\"})"}},
+            {"String: StartsWith", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE StartsWith(s, 'ab');", {"[{s: \"ab\"}, {s: \"ac\"})"}},
+            {"String: LIKE prefix", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s LIKE 'ab%';", {"[{s: \"ab\"}, {s: \"ac\"})"}},
+            {"String: NOT StartsWith", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE NOT StartsWith(s, 'ab');", {"({s: -∞}, {s: \"ab\"})", "[{s: \"ac\"}, {s: +∞})"}},
+            {"String: StartsWith a parameter", "sc_str", "DECLARE $p AS String; SELECT * FROM `/Root/sc_str` WHERE StartsWith(s, $p);", {}, "s ∈ StartsWith($p)"},
+            {"String: quotes and separators", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s = 'a\"b, c: 1';", {"[{s: \"a\\\"b, c: 1\"}, {s: \"a\\\"b, c: 1\"}]"}},
+            {"String: non-UTF-8 bytes", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s = '\\xff\\xfe';", {"[{s: \"\\xFF\\xFE\"}, {s: \"\\xFF\\xFE\"}]"}},
+            {"Utf8: StartsWith", "sc_utf8", "SELECT * FROM `/Root/sc_utf8` WHERE StartsWith(u, 'при');", {"[{u: \"при\"}, {u: \"прй\"})"}},
+
+
+            {"Decimal key", "sc_dec", "SELECT * FROM `/Root/sc_dec` WHERE k < Decimal('1.5', 10, 2);", {"({k: -∞}, {k: 1.5})"}},
+            {"Date key: month", "sc_date", "SELECT * FROM `/Root/sc_date` WHERE k >= Date('2024-01-01') AND k < Date('2024-02-01');", {"[{k: 2024-01-01}, {k: 2024-02-01})"}},
+            {"Date key: point", "sc_date", "SELECT * FROM `/Root/sc_date` WHERE k = Date('2024-01-01');", {"[{k: 2024-01-01}, {k: 2024-01-01}]"}},
+            {"Datetime key", "sc_dt", "SELECT * FROM `/Root/sc_dt` WHERE k BETWEEN Datetime('2024-01-01T00:00:00Z') AND Datetime('2024-01-02T00:00:00Z');", {"[{k: 2024-01-01T00:00:00Z}, {k: 2024-01-02T00:00:00Z}]"}},
+            {"Timestamp key", "sc_ts", "SELECT * FROM `/Root/sc_ts` WHERE k >= Timestamp('2024-01-01T00:00:00Z');", {"[{k: 2024-01-01T00:00:00.000000Z}, {k: +∞})"}},
+            {"Interval key", "sc_interval", "SELECT * FROM `/Root/sc_interval` WHERE k > Interval('PT1H');", {"({k: 3600000000}, {k: +∞})"}},
+            {"Uuid key: point", "sc_uuid", "SELECT * FROM `/Root/sc_uuid` WHERE k = Uuid('00112233-4455-6677-8899-aabbccddeeff');", {"[{k: 00112233-4455-6677-8899-aabbccddeeff}, {k: 00112233-4455-6677-8899-aabbccddeeff}]"}},
+            {"Uuid key: two points", "sc_uuid",
+             "SELECT * FROM `/Root/sc_uuid` WHERE k IN (Uuid('00112233-4455-6677-8899-aabbccddeeff'), Uuid('ffeeddcc-bbaa-9988-7766-554433221100'));", {"[{k: 00112233-4455-6677-8899-aabbccddeeff}, {k: 00112233-4455-6677-8899-aabbccddeeff}]", "[{k: ffeeddcc-bbaa-9988-7766-554433221100}, {k: ffeeddcc-bbaa-9988-7766-554433221100}]"}},
+            {"Bool key", "sc_bool", "SELECT * FROM `/Root/sc_bool` WHERE k = true;", {"[{k: true}, {k: true}]"}},
+
+            {"Column table: OR of composite conditions", "sc_col", "SELECT * FROM `/Root/sc_col` WHERE ((a = 1 AND b < 5) OR (a = 3 AND b >= 10)) AND c = 7;", {"({a: 1, b: -∞}, {a: 1, b: 5})", "[{a: 3, b: 10}, {a: 3, b: +∞})"}},
+            {"Column table: IN times a point", "sc_col", "SELECT * FROM `/Root/sc_col` WHERE a IN (1, 2) AND b = 7;", {"[{a: 1, b: 7}, {a: 1, b: 7}]", "[{a: 2, b: 7}, {a: 2, b: 7}]"}},
+            {"Column table: parameter", "sc_col", "DECLARE $hi AS Int64; SELECT * FROM `/Root/sc_col` WHERE a IN (1, 2) AND b < $hi;", {}, "a ∈ {1, 2} × b ∈ (-∞, $hi)"},
+
+            {"Secondary index: point", "sc_idx", "SELECT * FROM `/Root/sc_idx` WHERE c = 5;", {"({c: 5, a: -∞}, {c: 5, a: +∞})"}},
+            {"Secondary index: IN", "sc_idx", "SELECT * FROM `/Root/sc_idx` WHERE c IN (1, 2);", {"({c: 1, a: -∞}, {c: 3, a: -∞})"}},
+            {"Secondary index: range", "sc_idx", "SELECT a FROM `/Root/sc_idx` WHERE c > 5 AND c < 10;", {"({c: 5, a: +∞}, {c: 10, a: -∞})"}},
+            {"Tuple IN projects away a non-key column", "sc_projection", "DECLARE $triples AS List<Tuple<Int32, Int32, Int32>>; SELECT * FROM `/Root/sc_projection` WHERE (a, b, c) IN $triples;", {}, "in_ranges((a, b), project($triples, 0, 1), limit=10000)"},
+            {"Tuple IN projects reordered columns", "sc_projection", "DECLARE $triples AS List<Tuple<Int32, Int32, Int32>>; SELECT * FROM `/Root/sc_projection` WHERE (c, a, b) IN $triples;", {}, "in_ranges((a, b), project($triples, 1, 2), limit=10000)"},
+            {"Tuple IN projects a repeated column", "sc_projection", "DECLARE $triples AS List<Tuple<Int32, Int32, Int32>>; SELECT * FROM `/Root/sc_projection` WHERE (a, a, b) IN $triples;", {}, "in_ranges((a, b), project($triples, 0, 2), limit=10000)"},
+            {"Tuple IN on three key columns", "sc_triple", "DECLARE $triples AS List<Tuple<Int32, Int32, Int32>>; SELECT * FROM `/Root/sc_triple` WHERE (a, b, c) IN $triples;", {}, "in_ranges((a, b, c), $triples, limit=10000)"},
+            {"Computed parameter bound", "sc_row", "DECLARE $p AS Int64; SELECT * FROM `/Root/sc_row` WHERE a > $p + 1;", {}, "a ∈ (f1($p), +∞)"},
+            {"Runtime IN with a constrained suffix", "sc_row", "DECLARE $list AS List<Int64>; SELECT * FROM `/Root/sc_row` WHERE a IN $list AND b = 7;", {}, "range_product(in_ranges(a, $list, limit=10000), b ∈ {7}, limit=10000)"},
+            {"Product of runtime IN lists", "sc_row", "DECLARE $xs AS List<Int64>; DECLARE $ys AS List<Int64>; SELECT * FROM `/Root/sc_row` WHERE a IN $xs AND b IN $ys;", {}, "range_product(in_ranges(a, $xs, limit=10000), in_ranges(b, $ys, limit=10000), limit=10000)"},
+        };
+        for (const auto& test : cases) {
+            const auto result = testContext.GetSession().ExecuteQuery(
+                TStringBuilder() << "PRAGMA YqlSelect = 'force'; " << test.Query,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), test.Title << ": " << result.GetIssues().ToString());
+            const auto plan = TString{*result.GetStats()->GetPlan()};
+            const auto simplified = GetSimplifiedPlan(plan);
+            const auto* read = FindOperatorByStringField(simplified, "Name", test.FullScan ? "TableFullScan" : "TableRangeScan");
+            UNIT_ASSERT_C(read, test.Title << ": " << plan);
+            UNIT_ASSERT_C(GetStringField(*read, "Table").StartsWith(test.Table), test.Title << ": " << plan);
+            const auto& fields = read->GetMapSafe();
+            if (test.FullScan || !test.Expression.empty()) {
+                UNIT_ASSERT_C(!fields.contains("ReadRanges"), test.Title << ": " << plan);
+                if (!test.Expression.empty()) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*read, "ReadRangesExpression"), test.Expression, test.Title << ": " << plan);
+                }
+            } else {
+                UNIT_ASSERT_C(fields.contains("ReadRanges"), test.Title << ": " << plan);
+                UNIT_ASSERT_C(!fields.contains("ReadRangesExpression"), test.Title << ": " << plan);
+                const auto& ranges = fields.at("ReadRanges").GetArraySafe();
+                UNIT_ASSERT_VALUES_EQUAL_C(ranges.size(), test.Ranges.size(), test.Title << ": " << plan);
+                for (size_t i = 0; i < ranges.size(); ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(ranges[i].GetStringSafe(), test.Ranges[i], test.Title << ": " << plan);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ExplainUnknownNamesSpanResultSetsAndViews) {
+        TExplainPlanTestContext testContext;
+        auto tableSession = testContext.GetKikimr().GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto schema = tableSession.ExecuteSchemeQuery(
+            "CREATE TABLE `/Root/unknowns` (a Int64 NOT NULL, PRIMARY KEY (a));").GetValueSync();
+        UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+        const auto result = testContext.GetSession().ExecuteQuery(R"(
+            PRAGMA YqlSelect = 'force';
+            DECLARE $p AS Int64;
+            SELECT * FROM `/Root/unknowns` WHERE a > $p + 1;
+            SELECT * FROM `/Root/unknowns` WHERE a > $p + 2;
+        )", NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const TString plan{*result.GetStats()->GetPlan()};
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(plan, &json, true));
+        for (const TStringBuf view : {"Plan", "SimplifiedPlan"}) {
+            const auto& root = view == "Plan" ? json["Plan"]["Plans"].GetArraySafe().front() : json["SimplifiedPlan"];
+            const auto& results = root["Plans"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL_C(results.size(), 2, plan);
+            for (size_t i = 0; i < results.size(); ++i) {
+                const auto* read = FindOperatorByStringField(results[i], "Name", "TableRangeScan");
+                UNIT_ASSERT_C(read, plan);
+                UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*read, "ReadRangesExpression"),
+                    TStringBuilder() << "a ∈ (f" << i + 1 << "($p), +∞)", plan);
+                UNIT_ASSERT(!read->Has("ReadRanges"));
+                UNIT_ASSERT_VALUES_EQUAL(read->GetMapSafe().at("ReadRangesKeys").GetArraySafe().size(), 1);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ExplainRangeComposite, ColumnStorage) {
+        TExplainPlanTestContext testContext;
+        auto tableSession = testContext.GetKikimr().GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto schema = tableSession.ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE TABLE `/Root/composite` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64,
+                PRIMARY KEY (a, b)
+            )
+        )" << (ColumnStorage ? " WITH (STORE = column);" : ";")).GetValueSync();
+        UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+
+        const std::pair<TStringBuf, TStringBuf> cases[] = {
+            {"a = 1 AND b >= 10 AND b < 20", "[{a: 1, b: 10}, {a: 1, b: 20})"},
+            // A bound on a key prefix covers every value of the remaining key columns.
+            {"a = 1", "({a: 1, b: -∞}, {a: 1, b: +∞})"},
+        };
+        for (const auto& [predicate, expectedRange] : cases) {
+            const auto plan = ExecuteExplain(testContext.GetSession(), TStringBuilder()
+                << "PRAGMA YqlSelect = 'force'; SELECT a, b, c FROM `/Root/composite` WHERE " << predicate << " AND c = 7;");
+            const auto simplifiedPlan = GetSimplifiedPlan(plan);
+            const auto* readOp = FindOperatorByStringField(simplifiedPlan, "Name", "TableRangeScan");
+            UNIT_ASSERT_C(readOp, plan);
+            UNIT_ASSERT_VALUES_EQUAL_C(readOp->GetMapSafe().at("ReadRanges").GetArraySafe().size(), 1, plan);
+            UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRanges", TString(expectedRange)), plan);
+            for (const auto* column : {"a", "b", "c"}) {
+                UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", column), plan);
+            }
+        }
+
+        // IN over tuples in another order than the key: every tuple is a point of the key.
+        const auto tuplePlan = ExecuteExplain(testContext.GetSession(), R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT a, b, c FROM `/Root/composite` WHERE (b, a) IN ((10, 1), (20, 2)) AND c = 7;
+        )");
+        const auto simplifiedTuplePlan = GetSimplifiedPlan(tuplePlan);
+        const auto* tupleReadOp = FindOperatorByStringField(simplifiedTuplePlan, "Name", "TableRangeScan");
+        UNIT_ASSERT_C(tupleReadOp, tuplePlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(tupleReadOp->GetMapSafe().at("ReadRanges").GetArraySafe().size(), 2, tuplePlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*tupleReadOp, "ReadRanges", "[{a: 1, b: 10}, {a: 1, b: 10}]"), tuplePlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*tupleReadOp, "ReadRanges", "[{a: 2, b: 20}, {a: 2, b: 20}]"), tuplePlan);
+    }
+
+    Y_UNIT_TEST(ExplainUuidReadRanges) {
+        TExplainPlanTestContext testContext;
+        auto tableSession = testContext.GetKikimr().GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto schema = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/uuid_keys` (
+                k Uuid,
+                v Int64,
+                PRIMARY KEY (k)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+
+        const TStringBuf uuid = "00112233-4455-6677-8899-aabbccddeeff";
+        const auto plan = ExecuteExplain(testContext.GetSession(), TStringBuilder()
+            << "PRAGMA YqlSelect = 'force'; SELECT * FROM `/Root/uuid_keys` WHERE k = Uuid('" << uuid << "');");
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* readOp = FindOperatorByStringField(simplifiedPlan, "Name", "TableRangeScan");
+        UNIT_ASSERT_C(readOp, plan);
+        const TString expectedRange = TStringBuilder() << "[{k: " << uuid << "}, {k: " << uuid << "}]";
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRanges", expectedRange), plan);
     }
 
     Y_UNIT_TEST(ExplainAnalyzeSimplifiedPlanCpuWithActualRows) {
@@ -517,7 +911,185 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         AssertRboCpuValues(fullScan, 7, 7, simplifiedPlan);
     }
 
-    Y_UNIT_TEST(ExplainAnalyzeDuplicateOperatorIdUsesFirstMatch) {
+    Y_UNIT_TEST(ExplainAnalyzeRuntimeStatsMatchTypesWithinStage) {
+        const TString txPlan = R"json({
+            "Plans": [{
+                "StageGuid": "stage-1",
+                "Operators": [
+                    {"Name": "Map [Join := 1]", "OperatorId": 1},
+                    {"Name": "Filter", "OperatorId": 2, "RuntimeStatsType": "Filter"},
+                    {"Name": "Aggregate", "OperatorId": 3, "RuntimeStatsType": "Aggregation"},
+                    {"Name": "InnerJoin (BlockHash)", "OperatorId": 4, "RuntimeStatsType": "Join"},
+                    {"Name": "InnerJoin (Lookup)", "OperatorId": 5}
+                ],
+                "Stats": {"Operator": [
+                    {"Type": "Join", "Id": "0", "Rows": {"Sum": 50}, "Bytes": {"Sum": 500}},
+                    {"Type": "Aggregation", "Id": "0", "Rows": {"Sum": 10}, "Bytes": {"Sum": 100}},
+                    {"Type": "Filter", "Id": "0", "Rows": {"Sum": 20}, "Bytes": {"Sum": 200}}
+                ]},
+                "Plans": [{
+                    "StageGuid": "stage-2",
+                    "Operators": [{"Name": "Other filter", "OperatorId": 6, "RuntimeStatsType": "Filter"}],
+                    "Stats": {"Operator": [
+                        {"Type": "Filter", "Id": "0", "Rows": {"Sum": 70}, "Bytes": {"Sum": 700}}
+                    ]}
+                }]
+            }],
+            "SimplifiedPlan": {
+                "Operators": [{"Name": "Map [Join := 1]", "OperatorId": 1}],
+                "Plans": [
+                    {"Operators": [{"Name": "Filter", "OperatorId": 2}]},
+                    {"Operators": [{"Name": "Aggregate", "OperatorId": 3}]},
+                    {"Operators": [{"Name": "InnerJoin (BlockHash)", "OperatorId": 4}]},
+                    {"Operators": [{"Name": "InnerJoin (Lookup)", "OperatorId": 5}]},
+                    {"Operators": [{"Name": "Other filter", "OperatorId": 6}]}
+                ]
+            }
+        })json";
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(txPlan, &json, true);
+        for (bool reverse : {false, true}) {
+            if (reverse) {
+                auto& stats = json["Plans"][0]["Stats"]["Operator"].GetArraySafe();
+                std::reverse(stats.begin(), stats.end());
+            }
+            NKqpProto::TKqpStatsQuery queryStats;
+            const auto plan = SerializeRBOAnalyzePlan({WriteJson(json, false)}, queryStats);
+            UNIT_ASSERT_C(!plan.Contains("\"RuntimeStatsType\""), plan);
+            UNIT_ASSERT_C(!plan.Contains("\"OperatorId\""), plan);
+            const auto simplified = GetSimplifiedPlan(plan);
+            for (const auto& [name, rows] : TVector<std::pair<TString, int>>{
+                    {"Filter", 20}, {"Aggregate", 10}, {"InnerJoin (BlockHash)", 50}, {"Other filter", 70}}) {
+                const auto& op = FindRequiredOperatorByStringField(simplified, "Name", name);
+                UNIT_ASSERT_VALUES_EQUAL_C(op["A-Rows"].GetDoubleSafe(), rows, plan);
+                UNIT_ASSERT_VALUES_EQUAL_C(op["A-Size"].GetDoubleSafe(), rows * 10, plan);
+            }
+            for (const auto& name : {"Map [Join := 1]", "InnerJoin (Lookup)"}) {
+                const auto& op = FindRequiredOperatorByStringField(simplified, "Name", name);
+                UNIT_ASSERT_C(!op.Has("A-Rows") && !op.Has("A-Size"), plan);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeAmbiguousRuntimeStatsUseStageFallback) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "StageGuid": "stage-1",
+                "Operators": [
+                    {"Name": "Map", "OperatorId": 1},
+                    {"Name": "Filter", "OperatorId": 2, "RuntimeStatsType": "Filter", "UseStageStats": true}
+                ],
+                "Stats": {"OutputRows": {"Sum": 7}, "OutputBytes": {"Sum": 70}, "Operator": [
+                    {"Type": "Filter", "Id": "0", "Rows": {"Sum": 20}, "Bytes": {"Sum": 200}}
+                ]}
+            }],
+            "SimplifiedPlan": {
+                "Operators": [{"Name": "Map", "OperatorId": 1}],
+                "Plans": [{"Operators": [{"Name": "Filter", "OperatorId": 2}]}]
+            }
+        })";
+
+        for (bool duplicateOperator : {false, true}) {
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(txPlan, &json, true);
+            auto& stage = json["Plans"][0];
+            if (duplicateOperator) {
+                // Count all execution candidates, including ones absent from
+                // the simplified plan. Their counters may already be combined.
+                auto duplicate = stage["Operators"][1];
+                duplicate["OperatorId"] = 3;
+                duplicate.EraseValue("UseStageStats");
+                stage["Operators"].AppendValue(duplicate);
+            } else {
+                auto duplicate = stage["Stats"]["Operator"][0];
+                duplicate["Id"] = "1";
+                stage["Stats"]["Operator"].AppendValue(duplicate);
+            }
+            const auto simplified = GetRboAnalyzeSimplifiedPlan(WriteJson(json, false));
+            const auto& filter = FindRequiredOperatorByStringField(simplified, "Name", "Filter");
+            UNIT_ASSERT_VALUES_EQUAL_C(filter["A-Rows"].GetDoubleSafe(), 7, simplified);
+            UNIT_ASSERT_VALUES_EQUAL_C(filter["A-Size"].GetDoubleSafe(), 70, simplified);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ExplainAnalyzeRuntimeStatsFallbackPerMetric, RowsOnly) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "Node Type": "Broadcast", "PlanNodeType": "Connection", "Stats": {"Tasks": 4},
+                "Plans": [{
+                    "StageGuid": "stage-1",
+                    "Operators": [{"Name": "Filter", "OperatorId": 1, "RuntimeStatsType": "Filter"}],
+                    "Stats": {
+                        "Operator": [{"Type": "Filter", "Id": "0"}],
+                        "OutputRows": {"Sum": 80}, "OutputBytes": {"Sum": 800}, "CpuTimeUs": {"Max": 7000}
+                    }
+                }]
+            }],
+            "SimplifiedPlan": {"Operators": [{"Name": "Filter", "OperatorId": 1}]}
+        })";
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(txPlan, &json, true);
+        auto& stat = json["Plans"][0]["Plans"][0]["Stats"]["Operator"][0];
+        stat[RowsOnly ? "Rows" : "Bytes"]["Sum"] = RowsOnly ? 17 : 170;
+        const auto simplified = GetRboAnalyzeSimplifiedPlan(WriteJson(json, false));
+        const auto& filter = FindRequiredOperatorByStringField(simplified, "Name", "Filter");
+        UNIT_ASSERT_VALUES_EQUAL_C(filter["A-Rows"].GetDoubleSafe(), RowsOnly ? 17 : 20, simplified);
+        UNIT_ASSERT_VALUES_EQUAL_C(filter["A-Size"].GetDoubleSafe(), RowsOnly ? 200 : 170, simplified);
+        AssertRboCpuValues(filter, 7, 7, simplified);
+    }
+
+    Y_UNIT_TEST_TWIN(ExplainAnalyzeStageStatsUseLastNonMapOperator, MultipleNonMap) {
+        NTests::TIdTestContext ctx;
+        const auto a = ctx.Id("a");
+        const auto b = ctx.Id("b");
+        TIntrusivePtr<IOperator> input = ctx.Read({a});
+        if (MultipleNonMap) {
+            input = MakeIntrusive<TOpFilter>(input, ctx.Pos, ctx.Constant());
+        }
+        auto root = ctx.Root(ctx.Copies(input, {{b, a}}), {{b, "b"}});
+        root->PlanProps.InfoUnitRegistry.FinalizeDisplayNames({a, b});
+        TAssignStagesStage().RunStage(*root, ctx.RboCtx);
+        for (const auto& item : *root) {
+            item.Current->Props.Statistics.emplace();
+            item.Current->Props.Cost = 0;
+        }
+
+        ui64 nodeId = 0;
+        ui32 operatorId = 0;
+        THashMap<IOperator*, ui32> operatorIds;
+        auto execution = root->GetExecutionJson(nodeId, operatorId, operatorIds);
+        auto& stage = execution["Plans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(stage["Operators"].GetArraySafe().size(), MultipleNonMap ? 3 : 2);
+        stage["Stats"]["OutputRows"]["Sum"] = 42;
+        stage["Stats"]["OutputBytes"]["Sum"] = 420;
+        stage["Stats"]["CpuTimeUs"]["Max"] = 7000;
+        NJson::TJsonValue txPlan;
+        txPlan["Plans"].AppendValue(execution);
+        txPlan["SimplifiedPlan"] = root->GetExplainJson(nodeId, operatorIds);
+
+        NKqpProto::TKqpStatsQuery queryStats;
+        const auto plan = SerializeRBOAnalyzePlan({WriteJson(txPlan, false)}, queryStats);
+        UNIT_ASSERT_C(!plan.Contains("\"UseStageStats\""), plan);
+        const auto simplified = GetSimplifiedPlan(plan);
+        const auto& scan = FindRequiredOperatorByStringField(simplified, "Name", "TableFullScan");
+        if (MultipleNonMap) {
+            UNIT_ASSERT_C(!scan.Has("A-Rows") && !scan.Has("A-Size"), plan);
+            const auto& filter = FindRequiredOperatorByStringField(simplified, "Name", "Filter");
+            UNIT_ASSERT_VALUES_EQUAL_C(filter["A-Rows"].GetDoubleSafe(), 42, plan);
+            UNIT_ASSERT_VALUES_EQUAL_C(filter["A-Size"].GetDoubleSafe(), 420, plan);
+            AssertNoRboCpuValues(filter, simplified);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(scan["A-Rows"].GetDoubleSafe(), 42, plan);
+            UNIT_ASSERT_VALUES_EQUAL_C(scan["A-Size"].GetDoubleSafe(), 420, plan);
+        }
+        AssertNoRboCpuValues(scan, simplified);
+        const auto* map = FindOperatorByNamePrefix(simplified, "Map");
+        UNIT_ASSERT(map);
+        AssertRboCpuValues(*map, 7, 7, simplified);
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeDuplicateExecutionOperatorIdUsesFirstMatch) {
         const TString txPlan = R"({
             "Plans": [{
                 "Node Type": "FirstExec", "StageGuid": "stage-first",
@@ -544,8 +1116,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL_C(first.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, simplifiedPlan);
         UNIT_ASSERT_VALUES_EQUAL_C(first.GetMapSafe().at("A-Size").GetDoubleSafe(), 60, simplifiedPlan);
         AssertRboCpuValues(first, 7, 7, simplifiedPlan);
-        UNIT_ASSERT_C(!second.GetMapSafe().contains("A-Rows"), simplifiedPlan);
-        UNIT_ASSERT_C(!second.GetMapSafe().contains("A-Size"), simplifiedPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(second["A-Rows"].GetDoubleSafe(), 6, simplifiedPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(second["A-Size"].GetDoubleSafe(), 60, simplifiedPlan);
         AssertNoRboCpuValues(second, simplifiedPlan);
     }
 
@@ -646,7 +1218,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto* readOp = FindOperatorByStringField(simplifiedPlan, "Name", "TableRangeScan");
         UNIT_ASSERT_C(readOp, plan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRangesKeys", "a"), plan);
-        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a (5, +∞)"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRanges", "({a: 5}, {a: +∞})"), plan);
+        const auto& columns = readOp->GetMapSafe().at("Columns").GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL_C(columns.size(), 1, plan);
+        // The range-only key is not live after pushdown, so its display name retains an IU suffix.
+        UNIT_ASSERT_C(columns.front().GetStringSafe().StartsWith("t1.a_"), plan);
         UNIT_ASSERT_C(readOp->GetMapSafe().contains("A-Rows"), plan);
         UNIT_ASSERT_C(readOp->GetMapSafe().at("A-Rows").GetDoubleSafe() > 0, plan);
         UNIT_ASSERT_C(readOp->GetMapSafe().contains("A-Size"), plan);
@@ -663,11 +1239,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             group by t1.b;
         )");
         const auto simplifiedAggregatePlan = GetSimplifiedPlan(aggregatePlan);
-        const auto* aggregateOp = FindOperatorByStringFieldContaining(simplifiedAggregatePlan, "Aggregation", ": count(");
-        UNIT_ASSERT_C(aggregateOp, aggregatePlan);
-        const auto aggregation = GetStringField(*aggregateOp, "Aggregation");
-        UNIT_ASSERT_C(aggregation.Contains(": sum("), aggregatePlan);
-        UNIT_ASSERT_C(aggregation.Contains(": count("), aggregatePlan);
+        const auto* count = FindAggregation(simplifiedAggregatePlan, "count");
+        UNIT_ASSERT_C(count, aggregatePlan);
+        UNIT_ASSERT_C(FindAggregation(simplifiedAggregatePlan, "sum"), aggregatePlan);
+        UNIT_ASSERT_C(!GetBoolField(*count, "Distinct"), aggregatePlan);
+        UNIT_ASSERT_C(!GetStringField(*count, "Output").empty(), aggregatePlan);
+        UNIT_ASSERT_VALUES_EQUAL_C((*count)["Arguments"].GetArraySafe().size(), 1, aggregatePlan);
     }
 
     Y_UNIT_TEST(ExplainUnionAll) {
@@ -683,6 +1260,23 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto* unionOp = FindOperatorByStringField(simplifiedUnionPlan, "Name", "UnionAll");
         UNIT_ASSERT_C(unionOp, unionPlan);
         UNIT_ASSERT_C(!GetBoolField(*unionOp, "Ordered"), unionPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*unionOp, "Columns", "a"), unionPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(unionOp->GetMapSafe().at("Columns").GetArraySafe().size(), 1, unionPlan);
+    }
+
+    Y_UNIT_TEST(ExplainParameterSourceColumns) {
+        TExplainPlanTestContext testContext;
+        auto plan = ExecuteExplain(testContext.GetSession(), R"(
+            DECLARE $param AS List<Struct<id:Int32,value:String>>;
+            SELECT id, value FROM AS_TABLE($param);
+        )");
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* source = FindOperatorByStringField(simplifiedPlan, "Name", "EmptySource");
+        UNIT_ASSERT_C(source, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*source, "Parameter"), "$param", plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*source, "Columns", "id"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*source, "Columns", "value"), plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(source->GetMapSafe().at("Columns").GetArraySafe().size(), 2, plan);
     }
 
     Y_UNIT_TEST(ExplainScalarSubquery) {
@@ -695,10 +1289,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             where t1.a = (select max(t2.a) from `/Root/t2` as t2);
         )");
         const auto simplifiedScalarSubplanPlan = GetSimplifiedPlan(scalarSubplanPlan);
-        // The subplan is reduced to a single row by an aggregate that counts its rows along the way, so
-        // that a subquery returning several rows fails the query instead of picking one of them.
-        UNIT_ASSERT_C(FindOperatorByStringFieldContaining(simplifiedScalarSubplanPlan, "Aggregation", ": max("), scalarSubplanPlan);
-        UNIT_ASSERT_C(FindOperatorByStringFieldContaining(simplifiedScalarSubplanPlan, "Aggregation", ": count("), scalarSubplanPlan);
+        // A global max already produces exactly one row, so scalar inlining
+        // does not need a count/min aggregate to validate the row count.
+        UNIT_ASSERT_C(FindAggregation(simplifiedScalarSubplanPlan, "max"), scalarSubplanPlan);
+        UNIT_ASSERT_C(!FindAggregation(simplifiedScalarSubplanPlan, "count"), scalarSubplanPlan);
+        UNIT_ASSERT_C(!FindAggregation(simplifiedScalarSubplanPlan, "min"), scalarSubplanPlan);
         UNIT_ASSERT_C(FindOperatorByStringFieldContaining(simplifiedScalarSubplanPlan, "Name", "Join"), scalarSubplanPlan);
     }
 
@@ -965,7 +1560,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             $round = ($x, $y) -> { return $x; };
             $to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };
             $to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };
-        )" + GetFullPath(BenchmarkQueryPath[EBenchType::TPCDS], "23.yql");
+        )" + ReadBenchmarkQuery(EBenchType::TPCDS, 23);
         auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
             NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -990,6 +1585,139 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(sequential.PlanJson);
     }
 
+}
+
+Y_UNIT_TEST_SUITE(KqpRboExplainProperties) {
+    void AssertJson(const NJson::TJsonValue& actual, TStringBuf expectedText) {
+        NJson::TJsonValue expected;
+        UNIT_ASSERT(NJson::ReadJsonTree(expectedText, &expected));
+        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+    }
+
+    Y_UNIT_TEST(NumericEstimates) {
+        NTests::TIdTestContext ctx;
+        const auto a = ctx.Id("a");
+        auto read = ctx.Read({a});
+        auto root = ctx.Root(read, {{a, "a"}});
+        root->PlanProps.InfoUnitRegistry.FinalizeDisplayNames({a});
+        read->Props.Statistics.emplace();
+        read->Props.Statistics->ERows = 1.25;
+        read->Props.Statistics->EBytes = 2048.5;
+        read->Props.Cost = 3.75;
+        ui64 counter = 0;
+        auto plan = root->GetExplainJson(counter, {});
+        const auto* scan = FindOperatorByStringField(plan, "Name", "TableFullScan");
+        UNIT_ASSERT(scan);
+        UNIT_ASSERT_VALUES_EQUAL((*scan)["E-Rows"].GetDoubleSafe(), 1.25);
+        UNIT_ASSERT_VALUES_EQUAL((*scan)["E-Size"].GetDoubleSafe(), 2048.5);
+        UNIT_ASSERT_VALUES_EQUAL((*scan)["E-Cost"].GetDoubleSafe(), 3.75);
+
+        read->Props.Statistics->ERows = std::numeric_limits<double>::infinity();
+        read->Props.Statistics->EBytes = std::numeric_limits<double>::quiet_NaN();
+        read->Props.Cost = -std::numeric_limits<double>::infinity();
+        plan = root->GetExplainJson(counter, {});
+        scan = FindOperatorByStringField(plan, "Name", "TableFullScan");
+        UNIT_ASSERT(scan);
+        for (const auto* field : {"E-Rows", "E-Size", "E-Cost"}) {
+            UNIT_ASSERT(!scan->Has(field));
+        }
+        NJson::TJsonValue parsed;
+        UNIT_ASSERT(NJson::ReadJsonTree(plan.GetStringRobust(), &parsed));
+    }
+
+    Y_UNIT_TEST(SortAndWindowKeys) {
+        NTests::TIdTestContext ctx;
+        const auto a = ctx.Id("a, b");
+        const auto b = ctx.Id("b");
+        auto& registry = ctx.Props.InfoUnitRegistry;
+        registry.FinalizeDisplayNames({a, b});
+        auto read = ctx.Read({a, b});
+        TSortIUs keys{{b, {false, false}}, {a, {true, true}}};
+        const TString expected = R"([
+            {"Column":"b","Ascending":false,"NullsFirst":false},
+            {"Column":"a, b","Ascending":true,"NullsFirst":true}
+        ])";
+        TOpSort sort(read, ctx.Pos, keys);
+        AssertJson(sort.ToJson(0, registry)["SortBy"], expected);
+        TOpSort top(read, ctx.Pos, keys, ctx.Constant());
+        AssertJson(top.ToJson(0, registry)["TopSortBy"], expected);
+        TMergeConnection merge(keys, 0);
+        AssertJson(merge.ToJson(registry)["SortBy"], expected);
+        AssertJson(merge.ToJson(registry)["SortColumns"], expected);
+
+        TOrderedIUs<> partitions{b, a};
+        TOpWindowFrame frame;
+        frame.BeginKind = EWindowFrameBound::Preceding;
+        frame.BeginValue = 3;
+        frame.EndKind = EWindowFrameBound::Following;
+        frame.EndValue = 0;
+        TOpWindow window(read, ctx.Pos, TWindowIUs{}, partitions, keys, frame);
+        const auto json = window.ToJson(0, registry);
+        AssertJson(json["PartitionBy"], R"(["b","a, b"])");
+        AssertJson(json["OrderBy"], expected);
+        AssertJson(json["Frame"], R"({"Type":"Rows","Begin":{"Kind":"Preceding","Value":3},"End":{"Kind":"Following","Value":0}})");
+
+        TOpWindow defaultWindow(read, ctx.Pos, TWindowIUs{}, TOrderedIUs<>{}, TSortIUs{}, TOpWindowFrame{});
+        const auto defaults = defaultWindow.ToJson(0, registry);
+        AssertJson(defaults["Frame"], R"({"Type":"Rows","Begin":{"Kind":"UnboundedPreceding"},"End":{"Kind":"CurrentRow"}})");
+        UNIT_ASSERT(!defaults.Has("PartitionBy"));
+        UNIT_ASSERT(!defaults.Has("OrderBy"));
+    }
+
+    Y_UNIT_TEST(AggregationAndFlags) {
+        NTests::TIdTestContext ctx;
+        const auto a = ctx.Id("a");
+        const auto b = ctx.Id("b");
+        const auto distinctCount = ctx.Id("distinct_count");
+        const auto count = ctx.Id("count");
+        auto& registry = ctx.Props.InfoUnitRegistry;
+        registry.FinalizeDisplayNames({a, b, distinctCount, count});
+        TAggregationIUs aggregations;
+        aggregations.Add(distinctCount, TOpAggregationTraits{a, "count", true});
+        aggregations.Add(count, TOpAggregationTraits{a, "count", false});
+        TOrderedIUs<> keys{b, a};
+        TOpAggregate aggregate(ctx.Read({a, b}), aggregations, keys, EOpPhase::Intermediate, false, ctx.Pos);
+        aggregate.SetPushedToOlap();
+        const auto json = aggregate.ToJson(0, registry);
+        AssertJson(json["GroupBy"], R"(["b","a"])");
+        AssertJson(json["Aggregation"], R"([
+            {"Output":"distinct_count","Function":"count","Arguments":["a"],"Distinct":true},
+            {"Output":"count","Function":"count","Arguments":["a"],"Distinct":false}
+        ])");
+        UNIT_ASSERT(GetBoolField(json, "Pushdown"));
+        TUnionAllConnection parallel(0, true);
+        UNIT_ASSERT(GetBoolField(parallel.ToJson(registry), "Parallel"));
+        TUnionAllConnection sequential(0, false);
+        UNIT_ASSERT(!sequential.ToJson(registry).Has("Parallel"));
+    }
+
+    Y_UNIT_TEST(ReadRangeAndLookupPrefix) {
+        NTests::TIdTestContext ctx;
+        const auto a = ctx.Id("a");
+        auto& registry = ctx.Props.InfoUnitRegistry;
+        registry.FinalizeDisplayNames({a});
+        auto read = ctx.Read({a});
+        read->RangeInfo.emplace();
+        read->RangeInfo->ExpectedMaxRanges = 17;
+        const auto json = read->ToJson(0, registry);
+        UNIT_ASSERT_VALUES_EQUAL(json["ReadRangesExpectedSize"].GetUIntegerSafe(), 17);
+        UNIT_ASSERT_VALUES_EQUAL(json["Path"].GetStringSafe(), "/Root/table");
+
+        TOpTableLookup::TLookupKeys keys{{a, "a"}};
+        TOpTableLookup::TLookupKeyPrefix prefix;
+        prefix.Columns = {"z", "x, y"};
+        const auto* keyType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Int32);
+        prefix.PointsItemType = ctx.ExprCtx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+            ctx.ExprCtx.MakeType<TItemExprType>("z", keyType),
+            ctx.ExprCtx.MakeType<TItemExprType>("x, y", keyType)
+        });
+        const auto* pointsType = ctx.ExprCtx.MakeType<TListExprType>(prefix.PointsItemType);
+        prefix.Points = ctx.ExprCtx.NewCallable(ctx.Pos, "List", {ExpandType(ctx.Pos, *pointsType, ctx.ExprCtx)});
+        TOpTableLookup lookup(read, ctx.Pos, read->TableCallable, TUnorderedIUs{a}, keys, "Inner", std::nullopt, prefix);
+        AssertJson(lookup.ToJson(0, registry)["LookupKeyPrefix"], R"(["z","x, y"])");
+        auto empty = ctx.Read({});
+        AssertJson(empty->ToJson(0, registry)["Columns"], "[]");
+    }
 }
 
 } // namespace NKikimr::NKqp

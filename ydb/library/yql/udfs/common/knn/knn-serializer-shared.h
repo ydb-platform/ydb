@@ -4,8 +4,10 @@
 
 #include <util/generic/scope.h>
 #include <util/generic/strbuf.h>
+#include <util/string/builder.h>
 #include <util/generic/yexception.h>
 #include <util/stream/output.h>
+#include <util/string/printf.h>
 
 #include <functional>
 
@@ -70,6 +72,126 @@ namespace NKnnVectorSerialization {
             const TConstArrayRef<TTo> array(reinterpret_cast<const TTo*>(Data_.data()), GetElementCount());
             for (auto& element : array) {
                 elementHandler(element);
+            }
+        }
+    };
+
+    // Two trailer bytes retain the exact dimension, including odd and empty
+    // vectors. Padding is canonical: the unused high nibble must be zero.
+    inline bool TryGetInt4ElementCount(TStringBuf data, size_t& count) {
+        if (data.size() < HeaderLen + 1) {
+            return false;
+        }
+        const ui8 padding = static_cast<ui8>(data[data.size() - HeaderLen - 1]);
+        const size_t capacity = (data.size() - HeaderLen - 1) * 2;
+        if (padding > 1 || padding > capacity) {
+            return false;
+        }
+        if (padding && (static_cast<ui8>(data[data.size() - HeaderLen - 2]) & 0xf0)) {
+            return false;
+        }
+        count = capacity - padding;
+        return true;
+    }
+
+    inline bool IsExpectedFormat(TStringBuf data, EFormat format, ui32 dimensions, size_t elementSize) {
+        if (data.empty() || format != static_cast<ui8>(data.back())) {
+            return false;
+        }
+
+        if (format == EFormat::BitVector) {
+            return data.size() >= 2 && dimensions == (data.size() - 2) * 8 - data[data.size() - 2];
+        }
+        if (format == EFormat::Int4Vector || format == EFormat::Uint4Vector) {
+            size_t count = 0;
+            return TryGetInt4ElementCount(data, count) && count == dimensions;
+        }
+        return data.size() == 1 + elementSize * dimensions;
+    }
+
+    inline TString FormatError(TStringBuf data, EFormat format, ui32 dimensions, size_t elementSize) {
+        if (data.empty()) {
+            return TStringBuilder() << "Empty vector data, expected dimension " << dimensions;
+        }
+        if (format != static_cast<ui8>(data.back())) {
+            return Sprintf("Invalid vector format byte, got %02x, expected %02x",
+                static_cast<ui8>(data.back()), static_cast<ui8>(format));
+        }
+        if (format == EFormat::BitVector) {
+            const auto actualDim = data.size() >= 2 ? (data.size() - 2) * 8 - static_cast<ui8>(data[data.size() - 2]) : 0;
+            return TStringBuilder() << "Vector dimension mismatch: got " << static_cast<int>(actualDim)
+                << " expected " << dimensions;
+        }
+        if (format == EFormat::Int4Vector || format == EFormat::Uint4Vector) {
+            size_t count = 0;
+            if (!TryGetInt4ElementCount(data, count)) {
+                return "Invalid packed 4-bit vector payload or padding";
+            }
+            return TStringBuilder() << "Vector dimension mismatch: got " << count << " expected " << dimensions;
+        }
+        return TStringBuilder() << "Vector dimension mismatch: got " << (data.size() - 1) / elementSize
+            << " (size " << data.size() << " bytes) expected " << dimensions
+            << " (size " << (1 + elementSize * dimensions) << " bytes)";
+    }
+
+    template <bool Signed>
+    class TSerializer<NVectorDistance::NPrivate::TInt4<Signed>> {
+        using T = NVectorDistance::NPrivate::TInt4<Signed>;
+        IOutputStream* OutStream_;
+        ui8 Pending_ = 0;
+        bool HasPending_ = false;
+
+    public:
+        explicit TSerializer(IOutputStream* output) : OutStream_(output) {}
+        ~TSerializer() {
+            if (OutStream_) {
+                Finish();
+            }
+        }
+
+        template <typename TFrom>
+        void HandleElement(TFrom from) {
+            Y_ENSURE(OutStream_);
+            const ui8 bits = static_cast<T>(from).Bits;
+            if (HasPending_) {
+                const ui8 packed = Pending_ | (bits << 4);
+                OutStream_->Write(&packed, 1);
+            } else {
+                Pending_ = bits;
+            }
+            HasPending_ = !HasPending_;
+        }
+
+        void Finish() {
+            Y_ENSURE(OutStream_);
+            Y_DEFER { OutStream_ = nullptr; };
+            if (HasPending_) {
+                OutStream_->Write(&Pending_, 1);
+            }
+            const ui8 padding = HasPending_ ? 1 : 0;
+            OutStream_->Write(&padding, 1);
+            const ui8 format = Format<T>;
+            OutStream_->Write(&format, HeaderLen);
+        }
+    };
+
+    template <bool Signed>
+    class TDeserializer<NVectorDistance::NPrivate::TInt4<Signed>> {
+        using T = NVectorDistance::NPrivate::TInt4<Signed>;
+        TStringBuf Data_;
+        size_t Count_ = 0;
+
+    public:
+        explicit TDeserializer(TStringBuf data) : Data_(data) {
+            Y_ENSURE(TryGetInt4ElementCount(data, Count_));
+            Y_ENSURE(static_cast<ui8>(data.back()) == Format<T>);
+        }
+
+        size_t GetElementCount() const { return Count_; }
+
+        void DoDeserialize(std::function<void(const T&)>&& handler) const {
+            for (const T value : NVectorDistance::TPackedInt4Coords<T>(Data_.data(), Count_)) {
+                handler(value);
             }
         }
     };
@@ -218,6 +340,8 @@ namespace NKnnVectorSerialization {
             // We expect byte length of the result is (bit-length / 8 + bit-length % 8 != 0) + bits-count (1 byte) + HeaderLen
             // First part can be optimized to (bit-length + 7) / 8
             return (elementCount + 7) / 8 + 1 + HeaderLen;
+        } else if constexpr (NVectorDistance::IsInt4<TTo>) {
+            return (elementCount + 1) / 2 + 1 + HeaderLen;
         } else {
             return elementCount * sizeof(TTo) + HeaderLen;
         }

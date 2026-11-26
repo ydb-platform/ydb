@@ -1,4 +1,4 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include "kqp_effects_helpers.h"
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -14,17 +14,6 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NQuery;
 
-namespace {
-
-NKikimrConfig::TAppConfig NewRboAppConfig() {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
-    appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
-    return appConfig;
-}
-
-} // namespace
-
 Y_UNIT_TEST_SUITE(KqpOverloadNewRbo) {
 
     Y_UNIT_TEST_TWIN(OltpOverloaded, Distributed) {
@@ -32,7 +21,7 @@ Y_UNIT_TEST_SUITE(KqpOverloadNewRbo) {
             .SetEnableScriptExecutionOperations(true)
             .SetUseRealThreads(false);
 
-        TKikimrRunner kikimr(settings);
+        TEffectsKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
         auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
 
@@ -53,7 +42,7 @@ Y_UNIT_TEST_SUITE(KqpOverloadNewRbo) {
             const TString query =
                 Distributed
                 ? R"(
-                    UPSERT INTO `/Root/TwoShard` (Key, Value1) VALUES (1, 'value');
+                    UPSERT INTO `/Root/TwoShard` (Key, Value1) VALUES (1u, 'value');
                     SELECT * FROM `/Root/TwoShard`;
                 )"
                 : R"(
@@ -112,7 +101,8 @@ Y_UNIT_TEST_SUITE(KqpOverloadNewRbo) {
             };
 
 
-            runtime.SetObserverFunc(grab);
+            auto previousObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(previousObserver); };
 
             auto future = kikimr.RunInThreadPool([&]{
                 auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW());
@@ -123,10 +113,14 @@ Y_UNIT_TEST_SUITE(KqpOverloadNewRbo) {
 
             TDispatchOptions opts;
             opts.FinalEvents.emplace_back([&](IEventHandle&) {
-                return requests >= requestsExpected;
+                return requests >= requestsExpected || future.HasValue() || future.HasException();
             });
             runtime.DispatchEvents(opts);
-            UNIT_ASSERT(requests == requestsExpected);
+            if (future.HasValue() || future.HasException()) {
+                const auto completed = future.GetValueSync();
+                UNIT_ASSERT_C(completed.IsSuccess(), completed.GetIssues().ToString());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(requests, requestsExpected);
             UNIT_ASSERT(!blockResults);
             UNIT_ASSERT(overloadSeqNo > 0);
 
@@ -143,8 +137,16 @@ Y_UNIT_TEST_SUITE(KqpOverloadNewRbo) {
                 return tx->Commit().GetValueSync();
             });
 
-            runtime.DispatchEvents(opts);
-            UNIT_ASSERT(requests == requestsExpected);
+            TDispatchOptions commitOpts;
+            commitOpts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return requests >= requestsExpected || commitFuture.HasValue() || commitFuture.HasException();
+            });
+            runtime.DispatchEvents(commitOpts);
+            if (commitFuture.HasValue() || commitFuture.HasException()) {
+                const auto completed = commitFuture.GetValueSync();
+                UNIT_ASSERT_C(completed.IsSuccess(), completed.GetIssues().ToString());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(requests, requestsExpected);
             UNIT_ASSERT(!blockResults);
             UNIT_ASSERT(overloadSeqNo > 0);
 

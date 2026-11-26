@@ -258,7 +258,14 @@ void GenericBlockDecompress(TSource* source, TBlob* sink, TDecompressFn&& decomp
 
 void Lz4Compress(TSource* source, TBlob* sink, bool highCompression)
 {
-    auto compressFn = highCompression ? LZ4_compressHC : LZ4_compress;
+    // Unary plus decays both captureless lambdas to the same function pointer type.
+    auto compressFn = highCompression
+        ? +[] (const char* input, char* output, int inputSize) {
+            return LZ4_compress_HC(input, output, inputSize, LZ4_compressBound(inputSize), /*compressionLevel*/ 0);
+        }
+        : +[] (const char* input, char* output, int inputSize) {
+            return LZ4_compress_default(input, output, inputSize, LZ4_compressBound(inputSize));
+        };
 
     GenericBlockCompress(
         source,

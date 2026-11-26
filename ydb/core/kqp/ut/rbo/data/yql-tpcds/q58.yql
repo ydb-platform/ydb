@@ -13,24 +13,24 @@ $ss_items = (
         i_item_id AS item_id,
         Sum(ss_ext_sales_price) AS ss_item_rev
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/item`
+        `item`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         ss_item_sk == i_item_sk
         AND d_date IN (
             SELECT
                 d_date
             FROM
-                `/Root/test/ds/date_dim`
+                `date_dim`
             WHERE
                 d_week_seq == (
                     SELECT
                         d_week_seq
                     FROM
-                        `/Root/test/ds/date_dim`
+                        `date_dim`
                     WHERE
                         CAST(d_date AS Date) == CAST('1998-02-19' AS Date)
                 )
@@ -45,24 +45,24 @@ $cs_items = (
         i_item_id AS item_id,
         Sum(cs_ext_sales_price) AS cs_item_rev
     FROM
-        `/Root/test/ds/catalog_sales`
+        `catalog_sales`
     ,
-        `/Root/test/ds/item`
+        `item`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         cs_item_sk == i_item_sk
         AND d_date IN (
             SELECT
                 d_date
             FROM
-                `/Root/test/ds/date_dim`
+                `date_dim`
             WHERE
                 d_week_seq == (
                     SELECT
                         d_week_seq
                     FROM
-                        `/Root/test/ds/date_dim`
+                        `date_dim`
                     WHERE
                         CAST(d_date AS Date) == CAST('1998-02-19' AS Date)
                 )
@@ -77,24 +77,24 @@ $ws_items = (
         i_item_id AS item_id,
         Sum(ws_ext_sales_price) AS ws_item_rev
     FROM
-        `/Root/test/ds/web_sales`
+        `web_sales`
     ,
-        `/Root/test/ds/item`
+        `item`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         ws_item_sk == i_item_sk
         AND d_date IN (
             SELECT
                 d_date
             FROM
-                `/Root/test/ds/date_dim`
+                `date_dim`
             WHERE
                 d_week_seq == (
                     SELECT
                         d_week_seq
                     FROM
-                        `/Root/test/ds/date_dim`
+                        `date_dim`
                     WHERE
                         CAST(d_date AS Date) == CAST('1998-02-19' AS Date)
                 )

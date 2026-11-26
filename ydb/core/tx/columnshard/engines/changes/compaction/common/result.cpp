@@ -11,7 +11,7 @@ TString TColumnPortionResult::DebugString() const {
 ui32 TColumnPortionResult::GetRecordsCount() const {
     ui32 result = 0;
     for (auto&& i : Chunks) {
-        AFL_VERIFY(i->GetRecordsCount());
+        YDB_LOG_VERIFY(i->GetRecordsCount());
         result += *i->GetRecordsCount();
     }
     return result;

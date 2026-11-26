@@ -3,6 +3,8 @@
 #include "yql_kikimr_settings.h"
 #include "yql_kikimr_type_ann_pg.h"
 
+#include <ydb/core/kqp/common/pg_policy/pg_policy.h>
+
 #include <ydb/core/base/fulltext.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/base/kmeans_clusters.h>
@@ -202,7 +204,7 @@ bool ValidateInteger(TExprContext& ctx, const TMaybeNode<TExprBase>& value, TStr
 }
 
 IGraphTransformer::TStatus CoerceGeneratedLambdaToColumnType(TExprNode::TPtr& lambda, const TTypeAnnotationNode* rowType,
-    const TTypeAnnotationNode& columnType, const TString& columnName, TExprContext& ctx, TTypeAnnotationContext& typeCtx)
+    const TTypeAnnotationNode& columnType, const TString& columnName, TExprContext& ctx, TTypeAnnotationContext& typeCtx, bool disablePgCompatibility)
 {
     if (!rowType) {
         return IGraphTransformer::TStatus::Ok;
@@ -213,7 +215,7 @@ IGraphTransformer::TStatus CoerceGeneratedLambdaToColumnType(TExprNode::TPtr& la
     if (!UpdateLambdaAllArgumentsTypes(probe, {rowType}, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
-    if (!InstantAnnotateTypes(probe, ctx, /* wholeProgram */ false, typeCtx) || !probe->GetTypeAnn()) {
+    if (!NKikimr::NKqp::InstantAnnotateKqpTypes(probe, ctx, typeCtx, disablePgCompatibility) || !probe->GetTypeAnn()) {
         ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder()
             << "Failed to infer the type of generated column " << columnName));
         return IGraphTransformer::TStatus::Error;
@@ -256,7 +258,8 @@ IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription
         }
 
         if (const auto* columnType = table.GetColumnType(name)) {
-            if (auto status = CoerceGeneratedLambdaToColumnType(lambda, table.SchemeNode, *columnType, name, ctx, typeCtx);
+            if (auto status = CoerceGeneratedLambdaToColumnType(lambda, table.SchemeNode, *columnType, name, ctx, typeCtx,
+                sessionCtx.Config().FeatureFlags.GetDisablePgCompatibility());
                 status != IGraphTransformer::TStatus::Ok)
             {
                 return status;
@@ -521,11 +524,11 @@ namespace {
         const TExprBase& defaultExpr, TPositionHandle pos, const TString& name, const TKikimrTableDescription* table, TExprContext& ctx,
         const TTypeAnnotationContext& typesCtx, std::function<void(TExprNode::TPtr)> onRepeat, const bool columnNotNull)
     {
-        if (!defaultType) {
+        if (!defaultType || defaultExpr.Maybe<TCoNull>().IsValid()) {
             return std::nullopt;
         }
 
-        if (defaultType->HasNull() || IsPgNullExprNode(defaultExpr)) {
+        if (!IsYqlNullExprNode(defaultExpr) && (defaultType->HasNull() || IsPgNullExprNode(defaultExpr))) {
             if (columnNotNull) {
                 if (table) {
                     ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
@@ -535,19 +538,6 @@ namespace {
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Default expr " << name
                         << " is nullable or optional, but column has not null constraint."));
-                }
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (defaultExpr.Maybe<TCoNull>().IsValid()) {
-                if (table) {
-                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                        << " Column: \"" << name
-                        << "\". Default expr with null is not supported. Use DROP DEFAULT to replace the default value by null."));
-                } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                        << "Default expr " << name << " is null, but default expr with null is not supported. Try to set the column without DEFAULT clause instead."));
                 }
                 return IGraphTransformer::TStatus::Error;
             }
@@ -805,7 +795,8 @@ namespace {
             }
 
             // Type the expression body
-            if (!InstantAnnotateTypes(lambda, ctx, /* wholeProgram */ false, typeCtx)) {
+            if (!NKikimr::NKqp::InstantAnnotateKqpTypes(lambda, ctx, typeCtx,
+                sessionCtx.Config().FeatureFlags.GetDisablePgCompatibility())) {
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -873,6 +864,12 @@ namespace {
                     << " column is already set: "
                     << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
                 return false;
+            }
+
+            if (IsYqlNullExprNode(constrValue)) {
+                columnMeta.DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL;
+                columnMeta.DefaultFromLiteral.Clear();
+                return true;
             }
 
             columnMeta.SetDefaultFromLiteral();
@@ -1599,6 +1596,10 @@ private:
                 }
             }
 
+            if (columnMeta.DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL) {
+                columnMeta.DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED;
+            }
+
             if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
                 return TStatus::Error;
             }
@@ -1646,6 +1647,16 @@ private:
                 indexType = TIndexDescription::EType::GlobalSyncUnique;
             } else if (type == "globalVectorKmeansTree") {
                 indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
+            } else if (type == "globalHnsw") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableHnswIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "HNSW index support is disabled (EnableHnswIndex)"));
+                    return TStatus::Error;
+                }
+                if (meta->StoreType == EStoreType::Column) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "HNSW indexes require STORE = ROW"));
+                    return TStatus::Error;
+                }
+                indexType = TIndexDescription::EType::GlobalSyncHnsw;
             } else if (type == "globalFulltextPlain") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
@@ -1756,6 +1767,12 @@ private:
 
                 TString error;
                 switch (indexType) {
+                    case TIndexDescription::EType::GlobalSyncHnsw: {
+                        NKikimr::NKMeans::FillHnswSetting(
+                            *vectorIndexKmeansTreeDescription.MutableSettings(),
+                            nameLower, value.StringValue(), error);
+                        break;
+                    }
                     case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                         NKikimr::NKMeans::FillSetting(
                             *vectorIndexKmeansTreeDescription.MutableSettings(),
@@ -1807,9 +1824,13 @@ private:
                     // no specialized index description
                     // no settings validation
                     break;
-                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                case TIndexDescription::EType::GlobalSyncHnsw: {
                     TString error;
-                    if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), error)) {
+                    const bool valid = indexType == TIndexDescription::EType::GlobalSyncHnsw
+                        ? NKikimr::NKMeans::ValidateHnswSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), error)
+                        : NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), error);
+                    if (!valid) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -2496,13 +2517,6 @@ private:
                         }
 
                         if (column) {
-                            if (!column->IsDefaultKindDefined()) {
-                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                                    << " Column: \"" << name
-                                    << "\" has no default to drop"));
-                                return TStatus::Error;
-                            }
                             if (column->IsDefaultFromSequence()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
                                     << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
@@ -2935,6 +2949,7 @@ private:
                 "consistency_level",
                 "commit_interval",
                 "initial_scan",
+                "bootstrap",
                 "availability_period",
             };
             settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));

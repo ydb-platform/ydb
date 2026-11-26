@@ -21,8 +21,9 @@ namespace {
 // CreateEmptyImage alone has host intrinsics but no RuntimeLibraryInstance_
 // with wasm malloc/free; compartment->AllocateBytes needs those exports.
 //
-// Heap starts above a reserved low region so UDF data segments (e.g. at 1024)
-// are not clobbered by the first malloc used for argument/result marshalling.
+// Use the compartment memory layout: its heap starts above module static
+// storage and the guest stack. A fixed 64 KiB break overlaps coroutine arenas
+// in libc-free modules and corrupts arguments during repeated calls.
 //
 // malloc goes through "sbrk" rather than bumping the heap global directly,
 // because the host moves that same break past regions it pins into linear
@@ -35,11 +36,16 @@ namespace {
 constexpr TStringBuf DefaultRegistrySdkWast = R"WAST(
 (module
     (import "env" "memory" (memory i64 8 2097152))
-    (global $heap (mut i64) (i64.const 65536))
+    (import "env" "__heap_base" (global $heap_base (mut i64)))
+    (global $heap (mut i64) (i64.const 0))
     (func $sbrk (param $n i64) (result i64)
         (local $p i64)
         (local $break i64)
         (local $pages i64)
+        ;; Initialize lazily: mutable layout globals cannot be used in a
+        ;; constant initializer. Both malloc and a first host fence go here.
+        (if (i64.eqz (global.get $heap))
+            (then (global.set $heap (global.get $heap_base))))
         (local.set $p (global.get $heap))
         (local.set $break
             (i64.and

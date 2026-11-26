@@ -1,0 +1,8 @@
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    TIMEOUT(3000)
+    TAG(ya:fat)
+ELSE()
+    SIZE(MEDIUM)
+    TIMEOUT(600)
+ENDIF()

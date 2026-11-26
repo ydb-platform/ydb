@@ -13,4 +13,5 @@ PEERDIR(
     ydb/library/pdisk_io
 )
 
+REQUIREMENTS(cpu:1)
 END()

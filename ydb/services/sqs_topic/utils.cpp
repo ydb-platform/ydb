@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/base/iface.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/persqueue/public/metrics/metrics.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
@@ -15,14 +16,6 @@
 #include <format>
 
 namespace NKikimr::NSqsTopic {
-
-    namespace {
-
-        TString ConvertOldConsumerName(const TString& consumer) {
-            return NPersQueue::ConvertOldConsumerName(consumer, AppData()->PQConfig);
-        }
-
-    } // namespace
 
     TQueueNameWithConsumer SplitExtendedQueueName(TStringBuf queueNameExt) {
         TQueueNameWithConsumer result;
@@ -85,7 +78,8 @@ namespace NKikimr::NSqsTopic {
         TVector<std::pair<TString, TString>>&& labels,
         const TString& databaseId,
         const TString& cloudId,
-        const TString& folderId
+        const TString& folderId,
+        const NKikimrPQ::TPQConfig* pqConfig
     ) {
         TString fullDatabasePath = databasePath + "/";
         TString adjustedTopicPath;
@@ -105,7 +99,11 @@ namespace NKikimr::NSqsTopic {
         }
         common.emplace_back("method", method);
         common.emplace_back("topic", adjustedTopicPath);
-        common.emplace_back("consumer", ConvertOldConsumerName(consumerName));
+        // QueueUrl stores the path form. MetricsConsumerName converts the config name,
+        // so restore that name before applying the label function.
+        const auto& resolvedPqConfig = pqConfig ? *pqConfig : AppData()->PQConfig;
+        common.emplace_back("consumer", NPQ::MetricsConsumerName(
+            NPersQueue::ConvertNewConsumerName(consumerName, resolvedPqConfig), resolvedPqConfig));
         std::move(labels.begin(), labels.end(), std::back_inserter(common));
         return common;
     }
@@ -114,7 +112,8 @@ namespace NKikimr::NSqsTopic {
         const TString& databasePath,
         const TString& topicPath,
         const TString& consumer,
-        const TString& method
+        const TString& method,
+        const NKikimrPQ::TPQConfig* pqConfig
     ) {
         return GetMetricsLabels(
             databasePath,
@@ -123,7 +122,11 @@ namespace NKikimr::NSqsTopic {
             method,
             {
                 {"name", "api.sqs.request.message_count"}
-            }
+            },
+            {},
+            {},
+            {},
+            pqConfig
         );
     }
 
@@ -132,7 +135,8 @@ namespace NKikimr::NSqsTopic {
         const TString& topicPath,
         const TString& consumer,
         const TString& method,
-        const TString& status
+        const TString& status,
+        const NKikimrPQ::TPQConfig* pqConfig
     ) {
         return GetMetricsLabels(
             databasePath,
@@ -142,7 +146,11 @@ namespace NKikimr::NSqsTopic {
             {
                 {"name", "api.sqs.response.message_count"},
                 {"status", status}
-            }
+            },
+            {},
+            {},
+            {},
+            pqConfig
         );
     }
 
@@ -150,7 +158,8 @@ namespace NKikimr::NSqsTopic {
         const TString& databasePath,
         const TString& topicPath,
         const TString& consumer,
-        const TString& method
+        const TString& method,
+        const NKikimrPQ::TPQConfig* pqConfig
     ) {
         return GetMetricsLabels(
             databasePath,
@@ -159,7 +168,11 @@ namespace NKikimr::NSqsTopic {
             method,
             {
                 {"name", "api.sqs.response.empty_count"}
-            }
+            },
+            {},
+            {},
+            {},
+            pqConfig
         );
     }
 
@@ -167,7 +180,8 @@ namespace NKikimr::NSqsTopic {
         const TString& databasePath,
         const TString& topicPath,
         const TString& consumer,
-        const TString& method
+        const TString& method,
+        const NKikimrPQ::TPQConfig* pqConfig
     ) {
         return GetMetricsLabels(
             databasePath,
@@ -176,7 +190,11 @@ namespace NKikimr::NSqsTopic {
             method,
             {
                 {"name", "api.sqs.request.bytes"}
-            }
+            },
+            {},
+            {},
+            {},
+            pqConfig
         );
     }
 

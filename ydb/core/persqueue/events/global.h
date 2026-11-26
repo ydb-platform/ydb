@@ -78,6 +78,9 @@ namespace NKikimr::TEvPersQueue {
     struct TEvRequest : public TEventPB<TEvRequest,
             NKikimrClient::TPersQueueRequest, EvRequest> {
         TEvRequest() {}
+
+        // Mirrorer requests are sent locally to their own tablet; this flag is not serialized.
+        bool FromMirrorer = false;
     };
 
     struct TEvPartitionUpdateReadMetrics : public TEventPB<TEvPartitionUpdateReadMetrics,

@@ -1,7 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_settings.h"
 
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 
 #include <yql/essentials/ast/yql_ast.h>

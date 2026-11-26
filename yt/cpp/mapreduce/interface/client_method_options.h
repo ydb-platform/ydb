@@ -1248,6 +1248,11 @@ struct TCreateClientOptions
     TSelf& ServiceTicketAuth(const NAuth::IServiceTicketAuthPtrWrapper& wrapper);
     /// @}
 
+    /// @brief User ticket for authentication on behalf of a user.
+    ///
+    /// A non-empty UserTicket requires ServiceTicketAuth to be set.
+    FLUENT_FIELD(TString, UserTicket);
+
     /// @brief Use tvm-only endpoints in cluster connection.
     FLUENT_FIELD_DEFAULT(bool, TvmOnly, false);
 

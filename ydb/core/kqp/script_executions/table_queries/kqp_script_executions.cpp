@@ -2,11 +2,11 @@
 #include "kqp_script_executions_impl.h"
 
 #include <ydb/core/fq/libs/common/rows_proto_splitter.h>
-#include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/common/stats/query_stats.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_execution_compression.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_execution_retries.h>
@@ -776,6 +776,16 @@ public:
             }
         }
 
+        std::optional<bool> disablePgCompatibility;
+        if (ev.QueryPhysicalGraph) {
+            disablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility();
+            if (*disablePgCompatibility && !ev.QueryPhysicalGraph->GetCompiledWithPgCompatibilityDisabled()) {
+                SendFailResponse(
+                    Ydb::StatusIds::UNSUPPORTED, "PostgreSQL compatibility is disabled and the saved plan was not compiled in that mode");
+                return;
+            }
+        }
+
         auto meta = GetOperationMeta();
 
         // Start request.
@@ -794,6 +804,7 @@ public:
                 .Counters = Counters,
                 .SaveQueryPhysicalGraph = ev.SaveQueryPhysicalGraph,
                 .PhysicalGraph = ev.QueryPhysicalGraph,
+                .DisablePgCompatibility = disablePgCompatibility,
                 .DisableDefaultTimeout = ev.DisableDefaultTimeout,
                 .CheckpointId = ev.CheckpointId,
                 .StreamingQueryPath = ev.StreamingQueryPath,
@@ -1232,6 +1243,9 @@ private:
         request.SetPoolId(meta.GetResourcePoolId());
 
         const bool hasPhysicalGraph = physicalGraph.has_value();
+        // A retry of the same execution retains the policy of its saved graph.
+        const auto disablePgCompatibility =
+            physicalGraph ? std::optional{ physicalGraph->GetCompiledWithPgCompatibilityDisabled() } : std::nullopt;
         RunScriptActorId = Register(CreateRunScriptActor(queryRequest,
             {
                 .Database = request.GetDatabase(),
@@ -1245,6 +1259,7 @@ private:
                 .Counters = Counters,
                 .SaveQueryPhysicalGraph = meta.GetSaveQueryPhysicalGraph(),
                 .PhysicalGraph = std::move(physicalGraph),
+                .DisablePgCompatibility = disablePgCompatibility,
                 .DisableDefaultTimeout = meta.GetDisableDefaultTimeout(),
                 .CheckpointId = meta.GetCheckpointId(),
                 .StreamingQueryPath = meta.GetStreamingQueryPath(),
@@ -3627,6 +3642,10 @@ private:
             return;
         }
 
+        if (ResultSetIndex < 0) {
+            return Finish(Ydb::StatusIds::BAD_REQUEST, "Result set index is invalid");
+        }
+
         const auto operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
 
         if (operationStatus) {
@@ -3662,8 +3681,7 @@ private:
 
         if (!serializedMetas) {
             if (!operationStatus) {
-                Finish(Ydb::StatusIds::BAD_REQUEST, "Result is not ready");
-                return;
+                return FinishResultSetNotReady("Result is not ready");
             }
 
             const auto operationStatusCode = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
@@ -3684,8 +3702,10 @@ private:
 
         const NJson::TJsonValue* metaValue = nullptr;
         if (!value.GetValuePointer(ResultSetIndex, &metaValue)) {
-            Finish(Ydb::StatusIds::BAD_REQUEST, "Result set index is invalid");
-            return;
+            if (!operationStatus) {
+                return FinishResultSetNotReady("Result set index is invalid");
+            }
+            return Finish(Ydb::StatusIds::BAD_REQUEST, "Result set index is invalid");
         }
         Y_ENSURE(metaValue, "Result set index is invalid");
 
@@ -3694,8 +3714,7 @@ private:
 
         if (!operationStatus) {
             if (!meta.enabled_runtime_results()) {
-                Finish(Ydb::StatusIds::BAD_REQUEST, "Results are not ready");
-                return;
+                return FinishResultSetNotReady("Results are not ready");
             }
             HasMoreResults = !meta.finished();
             NumberOfSavedRows = meta.number_rows();
@@ -3827,8 +3846,15 @@ private:
                 {"hasMoreResults", HasMoreResults});
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::move(ResultSet), HasMoreResults, std::move(issues)));
         } else {
-            Send(Owner, new TEvFetchScriptResultsResponse(status, std::nullopt, true, std::move(issues)));
+            auto response = std::make_unique<TEvFetchScriptResultsResponse>(status, std::nullopt, /* hasMoreResults */ true, std::move(issues));
+            response->ResultSetNotReady = ResultSetNotReady;
+            Send(Owner, std::move(response));
         }
+    }
+
+    void FinishResultSetNotReady(const TString& message) {
+        ResultSetNotReady = true;
+        Finish(Ydb::StatusIds::BAD_REQUEST, message);
     }
 
     void CancelFetchQuery() {
@@ -3848,6 +3874,7 @@ private:
     i64 AdditionalRowSize = 0;
     Ydb::ResultSet ResultSet;
     bool HasMoreResults = false;
+    bool ResultSetNotReady = false;
 };
 
 // Save information about query effects like S3 writes in order to commit / rollback after operation finish, saved after query compilation in DataExecuter
@@ -4318,7 +4345,7 @@ private:
         if (Request.QueryStats) {
             NJson::TJsonValue statsJson;
             Ydb::TableStats::QueryStats queryStats;
-            NGRpcService::FillQueryStats(queryStats, *Request.QueryStats);
+            FillQueryStats(queryStats, *Request.QueryStats);
             NProtobufJson::Proto2Json(queryStats, statsJson, NProtobufJson::TProto2JsonConfig());
             TStringStream statsStream;
             NJson::WriteJson(&statsStream, &statsJson,

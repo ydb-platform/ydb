@@ -75,11 +75,15 @@ message TAlterRecord {
     //_ Table: Attributes of family columns
 
     optional uint32 Codec = 11;     // Read NPage::ECodec for details
+    optional uint32 CodecLevel = 38 [default = 1]; // ZSTD compression level; 0 means the native ZSTD default
     optional bool InMemory = 12;    // Deprecated, replaced with Cache
     optional uint32 Cache = 13;     // Read NPage::ECache for details
     optional uint32 Large = 14;     // When keep values in single blobs
     optional uint32 Small = 18;     // When pack values to outer blobs
     optional uint32 CacheMode = 27; // NPage::ECacheMode
+    // Ignored by older versions, which drop them when they rewrite the alter log: the flags then get the defaults
+    optional bool KeyIndexInDescriptor = 36 [default = true];     // Main group index of tier parts is in the descriptor page collection
+    optional bool GroupIndexesInDescriptor = 37 [default = true]; // Other groups indexes of tier parts are in the descriptor page collection
 
     //_ Table: Attributes of single colimn
 

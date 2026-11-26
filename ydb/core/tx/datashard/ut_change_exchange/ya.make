@@ -26,11 +26,13 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/result
+    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    datashard_ut_cdc_building_columns.cpp
     datashard_ut_change_exchange.cpp
 )
 

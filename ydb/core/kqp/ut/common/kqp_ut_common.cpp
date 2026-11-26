@@ -1911,7 +1911,7 @@ NJson::TJsonValue GetDetailedJoinOrderImpl(const NJson::TJsonValue& opt, const T
     auto op = opt.GetMapSafe().at("Operators").GetArraySafe()[0];
     res["op_name"] = op.GetMapSafe().at("Name").GetStringSafe();
     if (params.IncludeOptimizerEstimation && op.GetMapSafe().contains("E-Rows")) {
-        res["e-size"] = op.GetMapSafe().at("E-Rows").GetStringSafe();
+        res["e-size"] = op.GetMapSafe().at("E-Rows").GetStringRobust();
     }
 
 

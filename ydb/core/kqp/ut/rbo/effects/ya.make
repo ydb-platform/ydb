@@ -4,19 +4,31 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(16)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 SRCS(
+    kqp_rbo_effects_copy_ut.cpp
+    kqp_rbo_effects_lowering_ut.cpp
+    kqp_rbo_generated_effects_ut.cpp
+    kqp_rbo_generated_sources_ut.cpp
+    kqp_rbo_index_effects_ut.cpp
+    kqp_rbo_index_returning_ut.cpp
+    kqp_rbo_index_writes_ut.cpp
+    kqp_rbo_olap_effects_ut.cpp
+    kqp_rbo_yql_effects_ut.cpp
     kqp_effects_ut.cpp
+    kqp_effects_guards_ut.cpp
     kqp_immediate_effects_ut.cpp
     kqp_inplace_update_ut.cpp
     kqp_overload_ut.cpp
     kqp_reattach_ut.cpp
+    kqp_returning_ut.cpp
     kqp_write_ut.cpp
 )
 
 PEERDIR(
     ydb/core/kqp/ut/common
+    ydb/core/kqp/ut/olap/helpers
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
 )

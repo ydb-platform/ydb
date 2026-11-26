@@ -100,6 +100,7 @@ PEERDIR(
     ydb/core/sys_view/service
     ydb/core/tracing
     ydb/core/util
+    ydb/core/persqueue/public/metrics
     ydb/library/persqueue/topic_parser
     ydb/library/services
 )

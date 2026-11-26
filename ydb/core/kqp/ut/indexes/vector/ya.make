@@ -3,11 +3,12 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 SIZE(MEDIUM)
 
 SRCS(
     kqp_indexes_vector_ut.cpp
+    kqp_indexes_hnsw_ut.cpp
 )
 
 PEERDIR(

@@ -360,6 +360,7 @@ PEERDIR(
     contrib/libs/lz4
     contrib/libs/openssl
 
+    library/cpp/containers/absl
     library/cpp/openssl/init
     library/cpp/openssl/io
     library/cpp/threading/thread_local

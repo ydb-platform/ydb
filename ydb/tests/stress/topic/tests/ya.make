@@ -8,7 +8,8 @@ TEST_SRCS(
     test_workload_topic.py
 )
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+
 REQUIREMENTS(ram:32 cpu:4)
 
 IF (SANITIZER_TYPE)
@@ -16,6 +17,7 @@ IF (SANITIZER_TYPE)
 ENDIF()
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(5)
 
 DEPENDS(
     ydb/apps/ydb
@@ -27,5 +29,7 @@ PEERDIR(
     ydb/tests/library/stress
     ydb/tests/stress/topic/workload
 )
+
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 END()

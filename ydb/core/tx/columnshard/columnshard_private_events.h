@@ -95,26 +95,15 @@ struct TEvPrivate {
         EvRetryConfigSubscription,
         EvUpdateChannelApproximateFreeSpace,
 
-        EvContinueFindEmptyHistoryIntervals,
-        EvFindEmptyHistoryIntervalsPortionsReady,
         EvPrefetchPortionsMetadata,
+
+        EvBackupExportReset,
+
+        EvPassWriteGate,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
-
-    struct TEvContinueFindEmptyHistoryIntervals
-        : NActors::TEventLocal<TEvContinueFindEmptyHistoryIntervals, EvContinueFindEmptyHistoryIntervals> {};
-
-    struct TEvFindEmptyHistoryIntervalsPortionsReady
-        : NActors::TEventLocal<TEvFindEmptyHistoryIntervalsPortionsReady, EvFindEmptyHistoryIntervalsPortionsReady> {
-        std::vector<std::pair<TInternalPathId, ui64>> Portions;
-
-        explicit TEvFindEmptyHistoryIntervalsPortionsReady(std::vector<std::pair<TInternalPathId, ui64>>&& portions)
-            : Portions(std::move(portions))
-        {
-        }
-    };
 
     class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
     private:
@@ -132,7 +121,7 @@ struct TEvPrivate {
         }
 
         NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult> ExtractResult() {
-            AFL_VERIFY(Result);
+            YDB_LOG_VERIFY(Result);
             auto result = std::move(*Result);
             Result.reset();
             return result;
@@ -203,8 +192,8 @@ struct TEvPrivate {
             : Requests(std::move(requests))
             , Callback(callback)
         {
-            AFL_VERIFY(Callback);
-            AFL_VERIFY(Requests.size());
+            YDB_LOG_VERIFY(Callback);
+            YDB_LOG_VERIFY(Requests.size());
         }
     };
 
@@ -488,23 +477,36 @@ struct TEvPrivate {
     3. TEvBackupExportState - internal message for iscan iface
     */
     struct TEvBackupExportRecordBatch: public TEventLocal<TEvBackupExportRecordBatch, EvBackupExportRecordBatch> {
-        explicit TEvBackupExportRecordBatch(const std::shared_ptr<arrow::RecordBatch>& data, bool isLast)
+        explicit TEvBackupExportRecordBatch(const std::shared_ptr<arrow::RecordBatch>& data, bool isLast, ui32 generation = 0)
             : Data(data)
             , IsLast(isLast)
+            , Generation(generation)
         {
         }
 
         std::shared_ptr<arrow::RecordBatch> Data;
         bool IsLast;
+        ui32 Generation;
     };
 
     struct TEvBackupExportRecordBatchResult: public TEventLocal<TEvBackupExportRecordBatchResult, EvBackupExportRecordBatchResult> {
-        explicit TEvBackupExportRecordBatchResult(bool isFinish)
+        explicit TEvBackupExportRecordBatchResult(bool isFinish, ui32 generation = 0)
             : IsFinish(isFinish)
+            , Generation(generation)
         {
         }
 
         bool IsFinish = false;
+        ui32 Generation;
+    };
+
+    struct TEvBackupExportReset: public TEventLocal<TEvBackupExportReset, EvBackupExportReset> {
+        explicit TEvBackupExportReset(ui32 generation)
+            : Generation(generation)
+        {
+        }
+
+        ui32 Generation;
     };
 
     struct TEvBackupExportState: public TEventLocal<TEvBackupExportState, EvBackupExportState> {

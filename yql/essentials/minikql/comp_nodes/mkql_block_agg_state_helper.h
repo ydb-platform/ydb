@@ -1,6 +1,13 @@
 #pragma once
 
+#include <yql/essentials/public/decimal/yql_decimal.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
+
 #include <util/system/unaligned_mem.h>
+
+#include <memory>
+#include <type_traits>
 
 namespace NKikimr::NMiniKQL {
 

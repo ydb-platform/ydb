@@ -77,6 +77,7 @@ private:
             EvScheduleTraversal,
             EvAnalyzeDeadline,
             EvScheduleForceTraversal,
+            EvReportAnalyzeCounters,
 
             EvEnd
         };
@@ -88,6 +89,7 @@ private:
         struct TEvScheduleTraversal : public TEventLocal<TEvScheduleTraversal, EvScheduleTraversal> {};
         struct TEvScheduleForceTraversal : public TEventLocal<TEvScheduleForceTraversal, EvScheduleForceTraversal> {};
         struct TEvAnalyzeDeadline : public TEventLocal<TEvAnalyzeDeadline, EvAnalyzeDeadline> {};
+        struct TEvReportAnalyzeCounters : public TEventLocal<TEvReportAnalyzeCounters, EvReportAnalyzeCounters> {};
 
     };
 
@@ -145,6 +147,7 @@ private:
     void Handle(TEvStatistics::TEvAnalyzeOpCancelRequest::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeOpForgetRequest::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeActorProgress::TPtr& ev);
+    void Handle(TEvPrivate::TEvReportAnalyzeCounters::TPtr& ev);
 
     void PassAway() final;
 
@@ -171,6 +174,13 @@ private:
         std::optional<Ydb::Table::AnalyzeState::State> forceTerminalState,
         NYql::TIssues issues = {});
 
+    struct TBaseStatisticsTotals {
+        ui64 RowCount = 0;
+        ui64 BytesSize = 0;
+    };
+
+    static TBaseStatisticsTotals CalculateBaseStatisticsTotals(const NKikimrStat::TSchemeShardStats& stats);
+    void RebuildBaseStatisticsCounters();
     void ReportBaseStatisticsCounters();
     void ReportAnalyzeCounters();
     void InitAnalyzeCounters();
@@ -238,6 +248,7 @@ private:
             hFunc(TEvStatistics::TEvAnalyzeOpCancelRequest, Handle);
             hFunc(TEvStatistics::TEvAnalyzeOpForgetRequest, Handle);
             hFunc(TEvStatistics::TEvAnalyzeActorProgress, Handle);
+            hFunc(TEvPrivate::TEvReportAnalyzeCounters, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -259,6 +270,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr BackgroundAnalyzePendingCounter;
     NMonitoring::TDynamicCounters::TCounterPtr BackgroundAnalyzeCompletedCounter;
     NMonitoring::TDynamicCounters::TCounterPtr BackgroundAnalyzeFailedCounter;
+    bool AnalyzeCountersDirty = true;
+    static constexpr TDuration AnalyzeCountersReportPeriod = TDuration::Seconds(1);
 
     // Cached parsed change counters (pathId -> TChangeCounters).
     // Invalidated when BaseStatistics is updated (TTxSchemeShardStats::Complete)
@@ -283,8 +296,10 @@ private:
     struct TSerializedBaseStats {
         std::shared_ptr<TString> Committed; // Value that is safely persisted in local DB. Can be nullptr.
         std::shared_ptr<TString> Latest; // Value from the latest update.
+        TBaseStatisticsTotals CommittedTotals;
     };
     std::unordered_map<TSSId, TSerializedBaseStats> BaseStatistics;
+    TBaseStatisticsTotals BaseStatisticsTotals;
 
     std::unordered_map<TSSId, size_t> SchemeShards; // all connected schemeshards
     std::unordered_map<TActorId, TSSId> SchemeShardPipes; // schemeshard pipe servers

@@ -9,14 +9,13 @@
 #include "resource_subscriber/actor.h"
 #include "transactions/locks/read_finished.h"
 
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/diagnostics/scan_diagnostics_actor.h>
-#include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/tiering/manager.h>
 
@@ -51,6 +50,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     for (auto&& i : ActorsToStop) {
         ctx.Send(i, new TEvents::TEvPoisonPill);
     }
+    StopLocalDbBackup(ctx);
 
     StoragesManager->Stop();
     DataLocksManager->Stop();
@@ -79,6 +79,8 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
             {"reason", "db_reading_not_finished"});
         return;
     }
+    YDB_LOG_VERIFY(!WriteGate);
+    WriteGate.emplace(*Executor(), TablesManager, *OperationsManager, *SpaceWatcher, Counters, TabletID());
     ProgressTxController->OnTabletInit();
     AbortNotProposedTransactions();
     {
@@ -90,7 +92,6 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
             {"event", "initialize_shard"},
             {"step", "SwitchToWork"});
         Become(&TThis::StateWork);
-        StartFindEmptyHistoryIntervals(ctx);
         SignalTabletActive(ctx);
         YDB_LOG_INFO("",
             {"event", "initialize_shard"},
@@ -99,8 +100,6 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
         EnqueueProgressTx(ctx);
         OnTieringModified();
     }
-    // the request for every portion takes long to build, so it is not part of the start
-    ctx.Send(SelfId(), new TEvPrivate::TEvPrefetchPortionsMetadata());
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
     BackgroundSessionsManager->Start();
@@ -118,8 +117,14 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
             portionsCount += granule->GetPortions().size();
         }
     }
-    StartupTimeline.OnSwitchedToWork(portionsCount);
+    StartupTimeline.OnSwitchedToWork(portionsCount, !DeferredPortionLoader.IsEnabled());
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*this);
+    if (DeferredPortionLoader.IsEnabled()) {
+        StartDeferredPortionLoading(ctx);
+    } else {
+        // the request for every portion takes long to build, so it is not part of the start
+        ctx.Send(SelfId(), new TEvPrivate::TEvPrefetchPortionsMetadata());
+    }
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
@@ -335,8 +340,9 @@ void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const
     const TDuration stalenessLivetime = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness();
     const TDuration stalenessInMem = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStalenessInMem();
     const TDuration usedLivetime = NYDBTest::TControllers::GetColumnShardController()->GetUsedSnapshotLivetime();
-    AFL_VERIFY(usedLivetime < stalenessInMem || (stalenessInMem == usedLivetime && usedLivetime == TDuration::Zero()))("used", usedLivetime)(
-                                                "staleness", stalenessInMem);
+    YDB_LOG_VERIFY(usedLivetime < stalenessInMem || (stalenessInMem == usedLivetime && usedLivetime == TDuration::Zero()),
+        {"used", usedLivetime},
+        {"staleness", stalenessInMem});
     const TDuration ping = 0.3 * std::min(stalenessInMem - usedLivetime, stalenessLivetime - stalenessInMem);
     if (auto writeTx = InFlightReadsTracker.Ping(this, stalenessInMem, usedLivetime, TInstant::Now())) {
         Execute(writeTx.release(), ctx);
@@ -369,7 +375,7 @@ void TColumnShard::Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorCon
         GetProgressTxController().PingTimeouts(now);
         ctx.Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup(0));
     } else if (ev->Get()->Tag == 1) {
-        WriteTasksQueue->Drain(true, ctx);
+        DrainWriteQueue(ctx, true);
     }
 }
 
@@ -469,7 +475,7 @@ void TColumnShard::UpdateIndexCounters() {
 
 ui64 TColumnShard::MemoryUsage() const {
     ui64 memory = ProgressTxController->GetMemoryUsage() + ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) +
-                  (WaitingScans.size()) * (sizeof(NOlap::TSnapshot) + sizeof(void*));
+                  ScanGate.GetMemoryUsage() + (WriteGate ? WriteGate->GetMemoryUsage() : 0);
     memory += TablesManager.GetMemoryUsage();
     return memory;
 }
@@ -481,7 +487,6 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
     }
 
     ui64 storageBytes =
-        Counters.GetTabletCounters()->GetValue(COUNTER_PREPARED_BYTES) + Counters.GetTabletCounters()->GetValue(COUNTER_COMMITTED_BYTES) +
         Counters.GetTabletCounters()->GetValue(COUNTER_INSERTED_BYTES) + Counters.GetTabletCounters()->GetValue(COUNTER_COMPACTED_BYTES) +
         Counters.GetTabletCounters()->GetValue(COUNTER_SPLIT_COMPACTED_BYTES) + Counters.GetTabletCounters()->GetValue(COUNTER_INACTIVE_BYTES);
 

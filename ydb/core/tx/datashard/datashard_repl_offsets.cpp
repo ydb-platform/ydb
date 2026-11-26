@@ -46,6 +46,111 @@ namespace NKikimr::NDataShard {
             .Delete();
     }
 
+    class TReplicationSourceOffsetsDb::TCleanupBatch {
+        using Schema = TDataShard::Schema;
+        using ECleanupStatus = TReplicationSourceOffsetsDb::ECleanupStatus;
+
+        // Internal cleanup budgets count fixed-size keys, not user values
+        // or serialized redo records.
+        static constexpr size_t MaxRows = 1000;
+        static constexpr size_t MaxKeyBytes = 16 * 1024;
+        static constexpr size_t OffsetKeyBytes = 4 * sizeof(ui64);
+        static constexpr size_t SourceKeyBytes = 3 * sizeof(ui64);
+
+    public:
+        ECleanupStatus ReadOffsets(NIceDb::TNiceDb& db, const TPathId& pathId, TCleanupCursor& cursor) {
+            auto rows = db.Table<Schema::ReplicationSourceOffsets>()
+                .GreaterOrEqual(pathId.OwnerId, pathId.LocalPathId, cursor.SourceId, cursor.SplitKeyId)
+                .LessOrEqual(pathId.OwnerId, pathId.LocalPathId)
+                .Select<Schema::ReplicationSourceOffsets::SourceId, Schema::ReplicationSourceOffsets::SplitKeyId>();
+            if (!rows.IsReady()) {
+                return ECleanupStatus::NotReady;
+            }
+            while (!rows.EndOfSet() && HasBudget(OffsetKeyBytes)) {
+                cursor.SourceId = rows.GetValue<Schema::ReplicationSourceOffsets::SourceId>();
+                cursor.SplitKeyId = rows.GetValue<Schema::ReplicationSourceOffsets::SplitKeyId>();
+                Offsets.emplace_back(cursor.SourceId, cursor.SplitKeyId);
+                KeyBytes += OffsetKeyBytes;
+                if (!HasBudget(OffsetKeyBytes)) {
+                    break;
+                }
+                if (!rows.Next()) {
+                    return ECleanupStatus::NotReady;
+                }
+            }
+            return rows.EndOfSet() ? ECleanupStatus::Done : ECleanupStatus::More;
+        }
+
+        ECleanupStatus ReadSources(NIceDb::TNiceDb& db, const TPathId& pathId, TCleanupCursor& cursor) {
+            auto rows = db.Table<Schema::ReplicationSources>()
+                .GreaterOrEqual(pathId.OwnerId, pathId.LocalPathId, cursor.SourceId)
+                .LessOrEqual(pathId.OwnerId, pathId.LocalPathId)
+                .Select<Schema::ReplicationSources::SourceId>();
+            if (!rows.IsReady()) {
+                return ECleanupStatus::NotReady;
+            }
+            while (!rows.EndOfSet() && HasBudget(SourceKeyBytes)) {
+                cursor.SourceId = rows.GetValue<Schema::ReplicationSources::SourceId>();
+                Sources.push_back(cursor.SourceId);
+                KeyBytes += SourceKeyBytes;
+                if (!HasBudget(SourceKeyBytes)) {
+                    break;
+                }
+                if (!rows.Next()) {
+                    return ECleanupStatus::NotReady;
+                }
+            }
+            return rows.EndOfSet() ? ECleanupStatus::Done : ECleanupStatus::More;
+        }
+
+        void Remove(NIceDb::TNiceDb& db, const TPathId& pathId) const {
+            for (const auto& [sourceId, splitKeyId] : Offsets) {
+                db.Table<Schema::ReplicationSourceOffsets>()
+                    .Key(pathId.OwnerId, pathId.LocalPathId, sourceId, splitKeyId).Delete();
+            }
+            for (ui64 sourceId : Sources) {
+                db.Table<Schema::ReplicationSources>()
+                    .Key(pathId.OwnerId, pathId.LocalPathId, sourceId).Delete();
+            }
+        }
+
+    private:
+        bool HasBudget(size_t bytes) const {
+            return Offsets.size() + Sources.size() < MaxRows && KeyBytes + bytes <= MaxKeyBytes;
+        }
+
+        TVector<std::pair<ui64, ui64>> Offsets;
+        TVector<ui64> Sources;
+        size_t KeyBytes = 0;
+    };
+
+    TReplicationSourceOffsetsDb::ECleanupStatus TReplicationSourceOffsetsDb::RemoveTableBatch(const TPathId& pathId, TCleanupCursor& cursor) {
+        NIceDb::TNiceDb db(Txc.DB);
+        TCleanupBatch batch;
+        auto next = cursor;
+        auto status = ECleanupStatus::Done;
+        if (!next.OffsetsDone) {
+            status = batch.ReadOffsets(db, pathId, next);
+            if (status == ECleanupStatus::Done) {
+                next.OffsetsDone = true;
+                next.SourceId = 0;
+                next.SplitKeyId = 0;
+            }
+        }
+        if (next.OffsetsDone) {
+            status = batch.ReadSources(db, pathId, next);
+        }
+        if (status == ECleanupStatus::NotReady) {
+            return status;
+        }
+
+        // Finish all reads before mutating the database, so a page fault can
+        // restart the transaction without committing a partial cleanup batch.
+        batch.Remove(db, pathId);
+        cursor = status == ECleanupStatus::Done ? TCleanupCursor{} : next;
+        return status;
+    }
+
     bool TReplicationSourceState::TLessByKeyPrefix::operator()(TConstArrayRef<TCell> a, TConstArrayRef<TCell> b) const {
         return ComparePrefixBorders(
             *KeyColumnTypes,
@@ -322,6 +427,12 @@ namespace NKikimr::NDataShard {
         const auto& userTables = GetUserTables();
         auto itUserTables = userTables.find(pathId.LocalPathId);
         if (itUserTables == userTables.end()) {
+            return nullptr;
+        }
+
+        const auto& table = *itUserTables->second;
+        if (!table.IsIncrementalRestore()
+            && !table.IsReplicated()) {
             return nullptr;
         }
 

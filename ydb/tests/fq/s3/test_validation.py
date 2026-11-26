@@ -1,59 +1,42 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 import pytest
-
-import ydb.public.api.protos.draft.fq_pb2 as fq
-
-from ydb.tests.tools.fq_runner.fq_client import FederatedQueryException
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
+import ydb.public.api.protos.ydb_value_pb2 as ydb_value
 
 
-class TestS3(object):
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_empty(self, client):
-        try:
-            client.create_query("simple", "", type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        except FederatedQueryException as e:
-            assert "message: \"text\\\'s length is not in [1; 1024000]" in e.args[0]
-            return
-        assert False
+class TestSqlValidation:
+    def test_invalid_sql(self, client):
+        result = client.execute('SELECT FROM;').check(False)
+        assert result.error
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_nested_issues(self, client):
-        sql = "$t_0 = SELECT 1 - \"f\" AS data;\n"
+    @pytest.mark.parametrize('depth', [1, 8, 16])
+    def test_nested_issues(self, client, depth):
+        # The nested issue tree must also fit the protobuf recursion limit.
+        sql = '$t_0 = SELECT 1 - "f" AS data;\n'
+        for i in range(depth):
+            sql += f'$t_{i + 1} = SELECT data FROM $t_{i} WHERE data != {i};\n'
+        result = client.execute(sql + f'SELECT data FROM $t_{depth};').check(False)
+        assert 'Cannot substract' in result.error, result.error
+        assert any(issue.issues for issue in result.exception.issues)
 
-        number_rows = 100
-        for i in range(number_rows):
-            sql += f"$t_{i + 1} = SELECT data FROM $t_{i} WHERE data != {i};\n"
-
-        sql += f"SELECT data FROM $t_{number_rows};"
-
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-
-        describe_result = client.describe_query(query_id).result
-        describe_string = "{}".format(describe_result)
-        assert "(skipped levels)" in describe_string, describe_string
-        assert "Cannot substract" in describe_string, describe_string
-
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_nested_type(self, client):
-        sql = "$t_0 = SELECT 1 AS data;\n"
-
-        number_rows = 300
-        for i in range(number_rows):
-            sql += f"$t_{i + 1} = SELECT <|data:data|> AS data FROM $t_{i};\n"
-
-        sql += f"SELECT data FROM $t_{number_rows};"
-
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-
-        describe_result = client.describe_query(query_id).result
-        describe_string = "{}".format(describe_result)
-        assert "Invalid result set" in describe_string, describe_string
-        assert "Nesting depth of type for result column" in describe_string, describe_string
+    @pytest.mark.parametrize('depth', [1, 8, 16])
+    def test_nested_type(self, client, depth):
+        # Every struct adds several protobuf messages to its schema. Keep the
+        # response below the protobuf decoder's recursion limit.
+        sql = '$t_0 = SELECT CAST(1 AS Int32) AS data;\n'
+        for i in range(depth):
+            sql += f'$t_{i + 1} = SELECT <|data:data|> AS data FROM $t_{i};\n'
+        result = client.execute(sql + f'SELECT data FROM $t_{depth};').check().result_set()
+        assert len(result.columns) == 1
+        assert result.columns[0].name == 'data'
+        assert len(result.rows) == 1
+        column_type = result.columns[0].type
+        value = result.rows[0]['data']
+        for _ in range(depth):
+            assert column_type.WhichOneof('type') == 'struct_type'
+            members = column_type.struct_type.members
+            assert len(members) == 1
+            assert members[0].name == 'data'
+            column_type = members[0].type
+            assert list(value) == ['data']
+            value = value['data']
+        assert column_type.type_id == ydb_value.Type.INT32
+        assert value == 1

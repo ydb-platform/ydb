@@ -37,29 +37,36 @@ class DMLOperations():
             sql_ttl = create_ttl_sql_request(f"ttl_{cleanup_type_name(ttl)}", {"P18262D": ""}, "SECONDS" if ttl in ttl_int_types else "", table_name)
             self.query(sql_ttl)
 
-    def insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+    def insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, batch_size: int = 1):
         number_of_columns = len(pk_types) + len(all_types) + len(index)
 
         if ttl != "":
             number_of_columns += 1
-        for count in range(1, number_of_columns + 1):
-            self.create_insert(table_name, count, all_types,
-                               pk_types, index, ttl)
+        for first in range(1, number_of_columns + 1, batch_size):
+            self._insert_rows(table_name, range(first, min(first + batch_size, number_of_columns + 1)),
+                              all_types, pk_types, index, ttl)
 
     def create_insert(self, table_name: str, value: int, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+        self._insert_rows(table_name, [value], all_types, pk_types, index, ttl)
+
+    def _insert_rows(self, table_name, values, all_types, pk_types, index, ttl):
+        columns = [
+            (prefix + cleanup_type_name(type_name), type_name, generate_value)
+            for prefix, types in (("pk_", pk_types), ("col_", all_types), ("col_index_", index))
+            for type_name, generate_value in types.items()
+        ]
+        if ttl != "":
+            columns.append((f"ttl_{ttl}", ttl, ttl_types[ttl]))
+        rows = [
+            "(" + ", ".join(format_sql_value(generate_value(value), type_name)
+                            for _, type_name, generate_value in columns) + ")"
+            for value in values
+        ]
         insert_sql = f"""
             INSERT INTO {table_name}(
-                {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
-                {", ".join(["col_" + cleanup_type_name(type_name) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
-                {", ".join(["col_index_" + cleanup_type_name(type_name) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
-                {f"ttl_{ttl}" if ttl != "" else ""}
+                {", ".join(name for name, _, _ in columns)}
             )
-            VALUES(
-                {", ".join([format_sql_value(pk_types[type_name](value), type_name) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
-                {", ".join([format_sql_value(all_types[type_name](value), type_name) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
-                {", ".join([format_sql_value(index[type_name](value), type_name) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
-                {format_sql_value(ttl_types[ttl](value), ttl) if ttl != "" else ""}
-            );
+            VALUES {", ".join(rows)};
         """
         self.query(insert_sql)
 

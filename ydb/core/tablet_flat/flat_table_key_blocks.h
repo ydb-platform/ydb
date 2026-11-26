@@ -32,7 +32,7 @@
 // inclusivity, never redraw.
 
 #include "flat_part_slice.h"
-#include "flat_row_eggs.h"
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include "flat_table_subset.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>

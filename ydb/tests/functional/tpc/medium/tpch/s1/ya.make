@@ -7,4 +7,5 @@ TEST_SRCS(
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/tpc/medium/tpch/common.inc)
 
 # Share class setup and imported data across all 22 queries.
+REQUIREMENTS(cpu:2)
 END()

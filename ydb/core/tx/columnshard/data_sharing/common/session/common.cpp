@@ -21,9 +21,9 @@ TConclusionStatus TCommonSession::TryStart(NColumnShard::TColumnShard& shard) {
         {"info", Info});
     YDB_LOG_DEBUG("",
         {"info", "Start"});
-    AFL_VERIFY(State == EState::Prepared);
+    YDB_LOG_VERIFY(State == EState::Prepared);
 
-    AFL_VERIFY(!!LockGuard);
+    YDB_LOG_VERIFY(!!LockGuard);
     const auto& index = shard.GetIndexAs<TColumnEngineForLogs>();
     THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>> portionsByPath;
     THashSet<TString> StoragesIds;
@@ -51,19 +51,19 @@ TConclusionStatus TCommonSession::TryStart(NColumnShard::TColumnShard& shard) {
 void TCommonSession::PrepareToStart(const NColumnShard::TColumnShard& shard) {
     YDB_LOG_CREATE_CONTEXT(
         {"info", Info});
-    AFL_VERIFY(State == EState::Created);
+    YDB_LOG_VERIFY(State == EState::Created);
     State = EState::Prepared;
-    AFL_VERIFY(!LockGuard);
+    YDB_LOG_VERIFY(!LockGuard);
     LockGuard = shard.GetDataLocksManager()->RegisterLock<NDataLocks::TSnapshotLock>("sharing_session:" + GetSessionId(),
         TransferContext.GetSnapshotBarrierVerified(), GetPathIdsForStart(), NDataLocks::ELockCategory::Sharing, true);
     shard.GetSharingSessionsManager()->StartSharingSession();
 }
 
 void TCommonSession::Finish(const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
-    AFL_VERIFY(State == EState::InProgress || State == EState::Prepared);
+    YDB_LOG_VERIFY(State == EState::InProgress || State == EState::Prepared);
     State = EState::Finished;
     shard.GetSharingSessionsManager()->FinishSharingSession();
-    AFL_VERIFY(LockGuard);
+    YDB_LOG_VERIFY(LockGuard);
     LockGuard->Release(*dataLocksManager);
 }
 

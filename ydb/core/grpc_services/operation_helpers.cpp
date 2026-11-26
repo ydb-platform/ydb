@@ -242,6 +242,18 @@ void ToOperation(const NKikimrSetColumnConstraint::TSetColumnConstraint& constra
     operation->mutable_metadata()->PackFrom(metadata);
 }
 
+bool TryGetReassignTabletsId(const NOperationId::TOperationId& operationId, ui64& hiveId, ui64& generation, ui64& reassignId) {
+    try {
+        auto read = [&](const char* key, ui64& value) {
+            const auto& values = operationId.GetValue(key);
+            return values.size() == 1 && TryFromString(*values[0], value) && value != 0;
+        };
+        return read("hive_id", hiveId) && read("hive_generation", generation) && read("reassign_id", reassignId);
+    } catch (const yexception&) {
+        return false;
+    }
+}
+
 bool TryGetUlidId(const NOperationId::TOperationId& operationId, TString& binaryId) {
     const auto& ids = operationId.GetValue("id");
     if (ids.size() != 1) {

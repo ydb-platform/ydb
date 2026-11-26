@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/kqp/common/compile_cache/types.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/library/actors/core/actorid.h>
@@ -44,6 +45,7 @@ struct TKqlTransformContext : TThrRefBase {
 
     TIntrusivePtr<NYql::TExprNode> ExplainTransformerInput; // Explain transformer must work after other transformers, but use input before peephole
     std::optional<NJson::TJsonValue> PlanJson; // JSON plan for the new optimizer
+    TOptimizerCacheOutput CacheOutput;
     TMaybe<NYql::NNodes::TKiDataQueryBlocks> DataQueryBlocks;
 
     void Reset();

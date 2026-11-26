@@ -4,6 +4,8 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr::NConsole {
 namespace {
 
@@ -39,12 +41,30 @@ struct TSession {
     TActorId Pipe;
 };
 
-TSession CreateSession(TTenantTestRuntime& runtime, TActorId sender = {}) {
-    if (!sender) {
-        sender = runtime.AllocateEdgeActor();
+class TConsoleTestRuntime : public TTenantTestRuntime {
+public:
+    TConsoleTestRuntime()
+        : TTenantTestRuntime(ConsoleTestConfig())
+        , BackgroundProposals(*this, [this](const auto& ev) {
+            return !SessionSenders.contains(ev->Sender);
+        })
+    {}
+
+    TSession CreateSession(TActorId sender = {}) {
+        if (!sender) {
+            sender = AllocateEdgeActor();
+        }
+        SessionSenders.insert(sender);
+        return {sender, ConnectToPipe(MakeConsoleID(), sender, 0, GetPipeConfigWithRetries())};
     }
-    return {sender, runtime.ConnectToPipe(MakeConsoleID(), sender, 0, GetPipeConfigWithRetries())};
-}
+
+private:
+    THashSet<TActorId> SessionSenders;
+
+    // The real BSC can reconnect and replace the test's legacy Console session.
+    // Only proposals from explicitly created test sessions may reach Console.
+    TBlockEvents<TEvBlobStorage::TEvControllerProposeConfigRequest> BackgroundProposals;
+};
 
 auto Propose(TTenantTestRuntime& runtime, const TSession& session, bool distconf) {
     auto request = MakeHolder<TEvBlobStorage::TEvControllerProposeConfigRequest>();
@@ -89,8 +109,8 @@ void CheckStoredConfig(TTenantTestRuntime& runtime, const TString& expected) {
 }
 
 void TestDelayedCommit(bool distconf, bool sameSender, bool replaceSession) {
-    TTenantTestRuntime runtime(ConsoleTestConfig());
-    const auto oldSession = CreateSession(runtime);
+    TConsoleTestRuntime runtime;
+    const auto oldSession = runtime.CreateSession();
     Propose(runtime, oldSession, distconf);
 
     const auto subscriber = Subscribe(runtime);
@@ -114,7 +134,7 @@ void TestDelayedCommit(bool distconf, bool sameSender, bool replaceSession) {
 
     auto newSession = oldSession;
     if (replaceSession) {
-        newSession = CreateSession(runtime, sameSender ? oldSession.Sender : TActorId());
+        newSession = runtime.CreateSession(sameSender ? oldSession.Sender : TActorId());
         Propose(runtime, newSession, distconf);
     }
     SendCommit(runtime, newSession, newConfig, 456);
@@ -154,8 +174,8 @@ Y_UNIT_TEST_SUITE(TConsoleHandshakeTest) {
 
     Y_UNIT_TEST(QueuedCommitRejectedAfterSessionReplacement) {
         for (bool distconf : {false, true}) {
-            TTenantTestRuntime runtime(ConsoleTestConfig());
-            const auto oldSession = CreateSession(runtime);
+            TConsoleTestRuntime runtime;
+            const auto oldSession = runtime.CreateSession();
             Propose(runtime, oldSession, distconf);
 
             runtime.SendToConsole(new TEvConsole::TEvGetConfigRequest());
@@ -178,7 +198,7 @@ Y_UNIT_TEST_SUITE(TConsoleHandshakeTest) {
             });
             SendCommit(runtime, oldSession, oldConfig);
             runtime.WaitFor("old commit transaction queued", [&] { return setRequestObserved; });
-            const auto newSession = CreateSession(runtime);
+            const auto newSession = runtime.CreateSession();
             Propose(runtime, newSession, distconf);
 
             blockedCommits.Stop().Unblock();
@@ -199,8 +219,8 @@ Y_UNIT_TEST_SUITE(TConsoleHandshakeTest) {
 
     Y_UNIT_TEST(IndependentClientSessionDoesNotInvalidateCommit) {
         for (bool distconf : {false, true}) {
-            TTenantTestRuntime runtime(ConsoleTestConfig());
-            const auto session = CreateSession(runtime);
+            TConsoleTestRuntime runtime;
+            const auto session = runtime.CreateSession();
             auto initial = Propose(runtime, session, distconf);
             UNIT_ASSERT_C(initial->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvControllerProposeConfigResponse::ReverseCommit,
                 initial->Get()->Record.ShortDebugString());
@@ -212,7 +232,7 @@ Y_UNIT_TEST_SUITE(TConsoleHandshakeTest) {
             SendCommit(runtime, session, config);
             runtime.WaitFor("commit YAML write delayed", [&] { return !delayedCommit.empty(); });
 
-            const auto independentSession = CreateSession(runtime);
+            const auto independentSession = runtime.CreateSession();
             Propose(runtime, independentSession, !distconf);
             delayedCommit.Stop().Unblock();
             auto committed = GrabCommit(runtime, session);

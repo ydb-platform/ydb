@@ -2255,6 +2255,33 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable VIEW idx_v ORDER BY k;", expected);
     }
 
+    Y_UNIT_TEST(RandomDefaultConflictRollsBackMultiShardInsert) {
+        TScopedEpochRandomProvider random;
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                bucket Int32 NOT NULL,
+                v Uint64 NOT NULL DEFAULT RandomNumber(1) >> 60,
+                PRIMARY KEY (k),
+                INDEX idx_v GLOBAL UNIQUE SYNC ON (v, bucket)
+            ) WITH (PARTITION_AT_KEYS = (2, 3));
+        )");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), "RandomNumber(1) >> 60");
+        fixture.Exec("INSERT INTO TestTable (k, bucket, v) VALUES (0, 20, 3ul);");
+
+        // The input has distinct index keys even though the rows share one random draw.
+        random.SetEpoch(3);
+        const auto result = fixture.QuerySession().ExecuteQuery(
+            "INSERT INTO TestTable (k, bucket) VALUES (1, 10), (2, 20), (3, 30);", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Conflict with existing key.");
+        fixture.Check("SELECT k, bucket, v FROM TestTable ORDER BY k;", "[[0;20;3u]]");
+        fixture.Check("SELECT k, bucket, v FROM TestTable VIEW idx_v ORDER BY k;", "[[0;20;3u]]");
+    }
+
     Y_UNIT_TEST(CachedRandomDefaultConsistentWithReturningAndIndex) {
         TScopedEpochRandomProvider random;
         TTestFixture fixture;
@@ -2757,9 +2784,10 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         });
 
         runtime.WaitFor("index backfill request", [&] { return !backfill.empty(); });
-        // The backfill snapshot predates this write, which must reach the index through live maintenance.
+        // The snapshot predates both writes, so the successful write must reach the index through live maintenance.
         UNIT_ASSERT(backfill.front()->Get()->Record.HasSnapshotStep());
         UNIT_ASSERT(backfill.front()->Get()->Record.HasSnapshotTxId());
+        fixture.Rejects("INSERT INTO TestTable (k, other) VALUES (5, 50);", "default ran");
         fixture.Exec("INSERT INTO TestTable (k, other, v) VALUES (4, 40, 9ul);");
         UNIT_ASSERT_C(!build.HasValue() && !build.HasException(), "index build finished with backfill blocked");
 
@@ -2767,7 +2795,6 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         const auto result = runtime.WaitFuture(build);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        fixture.Rejects("INSERT INTO TestTable (k, other) VALUES (5, 50);", "default ran");
         const TString rows = "[[1;[10];[42u]];[2;[20];[7u]];[3;[30];#];[4;[40];[9u]]]";
         fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", rows);
         fixture.Check("SELECT k, other, v FROM TestTable VIEW idx_v ORDER BY k;", rows);
@@ -3449,7 +3476,23 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
 
     Y_UNIT_TEST(IncrementalBackupCollectionRestoresRowsAndFullSnapshotDefault) {
         TTestFixture fixture(DefaultExprBackupSettings());
-        const TString fullSnapshotDefault = "RandomNumber(1) * 0ul + 50ul";
+        // The simulated runtime installs its random provider when the fixture is constructed.
+        TScopedEpochRandomProvider random;
+        auto& runtime = *fixture.Runner().GetTestServer().GetRuntime();
+        const TString fullSnapshotDefault = "RandomNumber(1)";
+        const auto insertAndReadDefault = [&](i32 key) {
+            const auto query = TStringBuilder() << "INSERT INTO TestTable (k) VALUES (" << key << ") RETURNING k, v;";
+            const auto result = runtime.WaitFuture(fixture.QuerySession().ExecuteQuery(query, TTxControl::NoTx()));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("k").GetInt32(), key);
+            const auto value = parser.ColumnParser("v").GetOptionalUint64();
+            UNIT_ASSERT(value);
+            UNIT_ASSERT(!parser.TryNextRow());
+            return *value;
+        };
+
         fixture.Exec(ValueTableDDL());
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.Exec(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << fullSnapshotDefault << ";");
@@ -3465,15 +3508,18 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         // The collection locks the table schema. The earlier default change predates the full snapshot.
         fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT RandomNumber(1) * 0ul + 99ul;",
             "Alter schema forbidden: table is part of a backup collection");
-        fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
+        random.SetEpoch(1);
+        const ui64 materialized = insertAndReadDefault(2);
+        UNIT_ASSERT_VALUES_EQUAL(materialized >> 60, 1u);
         fixture.Exec("INSERT INTO TestTable (k, v) VALUES (3, 7ul);");
 
         // The backup rotates its CDC stream, whose name includes a second-resolution timestamp.
-        fixture.Runner().GetTestServer().GetRuntime()->AdvanceCurrentTime(TDuration::Seconds(1));
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
         RunBackupCollectionOperation<NYdb::NBackup::TIncrementalBackupResponse>(
             fixture, "BACKUP IncrementalDefaultBackup INCREMENTAL;", TBackupOperationId::INCREMENTAL_BACKUP);
 
-        fixture.Exec("INSERT INTO TestTable (k) VALUES (4);");
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (4, 99ul);");
+        random.SetEpoch(2);
         fixture.Exec("DROP TABLE TestTable;");
         RunBackupCollectionOperation<NYdb::NBackup::TBackupCollectionRestoreResponse>(
             fixture, "RESTORE IncrementalDefaultBackup;", TBackupOperationId::RESTORE);
@@ -3481,8 +3527,12 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         // RESTORE copies the full snapshot's schema and replays the incremental row changes.
         AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), fullSnapshotDefault);
         UNIT_ASSERT_STRING_CONTAINS(fixture.ShowCreateTable("/Root/TestTable"), TStringBuilder() << "DEFAULT " << fullSnapshotDefault);
-        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42u]];[2;[50u]];[3;[7u]]]");
-        fixture.Check("INSERT INTO TestTable (k) VALUES (4) RETURNING k, v;", "[[4;[50u]]]");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", TStringBuilder() << "[[1;[42u]];[2;[" << materialized << "u]];[3;[7u]]]");
+        // A value evaluated during restore would still belong to epoch 2.
+        random.SetEpoch(3);
+        const ui64 fresh = insertAndReadDefault(4);
+        UNIT_ASSERT_VALUES_EQUAL(fresh >> 60, 3u);
+        fixture.Check("SELECT k, v FROM TestTable WHERE k = 4;", TStringBuilder() << "[[4;[" << fresh << "u]]]");
     }
 
     Y_UNIT_TEST(PreparedInsertAfterTableRecreation) {

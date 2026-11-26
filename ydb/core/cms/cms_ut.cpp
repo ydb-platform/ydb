@@ -170,9 +170,10 @@ void CheckWalleHttpTask(const TString &response, const TString &status, ui32 nod
 }
 
 TString MakeWalleDrainDataJson(ui32 nodeId, const TString &drainData = "true",
-    const TString &action = "redeploy", const TString &taskId = "eviction") {
-    return Sprintf(R"({"id":"%s","type":"automated","issuer":"UT","action":"%s","hosts":["%u"],"drain_data":%s})",
-        taskId.c_str(), action.c_str(), nodeId, drainData.c_str());
+    const TString &action = "redeploy", const TString &taskId = "eviction", const TString &drainPolicy = {}) {
+    const TString policy = drainPolicy.empty() ? TString() : TString(",\"drain_policy\":") + drainPolicy;
+    return Sprintf(R"({"id":"%s","type":"automated","issuer":"UT","action":"%s","hosts":["%u"],"drain_data":%s%s})",
+        taskId.c_str(), action.c_str(), nodeId, drainData.c_str(), policy.c_str());
 }
 
 void SetVDisksMoved(TCmsTestEnv &env, const TTestEnvOpts &opts, ui32 nodeId, bool moved) {
@@ -3657,6 +3658,62 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckWalleListTasks(0);
     }
 
+    Y_UNIT_TEST(WalleDrainPolicyWithStaticVDisks)
+    {
+        // Without WithDynamicGroups(), all generated groups are static.
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        const auto nodeId = env.GetNodeId(0);
+        const auto otherNodeId = env.GetNodeId(1);
+        const auto &vdisks = TFakeNodeWhiteboardService::Info[nodeId].VDiskStateInfo;
+        UNIT_ASSERT(!vdisks.empty());
+        for (const auto &entry : vdisks) {
+            UNIT_ASSERT(TClusterInfo::IsStaticGroupVDisk(entry.first));
+        }
+
+        // Omitted, empty and explicit false policies retain the existing behavior.
+        for (const TString policy : {"", "{}", R"({"allow_static_vdisks_to_remain":false})"}) {
+            CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+                MakeWalleDrainDataJson(nodeId, "true", "redeploy", "eviction", policy)), "in-process", nodeId);
+        }
+
+        const TString policy = R"({"allow_static_vdisks_to_remain":true})";
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+            MakeWalleDrainDataJson(nodeId, "true", "redeploy", "eviction", policy)), "ok", nodeId);
+        env.CheckWalleListTasks(0);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId, "true", "redeploy", "eviction", policy)), "ok", nodeId);
+
+        // The first permission still prevents maintenance of another host in the same static groups.
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(otherNodeId, "true", "redeploy", "other", policy)), "in-process", otherNodeId);
+        env.RestartCms();
+        env.CheckWalleCheckTask("other", TStatus::DISALLOW_TEMP, otherNodeId);
+
+        env.CheckWalleRemoveTask("eviction");
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/other"),
+            "ok", otherNodeId);
+        env.CheckWalleRemoveTask("other");
+        env.CheckWalleListTasks(0);
+    }
+
+    Y_UNIT_TEST(WalleDrainPolicyWaitsForDynamicVDisks)
+    {
+        const auto opts = TTestEnvOpts(8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+        const auto nodeId = env.GetNodeId(0);
+        const TString policy = R"({"allow_static_vdisks_to_remain":true})";
+
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId, "true", "redeploy", "eviction", policy)), "in-process", nodeId);
+        env.RestartCms();
+        env.CheckWalleCheckTask("eviction", TStatus::DISALLOW_TEMP, nodeId);
+
+        SetVDisksMoved(env, opts, nodeId, true);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction"),
+            "ok", nodeId);
+        env.CheckWalleRemoveTask("eviction");
+    }
+
     Y_UNIT_TEST(WalleDrainDataDryRun)
     {
         TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
@@ -3705,12 +3762,19 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         const auto nodeId = env.GetNodeId(0);
 
         ui32 createRequests = 0;
+        bool supportsDrainData = false;
         TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvTabletPipe::EvClientConnected) {
                 auto *msg = ev->Get<TEvTabletPipe::TEvClientConnected>();
                 if (msg->TabletId == MakeCmsID()) {
-                    // Older CMS tablets do not provide version information on connection.
-                    msg->VersionInfo.clear();
+                    if (supportsDrainData) {
+                        NKikimrCms::TVersionInfo versionInfo;
+                        versionInfo.SetSupportWalleDrainData(true);
+                        msg->VersionInfo = versionInfo.SerializeAsString();
+                    } else {
+                        // Older CMS tablets do not provide version information on connection.
+                        msg->VersionInfo.clear();
+                    }
                 }
             } else if (ev->GetTypeRewrite() == TEvCms::EvWalleCreateTaskRequest) {
                 ++createRequests;
@@ -3728,12 +3792,59 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckListPermissions(WALLE_CMS_USER, 0);
         env.CheckListRequests(WALLE_CMS_USER, 0);
 
+        // Support for drain_data alone must not allow silently ignoring the policy.
+        supportsDrainData = true;
+        for (const TString uri : {"/api/walle/v11/tasks", "/api/walle/v11/tasks?dry_run=true"}) {
+            const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, uri,
+                MakeWalleDrainDataJson(nodeId, "true", "redeploy", "eviction",
+                    R"({"allow_static_vdisks_to_remain":true})"));
+            UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
+            UNIT_ASSERT_C(response.Contains("CMS does not support drain_policy"), response);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(createRequests, 0);
+        env.CheckWalleListTasks(0);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+            MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);
+
         // Ordinary tasks do not require the support check.
         CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
             MakeWalleDrainDataJson(nodeId, "false")), "ok", nodeId);
         CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
             Sprintf(R"({"id":"ordinary","action":"redeploy","hosts":["%u"]})", nodeId)), "ok", nodeId);
-        UNIT_ASSERT_VALUES_EQUAL(createRequests, 2);
+        UNIT_ASSERT_VALUES_EQUAL(createRequests, 3);
+    }
+
+    Y_UNIT_TEST(WalleDrainPolicyValidation)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        const auto nodeId = env.GetNodeId(0);
+
+        for (const TString policy : {"null", "false", "[]", R"("all")"}) {
+            const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+                MakeWalleDrainDataJson(nodeId, "true", "redeploy", "eviction", policy));
+            UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
+            UNIT_ASSERT_C(response.Contains("drain_policy must be an object"), response);
+        }
+        for (const TString value : {"1", "null", "{}", "[]", R"("false")"}) {
+            const TString policy = Sprintf(R"({"allow_static_vdisks_to_remain":%s})", value.c_str());
+            const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+                MakeWalleDrainDataJson(nodeId, "true", "redeploy", "eviction", policy));
+            UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
+            UNIT_ASSERT_C(response.Contains("drain_policy.allow_static_vdisks_to_remain must be a boolean"), response);
+        }
+        const auto unknownField = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId, "true", "redeploy", "eviction", R"({"unknown":false})"));
+        UNIT_ASSERT_C(unknownField.StartsWith("HTTP/1.1 400"), unknownField);
+        UNIT_ASSERT_C(unknownField.Contains("Unknown drain_policy field"), unknownField);
+
+        const auto withoutDrainData = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId, "false", "redeploy", "eviction",
+                R"({"allow_static_vdisks_to_remain":true})"));
+        UNIT_ASSERT_C(withoutDrainData.StartsWith("HTTP/1.1 400"), withoutDrainData);
+        UNIT_ASSERT_C(withoutDrainData.Contains("drain_policy requires drain_data=true"), withoutDrainData);
+        env.CheckWalleListTasks(0);
+        env.CheckListPermissions(WALLE_CMS_USER, 0);
+        env.CheckListRequests(WALLE_CMS_USER, 0);
     }
 
     Y_UNIT_TEST(WalleDrainDataDisabledEvictVDisks)

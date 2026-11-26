@@ -175,6 +175,11 @@ enum EAvailabilityMode {
     MODE_SMART_AVAILABILITY = 3;
 }
 
+message TDrainPolicy {
+  // Only controls waiting for evacuation, not relocation itself or availability checks.
+  optional bool AllowStaticVDisksToRemain = 1 [default = false];
+}
+
 message TPermissionRequest {
   optional string  User = 1;
   repeated TAction Actions = 2;
@@ -188,12 +193,13 @@ message TPermissionRequest {
   // Availability mode is not preserved for scheduled events.
   optional EAvailabilityMode AvailabilityMode = 9 [default = MODE_MAX_AVAILABILITY];
   optional string MaintenanceTaskId = 10;
-  // Evit vdisks before granting permission
+  // Evict VDisks before granting permission, subject to DrainPolicy.
   optional bool EvictVDisks = 11 [default = false];
   optional int32 Priority = 12;
   // Maximum number of permissions that may be issued by a single check of this request.
   // Unset means "no cap", 0 means "cap is zero".
   optional uint32 MaxPermissionCount = 13 [default = 0];
+  optional TDrainPolicy DrainPolicy = 14;
 }
 
 enum EExtensionType {
@@ -372,6 +378,7 @@ message TWalleCreateTaskRequest {
   optional bool   DryRun = 6;
   reserved 7; // Devices
   optional bool   DrainData = 8; // Passed as EvictVDisks in the CMS permission request.
+  optional TDrainPolicy DrainPolicy = 9;
 }
 
 message TWalleCreateTaskResponse {
@@ -569,6 +576,7 @@ message TResetMarkerResponse {
 
 message TVersionInfo {
     optional bool SupportWalleDrainData = 1;
+    optional bool SupportWalleDrainPolicy = 2;
 }
 
 message TGetConfigRequest {

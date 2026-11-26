@@ -87,6 +87,29 @@ private:
             request->Record.SetDrainData(map["drain_data"].GetBoolean());
         }
 
+        if (map.contains("drain_policy")) {
+            if (!map["drain_policy"].IsMap()) {
+                ReplyWithError("HTTP/1.1 400 Bad Request\r\n\r\ndrain_policy must be an object", ctx);
+                return;
+            }
+            if (!request->Record.GetDrainData()) {
+                ReplyWithError("HTTP/1.1 400 Bad Request\r\n\r\ndrain_policy requires drain_data=true", ctx);
+                return;
+            }
+            auto *policy = request->Record.MutableDrainPolicy();
+            for (const auto &[name, value] : map["drain_policy"].GetMap()) {
+                if (name != "allow_static_vdisks_to_remain") {
+                    ReplyWithError(TString("HTTP/1.1 400 Bad Request\r\n\r\nUnknown drain_policy field: ") + name, ctx);
+                    return;
+                }
+                if (!value.IsBoolean()) {
+                    ReplyWithError("HTTP/1.1 400 Bad Request\r\n\r\ndrain_policy.allow_static_vdisks_to_remain must be a boolean", ctx);
+                    return;
+                }
+                policy->SetAllowStaticVDisksToRemain(value.GetBoolean());
+            }
+        }
+
         auto &hosts = map["hosts"].GetArray();
         for (auto &host : hosts)
             *request->Record.AddHosts() = host.GetString();
@@ -361,6 +384,10 @@ private:
             NKikimrCms::TVersionInfo versionInfo;
             if (!versionInfo.ParseFromString(msg->VersionInfo) || !versionInfo.GetSupportWalleDrainData()) {
                 ReplyWithError("HTTP/1.1 400 Bad Request\r\n\r\nCMS does not support drain_data", ctx);
+                return;
+            }
+            if (CreateTaskRequest->Record.HasDrainPolicy() && !versionInfo.GetSupportWalleDrainPolicy()) {
+                ReplyWithError("HTTP/1.1 400 Bad Request\r\n\r\nCMS does not support drain_policy", ctx);
                 return;
             }
             NTabletPipe::SendData(ctx, CmsPipe, CreateTaskRequest.Release());

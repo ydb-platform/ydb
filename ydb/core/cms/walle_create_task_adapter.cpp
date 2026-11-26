@@ -129,6 +129,9 @@ private:
         request->Record.SetSchedule(true);
         request->Record.SetDryRun(task.GetDryRun());
         request->Record.SetEvictVDisks(task.GetDrainData());
+        if (task.HasDrainPolicy()) {
+            request->Record.MutableDrainPolicy()->CopyFrom(task.GetDrainPolicy());
+        }
         const auto &action = task.GetAction();
         if (action == "temporary-unreachable") {
             request->Record.SetPriority(WALLE_SOFT_MAINTENANCE_PRIORITY);

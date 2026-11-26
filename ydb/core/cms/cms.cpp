@@ -399,6 +399,9 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         scheduled.SetPartialPermissionAllowed(allowPartial);
         scheduled.SetSchedule(request.GetSchedule());
         scheduled.SetEvictVDisks(request.GetEvictVDisks());
+        if (request.HasDrainPolicy()) {
+            scheduled.MutableDrainPolicy()->CopyFrom(request.GetDrainPolicy());
+        }
         scheduled.SetReason(request.GetReason());
         if (request.HasDuration())
             scheduled.SetDuration(request.GetDuration());
@@ -479,7 +482,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
         bool prepared = !request.GetEvictVDisks();
         if (!prepared) {
-            prepared = CheckEvictVDisks(action, error);
+            prepared = CheckEvictVDisks(action, request.GetDrainPolicy(), error);
         }
 
         if (prepared && CheckAction(action, opts, error, ctx)) {
@@ -715,7 +718,7 @@ bool TCms::CheckAccess(const TString &token,
     return false;
 }
 
-bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
+bool TCms::CheckEvictVDisks(const TAction &action, const TDrainPolicy &policy, TErrorInfo &error) const {
     if (!State->Sentinel) {
         error.Code = TStatus::ERROR;
         error.Reason = "Unable to evict vdisks while Sentinel (self heal) is disabled";
@@ -740,7 +743,12 @@ bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
     }
 
     for (const auto node : ClusterInfo->HostNodes(action.GetHost())) {
-        if (!node->VDisks.empty()) {
+        for (const auto &vdiskId : node->VDisks) {
+            // The policy only skips waiting; static VDisks still participate in availability checks.
+            if (policy.GetAllowStaticVDisksToRemain() && TClusterInfo::IsStaticGroupVDisk(vdiskId)) {
+                continue;
+            }
+
             error.Code = TStatus::DISALLOW_TEMP;
             error.Reason = TStringBuilder() << "VDisks eviction from host " << action.GetHost() << " has not yet been completed";
             return false;

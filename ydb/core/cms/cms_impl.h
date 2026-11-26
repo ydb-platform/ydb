@@ -348,6 +348,7 @@ private:
         TString &error,
         const TActorContext &ctx);
     bool CheckEvictVDisks(const NKikimrCms::TAction &action,
+        const NKikimrCms::TDrainPolicy &policy,
         TErrorInfo &error) const;
     bool CheckAction(const NKikimrCms::TAction &action,
         const TActionOptions &opts,

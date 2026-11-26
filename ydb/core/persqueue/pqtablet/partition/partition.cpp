@@ -4294,7 +4294,8 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
                                           NPersQueue::TTopicConverterPtr topicConverter,
                                           const TActorContext& ctx)
 {
-    bool autopartitioningChanged = SplitMergeEnabled(Config) != SplitMergeEnabled(config);
+    bool autopartitioningChanged = SplitMergeEnabled(Config) != SplitMergeEnabled(config)
+        || Config.GetSplitByPartitionKey() != config.GetSplitByPartitionKey();
 
     TVector<TString> consumersToResendOffsets;
     for (const auto& consumer : config.GetConsumers()) {

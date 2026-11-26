@@ -197,4 +197,16 @@ Y_UNIT_TEST_SUITE(TPartitionKeyRangeIntersectsTest) {
         // then
         UNIT_ASSERT(intersects);
     }
+
+    Y_UNIT_TEST(ShouldIntersectWhenUpperBoundIsPresentButEmpty) {
+        // given
+        const auto source = MakeKeyRange(MakeBound({100}), TSerializedCellVec(TString()));
+        const auto partition = MakeKeyRange(MakeBound({100}), Nothing());
+
+        // when
+        const bool intersects = Intersects(source, partition, Uint64Key);
+
+        // then
+        UNIT_ASSERT(intersects);
+    }
 }

@@ -153,8 +153,12 @@ void TPartitionKeyRange::ParseBound(const TString& data, TMaybe<TSerializedCellV
 
 namespace {
 
+bool IsUnbounded(const TMaybe<TSerializedCellVec>& bound) {
+    return !bound || bound->GetCells().empty();
+}
+
 bool IsEntirelyBefore(const TPartitionKeyRange& range, const TPartitionKeyRange& other, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
-    if (!range.ToBound || !other.FromBound) {
+    if (IsUnbounded(range.ToBound) || IsUnbounded(other.FromBound)) {
         return false;
     }
     return ComparePrefixBorders(keyTypes,

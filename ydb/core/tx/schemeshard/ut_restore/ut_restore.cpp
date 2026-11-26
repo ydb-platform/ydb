@@ -14477,13 +14477,14 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
                 Columns { Name: "id" Type: "Uint32" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["id"]
+                PartitionConfig { EnableFilterByKey: false }
             }
             IndexDescription { Name: "by_value" Type: EIndexTypeGlobal KeyColumnNames: ["value"] }
         )");
         env.TestWaitNotification(runtime, txId);
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
-            PartitionConfig { EnableFilterByKey: false ByKeyFilterPrefixes { PrefixLength: 1 } }
+            PartitionConfig { ByKeyFilterPrefixes { PrefixLength: 1 } }
         )");
         env.TestWaitNotification(runtime, txId);
         const auto exportId = ++txId;

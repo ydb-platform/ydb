@@ -3,6 +3,7 @@ YQL_LIBRARY()
 SRCS(
     current_query_stats.h
     helpers.cpp
+    kqp_compute_column.h
     kqp_event_ids.cpp
     mvcc_version.h
     query_id.cpp
@@ -25,6 +26,8 @@ PEERDIR(
     ydb/core/base
     ydb/core/protos
     ydb/core/resource_pools
+    ydb/core/scheme
+    ydb/core/tablet_flat/base
     ydb/library/actors/core
     ydb/library/yql/dq/actors
     ydb/public/api/protos

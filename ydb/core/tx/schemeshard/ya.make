@@ -401,9 +401,10 @@ PEERDIR(
     ydb/core/split
     ydb/core/statistics
     ydb/core/sys_view/common
-    ydb/core/sys_view/partition_stats
+    ydb/core/sys_view/partition_stats/collector
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tablet_flat/base
     ydb/core/test_tablet
     ydb/core/tx
     ydb/core/tx/datashard

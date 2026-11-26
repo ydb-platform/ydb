@@ -9,7 +9,6 @@ TEST_SRCS(
 
 REQUIREMENTS(ram:32 cpu:8)
 SIZE(LARGE)
-TAG(ya:fat)
 TIMEOUT(2400)
 
 DEPENDS(
@@ -20,5 +19,7 @@ PEERDIR(
     ydb/tests/library
     ydb/tests/library/stress
 )
+
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 END()

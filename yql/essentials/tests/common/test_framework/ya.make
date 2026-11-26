@@ -35,6 +35,7 @@ RESOURCE(
 PEERDIR_FROM_POLICY(
     ALLOW
     logos/libs/testy/yql_lite
+    logos/projects/ads/mldwh/querygen
 )
 
 END()

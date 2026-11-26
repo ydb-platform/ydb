@@ -1,5 +1,5 @@
 #pragma once
-#include "flat_row_eggs.h"
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include "flat_row_versions.h"
 #include "flat_update_op.h"
 #include "flat_dbase_scheme.h"

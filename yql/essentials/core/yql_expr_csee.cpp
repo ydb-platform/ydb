@@ -79,7 +79,8 @@ EDependencyScope CheckDependencyScope(const TLambdaFrame& frame, const TExprNode
     return EDependencyScope::None;
 }
 
-ui64 CalculateHash(ui16 depth, TExprNode& node, const TLambdaFrame& currFrame, const TColumnOrderStorage& coStore) {
+ui64 CalculateHash(ui16 depth, TExprNode& node, const TLambdaFrame& currFrame, const TColumnOrderStorage& coStore,
+                   TNodeMap<ui64>& mixedHashes) {
     const auto dependency = CheckDependencyScope(currFrame, node);
     switch (dependency) {
         case EDependencyScope::None:
@@ -98,6 +99,9 @@ ui64 CalculateHash(ui16 depth, TExprNode& node, const TLambdaFrame& currFrame, c
             }
             break;
         case EDependencyScope::Mixed:
+            if (const auto it = mixedHashes.find(&node); it != mixedHashes.end()) {
+                return it->second;
+            }
             break;
     }
 
@@ -142,7 +146,7 @@ ui64 CalculateHash(ui16 depth, TExprNode& node, const TLambdaFrame& currFrame, c
                 TSmallVec<ui64> hashes;
                 hashes.reserve(size);
                 for (ui32 i = 0U; i < node.ChildrenSize(); ++i) {
-                    hashes.emplace_back(CalculateHash(depth, *node.Child(i), currFrame, coStore));
+                    hashes.emplace_back(CalculateHash(depth, *node.Child(i), currFrame, coStore, mixedHashes));
                 };
                 std::sort(hashes.begin(), hashes.end());
                 hash = std::accumulate(hashes.cbegin(), hashes.cend(), ~hash, [](ui64 hash, ui64 childHash) {
@@ -150,7 +154,7 @@ ui64 CalculateHash(ui16 depth, TExprNode& node, const TLambdaFrame& currFrame, c
                 });
             } else {
                 for (ui32 i = 0U; i < node.ChildrenSize(); ++i) {
-                    const auto childHash = CalculateHash(depth, *node.Child(i), currFrame, coStore);
+                    const auto childHash = CalculateHash(depth, *node.Child(i), currFrame, coStore, mixedHashes);
                     hash = CseeHash(childHash, hash);
                 }
             }
@@ -174,7 +178,7 @@ ui64 CalculateHash(ui16 depth, TExprNode& node, const TLambdaFrame& currFrame, c
 
             TLambdaFrame newFrame(&node, &currFrame);
             for (ui32 i = 1U; i < node.ChildrenSize(); ++i) {
-                const auto lambdaHash = CalculateHash(depth + 1, *node.Child(i), newFrame, coStore);
+                const auto lambdaHash = CalculateHash(depth + 1, *node.Child(i), newFrame, coStore, mixedHashes);
                 hash = CseeHash(lambdaHash, hash);
             }
             break;
@@ -224,6 +228,7 @@ ui64 CalculateHash(ui16 depth, TExprNode& node, const TLambdaFrame& currFrame, c
             node.SetHashBelow(hash);
             break;
         case EDependencyScope::Mixed:
+            mixedHashes.emplace(&node, hash);
             break;
     }
     return hash;
@@ -533,7 +538,10 @@ void CalculateCompletness(TExprNode& node, bool insideDependsOn, ui16 level, TNo
 
 ui64 CalcHash(TExprNode& node, const TColumnOrderStorage& coStore) {
     TLambdaFrame frame;
-    return CalculateHash(0, node, frame, coStore);
+    // The root fixes which arguments are bound and which are captured. Mixed hashes
+    // can be shared within this traversal, but not between different hashing roots.
+    TNodeMap<ui64> mixedHashes;
+    return CalculateHash(0, node, frame, coStore, mixedHashes);
 }
 
 bool EqualNodes(const TExprNode& left, const TExprNode& right, const TColumnOrderStorage& coStore) {

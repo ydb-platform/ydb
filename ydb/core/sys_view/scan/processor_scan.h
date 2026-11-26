@@ -1,0 +1,119 @@
+#pragma once
+
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/sys_view/common/common.h>
+#include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/sys_view/common/keys.h>
+#include <ydb/core/sys_view/scan/scan_actor_base_impl.h>
+
+#include <ydb/library/actors/core/hfunc.h>
+
+namespace NKikimr::NSysView {
+
+using namespace NActors;
+
+template <typename TEntry, typename TRequest, typename TResponse,
+    typename TEvRequest, typename TEvResponse, typename TExtractorMap, typename... T>
+class TProcessorScan : public TScanActorBase<
+    TProcessorScan<TEntry, TRequest, TResponse, TEvRequest, TEvResponse, TExtractorMap, T...>>
+{
+public:
+    using TScan = TProcessorScan<TEntry, TRequest, TResponse, TEvRequest, TEvResponse, TExtractorMap, T...>;
+    using TBase = TScanActorBase<TScan>;
+
+    static constexpr auto ActorActivityType() {
+        return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
+    }
+
+    TProcessorScan(const NActors::TActorId& ownerId, ui32 scanId,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+        NKikimrSysView::EStatsType type)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
+    {
+        ConvertKeyRange<TRequest, T...>(Request, this->TableRange);
+        Request.SetType(type);
+    }
+
+    STATEFN(StateScan) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
+            hFunc(TEvResponse, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            hFunc(NKqp::TEvKqp::TEvAbortExecution, this->HandleAbortExecution);
+            cFunc(TEvents::TEvWakeup::EventType, this->HandleTimeout);
+            cFunc(TEvents::TEvPoison::EventType, PassAway);
+            default:
+                YDB_LOG_CRIT_COMP(NKikimrServices::SYSTEM_VIEWS, "TProcessorScan::StateWork: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
+        }
+    }
+
+private:
+    void ProceedToScan() override {
+        TBase::Become(&TScan::StateScan);
+        if (this->AckReceived) {
+            RequestBatch();
+        }
+    }
+
+    void RequestBatch() {
+        if (!this->SysViewProcessorId) {
+            YDB_LOG_WARN_COMP(NKikimrServices::SYSTEM_VIEWS, "TProcessorScan::ProceedToScan: sysview processor not configured, sending empty response",
+                {"database", this->TenantName});
+            this->ReplyEmptyAndDie();
+            return;
+        }
+
+        if (this->BatchRequestInFlight) {
+            return;
+        }
+
+        auto req = MakeHolder<TEvRequest>();
+        req->Record.CopyFrom(Request);
+
+        this->SendThroughPipeCache(req.Release(), this->SysViewProcessorId);
+
+        this->BatchRequestInFlight = true;
+    }
+
+    void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
+        RequestBatch();
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+        this->ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
+            "NSysView::TProcessorScan: delivery problem");
+    }
+
+    void Handle(typename TEvResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        if (record.HasOverloaded() && record.GetOverloaded()) {
+            this->ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
+                "NSysView::TProcessorScan: SysViewProcessor is overloaded");
+            return;
+        }
+
+        this->template ReplyBatch<TEvResponse, TEntry, TExtractorMap, true>(ev);
+
+        if (!record.GetLastBatch()) {
+            Y_ABORT_UNLESS(record.HasNext());
+            Request.MutableFrom()->CopyFrom(record.GetNext());
+            Request.SetInclusiveFrom(true);
+        }
+
+        this->BatchRequestInFlight = false;
+    }
+
+    void PassAway() override {
+        TBase::PassAway();
+    }
+
+private:
+    TRequest Request;
+};
+
+template <typename TEntry>
+using TExtractorFunc = std::function<TCell(const TEntry&)>;
+
+} // NKikimr::NSysView

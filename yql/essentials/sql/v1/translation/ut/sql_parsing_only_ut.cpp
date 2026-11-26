@@ -5786,6 +5786,21 @@ Y_UNIT_TEST(ShowCreateExternalTable) {
     UNIT_ASSERT_VALUES_EQUAL(elementStat["showCreateExternalTable"], 1);
 }
 
+Y_UNIT_TEST(ShowCreateStreamingQuery) {
+    const auto res = SqlToYql(R"sql(
+        USE ydb;
+        SHOW CREATE STREAMING QUERY `folder/my_query`;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elements = {"Read!"};
+    VerifyProgram(res, elements, [](const TString&, const TString& line) {
+        UNIT_ASSERT_STRING_CONTAINS(line, "showCreateStreamingQuery");
+        UNIT_ASSERT_STRING_CONTAINS(line, "folder/my_query");
+    });
+    UNIT_ASSERT_VALUES_EQUAL(elements["Read!"], 1);
+}
+
 Y_UNIT_TEST(OptionalAliases) {
     UNIT_ASSERT(SqlToYql("USE plato; SELECT foo FROM (SELECT key foo FROM Input);").IsOk());
     UNIT_ASSERT(SqlToYql("USE plato; SELECT a.x FROM Input1 a JOIN Input2 b ON a.key = b.key;").IsOk());

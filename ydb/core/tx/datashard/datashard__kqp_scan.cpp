@@ -654,6 +654,12 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
                 << " column " << request.GetColumnTags(i)  << " at " << TabletID());
             return;
         }
+        if (column->IsBuildInProgress) {
+            reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
+                << " Cannot read table '" << request.GetTablePath() << "' column '" << column->Name
+                << "' (" << request.GetColumnTags(i) << ") at " << TabletID() << ": column build is in progress");
+            return;
+        }
 
         const auto& typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(request.GetColumnTypes(i), &request.GetColumnTypeInfos(i));
         if (column->Type != typeInfoMod.TypeInfo || column->TypeMod != typeInfoMod.TypeMod) {

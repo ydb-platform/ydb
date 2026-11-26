@@ -1,7 +1,7 @@
 #pragma once
 
 #include "flat_scan_lead.h"
-#include "flat_row_eggs.h"
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include "flat_row_scheme.h"
 #include "util_basics.h"
 #include "util_fmt_abort.h"

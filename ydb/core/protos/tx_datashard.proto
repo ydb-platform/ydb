@@ -388,6 +388,8 @@ message TKqpVectorResolveSettings {
     optional uint64 QuerySpanId = 20;
 
     optional string PoolId = 21;
+    optional NKqpProto.TKqpPhyCnVectorResolve.EIndexType IndexType = 22;
+    optional NKqpProto.TKqpPhyCnVectorResolve.EOperation Operation = 23;
 }
 
 // Settings of the input-transform actor reading top-K rows from a vector KMeans tree index.
@@ -454,6 +456,10 @@ message TKqpVectorSearchSettings {
     // Inconsistent online RO: the reads carry neither a snapshot nor a lock.
     optional bool AllowInconsistentReads = 28;
     optional NKikimrProto.TPathID HnswIndexId = 29;
+
+    // Search all posting partitions without k-means cluster-range pruning.
+    optional bool FullRangeHnsw = 30;
+    optional uint32 HnswEfSearch = 31 [default = 15];
 }
 
 message TKqpTaskInfo {
@@ -719,6 +725,9 @@ message TFlatSchemeTransaction {
     optional TTruncateTable TruncateTable = 25;
 
     optional TPrepareIndexValidation PrepareIndexValidation = 26;
+
+    // Seed the sole leaf of an inline, unprefixed HNSW index during table creation.
+    optional bytes InitialHnswCentroid = 27;
 }
 
 message TDistributedEraseTransaction {

@@ -9,7 +9,9 @@ import grpc
 from ydb.public.api.grpc.ydb_keyvalue_v1_pb2_grpc import KeyValueServiceStub
 from ydb.public.api.protos import ydb_keyvalue_pb2 as kv_api
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
-from ydb.tests.functional.mirror3dc.kv_workload import RPC_TIMEOUT, RETRY_TIMEOUT, invoke, make_value
+from ydb.tests.functional.mirror3dc.kv_workload import (
+    BsQueueReconnectGrace, RPC_TIMEOUT, RETRY_TIMEOUT, invoke, make_value,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -52,11 +54,16 @@ class KvChurnWorkload:
         self.executor = None
         self.tasks = []
         self.events = event_logger or logger
+        self._reconnect_grace = BsQueueReconnectGrace(self.events)
 
     def stats(self):
         with self.lock:
             return dict(writes=self.writes, deletes=self.deletes, reads=self.reads,
-                        live=len(self.current), max_live=self.high_watermark)
+                        live=len(self.current), max_live=self.high_watermark, bsqueue_retries=self._reconnect_grace.retries)
+
+    def expect_reconnect(self, timeout, *, group_id):
+        """Temporarily accept DSPE4 errors while a deliberately returned DC reconnects."""
+        self._reconnect_grace.expect_reconnect(timeout, group_id=group_id)
 
     def check_errors(self):
         for task in self.tasks:
@@ -74,7 +81,7 @@ class KvChurnWorkload:
 
     def _invoke(self, request):
         # A deliberately stopped server can cancel an already accepted RPC.
-        return invoke(request, self.failed, retryable_grpc_codes=(
+        return invoke(request, self.failed, retry_response=self._reconnect_grace.retry_response, retryable_grpc_codes=(
             grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED, grpc.StatusCode.CANCELLED,
         ))
 
@@ -183,7 +190,7 @@ class KvChurnWorkload:
         self.stopped.set()
         self.executor.shutdown(wait=True)
         self.events.info('WORKLOAD_STOPPED')
-        logger.info('KV churn finished: %s', self.stats())
+        self.events.info('KV churn finished: %s', self.stats())
         if exc_type is None:
             self.check_errors()
             # The mutation thread has stopped; validate every remaining key.
@@ -196,4 +203,4 @@ class KvChurnWorkload:
                 raise AssertionError(f'Unexpected KV working set size: {stats}')
             if not stats['deletes'] or not stats['reads']:
                 raise AssertionError(f'Incomplete churn workload: {stats}')
-            logger.info('KV churn final validation passed: %s', stats)
+            self.events.info('KV churn final validation passed: %s', stats)

@@ -410,12 +410,12 @@ Y_UNIT_TEST(InvalidViewAndSubqueryModePositions) {
         const TString bodyKind = mode == NSQLTranslation::ESqlMode::LIMITED_VIEW ? "view" : "subquery";
         const auto multipleSelects = SqlToYqlWithMode("    SELECT 1;\n"
                                                       "        SELECT 2;",
-                                                      mode, 10, {}, EDebugOutput::None, false, settings);
+                                                      mode, 10, {}, EDebugOutput::None, /* ansiLexer = */ false, settings);
         UNIT_ASSERT(!multipleSelects.IsOk());
         UNIT_ASSERT_NO_DIFF(Err2Str(multipleSelects),
                             "<main>:2:9: Error: Strictly one select/process/reduce statement is expected at the end of " + bodyKind + "\n");
 
-        const auto noSelect = SqlToYqlWithMode("\n    $foo = 1;", mode, 10, {}, EDebugOutput::None, false, settings);
+        const auto noSelect = SqlToYqlWithMode("\n    $foo = 1;", mode, 10, {}, EDebugOutput::None, /* ansiLexer = */ false, settings);
         UNIT_ASSERT(!noSelect.IsOk());
         UNIT_ASSERT_NO_DIFF(Err2Str(noSelect),
                             "<main>:2:5: Error: Strictly one select/process/reduce statement is expected at the end of " + bodyKind + "\n");

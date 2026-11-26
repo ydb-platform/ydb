@@ -1077,6 +1077,9 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
     settings->SetKeepRowsOrder(streamLookup.GetKeepRowsOrder());
     settings->SetCookieFormatVersion(streamLookup.GetCookieFormatVersion());
     settings->SetAllowNullKeysPrefixSize(streamLookup.GetAllowNullKeysPrefixSize());
+    if (streamLookup.GetLookupJoinUniqueKeys()) {
+        settings->SetLookupJoinUniqueKeys(true);
+    }
     settings->SetIsolationLevel(GetMeta().RequestIsolationLevel);
 
     if (streamLookup.GetIsTableImmutable()
@@ -1095,13 +1098,23 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
         if (limit) {
             auto& out = *settings->MutableVectorTopK();
             out.SetColumn(in.GetColumn());
+            if (in.HasHnswEfSearch()) {
+                out.SetHnswEfSearch(in.GetHnswEfSearch());
+            }
             *out.MutableSettings() = in.GetSettings();
             if (in.HasHnswIndexId()) {
                 *out.MutableHnswIndexId() = in.GetHnswIndexId();
             }
-            auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+            NMiniKQL::TType* targetType = nullptr;
+            auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv,
+                NUdf::TUnboxedValuePod(), &targetType, /*allowOptional=*/in.HasHnswEfSearch());
+            if (targetType && targetType->GetKind() == NMiniKQL::TType::EKind::Optional) {
+                // HNSW validates the target before supplying a nonzero pushed limit.
+                YQL_ENSURE(target);
+                target = target.GetOptionalValue();
+            }
             out.SetTargetVector(TString(target.AsStringRef()));
-            out.SetLimit((ui32)limit);
+            out.SetLimit(static_cast<ui32>(std::min<ui64>(limit, Max<ui32>())));
             for (const auto& colIdx: in.GetDistinctColumns()) {
                 out.AddDistinctColumns(colIdx);
             }
@@ -1128,6 +1141,8 @@ void TKqpTasksGraph::BuildVectorResolveChannels(const TStageInfo& stageInfo, ui3
     *settings->MutableIndexSettings() = vectorResolve.GetIndexSettings();
     settings->SetOverlapClusters(vectorResolve.GetOverlapClusters());
     settings->SetOverlapRatio(vectorResolve.GetOverlapRatio());
+    settings->SetIndexType(vectorResolve.GetIndexType());
+    settings->SetOperation(vectorResolve.GetOperation());
 
     YQL_ENSURE(stageInfo.Meta.IndexMetas.size() == 1);
     const auto& levelTableInfo = stageInfo.Meta.IndexMetas.back().TableConstInfo;
@@ -1211,8 +1226,12 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
         settings->SetTopK(static_cast<ui32>(std::min<ui64>(raw, Max<ui32>())));
     }
     settings->SetLevelTop(vectorSearch.GetLevelTop());
+    if (vectorSearch.HasHnswEfSearch()) {
+        settings->SetHnswEfSearch(vectorSearch.GetHnswEfSearch());
+    }
     settings->SetVectorColumnIndex(vectorSearch.GetVectorColumnIndex());
     settings->SetHasPrefix(vectorSearch.GetHasPrefix());
+    settings->SetFullRangeHnsw(vectorSearch.GetFullRangeHnsw());
 
     YQL_ENSURE(stageInfo.Meta.IndexMetas.size() == 2);
     const auto& levelTableInfo = stageInfo.Meta.IndexMetas[0].TableConstInfo;
@@ -3273,19 +3292,27 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
         if (source.HasVectorTopK()) {
             const auto& in = source.GetVectorTopK();
             const auto guard = TxAlloc->TypeEnv.BindAllocator();
-            // A parametric LIMIT can resolve to 0. The datashard rejects a VectorTopK with
-            // limit 0, so skip the pushdown; the plan's own LIMIT still yields no rows.
-            const ui64 limit = ExtractPhyValue(stageInfo, in.GetLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod()).Get<ui64>();
-            if (limit) {
+            const auto limit = ExtractPhyValue(stageInfo, in.GetLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv,
+                NUdf::TUnboxedValuePod()).Get<ui64>();
+            NMiniKQL::TType* targetType = nullptr;
+            auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv,
+                NUdf::TUnboxedValuePod(), &targetType, /*allowOptional=*/true);
+            if (limit && target) {
+                // With a NULL target the SQL sort keys are NULL, so leave the full input to KQP.
+                if (targetType->GetKind() == NMiniKQL::TType::EKind::Optional) {
+                    target = target.GetOptionalValue();
+                }
                 auto& out = *settings->MutableVectorTopK();
                 out.SetColumn(in.GetColumn());
+                if (in.HasHnswEfSearch()) {
+                    out.SetHnswEfSearch(in.GetHnswEfSearch());
+                }
                 *out.MutableSettings() = in.GetSettings();
                 if (in.HasHnswIndexId()) {
                     *out.MutableHnswIndexId() = in.GetHnswIndexId();
                 }
-                auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
                 out.SetTargetVector(TString(target.AsStringRef()));
-                out.SetLimit((ui32)limit);
+                out.SetLimit(static_cast<ui32>(std::min<ui64>(limit, Max<ui32>())));
             }
         }
 

@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/kqp/runtime/common
     ydb/core/protos
     ydb/core/sys_view/common
+    ydb/core/sys_view/scan
     ydb/core/sys_view/show_create/formatters
     ydb/core/tx/columnshard/engines/scheme/defaults/protos
     ydb/core/tx/schemeshard

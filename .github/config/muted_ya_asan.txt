@@ -6,9 +6,13 @@ ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.BatchWriteThenRead
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.BatchWriteThenReadMultiTabletInterleaved_Sequential_WithRestarts_Uring
 ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.block42
+ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.mirror3of4
+ydb/core/blobstorage/ut_blobstorage/ut_osiris unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_mirror3of4
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
+ydb/core/client/ut TFlatTest.SplitEmptyAndWrite
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/fq/libs/wasm_services/ut TFqWasmModuleTest.ProfileJsonStackHandlesLongStringsWithinResponseLimit
@@ -40,6 +44,10 @@ ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCs
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
+ydb/core/kqp/ut/rbo/statistics/correctness KqpCorrectnessAnalyzedStatistics.TPCDS+ColumnStore
+ydb/core/kqp/ut/rbo/statistics/correctness KqpCorrectnessAnalyzedStatistics.TPCDS-ColumnStore
+ydb/core/kqp/ut/rbo/statistics/join_order KqpJoinOrderAnalyzedStatistics.TPCDS+ColumnStore
+ydb/core/kqp/ut/rbo/statistics/join_order KqpJoinOrderAnalyzedStatistics.TPCDS-ColumnStore
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnDefaultNull
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression+EnableCompileTimeDefaults
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationOnlineRO
@@ -96,9 +104,14 @@ ydb/library/actors/interconnect/ut DynamicProxy.RaceCheck10
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/nmslib/test/run_test_integr exectest.sole chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
+ydb/public/sdk/cpp/src/client/topic/ut/slow TxUsage.Write_Only_Big_Messages_In_Wide_Transactions_Query
+ydb/public/sdk/cpp/src/client/topic/ut/slow TxUsage.Write_Only_Big_Messages_In_Wide_Transactions_Table
+ydb/public/sdk/cpp/src/client/topic/ut/slow unittest.[*/*] chunk
 ydb/tests/compatibility/common test_checksum_table.py.TestChecksumTable.test_checksum_survives_upgrade[restart_stable-26-3-1_to_stable-26-4-1]
 ydb/tests/compatibility/common test_checksum_table.py.TestChecksumTable.test_checksum_survives_upgrade[restart_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simple[restart_prestable-27-1-1_to_prestable-27-1-1-column]
+ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simple[restart_prestable-27-1-1_to_prestable-27-1-1-row]
+ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simple[restart_prestable-27-1-1_to_stable-26-4-1-column]
 ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_tpch1[restart_prestable-27-1-1_to_prestable-27-1-1-column-date64]
 ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_tpch1[restart_prestable-27-1-1_to_prestable-27-1-1-column]
 ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_tpch1[restart_prestable-27-1-1_to_prestable-27-1-1-row]
@@ -155,6 +168,7 @@ ydb/tests/compatibility/common test_example.py.TestExampleRestartToAnotherVersio
 ydb/tests/compatibility/common test_followers.py.TestFollowersCompatibility.test_followers_compatability[mixed_prestable-27-1-1]
 ydb/tests/compatibility/common test_followers.py.TestFollowersCompatibility.test_followers_compatability[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/common test_followers.py.TestFollowersCompatibility.test_followers_compatability[mixed_stable-26-4-1]
+ydb/tests/compatibility/common test_node_broker_delta_protocol.py.TestNodeBrokerDeltaProtocolRestartToAnotherVersion.test[restart_prestable-27-1-1_to_prestable-27-1-1]
 ydb/tests/compatibility/common test_node_broker_delta_protocol.py.TestNodeBrokerDeltaProtocolRestartToAnotherVersion.test[restart_stable-26-4-1_to_stable-26-4-1]
 ydb/tests/compatibility/common test_row_table_compression.py.TestRowTableCompressionMixed.test_zstd_disabled_in_mixed_cluster[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/common test_show_create_table.py.TestShowCreateTable.test_show_create_table_after_version_change[restart_stable-26-4-1_to_stable-26-4-1]
@@ -200,6 +214,12 @@ ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRestart.test_re
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRestart.test_rename_table[restart_stable-26-4-1_to_stable-26-3-1]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRestart.test_rename_table[restart_stable-26-4-1_to_stable-26-4-1]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-26-3-1_to_stable-26-4-1]
+ydb/tests/compatibility/olap test_tiering.py.TestTieringActualizationLegacy.test_prefix_actualization_with_legacy_flat_tier[restart_stable-26-3-1_to_stable-26-4-1]
+ydb/tests/compatibility/olap test_tiering.py.TestTieringActualizationLegacy.test_prefix_actualization_with_legacy_flat_tier[restart_stable-26-4-1_to_stable-26-3-1]
+ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixActualization.test_prefix_actualization_survives_restart[restart_prestable-27-1-1_to_prestable-27-1-1]
+ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixActualization.test_prefix_actualization_survives_restart[restart_prestable-27-1-1_to_stable-26-4-1]
+ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixActualization.test_prefix_actualization_survives_restart[restart_stable-26-4-1_to_prestable-27-1-1]
+ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixActualization.test_prefix_actualization_survives_restart[restart_stable-26-4-1_to_stable-26-4-1]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_prestable-27-1-1_to_prestable-27-1-1-False]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_prestable-27-1-1_to_prestable-27-1-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_prestable-27-1-1_to_stable-26-4-1-False]
@@ -513,8 +533,10 @@ ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-4-1_to_stable-26-4-1-2-8388608-ROW]
 ydb/tests/compatibility/streaming py3test.[test_streaming.py */*] chunk
 ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-27-1-1_to_stable-26-4-1-True]
+ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-4-1_to_stable-26-3-1-False]
 ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-4-1_to_stable-26-3-1-True]
 ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-4-1_to_stable-26-4-1-True]
+ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_stable-26-4-1-False]
 ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-4-1_to_prestable-27-1-1-False]
 ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-4-1_to_prestable-27-1-1-True]
@@ -525,6 +547,7 @@ ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.te
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster_join[mixed_prestable-27-1-1-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster_join[mixed_prestable-27-1-1-True]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster_join[mixed_prestable-27-1-1_and_stable-26-4-1-False]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster_join[mixed_prestable-27-1-1_and_stable-26-4-1-True]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster_join[mixed_stable-26-4-1_and_stable-26-3-1-True]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster_multi_output[mixed_prestable-27-1-1-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster_multi_output[mixed_prestable-27-1-1-True]
@@ -576,7 +599,7 @@ ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeA
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_multi_output[rolling_stable-26-3-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_multi_output[rolling_stable-26-4-1_to_prestable-27-1-1-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_multi_output[rolling_stable-26-4-1_to_prestable-27-1-1-True]
-ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksMixedCluster.test_mixed_cluster[mixed_stable-26-4-1-True]
+ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksMixedCluster.test_mixed_cluster[mixed_prestable-27-1-1_and_stable-26-4-1-True]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-27-1-1_to_prestable-27-1-1-True]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-27-1-1_to_stable-26-4-1-False]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-3-1_to_stable-26-4-1-False]
@@ -621,7 +644,15 @@ ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grp
 ydb/tests/functional/blobstorage/replication_rate_control test_replication_rate_control.py.test_replication_rate_control_is_applied_at_runtime
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
-ydb/tests/functional/sdk/cpp/path_aliasing TPathAliasing.DiscoveryAndSchemeResources
+ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy
+ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[enforce_user_token_disabled-no_schema_grants]
+ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[enforce_user_token_disabled-with_schema_grants]
+ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[enforce_user_token_enabled-no_schema_grants]
+ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[enforce_user_token_enabled-with_schema_grants]
+ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[require_counters_authentication-no_schema_grants]
+ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[require_counters_authentication-with_schema_grants]
+ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[require_healthcheck_authentication-no_schema_grants]
+ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[require_healthcheck_authentication-with_schema_grants]
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py */*] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]

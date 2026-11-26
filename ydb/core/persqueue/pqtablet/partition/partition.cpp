@@ -179,6 +179,18 @@ bool SeqnoViolation(TMaybe<i16> lastEpoch, ui64 lastSeqNo, TMaybe<i16> messageEp
     return messageSeqNo <= lastSeqNo;
 }
 
+TDuration TPartition::GetOffsetsSnapshotSendInterval(const TActorContext& ctx) const {
+    const auto& featureFlags = AppData(ctx)->FeatureFlags;
+    bool isTopicMutateDisabled = featureFlags.GetEnableSourceTopicMutateRestricted() ||
+        !featureFlags.GetEnableClientModifications() ||
+        Config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED ||
+        Config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE;
+
+    return isTopicMutateDisabled ?
+        TDuration::Seconds(1) :
+        TDuration::Seconds(30);
+}
+
 bool TPartition::LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const {
     return !IsActive() &&
         (static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == GetEndOffset() ||
@@ -4265,11 +4277,14 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
         }
     }
 
-    if (replicationSessionEstablished) {
+    if (replicationSessionEstablished || ctx.Now() - LastOffsetsSnapshotSentTime > GetOffsetsSnapshotSendInterval(ctx)) {
         SendOffsetsToReplicationConsumer(ctx);
+        LastOffsetsSnapshotSentTime = ctx.Now();
     } else if (!changedUsers.empty()) {
         SendOffsetsToReplicationConsumer(ctx, changedUsers);
+        LastOffsetsSnapshotSentTime = ctx.Now();
     }
+
     ChangeConfigActs.clear();
     AnswerCurrentReplies(ctx);
 

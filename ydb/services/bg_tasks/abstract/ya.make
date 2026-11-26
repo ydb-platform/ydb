@@ -5,11 +5,14 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/accessor
+    library/cpp/json
+    library/cpp/json/writer
+    library/cpp/string_utils/base64
+    ydb/core/base
     ydb/library/actors/core
-    ydb/public/api/protos
-    ydb/services/bg_tasks/protos
     ydb/library/conclusion
+    ydb/library/services
+    ydb/services/bg_tasks/protos
 )
 
 END()

@@ -78,6 +78,7 @@ struct TReadIteratorVectorTop {
     TString Target;
     std::unique_ptr<NKMeans::IClusters> KMeans;
     std::vector<ui32> DistinctColumns;
+    ui32 HnswEfSearch = NKMeans::DefaultHnswEfSearch;
 
     // Set when a ready in-memory HNSW index is available for this table/column;
     // if set, TReader::IterateRange uses it instead of the brute-force scan below.
@@ -298,6 +299,11 @@ struct TShortTableInfo {
 
         for (const auto& it: tableInfo->Columns) {
             const auto& column = it.second;
+            if (column.IsBuildInProgress) {
+                // Retain names for diagnostics without exposing unreadable columns.
+                BuildingColumns.emplace(it.first, column.Name);
+                continue;
+            }
             Columns.emplace(it.first, TShortColumnInfo(it.first, column.Type, column.Name));
         }
     }
@@ -367,6 +373,7 @@ struct TShortTableInfo {
     size_t KeyColumnCount = 0;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TMap<NTable::TTag, TShortColumnInfo> Columns;
+    TMap<NTable::TTag, TString> BuildingColumns;
     TUserTable::TCPtr HnswTable;
 };
 
@@ -1399,7 +1406,7 @@ private:
         size_t requested = Min(available, static_cast<size_t>(topK.Limit));
         constexpr size_t MaxSearchAttempts = 2;
         for (size_t attempt = 0; attempt < MaxSearchAttempts; ++attempt) {
-            auto candidates = topK.HnswIndex->Search(topK.Target, requested, State.ReadVersion);
+            auto candidates = topK.HnswIndex->Search(topK.Target, requested, State.ReadVersion, topK.HnswEfSearch);
             if (!candidates.Covered || positions.empty()) {
                 return candidates;
             }
@@ -2884,10 +2891,18 @@ public:
         for (auto col: record.GetColumns()) {
             auto it = TableInfo.Columns.find(col);
             if (it == TableInfo.Columns.end()) {
+                TString reason;
+                if (const auto building = TableInfo.BuildingColumns.find(col);
+                    building != TableInfo.BuildingColumns.end()) {
+                    reason = TStringBuilder() << "Cannot read column '" << building->second
+                        << "' (" << col << "): column build is in progress";
+                } else {
+                    reason = TStringBuilder() << "Unknown column: " << col;
+                }
                 SetStatusError(
                     Result->Record,
                     Ydb::StatusIds::SCHEME_ERROR,
-                    TStringBuilder() << "Unknown column: " << col
+                    TStringBuilder() << reason
                         << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
                 return;
             }
@@ -2909,11 +2924,7 @@ public:
                 // The exact-scan distance calculator does not consume HNSW
                 // construction settings. Keep them in topK for graph selection
                 // and rebuilds, including when this read falls back to a scan.
-                auto distanceSettings = topK.GetSettings();
-                distanceSettings.clear_m();
-                distanceSettings.clear_ef_construction();
-                distanceSettings.clear_min_rows();
-                distanceSettings.clear_delta_rows();
+                auto distanceSettings = NKMeans::MakeDistanceSettings(topK.GetSettings());
                 // Use auto-detect if vector_dimension is 0 (brute force search without index)
                 if (distanceSettings.vector_dimension() == 0) {
                     topState->KMeans = NKMeans::CreateClustersAutoDetect(distanceSettings, topK.GetTargetVector(), 0, error);
@@ -2939,6 +2950,7 @@ public:
                     << error << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
                 return;
             }
+            topState->HnswEfSearch = topK.GetHnswEfSearch();
             topState->Column = topK.GetColumn();
             topState->Limit = topK.GetLimit();
             topState->Target = topK.GetTargetVector();
@@ -2972,6 +2984,12 @@ public:
                     // Threshold overrides affect when to build, not graph compatibility.
                     if (requested.has_min_rows()) { hnswSettings.set_min_rows(requested.min_rows()); }
                     if (requested.has_delta_rows()) { hnswSettings.set_delta_rows(requested.delta_rows()); }
+                }
+                // A tuning override is irrelevant to ordinary vector scans.
+                if (selected && (!topK.GetHnswEfSearch() || topK.GetHnswEfSearch() > NKMeans::MaxHnswEfSearch)) {
+                    SetStatusError(Result->Record, Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "HNSWEfSearch must be in 1.." << NKMeans::MaxHnswEfSearch);
+                    return;
                 }
                 topState->HnswIndexId = selected;
                 const bool canUseHnsw = selected && CanUseHnsw(*Self, state, selected);

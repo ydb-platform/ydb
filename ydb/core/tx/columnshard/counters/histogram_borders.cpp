@@ -3,10 +3,6 @@
 #include <util/string/cast.h>
 
 namespace NKikimr::NColumnShard {
-const std::map<i64, TString> THistorgamBorders::BlobSizeBorders = { { 0, "0" }, { 512 * 1024, "512kb" }, { 1024 * 1024, "1Mb" },
-    { 2 * 1024 * 1024, "2Mb" }, { 4 * 1024 * 1024, "4Mb" }, { 5 * 1024 * 1024, "5Mb" }, { 6 * 1024 * 1024, "6Mb" }, { 7 * 1024 * 1024, "7Mb" },
-    { 8 * 1024 * 1024, "8Mb" } };
-
 const std::map<i64, TString> THistorgamBorders::BytesBorders = [] {
     std::map<i64, TString> map;
     map[0] = "0";

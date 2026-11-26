@@ -58,9 +58,11 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////////////////////
         // TTree
         ////////////////////////////////////////////////////////////////////////////////////////////
-        TTree::TTree(TIntrusivePtr<TIngressCache> ingressCache, const TString &vdiskLogPrefix)
+        TTree::TTree(TIntrusivePtr<TIngressCache> ingressCache, const TString &vdiskLogPrefix,
+                bool dropBarriersOnTabletDeletion)
             : IngressCache(std::move(ingressCache))
             , VDiskLogPrefix(vdiskLogPrefix)
+            , DropBarriersOnTabletDeletion(dropBarriersOnTabletDeletion)
         {}
 
         void TTree::Update(
@@ -68,14 +70,11 @@ namespace NKikimr {
                 const TKeyBarrier &key,
                 const TMemRecBarrier &memRec)
         {
-            LockWrite();
-
-            if (DeadTablets.contains(key.TabletId)) {
-                // complete tablet deletion (Max generation block), ignore further barriers
-                UnlockWrite();
+            if (CanDropBarriers(key.TabletId)) {
                 return;
             }
 
+            LockWrite();
             TIndexKey indexKey(key.TabletId, key.Channel);
             auto deadIt = Dead.find(indexKey);
             if (deadIt != Dead.end()) {
@@ -107,15 +106,12 @@ namespace NKikimr {
         void TTree::MarkTabletDeleted(ui64 tabletId) {
             LockWrite();
 
-            if (!DeadTablets.insert(tabletId).second) {
-                UnlockWrite();
-                return;
-            }
-
-            for (ui32 channel = 0; channel < 256; ++channel) {
-                TIndexKey indexKey(tabletId, static_cast<ui8>(channel));
-                Index.erase(indexKey);
-                Dead.erase(indexKey);
+            if (DeadTablets.insert(tabletId).second && DropBarriersOnTabletDeletion) {
+                for (ui32 channel = 0; channel < 256; ++channel) {
+                    TIndexKey indexKey(tabletId, static_cast<ui8>(channel));
+                    Index.erase(indexKey);
+                    Dead.erase(indexKey);
+                }
             }
 
             UnlockWrite();
@@ -126,7 +122,7 @@ namespace NKikimr {
 
             THashSet<ui64> added;
             for (ui64 tabletId : tabletIds) {
-                if (DeadTablets.insert(tabletId).second) {
+                if (DeadTablets.insert(tabletId).second && DropBarriersOnTabletDeletion) {
                     added.insert(tabletId);
                 }
             }
@@ -158,10 +154,6 @@ namespace NKikimr {
                 TMaybe<TCurrentBarrier> &soft,
                 TMaybe<TCurrentBarrier> &hard) const
         {
-            // A completely deleted tablet (Max generation block) has no barriers here at all: the
-            // records were dropped by MarkTabletDeleted and Update ignores any that arrive later.
-            // That is a fact about the tablet, not a barrier value, so it is not made up here --
-            // IsTabletDeleted() reports it and TBarriersEssence acts on it.
             LockRead();
 
             TIndexKey indexKey(tabletId, channel);
@@ -207,8 +199,9 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////////////////////
         // TMemView::TTreeWithLog
         ////////////////////////////////////////////////////////////////////////////////////////////
-        TMemView::TTreeWithLog::TTreeWithLog(TIntrusivePtr<TIngressCache> ingressCache, const TString &vdiskLogPrefix)
-            : Tree(std::make_shared<TTree>(ingressCache, vdiskLogPrefix))
+        TMemView::TTreeWithLog::TTreeWithLog(TIntrusivePtr<TIngressCache> ingressCache, const TString &vdiskLogPrefix,
+                bool dropBarriersOnTabletDeletion)
+            : Tree(std::make_shared<TTree>(std::move(ingressCache), vdiskLogPrefix, dropBarriersOnTabletDeletion))
         {}
 
         void TMemView::TTreeWithLog::RollUp(bool gcOnlySynced){
@@ -269,10 +262,11 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////////////////////
         // TMemView
         ////////////////////////////////////////////////////////////////////////////////////////////
-        TMemView::TMemView(TIntrusivePtr<TIngressCache> ingrCache, const TString &vdiskLogPrefix, bool gcOnlySynced)
+        TMemView::TMemView(TIntrusivePtr<TIngressCache> ingrCache, const TString &vdiskLogPrefix, bool gcOnlySynced,
+                bool dropBarriersOnTabletDeletion)
             : GCOnlySynced(gcOnlySynced)
-            , Active(std::make_unique<TTreeWithLog>(ingrCache, vdiskLogPrefix))
-            , Passive(std::make_unique<TTreeWithLog>(ingrCache, vdiskLogPrefix))
+            , Active(std::make_unique<TTreeWithLog>(ingrCache, vdiskLogPrefix, dropBarriersOnTabletDeletion))
+            , Passive(std::make_unique<TTreeWithLog>(ingrCache, vdiskLogPrefix, dropBarriersOnTabletDeletion))
         {}
 
         void TMemView::Update(const TKeyBarrier &key, const TMemRecBarrier &memRec) {

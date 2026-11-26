@@ -208,6 +208,7 @@ void TDuplicateManager::HandleFilterRequestImpl(TEvRequestFilter::TPtr& ev) {
 void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr& ev) {
     std::shared_ptr<TFilterAccumulator> constructor = ev->Get()->GetRequest();
     if (FiltersStore.NotifyReadyFilter(constructor)) {
+        Counters->OnRequestCacheHit();
         YDB_LOG_TRACE("",
             {"component", "duplicates_manager"},
             {"self", TActivationContext::AsActorContext().SelfID},

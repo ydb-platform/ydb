@@ -24,11 +24,11 @@ namespace {
     }
 
     // the reports of Node Warden telling BSC that the part has missed a write
-    ui32 CountStandbyMarks(IEventHandle& ev, ui32 targetGroupId) {
+    ui32 CountStandbyMarks(IEventHandle& ev, ui32 targetGroupId, bool dataOnly = false) {
         ui32 num = 0;
         if (ev.GetTypeRewrite() == TEvBlobStorage::EvControllerUpdateSyncerState) {
             for (const auto& item : ev.Get<TEvBlobStorage::TEvControllerUpdateSyncerState>()->Record.GetStandbyDirty()) {
-                num += item.GetTargetGroupId() == targetGroupId;
+                num += item.GetTargetGroupId() == targetGroupId && (!dataOnly || item.GetData());
             }
         }
         return num;
@@ -66,6 +66,59 @@ namespace {
         }
         return env.GetGroups().front();
     }
+
+    NKikimrBridge::TDatabaseSynchronization GetStandbyMetrics(TEnvironmentSetup& env) {
+        NKikimrBridge::TStorageQuery query;
+        query.SetView(NKikimrBridge::TStorageQuery::DATABASES);
+        query.SetStoragePool(env.StoragePoolName);
+        query.SetPileName("pile_2");
+        query.SetIncludeSyncMetrics(true);
+        const auto report = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(report.GetStatus() == Ydb::StatusIds::SUCCESS, report.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(report.GetDatabases().databases_size(), 1);
+        return report.GetDatabases().databases(0);
+    }
+
+    void WaitForStandbyReconciliation(TEnvironmentSetup& env) {
+        WaitUntil(env, [&] {
+            const auto row = GetStandbyMetrics(env);
+            return row.groups().pending() == 1 && row.has_remaining_bytes() && row.remaining_bytes() == 0 &&
+                row.remaining_bytes_complete();
+        }, "standby reconciliation completed");
+    }
+
+    class THeldStandbyScan {
+        TEnvironmentSetup& Env;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> Scans;
+
+    public:
+        THeldStandbyScan(TEnvironmentSetup& env, ui32 target)
+            : Env(env)
+        {
+            Env.Runtime->FilterFunction = [this, target](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvAssimilate && ev->Recipient == MakeBlobStorageProxyID(target)) {
+                    Scans.emplace_back(nodeId, std::move(ev));
+                    return false;
+                }
+                return true;
+            };
+        }
+
+        void CheckIncompleteEstimate() {
+            WaitUntil(Env, [&] { return !Scans.empty(); }, "new scan of the target started");
+            const auto row = GetStandbyMetrics(Env);
+            UNIT_ASSERT_VALUES_EQUAL(row.groups().syncing(), 1);
+            UNIT_ASSERT(row.has_remaining_bytes_complete());
+            UNIT_ASSERT(!row.remaining_bytes_complete());
+        }
+
+        ~THeldStandbyScan() {
+            Env.Runtime->FilterFunction = {};
+            for (auto& [nodeId, ev] : Scans) {
+                Env.Runtime->Send(ev.release(), nodeId);
+            }
+        }
+    };
 
     // Fail the standby request before the required pile gets its write. A standby failure must neither fail the
     // client nor restart its request, including a RACE that would normally wait for another group generation.
@@ -458,6 +511,12 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         TEnvironmentSetup env(MakeSettings());
         const ui32 groupId = PrepareStandby(env);
         const auto piles = GetPileGroups(env, groupId);
+        WaitForStandbyReconciliation(env);
+        ui32 marks = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            marks += CountStandbyMarks(*ev, piles[1], true);
+            return true;
+        };
         SetStandbyBudget(env, 0);
         const i64 droppedBefore = GetStandbyCounter(env, "WritesDropped");
         TDataChecker checker(env);
@@ -466,9 +525,51 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         UNIT_ASSERT_VALUES_EQUAL(writtenGroup, groupId);
         UNIT_ASSERT_LT(droppedBefore, GetStandbyCounter(env, "WritesDropped"));
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, id, data), NKikimrProto::NODATA);
+        WaitUntil(env, [&] { return marks != 0; }, "missed write reported to the controller", TDuration::Seconds(1), 30);
+        env.Runtime->FilterFunction = {};
+        const auto dirty = GetStandbyMetrics(env);
+        UNIT_ASSERT_VALUES_EQUAL(dirty.groups().pending(), 1);
+        UNIT_ASSERT(dirty.has_remaining_bytes_complete());
+        UNIT_ASSERT(!dirty.remaining_bytes_complete());
+        {
+            THeldStandbyScan scan(env, piles[1]);
+            scan.CheckIncompleteEstimate();
+        }
         WaitUntil(env, [&] { return ReadFromPileGroup(env, piles[1], 9, id, data) == NKikimrProto::OK; },
             "reconciliation copies the dropped write");
+        WaitForStandbyReconciliation(env);
         UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::HOT_STANDBY);
+    }
+
+    Y_UNIT_TEST(NewStandbyRoundNeedsNewRemainingBytesEstimate) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const ui32 target = GetPileGroups(env, groupId).at(1);
+        const auto getPart = [&] {
+            const auto info = GetGroupInfo(env, groupId);
+            const auto* part = NBridge::GetGroupPile(info.GetBridgeGroupState(), TBridgePileId::FromPileIndex(1));
+            UNIT_ASSERT(part);
+            return *part;
+        };
+        WaitForStandbyReconciliation(env);
+        const auto first = getPart();
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(10)); // let the proxy learn that writes can only reach the source
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        const auto& [_, blob, data] = checker.GetWritten().back();
+        {
+            THeldStandbyScan scan(env, target);
+            SwitchPileState(env, 1, NKikimrBridge::TClusterState::HOT_STANDBY);
+            scan.CheckIncompleteEstimate();
+            const auto second = getPart();
+            UNIT_ASSERT_LT(first.GetBecameUnsyncedGeneration(), second.GetBecameUnsyncedGeneration());
+            UNIT_ASSERT_EQUAL(first.GetStage(), second.GetStage());
+            UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, target, 9, blob, data), NKikimrProto::NODATA);
+        }
+        WaitUntil(env, [&] { return ReadFromPileGroup(env, target, 9, blob, data) == NKikimrProto::OK; },
+            "new standby reconciliation copies the missed write");
     }
 
     // An abandoned assignment must retain the missed write even with no new write or node registration to mark it again.

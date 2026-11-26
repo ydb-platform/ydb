@@ -111,6 +111,7 @@ PEERDIR(
     ydb/core/subsystems/actor_system_monitoring
     ydb/core/subsystems/inmemory_metrics_monitoring
     ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart
+    ydb/core/sys_view
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/tablet

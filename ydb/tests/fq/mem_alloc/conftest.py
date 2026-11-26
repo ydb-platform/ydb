@@ -58,11 +58,14 @@ def kikimr(request):
     cluster = Kikimr(config, enable_discovery=False)
     try:
         if multi_dc:
-            # NodeBroker does not allow changing the location of a registered
-            # node. Keep the original two slots in their default DC and start
-            # two new slots in a second DC from their first registration.
-            cluster.cluster.register_and_start_slots(database=cluster.get_database_name(), count=2, data_center='DC2')
-            cluster.datacenters = {node_id: node.data_center for node_id, node in cluster.cluster.slots.items()}
+            cluster.cluster.register_and_start_slots(database=cluster.get_database_name(), count=2)
+            cluster.datacenters = {}
+            for index, (node_id, node) in enumerate(cluster.cluster.slots.items()):
+                node.stop()
+                node.data_center = f'DC{index % 2 + 1}'
+                cluster.datacenters[node_id] = node.data_center
+                node.start()
+            cluster.recreate_driver(cluster.first_node.node_id)
         else:
             # Keep allocation pressure on one compute node, as in the original
             # tests; the storage node and the external topic cluster stay separate.

@@ -92,6 +92,26 @@ Y_UNIT_TEST_SUITE(TPlanKeyRangeSplitTest) {
         UNIT_ASSERT_VALUES_EQUAL(GetSourceIds(plan[1]), TVector<TString>({"ds1"}));
     }
 
+    Y_UNIT_TEST(ShouldSplitInsideSourceWhenUpperBoundIsPresentButEmpty) {
+        // given
+        TKeyRangeWriteStats stats;
+        stats.Sources = {MakeSource("ds1", std::nullopt, std::nullopt)};
+        stats.Sources[0].KeyRange.ToBound = TSerializedCellVec(TString());
+        AddKeys(stats, 1, 101, 1);
+        auto parent = MakeRange(std::nullopt, std::nullopt);
+        parent.ToBound = TSerializedCellVec(TString());
+
+        // when
+        const auto plan = PlanKeyRangeSplit(parent, Uint64Key, stats);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(plan.size(), 2);
+        AssertBound(plan[0].Range.ToBound, 51);
+        AssertBound(plan[1].Range.FromBound, 51);
+        UNIT_ASSERT_VALUES_EQUAL(GetSourceIds(plan[0]), TVector<TString>({"ds1"}));
+        UNIT_ASSERT_VALUES_EQUAL(GetSourceIds(plan[1]), TVector<TString>({"ds1"}));
+    }
+
     Y_UNIT_TEST(ShouldSplitBetweenSourcesWhenSourceBoundaryHalvesLoad) {
         // given
         TKeyRangeWriteStats stats;

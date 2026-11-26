@@ -39,14 +39,18 @@ int CompareBounds(const TSerializedCellVec& lhs, const TSerializedCellVec& rhs, 
         rhs.GetCells(), PrefixModeLeftBorderInclusive);
 }
 
+bool IsUnbounded(const TMaybe<TSerializedCellVec>& bound) {
+    return !bound || bound->GetCells().empty();
+}
+
 bool IsInside(const TSerializedCellVec& key, const TPartitionKeyRange& range, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
-    return (!range.FromBound || CompareBounds(key, *range.FromBound, keyTypes) >= 0)
-        && (!range.ToBound || CompareBounds(key, *range.ToBound, keyTypes) < 0);
+    return (IsUnbounded(range.FromBound) || CompareBounds(key, *range.FromBound, keyTypes) >= 0)
+        && (IsUnbounded(range.ToBound) || CompareBounds(key, *range.ToBound, keyTypes) < 0);
 }
 
 bool IsStrictlyInside(const TSerializedCellVec& boundary, const TPartitionKeyRange& range, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
-    return (!range.FromBound || CompareBounds(boundary, *range.FromBound, keyTypes) > 0)
-        && (!range.ToBound || CompareBounds(boundary, *range.ToBound, keyTypes) < 0);
+    return (IsUnbounded(range.FromBound) || CompareBounds(boundary, *range.FromBound, keyTypes) > 0)
+        && (IsUnbounded(range.ToBound) || CompareBounds(boundary, *range.ToBound, keyTypes) < 0);
 }
 
 TSerializedCellVec MakeFullKey(const TSerializedCellVec& bound, size_t keySize) {
@@ -104,7 +108,7 @@ TVector<TCandidate> GetCandidates(TWeightedKeys& keys, TConstArrayRef<TKeyRangeS
             continue;
         }
         for (const auto* bound : {source.KeyRange.FromBound.Get(), source.KeyRange.ToBound.Get()}) {
-            if (bound) {
+            if (bound && !bound->GetCells().empty()) {
                 candidates.push_back({MakeFullKey(*bound, keyTypes.size()), true});
             }
         }

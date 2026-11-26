@@ -2990,7 +2990,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitMergeValidation) {
         )", {{NKikimrScheme::StatusInvalidParameter, "Duplicate SourceTabletId"}});
     }
 
-    void CreatePgNumericKeyRangeTopic(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
+    NKikimrSchemeOp::TPersQueueGroupDescription MakePgNumericKeyRangeTopic() {
         NKikimrSchemeOp::TPersQueueGroupDescription topic;
         topic.SetName("Topic");
         topic.SetTotalGroupCount(1);
@@ -3009,7 +3009,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitMergeValidation) {
         strategy.SetMinPartitionCount(1);
         strategy.SetMaxPartitionCount(10);
         config.SetSplitByPartitionKey(true);
-        TestCreatePQGroup(runtime, ++txId, "/MyRoot", topic.ShortDebugString());
+        return topic;
+    }
+
+    void CreatePgNumericKeyRangeTopic(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", MakePgNumericKeyRangeTopic().ShortDebugString());
         env.TestWaitNotification(runtime, txId);
     }
 
@@ -3037,6 +3041,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitMergeValidation) {
         // then
         const auto described = DescribePath(runtime, "/MyRoot/Topic");
         UNIT_ASSERT_VALUES_EQUAL(described.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 1);
+    }
+
+    Y_UNIT_TEST(ShouldRejectPartitionBoundaryWhenPgKeyIsMalformed) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        auto topic = MakePgNumericKeyRangeTopic();
+        topic.SetTotalGroupCount(2);
+        topic.AddPartitionBoundaries()->AddTuple()->MutableOptional()->SetBytes("\xff\xff\xff");
+
+        // when
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", topic.ShortDebugString(),
+            {{NKikimrScheme::StatusSchemeError, "Invalid partition boundary at position: 0"}});
+
+        // then
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic"), {NLs::PathNotExist});
     }
 
     Y_UNIT_TEST(ShouldSplitByPgKeyWhenBoundaryIsValid) {

@@ -4,6 +4,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
+#include "common/validation.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/engine/mkql_proto.h>
@@ -144,6 +145,25 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
                     }
 
                     cells.resize(pqGroupInfo->KeySchema.size()); // Extend with NULLs
+
+                    if (op.GetPQTabletConfig().GetSplitByPartitionKey()) {
+                        const auto& keyTypes = pqGroupInfo->KeySchema;
+                        if (!NValidation::IsValidTableKey(cells, keyTypes)) {
+                            status = NKikimrScheme::StatusSchemeError;
+                            errStr = Sprintf("Invalid partition boundary at position: %u", i);
+                            return nullptr;
+                        }
+
+                        if (i > 0) {
+                            const TSerializedCellVec prevKey(prevBound);
+                            if (CompareTypedCellVectors(prevKey.GetCells().data(), cells.data(), keyTypes.data(), keyTypes.size()) >= 0) {
+                                status = NKikimrScheme::StatusInvalidParameter;
+                                errStr = Sprintf("Partition boundaries must be strictly increasing, position: %u", i);
+                                return nullptr;
+                            }
+                        }
+                    }
+
                     keyRange->ToBound = TSerializedCellVec::Serialize(cells);
                 } else { // splitMergeEnabled
                     auto range = NDataStreams::V1::RangeFromShardNumber(i, partitionCount);
@@ -411,6 +431,23 @@ public:
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
                     "SplitByPartitionKey must match the key range heartbeat mode of the CDC stream");
                 return result;
+            }
+
+            if (keyRangeHeartbeats) {
+                const auto tablePathId = parentPath.Parent().Base()->PathId;
+                Y_ABORT_UNLESS(context.SS->Tables.contains(tablePathId));
+                const auto table = context.SS->Tables.at(tablePathId);
+
+                TTopicInfo::TKeySchema tableKeyTypes;
+                for (const auto columnId : table->KeyColumnIds) {
+                    tableKeyTypes.push_back(table->Columns.at(columnId).PType);
+                }
+
+                if (pqGroup->KeySchema != tableKeyTypes) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter,
+                        "PartitionKeySchema must match the key columns of the CDC stream table");
+                    return result;
+                }
             }
         }
 

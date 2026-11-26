@@ -39,6 +39,7 @@ bool IsReplicationSupport(const NKikimrSchemeOp::TCdcStreamDescription& streamDe
 bool ShouldUseKeyRangeHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc, const TFeatureFlags& featureFlags) {
     return featureFlags.GetEnableCdcKeyRangeHeartbeats()
         && streamDesc.GetResolvedTimestampsIntervalMs() > 0
+        && !streamDesc.GetSchemaChanges()
         && IsReplicationSupport(streamDesc, "supports_key_range_autopartitioning");
 }
 
@@ -1055,7 +1056,7 @@ bool ShouldAggregateHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& str
     return AppData()->FeatureFlags.GetEnableCdcAggregator()
         // DataShards emit heartbeats only with a resolved timestamps interval, otherwise there is nothing to aggregate
         && streamDesc.GetResolvedTimestampsIntervalMs() > 0
-        && !IsReplicationSupport(streamDesc, "supports_key_range_autopartitioning");
+        && !ShouldUseKeyRangeHeartbeats(streamDesc, AppData()->FeatureFlags);
 }
 
 TMaybe<TChannelsBindings> CheckCdcAggregatorCanBeCreated(

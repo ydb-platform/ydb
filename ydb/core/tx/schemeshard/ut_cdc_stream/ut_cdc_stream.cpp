@@ -17,6 +17,7 @@
 #include <util/string/cast.h>
 #include <util/string/escape.h>
 #include <util/string/hex.h>
+#include <util/string/join.h>
 #include <util/string/printf.h>
 
 using namespace NKikimr;
@@ -2145,6 +2146,49 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         }
     }
 
+    Y_UNIT_TEST(ShouldPassEachPqTabletOnlyDataShardsOfItsPartitionsWhenKeyRangeHeartbeats) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcKeyRangeHeartbeats(true));
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 3
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TMap<TVector<ui32>, TSet<TString>> partitionIdsToSourceIds;
+        auto observer = runtime.AddObserver<TEvPersQueue::TEvProposeTransaction>([&](auto& ev) {
+            const auto& config = ev->Get()->GetRecord().GetConfig();
+            const auto& partitionIds = config.GetTabletConfig().GetPartitionIds();
+            auto& sourceIds = partitionIdsToSourceIds[TVector<ui32>(partitionIds.begin(), partitionIds.end())];
+            for (const auto& group : config.GetBootstrapConfig().GetExplicitMessageGroups()) {
+                sourceIds.insert(group.GetId());
+            }
+        });
+
+        // when
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, true).DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        // then
+        const auto table = DescribePath(runtime, "/MyRoot/Table", true, true);
+        const auto& shards = table.GetPathDescription().GetTablePartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitionIdsToSourceIds.size(), 2);
+        for (const auto& [partitionIds, sourceIds] : partitionIdsToSourceIds) {
+            TSet<TString> expectedSourceIds;
+            for (const auto partitionId : partitionIds) {
+                expectedSourceIds.insert(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shards.Get(partitionId).GetDatashardId())));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", sourceIds), JoinSeq(",", expectedSourceIds));
+        }
+    }
+
     Y_UNIT_TEST(ShouldPassFullKeyBoundsInBootstrapWhenTableKeyWasExtended) {
         // given
         TTestBasicRuntime runtime;
@@ -2454,9 +2498,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             .EnableProtoSourceIdInfo(true)
             .EnableCdcKeyRangeHeartbeats(true));
         ui64 txId = 100;
-        auto stream = GlobalReplicationStream(false, true);
-        stream.MutableStreamDescription()->SetSchemaChanges(true);
-        CreateReplicationStream(runtime, env, txId, 1, stream);
+        CreateReplicationStream(runtime, env, txId, 1, GlobalReplicationStream(false, true));
 
         // when
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -2623,6 +2665,35 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic"), {NLs::PathNotExist});
     }
 
+    Y_UNIT_TEST(ShouldRejectSplitByPartitionKeyWhenBoundariesAreNotIncreasing) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        // when
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic"
+            TotalGroupCount: 3
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+                PartitionKeySchema { Name: "key" TypeId: 2 }
+                SplitByPartitionKey: true
+            }
+            PartitionBoundaries {
+                Tuple { Optional { Uint32: 10 } }
+            }
+            PartitionBoundaries {
+                Tuple { Optional { Uint32: 10 } }
+            }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Partition boundaries must be strictly increasing"}});
+
+        // then
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic"), {NLs::PathNotExist});
+    }
+
     Y_UNIT_TEST(ShouldKeepKeyRangeHeartbeatsWhenSchemeShardReboots) {
         // given
         TTestBasicRuntime runtime;
@@ -2723,7 +2794,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldNotAggregateHeartbeatsWhenReplicationSupportsKeyRangeAndFlagDisabled) {
+    Y_UNIT_TEST(ShouldAggregateHeartbeatsWhenReplicationSupportsKeyRangeAndFlagDisabled) {
         // given
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
@@ -2738,9 +2809,32 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         // then
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
-            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect),
-            NLs::StreamHasAggregatorTabletId(false),
+            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated),
+            NLs::StreamHasAggregatorTabletId(true),
         });
+    }
+
+    Y_UNIT_TEST(ShouldUseDirectHeartbeatsWhenReplicationStreamHasSchemaChanges) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcKeyRangeHeartbeats(true));
+        ui64 txId = 100;
+        CreateSourceTable(runtime, env, txId);
+        auto stream = GlobalReplicationStream(false, true);
+        stream.MutableStreamDescription()->SetSchemaChanges(true);
+
+        // when
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", stream.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        // then
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect),
+        });
+        const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        UNIT_ASSERT(!topic.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetSplitByPartitionKey());
     }
 
     Y_UNIT_TEST_FLAG(ShouldRejectTopicPartitioningWhenKeyRangeHeartbeats, topicAutoPartitioning) {
@@ -2810,6 +2904,36 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         // when
         RotateCdcStream(runtime, env, txId, rotatedStream, false,
             {{NKikimrScheme::StatusInvalidParameter, "SplitByPartitionKey must match the key range heartbeat mode"}});
+
+        // then
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/RotatedStream"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+    }
+
+    Y_UNIT_TEST(ShouldRejectRotationWhenTopicKeySchemaDiffersFromTable) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcKeyRangeHeartbeats(true));
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, false).DebugString());
+        env.TestWaitNotification(runtime, txId);
+        auto rotatedStream = GlobalReplicationStream(false, true);
+        rotatedStream.MutableStreamDescription()->SetName("RotatedStream");
+
+        // when
+        RotateCdcStream(runtime, env, txId, rotatedStream, true,
+            {{NKikimrScheme::StatusInvalidParameter, "PartitionKeySchema must match the key columns"}});
 
         // then
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/RotatedStream"), {NLs::PathNotExist});

@@ -1,6 +1,10 @@
 #include <ydb/core/tablet_flat/flat_executor_tx_env.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_sz_env.h>
+#include <ydb/core/tablet_flat/flat_fwd_iface.h>
+#include <ydb/core/tablet_flat/flat_fwd_conf.h>
+#include <ydb/core/tablet_flat/flat_fwd_sieve.h>
+#include <ydb/core/tablet_flat/flat_part_index_iter_iface.h>
 #include <ydb/core/tablet_flat/flat_writer_blocks.h>
 #include <ydb/core/tablet_flat/shared_cache_pages.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
@@ -42,6 +46,7 @@ namespace {
         {
             NTable::NTest::TLayoutCook layout;
             layout.Col(0, 0, NScheme::NTypeIds::Uint32).Col(0, 1, NScheme::NTypeIds::String).Key({ 0 });
+            Scheme = layout.RowScheme();
             NTable::NPage::TConf conf;
             conf.Group(0).PageSize = 128;
             conf.SmallEdge = 8;
@@ -100,6 +105,7 @@ namespace {
 
         TPrivatePageCache Cache;
         TPrivateSeat Seat;
+        TIntrusiveConstPtr<NTable::TRowScheme> Scheme;
         TIntrusiveConstPtr<NTable::NTest::TPartStore> Source;
         THolder<NTable::TPrivatePartStore> Part;
         TVector<NTable::TPageLocation> Locations;
@@ -479,6 +485,106 @@ Y_UNIT_TEST_SUITE(TLegacyPageReadEnv) {
         UNIT_ASSERT(sticky && regular);
         UNIT_ASSERT(sticky->data() == stickyBytes);
         UNIT_ASSERT(regular->data() == regularBytes);
+    }
+
+    Y_UNIT_TEST(ForwardEnvironmentPreservesFetchAndResetLifetimes) {
+        TReadFixture f;
+        TIntrusiveConstPtr<NTable::TPrivatePartStore> part(f.Part.Release());
+        NTable::TSubset subset(
+            NTable::TEpoch::Max(), f.Scheme, TVector<NTable::TPartView>{ { part, nullptr, NTable::TSlices::All() } });
+        NTable::NFwd::TConf conf;
+        conf.AheadLo = 256;
+        conf.AheadHi = 512;
+        auto environment = NTable::NFwd::MakeEnv(conf, subset);
+        const auto& target = f.Locations.front();
+        auto index = NTable::CreateIndexIter(part.Get(), environment.Get(), {});
+        UNIT_ASSERT(index->Seek(0) == NTable::EReady::Page);
+        auto firstFetch = environment->GetFetch();
+        UNIT_ASSERT(firstFetch);
+        auto staleRequest = environment->MakeRequest(NBlockIO::EPriority::Bulk, std::move(firstFetch));
+        auto makeReply = [&](NActors::IEventBase& event) {
+            const auto& request = *CheckedCast<NSharedCache::TEvRequest*>(&event);
+            ui32 slot = 0;
+            while (slot < part->GetPageCollectionCount() &&
+                   part->GetPageCollection(slot)->Label() != request.PageCollection->Label()) {
+                ++slot;
+            }
+            UNIT_ASSERT(slot < part->GetPageCollectionCount());
+            auto reply = MakeHolder<NSharedCache::TEvResult>(request.PageCollection, NKikimrProto::OK, request.Cookie);
+            for (const auto& location : request.Pages) {
+                auto page = TSharedPageRef::MakePrivate(*f.Source->Store->GetPage(slot, location.Offset));
+                auto type = location.Type;
+                if (type == NTable::NPage::EPage::Undef) {
+                    const auto pageId = location.Offset.IsPageIndex()
+                                            ? location.Offset.AsPageIndex()
+                                            : f.Source->Store->ResolveByteOffset(slot, location.Offset.AsByteOffset());
+                    type = f.Source->Store->GetPageType(slot, pageId);
+                }
+                page.SetType(type);
+                reply->Pages.emplace_back(location.Offset, location.Size, std::move(page));
+            }
+            return reply;
+        };
+        auto stale = makeReply(*staleRequest);
+        UNIT_ASSERT(!environment->MayProgress());
+        UNIT_ASSERT(environment->Reset() == environment.Get());
+        index = NTable::CreateIndexIter(part.Get(), environment.Get(), {});
+        UNIT_ASSERT(environment->MayProgress());
+        const auto beforeStale = environment->Stats();
+        environment->Save(*stale);
+        UNIT_ASSERT(environment->MayProgress());
+        UNIT_ASSERT(environment->Stats() == beforeStale);
+
+        const TSharedData* page = nullptr;
+        for (ui32 attempt = 0; attempt < 32 && !page; ++attempt) {
+            if (index->Seek(0) == NTable::EReady::Data) {
+                UNIT_ASSERT(index->GetLocation().Offset == target.Offset);
+                page = environment->TryGetPage(part.Get(), target, {});
+            }
+            if (page) {
+                break;
+            }
+            while (auto fetch = environment->GetFetch()) {
+                auto request = environment->MakeRequest(NBlockIO::EPriority::Bulk, std::move(fetch));
+                auto reply = makeReply(*request);
+                environment->Save(*reply);
+            }
+        }
+        UNIT_ASSERT(page);
+        UNIT_ASSERT_VALUES_EQUAL(page->size(), target.Size);
+        UNIT_ASSERT(page->data() == f.Source->Store->GetPage(part->DataSlot({}), target.Offset)->data());
+        UNIT_ASSERT(environment->MayProgress());
+    }
+
+    Y_UNIT_TEST(ForwardLoaderAndProtocolOutliveForwardEnvironment) {
+        TReadFixture f;
+        NTable::TSubset subset(NTable::TEpoch::Max(), f.Scheme);
+        NTable::NFwd::TConf conf;
+        conf.AheadLo = 0;
+        conf.AheadHi = 0;
+        auto environment = NTable::NFwd::MakeEnv(conf, subset);
+        const auto* protocol = &environment->Protocol();
+        auto loader = environment->MakeLoaderEnvironment();
+        UNIT_ASSERT(&loader->Protocol() == protocol);
+        THolder<TPrivatePageCache> cache;
+        {
+            TPrivatePageCacheBackend backend(cache);
+            UNIT_ASSERT(&backend.Protocol() == protocol);
+        }
+        environment.Reset();
+        UNIT_ASSERT(protocol->EventKind(NSharedCache::EvResult) == EPageCacheEvent::Result);
+        auto fetch = NTable::TLoaderFetch{
+            .PageCollection = f.Part->GetPageCollectionRef(f.Part->DataSlot({})),
+            .Pages = f.Locations,
+        };
+        const auto* locations = fetch.Pages.data();
+        auto request = loader->MakeRequest(NBlockIO::EPriority::Fast, std::move(fetch), 91);
+        const auto& typed = *CheckedCast<NSharedCache::TEvRequest*>(request.Get());
+        UNIT_ASSERT(typed.Pages.data() == locations);
+        UNIT_ASSERT(typed.Pages == f.Locations);
+        UNIT_ASSERT_VALUES_EQUAL(typed.Cookie, 91);
+        UNIT_ASSERT(typed.Priority == NBlockIO::EPriority::Fast);
+        UNIT_ASSERT(!cache);
     }
 
     Y_UNIT_TEST(BackendClassifiesEventsAndBorrowsResultMetadata) {

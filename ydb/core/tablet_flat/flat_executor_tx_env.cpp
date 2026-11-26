@@ -1,6 +1,7 @@
 #include "flat_executor_tx_env.h"
 #include "flat_database.h"
 #include "flat_part_loader.h"
+#include "flat_fwd_env.h"
 #include "flat_writer_blocks.h"
 #include "shared_cache_pages.h"
 
@@ -358,3 +359,23 @@ namespace NTabletFlatExecutor {
 
 } // namespace NTabletFlatExecutor
 } // namespace NKikimr
+
+namespace NKikimr::NTable::NFwd {
+
+THolder<IEnv> MakeEnv(const TConf& conf, const TSubset& subset) {
+    return MakeHolder<TEnv>(conf, subset);
+}
+
+const NTabletFlatExecutor::IPageCacheProtocol& TEnv::Protocol() const noexcept {
+    return NTabletFlatExecutor::GetPrivatePageCacheProtocol();
+}
+
+THolder<NActors::IEventBase> TEnv::MakeRequest(NTabletFlatExecutor::NBlockIO::EPriority priority, TFetch fetch) const {
+    return Protocol().MakePageRequest(priority, std::move(fetch.PageCollection), std::move(fetch.Pages), fetch.Cookie);
+}
+
+THolder<IPartLoaderEnv> TEnv::MakeLoaderEnvironment() const {
+    return MakeHolder<TLoader::TLoaderEnv>(TVector<TIntrusivePtr<TLoader::TPageCollection>>{});
+}
+
+} // namespace NKikimr::NTable::NFwd

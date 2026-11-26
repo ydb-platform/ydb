@@ -5,12 +5,15 @@
 #include "flat_scan_eggs.h"
 #include "flat_scan_spent.h"
 #include "flat_bio_events.h"
-#include "flat_fwd_env.h"
+#include "flat_fwd_iface.h"
+#include "flat_fwd_conf.h"
+#include "flat_fwd_sieve.h"
 #include "util_fmt_abort.h"
 #include "util_fmt_logger.h"
 #include "util_fmt_desc.h"
 #include "shared_sausagecache.h"
 #include "flat_part_store.h"
+#include "flat_part_loader.h"
 #include "flat_load_blob_queue.h"
 
 #include <ydb/core/base/appdata.h>
@@ -38,7 +41,7 @@ namespace NOps {
         using TPartStore = NTable::TPartStore;
         using TColdPart = NTable::TColdPart;
         using TColdPartStore = NTable::TColdPartStore;
-        using TEnv = NTable::NFwd::TEnv;
+        using TEnv = NTable::NFwd::IEnv;
         using TSpent = NTable::TSpent;
         using IScan = NTable::IScan;
         using EScan = NTable::EScan;
@@ -130,10 +133,13 @@ namespace NOps {
     private:
         class TColdPartLoader : public ::NActors::TActorBootstrapped<TColdPartLoader> {
         public:
-            TColdPartLoader(TActorId owner, TIntrusiveConstPtr<TColdPartStore> part, EPriority readPriority)
+            TColdPartLoader(TActorId owner, TIntrusiveConstPtr<TColdPartStore> part, EPriority readPriority,
+                THolder<NTable::IPartLoaderEnv> environment)
                 : Owner(owner)
                 , Part(std::move(part))
                 , ReadPriority(readPriority)
+                , PageCacheProtocol(environment->Protocol())
+                , LoaderEnv(std::move(environment))
             { }
 
             void Bootstrap() {
@@ -186,7 +192,7 @@ namespace NOps {
                     .Opaque = Part->Opaque,
                     .Epoch = Part->Epoch,
                 };
-                Loader.emplace(std::move(parts));
+                Loader.emplace(std::move(LoaderEnv), std::move(parts));
                 Become(&TThis::StateLoadPart);
 
                 RunLoader();
@@ -194,7 +200,7 @@ namespace NOps {
 
             void RunLoader() {
                 if (auto fetch = Loader->Run({.PreloadIndex = false, .PreloadData = false})) {
-                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(ReadPriority, std::move(fetch.PageCollection), std::move(fetch.Pages)));
+                    Send(MakeSharedPageCacheId(), Loader->MakeRequest(ReadPriority, std::move(fetch)));
                     ++ReadsLeft;
                 }
 
@@ -205,15 +211,24 @@ namespace NOps {
                 }
             }
 
-            STRICT_STFUNC(StateLoadPart, {
-                sFunc(TEvents::TEvPoison, PassAway);
-                hFunc(NSharedCache::TEvResult, Handle);
-                hFunc(NBlockIO::TEvStat, Handle);
-            });
+            STFUNC(StateLoadPart) {
+                STFUNC_BODY(
+                    {
+                        sFunc(TEvents::TEvPoison, PassAway);
+                        hFunc(NBlockIO::TEvStat, Handle);
+                    },
+                    { HandlePageCacheResult(ev); });
+            }
 
-            void Handle(NSharedCache::TEvResult::TPtr& ev) {
-                auto* msg = ev->Get();
-                if (msg->Status != NKikimrProto::OK) {
+            void HandlePageCacheResult(TAutoPtr<NActors::IEventHandle>& ev) {
+                const ui32 etype = ev->GetTypeRewrite();
+                if (PageCacheProtocol.EventKind(etype) != EPageCacheEvent::Result) {
+                    STFUNC_STRICT_UNHANDLED_MSG_HANDLER;
+                    return;
+                }
+                auto& event = *ev->GetBase();
+                const auto msg = PageCacheProtocol.ReadResult(event);
+                if (msg.Status != NKikimrProto::OK) {
                     Send(Owner, new TEvPrivate::TEvPartFailed(Part->Label));
                     return PassAway();
                 }
@@ -222,8 +237,8 @@ namespace NOps {
                 --ReadsLeft;
 
                 Y_ENSURE(Loader);
-                Y_ENSURE(msg->Cookie == 0);
-                Loader->Save(*msg);
+                Y_ENSURE(msg.Cookie == 0);
+                Loader->Save(event);
 
                 if (ReadsLeft == 0) {
                     RunLoader();
@@ -236,7 +251,7 @@ namespace NOps {
             }
 
             void PassAway() override {
-                Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
+                Send(MakeSharedPageCacheId(), PageCacheProtocol.MakeUnregisterRequest());
                 TActorBootstrapped::PassAway();
             }
 
@@ -244,6 +259,8 @@ namespace NOps {
             TActorId Owner;
             TIntrusiveConstPtr<TColdPartStore> Part;
             EPriority ReadPriority;
+            const IPageCacheProtocol& PageCacheProtocol;
+            THolder<NTable::IPartLoaderEnv> LoaderEnv;
             TVector<NTable::TPageCollectionComponents> Components;
             TVector<NPageCollection::TLargeGlobIdRestoreState> PageCollectionLoaders;
             size_t ComponentsLeft = 0;
@@ -273,7 +290,7 @@ namespace NOps {
             conf.Edge = Conf.LargeEdge;
             conf.Tablet = Args.Tablet;
 
-            Cache = new TEnv(conf, Subset);
+            Cache = NTable::NFwd::MakeEnv(conf, Subset);
 
             BlobQueue.Config.TabletID = Args.Tablet;
 
@@ -318,7 +335,7 @@ namespace NOps {
                 // Create a loader for this new part
                 TIntrusiveConstPtr<TColdPartStore> partStore = dynamic_cast<TColdPartStore*>(const_cast<TColdPart*>(part.Get()));
                 Y_ENSURE(partStore, "Cannot load unsupported part " << NFmt::Do(*part));
-                ColdPartLoaders[label] = RegisterWithSameMailbox(new TColdPartLoader(SelfId(), std::move(partStore), Args.ReadPrio));
+                ColdPartLoaders[label] = RegisterWithSameMailbox(new TColdPartLoader(SelfId(), std::move(partStore), Args.ReadPrio, Cache->MakeLoaderEnvironment()));
             }
 
             // Return empty TPartView to signal loader is still in progress
@@ -367,18 +384,20 @@ namespace NOps {
             cFunc(TEvents::TEvBootstrap::EventType, Bootstrap);
         });
 
-        STRICT_STFUNC(StateWork, {
-            hFunc(TEvContinue, Handle);
-            hFunc(TEvPrivate::TEvLoadBlob, Handle);
-            hFunc(TEvBlobStorage::TEvGetResult, Handle);
-            hFunc(NBlockIO::TEvStat, Handle);
-            hFunc(TEvPrivate::TEvPartLoaded, Handle);
-            hFunc(TEvPrivate::TEvPartFailed, Handle);
-            hFunc(NSharedCache::TEvResult, Handle);
-            IgnoreFunc(NSharedCache::TEvUpdated);
-            cFunc(TEvents::TEvUndelivered::EventType, HandleUndelivered);
-            cFunc(TEvents::TEvPoison::EventType, HandlePoison);
-        });
+        STFUNC(StateWork) {
+            STFUNC_BODY(
+                {
+                    hFunc(TEvContinue, Handle);
+                    hFunc(TEvPrivate::TEvLoadBlob, Handle);
+                    hFunc(TEvBlobStorage::TEvGetResult, Handle);
+                    hFunc(NBlockIO::TEvStat, Handle);
+                    hFunc(TEvPrivate::TEvPartLoaded, Handle);
+                    hFunc(TEvPrivate::TEvPartFailed, Handle);
+                    cFunc(TEvents::TEvUndelivered::EventType, HandleUndelivered);
+                    cFunc(TEvents::TEvPoison::EventType, HandlePoison);
+                },
+                { HandlePageCacheEvent(ev); });
+        }
 
         void Bootstrap()
         {
@@ -502,7 +521,7 @@ namespace NOps {
                             << " cookie " << fetch.Cookie;
                     }
 
-                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, std::move(fetch.PageCollection), std::move(fetch.Pages), fetch.Cookie));
+                    Send(MakeSharedPageCacheId(), Cache->MakeRequest(Args.ReadPrio, std::move(fetch)));
                 }
 
                 if (ready == NTable::EReady::Page)
@@ -615,9 +634,19 @@ namespace NOps {
             Terminate(EStatus::StorageError);
         }
 
-        void Handle(NSharedCache::TEvResult::TPtr& ev)
+        void HandlePageCacheEvent(TAutoPtr<NActors::IEventHandle>& ev)
         {
-            auto& msg = *ev->Get();
+            const ui32 etype = ev->GetTypeRewrite();
+            const auto kind = Cache->Protocol().EventKind(etype);
+            if (kind == EPageCacheEvent::Updated) {
+                return;
+            }
+            if (kind != EPageCacheEvent::Result) {
+                STFUNC_STRICT_UNHANDLED_MSG_HANDLER;
+                return;
+            }
+            auto& event = *ev->GetBase();
+            const auto msg = Cache->Protocol().ReadResult(event);
 
             auto lvl = msg.Status ? ELnLev::Error : ELnLev::Debug;
 
@@ -632,7 +661,7 @@ namespace NOps {
                 return Terminate(EStatus::StorageError);
             }
 
-            Cache->Save(std::move(msg.PageCollection), msg.Cookie, std::move(msg.Pages));
+            Cache->Save(event);
 
             if (MayProgress()) {
                 Spent->Alter(true /* resource available again */);
@@ -691,7 +720,7 @@ namespace NOps {
                 Send(pr.second, new TEvents::TEvPoison);
             }
 
-            Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
+            Send(MakeSharedPageCacheId(), Cache->Protocol().MakeUnregisterRequest());
             PassAway();
         }
 
@@ -746,7 +775,7 @@ namespace NOps {
         TActorId Owner;
 
         THolder<TScanSnapshot> Snapshot;
-        TAutoPtr<TEnv> Cache;       /* NFwd scan read ahead cache   */
+        THolder<TEnv> Cache;        /* NFwd scan read ahead cache   */
         TAutoPtr<TSpent> Spent;     /* NBlockIO read blockage stats */
         ui64 Depth = 0;
         ui64 Resets = 0;

@@ -26,16 +26,6 @@ namespace NFwd {
     using IPageCollection = NPageCollection::IPageCollection;
     using TGroupId = NPage::TGroupId;
 
-    struct TFetch : TMoveOnly {
-        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
-        TVector<NTable::NPage::TPageLocation> Pages;
-        ui64 Cookie;
-
-        explicit operator bool() const {
-            return bool(Pages);
-        }
-    };
-
     class TPartGroupLoadingQueue : public IPageLoadingQueue, public TIntrusiveListItem<TPartGroupLoadingQueue> {
     public:
         TPartGroupLoadingQueue(ui32 partIndex, ui64 cookie,
@@ -92,7 +82,7 @@ namespace NFwd {
         TFetch IndexFetch;
     };
 
-    struct TEnv : public IPages {
+    struct TEnv : public IEnv {
         struct TGroupPages {
             THolder<IPageLoadingLogic> PageLoadingLogic;
             TIntrusiveConstPtr<IPageCollection> IndexPageCollection;
@@ -115,7 +105,17 @@ namespace NFwd {
                 AddPartView(one);
         }
 
-        void AddCold(const TPartView& partView)
+        const NTabletFlatExecutor::IPageCacheProtocol& Protocol() const noexcept override;
+        THolder<NActors::IEventBase> MakeRequest(
+            NTabletFlatExecutor::NBlockIO::EPriority priority, TFetch fetch) const override;
+        THolder<IPartLoaderEnv> MakeLoaderEnvironment() const override;
+
+        void Save(NActors::IEventBase& event) override {
+            auto& result = *CheckedCast<NSharedCache::TEvResult*>(&event);
+            SavePages(result.PageCollection, result.Cookie, std::move(result.Pages));
+        }
+
+        void AddCold(const TPartView& partView) override
         {
             auto r = ColdParts.insert(partView.Part.Get());
             Y_ENSURE(r.second, "Cannot add a duplicate cold part");
@@ -123,7 +123,7 @@ namespace NFwd {
             AddPartView(partView);
         }
 
-        bool MayProgress() const
+        bool MayProgress() const override
         {
             return Pending == 0;
         }
@@ -173,7 +173,8 @@ namespace NFwd {
             return Get(queue, TPageOffset::FromPageIndex(static_cast<ui32>(ref)), EPage::Opaque);
         }
 
-        void Save(TIntrusiveConstPtr<IPageCollection> pageCollection, ui64 cookie, TVector<NSharedCache::TEvResult::TLoaded> pages)
+    private:
+        void SavePages(TIntrusiveConstPtr<IPageCollection> pageCollection, ui64 cookie, TVector<NSharedCache::TEvResult::TLoaded> pages)
         {
             const ui32 epoch = ui32(cookie) - Salt;
             if (epoch < Epoch) {
@@ -202,7 +203,8 @@ namespace NFwd {
             }
         }
 
-        IPages* Reset()
+    public:
+        IPages* Reset() override
         {
             /* Current version of cache works only on forward iterations over
                 parts and cannot handle backward jumps. This call is temporary
@@ -227,7 +229,7 @@ namespace NFwd {
             return this;
         }
 
-        TStat Stats() const
+        TStat Stats() const override
         {
             auto aggr = [](auto &&stat, const TPartGroupLoadingQueue &q) {
                 return stat += q->Stat;
@@ -236,7 +238,7 @@ namespace NFwd {
             return std::accumulate(GroupQueues.begin(), GroupQueues.end(), Total, aggr);
         }
 
-        TFetch GetFetch()
+        TFetch GetFetch() override
         {
             while (FetchingQueues) {
                 auto queue = FetchingQueues.Front();
@@ -260,7 +262,7 @@ namespace NFwd {
             return {};
         }
 
-        TAutoPtr<TSeen> GrabTraces()
+        TAutoPtr<TSeen> GrabTraces() override
         {
             TDeque<TSieve> sieves(PartGroupQueues.size() - ColdParts.size() + 1);
 

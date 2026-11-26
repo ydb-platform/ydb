@@ -108,10 +108,8 @@ ENDPOINT_SPECS = [
     {'path': '/jquery.tablesorter.js'},
     {'path': '/labeledcounters'},
     {'path': '/login'},
-    {'path': '/memory/fragmentation'},
-    {'path': '/memory/heap'},
-    {'path': '/memory/peakheap'},
     {'path': '/memory/statistics'},
+    # TCMalloc-specific pages are covered by test_memory in non-sanitized builds.
     {'path': '/monitoring/'},
     {
         'path_factory': lambda cluster: f'/node/{cluster.nodes[1].node_id}/monitoring',
@@ -282,11 +280,11 @@ def _request_status(method, base_url, path, token):
     return response.status_code
 
 
-def _collect_endpoints(cluster):
+def _collect_endpoints(cluster, specs=ENDPOINT_SPECS):
     node = cluster.nodes[1]
     base_url = f'https://{node.host}:{node.mon_port}'
     endpoint_specs = []
-    for spec in ENDPOINT_SPECS:
+    for spec in specs:
         methods = _methods_for_spec(spec)
         for base_path, query_string, full_path in _requests_for_spec(cluster, spec):
             endpoint_specs.append((base_path, query_string, full_path, methods))
@@ -321,13 +319,6 @@ def _canonize(name, results):
     return yatest.common.canonical_file(out_path, local=True, universal_lines=True)
 
 
-def _run_mon_endpoints_auth_test(canon_case_id, cluster):
-    return _canonize(
-        f'mon_endpoints_auth-{canon_case_id}',
-        _collect_endpoints(cluster),
-    )
-
-
 _MON_ENDPOINTS_AUTH_CASES = (
     pytest.param('enforce_user_token_enabled_no_schema_grants', id='enforce_user_token_enabled-no_schema_grants'),
     pytest.param('enforce_user_token_enabled_with_schema_grants', id='enforce_user_token_enabled-with_schema_grants'),
@@ -352,4 +343,27 @@ _MON_ENDPOINTS_AUTH_CASES = (
 @pytest.mark.parametrize('case_name', _MON_ENDPOINTS_AUTH_CASES)
 def test(case_name, request):
     cluster = request.getfixturevalue(f'ydb_cluster_mon_endpoints_auth_{case_name}')
-    return _run_mon_endpoints_auth_test(request.node.callspec.id, cluster)
+    return _canonize(
+        f'mon_endpoints_auth-{request.node.callspec.id}',
+        _collect_endpoints(cluster),
+    )
+
+
+@pytest.mark.skipif(
+    bool(yatest.common.context.sanitize),
+    reason='TCMalloc memory endpoints are unavailable in sanitized builds',
+)
+@pytest.mark.parametrize('case_name', _MON_ENDPOINTS_AUTH_CASES)
+def test_memory(case_name, request):
+    cluster = request.getfixturevalue(f'ydb_cluster_mon_endpoints_auth_{case_name}')
+    return _canonize(
+        f'memory_endpoints_auth-{request.node.callspec.id}',
+        _collect_endpoints(
+            cluster,
+            [
+                {'path': '/memory/fragmentation'},
+                {'path': '/memory/heap'},
+                {'path': '/memory/peakheap'},
+            ],
+        ),
+    )

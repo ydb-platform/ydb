@@ -139,6 +139,7 @@ class TController::TTxIndexBuild: public TTxBase {
             NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
         );
         Self->AssignedTxIds.emplace(end, txId);
+        Self->StartWriteTx(db, end, txId);
         return txId;
     }
 
@@ -216,7 +217,7 @@ class TController::TTxIndexBuild: public TTxBase {
                     auto assigned = Self->AssignedTxIds.lower_bound(end);
                     if (assigned != Self->AssignedTxIds.end()) {
                         txId = assigned->second;
-                        Self->WriteTxIntervals.AddInterval(txId, end);
+                        Self->AddWriteTxInterval(db, assigned->first, txId, end);
                     } else if (CanReuseLastGlobalAssignment(join)) {
                         auto node = Self->AssignedTxIds.extract(Self->AssignedTxIds.rbegin()->first);
                         db.Table<Schema::TxIds>().Key(node.key().Step, node.key().TxId).Delete();
@@ -225,6 +226,7 @@ class TController::TTxIndexBuild: public TTxBase {
                         db.Table<Schema::TxIds>().Key(end.Step, end.TxId).Update(
                             NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
                         );
+                        Self->MoveWriteTx(db, end, txId);
                         Self->AssignedTxIds.insert(std::move(node));
                     } else if (!Self->AllocatedTxIds.empty() && Self->AssignedTxIds.size() < MaxOpenTxIds + 1) {
                         txId = Allocate(end, db);

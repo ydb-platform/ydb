@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "write_tx_intervals_repository.h"
 
 #include <variant>
 
@@ -61,6 +62,23 @@ class TController::TTxAssignTxId: public TTxBase {
         return result;
     }
 
+    bool CanServeInterval(const TRowVersion& key, ui64 writeTxId, const TRowVersion& intervalEnd) const {
+        return key == intervalEnd
+            || !Self->IndexBuilds.empty()
+            || Self->WriteTxIntervals.CanReuse(writeTxId, intervalEnd);
+    }
+
+    ui64 Allocate(const TRowVersion& end, NIceDb::TNiceDb& db) {
+        const ui64 txId = Self->AllocatedTxIds.front();
+        Self->AllocatedTxIds.pop_front();
+        db.Table<Schema::TxIds>().Key(end.Step, end.TxId).Update(
+            NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
+        );
+        Self->AssignedTxIds.emplace(end, txId);
+        Self->StartWriteTx(db, end, txId);
+        return txId;
+    }
+
 public:
     explicit TTxAssignTxId(TController* self)
         : TTxBase("TxAssignTxId", self)
@@ -91,9 +109,8 @@ public:
 
         auto result = Process([&](const TRowVersion& version) -> TAssignResult {
             auto it = Self->AssignedTxIds.lower_bound(version);
-            if (it != Self->AssignedTxIds.end()
-                    && (!Self->IndexBuilds.empty() || Self->WriteTxIntervals.CanReuse(it->second, version))) {
-                Self->WriteTxIntervals.AddInterval(it->second, version);
+            if (it != Self->AssignedTxIds.end() && CanServeInterval(it->first, it->second, version)) {
+                Self->AddWriteTxInterval(db, it->first, it->second, version);
                 return it->second;
             }
 
@@ -107,16 +124,7 @@ public:
                 return EError::TxIdsExhausted;
             }
 
-            const ui64 txId = Self->AllocatedTxIds.front();
-            Self->AllocatedTxIds.pop_front();
-
-            db.Table<Schema::TxIds>().Key(version.Step, version.TxId).Update(
-                NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
-            );
-            it = Self->AssignedTxIds.emplace(version, txId).first;
-            Self->WriteTxIntervals.Start(txId, version);
-
-            return txId;
+            return Allocate(version, db);
         });
 
         if (const auto* x = std::get_if<EError>(&result); x && *x == EError::TxIdsExhausted) {
@@ -145,12 +153,7 @@ public:
                     return true;
                 }
 
-                const auto txId = Self->AllocatedTxIds.front();
-                Self->AllocatedTxIds.pop_front();
-                Self->AssignedTxIds.emplace(it->first, txId);
-                db.Table<Schema::TxIds>().Key(it->first.Step, it->first.TxId).Update(
-                    NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
-                );
+                Allocate(it->first, db);
             } else {
                 auto nh = Self->AssignedTxIds.extract(Self->AssignedTxIds.rbegin()->first);
                 db.Table<Schema::TxIds>().Key(nh.key().Step, nh.key().TxId).Delete();
@@ -159,6 +162,7 @@ public:
                 db.Table<Schema::TxIds>().Key(nh.key().Step, nh.key().TxId).Update(
                     NIceDb::TUpdate<Schema::TxIds::WriteTxId>(nh.mapped())
                 );
+                Self->MoveWriteTx(db, nh.key(), nh.mapped());
                 Self->AssignedTxIds.insert(std::move(nh));
             }
         }
@@ -166,7 +170,7 @@ public:
         result = Process([&](const TRowVersion& version) -> TAssignResult {
             auto it = Self->AssignedTxIds.lower_bound(version);
             Y_ABORT_UNLESS(it != Self->AssignedTxIds.end());
-            Self->WriteTxIntervals.AddInterval(it->second, version);
+            Self->AddWriteTxInterval(db, it->first, it->second, version);
             return it->second;
         });
 
@@ -214,6 +218,23 @@ void TController::AllocateTxIds(const TActorContext& ctx) {
 
     AllocateTxIdInFlight = true;
     ctx.Send(TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(MaxOpenTxIds));
+}
+
+void TController::StartWriteTx(NIceDb::TNiceDb& db, const TRowVersion& key, ui64 writeTxId) {
+    WriteTxIntervals.Start(writeTxId, key);
+    TWriteTxIntervalsRepository::SaveFirstIntervalEnd(db, key, writeTxId, WriteTxIntervals);
+}
+
+void TController::MoveWriteTx(NIceDb::TNiceDb& db, const TRowVersion& key, ui64 writeTxId) {
+    TWriteTxIntervalsRepository::SaveFirstIntervalEnd(db, key, writeTxId, WriteTxIntervals);
+}
+
+void TController::AddWriteTxInterval(NIceDb::TNiceDb& db, const TRowVersion& key, ui64 writeTxId,
+        const TRowVersion& intervalEnd)
+{
+    if (WriteTxIntervals.AddInterval(writeTxId, intervalEnd)) {
+        TWriteTxIntervalsRepository::SaveFirstIntervalEnd(db, key, writeTxId, WriteTxIntervals);
+    }
 }
 
 void TController::RunTxAssignTxId(const TActorContext& ctx) {

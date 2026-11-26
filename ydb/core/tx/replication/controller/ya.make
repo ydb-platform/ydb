@@ -83,6 +83,7 @@ SRCS(
     tx_source_offset_report.cpp
     worker_lag_expiry_queue.cpp
     write_tx_intervals.cpp
+    write_tx_intervals_repository.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(replication.h)

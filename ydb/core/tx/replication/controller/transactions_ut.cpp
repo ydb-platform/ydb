@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
         UNIT_ASSERT_VALUES_EQUAL(env.SdkTransactions(true).value().Assigned.size(), 0);
     }
 
-    Y_UNIT_TEST(ShouldReuseExtendedTxIdForItsFirstIntervalAfterEarlierCommit) {
+    void CheckExtendedTxIdReusedForItsFirstInterval(bool restart) {
         // given
         TTransactionsEnv env;
         const auto first = env.Assign(1);
@@ -287,12 +287,39 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
         env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
         env.CommitStatus(first, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
         UNIT_ASSERT_VALUES_EQUAL(env.Count(), 4);
+        if (restart) {
+            env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
+            env.Handshake();
+        }
 
         // when
         const auto repeated = env.Assign(49999);
 
         // then
         UNIT_ASSERT_VALUES_EQUAL(repeated, last);
+    }
+
+    Y_UNIT_TEST(ShouldReuseExtendedTxIdForItsFirstIntervalAfterEarlierCommit) {
+        CheckExtendedTxIdReusedForItsFirstInterval(false);
+    }
+
+    Y_UNIT_TEST(ShouldReuseExtendedTxIdForItsFirstIntervalAfterRestart) {
+        CheckExtendedTxIdReusedForItsFirstInterval(true);
+    }
+
+    Y_UNIT_TEST(ShouldAllocateFreshTxIdForEarlierIntervalAfterRestart) {
+        // given
+        TTransactionsEnv env;
+        env.Assign(1);
+        const auto later = env.Assign(29999);
+        env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
+        env.Handshake();
+
+        // when
+        const auto earlier = env.Assign(19999);
+
+        // then
+        UNIT_ASSERT_VALUES_UNEQUAL(earlier, later);
     }
 
     Y_UNIT_TEST(ShouldReuseLaterTxIdForMergedIntervalAfterEarlierCommit) {

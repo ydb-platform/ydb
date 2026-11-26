@@ -573,6 +573,7 @@ class TLocalTableWriter
                 } else {
                     versionsWithoutTxId.insert(version);
                     PendingTxId.insert(record->GetOrder());
+                    PendingTxIdVersions.emplace(version, record->GetOrder());
                 }
             } else {
                 records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
@@ -615,19 +616,7 @@ class TLocalTableWriter
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
         if (IndexBuild) {
             for (const auto& assignment : ev->Get()->Record.GetVersionTxIds()) {
-                const auto begin = TRowVersion::FromProto(assignment.GetBegin());
-                const auto end = TRowVersion::FromProto(assignment.GetVersion());
-                for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
-                    auto& record = PendingRecords.at(*it);
-                    const auto version = TRowVersion(record->GetStep(), record->GetTxId());
-                    if (begin <= version && version < end) {
-                        record->RewriteTxId(assignment.GetTxId());
-                        BlockedRecords.insert(*it);
-                        it = PendingTxId.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
+                RewritePendingTxIds(assignment);
             }
             if (PendingTxId.empty()) {
                 // Replies can cross in flight at C. Preserve topic order by
@@ -646,22 +635,8 @@ class TLocalTableWriter
         }
 
         for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
-            const auto begin = TRowVersion::FromProto(kv.GetBegin());
-            const auto version = TRowVersion::FromProto(kv.GetVersion());
-            TxIds.emplace(version, kv);
-
-            for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
-                Y_ABORT_UNLESS(PendingRecords.contains(*it));
-                auto& record = PendingRecords.at(*it);
-                const auto recordVersion = TRowVersion(record->GetStep(), record->GetTxId());
-                if (begin <= recordVersion && recordVersion < version) {
-                    record->RewriteTxId(kv.GetTxId());
-                    BlockedRecords.insert(*it);
-                    it = PendingTxId.erase(it);
-                } else {
-                    ++it;
-                }
-            }
+            TxIds.emplace(TRowVersion::FromProto(kv.GetVersion()), kv);
+            RewritePendingTxIds(kv);
         }
 
         for (auto it = BlockedRecords.begin(); it != BlockedRecords.end()
@@ -673,6 +648,18 @@ class TLocalTableWriter
 
         if (records) {
             EnqueueRecords(std::move(records));
+        }
+    }
+
+    void RewritePendingTxIds(const NKikimrReplication::TEvTxIdResult::TVersionTxId& assignment) {
+        const auto end = TRowVersion::FromProto(assignment.GetVersion());
+        auto it = PendingTxIdVersions.lower_bound(TRowVersion::FromProto(assignment.GetBegin()));
+        while (it != PendingTxIdVersions.end() && it->first < end) {
+            Y_ABORT_UNLESS(PendingRecords.contains(it->second));
+            PendingRecords.at(it->second)->RewriteTxId(assignment.GetTxId());
+            BlockedRecords.insert(it->second);
+            PendingTxId.erase(it->second);
+            it = PendingTxIdVersions.erase(it);
         }
     }
 
@@ -879,6 +866,7 @@ private:
     THashMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
     TMap<TRowVersion, NKikimrReplication::TEvTxIdResult::TVersionTxId> TxIds; // key is non-inclusive right hand edge
     TSet<ui64> PendingTxId;
+    TMultiMap<TRowVersion, ui64> PendingTxIdVersions;
     TSet<ui64> BlockedRecords;
     TRowVersion PendingHeartbeat = TRowVersion::Min();
     THolder<TEvWorker::TEvSchemaChange> PendingSchemaChange;

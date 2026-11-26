@@ -2,6 +2,7 @@
 #include "target_table.h"
 #include "target_topic.h"
 #include "target_transfer.h"
+#include "write_tx_intervals_repository.h"
 
 #include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
 
@@ -344,6 +345,7 @@ class TController::TTxInit: public TTxBase {
             && LoadTargets(db)
             && LoadSrcStreams(db)
             && LoadTxIds(db)
+            && TWriteTxIntervalsRepository::Load(db, Self->WriteTxIntervals)
             && LoadWorkers(db)
             && LoadSchemaBarrierWorkers(db)
             && LoadIndexBuildWorkers(db)

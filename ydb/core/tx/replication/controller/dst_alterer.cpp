@@ -464,6 +464,10 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void PassAway() override {
+        if (PipeCache) {
+            Send(PipeCache, new TEvPipeCache::TEvUnlink(SchemeShardId));
+        }
+
         if (TrimVerifier) {
             Send(TrimVerifier, new TEvents::TEvPoison());
         }

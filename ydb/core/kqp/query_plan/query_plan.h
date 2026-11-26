@@ -24,8 +24,10 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, const TString co
  */
 TString AddExecStatsToTxPlan(const TString& txPlan, const NYql::NDqProto::TDqExecutionStats& stats, bool newRboEnabled);
 
-// Select the serializer from each transaction plan, including executions that
-// fell back to the legacy optimizer or belong to separate statement parts.
+// Select the serializer from the actual transaction plan format, which may
+// differ from the configured optimizer after fallback. Callers supply plans
+// from one compiled query (the data-loading part for split CTAS); scripting
+// serializes each subquery separately before assembling the script plan.
 TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "");
 
 TString SerializeScriptPlan(const TVector<const TString>& queryPlans);

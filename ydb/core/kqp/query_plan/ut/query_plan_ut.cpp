@@ -195,6 +195,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPlanSerialization) {
         second["Plans"][0]["Plans"][0]["Stats"]["Tasks"] = 3;
 
         NKqpProto::TKqpStatsQuery stats;
+        stats.AddExecutions()->AddTxPlansWithStats("");
         stats.AddExecutions()->AddTxPlansWithStats(first.GetStringRobust());
         stats.AddExecutions()->AddTxPlansWithStats("");
         stats.AddExecutions()->AddTxPlansWithStats(second.GetStringRobust());
@@ -205,51 +206,16 @@ Y_UNIT_TEST_SUITE(KqpQueryPlanSerialization) {
         UNIT_ASSERT_VALUES_EQUAL(stage["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 3);
     }
 
-    Y_UNIT_TEST(AnalyzePreservesIndependentRboStatements) {
-        auto first = MakeRboPlan("first");
-        auto second = MakeRboPlan("second"); // Same operators, different compilation.
-        first["Plans"][0]["Stats"]["Tasks"] = 2;
-        second["Plans"][0]["Stats"]["Tasks"] = 3;
-        NKqpProto::TKqpStatsQuery stats;
-        stats.AddExecutions()->AddTxPlansWithStats(first.GetStringRobust());
-        stats.AddExecutions()->AddTxPlansWithStats(second.GetStringRobust());
-        const auto plan = ParsePlan(SerializeAnalyzePlan(stats));
-        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"].GetArraySafe().size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][1]["Stats"]["Tasks"].GetIntegerSafe(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(plan["SimplifiedPlan"]["Plans"].GetArraySafe().size(), 2);
-    }
-
-    Y_UNIT_TEST_TWIN(AnalyzePreservesMixedOptimizerStatements, RboFirst) {
-        auto rbo = MakeRboPlan("rbo");
-        rbo["Plans"][0]["Stats"]["Tasks"] = 4;
-        rbo["SimplifiedPlan"]["OptimizerStats"]["CBOTreesOptimized"] = 1;
-        NKqpProto::TKqpStatsQuery stats;
-        stats.AddExecutions()->AddTxPlansWithStats(RboFirst ? rbo.GetStringRobust() : LegacyTxPlan);
-        stats.AddExecutions()->AddTxPlansWithStats(RboFirst ? LegacyTxPlan : rbo.GetStringRobust());
-        const auto plan = ParsePlan(SerializeAnalyzePlan(stats, "pool"));
-        const auto& plans = plan["Plan"]["Plans"].GetArraySafe();
-        UNIT_ASSERT_VALUES_EQUAL(plans.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(plans[RboFirst ? 1 : 0]["Stats"]["Tasks"].GetIntegerSafe(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(plans[RboFirst ? 0 : 1]["Stats"]["Tasks"].GetIntegerSafe(), 2);
-        const auto& simplified = plan["SimplifiedPlan"]["Plans"].GetArraySafe();
-        UNIT_ASSERT_VALUES_EQUAL(simplified.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(simplified[RboFirst ? 1 : 0]["OptimizerStats"]["CBOTreesOptimized"].GetIntegerSafe(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Stats"]["ResourcePoolId"].GetStringSafe(), "pool");
-    }
-
-    Y_UNIT_TEST(ScriptPreservesSerializedSimplifiedPlans) {
+    Y_UNIT_TEST_TWIN(ScriptPreservesSerializedSimplifiedPlans, NewRbo) {
         NKqpProto::TKqpStatsQuery stats;
         auto rbo = MakeRboPlan("rbo");
         rbo["SimplifiedPlan"]["OptimizerStats"]["CBOTreesOptimized"] = 1;
         stats.AddExecutions()->AddTxPlansWithStats(rbo.GetStringRobust());
-        const auto rboPlan = SerializeAnalyzePlan(stats);
-        const auto legacyPlan = SerializeTxPlans({LegacyTxPlan});
-        const auto script = ParsePlan(SerializeScriptPlan({legacyPlan, rboPlan}));
+        const auto queryPlan = NewRbo ? SerializeAnalyzePlan(stats) : SerializeTxPlans({LegacyTxPlan});
+        const auto script = ParsePlan(SerializeScriptPlan({queryPlan}));
         const auto& queries = script["queries"].GetArraySafe();
-        UNIT_ASSERT_VALUES_EQUAL(queries.size(), 2);
-        UNIT_ASSERT(queries[0]["SimplifiedPlan"] == ParsePlan(rboPlan)["SimplifiedPlan"]);
-        UNIT_ASSERT(queries[1]["SimplifiedPlan"] == ParsePlan(legacyPlan)["SimplifiedPlan"]);
+        UNIT_ASSERT_VALUES_EQUAL(queries.size(), 1);
+        UNIT_ASSERT(queries[0]["SimplifiedPlan"] == ParsePlan(queryPlan)["SimplifiedPlan"]);
     }
 
     Y_UNIT_TEST(ScriptBuildsMissingLegacySimplifiedPlan) {

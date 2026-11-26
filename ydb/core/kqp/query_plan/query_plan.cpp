@@ -1317,36 +1317,28 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 }
 
 TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId) {
-    struct TPlanGroup {
-        bool IsRbo;
-        NJson::TJsonValue Identity;
-        TVector<const TString> TxPlans;
-    };
-    TVector<TPlanGroup> groups;
+    TVector<const TString> txPlans;
     for (const auto& execStats: queryStats.GetExecutions()) {
         for (const auto& txPlan: execStats.GetTxPlansWithStats()) {
-            if (txPlan.empty()) {
-                continue;
+            if (!txPlan.empty()) {
+                txPlans.push_back(txPlan);
             }
-            NJson::TJsonValue plan;
-            NJson::ReadJsonTree(txPlan, &plan, true);
-            // RBO attaches its simplified query plan to every physical
-            // transaction. Legacy transaction plans only contain execution
-            // nodes; their simplified plan is built when assembling the query.
-            const bool isRbo = plan.Has("SimplifiedPlan");
-            if (isRbo) {
-                // Merge stage statistics only for copies of the same query
-                // plan. A split statement can contain independently compiled
-                // queries, including a mixture of RBO and legacy plans.
-                ModifyPlan(plan, [](NJson::TJsonValue& node) {
-                    node.EraseValue("Stats");
-                });
-            }
-            if (groups.empty() || groups.back().IsRbo != isRbo
-                || (isRbo && groups.back().Identity != plan)) {
-                groups.push_back({isRbo, std::move(plan), {}});
-            }
-            groups.back().TxPlans.push_back(txPlan);
+        }
+    }
+
+    if (!txPlans.empty()) {
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(txPlans.front(), &plan, true);
+        // Fallback retries one compilation request, not the entire client
+        // request. Ordinary queries supply plans from that compilation;
+        // scripting serializes each subquery separately, and split CTAS
+        // contributes execution plans only from its data-loading part.
+        // The first nonempty plan therefore identifies the format here,
+        // independently of the session or last statement's optimizer flag.
+        // RBO transaction plans carry SimplifiedPlan; legacy plans acquire
+        // it when the transaction plans are assembled into a query plan.
+        if (plan.Has("SimplifiedPlan")) {
+            return SerializeRBOAnalyzePlan(txPlans, queryStats, poolId);
         }
     }
 
@@ -1372,28 +1364,7 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const 
     }
     writer.EndObject();
 
-    const auto serializeGroup = [&](const TPlanGroup& group) {
-        return group.IsRbo
-            ? SerializeRBOAnalyzePlan(group.TxPlans, queryStats, poolId)
-            : SerializeTxPlans(group.TxPlans, "", writer.Str());
-    };
-    if (groups.size() == 1) {
-        return serializeGroup(groups.front());
-    }
-
-    NJson::TJsonValue result;
-    NJson::ReadJsonTree(SerializeTxPlans({}, "", writer.Str()), &result, true);
-    // Preserve each serializer's simplified plan. Running the legacy
-    // simplifier over RBO operators loses their metadata and statistics.
-    for (auto group = groups.rbegin(); group != groups.rend(); ++group) {
-        NJson::TJsonValue plan;
-        NJson::ReadJsonTree(serializeGroup(*group), &plan, true);
-        for (const auto& node : plan["Plan"]["Plans"].GetArraySafe()) {
-            result["Plan"]["Plans"].AppendValue(node);
-        }
-        result["SimplifiedPlan"]["Plans"].AppendValue(plan["SimplifiedPlan"]);
-    }
-    return result.GetStringRobust();
+    return SerializeTxPlans(txPlans, "", writer.Str());
 }
 
 TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {

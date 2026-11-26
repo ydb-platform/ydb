@@ -1227,8 +1227,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
             info.ResetForcedStatus();
 
-            EMaintenanceStatus::E target = EMaintenanceStatus::NOT_SET;
-
+            bool needsMaintenanceStatus = false;
             if (it->second.HasFaultyMarker()) {
                 switch (Config.EvictVDisksStatus) {
                     case EEvictVDisksStatus::Faulty:
@@ -1236,21 +1235,22 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                         info.SetForcedStatus(EPDiskStatus::FAULTY);
                         break;
                     case EEvictVDisksStatus::Maintenance:
-                        target = EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
+                        needsMaintenanceStatus = true;
                         break;
                     case EEvictVDisksStatus::Disabled:
                         break;
                 }
-            } else if (Config.EvictVDisksStatus == EEvictVDisksStatus::Maintenance) {
-                // No FAULTY marker present, but it might have been earlier.
-                if (info.GetTargetMaintenanceStatus() == EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED) {
-                    // Previously we've set LONG_TERM_MAINTENANCE_PLANNED because of the EEvictVDisksStatus::Maintenance.
-                    // Set to NO_REQUEST to remove it.
-                    target = EMaintenanceStatus::NO_REQUEST;
-                }
             }
-                        
-            info.SetTargetMaintenanceStatus(target);
+
+            const bool maintenanceWasRequested = info.GetTargetMaintenanceStatus() == EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
+            const bool maintenanceClearPending = info.InFlightToBscMaintenanceStatus == EMaintenanceStatus::NO_REQUEST;
+            auto newTargetMaintenance = EMaintenanceStatus::NOT_SET;
+            if (needsMaintenanceStatus) {
+                newTargetMaintenance = EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
+            } else if (maintenanceWasRequested || maintenanceClearPending) {
+                newTargetMaintenance = EMaintenanceStatus::NO_REQUEST;
+            }
+            info.SetTargetMaintenanceStatus(newTargetMaintenance);
 
             all.AddPDisk(id, hasGoodState);
 
@@ -1462,8 +1462,8 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             EMaintenanceStatus::E maintenanceStatus = info->GetMaintenanceStatus();
             if (maintenanceStatus != EMaintenanceStatus::NOT_SET && maintenanceStatus != info->BscMaintenanceStatus) {
                 command.SetMaintenanceStatus(maintenanceStatus);
-                info->InFlightToBscMaintenanceStatus = maintenanceStatus;
             }
+            info->InFlightToBscMaintenanceStatus = command.GetMaintenanceStatus();
         }
         request->Record.MutableRequest()->SetIgnoreDisintegratedGroupsChecks(true);
 

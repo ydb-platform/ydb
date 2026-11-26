@@ -123,6 +123,7 @@ namespace NKikimr::NTabletFlatExecutor {
                 total.Parts += stats.Parts;
                 total.HiddenRows += stats.HiddenRows;
                 total.HiddenDrops += stats.HiddenDrops;
+                total.RetainedErases += stats.RetainedErases;
 
                 auto parts = States[i].Bundle->Results();
                 Y_ENSURE(stats.Parts == parts.size());

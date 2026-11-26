@@ -482,6 +482,124 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
         UNIT_ASSERT_VALUES_EQUAL(strategy.GetLastFinishedForcedCompactionTs(), TInstant::Seconds(60));
     }
 
+    Y_UNIT_TEST(RetainedEraseDoesNotRepeatForcedCompaction) {
+        TSimpleBackend backend;
+        TSimpleBroker broker;
+        TSimpleLogger logger;
+        TSimpleTime time;
+        const TRowVersion snapshot(2, 1);
+        const TRowVersion erased(3, 1);
+        constexpr ui64 keys = 128;
+        {
+            auto db = backend.Begin();
+            db.Materialize<Schema>();
+            TCompactionPolicy policy;
+            // Keep byte-based reclamation observable despite part metadata.
+            policy.DroppedRowsPercentToCompact = 1;
+            policy.Generations.emplace_back(10 * 1024 * 1024, 2, 10, 100 * 1024 * 1024, "compact_gen1", true);
+            policy.Generations.emplace_back(100 * 1024 * 1024, 2, 10, 200 * 1024 * 1024, "compact_gen2", true);
+            policy.Generations.emplace_back(200 * 1024 * 1024, 2, 10, 200 * 1024 * 1024, "compact_gen3", true);
+            for (auto& gen : policy.Generations) {
+                gen.ExtraCompactionPercent = 0;
+                gen.ExtraCompactionMinSize = 0;
+                gen.ExtraCompactionExpPercent = 0;
+                gen.ExtraCompactionExpMaxSize = 0;
+            }
+            backend.DB.Alter().SetCompactionPolicy(Table, policy);
+            backend.Commit();
+        }
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, &logger, "suffix");
+        strategy.Start({ });
+        {
+            auto db = backend.Begin();
+            db.Table<Schema::Data>().Key(0).UpdateV<Schema::Data::Value>(TRowVersion(1, 1), 42);
+            backend.Commit();
+        }
+        backend.SimpleMemCompaction(&strategy);
+        {
+            auto db = backend.Begin();
+            for (ui64 key = 0; key < keys; ++key) {
+                db.Table<Schema::Data>().Key(key).DeleteV(erased);
+            }
+            // Preserve S, where only key 0 existed. Other keys need a positive
+            // erase as evidence of their later conflicting writes.
+            backend.DB.RemoveRowVersions(Table, TRowVersion::Min(), snapshot);
+            backend.Commit();
+        }
+        {
+            const auto id = strategy.BeginMemCompaction(0, {0, TEpoch::Max()}, 0);
+            auto outcome = backend.RunCompaction(id);
+            UNIT_ASSERT(!outcome.Params->IsFinal);
+            UNIT_ASSERT(!outcome.Params->UnderlayMask);
+            UNIT_ASSERT_VALUES_EQUAL(outcome.Result->Parts.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(outcome.Result->Parts.front()->Stat.Drops, keys);
+            UNIT_ASSERT_VALUES_EQUAL(outcome.Result->Parts.front()->Stat.RetainedErases, 0u);
+            auto changes = strategy.CompactionFinished(id, std::move(outcome.Params), std::move(outcome.Result));
+            backend.ApplyChanges(Table, std::move(changes));
+        }
+        // A non-final erase may still remove an underlay. Its initial automatic
+        // full compaction must remain enabled by the existing drop heuristic.
+        UNIT_ASSERT(broker.HasPending());
+        UNIT_ASSERT(!strategy.AllowForcedCompaction());
+        const auto drain = [&](TGenCompactionStrategy& active) {
+            ui32 tasks = 0;
+            ui32 compactions = 0;
+            while (broker.HasPending()) {
+                UNIT_ASSERT_C(++tasks <= 16, "retained erase repeatedly schedules full compaction");
+                UNIT_ASSERT(broker.RunPending());
+                if (backend.StartedCompactions.empty()) {
+                    continue;
+                }
+                auto result = backend.RunCompaction();
+                auto changes = active.CompactionFinished(
+                    result.CompactionId, std::move(result.Params), std::move(result.Result));
+                backend.ApplyChanges(Table, std::move(changes));
+                ++compactions;
+            }
+            UNIT_ASSERT(compactions > 0);
+            UNIT_ASSERT(backend.StartedCompactions.empty());
+        };
+        drain(strategy);
+        const auto parts = backend.TableParts(Table);
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 1u);
+        // Key 0's main upsert uses a virtual erase at D; the remaining keys
+        // carry actual retained head erases, counted independently of history.
+        UNIT_ASSERT_VALUES_EQUAL(parts.front()->Stat.Drops, keys);
+        UNIT_ASSERT_VALUES_EQUAL(parts.front()->Stat.HiddenRows, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(parts.front()->Stat.RetainedErases, keys - 1);
+        UNIT_ASSERT(parts.front()->GarbageStats);
+        UNIT_ASSERT_VALUES_EQUAL(parts.front()->GarbageStats->GetGarbageBytes(erased.Prev()), 0u);
+        UNIT_ASSERT(parts.front()->GarbageStats->GetGarbageBytes(erased) > 0);
+        UNIT_ASSERT(strategy.AllowForcedCompaction());
+        strategy.ReflectRemovedRowVersions();
+        UNIT_ASSERT(!broker.HasPending());
+        strategy.Stop();
+
+        TGenCompactionStrategy restarted(Table, &backend, &broker, &time, &logger, "suffix");
+        restarted.Start({ });
+        UNIT_ASSERT(restarted.AllowForcedCompaction());
+        UNIT_ASSERT(!broker.HasPending());
+        {
+            backend.Begin();
+            backend.DB.RemoveRowVersions(Table, TRowVersion::Min(), erased.Prev());
+            backend.Commit();
+        }
+        restarted.ReflectRemovedRowVersions();
+        UNIT_ASSERT(restarted.AllowForcedCompaction());
+        UNIT_ASSERT(!broker.HasPending());
+        {
+            backend.Begin();
+            backend.DB.RemoveRowVersions(Table, TRowVersion::Min(), erased);
+            backend.Commit();
+        }
+        restarted.ReflectRemovedRowVersions();
+        UNIT_ASSERT(!restarted.AllowForcedCompaction());
+        UNIT_ASSERT(broker.HasPending());
+        drain(restarted);
+        UNIT_ASSERT(restarted.AllowForcedCompaction());
+        UNIT_ASSERT(backend.TableParts(Table).empty());
+    }
+
     Y_UNIT_TEST(ForcedCompactionByUnreachableMvccData) {
         TSimpleBackend backend;
         TSimpleBroker broker;

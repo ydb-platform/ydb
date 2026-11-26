@@ -992,6 +992,88 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionTransfer) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionIntegration) {
+    Y_UNIT_TEST_QUAD(KqpRetainedSnapshotInsertEraseConflictSurvivesCompaction, Compact, PreviouslyDeleted) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        if constexpr (PreviouslyDeleted) {
+            ExecSQL(test.Server, test.Sender, "INSERT INTO `/Root/table-a` (key, value) VALUES (2, 10);");
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            ExecSQL(test.Server, test.Sender, "DELETE FROM `/Root/table-a` WHERE key = 2;");
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        test.WriteVersion(1);
+
+        // Reading key 1 fixes the transaction's snapshot without taking a read lock on key 2.
+        const TString sessionId = NKqpHelpers::CreateSessionRPC(runtime, "/Root");
+        TRowVersion snapshot = TRowVersion::Min();
+        auto captureSnapshot = runtime.AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.HasSnapshot() && record.GetTableId().GetOwnerId() == test.TableA.PathId.OwnerId
+                && record.GetTableId().GetTableId() == test.TableA.PathId.LocalPathId)
+            {
+                snapshot = TRowVersion::FromProto(record.GetSnapshot());
+            }
+        });
+        auto begin = NKqpHelpers::MakeSimpleRequestRPC(
+            "SELECT key, value FROM `/Root/table-a` WHERE key = 1;", sessionId, {}, false);
+        begin.mutable_tx_control()->mutable_begin_tx()->mutable_snapshot_read_write();
+        TString txId;
+        UNIT_ASSERT_VALUES_EQUAL(NKqpHelpers::KqpSimpleBeginWait(runtime, txId,
+            NKqpHelpers::SendRequest(runtime, std::move(begin), "/Root")),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
+        captureSnapshot.Remove();
+        UNIT_ASSERT(snapshot);
+        UNIT_ASSERT(!txId.empty());
+        test.PublishRegistry({snapshot}, {test.TableA});
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        ExecSQL(test.Server, test.Sender, "INSERT INTO `/Root/table-a` (key, value) VALUES (2, 20);");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        ExecSQL(test.Server, test.Sender, "DELETE FROM `/Root/table-a` WHERE key = 2;");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        const auto afterDelete = AcquireReadSnapshot(runtime, "/Root");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        ExecSQL(test.Server, test.Sender, "UPSERT INTO `/Root/table-a` (key, value) VALUES (3, 30);");
+        runtime.SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry({snapshot}, {test.TableA});
+        test.RunCleanup();
+        UNIT_ASSERT(snapshot < afterDelete);
+        UNIT_ASSERT(test.GetRemovedRanges(test.ShardA).Contains(snapshot.Next(), afterDelete.Next()));
+
+        if constexpr (Compact) {
+            auto request = MakeHolder<TEvDataShard::TEvCompactTable>(test.TableA.PathId);
+            request->Record.SetCompactSinglePartedShards(true);
+            runtime.SendToPipe(test.ShardA, test.Sender, request.Release(), 0, GetPipeConfigWithRetries());
+            const auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(test.Sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK,
+                result->Get()->Record.ShortDebugString());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatIntReadResult(test.ReadSnapshot(test.ShardA, test.TableA, snapshot).get()), "1, 1\n");
+
+        bool writeConflict = false;
+        auto captureConflict = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetOrigin() != test.ShardA || record.GetStatus() != NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN) {
+                return;
+            }
+            for (const auto& issue : record.GetIssues()) {
+                if (issue.message().Contains("Write conflict with concurrent transaction.")) {
+                    writeConflict = true;
+                }
+            }
+        });
+        const auto result = NKqpHelpers::AwaitResponse(runtime, NKqpHelpers::KqpSimpleSendCommit(runtime, sessionId, txId,
+            "UPSERT INTO `/Root/table-a` (key, value) VALUES (2u, 200u);", "/Root"));
+        captureConflict.Remove();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.operation().status(), Ydb::StatusIds::ABORTED, result.ShortDebugString());
+        UNIT_ASSERT_C(writeConflict, result.ShortDebugString());
+        const TVector<ui64> shards{test.ShardA};
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, test.TableA),
+            "key = 1, value = 1\nkey = 3, value = 30\n");
+        NKqpHelpers::CloseSession(runtime, sessionId);
+    }
+
     Y_UNIT_TEST(KqpDelayedSnapshotAcquisitionKeepsFirstRemoteReadConsistent) {
         TSnapshotRetentionTest test(true, 2);
         auto& runtime = test.GetRuntime();

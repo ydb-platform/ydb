@@ -62,6 +62,7 @@ namespace NTable {
         ui64 Parts  = 0;    /* Total number of produced parts   */
         ui64 HiddenRows = 0; /* Hidden (non-head) total rows */
         ui64 HiddenDrops = 0; /* Hidden (non-head) rows with ERowOp::Erase */
+        ui64 RetainedErases = 0; /* Final head erases retained for positive row versions */
     };
 
 }

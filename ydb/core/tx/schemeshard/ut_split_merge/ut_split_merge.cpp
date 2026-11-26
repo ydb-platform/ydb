@@ -2990,7 +2990,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitMergeValidation) {
         )", {{NKikimrScheme::StatusInvalidParameter, "Duplicate SourceTabletId"}});
     }
 
-    NKikimrSchemeOp::TPersQueueGroupDescription MakePgNumericKeyRangeTopic() {
+    NKikimrSchemeOp::TPersQueueGroupDescription MakePgKeyRangeTopic(const TString& pgTypeName) {
         NKikimrSchemeOp::TPersQueueGroupDescription topic;
         topic.SetName("Topic");
         topic.SetTotalGroupCount(1);
@@ -2999,7 +2999,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitMergeValidation) {
         config.MutablePartitionConfig()->SetLifetimeSeconds(10);
         auto& keyComponent = *config.AddPartitionKeySchema();
         keyComponent.SetName("key");
-        const auto pgType = NScheme::ProtoColumnTypeFromTypeInfoMod(NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgnumeric")), "");
+        const auto pgType = NScheme::ProtoColumnTypeFromTypeInfoMod(NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName(pgTypeName)), "");
         keyComponent.SetTypeId(pgType.TypeId);
         if (pgType.TypeInfo) {
             *keyComponent.MutableTypeInfo() = *pgType.TypeInfo;
@@ -3013,7 +3013,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitMergeValidation) {
     }
 
     void CreatePgNumericKeyRangeTopic(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
-        TestCreatePQGroup(runtime, ++txId, "/MyRoot", MakePgNumericKeyRangeTopic().ShortDebugString());
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", MakePgKeyRangeTopic("pgnumeric").ShortDebugString());
         env.TestWaitNotification(runtime, txId);
     }
 
@@ -3048,13 +3048,27 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitMergeValidation) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-        auto topic = MakePgNumericKeyRangeTopic();
+        auto topic = MakePgKeyRangeTopic("pgnumeric");
         topic.SetTotalGroupCount(2);
         topic.AddPartitionBoundaries()->AddTuple()->MutableOptional()->SetBytes("\xff\xff\xff");
 
         // when
         TestCreatePQGroup(runtime, ++txId, "/MyRoot", topic.ShortDebugString(),
             {{NKikimrScheme::StatusSchemeError, "Invalid partition boundary at position: 0"}});
+
+        // then
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(ShouldRejectSplitByPartitionKeyWhenPgKeyIsNotComparable) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // when
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", MakePgKeyRangeTopic("pgpoint").ShortDebugString(),
+            {{NKikimrScheme::StatusSchemeError, "is not allowed with SplitByPartitionKey"}});
 
         // then
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic"), {NLs::PathNotExist});

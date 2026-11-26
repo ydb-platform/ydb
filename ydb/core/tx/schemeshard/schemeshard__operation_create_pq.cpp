@@ -12,6 +12,7 @@
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -105,6 +106,17 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
             errStr = Sprintf("Invalid key schema: %s", error.data());
             return nullptr;
         }
+
+        if (op.GetPQTabletConfig().GetSplitByPartitionKey()) {
+            for (size_t i = 0; i < pqGroupInfo->KeySchema.size(); ++i) {
+                if (!NKikimr::IsAllowedKeyType(pqGroupInfo->KeySchema[i])) {
+                    status = NKikimrScheme::StatusSchemeError;
+                    errStr = Sprintf("Key column %s has type %s that is not allowed with SplitByPartitionKey",
+                        op.GetPQTabletConfig().GetPartitionKeySchema(i).GetName().c_str(), NScheme::TypeName(pqGroupInfo->KeySchema[i]).c_str());
+                    return nullptr;
+                }
+            }
+        }
     } else {
         if (op.PartitionBoundariesSize()) {
             status = NKikimrScheme::StatusInvalidParameter;
@@ -154,13 +166,11 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
                             return nullptr;
                         }
 
-                        if (i > 0) {
-                            const TSerializedCellVec prevKey(prevBound);
-                            if (CompareTypedCellVectors(prevKey.GetCells().data(), cells.data(), keyTypes.data(), keyTypes.size()) >= 0) {
-                                status = NKikimrScheme::StatusInvalidParameter;
-                                errStr = Sprintf("Partition boundaries must be strictly increasing, position: %u", i);
-                                return nullptr;
-                            }
+                        const auto prevKey = i > 0 ? TSerializedCellVec(prevBound) : TSerializedCellVec(TVector<TCell>(keyTypes.size()));
+                        if (CompareTypedCellVectors(prevKey.GetCells().data(), cells.data(), keyTypes.data(), keyTypes.size()) >= 0) {
+                            status = NKikimrScheme::StatusInvalidParameter;
+                            errStr = Sprintf("Partition boundaries must be strictly increasing and greater than the all-NULL key, position: %u", i);
+                            return nullptr;
                         }
                     }
 

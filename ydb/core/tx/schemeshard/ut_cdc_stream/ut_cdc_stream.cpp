@@ -2694,6 +2694,63 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic"), {NLs::PathNotExist});
     }
 
+    Y_UNIT_TEST(ShouldRejectSplitByPartitionKeyWhenFirstBoundaryIsAllNull) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        // when
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic"
+            TotalGroupCount: 2
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+                PartitionKeySchema { Name: "key1" TypeId: 2 }
+                PartitionKeySchema { Name: "key2" TypeId: 2 }
+                SplitByPartitionKey: true
+            }
+            PartitionBoundaries {
+                Tuple { }
+            }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Partition boundaries must be strictly increasing"}});
+
+        // then
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(ShouldCreateSplitByPartitionKeyTopicWhenFirstBoundaryHasNullPrefix) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        // when
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic"
+            TotalGroupCount: 2
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+                PartitionKeySchema { Name: "key1" TypeId: 2 }
+                PartitionKeySchema { Name: "key2" TypeId: 2 }
+                SplitByPartitionKey: true
+            }
+            PartitionBoundaries {
+                Tuple { }
+                Tuple { Optional { Uint32: 5 } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // then
+        const auto described = DescribePath(runtime, "/MyRoot/Topic");
+        UNIT_ASSERT_VALUES_EQUAL(described.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 2);
+    }
+
     Y_UNIT_TEST(ShouldKeepKeyRangeHeartbeatsWhenSchemeShardReboots) {
         // given
         TTestBasicRuntime runtime;

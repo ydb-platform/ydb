@@ -5,9 +5,8 @@
 
 namespace NKikimr::NSharedCache {
 
-struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheCounters> {
+struct TPageCacheCounters {
     using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
-    using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
 
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
@@ -33,6 +32,14 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr ActiveInMemoryBytes;
     const TCounterPtr EvictedPages;
     const TCounterPtr EvictedBytes;
+
+protected:
+    explicit TPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
+};
+
+struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheCounters>, public TPageCacheCounters {
+    using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
+
     const TCounterPtr S3FIFOEvictOps;
 
     // page collection counters:

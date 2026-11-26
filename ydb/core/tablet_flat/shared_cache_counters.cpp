@@ -2,7 +2,7 @@
 
 namespace NKikimr::NSharedCache {
 
-TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+TPageCacheCounters::TPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
     : Counters(counters)
     // page counters:
     , MemLimitBytes(counters->GetCounter("MemLimitBytes"))
@@ -26,6 +26,10 @@ TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonito
     , ActiveInMemoryBytes(counters->GetCounter("ActiveInMemoryBytes"))
     , EvictedPages(counters->GetCounter("EvictedPages", true))
     , EvictedBytes(counters->GetCounter("EvictedBytes", true))
+{}
+
+TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+    : TPageCacheCounters(counters)
     , S3FIFOEvictOps(counters->GetCounter("S3FIFOEvictOps", true))
     // page collection counters:
     , PageCollections(counters->GetCounter("PageCollections"))
@@ -35,6 +39,6 @@ TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonito
     , PendingRequests(counters->GetCounter("PendingRequests"))
     , SucceedRequests(counters->GetCounter("SucceedRequests", true))
     , FailedRequests(counters->GetCounter("FailedRequests", true))
-{ }
+{}
 
 } // namespace NKikimr::NSharedCache

@@ -236,6 +236,7 @@ namespace NKikimr::NBlobDepot {
 
                 const size_t size = id.BlobSize();
                 InFlightTrashSize += size;
+                HotBytesPendingTrashCommit += size;
                 Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_IN_FLIGHT_TRASH_SIZE] = InFlightTrashSize;
                 TotalStoredDataSize -= size;
                 Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_DATA_SIZE] = TotalStoredDataSize;
@@ -322,6 +323,9 @@ namespace NKikimr::NBlobDepot {
                 if (Self->MoveData.Key && *Self->MoveData.Key == binaryKey &&
                         Self->MoveData.BlobLocator.HasBlobSeqId() && mappingChanged) {
                     Self->MoveData.RecordTouched = true;
+                    if (Self->CancelInternalHotWriteWait(Self->MoveData.GetCopyBytes(), Self->SelfId())) {
+                        Self->Send(Self->SelfId(), new TEvMoveDataContinue);
+                    }
                 }
                 if (outcome != EUpdateOutcome::DROP && !Self->MoveData.NeedsAnotherPass &&
                         (inserted || value.ValueVersion != valueVersionBefore)) {

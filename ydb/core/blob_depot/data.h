@@ -531,6 +531,7 @@ namespace NKikimr::NBlobDepot {
         ui64 TotalStoredDataSize = 0;
         ui64 TotalStoredTrashSize = 0;
         ui64 InFlightTrashSize = 0;
+        ui64 HotBytesPendingTrashCommit = 0;
         ui64 TotalS3DataSize = 0;
         ui64 TotalS3LiveBytes = 0;
         ui64 NextHotWriteSequence = 1;
@@ -905,6 +906,7 @@ namespace NKikimr::NBlobDepot {
         ui64 GetTotalStoredDataSize() const { return TotalStoredDataSize; }
         ui64 GetTotalStoredTrashSize() const { return TotalStoredTrashSize; }
         ui64 GetInFlightTrashSize() const { return InFlightTrashSize; }
+        ui64 GetHotBytesPendingTrashCommit() const { return HotBytesPendingTrashCommit; }
         ui64 GetTotalS3DataSize() const { return TotalS3DataSize; }
         ui64 GetTotalS3LiveBytes() const { return TotalS3LiveBytes; }
         bool IsS3ObjectReferenced(const TS3Locator& locator) const;

@@ -25,9 +25,17 @@ message TS3BackendSettings {
 
     message TAsyncMode {
         // Acknowledged data starts on Data channels. The tablet then packs eligible data into S3 objects.
-        // Foreground write limits are reserved for hot-write admission.
+        // Maximum referenced hot bytes plus outstanding write credits for this depot.
+        // After a tablet restart, writes requiring credit wait for the key index to finish loading
+        // so the tablet can account for all hot bytes. Caller deadlines still apply during this wait.
         optional uint64 MaxPendingBytes = 2;
+
+        // Start throttling at this many charged bytes. Requires MaxPendingBytes.
+        // Zero rate-limits writes even when the depot is empty and cools all eligible data.
+        // Omit both throttle settings to use the byte limit without rate limiting.
         optional uint64 ThrottleStartBytes = 3;
+
+        // Foreground write admission rate at ThrottleStartBytes. It drops linearly to zero at MaxPendingBytes.
         optional uint64 ThrottleMaxBytesPerSecond = 4;
 
         // Number of concurrent background uploads (1..32).

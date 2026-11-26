@@ -58,6 +58,7 @@ LIBRARY()
         garbage_collection.h
         given_id_range.cpp
         group_metrics_exchange.cpp
+        hot_write_admission.cpp
         mon_main.cpp
         mon_main.h
         move_data.cpp

@@ -344,6 +344,7 @@ namespace NKikimr::NBlobDepot {
         BarrierServer->OnDataLoaded();
         BlocksManager->OnDataLoaded();
         S3Manager->OnDataLoaded();
+        ScheduleHotWriteAdmission();
         StartGroupAssimilator();
         TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_LOADING_KEYS] = 0;
         TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_LOADED] = 1;

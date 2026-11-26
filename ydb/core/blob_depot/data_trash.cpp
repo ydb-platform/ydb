@@ -15,6 +15,7 @@ namespace NKikimr::NBlobDepot {
             record.MoveToTrash(this, it->second);
             records.insert(&record);
             InFlightTrashSize -= it->second.BlobSize();
+            HotBytesPendingTrashCommit -= it->second.BlobSize();
             AllInFlightTrashBlobs.erase(it->second);
         }
         InFlightTrashBlobs.erase(first, last);
@@ -35,6 +36,7 @@ namespace NKikimr::NBlobDepot {
         InFlightTrashS3.erase(s3first, s3last);
 
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_IN_FLIGHT_TRASH_SIZE] = InFlightTrashSize;
+        Self->ScheduleHotWriteAdmission();
         Self->S3Manager->MaybeScheduleCooling();
     }
 

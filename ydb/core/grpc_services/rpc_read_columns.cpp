@@ -11,7 +11,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/kqp/common/events/scan.h>
-#include <ydb/core/sys_view/scan.h>
+#include <ydb/core/sys_view/scan_factory/scan_factory.h>
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/public/api/protos/ydb_clickhouse_internal.pb.h>
@@ -264,7 +264,7 @@ private:
 
         // This list of columns will be requested from sys view scan actor
         // It starts with all key columns followed by all the columns requested by user possibly including key columns again
-        TSmallVec<NMiniKQL::TKqpComputeContextBase::TColumn> columns;
+        TSmallVec<NMiniKQL::TKqpComputeColumn> columns;
 
         {
             auto& entry = ResolveNamesResult->ResultSet.front();

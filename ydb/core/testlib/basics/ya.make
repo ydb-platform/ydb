@@ -26,6 +26,7 @@ PEERDIR(
     ydb/core/node_whiteboard
     ydb/core/quoter
     ydb/core/statistics/service
+    ydb/core/sys_view
     ydb/core/tablet_flat
     ydb/core/testlib/actors
     ydb/core/testlib/basics/core

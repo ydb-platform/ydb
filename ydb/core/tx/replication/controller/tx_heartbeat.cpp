@@ -227,7 +227,7 @@ public:
         }
 
         if (HadHeartbeats) {
-            Self->RemoveEndedWorkers(ctx);
+            Self->RemoveParentsWithReadyChildren(ctx);
         }
 
         if (Self->PendingHeartbeats) {

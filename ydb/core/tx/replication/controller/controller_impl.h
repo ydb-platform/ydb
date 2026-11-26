@@ -2,6 +2,7 @@
 
 #include "logging.h"
 #include "nodes_manager.h"
+#include "partition_split_merge_transitions.h"
 #include "private_events.h"
 #include "public_events.h"
 #include "replication.h"
@@ -198,9 +199,7 @@ private:
     void StopWorker(ui32 nodeId, const TWorkerId& id);
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
-    void RemoveEndedWorkers(const TActorContext& ctx);
-    bool IsRemovingTargetWorkers(ui64 replicationId, ui64 targetId) const;
-    void DeleteExitedWorkers(ui64 replicationId, ui64 targetId, NIceDb::TNiceDb& db);
+    void RemoveParentsWithReadyChildren(const TActorContext& ctx);
     TReplication::ITarget* FindTarget(const TWorkerId& id) const;
     bool IsHeartbeatParticipant(const TWorkerId& id) const;
     size_t CountHeartbeatParticipants() const;
@@ -356,8 +355,7 @@ private:
     THashSet<TWorkerId> BootQueue;
     THashSet<std::pair<TWorkerId, ui32>> StopQueue;
     THashSet<TWorkerId> RemoveQueue;
-    THashSet<TWorkerId> ExitingWorkers;
-    THashSet<TWorkerId> ExitedWorkers;
+    TPartitionSplitMergeTransitions SplitMergeTransitions;
 
     bool ProcessQueuesScheduled = false;
     static constexpr ui32 ProcessBatchLimit = 100;

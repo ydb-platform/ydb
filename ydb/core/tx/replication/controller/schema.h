@@ -198,7 +198,7 @@ struct TControllerSchema: NIceDb::Schema {
         using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, NextOffset>;
     };
 
-    struct ExitedWorkers: Table<11> {
+    struct CompletedSplitMergeTransitions: Table<11> {
         struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
         struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
         struct WorkerId: Column<3, NScheme::NTypeIds::Uint64> {};
@@ -216,7 +216,7 @@ struct TControllerSchema: NIceDb::Schema {
         SchemaBarrierWorkers,
         IndexBuildWorkers,
         ProcessedSourceOffsets,
-        ExitedWorkers
+        CompletedSplitMergeTransitions
     >;
 
 }; // TControllerSchema

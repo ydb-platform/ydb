@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "partition_split_merge_transitions_repository.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -106,7 +107,7 @@ void TController::RunTxDropDstResult(TEvPrivate::TEvDropDstResult::TPtr& ev, con
 void TController::RemoveTarget(NIceDb::TNiceDb& db, TReplication& replication, ui64 targetId) {
     const auto rid = replication.GetId();
     DeleteProcessedSourceOffsets(rid, targetId, db);
-    DeleteExitedWorkers(rid, targetId, db);
+    TPartitionSplitMergeTransitionsRepository::DeleteCompleted(db, SplitMergeTransitions.ClearTarget(rid, targetId));
     db.Table<Schema::Targets>().Key(rid, targetId).Delete();
     db.Table<Schema::SrcStreams>().Key(rid, targetId).Delete();
     for (const auto wid : replication.FindTarget(targetId)->GetWorkers()) {

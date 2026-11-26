@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "partition_split_merge_transitions_repository.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -23,7 +24,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Event->Get()->Record;
         Id = TWorkerId::Parse(record.GetWorker());
-        if (!Self->IsValidWorker(Id) || Self->ExitedWorkers.contains(Id) || Self->ExitingWorkers.contains(Id)) {
+        if (!Self->IsValidWorker(Id)) {
             return true;
         }
 
@@ -90,15 +91,16 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        if (Self->ExitingWorkers.contains(Id)) {
-            db.Table<Schema::ExitedWorkers>().Key(Id.ReplicationId(), Id.TargetId(), Id.WorkerId()).Update();
+        if (Self->SplitMergeTransitions.IsParentRemovalRequested(Id)) {
+            TPartitionSplitMergeTransitionsRepository::SaveCompleted(db, Id);
         } else {
             // Once any worker leaves, the persisted worker set is no longer
             // complete. Keep schema reports blocked until
             // the next registration pass recreates it.
             db.Table<Schema::Targets>().Key(Id.ReplicationId(), Id.TargetId()).Update(
                 NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
-            Self->DeleteExitedWorkers(Id.ReplicationId(), Id.TargetId(), db);
+            TPartitionSplitMergeTransitionsRepository::DeleteCompleted(db,
+                Self->SplitMergeTransitions.ClearTarget(Id.ReplicationId(), Id.TargetId()));
         }
         db.Table<Schema::Workers>().Key(Id.ReplicationId(), Id.TargetId(), Id.WorkerId()).Delete();
         Remove = true;
@@ -111,9 +113,9 @@ public:
         }
 
         Self->RemoveQueue.erase(Id);
-        const bool exited = Self->ExitingWorkers.erase(Id);
-        if (exited) {
-            Self->ExitedWorkers.insert(Id);
+        const bool parentRemovalRequested = Self->SplitMergeTransitions.IsParentRemovalRequested(Id);
+        if (parentRemovalRequested) {
+            Self->SplitMergeTransitions.CompleteTransition(Id);
         } else {
             Self->CompleteWorkerSets.erase(std::make_pair(Id.ReplicationId(), Id.TargetId()));
         }
@@ -146,8 +148,8 @@ public:
         Self->TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = Self->WorkersWithHeartbeat.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_PENDING_HEARTBEAT] = Self->PendingHeartbeats.size();
 
-        if (exited) {
-            Self->RemoveEndedWorkers(ctx);
+        if (parentRemovalRequested) {
+            Self->RemoveParentsWithReadyChildren(ctx);
         }
 
         const auto replication = Self->Find(Id.ReplicationId());

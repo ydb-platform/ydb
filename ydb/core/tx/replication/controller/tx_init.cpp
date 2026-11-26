@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "partition_split_merge_transitions_repository.h"
 #include "target_table.h"
 #include "target_topic.h"
 #include "target_transfer.h"
@@ -247,23 +248,6 @@ class TController::TTxInit: public TTxBase {
         return true;
     }
 
-    bool LoadExitedWorkers(NIceDb::TNiceDb& db) {
-        auto rowset = db.Table<Schema::ExitedWorkers>().Select();
-        if (!rowset.IsReady()) {
-            return false;
-        }
-        while (!rowset.EndOfSet()) {
-            Self->ExitedWorkers.insert(TWorkerId(
-                rowset.GetValue<Schema::ExitedWorkers::ReplicationId>(),
-                rowset.GetValue<Schema::ExitedWorkers::TargetId>(),
-                rowset.GetValue<Schema::ExitedWorkers::WorkerId>()));
-            if (!rowset.Next()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     bool LoadWorkers(NIceDb::TNiceDb& db) {
         auto rowset = db.Table<Schema::Workers>().Select();
         if (!rowset.IsReady()) {
@@ -354,6 +338,18 @@ class TController::TTxInit: public TTxBase {
         return true;
     }
 
+    bool ForgetTransitionsOfLoadedWorkers(NIceDb::TNiceDb& db) {
+        TVector<TWorkerId> parents;
+        for (const auto& [id, _] : Self->Workers) {
+            if (Self->SplitMergeTransitions.IsTransitionCompleted(id)) {
+                parents.push_back(id);
+            }
+        }
+        Self->SplitMergeTransitions.ForgetTransitions(parents);
+        TPartitionSplitMergeTransitionsRepository::DeleteCompleted(db, parents);
+        return true;
+    }
+
     inline bool Load(NIceDb::TNiceDb& db) {
         Self->Reset();
         return LoadSysParams(db)
@@ -362,10 +358,11 @@ class TController::TTxInit: public TTxBase {
             && LoadSrcStreams(db)
             && LoadTxIds(db)
             && LoadWorkers(db)
-            && LoadExitedWorkers(db)
+            && TPartitionSplitMergeTransitionsRepository::Load(db, Self->SplitMergeTransitions)
             && LoadSchemaBarrierWorkers(db)
             && LoadIndexBuildWorkers(db)
-            && LoadProcessedSourceOffsets(db);
+            && LoadProcessedSourceOffsets(db)
+            && ForgetTransitionsOfLoadedWorkers(db);
     }
 
     inline bool Load(NTable::TDatabase& toughDb) {

@@ -40,6 +40,8 @@ SRCS(
     logging.cpp
     monitoring.cpp
     nodes_manager.cpp
+    partition_split_merge_transitions.cpp
+    partition_split_merge_transitions_repository.cpp
     private_events.cpp
     replication.cpp
     resource_id_resolver.cpp

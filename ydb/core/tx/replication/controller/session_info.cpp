@@ -57,14 +57,6 @@ void TWorkerInfo::SetDataEnded(bool value) {
     DataEnded = value;
 }
 
-void TWorkerInfo::SetChildPartitionIds(TVector<ui64>&& value) {
-    ChildPartitionIds = std::move(value);
-}
-
-const TVector<ui64>& TWorkerInfo::GetChildPartitionIds() const {
-    return ChildPartitionIds;
-}
-
 void TWorkerInfo::SetHeartbeat(const TRowVersion& value) {
     Heartbeat = value;
 }

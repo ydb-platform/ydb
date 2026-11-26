@@ -300,7 +300,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         const auto description = result.GetTableDescription();
         const auto& sourceTable = NYdb::TProtoAccessor::GetProto(description);
         if (Kind == TReplication::ETargetKind::Table
-            && (AppData()->FeatureFlags.GetEnableFulltextIndexReplication() || !BootstrapIndexes.empty()))
+            && AppData()->FeatureFlags.GetEnableFulltextIndexReplication())
         {
             const auto pendingIndexes = GetBuildingFulltextIndexes(sourceTable);
             if (!pendingIndexes.empty()) {
@@ -397,28 +397,21 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 return Error(NKikimrScheme::StatusSchemeError, error);
             }
             for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
-                if (BootstrapIndexes.contains(index.GetName())) {
-                    index.SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
-                }
-            }
-            for (const auto& source : sourceTable.indexes()) {
-                if (!IsFulltextIndex(source)) {
+                if (!NTableIndex::IsFulltextOrJsonIndex(index.GetType())) {
                     continue;
                 }
-                for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
-                    if (index.GetName() == source.name()) {
-                        if (HasSupportedFulltextLayout(source)) {
-                            index.SetType(GetFulltextIndexType(source));
-                            index.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(source.use_row_id_as_doc_id());
-                        }
-                        if (source.has_global_fulltext_plain_index()) {
-                            *index.MutableFulltextIndexDescription()->MutableSettings()
-                                = source.global_fulltext_plain_index().fulltext_settings();
-                        } else if (source.has_global_fulltext_relevance_index()) {
-                            *index.MutableFulltextIndexDescription()->MutableSettings()
-                                = source.global_fulltext_relevance_index().fulltext_settings();
-                        }
+                for (const auto& source : sourceTable.indexes()) {
+                    if (source.name() != index.GetName()) {
+                        continue;
                     }
+                    if (source.has_global_fulltext_plain_index()) {
+                        *index.MutableFulltextIndexDescription()->MutableSettings()
+                            = source.global_fulltext_plain_index().fulltext_settings();
+                    } else if (source.has_global_fulltext_relevance_index()) {
+                        *index.MutableFulltextIndexDescription()->MutableSettings()
+                            = source.global_fulltext_relevance_index().fulltext_settings();
+                    }
+                    break;
                 }
             }
         } else {
@@ -525,9 +518,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
-        if (HasIndexTx()) {
-            ExecuteSchemeTx(IndexTx);
-        } else if (SwitchoverTx.HasAlterTable()) {
+        if (SwitchoverTx.HasAlterTable()) {
             ExecuteSchemeTx(SwitchoverTx);
         } else if (InitialScan || CreatePlaceholder || Kind == TReplication::ETargetKind::Topic) {
             CreateDst();
@@ -538,29 +529,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void CreateDst() {
         ExecuteSchemeTx(TxBody);
-    }
-
-    bool HasIndexTx() const {
-        return IndexTx.HasInitiateIndexBuild();
-    }
-
-    void PrepareIndexWriteOnly(const TString& name, const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        IndexTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexBuild);
-        IndexTx.SetInternal(true);
-        IndexTx.SetWorkingDir(record.GetPath());
-        auto* build = IndexTx.MutableInitiateIndexBuild();
-        build->SetTable(record.GetPath());
-        build->SetForReplication(true);
-        build->SetPrepareExistingForReplication(true);
-        build->MutableIndex()->SetName(name);
-        if (PathId) {
-            PathId.ToProto(IndexTx.MutableExpectedReplicationOwnerPathId());
-        }
-        auto* condition = IndexTx.AddApplyIf();
-        condition->SetPathId(DstPathId.LocalPathId);
-        condition->SetPathVersion(record.GetPathDescription().GetSelf().GetPathVersion());
-        NeedToCheck = true;
-        AllocateTxId();
     }
 
     void PrepareSwitchover(const NKikimrScheme::TEvDescribeSchemeResult& desc) {
@@ -630,10 +598,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             if (record.HasPathCreateTxId()) {
                 NeedToCheck = true;
                 return SubscribeTx(record.GetPathCreateTxId());
-            } else if (HasIndexTx()) {
-                IndexTx.Clear();
-                Become(&TThis::StateDescribeDstPath);
-                return Retry();
             } else if (SwitchoverTx.HasAlterTable()) {
                 SwitchoverTx.Clear();
                 Become(&TThis::StateDescribeDstPath);
@@ -646,9 +610,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return DescribeDstPath();
         case NKikimrScheme::StatusPreconditionFailed:
         case NKikimrScheme::StatusPathDoesNotExist:
-            if (HasIndexTx()) {
-                return DescribeDstPath();
-            }
             if (SwitchoverTx.HasAlterTable()) {
                 // Either the ApplyIf no longer holds -- the destination moved under us, possibly
                 // because the demote itself committed and its reply was lost -- or the alter is
@@ -692,7 +653,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void DescribeDstPath() {
-        IndexTx.Clear();
         Send(PipeCache, new TEvPipeCache::TEvForward(
             new TEvSchemeShard::TEvDescribeScheme(DstPath), SchemeShardId));
         Become(&TThis::StateDescribeDstPath);
@@ -736,18 +696,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                     return Error(SwitchoverRefusal->Status, SwitchoverRefusal->Reason);
                 }
                 return PrepareSwitchover(record);
-            }
-            if (!BootstrapIndexes.empty()) {
-                for (const auto& expected : TxBody.GetCreateIndexedTable().GetIndexDescription()) {
-                    if (expected.GetState() != NKikimrSchemeOp::EIndexStateWriteOnly) {
-                        continue;
-                    }
-                    for (const auto& index : desc.GetTable().GetTableIndexes()) {
-                        if (index.GetName() == expected.GetName() && index.GetState() == NKikimrSchemeOp::EIndexStateReady) {
-                            return PrepareIndexWriteOnly(index.GetName(), record);
-                        }
-                    }
-                }
             }
             return Success();
         }
@@ -994,10 +942,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             if (NTableIndex::IsFulltextOrJsonIndex(index.GetType())
-                && (!EqualFulltextSettings(index.GetFulltextIndexDescription().GetSettings(),
-                        it->second->GetFulltextIndexDescription().GetSettings())
-                    || index.GetFulltextIndexDescription().GetUseRowIdAsDocId()
-                        != it->second->GetFulltextIndexDescription().GetUseRowIdAsDocId()))
+                && !EqualFulltextSettings(index.GetFulltextIndexDescription().GetSettings(),
+                    it->second->GetFulltextIndexDescription().GetSettings()))
             {
                 error = TStringBuilder() << "Fulltext/JSON settings mismatch: " << index.GetName();
                 return false;
@@ -1213,7 +1159,6 @@ public:
             TReplication::EState desiredState,
             bool switchover,
             TTopicMirrorSettings&& topicMirror,
-            THashSet<TString> bootstrapIndexes = {},
             std::optional<THashSet<TString>> discoveredIndexes = {},
             bool canDeferIndexCreation = false)
         : Parent(parent)
@@ -1228,7 +1173,6 @@ public:
         , Mode(mode)
         , Consistency(consistency)
         , InitialScan(initialScan)
-        , BootstrapIndexes(std::move(bootstrapIndexes))
         , DiscoveredIndexes(std::move(discoveredIndexes))
         , CanDeferIndexCreation(canDeferIndexCreation)
         , Switchover(switchover)
@@ -1286,7 +1230,6 @@ private:
     const EReplicationMode Mode;
     const EConsistencyLevel Consistency;
     const bool InitialScan;
-    const THashSet<TString> BootstrapIndexes;
     const std::optional<THashSet<TString>> DiscoveredIndexes;
     const bool CanDeferIndexCreation;
     const bool Switchover;
@@ -1302,7 +1245,6 @@ private:
     ui64 TxId = 0;
     ui64 WaitingTxId = 0;
     NKikimrSchemeOp::TModifyScheme TxBody;
-    NKikimrSchemeOp::TModifyScheme IndexTx;
     NKikimrSchemeOp::TModifyScheme SwitchoverTx;
     ui64 SwitchoverPathVersion = 0;
     struct TRefusal {
@@ -1397,7 +1339,6 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
     // must not be treated as destinations awaiting an external import.
     const bool scanSpecializedIndex = target->IsIndexBuild()
         && (target->GetConfig()->IsFulltextOrJsonIndex() || target->GetConfig()->IsRowIdIndex());
-    THashSet<TString> bootstrapIndexes;
     std::optional<THashSet<TString>> discoveredIndexes;
     if (target->GetKind() == TReplication::ETargetKind::Table && replication->GetConfig().GetInitialScan()) {
         discoveredIndexes.emplace();
@@ -1407,11 +1348,6 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
             {
                 const auto indexPath = SplitPath(peer->GetSrcIndexPath());
                 discoveredIndexes->insert(indexPath.back());
-                if (peer->IsIndexBuild()
-                    && (peer->GetConfig()->IsFulltextOrJsonIndex() || peer->GetConfig()->IsRowIdIndex()))
-                {
-                    bootstrapIndexes.insert(indexPath.back());
-                }
             }
         }
     }
@@ -1420,7 +1356,7 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
         EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()),
         replication->GetConfig().GetInitialScan() || scanSpecializedIndex, replication->GetDesiredState(),
-        IsSwitchover(replication->GetConfig()), std::move(bootstrapIndexes), std::move(discoveredIndexes),
+        IsSwitchover(replication->GetConfig()), std::move(discoveredIndexes),
         target->GetStreamSchemaChanges().value_or(false));
 }
 
@@ -1428,11 +1364,11 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
         const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
         EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
-        TReplication::EState desiredState, bool switchover, THashSet<TString> bootstrapIndexes,
+        TReplication::EState desiredState, bool switchover,
         std::optional<THashSet<TString>> discoveredIndexes, bool canDeferIndexCreation)
 {
     return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency,
-        database, initialScan, desiredState, switchover, {}, std::move(bootstrapIndexes), std::move(discoveredIndexes),
+        database, initialScan, desiredState, switchover, {}, std::move(discoveredIndexes),
         canDeferIndexCreation);
 }
 

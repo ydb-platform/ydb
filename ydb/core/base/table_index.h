@@ -43,6 +43,17 @@ struct TIndexColumns {
 
 inline constexpr const char* ImplTable = "indexImplTable";
 
+inline bool IsCompactFulltextIndex(NKikimrSchemeOp::EIndexType type) {
+    return type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+        || type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
+        || type == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact;
+}
+
+inline bool IsIntegerPrimaryKeyType(NScheme::TTypeId type) {
+    return type == NScheme::NTypeIds::Uint64 || type == NScheme::NTypeIds::Int64
+        || type == NScheme::NTypeIds::Uint32 || type == NScheme::NTypeIds::Int32;
+}
+
 inline bool IsFulltextOrJsonIndex(NKikimrSchemeOp::EIndexType type) {
     switch (type) {
     case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:

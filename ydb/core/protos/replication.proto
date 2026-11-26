@@ -581,7 +581,6 @@ message TSchemaChange {
         repeated string IndexColumns = 3;
         repeated string DataColumns = 4;
         optional Ydb.Table.FulltextIndexSettings FulltextSettings = 5;
-        optional bool UseRowIdAsDocId = 6;
     }
 
     message TIndexes {

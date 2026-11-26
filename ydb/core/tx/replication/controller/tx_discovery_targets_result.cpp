@@ -1,9 +1,6 @@
 #include "controller_impl.h"
 #include "target_transfer.h"
 
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/base/path.h>
-
 #include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
@@ -62,7 +59,6 @@ public:
 
         if (Ev->Get()->IsSuccess()) {
             Replication->SetState(Replication->GetState());
-            THashMap<TString, ui64> indexGroups;
             for (const auto& target : Ev->Get()->ToAdd) {
                 const auto tid = Replication->AddTarget(target.Kind, target.Config);
 
@@ -80,27 +76,10 @@ public:
                     NIceDb::TUpdate<Schema::Targets::SrcPath>(target.Config->GetSrcPath()),
                     NIceDb::TUpdate<Schema::Targets::SrcIsImpl>(target.Config->GetSrcIsImpl()),
                     NIceDb::TUpdate<Schema::Targets::DstPath>(target.Config->GetDstPath()),
-                    NIceDb::TUpdate<Schema::Targets::FulltextOrJsonIndex>(target.Config->IsFulltextOrJsonIndex()),
-                    NIceDb::TUpdate<Schema::Targets::RowIdIndex>(target.Config->IsRowIdIndex()),
                     NIceDb::TUpdate<Schema::Targets::TransformLambda>(transformLambda),
                     NIceDb::TUpdate<Schema::Targets::RunAsUser>(runAsUser),
                     NIceDb::TUpdate<Schema::Targets::DirectoryPath>(directoryPath)
                 );
-
-                if (target.Kind == TReplication::ETargetKind::IndexTable
-                    && (target.Config->IsFulltextOrJsonIndex() || target.Config->IsRowIdIndex())
-                    && Replication->GetConfig().GetInitialScan()
-                    && AppData()->FeatureFlags.GetEnableFulltextIndexReplication())
-                {
-                    const auto indexPath = CanonizePath(TString(ExtractParent(target.Config->GetDstPath())));
-                    const auto [group, inserted] = indexGroups.emplace(indexPath, tid);
-                    Y_UNUSED(inserted);
-                    Replication->FindTarget(tid)->SetIndexBuild(true);
-                    auto& build = Self->IndexBuilds[{rid, tid}];
-                    build.SetPhase(NKikimrReplication::TIndexBuildState::FILLING);
-                    build.SetIndexGroupId(group->second);
-                    Self->SaveIndexBuild(db, {rid, tid}, build);
-                }
 
                 YDB_LOG_NOTICE_CTX(ctx, "Add target",
                     {"rid", rid},

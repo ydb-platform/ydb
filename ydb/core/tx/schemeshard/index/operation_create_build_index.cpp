@@ -57,47 +57,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     const auto& op = tx.GetInitiateIndexBuild();
     NKikimrSchemeOp::TIndexCreationConfig indexDesc = op.GetIndex();
-    if (op.GetPrepareExistingForReplication()) {
-        const auto table = TPath::Resolve(op.GetTable(), context.SS);
-        const auto checks = table.Check().IsAtLocalSchemeShard().IsResolved().NotDeleted()
-            .IsTable().NotUnderOperation();
-        if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-        }
-        if (!tx.GetInternal() || !op.GetForReplication() || op.GetIsRebuild() || !table.IsAsyncReplicaTable()) {
-            return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter,
-                "Preparing an existing index requires an internal replica operation")};
-        }
-        TString error;
-        if (!context.SS->CheckApplyIf(tx, error)) {
-            return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, error)};
-        }
-        const auto& config = context.SS->Tables.at(table->PathId)->ReplicationConfig();
-        if (config.HasOwnerPathId() && (!tx.HasExpectedReplicationOwnerPathId()
-            || TPathId::FromProto(config.GetOwnerPathId()) != TPathId::FromProto(tx.GetExpectedReplicationOwnerPathId())))
-        {
-            return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Destination is owned by another replication")};
-        }
-        const auto index = table.Child(indexDesc.GetName());
-        const auto indexChecks = index.Check().IsResolved().NotDeleted().IsTableIndex().NotUnderOperation();
-        if (!indexChecks) {
-            return {CreateReject(opId, indexChecks.GetStatus(), indexChecks.GetError())};
-        }
-        const auto& existing = *context.SS->Indexes.at(index->PathId);
-        const bool rowId = existing.Type == NKikimrSchemeOp::EIndexTypeGlobalUnique
-            && existing.IndexKeys.size() == 1 && existing.IndexKeys.front() == NTableIndex::NFulltext::RowIdColumn;
-        if ((!NTableIndex::IsFulltextOrJsonIndex(existing.Type) && !rowId)
-            || (existing.State != NKikimrSchemeOp::EIndexStateReady && existing.State != NKikimrSchemeOp::EIndexStateWriteOnly))
-        {
-            return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Index cannot be attached for replica backfill")};
-        }
-        auto alter = TransactionTemplate(table.PathString(), NKikimrSchemeOp::ESchemeOpAlterTableIndex);
-        alter.SetInternal(true);
-        alter.MutableAlterTableIndex()->SetName(index.LeafName());
-        alter.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
-        return {CreateAlterTableIndex(NextPartId(opId, {}), alter)};
-    }
-
     const bool isOnlineRebuild = op.GetIsRebuild() && op.HasRebuildIndexName();
     const bool isRebuild = op.GetIsRebuild() && !isOnlineRebuild;
 
@@ -155,14 +114,17 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     auto tableInfo = context.SS->Tables.at(table.Base()->PathId);
     const bool forReplication = op.GetForReplication();
-    const bool rowIdReplication = AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
+    const auto& flags = AppData()->FeatureFlags;
+    const bool fulltextReplication = flags.GetEnableFulltextIndexReplication()
+        && flags.GetEnableCompactFulltextIndex() && flags.GetEnableFulltextIndexRowId();
+    const bool rowIdReplication = fulltextReplication
         && GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalUnique
         && indexDesc.KeyColumnNamesSize() == 1
         && indexDesc.GetKeyColumnNames(0) == NTableIndex::NFulltext::RowIdColumn;
     if (forReplication && (!tx.GetInternal() || !table.IsAsyncReplicaTable()
         || (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobal
-            && !(AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
-                && NTableIndex::IsFulltextOrJsonIndex(GetIndexType(indexDesc))) && !rowIdReplication) || op.GetIsRebuild()))
+            && !(fulltextReplication
+                && NTableIndex::IsCompactFulltextIndex(GetIndexType(indexDesc))) && !rowIdReplication) || op.GetIsRebuild()))
     {
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter,
             "Replication index creation requires an internal supported index on a replica")};
@@ -250,8 +212,12 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     TString errStr;
     if (!isRebuild) {
-        const bool replicatedRowId = forReplication && NTableIndex::IsFulltextOrJsonIndex(GetIndexType(indexDesc))
-            && indexDesc.GetFulltextIndexDescription().GetUseRowIdAsDocId();
+        const bool replicatedFulltext = forReplication && NTableIndex::IsCompactFulltextIndex(GetIndexType(indexDesc));
+        const bool replicatedRowId = replicatedFulltext && (tableInfo->KeyColumnIds.size() != 1
+            || !NTableIndex::IsIntegerPrimaryKeyType(tableInfo->Columns.at(tableInfo->KeyColumnIds.front()).PType.GetTypeId()));
+        if (replicatedFulltext) {
+            indexDesc.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(replicatedRowId);
+        }
         if (replicatedRowId) {
             // The dependency's CDC scan may still be filling. Waiting here for
             // Ready would park the base-table schema barrier and prevent that
@@ -281,7 +247,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
                     "Replicated fulltext/JSON index requires its Uint64 NOT NULL row-id column and unique index")};
             }
-        } else if (!NTableIndex::MaybeEnableFulltextRowIdMode(tableInfo, table.Base()->GetChildren(), context.SS->Indexes.AsMap(), indexDesc, errStr)) {
+        } else if (!replicatedFulltext && !NTableIndex::MaybeEnableFulltextRowIdMode(tableInfo, table.Base()->GetChildren(), context.SS->Indexes.AsMap(), indexDesc, errStr)) {
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusInvalidParameter, errStr)};
         }
     }

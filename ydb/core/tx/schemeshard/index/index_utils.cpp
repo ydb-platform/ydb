@@ -8,12 +8,6 @@
 namespace NKikimr {
 namespace NTableIndex {
 
-bool IsCompactFulltextIndex(NKikimrSchemeOp::EIndexType indexType) {
-    return indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
-        || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
-        || indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact;
-}
-
 TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc) {
     TIndexObjectCounts res;
     res.IndexTableCount = 1;
@@ -1190,17 +1184,6 @@ bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTy
 
     return true;
 }
-
-namespace {
-
-bool IsIntegerPrimaryKeyType(NScheme::TTypeId typeId) {
-    return typeId == NScheme::NTypeIds::Uint64
-        || typeId == NScheme::NTypeIds::Int64
-        || typeId == NScheme::NTypeIds::Uint32
-        || typeId == NScheme::NTypeIds::Int32;
-}
-
-} // namespace
 
 bool CheckSingleIntegerPrimaryKey(
     const TTableColumns& baseTableColumns,

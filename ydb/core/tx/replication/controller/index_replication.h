@@ -25,15 +25,6 @@ inline bool IsFulltextRowIdIndex(const Ydb::Table::TableIndexDescription& index)
         && index.index_columns(0) == NTableIndex::NFulltext::RowIdColumn;
 }
 
-inline bool UsesFulltextRowId(const Ydb::Table::DescribeTableResult& table) {
-    for (const auto& index : table.indexes()) {
-        if (index.use_row_id_as_doc_id() || IsFulltextRowIdIndex(index)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 inline bool IsFulltextRowIdIndex(const NKikimrReplication::TSchemaChange::TIndex& index) {
     return index.GetType() == "GlobalUnique" && index.IndexColumnsSize() == 1
         && index.GetIndexColumns(0) == NTableIndex::NFulltext::RowIdColumn;
@@ -59,22 +50,6 @@ inline TVector<TString> GetBuildingFulltextIndexes(const Ydb::Table::DescribeTab
 
 inline bool HasBuildingFulltextIndex(const Ydb::Table::DescribeTableResult& table) {
     return !GetBuildingFulltextIndexes(table).empty();
-}
-
-inline bool HasSupportedFulltextLayout(const Ydb::Table::TableIndexDescription& index) {
-    return index.fulltext_storage_layout() == Ydb::Table::TableIndexDescription::FULLTEXT_STORAGE_LAYOUT_FLAT
-        || index.fulltext_storage_layout() == Ydb::Table::TableIndexDescription::FULLTEXT_STORAGE_LAYOUT_COMPACT;
-}
-
-inline NKikimrSchemeOp::EIndexType GetFulltextIndexType(const Ydb::Table::TableIndexDescription& index) {
-    const bool compact = index.fulltext_storage_layout() == Ydb::Table::TableIndexDescription::FULLTEXT_STORAGE_LAYOUT_COMPACT;
-    if (index.has_global_fulltext_plain_index()) {
-        return compact ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact : NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain;
-    }
-    if (index.has_global_fulltext_relevance_index()) {
-        return compact ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance : NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
-    }
-    return compact ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact : NKikimrSchemeOp::EIndexTypeGlobalJson;
 }
 
 inline NKikimrSchemeOp::EIndexType GetSchemaIndexType(const NKikimrReplication::TSchemaChange::TIndex& index) {

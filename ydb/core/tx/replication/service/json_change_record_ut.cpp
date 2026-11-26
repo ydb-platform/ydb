@@ -628,20 +628,17 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
         {
             auto record = MakeIndexSchemaChangeRecord(TStringBuilder()
                 << "{\"idx\":{\"type\":\"" << type << "\",\"indexColumns\":[\"value\"],"
-                << "\"dataColumns\":[],\"fulltextSettings\":\"\",\"useRowIdAsDocId\":true}}");
+                << "\"dataColumns\":[],\"fulltextSettings\":\"\"}}");
             NKikimrReplication::TSchemaChange schema;
             TString error;
             UNIT_ASSERT_C(record->TryGetSchemaChange(schema, error), error);
             const auto& index = schema.GetIndexes().GetItems(0);
             UNIT_ASSERT(index.HasFulltextSettings());
-            UNIT_ASSERT(index.GetUseRowIdAsDocId());
             UNIT_ASSERT_VALUES_EQUAL(index.GetType(), type);
         }
         for (const auto* settings : {
-                R"("fulltextSettings":42,"useRowIdAsDocId":false)",
-                R"("fulltextSettings":"!","useRowIdAsDocId":false)",
-                R"("fulltextSettings":"","useRowIdAsDocId":"false")",
-                R"("fulltextSettings":"")"})
+                R"("fulltextSettings":42)",
+                R"("fulltextSettings":"!")"})
         {
             auto record = MakeIndexSchemaChangeRecord(TStringBuilder()
                 << "{\"idx\":{\"type\":\"GlobalFulltextPlain\",\"indexColumns\":[\"value\"],"

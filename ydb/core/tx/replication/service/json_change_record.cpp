@@ -636,9 +636,7 @@ bool TChangeRecord::TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema
             index->SetName(name);
             index->SetType(definition["type"].GetString());
             if (definition.Has("fulltextSettings")) {
-                if (!definition["fulltextSettings"].IsString()
-                    || !definition["useRowIdAsDocId"].IsBoolean())
-                {
+                if (!definition["fulltextSettings"].IsString()) {
                     error = TStringBuilder() << "schema record index '" << name << "' has invalid fulltext settings";
                     return false;
                 }
@@ -652,7 +650,6 @@ bool TChangeRecord::TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema
                     error = TStringBuilder() << "schema record index '" << name << "' has invalid fulltext settings encoding";
                     return false;
                 }
-                index->SetUseRowIdAsDocId(definition["useRowIdAsDocId"].GetBoolean());
             }
             for (const auto& column : definition["indexColumns"].GetArray()) {
                 index->AddIndexColumns(column.GetString());

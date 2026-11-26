@@ -32,7 +32,6 @@ namespace {
 
 struct TReplicationSettings {
     TString Kind;
-    bool Compact = false;
     bool Global = false;
     bool InitialIndex = false;
     bool JsonDocument = false;
@@ -48,17 +47,16 @@ struct TReplicationSettings {
     bool PauseBeforeFinish = false;
     bool FinishDuringInitialization = false;
     bool RestartDuringCancellation = false;
-    bool ExistingReadyDestination = false;
 };
 
 void RunReplication(const TReplicationSettings& settings) {
-    const auto& [kind, compact, global, initialIndex, jsonDocument, finish, stall, customKey,
+    const auto& [kind, global, initialIndex, jsonDocument, finish, stall, customKey,
         dropDuringScan, prefixAndCovering, attach, raceDiscovery, splitMerge, dropDuringReadiness,
-        pauseBeforeFinish, finishDuringInitialization, restartDuringCancellation, existingReadyDestination] = settings;
+        pauseBeforeFinish, finishDuringInitialization, restartDuringCancellation] = settings;
     NTestHelpers::TFeatureFlags flags;
     flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
     flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
-    flags.FeatureFlags.SetEnableCompactFulltextIndex(compact);
+    flags.FeatureFlags.SetEnableCompactFulltextIndex(true);
     NTestHelpers::TEnv env(flags, true, stall || raceDiscovery || finish || splitMerge || dropDuringReadiness || finishDuringInitialization
         ? NTestHelpers::ERuntimeMode::Simulated : NTestHelpers::ERuntimeMode::RealThreads);
     auto& runtime = env.GetRuntime();
@@ -217,7 +215,7 @@ void RunReplication(const TReplicationSettings& settings) {
     if (initialIndex) {
         compactIndexes("/Root/source");
     }
-    if (attach || existingReadyDestination) {
+    if (attach) {
         if (initialIndex) {
             NYdb::NTable::TTableClient tables(env.GetDriver());
             auto session = env.RunCall([&] { return tables.GetSession().GetValueSync(); });
@@ -236,7 +234,7 @@ void RunReplication(const TReplicationSettings& settings) {
             execute("CREATE TABLE `/Root/other_replica` (key Uint64 NOT NULL, value Uint64, PRIMARY KEY(key));");
         }
     }
-    if (attach || existingReadyDestination) {
+    if (attach) {
         // Consistent copies stand in for imported data. Bootstrap now requires
         // IMPORTED replica metadata on the base and every backing table before
         // the controller can attach and enter STANDBY.
@@ -330,26 +328,10 @@ void RunReplication(const TReplicationSettings& settings) {
                 }
             }
         });
-    std::atomic<bool> sawPrepareExisting{false};
-    auto prepareObserver = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(
-        [&](NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
-            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
-                if (tx.GetInitiateIndexBuild().GetPrepareExistingForReplication()) {
-                    sawPrepareExisting = true;
-                }
-            }
-        });
     execute(TStringBuilder() << "CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica`"
         << (stall ? ", `/Root/other` AS `/Root/other_replica`" : "") << " WITH ("
         << "CONNECTION_STRING='grpc://" << env.GetEndpoint() << "/?database=/Root', TOKEN='root@builtin'"
         << (global ? ", CONSISTENCY_LEVEL='GLOBAL', COMMIT_INTERVAL=Interval('PT1S')" : "") << ");");
-    if (existingReadyDestination) {
-        const auto deadline = TInstant::Now() + TDuration::Seconds(90);
-        while (!sawPrepareExisting) {
-            UNIT_ASSERT_C(TInstant::Now() < deadline, "Bootstrap did not prepare the existing Ready index");
-            pause();
-        }
-    }
     if (attach) {
         const auto deadline = TInstant::Now() + TDuration::Seconds(90);
         TVector<TString> paths{"/Root/source"};
@@ -676,13 +658,14 @@ void RunReplication(const TReplicationSettings& settings) {
     execute("DROP ASYNC REPLICATION `/Root/replication`;");
 }
 
-void RunLayoutMismatch(const TString& kind, bool compact, bool initialIndex) {
+void RunUnsupportedOnlineIndex(bool sourceCompact, bool destinationCompact, bool destinationRowId, TStringBuf expectedError) {
     NTestHelpers::TFeatureFlags sourceFlags;
     sourceFlags.FeatureFlags.SetEnableFulltextIndexReplication(true);
     sourceFlags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
-    sourceFlags.FeatureFlags.SetEnableCompactFulltextIndex(compact);
+    sourceFlags.FeatureFlags.SetEnableCompactFulltextIndex(sourceCompact);
     auto destinationFlags = sourceFlags;
-    destinationFlags.FeatureFlags.SetEnableCompactFulltextIndex(!compact);
+    destinationFlags.FeatureFlags.SetEnableCompactFulltextIndex(destinationCompact);
+    destinationFlags.FeatureFlags.SetEnableFulltextIndexRowId(destinationRowId);
     NTestHelpers::TEnv source(sourceFlags);
     NTestHelpers::TEnv destination(destinationFlags);
     auto& runtime = destination.GetRuntime();
@@ -692,42 +675,35 @@ void RunLayoutMismatch(const TString& kind, bool compact, bool initialIndex) {
         auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
     };
-    const bool json = kind == "json";
-    const TString index = TStringBuilder() << "INDEX idx GLOBAL USING " << kind << " ON (value)"
-        << (json ? "" : " WITH (tokenizer=standard, use_filter_lowercase=true)");
-    execute(src, TStringBuilder() << "CREATE TABLE `/Root/source` (key Uint64 NOT NULL, value "
-        << (json ? "Json" : "Utf8") << ", PRIMARY KEY(key)"
-        << (initialIndex ? TString(TStringBuilder() << ", " << index) : TString()) << ");");
-    execute(src, TStringBuilder() << "UPSERT INTO `/Root/source` (key,value) VALUES (1,"
-        << (json ? "CAST(@@{\"tag\":\"cats\"}@@ AS Json)" : "'cats'u") << ");");
+    execute(src, "CREATE TABLE `/Root/source` (key Uint64 NOT NULL, value Utf8, PRIMARY KEY(key));");
+    execute(src, "UPSERT INTO `/Root/source` (key,value) VALUES (1,'cats'u);");
     execute(dst, TStringBuilder() << "CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica` WITH ("
         << "CONNECTION_STRING='grpc://" << source.GetEndpoint() << "/?database=/Root', TOKEN='root@builtin');");
-    if (!initialIndex) {
-        const auto deadline = TInstant::Now() + TDuration::Seconds(90);
-        while (true) {
-            const auto result = dst.ExecuteQuery("SELECT key FROM `/Root/replica`;", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
-            if (result.IsSuccess() && result.GetResultSet(0).RowsCount() == 1) {
-                break;
-            }
-            UNIT_ASSERT_C(TInstant::Now() < deadline, result.GetIssues().ToString());
-            Sleep(TDuration::MilliSeconds(100));
-        }
-        execute(src, TStringBuilder() << "ALTER TABLE `/Root/source` ADD " << index << ";");
-    }
-    const TString search = TStringBuilder() << "SELECT key FROM `/Root/replica` VIEW idx WHERE "
-        << (json ? "JSON_VALUE(value,'$.tag' RETURNING Utf8)='cats'u" : "FulltextMatch(value,'cats')") << ";";
     const auto deadline = TInstant::Now() + TDuration::Seconds(90);
     while (true) {
-        const auto result = dst.ExecuteQuery(search, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
-        if (result.IsSuccess() && NYdb::FormatResultSetYson(result.GetResultSet(0)) == "[[1u]]") {
+        const auto result = dst.ExecuteQuery("SELECT key FROM `/Root/replica`;", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        if (result.IsSuccess() && result.GetResultSet(0).RowsCount() == 1) {
             break;
         }
         UNIT_ASSERT_C(TInstant::Now() < deadline, result.GetIssues().ToString());
         Sleep(TDuration::MilliSeconds(100));
     }
-    const auto srcIndex = source.GetDescription("/Root/source").GetPathDescription().GetTable().GetTableIndexes(0);
-    const auto dstIndex = destination.GetDescription("/Root/replica").GetPathDescription().GetTable().GetTableIndexes(0);
-    UNIT_ASSERT_VALUES_EQUAL(srcIndex.GetType(), dstIndex.GetType());
+    execute(src, "ALTER TABLE `/Root/source` ADD INDEX idx GLOBAL USING fulltext_plain ON (value) WITH (tokenizer=standard);");
+    const auto controllerId = destination.GetDescription("/Root/replication").GetPathDescription()
+        .GetReplicationDescription().GetControllerId();
+    const auto pathId = destination.GetPathId("/Root/replication");
+    while (true) {
+        auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+        pathId.ToProto(request->Record.MutablePathId());
+        const auto reply = destination.Send<TEvController::TEvDescribeReplicationResult>(controllerId, std::move(request));
+        if (reply->Get()->Record.GetState().HasError()) {
+            UNIT_ASSERT_STRING_CONTAINS(reply->Get()->Record.DebugString(), expectedError);
+            break;
+        }
+        UNIT_ASSERT_C(TInstant::Now() < deadline, "Unsupported online index was not rejected");
+        Sleep(TDuration::MilliSeconds(100));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(destination.GetDescription("/Root/replica").GetPathDescription().GetTable().TableIndexesSize(), 0);
     execute(dst, "DROP ASYNC REPLICATION `/Root/replication`;");
 }
 
@@ -798,114 +774,107 @@ Y_UNIT_TEST_SUITE(FulltextReplication) {
         UNIT_ASSERT(!monitoring().Contains(reason));
     }
 
-    Y_UNIT_TEST_TWIN(PlainOnline, Compact) {
-        RunReplication({.Kind = "fulltext_plain", .Compact = Compact});
-        RunReplication({.Kind = "fulltext_plain", .Compact = Compact, .Global = true});
+    Y_UNIT_TEST(PlainOnline) {
+        RunReplication({.Kind = "fulltext_plain"});
+        RunReplication({.Kind = "fulltext_plain", .Global = true});
     }
 
-    Y_UNIT_TEST_TWIN(RelevanceOnline, Compact) {
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact});
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true});
+    Y_UNIT_TEST(RelevanceOnline) {
+        RunReplication({.Kind = "fulltext_relevance"});
+        RunReplication({.Kind = "fulltext_relevance", .Global = true});
     }
 
-    Y_UNIT_TEST_TWIN(JsonOnline, Compact) {
-        RunReplication({.Kind = "json", .Compact = Compact});
-        RunReplication({.Kind = "json", .Compact = Compact, .Global = true, .JsonDocument = true});
+    Y_UNIT_TEST(JsonOnline) {
+        RunReplication({.Kind = "json"});
+        RunReplication({.Kind = "json", .Global = true, .JsonDocument = true});
     }
 
-    Y_UNIT_TEST_TWIN(ExistingIndexes, Compact) {
-        RunReplication({.Kind = "fulltext_plain", .Compact = Compact, .InitialIndex = true});
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true, .InitialIndex = true});
-        RunReplication({.Kind = "json", .Compact = Compact, .Global = true, .InitialIndex = true});
+    Y_UNIT_TEST(ExistingIndexes) {
+        RunReplication({.Kind = "fulltext_plain", .InitialIndex = true});
+        RunReplication({.Kind = "fulltext_relevance", .Global = true, .InitialIndex = true});
+        RunReplication({.Kind = "json", .Global = true, .InitialIndex = true});
     }
 
-    Y_UNIT_TEST(InitialScanWithExistingReadyIndex) {
-        RunReplication({.Kind = "fulltext_plain", .Compact = true, .InitialIndex = true, .ExistingReadyDestination = true});
+    Y_UNIT_TEST(RecoveryAndCompletion) {
+        RunReplication({.Kind = "fulltext_relevance", .Global = true, .Finish = true});
+        RunReplication({.Kind = "json", .JsonDocument = true, .Finish = true});
     }
 
-    Y_UNIT_TEST_TWIN(RecoveryAndCompletion, Compact) {
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true, .Finish = true});
-        RunReplication({.Kind = "json", .Compact = Compact, .JsonDocument = true, .Finish = true});
-    }
-
-    Y_UNIT_TEST_TWIN(CompletionFromPaused, Compact) {
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true,
+    Y_UNIT_TEST(CompletionFromPaused) {
+        RunReplication({.Kind = "fulltext_relevance", .Global = true,
             .Finish = true, .PauseBeforeFinish = true});
-        RunReplication({.Kind = "json", .Compact = Compact, .JsonDocument = true,
+        RunReplication({.Kind = "json", .JsonDocument = true,
             .Finish = true, .CustomKey = true, .PauseBeforeFinish = true});
     }
 
-    Y_UNIT_TEST_TWIN(CompletionWithMixedBackingTablePhases, Compact) {
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .FinishDuringInitialization = true});
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true,
+    Y_UNIT_TEST(CompletionWithMixedBackingTablePhases) {
+        RunReplication({.Kind = "fulltext_relevance", .FinishDuringInitialization = true});
+        RunReplication({.Kind = "fulltext_relevance", .Global = true,
             .FinishDuringInitialization = true, .RestartDuringCancellation = true});
     }
 
-    Y_UNIT_TEST_TWIN(CustomPrimaryKey, Compact) {
-        RunReplication({.Kind = "fulltext_plain", .Compact = Compact, .InitialIndex = true, .Finish = true, .CustomKey = true});
+    Y_UNIT_TEST(CustomPrimaryKey) {
+        RunReplication({.Kind = "fulltext_plain", .InitialIndex = true, .Finish = true, .CustomKey = true});
     }
 
-    Y_UNIT_TEST_TWIN(OnlineCustomPrimaryKey, Compact) {
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true, .Finish = true, .CustomKey = true});
+    Y_UNIT_TEST(OnlineCustomPrimaryKey) {
+        RunReplication({.Kind = "fulltext_relevance", .Global = true, .Finish = true, .CustomKey = true});
     }
 
-    Y_UNIT_TEST_TWIN(JsonCustomPrimaryKey, Compact) {
-        RunReplication({.Kind = "json", .Compact = Compact, .JsonDocument = true, .Finish = true, .CustomKey = true});
+    Y_UNIT_TEST(JsonCustomPrimaryKey) {
+        RunReplication({.Kind = "json", .JsonDocument = true, .Finish = true, .CustomKey = true});
     }
 
-    Y_UNIT_TEST_TWIN(PrefixAndCoveringColumns, Compact) {
-        RunReplication({.Kind = "fulltext_plain", .Compact = Compact, .PrefixAndCovering = true});
-        if (Compact) {
-            RunReplication({.Kind = "fulltext_relevance", .Compact = true, .Global = true, .InitialIndex = true, .PrefixAndCovering = true});
-        }
-        RunReplication({.Kind = "json", .Compact = Compact, .Global = true, .PrefixAndCovering = true});
+    Y_UNIT_TEST(PrefixAndCoveringColumns) {
+        RunReplication({.Kind = "fulltext_plain", .PrefixAndCovering = true});
+        RunReplication({.Kind = "fulltext_relevance", .Global = true, .InitialIndex = true, .PrefixAndCovering = true});
+        RunReplication({.Kind = "json", .Global = true, .PrefixAndCovering = true});
     }
 
-    Y_UNIT_TEST_TWIN(SourceIndexFinishesDuringDiscovery, Compact) {
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true, .RaceDiscovery = true});
-        RunReplication({.Kind = "json", .Compact = Compact, .RaceDiscovery = true});
+    Y_UNIT_TEST(SourceIndexFinishesDuringDiscovery) {
+        RunReplication({.Kind = "fulltext_relevance", .Global = true, .RaceDiscovery = true});
+        RunReplication({.Kind = "json", .RaceDiscovery = true});
     }
 
-    Y_UNIT_TEST_TWIN(OnlineAddAfterAttachment, Compact) {
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Stall = true, .Attach = true});
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true, .Stall = true, .Attach = true});
+    Y_UNIT_TEST(OnlineAddAfterAttachment) {
+        RunReplication({.Kind = "fulltext_relevance", .Stall = true, .Attach = true});
+        RunReplication({.Kind = "fulltext_relevance", .Global = true, .Stall = true, .Attach = true});
     }
 
-    Y_UNIT_TEST_TWIN(CopiedIndexAttachment, Compact) {
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true,
+    Y_UNIT_TEST(CopiedIndexAttachment) {
+        RunReplication({.Kind = "fulltext_relevance", .Global = true,
             .InitialIndex = true, .Finish = true, .Attach = true});
-        RunReplication({.Kind = "json", .Compact = Compact, .InitialIndex = true,
+        RunReplication({.Kind = "json", .InitialIndex = true,
             .JsonDocument = true, .Finish = true, .Attach = true});
     }
 
-    Y_UNIT_TEST_TWIN(RecoveryDuringInitialization, Compact) {
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true, .Finish = true, .Stall = true});
-        RunReplication({.Kind = "json", .Compact = Compact, .JsonDocument = true, .Finish = true, .Stall = true});
+    Y_UNIT_TEST(RecoveryDuringInitialization) {
+        RunReplication({.Kind = "fulltext_relevance", .Global = true, .Finish = true, .Stall = true});
+        RunReplication({.Kind = "json", .JsonDocument = true, .Finish = true, .Stall = true});
     }
 
-    Y_UNIT_TEST_TWIN(SplitAndMerge, Compact) {
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true, .SplitMerge = true});
-        RunReplication({.Kind = "json", .Compact = Compact, .JsonDocument = true, .SplitMerge = true});
+    Y_UNIT_TEST(SplitAndMerge) {
+        RunReplication({.Kind = "fulltext_relevance", .Global = true, .SplitMerge = true});
+        RunReplication({.Kind = "json", .JsonDocument = true, .SplitMerge = true});
     }
 
-    Y_UNIT_TEST_TWIN(DropDuringScan, Compact) {
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true, .Stall = true, .DropDuringScan = true});
+    Y_UNIT_TEST(DropDuringScan) {
+        RunReplication({.Kind = "fulltext_relevance", .Global = true, .Stall = true, .DropDuringScan = true});
     }
 
-    Y_UNIT_TEST_TWIN(DropDuringReadiness, Compact) {
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true, .DropDuringReadiness = true});
-        RunReplication({.Kind = "json", .Compact = Compact, .DropDuringReadiness = true});
+    Y_UNIT_TEST(DropDuringReadiness) {
+        RunReplication({.Kind = "fulltext_relevance", .Global = true, .DropDuringReadiness = true});
+        RunReplication({.Kind = "json", .DropDuringReadiness = true});
     }
 
-    Y_UNIT_TEST_TWIN(DifferentDestinationLayout, Compact) {
-        for (const TString kind : {"fulltext_plain", "fulltext_relevance", "json"}) {
-            RunLayoutMismatch(kind, Compact, true);
-            RunLayoutMismatch(kind, Compact, false);
-        }
+    Y_UNIT_TEST(OnlineBuildRequiresCompactAndRowIdSupport) {
+        RunUnsupportedOnlineIndex(true, false, true, "requires fulltext replication, compact and row-id support");
+        RunUnsupportedOnlineIndex(true, true, false, "requires fulltext replication, compact and row-id support");
+        RunUnsupportedOnlineIndex(false, true, true, "Unsupported source fulltext/JSON index format");
     }
 
-    Y_UNIT_TEST_TWIN(StalledScanDoesNotBlockOtherTables, Compact) {
-        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true, .Stall = true});
+    Y_UNIT_TEST(StalledScanDoesNotBlockOtherTables) {
+        RunReplication({.Kind = "fulltext_relevance", .Global = true, .Stall = true});
     }
 }
 

@@ -1060,8 +1060,8 @@ public:
             if (base && base->GetKind() == TReplication::ETargetKind::Table) {
                 for (const auto& index : it->second.Schema.GetIndexes().GetItems()) {
                     const auto type = GetSchemaIndexType(index);
-                    const bool fulltext = NTableIndex::IsFulltextOrJsonIndex(type);
-                    const bool rowId = AppData()->FeatureFlags.GetEnableFulltextIndexReplication() && IsFulltextRowIdIndex(index);
+                    const bool fulltext = NTableIndex::IsCompactFulltextIndex(type) && index.HasFulltextSettings();
+                    const bool rowId = IsFulltextRowIdIndex(index);
                     if (index.GetType() != "GlobalSync" && !fulltext && !rowId) {
                         continue;
                     }

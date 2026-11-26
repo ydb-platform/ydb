@@ -7,7 +7,7 @@ namespace NKikimr::NReplication {
 
 bool HasFulltextIndexMetadata(const NKikimrReplication::TSchemaChange& schema) {
     for (const auto& index : schema.GetIndexes().GetItems()) {
-        if (index.HasFulltextSettings() || index.HasUseRowIdAsDocId()) {
+        if (index.HasFulltextSettings()) {
             return true;
         }
     }
@@ -18,7 +18,6 @@ void ClearFulltextIndexMetadata(NKikimrReplication::TSchemaChange& schema) {
     if (schema.HasIndexes()) {
         for (auto& index : *schema.MutableIndexes()->MutableItems()) {
             index.ClearFulltextSettings();
-            index.ClearUseRowIdAsDocId();
         }
     }
 }
@@ -41,10 +40,6 @@ bool MergeSchemaIndexMetadata(NKikimrReplication::TSchemaChange& into,
         auto& index = *into.MutableIndexes()->MutableItems(i);
         if (incoming.HasFulltextSettings() && !index.HasFulltextSettings()) {
             index.MutableFulltextSettings()->CopyFrom(incoming.GetFulltextSettings());
-            changed = true;
-        }
-        if (incoming.HasUseRowIdAsDocId() && !index.HasUseRowIdAsDocId()) {
-            index.SetUseRowIdAsDocId(incoming.GetUseRowIdAsDocId());
             changed = true;
         }
     }
@@ -70,10 +65,6 @@ bool IsSameSchemaChange(const NKikimrReplication::TSchemaChange& lhs,
             if (!leftIndex->HasFulltextSettings() || !rightIndex->HasFulltextSettings()) {
                 leftIndex->ClearFulltextSettings();
                 rightIndex->ClearFulltextSettings();
-            }
-            if (!leftIndex->HasUseRowIdAsDocId() || !rightIndex->HasUseRowIdAsDocId()) {
-                leftIndex->ClearUseRowIdAsDocId();
-                rightIndex->ClearUseRowIdAsDocId();
             }
         }
     }

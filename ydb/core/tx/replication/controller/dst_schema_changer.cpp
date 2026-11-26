@@ -344,6 +344,11 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             if (AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
                 && desired.GetName() == NTableIndex::NFulltext::RowIdColumn)
             {
+                const auto& flags = AppData()->FeatureFlags;
+                if (!flags.GetEnableFulltextIndexRowId() || !flags.GetEnableCompactFulltextIndex()) {
+                    error = "Online fulltext/JSON replication requires compact and row-id support";
+                    return false;
+                }
                 if (desired.GetType() != "Uint64") {
                     error = "Fulltext/JSON row-id column must have type Uint64";
                     return false;
@@ -401,11 +406,8 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             const bool sameData = std::equal(expected.GetDataColumns().begin(), expected.GetDataColumns().end(),
                 index.GetDataColumnNames().begin(), index.GetDataColumnNames().end());
             const bool sameFulltext = !NTableIndex::IsFulltextOrJsonIndex(index.GetType())
-                || ((!expected.HasFulltextSettings()
-                        || EqualFulltextSettings(expected.GetFulltextSettings(),
-                            index.GetFulltextIndexDescription().GetSettings()))
-                    && (!expected.HasUseRowIdAsDocId()
-                        || expected.GetUseRowIdAsDocId() == index.GetFulltextIndexDescription().GetUseRowIdAsDocId()));
+                || !expected.HasFulltextSettings()
+                || EqualFulltextSettings(expected.GetFulltextSettings(), index.GetFulltextIndexDescription().GetSettings());
             if (expected.GetType() != type || !sameKeys || !sameData || !sameFulltext) {
                 error = TStringBuilder() << "destination index differs from source schema: " << index.GetName();
                 return false;
@@ -416,14 +418,22 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
 
         const NKikimrReplication::TSchemaChange::TIndex* added = nullptr;
         for (const auto& [name, index] : desired) {
-            const bool fulltext = NTableIndex::IsFulltextOrJsonIndex(GetSchemaIndexType(*index));
-            const bool rowId = AppData()->FeatureFlags.GetEnableFulltextIndexReplication() && IsFulltextRowIdIndex(*index);
+            const auto indexType = GetSchemaIndexType(*index);
+            const bool fulltext = NTableIndex::IsFulltextOrJsonIndex(indexType);
+            const bool rowId = IsFulltextRowIdIndex(*index);
             if (index->GetType() == "GlobalSync" || fulltext || rowId) {
-                if (fulltext && (!AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
-                    || !index->HasFulltextSettings()))
-                {
-                    error = TStringBuilder() << "Fulltext/JSON index replication is disabled or settings are missing: " << name;
-                    return false;
+                if (fulltext || rowId) {
+                    const auto& flags = AppData()->FeatureFlags;
+                    if (!flags.GetEnableFulltextIndexReplication() || !flags.GetEnableCompactFulltextIndex()
+                        || !flags.GetEnableFulltextIndexRowId())
+                    {
+                        error = TStringBuilder() << "Online fulltext/JSON replication requires fulltext replication, compact and row-id support: " << name;
+                        return false;
+                    }
+                    if (fulltext && (!NTableIndex::IsCompactFulltextIndex(indexType) || !index->HasFulltextSettings())) {
+                        error = TStringBuilder() << "Unsupported source fulltext/JSON index format or missing settings: " << name;
+                        return false;
+                    }
                 }
                 if (added || dropped || HasTableChanges()) {
                     error = "combined ADD INDEX and other schema changes are not supported";
@@ -474,7 +484,6 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             index.SetType(type);
             if (NTableIndex::IsFulltextOrJsonIndex(type)) {
                 *index.MutableFulltextIndexDescription()->MutableSettings() = added->GetFulltextSettings();
-                index.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(added->GetUseRowIdAsDocId());
             }
             *index.MutableKeyColumnNames() = added->GetIndexColumns();
             *index.MutableDataColumnNames() = added->GetDataColumns();

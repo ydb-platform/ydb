@@ -448,7 +448,7 @@ Y_UNIT_TEST_SUITE(ServiceSchemaProtocol) {
                     "schemaVersion": 2,
                     "indexes": {
                         "by_value": {"type": "GlobalJson", "indexColumns": ["value"], "dataColumns": [],
-                            "fulltextSettings": "", "useRowIdAsDocId": false}
+                            "fulltextSettings": ""}
                     },
                     "columns": {"key": {"type": "Uint32"}, "value": {"type": "Utf8"}},
                     "primaryKeyColumnNames": ["key"]
@@ -501,8 +501,7 @@ Y_UNIT_TEST_SUITE(Worker) {
 
         auto enriched = legacy;
         auto* fulltext = enriched.MutableIndexes()->MutableItems(0);
-        fulltext->MutableFulltextSettings();
-        fulltext->SetUseRowIdAsDocId(true);
+        fulltext->MutableFulltextSettings()->add_columns()->set_column("value");
         UNIT_ASSERT(IsSameSchemaChange(legacy, enriched));
         UNIT_ASSERT(IsSameSchemaChange(enriched, legacy));
 
@@ -512,7 +511,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         UNIT_ASSERT(!MergeSchemaIndexMetadata(merged, legacy));
 
         auto conflicting = enriched;
-        conflicting.MutableIndexes()->MutableItems(0)->SetUseRowIdAsDocId(false);
+        conflicting.MutableIndexes()->MutableItems(0)->MutableFulltextSettings()->mutable_columns(0)->set_column("other");
         UNIT_ASSERT(!IsSameSchemaChange(enriched, conflicting));
         ClearFulltextIndexMetadata(merged);
         UNIT_ASSERT_VALUES_EQUAL(merged.SerializeAsString(), legacy.SerializeAsString());

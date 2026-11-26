@@ -166,11 +166,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
     }
 
     Y_UNIT_TEST(AlterRejectsDefaultExpressionDependencies) {
-        CheckMalformedDefaultExpression(ESchemaOperation::AlterColumn, true, true, "DEFAULT expression column 'value' cannot have dependencies");
+        CheckMalformedDefaultExpression(ESchemaOperation::AlterColumn, true, true,
+            "DEFAULT expression column 'value' cannot have dependencies");
     }
 
     Y_UNIT_TEST(AlterAddRejectsDefaultExpressionDependencies) {
-        CheckMalformedDefaultExpression(ESchemaOperation::AddColumn, true, true, "DEFAULT expression column 'value' cannot have dependencies");
+        CheckMalformedDefaultExpression(ESchemaOperation::AddColumn, true, true,
+            "DEFAULT expression column 'value' cannot have dependencies");
     }
 
     Y_UNIT_TEST(CreateTableWithDefaultExpression) {
@@ -279,7 +281,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
               }
               KeyColumnNames: ["key"]
               PartitionConfig {
-                  ColumnFamilies { Id: 0 StorageConfig { SysLog { PreferredPoolKind: "hdd" } Log { PreferredPoolKind: "hdd" } Data { PreferredPoolKind: "hdd" } } }
+                  ColumnFamilies {
+                    Id: 0
+                    StorageConfig {
+                      SysLog { PreferredPoolKind: "hdd" }
+                      Log { PreferredPoolKind: "hdd" }
+                      Data { PreferredPoolKind: "hdd" }
+                    }
+                  }
                   ColumnFamilies { Id: 1 Name: "alt" StorageConfig { Data { PreferredPoolKind: "hdd" } } }
               }
         )pb");

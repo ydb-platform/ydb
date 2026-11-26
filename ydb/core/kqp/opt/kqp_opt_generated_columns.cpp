@@ -380,7 +380,9 @@ TVector<const TKikimrColumnMetadata*> CollectStoredGeneratedColumns(const TKikim
     TVector<const TKikimrColumnMetadata*> generatedColumns;
     for (const auto& name : table.Metadata->ColumnOrder) {
         const auto* colMeta = table.Metadata->Columns.FindPtr(name);
-        if (colMeta && colMeta->IsDefaultFromExpression() && colMeta->DefaultExpression->IsGenerated() && colMeta->DefaultExpression->Stored) {
+        if (colMeta && colMeta->IsDefaultFromExpression()
+            && colMeta->DefaultExpression->IsGenerated() && colMeta->DefaultExpression->Stored)
+        {
             generatedColumns.push_back(colMeta);
         }
     }

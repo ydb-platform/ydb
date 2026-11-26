@@ -201,28 +201,44 @@ void TKikimrQueryContext::Reset() {
     CompileTrace.Reset();
 }
 
-const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TString& cluster,
-    const TString& table, TPositionHandle pos, TExprContext& ctx) const
+namespace {
+
+template <typename TTables>
+auto FindExistingTable(TTables& tables, const NKikimr::NKqp::TKqpTempTablesState::TConstPtr& tempTablesState,
+    const TString& cluster, const TString& table, TPositionHandle pos, TExprContext& ctx)
 {
     auto tablePath = table;
-    if (TempTablesState) {
-        auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
+    if (tempTablesState) {
+        auto tempTableInfoIt = tempTablesState->FindInfo(table, true);
 
-        if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+        if (tempTableInfoIt != tempTablesState->TempTables.end()) {
             tablePath = tempTableInfoIt->first;
         }
     }
 
-    auto desc = Tables.FindPtr(std::make_pair(cluster, tablePath));
-    if (desc && (desc->GetTableType() != ETableType::Table || desc->DoesExist())) {
-        return desc;
+    auto* desc = tables.FindPtr(std::make_pair(cluster, tablePath));
+    if (!desc || (desc->GetTableType() == ETableType::Table && !desc->DoesExist())) {
+        ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()
+            << "Cannot find table '" << NCommon::FullTableName(cluster, tablePath)
+            << "' because it does not exist or you do not have access permissions."
+            << " Please check correctness of table path and user permissions."));
+        desc = nullptr;
     }
+    return desc;
+}
 
-    ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()
-        << "Cannot find table '" << NCommon::FullTableName(cluster, tablePath)
-        << "' because it does not exist or you do not have access permissions."
-        << " Please check correctness of table path and user permissions."));
-    return nullptr;
+} // namespace
+
+TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TString& cluster, const TString& table,
+    TPositionHandle pos, TExprContext& ctx)
+{
+    return FindExistingTable(Tables, TempTablesState, cluster, table, pos, ctx);
+}
+
+const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TString& cluster, const TString& table,
+    TPositionHandle pos, TExprContext& ctx) const
+{
+    return FindExistingTable(Tables, TempTablesState, cluster, table, pos, ctx);
 }
 
 TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster, const TString& database,

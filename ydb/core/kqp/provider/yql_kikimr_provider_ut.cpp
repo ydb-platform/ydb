@@ -70,19 +70,6 @@ void Find(const TAstNode* node, const std::function<bool(const TAstNode*)>& pred
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KikimrProvider) {
-    Y_UNIT_TEST(NormalizeDefaultExprTextPreservesAnsiLiterals) {
-        TExprContext ctx;
-        const TString expression = R"sql('\n' || 'it''s@@'u /* comment */ || "column name")sql";
-
-        const auto native = NormalizeDefaultExprText(expression, false, ctx);
-        UNIT_ASSERT(native);
-        UNIT_ASSERT_VALUES_EQUAL(*native, expression);
-
-        const auto ansi = NormalizeDefaultExprText(expression, true, ctx);
-        UNIT_ASSERT_C(ansi, ctx.IssueManager.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(*ansi, R"sql(@@\n@@ || @@it's@@@@@@u /* comment */ || `column name`)sql");
-    }
-
     Y_UNIT_TEST(DefaultCompileTimeEvaluationRejectsRuntimeInputs) {
         TExprContext ctx;
         TTypeAnnotationContext types;

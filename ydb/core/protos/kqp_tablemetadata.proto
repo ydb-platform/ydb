@@ -33,7 +33,6 @@ message TDefaultExpression {
     optional string ExprText = 1;
     repeated string Dependencies = 2;
     optional bool Stored = 3 [default = false];
-    // DEFAULT expressions accept explicit writes; GENERATED columns do not.
     optional bool Writable = 4 [default = false];
 }
 

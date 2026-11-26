@@ -14,8 +14,6 @@
 
 #include <util/generic/hash_set.h>
 #include <util/string/builder.h>
-#include <util/string/escape.h>
-#include <util/string/subst.h>
 
 namespace NYql {
 
@@ -25,58 +23,6 @@ TString AssembleGeneratedQuery(const TString& exprBody) {
 
 TString AssembleDefaultQuery(const TString& exprBody) {
     return TStringBuilder() << "SELECT " << exprBody << ";";
-}
-
-TMaybe<TString> NormalizeDefaultExprText(TStringBuf exprBody, bool ansiLexer, TExprContext& ctx) {
-    if (!ansiLexer) {
-        return TString(exprBody);
-    }
-
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    auto lexer = NSQLTranslationV1::MakeLexer(lexers, ansiLexer);
-
-    TString normalized;
-    normalized.reserve(exprBody.size());
-    const auto appendToken = [&](NSQLTranslation::TParsedToken&& token) {
-        if (token.Name == "EOF") {
-            return;
-        }
-
-        const TStringBuf text = token.Content;
-        if (token.Name != "STRING_VALUE" || (!text.StartsWith('\'') && !text.StartsWith('"'))) {
-            normalized += text;
-            return;
-        }
-
-        const char quote = text.front();
-        const auto end = text.rfind(quote);
-        YQL_ENSURE(end > 0);
-        TString content(text.SubStr(1, end - 1));
-        SubstGlobal(content, TString(2, quote), TString(1, quote));
-        if (quote == '\'') {
-            // Raw string literals preserve ANSI backslashes and can carry the original type suffix.
-            SubstGlobal(content, "@@", "@@@@");
-            normalized += "@@";
-            normalized += content;
-            normalized += "@@";
-            normalized += text.SubStr(end + 1);
-        } else {
-            content = EscapeC(content);
-            SubstGlobal(content, "`", "\\`");
-            normalized += '`';
-            normalized += content;
-            normalized += '`';
-        }
-    };
-
-    TIssues issues;
-    const bool success = lexer->Tokenize(TString(exprBody), "", appendToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS);
-    ctx.IssueManager.AddIssues(issues);
-    if (!success) {
-        return {};
-    }
-    return normalized;
 }
 
 bool CanEvaluateDefaultAtCompileTime(const TExprNode& expression) {
@@ -180,6 +126,7 @@ const THashSet<TStringBuf>& ReadsDataCallables() {
         "Sync!",
         "DataSource",
         "DataSink",
+        "HasItems",
     };
     return callables;
 }
@@ -222,7 +169,7 @@ bool IsReadsDataNode(const TExprNode& node) {
     return TCoRight::Match(&node) || TCoLeft::Match(&node) || TCoCons::Match(&node)
         || TCoRead::Match(&node) || TCoWrite::Match(&node) || TCoCommit::Match(&node)
         || TCoDataSource::Match(&node) || TCoDataSink::Match(&node) || TCoSync::Match(&node)
-        || TCoConfigure::Match(&node) || TCoWithWorld::Match(&node)
+        || TCoConfigure::Match(&node) || TCoWithWorld::Match(&node) || TCoHasItems::Match(&node)
         || ReadsDataCallables().contains(node.Content());
 }
 
@@ -255,7 +202,7 @@ struct TGeneratedFindings {
     TExprNode::TPtr ProjectionLambda;
 };
 
-TGeneratedFindings CollectFindings(const TExprNode::TPtr& root) {
+TGeneratedFindings CollectFindings(const TExprNode::TPtr& root, bool treatHasItemsAsRead) {
     TGeneratedFindings findings;
 
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
@@ -279,7 +226,7 @@ TGeneratedFindings CollectFindings(const TExprNode::TPtr& root) {
             ++findings.Reads;
         }
 
-        if (IsReadsDataNode(*node)) {
+        if (IsReadsDataNode(*node) && (treatHasItemsAsRead || !TCoHasItems::Match(node.Get()))) {
             findings.ReadsData = true;
         } else if (IsAggregationNode(*node)) {
             findings.HasAggregation = true;
@@ -381,7 +328,7 @@ bool EmitOutOfRowError(const TGeneratedFindings& findings, bool readsDataIsSubqu
 
 // Compiles `SELECT <expr> [FROM <source>];` down to the projection lambda and rejects
 // everything that is not a scalar expression over the row
-TExprNode::TPtr CompileScalarExpr(const TString& sqlText, const TDiagnostics& diagnostics, ui32 expectedReads,
+TExprNode::TPtr CompileScalarExpr(const TString& sqlText, const TDiagnostics& diagnostics, bool isGenerated,
     TExprContext& ctx, NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder,
     const IModuleResolver::TPtr& moduleResolver)
 {
@@ -391,7 +338,8 @@ TExprNode::TPtr CompileScalarExpr(const TString& sqlText, const TDiagnostics& di
         return nullptr;
     }
 
-    auto checks = CollectFindings(queryGraph);
+    const ui32 expectedReads = isGenerated ? 1 : 0;
+    auto checks = CollectFindings(queryGraph, isGenerated);
 
     if (checks.HasStar || checks.Reads > expectedReads || checks.ProjectionItems > 1) {
         ctx.AddError(TIssue(ctx.GetPosition(queryGraph->Pos()), TStringBuilder()
@@ -409,7 +357,8 @@ TExprNode::TPtr CompileScalarExpr(const TString& sqlText, const TDiagnostics& di
         return nullptr;
     }
 
-    const TGeneratedFindings body = CollectFindings(checks.ProjectionLambda->TailPtr());
+    // DEFAULT allows HasItems on local collections. Reads inside its argument are still checked.
+    const TGeneratedFindings body = CollectFindings(checks.ProjectionLambda->TailPtr(), isGenerated);
     if (EmitOutOfRowError(body, /* readsDataIsSubquery */ true, diagnostics, ctx, checks.ProjectionLambda->Pos())) {
         return nullptr;
     }
@@ -447,8 +396,7 @@ TExprNode::TPtr CompileGeneratedExpr(const TString& sqlText, const TString& colu
     NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder, const IModuleResolver::TPtr& moduleResolver)
 {
     // The generated envelope reads the table the column belongs to
-    return CompileScalarExpr(sqlText, GeneratedDiagnostics(columnName), /* expectedReads */ 1,
-        ctx, settingsBuilder, moduleResolver);
+    return CompileScalarExpr(sqlText, GeneratedDiagnostics(columnName), /* isGenerated */ true, ctx, settingsBuilder, moduleResolver);
 }
 
 TExprNode::TPtr CompileDefaultExpr(const TString& sqlText, const TString& columnName, TExprContext& ctx,
@@ -457,8 +405,7 @@ TExprNode::TPtr CompileDefaultExpr(const TString& sqlText, const TString& column
     const TDiagnostics diagnostics = DefaultDiagnostics(columnName);
 
     // The DEFAULT envelope has no FROM, so any read at all is a subquery
-    auto lambda = CompileScalarExpr(sqlText, diagnostics, /* expectedReads */ 0,
-        ctx, settingsBuilder, moduleResolver);
+    auto lambda = CompileScalarExpr(sqlText, diagnostics, /* isGenerated */ false, ctx, settingsBuilder, moduleResolver);
     if (!lambda) {
         return nullptr;
     }

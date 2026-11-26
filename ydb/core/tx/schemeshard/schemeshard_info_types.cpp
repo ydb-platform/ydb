@@ -650,9 +650,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromExpression && columnFamily && columnFamily->GetId() != 0) {
                 NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
-                if (generatedDesc.ParseFromString(sourceColumn.DefaultValue)
-                    && !generatedDesc.GetStored())
-                {
+                if (generatedDesc.ParseFromString(sourceColumn.DefaultValue) && !generatedDesc.GetStored()) {
                     errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
                     return nullptr;
                 }

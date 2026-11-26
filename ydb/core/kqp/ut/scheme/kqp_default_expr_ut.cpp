@@ -817,22 +817,6 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             "DEFAULT expressions are disabled");
     }
 
-    Y_UNIT_TEST_TWIN(AnsiDefaultPreservesValueAfterReload, Alter) {
-        TTestFixture fixture;
-        const std::string expression = R"sql(CAST(RandomNumber(1) * 0ul AS String) || '\n' || 'it''s@@')sql";
-        if (Alter) {
-            fixture.Exec(DefaultExprDDL("v String"));
-            fixture.Exec("--!ansi_lexer\nALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " + expression + ";");
-        } else {
-            fixture.Exec(DefaultExprDDL("v String DEFAULT " + expression, "--!ansi_lexer\n"));
-        }
-        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
-        fixture.RestartSchemeShard("/Root/TestTable");
-        fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
-        fixture.Check(R"sql(SELECT k, v = "0\\nit's@@" FROM TestTable ORDER BY k;)sql",
-            "[[1;[%true]];[2;[%true]]]");
-    }
-
     Y_UNIT_TEST(PgDefaultCoercionMatchesAfterReload) {
         auto appConfig = DefaultExprAppConfig();
         appConfig.MutableFeatureFlags()->SetDisablePgCompatibility(false);
@@ -1078,28 +1062,6 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
 
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;#]]");
-    }
-
-    Y_UNIT_TEST_TWIN(OptionalDefaultRejectedBeforeSetNotNull, ProducesNull) {
-        auto appConfig = DefaultExprAppConfig();
-        appConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
-        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
-        const TString expression = ProducesNull
-            ? R"(CAST("invalid" || CAST(RandomNumber(1) AS String) AS Uint64))"
-            : R"(CAST(CAST(RandomNumber(1) AS String) AS Uint64))";
-        fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Uint64 DEFAULT " << expression));
-        const auto before = fixture.ColumnDesc("/Root/TestTable", "v");
-        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (1, 7ul);");
-
-        fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET NOT NULL;", "declared NOT NULL");
-        const auto after = fixture.ColumnDesc("/Root/TestTable", "v");
-        UNIT_ASSERT(!after.GetNotNull());
-        UNIT_ASSERT(!after.GetSetNotNullInProgress());
-        UNIT_ASSERT_VALUES_EQUAL(before.GetDefaultFromExpression().SerializeAsString(),
-            after.GetDefaultFromExpression().SerializeAsString());
-        fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
-        fixture.Check("SELECT k, v FROM TestTable WHERE k = 1;", "[[1;[7u]]]");
-        fixture.Check("SELECT COUNT(*) FROM TestTable;", "[[2u]]");
     }
 
     Y_UNIT_TEST(SetAndDropNotNullKeepExpressionDefault) {

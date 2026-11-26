@@ -5,8 +5,6 @@
 #include <yql/essentials/ast/yql_expr.h>
 
 #include <util/generic/hash_set.h>
-#include <util/generic/maybe.h>
-#include <util/generic/strbuf.h>
 
 namespace NYql {
 
@@ -15,9 +13,6 @@ TString AssembleGeneratedQuery(const TString& exprBody);
 
 // Wraps a raw DEFAULT expression body in a FROM-less SELECT envelope
 TString AssembleDefaultQuery(const TString& exprBody);
-
-// Converts a captured DEFAULT expression to SQL for the standard lexer, using the original query's lexer mode.
-TMaybe<TString> NormalizeDefaultExprText(TStringBuf exprBody, bool ansiLexer, TExprContext& ctx);
 
 // Checks whether a closed DEFAULT expression can be evaluated as a schema literal.
 bool CanEvaluateDefaultAtCompileTime(const TExprNode& expression);

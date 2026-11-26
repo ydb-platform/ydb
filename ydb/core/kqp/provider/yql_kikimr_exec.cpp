@@ -1,4 +1,3 @@
-#include "generated_column.h"
 #include "yql_kikimr_provider_impl.h"
 
 #include <ydb/core/base/fulltext.h>
@@ -2426,20 +2425,16 @@ public:
 
                                 if (!IsLiteralDefaultValue(defaultExpr)) {
                                     YQL_ENSURE(setDefault.SqlText());
-                                    auto expressionText = NormalizeDefaultExprText(setDefault.SqlText().Cast().Value(),
-                                        SessionCtx->Query().TranslationSettings.AnsiLexer, ctx);
-                                    if (!expressionText) {
-                                        return SyncError();
-                                    }
 
                                     alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION);
                                     auto* expression = alter_columns->MutableDefaultFromExpression();
-                                    expression->SetExprText(std::move(*expressionText));
+                                    expression->SetExprText(TString(setDefault.SqlText().Cast().Value()));
                                     expression->SetStored(true);
                                     expression->SetWritable(true);
                                 } else {
                                     alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
-                                    auto err = FillLiteralProto(defaultExpr, &RemoveOptionality(*defaultExpr.Ref().GetTypeAnn()), *alter_columns->MutableDefaultFromLiteral());
+                                    const auto& literalType = RemoveOptionality(*defaultExpr.Ref().GetTypeAnn());
+                                    auto err = FillLiteralProto(defaultExpr, &literalType, *alter_columns->MutableDefaultFromLiteral());
                                     if (err) {
                                         ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
                                         return SyncError();

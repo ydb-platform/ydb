@@ -1,9 +1,14 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/grpc_services/service_table.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
@@ -15,9 +20,13 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/random_provider/random_provider.h>
+#include <util/generic/scope.h>
 
 #include <algorithm>
 #include <atomic>
+#include <map>
+#include <optional>
+#include <utility>
 
 namespace NKikimr::NKqp {
 
@@ -83,6 +92,18 @@ private:
 };
 
 class TTestFixture {
+    template <typename TCall>
+    auto RunCall(TCall&& call) {
+        if (Kikimr.GetTestServer().GetRuntime()->IsRealThreads()) {
+            return call();
+        }
+        return Kikimr.RunCall(std::forward<TCall>(call));
+    }
+
+    TExecuteQueryResult Execute(const std::string& query) {
+        return RunCall([&] { return Session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync(); });
+    }
+
 public:
     explicit TTestFixture(const TFixtureOptions& options = {})
         : TTestFixture(TKikimrSettings(DefaultExprAppConfig(options)).SetWithSampleTables(false))
@@ -92,17 +113,17 @@ public:
     explicit TTestFixture(const TKikimrSettings& settings)
         : Kikimr(settings)
         , Db(Kikimr.GetQueryClient())
-        , Session(Db.GetSession().GetValueSync().GetSession())
+        , Session(RunCall([&] { return Db.GetSession().ExtractValueSync().GetSession(); }))
     {
     }
 
     void Exec(const std::string& query) {
-        auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        auto result = Execute(query);
         UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n" << result.GetIssues().ToString());
     }
 
     TString Rejects(const std::string& query, const TString& expectedError) {
-        auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        auto result = Execute(query);
         UNIT_ASSERT_C(!result.IsSuccess(), "expected the query to be rejected: " << query);
         const TString issues = result.GetIssues().ToString();
         UNIT_ASSERT_STRING_CONTAINS_C(issues, expectedError, "query: " << query);
@@ -110,7 +131,7 @@ public:
     }
 
     void RejectsWithStatus(const std::string& query, EStatus expectedStatus) {
-        auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        auto result = Execute(query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, query << "\n" << result.GetIssues().ToString());
     }
 
@@ -123,7 +144,7 @@ public:
     }
 
     TString QueryYson(const std::string& query) {
-        auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        auto result = Execute(query);
         UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n" << result.GetIssues().ToString());
         return FormatResultSetYson(result.GetResultSet(0));
     }
@@ -181,7 +202,7 @@ public:
 
     // The column description as SchemeShard persisted it
     NKikimrSchemeOp::TColumnDescription ColumnDesc(const std::string& path, const std::string& column) {
-        auto describe = Kikimr.GetTestClient().Ls(TString(path));
+        auto describe = RunCall([&] { return Kikimr.GetTestClient().Ls(TString(path)); });
         const auto& table = describe->Record.GetPathDescription().GetTable();
         for (const auto& col : table.GetColumns()) {
             if (col.GetName() == column) {
@@ -194,7 +215,7 @@ public:
 
     std::string ShowCreateTable(const std::string& path) {
         const std::string query = "SHOW CREATE TABLE `" + path + "`;";
-        auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        auto result = Execute(query);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         TResultSetParser parser(result.GetResultSet(0));
@@ -215,6 +236,40 @@ public:
         }
         RestartSchemeShard(tablePath);
         Session = Db.GetSession().GetValueSync().GetSession();
+    }
+
+    TVector<NJson::TJsonValue> ReadChangefeedMessages(size_t expectedCount) {
+        return RunCall([&] {
+            NTopic::TTopicClient topicClient(Kikimr.GetDriver());
+            NTopic::TReadSessionSettings settings;
+            settings.ConsumerName("test_consumer");
+            settings.AppendTopics(NTopic::TTopicReadSettings().Path("/Root/TestTable/feed"));
+            auto reader = topicClient.CreateReadSession(settings);
+
+            TVector<NJson::TJsonValue> messages;
+            const auto deadline = TInstant::Now() + TDuration::Seconds(20);
+            while (messages.size() < expectedCount) {
+                const auto now = TInstant::Now();
+                if (now >= deadline || !reader->WaitEvent().Wait(deadline - now)) {
+                    break;
+                }
+                for (auto& event : reader->GetEvents(false)) {
+                    if (auto* start = std::get_if<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
+                        start->Confirm();
+                    } else if (auto* data = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+                        for (const auto& message : data->GetMessages()) {
+                            auto& json = messages.emplace_back();
+                            UNIT_ASSERT_C(NJson::ReadJsonTree(message.GetData(), &json), message.GetData());
+                        }
+                        data->Commit();
+                    } else if (auto* closed = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+                        UNIT_FAIL(closed->GetIssues().ToString());
+                    }
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(messages.size(), expectedCount, "changefeed message count");
+            return messages;
+        });
     }
 
     TKikimrRunner& Runner() {
@@ -2542,6 +2597,364 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         check("[[1;[11];#];[2;[22];#];[3;[30];#]]");
     }
 
+    Y_UNIT_TEST(OnlineIndexBuildUsesStoredDefaults) {
+        TTestFixture fixture(TKikimrSettings(DefaultExprAppConfig()).SetWithSampleTables(false).SetUseRealThreads(false));
+        fixture.Exec(ValueTableDDL());
+        fixture.Exec("INSERT INTO TestTable (k, other) VALUES (1, 10);");
+        fixture.Exec("INSERT INTO TestTable (k, other, v) VALUES (2, 20, 7ul), (3, 30, NULL);");
+        fixture.Exec(R"(
+            ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT Ensure(RandomNumber(1), false, "default ran");
+        )");
+
+        auto& kikimr = fixture.Runner();
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto client = kikimr.GetQueryClient();
+        NActors::TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> backfill(runtime);
+        Y_DEFER { backfill.Stop().Unblock(); };
+        auto build = kikimr.RunInThreadPool([&] {
+            return client.ExecuteQuery("ALTER TABLE TestTable ADD INDEX idx_v GLOBAL SYNC ON (v) COVER (other);",
+                TTxControl::NoTx());
+        });
+
+        runtime.WaitFor("index backfill request", [&] { return !backfill.empty(); });
+        // The backfill snapshot predates this write, which must reach the index through live maintenance.
+        UNIT_ASSERT(backfill.front()->Get()->Record.HasSnapshotStep());
+        UNIT_ASSERT(backfill.front()->Get()->Record.HasSnapshotTxId());
+        fixture.Exec("INSERT INTO TestTable (k, other, v) VALUES (4, 40, 9ul);");
+        UNIT_ASSERT_C(!build.HasValue() && !build.HasException(), "index build finished with backfill blocked");
+
+        backfill.Stop().Unblock();
+        const auto result = runtime.WaitFuture(build);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        fixture.Rejects("INSERT INTO TestTable (k, other) VALUES (5, 50);", "default ran");
+        const TString rows = "[[1;[10];[42u]];[2;[20];[7u]];[3;[30];#];[4;[40];[9u]]]";
+        fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", rows);
+        fixture.Check("SELECT k, other, v FROM TestTable VIEW idx_v ORDER BY k;", rows);
+    }
+
+    Y_UNIT_TEST(ShardOperationsPreserveStoredDefaults) {
+        TTestFixture fixture(TKikimrSettings(DefaultExprAppConfig()).SetWithSampleTables(false).SetUseRealThreads(false));
+        fixture.Exec(TStringBuilder() << R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                other Int32,
+                v Uint64 DEFAULT )" << DefaultExpr << R"(,
+                PRIMARY KEY (k),
+                INDEX idx_other GLOBAL SYNC ON (other) COVER (v)
+            ) WITH (
+                AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                AUTO_PARTITIONING_BY_LOAD = DISABLED
+            );
+        )");
+        fixture.Exec("INSERT INTO TestTable (k, other) VALUES (1, 10);");
+        fixture.Exec("INSERT INTO TestTable (k, other, v) VALUES (2, 20, NULL), (3, 30, 7ul);");
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT RandomNumber(1) * 0ul + 43ul;");
+
+        const TString historical = "[[1;[10];[42u]];[2;[20];#];[3;[30];[7u]]]";
+        const auto checkAfterMaintenance = [&](i32 key, const TString& expected) {
+            fixture.Check("SELECT k, other, v FROM TestTable WHERE k <= 3 ORDER BY k;", historical);
+            fixture.Check("SELECT k, other, v FROM TestTable VIEW idx_other WHERE k <= 3 ORDER BY k;", historical);
+            fixture.Check(TStringBuilder() << "INSERT INTO TestTable (k, other) VALUES (" << key << ", " << key * 10
+                << ") RETURNING v;", "[[[43u]]]");
+            fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", expected);
+            fixture.Check("SELECT k, other, v FROM TestTable VIEW idx_other ORDER BY k;", expected);
+        };
+
+        auto& server = fixture.Runner().GetTestServer();
+        auto& runtime = *server.GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        const TString tablePath = "/Root/TestTable";
+        SetSplitMergePartCountLimit(&runtime, -1);
+
+        const auto description = DescribeTable(&server, sender, tablePath);
+        const auto& self = description.GetPathDescription().GetSelf();
+        const auto compactShard = [&](ui64 shard) {
+            auto request = MakeHolder<TEvDataShard::TEvCompactTable>(self.GetSchemeshardId(), self.GetPathId());
+            request->Record.SetCompactBorrowed(true);
+            request->Record.SetCompactSinglePartedShards(true);
+            runtime.SendToPipe(shard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+            const auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK,
+                result->Get()->Record.ShortDebugString());
+        };
+
+        const auto changePartitions = [&](const TVector<ui64>& sources, std::optional<i32> splitBoundary) {
+            auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+            request->Record.SetExecTimeoutPeriod(Max<ui64>());
+            auto& modify = *request->Record.MutableTransaction()->MutableModifyScheme();
+            modify.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
+            auto& partitions = *modify.MutableSplitMergeTablePartitions();
+            partitions.SetTablePath(tablePath);
+            for (ui64 tabletId : sources) {
+                partitions.AddSourceTabletId(tabletId);
+            }
+            if (splitBoundary) {
+                partitions.AddSplitBoundary()->MutableKeyPrefix()->AddTuple()->MutableOptional()->SetInt32(*splitBoundary);
+            }
+
+            runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()), 0, true);
+            const auto started = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+            const auto& status = started->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress,
+                status.ShortDebugString());
+
+            auto notify = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(status.GetTxId());
+            runtime.SendToPipe(status.GetSchemeShardTabletId(), sender, notify.Release(), 0, GetPipeConfigWithRetries());
+            const auto done = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(done->Get()->Record.GetTxId(), status.GetTxId());
+        };
+
+        const auto initialShards = GetTableShards(&server, sender, tablePath);
+        UNIT_ASSERT_VALUES_EQUAL(initialShards.size(), 1u);
+        changePartitions(initialShards, 3);
+        const auto splitShards = GetTableShards(&server, sender, tablePath);
+        UNIT_ASSERT_VALUES_EQUAL(splitShards.size(), 2u);
+        checkAfterMaintenance(4, "[[1;[10];[42u]];[2;[20];#];[3;[30];[7u]];[4;[40];[43u]]]");
+
+        // Both split shards initially borrow parts from the original shard. Materialize them before merging.
+        for (ui64 shard : splitShards) {
+            compactShard(shard);
+        }
+        changePartitions(splitShards, std::nullopt);
+        const auto mergedShards = GetTableShards(&server, sender, tablePath);
+        UNIT_ASSERT_VALUES_EQUAL(mergedShards.size(), 1u);
+        checkAfterMaintenance(5, "[[1;[10];[42u]];[2;[20];#];[3;[30];[7u]];[4;[40];[43u]];[5;[50];[43u]]]");
+
+        const ui64 shard = mergedShards.front();
+        const auto oldActor = ResolveTablet(runtime, shard);
+        RebootTablet(runtime, shard, sender);
+        UNIT_ASSERT_C(ResolveTablet(runtime, shard) != oldActor, "expected a new DataShard actor after restart");
+        checkAfterMaintenance(6, "[[1;[10];[42u]];[2;[20];#];[3;[30];[7u]];[4;[40];[43u]];[5;[50];[43u]];[6;[60];[43u]]]");
+
+        compactShard(shard);
+        checkAfterMaintenance(7, "[[1;[10];[42u]];[2;[20];#];[3;[30];[7u]];[4;[40];[43u]];[5;[50];[43u]];[6;[60];[43u]];[7;[70];[43u]]]");
+    }
+
+    Y_UNIT_TEST(TtlUsesStoredTimestampsAfterDefaultChange) {
+        TTestFixture fixture(TKikimrSettings(DefaultExprAppConfig()).SetWithSampleTables(false).SetUseRealThreads(false));
+        auto& server = fixture.Runner().GetTestServer();
+        auto& runtime = *server.GetRuntime();
+        runtime.SetFastSimulatedTime(false);
+
+        auto& allowErase = runtime.GetAppData().Icb->SchemeShardControls.AllowConditionalEraseOperations;
+        TControlBoard::SetValue(false, allowErase);
+        runtime.AdvanceCurrentTime(TDuration::Minutes(2));
+
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                ts Timestamp DEFAULT IF(RandomNumber(1) * 0ul = 0ul,
+                    Timestamp("1970-01-01T00:00:01Z"), Timestamp("1970-01-01T00:00:00Z")),
+                PRIMARY KEY (k)
+            ) WITH (TTL = Interval("PT1M") ON ts);
+        )");
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Exec(R"(
+            INSERT INTO TestTable (k, ts) VALUES (2, Timestamp("1970-01-01T01:00:00Z")), (3, NULL);
+        )");
+        fixture.Exec(R"(
+            ALTER TABLE TestTable ALTER COLUMN ts SET DEFAULT IF(RandomNumber(1) * 0ul = 0ul,
+                Timestamp("1970-01-01T02:00:00Z"), Timestamp("1970-01-01T00:00:00Z"));
+        )");
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (4);");
+
+        const char* rows = "SELECT k, ts FROM TestTable ORDER BY k;";
+        fixture.Check(rows, "[[1;[1000000u]];[2;[3600000000u]];[3;#];[4;[7200000000u]]]");
+
+        const auto shards = GetTableShards(&server, runtime.AllocateEdgeActor(), "/Root/TestTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        using TEraseResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back([tabletId = shards.front()](IEventHandle& event) {
+            if (event.GetTypeRewrite() != TEraseResponse::EventType) {
+                return false;
+            }
+            const auto& response = event.Get<TEraseResponse>()->Record;
+            if (response.GetTabletID() != tabletId) {
+                return false;
+            }
+            const auto status = response.GetStatus();
+            using TStatus = TEraseResponse::ProtoRecordType;
+            if (status == TStatus::ACCEPTED || status == TStatus::PARTIAL) {
+                return false;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(status, TStatus::OK, response.ShortDebugString());
+            return true;
+        });
+
+        TControlBoard::SetValue(true, allowErase);
+        runtime.AdvanceCurrentTime(TDuration::Minutes(1));
+        UNIT_ASSERT_C(runtime.DispatchEvents(options, TDuration::Minutes(5)), "conditional erase did not finish");
+        fixture.Check(rows, "[[2;[3600000000u]];[3;#];[4;[7200000000u]]]");
+    }
+
+    Y_UNIT_TEST(ChangefeedImagesUseStoredValuesAfterDefaultChange) {
+        TTestFixture fixture;
+        fixture.Exec(DefaultExprDDL("v Int32 DEFAULT IF(RandomNumber(1) * 0ul = 0ul, 42, 0)"));
+        fixture.Exec("INSERT INTO TestTable (k, other) VALUES (1, 10);");
+        fixture.Exec("INSERT INTO TestTable (k, other, v) VALUES (2, 20, 7), (3, 30, NULL);");
+
+        fixture.Exec("ALTER TABLE TestTable ADD CHANGEFEED feed WITH (MODE = 'NEW_AND_OLD_IMAGES', FORMAT = 'JSON');");
+        fixture.Exec("ALTER TOPIC `/Root/TestTable/feed` ADD CONSUMER test_consumer;");
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT IF(RandomNumber(1) * 0ul = 0ul, 50, 0);");
+        fixture.Exec("UPDATE TestTable SET other = other + 1 WHERE k IN (1, 2, 3);");
+        fixture.Exec("INSERT INTO TestTable (k, other) VALUES (4, 40);");
+
+        THashMap<i64, NJson::TJsonValue> messages;
+        for (auto& message : fixture.ReadChangefeedMessages(4)) {
+            const auto key = message["key"][0].GetInteger();
+            UNIT_ASSERT_C(messages.emplace(key, std::move(message)).second, "duplicate CDC key " << key);
+        }
+
+        for (const char* image : {"oldImage", "newImage"}) {
+            UNIT_ASSERT_VALUES_EQUAL_C(messages.at(1)[image]["v"].GetInteger(), 42, image);
+            UNIT_ASSERT_VALUES_EQUAL_C(messages.at(2)[image]["v"].GetInteger(), 7, image);
+            const auto& nullImage = messages.at(3)[image];
+            UNIT_ASSERT_C(nullImage.Has("v") && nullImage["v"].IsNull(), image);
+        }
+        UNIT_ASSERT(!messages.at(4).Has("oldImage"));
+        UNIT_ASSERT_VALUES_EQUAL(messages.at(4)["newImage"]["v"].GetInteger(), 50);
+    }
+
+    Y_UNIT_TEST(ConcurrentDefaultChangesAndWritesAcrossNodes) {
+        TTestFixture fixture(TKikimrSettings(DefaultExprAppConfig()).SetWithSampleTables(false)
+            .SetNodeCount(2).SetUseRealThreads(false));
+        auto& kikimr = fixture.Runner();
+        auto& server = kikimr.GetTestServer();
+        auto& runtime = *server.GetRuntime();
+        runtime.SetFastSimulatedTime(false);
+
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                other Int32 NOT NULL,
+                v Int32 DEFAULT IF(RandomNumber(1) * 0ul = 0ul, 42, 0),
+                PRIMARY KEY (k),
+                INDEX idx_other GLOBAL SYNC ON (other) COVER (v)
+            );
+        )");
+        fixture.Exec("ALTER TABLE TestTable ADD CHANGEFEED feed WITH (MODE = 'NEW_AND_OLD_IMAGES', FORMAT = 'JSON');");
+        fixture.Exec("ALTER TOPIC `/Root/TestTable/feed` ADD CONSUMER test_consumer;");
+
+        TPortManager ports;
+        const auto writerPort = ports.GetPort();
+        server.EnableGRpc(writerPort, 1);
+        TDriver ddlDriver(kikimr.GetDriverConfig().SetDiscoveryMode(EDiscoveryMode::Off));
+        TDriver writerDriver(kikimr.GetDriverConfig().SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetEndpoint(TStringBuilder() << "localhost:" << writerPort));
+        Y_DEFER {
+            kikimr.RunCall([&] {
+                writerDriver.Stop(true);
+                ddlDriver.Stop(true);
+                return true;
+            });
+        };
+        auto ddlClient = NQuery::TQueryClient(ddlDriver);
+        auto writerClient = NYdb::NTable::TTableClient(writerDriver);
+        auto connectedDdl = kikimr.RunCall([&] { return ddlClient.GetSession().ExtractValueSync(); });
+        auto connectedWriter = kikimr.RunCall([&] { return writerClient.CreateSession().ExtractValueSync(); });
+        UNIT_ASSERT_C(connectedDdl.IsSuccess(), connectedDdl.GetIssues().ToString());
+        UNIT_ASSERT_C(connectedWriter.IsSuccess(), connectedWriter.GetIssues().ToString());
+        auto ddl = connectedDdl.GetSession();
+        auto writer = connectedWriter.GetSession();
+        UNIT_ASSERT_STRING_CONTAINS(ddl.GetId(), TStringBuilder() << "node_id=" << runtime.GetNodeId(0) << "&");
+        UNIT_ASSERT_STRING_CONTAINS(writer.GetId(), TStringBuilder() << "node_id=" << runtime.GetNodeId(1) << "&");
+
+        auto prepareResult = kikimr.RunCall([&] {
+            return writer.PrepareDataQuery(R"(
+                DECLARE $k AS Int32;
+                INSERT INTO TestTable (k, other) VALUES ($k, $k * 10) RETURNING k, other, v;
+            )").ExtractValueSync();
+        });
+        UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        auto prepared = prepareResult.GetQuery();
+        const auto tx = NYdb::NTable::TTxControl::BeginTx().CommitTx();
+        std::map<std::pair<i32, i32>, std::optional<i32>> expectedCdc;
+        const auto checkReturning = [&](const auto& result, const TString& rows) {
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYsonUnordered(rows, FormatResultSetYson(result.GetResultSet(0)));
+            TResultSetParser parser(result.GetResultSet(0));
+            while (parser.TryNextRow()) {
+                const auto k = parser.ColumnParser("k").GetInt32();
+                const auto other = parser.ColumnParser("other").GetInt32();
+                UNIT_ASSERT(expectedCdc.emplace(std::make_pair(k, other), parser.ColumnParser("v").GetOptionalInt32()).second);
+            }
+        };
+        const auto checkPrepared = [&](i32 k, const TString& rows) {
+            auto params = prepared.GetParamsBuilder().AddParam("$k").Int32(k).Build().Build();
+            checkReturning(runtime.WaitFuture(prepared.Execute(tx, params)), rows);
+        };
+        const auto checkWrite = [&](const TString& query, const TString& rows) {
+            checkReturning(runtime.WaitFuture(writer.ExecuteDataQuery(query, tx)), rows);
+        };
+        const auto checkStored = [&](const TString& rows) {
+            fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", rows);
+            fixture.Check("SELECT k, other, v FROM TestTable VIEW idx_other ORDER BY k;", rows);
+        };
+
+        checkPrepared(1, "[[1;10;[42]]]");
+        checkWrite("INSERT INTO TestTable (k, other, v) VALUES (2, 20, NULL) RETURNING k, other, v;", "[[2;20;#]]");
+        {
+            // Keep the DDL pending at SchemeShard while the other node commits the UPSERT.
+            NActors::TBlockEvents<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction> proposal(runtime, [](const auto& ev) {
+                const auto& record = ev->Get()->Record;
+                return record.TransactionSize() == 1 && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterTable;
+            });
+            Y_DEFER { proposal.Stop().Unblock(); };
+            auto alter = ddl.ExecuteQuery(
+                "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT IF(RandomNumber(1) * 0ul = 0ul, 50, 0);", TTxControl::NoTx());
+            runtime.WaitFor("SET DEFAULT proposal", [&] { return !proposal.empty(); });
+            checkWrite("UPSERT INTO TestTable (k, other) VALUES (1, 11), (2, 21), (3, 30) RETURNING k, other, v;",
+                "[[1;11;[42]];[2;21;#];[3;30;[42]]]");
+            UNIT_ASSERT(!alter.HasValue() && !alter.HasException());
+            proposal.Stop().Unblock();
+            const auto result = runtime.WaitFuture(alter);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        checkPrepared(4, "[[4;40;[50]]]");
+        checkWrite("UPSERT INTO TestTable (k, other) VALUES (1, 12), (2, 22), (5, 50) RETURNING k, other, v;",
+            "[[1;12;[42]];[2;22;#];[5;50;[50]]]");
+        checkStored("[[1;12;[42]];[2;22;#];[3;30;[42]];[4;40;[50]];[5;50;[50]]]");
+        {
+            const TString upsert = "UPSERT INTO TestTable (k, other) VALUES (1, 13), (5, 51), (6, 60) RETURNING k, other, v;";
+            NActors::TBlockEvents<TEvKqp::TEvQueryRequest> pendingWrite(runtime, [&](const auto& ev) {
+                return ev->Get()->GetQuery() == upsert;
+            });
+            Y_DEFER { pendingWrite.Stop().Unblock(); };
+            auto write = writer.ExecuteDataQuery(upsert, tx);
+            runtime.WaitFor("UPSERT request", [&] { return !pendingWrite.empty(); });
+            const auto result = runtime.WaitFuture(
+                ddl.ExecuteQuery("ALTER TABLE TestTable ALTER COLUMN v DROP DEFAULT;", TTxControl::NoTx()));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(!write.HasValue() && !write.HasException());
+            pendingWrite.Stop().Unblock();
+            checkReturning(runtime.WaitFuture(write), "[[1;13;[42]];[5;51;[50]];[6;60;#]]");
+        }
+
+        checkPrepared(7, "[[7;70;#]]");
+        checkWrite("UPSERT INTO TestTable (k, other) VALUES (2, 23), (8, 80) RETURNING k, other, v;", "[[2;23;#];[8;80;#]]");
+        checkStored("[[1;13;[42]];[2;23;#];[3;30;[42]];[4;40;[50]];[5;51;[50]];[6;60;#];[7;70;#];[8;80;#]]");
+
+        for (const auto& message : fixture.ReadChangefeedMessages(expectedCdc.size())) {
+            const auto& image = message["newImage"];
+            UNIT_ASSERT(image.Has("other") && image.Has("v"));
+            const auto key = std::make_pair(static_cast<i32>(message["key"][0].GetInteger()),
+                static_cast<i32>(image["other"].GetInteger()));
+            const auto found = expectedCdc.find(key);
+            UNIT_ASSERT_C(found != expectedCdc.end(), "unexpected CDC image for key " << key.first << " other " << key.second);
+            if (found->second) {
+                UNIT_ASSERT_VALUES_EQUAL(image["v"].GetInteger(), *found->second);
+            } else {
+                UNIT_ASSERT(image["v"].IsNull());
+            }
+            expectedCdc.erase(found);
+        }
+        UNIT_ASSERT(expectedCdc.empty());
+    }
+
     Y_UNIT_TEST(ChangefeedUsesCurrentExpressionDefault) {
         TTestFixture fixture;
         fixture.Exec(DefaultExprDDL("v Int32"));
@@ -2557,34 +2970,10 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec("UPSERT INTO TestTable (k, other) VALUES (3, 30);");
         fixture.Exec("REPLACE INTO TestTable (k, other) VALUES (4, 40);");
 
-        NTopic::TTopicClient topicClient(fixture.Runner().GetDriver());
-        NTopic::TReadSessionSettings settings;
-        settings.ConsumerName("test_consumer");
-        settings.AppendTopics(NTopic::TTopicReadSettings().Path("/Root/TestTable/feed"));
-        auto reader = topicClient.CreateReadSession(settings);
-
         THashMap<i64, NJson::TJsonValue> messages;
-        const auto deadline = TInstant::Now() + TDuration::Seconds(20);
-        while (messages.size() < 4) {
-            const auto now = TInstant::Now();
-            if (now >= deadline || !reader->WaitEvent().Wait(deadline - now)) {
-                break;
-            }
-            for (auto& event : reader->GetEvents(false)) {
-                if (auto* start = std::get_if<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
-                    start->Confirm();
-                } else if (auto* data = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
-                    for (const auto& message : data->GetMessages()) {
-                        NJson::TJsonValue json;
-                        UNIT_ASSERT_C(NJson::ReadJsonTree(message.GetData(), &json), message.GetData());
-                        const auto key = json["key"][0].GetInteger();
-                        UNIT_ASSERT_C(messages.emplace(key, std::move(json)).second, message.GetData());
-                    }
-                    data->Commit();
-                } else if (auto* closed = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
-                    UNIT_FAIL(closed->GetIssues().ToString());
-                }
-            }
+        for (auto& message : fixture.ReadChangefeedMessages(4)) {
+            const auto key = message["key"][0].GetInteger();
+            UNIT_ASSERT_C(messages.emplace(key, std::move(message)).second, "duplicate CDC key " << key);
         }
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(messages.at(1)["update"]["v"].GetInteger(), 42);

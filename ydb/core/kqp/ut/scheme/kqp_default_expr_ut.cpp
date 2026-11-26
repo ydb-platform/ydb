@@ -13,6 +13,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_backup.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -396,6 +397,41 @@ void RunDmlMatrix(ESecondaryIndexKind indexKind, bool withReturning) {
             fixture.Check(query, expectedIndex);
         }
     }
+}
+
+TKikimrSettings DefaultExprBackupSettings() {
+    auto config = DefaultExprAppConfig();
+    config.MutableFeatureFlags()->SetEnableBackupService(true);
+    return TKikimrSettings(config).SetWithSampleTables(false).SetEnableBackupService(true).SetUseRealThreads(false);
+}
+
+using TBackupOperationId = NYdb::TOperation::TOperationId;
+
+template <typename TOperationResult>
+void RunBackupCollectionOperation(TTestFixture& fixture, const std::string& query, TBackupOperationId::EKind kind) {
+    auto& runtime = *fixture.Runner().GetTestServer().GetRuntime();
+    auto result = runtime.WaitFuture(fixture.QuerySession().ExecuteQuery(query, TTxControl::NoTx()));
+    UNIT_ASSERT_C(result.IsSuccess(), query << "\n" << result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1u);
+    TResultSetParser parser(result.GetResultSet(0));
+    UNIT_ASSERT_C(parser.TryNextRow(), query);
+    const std::string id(parser.ColumnParser("operation_id").GetUtf8());
+    UNIT_ASSERT_C(!id.empty(), query);
+
+    TBackupOperationId operationId;
+    operationId.SetKind(kind);
+    operationId.AddOptionalValue("id", id);
+    NYdb::NOperation::TOperationClient client(fixture.Runner().GetDriver());
+    const auto settings = NYdb::NOperation::TGetOperationSettings().ClientTimeout(TDuration::Seconds(5));
+    const auto deadline = TMonotonic::Now() + TDuration::Seconds(30);
+    const auto getOperation = [&] { return runtime.WaitFuture(client.Get<TOperationResult>(operationId, settings)); };
+    auto operation = getOperation();
+    while (operation.Status().IsSuccess() && !operation.Ready() && TMonotonic::Now() < deadline) {
+        operation = getOperation();
+    }
+    UNIT_ASSERT_C(operation.Status().IsSuccess(),
+        query << " (" << id << ")\n" << operation.Status().GetStatus() << ": " << operation.Status().GetIssues().ToString());
+    UNIT_ASSERT_C(operation.Ready(), query << " did not complete: " << operation.ToString());
 }
 
 }   // namespace
@@ -3060,6 +3096,67 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Rejects("INSERT INTO TestTable (k) VALUES (2);", "Missing not null column in input: required");
         fixture.Exec("INSERT INTO TestTable (k, required) VALUES (2, 7ul);");
         fixture.Check("SELECT k, v, required FROM TestTable ORDER BY k;", "[[1;[42u];42u];[2;#;7u]]");
+    }
+
+    Y_UNIT_TEST(FullBackupCollectionRestoresExpressionDefault) {
+        TTestFixture fixture(DefaultExprBackupSettings());
+        fixture.Exec(ValueTableDDL());
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (2, 7ul), (3, NULL);");
+        fixture.Exec(R"(
+            CREATE BACKUP COLLECTION FullDefaultBackup (TABLE `/Root/TestTable`)
+                WITH (STORAGE = 'cluster');
+        )");
+        RunBackupCollectionOperation<NYdb::NBackup::TFullBackupResponse>(
+            fixture, "BACKUP FullDefaultBackup;", TBackupOperationId::FULL_BACKUP);
+
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (4);");
+        fixture.Exec("DROP TABLE TestTable;");
+        RunBackupCollectionOperation<NYdb::NBackup::TBackupCollectionRestoreResponse>(
+            fixture, "RESTORE FullDefaultBackup;", TBackupOperationId::RESTORE);
+
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+        UNIT_ASSERT_STRING_CONTAINS(fixture.ShowCreateTable("/Root/TestTable"), TStringBuilder() << "DEFAULT " << DefaultExpr);
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42u]];[2;[7u]];[3;#]]");
+        fixture.Check("INSERT INTO TestTable (k) VALUES (4) RETURNING k, v;", "[[4;[42u]]]");
+    }
+
+    Y_UNIT_TEST(IncrementalBackupCollectionRestoresRowsAndFullSnapshotDefault) {
+        TTestFixture fixture(DefaultExprBackupSettings());
+        const TString fullSnapshotDefault = "RandomNumber(1) * 0ul + 50ul";
+        fixture.Exec(ValueTableDDL());
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Exec(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << fullSnapshotDefault << ";");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), fullSnapshotDefault);
+
+        fixture.Exec(R"(
+            CREATE BACKUP COLLECTION IncrementalDefaultBackup (TABLE `/Root/TestTable`)
+                WITH (STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true');
+        )");
+        RunBackupCollectionOperation<NYdb::NBackup::TFullBackupResponse>(
+            fixture, "BACKUP IncrementalDefaultBackup;", TBackupOperationId::FULL_BACKUP);
+
+        // The collection locks the table schema. The earlier default change predates the full snapshot.
+        fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT RandomNumber(1) * 0ul + 99ul;",
+            "Alter schema forbidden: table is part of a backup collection");
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (3, 7ul);");
+
+        // The backup rotates its CDC stream, whose name includes a second-resolution timestamp.
+        fixture.Runner().GetTestServer().GetRuntime()->AdvanceCurrentTime(TDuration::Seconds(1));
+        RunBackupCollectionOperation<NYdb::NBackup::TIncrementalBackupResponse>(
+            fixture, "BACKUP IncrementalDefaultBackup INCREMENTAL;", TBackupOperationId::INCREMENTAL_BACKUP);
+
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (4);");
+        fixture.Exec("DROP TABLE TestTable;");
+        RunBackupCollectionOperation<NYdb::NBackup::TBackupCollectionRestoreResponse>(
+            fixture, "RESTORE IncrementalDefaultBackup;", TBackupOperationId::RESTORE);
+
+        // RESTORE copies the full snapshot's schema and replays the incremental row changes.
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), fullSnapshotDefault);
+        UNIT_ASSERT_STRING_CONTAINS(fixture.ShowCreateTable("/Root/TestTable"), TStringBuilder() << "DEFAULT " << fullSnapshotDefault);
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42u]];[2;[50u]];[3;[7u]]]");
+        fixture.Check("INSERT INTO TestTable (k) VALUES (4) RETURNING k, v;", "[[4;[50u]]]");
     }
 
     Y_UNIT_TEST(PreparedInsertAfterTableRecreation) {

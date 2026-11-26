@@ -16,7 +16,7 @@
 #include "flat_comp.h"
 #include "flat_executor_misc.h"
 #include "flat_bio_stats.h"
-#include "shared_cache_pages.h"
+#include "flat_transaction_pages.h"
 #include "shared_sausagecache.h"
 #include "util_channel.h"
 
@@ -540,7 +540,7 @@ namespace NTabletFlatExecutor {
 
             Spent = new TSpent(TAppData::TimeProvider.Get());
             Registry = AppData()->TypeRegistry;
-            SharedCachePages = AppData()->SharedCachePages.Get();
+            PageCache = GetWrittenPageCache();
             Scheme = std::move(scheme);
             Driver = driver;
 
@@ -837,32 +837,9 @@ namespace NTabletFlatExecutor {
 
             for (auto &result : Results) {
                 Y_ENSURE(result.PageCollections, "Compaction produced a part without page collections");
-                TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> resultingPageCollections;
-                for (auto& pageCollection : result.PageCollections) {
-                    auto resultingPageCollection = MakeIntrusive<NTable::TLoader::TPageCollection>(pageCollection.PageCollection);
-                    auto saveCompactedPages = MakeHolder<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection);
-                    auto gcList = SharedCachePages->GCList;
-                    auto addPage = [&saveCompactedPages, &resultingPageCollection, &gcList](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
-                        auto sharedPage = MakeIntrusive<TPage>(loadedPage.Location.Offset, loadedPage.Location.Size, loadedPage.Location.Type, loadedPage.Location.Crc32, nullptr);
-                        sharedPage->ProvideBody(std::move(loadedPage.Data));
-                        saveCompactedPages->Pages.push_back(sharedPage);
-                        if (sticky) {
-                            resultingPageCollection->AddStickyPage(loadedPage.Location.Offset, loadedPage.Location.Size, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList, loadedPage.Location.Type));
-                        } else {
-                            resultingPageCollection->AddPage(loadedPage.Location.Offset, loadedPage.Location.Size, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList, loadedPage.Location.Type));
-                        }
-                    };
-                    for (auto &page : pageCollection.StickyPages) {
-                        addPage(page, true);
-                    }
-                    for (auto &page : pageCollection.RegularPages) {
-                        addPage(page, false);
-                    }
-
-                    Send(MakeSharedPageCacheId(), saveCompactedPages.Release());
-
-                    resultingPageCollections.push_back(std::move(resultingPageCollection));
-                }
+                auto environment = PageCache.AddWrittenPages(result.PageCollections, [this](THolder<IEventBase> event) {
+                    Send(MakeSharedPageCacheId(), event.Release());
+                });
 
                 TVector<NTable::TPageCollectionComponents> comps(result.PageCollections.size());
                 NTable::TPartComponents parts{
@@ -871,10 +848,7 @@ namespace NTabletFlatExecutor {
                     .Epoch = NTable::TEpoch::Max(),
                 };
 
-                // Pass pre-built collections with MakeUsed refs so shared cache sees active refs
-                NTable::TLoader loader(
-                    std::move(parts),
-                    std::move(resultingPageCollections));
+                NTable::TLoader loader(std::move(environment), std::move(parts));
 
                 // do not preload index as it may be already offloaded
                 auto fetch = loader.Run({.PreloadIndex = false, .PreloadData = false});
@@ -1118,7 +1092,7 @@ namespace NTabletFlatExecutor {
         TVector<TCompactionOutputs::TResult> Results;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
         const NScheme::TTypeRegistry * Registry = nullptr;
-        NSharedCache::TSharedCachePages * SharedCachePages;
+        TWrittenPageCache PageCache;
 
         bool Finished = false;
         bool Failed = false;/* Failed to write blobs    */

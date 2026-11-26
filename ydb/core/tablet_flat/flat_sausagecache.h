@@ -6,6 +6,10 @@
 #include "shared_cache_events.h"
 #include <ydb/core/util/page_map.h>
 
+namespace NKikimr::NSharedCache {
+class TSharedCachePages;
+}
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
@@ -169,6 +173,8 @@ struct TPrivatePageCacheRestartState final : public IPageCacheRestartState {
 struct TPrivateLoadedCollections final : public IPageCacheLoadedCollections {
     TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> PageCollections;
 };
+
+TWrittenPageCache MakePrivateWrittenPageCache(NSharedCache::TSharedCachePages& pages) noexcept;
 
 // The holder stays stable when boot recreates the private cache
 class TPrivatePageCacheBackend final : public IExecutorPageCache {

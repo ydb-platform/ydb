@@ -1,6 +1,8 @@
 #include <ydb/core/tablet_flat/flat_executor_tx_env.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_sz_env.h>
+#include <ydb/core/tablet_flat/flat_writer_blocks.h>
+#include <ydb/core/tablet_flat/shared_cache_pages.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -417,6 +419,66 @@ Y_UNIT_TEST_SUITE(TLegacyPageReadEnv) {
         UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
         const auto& emptyAttach = *CheckedCast<NSharedCache::TEvAttach*>(events.front().Get());
         UNIT_ASSERT(emptyAttach.BtreeSeeds.empty() && !emptyAttach.ReplayStickyWalk);
+    }
+
+    Y_UNIT_TEST(WrittenPagesKeepOwnersAndReuseBuffers) {
+        TReadFixture f;
+        auto cachePages = MakeIntrusive<NSharedCache::TSharedCachePages>();
+        auto cache = MakePrivateWrittenPageCache(*cachePages);
+        TVector<NWriter::TWrittenPageCollection> written(2);
+        const ui32 dataSlot = f.Part->DataSlot({});
+        const ui32 outerSlot = f.Part->OuterSlot();
+        written[0].PageCollection = f.Part->GetPageCollectionRef(dataSlot);
+        written[1].PageCollection = f.Part->GetPageCollectionRef(outerSlot);
+        const auto& stickyLocation = f.Locations[0];
+        const auto& regularLocation = f.Locations[1];
+        const auto outerLocation = f.Source->Store->GetPageLocation(outerSlot, 0);
+        written[0].StickyPages.emplace_back(stickyLocation, *f.Source->Store->GetPage(dataSlot, stickyLocation.Offset));
+        written[0].RegularPages.emplace_back(
+            regularLocation, *f.Source->Store->GetPage(dataSlot, regularLocation.Offset));
+        written[1].RegularPages.emplace_back(outerLocation, *f.Source->Store->GetPage(outerSlot, outerLocation.Offset));
+        const auto* stickyBytes = written[0].StickyPages.front().Data.data();
+        const auto* regularBytes = written[0].RegularPages.front().Data.data();
+        TVector<THolder<IEventBase>> events;
+        auto environment = cache.AddWrittenPages(written, [&](THolder<IEventBase> event) {
+            UNIT_ASSERT_VALUES_EQUAL(event->Type(), NSharedCache::EvSaveCompactedPages);
+            const auto& saved = *CheckedCast<NSharedCache::TEvSaveCompactedPages*>(event.Get());
+            UNIT_ASSERT(events.size() < written.size());
+            UNIT_ASSERT(saved.PageCollection.Get() == written[events.size()].PageCollection.Get());
+            if (events.empty()) {
+                UNIT_ASSERT_VALUES_EQUAL(saved.Pages.size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(saved.Pages[0]->Offset, stickyLocation.Offset);
+                UNIT_ASSERT_VALUES_EQUAL(saved.Pages[1]->Offset, regularLocation.Offset);
+                UNIT_ASSERT_VALUES_EQUAL(saved.Pages[0]->Size, stickyLocation.Size);
+                UNIT_ASSERT_VALUES_EQUAL(saved.Pages[1]->Size, regularLocation.Size);
+                // The shared-cache handoff holds one use; Sticky retains another
+                UNIT_ASSERT_VALUES_EQUAL(saved.Pages[0]->UseCount(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(saved.Pages[1]->UseCount(), 1);
+                UNIT_ASSERT(saved.Pages[0]->Type == stickyLocation.Type);
+                UNIT_ASSERT(saved.Pages[1]->Type == regularLocation.Type);
+                UNIT_ASSERT_VALUES_EQUAL(saved.Pages[0]->Crc32, stickyLocation.Crc32);
+                UNIT_ASSERT_VALUES_EQUAL(saved.Pages[1]->Crc32, regularLocation.Crc32);
+                UNIT_ASSERT(!written[0].StickyPages.front().Data);
+                UNIT_ASSERT(!written[0].RegularPages.front().Data);
+                UNIT_ASSERT(written[1].RegularPages.front().Data);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(saved.Pages.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(saved.Pages.front()->Offset, outerLocation.Offset);
+                UNIT_ASSERT(!written[1].RegularPages.front().Data);
+            }
+            events.push_back(std::move(event));
+        });
+        UNIT_ASSERT_VALUES_EQUAL(events.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(environment->GetCollectionCount(), 2);
+        UNIT_ASSERT(environment->GetCollection(0).Get() == written[0].PageCollection.Get());
+        UNIT_ASSERT(environment->GetCollection(1).Get() == written[1].PageCollection.Get());
+        events.clear();
+        environment->Initialize(NTable::TPartSlots(1));
+        const auto* sticky = environment->TryGetSlotPage(0, stickyLocation);
+        const auto* regular = environment->TryGetSlotPage(0, regularLocation);
+        UNIT_ASSERT(sticky && regular);
+        UNIT_ASSERT(sticky->data() == stickyBytes);
+        UNIT_ASSERT(regular->data() == regularBytes);
     }
 
     Y_UNIT_TEST(BackendClassifiesEventsAndBorrowsResultMetadata) {

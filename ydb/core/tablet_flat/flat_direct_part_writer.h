@@ -8,9 +8,8 @@
 #include "flat_part_laid.h"
 #include "flat_part_screen.h"
 #include "flat_part_store.h"
-#include "flat_sausagecache.h"
 #include "flat_sausage_chop.h"
-#include "shared_cache_pages.h"
+#include "flat_transaction_pages.h"
 #include "shared_sausagecache.h"
 #include "util_fmt_abort.h"
 
@@ -81,7 +80,7 @@ namespace NTabletFlatExecutor {
             , Scheme(std::move(scheme))
         {
             Bundle = new TBundle(Mask_, Cfg.Writer);
-            SharedCachePages = AppData()->SharedCachePages.Get();
+            PageCache = GetWrittenPageCache();
         }
 
         const TLogoBlobID& Mask() const noexcept { return Mask_; }
@@ -259,37 +258,9 @@ namespace NTabletFlatExecutor {
             for (auto &res : Results) {
                 Y_ENSURE(res.PageCollections, "Direct write produced a part without page collections");
 
-                TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> pageCollections;
-                for (auto& pageCollection : res.PageCollections) {
-                    auto resultingPageCollection = MakeIntrusive<NTable::TLoader::TPageCollection>(pageCollection.PageCollection);
-                    auto saveCompactedPages = MakeHolder<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection);
-                    auto gcList = SharedCachePages->GCList;
-                    auto addPage = [&saveCompactedPages, &resultingPageCollection, &gcList]
-                        (NPageCollection::TLoadedPage& loadedPage, bool sticky) {
-                        auto& location = loadedPage.Location;
-                        auto sharedPage = MakeIntrusive<TPage>(location.Offset, location.Size,
-                            location.Type, location.Crc32, nullptr);
-                        sharedPage->ProvideBody(std::move(loadedPage.Data));
-                        saveCompactedPages->Pages.push_back(sharedPage);
-                        if (sticky) {
-                            resultingPageCollection->AddStickyPage(location.Offset, location.Size,
-                                TSharedPageRef::MakeUsed(std::move(sharedPage), gcList, location.Type));
-                        } else {
-                            resultingPageCollection->AddPage(location.Offset, location.Size,
-                                TSharedPageRef::MakeUsed(std::move(sharedPage), gcList, location.Type));
-                        }
-                    };
-                    for (auto &page : pageCollection.StickyPages) {
-                        addPage(page, true);
-                    }
-                    for (auto &page : pageCollection.RegularPages) {
-                        addPage(page, false);
-                    }
-
-                    ctx.Send(MakeSharedPageCacheId(), saveCompactedPages.Release());
-
-                    pageCollections.push_back(std::move(resultingPageCollection));
-                }
+                auto environment = PageCache.AddWrittenPages(res.PageCollections, [&ctx](THolder<IEventBase> event) {
+                    ctx.Send(MakeSharedPageCacheId(), event.Release());
+                });
 
                 TVector<NTable::TPageCollectionComponents> comps(res.PageCollections.size());
                 NTable::TPartComponents parts{
@@ -298,8 +269,7 @@ namespace NTabletFlatExecutor {
                     .Epoch = NTable::TEpoch::Max(),
                 };
 
-                // Pass pre-built collections so the shared cache sees active refs for the written pages.
-                NTable::TLoader loader(std::move(parts), std::move(pageCollections));
+                NTable::TLoader loader(std::move(environment), std::move(parts));
 
                 auto fetch = loader.Run({.PreloadIndex = false, .PreloadData = false});
                 Y_ENSURE(!fetch, "Just written part needs to load page collection pages");
@@ -385,7 +355,7 @@ namespace NTabletFlatExecutor {
         TAutoPtr<TPartWriter> Writer;
         NTable::TWriteStats WriteStats;
         TVector<TBundle::TResult> Results;
-        NSharedCache::TSharedCachePages *SharedCachePages = nullptr;
+        TWrittenPageCache PageCache;
 
         TOwnedCellVec PrevKey;
         bool HavePrevKey = false;

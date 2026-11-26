@@ -1,16 +1,66 @@
 #include "flat_executor_tx_env.h"
 #include "flat_database.h"
 #include "flat_part_loader.h"
+#include "flat_writer_blocks.h"
+#include "shared_cache_pages.h"
+
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
     namespace {
+
+        THolder<NTable::IPartLoaderEnv> AddPrivateWrittenPages(
+            void* context, TArrayRef<NWriter::TWrittenPageCollection> collections, TPageCacheEventSender send) {
+            auto* cachePages = static_cast<NSharedCache::TSharedCachePages*>(context);
+            TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> prebuilt;
+            for (auto& collection : collections) {
+                auto cached = MakeIntrusive<TPrivatePageCache::TPageCollection>(collection.PageCollection);
+                auto event = MakeHolder<NSharedCache::TEvSaveCompactedPages>(collection.PageCollection);
+                auto gcList = cachePages->GCList;
+                const auto addPage = [&](NPageCollection::TLoadedPage& loaded, bool sticky) {
+                    const auto& location = loaded.Location;
+                    auto page = MakeIntrusive<NSharedCache::TPage>(
+                        location.Offset, location.Size, location.Type, location.Crc32, nullptr);
+                    page->ProvideBody(std::move(loaded.Data));
+                    event->Pages.push_back(page);
+                    auto ref = NSharedCache::TSharedPageRef::MakeUsed(std::move(page), gcList, location.Type);
+                    if (sticky) {
+                        cached->AddStickyPage(location.Offset, location.Size, std::move(ref));
+                    } else {
+                        cached->AddPage(location.Offset, location.Size, std::move(ref));
+                    }
+                };
+                for (auto& page : collection.StickyPages) {
+                    addPage(page, true);
+                }
+                for (auto& page : collection.RegularPages) {
+                    addPage(page, false);
+                }
+                send(std::move(event));
+                prebuilt.push_back(std::move(cached));
+            }
+            return MakeHolder<NTable::TLoader::TLoaderEnv>(std::move(prebuilt));
+        }
 
         const NTable::TPrivatePartStore& PrivatePart(const NTable::TPartStore& partStore) {
             return *CheckedCast<const NTable::TPrivatePartStore*>(&partStore);
         }
 
     } // namespace
+
+    THolder<NTable::IPartLoaderEnv> TWrittenPageCache::AddWrittenPages(
+        TArrayRef<NWriter::TWrittenPageCollection> collections, TPageCacheEventSender send) const {
+        return AddWrittenPages_(Context_, collections, send);
+    }
+
+    TWrittenPageCache MakePrivateWrittenPageCache(NSharedCache::TSharedCachePages& pages) noexcept {
+        return TWrittenPageCache(&pages, AddPrivateWrittenPages);
+    }
+
+    TWrittenPageCache GetWrittenPageCache() {
+        return MakePrivateWrittenPageCache(*AppData()->SharedCachePages);
+    }
 
     bool TPrivatePageCacheBackend::PrepareRegistration() {
         const bool replayStickyWalks = bool(Cache_);

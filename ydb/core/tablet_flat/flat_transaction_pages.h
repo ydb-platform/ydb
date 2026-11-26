@@ -34,6 +34,10 @@ class ITransaction;
 struct TSeat;
 struct TTransactionEnv;
 
+namespace NWriter {
+    struct TWrittenPageCollection;
+}
+
 class IPageCacheRestartState {
 public:
     virtual ~IPageCacheRestartState() = default;
@@ -75,6 +79,30 @@ struct TPageCacheStats {
 };
 
 using TPageCacheEventSender = TFunctionRef<void(THolder<NActors::IEventBase>)>;
+
+// Borrows the application's cache state for the writer's lifetime
+class TWrittenPageCache {
+    using TAddWrittenPages = THolder<NTable::IPartLoaderEnv> (*)(
+        void*, TArrayRef<NWriter::TWrittenPageCollection>, TPageCacheEventSender);
+
+public:
+    TWrittenPageCache() = default;
+
+    TWrittenPageCache(void* context, TAddWrittenPages addWrittenPages) noexcept
+        : Context_(context)
+        , AddWrittenPages_(addWrittenPages)
+    {}
+
+    // The sender is called synchronously and is not retained
+    THolder<NTable::IPartLoaderEnv> AddWrittenPages(
+        TArrayRef<NWriter::TWrittenPageCollection> collections, TPageCacheEventSender send) const;
+
+private:
+    void* Context_ = nullptr;
+    TAddWrittenPages AddWrittenPages_ = nullptr;
+};
+
+TWrittenPageCache GetWrittenPageCache();
 
 enum class ERequestTypeCookie : ui64 {
     Undefined = 0,

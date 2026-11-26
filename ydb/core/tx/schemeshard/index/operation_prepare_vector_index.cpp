@@ -50,12 +50,14 @@ public:
 
         TPathId pathId = txState->TargetPathId;
         Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
+        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
 
         NKikimrTxDataShard::TFlatSchemeTransaction txTemplate;
         auto snapshot = txTemplate.MutableCreatePersistentSnapshot();
         snapshot->SetOwnerId(pathId.OwnerId);
         snapshot->SetPathId(pathId.LocalPathId);
         snapshot->SetName("VectorIndexDeltaSnapshot");
+        snapshot->SetTableSchemaVersion(table->AlterVersion + 1);
 
         txState->ClearShardsInProgress();
 
@@ -124,9 +126,15 @@ public:
         context.SS->SnapshotsStepIds[OperationId.GetTxId()] = step;
         context.SS->PersistSnapshotStepId(db, OperationId.GetTxId(), step);
 
-        // Apply the prepared index state at the snapshot step. The index path id is
-        // kept in BuildIndexId (persisted with the tx state) to select exactly the
-        // index this operation was created for.
+        // Increment table AlterVersion to guarantee query plan invalidation.
+        const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
+        tableInfo->AlterVersion += 1;
+        context.SS->PersistTableAltered(db, txState->TargetPathId, tableInfo);
+        auto tablePath = context.SS->PathsById.at(txState->TargetPathId);
+        context.SS->ClearDescribePathCaches(tablePath);
+        context.OnComplete.PublishToSchemeBoard(OperationId, txState->TargetPathId);
+
+        // Apply index metadata, index path id is kept in BuildIndexId.
         const auto indexPathId = TPathId(txState->TargetPathId.OwnerId, ui64(txState->BuildIndexId));
         auto indexPath = context.SS->PathsById.at(indexPathId);
         TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(indexPathId);

@@ -18,12 +18,12 @@ SRCS(
 PEERDIR_FROM_POLICY(
     ALLOW
     yql/udfs/kikimr
-    rtmapreduce/tools/shmdump
     cloud/filestore/libs/storage/core
     cloud/filestore/libs/storage/perf
     cloud/storage/core/libs/kikimr
     cloud/blockstore/libs/storage/core
     logbroker/pipe-parser/ytsender-ng
+    logos/projects/ads/mldwh/querygen
 )
 
 END()

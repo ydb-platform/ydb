@@ -160,6 +160,7 @@ PEERDIR_FROM_POLICY(
     ALLOW
     statbox/qb4/py_libs/testing/update_sample/schema_helper_impl
     classifieds/vsdwh/tools/ci/jobs/yql_udf/parser
+    toloka/analytics/programs/yql_parser
 )
 
 END()

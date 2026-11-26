@@ -15,7 +15,9 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
@@ -94,6 +96,53 @@ EUserFacingStorageType GetUserFacingStorageType(const TString& poolKind) {
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartitionStats& tableStats) {
+    stats->SetRowCount(tableStats.RowCount);
+    stats->SetDataSize(tableStats.DataSize);
+    stats->SetIndexSize(tableStats.IndexSize);
+    stats->SetByKeyFilterSize(tableStats.ByKeyFilterSize);
+    stats->SetLastAccessTime(tableStats.LastAccessTime.MilliSeconds());
+    stats->SetLastUpdateTime(tableStats.LastUpdateTime.MilliSeconds());
+    stats->SetImmediateTxCompleted(tableStats.ImmediateTxCompleted);
+    stats->SetPlannedTxCompleted(tableStats.PlannedTxCompleted);
+    stats->SetTxRejectedByOverload(tableStats.TxRejectedByOverload);
+    stats->SetTxRejectedBySpace(tableStats.TxRejectedBySpace);
+    stats->SetTxCompleteLagMsec(tableStats.TxCompleteLag.MilliSeconds());
+    stats->SetInFlightTxCount(tableStats.InFlightTxCount);
+
+    stats->SetRowUpdates(tableStats.RowUpdates);
+    stats->SetRowDeletes(tableStats.RowDeletes);
+    stats->SetRowReads(tableStats.RowReads);
+    stats->SetRangeReads(tableStats.RangeReads);
+    stats->SetRangeReadRows(tableStats.RangeReadRows);
+
+    stats->SetLocksAcquired(tableStats.LocksAcquired);
+    stats->SetLocksWholeShard(tableStats.LocksWholeShard);
+    stats->SetLocksBroken(tableStats.LocksBroken);
+
+    stats->SetPartCount(tableStats.PartCount);
+    stats->SetHasSchemaChanges(tableStats.HasSchemaChanges);
+
+    auto* storagePoolsStats = stats->MutableStoragePools()->MutablePoolsUsage();
+    for (const auto& [poolKind, stats] : tableStats.StoragePoolsStats) {
+        auto* storagePoolStats = storagePoolsStats->Add();
+        storagePoolStats->SetPoolKind(poolKind);
+        storagePoolStats->SetDataSize(stats.DataSize);
+        storagePoolStats->SetIndexSize(stats.IndexSize);
+    }
+}
+
+void FillTableMetrics(NKikimrTabletBase::TMetrics* metrics, const TPartitionStats& tableStats) {
+    metrics->SetCPU(tableStats.GetCurrentRawCpuUsage());
+    metrics->SetMemory(tableStats.Memory);
+    metrics->SetNetwork(tableStats.Network);
+    metrics->SetStorage(tableStats.Storage);
+    metrics->SetReadThroughput(tableStats.ReadThroughput);
+    metrics->SetWriteThroughput(tableStats.WriteThroughput);
+    metrics->SetReadIops(tableStats.ReadIops);
+    metrics->SetWriteIops(tableStats.WriteIops);
+}
 
 void TSubDomainInfo::ApplyAuditSettings(const TSubDomainInfo::TMaybeAuditSettings& diff) {
     if (diff.Defined()) {
@@ -2301,9 +2350,13 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     }
     newPartitioning.clear();
 
-    PreserializedTablePartitions.clear();
-    PreserializedTablePartitionsNoKeys.clear();
-    PreserializedTableSplitBoundaries.clear();
+    PreserializedTablePartitionsElems.clear();
+    PreserializedTablePartitionsNoKeysElems.clear();
+    PreserializedTableSplitBoundariesElems.clear();
+    PreserializedTablePartitionStatsElems.clear();
+    PreserializedTablePartitionsCompact.clear();
+    PreserializedTablePartitionsNoKeysCompact.clear();
+    PreserializedTableSplitBoundariesCompact.clear();
 
     // Only schedule TTL sweeps when TTL is actually enabled — non-TTL tables
     // don't need entries in CondEraseSchedule at all.
@@ -2348,9 +2401,14 @@ void TTableInfo::MovePartitioning(TVector<TTableShardInfo>&& newPartitioning) {
         Partitions[i]->Position = i;
     }
 
-    PreserializedTablePartitions.clear();
-    PreserializedTablePartitionsNoKeys.clear();
-    PreserializedTableSplitBoundaries.clear();
+    PreserializedTablePartitionsElems.clear();
+    PreserializedTablePartitionsNoKeysElems.clear();
+    PreserializedTableSplitBoundariesElems.clear();
+    PreserializedTablePartitionsCompact.clear();
+    PreserializedTablePartitionsNoKeysCompact.clear();
+    PreserializedTableSplitBoundariesCompact.clear();
+    // positions may reshuffle at an unchanged count — the size token would not catch it
+    PreserializedTablePartitionStatsElems.clear();
 
     VerifyConsistency();
 }
@@ -2397,9 +2455,14 @@ void TTableInfo::CopyPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
         Partitions[i]->Position = i;
     }
 
-    PreserializedTablePartitions.clear();
-    PreserializedTablePartitionsNoKeys.clear();
-    PreserializedTableSplitBoundaries.clear();
+    PreserializedTablePartitionsElems.clear();
+    PreserializedTablePartitionsNoKeysElems.clear();
+    PreserializedTableSplitBoundariesElems.clear();
+    PreserializedTablePartitionsCompact.clear();
+    PreserializedTablePartitionsNoKeysCompact.clear();
+    PreserializedTableSplitBoundariesCompact.clear();
+    // PartitionStats were re-keyed above; entries are stale even at an unchanged count
+    PreserializedTablePartitionStatsElems.clear();
 
     VerifyConsistency();
 }
@@ -2530,9 +2593,28 @@ void TTableInfo::ApplySplitMerge(
         }
     }
 
-    PreserializedTablePartitions.clear();
-    PreserializedTablePartitionsNoKeys.clear();
-    PreserializedTableSplitBoundaries.clear();
+    // Splice the caches with the partition vector: survivors keep their
+    // entries, touched positions rebuild lazily; a wrong size means a full
+    // lazy rebuild below.
+    const ui64 oldPartitionCount = Partitions.size() + kRemoved - kAdded;
+    auto spliceElems = [oldPartitionCount, splitFirstIdx, kRemoved, kAdded](auto& elems) {
+        using TElem = std::decay_t<decltype(elems[0])>;
+        if (elems.size() != oldPartitionCount) {
+            elems.clear(); // stale/mismatched cache: full lazy rebuild on the next describe
+            return;
+        }
+        elems.erase(elems.begin() + splitFirstIdx, elems.begin() + splitFirstIdx + kRemoved);
+        elems.insert(elems.begin() + splitFirstIdx, kAdded, TElem{});
+    };
+    spliceElems(PreserializedTablePartitionsElems);
+    spliceElems(PreserializedTablePartitionsNoKeysElems);
+    spliceElems(PreserializedTableSplitBoundariesElems);
+    spliceElems(PreserializedTablePartitionStatsElems);
+    // the spliced sections must re-compact before the next warm describe
+    PreserializedTablePartitionsCompact.clear();
+    PreserializedTablePartitionsNoKeysCompact.clear();
+    PreserializedTableSplitBoundariesCompact.clear();
+
 
     VerifyConsistency();
 }
@@ -2666,6 +2748,22 @@ void TTableInfo::RecomputeOldestPendingCandidateAt() {
 }
 
 void TTableInfo::VerifyConsistency() const {
+    // Describe caches are either empty or exactly partition-sized (the size
+    // is the validity token of the lazy build). Always enforced - O(1),
+    // unlike the checks below, and the describe correctness depends on it.
+    Y_ABORT_UNLESS(
+        PreserializedTablePartitionsElems.empty()
+        || PreserializedTablePartitionsElems.size() == Partitions.size());
+    Y_ABORT_UNLESS(
+        PreserializedTablePartitionsNoKeysElems.empty()
+        || PreserializedTablePartitionsNoKeysElems.size() == Partitions.size());
+    Y_ABORT_UNLESS(
+        PreserializedTableSplitBoundariesElems.empty()
+        || PreserializedTableSplitBoundariesElems.size() == Partitions.size());
+    Y_ABORT_UNLESS(
+        PreserializedTablePartitionStatsElems.empty()
+        || PreserializedTablePartitionStatsElems.size() == Partitions.size());
+
     // AppData is absent in lowlevel unit tests
     if (HasAppData() && !AppData()->FeatureFlags.GetEnableTablePartitionsConsistencyCheck()) {
         LastVerifyConsistencyTime = 0;
@@ -2756,21 +2854,23 @@ void TTableAggregatedStats::RemoveShardStats(const TVector<TShardIdx>& keys, TIn
 }
 
 void TTableInfo::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now) {
-    Stats.UpdateShardStats(diskSpaceUsageDelta, datashardIdx, newStats, now);
+    if (Stats.UpdateShardStats(diskSpaceUsageDelta, datashardIdx, newStats, now)) {
+        RenewShardStatsElems(datashardIdx);
+    }
 }
 
-void TTableAggregatedStats::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now) {
+bool TTableAggregatedStats::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now) {
     auto found = PartitionStats.find(datashardIdx);
     // Ignore stats from unknown datashard (it could have been split)
     if (found == PartitionStats.end()) {
-        return;
+        return false;
     }
 
     TPartitionStats& oldStats = found->second;
 
     if (newStats.SeqNo <= oldStats.SeqNo) {
         // Ignore outdated message
-        return;
+        return false;
     }
 
     if (newStats.SeqNo.Generation > oldStats.SeqNo.Generation) {
@@ -2886,6 +2986,8 @@ void TTableAggregatedStats::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsag
     }
 
     UpdatedStats.insert(datashardIdx);
+
+    return true;
 }
 
 void TTableInfo::UpdateShardStatsForFollower(
@@ -2893,6 +2995,8 @@ void TTableInfo::UpdateShardStatsForFollower(
     const TShardIdx& shardIdx,
     const TPartitionStats& newStats
 ) {
+    // No renewal: followers update only TopCpuUsage, which is not serialized
+    // into the elements. Leader reports (UpdateShardStats) renew eagerly.
     Stats.UpdateShardStatsForFollower(followerId, shardIdx, newStats);
 }
 
@@ -2932,6 +3036,35 @@ void TTableAggregatedStats::UpdateShardStatsForFollower(
     // NOTE: See the comment for the TPartitionStats.TopCpuUsage field
     //       for the reasons why this is sufficient
     oldStats.TopCpuUsage.Update(newStats.TopCpuUsage); // The left is new stats now!
+}
+
+void TTableInfo::RenewShardStatsElems(const TShardIdx& shardIdx) {
+    // Wrong size = stale cache; the next describe rebuilds lazily.
+    if (PreserializedTablePartitionStatsElems.size() != Partitions.size()) {
+        return;
+    }
+    const auto* shard = PartitionStore.FindPtr(shardIdx);
+    if (!shard) {
+        return;
+    }
+    const auto* stats = Stats.PartitionStats.FindPtr(shardIdx);
+    // lvalue fallback: a ternary with a prvalue arm would copy *stats
+    static const TPartitionStats emptyStats;
+    const TPartitionStats& s = stats ? *stats : emptyStats;
+    TShardStatsElems& elems = PreserializedTablePartitionStatsElems[shard->Position];
+    // Entries are [tag + len + payload] wire forms of one repeated-field
+    // element, built via a one-element wrapper serialization (see BuildTableDescribe).
+    // Built into locals and assigned together: a failed serialization must
+    // never leave a half-built slot (BuildTableDescribe rebuilds those).
+    NKikimrSchemeOp::TPathDescription wrap;
+    TString statsEntry, metricsEntry;
+    FillTableStats(wrap.AddTablePartitionStats(), s);
+    Y_PROTOBUF_SUPPRESS_NODISCARD wrap.SerializeToString(&statsEntry);
+    wrap.Clear();
+    FillTableMetrics(wrap.AddTablePartitionMetrics(), s);
+    Y_PROTOBUF_SUPPRESS_NODISCARD wrap.SerializeToString(&metricsEntry);
+    elems.Stats = std::move(statsEntry);
+    elems.Metrics = std::move(metricsEntry);
 }
 
 void TAggregatedStats::UpdateTableStats(TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now) {

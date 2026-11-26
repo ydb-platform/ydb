@@ -20,6 +20,7 @@ RECURSE_FOR_TESTS(
     ut_continuous_backup
     ut_continuous_backup_reboots
     ut_database_freeze
+    ut_describe_table_bench
     ut_shred
     ut_shred_reboots
     ut_export

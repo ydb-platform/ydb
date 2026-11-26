@@ -776,7 +776,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         return;
     }
 
-    if (ev->Get()->MirrorerActor && IsCdcReplicationTopic() && !IsCurrentMirrorer(ev->Get()->MirrorerActor)) {
+    if (ev->Get()->MirrorerActor && IsCdcReplicationTopic() && !IsMirroringEnabled(ev->Get()->MirrorerActor)) {
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR, "CDC mirroring has stopped");
         return;
     }
@@ -1206,7 +1206,7 @@ void TPartition::ExecRequest(TEmitHeartbeatMsg& msg, ProcessParameters& paramete
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p,
                                                          TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
-    if (p.MirrorerActor && IsCdcReplicationTopic() && !IsCurrentMirrorer(p.MirrorerActor)) {
+    if (p.MirrorerActor && IsCdcReplicationTopic() && !IsMirroringEnabled(p.MirrorerActor)) {
         WriteInflightSize -= p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false, NPersQueue::NErrorCode::ERROR, "CDC mirroring has stopped");
         return EProcessResult::ContinueDrop;
@@ -1407,7 +1407,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
     const auto& ctx = ActorContext();
 
-    if (p.MirrorerActor && IsCdcReplicationTopic() && !IsCurrentMirrorer(p.MirrorerActor)) {
+    if (p.MirrorerActor && IsCdcReplicationTopic() && !IsMirroringEnabled(p.MirrorerActor)) {
         ScheduleReplyError(p.Cookie, false, NPersQueue::NErrorCode::ERROR, "CDC mirroring has stopped");
         return false;
     }

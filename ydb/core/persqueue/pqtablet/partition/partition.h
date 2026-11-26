@@ -236,7 +236,7 @@ private:
     void CreateMirrorerActor();
     void DestroyMirrorer();
     bool IsCdcReplicationTopic() const;
-    bool IsCurrentMirrorer(const TActorId& sender) const;
+    bool IsMirroringEnabled(const TActorId& sender) const;
     void NotifyMirrorerPersistDone();
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);

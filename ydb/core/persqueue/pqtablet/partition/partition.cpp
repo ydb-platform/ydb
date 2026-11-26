@@ -5438,7 +5438,7 @@ bool TPartition::IsCdcReplicationTopic() const {
         || (ChangeConfig && ChangeConfig->Config.HasCdcReplication());
 }
 
-bool TPartition::IsCurrentMirrorer(const TActorId& sender) const {
+bool TPartition::IsMirroringEnabled(const TActorId& sender) const {
     return Mirrorer && sender == Mirrorer->Actor
         && (!ChangeConfig || MirroringEnabled(ChangeConfig->Config));
 }

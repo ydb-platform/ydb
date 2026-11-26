@@ -917,6 +917,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TString TransactionMode;
         TString Schema;
         TString Base64;
+        TString OperationId;
+        TString ExecutionId;
     };
 
     NJson::TJsonValue PostQuery(TKeepAliveHttpClient& httpClient, TPostQueryArguments args) {
@@ -938,6 +940,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
         if (args.Base64) {
             jsonRequest["base64"] = args.Base64;
+        }
+        if (args.OperationId) {
+            jsonRequest["operation_id"] = args.OperationId;
+        }
+        if (args.ExecutionId) {
+            jsonRequest["execution_id"] = args.ExecutionId;
         }
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
@@ -6998,6 +7006,61 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
         return response;
+    }
+
+    Y_UNIT_TEST(LongQueryFetchesPagesThroughProxy) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134));
+        const ui16 grpcPort = tp.GetPort(2135);
+        const ui16 monPort = tp.GetPort(8765);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+        GrantRead(client);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+        const auto response = PostQuery(httpClient, {
+            .Query = R"(
+                $rows = ListMap(ListFromRange(0, 1001), ($value) -> { RETURN <|Value: $value|>; });
+                SELECT * FROM AS_TABLE($rows) ORDER BY Value;
+                SELECT 42 AS OtherValue;
+            )",
+            .Action = "execute-long-query",
+        });
+        const auto operationId = response["operation_id"].GetString();
+        const auto executionId = response["execution_id"].GetString();
+        UNIT_ASSERT_C(!operationId.empty(), NJson::WriteJson(response));
+        UNIT_ASSERT_C(!executionId.empty(), NJson::WriteJson(response));
+        UNIT_ASSERT_VALUES_EQUAL_C(response["result"].GetArray().size(), 1002,
+            NJson::WriteJson(response) << " operation: " << GetOperation(httpClient, operationId));
+
+        for (size_t i = 0; i < 1001; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(response["result"][i]["Value"].GetIntegerSafe(), i);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(response["result"][1001]["OtherValue"].GetIntegerSafe(), 42);
+
+        const auto byOperation = PostQuery(httpClient, {
+            .Action = "fetch-long-query",
+            .OperationId = operationId,
+        });
+        UNIT_ASSERT_VALUES_EQUAL(byOperation["result"], response["result"]);
+
+        const auto byExecution = PostQuery(httpClient, {
+            .Action = "fetch-long-query",
+            .ExecutionId = executionId,
+        });
+        UNIT_ASSERT_VALUES_EQUAL(byExecution["result"], response["result"]);
     }
 
     Y_UNIT_TEST(QueryExecuteScript) {

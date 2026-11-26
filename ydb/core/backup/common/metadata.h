@@ -1,5 +1,6 @@
 #pragma once
 #include "encryption.h"
+#include "table_checksum.h"
 
 #include <ydb/core/base/row_version.h>
 
@@ -87,8 +88,11 @@ public:
     bool HasEnablePermissions() const;
     bool GetEnablePermissions() const;
 
+    const std::optional<TTableChecksum>& GetTableChecksum() const;
+
     TString Serialize() const;
-    static TMetadata Deserialize(const TString& metadata);
+    static TMetadata Deserialize(const TString& metadata, bool readTableChecksum = false);
+    static TString WithTableChecksum(const TString& metadata, const TTableChecksum& checksum);
 
 private:
     TString ConsistencyKey;
@@ -123,6 +127,7 @@ private:
     // 0: The export has no permissions
     // 1: The export must have permissions file
     std::optional<bool> EnablePermissions;
+    std::optional<TTableChecksum> TableChecksum;
 };
 
 TString NormalizeItemPath(const TString& path);

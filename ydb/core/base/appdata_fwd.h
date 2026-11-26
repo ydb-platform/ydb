@@ -22,6 +22,9 @@ namespace NActors {
 
 namespace NKikimr {
     class TScanAdmissionControl;
+    namespace NBackup {
+        class ITableChecksumFactory;
+    }
     namespace NPathAliasing {
         class TPathNormalizer;
     }
@@ -224,6 +227,7 @@ struct TAppData {
     const NScheme::TTypeRegistry* TypeRegistry = nullptr;
     const NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     const NDataShard::IExportFactory *DataShardExportFactory = nullptr;
+    const NBackup::ITableChecksumFactory* TableChecksumFactory = nullptr;
     const TFormatFactory* FormatFactory = nullptr;
     const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr;
     const NSchemeShard::IOperationFactory *SchemeOperationFactory = nullptr;

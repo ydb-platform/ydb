@@ -616,11 +616,16 @@ public:
         }
     }
 
+    ui32 GetAvailableExecutionUnits() const {
+        // Lowering the limit can leave more slots in use than it allows.
+        return std::max<i32>(0, ExecutionUnitsResource.load());
+    }
+
     TKqpLocalNodeResources GetLocalResources() const override {
         TKqpLocalNodeResources result;
 
         with_lock (Lock) {
-            result.ExecutionUnits = ExecutionUnitsResource.load();
+            result.ExecutionUnits = GetAvailableExecutionUnits();
             result.Memory = HasQueryMemoryState.load() ? GetQueryMemoryAvailable() : TotalMemoryResource->Available();
             result.ExternalMemory = ArenaExternalMemory.load();
         }
@@ -1600,11 +1605,12 @@ private:
                     ? ResourceManager->GetQueryMemoryAvailable()
                     : ResourceManager->TotalMemoryResource->Available();
 
-                payload.SetAvailableComputeActors(ResourceManager->ExecutionUnitsResource.load()); // legacy
+                const ui32 executionUnits = ResourceManager->GetAvailableExecutionUnits();
+                payload.SetAvailableComputeActors(executionUnits); // legacy
                 payload.SetTotalMemory(memoryLimit); // legacy
                 payload.SetUsedMemory(memoryLimit - memoryAvailable); // legacy
 
-                payload.SetExecutionUnits(ResourceManager->ExecutionUnitsResource.load());
+                payload.SetExecutionUnits(executionUnits);
                 auto* pool = payload.MutableMemory()->Add();
                 pool->SetPool(1); // legacy ScanQuery pool id
                 pool->SetAvailable(memoryAvailable);

@@ -14,6 +14,8 @@
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 #include <ydb/core/kqp/common/control.h>
 
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
 using namespace NActors;
@@ -523,6 +525,27 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
 
     if (!plan) {
         plan = planner->Plan(allNodes, ResourceEstimations, fixedAssignments);
+    }
+
+    // Keep successful snapshot-based placement. On failure, retry with the capacity
+    // we already read from the local RM, without waiting for gossip.
+    if (!plan && localResources.ExecutionUnits) {
+        auto retryNodes = allNodes;
+        auto local = std::find_if(retryNodes.begin(), retryNodes.end(), [selfNodeId](const auto* node) {
+            return node->GetNodeId() == selfNodeId;
+        });
+        if (local != retryNodes.end() &&
+            (localResources.Memory > (*local)->GetTotalMemory() - (*local)->GetUsedMemory() ||
+             localResources.ExecutionUnits > (*local)->GetAvailableComputeActors()))
+        {
+            // This entry is only an input to greedy; leave the cached snapshot intact.
+            NKikimrKqp::TKqpNodeResources liveLocal = **local;
+            liveLocal.SetTotalMemory(localResources.Memory);
+            liveLocal.SetUsedMemory(0);
+            liveLocal.SetAvailableComputeActors(localResources.ExecutionUnits);
+            *local = &liveLocal;
+            plan = planner->Plan(retryNodes, ResourceEstimations, fixedAssignments);
+        }
     }
 
     if (!plan) {

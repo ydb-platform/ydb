@@ -5,6 +5,8 @@
 
 #include <yt/yt/core/profiling/timing.h>
 
+#include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
+
 #include <util/random/shuffle.h>
 
 namespace NYT::NConcurrency {
@@ -257,10 +259,11 @@ public:
     {
         YT_VERIFY(amount >= 0);
 
+        auto sharedBucket = SharedBucket_.Acquire();
         auto available = Quota_.GetValue();
         auto globalAvailable = IsLimited()
             ? 0
-            : std::max<i64>(0, SharedBucket_->Limit.GetValue());
+            : std::max<i64>(0, sharedBucket->Limit.GetValue());
 
         if (amount > available + globalAvailable) {
             return false;
@@ -268,7 +271,7 @@ public:
 
         auto globalConsumed = std::clamp<i64>(amount - available, 0, globalAvailable);
         Quota_.Acquire(amount - globalConsumed);
-        SharedBucket_->Limit.Acquire(globalConsumed);
+        sharedBucket->Limit.Acquire(globalConsumed);
 
         ValueCounter_.Increment(amount);
         Usage_ += amount;
@@ -280,16 +283,17 @@ public:
     {
         YT_VERIFY(amount >= 0);
 
+        auto sharedBucket = SharedBucket_.Acquire();
         auto available = Quota_.GetValue();
         auto globalAvailable = IsLimited()
             ? 0
-            : std::max<i64>(0, SharedBucket_->Limit.GetValue());
+            : std::max<i64>(0, sharedBucket->Limit.GetValue());
 
         auto consumed = std::min(amount, available + globalAvailable);
 
         auto globalConsumed = std::clamp<i64>(consumed - available, 0, globalAvailable);
         Quota_.Acquire(consumed - globalConsumed);
-        SharedBucket_->Limit.Acquire(globalConsumed);
+        sharedBucket->Limit.Acquire(globalConsumed);
 
         ValueCounter_.Increment(consumed);
         Usage_ += consumed;
@@ -301,15 +305,16 @@ public:
     {
         YT_VERIFY(amount >= 0);
 
+        auto sharedBucket = SharedBucket_.Acquire();
         auto available = Quota_.GetValue();
         // NB: Shared bucket limit can get below zero because resource acquisition is racy.
         auto globalAvailable = IsLimited()
             ? 0
-            : std::max<i64>(0, SharedBucket_->Limit.GetValue());
+            : std::max<i64>(0, sharedBucket->Limit.GetValue());
 
         auto globalConsumed = std::clamp<i64>(amount - available, 0, globalAvailable);
         Quota_.Acquire(amount - globalConsumed);
-        SharedBucket_->Limit.Acquire(globalConsumed);
+        sharedBucket->Limit.Acquire(globalConsumed);
 
         ValueCounter_.Increment(amount);
         Usage_ += amount;
@@ -357,8 +362,9 @@ public:
 
     i64 GetAvailable() const override
     {
+        auto sharedBucket = SharedBucket_.Acquire();
         auto available = Quota_.GetValue();
-        auto globalAvailable = IsLimited() ? 0 : SharedBucket_->Limit.GetValue();
+        auto globalAvailable = IsLimited() ? 0 : sharedBucket->Limit.GetValue();
         return available + globalAvailable;
     }
 
@@ -465,6 +471,11 @@ public:
         }
     }
 
+    void SetSharedBucket(const TSharedBucketPtr& sharedBucket)
+    {
+        SharedBucket_.Store(sharedBucket);
+    }
+
     bool IsLimited() const
     {
         return Limited_.load();
@@ -472,7 +483,7 @@ public:
 
 private:
     const NLogging::TLogger Logger;
-    const TSharedBucketPtr SharedBucket_;
+    TAtomicIntrusivePtr<TSharedBucket> SharedBucket_;
     const NProfiling::TProfiler Profiler_;
     const NProfiling::TCounter ValueCounter_;
     const NProfiling::TCounter ReleasedCounter_;
@@ -520,15 +531,12 @@ public:
         , SharedBucket_(New<TSharedBucket>(
             Config_->GlobalAccumulationTicks,
             Profiler_,
-            GetSharedBucketValue()))
+            GetSharedBucketValue(Ipc_)))
     {
-        if (Ipc_) {
-            Profiler_.AddFuncGauge("/leader", MakeStrong(this), [this] {
-                return IsLeader_.load();
-            });
-        } else {
-            IsLeader_ = true;
-        }
+        IsLeader_ = !Ipc_;
+        Profiler_.AddFuncGauge("/leader", MakeStrong(this), [this] {
+            return IsLeader_.load();
+        });
 
         Profiler_.AddFuncGauge("/total_limit", MakeStrong(this), [this] {
             auto guard = Guard(Lock_);
@@ -542,50 +550,44 @@ public:
         const std::string& name,
         TFairThrottlerBucketConfigPtr config) final
     {
-        if (!config) {
-            config = New<TFairThrottlerBucketConfig>();
-        }
-
         auto guard = Guard(Lock_);
-        if (auto it = Buckets_.find(name); it != Buckets_.end()) {
-            it->second.Throttler->Update(Config_, config);
-
-            it->second.Config = std::move(config);
-
-            return it->second.Throttler;
-        }
-
-        auto throttler = New<TBucketThrottler>(
-            Logger().WithTag("Bucket", name),
-            Profiler_.WithTag("bucket", name),
-            SharedBucket_,
-            Config_);
-
-        throttler->Update(Config_, config);
-
-        IFairThrottlerIpcBucketPtr ipcBucket;
-        if (Ipc_) {
-            ipcBucket = Ipc_->CreateBucket();
-        }
-
-        Buckets_[name] = TBucket{
-            .Config = std::move(config),
-            .Throttler = throttler,
-            .IpcBucket = ipcBucket,
-        };
-
-        return throttler;
+        return CreateBucketThrottler(name, std::move(config), Config_, Ipc_, SharedBucket_);
     }
 
     void Reconfigure(
         TFairThrottlerConfigPtr config,
         const THashMap<std::string, TFairThrottlerBucketConfigPtr>& buckets) final
     {
-        for (const auto& [name, config] : buckets) {
-            CreateBucketThrottler(name, config);
+        auto guard = Guard(Lock_);
+        bool ipcChanged = Config_->IpcPath != config->IpcPath || Config_->UseShmem != config->UseShmem;
+        auto ipc = Ipc_;
+        auto sharedBucket = SharedBucket_;
+        if (ipcChanged) {
+            ipc = config->IpcPath
+                ? CreateFairThrottlerFileIpc(*config->IpcPath, config->UseShmem, Logger)
+                : nullptr;
+            sharedBucket = New<TSharedBucket>(
+                config->GlobalAccumulationTicks,
+                Profiler_,
+                GetSharedBucketValue(ipc));
         }
 
-        auto guard = Guard(Lock_);
+        auto bucketConfigs = buckets;
+        for (const auto& [name, bucket] : Buckets_) {
+            bucketConfigs.emplace(name, bucket.Config);
+        }
+        for (const auto& [name, bucketConfig] : bucketConfigs) {
+            CreateBucketThrottler(name, bucketConfig, config, ipc, sharedBucket);
+        }
+
+        Ipc_ = std::move(ipc);
+        SharedBucket_ = std::move(sharedBucket);
+        if (ipcChanged) {
+            IsLeader_ = !Ipc_;
+            YT_TLOG_INFO("Fair throttler IPC reconfigured")
+                .With("IpcPath", config->IpcPath)
+                .With("UseShmem", config->UseShmem);
+        }
         Config_ = std::move(config);
     }
 
@@ -602,27 +604,58 @@ private:
         IFairThrottlerIpcBucketPtr IpcBucket;
     };
 
-    // Protects all Config_ and Buckets_.
+    // Protects configuration, buckets, IPC state and limit updates.
     YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     TFairThrottlerConfigPtr Config_;
     THashMap<std::string, TBucket> Buckets_;
 
-    const IFairThrottlerIpcPtr Ipc_;
-    const TSharedBucketPtr SharedBucket_;
+    IFairThrottlerIpcPtr Ipc_;
+    TSharedBucketPtr SharedBucket_;
 
-    TAtomicValuePtr GetSharedBucketValue()
+    IThroughputThrottlerPtr CreateBucketThrottler(
+        const std::string& name,
+        TFairThrottlerBucketConfigPtr bucketConfig,
+        const TFairThrottlerConfigPtr& config,
+        const IFairThrottlerIpcPtr& ipc,
+        const TSharedBucketPtr& sharedBucket)
     {
-        return Ipc_
+        if (!bucketConfig) {
+            bucketConfig = New<TFairThrottlerBucketConfig>();
+        }
+
+        TBucket bucket;
+        auto it = Buckets_.find(name);
+        if (it != Buckets_.end()) {
+            bucket = it->second;
+        } else {
+            bucket.Throttler = New<TBucketThrottler>(
+                Logger().WithTag("Bucket", name),
+                Profiler_.WithTag("bucket", name),
+                sharedBucket,
+                config);
+        }
+        if (it == Buckets_.end() || sharedBucket != SharedBucket_) {
+            bucket.IpcBucket = ipc ? ipc->CreateBucket() : nullptr;
+            bucket.Throttler->SetSharedBucket(sharedBucket);
+        }
+        bucket.Config = std::move(bucketConfig);
+        bucket.Throttler->Update(config, bucket.Config);
+        auto throttler = bucket.Throttler;
+        Buckets_[name] = std::move(bucket);
+        return throttler;
+    }
+
+    TAtomicValuePtr GetSharedBucketValue(const IFairThrottlerIpcPtr& ipc)
+    {
+        return ipc
             ? TAtomicValuePtr(
-                &Ipc_->GetState()->Value,
-                [ipc = Ipc_] (auto /*ptr*/) { })
+                &ipc->GetState()->Value,
+                [ipc] (auto /*ptr*/) { })
             : nullptr;
     }
 
     void DoUpdateLeader()
     {
-        auto guard = Guard(Lock_);
-
         std::vector<double> weights;
         weights.reserve(Buckets_.size());
 
@@ -747,8 +780,6 @@ private:
 
     void DoUpdateFollower()
     {
-        auto guard = Guard(Lock_);
-
         THashMap<std::string, i64> bucketIncome;
         THashMap<std::string, i64> bucketUsage;
         THashMap<std::string, i64> bucketDemands;
@@ -822,6 +853,8 @@ private:
 
     void UpdateLimits(TInstant at)
     {
+        auto guard = Guard(Lock_);
+
         if (!IsLeader_ && Ipc_->TryLock()) {
             IsLeader_ = true;
 
@@ -834,7 +867,6 @@ private:
             DoUpdateFollower();
         }
 
-        auto guard = Guard(Lock_);
         ScheduleLimitUpdate(at + Config_->DistributionPeriod);
     }
 

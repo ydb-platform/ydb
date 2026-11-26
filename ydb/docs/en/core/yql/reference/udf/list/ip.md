@@ -2,6 +2,8 @@
 
 The `Ip`  module supports both the IPv4 and IPv6 addresses. By default, they are represented as binary strings of 4 and 16 bytes, respectively.
 
+The `Ip::Ipv4FromUint32` and `Ip::Ipv4ToUint32` functions are available since version [YQL 2025.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.03.md#ip-module).
+
 ## List of functions
 
 * `Ip::FromString(String{Flags:AutoMap}) -> String?` - From a human-readable representation to a binary representation.

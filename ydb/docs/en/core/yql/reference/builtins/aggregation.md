@@ -915,6 +915,8 @@ FROM my_table;
 
 
 
+{% if backend_name != "YDB" %}
+
 ## RANDOM_SAMPLE and RANDOM_VALUE
 
 ### Signature
@@ -956,3 +958,5 @@ The final result is non-deterministic (it is impossible to perform two runs that
 Choose a reasonable `limit` value, as the aggregation function keeps `limit` elements in memory during execution. Using a large `limit` when processing large elements can cause out-of-memory errors.
 
 {% endnote %}
+
+{% endif %}

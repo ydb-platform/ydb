@@ -150,6 +150,8 @@ SELECT Math::Rem(-1, 7);        -- -1
 
 ## SwapBytes {#swap-bytes}
 
+Доступна начиная с версии [YQL 2025.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.03.md#math-module).
+
 ### Сигнатура
 
 * `Math::SwapBytes(T{Flags:AutoMap}) -> T`

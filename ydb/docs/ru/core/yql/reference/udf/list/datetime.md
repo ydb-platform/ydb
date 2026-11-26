@@ -402,6 +402,8 @@ SELECT
   -> (Resource<TM64>{Flags:AutoMap}) -> String
   ```
 
+Параметр `WriteOffsetWithColon` доступен начиная с версии [YQL 2025.05](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.05.md#datetime-module).
+
 Поддерживается множество спецификаторов для строки форматирования:
 
 * `%%` - символ %;
@@ -410,7 +412,7 @@ SELECT
 * `%d` — день, 2 цифры;
 * `%H` - час 2 цифры;
 * `%M` - минуты 2 цифры;
-* `%S` — секунды, 2 цифры или `XX.XXXXXX`, если есть микросекунды (и только если флаг `AlwaysWriteFractionalSeconds` не установлен в `True`);
+* `%S`: секунды, 2 цифры. При ненулевых микросекундах добавляется дробная часть до 6 цифр. Если `AlwaysWriteFractionalSeconds` равен `True`, дробная часть всегда содержит ровно 6 цифр, включая `.000000` для целых секунд;
 * `%z`: `+hhmm` или `-hhmm` по умолчанию; `+hh:mm` или `-hh:mm`, если `WriteOffsetWithColon` равен `True`.
 * `%Z` - IANA имя таймзоны;
 * `%b` - короткое трехбуквенное английское название месяца (Jan);
@@ -436,6 +438,8 @@ SELECT
 
 * `DateTime::Parse(String) -> (String{Flags:AutoMap}) -> Resource<TM>?`;
 * `DateTime::Parse64(String) -> (String{Flags:AutoMap}) -> Resource<TM64>?`.
+
+Спецификатор `%z` в `DateTime::Parse` и `DateTime::Parse64` доступен начиная с версии [YQL 2025.05](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.05.md#datetime-module).
 
 Реализованные спецификаторы:
 

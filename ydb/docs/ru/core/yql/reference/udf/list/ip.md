@@ -2,6 +2,8 @@
 
 В модуле `Ip` поддерживаются как IPv4, так и IPv6 адреса. По умолчанию они представляются в виде бинарных строк длиной 4 и 16 байт, соответственно.
 
+Функции `Ip::Ipv4FromUint32` и `Ip::Ipv4ToUint32` доступны начиная с версии [YQL 2025.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.03.md#ip-module).
+
 ## Список функций
 
 * `Ip::FromString(String{Flags:AutoMap}) -> String?` - из человекочитаемого представления в бинарное.

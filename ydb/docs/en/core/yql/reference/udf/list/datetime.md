@@ -400,6 +400,8 @@ Get a string representation of a time using an arbitrary formatting string.
   -> (Resource<TM64>{Flags:AutoMap}) -> String
   ```
 
+The `WriteOffsetWithColon` parameter is available since version [YQL 2025.05](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.05.md#datetime-module).
+
 A set of specifiers is implemented for the formatting string:
 
 * `%%`: % character
@@ -408,7 +410,7 @@ A set of specifiers is implemented for the formatting string:
 * `%d`: 2-digit day
 * `%H`: 2-digit hour
 * `%M`: 2-digit minutes
-* `%S`: 2-digit seconds or `XX.XXXXXX` in the case of non-empty microseconds (only if `AlwaysWriteFractionalSeconds` is not set to `True`)
+* `%S`: 2-digit seconds. Non-zero microseconds add a fractional part of up to 6 digits. When `AlwaysWriteFractionalSeconds` is `True`, the fractional part always contains exactly 6 digits, including `.000000` for whole seconds.
 * `%z`: `+hhmm` or `-hhmm` by default; `+hh:mm` or `-hh:mm` when `WriteOffsetWithColon` is `True`.
 * `%Z`: IANA name of the timezone
 * `%b`: A short three-letter English name of the month (Jan)
@@ -434,6 +436,8 @@ Parse a string into an internal representation using an arbitrary formatting str
 
 * `DateTime::Parse(String) -> (String{Flags:AutoMap}) -> Resource<TM>?`
 * `DateTime::Parse64(String) -> (String{Flags:AutoMap}) -> Resource<TM64>?`
+
+The `%z` specifier in `DateTime::Parse` and `DateTime::Parse64` is available since version [YQL 2025.05](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.05.md#datetime-module).
 
 Implemented specifiers:
 

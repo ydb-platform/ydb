@@ -378,11 +378,8 @@ SELECT Udf(Unicode::IsUtf)("2022-01-01")
 ```
 
 ```yql
-$config = @@{
-"name":"MessageFoo",
-"meta": "..."
-}@@;
-SELECT Udf(Protobuf::TryParse, $config As TypeConfig)("")
+$match = Udf(Re2::Match, AsTuple("a+", NULL) AS RunConfig);
+SELECT $match("aaa"); -- true
 ```
 
 {% if feature_mapreduce %}
@@ -1136,9 +1133,9 @@ SELECT Block(($arg)->{
 
 {% if backend_name == "YDB" %}
 
-`EvaluateExpr` evaluates an expression before the main part of a query and substitutes the result as a literal. It is available in Query Service. For example, you can precompute a value for a filter or a row limit.
+`EvaluateExpr` evaluates an expression during query compilation and substitutes the result as a literal. Constant expressions are supported in both Query Service and Table Service. For example, you can precompute a value for a filter or a row limit.
 
-The only argument is the expression to evaluate. It must be evaluable before reading the input rows: it cannot reference column values of the current row.
+The only argument must be evaluable during compilation: it cannot depend on column values of the current row or parameters declared with `DECLARE`. A parameter cannot be used inside `EvaluateExpr` even when its value is supplied with the query. This restriction applies to both APIs.
 
 `EvaluateAtom` evaluates names, such as a table name in a [named expression](../syntax/expressions.md#named-nodes). Dynamic name support depends on the API: use Query Service; Table Service does not support `EvaluateAtom`.
 

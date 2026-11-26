@@ -159,7 +159,7 @@ Functions for ASCII strings:
 
 * `String::Prec(Double{Flags:AutoMap}, Uint64) -> String`
 
-* `String::Reverse(String?) -> String?` Removed in the version [YQL 2025.02](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.02.md#string-module)
+* `String::Reverse(String?) -> String?` Removed in the version [YQL 2025.02](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.02.md#string-module). Use [Unicode::Reverse](unicode.md).
 
 {% note alert %}
 

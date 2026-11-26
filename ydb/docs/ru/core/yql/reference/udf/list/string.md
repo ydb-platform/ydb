@@ -59,7 +59,7 @@ SELECT String::Strip("YQL ");       -- "YQL"
 * `String::StartsWith(string:String?, prefix:String) -> Bool` - Устаревшая: используйте встроенную функцию [StartsWith](../../builtins/basic.md#starts_ends_with)
 * `String::HasSuffix(string:String?, suffix:String) -> Bool` - Устаревшая: используйте встроенную функцию [EndsWith](../../builtins/basic.md#starts_ends_with)
 * `String::EndsWith(string:String?, suffix:String) -> Bool` - Устаревшая: используйте встроенную функцию [EndsWith](../../builtins/basic.md#starts_ends_with)
-* `String::Reverse(string:String?) -> String?` - удалена в версии [YQL 2025.02](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.02.md#string-module)
+* `String::Reverse(string:String?) -> String?` - удалена в версии [YQL 2025.02](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.02.md#string-module). Используйте [Unicode::Reverse](unicode.md).
 
   Устаревшие функции, к использованию не рекомендуются.
 

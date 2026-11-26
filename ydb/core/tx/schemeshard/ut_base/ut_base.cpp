@@ -5527,7 +5527,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             Columns { Name: "value" Type: "Utf8" FamilyName: "payload" }
             KeyColumnNames: ["key"]
             PartitionConfig {
-                ColumnFamilies { Id: 0 StorageConfig {
+                ColumnFamilies { Id: 0 KeyIndexInDescriptor: false StorageConfig {
                     SysLog { PreferredPoolKind: "pool-kind-1" }
                     Log { PreferredPoolKind: "pool-kind-1" }
                     Data { PreferredPoolKind: "pool-kind-1" }
@@ -5552,6 +5552,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT_UNEQUAL(archiveId, 0u);
         const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
+        const auto hotPolicy = runtime.GetAppData().DomainsInfo->GetDefaultUserTablePolicy();
 
         const auto check = [&](i32 level, size_t expectedFamilies) {
             const auto described = DescribePath(runtime, "/MyRoot/Table", true);
@@ -5570,7 +5571,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             UNIT_ASSERT(!tier.GetGroupIndexesInDescriptor());
             for (const auto& family : current.GetColumnFamilies()) {
                 UNIT_ASSERT_UNEQUAL(family.GetId(), archiveId);
+                if (family.GetId() == 0) {
+                    UNIT_ASSERT(!family.GetKeyIndexInDescriptor());
+                    UNIT_ASSERT_EQUAL(family.GetColumnCodec(), NKikimrSchemeOp::ColumnCodecLZ4);
+                }
             }
+
+            const NLocalDb::TCompactionPolicy policy(current.GetCompactionPolicy());
+            UNIT_ASSERT_VALUES_EQUAL(policy.Generations.size(), hotPolicy->Generations.size() + 1);
+            for (size_t i = 0; i < hotPolicy->Generations.size(); ++i) {
+                UNIT_ASSERT(policy.Generations[i] == hotPolicy->Generations[i]);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(policy.Generations.back().TierId.value_or(0), archiveId);
+            const auto localPolicy = GetCompactionPolicy(runtime, shards.front(), 1001);
+            UNIT_ASSERT(localPolicy->Generations == policy.Generations);
 
             const auto local = GetDatashardSchema(runtime, shards.front(), described.GetPathId());
             const auto& families = local.GetPartitionConfig().GetColumnFamilies();
@@ -5578,6 +5592,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             const auto* archive = FindIfPtr(families, [=](const auto& family) { return family.GetId() == archiveId; });
             UNIT_ASSERT(primary && archive);
             UNIT_ASSERT_EQUAL(primary->GetColumnCodec(), NKikimrSchemeOp::ColumnCodecLZ4);
+            UNIT_ASSERT(!primary->GetKeyIndexInDescriptor());
             UNIT_ASSERT_UNEQUAL(archive->GetRoom(), primary->GetRoom());
             UNIT_ASSERT_EQUAL(archive->GetColumnCodec(), NKikimrSchemeOp::ColumnCodecZSTD);
             UNIT_ASSERT_VALUES_EQUAL(archive->GetColumnCodecLevel(), level);
@@ -5612,6 +5627,70 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         check(7, 3);
     }
 
+    Y_UNIT_TEST(NamedTiersShareStorageWithoutSharingGenerations) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataTiering(true);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+                ColumnFamilies { Id: 0 StorageConfig {
+                    SysLog { PreferredPoolKind: "pool-kind-1" }
+                    Log { PreferredPoolKind: "pool-kind-1" }
+                    Data { PreferredPoolKind: "pool-kind-1" }
+                } }
+                Tiers { Name: "warm" Id: 42 StorageConfig { PreferredPoolKind: "pool-kind-2" } }
+                CompactionPolicy {
+                    Generation { GenerationId: 0 }
+                    Generation { GenerationId: 1 TierId: 42 CountToCompact: 9 }
+                    Generation { GenerationId: 2 TierId: 42 CountToCompact: 13 }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
+        const auto initial = GetCompactionPolicy(runtime, shards.front(), 1001);
+        UNIT_ASSERT_VALUES_EQUAL(initial->Generations.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(initial->Generations[0].TierId.value_or(0), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(initial->Generations[1].TierId.value_or(0), 42u);
+        UNIT_ASSERT_VALUES_EQUAL(initial->Generations[1].CountToCompact, 9u);
+        UNIT_ASSERT_VALUES_EQUAL(initial->Generations[2].TierId.value_or(0), 42u);
+        UNIT_ASSERT_VALUES_EQUAL(initial->Generations[2].CountToCompact, 13u);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table" PartitionConfig {
+                Tiers { Name: "cold" Id: 7
+                    StorageConfig { PreferredPoolKind: "pool-kind-2" }
+                    KeyIndexInDescriptor: false GroupIndexesInDescriptor: false
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto policy = GetCompactionPolicy(runtime, shards.front(), 1001);
+        UNIT_ASSERT_VALUES_EQUAL(policy->Generations.size(), 4);
+        for (size_t i = 0; i < initial->Generations.size(); ++i) {
+            UNIT_ASSERT(policy->Generations[i] == initial->Generations[i]);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(policy->Generations.back().TierId.value_or(0), 7u);
+        UNIT_ASSERT_VALUES_EQUAL(policy->Generations.back().CountToCompact, 13u);
+
+        const auto path = DescribePath(runtime, "/MyRoot/Table");
+        const auto local = GetDatashardSchema(runtime, shards.front(), path.GetPathId());
+        const auto& config = local.GetPartitionConfig();
+        const auto* warm = FindIfPtr(config.GetColumnFamilies(), [](const auto& f) { return f.GetId() == 42; });
+        const auto* cold = FindIfPtr(config.GetColumnFamilies(), [](const auto& f) { return f.GetId() == 7; });
+        UNIT_ASSERT(warm && cold);
+        UNIT_ASSERT_UNEQUAL(warm->GetRoom(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(warm->GetRoom(), cold->GetRoom());
+        UNIT_ASSERT_VALUES_EQUAL(config.StorageRoomsSize(), 2);
+        UNIT_ASSERT(warm->GetKeyIndexInDescriptor() && warm->GetGroupIndexesInDescriptor());
+        UNIT_ASSERT(!cold->GetKeyIndexInDescriptor() && !cold->GetGroupIndexesInDescriptor());
+    }
+
     Y_UNIT_TEST(NamedTiersValidateAddAndAlter) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -5628,7 +5707,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table" PartitionConfig { Tiers { Name: "cold" } }
+            Name: "Table" PartitionConfig { Tiers { Name: "cold" Id: 7 } }
         )");
         env.TestWaitNotification(runtime, txId);
 
@@ -5661,6 +5740,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         reject(R"(ColumnFamilies { Id: 0 ColumnCodec: ColumnCodecPlain }
                   AlterTiers { Name: "default" Codec: ColumnCodecLZ4 })");
         reject(R"(AlterTiers { Name: "archive" CodecLevel: 7 })");
+        reject(R"(CompactionPolicy {
+            Generation { GenerationId: 0 }
+            Generation { GenerationId: 1 }
+            Generation { GenerationId: 2 }
+            Generation { GenerationId: 3 TierId: 42 }
+            Generation { GenerationId: 4 TierId: 7 }
+            Generation { GenerationId: 5 TierId: 999 }
+        })");
         flags.SetEnableTableCacheModes(false);
         reject(R"(AlterTiers { Name: "archive" CacheMode: ColumnCacheModeTryKeepInMemory })");
         flags.SetEnableDataTiering(false);
@@ -11616,6 +11703,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     Y_UNIT_TEST(CreateTableRejectsInterleavedGenerationTiers) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataTiering(true);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -11623,6 +11711,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             Columns { Name: "key" Type: "Uint32" }
             KeyColumnNames: [ "key" ]
             PartitionConfig {
+                Tiers { Name: "warm" Id: 42 }
+                Tiers { Name: "cold" Id: 7 }
                 CompactionPolicy {
                     Generation { GenerationId: 0 SizeToCompact: 1000 CountToCompact: 5 TierId: 42 }
                     Generation { GenerationId: 1 SizeToCompact: 10000 CountToCompact: 5 TierId: 7 }

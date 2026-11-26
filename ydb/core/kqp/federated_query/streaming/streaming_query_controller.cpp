@@ -73,15 +73,15 @@ public:
     }
 
     bool NeedsPrepare() const override {
-        return (AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart()
-                   || AppData()->FeatureFlags.GetEnableStreamingQueryReplanning())
-            && Settings.HasPqSources && Settings.Graph && PqGatewayFactory;
+        return (AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart() ||
+                   AppData()->FeatureFlags.GetEnableStreamingQueryReplanning()) &&
+               Settings.HasPqSources && Settings.Graph && PqGatewayFactory;
     }
 
     void StartPrepare(TVector<TPqTopicResolverSource> sources, THashMap<TString, TString> secureParams) override {
-        auto* resolver = CreateKqpPqTopicResolver(Settings.ExecuterId, Settings.TxId, std::move(sources),
-            std::move(secureParams), PqGatewayFactory, MutableGraph(), Settings.SourceTemplates,
-            Settings.Graph->GetPreparedQuery().GetPhysicalQuery().GetMaxTasksPerStage());
+        auto* resolver =
+            CreateKqpPqTopicResolver(Settings.ExecuterId, Settings.TxId, std::move(sources), std::move(secureParams), PqGatewayFactory,
+                MutableGraph(), Settings.SourceTemplates, Settings.Graph->GetPreparedQuery().GetPhysicalQuery().GetMaxTasksPerStage());
         TActivationContext::RegisterWithSameMailbox(resolver, Settings.ExecuterId);
     }
 

@@ -33,7 +33,7 @@ namespace NKikimr::NKqp {
 //   queryPhysicalGraph  – will be patched in-place with new partition counts
 NActors::IActor* CreateKqpPqTopicResolver(const NActors::TActorId& owner, ui64 txId, TVector<TPqTopicResolverSource> sources,
     THashMap<TString, TString> secureParams, NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
-    std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph,
-    TPqSourcePlanningSnapshot sourceTemplates = {}, ui32 maxTasksPerStage = 0);
+    std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph, TPqSourcePlanningSnapshot sourceTemplates = {},
+    ui32 maxTasksPerStage = 0);
 
 }   // namespace NKikimr::NKqp

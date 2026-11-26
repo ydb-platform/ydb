@@ -1,9 +1,9 @@
 #include "pq_topic_resolver.h"
 
 #include <ydb/core/kqp/common/kqp_streaming_query_controller.h>
+#include <ydb/core/kqp/executer_actor/kqp_graph_replanning.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
-#include <ydb/core/kqp/executer_actor/kqp_graph_replanning.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -28,8 +28,7 @@ using namespace NActors;
 namespace {
 
 TString MakeTopicKey(const TString& endpoint, const TString& database, const TString& topicPath) {
-    return TStringBuilder() << endpoint.size() << ":" << endpoint
-        << database.size() << ":" << database << topicPath;
+    return TStringBuilder() << endpoint.size() << ":" << endpoint << database.size() << ":" << database << topicPath;
 }
 
 // Per-cluster partition counts for one topic.
@@ -51,9 +50,7 @@ enum EPqResolverPrivateEv {
     EvTopicDescribeResult = EventSpaceBegin(TEvents::ES_PRIVATE),
 };
 
-struct TEvTopicDescribeResult
-    : public TEventLocal<TEvTopicDescribeResult, EvTopicDescribeResult>
-{
+struct TEvTopicDescribeResult: public TEventLocal<TEvTopicDescribeResult, EvTopicDescribeResult> {
     // On success: topic key (endpoint, database, topic path) and per-cluster data.
     TString TopicKey;
     TTopicClusterPartitions ClusterPartitions;
@@ -81,13 +78,8 @@ public:
         return NKikimrServices::TActivity::KQP_TABLE_RESOLVER;   // reuse closest existing type
     }
 
-    TKqpPqTopicResolver(
-        const TActorId& owner,
-        ui64 txId,
-        TVector<TPqTopicResolverSource> sources,
-        THashMap<TString, TString> secureParams,
-        NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
-        std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph,
+    TKqpPqTopicResolver(const TActorId& owner, ui64 txId, TVector<TPqTopicResolverSource> sources, THashMap<TString, TString> secureParams,
+        NYql::IPqGatewayFactory::TPtr pqGatewayFactory, std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph,
         TPqSourcePlanningSnapshot sourceTemplates, ui32 maxTasksPerStage)
         : Owner(owner)
         , TxId(txId)
@@ -97,7 +89,8 @@ public:
         , QueryPhysicalGraph(std::move(queryPhysicalGraph))
         , SourceTemplates(std::move(sourceTemplates))
         , MaxTasksPerStage(maxTasksPerStage)
-    {}
+    {
+    }
 
     void Bootstrap() {
         if (Sources.empty()) {
@@ -366,8 +359,7 @@ private:
 
 NActors::IActor* CreateKqpPqTopicResolver(const NActors::TActorId& owner, ui64 txId, TVector<TPqTopicResolverSource> sources,
     THashMap<TString, TString> secureParams, NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
-    std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph,
-    TPqSourcePlanningSnapshot sourceTemplates, ui32 maxTasksPerStage)
+    std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph, TPqSourcePlanningSnapshot sourceTemplates, ui32 maxTasksPerStage)
 {
     return new TKqpPqTopicResolver(owner, txId, std::move(sources), std::move(secureParams), std::move(pqGatewayFactory),
         std::move(queryPhysicalGraph), std::move(sourceTemplates), maxTasksPerStage);

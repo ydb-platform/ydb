@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 

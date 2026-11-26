@@ -247,9 +247,7 @@ class TestRescaling(StreamingTestBase):
         """Keep source scale-up available with both rescaling flags enabled and no checkpoints."""
         partitions_count = 100
         query_name = entity_name("pq_source_rescaling_without_checkpoints")
-        inp, out, _ = self.get_io_names(
-            kikimr, query_name, True, entity_name, partitions_count=partitions_count
-        )
+        inp, out, _ = self.get_io_names(kikimr, query_name, True, entity_name, partitions_count=partitions_count)
         kikimr.ydb_client.query(f'''
             CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
                 PRAGMA ydb.DisableCheckpoints = "TRUE";

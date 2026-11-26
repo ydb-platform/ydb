@@ -2361,7 +2361,8 @@ private:
 
         // what is left to copy into the target, see GetBridgeSyncRemaining; it outlives the syncers of the stage, as
         // each of them starts from zero
-        std::optional<NKikimrBridge::TGroupState::EStage> CopyStage; // the stage the two fields below belong to
+        std::optional<NKikimrBridge::TGroupState::EStage> CopyStage;
+        ui64 CopyRound = 0; // BecameUnsyncedGeneration of LastProgress and KnownRemaining
         std::optional<TSyncerProgress> LastProgress; // the latest report of a syncer in CopyStage
         std::optional<ui64> KnownRemaining; // what was left at the latest report with a finished scan in CopyStage
         // bytes copied into the target by all of its syncers, and its samples over BridgeSyncRateWindow for the rate
@@ -2371,6 +2372,8 @@ private:
         // What the part of HOT_STANDBY pile may have missed since the last reconciliation pass started; nothing is
         // known about the part when the entry gets created (BSC has started, or the part has been reset).
         EStandbyDirty StandbyDirty = EStandbyDirty::Data;
+        // Unset for ordinary sync. A full standby scan is current only if it covers all reported data misses.
+        std::optional<bool> StandbyScanCurrent;
         // the passes are this far apart at least, and the failed ones are retried with backoff; the sync of the part of
         // the pile rejoining doesn't wait for them
         TMonotonic StandbyNotBefore;
@@ -2507,8 +2510,12 @@ private:
     static constexpr size_t MaxStandbyReconcilers = 16;
     static constexpr TDuration StandbyReconcileInterval = TDuration::Minutes(1);
 
-    static void MarkStandbyDirty(TSyncerState& syncerState, EStandbyDirty dirty) {
+    void MarkStandbyDirty(TSyncerState& syncerState, EStandbyDirty dirty) {
         syncerState.StandbyDirty = Max(syncerState.StandbyDirty, dirty);
+        if (dirty == EStandbyDirty::Data && syncerState.StandbyScanCurrent.value_or(false)) {
+            syncerState.StandbyScanCurrent = false;
+            SysViewChangedGroups.insert(syncerState.TargetGroupId);
+        }
     }
 
     // the node has registered anew: the reports of the parts it has found missing a write may have got lost with its
@@ -2580,17 +2587,13 @@ private:
         ui64 Bytes = 0;
         bool Complete = false;
     };
-    std::optional<TBridgeSyncRemaining> GetBridgeSyncRemaining(TGroupId targetGroupId,
-        NKikimrBridge::TGroupState::EStage stage) const;
+    std::optional<TBridgeSyncRemaining> GetBridgeSyncRemaining(const NKikimrBridge::TGroupState::TPile& pile) const;
     const NKikimrBridge::TGroupState::TPile* FindBridgeSyncPile(TGroupId targetGroupId, ui64* currentRound = nullptr);
     std::optional<TInstant> GetBridgeSyncLastProgressTimestamp(TGroupId targetGroupId);
     void RecordBridgeSyncProgress(TGroupId targetGroupId, ui64 round, TInstant timestamp);
     void ForgetBridgeSyncProgress(TGroupId targetGroupId, ui64 round);
-    // the stage of the target group of a pile, if it is one
-    std::optional<NKikimrBridge::TGroupState::EStage> GetBridgeSyncStage(TGroupId targetGroupId);
-    // returns the bytes copied since the previous report
-    ui64 UpdateBridgeSyncCopyProgress(TSyncerState& syncerState, NKikimrBridge::TGroupState::EStage stage,
-        const TSyncerProgress& progress, bool comprehensive);
+    void UpdateBridgeSyncCopyProgress(TSyncerState& syncerState, const NKikimrBridge::TGroupState::TPile& pile,
+        const TSyncerProgress& progress);
     void UpdateBridgeSyncCopyRates();
     static constexpr TDuration BridgeSyncRateWindow = TDuration::Minutes(1);
 
@@ -2648,6 +2651,7 @@ private:
         // what the blob scan of the stage before Stage has found missing from the target, in blob bytes; there is a row
         // with this field and no errors, so that BSC restarts don't lose it
         std::optional<ui64> EstimatedBytesToCopy;
+        ui64 EstimateRound = 0;
     };
     THashMap<TGroupId, TBridgeSyncState> BridgeSyncState;
 

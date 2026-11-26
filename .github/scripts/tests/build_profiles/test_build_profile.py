@@ -69,6 +69,14 @@ class BuildProfilesTest(unittest.TestCase):
                     flags + ['--thinlto'],
                 )
 
+    def test_reproduction_preserves_all_profile_definitions(self):
+        profile = ['--build=release', '-DALLOCATOR=MIM', '-DHARDENING=yes', '-DCFLAGS=-one -two']
+        overrides = ['-D', 'HARDENING=no', '--test-env', 'TOKEN=secret', '-DSECRET=hidden']
+        self.assertEqual(
+            shlex.split(build_profile.portable_reproduction_args(overrides, profile)),
+            profile + ['-DHARDENING=no'],
+        )
+
     def test_reproduction_definition_forms_and_order(self):
         args = ['-DHARDENING=yes', '-D', 'HARDENING=no',
                 '-D', 'CFLAGS=-one -two', '-DCFLAGS=-three',

@@ -340,7 +340,7 @@ runs:
         python3 .github/scripts/build_profile.py "$BUILD_PRESET" --output-dir "$TMP_DIR/build-profile"
         mapfile -t profile_params < "$TMP_DIR/build-profile/args"
         DASHBOARD_SANITIZER=$(cat "$TMP_DIR/build-profile/sanitize")
-        reproduction_params=("${profile_params[@]}")
+        reproduction_params=()
         if [[ "$BUILD_PRESET" == release-tsan || "$BUILD_PRESET" == release-msan ]]; then
           if [ -z "$TEST_RETRY_COUNT" ]; then
             TEST_RETRY_COUNT=1
@@ -400,7 +400,7 @@ runs:
         if [ true = ${{ inputs.run_tests }} ]; then
             params+=(-A)
         fi
-        python3 -c 'import sys; sys.path.insert(0, ".github/scripts"); from build_profile import portable_reproduction_args; print(portable_reproduction_args(sys.argv[1:]))' "${reproduction_params[@]}" > "$TMP_DIR/build-profile/reproduction-args"
+        python3 -c 'import sys; sys.path.insert(0, ".github/scripts"); from pathlib import Path; from build_profile import portable_reproduction_args; print(portable_reproduction_args(sys.argv[2:], Path(sys.argv[1]).read_text().splitlines()))' "$TMP_DIR/build-profile/args" "${reproduction_params[@]}" > "$TMP_DIR/build-profile/reproduction-args"
         YA_MAKE_COMMAND=$(python3 -c 'import shlex, sys; print(shlex.join(sys.argv[1:]))' ./ya make "${params[@]}")
         params=("${profile_params[@]}" "${params[@]}")
         GRAPH_PATH=$(realpath graph.json)

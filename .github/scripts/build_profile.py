@@ -51,7 +51,7 @@ def resolve_profile(name, fallback=None):
     return {"args": args, "sanitize": sanitizer}
 
 
-def portable_reproduction_args(args):
+def portable_reproduction_args(args, profile_args=()):
     # Reports are public: never copy arbitrary test environments or credentials.
     # Preserve only compiler options understood by the shared profiles.
     value_options = {"--build", "--sanitize"}
@@ -77,7 +77,7 @@ def portable_reproduction_args(args):
         elif arg.startswith("-D") and arg[2:].split("=", 1)[0] in definitions:
             result.append(arg)
         index += 1
-    return shlex.join(result)
+    return shlex.join([*profile_args, *result])
 
 
 def reproduction_args(name):

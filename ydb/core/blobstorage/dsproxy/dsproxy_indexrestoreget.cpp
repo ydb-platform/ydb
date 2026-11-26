@@ -19,6 +19,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
     const bool Decommission;
     const bool DoNotReportIndexRestoreGetMissingBlobs;
     const std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> ForceBlockTabletData;
+    const std::optional<TEvBlobStorage::TEvGet::TReaderTabletData> ReaderTabletData;
 
     THashMap<ui64, TGroupQuorumTracker> QuorumTracker;
     TVector<TBlobStatusTracker> BlobStatus;
@@ -252,6 +253,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(Queries, QuerySize, Deadline, GetHandleClass,
             true /*mustRestoreFirst*/, true /*isIndexOnly*/, ForceBlockTabletData, IsInternal);
         ev->RestartCounter = counter;
+        ev->ReaderTabletData = ReaderTabletData;
         ev->Decommission = Decommission;
         ev->DoNotReportIndexRestoreGetMissingBlobs = DoNotReportIndexRestoreGetMissingBlobs;
         return ev;
@@ -275,6 +277,7 @@ public:
         , Decommission(params.Common.Event->Decommission)
         , DoNotReportIndexRestoreGetMissingBlobs(params.Common.Event->DoNotReportIndexRestoreGetMissingBlobs)
         , ForceBlockTabletData(params.Common.Event->ForceBlockTabletData)
+        , ReaderTabletData(params.Common.Event->ReaderTabletData)
         , VGetsInFlight(0)
         , GetHandleClass(params.Common.Event->GetHandleClass)
         , RestoreQueriesStarted(0)
@@ -356,6 +359,11 @@ public:
                                 );
 
                         vget->Record.SetSuppressBarrierCheck(IsInternal);
+                        if (ReaderTabletData) {
+                            NKikimrBlobStorage::TEvVGet::TTabletData *reader = vget->Record.MutableReaderTabletData();
+                            reader->SetId(ReaderTabletData->Id);
+                            reader->SetGeneration(ReaderTabletData->Generation);
+                        }
                         vget->Record.SetTabletId(TabletId);
                     }
                     const ui64 cookie = queryIdx;

@@ -562,8 +562,9 @@ class TLocalTableWriter
                     continue;
                 }
 
-                if (auto it = TxIds.upper_bound(version); !IndexBuild && it != TxIds.end()) {
-                    record->RewriteTxId(it->second);
+                if (auto it = TxIds.upper_bound(version); !IndexBuild && it != TxIds.end()
+                        && TRowVersion::FromProto(it->second.GetBegin()) <= version) {
+                    record->RewriteTxId(it->second.GetTxId());
                     if (PendingTxId.empty()) {
                         records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
                     } else {
@@ -645,60 +646,29 @@ class TLocalTableWriter
         }
 
         for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
+            const auto begin = TRowVersion::FromProto(kv.GetBegin());
             const auto version = TRowVersion::FromProto(kv.GetVersion());
-            TxIds.emplace(version, kv.GetTxId());
+            TxIds.emplace(version, kv);
 
-            auto pendingIt = PendingTxId.begin();
-            auto blockedIt = BlockedRecords.begin();
-
-            auto processPending = [this, &records, &version, txId = kv.GetTxId()](auto& it) -> bool {
+            for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
                 Y_ABORT_UNLESS(PendingRecords.contains(*it));
                 auto& record = PendingRecords.at(*it);
-
                 const auto recordVersion = TRowVersion(record->GetStep(), record->GetTxId());
-                if (recordVersion >= version) {
-                    return false;
-                }
-
-                record->RewriteTxId(txId);
-                records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
-
-                it = PendingTxId.erase(it);
-                return true;
-            };
-
-            auto processBlocked = [this, &records](auto& it) {
-                Y_ABORT_UNLESS(PendingRecords.contains(*it));
-                auto& record = PendingRecords.at(*it);
-
-                records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
-
-                it = BlockedRecords.erase(it);
-            };
-
-            while (pendingIt != PendingTxId.end() && blockedIt != BlockedRecords.end()) {
-                if (*pendingIt < *blockedIt) {
-                    if (!processPending(pendingIt)) {
-                        break;
-                    }
+                if (begin <= recordVersion && recordVersion < version) {
+                    record->RewriteTxId(kv.GetTxId());
+                    BlockedRecords.insert(*it);
+                    it = PendingTxId.erase(it);
                 } else {
-                    processBlocked(blockedIt);
+                    ++it;
                 }
             }
+        }
 
-            if (blockedIt == BlockedRecords.end()) {
-                for (; pendingIt != PendingTxId.end();) {
-                    if (!processPending(pendingIt)) {
-                        break;
-                    }
-                }
-            }
-
-            if (pendingIt == PendingTxId.end()) {
-                for (; blockedIt != BlockedRecords.end();) {
-                    processBlocked(blockedIt);
-                }
-            }
+        for (auto it = BlockedRecords.begin(); it != BlockedRecords.end()
+                && (PendingTxId.empty() || *it < *PendingTxId.begin());) {
+            Y_ABORT_UNLESS(PendingRecords.contains(*it));
+            records.emplace_back(*it, TablePathId, PendingRecords.at(*it)->GetBody().size());
+            it = BlockedRecords.erase(it);
         }
 
         if (records) {
@@ -907,7 +877,7 @@ private:
     bool RefreshingSchema = false;
 
     THashMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
-    TMap<TRowVersion, ui64> TxIds; // key is non-inclusive right hand edge
+    TMap<TRowVersion, NKikimrReplication::TEvTxIdResult::TVersionTxId> TxIds; // key is non-inclusive right hand edge
     TSet<ui64> PendingTxId;
     TSet<ui64> BlockedRecords;
     TRowVersion PendingHeartbeat = TRowVersion::Min();

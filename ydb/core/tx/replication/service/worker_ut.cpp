@@ -1748,15 +1748,20 @@ public:
         auto result = MakeHolder<TEvService::TEvTxIdResult>(42, 1);
         auto* assignment = result->Record.AddVersionTxIds();
         TRowVersion(step, 0).ToProto(assignment->MutableVersion());
+        TRowVersion(step - 10, 0).ToProto(assignment->MutableBegin());
         assignment->SetTxId(step + 1000);
         Runtime.Send(new IEventHandle(Service, Controller, result.Release()), 0, true);
+    }
+
+    void RequestTxId(const TActorId& actor, ui64 step) {
+        Runtime.Send(new IEventHandle(Service, actor,
+            new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(step, 0)})), 0, true);
     }
 
     void CheckTxId(const TActorId& actor, ui64 step, ui64 assignedStep, bool cached, TStringBuf reason) {
         UNIT_ASSERT(TxIdRequests.empty());
         UNIT_ASSERT(TxIdResults.empty());
-        Runtime.Send(new IEventHandle(Service, actor,
-            new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(step, 0)})), 0, true);
+        RequestTxId(actor, step);
         Runtime.WaitFor("tx-id response or controller request", [&] {
             return !TxIdRequests.empty() || !TxIdResults.empty();
         }, TDuration::Seconds(30));
@@ -1775,6 +1780,31 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(record.GetVersions(0)), TRowVersion(step, 0));
         }
         TxIdResults.clear();
+        TxIdRequests.clear();
+    }
+
+    void CheckTxIdResults(const THashMap<TActorId, ui64>& assignedSteps) {
+        Runtime.WaitFor("tx-id results", [&] {
+            return TxIdResults.size() == assignedSteps.size();
+        }, TDuration::Seconds(30));
+        for (const auto& ev : TxIdResults) {
+            const auto& record = ev->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.VersionTxIdsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(record.GetVersionTxIds(0).GetVersion()),
+                TRowVersion(assignedSteps.at(ev->GetRecipientRewrite()), 0));
+        }
+        TxIdResults.clear();
+    }
+
+    void CheckTxIdRequest(ui64 step) {
+        Runtime.WaitFor("tx-id response or controller request", [&] {
+            return !TxIdRequests.empty() || !TxIdResults.empty();
+        }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(TxIdResults.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(TxIdRequests.size(), 1);
+        const auto& record = TxIdRequests.front()->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.VersionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(record.GetVersions(0)), TRowVersion(step, 0));
         TxIdRequests.clear();
     }
 };
@@ -1898,6 +1928,37 @@ Y_UNIT_TEST_SUITE(ReplicationServiceSession) {
         fixture.Heartbeat(third, 100);
         fixture.CheckTxId(third, 140, 150, false,
             "Stopping before the first heartbeat corrupted subsequent heartbeat quorum");
+    }
+
+    Y_UNIT_TEST(ShouldKeepEarlierVersionWaitingWhenLaterIntervalIsAssignedFirst) {
+        // given
+        TServiceFixture fixture;
+        const auto ahead = fixture.Add(1);
+        const auto behind = fixture.Add(2);
+        fixture.CheckTxId(ahead, 75, 80, false, "The later interval must be requested from the controller");
+        fixture.CheckTxId(behind, 25, 30, false, "The earlier interval must be requested from the controller");
+        fixture.AssignTxId(80);
+
+        // when
+        fixture.AssignTxId(30);
+
+        // then
+        fixture.CheckTxIdResults({{ahead, 80}, {behind, 30}});
+    }
+
+    Y_UNIT_TEST(ShouldRequestControllerWhenCachedIntervalStartsAfterVersion) {
+        // given
+        TServiceFixture fixture;
+        const auto worker = fixture.Add(1);
+        fixture.CheckTxId(worker, 75, 80, false, "The interval must be requested from the controller");
+        fixture.AssignTxId(80);
+        fixture.CheckTxIdResults({{worker, 80}});
+
+        // when
+        fixture.RequestTxId(worker, 65);
+
+        // then
+        fixture.CheckTxIdRequest(65);
     }
 }
 

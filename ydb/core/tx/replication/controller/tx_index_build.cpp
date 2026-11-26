@@ -21,6 +21,10 @@ TRowVersion IntervalEnd(const TRowVersion& version, ui64 interval) {
     return TRowVersion((version.Step / interval + 1) * interval, 0);
 }
 
+TRowVersion IntervalBegin(const TRowVersion& version, ui64 interval) {
+    return TRowVersion(version.Step / interval * interval, 0);
+}
+
 bool IsValidCheckpoint(const NKikimrReplication::TIndexBuildProgress& progress,
         const NKikimrReplication::TIndexBuildProgress& previous)
 {
@@ -211,8 +215,8 @@ class TController::TTxIndexBuild: public TTxBase {
                 if (global) {
                     auto assigned = Self->AssignedTxIds.lower_bound(end);
                     if (assigned != Self->AssignedTxIds.end()) {
-                        end = assigned->first;
                         txId = assigned->second;
+                        Self->WriteTxIntervals.AddInterval(txId, end);
                     } else if (CanReuseLastGlobalAssignment(join)) {
                         auto node = Self->AssignedTxIds.extract(Self->AssignedTxIds.rbegin()->first);
                         db.Table<Schema::TxIds>().Key(node.key().Step, node.key().TxId).Delete();
@@ -233,7 +237,6 @@ class TController::TTxIndexBuild: public TTxBase {
                     for (const auto& assigned : build.GetAssignments()) {
                         if (TRowVersion::FromProto(assigned.GetVersion()) >= end) {
                             txId = assigned.GetWriteTxId();
-                            end = TRowVersion::FromProto(assigned.GetVersion());
                             break;
                         }
                     }
@@ -273,7 +276,8 @@ class TController::TTxIndexBuild: public TTxBase {
                 auto& assigned = *reply->Record.AddVersionTxIds();
                 end.ToProto(assigned.MutableVersion());
                 assigned.SetTxId(txId);
-                (global ? join : TRowVersion::Min()).ToProto(assigned.MutableBegin());
+                const auto begin = IntervalBegin(version, interval);
+                (global ? Max(begin, join) : begin).ToProto(assigned.MutableBegin());
             }
 
             if (reply->Record.VersionTxIdsSize()) {

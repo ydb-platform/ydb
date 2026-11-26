@@ -9,6 +9,7 @@ namespace NKikimr::NReplication::NController {
 class TController::TTxAssignTxId: public TTxBase {
     THashMap<ui32, THolder<TEvService::TEvTxIdResult>> Result;
     bool TxIdsExhausted = false;
+    ui64 CommitIntervalMs = 0;
 
     struct TTxId {
         ui64 Value;
@@ -48,6 +49,9 @@ class TController::TTxAssignTxId: public TTxBase {
 
                 auto& item = *ev->Record.AddVersionTxIds();
                 it->first.ToProto(item.MutableVersion());
+                if (CommitIntervalMs) {
+                    TRowVersion(it->first.Step - CommitIntervalMs, 0).ToProto(item.MutableBegin());
+                }
                 item.SetTxId(txId);
             }
 
@@ -79,13 +83,17 @@ public:
             Self->PendingTxId.clear();
             return true;
         }
+        if (replication) {
+            CommitIntervalMs = replication->GetConfig().GetConsistencySettings().GetGlobal().GetCommitIntervalMilliSeconds();
+        }
 
         NIceDb::TNiceDb db(txc.DB);
 
         auto result = Process([&](const TRowVersion& version) -> TAssignResult {
-            auto it = Self->IndexBuilds.empty()
-                ? Self->AssignedTxIds.find(version) : Self->AssignedTxIds.lower_bound(version);
-            if (it != Self->AssignedTxIds.end()) {
+            auto it = Self->AssignedTxIds.lower_bound(version);
+            if (it != Self->AssignedTxIds.end()
+                    && (!Self->IndexBuilds.empty() || Self->WriteTxIntervals.CanReuse(it->second, version))) {
+                Self->WriteTxIntervals.AddInterval(it->second, version);
                 return it->second;
             }
 
@@ -106,6 +114,7 @@ public:
                 NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
             );
             it = Self->AssignedTxIds.emplace(version, txId).first;
+            Self->WriteTxIntervals.Start(txId, version);
 
             return txId;
         });
@@ -157,6 +166,7 @@ public:
         result = Process([&](const TRowVersion& version) -> TAssignResult {
             auto it = Self->AssignedTxIds.lower_bound(version);
             Y_ABORT_UNLESS(it != Self->AssignedTxIds.end());
+            Self->WriteTxIntervals.AddInterval(it->second, version);
             return it->second;
         });
 

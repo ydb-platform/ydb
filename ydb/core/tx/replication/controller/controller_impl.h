@@ -9,6 +9,7 @@
 #include "session_info.h"
 #include "sys_params.h"
 #include "worker_lag_expiry_queue.h"
+#include "write_tx_intervals.h"
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/defs.h>
@@ -379,6 +380,7 @@ private:
     bool IndexBuildTxInFlight = false;
     TMap<ui64, TRowVersion> CommittedVersions; // Completed global frontier per replication.
     TMap<TRowVersion, ui64> AssignedTxIds; // tx ids assigned to version
+    TWriteTxIntervals WriteTxIntervals;
     TMap<TRowVersion, THashSet<ui32>> PendingTxId;
     bool AssignTxIdInFlight = false;
 

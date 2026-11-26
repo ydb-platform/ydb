@@ -304,6 +304,7 @@ public:
             NIceDb::TUpdate<Schema::Replications::CommittedTxId>(frontier.TxId)
         );
         db.Table<Schema::TxIds>().Key(it->first.Step, it->first.TxId).Delete();
+        Self->WriteTxIntervals.Complete(it->second);
         it = Self->AssignedTxIds.erase(it);
         Self->CommittingTxId = 0;
         if (Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {

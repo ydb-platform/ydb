@@ -273,6 +273,50 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
         UNIT_ASSERT_VALUES_EQUAL(env.SdkTransactions(true).value().Assigned.size(), 0);
     }
 
+    Y_UNIT_TEST(ShouldReuseExtendedTxIdForItsFirstIntervalAfterEarlierCommit) {
+        // given
+        TTransactionsEnv env;
+        const auto first = env.Assign(1);
+        env.Assign(19999);
+        env.Assign(29999);
+        env.Assign(39999);
+        const auto last = env.Assign(49999);
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(59999), last);
+        env.HoldCommits();
+        env.Heartbeat();
+        env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        env.CommitStatus(first, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 4);
+
+        // when
+        const auto repeated = env.Assign(49999);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(repeated, last);
+    }
+
+    Y_UNIT_TEST(ShouldReuseLaterTxIdForMergedIntervalAfterEarlierCommit) {
+        // given
+        TTransactionsEnv env;
+        const auto first = env.Assign(1);
+        const auto next = env.Assign(29999);
+        env.Assign(39999);
+        env.Assign(49999);
+        env.Assign(59999);
+        UNIT_ASSERT_VALUES_EQUAL(env.Assign(19999), next);
+        env.HoldCommits();
+        env.Heartbeat();
+        env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        env.CommitStatus(first, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 4);
+
+        // when
+        const auto repeated = env.Assign(19999);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(repeated, next);
+    }
+
     Y_UNIT_TEST(RestoresAssignedTransactionsAfterRestart) {
         TTransactionsEnv env;
         const auto first = env.Assign(1);

@@ -291,6 +291,24 @@ Y_UNIT_TEST(SplitWithoutBoundaryUsesMiddleOfRange) {
     UNIT_ASSERT(!GroupOf(blocked).GetSplit(0).GetSplitBoundary().empty());
 }
 
+Y_UNIT_TEST(SplitWithBoundaryDoesNotRequireBytewiseOrderedRange) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    TProposeCapture blocked;
+    InstallProposeCapture(tc, blocked);
+    auto config = MakeScaleConfig(10, 1);
+    auto* keyRange = config.MutableAllPartitions(0)->MutableKeyRange();
+    keyRange->SetFromBound(TString("\xff\x00", 2));
+    keyRange->SetToBound(TString("\x00\x02", 2));
+    auto host = StartHost(tc, config);
+    SendScale(tc, host, 0, NKikimrPQ::EScaleStatus::NEED_SPLIT, TString("\x00\x01", 2));
+    WaitProposes(tc, blocked);
+    UNIT_ASSERT_VALUES_EQUAL(GroupOf(blocked).SplitSize(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(GroupOf(blocked).GetSplit(0).GetSplitBoundary(), TString("\x00\x01", 2));
+}
+
 Y_UNIT_TEST(EmptySplitBoundaryIsDropped) {
     TTestContext tc;
     tc.Prepare();

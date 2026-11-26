@@ -2950,6 +2950,8 @@ private:
                 "commit_interval",
                 "initial_scan",
                 "bootstrap",
+                "bootstrap_storage",
+                "bootstrap_prefix",
                 "availability_period",
             };
             settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));

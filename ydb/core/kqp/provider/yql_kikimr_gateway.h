@@ -1548,6 +1548,8 @@ struct TReplicationSettings : public TReplicationSettingsBase {
     TMaybe<TGlobalConsistency> GlobalConsistency;
     TMaybe<bool> InitialScan;
     TMaybe<TString> Bootstrap;
+    TMaybe<TString> BootstrapStorage;
+    TMaybe<TString> BootstrapPrefix;
     TMaybe<NKikimrReplication::TAvailabilityPeriod> AvailabilityPeriod;
 
     TRowConsistency& EnsureRowConsistency() {

@@ -1,5 +1,33 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.36.0 {#2-36-0}
+
+Released on November 26, 2026. To update to version **2.36.0**, select the [Downloads](downloads/ydb-cli.md) section.
+
+### Features
+
+* Added Apache Parquet table exports with `--file-format parquet` to the [`{{ ydb-cli }} export s3` command](./reference/ydb-cli/export-import/export-s3.md). Parquet export requires the [`enable_export_in_parquet` feature flag](./reference/configuration/feature_flags.md#configuration) to be enabled on the server. This format is incompatible with {{ ydb-short-name }} backup encryption.
+* The [`{{ ydb-cli }} export s3`](./reference/ydb-cli/export-import/export-s3.md) and [`{{ ydb-cli }} export nfs`](./reference/ydb-cli/export-import/export-nfs.md) commands now skip objects marked with `__omit_backup = "true"`. The [`{{ ydb-cli }} tools dump` command](./reference/ydb-cli/export-import/tools-dump.md) honors the attribute for tables and changefeeds.
+* Extended the [`{{ ydb-cli }} admin cluster bridge` commands](./reference/ydb-cli/commands/bridge/index.md).
+  * The new [`rollback` command](./reference/ydb-cli/commands/bridge/rollback.md) starts rolling back the conversion of an ordinary cluster to bridge mode. Track progress in the `list piles` view.
+  * The [`list` command](./reference/ydb-cli/commands/bridge/list.md#views) now has `piles`, `databases`, and `groups` views for monitoring synchronization.
+  * The new [`set-database-mode` command](./reference/ydb-cli/commands/bridge/set-database-mode.md) switches a database between bridged and ordinary storage.
+  * The new [`provision-pile` command](./reference/ydb-cli/commands/bridge/provision-pile.md) prepares storage for a new pile in a running cluster.
+  * The new [`destroy-pile` command](./reference/ydb-cli/commands/bridge/destroy-pile.md) deletes a disconnected pile's storage and data.
+
+### Improvements
+
+* The [`{{ ydb-cli }} scheme rmdir --recursive` command](./reference/ydb-cli/commands/dir.md#rmdir) now removes objects in parallel. Use the `--in-flight` option to limit the number of concurrent removals.
+* The [`{{ ydb-cli }} tools dump` command](./reference/ydb-cli/export-import/tools-dump.md) now dumps column-oriented tables faster. It also uses less server memory on compatible servers.
+* The [`{{ ydb-cli }} operation get` command](./reference/ydb-cli/operation-get.md) now displays available details for failed operations and still exits with a nonzero status.
+* Cluster administration commands that allow omitting the [connection database](./reference/ydb-cli/connect.md#connection) now reject tenant paths. Use a root domain such as `/Root` for `--database`, or connect without a database.
+
+### Bug fixes
+
+* [Exports to S3](./reference/ydb-cli/export-import/export-s3.md) now exclude asynchronous replication changefeeds from backups. [Imports from S3](./reference/ydb-cli/export-import/import-s3.md) do not restore these changefeeds.
+* [Workload imports](./reference/ydb-cli/commands/workload/index.md) now skip database post-import actions when saving data to files with `--file-output-path`.
+* Fixed a crash when searching the documentation in [interactive AI mode](./reference/ydb-cli/interactive-cli-ai.md#usage).
+
 ## Version 2.35.0 {#2-35-0}
 
 Released on October 30, 2026. To update to version **2.35.0**, select the [Downloads](downloads/ydb-cli.md) section.

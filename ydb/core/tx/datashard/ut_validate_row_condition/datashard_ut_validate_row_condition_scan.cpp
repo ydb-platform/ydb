@@ -1,6 +1,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/protos/set_column_constraint.pb.h>
+#include <ydb/core/tablet/resource_broker.h>
 
 namespace NKikimr {
 
@@ -10,7 +11,7 @@ using namespace Tests;
 
 Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
-    Y_UNIT_TEST(SimpleCheck) {
+    Y_UNIT_TEST_TWIN(SimpleCheck, ZeroMemoryLimit) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -32,6 +33,18 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         auto tableId = ResolveTableId(server, sender, "/Root/test");
 
+        if (ZeroMemoryLimit) {
+            using namespace NResourceBroker;
+            auto configure = MakeHolder<TEvResourceBroker::TEvConfigure>();
+            configure->Merge = true;
+            auto* queue = configure->Record.AddQueues();
+            queue->SetName("queue_build_index");
+            queue->MutableLimit()->SetMemory(0);
+            runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, configure.Release()));
+            auto reply = runtime.GrabEdgeEventRethrow<TEvResourceBroker::TEvConfigureResult>(sender);
+            UNIT_ASSERT(reply->Get()->Record.GetSuccess());
+        }
+
         auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(100);
         request->Record.SetTabletId(shards[0]);
@@ -44,8 +57,14 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         {
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvValidateRowConditionResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrSetColumnConstraint::EValidateStatus::DONE);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetIsValid(), true);
+            if (ZeroMemoryLimit) {
+                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Record.IssuesSize(), 1);
+                UNIT_ASSERT_STRING_CONTAINS(reply->Record.GetIssues(0).message(), "scan memory reservation exceeds the current broker limit");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrSetColumnConstraint::EValidateStatus::DONE);
+                UNIT_ASSERT(reply->Record.GetIsValid());
+            }
         }
     }
 

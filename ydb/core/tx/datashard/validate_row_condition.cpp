@@ -193,17 +193,18 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
         return;
     }
 
-    auto sendResponse = [&](NKikimrSetColumnConstraint::EValidateStatus buildStatus, const TString& error = "") {
+    auto sendResponse = [id, tabletId = TabletID(), sender = ev->Sender, self = ctx.SelfID](
+        NKikimrSetColumnConstraint::EValidateStatus buildStatus, const TString& error = "") {
         auto response = MakeHolder<TEvDataShard::TEvValidateRowConditionResponse>();
         response->Record.SetId(id);
-        response->Record.SetTabletId(TabletID());
+        response->Record.SetTabletId(tabletId);
         response->Record.SetStatus(buildStatus);
         if (!error.empty()) {
             auto* issue = response->Record.AddIssues();
             issue->set_severity(NYql::TSeverityIds::S_ERROR);
             issue->set_message(error);
         }
-        ctx.Send(ev->Sender, std::move(response));
+        TActivationContext::Send(new IEventHandle(sender, self, response.Release()));
     };
 
     if (record.GetTabletId() != TabletID()) {
@@ -240,7 +241,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
         {"localTid", userTable.LocalTid});
 
     auto scan = new TValidateRowConditionScan(record, ev->Sender, TabletID(), userTable, GetScanManager());
-    StartScan(this, scan, id, seqNo, rowVersion, userTable.LocalTid);
+    StartScan(this, scan, id, seqNo, rowVersion, userTable.LocalTid, [sendResponse](const TString& reason) {
+        sendResponse(NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST, reason);
+    });
 }
 
 } // namespace NKikimr::NDataShard

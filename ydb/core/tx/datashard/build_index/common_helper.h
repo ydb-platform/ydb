@@ -579,9 +579,9 @@ void SendScanError(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::TSe
     TlsActivationContext->Send(new IEventHandle(sender, TActorId(), response.Release()));
 }
 
-template<typename TResponse>
 inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui64 id,
-    TScanRecord::TSeqNo seqNo, std::optional<TRowVersion> rowVersion, ui32 tableId, TActorId sender)
+    TScanRecord::TSeqNo seqNo, std::optional<TRowVersion> rowVersion, ui32 tableId,
+    std::function<void(const TString&)> onAdmissionFailure)
 {
     auto& scanManager = dataShard->GetScanManager();
 
@@ -602,12 +602,22 @@ inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui6
         scanOpts.SetSnapshotRowVersion(*rowVersion);
     }
     scanOpts.SetResourceBroker("build_index", 10);
-    scanOpts.OnAdmissionFailure = [dataShard, id, seqNo, sender](const TString& reason, bool) {
+    scanOpts.OnAdmissionFailure = [dataShard, id, onAdmissionFailure = std::move(onAdmissionFailure)](const TString& reason, bool) {
         dataShard->GetScanManager().Drop(id);
-        SendScanError<TResponse>(id, dataShard->TabletID(), sender, seqNo, reason);
+        onAdmissionFailure(reason);
     };
     const auto scanId = dataShard->QueueScan(tableId, std::move(scan), 0, scanOpts);
     scanManager.Set(id, seqNo).push_back(scanId);
+}
+
+template<typename TResponse>
+inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui64 id,
+    TScanRecord::TSeqNo seqNo, std::optional<TRowVersion> rowVersion, ui32 tableId, TActorId sender)
+{
+    StartScan(dataShard, std::move(scan), id, seqNo, rowVersion, tableId,
+        [id, tabletId = dataShard->TabletID(), sender, seqNo](const TString& reason) {
+            SendScanError<TResponse>(id, tabletId, sender, seqNo, reason);
+        });
 }
 
 template<typename TResponse>

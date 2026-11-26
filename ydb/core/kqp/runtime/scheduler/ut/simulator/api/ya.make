@@ -1,6 +1,6 @@
-DLL(kqp_scheduler_sim_api)
+DLL(simulator_api)
 
-SRCDIR(ydb/core/kqp/runtime/scheduler/sim)
+SRCDIR(ydb/core/kqp/runtime/scheduler/ut/simulator)
 
 SRCS(
     api.cpp

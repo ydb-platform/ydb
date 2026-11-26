@@ -17,7 +17,7 @@ struct TSchedulableTask : public std::enable_shared_from_this<TSchedulableTask> 
 
     void RegisterForResume(const NActors::TActorId& actorId);
     void RegisterForResume(std::function<void()> resume);
-    void Resume();
+    bool TryResume();
 
     using TResumeEventType = NActors::TEvents::TEvWakeup;
     static bool IsResumeEvent(const TResumeEventType::TPtr& ev) {

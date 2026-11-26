@@ -30,12 +30,15 @@ void TSchedulableTask::RegisterForResume(std::function<void()> resume) {
     Iterator = Query->AddTask(shared_from_this());
 }
 
-void TSchedulableTask::Resume() {
+bool TSchedulableTask::TryResume() {
     if (ResumeCallback) {
         ResumeCallback();
     } else if (NActors::TlsActivationContext) {
         NActors::TActivationContext::Send(ActorId, GetResumeEvent());
+    } else {
+        return false;
     }
+    return true;
 }
 
 bool TSchedulableTask::TryIncreaseUsage() {

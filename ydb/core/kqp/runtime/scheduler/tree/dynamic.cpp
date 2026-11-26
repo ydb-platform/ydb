@@ -148,8 +148,7 @@ ui32 TQuery::ResumeTasks(ui32 count) {
 
     for (auto it = SchedulableTasks.begin(); run < count && it != SchedulableTasks.end();) {
         if (auto task = it->first.lock()) {
-            if (it->second) {
-                task->Resume();
+            if (it->second && task->TryResume()) {
                 ++run;
             }
             ++it;

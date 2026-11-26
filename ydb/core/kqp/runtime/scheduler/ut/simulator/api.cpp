@@ -1,4 +1,4 @@
-// The same scheduler and the same command language as kqp_scheduler_sim, but linked into the caller's process:
+// The same scheduler and the same command language as the simulator CLI, but linked into the caller's process:
 // no pipe, no process switch and no per-command round-trip. Used by sim5.py through ctypes.
 //
 //   void* kqp_sim_new(unsigned long long seed);
@@ -7,7 +7,7 @@
 //
 // The commands are those of main.cpp (see the comment there); an error is replied as "error <message>".
 
-#include "stand.h"
+#include "simulator.h"
 
 namespace {
 
@@ -19,28 +19,18 @@ extern "C" {
 
 __attribute__((visibility("default"))) void* kqp_sim_new(unsigned long long seed) {
     try {
-        return new NKikimr::NKqp::NStand::TStand(seed);
+        return new NKikimr::NKqp::NSimulator::TSimulator(seed);
     } catch (const std::exception&) {
         return nullptr;
     }
 }
 
 __attribute__((visibility("default"))) void kqp_sim_free(void* handle) {
-    if (!handle) {
-        return;
-    }
-    auto& stand = *static_cast<NKikimr::NKqp::NStand::TStand*>(handle);
-    // Like the "quit" of the line protocol: a task must not be destroyed while it holds the quota
-    TStringBuilder reply;
-    try {
-        stand.Handle("quit", reply);
-    } catch (const std::exception&) {
-    }
-    delete &stand;
+    delete static_cast<NKikimr::NKqp::NSimulator::TSimulator*>(handle);
 }
 
 __attribute__((visibility("default"))) const char* kqp_sim_exec(void* handle, const char* line) {
-    auto& stand = *static_cast<NKikimr::NKqp::NStand::TStand*>(handle);
+    auto& stand = *static_cast<NKikimr::NKqp::NSimulator::TSimulator*>(handle);
 
     TStringBuilder reply;
     bool next = true;

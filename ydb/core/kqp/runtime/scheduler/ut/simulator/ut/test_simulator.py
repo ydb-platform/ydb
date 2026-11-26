@@ -1,26 +1,25 @@
-#!/usr/bin/env python3
-"""Smoke tests for the real scheduler behind the simulator's CLI and C API.
-
-Run with: python3 test_simulator.py --cli /path/to/kqp_scheduler_sim \
-    --api /path/to/libkqp_scheduler_sim_api.so
-"""
-
-import argparse
-from contextlib import contextmanager
 import ctypes
-from pathlib import Path
 import subprocess
+import sys
 import unittest
+from contextlib import contextmanager
+
+import yatest.common
+
+
+SIMULATOR_DIR = "ydb/core/kqp/runtime/scheduler/ut/simulator"
 
 
 class SimulatorCli:
     def __init__(self, path):
         self.path = path
 
-    def run(self, commands, seed):
+    def run(self, commands, seed, *, quit=True):
+        if quit:
+            commands = (*commands, "quit")
         result = subprocess.run(
             [str(self.path), str(seed)],
-            input="\n".join((*commands, "quit", "")),
+            input="\n".join((*commands, "")),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -63,7 +62,18 @@ class SimulatorApi:
             return [execute(command) for command in commands]
 
 
-class SimulatorTest(unittest.TestCase):
+class TestSimulator(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if sys.platform == "win32":
+            executable, library = "simulator.exe", "simulator_api.dll"
+        elif sys.platform == "darwin":
+            executable, library = "simulator", "libsimulator_api.dylib"
+        else:
+            executable, library = "simulator", "libsimulator_api.so"
+        cls.cli = SimulatorCli(yatest.common.binary_path(f"{SIMULATOR_DIR}/{executable}"))
+        cls.api = SimulatorApi(yatest.common.binary_path(f"{SIMULATOR_DIR}/api/{library}"))
+
     def compare_transports(self, commands, seed=17):
         cli = self.cli.run(commands, seed)
         api = self.api.run(commands, seed)
@@ -140,6 +150,58 @@ class SimulatorTest(unittest.TestCase):
             ]
         )
 
+    def test_query_end_releases_memory(self):
+        self.check_transcript(
+            [
+                ("limits 1 500", "ok"),
+                ("pool batch 500", "ok"),
+                ("query 1 batch 100", "ok"),
+                ("mem 1 500 0", "ok"),
+                ("free 1 501", "error .*Cannot free 501 bytes: query holds 500.*"),
+                ("free 1 -1", "error .*Bytes must be nonnegative.*"),
+                ("avail 1", "0"),
+                ("query_end 1", "ok"),
+                ("query_end 1", "ok"),
+                ("query 2 batch 100", "ok"),
+                ("avail 2", "500"),
+                ("mem 2 500 0", "ok"),
+            ]
+        )
+
+    def test_invalid_commands_leave_state_unchanged(self):
+        self.check_transcript(
+            [
+                ("limits 1 1000", "ok"),
+                ("pool first 500", "ok"),
+                ("pool second 400", "ok"),
+                ("query 1 first invalid", "error .*"),
+                ("query 1 second 100", "ok"),
+                ("query 2 second 101", "error .*Elastic percent must be between 0 and 100.*"),
+                ("query 2 first 100", "ok"),
+                ("at -1", "error .*Timestamp must be nonnegative.*"),
+                ("at 10", "ok"),
+                ("task 10 1", "ok"),
+                ("task 20 1", "ok"),
+                ("query_end 2", "ok"),
+                ("update", "ok"),
+                ("start 10", "ok"),
+                ("task 10 1", "error .*Task already exists 10.*"),
+                ("start 20", r"delay [1-9]\d*"),
+                ("stop 10", r"ok \| 20"),
+                ("start 20", "ok"),
+            ]
+        )
+
+    def test_eof_with_active_tasks(self):
+        commands = [
+            "limits 1 1000", "pool batch 500", "query 1 batch 100",
+            "task 10 1", "task 20 1", "update", "start 10", "start 20",
+        ]
+        replies = self.compare_transports(commands)
+        self.assertEqual(replies[:-1], ["ok"] * (len(commands) - 1))
+        self.assertRegex(replies[-1], r"^delay [1-9]\d*$")
+        self.assertEqual(self.cli.run(commands, 17, quit=False), replies)
+
     def test_seed_and_virtual_execution_time(self):
         def delays(duration, seed):
             commands = [
@@ -169,17 +231,3 @@ class SimulatorTest(unittest.TestCase):
             self.assertEqual(second("at 50"), "ok")
             self.assertRegex(second("avail 1"), "^error .*Unknown query 1.*$")
             self.assertEqual(first("avail 1"), "500")
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cli", required=True, type=Path)
-    parser.add_argument("--api", required=True, type=Path)
-    args = parser.parse_args()
-    SimulatorTest.cli = SimulatorCli(args.cli.resolve(strict=True))
-    SimulatorTest.api = SimulatorApi(args.api.resolve(strict=True))
-    unittest.main(argv=[__file__], verbosity=2)
-
-
-if __name__ == "__main__":
-    main()

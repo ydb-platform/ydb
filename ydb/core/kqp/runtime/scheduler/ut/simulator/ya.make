@@ -1,4 +1,4 @@
-PROGRAM(kqp_scheduler_sim)
+PROGRAM(simulator)
 
 SRCS(
     main.cpp
@@ -19,4 +19,5 @@ END()
 
 RECURSE_FOR_TESTS(
     api
+    ut
 )

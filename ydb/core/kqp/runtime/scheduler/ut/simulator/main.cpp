@@ -21,20 +21,20 @@
 // Every reply ends with " | <tid> ..." if some tasks were woken up since the previous reply.
 // An error is replied as "error <message>".
 //
-// Usage: kqp_scheduler_sim [seed]
+// Usage: simulator [seed]
 
-#include "stand.h"
+#include "simulator.h"
 
 int main(int argc, const char* argv[]) {
     const ui64 seed = argc > 1 ? FromString<ui64>(argv[1]) : 1;
-    NKikimr::NKqp::NStand::TStand stand(seed);
+    NKikimr::NKqp::NSimulator::TSimulator simulator(seed);
 
     TString line;
     while (Cin.ReadLine(line)) {
         TStringBuilder reply;
         bool next = true;
         try {
-            next = stand.Handle(line, reply);
+            next = simulator.Handle(line, reply);
         } catch (const std::exception& e) {
             reply.clear();
             reply << "error " << TString(e.what()).substr(0, 500);
@@ -43,7 +43,7 @@ int main(int argc, const char* argv[]) {
             break;
         }
 
-        stand.AppendWoken(reply);
+        simulator.AppendWoken(reply);
         // The newlines of an error would break the protocol
         for (auto& c : reply) {
             if (c == '\n') {

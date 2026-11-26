@@ -149,10 +149,7 @@ void TSchedulableBase::StopExecution() {
         Executed = false;
 
         if (auto spareUsage = SchedulableTask->GetSpareUsage()) {
-            // Actor-backed wake-ups need an actor context. The simulator uses callbacks.
-            if (NActors::TlsActivationContext || TimeProvider) {
-                SchedulableTask->Query->ResumeTasks(spareUsage);
-            }
+            SchedulableTask->Query->ResumeTasks(spareUsage);
         }
         // TODO: resume tasks for all queries from parent leaf pool
     } else if (Throttled) {

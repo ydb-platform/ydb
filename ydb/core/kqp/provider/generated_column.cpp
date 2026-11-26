@@ -1,6 +1,7 @@
 #include "generated_column.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/sql_types/normalize_name.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
@@ -10,7 +11,10 @@
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
+#include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
 #include <yql/essentials/sql/v1/translation/sql.h>
+#include <yql/essentials/sql/v1/translation/sql_query.h>
 
 #include <util/generic/hash_set.h>
 #include <util/string/builder.h>
@@ -397,6 +401,56 @@ TExprNode::TPtr CompileGeneratedExpr(const TString& sqlText, const TString& colu
 {
     // The generated envelope reads the table the column belongs to
     return CompileScalarExpr(sqlText, GeneratedDiagnostics(columnName), /* isGenerated */ true, ctx, settingsBuilder, moduleResolver);
+}
+
+bool CheckDefaultExpressionPragmas(const TStringBuf prefix, const NSQLTranslation::TTranslationSettings& settings,
+    TPositionHandle pos, TExprContext& ctx)
+{
+    if (prefix.empty()) {
+        return true;
+    }
+
+    const NSQLTranslationV1::TParsers parsers{
+        NSQLTranslationV1::MakeAntlr4ParserFactory(), NSQLTranslationV1::MakeAntlr4AnsiParserFactory()
+    };
+    TIssues issues;
+    google::protobuf::Arena arena;
+    const auto* ast = NSQLTranslationV1::SqlAST(parsers, TString(prefix), settings.File, issues,
+        NSQLTranslation::SQL_MAX_PARSER_ERRORS, settings.AnsiLexer, &arena);
+    if (!ast) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos), "Cannot parse the SQL context of the DEFAULT expression"));
+        return false;
+    }
+
+    const NSQLTranslation::TParsedTokenList tokens;
+    NSQLTranslationV1::TContext sqlContext({}, parsers, settings, {}, tokens, issues);
+    NSQLTranslationV1::TSqlQuery sqlQuery(sqlContext, settings.Mode, /*topLevel=*/true);
+    const auto& query = static_cast<const NSQLv1Generated::TSQLv1ParserAST&>(*ast).GetRule_sql_query();
+    bool disabled = false;
+    for (const auto* statement : NSQLTranslationV1::Statements(query)) {
+        if (!statement->HasAlt_sql_stmt_core1()) {
+            continue;
+        }
+        const auto& pragma = statement->GetAlt_sql_stmt_core1().GetRule_pragma_stmt1();
+        if (!NSQLTranslationV1::OptIdPrefixAsStr(pragma.GetRule_opt_id_prefix_or_type2(), sqlQuery).empty()) {
+            continue;
+        }
+        auto name = NSQLTranslationV1::Id(pragma.GetRule_an_id3(), sqlQuery);
+        if (NormalizeName(sqlContext.Pos(), name)) {
+            continue;
+        }
+        if (name == "disableansiinforemptyornullableitemscollections") {
+            disabled = true;
+        } else if (name == "ansiinforemptyornullableitemscollections") {
+            disabled = false;
+        }
+    }
+
+    if (disabled) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos),
+            "DEFAULT expressions do not support PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections"));
+    }
+    return !disabled;
 }
 
 TExprNode::TPtr CompileDefaultExpr(const TString& sqlText, const TString& columnName, TExprContext& ctx,

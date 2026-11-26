@@ -28,6 +28,9 @@ void CollectColumnRefs(const TExprNode& body, const TExprNode* rowArg, THashSet<
 TExprNode::TPtr CompileGeneratedExpr(const TString& sqlText, const TString& columnName, TExprContext& ctx,
     NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder, const IModuleResolver::TPtr& moduleResolver);
 
+bool CheckDefaultExpressionPragmas(TStringBuf prefix, const NSQLTranslation::TTranslationSettings& settings,
+    TPositionHandle pos, TExprContext& ctx);
+
 // Compiles the stored SQL text of a DEFAULT column into `(lambda '(row) <expr>)`.
 // The lambda argument is an unused empty struct: a DEFAULT expression cannot reference columns
 TExprNode::TPtr CompileDefaultExpr(const TString& sqlText, const TString& columnName, TExprContext& ctx,

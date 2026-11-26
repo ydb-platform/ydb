@@ -144,11 +144,6 @@ DELEGATE_METHOD(TFuture<void>, ExternalizeNode, (
     const TExternalizeNodeOptions& options),
     (path, cellTag, options))
 
-DELEGATE_METHOD(TFuture<void>, InternalizeNode, (
-    const NYPath::TYPath& path,
-    const TInternalizeNodeOptions& options),
-    (path, options))
-
 DELEGATE_METHOD(TFuture<NObjectClient::TObjectId>, CreateObject, (
     NObjectClient::EObjectType type,
     const TCreateObjectOptions& options),

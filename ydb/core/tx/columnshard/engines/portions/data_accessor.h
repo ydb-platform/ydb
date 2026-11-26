@@ -211,7 +211,7 @@ public:
 
     TPreparedColumn Compile() {
         if (BlobsInfo.empty()) {
-            BlobsInfo.emplace_back(TAssembleBlobInfo(RecordsCount, DataLoader ? DataLoader->GetDefaultValue() : AbsentFill));
+            BlobsInfo.emplace_back(TAssembleBlobInfo(RecordsCount, AbsentFill));
             return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
         } else {
             YDB_LOG_VERIFY(RecordsCountByChunks == RecordsCount,

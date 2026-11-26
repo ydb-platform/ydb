@@ -323,13 +323,13 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             const auto fill = ISnapshotSchema::GetAbsentColumnFill(*portionSchema, *resultFiltered, columnId);
             if (!firstFill) {
                 firstFill = fill;
-            } else if (!NArrow::ScalarEqualsNullable(fill, *firstFill)) {
+            } else if (!NArrow::ScalarIdenticalNullable(fill, *firstFill)) {
                 differs = true;
                 break;
             }
         }
         const auto resultFill = ISnapshotSchema::GetAbsentColumnFill(*resultFiltered, *resultFiltered, columnId);
-        if (firstFill && !NArrow::ScalarEqualsNullable(*firstFill, resultFill)) {
+        if (firstFill && !NArrow::ScalarIdenticalNullable(*firstFill, resultFill)) {
             differs = true;
         }
         if (differs) {
@@ -374,7 +374,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             }
             const auto fill = ISnapshotSchema::GetAbsentColumnFill(*PortionSchemas[batchIdx], *resultFiltered, columnId);
             const auto resultFill = ISnapshotSchema::GetAbsentColumnFill(*resultFiltered, *resultFiltered, columnId);
-            if (NArrow::ScalarEqualsNullable(fill, resultFill) && !fill) {
+            if (NArrow::ScalarIdenticalNullable(fill, resultFill) && !fill) {
                 continue;
             }
             const ui32 rows = Batches[batchIdx]->num_rows();

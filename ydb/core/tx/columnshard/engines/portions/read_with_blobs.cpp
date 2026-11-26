@@ -128,7 +128,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         } else {
             const auto fromFill = ISnapshotSchema::GetAbsentColumnFill(*from, *to, i);
             const auto toFill = ISnapshotSchema::GetAbsentColumnFill(*to, *to, i);
-            if (!NArrow::ScalarEqualsNullable(fromFill, toFill)) {
+            if (!NArrow::ScalarIdenticalNullable(fromFill, toFill)) {
                 auto constructed = ISnapshotSchema::BuildAbsentColumnPortionChunks(
                     to->GetIndexInfo(), i, fromFill, source.PortionInfo.GetPortionInfo().GetRecordsCount());
                 YDB_LOG_VERIFY(constructed.IsSuccess(),

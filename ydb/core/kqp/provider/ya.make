@@ -85,6 +85,7 @@ PEERDIR(
     yql/essentials/sql/v1/translation
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
+    yql/essentials/utils
     yql/essentials/utils/log
 )
 

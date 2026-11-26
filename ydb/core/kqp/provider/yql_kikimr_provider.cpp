@@ -3,8 +3,6 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 
 #include <array>
-#include <limits>
-
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/simple/user_request_context.h>
@@ -21,34 +19,13 @@
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
-
-#include <util/string/ascii.h>
+#include <yql/essentials/utils/parse_double.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
 namespace {
-
-template <class T>
-T ParseFloatingLiteral(const TStringBuf text) {
-    T parsed;
-    if (TryFromString(text, parsed)) {
-        return parsed;
-    }
-    if (AsciiEqualsIgnoreCase(text, "nan")) {
-        return std::numeric_limits<T>::quiet_NaN();
-    }
-    if (AsciiEqualsIgnoreCase(text, "inf") || AsciiEqualsIgnoreCase(text, "+inf")
-        || AsciiEqualsIgnoreCase(text, "infinity") || AsciiEqualsIgnoreCase(text, "+infinity"))
-    {
-        return std::numeric_limits<T>::infinity();
-    }
-    if (AsciiEqualsIgnoreCase(text, "-inf") || AsciiEqualsIgnoreCase(text, "-infinity")) {
-        return -std::numeric_limits<T>::infinity();
-    }
-    return FromString<T>(text);
-}
 
 const TStringBuf CommitModeFlush = "flush";
 const TStringBuf CommitModeRollback = "rollback";
@@ -853,10 +830,10 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             protoValue.set_text_value(ToString(value));
             break;
         case EDataSlot::Double:
-            protoValue.set_double_value(ParseFloatingLiteral<double>(value));
+            protoValue.set_double_value(DoubleFromString(value));
             break;
         case EDataSlot::Float:
-            protoValue.set_float_value(ParseFloatingLiteral<float>(value));
+            protoValue.set_float_value(FloatFromString(value));
             break;
         case EDataSlot::Yson:
             protoValue.set_bytes_value(ToString(value));

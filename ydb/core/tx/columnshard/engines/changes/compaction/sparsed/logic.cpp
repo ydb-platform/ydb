@@ -23,7 +23,7 @@ void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor
             fill = ISnapshotSchema::GetAbsentColumnFill(*portionSchemas[idx], *Context.GetSchemaInfo(), Context.GetColumnId());
         }
         if (!p) {
-            if (!NArrow::ScalarEqualsNullable(fill, outputDefault)) {
+            if (!NArrow::ScalarIdenticalNullable(fill, outputDefault)) {
                 const auto& containers = mergingContext.GetInputContainers();
                 const ui32 rows = idx < containers.size() && containers[idx] ? containers[idx]->num_rows() : 0;
                 if (rows) {
@@ -63,14 +63,14 @@ void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor
                 }
                 if (current->GetType() == EType::SparsedArray) {
                     const auto sparsed = std::static_pointer_cast<NArrow::NAccessor::TSparsedArray>(current);
-                    if (!NArrow::ScalarEqualsNullable(sparsed->GetDefaultValue(), outputDefault)) {
+                    if (!NArrow::ScalarIdenticalNullable(sparsed->GetDefaultValue(), outputDefault)) {
                         current = std::make_shared<NArrow::NAccessor::TTrivialChunkedArray>(sparsed->GetChunkedArray());
                     }
                 }
             };
             expand(expand, item);
         };
-        if (!hasPortionSchema || !NArrow::ScalarEqualsNullable(fill, outputDefault)) {
+        if (!hasPortionSchema || !NArrow::ScalarIdenticalNullable(fill, outputDefault)) {
             materializeMismatched(p);
         }
         Cursors.emplace_back(TSparsedChunkCursor(p, Context.GetLoader(), idx++));

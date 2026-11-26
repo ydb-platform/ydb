@@ -492,7 +492,7 @@ int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::sh
     return ScalarCompare(*x, *y);
 }
 
-bool ScalarEqualsNullable(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+bool ScalarIdenticalNullable(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
     if (!x || !y) {
         return !x && !y;
     }

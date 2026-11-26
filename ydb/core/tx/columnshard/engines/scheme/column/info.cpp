@@ -69,7 +69,7 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
     YDB_LOG_VERIFY(Loader);
     const bool targetIsSparsed = Loader->GetAccessorConstructor()->GetClassName() == NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
     const bool sparsedDefaultChanged =
-        targetIsSparsed && !NArrow::ScalarEqualsNullable(DefaultValue.GetValue(), sourceColumnFeatures.DefaultValue.GetValue());
+        targetIsSparsed && !NArrow::ScalarIdenticalNullable(DefaultValue.GetValue(), sourceColumnFeatures.DefaultValue.GetValue());
     const auto checkNeedActualize = [&]() {
         if (!Serializer.IsEqualTo(sourceColumnFeatures.Serializer)) {
             YDB_LOG_DEBUG("",

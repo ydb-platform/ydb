@@ -359,7 +359,7 @@ std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
         const auto resultFill = GetAbsentColumnFill(*targetSchema, *targetSchema, columnId);
         for (auto& [_, blobSchema] : schemas) {
             const auto inputFill = GetAbsentColumnFill(*blobSchema, *targetSchema, columnId);
-            if (!NArrow::ScalarEqualsNullable(inputFill, resultFill)) {
+            if (!NArrow::ScalarIdenticalNullable(inputFill, resultFill)) {
                 result.emplace(columnId);
                 break;
             }

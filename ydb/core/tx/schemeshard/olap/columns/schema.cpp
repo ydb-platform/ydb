@@ -233,7 +233,7 @@ bool TOlapColumnsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTab
                 parsed.AlignToColumnType(*arrowType);
                 requested = parsed.GetValue();
             }
-            if (!NArrow::ScalarEqualsNullable(requested, col->GetDefaultValue().GetValue())) {
+            if (!NArrow::ScalarIdenticalNullable(requested, col->GetDefaultValue().GetValue())) {
                 errors.AddError("Default value for column '" + colName + "' does not match schema preset");
                 return false;
             }

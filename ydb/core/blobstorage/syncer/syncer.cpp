@@ -1,5 +1,7 @@
 #include "syncer.h"
 #include "syncer_impl.h"
+#include <ydb/core/base/counters.h>
+#include <ydb/core/blobstorage/bridge/keep_check.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_BRIDGE_SYNC
@@ -22,6 +24,8 @@ namespace NKikimr::NGroupSyncer {
     }
 
     void TSyncerActor::Bootstrap() {
+        PayloadBytesWritten = GetServiceCounters(AppData()->Counters, "bridge|nodewarden")
+            ->GetSubgroup("mode", Reconcile ? "reconcile" : "sync")->GetCounter("SyncPayloadBytesWritten", true);
         LogId = TStringBuilder() << SelfId() << Info->GroupID << '{' << SourceGroupId << "->" << TargetGroupId << '}';
 
         const auto& state = Info->Group->GetBridgeGroupState();
@@ -550,8 +554,29 @@ namespace NKikimr::NGroupSyncer {
             QuotaQueue.emplace_back(std::move(handle), quoterBytes);
             ProcessQuotaQueue();
         } else {
-            TActivationContext::Send(handle.release());
+            DispatchQuery(std::move(handle));
         }
+    }
+
+    void TSyncerActor::DispatchQuery(std::unique_ptr<IEventHandle> handle) {
+        TVector<TLogoBlobID> kept;
+        if (handle->GetTypeRewrite() == TEvBlobStorage::EvPut) {
+            const auto& put = *handle->Get<TEvBlobStorage::TEvPut>();
+            if (put.IssueKeepFlag) {
+                kept.push_back(put.Id);
+            }
+        } else if (handle->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbage) {
+            const auto& gc = *handle->Get<TEvBlobStorage::TEvCollectGarbage>();
+            if (gc.Keep) {
+                kept = *gc.Keep;
+            }
+        }
+        if (!kept.empty()) {
+            const auto& state = Info->Group->GetBridgeGroupState();
+            handle->Sender = Register(NBridge::CreateKeepCheckActor(SelfId(), {*NBridge::FindGroupPileByGroupId(state, SourceGroupId)},
+                *NBridge::FindGroupPileByGroupId(state, TargetGroupId), std::move(kept), /*waitForCheck=*/true));
+        }
+        TActivationContext::Send(handle.release());
     }
 
     void TSyncerActor::ProcessQuotaQueue() {
@@ -565,7 +590,7 @@ namespace NKikimr::NGroupSyncer {
                 WaitingForQuota = true;
                 Schedule(timeout, new TEvents::TEvWakeup);
             } else {
-                TActivationContext::Send(handle.release());
+                DispatchQuery(std::move(handle));
                 QuotaQueue.pop_front();
             }
         }
@@ -575,7 +600,7 @@ namespace NKikimr::NGroupSyncer {
         Y_ABORT_UNLESS(WaitingForQuota && !QuotaQueue.empty());
         WaitingForQuota = false;
         auto& [handle, quoterBytes] = QuotaQueue.front();
-        TActivationContext::Send(handle.release());
+        DispatchQuery(std::move(handle));
         QuotaQueue.pop_front();
         ProcessQuotaQueue();
     }
@@ -614,6 +639,7 @@ namespace NKikimr::NGroupSyncer {
         const bool success = status == NKikimrProto::OK;
         OnQueryFinished(ev->Cookie, success);
         if (success) {
+            *PayloadBytesWritten += msg.Id.BlobSize();
             SyncerDataStats->BytesDone += msg.Id.BlobSize();
             ++SyncerDataStats->BlobsDone;
             CountCopied(msg.Id);

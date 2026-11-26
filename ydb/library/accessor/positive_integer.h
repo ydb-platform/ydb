@@ -69,7 +69,7 @@ public:
         return TPositiveIncreasingControlInteger(Value + v);
     }
     TPositiveIncreasingControlInteger operator-(const ui64 v) const {
-        AFL_VERIFY(v <= Value);
+        YDB_LOG_VERIFY(v <= Value);
         return TPositiveIncreasingControlInteger(Value - v);
     }
     ui64 Val() const {

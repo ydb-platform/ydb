@@ -3,3 +3,5 @@ items:
   href: setup.md
 - name: External traces
   href: external-traces.md
+- name: Query execution tracing
+  href: query-tracing.md

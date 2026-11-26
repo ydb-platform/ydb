@@ -26,6 +26,11 @@ PEERDIR(
 )
 
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    statbox/qb4/py_libs/testing/update_sample/schema_helper_impl
+)
+
 END()
 
 RECURSE(

@@ -111,7 +111,7 @@ class TestDataType(RestartToAnotherVersionFixture):
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for query in querys:
-                session_pool.execute_with_retries(query)
+                session_pool.execute_with_retries(query, retry_settings=ydb.RetrySettings(idempotent=True))
 
     def check_table(self):
         queries = []
@@ -228,7 +228,7 @@ class TestDataType(RestartToAnotherVersionFixture):
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for query, parameters in queries_with_parameters:
-                session_pool.execute_with_retries(query, parameters)
+                session_pool.execute_with_retries(query, parameters, retry_settings=ydb.RetrySettings(idempotent=True))
 
     def parametrized_check_table(self):
         queries_with_parameters = []

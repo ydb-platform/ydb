@@ -7,11 +7,8 @@
 #include "vdisk_mongroups.h"
 #include "vdisk_performance_params.h"
 
-#include <library/cpp/bucket_quoter/bucket_quoter.h>
-#include <ydb/library/lockfree_bucket/lockfree_bucket.h>
-#include <util/system/compiler.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/util/light.h>
+#include <ydb/library/lockfree_bucket/light_bucket.h>
 
 #include <concepts>
 #include <type_traits>
@@ -275,29 +272,6 @@ public:
     ui64 GetCost(const NPDisk::TEvChunkWrite& ev) const;
 };
 
-struct TFailTimer {
-    using TTime = TInstant;
-    static TTime Now() {
-        Y_FAIL();
-    }
-};
-
-template<class TBackupTimer = TFailTimer>
-struct TAppDataTimerMs {
-    using TTime = TInstant;
-    static constexpr ui64 Resolution = 1000ull; // milliseconds
-    static TTime Now() {
-        if (NKikimr::TAppData::TimeProvider) {
-            return NKikimr::TAppData::TimeProvider->Now();
-        } else {
-            return TBackupTimer::Now();
-        }
-    }
-    static ui64 Duration(TTime from, TTime to) {
-        return (to - from).MilliSeconds();
-    }
-};
-
 using TBsCostModelErasureNone = TBsCostModelBase;
 class TBsCostModelMirror3dc;
 class TBsCostModel4Plus2Block;
@@ -339,20 +313,15 @@ private:
 
     TBlobStorageGroupType GroupType;
     std::unique_ptr<TBsCostModelBase> CostModel;
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> CostCounters;
     std::shared_ptr<NMonGroup::TCostTrackerGroup> MonGroup;
-
-    const double BucketRelativeMinimum = 2;
-    std::atomic<i64> BucketUpperLimit = 1'000'000'000;  // 10^9 nsec
-    std::atomic<i64> BucketLowerLimit = 1'000'000'000 * -BucketRelativeMinimum;
-    std::atomic<ui64> DiskTimeAvailable = 1'000'000'000;
-
-    TLockFreeBucket<TAppDataTimerMs<TInstantTimerMs>> Bucket;
-    TLight BurstDetector;
-    std::atomic<ui64> SeqnoBurstDetector = 0;
 
     TControlWrapper BurstThresholdNs;
     TControlWrapper DiskTimeAvailableScale;
+    TLockFreeLightBucket Bucket;
+
+    // Only the burst-counter publisher updates these totals.
+    ui64 PublishedGreenMs = 0;
+    ui64 PublishedRedMs = 0;
 
 public:
     TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
@@ -377,25 +346,9 @@ public:
         }
     }
 
-    void CountRequest(ui64 cost) {
-        i64 bucketCapacity = GetDiskTimeAvailableScale() * BurstThresholdNs;
-        BucketUpperLimit.store(bucketCapacity);
-        BucketLowerLimit.store(bucketCapacity * -BucketRelativeMinimum);
-        Bucket.FillAndTake(cost);
-        BurstDetector.Set(Bucket.IsEmpty(), SeqnoBurstDetector.fetch_add(1));
-    }
-
-    void UpdatePDiskParameters(ui32 numOwners, ui32 expectedSlotCount) {
-        ui64 totalTime = 1'000'000'000 * GetDiskTimeAvailableScale();
-        ui64 diskTimeAvailable = totalTime / numOwners;
-        DiskTimeAvailable.store(diskTimeAvailable);
-        MonGroup->DiskTimeAvailableCtr() = diskTimeAvailable;
-
-        if (expectedSlotCount > 0) {
-            ui64 diskTimeFairShare = totalTime / expectedSlotCount;
-            MonGroup->DiskTimeFairShareNs() = diskTimeFairShare;
-        }
-    }
+    void CountRequest(ui64 cost);
+    void UpdatePDiskParameters(ui32 numOwners, ui32 expectedSlotCount);
+    void PublishBurstCounters();
 
 public:
     template<CDiskOperation TEvent>
@@ -445,14 +398,8 @@ public:
         CountRequest(cost);
     }
 
-    void CountPDiskResponse() {
-        BurstDetector.Set(Bucket.IsEmpty(), SeqnoBurstDetector.fetch_add(1));
-    }
-
 private:
-    float GetDiskTimeAvailableScale() {
-        return 0.001 * DiskTimeAvailableScale;
-    }
+    ui64 GetBucketCapacity() const;
 };
 
 } // NKikimr

@@ -304,6 +304,29 @@ namespace {
 
 Y_UNIT_TEST_SUITE(BridgePoolMode) {
 
+    Y_UNIT_TEST(RequestCountersFollowPoolRename) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const ui32 nodeId = 1;
+        auto pool = ReadStoragePool(env, 1);
+        const auto oldWrites = GetCompletedTestWrites(env, nodeId, pool.GetName());
+        const auto before = oldWrites->Val();
+        TDataChecker checker(env);
+        checker.Write(groupId, nodeId);
+        UNIT_ASSERT_VALUES_EQUAL(oldWrites->Val(), before + 1);
+
+        const ui32 generation = GetNodeGroupGeneration(env, groupId, nodeId);
+        pool.SetName("renamed_pool");
+        NKikimrBlobStorage::TConfigRequest rename;
+        rename.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
+        const auto response = env.Invoke(rename);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        WaitUntil(env, [&] { return GetNodeGroupGeneration(env, groupId, nodeId) > generation; }, "renamed group");
+        checker.Write(groupId, nodeId);
+        UNIT_ASSERT_VALUES_EQUAL(GetCompletedTestWrites(env, nodeId, pool.GetName())->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(oldWrites->Val(), before + 1);
+    }
+
     Y_UNIT_TEST(RejectIncompatiblePileOverrideErasure) {
         CheckIncompatiblePoolPileOverride("none", 8, 0);
     }

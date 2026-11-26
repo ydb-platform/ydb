@@ -24,6 +24,7 @@ struct TLogRow {
 };
 
 TLogRow ParseLegacyLogRow(TStringBuf str);
+TLogRow ParseLegacyLogRowWithYtTimestamp(TStringBuf str);
 TLogRow ParseJsonLogRow(TStringBuf str);
 
 } // namespace NYql::NLog

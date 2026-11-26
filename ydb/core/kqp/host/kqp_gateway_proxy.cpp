@@ -1200,6 +1200,9 @@ public:
                             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
                                 *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
+                            case TIndexDescription::EType::GlobalSyncHnsw:
+                                *indexDesc->MutableHnswIndexDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
+                                break;
                             case TIndexDescription::EType::GlobalFulltextPlain:
                             case TIndexDescription::EType::GlobalFulltextRelevance:
                             case TIndexDescription::EType::GlobalFulltextCompact:

@@ -10,9 +10,11 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/skeleton
     ydb/core/testlib/default
     ydb/core/testlib/actors
+    ydb/library/actors/testlib
 )
 
 SRCS(
+    skeleton_burst_counter_publisher_ut.cpp
     skeleton_oos_logic_ut.cpp
     skeleton_front_latency_ut.cpp
     skeleton_log_counters_ut.cpp

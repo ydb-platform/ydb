@@ -403,6 +403,7 @@ struct TEvaluationStats {
 };
 
 struct TLineageSettings {
+    THashSet<TString> Flags;
     bool EnableLineage = false;
     bool EnableStandaloneLineage = false;
     ui64 LineageOutputLimit = 40 * 1024 * 1024;  // 40 mb limit for lineage representation

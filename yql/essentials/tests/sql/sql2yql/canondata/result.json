@@ -2799,6 +2799,13 @@
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_case-case_opt_then_/sql.yql"
         }
     ],
+    "test_sql2yql.test[coalesce-coalesce_partial_typecheck]": [
+        {
+            "checksum": "8a373a251136b02f08c74295dd3a4113",
+            "size": 2473,
+            "uri": "https://{canondata_backend}/212715/0f97de75abdb86990f896c2c12dfb8e1bfc5653b/resource.tar.gz#test_sql2yql.test_coalesce-coalesce_partial_typecheck_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[coalesce-coalesce_symmetry]": [
         {
             "checksum": "0062db4e63e50da002300a17f66fd374",
@@ -15738,6 +15745,11 @@
     "test_sql_format.test[case-case_opt_then]": [
         {
             "uri": "file://test_sql_format.test_case-case_opt_then_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[coalesce-coalesce_partial_typecheck]": [
+        {
+            "uri": "file://test_sql_format.test_coalesce-coalesce_partial_typecheck_/formatted.sql"
         }
     ],
     "test_sql_format.test[coalesce-coalesce_symmetry]": [

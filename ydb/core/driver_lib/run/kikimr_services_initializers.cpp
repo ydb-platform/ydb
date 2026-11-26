@@ -108,8 +108,8 @@
 #include <ydb/core/metering/metering.h>
 
 #include <ydb/core/mind/address_classification/net_classifier.h>
+#include <ydb/core/mind/bootstrapper/configured_tablet_bootstrapper.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
-#include <ydb/core/mind/configured_tablet_bootstrapper.h>
 #include <ydb/core/mind/dynamic_nameserver.h>
 #include <ydb/core/mind/labels_maintainer.h>
 #include <ydb/core/mind/lease_holder.h>
@@ -2965,7 +2965,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             {"default", NConveyorComposite::NConfig::TConfig::BuildDefault().DebugString()});
         serviceConfig = NConveyorComposite::NConfig::TConfig::BuildDefault();
     }
-    AFL_VERIFY(!serviceConfig.IsFail());
+    YDB_LOG_VERIFY(!serviceConfig.IsFail());
 
     if (serviceConfig->IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");

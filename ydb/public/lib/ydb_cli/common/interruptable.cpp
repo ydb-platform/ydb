@@ -2,10 +2,10 @@
 
 namespace NYdb::NConsoleClient {
 
-TAtomic TInterruptableCommand::Interrupted = false;
+std::atomic<bool> TInterruptableCommand::Interrupted = false;
 
 void TInterruptableCommand::OnTerminate(int) {
-    AtomicSet(Interrupted, true);
+    Interrupted.store(true);
 }
 
 void TInterruptableCommand::SetInterruptHandlers() {
@@ -19,11 +19,11 @@ void TInterruptableCommand::ResetInterrupted() {
     }
 
     SignalHandlers.clear();
-    AtomicSet(Interrupted, false);
+    Interrupted.store(false);
 }
 
 bool TInterruptableCommand::IsInterrupted() {
-    return AtomicGet(Interrupted);
+    return Interrupted.load();
 }
 
 } // namespace NYdb::NConsoleClient

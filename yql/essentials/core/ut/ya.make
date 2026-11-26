@@ -4,6 +4,7 @@ SRCS(
     yql_column_order_ut.cpp
     yql_default_valid_value_ut.cpp
     yql_expr_constraint_ut.cpp
+    yql_expr_csee_ut.cpp
     yql_range_frame_collector_bounds_ut.cpp
     yql_expr_optimize_ut.cpp
     yql_expr_type_annotation_ut.cpp

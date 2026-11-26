@@ -66,6 +66,9 @@ void FillCdcStream(TNavigate::TEntry& entry, const TString& streamName = "feed")
     auto self = MakeIntrusive<TNavigate::TDirEntryInfo>();
     self->Info.SetName(streamName);
     entry.Self = self;
+    auto list = MakeIntrusive<TNavigate::TListNodeEntry>();
+    list->Children.emplace_back("streamImpl", TPathId(1, 1), TNavigate::KindTopic);
+    entry.ListNodeEntry = list;
 }
 
 struct TDescribeEnv {

@@ -698,6 +698,7 @@ public:
         if (OriginalGroupId == Info->GroupID) {
             SendToProxy(std::move(get), PatchedId.Hash(), Span.GetTraceId());
         } else {
+            get->IsProxySubrequest = true;
             SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash(), Span.GetTraceId());
         }
     }

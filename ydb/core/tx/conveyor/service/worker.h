@@ -81,8 +81,8 @@ struct TEvInternal {
             , Instants(std::move(instants))
             , ProcessIds(std::move(processIds))
             , WorketIdx(workerIdx) {
-            AFL_VERIFY(ProcessIds.size());
-            AFL_VERIFY(Instants.size() == ProcessIds.size() + 1);
+            YDB_LOG_VERIFY(ProcessIds.size());
+            YDB_LOG_VERIFY(Instants.size() == ProcessIds.size() + 1);
         }
     };
 
@@ -142,8 +142,8 @@ public:
         , WorkerIdx(workerIdx)
         , SendFwdHistogram(sendFwdHistogram)
         , SendFwdDuration(sendFwdDuration) {
-        AFL_VERIFY(0 < CPUHardLimit);
-        AFL_VERIFY(CPUHardLimit <= 1);
+        YDB_LOG_VERIFY(0 < CPUHardLimit);
+        YDB_LOG_VERIFY(CPUHardLimit <= 1);
     }
 };
 

@@ -179,9 +179,6 @@ private:
             RuntimeError("Index settings are required", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
-        if (EmptyIndex) {
-            LevelsFinished = true;
-        }
         while (!LevelsFinished) {
             if (!LevelClusters.size()) {
                 LevelClusters.clear();
@@ -194,6 +191,24 @@ private:
                             if (!NKikimr::NTableIndex::NKMeans::HasPostingParentFlag(rootClusterId)) {
                                 LevelClusters[rootClusterId].push_back(i);
                             } else {
+                                // A delete uses only the posting key and must also remove
+                                // postings made with invalid embeddings by older writers.
+                                if (Settings.GetOperation() == NKqpProto::TKqpPhyCnVectorResolve::OPERATION_UPSERT) {
+                                    if (!DirectLeafValidator) {
+                                        TString error;
+                                        DirectLeafValidator = NKMeans::CreateClusters(
+                                            NKMeans::MakeDistanceSettings(Settings.GetIndexSettings()), 0, error);
+                                        if (!DirectLeafValidator) {
+                                            RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                                            return;
+                                        }
+                                    }
+                                    const auto embedding = PendingRows[i].GetElement(Settings.GetVectorColumnIndex());
+                                    if ((!embedding.IsString() && !embedding.IsEmbedded())
+                                            || !DirectLeafValidator->IsExpectedFormat(embedding.AsStringRef())) {
+                                        continue;
+                                    }
+                                }
                                 // Add leaf clusters directly to NextClusters
                                 NextClusters[i] = {std::make_pair(rootClusterId, (double)0.0)};
                             }
@@ -411,31 +426,27 @@ private:
 
     void ParseFetchedClusters() {
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(Settings.GetIndexSettings(), 0, error);
+        // Routing uses only vector geometry. Preserve the full index settings
+        // separately for HNSW graph selection and construction.
+        auto distanceSettings = NKMeans::MakeDistanceSettings(Settings.GetIndexSettings());
+        auto clusters = NKikimr::NKMeans::CreateClusters(distanceSettings, 0, error);
         if (!clusters) {
             // Index settings are invalid for some reason
             RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
-        if (!FetchedClusters.size()) {
-            if (!ReadingChildClustersOf) {
-                // Index is empty
-                EmptyIndex = true;
-            } else {
-                // The cluster has no children in the level table, i.e. its subtree is empty.
-                // It's possible when the cluster didn't get any rows during the index build,
-                // for example when two clusters of the same level got equal centroids.
-                // Just skip such clusters instead of failing the query - the row is either
-                // resolved into other (overlapping) clusters or isn't added to the index at all,
-                // which is the same as what the read path does for such clusters.
+        if (FetchedClusters.empty()) {
+            if (!ReadingChildClustersOf && !IsPrefixed
+                    && Settings.GetIndexType() == NKqpProto::TKqpPhyCnVectorResolve::INDEX_TYPE_HNSW) {
+                // Older inline HNSW indexes can lack the initial centroid. Use
+                // the same root leaf as newly created indexes for their postings.
+                FetchedClusters.emplace(NTableIndex::NKMeans::SetPostingParentFlag(1), clusters->GetEmptyRow());
+            } else if (ReadingChildClustersOf) {
+                // A subtree can be empty when its centroid received no rows during the build.
                 YDB_LOG_NOTICE("Cluster has no child clusters, skipping it",
-                    {"logPrefix", this->LogPrefix},
+                    {"logPrefix", LogPrefix},
                     {"parent", ReadingChildClustersOf});
-                CurClusters = std::move(clusters);
-                CurClusterIds.clear();
             }
-            ContinueResolveClusters();
-            return;
         }
         TVector<ui64> clusterIds;
         TVector<TString> clusterRows;
@@ -443,7 +454,7 @@ private:
             clusterIds.push_back(pp.first);
             clusterRows.push_back(std::move(pp.second));
         }
-        if (!clusters->SetClusters(std::move(clusterRows))) {
+        if (!clusterRows.empty() && !clusters->SetClusters(std::move(clusterRows))) {
             // Clusters are invalid for some reason
             RuntimeError("Child clusters of "+std::to_string(ReadingChildClustersOf)+" are invalid", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
@@ -462,11 +473,6 @@ private:
 
     i64 ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) {
         auto guard = BindAllocator();
-
-        if (EmptyIndex) {
-            PendingRows.clear();
-            return 0;
-        }
 
         i64 totalSize = 0;
 
@@ -608,8 +614,8 @@ private:
     TVector<TVector<std::pair<NTableIndex::NKMeans::TClusterId, double>>> NextClusters;
     TMap<NTableIndex::NKMeans::TClusterId, TVector<size_t>> LevelClusters;
     std::unique_ptr<NKikimr::NKMeans::IClusters> RootClusters;
+    std::unique_ptr<NKikimr::NKMeans::IClusters> DirectLeafValidator;
     TVector<NTableIndex::NKMeans::TClusterId> RootClusterIds;
-    bool EmptyIndex = false;
     std::unique_ptr<NKikimr::NKMeans::IClusters> CurClusters;
     TVector<NTableIndex::NKMeans::TClusterId> CurClusterIds;
     std::vector<std::pair<ui32, double>> TmpClusters;

@@ -5,6 +5,12 @@
 #include <ydb/core/blob_depot/blob_depot_tablet.h>
 #include <ydb/core/blob_depot/data.h>
 
+#ifndef KIKIMR_DISABLE_S3_OPS
+#include <ydb/core/blob_depot/blob_limits.h>
+#include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/wrappers/abstract.h>
+#endif
+
 #include "blob_depot_event_managers.h"
 #include "blob_depot_test_env.h"
 
@@ -720,6 +726,142 @@ Y_UNIT_TEST_SUITE(BlobDepotMoveData) {
             test.Get(blob);
         }
     }
+
+#ifndef KIKIMR_DISABLE_S3_OPS
+    void EnableMoveDataCooling(TMoveDataTest& test, const TString& bucket) {
+        auto& runtime = *test.Env.Runtime;
+        for (const ui32 node : runtime.GetNodes()) {
+            runtime.GetNode(node)->AppData->FeatureFlags.SetEnableBlobDepotDataCooling(true);
+        }
+        test.ReassignAllChannels();
+        // Applying S3 settings restarts the tablet. Its first LIST confirms that the
+        // incarnation with the new settings and channel history is serving requests.
+        bool coolingReady = false;
+        runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            using TList = NWrappers::NExternalStorage::TEvListObjectsRequest;
+            if (ev->GetTypeRewrite() == TList::EventType) {
+                coolingReady |= ev->Get<TList>()->GetRequest().GetBucket() == bucket;
+            }
+            return true;
+        };
+        NKikimrBlobStorage::TConfigRequest reconfigure;
+        auto* change = reconfigure.AddCommand()->MutableReconfigureVirtualGroup();
+        change->SetName("vg");
+        auto* s3 = change->MutableS3BackendSettings();
+        s3->MutableSettings()->SetEndpoint("fake.fake");
+        s3->MutableSettings()->SetBucket(bucket);
+        s3->MutableAsyncMode()->SetHotTargetBytes(NBlobDepot::MaxWriteCreditBytes - 1);
+        s3->MutableAsyncMode()->SetMaxPendingBytes(NBlobDepot::MaxWriteCreditBytes);
+        const auto applied = test.Env.Invoke(reconfigure);
+        UNIT_ASSERT_C(applied.GetSuccess(), applied.GetErrorDescription());
+        const auto readyDeadline = runtime.GetClock() + TDuration::Seconds(30);
+        runtime.Sim([&] { return !coolingReady && runtime.GetClock() < readyDeadline; });
+        UNIT_ASSERT(coolingReady);
+        runtime.FilterFunction = {};
+    }
+
+    Y_UNIT_TEST(MoveDataWaitsForHotWriteCapacity) {
+        TMoveDataTest test;
+        auto& runtime = *test.Env.Runtime;
+        auto& blob = test.AddBlob(1, 1, 1, 0, 6 << 20);
+        test.Put(blob);
+        EnableMoveDataCooling(test, "move-data-admission");
+        ui32 continueEvents = 0;
+        ui32 uploadNode = 0;
+        std::unique_ptr<IEventHandle> upload;
+        std::optional<NKikimrTabletBase::TEvMoveDataResponse::EStatus> status;
+        runtime.FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NBlobDepot::TBlobDepot::TEvMoveDataContinue::EventType) {
+                ++continueEvents;
+            }
+            if (!uploadNode && ev->GetTypeRewrite() == NWrappers::NExternalStorage::TEvPutObjectResponse::EventType) {
+                uploadNode = node;
+                upload = std::move(ev);
+                return false;
+            } else if (ev->GetTypeRewrite() == TEvTablet::EvMoveDataResponse && ev->GetRecipientRewrite() == test.Edge) {
+                status = ev->Get<TEvTablet::TEvMoveDataResponse>()->Record.GetStatus();
+                return false;
+            }
+            return true;
+        };
+        test.SendMoveData();
+        const auto deadline = runtime.GetClock() + TDuration::Seconds(30);
+        runtime.Sim([&] { return !upload && !status && runtime.GetClock() < deadline; });
+        UNIT_ASSERT(upload);
+        const auto before = continueEvents;
+        // The copy stays registered across a prolonged capacity shortage.
+        test.Env.Sim(TDuration::Seconds(6));
+        UNIT_ASSERT_VALUES_EQUAL(continueEvents, before);
+        UNIT_ASSERT(!status);
+        runtime.Send(std::move(upload), uploadNode);
+        runtime.Sim([&] { return !status && runtime.GetClock() < deadline; });
+        UNIT_ASSERT(status);
+        UNIT_ASSERT_EQUAL(*status, NKikimrTabletBase::TEvMoveDataResponse::Success);
+        runtime.FilterFunction = {};
+        test.Get(blob);
+    }
+
+    Y_UNIT_TEST(MoveDataReservesCreditBeforeWakingTheCopy) {
+        using namespace NBlobDepot;
+        using namespace NWrappers::NExternalStorage;
+        TMoveDataTest test;
+        auto& runtime = *test.Env.Runtime;
+        auto& moving = test.AddBlob(1, 1, 1, 0, 4 << 20);
+        auto& garbage = test.AddBlob(2, 2, 1, 1, 5 << 20);
+        test.Put(moving);
+        test.Put(garbage);
+        EnableMoveDataCooling(test, "move-data-credit-fairness");
+
+        bool coolingBlocked = false;
+        bool foregroundWaiting = false;
+        bool foregroundGranted = false;
+        bool holdWake = false;
+        ui32 wakeNode = 0;
+        std::unique_ptr<IEventHandle> wake;
+        runtime.FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvPutObjectResponse::EventType) {
+                coolingBlocked = true;
+                return false;
+            } else if (ev->GetTypeRewrite() == TEvBlobDepot::EvHotWriteCredit) {
+                foregroundWaiting |= ev->Get<TEvBlobDepot::TEvHotWriteCredit>()->Record.HasMinBytes();
+            } else if (ev->GetTypeRewrite() == TEvBlobDepot::EvHotWriteCreditResult) {
+                foregroundGranted |= ev->Get<TEvBlobDepot::TEvHotWriteCreditResult>()->Record.GetGrantedBytes() != 0;
+            } else if (holdWake && ev->GetTypeRewrite() == TBlobDepot::TEvMoveDataContinue::EventType) {
+                holdWake = false;
+                wakeNode = node;
+                wake = std::move(ev);
+                return false;
+            }
+            return true;
+        };
+
+        test.SendMoveData();
+        const auto deadline = runtime.GetClock() + TDuration::Seconds(30);
+        runtime.Sim([&] { return !coolingBlocked && runtime.GetClock() < deadline; });
+        UNIT_ASSERT(coolingBlocked);
+        auto& foreground = test.AddBlob(3, 3, 1, 0, 5 << 20);
+        const auto writer = runtime.AllocateEdgeActor(1);
+        SendTEvPut(test.Env, writer, test.VirtualGroup, foreground.Id, foreground.Data);
+        runtime.Sim([&] { return !foregroundWaiting && runtime.GetClock() < deadline; });
+        UNIT_ASSERT(foregroundWaiting);
+
+        // Reclaim enough bytes for either write, then delay the copy after admission has woken it.
+        holdWake = true;
+        test.Collect(garbage);
+        runtime.Sim([&] { return !wake && !foregroundGranted && runtime.GetClock() < deadline; });
+        UNIT_ASSERT(wake);
+        test.Env.Sim(TDuration::MilliSeconds(500));
+        UNIT_ASSERT(!foregroundGranted);
+        runtime.Send(std::move(wake), wakeNode);
+        auto put = test.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(writer, false, deadline);
+        UNIT_ASSERT(put);
+        VerifyTEvPutResult(put, foreground, test.State);
+        test.WaitMoveData();
+        runtime.FilterFunction = {};
+        test.Get(moving);
+        test.Get(foreground);
+    }
+#endif
 
     Y_UNIT_TEST(BlobDeletedBeforeMove) {
         TMoveDataTest test;

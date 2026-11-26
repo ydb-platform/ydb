@@ -11,6 +11,30 @@ namespace NYdb::inline Dev::NTopic::NTests {
 
     Y_UNIT_TEST_SUITE(Describe) {
 
+        Y_UNIT_TEST(SerializeToCreateTopicRequest) {
+            Ydb::Topic::DescribeTopicResult result;
+            result.set_partition_write_speed_messages_per_second(100);
+            result.set_partition_write_burst_messages(200);
+            result.set_partition_total_read_speed_bytes_per_second(300);
+            result.set_partition_consumer_read_speed_bytes_per_second(150);
+            result.set_partition_total_read_speed_messages_per_second(400);
+            result.set_partition_read_without_consumer_speed_bytes_per_second(500);
+            result.set_partition_read_without_consumer_speed_messages_per_second(600);
+            result.set_content_based_deduplication(true);
+
+            TTopicDescription description(std::move(result));
+            Ydb::Topic::CreateTopicRequest request;
+            description.SerializeTo(request);
+
+            UNIT_ASSERT_VALUES_EQUAL(request.partition_write_speed_messages_per_second(), 100);
+            UNIT_ASSERT_VALUES_EQUAL(request.partition_write_burst_messages(), 200);
+            UNIT_ASSERT_VALUES_EQUAL(request.partition_total_read_speed_bytes_per_second(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(request.partition_total_read_speed_messages_per_second(), 400);
+            UNIT_ASSERT_VALUES_EQUAL(request.partition_read_without_consumer_speed_bytes_per_second(), 500);
+            UNIT_ASSERT_VALUES_EQUAL(request.partition_read_without_consumer_speed_messages_per_second(), 600);
+            UNIT_ASSERT(request.content_based_deduplication());
+        }
+
         void DescribeTopicWithKillTablets(TTopicSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation)
         {
             TDescribeTopicSettings settings;
@@ -57,7 +81,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
                 UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
                 UNIT_ASSERT_GT(partitionLocation.GetGeneration(), 0); // greater-then 0 after tablet restart
             }
-        
+
         }
 
         void DescribeConsumerWithKillTablets(TTopicSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation)
@@ -152,7 +176,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
             }
             setup.GetServer().AnnoyingClient->ModifyACL("/Root", setup.GetTopicPath(), acl.SerializeAsString());
 
-            while (true) { 
+            while (true) {
                 TDescribePartitionResult result = client.DescribePartition(existingTopic ? setup.GetTopicPath() : "bad-topic", testPartitionId, settings).GetValueSync();
                 UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SCHEME_ERROR || result.GetStatus() == EStatus::UNAUTHORIZED, result.GetIssues());
                 // Connect access may appear later

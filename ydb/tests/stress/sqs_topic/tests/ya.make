@@ -13,7 +13,6 @@ TEST_SRCS(
 REQUIREMENTS(ram:32 cpu:4)
 
 SIZE(LARGE)
-TAG(ya:fat)
 
 DEPENDS(
     ydb/apps/ydb
@@ -28,5 +27,7 @@ PEERDIR(
     contrib/python/boto3
     contrib/python/botocore
 )
+
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 END()

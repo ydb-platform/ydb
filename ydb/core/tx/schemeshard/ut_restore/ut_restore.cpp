@@ -12,10 +12,13 @@
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet_flat/flat_boot_cookie.h>
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/actors/wait_events.h>
 #include <ydb/core/testlib/audit_helpers/audit_helper.h>
@@ -28,10 +31,12 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/ydb_convert/kesus_description.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/aws_init/aws.h>
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -5780,8 +5785,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", EnableDataShardDirectPartImport, Ydb::StatusIds::CANCELLED);
     }
 
-    void ShouldFailOnInvalidCsv(const TString& csv, bool enableDataShardDirectPartImport) {
+    void ShouldFailOnInvalidCsv(const TString& csv, const TString& expectedError, bool enableDataShardDirectPartImport) {
+        std::vector<std::string> auditLines;
         TTestBasicRuntime runtime;
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(auditLines);
 
         const auto data = TTestDataWithScheme(R"(
             columns {
@@ -5795,7 +5802,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             primary_key: "key"
         )", {TTestData(csv, EmptyYsonStr)});
 
-        Run(runtime, ConvertTestData(data), R"(
+        const auto importId = Run(runtime, ConvertTestData(data), R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -5805,14 +5812,37 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               }
             }
         )", enableDataShardDirectPartImport, Ydb::StatusIds::CANCELLED);
+
+        const auto result = TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = result.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), expectedError);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_ERROR));
+
+        const auto list = TestListImports(runtime, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
+        const auto& listed = list.GetEntries(0);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetId(), importId);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetStatus(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(listed.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetIssues(0).message(), entry.GetIssues(0).message());
+
+        runtime.WaitFor("import end audit record", [&] {
+            return AnyOf(auditLines, [](const auto& line) { return line.find("operation=IMPORT END") != std::string::npos; });
+        }, TDuration::Seconds(10));
+        const auto line = FindAuditLine(auditLines, "operation=IMPORT END");
+        UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(line, "reason=" + entry.GetIssues(0).message());
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnFileWithoutNewLines, EnableDataShardDirectPartImport) {
-        ShouldFailOnInvalidCsv("\"a1\",\"value1\"", EnableDataShardDirectPartImport);
+        ShouldFailOnInvalidCsv("\"a1\",\"value1\"",
+            "/data_00.csv: cannot process data: reached end of file", EnableDataShardDirectPartImport);
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnEmptyToken, EnableDataShardDirectPartImport) {
-        ShouldFailOnInvalidCsv("\"a1\",\n", EnableDataShardDirectPartImport);
+        ShouldFailOnInvalidCsv("\"a1\",\n",
+            "/data_00.csv: cannot process data: Empty token on line: \"a1\",", EnableDataShardDirectPartImport);
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnInvalidValue, EnableDataShardDirectPartImport) {
@@ -6783,6 +6813,21 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).message(), "Cancelled manually");
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_ERROR));
+        const auto list = TestListImports(runtime, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
+        const auto& listed = list.GetEntries(0);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetId(), importId);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetStatus(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(listed.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetIssues(0).message(), "Cancelled manually");
+
+        runtime.WaitFor("import end audit record", [&] {
+            return AnyOf(auditLines, [](const auto& line) { return line.find("operation=IMPORT END") != std::string::npos; });
+        }, TDuration::Seconds(10));
 
         // Check audit record for import end
         //
@@ -8584,7 +8629,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestTopic(true);
     }
 
-    Y_UNIT_TEST(TopicExportImport) {
+    Y_UNIT_TEST_TWIN(TopicExportImport, ExplicitReadQuota) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -8593,6 +8638,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        auto* quoting = runtime.GetAppData().PQConfig.MutableQuotingConfig();
+        quoting->SetPartitionReadQuotaIsTwiceWriteQuota(true);
+        quoting->SetMaxParallelConsumersPerPartition(2);
         ui64 txId = 100;
 
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
@@ -8600,9 +8648,20 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
-        auto topic = NDescUT::TSimpleTopic(1, 0);
+        const auto topic = NDescUT::TSimpleTopic(1);
+        auto source = topic.GetPrivateProto();
+        auto* partition = source.MutablePQTabletConfig()->MutablePartitionConfig();
+        partition->SetWriteSpeedInBytesPerSecond(1024);
+        partition->SetBurstSize(1024);
+        if (ExplicitReadQuota) {
+            partition->SetReadSpeedInBytesPerSecond(4096);
+            partition->SetReadSpeedInMessagesPerSecond(100);
+            auto* readQuota = NPQ::GetOrAddReadQuota(*source.MutablePQTabletConfig(), NPQ::CLIENTID_WITHOUT_CONSUMER);
+            readQuota->SetSpeedInBytesPerSecond(2048);
+            readQuota->SetSpeedInMessagesPerSecond(50);
+        }
 
-        TestCreatePQGroup(runtime, ++txId, "/MyRoot", topic.GetPrivateProto().DebugString());
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", source.DebugString());
         env.TestWaitNotification(runtime, txId);
 
         TestExport(runtime, ++txId, "/MyRoot", topic.GetExportRequest(port));
@@ -8613,10 +8672,37 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
-        auto describePath = DescribePath(runtime, "/MyRoot" + topic.GetRestoredDir());
-        TestDescribeResult(describePath, {
-            NLs::PathExist,
-        });
+        const auto restoredPath = "/MyRoot" + topic.GetRestoredDir();
+        const auto checkReadQuota = [&](const auto& result, i64 expected) {
+            TestDescribeResult(result, {NLs::PathExist});
+            const auto& path = result.GetPathDescription();
+            const auto& restored = path.GetPersQueueGroup();
+            UNIT_ASSERT_VALUES_EQUAL(restored.GetPQTabletConfig().GetPartitionConfig().HasReadSpeedInBytesPerSecond(),
+                ExplicitReadQuota);
+
+            TActorSystemStub actorSystem;
+            actorSystem.AppData.PQConfig = runtime.GetAppData().PQConfig;
+            Ydb::Topic::DescribeTopicResult description;
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            UNIT_ASSERT_C(FillTopicDescription(description, restored, path.GetSelf(), Nothing(), status, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(description.partition_total_read_speed_bytes_per_second(), expected);
+            UNIT_ASSERT_VALUES_EQUAL(description.partition_total_read_speed_messages_per_second(), ExplicitReadQuota ? 100 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(description.partition_read_without_consumer_speed_bytes_per_second(), ExplicitReadQuota ? 2048 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(description.partition_read_without_consumer_speed_messages_per_second(), ExplicitReadQuota ? 50 : 0);
+        };
+
+        const auto restored = DescribePath(runtime, restoredPath);
+        checkReadQuota(restored, 4096);
+
+        TPersQueueGroupDescription alter;
+        alter.SetName(topic.GetDir());
+        *alter.MutablePQTabletConfig() = restored.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+        alter.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(2048);
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot/Restored", alter.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        checkReadQuota(DescribePath(runtime, restoredPath), ExplicitReadQuota ? 4096 : 8192);
     }
 
     Y_UNIT_TEST(TopicExportImportWithAllFields) {

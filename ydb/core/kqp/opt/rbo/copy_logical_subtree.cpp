@@ -269,8 +269,10 @@ TIntrusivePtr<IOperator> TOpRead::CopyImpl(TInfoUnitRegistry& registry, TSubstit
     if (!CanCopyRead(*this)) {
         return nullptr;
     }
-    return MakeIntrusive<TOpRead>(Alias, CopyColumns(Columns_, registry, renames), StorageType,
+    auto read = MakeIntrusive<TOpRead>(Alias, CopyColumns(Columns_, registry, renames), StorageType,
         TableCallable, nullptr, Limit, RangeInfo, std::nullopt, SortDir, TPhysicalOpProps{}, Pos, RequireSortedRead);
+    read->ForcePrimary = ForcePrimary;
+    return read;
 }
 
 TIntrusivePtr<IOperator> TOpMap::CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const {

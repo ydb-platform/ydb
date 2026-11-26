@@ -84,9 +84,10 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                     blobState.WholeSituation == TBlobState::ESituation::Absent))
                 : std::nullopt;
 
-            // fill in keep/doNotKeep flags
-            const auto it = BlobFlags.find(query.Id);
-            std::tie(outResponse.Keep, outResponse.DoNotKeep) = it != BlobFlags.end() ? it->second : std::make_tuple(false, false);
+            if (const auto it = BlobFlags.find(query.Id); it != BlobFlags.end()) {
+                const auto& [keep, doNotKeep] = it->second;
+                outResponse.MergeKeepFlags(keep, doNotKeep);
+            }
 
             if (blobState.WholeSituation == TBlobState::ESituation::Absent) {
                 bool okay = true;

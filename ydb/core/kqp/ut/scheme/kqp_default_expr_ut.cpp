@@ -951,21 +951,22 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Rejects(ValueTableDDL(), "DEFAULT expressions are disabled");
     }
 
-    Y_UNIT_TEST(ExpressionDefaultsRequireWriteSettings) {
+    Y_UNIT_TEST_TWIN(ExpressionDefaultsRequireIndexStreamWrite, EnableCompileTimeDefaults) {
         auto appConfig = DefaultExprAppConfig();
         auto* config = appConfig.MutableTableServiceConfig();
         config->SetEnableIndexStreamWrite(false);
-        config->SetEnableCompileTimeDefaults(false);
+        config->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
         TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
-        const TString error = "DEFAULT expressions require EnableIndexStreamWrite or EnableCompileTimeDefaults";
+        const TString error = "DEFAULT expressions require EnableIndexStreamWrite";
 
         fixture.Rejects(ValueTableDDL(), error);
         fixture.Exec(DefaultExprDDL("v Uint64 DEFAULT 7ul"));
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT 8ul;");
         fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT RandomNumber(1);", error);
 
         const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
         UNIT_ASSERT_C(column.HasDefaultFromLiteral(), column.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromLiteral().value().uint64_value(), 7u);
+        UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromLiteral().value().uint64_value(), 8u);
     }
 
     Y_UNIT_TEST(CoercibleSourceRequiresFeatureFlag) {

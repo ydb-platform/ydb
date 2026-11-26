@@ -152,7 +152,9 @@ public:
         const auto previousLag = GetLag();
         const auto res = Targets.emplace(id, CreateTarget(self, id, kind, std::forward<Args>(args)...));
         Y_VERIFY_S(res.second, "Duplicate target: " << id);
-        TLagProvider::AddPendingLag(id);
+        if (!IsTopicTarget(kind)) {
+            TLagProvider::AddPendingLag(id);
+        }
         NotifyLagChanged(previousLag);
         return id;
     }

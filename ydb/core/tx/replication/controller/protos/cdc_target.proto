@@ -10,8 +10,7 @@ message TCdcTarget {
     enum EPhase {
         RUNNING = 0;
         STOPPING = 1;
-        STOPPING_PRESERVE = 2;
-        TRIMMING = 3;
+        reserved 2, 3;
         PREPARED = 4;
         FINISHED = 5;
     }
@@ -20,7 +19,7 @@ message TCdcTarget {
     optional NKikimrProto.TPathID StreamPathId = 3;
     optional NKikimrProto.TPathID TablePathId = 4;
     optional EPhase Phase = 5 [default = RUNNING];
-    optional uint64 TrimRequestId = 6;
+    reserved 6;
     optional NKikimrSchemeOp.TCreateCdcStream Definition = 7;
     optional Ydb.Table.ChangefeedDescription SourceStream = 8;
     optional uint64 InitialCreateTxId = 9;

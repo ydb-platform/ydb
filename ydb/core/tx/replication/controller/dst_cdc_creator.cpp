@@ -240,10 +240,6 @@ bool TCdcCreation::CheckTopic(const NKikimrScheme::TEvDescribeSchemeResult& reco
         return false;
     }
 
-    if (config.GetCdcReplication().HasTrimTxId()) {
-        error = "CDC destination topic already has a trim request";
-        return false;
-    }
     return true;
 }
 

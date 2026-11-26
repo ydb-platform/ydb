@@ -557,8 +557,6 @@ public:
 
         txState->ClearShardsInProgress();
 
-        const auto& description = context.SS->Tables.at(txState->TargetPathId)->AlterData->TableDescriptionFull;
-        const bool activateCdcStreams = description.Defined() && description->ActivateCdcStreamsSize();
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             auto idx = txState->Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
@@ -570,9 +568,6 @@ public:
             const auto seqNo = context.SS->StartRound(*txState);
             const auto txBody = context.SS->FillAlterTableTxBody(txState->TargetPathId, idx, seqNo);
             auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, txBody, context.Ctx);
-            if (activateCdcStreams) {
-                event->Record.SetTxKind(NKikimrTxDataShard::TX_KIND_CDC_HANDOFF);
-            }
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
         }
 

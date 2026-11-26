@@ -1159,9 +1159,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 *state.MutableTopicSetup() = Cdc->Topic;
                 state.SetInitialCreateTxId(TxId);
             } else {
-                // Final validation follows a fresh allocation, with no proposal using this id.
                 Cdc->Settings.StreamPathId.ToProto(state.MutableStreamPathId());
-                state.SetTrimRequestId(TxId);
             }
         } else {
             result->PreparingCdc = PrepareCdcTable;

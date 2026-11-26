@@ -26,23 +26,15 @@ bool TTargetCdc::ActivateOnDetach() const {
 }
 
 bool TTargetCdc::OnDstAltered(NIceDb::TNiceDb& db, const TActorContext& ctx) {
-    switch (Cdc.GetPhase()) {
-    case TCdc::STOPPING:
-        Cdc.SetPhase(TCdc::TRIMMING);
-        break;
-    case TCdc::STOPPING_PRESERVE:
-        Cdc.SetPhase(TCdc::PREPARED);
-        break;
-    case TCdc::TRIMMING:
-        if (GetReplication()->GetState() == TReplication::EState::Removing) {
-            Cdc.SetPhase(TCdc::FINISHED);
-            SetDstState(EDstState::Done);
-        } else {
-            Cdc.SetPhase(TCdc::PREPARED);
-        }
-        break;
-    default:
+    if (Cdc.GetPhase() != TCdc::STOPPING) {
         return false;
+    }
+
+    if (GetReplication()->GetState() == TReplication::EState::Removing) {
+        Cdc.SetPhase(TCdc::FINISHED);
+        SetDstState(EDstState::Done);
+    } else {
+        Cdc.SetPhase(TCdc::PREPARED);
     }
 
     Shutdown(ctx);

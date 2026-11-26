@@ -776,7 +776,9 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         return;
     }
 
-    if (ev->Get()->MirrorerActor && IsCdcReplicationTopic() && !IsCurrentMirrorer(ev->Get()->MirrorerActor)) {
+    const bool cdcMirrorWrite = ev->Get()->FromMirrorer && IsCdcReplicationTopic();
+    const auto mirrorer = cdcMirrorWrite ? GetActiveMirrorer() : TActorId{};
+    if (cdcMirrorWrite && !mirrorer) {
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR, "CDC mirroring has stopped");
         return;
     }
@@ -785,7 +787,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     const bool replicationDisabled = replicatedPartition
         && AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled();
 
-    if (ev->Get()->MirrorerActor && replicationDisabled) {
+    if (ev->Get()->FromMirrorer && replicationDisabled) {
         DestroyMirrorer();
 
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR,
@@ -907,7 +909,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         TString sourceId = msg.SourceId;
         bool needToChangeOffset = msg.PartNo + 1 == msg.TotalParts;
         TWriteMsg write{ev->Get()->Cookie, offset, std::move(msg), ev->Get()->InitialSeqNo};
-        write.MirrorerActor = ev->Get()->MirrorerActor;
+        write.MirrorerActor = mirrorer;
         EmplacePendingRequest(std::move(write), NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.Partition.WriteMessage"), ctx);
         PendingRequests.back().Span.Attribute("source_id", std::move(sourceId));
         if (KVWriteInProgress) { // We are currently writing previous blob
@@ -1206,7 +1208,7 @@ void TPartition::ExecRequest(TEmitHeartbeatMsg& msg, ProcessParameters& paramete
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p,
                                                          TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
-    if (p.MirrorerActor && IsCdcReplicationTopic() && !IsCurrentMirrorer(p.MirrorerActor)) {
+    if (p.MirrorerActor && p.MirrorerActor != GetActiveMirrorer()) {
         WriteInflightSize -= p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false, NPersQueue::NErrorCode::ERROR, "CDC mirroring has stopped");
         return EProcessResult::ContinueDrop;
@@ -1407,7 +1409,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
     const auto& ctx = ActorContext();
 
-    if (p.MirrorerActor && IsCdcReplicationTopic() && !IsCurrentMirrorer(p.MirrorerActor)) {
+    if (p.MirrorerActor && p.MirrorerActor != GetActiveMirrorer()) {
         ScheduleReplyError(p.Cookie, false, NPersQueue::NErrorCode::ERROR, "CDC mirroring has stopped");
         return false;
     }
@@ -1421,7 +1423,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written
 
-    ui64 defaultOffset = CdcReplicationTrimTxId ? curOffset : Max(curOffset, BlobEncoder.MirroredOffset);
+    ui64 defaultOffset = Max(curOffset, BlobEncoder.MirroredOffset);
     if (AppData(ctx)->PQConfig.HasMinOffset()) {
         defaultOffset = Max(defaultOffset, AppData(ctx)->PQConfig.GetMinOffset());
     }

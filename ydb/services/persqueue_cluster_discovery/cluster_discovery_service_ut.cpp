@@ -1321,6 +1321,72 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         }
     }
 
+    using TWriteWeights = absl::flat_hash_map<TString, ui64>;
+
+    // Polls the tracker until the account has the expected write lists and weights.
+    static void WaitForAccountWriteWeights(
+        TTestActorRuntime& actorSystem, const TString& account, const TWriteWeights& expected)
+    {
+        TWriteWeights last;
+        for (size_t i = 0; i < 100; ++i) {
+            const TActorId sender = actorSystem.AllocateEdgeActor();
+            actorSystem.Send(new IEventHandle(
+                NPQ::NClusterTracker::MakeClusterTrackerID(),
+                sender,
+                new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList()));
+            TAutoPtr<IEventHandle> handle;
+            const auto* event = actorSystem.GrabEdgeEvent<NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse>(handle);
+            UNIT_ASSERT(event);
+            if (event->Success && event->ClustersList) {
+                const auto it = event->ClustersList->Accounts.find(account);
+                if (it != event->ClustersList->Accounts.end()) {
+                    UNIT_ASSERT(it->second.Write.contains("dc1"));
+                    last = it->second.WriteWeights;
+                    if (last == expected) {
+                        return;
+                    }
+                }
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL("account " << account << " write weights were not updated, last size " << last.size());
+    }
+
+    Y_UNIT_TEST(TestTrackerReadsAccountWriteWeights) {
+        TPQCDServer server;
+        server.SetNetDataViaFile("::1/128\tdc1");
+        server.Run();
+
+        server.PQClient().InitRoot();
+        server.PQClient().InitDCs();
+        server.WaitUntilHealthy();
+
+        TFancyGRpcWrapper wrapper(server.GrpcPort());
+        wrapper.WaitForExactClustersDataVersion(1);
+
+        // An Account table that CM has not migrated yet: lists are read, weights stay empty.
+        server.PQClient().RunYqlSchemeQuery(
+            "CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Account` ("
+            "name Utf8, readClusters Utf8, writeClusters Utf8, version Int64, PRIMARY KEY (name));");
+        server.PQClient().RunYqlDataQuery(
+            "UPSERT INTO `/Root/PQ/Config/V2/Account` (name, readClusters, writeClusters, version) "
+            "VALUES (\"prod\", \"dc1,dc2\", \"dc1,dc2\", 1);");
+        wrapper.WaitForExactClustersDataVersion(2);
+        WaitForAccountWriteWeights(server.ActorSystem(), "prod", {});
+
+        server.PQClient().RunYqlSchemeQuery("ALTER TABLE `/Root/PQ/Config/V2/Account` ADD COLUMN writeWeights Utf8;");
+        server.PQClient().RunYqlDataQuery(
+            "UPDATE `/Root/PQ/Config/V2/Account` SET writeWeights = \"dc1:2,dc2:4\", version = 2 "
+            "WHERE name = \"prod\";");
+        wrapper.WaitForExactClustersDataVersion(3);
+        WaitForAccountWriteWeights(server.ActorSystem(), "prod", {{"dc1", 2}, {"dc2", 4}});
+
+        // A change of the weights alone is published too.
+        server.PQClient().RunYqlDataQuery(
+            "UPDATE `/Root/PQ/Config/V2/Account` SET writeWeights = \"dc1:8,dc2:4\" WHERE name = \"prod\";");
+        WaitForAccountWriteWeights(server.ActorSystem(), "prod", {{"dc1", 8}, {"dc2", 4}});
+    }
+
     Y_UNIT_TEST(TestPreferredClusterAlreadyFirst) {
         TPQCDServer server;
         server.SetNetDataViaFile("::1/128\tdc1");

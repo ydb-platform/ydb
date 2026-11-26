@@ -26,6 +26,21 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT_VALUES_EQUAL(ParseFnxClusterCsv(",,;"), TVector<TString>{});
     }
 
+    Y_UNIT_TEST(ParseClusterWeightsCsv) {
+        using TWeights = absl::flat_hash_map<TString, ui64>;
+        UNIT_ASSERT(ParseClusterWeightsCsv("").empty());
+        UNIT_ASSERT(ParseClusterWeightsCsv(",,;").empty());
+        UNIT_ASSERT(ParseClusterWeightsCsv("klg:2,sas:4") == (TWeights{{"klg", 2}, {"sas", 4}}));
+        UNIT_ASSERT(ParseClusterWeightsCsv(" klg : 2 ; sas:4,") == (TWeights{{"klg", 2}, {"sas", 4}}));
+        UNIT_ASSERT(ParseClusterWeightsCsv("klg:0") == (TWeights{{"klg", 0}}));
+        UNIT_ASSERT(ParseClusterWeightsCsv("klg:18446744073709551615")
+            == (TWeights{{"klg", Max<ui64>()}}));
+        // Malformed pairs are skipped, the rest is kept.
+        UNIT_ASSERT(ParseClusterWeightsCsv("klg,sas:4,:5,vla:,myt:x,iva:-1,man:1:2")
+            == (TWeights{{"sas", 4}}));
+        UNIT_ASSERT(ParseClusterWeightsCsv("klg:2,klg:3") == (TWeights{{"klg", 3}}));
+    }
+
     static TClustersList::TCluster MakeCluster(const TString& name, bool fnx) {
         TClustersList::TCluster cluster;
         cluster.Name = name;
@@ -132,6 +147,9 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         right.Version = 2;
         right.Write = {"sas"};
         UNIT_ASSERT(!(left == right));
+        right.Write.clear();
+        right.WriteWeights = {{"sas", 4}};
+        UNIT_ASSERT(!(left == right));
 
         TClustersList list;
         list.Clusters.push_back(MakeCluster("sas", false));
@@ -233,9 +251,8 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(MakeListBalancersQuery(balancer, versions).Contains("B.clusters"));
         const TString account = SiblingTablePath(cluster, "Account");
         const TString accountsQuery = MakeListAccountsQuery(account);
-        UNIT_ASSERT(accountsQuery.Contains("A.readClusters"));
-        UNIT_ASSERT(accountsQuery.Contains("A.writeClusters"));
-        UNIT_ASSERT(accountsQuery.Contains("A.version"));
+        UNIT_ASSERT(accountsQuery.Contains("A.*"));
+        UNIT_ASSERT(!accountsQuery.Contains("A.writeWeights"));
         UNIT_ASSERT(accountsQuery.Contains("ORDER BY A.name"));
         UNIT_ASSERT(accountsQuery.Contains("$from"));
         UNIT_ASSERT(!accountsQuery.Contains("Versions"));

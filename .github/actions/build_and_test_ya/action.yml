@@ -340,6 +340,7 @@ runs:
         python3 .github/scripts/build_profile.py "$BUILD_PRESET" --output-dir "$TMP_DIR/build-profile"
         mapfile -t profile_params < "$TMP_DIR/build-profile/args"
         DASHBOARD_SANITIZER=$(cat "$TMP_DIR/build-profile/sanitize")
+        reproduction_params=("${profile_params[@]}")
         if [[ "$DASHBOARD_SANITIZER" == thread || "$DASHBOARD_SANITIZER" == memory ]]; then
           if [ -z "$TEST_RETRY_COUNT" ]; then
             TEST_RETRY_COUNT=1
@@ -356,6 +357,7 @@ runs:
 
         if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
           params+=(${{ inputs.additional_ya_make_args }})
+          reproduction_params+=(${{ inputs.additional_ya_make_args }})
         fi
 
         params+=(
@@ -398,6 +400,7 @@ runs:
         if [ true = ${{ inputs.run_tests }} ]; then
             params+=(-A)
         fi
+        python3 -c 'import sys; sys.path.insert(0, ".github/scripts"); from build_profile import portable_reproduction_args; print(portable_reproduction_args(sys.argv[1:]))' "${reproduction_params[@]}" > "$TMP_DIR/build-profile/reproduction-args"
         YA_MAKE_COMMAND=$(python3 -c 'import shlex, sys; print(shlex.join(sys.argv[1:]))' ./ya make "${params[@]}")
         params=("${profile_params[@]}" "${params[@]}")
         GRAPH_PATH=$(realpath graph.json)
@@ -711,7 +714,7 @@ runs:
             export GITHUB_HEAD_SHA="$ORIGINAL_HEAD"
 
             analytics start generate_summary
-            GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
+            BUILD_REPRODUCTION_ARGS_FILE="$TMP_DIR/build-profile/reproduction-args" GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
               --summary_links "$SUMMARY_LINKS" \
               --public_dir "$PUBLIC_DIR" \
               --public_dir_url "$PUBLIC_DIR_URL" \

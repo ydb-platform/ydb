@@ -432,7 +432,12 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     for current_status in status_for_history:
         status_test.get(current_status,[]).sort(key=lambda val: (val.full_name, ))
 
-    build_preset_params = reproduction_args(build_preset)
+    effective_args_file = os.environ.get("BUILD_REPRODUCTION_ARGS_FILE")
+    if effective_args_file:
+        with open(effective_args_file) as stream:
+            build_preset_params = stream.read().rstrip("\n")
+    else:
+        build_preset_params = reproduction_args(build_preset)
 
     # Get GitHub server URL and repository from environment
     github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")

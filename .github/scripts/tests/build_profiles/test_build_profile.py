@@ -57,6 +57,18 @@ class BuildProfilesTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Unknown build profile'):
             build_profile.resolve_profile('unknown', {})
 
+    def test_reproduction_omits_runner_blacklist(self):
+        flags = ['--build=release', '-DHARDENING=yes', '-DHARDENING=no', '-DCFLAGS=one two']
+        for blacklist in [
+            ['--test-blacklist-path', '/runner/temp/blacklist.yaml'],
+            ['--test-blacklist-path=/runner/temp/blacklist.yaml'],
+        ]:
+            with self.subTest(blacklist=blacklist):
+                self.assertEqual(
+                    shlex.split(build_profile.portable_reproduction_args(flags + blacklist + ['--thinlto'])),
+                    flags + ['--thinlto'],
+                )
+
     def test_workflow_presets_resolve(self):
         # Public presets used by the workflow matrices and choice inputs.
         presets = ['release', 'debug', 'relwithdebinfo', 'release-asan', 'release-tsan', 'release-msan']

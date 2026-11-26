@@ -51,6 +51,21 @@ def resolve_profile(name, fallback=None):
     return {"args": args, "sanitize": sanitizer}
 
 
+def portable_reproduction_args(args):
+    # Run-tests creates this file in runner.temp; it does not exist locally.
+    result = []
+    skip_value = False
+    for arg in args:
+        if skip_value:
+            skip_value = False
+            continue
+        if arg == "--test-blacklist-path":
+            skip_value = True
+        elif not arg.startswith("--test-blacklist-path="):
+            result.append(arg)
+    return shlex.join(result)
+
+
 def reproduction_args(name):
     # A missing/invalid profile must not hide the test results themselves.
     try:

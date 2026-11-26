@@ -1,3 +1,4 @@
+from ydb.tests.olap.lib.fill_tables import Dataset
 import ydb.tests.workload_manager.common.workload_manager as wm
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 
@@ -21,6 +22,5 @@ class TestWMOltpTpchS0_1(wm.WorkloadManagerOltpTpch20Base, FunctionalTestBase):
         cls.setup_cluster_ext(extra_feature_flags=['enable_composite_conveyor_scheduling'])
         cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'init', '--warehouses', str(cls.tpcc_warehouses)])
         cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'import', '--warehouses', str(cls.tpcc_warehouses), '--no-tui'])
-        cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls.get_path()}', 'init', '--store=column', '--datetime-types=dt64'])
-        cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls.get_path()}', 'import', 'generator', f'--scale={cls.scale}'])
+        cls.fill_tables(Dataset('tpch', f'olap_yatests/{cls.get_path()}', scale=cls.scale))
         super().setup_class()

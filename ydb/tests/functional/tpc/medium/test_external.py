@@ -1,3 +1,4 @@
+from ydb.tests.olap.lib.fill_tables import Dataset
 from ydb.tests.olap.load.lib.external import ExternalSuiteBase, pytest_generate_tests # noqa
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
@@ -11,12 +12,7 @@ class TestExternalE1(ExternalSuiteBase, FunctionalTestBase):
     def setup_class(cls) -> None:
         YdbCluster._tables_path = ''
         cls.setup_cluster()
-        cls.run_cli([
-            'workload', 'query', '-p', f'{cls.external_folder}', 'init', '--suite-path', cls.get_external_path()
-        ])
-        cls.run_cli([
-            'workload', 'query', '-p', f'{cls.external_folder}', 'import', '--suite-path', cls.get_external_path()
-        ])
+        cls.fill_tables(Dataset('query', cls.external_folder, suite_path=cls.get_external_path()))
         super().setup_class()
 
     @classmethod

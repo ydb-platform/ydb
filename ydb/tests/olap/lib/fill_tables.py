@@ -1,0 +1,336 @@
+"""Prepare benchmark tables and import their parts from static YDB nodes."""
+
+import argparse
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
+from dataclasses import dataclass
+import json
+import logging
+import os
+from pathlib import Path
+import re
+import shlex
+import shutil
+import subprocess
+from time import sleep
+from urllib.parse import urlsplit
+from uuid import uuid4
+
+import requests
+
+from .remote_execution import is_localhost
+from .ydb_cluster import YdbCluster
+
+
+LOGGER = logging.getLogger(__name__)
+SANDBOX_RESOURCE_API = 'https://sandbox.yandex-team.ru/api/v1.0/resource'
+
+
+@dataclass(frozen=True)
+class Dataset:
+    workload: str
+    path: str
+    scale: str | int | float = '1'
+    init_scale: str = ''
+    store: str = 'column'
+    float_mode: str = ''
+    datetime_types: str = 'dt64'
+    clear: bool = False
+    tables: str = ''
+    input_path: str = ''
+    suite_path: str = ''
+    import_options: tuple[str, ...] = ()
+
+    @property
+    def command(self) -> list[str]:
+        workload = 'query' if self.workload.startswith('external_') else self.workload
+        return ['workload', workload, '-p', self.path]
+
+    @property
+    def uses_generator(self) -> bool:
+        return self.workload in ('tpch', 'tpcds')
+
+    @property
+    def needs_resources(self) -> bool:
+        return not (self.uses_generator or self.input_path or self.workload == 'query')
+
+
+@dataclass(frozen=True)
+class Worker:
+    host: str
+    endpoint: str
+    directory: str
+    cli: str
+    auth: tuple[str, ...]
+    remote: bool
+
+
+def ssh_options() -> list[str]:
+    options = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15',
+               '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null']
+    if os.getenv('SSH_KEY_FILE'):
+        options += ['-i', os.environ['SSH_KEY_FILE']]
+    return options
+
+
+def run_on(host: str, command: list[str], *, capture=False, check=True, timeout=None):
+    if host:
+        user = os.getenv('SSH_USER')
+        target = f'{user}@{host}' if user else host
+        command = ['ssh', *ssh_options(), '--', target, shlex.join(command)]
+    return subprocess.run(command, check=check, stdin=subprocess.DEVNULL, text=True,
+                          capture_output=capture, timeout=timeout)
+
+
+def copy_to(worker_host: str, source: str, destination: str, *, directory=False):
+    user = os.getenv('SSH_USER')
+    host = f'[{worker_host}]' if ':' in worker_host else worker_host
+    target = f'{user}@{host}' if user else host
+    recursive = ['-r'] if directory else []
+    subprocess.run(['scp', *ssh_options(), *recursive, '--', source, f'{target}:{destination}'],
+                   check=True, stdin=subprocess.DEVNULL)
+
+
+def find_resources(workload: str, count: int) -> list[dict]:
+    headers = {}
+    if os.getenv('SANDBOX_TOKEN'):
+        headers['Authorization'] = f"OAuth {os.environ['SANDBOX_TOKEN']}"
+    resources = []
+    for part in range(count):
+        response = requests.get(SANDBOX_RESOURCE_API, headers=headers, timeout=30, params={
+            'type': 'OTHER_RESOURCE', 'state': 'READY', 'limit': 1, 'order': '-id',
+            'attrs': json.dumps({'benchmark_type': workload, 'part': str(part)}),
+        })
+        response.raise_for_status()
+        items = response.json()['items']
+        if not items or not items[0].get('id'):
+            raise RuntimeError(f'No downloadable Sandbox resource for {workload}, part {part}')
+        resources.append(items[0])
+    return resources
+
+
+class TableFiller:
+    def __init__(self, cli: str, *, static_nodes=None, key_file='', token_file='', resource_parts=16, attempts=3):
+        self.cli = os.path.abspath(cli)
+        self.static_nodes = static_nodes
+        self.database = '/' + YdbCluster.ydb_database.lstrip('/')
+        self.auth = ()
+        if key_file:
+            self.auth = ('--sa-key-file', os.path.abspath(key_file))
+        elif token_file:
+            self.auth = ('--token-file', os.path.abspath(token_file))
+        if resource_parts < 1 or attempts < 1:
+            raise ValueError('Resource part count and import attempts must be positive')
+        self.resource_parts = resource_parts
+        self.attempts = attempts
+
+    @staticmethod
+    def _discover_static_nodes() -> dict[str, str]:
+        if YdbCluster.ydb_mon_port == 0:
+            return {'localhost': YdbCluster.ydb_endpoint}
+        scheme = 'grpcs' if YdbCluster.ydb_endpoint.startswith('grpcs://') else 'grpc'
+        nodes = YdbCluster.get_cluster_nodes(role=YdbCluster.Node.Role.STORAGE, db_only=False)
+        endpoints = {}
+        for node in sorted(nodes, key=lambda node: (node.host, node.grpc_port)):
+            if node.host and node.grpc_port and not node.disconnected:
+                address = f'[{node.host}]' if ':' in node.host else node.host
+                endpoints.setdefault(node.host, f'{scheme}://{address}:{node.grpc_port}')
+        return endpoints
+
+    def __enter__(self):
+        if not os.access(self.cli, os.X_OK) or not os.path.isfile(self.cli):
+            raise ValueError(f'YDB CLI is not an executable file: {self.cli}')
+        endpoints = self.static_nodes or self._discover_static_nodes()
+        if not endpoints:
+            raise RuntimeError('No connected static nodes with a gRPC endpoint')
+        with ExitStack() as stack:
+            self.workers = []
+            for host, endpoint in endpoints.items():
+                remote = not is_localhost(host)
+                target = host if remote else ''
+                directory = run_on(target, ['mktemp', '-d', '/tmp/ydb-fill-tables.XXXXXXXX'],
+                                   capture=True, timeout=30).stdout.strip()
+                if not re.fullmatch(r'/tmp/ydb-fill-tables\.[A-Za-z0-9]{8}', directory):
+                    raise RuntimeError(f'Unexpected temporary directory on {host}: {directory!r}')
+                stack.callback(self._cleanup, target, directory)
+                cli, auth = self.cli, self.auth
+                if remote:
+                    cli = f'{directory}/ydb'
+                    copy_to(host, self.cli, cli)
+                    run_on(host, ['chmod', 'u+x', cli], timeout=30)
+                    if auth:
+                        key_path = f'{directory}/credentials'
+                        copy_to(host, auth[1], key_path)
+                        auth = (auth[0], key_path)
+                self.workers.append(Worker(host, endpoint, directory, cli, auth, remote))
+            self._stack = stack.pop_all()
+        return self
+
+    def __exit__(self, *exc):
+        self._stack.close()
+
+    @staticmethod
+    def _cleanup(host, directory):
+        try:
+            result = run_on(host, ['rm', '-rf', '--', directory], check=False, timeout=30)
+            if result.returncode:
+                LOGGER.warning('Failed to remove %s on %s', directory, host or 'localhost')
+        except (OSError, subprocess.TimeoutExpired):
+            LOGGER.warning('Failed to remove %s on %s', directory, host or 'localhost', exc_info=True)
+
+    def init(self, dataset: Dataset):
+        if not dataset.store:
+            return
+        command = [self.cli, '-e', YdbCluster.ydb_endpoint, '-d', self.database,
+                   *self.auth, *dataset.command, 'init']
+        if dataset.suite_path:
+            command += ['--suite-path', dataset.suite_path]
+        else:
+            command += ['--store', dataset.store]
+            if dataset.datetime_types:
+                command += ['--datetime-types', dataset.datetime_types]
+            if dataset.uses_generator:
+                if dataset.init_scale:
+                    command += ['--scale', dataset.init_scale]
+                if dataset.float_mode:
+                    command += ['--float-mode', dataset.float_mode]
+        if dataset.clear:
+            command.append('--clear')
+        run_on('', command)
+
+    def _import_part(self, dataset, worker, index, part, count, resource):
+        host = worker.host if worker.remote else ''
+        directory = f'{worker.directory}/dataset-{index}/part-{part}'
+        run_on(host, ['mkdir', '-p', directory], timeout=30)
+        command = [worker.cli, '-e', worker.endpoint, '-d', self.database, *worker.auth,
+                   *dataset.command, 'import', *dataset.import_options]
+        if resource:
+            resource_id = resource['id']
+            name = Path(resource.get('file_name') or '').name
+            data_path = f'{directory}/data/{name or resource_id}'
+            if name.endswith(('.tar', '.tar.gz', '.tgz', '.tar.zst')):
+                data_path = f'{directory}/data'
+                output_options = ['--untar', '--output', data_path]
+            else:
+                output_options = ['--output', data_path]
+            run_on(host, ['ya', 'download', *output_options, f'sbr:{resource_id}'], timeout=7200)
+        else:
+            data_path = dataset.input_path
+            if data_path and worker.remote:
+                data_path = f'{directory}/input/{Path(dataset.input_path).name}'
+                run_on(host, ['mkdir', '-p', f'{directory}/input'], timeout=30)
+                copy_to(host, dataset.input_path, data_path, directory=os.path.isdir(dataset.input_path))
+
+        if dataset.uses_generator:
+            command += ['generator', '--scale', str(dataset.scale), '-C', str(count), '-i', str(part)]
+        elif dataset.workload == 'clickbench':
+            command += ['files', '--input', data_path]
+        else:
+            suite_path = dataset.suite_path
+            if worker.remote:
+                suite_path = f'{directory}/suite'
+                copy_to(host, dataset.suite_path, suite_path, directory=True)
+            elif resource:
+                suite_path = f'{directory}/suite'
+                shutil.copytree(dataset.suite_path, suite_path)
+            if resource:
+                run_on(host, ['ln', '-s', data_path, f'{suite_path}/import'])
+            command += ['--suite-path', suite_path]
+        if dataset.tables:
+            command += ['--tables', dataset.tables]
+        command += ['--state', f'{directory}/state.json']
+        for attempt in range(1, self.attempts + 1):
+            LOGGER.info('Import %s, part %s/%s on %s (attempt %s)',
+                        dataset.path, part + 1, count, worker.host, attempt)
+            result = run_on(host, command, check=False)
+            if not result.returncode:
+                if resource:
+                    self._cleanup(host, directory)
+                return
+            if attempt < self.attempts:
+                sleep(5)
+        raise RuntimeError(f'Import of {dataset.path} part {part} on {worker.host} failed: exit {result.returncode}')
+
+    def _fill(self, dataset, index, resources):
+        count = len(resources) if resources else len(self.workers) if dataset.uses_generator else 1
+        with ThreadPoolExecutor(max_workers=min(count, len(self.workers))) as executor:
+            # Keep one active import per worker for this dataset, even when there are more resource parts.
+            def import_parts(worker_index, worker):
+                for part in range(worker_index, count, len(self.workers)):
+                    self._import_part(dataset, worker, index, part, count, resources[part] if resources else None)
+
+            jobs = [executor.submit(import_parts, i, worker) for i, worker in enumerate(self.workers[:count])]
+            for job in jobs:
+                job.result()
+
+    def fill(self, datasets: list[Dataset], *, initialize=True):
+        paths = sorted(Path(dataset.path.strip('/')).parts for dataset in datasets)
+        if not paths or not paths[0] or any(b[:len(a)] == a for a, b in zip(paths, paths[1:])):
+            raise ValueError('Specify datasets with distinct, non-overlapping table paths')
+        resources = {
+            workload: find_resources(workload, self.resource_parts)
+            for workload in sorted({d.workload for d in datasets if d.needs_resources})
+        }
+        for worker in self.workers[:self.resource_parts] if resources else ():
+            run_on(worker.host if worker.remote else '', ['ya', 'download', '--help'], capture=True, timeout=30)
+        # A new namespace also allows successive fills using the same deployed CLI.
+        run_id = uuid4().hex
+        with ThreadPoolExecutor(max_workers=len(datasets)) as executor:
+            jobs = []
+            for index, dataset in enumerate(datasets):
+                if initialize:
+                    # CLI init --clear can remove empty parent directories shared by datasets.
+                    self.init(dataset)
+                dataset_resources = resources[dataset.workload] if dataset.needs_resources else None
+                jobs.append(executor.submit(self._fill, dataset, f'{run_id}-{index}', dataset_resources))
+            for job in jobs:
+                job.result()
+
+
+def main():
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--cli', required=True, help='Path to the built YDB CLI')
+    parser.add_argument('--endpoint', required=True)
+    parser.add_argument('--database', required=True)
+    parser.add_argument('--mon-port', type=int, default=8765)
+    parser.add_argument('--static-node', action='append', default=[], metavar='HOST[=ENDPOINT]',
+                        help='SSH host with optional gRPC endpoint. Repeat for explicit static nodes')
+    parser.add_argument('--resource-parts', type=int, default=16)
+    parser.add_argument('--attempts', type=int, default=3)
+    auth = parser.add_mutually_exclusive_group()
+    auth.add_argument('--sa-key-file', default='')
+    auth.add_argument('--token-file', default='')
+    parser.add_argument('--dataset', action='append', required=True, type=json.loads,
+                        help='JSON object with workload and path, plus dataset options such as scale, store, clear and suite_path')
+    args = parser.parse_args()
+    static_nodes = {}
+    for spec in args.static_node:
+        host, _, endpoint = spec.partition('=')
+        if not re.fullmatch(r'[A-Za-z0-9:][A-Za-z0-9.:%_-]*', host) or host in static_nodes:
+            parser.error(f'Invalid or duplicate static node: {host}')
+        if endpoint:
+            url = urlsplit(endpoint)
+            if url.scheme not in ('grpc', 'grpcs') or not url.hostname:
+                parser.error(f'Expected a grpc:// or grpcs:// endpoint for {host}')
+        static_nodes[host] = endpoint or args.endpoint
+    if args.mon_port < 0:
+        parser.error('Monitoring port must be nonnegative')
+    try:
+        datasets = [Dataset(**spec) for spec in args.dataset]
+    except TypeError as error:
+        parser.error(f'Invalid dataset: {error}')
+    for dataset in datasets:
+        if dataset.workload not in ('tpch', 'tpcds', 'clickbench', 'query',
+                                    'external_a1', 'external_x1', 'external_m1', 'external_b1'):
+            parser.error(f'Unsupported workload: {dataset.workload}')
+        if not isinstance(dataset.path, str) or not dataset.path.strip('/') or dataset.store not in ('', 'column', 'row'):
+            parser.error(f'Invalid path or store for {dataset.workload}')
+        if dataset.command[1] == 'query':
+            suite = Path(dataset.suite_path)
+            if not dataset.suite_path or not suite.is_dir() or (dataset.store and not (suite / 'init').is_dir()):
+                parser.error(f'Specify a valid suite_path for {dataset.workload}')
+    YdbCluster.reset(args.endpoint, args.database.lstrip('/'), args.mon_port, None)
+    with TableFiller(args.cli, static_nodes=static_nodes, key_file=args.sa_key_file, token_file=args.token_file,
+                     resource_parts=args.resource_parts, attempts=args.attempts) as filler:
+        filler.fill(datasets)

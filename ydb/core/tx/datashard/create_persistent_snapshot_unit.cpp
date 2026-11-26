@@ -39,15 +39,10 @@ public:
 
         TPathId tableId(ownerId, pathId);
         auto oldInfo = DataShard.FindUserTable(tableId);
-        Y_ENSURE(oldInfo);
-        NKikimrSchemeOp::TTableDescription description;
-        oldInfo->GetSchema(description);
-        Y_ENSURE(description.GetTableSchemaVersion() == version - 1);
-        description.SetTableSchemaVersion(version);
-        auto newInfo = DataShard.AlterUserTable(ctx, txc, description);
+        Y_ENSURE(oldInfo && oldInfo->GetTableSchemaVersion() == version - 1);
+        auto tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, tableId, version, true);
         TDataShardLocksDb locksDb(DataShard, txc);
-        DataShard.ReplaceUserTable(tableId, newInfo, locksDb);
-
+        DataShard.ReplaceUserTable(tableId, tableInfo, locksDb);
         if (tableInfo->NeedSchemaSnapshots()) {
             DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
         }

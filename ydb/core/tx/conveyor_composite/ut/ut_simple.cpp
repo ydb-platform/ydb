@@ -36,7 +36,7 @@ THolder<TActorSystemSetup> BuildActorSystemSetup(const ui32 threads, const ui32 
     setup->ExecutorsCount = pools;
     setup->Executors.Reset(new TAutoPtr<NActors::IExecutorPool>[pools]);
     for (auto idx : xrange(pools)) {
-        setup->Executors[idx] = new NActors::TBasicExecutorPool(idx, threads, 50);
+        setup->Executors[idx] = new NActors::TBasicExecutorPool(idx, threads, 0);
     }
 
     setup->Scheduler = new NActors::TBasicSchedulerThread(NActors::TSchedulerConfig(512, 0));

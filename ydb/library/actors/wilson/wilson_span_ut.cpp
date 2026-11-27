@@ -43,7 +43,9 @@ Y_UNIT_TEST_SUITE(TSpan) {
         size_t builds = 0;
         auto attributes = [&] {
             ++builds;
-            return TKeyValueList{{"state", TString("ready")}};
+            TKeyValueList result;
+            result["state"] = TString("ready");
+            return result;
         };
         TSpan disabled;
         UNIT_ASSERT(!budget.Event(disabled, 10, "state", attributes));

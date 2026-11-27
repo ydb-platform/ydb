@@ -566,7 +566,7 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
         t.Run(std::move(*starved), false);
     }
 
-    Y_UNIT_TEST(FullChannelDoesNotPreemptTheSource) {
+    Y_UNIT_TEST(SaturatedInputRunsBeforeTheSource) {
         TQueues t;
         auto graph = std::make_shared<const TQueryTaskGraph>(
             TVector<TTaskGraphNode>{{1, 1, 1, 0, 1, true}, {2, 2, 1, 1, 1}},
@@ -578,12 +578,13 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
         auto claim = t.Pool->Take({}, 100);
         UNIT_ASSERT(claim && claim->Task->TaskId == 1);
         t.Run(std::move(*claim), true);
+        // Unread spill on the join input takes the worker. The scan runs after it.
         consumer->Task->Signal(InputDependency(1), ETaskPriority::Drain);
         claim = t.Pool->Take({}, 100);
-        UNIT_ASSERT(claim && claim->Task->TaskId == 1);
+        UNIT_ASSERT(claim && claim->Task == consumer->Task);
         t.Run(std::move(*claim), false);
         claim = t.Pool->Take({}, 100);
-        UNIT_ASSERT(claim && claim->Task == consumer->Task);
+        UNIT_ASSERT(claim && claim->Task->TaskId == 1);
         t.Run(std::move(*claim), false);
     }
 

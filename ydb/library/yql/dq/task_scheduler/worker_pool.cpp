@@ -521,7 +521,7 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
     double service = std::numeric_limits<double>::infinity();
     double score = service;
     double leastService = service;
-    std::tuple<bool, bool, bool, bool, ui32, bool, ui32, ui64> taskKey;
+    std::tuple<bool, bool, bool, bool, bool, ui32, ui32, ui64> taskKey;
     NActors::TActorId selectedQueryId, selectedActor;
     const auto now = TMonotonic::Now();
     const auto eligible = [](const TTask& task) {
@@ -531,17 +531,19 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
         const auto distance = query.Graph ? query.Graph->GetResultDistance(task.State.TaskId) : std::nullopt;
         const auto* node = query.Graph ? query.Graph->FindTask(task.State.TaskId) : nullptr;
         const bool source = node && node->HasSource;
-        // The scan keeps running while it can push. Aging rotates joins among
-        // themselves and must not hand a worker to a join while the scan is ready.
-        // Joins then run toward the result, so the orderkey join beats the wider side.
+        // A join with unread spill on its input runs before the scan: that is the
+        // task that drains the channel. A join with a free input stays behind the
+        // scan. Aging rotates those joins and must not lift them on its own.
+        // Among joins, the one closer to the result runs first.
         ui32 chain = std::numeric_limits<ui32>::max();
         if (distance && source) {
             chain = std::numeric_limits<ui32>::max() - *distance;
         } else if (distance) {
             chain = *distance;
         }
-        return std::tuple{!KnownReady(task.State), !source, Selections - task.SelectionAt < AgingSelections,
-            task.State.OutputSpilling, chain, !task.State.ChannelSaturated,
+        return std::tuple{!KnownReady(task.State), !task.State.ChannelSaturated, !source,
+            Selections - task.SelectionAt < AgingSelections,
+            task.State.OutputSpilling, chain,
             WorkRank(task.State.Classification.Work), task.Sequence};
     };
     for (auto id : ReadyQueries) {
@@ -564,9 +566,9 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
             }
             // An uncertain task can lose to ready work in a nearby CPU-service
             // band. Remove the penalty after it has waited through enough picks.
-            // get<2> is the recent-selection bit: a starved recheck drops the penalty.
+            // get<3> is the recent-selection bit: a starved recheck drops the penalty.
             const double candidateScore = candidateService
-                + (PreferReadyQueries && std::get<2>(key) && std::get<0>(key) ? RecheckPenaltyUs : 0.0);
+                + (PreferReadyQueries && std::get<3>(key) && std::get<0>(key) ? RecheckPenaltyUs : 0.0);
             if (!selectedTask || candidateScore < score
                 || (candidateScore == score && (selectedQuery == &query ? key < taskKey
                     : task.Sequence < selectedTask->Sequence))) {
@@ -581,7 +583,7 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
         }
     }
     bool consumerPriorityChangedSelection = false;
-    if (selectedTask && !std::get<5>(taskKey) && selectedQuery->ReadyTasks.size() > 1) {
+    if (selectedTask && !std::get<1>(taskKey) && selectedQuery->ReadyTasks.size() > 1) {
         const TTask* baseline = nullptr;
         std::tuple<bool, bool, bool, bool, ui32, ui32, ui64> baselineKey;
         for (auto actor : selectedQuery->ReadyTasks) {
@@ -590,8 +592,8 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
                 continue;
             }
             const auto key = keyFor(*selectedQuery, candidate);
-            const auto withoutSaturation = std::tuple{std::get<0>(key), std::get<1>(key), std::get<2>(key),
-                std::get<3>(key), std::get<4>(key), std::get<6>(key), std::get<7>(key)};
+            const auto withoutSaturation = std::tuple{std::get<0>(key), std::get<2>(key), std::get<3>(key),
+                std::get<4>(key), std::get<5>(key), std::get<6>(key), std::get<7>(key)};
             if (!baseline || withoutSaturation < baselineKey) {
                 baseline = &candidate;
                 baselineKey = withoutSaturation;
@@ -608,14 +610,16 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
         ++*LocalConsumerHints;
     }
     // Let the normal policy select the query first, including its cross-query
-    // tie breaker. Within it, locality never beats known readiness, aging,
-    // a source, or a task whose outputs are not all spilling.
+    // tie breaker. Within it, locality never beats known readiness, a saturated
+    // input, a source, aging, or a task whose outputs are not all spilling.
     if (selectedTask && hint.Consumer && hint.Query == selectedQueryId) {
         auto it = selectedQuery->Tasks.find(hint.Consumer);
         if (it != selectedQuery->Tasks.end() && eligible(it->second) && it->second.State.Revision == hint.ReadyRevision) {
             const auto consumerKey = keyFor(*selectedQuery, it->second);
-            if (std::tie(std::get<0>(consumerKey), std::get<1>(consumerKey), std::get<2>(consumerKey), std::get<3>(consumerKey))
-                <= std::tie(std::get<0>(taskKey), std::get<1>(taskKey), std::get<2>(taskKey), std::get<3>(taskKey)))
+            if (std::tie(std::get<0>(consumerKey), std::get<1>(consumerKey), std::get<2>(consumerKey),
+                    std::get<3>(consumerKey), std::get<4>(consumerKey))
+                <= std::tie(std::get<0>(taskKey), std::get<1>(taskKey), std::get<2>(taskKey),
+                    std::get<3>(taskKey), std::get<4>(taskKey)))
             {
                 localConsumer = true;
                 localityChangedSelection = selectedActor != hint.Consumer;
@@ -667,11 +671,11 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
         selection["query_weight"] = selectedQuery->Weight;
         selection["query_running"] = selectedQuery->Running;
         selection["reserved_cpu_us"] = reserveCpuUs;
-        selection["aging_override"] = !std::get<2>(taskKey);
+        selection["aging_override"] = !std::get<3>(taskKey);
         selection["known_ready"] = !std::get<0>(taskKey);
-        selection["source"] = !std::get<1>(taskKey);
-        selection["output_spilling"] = std::get<3>(taskKey);
-        selection["channel_saturated"] = !std::get<5>(taskKey);
+        selection["source"] = !std::get<2>(taskKey);
+        selection["output_spilling"] = std::get<4>(taskKey);
+        selection["channel_saturated"] = !std::get<1>(taskKey);
         selection["prefer_consumers"] = PreferConsumers;
         selection["readiness"] = TaskReadinessName(selectedTask->State.Classification.Readiness);
         selection["work"] = TaskWorkName(selectedTask->State.Classification.Work);

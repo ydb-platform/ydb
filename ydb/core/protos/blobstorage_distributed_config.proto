@@ -34,7 +34,7 @@ message TStorageConfig { // contents of storage metadata
     string SelfAssemblyUUID = 7; // self-assembly UUID generated when config is first created
     optional bytes ConfigComposite = 12; // compressed stored storage config YAML (if stored)
     NKikimrConfig.TSelfManagementConfig SelfManagementConfig = 13;
-    TStorageConfig PrevConfig = 100; // previous version of StorageConfig (if any)
+    TStorageConfig PrevConfig = 100; // parent identity, bootstrap drive definitions and transition state for retries
     optional bytes CompressedStorageYaml = 14; // compressed storage YAML config (if dual-config is enabled)
     optional uint64 ExpectedStorageYamlVersion = 15;
     NKikimrBridge.TClusterState ClusterState = 16; // for bridged clusters; not set for ordinary ones

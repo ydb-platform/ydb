@@ -1343,8 +1343,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT(changed);
         config.MutableClusterState()->SetPerPileState(1, NKikimrBridge::TClusterState::DISCONNECTED);
         config.SetGeneration(prev.GetGeneration() + 1);
-        config.MutablePrevConfig()->CopyFrom(prev);
-        if (const auto error = NStorage::TDistributedConfigKeeper::TransformConfigBeforeCommit(&config)) {
+        if (const auto error = NStorage::TDistributedConfigKeeper::TransformConfigBeforeCommit(&config, prev)) {
             UNIT_FAIL(*error);
         }
 
@@ -1368,7 +1367,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         next->MutableClusterState()->CopyFrom(cs);
         TBridgePileId::FromPileIndex(1).CopyToProto(next,
             &NKikimrBridge::TClusterStateDetails::TUnsyncedHistory::AddUnsyncedPiles);
-        if (const auto error = NStorage::TDistributedConfigKeeper::TrimHistoryEntries(&trimmed)) {
+        if (const auto error = NStorage::TDistributedConfigKeeper::TrimHistoryEntries(&trimmed, prev)) {
             UNIT_FAIL(*error);
         }
         const auto& trimmedHistory = trimmed.GetClusterStateDetails().GetUnsyncedHistory();
@@ -1385,8 +1384,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
             config.ClearBridgeRollback();
             config.MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(1));
             config.SetGeneration(prev.GetGeneration() + 1);
-            config.MutablePrevConfig()->CopyFrom(prev);
-            if (const auto error = NStorage::TDistributedConfigKeeper::UpdateClusterStateGeneration(&config)) {
+            if (const auto error = NStorage::TDistributedConfigKeeper::UpdateClusterStateGeneration(&config, prev)) {
                 UNIT_FAIL(*error);
             }
             return config.GetClusterState().GetGeneration();
@@ -2864,8 +2862,7 @@ selector_config: []
                         path, std::nullopt);
                 }
             }
-            return NStorage::HasConfigQuorum(committed, disks, TBridgePileId(),
-                *MakeNodeWardenConfig(committed), false);
+            return NStorage::HasConfigQuorum(committed, disks, TBridgePileId(), *MakeNodeWardenConfig(committed));
         };
 
         {
@@ -2893,6 +2890,15 @@ selector_config: []
             const auto& committed = metadata(1).GetCommittedStorageConfig();
             originalConfig.CopyFrom(committed);
             UNIT_ASSERT_VALUES_EQUAL(committed.GetGeneration(), 1u);
+            const auto drives = [](const auto& config) {
+                std::vector<std::pair<ui32, TString>> result;
+                NStorage::EnumerateConfigDrives(config, 0, [&](const auto& node, const auto& drive) {
+                    result.emplace_back(node.GetNodeId(), drive.GetPath());
+                });
+                return result;
+            };
+            UNIT_ASSERT(drives(committed.GetPrevConfig()) == drives(config));
+            UNIT_ASSERT(!committed.GetPrevConfig().GetBlobStorageConfig().HasServiceSet());
             UNIT_ASSERT(HasQuorum(committed, {1}));
             for (ui32 nodeId : {2, 3}) {
                 UNIT_ASSERT(!metadata(nodeId).HasCommittedStorageConfig());
@@ -3179,8 +3185,8 @@ selector_config: []
         }
         UNIT_ASSERT_VALUES_EQUAL(available.size(), 18);
         const auto nwConfig = MakeNodeWardenConfig(newer);
-        UNIT_ASSERT(NStorage::HasConfigQuorum(newer, available, {}, *nwConfig, false));
-        UNIT_ASSERT(NStorage::HasConfigQuorum(newer, newerDisks, {}, *nwConfig, false));
+        UNIT_ASSERT(NStorage::HasConfigQuorum(newer, available, {}, *nwConfig));
+        UNIT_ASSERT(NStorage::HasConfigQuorum(newer, newerDisks, {}, *nwConfig));
 
         TTestActorSystem runtime(9);
         runtime.Start();
@@ -3558,8 +3564,7 @@ selector_config: []
                                                      ui64 generation = 2) {
         auto updated = config;
         updated.SetGeneration(generation);
-        updated.MutablePrevConfig()->CopyFrom(config);
-        updated.MutablePrevConfig()->ClearPrevConfig();
+        NStorage::SetStorageConfigParent(updated, config);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&updated);
         return updated;
     }
@@ -3679,10 +3684,13 @@ selector_config: []
         UNIT_ASSERT(QueryKeeper(fixture.Runtime, fixture.Root()).HasScepter());
     }
 
-    Y_UNIT_TEST(RecoveryReproposesPossiblyChosenProposal) {
+    Y_UNIT_TEST_TWIN(RecoveryReproposesPossiblyChosenProposal, fullParent) {
         TCommitConfirmationFixture fixture(true);
         fixture.Start(true);
         auto updated = MakeNextConfig(fixture.Config);
+        if constexpr (fullParent) {
+            updated.MutablePrevConfig()->CopyFrom(fixture.Config);
+        }
         updated.MutableSelfManagementConfig()->SetAutomaticBootstrap(true);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&updated);
         auto collected = MakeCollectedConfigs(fixture.Config, {2, 3});
@@ -3695,7 +3703,7 @@ selector_config: []
         UNIT_ASSERT(result.ConfigToPropose);
         UNIT_ASSERT(result.PropositionBase);
         UNIT_ASSERT_VALUES_EQUAL(result.ConfigToPropose->GetFingerprint(), updated.GetFingerprint());
-        UNIT_ASSERT_VALUES_EQUAL(result.PropositionBase->GetFingerprint(), updated.GetFingerprint());
+        UNIT_ASSERT_VALUES_EQUAL(result.PropositionBase->SerializeAsString(), fixture.Config.SerializeAsString());
         UNIT_ASSERT(result.ConfigToPropose->GetSelfManagementConfig().GetAutomaticBootstrap());
         UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().GetFingerprint(),
             fixture.Config.GetFingerprint());
@@ -5282,14 +5290,24 @@ selector_config: []
     }
 
     bool HasTestConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config,
-                            const std::vector<ui32>& nodeIds, const NKikimrConfig::TBridgeConfig *bridge = nullptr) {
+                            const std::vector<ui32>& nodeIds, const NKikimrConfig::TBridgeConfig *bridge = nullptr,
+                            const NKikimrBlobStorage::TStorageConfig *prev = nullptr) {
         std::vector<NStorage::TSuccessfulDisk> disks;
         for (ui32 nodeId : nodeIds) {
             disks.emplace_back(NStorage::TNodeIdentifier(config.GetAllNodes(nodeId - 1)),
                 "/dev/disk" + std::to_string(nodeId) + "_1", nodeId * 1000 + 1);
         }
         return NStorage::HasConfigQuorum(config, disks, TBridgePileId(),
-            *MakeNodeWardenConfig(config, bridge), true);
+            *MakeNodeWardenConfig(config, bridge), prev);
+    }
+
+    Y_UNIT_TEST(ReassignmentChecksPreviousStorageQuorum) {
+        const auto base = MakeStorageConfig(3, 1, {1});
+        auto proposed = MakeStorageConfig(3, 2, {2});
+        NStorage::SetStorageConfigParent(proposed, base);
+        UNIT_ASSERT(HasTestConfigQuorum(proposed, {2, 3}));
+        UNIT_ASSERT(!HasTestConfigQuorum(proposed, {2, 3}, nullptr, &base));
+        UNIT_ASSERT(HasTestConfigQuorum(proposed, {1, 2}, nullptr, &base));
     }
 
     void CheckChosenUpdateSurvivesQuorumTurnover(bool fragmentWithChild) {
@@ -5355,6 +5373,8 @@ selector_config: []
         }), "the chosen update did not reach its delayed commit publication");
         const auto accepted = fixture.Metadata(1).GetProposedStorageConfig();
         UNIT_ASSERT_VALUES_EQUAL(accepted.GetGeneration(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(accepted.GetPrevConfig().SerializeAsString(),
+            NStorage::TStorageConfigMeta(fixture.Config).SerializeAsString());
         UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(1).GetCommittedStorageConfig().GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(2).GetCommittedStorageConfig().GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(2).GetProposedStorageConfig().GetGeneration(), 2);
@@ -5562,12 +5582,12 @@ selector_config: []
             expanded.MutableAllNodes(nodeId - 1)->MutableLocation()->CopyFrom(
                 fixture.Config.GetAllNodes(nodeId - 4).GetLocation());
         }
-        expanded.MutablePrevConfig()->CopyFrom(fixture.Config);
+        NStorage::SetStorageConfigParent(expanded, fixture.Config);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&expanded);
 
         UNIT_ASSERT(HasTestConfigQuorum(fixture.Config, {1, 2, 3}));
-        UNIT_ASSERT(!HasTestConfigQuorum(expanded, {1, 2, 3}));
-        UNIT_ASSERT(HasTestConfigQuorum(expanded, {1, 2, 3, 4, 5, 6}));
+        UNIT_ASSERT(!HasTestConfigQuorum(expanded, {1, 2, 3}, nullptr, &fixture.Config));
+        UNIT_ASSERT(HasTestConfigQuorum(expanded, {1, 2, 3, 4, 5, 6}, nullptr, &fixture.Config));
 
         auto& runtime = fixture.Runtime;
         TActorId edge;
@@ -5730,7 +5750,7 @@ selector_config: []
         for (auto& node : *expanded.MutableAllNodes()) {
             node.MutableLocation()->CopyFrom(fixture.Config.GetAllNodes((node.GetNodeId() - 1) % 3).GetLocation());
         }
-        expanded.MutablePrevConfig()->CopyFrom(fixture.Config);
+        NStorage::SetStorageConfigParent(expanded, fixture.Config);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&expanded);
 
         auto& runtime = fixture.Runtime;
@@ -6349,10 +6369,7 @@ selector_config: []
         fixture.Start();
         auto& [config, state, runtime, keepers] = fixture;
         SimUntil(runtime, [] { return false; }, TDuration::Seconds(1));
-        auto updated = config;
-        updated.SetGeneration(2);
-        updated.MutablePrevConfig()->CopyFrom(config);
-        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&updated);
+        const auto updated = MakeNextConfig(config);
 
         bool firstDeliveryDropped = false;
         ui32 repeatedDeliveries = 0;
@@ -6409,10 +6426,7 @@ selector_config: []
         fixture.Start();
         auto& [config, state, runtime, keepers] = fixture;
         SimUntil(runtime, [] { return false; }, TDuration::Seconds(1));
-        auto updated = config;
-        updated.SetGeneration(2);
-        updated.MutablePrevConfig()->CopyFrom(config);
-        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&updated);
+        const auto updated = MakeNextConfig(config);
         auto different = updated;
         different.SetSelfAssemblyUUID("other-config");
         if (higherGeneration) {
@@ -7874,12 +7888,12 @@ selector_config: []
                 "/dev/disk" + std::to_string(nodeId) + "_1", nodeId * 1000 + 1);
             if (nodeId == 78) {
                 UNIT_ASSERT(!NStorage::HasConfigQuorum(fixture.Config, disks, TBridgePileId(),
-                    *nodeWardenConfig, true));
+                    *nodeWardenConfig));
             }
         }
         disks.pop_back();
         UNIT_ASSERT(NStorage::HasConfigQuorum(fixture.Config, disks, TBridgePileId(),
-            *nodeWardenConfig, true));
+            *nodeWardenConfig));
         const auto replace = [&](ui64 version, bool silentLeaf) {
             UNIT_ASSERT(SimUntil(runtime, [&] { return !runtime.HasImmediateEvents(); }, TDuration::Seconds(1)));
             replaceResponse.reset();
@@ -8036,8 +8050,8 @@ selector_config: []
 
         UNIT_ASSERT(HasTestConfigQuorum(fixture.Config, {2, 3, 4, 6, 7, 8}, &bridge));
         UNIT_ASSERT(!HasTestConfigQuorum(fixture.Config, {3, 4, 7, 8}, &bridge));
-        UNIT_ASSERT(!HasTestConfigQuorum(updated, {2, 6}, &bridge));
-        UNIT_ASSERT(HasTestConfigQuorum(updated, {1, 2, 5, 6}, &bridge));
+        UNIT_ASSERT(!HasTestConfigQuorum(updated, {2, 6}, &bridge, &fixture.Config));
+        UNIT_ASSERT(HasTestConfigQuorum(updated, {1, 2, 5, 6}, &bridge, &fixture.Config));
         const auto result = ProcessCollectedConfigs(fixture, collected);
         UNIT_ASSERT_C(!result.ErrorReason, result.ErrorReason.value_or(""));
         UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(runtime, fixture.Root()).GetQueryConfig().GetConfig().GetFingerprint(),
@@ -8063,7 +8077,7 @@ selector_config: []
         auto& bridge = runtime.GetAppDataBridgeConfig();
         bridge.AddPiles()->SetName("pile0");
         bridge.AddPiles()->SetName("pile1");
-        UNIT_ASSERT(HasTestConfigQuorum(updated, {1, 2, 3, 4, 5, 6}, &bridge));
+        UNIT_ASSERT(HasTestConfigQuorum(updated, {1, 2, 3, 4, 5, 6}, &bridge, &config));
         runtime.Start();
         Y_DEFER { runtime.Stop(); };
         std::array<TActorId, 9> keepers;
@@ -9019,7 +9033,7 @@ selector_config: []
         for (auto& node : *expanded.MutableAllNodes()) {
             node.MutableLocation()->CopyFrom(fixture.Config.GetAllNodes((node.GetNodeId() - 1) % 9).GetLocation());
         }
-        expanded.MutablePrevConfig()->CopyFrom(fixture.Config);
+        NStorage::SetStorageConfigParent(expanded, fixture.Config);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&expanded);
         const std::vector<ui32> oldNodes{1, 2, 3, 4, 5, 6, 7, 8, 9};
         std::vector<ui32> healthyNodes;
@@ -9032,8 +9046,8 @@ selector_config: []
         auto healthyOldNodes = oldNodes;
         std::erase(healthyOldNodes, disconnectedNodeId);
         UNIT_ASSERT(HasTestConfigQuorum(fixture.Config, healthyOldNodes));
-        UNIT_ASSERT(!HasTestConfigQuorum(expanded, oldNodes));
-        UNIT_ASSERT(HasTestConfigQuorum(expanded, healthyNodes));
+        UNIT_ASSERT(!HasTestConfigQuorum(expanded, oldNodes, nullptr, &fixture.Config));
+        UNIT_ASSERT(HasTestConfigQuorum(expanded, healthyNodes, nullptr, &fixture.Config));
 
         auto& runtime = fixture.Runtime;
         TActorId edge;
@@ -9159,8 +9173,8 @@ selector_config: []
             UNIT_FAIL(*error);
         }
         fixture.Config.SetGeneration(beforeConversion.GetGeneration() + 1);
-        fixture.Config.MutablePrevConfig()->CopyFrom(beforeConversion);
-        if (const auto error = NStorage::TDistributedConfigKeeper::TransformConfigBeforeCommit(&fixture.Config)) {
+        NStorage::SetStorageConfigParent(fixture.Config, beforeConversion);
+        if (const auto error = NStorage::TDistributedConfigKeeper::TransformConfigBeforeCommit(&fixture.Config, beforeConversion)) {
             UNIT_FAIL(*error);
         }
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
@@ -9961,7 +9975,7 @@ selector_config: []
             UNIT_ASSERT(changed);
         }
         expanded.SetGeneration(2);
-        expanded.MutablePrevConfig()->CopyFrom(fixture.Config);
+        NStorage::SetStorageConfigParent(expanded, fixture.Config);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&expanded);
         auto fresh = expanded;
         fresh.SetGeneration(0);
@@ -10825,11 +10839,11 @@ selector_config: []
         const auto nwConfig = MakeNodeWardenConfig(fixture.Config);
         TStringStream quorumError;
         UNIT_ASSERT_C(NStorage::HasConfigQuorum(fixture.Config, readable,
-            TBridgePileId(), *nwConfig, false, &quorumError), quorumError.Str());
+            TBridgePileId(), *nwConfig, nullptr, &quorumError), quorumError.Str());
         auto insufficient = readable;
         insufficient.pop_back();
         UNIT_ASSERT(!NStorage::HasConfigQuorum(fixture.Config, insufficient,
-            TBridgePileId(), *nwConfig, false));
+            TBridgePileId(), *nwConfig));
     }
 
     Y_UNIT_TEST(EmptySubtreeRefillsTogether) {

@@ -445,7 +445,7 @@ namespace NKikimr::NStorage {
             }
         }
         const bool configQuorum = HasConfigQuorum(quorumConfig, successfulDisks, TBridgePileId(),
-            *Cfg, false, &err);
+            *Cfg, nullptr, &err);
 
         YDB_LOG_DEBUG("ProcessCollectConfigs",
             {"marker", "NWDC31"},
@@ -550,7 +550,7 @@ namespace NKikimr::NStorage {
                     && IsBootstrapProposition(r.Config) && !ValidateConfig(r.Config)
                     && HasDiskQuorum(r.Config, *havingDisksPtr, TBridgePileId(), *Cfg, nullptr, "bootstrap");
                 if (published || bootstrapQuorum
-                    || HasConfigQuorum(r.Config, *havingDisksPtr, TBridgePileId(), *Cfg, false)) {
+                    || HasConfigQuorum(r.Config, *havingDisksPtr, TBridgePileId(), *Cfg)) {
                     admittedConfigs.insert(meta);
                     const ui64 generation = r.Config.GetGeneration();
                     auto& [committed, configPtr] = configsWithQuorum[generation];
@@ -630,7 +630,7 @@ namespace NKikimr::NStorage {
                     }
                 });
                 if (requiredParents.contains(meta)
-                    || HasConfigQuorum(config, possibleDisks, TBridgePileId(), *Cfg, false)) {
+                    || HasConfigQuorum(config, possibleDisks, TBridgePileId(), *Cfg)) {
                     if (const auto error = ValidateConfig(config)) {
                         return {.ErrorReason = TStringBuilder() << "Invalid possibly chosen configuration: " << *error};
                     }
@@ -693,9 +693,11 @@ namespace NKikimr::NStorage {
         }
 
         if (recoveryProposal) {
+            // The ancestry check found the immediate parent as an independent record in this collection.
+            const auto& parent = persistentConfigs.at(TStorageConfigMeta(recoveryProposal->GetPrevConfig())).Config;
             return {.RecoveredConfig = *persistedConfig,
                     .RequiresRecoveryProposition = true,
-                    .PropositionBase = *recoveryProposal,
+                    .PropositionBase = parent,
                     .ConfigToPropose = *recoveryProposal};
         }
 
@@ -705,7 +707,7 @@ namespace NKikimr::NStorage {
                 emptyDisks.emplace_back(TNodeIdentifier(disk.GetNodeId()), disk.GetPath(),
                     disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
             }
-            if (!HasConfigQuorum(*StorageConfig, emptyDisks, TBridgePileId(), *Cfg, false)) {
+            if (!HasConfigQuorum(*StorageConfig, emptyDisks, TBridgePileId(), *Cfg)) {
                 THashSet<std::pair<TNodeIdentifier, TString>> readableDrives;
                 for (const auto& [node, path, guid] : emptyDisks) {
                     readableDrives.emplace(node, path);
@@ -850,7 +852,7 @@ namespace NKikimr::NStorage {
             finishWithError("Configuration changed while proposing; configuration recovery is required");
             ScheduleConfigRecovery();
         } else if (TStringStream err; HasConfigQuorum(proposition.StorageConfig, successfulDisks, TBridgePileId(),
-                *Cfg, proposition.MindPrev, &err)) {
+                *Cfg, proposition.MindPrev ? proposition.Base.get() : nullptr, &err)) {
             // apply configuration and spread it
             if (advancesConflict || proposition.RecoveryProposition) {
                 ConfigRecoveryRequired = false;
@@ -858,7 +860,7 @@ namespace NKikimr::NStorage {
             ApplyCommittedStorageConfig(proposition.StorageConfig);
 
             // this proposition came from actor -- we notify that actor and finish operation
-            Send(proposition.ActorId, new TEvPrivate::TEvConfigProposed(proposition.StorageConfig));
+            Send(proposition.ActorId, new TEvPrivate::TEvConfigProposed(std::move(proposition.StorageConfig)));
         } else {
             YDB_LOG_DEBUG("No quorum for ProposedStorageConfig",
                 {"marker", "NWDC47"},
@@ -1013,6 +1015,7 @@ namespace NKikimr::NStorage {
                 && (!LocalCommittedStorageConfig || !LocalCommittedStorageConfig->GetGeneration())
                 && !bootstrap && !task.TargetedPropositionAdmitted) {
                 const auto containsSelf = [this](const auto& node) { return node.GetNodeId() == SelfNode.NodeId(); };
+                // Full parent records allow an early membership check. For compact records the root checks its base.
                 if (!task.Request.HasCookie() || !task.Request.HasTaskId() || !proposed.HasPrevConfig()
                     || std::ranges::any_of(proposed.GetPrevConfig().GetAllNodes(), containsSelf)
                     || !std::ranges::any_of(proposed.GetAllNodes(), containsSelf)) {
@@ -1437,7 +1440,7 @@ namespace NKikimr::NStorage {
     }
 
     std::optional<TString> TDistributedConfigKeeper::StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
-            const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev,
+            TStorageConfigPtr propositionBase, TActorId actorId, bool mindPrev,
             bool advancesConflictingGeneration, bool recoveryProposition) {
         // ensure we are not proposing any other config right now
         Y_ABORT_UNLESS(!CurrentProposition);
@@ -1446,19 +1449,13 @@ namespace NKikimr::NStorage {
             if (!CheckFingerprint(*configToPropose)) {
                 return "Recovery proposition fingerprint is incorrect";
             }
-            propositionBase = configToPropose->HasPrevConfig() ? &configToPropose->GetPrevConfig() : nullptr;
         } else {
-            if (propositionBase) {
-                if (propositionBase->GetGeneration() == configToPropose->GetGeneration()) {
-                    configToPropose->SetGeneration(propositionBase->GetGeneration() + 1);
-                } else {
-                    Y_VERIFY_S(propositionBase->GetGeneration() < configToPropose->GetGeneration(),
-                        "PropositionBase# " << NKikimr::SecureDebugString(*propositionBase)
-                        << " ConfigToPropose# " << NKikimr::SecureDebugString(*configToPropose));
-                }
-
-                configToPropose->MutablePrevConfig()->CopyFrom(*propositionBase);
-                configToPropose->MutablePrevConfig()->ClearPrevConfig();
+            if (propositionBase->GetGeneration() == configToPropose->GetGeneration()) {
+                configToPropose->SetGeneration(propositionBase->GetGeneration() + 1);
+            } else {
+                Y_VERIFY_S(propositionBase->GetGeneration() < configToPropose->GetGeneration(),
+                    "PropositionBase# " << NKikimr::SecureDebugString(*propositionBase)
+                    << " ConfigToPropose# " << NKikimr::SecureDebugString(*configToPropose));
             }
 
             if (StorageConfig->GetGeneration()) {
@@ -1466,10 +1463,11 @@ namespace NKikimr::NStorage {
                 configToPropose->SetGeneration(Max(configToPropose->GetGeneration(), observedGeneration + 1));
             }
 
-            if (auto error = TransformConfigBeforeCommit(configToPropose)) {
+            if (auto error = TransformConfigBeforeCommit(configToPropose, *propositionBase)) {
                 return error;
             }
 
+            SetStorageConfigParent(*configToPropose, *propositionBase);
             UpdateFingerprint(configToPropose);
         }
 
@@ -1487,26 +1485,23 @@ namespace NKikimr::NStorage {
         YDB_LOG_INFO("StartProposition",
             {"marker", "NWDC60"},
             {"configToPropose", *configToPropose},
-            {"propositionBase", propositionBase},
+            {"propositionBase", propositionBase.get()},
             {"storageConfig", StorageConfig.get()},
             {"actorId", actorId});
 
-        if (propositionBase) {
-            if (auto error = ValidateConfig(*propositionBase)) {
-                return TStringBuilder() << "failed to propose configuration, base config contains errors: " << *error;
-            }
-            if (auto error = ValidateConfigUpdate(*propositionBase, *configToPropose)) {
-                return TStringBuilder() << "incorrect config proposed: " << *error
-                    << " Base# " << NKikimr::SecureDebugString(*propositionBase)
-                    << " Proposed# " << NKikimr::SecureDebugString(*configToPropose);
-            }
-        } else if (auto error = ValidateConfig(*configToPropose)) {
-            return TStringBuilder() << "incorrect config proposed: " << *error;
+        if (auto error = ValidateConfig(*propositionBase)) {
+            return TStringBuilder() << "failed to propose configuration, base config contains errors: " << *error;
+        }
+        if (auto error = ValidateConfigUpdate(*propositionBase, *configToPropose)) {
+            return TStringBuilder() << "incorrect config proposed: " << *error
+                << " Base# " << NKikimr::SecureDebugString(*propositionBase)
+                << " Proposed# " << NKikimr::SecureDebugString(*configToPropose);
         }
 
         // remember proposition
         CurrentProposition.emplace(TProposition{
             .StorageConfig = *configToPropose,
+            .Base = std::move(propositionBase),
             .ActorId = actorId,
             .MindPrev = mindPrev,
             .ConfigRecoveryGeneration = ConfigRecoveryGeneration,

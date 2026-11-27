@@ -324,7 +324,6 @@ public:
     NPDisk::TMainKey MainKey;
     TString CommittedYamlPath;
     TString ProposedYamlPath;
-    TString PrevYamlPath;
     bool JsonOut = false;
 
     void Config(TConfig& config) override {
@@ -337,8 +336,6 @@ public:
             .Optional().RequiredArgument("PATH").StoreResult(&CommittedYamlPath);
         config.Opts->AddLongOption("proposed-yaml", "Extract ProposedStorageConfig.ConfigComposite to file")
             .Optional().RequiredArgument("PATH").StoreResult(&ProposedYamlPath);
-        config.Opts->AddLongOption("prev-yaml", "Extract CommittedStorageConfig.PrevConfig.ConfigComposite to file")
-            .Optional().RequiredArgument("PATH").StoreResult(&PrevYamlPath);
         config.Opts->AddLongOption("json", "Print metadata as JSON to stdout")
             .Optional().StoreTrue(&JsonOut);
     }
@@ -350,7 +347,7 @@ public:
     }
 
     int Run(TConfig& /*config*/) override {
-        const bool requestedYaml = !CommittedYamlPath.empty() || !ProposedYamlPath.empty() || !PrevYamlPath.empty();
+        const bool requestedYaml = !CommittedYamlPath.empty() || !ProposedYamlPath.empty();
 
         std::optional<NKikimrBlobStorage::TPDiskMetadataRecord> metadata;
         try {
@@ -408,11 +405,6 @@ public:
                 rec.HasProposedStorageConfig() && rec.GetProposedStorageConfig().HasConfigComposite())) {
             return EXIT_FAILURE;
         }
-        if (!decomposeToFile(PrevYamlPath, "CommittedStorageConfig.PrevConfig.ConfigComposite",
-                [&]{ return rec.GetCommittedStorageConfig().GetPrevConfig().GetConfigComposite(); },
-                rec.HasCommittedStorageConfig() && rec.GetCommittedStorageConfig().HasPrevConfig() && rec.GetCommittedStorageConfig().GetPrevConfig().HasConfigComposite())) {
-            return EXIT_FAILURE;
-        }
 
         if (JsonOut) {
             using namespace google::protobuf::util;
@@ -452,7 +444,6 @@ public:
     TString JsonFile;
     TString CommittedYamlPath;
     TString ProposedYamlPath;
-    TString PrevYamlPath;
     TVector<NPDisk::TKey> MainKeyTmp;
     NPDisk::TMainKey MainKey;
     bool ClearProposed = false;
@@ -475,7 +466,7 @@ public:
             .Optional().StoreTrue(&ClearProposed);
         config.Opts->AddLongOption("validate-config", "Validate storage configs before writing")
             .Optional().StoreTrue(&ValidateCfg);
-        config.Opts->AddLongOption("auto-prev", "Automatically save current CommittedStorageConfig to PrevConfig when applying new committed-yaml")
+        config.Opts->AddLongOption("auto-prev", "Record the current committed configuration as the parent when applying new committed-yaml")
             .Optional().StoreTrue(&AutoPrev);
         config.Opts->AddLongOption('k', "main-key", "Encryption main-key to use for metadata operations").RequiredArgument("NUM")
             .Optional().AppendTo(&MainKeyTmp);
@@ -538,8 +529,8 @@ public:
         };
 
         if (AutoPrev && !CommittedYamlPath.empty() && rec.HasCommittedStorageConfig()) {
-            auto oldCommitted = rec.GetCommittedStorageConfig();
-            *rec.MutableCommittedStorageConfig()->MutablePrevConfig() = oldCommitted;
+            auto& committed = *rec.MutableCommittedStorageConfig();
+            NStorage::SetStorageConfigParent(committed, committed);
         }
 
         if (!CommittedYamlPath.empty()) {

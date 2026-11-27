@@ -14,22 +14,20 @@ Y_UNIT_TEST_SUITE(BridgeClusterState) {
         NKikimrBlobStorage::TStorageConfig config;
         config.SetGeneration(1);
         config.MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(2));
-        auto update = [&] {
-            if (const auto error = NStorage::TDistributedConfigKeeper::UpdateClusterStateGeneration(&config)) {
+        auto update = [&](const NKikimrBlobStorage::TStorageConfig& prev) {
+            if (const auto error = NStorage::TDistributedConfigKeeper::UpdateClusterStateGeneration(&config, prev)) {
                 UNIT_FAIL(*error);
             }
-            if (const auto error = NStorage::TDistributedConfigKeeper::TrimHistoryEntries(&config)) {
+            if (const auto error = NStorage::TDistributedConfigKeeper::TrimHistoryEntries(&config, prev)) {
                 UNIT_FAIL(*error);
             }
         };
-        update();
+        update({});
         auto advance = [&](TState::EPileState state) {
-            auto prev = config;
-            prev.ClearPrevConfig();
-            config.MutablePrevConfig()->CopyFrom(prev);
+            const auto prev = config;
             config.SetGeneration(prev.GetGeneration() + 1);
             config.MutableClusterState()->SetPerPileState(1, state);
-            update();
+            update(prev);
         };
 
         advance(TState::DISCONNECTED);

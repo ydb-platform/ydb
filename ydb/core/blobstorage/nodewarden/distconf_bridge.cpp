@@ -219,14 +219,15 @@ namespace NKikimr::NStorage {
         }
     }
 
-    std::optional<TString> TDistributedConfigKeeper::TransformConfigBeforeCommit(NKikimrBlobStorage::TStorageConfig *config) {
+    std::optional<TString> TDistributedConfigKeeper::TransformConfigBeforeCommit(NKikimrBlobStorage::TStorageConfig *config,
+            const NKikimrBlobStorage::TStorageConfig& prev) {
         if (auto error = CheckSynchronizedPiles(config)) { // can change cluster state
             return error;
-        } else if (auto error = UpdateClusterStateGeneration(config)) { // transforms cluster state change into unsynced history
+        } else if (auto error = UpdateClusterStateGeneration(config, prev)) { // transforms cluster state change into unsynced history
             return error;
-        } else if (auto error = TrimHistoryEntries(config)) { // trims unsynced history entries
+        } else if (auto error = TrimHistoryEntries(config, prev)) { // trims unsynced history entries
             return error;
-        } else if (auto error = UpdateBridgeGroupStateGenerations(config)) { // needs final cluster state generation
+        } else if (auto error = UpdateBridgeGroupStateGenerations(config, prev)) { // needs final cluster state generation
             return error;
         } else if (auto error = ExtractStateStorageConfig(config)) { // extract final state storage config
             return error;
@@ -272,14 +273,13 @@ namespace NKikimr::NStorage {
         return std::nullopt;
     }
 
-    std::optional<TString> TDistributedConfigKeeper::UpdateClusterStateGeneration(NKikimrBlobStorage::TStorageConfig *config) {
-        if (config->HasClusterState() && (!config->GetPrevConfig().GetGeneration() ||
-                !config->GetPrevConfig().HasClusterState() || // conversion from non-bridged cluster
-                !NBridge::IsSameClusterState(config->GetClusterState(), config->GetPrevConfig().GetClusterState()))) {
+    std::optional<TString> TDistributedConfigKeeper::UpdateClusterStateGeneration(NKikimrBlobStorage::TStorageConfig *config,
+            const NKikimrBlobStorage::TStorageConfig& prev) {
+        if (config->HasClusterState() && (!prev.GetGeneration() || !prev.HasClusterState() ||
+                !NBridge::IsSameClusterState(config->GetClusterState(), prev.GetClusterState()))) {
             // update cluster state generation if something has changed
             // the cluster bridged again goes on with the generations of the one rolled back, so that they don't repeat
             // (requests expecting the generation, nodes of piles removed then knowing newer ones)
-            const auto& prev = config->GetPrevConfig();
             ui64 prevGeneration = 0;
             if (prev.HasClusterState()) {
                 prevGeneration = prev.GetClusterState().GetGeneration();
@@ -309,14 +309,15 @@ namespace NKikimr::NStorage {
         return std::nullopt;
     }
 
-    std::optional<TString> TDistributedConfigKeeper::TrimHistoryEntries(NKikimrBlobStorage::TStorageConfig *config) {
+    std::optional<TString> TDistributedConfigKeeper::TrimHistoryEntries(NKikimrBlobStorage::TStorageConfig *config,
+            const NKikimrBlobStorage::TStorageConfig& prev) {
         if (config->HasClusterStateDetails()) {
             auto *details = config->MutableClusterStateDetails();
             auto *history = details->MutableUnsyncedHistory();
 
             Y_DEBUG_ABORT_UNLESS(config->HasClusterState());
             const auto& clusterState = config->GetClusterState();
-            const auto& prevClusterState = config->GetPrevConfig().GetClusterState();
+            const auto& prevClusterState = prev.GetClusterState();
 
             int maxFullySyncedIndex = -1;
             for (int i = 0; i < history->size(); ++i) {
@@ -347,12 +348,12 @@ namespace NKikimr::NStorage {
     }
 
     std::optional<TString> TDistributedConfigKeeper::UpdateBridgeGroupStateGenerations(
-            NKikimrBlobStorage::TStorageConfig *config) {
+            NKikimrBlobStorage::TStorageConfig *config, const NKikimrBlobStorage::TStorageConfig& prev) {
         if (!config->HasClusterState()) {
             return std::nullopt;
         }
         THashMap<TGroupId, ui32> prevGenerations;
-        for (const auto& group : config->GetPrevConfig().GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+        for (const auto& group : prev.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
             prevGenerations.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID),
                 group.GetGroupGeneration());
         }

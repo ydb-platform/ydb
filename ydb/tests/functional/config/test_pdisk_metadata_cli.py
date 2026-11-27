@@ -6,7 +6,6 @@ import subprocess
 import tempfile
 import time
 import yaml
-import copy
 from hamcrest import assert_that
 import logging
 
@@ -210,9 +209,7 @@ class TestPDiskMetadata(object):
                            "--committed-yaml", yaml_path, "--json"])
             rec = json.loads(res.stdout)
 
-            old_committed = copy.deepcopy(rec.get("CommittedStorageConfig", {}))
-            old_generation = old_committed.get("Generation", 0)
-            old_committed.pop("PrevConfig", None)
+            old_committed = rec["CommittedStorageConfig"]
 
             with open(json_path, 'w') as f:
                 json.dump(rec, f)
@@ -240,12 +237,9 @@ class TestPDiskMetadata(object):
             rec_after = json.loads(res_after.stdout)
 
             new_committed = rec_after.get("CommittedStorageConfig", {})
-            new_prev = copy.deepcopy(new_committed.get("PrevConfig", {}))
-            new_prev.pop("PrevConfig", None)
-
-            assert_that(new_prev)
-            assert_that(new_prev.get("Generation") == old_generation)
-            assert_that(new_prev == old_committed)
-            assert_that("PrevConfig" not in new_prev or not new_prev.get("PrevConfig"))
+            assert_that(new_committed.get("PrevConfig") == {
+                "Generation": old_committed["Generation"],
+                "Fingerprint": old_committed["Fingerprint"],
+            })
             for n in self.cluster.nodes.values():
                 n.start()

@@ -147,6 +147,33 @@ namespace NKikimr::NStorage {
         Register(new TWriterActor(std::move(path), std::move(record), cookie));
     }
 
+    void SetStorageConfigParent(NKikimrBlobStorage::TStorageConfig& config, const NKikimrBlobStorage::TStorageConfig& parent) {
+        NKikimrBlobStorage::TStorageConfig prev;
+        prev.SetGeneration(parent.GetGeneration());
+        prev.SetFingerprint(parent.GetFingerprint());
+
+        // Bootstrap recovery checks that every drive in the original generation-zero base was read.
+        const auto& bs = parent.GetBlobStorageConfig();
+        if (config.GetGeneration() == 1 && !parent.GetGeneration() && bs.HasDefineBox()) {
+            prev.MutableAllNodes()->CopyFrom(parent.GetAllNodes());
+            auto *drives = prev.MutableBlobStorageConfig();
+            drives->MutableDefineBox()->CopyFrom(bs.GetDefineBox());
+            drives->MutableDefineHostConfig()->CopyFrom(bs.GetDefineHostConfig());
+        }
+
+        // A repeated disable or conversion-finished request must recognize the transition it is confirming.
+        if (!config.GetSelfManagementConfig().GetEnabled() && parent.GetSelfManagementConfig().GetEnabled()) {
+            prev.MutableSelfManagementConfig()->SetEnabled(true);
+        }
+        const auto& details = parent.GetClusterStateDetails();
+        if (!config.GetClusterStateDetails().GetBscConversionPending() && details.GetBscConversionPending()) {
+            auto *previous = prev.MutableClusterStateDetails();
+            previous->SetBscConversionPending(true);
+            previous->SetBscConversionId(details.GetBscConversionId());
+        }
+        config.MutablePrevConfig()->Swap(&prev);
+    }
+
     TString TDistributedConfigKeeper::CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config) {
         NKikimrBlobStorage::TStorageConfig temp;
         temp.CopyFrom(config);

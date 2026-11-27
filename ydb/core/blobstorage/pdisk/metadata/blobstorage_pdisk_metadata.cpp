@@ -1,8 +1,8 @@
 #include "blobstorage_pdisk_metadata.h"
+#include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_actorsystem_creator.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <library/cpp/openssl/crypto/sha.h>
 #include <future>
 
 namespace NKikimr {
@@ -149,18 +149,6 @@ std::optional<NKikimrBlobStorage::TPDiskMetadataRecord> ReadPDiskMetadata(
     Y_UNREACHABLE();
 }
 
-static void UpdateStorageConfigFingerprint(NKikimrBlobStorage::TStorageConfig* config) {
-    if (!config) {
-        return;
-    }
-    config->ClearFingerprint();
-    TString s;
-    const bool success = config->SerializeToString(&s);
-    Y_ABORT_UNLESS(success);
-    auto digest = NOpenSsl::NSha1::Calc(s.data(), s.size());
-    config->SetFingerprint(digest.data(), digest.size());
-}
-
 void WritePDiskMetadata(const TString& path, const NKikimrBlobStorage::TPDiskMetadataRecord& record, const NPDisk::TMainKey& mainKey) {
     NKikimrBlobStorage::TPDiskMetadataRecord adjustedRecord(record);
 
@@ -175,12 +163,10 @@ void WritePDiskMetadata(const TString& path, const NKikimrBlobStorage::TPDiskMet
 
     if (adjustedRecord.HasCommittedStorageConfig()) {
         auto* cfg = adjustedRecord.MutableCommittedStorageConfig();
-        if (!cfg->HasPrevConfig() && previous) {
-            if (previous->HasCommittedStorageConfig()) {
-                cfg->MutablePrevConfig()->CopyFrom(previous->GetCommittedStorageConfig());
-            }
+        if (!cfg->HasPrevConfig() && previous && previous->HasCommittedStorageConfig()) {
+            NStorage::SetStorageConfigParent(*cfg, previous->GetCommittedStorageConfig());
         }
-        UpdateStorageConfigFingerprint(cfg);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(cfg);
     }
 
     TActorSystemCreator creator;

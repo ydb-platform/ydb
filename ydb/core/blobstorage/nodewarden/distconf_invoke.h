@@ -205,7 +205,7 @@ namespace NKikimr::NStorage {
         void ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
                 ui64 expectedStorageYamlVersion, bool enablingDistconf);
         void ReplaceStorageConfigExecute();
-        void StartCommitConfirmation(const std::optional<TStorageConfigMeta>& expected = {});
+        void StartCommitConfirmation(const NKikimrBlobStorage::TStorageConfig *expected = nullptr);
         void RetrySelfHealConfirmationOrFinish(TResult::EStatus status, TStringBuf reason);
         void FinishConfigChange();
         void CollectCommittedConfig();

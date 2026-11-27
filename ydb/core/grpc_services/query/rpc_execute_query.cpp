@@ -208,7 +208,7 @@ bool NeedCollectDiagnostics(const Ydb::Query::ExecuteQueryRequest& req) {
 
 // The finish callback reports transport completion, without identifying whether
 // it was cancellation, a deadline or another transport outcome.
-struct TEvRpcFinishObserved : TEventLocal<TEvRpcFinishObserved, TEvents::ES_PRIVATE> {
+struct TEvRpcFinishObserved : TEventLocal<TEvRpcFinishObserved, EventSpaceBegin(TEvents::ES_PRIVATE)> {
     const TMonotonic ObservedAt = TMonotonic::Now();
 };
 

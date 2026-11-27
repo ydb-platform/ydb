@@ -8,6 +8,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/federated_query/actors/lookup_actor/kikimr_lookup_factories.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
+#include <ydb/core/kqp/runtime/common/kqp_remote_embedder_stage.h>
 #include <ydb/core/kqp/runtime/kqp_full_text_source.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
@@ -55,6 +56,10 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
             }
 
             auto name = callable.GetType()->GetName();
+
+            if (name == "KqpRemoteEmbedderStage"sv) {
+                return WrapKqpRemoteEmbedderStage(callable, ctx, *computeCtx);
+            }
 
             if (name == "KqpWideReadTable"sv) {
                 return WrapKqpScanWideReadTable(callable, ctx, *computeCtx);
@@ -158,19 +163,24 @@ IDqOutputConsumer::TPtr TKqpTaskRunnerExecutionContext::CreateOutputConsumer(con
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* /* pgBuilder */) const
 {
+    IDqOutputConsumer::TPtr output;
     switch (outputDesc.GetTypeCase()) {
         case NDqProto::TTaskOutput::kRangePartition: {
             YQL_ENSURE(false, "unsupported");
         }
 
         case NDqProto::TTaskOutput::kEffects: {
-            return MakeIntrusive<TKqpApplyEffectsConsumer>(applyCtx);
+            output = MakeIntrusive<TKqpApplyEffectsConsumer>(applyCtx);
+            break;
         }
 
         default: {
-            return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(outputs), MinFillPercentage_);
+            output = DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(outputs), MinFillPercentage_);
+            break;
         }
     }
+    ComputeCtx_.RegisterRemoteEmbedderOutput(output.Get());
+    return output;
 }
 
 NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(

@@ -9,6 +9,10 @@
 
 #include <functional>
 
+namespace NYql::NDq {
+class IDqOutputConsumer;
+}
+
 namespace NKikimr::NMiniKQL {
 
 class TKqpComputeContextBase : public NYql::NDq::TDqComputeContextBase {
@@ -22,6 +26,12 @@ public:
     void SetWakeupCallback(std::function<void()> wakeupCallback);
     const std::function<void()>& GetWakeupCallback() const;
 
+    void SetRemoteEmbedderWakeupActor(NActors::TActorId actor) { RemoteEmbedderWakeupActor = actor; }
+    NActors::TActorId GetRemoteEmbedderWakeupActor() const { return RemoteEmbedderWakeupActor; }
+    void EnableRemoteEmbedderStage() { RemoteEmbedderStage = true; }
+    void RegisterRemoteEmbedderOutput(NYql::NDq::IDqOutputConsumer* output);
+    void FlushRemoteEmbedderOutputs() const;
+
     void SetCheckpointContext(TIntrusiveConstPtr<NYql::NDq::TCheckpointContext> checkpointContext);
     TIntrusiveConstPtr<NYql::NDq::TCheckpointContext> GetCheckpointContext() const;
 
@@ -32,6 +42,9 @@ public:
 private:
     ui64 CurrentTaskId = 0;
     std::function<void()> WakeupCallback;
+    NActors::TActorId RemoteEmbedderWakeupActor;
+    bool RemoteEmbedderStage = false;
+    TVector<NYql::NDq::IDqOutputConsumer*> RemoteEmbedderOutputs;
     TIntrusiveConstPtr<NYql::NDq::TCheckpointContext> CheckpointContext;
     TString Database;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;

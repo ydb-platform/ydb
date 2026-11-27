@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/kqp/runtime/common/kqp_compute_context.h>
 #include <ydb/library/yql/dq/actors/compute/dq_task_runner_exec_ctx.h>
 
 namespace NKikimr {
@@ -10,11 +11,14 @@ using namespace NYql::NDq;
 
 class TKqpTaskRunnerExecutionContext : public TDqTaskRunnerExecutionContext {
 public:
-    TKqpTaskRunnerExecutionContext(ui64 txId, bool withSpilling, TMaybe<ui8> minFillPercentage, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback)
+    TKqpTaskRunnerExecutionContext(ui64 txId, bool withSpilling, TMaybe<ui8> minFillPercentage, TWakeUpCallback&& wakeUpCallback,
+        TErrorCallback&& errorCallback, NMiniKQL::TKqpComputeContextBase& computeCtx, NActors::TActorId selfId)
         : TDqTaskRunnerExecutionContext(txId, std::move(wakeUpCallback), std::move(errorCallback))
         , WithSpilling_(withSpilling)
         , MinFillPercentage_(minFillPercentage)
+        , ComputeCtx_(computeCtx)
     {
+        ComputeCtx_.SetRemoteEmbedderWakeupActor(selfId);
     }
 
     IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc,
@@ -26,13 +30,10 @@ public:
         return TDqTaskRunnerExecutionContext::CreateChannelStorage(channelId, WithSpilling_ || withSpilling);
     }
 
-    NActors::TActorId GetAsyncUdfWakeupActor() const override {
-        return NActors::TActivationContext::AsActorContext().SelfID;
-    }
-
 private:
     const bool WithSpilling_;
     const TMaybe<ui8> MinFillPercentage_;
+    NMiniKQL::TKqpComputeContextBase& ComputeCtx_;
 };
 
 } // namespace NKqp

@@ -640,8 +640,6 @@ private:
                 }
                 break;
             }
-            case ERunStatus::PendingAsync:
-                break;
             case ERunStatus::PendingOutput: {
                 for (auto& [index, sink] : SinksMap) {
                     const i64 sinkFreeSpaceBeforeSend = sink.Sink->GetFreeSpace();

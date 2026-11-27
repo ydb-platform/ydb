@@ -127,7 +127,8 @@ void TKqpComputeActor::DoBootstrap() {
         actorSystem->Send(selfId, new TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::INTERNAL_ERROR, error));
     };
     try {
-        PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback)));
+        PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling,
+            ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback), ComputeCtx, selfId));
     } catch (const NMiniKQL::TKqpEnsureFail& e) {
         ErrorFromIssue((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
         return;

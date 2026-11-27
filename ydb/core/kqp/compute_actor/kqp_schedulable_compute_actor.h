@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_task.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_work_factory.h>
 
+#include <ydb/core/kqp/runtime/common/kqp_remote_embedder_stage.h>
 #include <ydb/library/yql/dq/actors/compute/dq_sync_compute_actor_base.h>
 
 namespace NKikimr::NKqp::NScheduler {
@@ -24,6 +25,20 @@ namespace NKikimr::NKqp::NScheduler {
         }
 
     protected:
+        void CheckRunStatus() override {
+            if (!WaitingForRemoteEmbedder ||
+                (!this->Checkpoints && this->ProcessOutputsState.AllOutputsFinished && !this->HasEffectsOutputs)) {
+                TBase::CheckRunStatus();
+                return;
+            }
+            // Acknowledge freed channel space without requesting another fetch.
+            if (this->Channels) {
+                for (const auto& [channelId, channel] : this->InputChannelsMap) {
+                    this->Channels->PollChannel(channelId, channel.Channel->GetFreeSpace());
+                }
+            }
+        }
+
         NYql::NDq::IDqSchedulableWorkFactoryPtr GetSchedulableWorkFactory() const override {
             return WorkFactory;
         }
@@ -71,7 +86,7 @@ namespace NKikimr::NKqp::NScheduler {
 
         void DoExecuteImpl() override {
             if (!Schedulable.IsAccountable()) {
-                return TBase::DoExecuteImpl();
+                return ExecuteTask();
             }
 
             // TODO: account waiting on mailbox?
@@ -81,9 +96,26 @@ namespace NKikimr::NKqp::NScheduler {
                 return;
             }
 
-            TBase::DoExecuteImpl();
+            ExecuteTask();
             if (!PassedAway) {
                 Schedulable.StopExecution();
+            }
+        }
+
+        void ExecuteTask() {
+            auto* actor = static_cast<TDerived*>(this);
+            const auto sourcesState = actor->GetSourcesState();
+            WaitingForRemoteEmbedder = false;
+            try {
+                TBase::DoExecuteImpl();
+            } catch (const NMiniKQL::TKqpRemoteEmbedderPending&) {
+                // Let DQ drain completed rows. The future sends the next
+                // wakeup, so CheckRunStatus must skip input polling.
+                WaitingForRemoteEmbedder = true;
+                this->TaskRunner->LastFetchStatus = NYql::NDq::ERunStatus::PendingInput;
+                this->TaskRunner->LastFetchTime = TInstant::Now();
+                actor->PollSources(sourcesState);
+                this->ProcessOutputsImpl(NYql::NDq::ERunStatus::PendingInput);
             }
         }
 
@@ -91,6 +123,7 @@ namespace NKikimr::NKqp::NScheduler {
         TSchedulableBase Schedulable;
         const NYql::NDq::IDqSchedulableWorkFactoryPtr WorkFactory;
         bool PassedAway = false;
+        bool WaitingForRemoteEmbedder = false;
     };
 
 } // namespace NKikimr::NKqp::NScheduler

@@ -1,10 +1,6 @@
 #include "dq_tasks_counters.h"
 #include "dq_tasks_runner.h"
 
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/coro_stack_pool.h>
-#include <ydb/library/actors/core/scheduler_cookie.h>
-#include <ydb/library/yql/dq/actors/compute/events/events.h>
 #include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 #include <ydb/library/yql/dq/runtime/streaming/dq_watermark_generator_tracker.h>
 #include <ydb/library/yql/dq/actors/spilling/counters/spilling_counters.h>
@@ -17,7 +13,6 @@
 #include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
-#include <ydb/library/yql/public/udf/udf_async_waiter.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
@@ -29,7 +24,6 @@
 
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/core/user_data/yql_user_data.h>
-#include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -38,11 +32,7 @@
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
 #include <util/generic/scope.h>
-#include <util/system/context.h>
 
-#include <algorithm>
-#include <exception>
-#include <mutex>
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -53,150 +43,6 @@ namespace NYql::NDq {
 namespace {
 
 constexpr const ui32 COMPUTATION_LOG_TAIL_MAX_ENTRIES = 100;
-
-struct TDqPatternCacheEntry final : TPatternCacheEntry {
-    using TPatternCacheEntry::TPatternCacheEntry;
-
-    bool UsesAsyncUdf = false;
-};
-
-bool UsesAsyncUdf(TNode* node) {
-    if (!node->GetType()->IsCallable()) {
-        return false;
-    }
-    const auto& callable = static_cast<const TCallable&>(*node);
-    return callable.GetType()->GetName() == "Udf" && callable.GetInputsCount() > 0
-        && TStringBuf(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef()) == "Knn.ApplyRemoteEmbedder";
-}
-
-class TAsyncUdfExecution final : public NUdf::IAsyncUdfWaiter, private ITrampoLine {
-    struct TWakeup {
-        explicit TWakeup(TWakeUpCallback callback)
-            : Callback(std::move(callback))
-        {}
-
-        std::mutex Mutex;
-        TWakeUpCallback Callback;
-    };
-
-    struct TAbandoned {};
-
-public:
-    TAsyncUdfExecution(NActors::TActorId wakeupActor, TWakeUpCallback wakeup, std::function<ERunStatus()> run)
-        : WakeupActor_(wakeupActor)
-        , Wakeup_(std::make_shared<TWakeup>(std::move(wakeup)))
-        , RunProgram_(std::move(run))
-        // A scalar UDF can run deep inside a native or generated expression.
-        , Stack_(NActors::TStackMemPool::GetMemPool(NActors::TStackMemPool::TPageBucket::Bytes(8_MB))->Allocate())
-        , Fiber_(TContClosure{this, {Stack_->Begin(), Stack_->End()}, "DqAsyncUdf"})
-    {}
-
-    ~TAsyncUdfExecution() override {
-        {
-            std::lock_guard lock(Wakeup_->Mutex);
-            Wakeup_->Callback = {};
-        }
-        if (Started_ && !Finished_) {
-            Abandoned_ = true;
-            Resume();
-        }
-    }
-
-    ERunStatus Run() {
-        Resume();
-        if (Error_) {
-            std::rethrow_exception(Error_);
-        }
-        return Status_;
-    }
-
-    // The consumer may hold rows produced before the current fetch started.
-    IDqOutputConsumer* OutputToFlush = nullptr;
-    bool ConsumingOutput = false;
-
-private:
-    void Resume() {
-        Y_ABORT_UNLESS(!Caller_ && !Finished_);
-        // A task can resume on a different executor thread.
-        TExceptionSafeContext caller;
-        Caller_ = &caller;
-        auto* previous = std::exchange(Current, this);
-        Started_ = true;
-        caller.SwitchTo(&Fiber_);
-        Current = previous;
-        Caller_ = nullptr;
-    }
-
-    void DoRun() override {
-        try {
-            for (;;) {
-                Suspend(RunProgram_());
-            }
-        } catch (const TAbandoned&) {
-        } catch (...) {
-            Error_ = std::current_exception();
-        }
-        Finished_ = true;
-        Fiber_.SwitchTo(Caller_);
-        Y_ABORT("Resumed a finished UDF evaluation");
-    }
-
-    void Suspend(ERunStatus status) {
-        Status_ = status;
-        Fiber_.SwitchTo(Caller_);
-        if (Abandoned_) {
-            throw TAbandoned{};
-        }
-    }
-
-    bool Wait(const NThreading::TFuture<void>& ready, NMonotonic::TMonotonic deadline) override {
-        if (ready.IsReady()) {
-            return true;
-        }
-        ready.Subscribe([wakeup = std::weak_ptr(Wakeup_)](const auto&) {
-            if (auto state = wakeup.lock()) {
-                std::lock_guard lock(state->Mutex);
-                if (state->Callback) {
-                    state->Callback();
-                }
-            }
-        });
-
-        // Keep the batch deadline even if the HTTP proxy has a backlog.
-        while (!ready.IsReady()) {
-            const auto now = NMonotonic::TMonotonic::Now();
-            if (now >= deadline) {
-                return false;
-            }
-            // An earlier batch's deadline can wake this one. Keep only one
-            // scheduled wakeup across calls.
-            if (!Timer_.Get() || !Timer_.Get()->IsArmed()) {
-                Timer_.Reset(NActors::ISchedulerCookie::Make2Way());
-                NActors::TActivationContext::Schedule(deadline - now, std::make_unique<NActors::IEventHandle>(
-                    WakeupActor_, NActors::TActorId{}, new TEvDqCompute::TEvResumeExecution(EResumeSource::CAWakeupCallback)),
-                    Timer_.Get());
-            }
-            if (auto* output = std::exchange(OutputToFlush, nullptr)) {
-                output->Flush();
-            }
-            Suspend(ERunStatus::PendingAsync);
-        }
-        return true;
-    }
-
-    const NActors::TActorId WakeupActor_;
-    std::shared_ptr<TWakeup> Wakeup_;
-    NActors::TSchedulerCookieHolder Timer_;
-    std::function<ERunStatus()> RunProgram_;
-    std::unique_ptr<NActors::IStackMem> Stack_;
-    TExceptionSafeContext Fiber_;
-    TExceptionSafeContext* Caller_ = nullptr;
-    std::exception_ptr Error_;
-    ERunStatus Status_ = ERunStatus::PendingInput;
-    bool Started_ = false;
-    bool Finished_ = false;
-    bool Abandoned_ = false;
-};
 
 void ValidateParamValue(std::string_view paramName, const TType* type, const NUdf::TUnboxedValuePod& value) {
     switch (type->GetKind()) {
@@ -463,11 +309,6 @@ public:
 
     ~TDqTaskRunner() {
         auto guard = Guard(Alloc());
-        if (AsyncUdfExecution) {
-            // Unwind the suspended evaluation before destroying graph values.
-            TBindTerminator term(AllocatedHolder->ProgramParsed.CompGraph->GetTerminator());
-            AsyncUdfExecution.reset();
-        }
         Stats.reset();
         AllocatedHolder.reset();
     }
@@ -546,10 +387,10 @@ public:
         return opts;
     }
 
-    std::shared_ptr<TDqPatternCacheEntry> CreateComputationPattern(const TDqTaskSettings& task, const TString& rawProgram, bool forCache, bool& canBeCached) {
+    std::shared_ptr<TPatternCacheEntry> CreateComputationPattern(const TDqTaskSettings& task, const TString& rawProgram, bool forCache, bool& canBeCached) {
         canBeCached = true;
         const bool useSeparatePattern = UseSeparatePatternAlloc(task);
-        auto entry = std::make_shared<TDqPatternCacheEntry>(useSeparatePattern);
+        auto entry = TComputationPatternLRUCache::CreateCacheEntry(useSeparatePattern);
         auto& patternAlloc = useSeparatePattern ? entry->Alloc : Alloc();
         auto& patternEnv = useSeparatePattern ? entry->Env : TypeEnv();
         patternAlloc.Ref().UseRefLocking = forCache;
@@ -640,7 +481,6 @@ public:
 
         TExploringNodeVisitor programExplorer;
         programExplorer.Walk(programRoot.GetNode(), patternEnv);
-        entry->UsesAsyncUdf = std::ranges::any_of(programExplorer.GetNodes(), UsesAsyncUdf);
         auto programSize = programExplorer.GetNodes().size();
 
         LOG(TStringBuilder() << "task: " << TaskId << ", program size: " << programSize
@@ -656,7 +496,7 @@ public:
         return entry;
     }
 
-    std::shared_ptr<TDqPatternCacheEntry> BuildTask(const TDqTaskSettings& task) {
+    std::shared_ptr<TPatternCacheEntry> BuildTask(const TDqTaskSettings& task) {
         LOG(TStringBuilder() << "Build task: " << TaskId);
         auto startTime = TInstant::Now();
 
@@ -664,7 +504,7 @@ public:
         YQL_ENSURE(program.GetRuntimeVersion());
         YQL_ENSURE(program.GetRuntimeVersion() <= NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
 
-        std::shared_ptr<TDqPatternCacheEntry> entry;
+        std::shared_ptr<TPatternCacheEntry> entry;
         bool canBeCached;
         if (UseSeparatePatternAlloc(task) && Context.PatternCache) {
             auto& cache = Context.PatternCache;
@@ -686,8 +526,7 @@ public:
                     throw;
                 }
             } else {
-                // DQ is the sole producer of entries in the task runner's cache.
-                entry = std::static_pointer_cast<TDqPatternCacheEntry>(future.GetValueSync());
+                entry = future.GetValueSync();
             }
         }
 
@@ -755,11 +594,6 @@ public:
         RuntimeSettings = DeserializeRuntimeSettingsFromProto(task.GetProgram().GetRuntimeSettings());
 
         auto entry = BuildTask(task);
-        if (entry->UsesAsyncUdf) {
-            if (auto wakeupActor = execCtx.GetAsyncUdfWakeupActor()) {
-                AsyncUdfExecution.emplace(wakeupActor, execCtx.GetWakeupCallback(), [this] { return RunProgram(); });
-            }
-        }
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId);
         auto startTime = TInstant::Now();
@@ -1102,6 +936,11 @@ public:
 
     ERunStatus Run() final {
         LOG(TStringBuilder() << "Run task: " << TaskId);
+        if (!AllocatedHolder->ResultStream && !AllocatedHolder->ResultStreamFinished) {
+            auto guard = BindAllocator();
+            TBindTerminator term(AllocatedHolder->ProgramParsed.CompGraph->GetTerminator());
+            AllocatedHolder->ResultStream = AllocatedHolder->ProgramParsed.CompGraph->GetValue();
+        }
 
         RunComputeTime = TDuration::Zero();
 
@@ -1110,21 +949,7 @@ public:
         }
 
         InputsConsumed = 0;
-        auto runStatus = [&] {
-            auto guard = BindAllocator();
-            TBindTerminator term(AllocatedHolder->ProgramParsed.CompGraph->GetTerminator());
-            const auto startComputeTime = TInstant::Now();
-            Y_DEFER {
-                if (Stats) {
-                    const auto duration = TInstant::Now() - startComputeTime;
-                    Stats->ComputeCpuTime += duration;
-                    if (CollectBasic()) {
-                        RunComputeTime = duration;
-                    }
-                }
-            };
-            return AsyncUdfExecution ? AsyncUdfExecution->Run() : RunProgram();
-        }();
+        auto runStatus = FetchAndDispatch();
         LastFetchTime = TInstant::Now();
         LastFetchStatus = runStatus;
 
@@ -1163,7 +988,6 @@ public:
                     Stats->FinishTs = now;
                     break;
                 case ERunStatus::PendingInput:
-                case ERunStatus::PendingAsync:
                     // output is checked first => not waiting for output
                     Stats->CurrentWaitOutputStartTime = TInstant::Zero();
                     ++Stats->InputWaitCount;
@@ -1195,10 +1019,6 @@ public:
 
     bool HasEffects() const final {
         return TaskHasEffects;
-    }
-
-    bool IsOutputEvaluationSuspended() const final {
-        return AsyncUdfExecution && AsyncUdfExecution->ConsumingOutput;
     }
 
     void SetWatermarkIn(TInstant time) override {
@@ -1300,7 +1120,6 @@ public:
     }
 
     TString Save() const override {
-        YQL_ENSURE(LastFetchStatus != ERunStatus::PendingAsync, "Cannot save a suspended UDF evaluation");
         return AllocatedHolder->ProgramParsed.CompGraph->SaveGraphState();
     }
 
@@ -1318,14 +1137,26 @@ private:
         return GetTypeEnv().GetAllocator();
     }
 
-    ERunStatus RunProgram() {
-        if (!AllocatedHolder->ResultStream && !AllocatedHolder->ResultStreamFinished) {
-            AllocatedHolder->ResultStream = AllocatedHolder->ProgramParsed.CompGraph->GetValue();
-        }
+    ERunStatus FetchAndDispatch() {
         if (!AllocatedHolder->Output) {
             LOG("no consumers, Finish execution");
             return ERunStatus::Finished;
         }
+
+        TBindTerminator term(AllocatedHolder->ProgramParsed.CompGraph->GetTerminator());
+
+        auto startComputeTime = TInstant::Now();
+        Y_DEFER {
+            if (Stats) {
+                auto duration = TInstant::Now() - startComputeTime;
+                Stats->ComputeCpuTime += duration;
+                if (CollectBasic()) {
+                    RunComputeTime = duration;
+                }
+            }
+        };
+
+        auto guard = BindAllocator();
 
         TUnboxedValueVector wideBuffer;
         const bool isWide = AllocatedHolder->OutputWideType != nullptr;
@@ -1337,14 +1168,6 @@ private:
             NUdf::TUnboxedValue value;
             NUdf::EFetchStatus fetchStatus = NUdf::EFetchStatus::Finish;
             if (!AllocatedHolder->ResultStreamFinished && !AllocatedHolder->Output->IsEarlyFinished()) {
-                if (AsyncUdfExecution && dataConsumed) {
-                    AsyncUdfExecution->OutputToFlush = AllocatedHolder->Output.Get();
-                }
-                Y_DEFER {
-                    if (AsyncUdfExecution) {
-                        AsyncUdfExecution->OutputToFlush = nullptr;
-                    }
-                };
                 if (isWide) {
                     fetchStatus = AllocatedHolder->ResultStream.WideFetch(wideBuffer.data(), wideBuffer.size());
                 } else {
@@ -1354,14 +1177,6 @@ private:
 
             switch (fetchStatus) {
                 case NUdf::EFetchStatus::Ok: {
-                    if (AsyncUdfExecution) {
-                        AsyncUdfExecution->ConsumingOutput = true;
-                    }
-                    Y_DEFER {
-                        if (AsyncUdfExecution) {
-                            AsyncUdfExecution->ConsumingOutput = false;
-                        }
-                    };
                     if (isWide) {
                         AllocatedHolder->Output->WideConsume(wideBuffer.data(), wideBuffer.size());
                     } else {
@@ -1369,10 +1184,6 @@ private:
                     }
                     if (CollectBasic()) {
                         ++Stats->TotalOutputsProduced;
-                    }
-                    if (std::exchange(YieldAfterOutput, false)) {
-                        AllocatedHolder->Output->Flush();
-                        return ERunStatus::PendingInput;
                     }
                     dataConsumed = true;
                     break;
@@ -1499,7 +1310,6 @@ private:
     };
 
     std::optional<TAllocatedHolder> AllocatedHolder;
-    std::optional<TAsyncUdfExecution> AsyncUdfExecution;
     NKikimr::NMiniKQL::TWatermark Watermark;
     TDqComputeActorWatermarks* WatermarksTracker = nullptr;
     TDqWatermarkGeneratorTracker* SourceWatermarksTracker = nullptr;

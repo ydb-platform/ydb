@@ -7,6 +7,7 @@ SRCS(
     kqp_compute_events.cpp
     kqp_compute_state.cpp
     kqp_pure_compute_actor.cpp
+    kqp_remote_embedder_stage.cpp
     kqp_scan_common.cpp
     kqp_scan_compute_actor.cpp
     kqp_scan_compute_manager.cpp
@@ -40,6 +41,7 @@ PEERDIR(
     ydb/library/yql/providers/solomon/actors
     ydb/library/yql/providers/ydb_external/actors
     ydb/library/yql/providers/yt/async_io
+    ydb/library/yql/public/udf
     ydb/services/udf_store/wasm
     yql/essentials/public/issue
 )

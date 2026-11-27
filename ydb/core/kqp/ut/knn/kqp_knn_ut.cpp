@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         TOidcTestServer server;
         const TString url(server.Issuer());
         const TString origin(url.substr(0, url.rfind('/')));
-        for (size_t i = 0; i < 3; ++i) {
+        for (size_t i = 0; i < 4; ++i) {
             server.Enqueue(R"({"data":[{"index":0,"embedding":[0.5,-0.25]}]})", HTTP_OK);
         }
 
@@ -118,6 +118,20 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         UNIT_ASSERT(scalarRows.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(scalarRows.ColumnParser("Status").GetUint32(), 200);
         UNIT_ASSERT(!scalarRows.TryNextRow());
+
+        const TString conditional = TStringBuilder() << R"(
+            DECLARE $call AS Bool;
+            SELECT ListMap(AsList('Молоко'), ($text) -> {
+                RETURN IF($call, ApplyRemoteEmbedder($text, 'test-model', ')" << url << R"(', '/Root/embedder_token', 0).Status, 42u);
+            }) AS Statuses;
+        )";
+        for (bool call : {false, true}) {
+            auto params = TParamsBuilder().AddParam("$call").Bool(call).Build().Build();
+            auto nested = client.ExecuteQuery(conditional, NQuery::TTxControl::NoTx(), std::move(params)).ExtractValueSync();
+            UNIT_ASSERT_C(nested.IsSuccess(), nested.GetIssues().ToString());
+            CompareYson(call ? "[[[200u]]]" : "[[[42u]]]", FormatResultSetYson(nested.GetResultSet(0)));
+            UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), call ? 2 : 1);
+        }
 
         auto batch = client.ExecuteQuery(TStringBuilder() << R"(
             $requests = AsList(AsStruct('Молоко' AS Text, AsStruct(1 AS Id) AS PassThrough));
@@ -173,7 +187,7 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         UNIT_ASSERT_C(scan.IsSuccess(), scan.GetIssues().ToString());
         CompareYson("[[200u]]", StreamResultToYson(scan));
         const auto requests = server.Requests();
-        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 4);
         for (const auto& request : requests) {
             UNIT_ASSERT_VALUES_EQUAL(request.Authorization, "Bearer embedder-token");
             UNIT_ASSERT_VALUES_EQUAL(request.Path, "/realm/embeddings");

@@ -36,17 +36,6 @@ protected:
         ERunStatus status = TaskRunner->Run();
 
         CA_LOG_T("Resume execution, run status: " << status);
-        if (TaskRunner->IsOutputEvaluationSuspended()) {
-            // A lazy output value can call a UDF while the channel is packing it.
-            this->ProcessOutputsState.LastRunStatus = status;
-            return;
-        }
-        if (!DeferredFinishedOutputs.empty()) {
-            for (auto channelId : std::exchange(DeferredFinishedOutputs, {})) {
-                FinishOutputChannel(channelId);
-            }
-            TBase::ContinueExecute(EResumeSource::CADataSent);
-        }
 
         if (status != ERunStatus::Finished) {
              static_cast<TDerived*>(this)->PollSources(std::move(sourcesState));
@@ -176,16 +165,6 @@ protected: //TDqComputeActorChannels::ICalbacks
     }
 
     void PeerFinished(ui64 channelId) override final {
-        if (TaskRunner && TaskRunner->IsOutputEvaluationSuspended()) {
-            DeferredFinishedOutputs.push_back(channelId);
-            TaskRunner->YieldAfterOutput = true;
-            return;
-        }
-        FinishOutputChannel(channelId);
-        TBase::DoExecute();
-    }
-
-    void FinishOutputChannel(ui64 channelId) {
         auto* outputChannel = this->OutputChannelsMap.FindPtr(channelId);
         YQL_ENSURE(outputChannel, "task: " << this->Task.GetId() << ", output channelId: " << channelId);
 
@@ -203,13 +182,11 @@ protected: //TDqComputeActorChannels::ICalbacks
                 << "drop " << dropRows << " rows");
         }
 
+        TBase::DoExecute();
     }
 
 protected: //TDqComputeActorCheckpoints::ICallbacks
     bool ReadyToCheckpoint() const override final {
-        if (TaskRunner && TaskRunner->LastFetchStatus == ERunStatus::PendingAsync) {
-            return false;
-        }
         // When task become finished, there will be no read attempts from inputs,
         // so stale data may stay in channels/sources
         const auto allowNonEmptyInputs = this->State == NDqProto::COMPUTE_STATE_FINISHED;
@@ -630,8 +607,6 @@ protected:
 protected:
     TIntrusivePtr<IDqTaskRunner> TaskRunner;
 
-private:
-    TVector<ui64> DeferredFinishedOutputs;
 };
 
 } //namespace NYql::NDq

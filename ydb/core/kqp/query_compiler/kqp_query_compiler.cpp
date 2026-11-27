@@ -28,7 +28,10 @@
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/minikql/mkql_node_builder.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
@@ -42,6 +45,38 @@ using namespace NYql;
 using namespace NYql::NNodes;
 
 namespace {
+
+TString WrapRemoteEmbedderProgram(TStringBuf bytecode, const TTypeEnvironment& env) {
+    // Wrap the compiled root so MiniKQL keeps all of the original lambda scopes.
+    const auto program = DeserializeRuntimeNode(bytecode, env);
+    const auto* literal = AS_VALUE(TStructLiteral, program);
+    const auto* type = literal->GetType();
+    TExploringNodeVisitor explorer;
+    explorer.Walk(program.GetNode(), env);
+    ui32 nextId = 0;
+    for (const auto* node : explorer.GetNodes()) {
+        if (node->GetType()->IsCallable()) {
+            nextId = Max(nextId, static_cast<const TCallable*>(node)->GetUniqueId());
+        }
+    }
+
+    TStructLiteralBuilder builder(env);
+    for (ui32 i = 0; i < type->GetMembersCount(); ++i) {
+        const auto name = type->GetMemberName(i);
+        auto value = literal->GetValue(i);
+        if (name == "Program") {
+            const auto* streamType = value.GetStaticType();
+            YQL_ENSURE(streamType->IsStream(), "KqpRemoteEmbedderStage expects a stream");
+            TCallableBuilder wrapper(env, "KqpRemoteEmbedderStage", value.GetStaticType());
+            wrapper.Add(value);
+            auto* root = wrapper.Build();
+            root->SetUniqueId(++nextId);
+            value = TRuntimeNode(root, false);
+        }
+        builder.Add(name, value);
+    }
+    return SerializeNode(builder.Build(), env);
+}
 
 // Helper function to set VectorTopK metric from string
 void SetVectorTopKMetric(Ydb::Table::VectorIndexSettings* indexSettings, const TString& metric) {
@@ -1188,6 +1223,11 @@ private:
         NDq::TSpillingSettings spillingSettings{Config->GetEnabledSpillingNodes()};
         auto programBytecode = NDq::BuildProgram(stage.Program(), *paramsType, *KqlCompiler, TypeEnv, FuncRegistry,
             ctx, {}, spillingSettings);
+        if (FindNode(stage.Program().Ptr(), [](const TExprNode::TPtr& node) {
+            return node->IsCallable("Udf") && node->ChildrenSize() && node->Head().Content() == "Knn.ApplyRemoteEmbedder";
+        })) {
+            programBytecode = WrapRemoteEmbedderProgram(programBytecode, TypeEnv);
+        }
 
         auto& programProto = *stageProto.MutableProgram();
         programProto.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);

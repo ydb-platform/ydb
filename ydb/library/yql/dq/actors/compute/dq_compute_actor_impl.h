@@ -555,8 +555,7 @@ protected:
 
         auto status = ProcessOutputsState.LastRunStatus;
 
-        if ((status == ERunStatus::PendingInput || (status == ERunStatus::PendingAsync && !Checkpoints))
-            && ProcessOutputsState.AllOutputsFinished && !HasEffectsOutputs) {
+        if (status == ERunStatus::PendingInput && ProcessOutputsState.AllOutputsFinished && !HasEffectsOutputs) {
             CA_LOG_D("All outputs have been finished. Consider finished");
             status = ERunStatus::Finished;
         }

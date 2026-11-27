@@ -1,8 +1,10 @@
+#include "dst_cdc_creator.h"
 #include "dst_creator.h"
 #include "private_events.h"
 
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/replication/service/service.h>
 #include <ydb/core/tx/replication/ut_helpers/mock_service.h>
@@ -877,6 +879,54 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
                 NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
         }
+    }
+
+    Y_UNIT_TEST(RecoverCdcAttachmentAfterConsumerAlter) {
+        TCdcCreation creation;
+        creation.InitialCreateTxId = 42;
+        creation.Settings.TablePathId = TPathId(1, 1);
+        creation.Settings.StreamPathId = TPathId(1, 2);
+        creation.Settings.TopicPathId = TPathId(1, 3);
+        creation.Settings.Consumer = "source-consumer";
+        creation.Definition.SetTopicPartitions(1);
+        creation.Definition.SetRetentionPeriodSeconds(3600);
+        constexpr ui64 storageLimitBytes = 8 * 1024 * 1024;
+        creation.Topic.MutablePartitionConfig()->SetStorageLimitBytes(storageLimitBytes);
+
+        NKikimrScheme::TEvDescribeSchemeResult record;
+        record.SetPath("/Root/Table/Feed/streamImpl");
+        auto& desc = *record.MutablePathDescription();
+        auto& self = *desc.MutableSelf();
+        self.SetSchemeshardId(creation.Settings.StreamPathId.OwnerId);
+        self.SetParentPathId(creation.Settings.StreamPathId.LocalPathId);
+        self.SetPathId(3);
+        self.SetCreateTxId(creation.InitialCreateTxId);
+        self.SetOwner("owner");
+        self.MutableVersion()->SetPQVersion(3);
+
+        auto& topic = *desc.MutablePersQueueGroup();
+        topic.SetTotalGroupCount(1);
+        topic.AddPartitions()->SetStatus(NKikimrPQ::Active);
+        auto& config = *topic.MutablePQTabletConfig();
+        config.MutablePartitionConfig()->SetLifetimeSeconds(creation.Definition.GetRetentionPeriodSeconds());
+        NKikimrSchemeOp::TModifyScheme setup;
+        creation.FillTopicSetup(setup, record);
+        const auto& partition = setup.GetAlterPersQueueGroup().GetPQTabletConfig().GetPartitionConfig();
+        UNIT_ASSERT_VALUES_EQUAL(partition.GetStorageLimitBytes(), storageLimitBytes);
+        config.SetReplicationSourceConsumer(creation.Settings.Consumer);
+        config.SetCdcReplication(true);
+        config.AddConsumers()->SetName("new-reader");
+
+        TString error;
+        UNIT_ASSERT(!creation.CheckTopic(record, self.GetSchemeshardId(), self.GetOwner(), error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "storage limit");
+
+        config.MutablePartitionConfig()->SetStorageLimitBytes(partition.GetStorageLimitBytes());
+        UNIT_ASSERT_C(creation.CheckTopic(record, self.GetSchemeshardId(), self.GetOwner(), error), error);
+        UNIT_ASSERT(!creation.NeedsTopicSetup);
+
+        config.SetCdcReplication(false);
+        UNIT_ASSERT(!creation.CheckTopic(record, self.GetSchemeshardId(), self.GetOwner(), error));
     }
 
     Y_UNIT_TEST(RecoverAttachment) {

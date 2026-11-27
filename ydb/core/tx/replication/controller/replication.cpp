@@ -2,10 +2,12 @@
 #include "private_events.h"
 #include "replication.h"
 #include "resource_id_resolver.h"
+#include "schema.h"
 #include "secret_resolver.h"
 #include "target_discoverer.h"
 #include "target_table.h"
 #include "target_topic.h"
+#include "target_cdc.h"
 #include "target_transfer.h"
 #include "tenant_resolver.h"
 #include "util.h"
@@ -17,6 +19,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
@@ -97,6 +100,8 @@ class TReplication::TImpl: public TLagProvider {
             return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
         case ETargetKind::Transfer:
             return new TTargetTransfer(self, id, std::forward<Args>(args)...);
+        case ETargetKind::CdcTopic:
+            return new TTargetCdc(self, id, std::forward<Args>(args)...);
         case ETargetKind::Topic:
             return new TTargetTopic(self, id, std::forward<Args>(args)...);
         }
@@ -147,7 +152,9 @@ public:
         const auto previousLag = GetLag();
         const auto res = Targets.emplace(id, CreateTarget(self, id, kind, std::forward<Args>(args)...));
         Y_VERIFY_S(res.second, "Duplicate target: " << id);
-        TLagProvider::AddPendingLag(id);
+        if (!IsTopicTarget(kind)) {
+            TLagProvider::AddPendingLag(id);
+        }
         NotifyLagChanged(previousLag);
         return id;
     }
@@ -165,13 +172,24 @@ public:
     }
 
     void RemoveTarget(ui64 id) {
-        const auto previousLag = GetLag();
         const auto it = Targets.find(id);
-        if (it != Targets.end()) {
-            TLagProvider::RemoveLag(it->second, id);
-            Targets.erase(it);
-            NotifyLagChanged(previousLag);
+        if (it == Targets.end()) {
+            return;
         }
+
+        const auto previousLag = GetLag();
+        if (auto* cdc = TTargetCdc::Cast(it->second.Ptr.Get())) {
+            const auto parent = CdcChildren.find(cdc->GetCdc().GetParentTargetId());
+            Y_ABORT_UNLESS(parent != CdcChildren.end());
+            Erase(parent->second, cdc);
+            if (parent->second.empty()) {
+                CdcChildren.erase(parent);
+            }
+        }
+
+        TLagProvider::RemoveLag(it->second, id);
+        Targets.erase(it);
+        NotifyLagChanged(previousLag);
     }
 
     TVector<ITarget*> GetTargets() const {
@@ -394,6 +412,7 @@ private:
     EState DesiredState = EState::Ready;
     ui64 NextTargetId = 1;
     THashMap<ui64, TTarget> Targets;
+    THashMap<ui64, TVector<TTargetCdc*>> CdcChildren;
     THashSet<ui64> PendingAlterTargets;
     TActorId SecretResolver;
     ui64 SecretResolverCookie = 0;
@@ -473,6 +492,48 @@ TVector<TReplication::ITarget*> TReplication::GetTargets() const {
 
 TVector<TString> TReplication::GetTargetTablePaths() const {
     return Impl->GetTargetTablePaths();
+}
+
+void TReplication::RegisterCdcChild(ui64 parentId, TTargetCdc& child) {
+    Impl->CdcChildren[parentId].push_back(&child);
+}
+
+TConstArrayRef<TTargetCdc*> TReplication::GetCdcChildren(ui64 parentId) const {
+    if (const auto* children = Impl->CdcChildren.FindPtr(parentId)) {
+        return *children;
+    }
+    return {};
+}
+
+bool TReplication::AreCdcChildrenPrepared(ui64 parentId) const {
+    for (const auto* child : GetCdcChildren(parentId)) {
+        switch (child->GetCdc().GetPhase()) {
+        case NKikimrReplicationController::TCdcTarget::PREPARED:
+        case NKikimrReplicationController::TCdcTarget::FINISHED:
+            break;
+        default:
+            return false;
+        }
+    }
+    return true;
+}
+
+void TReplication::FinishCdcChildren(ui64 parentId, NIceDb::TNiceDb& db) {
+    for (auto* child : GetCdcChildren(parentId)) {
+        if (child->GetCdc().GetPhase() == NKikimrReplicationController::TCdcTarget::FINISHED) {
+            continue;
+        }
+        Y_ABORT_UNLESS(child->GetCdc().GetPhase() == NKikimrReplicationController::TCdcTarget::PREPARED);
+        child->GetCdc().SetPhase(NKikimrReplicationController::TCdcTarget::FINISHED);
+        child->SetDstState(TReplication::EDstState::Done);
+        db.Table<TControllerSchema::Targets>().Key(GetId(), child->GetId()).Update(
+            NIceDb::TUpdate<TControllerSchema::Targets::DstState>(child->GetDstState()),
+            NIceDb::TUpdate<TControllerSchema::Targets::Cdc>(child->GetCdc().SerializeAsString()));
+    }
+}
+
+bool IsTopicTarget(TReplication::ETargetKind kind) {
+    return kind == TReplication::ETargetKind::Topic || kind == TReplication::ETargetKind::CdcTopic;
 }
 
 void TReplication::Progress(const TActorContext& ctx) {

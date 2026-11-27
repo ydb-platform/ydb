@@ -1,5 +1,7 @@
 #include "replication.h"
+#include "target_cdc.h"
 #include "target_table.h"
+#include "target_topic.h"
 #include "util.h"
 
 #include <ydb/core/protos/replication.pb.h>
@@ -106,6 +108,28 @@ Y_UNIT_TEST_SUITE(Replication) {
         UNIT_ASSERT_VALUES_EQUAL(replication->GetConfig().GetSrcConnectionParams().GetIamCredentials().GetResourceId(), "");
     }
 
+    Y_UNIT_TEST(RemovingCdcTargetsUpdatesTheirParent) {
+        auto replication = MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2),
+            NKikimrReplication::TReplicationConfig(), "/Root");
+        auto addFeed = [&](ui64 id, ui64 parentId) {
+            NKikimrReplicationController::TCdcTarget cdc;
+            cdc.SetParentTargetId(parentId);
+            replication->AddTarget(id, TReplication::ETargetKind::CdcTopic,
+                std::make_shared<TTargetCdc::TConfig>("source", "destination", cdc));
+        };
+        addFeed(3, 1);
+        addFeed(4, 1);
+        addFeed(5, 2);
+
+        replication->RemoveTarget(3);
+        UNIT_ASSERT_VALUES_EQUAL(replication->GetCdcChildren(1).size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(replication->GetCdcChildren(1).front()->GetId(), 4);
+
+        replication->RemoveTarget(4);
+        UNIT_ASSERT(replication->GetCdcChildren(1).empty());
+        UNIT_ASSERT_VALUES_EQUAL(replication->GetCdcChildren(2).front()->GetId(), 5);
+    }
+
     Y_UNIT_TEST(InitialScanIsImmutable) {
         NKikimrReplication::TReplicationConfig config;
         config.SetInitialScan(false);
@@ -157,6 +181,29 @@ Y_UNIT_TEST_SUITE(Replication) {
             Other->UpdateLag(1, TDuration::Seconds(2));
         }
     };
+
+    Y_UNIT_TEST(MirroredTopicsDoNotMaskWorkerLag) {
+        for (const auto kind : {TReplication::ETargetKind::Topic, TReplication::ETargetKind::CdcTopic}) {
+            TLagSetup s;
+            TReplication::ITarget::IConfig::TPtr config;
+            if (kind == TReplication::ETargetKind::CdcTopic) {
+                NKikimrReplicationController::TCdcTarget cdc;
+                cdc.SetParentTargetId(s.Target->GetId());
+                config = std::make_shared<TTargetCdc::TConfig>("source", "destination", cdc);
+            } else {
+                config = std::make_shared<TTargetTopic::TTopicConfig>("source", "destination");
+            }
+            const auto child = s.Replication->AddTarget(kind, config);
+            UNIT_ASSERT(!s.Replication->FindTarget(child)->GetLag());
+            UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(5));
+            s.Target->InvalidateLag(1);
+            UNIT_ASSERT(!s.Replication->GetLag());
+            s.Target->UpdateLag(1, TDuration::Seconds(7));
+            UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(7));
+            s.Replication->RemoveTarget(child);
+            UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(7));
+        }
+    }
 
     Y_UNIT_TEST(WorkerLagPropagatesMaximumChanges) {
         TLagSetup s;

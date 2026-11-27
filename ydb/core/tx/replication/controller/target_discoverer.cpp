@@ -1,6 +1,7 @@
 #include "logging.h"
 #include "private_events.h"
 #include "target_discoverer.h"
+#include "target_cdc.h"
 #include "target_table.h"
 #include "target_topic.h"
 #include "target_transfer.h"
@@ -148,8 +149,13 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             YDB_LOG_DEBUG("Describe table succeeded",
                 {"path", path.first});
 
-            const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Table,
+            auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Table,
                 std::make_shared<TTargetTable::TTableConfig>(path.first, path.second));
+            target.CdcStreams = result.GetTableDescription().GetChangefeedDescriptions();
+            EraseIf(target.CdcStreams, [](const auto& stream) {
+                return !TTargetCdc::IsUserStream(stream);
+            });
+
             YDB_LOG_INFO("Add target",
                 {"srcPath", target.Config->GetSrcPath()},
                 {"dstPath", target.Config->GetDstPath()},

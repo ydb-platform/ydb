@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "target_cdc.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -63,7 +64,49 @@ public:
             return true;
         }
 
-        if (Ev->Get()->IsSuccess()) {
+        NIceDb::TNiceDb db(txc.DB);
+        auto* cdc = TTargetCdc::Cast(target);
+        if (Ev->Get()->IsSuccess() && cdc) {
+            if (dstState != TReplication::EDstState::Creating) {
+                Replication.Reset();
+                return true;
+            }
+
+            Y_ABORT_UNLESS(Ev->Get()->CdcState);
+            const auto& created = *Ev->Get()->CdcState;
+            auto& state = cdc->GetCdc();
+            if (Ev->Get()->DstPathId) {
+                target->SetDstPathId(Ev->Get()->DstPathId);
+                target->SetDstState(TReplication::EDstState::Alter);
+                *state.MutableStreamPathId() = created.GetStreamPathId();
+                state.ClearInitialCreateTxId();
+                state.ClearSourceStream();
+                state.ClearDefinition();
+                state.ClearTopicSetup();
+
+                if (Replication->GetState() == TReplication::EState::Removing) {
+                    // Initial setup leaves the disabled stream without a mirrorer.
+                    state.SetPhase(NKikimrReplicationController::TCdcTarget::FINISHED);
+                    target->SetDstState(TReplication::EDstState::Done);
+                } else if (Replication->GetDesiredState() == TReplication::EState::Done
+                    && state.GetPhase() == NKikimrReplicationController::TCdcTarget::STOPPING)
+                {
+                    // This Disabled topic has never mirrored any data.
+                    state.SetPhase(NKikimrReplicationController::TCdcTarget::PREPARED);
+                }
+            } else {
+                // Persist the reserved CREATE before starting destination DDL.
+                *state.MutableTablePathId() = created.GetTablePathId();
+                state.SetActivateOnDetach(created.GetActivateOnDetach());
+                state.SetInitialCreateTxId(created.GetInitialCreateTxId());
+                *state.MutableDefinition() = created.GetDefinition();
+                *state.MutableTopicSetup() = created.GetTopicSetup();
+            }
+
+            cdc->Shutdown(ctx);
+            db.Table<Schema::Targets>().Key(rid, tid).Update(
+                NIceDb::TUpdate<Schema::Targets::Cdc>(state.SerializeAsString()));
+        } else if (Ev->Get()->IsSuccess()) {
             const bool wasAltering = dstState == TReplication::EDstState::Alter;
             target->SetDstPathId(Ev->Get()->DstPathId);
             if (target->GetKind() == TReplication::ETargetKind::Topic) {
@@ -71,6 +114,8 @@ public:
                 target->SetDstState(TReplication::EDstState::Alter);
             } else if (Replication->GetDesiredState() == TReplication::EState::Done) {
                 target->SetDstState(TReplication::EDstState::Alter);
+            } else if (Ev->Get()->PreparingCdc) {
+                target->SetDstState(TReplication::EDstState::PreparingCdc);
             } else if (Ev->Get()->WaitingImport) {
                 if (Replication->GetDesiredState() == TReplication::EState::Paused) {
                     target->SetDstState(TReplication::EDstState::WaitingImport);
@@ -88,12 +133,6 @@ public:
                 if (wasAltering && Replication->CheckAlterDone()) {
                     Replication->SetState(Replication->GetDesiredState());
                 }
-            }
-
-            // A destination success says nothing about the source: while the stream is failed,
-            // its issue is still the live one and PAUSE never resets it.
-            if (target->GetStreamState() != TReplication::EStreamState::Error) {
-                target->SetIssue({});
             }
 
             YDB_LOG_NOTICE_CTX(ctx, "Target dst created",
@@ -115,7 +154,14 @@ public:
                 {"error", Ev->Get()->Error});
         }
 
-        NIceDb::TNiceDb db(txc.DB);
+        // A reserved CDC CREATE is still pending. A source failure has its own live issue.
+        if (target->GetDstState() != TReplication::EDstState::Creating
+            && target->GetDstState() != TReplication::EDstState::Error
+            && target->GetStreamState() != TReplication::EStreamState::Error)
+        {
+            target->SetIssue({});
+        }
+
         db.Table<Schema::Replications>().Key(rid).Update(
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
             NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())

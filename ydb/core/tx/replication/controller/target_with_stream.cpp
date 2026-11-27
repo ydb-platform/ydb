@@ -4,6 +4,7 @@
 #include "stream_creator.h"
 #include "stream_remover.h"
 #include "target_with_stream.h"
+#include "target_cdc.h"
 #include "util.h"
 
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -13,6 +14,8 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
+
+#include <util/generic/algorithm.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -218,7 +221,9 @@ bool TTargetWithStreamCounters::UpdateWithSingleStatsItem(ui64, ui64 key, i64 va
 }
 
 bool TTargetWithStream::CanDetachWithoutStream() const {
-    if (GetReplication()->GetDesiredState() != TReplication::EState::Done) {
+    if (GetReplication()->GetDesiredState() != TReplication::EState::Done
+        || (GetKind() == ETargetKind::CdcTopic && GetReplication()->GetState() == TReplication::EState::Removing))
+    {
         return false;
     }
 
@@ -237,39 +242,56 @@ bool TTargetWithStream::CanDetachWithoutStream() const {
     }
 }
 
-void TTargetWithStream::Progress(const TActorContext& ctx) {
-    auto replication = GetReplication();
+bool TTargetWithStream::ProgressRemoving(const TActorContext& ctx) {
+    auto* replication = GetReplication();
+    if (replication->GetState() != TReplication::EState::Removing) {
+        return false;
+    }
 
-    if (GetKind() == TReplication::ETargetKind::Topic
-        && replication->GetState() == TReplication::EState::Removing)
-    {
-        switch (GetDstState()) {
-        case EDstState::Alter:
-        case EDstState::Removing:
+    const bool hasCdcChildren = !replication->GetCdcChildren(GetId()).empty();
+    switch (GetDstState()) {
+    case EDstState::Alter:
+        if (IsTopicTarget(GetKind()) || hasCdcChildren) {
             // Complete destination cleanup before removing the source consumer.
             TTargetBase::Progress(ctx);
-            return;
-        default:
-            break;
+            return true;
         }
+        break;
+    case EDstState::Removing:
+        if (IsTopicTarget(GetKind())) {
+            TTargetBase::Progress(ctx);
+            return true;
+        }
+        break;
+    default:
+        break;
     }
 
-    if (replication->GetState() == TReplication::EState::Removing
-        && GetStreamState() == EStreamState::Removed)
-    {
-        Reset(StreamCreator);
-        Reset(StreamRemover);
-        if (GetDstState() != EDstState::Removing && GetDstState() != EDstState::Attaching) {
-            if (HasWorkers()) {
-                RemoveWorkers(ctx);
-            } else {
-                ctx.Send(ctx.SelfID, new TEvPrivate::TEvDropStreamResult(
-                    replication->GetId(), GetId(), NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
-            }
-            return;
-        }
+    if (GetStreamState() != EStreamState::Removed) {
+        return false;
     }
 
+    Reset(StreamCreator);
+    Reset(StreamRemover);
+    if (EqualToOneOf(GetDstState(), EDstState::Removing, EDstState::Attaching)) {
+        return false;
+    }
+
+    if (HasWorkers()) {
+        RemoveWorkers(ctx);
+    } else {
+        ctx.Send(ctx.SelfID, new TEvPrivate::TEvDropStreamResult(
+            replication->GetId(), GetId(), NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
+    }
+    return true;
+}
+
+void TTargetWithStream::Progress(const TActorContext& ctx) {
+    if (ProgressRemoving(ctx)) {
+        return;
+    }
+
+    auto* replication = GetReplication();
     if (CanDetachWithoutStream()) {
         Reset(StreamCreator);
         // Keep the stream metadata so a later DROP can clean up a stream whose
@@ -315,6 +337,16 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
     case EStreamState::Removed:
     case EStreamState::Error:
         break;
+    }
+
+    const bool startingTable = GetDstState() == EDstState::Ready || GetDstState() == EDstState::PreparingCdc
+        || (GetDstState() == EDstState::Alter && replication->GetDesiredState() == TReplication::EState::Ready);
+    if (GetKind() == ETargetKind::Table && startingTable && !HasWorkers()
+        && AnyOf(replication->GetCdcChildren(GetId()), [](const auto* child) {
+            return child->GetDstState() != EDstState::Ready;
+        }))
+    {
+        return;
     }
 
     TTargetBase::Progress(ctx);

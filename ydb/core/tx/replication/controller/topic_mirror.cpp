@@ -86,6 +86,7 @@ Ydb::Topic::CreateTopicRequest BuildTopicMirrorRequest(const NYdb::NTopic::TTopi
 
     // Mirroring uses the effective read quota reported by the source.
     const auto& source = NYdb::TProtoAccessor::GetProto(description);
+    *request.mutable_consumers() = source.consumers();
     request.set_partition_total_read_speed_bytes_per_second(source.partition_total_read_speed_bytes_per_second());
 
     request.mutable_attributes()->erase("_ydb_replication_consumer");

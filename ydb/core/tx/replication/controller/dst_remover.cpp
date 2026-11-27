@@ -53,6 +53,7 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         tx.MutableDrop()->SetId(DstPathId.LocalPathId);
 
         switch (Kind) {
+        case TReplication::ETargetKind::CdcTopic:
         case TReplication::ETargetKind::Topic:
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
             break;
@@ -101,7 +102,7 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
             }
             break;
         case NKikimrScheme::StatusNameConflict:
-            if (Kind == TReplication::ETargetKind::Topic) {
+            if (IsTopicTarget(Kind)) {
                 // A collected destination id also produces a name conflict.
                 DropError = record.GetReason();
                 Send(PipeCache, new TEvPipeCache::TEvForward(
@@ -234,6 +235,7 @@ public:
         } else {
             switch (Kind) {
             case TReplication::ETargetKind::Table:
+            case TReplication::ETargetKind::CdcTopic:
             case TReplication::ETargetKind::Topic:
                 return AllocateTxId();
             case TReplication::ETargetKind::IndexTable:

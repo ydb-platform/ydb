@@ -1,6 +1,7 @@
 #include "controller_impl.h"
 #include "target_table.h"
 #include "target_topic.h"
+#include "target_cdc.h"
 #include "target_transfer.h"
 
 #include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
@@ -124,6 +125,12 @@ class TController::TTxInit: public TTxBase {
             case TReplication::ETargetKind::Transfer:
                 config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, replication->GetConfig());
                 break;
+            case TReplication::ETargetKind::CdcTopic: {
+                NKikimrReplicationController::TCdcTarget cdc;
+                Y_ABORT_UNLESS(cdc.ParseFromString(rowset.GetValue<Schema::Targets::Cdc>()));
+                config = std::make_shared<TTargetCdc::TConfig>(srcPath, dstPath, cdc);
+                break;
+            }
             case TReplication::ETargetKind::Topic:
                 config = std::make_shared<TTargetTopic::TTopicConfig>(srcPath, dstPath);
                 break;

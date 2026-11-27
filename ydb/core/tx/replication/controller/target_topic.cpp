@@ -5,7 +5,7 @@
 namespace NKikimr::NReplication::NController {
 
 TTargetTopic::TTargetTopic(TReplication* replication, ui64 id, const IConfig::TPtr& config)
-    : TTargetWithStream(replication, ETargetKind::Topic, id, config)
+    : TTargetWithStream(replication, config->GetKind(), id, config)
 {
 }
 

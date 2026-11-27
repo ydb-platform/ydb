@@ -6,6 +6,7 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/array_ref.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 
@@ -20,7 +21,13 @@ namespace NKikimrReplication {
     class TEvDescribeReplicationResult;
 }
 
+namespace NKikimr::NIceDb {
+class TNiceDb;
+}
+
 namespace NKikimr::NReplication::NController {
+
+class TTargetCdc;
 
 class TReplication: public TSimpleRefCount<TReplication> {
 public:
@@ -39,6 +46,7 @@ public:
         IndexTable,
         Transfer,
         Topic,
+        CdcTopic,
     };
 
     enum class EDstState: ui8 {
@@ -50,6 +58,7 @@ public:
         Paused,
         Attaching, // Deprecated.
         WaitingImport,
+        PreparingCdc,
         Error = Max<ui8>()
     };
 
@@ -162,6 +171,9 @@ public:
     const ITarget* FindBaseTableTarget(const ITarget& indexTarget) const;
     void RemoveTarget(ui64 id);
     TVector<ITarget*> GetTargets() const;
+    TConstArrayRef<TTargetCdc*> GetCdcChildren(ui64 parentId) const;
+    bool AreCdcChildrenPrepared(ui64 parentId) const;
+    void FinishCdcChildren(ui64 parentId, NIceDb::TNiceDb& db);
     TVector<TString> GetTargetTablePaths() const;
 
     bool IsExpectedTargetDiscoverer(const TActorId& actorId) const;
@@ -209,11 +221,16 @@ public:
     const std::optional<TDropOp>& GetDropOp() const;
 
 private:
+    friend class TTargetCdc;
+    void RegisterCdcChild(ui64 parentId, TTargetCdc& child);
+
     class TImpl;
     std::shared_ptr<TImpl> Impl;
     std::optional<TDropOp> DropOp;
 
 }; // TReplication
+
+bool IsTopicTarget(TReplication::ETargetKind kind);
 
 // Whether the replication takes over its destination tables as they are: they already exist and
 // already hold the data, so the controller demotes them in place instead of creating anything.

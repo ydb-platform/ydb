@@ -285,10 +285,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             error = "Topic replication supports row consistency only";
             return false;
         }
-        if (description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy()
-            != NYdb::NTopic::EAutoPartitioningStrategy::Disabled)
-        {
-            error = "Topic replication requires fixed partitions";
+
+        // The mirrorer follows source splits, but cannot follow merges yet.
+        const auto strategy = description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy();
+        if (strategy == NYdb::NTopic::EAutoPartitioningStrategy::ScaleUpAndDown) {
+            error = "Topic replication does not support partition merges yet";
             return false;
         }
 

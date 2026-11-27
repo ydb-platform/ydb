@@ -4,6 +4,7 @@
 #include "target_transfer.h"
 
 #include <ydb/core/protos/metrics_config.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/core/tx/replication/ut_helpers/test_topic.h>
@@ -522,6 +523,38 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
             "CDC topics cannot be replication sources");
         result = discover(enabled, false, false, "/Root/Table/Feed/streamImpl");
         UNIT_ASSERT(!result->Get()->IsSuccess());
+    }
+
+    Y_UNIT_TEST(TopicAdmissionAllowsAutopartitioningButNotMerges) {
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableTopicReplication(true);
+        TEnv env(flags);
+
+        const auto createTopic = [&](const TString& name, NKikimrPQ::TPQTabletConfig::TPartitionStrategyType type) {
+            auto topic = MakeTopicDescription({.Name = name});
+            auto& strategy = *topic->MutablePQTabletConfig()->MutablePartitionStrategy();
+            strategy.SetPartitionStrategyType(type);
+            strategy.SetMaxPartitionCount(4);
+            UNIT_ASSERT_VALUES_EQUAL(env.CreateTopic("/Root", *topic), NMsgBusProxy::MSTATUS_OK);
+        };
+        createTopic("ScaleUp", NKikimrPQ::TPQTabletConfig::CAN_SPLIT);
+        createTopic("ScaleUpAndDown", NKikimrPQ::TPQTabletConfig::CAN_SPLIT_AND_MERGE);
+
+        const auto discover = [&](const TString& source) {
+            auto config = CreateConfig({{source, "/Root/Replica"}});
+            config.MutableConsistencySettings()->MutableRow();
+            env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(), config));
+            return env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());
+        };
+
+        const auto scaleUp = discover("/Root/ScaleUp");
+        UNIT_ASSERT_C(scaleUp->Get()->IsSuccess(), scaleUp->Get()->Failed.front().Error.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(scaleUp->Get()->ToAdd.front().Kind, TReplication::ETargetKind::Topic);
+
+        const auto merges = discover("/Root/ScaleUpAndDown");
+        UNIT_ASSERT(!merges->Get()->IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(merges->Get()->Failed.front().Error.GetIssues().ToOneLineString(),
+            "does not support partition merges");
     }
 
     Y_UNIT_TEST(RetryableError) {

@@ -1,4 +1,5 @@
 #include <ydb/core/base/tablet.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/data_center_states.h>
@@ -20,6 +21,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
@@ -2007,6 +2009,38 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                         UNIT_ASSERT_EQUAL(kv.second, 8);
                     }
                 } });
+    }
+
+    Y_UNIT_TEST_TWIN(GroupErasureMappingAndReload, block82) {
+        const TString erasure = block82 ? "block-8-2" : "block-4-2";
+        TEnvironmentSetup env(block82 ? 12 : 8, 1);
+        TFinalizer finalizer(env);
+        bool active = false;
+        env.Prepare("normal", [](auto&) {}, active);
+        NKikimrBlobStorage::TConfigRequest request;
+        env.DefineBox(1, "box", {{"/dev/disk", NKikimrBlobStorage::ROT, false, false, 0}}, env.GetNodes(), request);
+        env.DefineStoragePool(1, 1, "pool", 1, NKikimrBlobStorage::ROT, {}, request, erasure);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        const auto config = FetchBaseConfig(&env);
+        UNIT_ASSERT_VALUES_EQUAL(config.GroupSize(), 1);
+        auto checkMapping = [&] {
+            const auto pools = GetServiceCounters(env.Runtime->GetAppData(0).Counters, "storage_pool_stat")
+                ->FindSubgroup("storagePoolId", "1:1");
+            UNIT_ASSERT(pools);
+            const auto pool = pools->FindSubgroup("storagePool", "pool");
+            UNIT_ASSERT(pool);
+            const auto group = pool->FindSubgroup("group", ToString(config.GetGroup(0).GetGroupId()));
+            UNIT_ASSERT(group);
+            UNIT_ASSERT_VALUES_EQUAL(group->ReadSnapshot().size(), 1);
+            const auto species = group->FindSubgroup("erasureSpecies", erasure);
+            UNIT_ASSERT(species);
+            UNIT_ASSERT(species->FindCounter("GroupErasureSpecies"));
+            UNIT_ASSERT_VALUES_EQUAL(species->FindCounter("GroupErasureSpecies")->Val(), 1);
+        };
+        checkMapping();
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        checkMapping();
     }
 
     Y_UNIT_TEST(ExtendBoxAndStoragePool) {

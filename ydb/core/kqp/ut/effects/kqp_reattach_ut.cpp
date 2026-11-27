@@ -7,6 +7,8 @@
 
 #include <util/generic/scope.h>
 
+#include <atomic>
+
 
 namespace NKikimr {
 namespace NKqp {
@@ -101,6 +103,88 @@ Y_UNIT_TEST_SUITE(KqpReattach) {
             auto result = runtime.WaitFuture(future);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNDETERMINED, result.GetIssues().ToString());
         }
+    }
+
+    // YDBBUGS-1232: a ColumnShard pipe break during a write commit must trigger a
+    // reattach attempt, not an immediate UNDETERMINED. Unlike DataShard, ColumnShard
+    // implements neither TEvProposeTransactionRestart nor TEvProposeTransactionAttach,
+    // so TKqpTransactionManager::ShouldReattach() never permits reattach: its gate
+    // requires a restart notification that ColumnShard never sends. This repro injects
+    // a delivery problem for the participating columnshard during the distributed
+    // commit (with no restart notification, faithful to ColumnShard) and asserts that
+    // KQP attempts to reattach. It fails until ColumnShard recovery is implemented.
+    Y_UNIT_TEST(ColumnShardDeliveryProblemMustReattach) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false).SetEnableDataShardVolatileTransactions(false);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        kikimr.RunCall([&] {
+            auto result = session.ExecuteQuery(Q_(R"(
+                CREATE TABLE `/Root/ColumnReattach` (
+                    Key Uint64 NOT NULL,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                ) WITH (STORE = COLUMN);
+            )"), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            return result;
+        });
+
+        std::atomic<bool> reattachAttempted{false};
+        ui64 tablet = 0;
+
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> TTestActorRuntime::EEventAction {
+            if (ev->GetTypeRewrite() != TEvPipeCache::EvForward) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            auto* fwd = ev->Get<TEvPipeCache::TEvForward>();
+            if (!fwd->Ev) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            if (fwd->Ev->Type() == TEvTxProxy::TEvProposeTransaction::EventType && tablet == 0) {
+                // The buffer write actor is already in StateCommit and is proposing the
+                // distributed commit to the coordinator. Simulate a columnshard pipe
+                // break: deliver a delivery problem for the participating columnshard,
+                // with no restart notification (ColumnShard never sends one).
+                const auto& proposal = static_cast<const TEvTxProxy::TEvProposeTransaction&>(*fwd->Ev).Record;
+                const auto& affected = proposal.GetTransaction().GetAffectedSet();
+                UNIT_ASSERT_C(affected.size() > 0, "expected a participating columnshard");
+                tablet = affected.Get(0).GetTabletId();
+
+                const TActorId bufferActor = ev->Sender;
+                auto deliveryProblem = std::make_unique<TEvPipeCache::TEvDeliveryProblem>(
+                    tablet, /* notDelivered */ false);
+                runtime.Send(bufferActor, ev->Recipient, deliveryProblem.release());
+
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            if (fwd->Ev->Type() == TEvDataShard::TEvProposeTransactionAttach::EventType) {
+                reattachAttempted.store(true);
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        runtime.SetObserverFunc(grab);
+
+        auto future = kikimr.RunInThreadPool([&] {
+            return session.ExecuteQuery(Q_(R"(
+                UPSERT INTO `/Root/ColumnReattach` (Key, Value) VALUES (1u, 'value');
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        });
+
+        auto result = runtime.WaitFuture(future, TDuration::Seconds(60));
+        UNIT_ASSERT_C(reattachAttempted.load(),
+            "KQP did not attempt to reattach to the columnshard after a mid-commit delivery problem; "
+            "query status: " + result.GetIssues().ToString());
     }
 }
 }

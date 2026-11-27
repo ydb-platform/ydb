@@ -1,11 +1,17 @@
 # -*- coding: utf-8 -*-
 import abc
+from contextlib import ExitStack
 import six
 import time
 import logging
 
+import grpc
+import pytest
 from hamcrest import assert_that, is_, not_
 
+from ydb.public.api.grpc.ydb_discovery_v1_pb2_grpc import DiscoveryServiceStub
+from ydb.public.api.protos import ydb_discovery_pb2 as discovery
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common import types
@@ -61,6 +67,65 @@ def wait_until_discovery_includes_all_slot_ports(
             % (sorted(required), last_observed["ports"], last_observed["debug_details"])
         ),
     )
+
+
+def _discovery_snapshot(reply):
+    assert reply.operation.status == StatusIds.SUCCESS
+    result = discovery.ListEndpointsResult()
+    assert reply.operation.result.Unpack(result)
+    return result
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_discovery_long_poll_hash(enabled):
+    config = KikimrConfigGenerator(
+        nodes=2, erasure=types.Erasure.NONE,
+        extra_feature_flags=["enable_discovery_long_polling"] if enabled else [],
+    )
+    with ExitStack() as resources:
+        cluster = KiKiMR(config)
+        cluster.start()
+        resources.callback(cluster.stop)
+        ports = {n.grpc_port for n in cluster.nodes.values()}
+        rpcs = [DiscoveryServiceStub(resources.enter_context(grpc.insecure_channel(n.endpoint))).ListEndpoints
+                for n in cluster.nodes.values()]
+
+        def request(snapshot_hash=b""):
+            return discovery.ListEndpointsRequest(database="/Root", snapshot_hash=snapshot_hash)
+
+        def snapshot(rpc, snapshot_hash=b""):
+            return _discovery_snapshot(rpc(request(snapshot_hash), timeout=5))
+
+        def all_ports_present():
+            try:
+                return all(ports <= {ep.port for ep in snapshot(rpc).endpoints} for rpc in rpcs)
+            except (grpc.RpcError, AssertionError):
+                return False
+
+        assert wait_for(all_ports_present, timeout_seconds=20, step_seconds=0.2)
+        if not enabled:
+            for rpc in rpcs:
+                for token in (b"", b"previous"):
+                    result = snapshot(rpc, token)
+                    assert not result.snapshot_hash and ports <= {ep.port for ep in result.endpoints}
+            return
+
+        hashes = [snapshot(rpc).snapshot_hash for rpc in rpcs]
+        assert all(hashes)
+        polls = []
+        for index, rpc in enumerate(rpcs):
+            current, other = hashes[index], hashes[1 - index]
+            assert snapshot(rpc, b"stale").snapshot_hash == current
+            if other != current:
+                assert snapshot(rpc, other).snapshot_hash == current
+            polls.append(rpc.future(request(current), timeout=25))
+        with pytest.raises(grpc.RpcError) as expired:
+            rpcs[0](request(hashes[0]), timeout=0.3)
+        assert expired.value.code() == grpc.StatusCode.DEADLINE_EXCEEDED
+        for poll in polls:
+            with pytest.raises(grpc.FutureTimeoutError):
+                poll.result(timeout=0.5)
+            assert poll.cancel()
 
 
 class TestDiscoveryExtEndpoint(object):
@@ -166,7 +231,7 @@ class TestDiscoveryExtEndpoint(object):
 class AbstractTestDiscoveryFaultInjection(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR()
+        cls.cluster = KiKiMR(configurator=KikimrConfigGenerator(extra_feature_flags=["enable_discovery_long_polling"]))
         cls.cluster.start()
         cls.database_name = '/Root/database'
         cls.logger = logger.getChild(cls.__name__)
@@ -288,7 +353,25 @@ class AbstractTestDiscoveryFaultInjection(object):
 
 class TestDiscoveryFaultInjectionSlotStop(AbstractTestDiscoveryFaultInjection):
     def inject_fault(self, slot):
-        slot.stop()
+        with grpc.insecure_channel(self.cluster.nodes[1].endpoint) as channel:
+            list_endpoints = DiscoveryServiceStub(channel).ListEndpoints
+            request = discovery.ListEndpointsRequest(database=self.database_name)
+            initial = _discovery_snapshot(list_endpoints(request, timeout=5))
+            assert initial.snapshot_hash
+            request.snapshot_hash = initial.snapshot_hash
+            pending = [list_endpoints.future(request, timeout=25) for _ in range(2)]
+            with pytest.raises(grpc.FutureTimeoutError):
+                pending[0].result(timeout=1)
+            slot.stop()
+            expected = {s.grpc_port for s in self.cluster.slots.values()} - {slot.grpc_port}
+            for call in pending:
+                result = _discovery_snapshot(call.result())
+                assert {ep.port for ep in result.endpoints} == expected
+                assert result.snapshot_hash != initial.snapshot_hash
+            # The board changed before this poll started.
+            current = _discovery_snapshot(list_endpoints(request, timeout=5))
+            assert {ep.port for ep in current.endpoints} == expected
+            assert current.snapshot_hash != initial.snapshot_hash
 
     def extract_fault(self, slot):
         slot.start()

@@ -15,7 +15,13 @@ struct TEvDiscovery {
     enum EEv {
         EvError = EventSpaceBegin(TKikimrEvents::ES_DISCOVERY),
         EvDiscoveryData,
+        EvCancelPoll,
         EvEnd
+    };
+
+    struct TEvCancelPoll : TEventLocal<TEvCancelPoll, EvCancelPoll> {
+        TString Path;
+        explicit TEvCancelPoll(const TString& path) : Path(path) {}
     };
 
     struct TEvError: public TEventLocal<TEvError, EvError> {
@@ -48,6 +54,13 @@ struct TEvDiscovery {
 
 namespace NDiscovery {
 
+struct TListEndpointsOptions {
+    TString SnapshotHash;
+    TString EndpointId;
+    TSet<TString> Services;
+    bool Ssl = false;
+};
+
 class TCachedMessageData {
 public:
     TString CachedMessage;
@@ -56,6 +69,8 @@ public:
     TMap<TActorId, TEvStateStorage::TBoardInfoEntry> InfoEntries; // OwnerId -> Payload
     TBridgeInfo::TPtr BridgeInfo;
     TEvStateStorage::TEvBoardInfo::EStatus Status;
+    TString SnapshotHash;
+    TString SnapshotHashSsl;
 
 public:
     TCachedMessageData(const TString& cachedMessage, const TString& cachedMessageSsl,
@@ -74,22 +89,24 @@ public:
                         const TBridgeInfo::TPtr& bridgeInfo,
                         const TString& endpointId = {},
                         const TSet<TString>& services = {},
-                        TEvStateStorage::TEvBoardInfo::EStatus status = TEvStateStorage::TEvBoardInfo::EStatus::Ok)
+                        TEvStateStorage::TEvBoardInfo::EStatus status = TEvStateStorage::TEvBoardInfo::EStatus::Ok,
+                        bool longPolling = false)
         : InfoEntries(std::move(infoEntries))
         , BridgeInfo(bridgeInfo)
         , Status(status)
     {
-        UpdateCache(nameserviceResponse, bridgeInfo, endpointId, services);
+        UpdateCache(InfoEntries, nameserviceResponse, bridgeInfo, endpointId, services, longPolling);
     }
 
-    void UpdateEntries(TMap<TActorId, TEvStateStorage::TBoardInfoEntry>&& newInfoEntries);
+    bool UpdateEntries(TMap<TActorId, TEvStateStorage::TBoardInfoEntry>&& newInfoEntries);
 
-    void UpdateCache(const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
+    void UpdateCache(const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& entries,
+                        const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
                         const TBridgeInfo::TPtr& bridgeInfo,
                         const TString& endpointId = {},
-                        const TSet<TString>& services = {});
+                        const TSet<TString>& services = {}, bool longPolling = false);
 
-    TEvDiscovery::TEvDiscoveryData* ToEvent(bool returnSerializedMessage) const;
+    TEvDiscovery::TEvDiscoveryData* ToEvent(bool returnSerializedMessage, bool allowEmpty = false) const;
 };
 
 }
@@ -104,9 +121,9 @@ IActor* CreateDiscoverer(
     const TString& database,
     bool returnSerializedMessage,
     const TActorId& replyTo,
-    const TActorId& cacheId);
+    const TActorId& cacheId, std::shared_ptr<const NDiscovery::TListEndpointsOptions> options = {});
 
 // Used to reduce number of requests to Board
-IActor* CreateDiscoveryCache(const TString& endpointId = {}, const TMaybe<TActorId>& nameserviceActorId = {});
+IActor* CreateDiscoveryCache(const TString& endpointId = {}, const TMaybe<TActorId>& nameserviceActorId = {}, bool longPolling = false);
 
 }

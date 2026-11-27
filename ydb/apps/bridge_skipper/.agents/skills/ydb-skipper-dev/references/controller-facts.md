@@ -1,7 +1,6 @@
 # bridge_skipper controller facts (developer reference)
 
-Checked at `skipper_initial_wip` HEAD `c33440067d60ba18b814dd92df9f1be37ed50df4` (2026-11-05). Paths are
-relative to `ydb/apps/bridge_skipper/`. Re-verify line numbers before citing; they drift.
+Paths are relative to `ydb/apps/bridge_skipper/`. Re-verify line numbers before citing; they drift.
 
 ## Layout and targets
 
@@ -18,8 +17,8 @@ relative to `ydb/apps/bridge_skipper/`. Re-verify line numbers before citing; th
 | `README.md` | Safety summary, required server/SDK commits, release checklist (10 recording cases, M1–M4, all open) | — |
 | `IMPLEMENTATION-index.md` | Source map, actors/threads, observation and policy invariants, validation map, web-administration contracts | — |
 
-Build and test through the personal `yamake` wrapper per the `ydb-build-test` skill, e.g. the unit
-targets `ydb/apps/bridge_skipper/{config,domain,runtime,http}/ut` and `ydb/apps/bridge_skipper`.
+The binary target is `ydb/apps/bridge_skipper`. Its unit test targets are
+`ydb/apps/bridge_skipper/{config,domain,runtime,http}/ut`.
 Mock lab: `YDBD_MOCK_IMPL=ya ydb/apps/bridge_skipper/ydbd_mock/scripts/lab.sh --fresh` (2 piles × 3 hosts,
 skipper on `:8080`, control UI on `:21999`). Mock and acceptance passes are not qualification.
 

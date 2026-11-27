@@ -140,7 +140,7 @@ public:
         return grpc::Status::OK;
     }
 
-    grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) {
+    grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) override {
         CheckClientMetadata(context, "x-ydb-database", TEST_DATABASE);
         if (Token) {
             CheckClientMetadata(context, "x-ydb-auth-ticket", Token);
@@ -212,7 +212,7 @@ public:
         Token = token;
     }
 
-    void ClearExpectations() {
+    void ClearExpectations() override {
         ExpectedClientCert = Token = {};
         Directories.clear();
         CapabilityProbe.Clear();

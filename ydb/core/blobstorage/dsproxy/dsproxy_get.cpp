@@ -244,7 +244,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         for (size_t index = 0; index < trace.Queries.size(); ++index) {
             const auto& requested = trace.Queries[index];
             const NKikimrBlobStorage::TQueryResult* result = nullptr;
-            for (int i = 0; i < Min(record.ResultSize(), 32); ++i) {
+            for (ui32 i = 0; i < record.ResultSize() && i < 32; ++i) {
                 const auto& candidate = record.GetResult(i);
                 if (LogoBlobIDFromLogoBlobID(candidate.GetBlobID()) == requested.BlobId
                         && candidate.GetShift() == requested.Shift) {

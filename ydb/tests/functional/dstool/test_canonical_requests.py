@@ -26,6 +26,7 @@ from ydb.apps.dstool.lib import table
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.common.wait_for import retry_assertions
 from ydb.tests.library.harness.kikimr_cluster import KiKiMR
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
 from ydb.core.protos.whiteboard_disk_states_pb2 import EVDiskState
@@ -156,6 +157,12 @@ def test_pdisk_set_broken_passes_layout_override(ignore_layout):
     assert command.HostKey.Fqdn == 'localhost'
     assert command.PDiskId == 1
     assert command.Status == dstool_cmd_pdisk_set.kikimr_bs3.BROKEN
+
+
+@pytest.fixture(scope='function')
+def ydb_configurator(ydb_cluster_configuration):
+    # cluster.stop() releases the configurator's ports, so each cluster needs a new allocator.
+    return KikimrConfigGenerator(**ydb_cluster_configuration)
 
 
 @pytest.fixture(scope='function')

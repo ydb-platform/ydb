@@ -209,18 +209,7 @@ public:
         BlobsInfo.emplace_back(std::move(info));
     }
 
-    TPreparedColumn Compile() {
-        if (BlobsInfo.empty()) {
-            BlobsInfo.emplace_back(TAssembleBlobInfo(RecordsCount, AbsentFill));
-            return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
-        } else {
-            YDB_LOG_VERIFY(RecordsCountByChunks == RecordsCount,
-                {"byChunks", RecordsCountByChunks},
-                {"expected", RecordsCount});
-            YDB_LOG_VERIFY(DataLoader);
-            return TPreparedColumn(std::move(BlobsInfo), DataLoader);
-        }
-    }
+    TPreparedColumn Compile();
 };
 
 }   // namespace NAssembling

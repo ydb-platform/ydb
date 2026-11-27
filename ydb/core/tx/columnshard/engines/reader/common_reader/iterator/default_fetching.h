@@ -100,7 +100,13 @@ private:
         if (columnChunks.empty()) {
             const auto fill = ISnapshotSchema::GetAbsentColumnFill(
                 *source.GetSourceSchema(), *source.GetContext()->GetReadMetadata()->GetResultSchema(), GetEntityId());
-            ColumnChunks.emplace_back(source.GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(source.GetRecordsCount(), fill));
+            const ui32 recordsCount = source.GetRecordsCount();
+            const ui32 chunkRecords =
+                ISnapshotSchema::GetAbsentColumnChunkRecords(GetColumnLoader(source)->GetField()->type(), fill, recordsCount);
+            for (ui32 pos = 0; pos < recordsCount; pos += chunkRecords) {
+                const ui32 count = std::min(chunkRecords, recordsCount - pos);
+                ColumnChunks.emplace_back(count, TPortionDataAccessor::TAssembleBlobInfo(count, fill));
+            }
             return;
         }
         StorageId = source.GetColumnStorageId(GetEntityId());

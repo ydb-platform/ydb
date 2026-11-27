@@ -55,6 +55,19 @@ TString SelectYson(TQueryClient& db, const TString& query) {
     return FormatResultSetYson(result.GetResultSet(0));
 }
 
+template <class TController>
+void WaitActualizedSince(TController& cs, const i64 before, const TString& message) {
+    const auto done = [&]() {
+        return cs->GetActualizationsCount().Val() > before && !cs->GetNeedActualizationCount().Val() &&
+               cs->GetTTLStartedCounter().Val() == cs->GetTTLFinishedCounter().Val();
+    };
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+    while (!done() && TInstant::Now() < deadline) {
+        Sleep(TDuration::MilliSeconds(200));
+    }
+    UNIT_ASSERT_C(done(), message);
+}
+
 TString ShowCreateQuery(TQueryClient& db, const TString& path) {
     auto result = db.ExecuteQuery("SHOW CREATE TABLE `" + path + "`;", NQuery::TTxControl::NoTx()).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -126,6 +139,26 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         ExecDml(db, "UPSERT INTO `/Root/DefUpsert` (Key) VALUES (2);");
         CompareYson(R"([[["kept"]]])", SelectYson(db, "SELECT Value FROM `/Root/DefUpsert` WHERE Key = 1;"));
         CompareYson(R"([[["born"]]])", SelectYson(db, "SELECT Value FROM `/Root/DefUpsert` WHERE Key = 2;"));
+    }
+
+    Y_UNIT_TEST(UpsertNewAndExistingWithoutIndexStreamWrite) {
+        auto settings = DefaultsSettings();
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(false);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetQueryClient();
+        ExecScheme(db, R"(
+            CREATE TABLE `/Root/DefUpsertNoStream` (
+                Key Uint32 NOT NULL,
+                Value Utf8 DEFAULT 'born',
+                PRIMARY KEY (Key)
+            ) WITH (STORE = COLUMN);
+        )");
+        ExecDml(db, "UPSERT INTO `/Root/DefUpsertNoStream` (Key) VALUES (1);");
+        ExecDml(db, "UPSERT INTO `/Root/DefUpsertNoStream` (Key, Value) VALUES (1, 'kept');");
+        ExecDml(db, "UPSERT INTO `/Root/DefUpsertNoStream` (Key) VALUES (1);");
+        ExecDml(db, "UPSERT INTO `/Root/DefUpsertNoStream` (Key) VALUES (2);");
+        CompareYson(R"([[["kept"]]])", SelectYson(db, "SELECT Value FROM `/Root/DefUpsertNoStream` WHERE Key = 1;"));
+        CompareYson(R"([[["born"]]])", SelectYson(db, "SELECT Value FROM `/Root/DefUpsertNoStream` WHERE Key = 2;"));
     }
 
     Y_UNIT_TEST(ReplaceOmit) {
@@ -403,6 +436,52 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         CompareYson(SelectYson(db, select + "`/Root/DsTypes`"), SelectYson(db, select + "`/Root/CsTypes`"));
     }
 
+    Y_UNIT_TEST(BadLiteralDefaultsMatchRowTable) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        const auto create = [&](const TString& side, const TString& name, const TString& column) {
+            TStringBuilder query;
+            query << "CREATE TABLE `/Root/" << side << name << "` (Key Uint32 NOT NULL, " << column << ", PRIMARY KEY (Key))";
+            if (side == "Cs") {
+                query << " WITH (STORE = COLUMN)";
+            }
+            return db.ExecuteQuery(query << ";", NQuery::TTxControl::NoTx()).GetValueSync();
+        };
+        for (const char* side : {"Ds", "Cs"}) {
+            const auto result = create(side, "BadType", "Value Uint32 DEFAULT 'aba'");
+            UNIT_ASSERT_C(!result.IsSuccess(), side);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "type mismatch");
+        }
+        for (const char* side : {"Ds", "Cs"}) {
+            ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/" << side << "AlterBad` (Key Uint32 NOT NULL, Value Uint32, PRIMARY KEY (Key))"
+                << (TStringBuf(side) == "Cs" ? " WITH (STORE = COLUMN)" : "") << ";");
+            ExpectSchemeError(db, TStringBuilder() << "ALTER TABLE `/Root/" << side << "AlterBad` ALTER COLUMN Value SET DEFAULT 'aba';",
+                "type mismatch");
+        }
+        const std::vector<std::pair<TString, TString>> ranges = {
+            {"Uint8", "300"},
+            {"Uint8", "-1"},
+            {"Int8", "200"},
+            {"Uint32", "-1"},
+            {"Int32", "3000000000"},
+        };
+        for (ui32 i = 0; i < ranges.size(); ++i) {
+            const TString name = TStringBuilder() << "Range" << i;
+            const TString column = TStringBuilder() << "Value " << ranges[i].first << " DEFAULT " << ranges[i].second;
+            const auto ds = create("Ds", name, column);
+            const auto cs = create("Cs", name, column);
+            UNIT_ASSERT_VALUES_EQUAL_C(ds.IsSuccess(), cs.IsSuccess(),
+                column << "; ds: " << ds.GetIssues().ToString() << "; cs: " << cs.GetIssues().ToString());
+            if (!ds.IsSuccess()) {
+                continue;
+            }
+            ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/Ds" << name << "` (Key) VALUES (1);");
+            ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/Cs" << name << "` (Key) VALUES (1);");
+            CompareYson(SelectYson(db, TStringBuilder() << "SELECT Value FROM `/Root/Ds" << name << "`;"),
+                SelectYson(db, TStringBuilder() << "SELECT Value FROM `/Root/Cs" << name << "`;"));
+        }
+    }
+
     Y_UNIT_TEST(BulkUpsertNotNullDefault) {
         TKikimrRunner kikimr(DefaultsSettings());
         auto db = kikimr.GetQueryClient();
@@ -438,7 +517,7 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         }
     }
 
-    Y_UNIT_TEST(ShowCreatePrintsSqlDefault) {
+    Y_UNIT_TEST_TWIN(ShowCreatePrintsSqlDefault, CsDefaultValuesEnabled) {
         TKikimrRunner kikimr(DefaultsSettings());
         auto db = kikimr.GetQueryClient();
         ExecScheme(db, R"(
@@ -446,36 +525,22 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
                 Key Uint32 NOT NULL,
                 Name Utf8 DEFAULT 'aba',
                 Value Uint32 NOT NULL DEFAULT 5,
+                Bytes String DEFAULT 'xyz',
+                Doc JsonDocument DEFAULT JsonDocument('[2]'),
                 PRIMARY KEY (Key)
             ) WITH (STORE = COLUMN);
         )");
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableCsDefaultValues(CsDefaultValuesEnabled);
         auto result = db.GetSession().GetValueSync().GetSession().ExecuteQuery(
             "SHOW CREATE TABLE `/Root/CsShow`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         const auto yson = FormatResultSetYson(result.GetResultSet(0));
         UNIT_ASSERT_STRING_CONTAINS(yson, "DEFAULT 'aba'");
         UNIT_ASSERT_STRING_CONTAINS(yson, "DEFAULT 5");
+        UNIT_ASSERT_STRING_CONTAINS(yson, "DEFAULT 'xyz'");
+        UNIT_ASSERT_STRING_CONTAINS(yson, "JsonDocument(");
         UNIT_ASSERT(!yson.Contains("DEFAULT_VALUE"));
         UNIT_ASSERT(!yson.Contains("ALTER OBJECT"));
-    }
-
-    Y_UNIT_TEST(ShowCreateSqlDefaultWhenFlagOff) {
-        TKikimrRunner kikimr(DefaultsSettings());
-        auto db = kikimr.GetQueryClient();
-        ExecScheme(db, R"(
-            CREATE TABLE `/Root/CsLegacy` (
-                Key Uint32 NOT NULL,
-                Value Uint32 DEFAULT 5,
-                PRIMARY KEY (Key)
-            ) WITH (STORE = COLUMN);
-        )");
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableCsDefaultValues(false);
-        auto result = db.GetSession().GetValueSync().GetSession().ExecuteQuery(
-            "SHOW CREATE TABLE `/Root/CsLegacy`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        const auto yson = FormatResultSetYson(result.GetResultSet(0));
-        UNIT_ASSERT_STRING_CONTAINS(yson, "DEFAULT 5");
-        UNIT_ASSERT(!yson.Contains("DEFAULT_VALUE"));
     }
 
     Y_UNIT_TEST(StoredDefaultIsHonoredWhenFlagOff) {
@@ -503,26 +568,6 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         ExecDml(db, "INSERT INTO `/Root/CsFlagOff` (Key) VALUES (3);");
         CompareYson(R"([[1u;[5u];#];[3u;[5u];#]])",
             SelectYson(db, "SELECT Key, Value, Extra FROM `/Root/CsFlagOff` ORDER BY Key;"));
-    }
-
-    Y_UNIT_TEST(ShowCreateBytesDefaultWhenFlagOff) {
-        TKikimrRunner kikimr(DefaultsSettings());
-        auto db = kikimr.GetQueryClient();
-        ExecScheme(db, R"(
-            CREATE TABLE `/Root/CsBytes` (
-                Key Uint32 NOT NULL,
-                Name String DEFAULT 'aba',
-                Doc JsonDocument DEFAULT JsonDocument('[2]'),
-                PRIMARY KEY (Key)
-            ) WITH (STORE = COLUMN);
-        )");
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableCsDefaultValues(false);
-        auto result = db.GetSession().GetValueSync().GetSession().ExecuteQuery(
-            "SHOW CREATE TABLE `/Root/CsBytes`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        const auto yson = FormatResultSetYson(result.GetResultSet(0));
-        UNIT_ASSERT_STRING_CONTAINS(yson, "DEFAULT 'aba'");
-        UNIT_ASSERT_STRING_CONTAINS(yson, "JsonDocument(");
     }
 
     Y_UNIT_TEST(ShowCreateDsJsonDocumentDefault) {
@@ -616,12 +661,11 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
             ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/CsNanAct` (Key) VALUES (" << key << ");");
         }
         UNIT_ASSERT(cs->WaitCompactions(TDuration::Seconds(20)));
+        const auto actualized = cs->GetActualizationsCount().Val();
         ExecScheme(db, "ALTER TABLE `/Root/DsNanAct` ALTER COLUMN Value SET DEFAULT 5.0;");
         ExecScheme(db, "ALTER TABLE `/Root/CsNanAct` ALTER COLUMN Value SET DEFAULT 5.0;");
         ExecScheme(db, "ALTER OBJECT `/Root/CsNanAct` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
-        const auto actualized = cs->GetActualizationsCount().Val();
-        cs->WaitActualization(TDuration::Seconds(30), true);
-        UNIT_ASSERT_C(cs->GetActualizationsCount().Val() > actualized, "SET DEFAULT did not actualize portions");
+        WaitActualizedSince(cs, actualized, "SET DEFAULT did not actualize portions");
         CompareYson(SelectYson(db, "SELECT Value FROM `/Root/DsNanAct` WHERE Key = 1;"),
             SelectYson(db, "SELECT Value FROM `/Root/CsNanAct` WHERE Key = 1;"));
     }
@@ -663,6 +707,26 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
             PARTITION BY HASH(Key)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         )");
+        ExpectSchemeError(db, R"(
+            CREATE TABLE `/Root/PresetStoreDef/Other` (
+                Key Uint64 NOT NULL,
+                Value Uint32 DEFAULT 6,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(Key)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )", "does not match schema preset");
+        ExecScheme(db, R"(
+            CREATE TABLE `/Root/PresetStoreDef/Inherit` (
+                Key Uint64 NOT NULL,
+                Value Uint32,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(Key)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )");
+        ExecDml(db, "INSERT INTO `/Root/PresetStoreDef/Inherit` (Key) VALUES (1);");
+        CompareYson(R"([[[5u]]])", SelectYson(db, "SELECT Value FROM `/Root/PresetStoreDef/Inherit`;"));
     }
 
     Y_UNIT_TEST(InvalidJsonDefaultRejected) {
@@ -749,21 +813,19 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Name, Value, Note FROM `/Root/CsKeep` WHERE Key = 2;"), "updated");
         UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 2;"), "stored");
 
+        const auto actualizedBeforeAdd = cs->GetActualizationsCount().Val();
         ExecScheme(db, "ALTER TABLE `/Root/CsKeep` ADD COLUMN Extra Utf8 DEFAULT 'added';");
         ExecScheme(db, "ALTER TABLE `/Root/CsKeep` ADD COLUMN Required Utf8 NOT NULL DEFAULT 'nn';");
         ExecScheme(db, "ALTER OBJECT `/Root/CsKeep` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
-        const auto actualizedAfterAdd = cs->GetActualizationsCount().Val();
-        cs->WaitActualization(TDuration::Seconds(30), true);
-        UNIT_ASSERT_C(cs->GetActualizationsCount().Val() > actualizedAfterAdd, "scheme actualization did not rewrite portions");
+        WaitActualizedSince(cs, actualizedBeforeAdd, "scheme actualization did not rewrite portions");
         UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Extra, Required FROM `/Root/CsKeep` WHERE Key = 1;"), "added");
         UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Extra, Required FROM `/Root/CsKeep` WHERE Key = 1;"), "nn");
         UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 1;"), "kept");
 
+        const auto actualizedBeforeSet = cs->GetActualizationsCount().Val();
         ExecScheme(db, "ALTER TABLE `/Root/CsKeep` ALTER COLUMN Value SET DEFAULT 'later';");
         ExecScheme(db, "ALTER OBJECT `/Root/CsKeep` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
-        const auto actualizedAfterSet = cs->GetActualizationsCount().Val();
-        cs->WaitActualization(TDuration::Seconds(30), true);
-        UNIT_ASSERT_C(cs->GetActualizationsCount().Val() > actualizedAfterSet, "SET DEFAULT did not actualize portions");
+        WaitActualizedSince(cs, actualizedBeforeSet, "SET DEFAULT did not actualize portions");
         UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 1;"), "kept");
         UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 2;"), "stored");
         UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 3;"), "born");
@@ -774,11 +836,10 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 1;"), "kept");
         UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 4;"), "later");
 
+        const auto actualizedBeforeDrop = cs->GetActualizationsCount().Val();
         ExecScheme(db, "ALTER TABLE `/Root/CsKeep` ALTER COLUMN Value DROP DEFAULT;");
         ExecScheme(db, "ALTER OBJECT `/Root/CsKeep` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
-        const auto actualizedAfterDrop = cs->GetActualizationsCount().Val();
-        cs->WaitActualization(TDuration::Seconds(30), true);
-        UNIT_ASSERT_C(cs->GetActualizationsCount().Val() > actualizedAfterDrop, "DROP DEFAULT did not actualize portions");
+        WaitActualizedSince(cs, actualizedBeforeDrop, "DROP DEFAULT did not actualize portions");
         UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 1;"), "kept");
         UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 3;"), "born");
         UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 4;"), "later");
@@ -832,6 +893,7 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         UNIT_ASSERT(cs->WaitCompactions(TDuration::Seconds(20)));
         CompareYson(R"([[1u;[5u]];[4u;[7u]]])",
             SelectYson(db, "SELECT Key, Value FROM `/Root/DefSparsePlain` ORDER BY Key;"));
+        const auto actualized = cs->GetActualizationsCount().Val();
         ExecScheme(db,
             "ALTER OBJECT `/Root/DefSparsePlain` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Value, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
         ExecScheme(db, "ALTER TABLE `/Root/DefSparsePlain` ALTER COLUMN Value SET DEFAULT 9;");
@@ -839,15 +901,13 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
             "ALTER OBJECT `/Root/DefSparsePlain` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Value, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`);");
         ExecScheme(db,
             "ALTER OBJECT `/Root/DefSparsePlain` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
-        const auto actualized = cs->GetActualizationsCount().Val();
-        cs->WaitActualization(TDuration::Seconds(30), true);
-        UNIT_ASSERT_C(cs->GetActualizationsCount().Val() > actualized, "default change did not actualize portions");
+        WaitActualizedSince(cs, actualized, "default change did not actualize portions");
         UNIT_ASSERT(TRestartTabletsCommand().Execute(kikimr).IsSuccess());
         CompareYson(R"([[1u;[5u]];[4u;[7u]]])",
             SelectYson(db, "SELECT Key, Value FROM `/Root/DefSparsePlain` ORDER BY Key;"));
     }
 
-    Y_UNIT_TEST(LargeHistoricalFillIsChunked) {
+    Y_UNIT_TEST(LargeHistoricalFillSurvivesCompactionAndActualization) {
         auto cs = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         TKikimrRunner kikimr(DefaultsSettings());
         auto db = kikimr.GetQueryClient();
@@ -877,7 +937,7 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         CompareYson(R"([[3000u;1u;3001u]])", SelectYson(db, check));
     }
 
-    Y_UNIT_TEST(DictionaryCompactionKeepsFill) {
+    Y_UNIT_TEST(DictionaryEncodingDefaultsMatchRowTable) {
         auto cs = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         cs->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         cs->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
@@ -1053,12 +1113,11 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
             ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/CsDoc` (Key) VALUES (" << key << ");");
         }
         UNIT_ASSERT(cs->WaitCompactions(TDuration::Seconds(20)));
+        const auto actualized = cs->GetActualizationsCount().Val();
         ExecScheme(db, "ALTER TABLE `/Root/DsDoc` ALTER COLUMN Doc SET DEFAULT JsonDocument('{\"a\":\"later\"}');");
         ExecScheme(db, "ALTER TABLE `/Root/CsDoc` ALTER COLUMN Doc SET DEFAULT JsonDocument('{\"a\":\"later\"}');");
         ExecScheme(db, "ALTER OBJECT `/Root/CsDoc` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
-        const auto actualized = cs->GetActualizationsCount().Val();
-        cs->WaitActualization(TDuration::Seconds(30), true);
-        UNIT_ASSERT_C(cs->GetActualizationsCount().Val() > actualized, "SET DEFAULT did not actualize portions");
+        WaitActualizedSince(cs, actualized, "SET DEFAULT did not actualize portions");
         ExecDml(db, "INSERT INTO `/Root/DsDoc` (Key) VALUES (6);");
         ExecDml(db, "INSERT INTO `/Root/CsDoc` (Key) VALUES (6);");
         CompareDoc(db);
@@ -1229,6 +1288,7 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(3000);
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferVolumeBytes(32_MB);
         settings.AppConfig.MutableColumnShardConfig()->SetBulkUpsertRequireAllColumns(false);
+        settings.AppConfig.MutableColumnShardConfig()->SetOnlyBulkUpsertWritingBuffer(false);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
         auto table = kikimr.GetTableClient();

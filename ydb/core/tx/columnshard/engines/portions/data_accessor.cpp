@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
@@ -803,6 +804,22 @@ TConclusion<std::shared_ptr<TPortionDataAccessor>> TPortionDataAccessor::BuildFr
             return parse;
         }
         return result;
+    }
+}
+
+NAssembling::TPreparedColumn NAssembling::TColumnAssemblingInfo::Compile() {
+    if (BlobsInfo.empty()) {
+        const ui32 chunkRecords = ISnapshotSchema::GetAbsentColumnChunkRecords(ResultLoader->GetField()->type(), AbsentFill, RecordsCount);
+        for (ui32 pos = 0; pos < RecordsCount; pos += chunkRecords) {
+            BlobsInfo.emplace_back(TAssembleBlobInfo(std::min(chunkRecords, RecordsCount - pos), AbsentFill));
+        }
+        return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
+    } else {
+        YDB_LOG_VERIFY(RecordsCountByChunks == RecordsCount,
+            {"byChunks", RecordsCountByChunks},
+            {"expected", RecordsCount});
+        YDB_LOG_VERIFY(DataLoader);
+        return TPreparedColumn(std::move(BlobsInfo), DataLoader);
     }
 }
 

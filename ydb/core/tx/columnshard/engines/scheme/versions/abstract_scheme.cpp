@@ -284,9 +284,7 @@ std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetAbsentColumnFill(
     return created->GetValue();
 }
 
-std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> ISnapshotSchema::BuildAbsentColumnChunks(
-    const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount) {
-    static constexpr ui64 MaxChunkBytes = 1 << 20;
+ui64 ISnapshotSchema::GetAbsentColumnValueBytes(const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill) {
     ui64 valueBytes = 8;
     if (fill && fill->is_valid) {
         if (const auto* binary = dynamic_cast<const arrow::BaseBinaryScalar*>(fill.get()); binary && binary->value) {
@@ -295,14 +293,25 @@ std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> ISnapshotSchema::
             valueBytes = std::max<ui64>(1, fixed->bit_width() / 8);
         }
     }
+    return valueBytes;
+}
+
+ui32 ISnapshotSchema::GetAbsentColumnChunkRecords(
+    const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount) {
+    static constexpr ui64 MaxChunkBytes = 1 << 20;
     static constexpr ui64 MaxChunksCount = (ui64)std::numeric_limits<ui16>::max() + 1;
+    const ui64 valueBytes = GetAbsentColumnValueBytes(type, fill);
     const ui64 minChunkRecords = (recordsCount + MaxChunksCount - 1) / MaxChunksCount;
-    const ui32 chunkRecords =
-        std::max<ui64>({ 1, minChunkRecords, std::min<ui64>(recordsCount, MaxChunkBytes / std::max<ui64>(1, valueBytes)) });
+    return std::max<ui64>({ 1, minChunkRecords, std::min<ui64>(recordsCount, MaxChunkBytes / std::max<ui64>(1, valueBytes)) });
+}
+
+std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> ISnapshotSchema::BuildAbsentColumnChunks(
+    const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount) {
     std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> result;
     if (!recordsCount) {
         return result;
     }
+    const ui32 chunkRecords = GetAbsentColumnChunkRecords(type, fill, recordsCount);
     const auto full = NArrow::TThreadSimpleArraysCache::Get(type, fill, chunkRecords);
     for (ui32 pos = 0; pos < recordsCount; pos += chunkRecords) {
         const ui32 count = std::min(chunkRecords, recordsCount - pos);

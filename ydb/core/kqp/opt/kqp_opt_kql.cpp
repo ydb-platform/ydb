@@ -564,7 +564,7 @@ TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputC
     }
 
     const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
-    if (!useStreamIndex && generateColumnsIfInsert.Ref().ChildrenSize() > 0) {
+    if (!useStreamIndex && table.Metadata->Kind != EKikimrTableKind::Olap && generateColumnsIfInsert.Ref().ChildrenSize() > 0) {
         return Build<TKqlInsertOnConflictUpdateRows>(ctx, write.Pos())
             .Table(BuildTableMeta(table, write.Pos(), ctx))
             .Input(input.Ptr())

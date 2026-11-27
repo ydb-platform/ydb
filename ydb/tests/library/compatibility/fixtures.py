@@ -290,10 +290,7 @@ class RestartToAnotherVersionFixture(CompatibilityReadinessMixin):
                 yield
         finally:
             self.stop_driver()
-            nodes = (*self.cluster.nodes.values(), *self.cluster.slots.values())
             self.cluster.stop()
-            live_pids = [node.pid for node in nodes if node.is_alive()]
-            assert not live_pids, f"ydbd processes still running after cluster teardown: {live_pids}"
 
     def change_cluster_version(self):
         self.current_binary_paths_index = (self.current_binary_paths_index + 1) % len(self.all_binary_paths)

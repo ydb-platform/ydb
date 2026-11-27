@@ -314,6 +314,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpPrepareIndexValidation:
             Y_ABORT("no implementation for ESchemeOpPrepareIndexValidation");
 
+        case NKikimrSchemeOp::ESchemeOpPrepareVectorIndex:
+            Y_ABORT("no implementation for ESchemeOpPrepareVectorIndex");
+
         case NKikimrSchemeOp::ESchemeOpDropIndex:
             return *modifyScheme.MutableDropIndex()->MutableTableName();
 
@@ -1228,6 +1231,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateIndexBuild:
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable:
         case NKikimrSchemeOp::ESchemeOpPrepareIndexValidation:
+        case NKikimrSchemeOp::ESchemeOpPrepareVectorIndex:
         case NKikimrSchemeOp::ESchemeOpCreateLock:
         case NKikimrSchemeOp::ESchemeOpApplyIndexBuild:
         case NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexMainTable:

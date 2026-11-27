@@ -4,5 +4,4 @@ RECURSE(
     mon
     node_registration
     oidc
-    sdk
 )

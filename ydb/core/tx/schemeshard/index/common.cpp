@@ -38,7 +38,8 @@ TPath GetShardsPath(TSchemeShard* ss, const TIndexBuildInfo& buildInfo) {
         case TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex:
             if (buildInfo.KMeans.Level == 1 &&
                 buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
-                buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders) {
+                buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders ||
+                buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Delta) {
                 return TPath::Init(buildInfo.TablePathId, ss);
             } else {
                 return GetBuildPath(ss, buildInfo, buildInfo.KMeans.ReadFrom());

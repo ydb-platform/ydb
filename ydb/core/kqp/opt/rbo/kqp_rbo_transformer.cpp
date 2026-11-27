@@ -907,6 +907,12 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     physicalJoinRules.emplace_back(std::make_unique<TRewriteJoinToIndexLookupJoinRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Physical rewrites II", std::move(physicalJoinRules)));
 
+    // A read of the index named by VIEW stays on the main table until the range pushdown or a lookup join reads the
+    // index, so both know which index to read. Otherwise the read reads the whole index.
+    TVector<std::unique_ptr<IRule>> viewIndexRules;
+    viewIndexRules.emplace_back(std::make_unique<TExpandViewIndexReadRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Expand view index reads", std::move(viewIndexRules)));
+
     // Assign physical stages.
     RBO.AddStage(std::make_unique<TAssignStagesStage>());
 

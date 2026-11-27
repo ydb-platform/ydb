@@ -789,6 +789,50 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("INSERT INTO TestTable (k) VALUES (3) RETURNING k, v;", "[[3;#]]");
     }
 
+    Y_UNIT_TEST_TWIN(NonDefaultLexicalPragmasRejectExpressionDefaults, Alter) {
+        TTestFixture fixture;
+        if constexpr (Alter) {
+            fixture.Exec(DefaultExprDDL("v Int32 DEFAULT 7"));
+        }
+
+        const auto ddl = [](TStringBuf expression) -> TString {
+            if constexpr (Alter) {
+                return TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << expression << ";";
+            } else {
+                return DefaultExprDDL(TStringBuilder() << "v Int32 DEFAULT " << expression);
+            }
+        };
+
+        struct TCase {
+            TStringBuf Name;
+            TStringBuf Override;
+            TStringBuf Reset;
+            TStringBuf Expression;
+        };
+        const TCase cases[] = {
+            {"CheckedOps", "CheckedOps = 'true'", "CheckedOps = 'false'",
+                "CAST(RandomNumber(1) * 0ul + 2147483647ul AS Int32) + 1"},
+            {"ClassicDivision", "ClassicDivision('false')", "ClassicDivision = 'true'",
+                "CAST(((RandomNumber(1) * 0ul + 3ul) / 2ul) * 10ul AS Int32)"},
+            {"UnicodeLiterals", "UnicodeLiterals", "DisableUnicodeLiterals",
+                "IF(FormatType(TypeOf('x')) = 'Utf8's, 1, 2) + CAST(RandomNumber(1) * 0ul AS Int32)"},
+        };
+        TStringBuilder resetPragmas;
+        for (const auto& test : cases) {
+            const TString pragma = TStringBuilder() << "PRAGMA " << test.Override << ";\n";
+            fixture.Rejects(pragma + ddl(test.Expression), TStringBuilder() << "DEFAULT expressions do not support PRAGMA " << test.Name);
+            resetPragmas << pragma << "PRAGMA " << test.Reset << ";\n";
+        }
+
+        if constexpr (Alter) {
+            fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, v;", "[[1;[7]]]");
+        }
+        const TString expression = "CAST(RandomNumber(1) * 0ul AS Int32) + 42";
+        fixture.Exec(resetPragmas + ddl(expression));
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), expression);
+        fixture.Check("INSERT INTO TestTable (k) VALUES (2) RETURNING k, v;", "[[2;[42]]]");
+    }
+
     Y_UNIT_TEST(UnrelatedDeclareAccepted) {
         TTestFixture fixture;
         // Unrelated query declarations are not part of the stored expression

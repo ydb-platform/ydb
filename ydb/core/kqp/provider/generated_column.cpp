@@ -426,7 +426,17 @@ bool CheckDefaultExpressionPragmas(const TStringBuf prefix, const NSQLTranslatio
     NSQLTranslationV1::TContext sqlContext({}, parsers, settings, {}, tokens, issues);
     NSQLTranslationV1::TSqlQuery sqlQuery(sqlContext, settings.Mode, /*topLevel=*/true);
     const auto& query = static_cast<const NSQLv1Generated::TSQLv1ParserAST&>(*ast).GetRule_sql_query();
-    bool disabled = false;
+    static const THashSet<TStringBuf> checkedPragmas = {
+        "ansiinforemptyornullableitemscollections",
+        "disableansiinforemptyornullableitemscollections",
+        "checkedops",
+        "classicdivision",
+        "unicodeliterals",
+        "disableunicodeliterals",
+    };
+
+    // Use the translator to resolve pragma arguments and resets in statement order.
+    NSQLTranslationV1::TBlocks blocks;
     for (const auto* statement : NSQLTranslationV1::Statements(query)) {
         if (!statement->HasAlt_sql_stmt_core1()) {
             continue;
@@ -436,21 +446,27 @@ bool CheckDefaultExpressionPragmas(const TStringBuf prefix, const NSQLTranslatio
             continue;
         }
         auto name = NSQLTranslationV1::Id(pragma.GetRule_an_id3(), sqlQuery);
-        if (NormalizeName(sqlContext.Pos(), name)) {
-            continue;
-        }
-        if (name == "disableansiinforemptyornullableitemscollections") {
-            disabled = true;
-        } else if (name == "ansiinforemptyornullableitemscollections") {
-            disabled = false;
+        if (!NormalizeName(sqlContext.Pos(), name) && checkedPragmas.contains(name) && !sqlQuery.Statement(blocks, *statement, {})) {
+            ctx.IssueManager.AddIssues(issues);
+            return false;
         }
     }
 
-    if (disabled) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos),
-            "DEFAULT expressions do not support PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections"));
+    TStringBuf unsupportedPragma;
+    if (!sqlContext.AnsiInForEmptyOrNullableItemsCollections.GetOrElse(true)) {
+        unsupportedPragma = "DisableAnsiInForEmptyOrNullableItemsCollections";
+    } else if (sqlContext.Scoped->PragmaCheckedOps) {
+        unsupportedPragma = "CheckedOps = 'true'";
+    } else if (!sqlContext.Scoped->PragmaClassicDivision) {
+        unsupportedPragma = "ClassicDivision = 'false'";
+    } else if (sqlContext.Scoped->UnicodeLiterals) {
+        unsupportedPragma = "UnicodeLiterals";
+    } else {
+        return true;
     }
-    return !disabled;
+
+    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "DEFAULT expressions do not support PRAGMA " << unsupportedPragma));
+    return false;
 }
 
 TExprNode::TPtr CompileDefaultExpr(const TString& sqlText, const TString& columnName, TExprContext& ctx,

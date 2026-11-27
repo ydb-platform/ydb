@@ -10,7 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     name: SwitchGate
     steps:
-    - name: main
+    - name: Switch gate
+      id: gate
       shell: bash
       run: |
         gate_config='${{ vars.POSTCOMMIT_GATE_CONFIG }}'
@@ -24,37 +25,23 @@ jobs:
         queued_json=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
           https://api.github.com/repos/${{github.repository}}/actions/runs?per_page=100\&page=1\&status=queued\&event=pull_request_target)
 
-        pr_check_items=$(jq --argjson max_age "$max_age_seconds" '
-          def fmt_duration:
-            if . < 60 then "\(.|floor)s"
-            elif . < 3600 then "\((./60)|floor)m"
-            elif . < 86400 then "\((./3600)|floor)h \(((./60)|floor % 60))m"
-            else "\((./86400)|floor)d \(((./3600)|floor % 24))h"
-            end;
+        queue_size=$(jq --argjson max_age "$max_age_seconds" '
           [.workflow_runs[]
             | select((.name // "") == "PR-check")
-            | . + {
-                waiting_seconds: (now - (.updated_at | fromdate))
-              }
-            | select(.waiting_seconds > 60)
-            | {
-                id,
-                title: (.display_title // .head_branch // ("run #" + (.id|tostring))),
-                html_url,
-                waiting: (.waiting_seconds | fmt_duration),
-                waiting_seconds,
-                ignored: (.waiting_seconds > $max_age)
-              }
-          ]
-          | sort_by(-.waiting_seconds)
+            | (now - (.updated_at | fromdate)) as $waiting
+            | select($waiting > 60 and $waiting <= $max_age)
+          ] | length
         ' <<<"$queued_json")
-
-        pr_check_queue_size=$(jq 'length' <<<"$pr_check_items")
-        queue_size=$(jq '[.[] | select(.ignored | not)] | length' <<<"$pr_check_items")
-        ignored_stale=$(jq '[.[] | select(.ignored)] | length' <<<"$pr_check_items")
+        ignored_stale=$(jq --argjson max_age "$max_age_seconds" '
+          [.workflow_runs[]
+            | select((.name // "") == "PR-check")
+            | select((now - (.updated_at | fromdate)) > $max_age)
+          ] | length
+        ' <<<"$queued_json")
 
         echo "Queue size: $queue_size"
         echo "Queue threshold: $queue_threshold"
+        echo "Ignored stale PR-check: $ignored_stale"
 
         if (( queue_size > queue_threshold )); then
           gate_action="closed"
@@ -65,6 +52,12 @@ jobs:
           echo "Open gate for postcommits"
           query='.runners[] | select(any(.labels[].name; .=="build-preset-relwithdebinfo" or .=="build-preset-asan" or .=="build-preset-tsan" or .=="build-preset-msan")) | select(all(.labels[].name; .!="postcommit")) | .id'
         fi
+
+        echo "gate_action=${gate_action}" >> "$GITHUB_OUTPUT"
+        echo "queue_size=${queue_size}" >> "$GITHUB_OUTPUT"
+        echo "queue_threshold=${queue_threshold}" >> "$GITHUB_OUTPUT"
+        echo "max_age_hours=${max_age_hours}" >> "$GITHUB_OUTPUT"
+        echo "ignored_stale=${ignored_stale}" >> "$GITHUB_OUTPUT"
 
         echo "Requesting a list of runners to update labels..."
         runners_json='{"runners":[]}'
@@ -116,100 +109,29 @@ jobs:
         done < <(jq -r "$query" <<<"$runners_json")
 
         echo "Runner labels synchronized"
-
-        postcommit_fetch_ok=1
-        postcommit_queued_json=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-          https://api.github.com/repos/${{github.repository}}/actions/runs?per_page=100\&page=1\&status=queued\&event=push) || postcommit_fetch_ok=0
-        if (( postcommit_fetch_ok == 0 )); then
-          echo "Failed to fetch queued postcommit runs; continuing with empty postcommit table"
-          postcommit_queued_json='{"workflow_runs":[]}'
-        fi
-
-        postcommit_parse_ok=1
-        postcommit_items=$(jq '
-          def fmt_duration:
-            if . < 60 then "\(.|floor)s"
-            elif . < 3600 then "\((./60)|floor)m"
-            elif . < 86400 then "\((./3600)|floor)h \(((./60)|floor % 60))m"
-            else "\((./86400)|floor)d \(((./3600)|floor % 24))h"
-            end;
-          [.workflow_runs[]
-            | (.name // "") as $name
-            | select($name == "PR-check" or ($name | startswith("Postcommit_")))
-            | . + {
-                waiting_seconds: (now - (.updated_at | fromdate))
-              }
-            | select(.waiting_seconds > 60)
-            | {
-                id,
-                name: $name,
-                title: (.display_title // .head_branch // ("run #" + (.id|tostring))),
-                html_url,
-                waiting: (.waiting_seconds | fmt_duration),
-                waiting_seconds
-              }
-          ]
-          | sort_by(-.waiting_seconds)
-        ' <<<"$postcommit_queued_json") || postcommit_parse_ok=0
-        if (( postcommit_parse_ok == 0 )); then
-          echo "Failed to parse queued postcommit runs"
-          postcommit_items='[]'
-          postcommit_fetch_ok=0
-        fi
-        postcommit_queue_size=$(jq 'length' <<<"$postcommit_items")
-        echo "Postcommit queue size: $postcommit_queue_size"
-
-        {
-          echo "## Postcommit gate: ${gate_action}"
-          echo ""
-          echo "| | |"
-          echo "|---|---|"
-          echo "| Decision | **${gate_action}** |"
-          echo "| Queue size | ${queue_size} (vars.POSTCOMMIT_QUEUE_THRESHOLD=${queue_threshold}) |"
-          echo "| Max age filter | ${max_age_hours}h (vars.POSTCOMMIT_GATE_CONFIG.ignore_pr_check_older_than_hours) |"
-          echo "| Ignored stale PR-check | ${ignored_stale} |"
-          echo ""
-          echo "### Queued PR-check (>60s): ${pr_check_queue_size} total, ${queue_size} in queue, ${ignored_stale} ignored"
-          echo ""
-          if (( pr_check_queue_size > 0 )); then
-            echo "| Gate | Waiting | Run |"
-            echo "|------|---------|-----|"
-            jq -r '
-              def esc_link: tostring | gsub("\\]"; "\\\\]") | gsub("\\|"; "\\\\|") | gsub("\n"; " ");
-              .[]
-              | (if .ignored then "ignored" else "counted" end) as $gate
-              | (.title | esc_link) as $title
-              | (if .ignored then "~~[\($title)](\(.html_url))~~" else "[\($title)](\(.html_url))" end) as $run
-              | "| \($gate) | \(.waiting) | \($run) |"
-            ' <<<"$pr_check_items"
-          else
-            echo "_No queued PR-check runs._"
-          fi
-          echo ""
-          if (( postcommit_fetch_ok == 0 )); then
-            echo "### Queued postcommit (>60s): unavailable"
-            echo ""
-            echo "_Failed to fetch queued push runs._"
-          else
-            echo "### Queued postcommit (>60s): ${postcommit_queue_size}"
-            echo ""
-            if (( postcommit_queue_size > 0 )); then
-              echo "| Waiting | Workflow | Run |"
-              echo "|---------|----------|-----|"
-              jq -r '
-                def esc_cell: tostring | gsub("\\|"; "\\\\|") | gsub("\n"; " ");
-                def esc_link: tostring | gsub("\\]"; "\\\\]") | gsub("\\|"; "\\\\|") | gsub("\n"; " ");
-                .[]
-                | (.title | esc_link) as $title
-                | "| \(.waiting) | `\(.name | esc_cell)` | [\($title)](\(.html_url)) |"
-              ' <<<"$postcommit_items"
-            else
-              echo "_No queued postcommit runs._"
-            fi
-          fi
-        } >> "$GITHUB_STEP_SUMMARY"
-
         if (( label_failures > 0 )); then
           echo "Label update failures: $label_failures"
           exit 1
         fi
+
+    - name: Checkout summary script
+      if: always()
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 1
+        sparse-checkout: |
+          .github/scripts/ci/postcommit_gate_summary.sh
+        sparse-checkout-cone-mode: false
+
+    - name: Write step summary
+      if: always() && steps.gate.outcome != 'skipped'
+      continue-on-error: true
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GATE_ACTION: ${{ steps.gate.outputs.gate_action }}
+        QUEUE_SIZE: ${{ steps.gate.outputs.queue_size }}
+        QUEUE_THRESHOLD: ${{ steps.gate.outputs.queue_threshold }}
+        MAX_AGE_HOURS: ${{ steps.gate.outputs.max_age_hours }}
+        IGNORED_STALE: ${{ steps.gate.outputs.ignored_stale }}
+      run: bash .github/scripts/ci/postcommit_gate_summary.sh

@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 
 from ydb.core.protos import bootstrap_pb2
-from ydb.tools.cfg import types
+from ydb.tools.cfg import static, types
 from ydb.tools.cfg.static import StaticConfigGenerator
 
 # (name, non_fixed_tablet_types_id, fixed_tablet_types_id)
@@ -56,7 +56,7 @@ def generate_bootstrap(fixed_tablet_types, system_tablets):
         shared_cache_memory_limit=None,
         pq_shared_cache_size=None,
     )
-    with mock.patch("ydb.tools.cfg.static.base.ClusterDetailsProvider", return_value=details):
+    with mock.patch.object(static.base, "ClusterDetailsProvider", return_value=details):
         return StaticConfigGenerator({"system_tablets": system_tablets}, binary_path="", output_dir="").boot_txt
 
 

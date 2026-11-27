@@ -133,6 +133,7 @@ TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoRespon
     TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> res(new TEvPersQueue::TEvHasDataInfoResponse());
 
     res->Record.SetEndOffset(GetEndOffset());
+    res->Record.SetSchemaVersion(Config.GetSchemaVersion());
     res->Record.SetSizeLag(lagSize);
     res->Record.SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
     if (cookie) {
@@ -141,6 +142,11 @@ TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoRespon
     GetResultPostProcessor<NKikimrPQ::THasDataInfoResponse>()(readingFinished, res->Record);
 
     return res;
+}
+
+bool TPartition::IsReplicationConsumer(const TString& clientId) const {
+    const auto* userInfo = UsersInfoStorage->GetIfExists(clientId);
+    return userInfo && userInfo->IsReplicationConsumer();
 }
 
 bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx) {
@@ -152,6 +158,8 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
     if (!IsActive()) {
         if (request.Offset < GetEndOffset() && (!request.ReadTimestamp || *request.ReadTimestamp <= EndWriteTimestamp)) {
             sendResponse(GetSizeLag(request.Offset), false);
+        } else if (request.Offset == GetEndOffset() && request.SchemaVersion < Config.GetSchemaVersion() && IsReplicationConsumer(request.ClientId)) {
+            sendResponse(0, false);
         } else {
             sendResponse(0, true);
 
@@ -270,7 +278,7 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
 
     THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
         record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp,
-        TInstant::MilliSeconds(record.GetDeadline())};
+        TInstant::MilliSeconds(record.GetDeadline()), record.GetSchemaVersion()};
 
     if (!InitDone || !ProcessHasDataRequest(req, ctx)) {
         THasDataDeadline dl{req.Deadline, req};

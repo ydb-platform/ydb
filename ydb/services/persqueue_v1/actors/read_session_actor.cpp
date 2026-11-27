@@ -256,7 +256,7 @@ void TReadSessionActor<Protocol>::Handle(typename IContext::TEvReadFinished::TPt
                     return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "can't commit without offsets", ctx);
                 }
 
-                THashMap<ui64, TEvPQProxy::TCommitRange> commitRange;
+                THashMap<i64, TEvPQProxy::TCommitRange> commitRange;
 
                 for (const auto& pc : req.commit_offsets()) {
                     for (const auto& c : pc.offsets()) {
@@ -447,7 +447,12 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvCommitRange::TPtr& ev, c
 
     auto it = Partitions.find(ev->Get()->AssignId);
     if (it == Partitions.end()) { // stale commit - ignore it
-        return;
+        if (ev->Get()->AssignId < 0) {
+            it = Partitions.find(-ev->Get()->AssignId);
+        }
+        if (it == Partitions.end()) {
+            return;
+        }
     }
 
     for (const auto& [b, e] : ev->Get()->CommitInfo.Ranges) {

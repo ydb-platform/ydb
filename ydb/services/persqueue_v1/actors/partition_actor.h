@@ -209,6 +209,7 @@ private:
 
     ui64 ReadOffset;
     ui64 ClientReadOffset;
+    ui64 ReadSchemaVersion = 0;
     TMaybe<ui64> ClientCommitOffset;
     bool ClientHasAnyCommits;
     bool ClientVerifyReadOffset;
@@ -239,6 +240,7 @@ private:
     NKikimrClient::TPersQueueRequest CurrentRequest;
 
     ui64 EndOffset;
+    ui64 EndSchemaVersion;
     TMaybe<ui64> RetainedStartOffset;
     ui64 SizeLag;
 

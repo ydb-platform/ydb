@@ -54,6 +54,7 @@ TPartitionActor::TPartitionActor(
     , ReadTimestampMs(readTimestampMs)
     , ReadOffset(0)
     , ClientReadOffset(0)
+    , ReadSchemaVersion(0)
     , ClientCommitOffset(0)
     , ClientVerifyReadOffset(false)
     , CommittedOffset(0)
@@ -1672,6 +1673,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     TAutoPtr<TEvPersQueue::TEvHasDataInfo> event(new TEvPersQueue::TEvHasDataInfo());
     event->Record.SetPartition(Partition.Partition);
     event->Record.SetOffset(ReadOffset);
+    event->Record.SetSchemaVersion(ReadSchemaVersion);
     event->Record.SetCookie(++WaitDataCookie);
     ui64 deadline = (ctx.Now() + WAIT_DATA - WAIT_DELTA).MilliSeconds();
     event->Record.SetDeadline(deadline);
@@ -2009,6 +2011,10 @@ void TPartitionActor::DoWakeup(const TActorContext& ctx) {
 }
 
 bool TPartitionActor::IsPartitionDataReady() const {
+    if (TopicHolder->IsReplicationConsumer && ReadOffset == EndOffset && ReadSchemaVersion < EndSchemaVersion) {
+        return true;
+    }
+
     return ReadOffset < EndOffset && (!ClientMaxOffset.Defined() || ReadOffset < *ClientMaxOffset);
 }
 

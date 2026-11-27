@@ -318,12 +318,12 @@ struct TEvPQProxy {
     };
 
     struct TEvCommitRange : public NActors::TEventLocal<TEvCommitRange, EvCommitRange> {
-        explicit TEvCommitRange(const ui64 assignId, const TCommitRange&& commitInfo)
+        explicit TEvCommitRange(const i64 assignId, const TCommitRange&& commitInfo)
             : AssignId(assignId)
             , CommitInfo(std::move(commitInfo))
         { }
 
-        ui64 AssignId;
+        i64 AssignId;
         TCommitRange CommitInfo;
     };
 

@@ -323,6 +323,7 @@ private:
     void ProcessChangeOwnerRequests(const TActorContext& ctx);
     void ProcessHasDataRequests(const TActorContext& ctx);
     bool ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx);
+    bool IsReplicationConsumer(const TString& clientId) const;
     void FailStaleSessionReadRequests(const TString& user, const TActorContext& ctx);
     void ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription);
     bool ProcessReadSchemaChanges(const TActorContext& ctx, TReadInfo& info, ui64 cookie);

@@ -257,44 +257,9 @@ Adding a pile allocates its storage and synchronizes bridged data without stoppi
 
 For command details, see [provision-pile](../../../reference/ydb-cli/commands/bridge/provision-pile.md) and [join-pile](../../../reference/ydb-cli/commands/bridge/rejoin.md).
 
-### Manage a backup pile {#backup-pile}
-
-Upgrade the BlobStorage Controller and connected nodes to a version that supports backup piles before adding the first one. Register the pile and its nodes as described in [Add a pile](#add-pile). Set `type: BACKUP`, supply its [channel profiles and S3 configuration](../../../reference/configuration/bridge_config.md#backup-piles), and enable `feature_flags.enable_blob_depot_data_cooling` before provisioning. Provide compute nodes capable of hosting BlobDepot tablets in this pile when it joins.
-
-While the pile is `INACTIVE`, define each backing pool with the exact name referenced by a channel profile and set `BackupPileName` to the pile name. This reserves the pool for the pile's BlobDepot channels and restricts physical placement to its disks. Dedicated pools can be used with the default value of `enable_non_uniform_storage`. For example, save the following request as `archive-local.txt`. Adjust the box, erasure, disk type and group count for the deployment.
-
-```protobuf
-Command {
-  DefineStoragePool {
-    BoxId: 1
-    Name: "archive-local"
-    BackupPileName: "archive"
-    BridgeMode: false
-    NumGroups: 1
-    ErasureSpecies: "block-4-2"
-    VDiskKind: "Default"
-    PDiskFilter { Property { Type: SSD } }
-  }
-}
-```
-
-```bash
-ydbd -s <endpoint> admin bs config invoke --proto-file archive-local.txt
-```
-
-Run `bridge provision-pile`, then `bridge join-pile` as for a regular pile. Provisioning allocates local physical capacity for the channel pools, the static group parts, and a virtual member of each dynamic bridged group. BlobDepot uses the pile's compute during synchronization. Follow progress with `admin cluster bridge list`. After the pile reaches `SYNCHRONIZED`, the usual switchover and failover commands can promote it to `PRIMARY`.
-
-To rotate credentials or change upload settings, fetch the current cluster YAML, edit `backup.s3`, and apply it with `admin cluster config replace -f config.yaml`. The controller delivers the revision to existing depots and uses it when creating new ones. Keep the previous credentials valid while the depots apply the change. Run `admin cluster bridge list groups --pile archive --detailed` and check that each virtual member’s applied revision reaches its desired revision. To change an endpoint or other routing setting, first verify that the new route reaches the same objects, including writes in flight. Use the `--confirm-s3-route-change` option for each affected pile.
-
-```bash
-{{ ydb-cli }} -y admin cluster config replace -f config.yaml --confirm-s3-route-change archive
-```
-
-A provisioned pile keeps its bucket, effective key prefix, and channel bindings. When you [destroy the pile](#remove-pile), the controller removes its virtual groups and releases the physical groups in its dedicated pools. The pools retain their configured group counts for subsequent provisioning. After removal, the bucket owner handles cleanup of any S3 objects left under the former BlobDepot prefixes.
-
 ### Remove a pile {#remove-pile}
 
-Removing a pile permanently deletes its storage-group parts and their local data. For S3 cleanup, see [Manage a backup pile](#backup-pile).
+Removing a pile permanently deletes its storage-group parts and all data in them.
 
 1. If the only retained copies of any database are in the pile being removed, for example after switching to ordinary storage with `--retain-pile pile-b`, first [switch that database to bridged storage](#database-mode). Pile states may remain unchanged. Before switching the database back to ordinary storage with `--retain-pile pile-a`, wait until every storage group being converted has a `SYNCED` part in `pile-a`, as described in [Verifying a database mode change](#verify-database-mode). After the switch to ordinary storage, redundant group parts enter `BLOCKS` and are deleted in the background.
 

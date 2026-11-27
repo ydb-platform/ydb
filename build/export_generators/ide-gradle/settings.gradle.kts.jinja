@@ -1,7 +1,5 @@
 {%- include "[generator]/vars.jinja" -%}
-{%- if contrib_maven_repo -%}
 val output_root = "{{ output_root }}"
-{%- endif %}
 pluginManagement {
     val bucketUsername = settings.providers.gradleProperty("bucketUsername")
         .orElse(settings.providers.environmentVariable("BUCKET_USERNAME")).get()
@@ -33,17 +31,6 @@ dependencyResolutionManagement {
                 password = bucketPassword
             }
         }
-{%- if crowd_maven_repo %}
-        maven {
-            name = "yandex_qe_assessment"
-            url = uri("https://bucket.yandex-team.ru/v1/maven/yandex_qe_assessment")
-            credentials {
-                username = bucketUsername
-                password = bucketPassword
-            }
-        }
-{%- endif %}
-{%- if contrib_maven_repo %}
         maven {
             name = "contrib"
             url = uri("file://$output_root/contrib/java")
@@ -51,7 +38,6 @@ dependencyResolutionManagement {
                     artifact()
                 }
         }
-{%- endif %}
     {%- if yandex_qa_maven_repo %}
         maven {
             name = "yandex_qa_releases"

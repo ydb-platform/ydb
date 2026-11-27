@@ -1,5 +1,4 @@
 #include "dst_alterer.h"
-#include "cdc_trim_verifier.h"
 #include "logging.h"
 #include "private_events.h"
 #include "topic_mirror.h"
@@ -53,7 +52,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
         if (!CdcStreams.empty()) {
-            DescribeDst(TrimRequestId ? TrimTablePathId : DstPathId);
+            DescribeDst(DstPathId);
             Become(&TThis::StateDescribeCdcTable);
         } else if (IsTopicTarget(Kind)) {
             DescribeDst(DstPathId);
@@ -66,11 +65,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     void DescribeDst(const TPathId& pathId) {
         auto request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(pathId);
         request->Record.MutableOptions()->SetShowPrivateTable(Kind == TReplication::ETargetKind::CdcTopic);
-        if (TrimRequestId) {
-            request->Record.MutableOptions()->SetReturnPartitioningInfo(true);
-        }
-        Send(PipeCache, new TEvPipeCache::TEvForward(request.Release(), SchemeShardId), 0,
-            TrimRequestId ? ++DescribeGeneration : 0);
+        Send(PipeCache, new TEvPipeCache::TEvForward(request.Release(), SchemeShardId));
     }
 
     STATEFN(StateDescribeCdcTable) {
@@ -82,9 +77,6 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void HandleCdcTable(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        if (TrimRequestId && ev->Cookie != DescribeGeneration) {
-            return;
-        }
         const auto& record = ev->Get()->GetRecord();
         if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
             return Error(record.GetStatus(), record.GetReason());
@@ -92,8 +84,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
 
         const auto& desc = record.GetPathDescription();
         const auto& self = desc.GetSelf();
-        const auto& tablePathId = TrimRequestId ? TrimTablePathId : DstPathId;
-        if (!desc.HasTable() || TPathId(self.GetSchemeshardId(), self.GetPathId()) != tablePathId) {
+        if (!desc.HasTable() || TPathId(self.GetSchemeshardId(), self.GetPathId()) != DstPathId) {
             return Error(NKikimrScheme::StatusPreconditionFailed, "CDC parent identity changed");
         }
 
@@ -140,18 +131,13 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             return Success();
         }
 
-        ClearingCdcSetup = !TrimRequestId
-            && replication.GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING;
+        ClearingCdcSetup = replication.GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING;
         if (ClearingCdcSetup) {
             SetupReplicationConfig = replication;
             SetupReplicationConfig.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORT_STATE_NONE);
         }
 
         CdcTableVersion = self.GetPathVersion();
-        if (TrimRequestId) {
-            DescribeDst(DstPathId);
-            return Become(&TThis::StateDescribeTopic);
-        }
         AlterDst();
     }
 
@@ -164,9 +150,6 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void HandleTopic(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        if (TrimRequestId && ev->Cookie != DescribeGeneration) {
-            return;
-        }
         const auto& record = ev->Get()->GetRecord();
         if (record.GetStatus() == NKikimrScheme::StatusPathDoesNotExist) {
             return DestinationMissing();
@@ -179,7 +162,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             return Error(NKikimrScheme::StatusSchemeError, "Destination is not a topic");
         }
 
-        if (TrimRequestId) {
+        if (Kind == TReplication::ETargetKind::CdcTopic && DesiredState == TReplication::EState::Done) {
             const auto& self = desc.GetSelf();
             const auto& config = desc.GetPersQueueGroup().GetPQTabletConfig();
             if (TPathId(self.GetSchemeshardId(), self.GetPathId()) != DstPathId
@@ -190,17 +173,8 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             if (!self.GetCreateFinished() || self.GetPathState() != NKikimrSchemeOp::EPathStateNoChanges) {
                 return Retry();
             }
-            if (config.GetPartitionConfig().HasMirrorFrom()) {
-                return Error(NKikimrScheme::StatusPreconditionFailed, "CDC mirroring must stop before trimming");
-            }
-            if (config.GetCdcReplication().GetTrimTxId() == TrimRequestId) {
-                TrimVerifier = Register(CreateCdcTrimVerifier(SelfId(), DstPathId, TrimRequestId,
-                    desc.GetPersQueueGroup()));
-                return Become(&TThis::StateVerifyTrim);
-            }
-            if (VerifyTrim || config.GetCdcReplication().HasTrimTxId()) {
-                return Error(NKikimrScheme::StatusPreconditionFailed,
-                    "CDC trim was not applied or a different trim request owns the topic");
+            if (!config.GetPartitionConfig().HasMirrorFrom()) {
+                return Success();
             }
         }
 
@@ -215,9 +189,6 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         config = desc.GetPersQueueGroup().GetPQTabletConfig();
         if (Kind == TReplication::ETargetKind::CdcTopic) {
             config.ClearPartitionKeySchema();
-        }
-        if (TrimRequestId) {
-            alter.SetTrimCdcReplicationTxId(TrimRequestId);
         }
 
         auto& partition = *config.MutablePartitionConfig();
@@ -234,11 +205,6 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         auto& condition = *TopicTx.AddApplyIf();
         condition.SetPathId(DstPathId.LocalPathId);
         condition.SetPathVersion(desc.GetSelf().GetPathVersion());
-        if (TrimRequestId) {
-            auto& parentCondition = *TopicTx.AddApplyIf();
-            parentCondition.SetPathId(TrimTablePathId.LocalPathId);
-            parentCondition.SetPathVersion(CdcTableVersion);
-        }
 
         AlterDst();
     }
@@ -379,32 +345,9 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         if (ClearingCdcSetup) {
             ClearingCdcSetup = false;
             AllocateTxId();
-        } else if (TrimRequestId) {
-            VerifyTrim = true;
-            DescribeDst(DstPathId);
-            Become(&TThis::StateDescribeTopic);
         } else {
             Success();
         }
-    }
-
-    STATEFN(StateVerifyTrim) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPrivate::TEvCdcTrimVerified, HandleTrimVerified);
-        default:
-            return StateBase(ev);
-        }
-    }
-
-    void HandleTrimVerified(TEvPrivate::TEvCdcTrimVerified::TPtr& ev) {
-        if (ev->Sender != TrimVerifier) {
-            return;
-        }
-        TrimVerifier = {};
-        if (!ev->Get()->Success) {
-            return Error(NKikimrScheme::StatusPreconditionFailed, ev->Get()->Error);
-        }
-        Success();
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -425,7 +368,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void DestinationMissing() {
-        if (TrimRequestId) {
+        if (Kind == TReplication::ETargetKind::CdcTopic && DesiredState == TReplication::EState::Done && DstPathId) {
             return Error(NKikimrScheme::StatusPathDoesNotExist, "Managed CDC topic is missing");
         }
         if (IsTopicTarget(Kind) && DesiredState == TReplication::EState::Ready) {
@@ -454,10 +397,6 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
 
     void Retry() {
         YDB_LOG_DEBUG("Retry");
-        if (TrimVerifier) {
-            Send(TrimVerifier, new TEvents::TEvPoison());
-            TrimVerifier = {};
-        }
         WaitingForCompletion = false;
         Schedule(RetryInterval, new TEvents::TEvWakeup);
         Become(&TThis::StateRetry);
@@ -468,9 +407,6 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             Send(PipeCache, new TEvPipeCache::TEvUnlink(SchemeShardId));
         }
 
-        if (TrimVerifier) {
-            Send(TrimVerifier, new TEvents::TEvPoison());
-        }
         TActorBootstrapped<TDstAlterer>::PassAway();
     }
 
@@ -521,22 +457,8 @@ public:
         CompletingCdcSetup = completingCdcSetup;
     }
 
-    TDstAlterer(const TActorId& parent, ui64 schemeShardId, ui64 rid, ui64 tid,
-            const TPathId& dstPathId, const TPathId& replicationPathId, const NKikimrReplicationController::TCdcTarget& cdc)
-        : TDstAlterer(parent, schemeShardId, rid, tid, TReplication::ETargetKind::CdcTopic,
-            dstPathId, TReplication::EState::Done, replicationPathId, {})
-    {
-        Trimming = true;
-        TrimRequestId = cdc.GetTrimRequestId();
-        TrimTablePathId = TPathId::FromProto(cdc.GetTablePathId());
-        CdcStreams.push_back({TPathId::FromProto(cdc.GetStreamPathId()), cdc.GetActivateOnDetach()});
-    }
-
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
-        if (Trimming && (!TrimRequestId || !TrimTablePathId || !CdcStreams.front().PathId)) {
-            return Error(NKikimrScheme::StatusInvalidParameter, "CDC trim request identities are missing");
-        }
         if (IsTopicTarget(Kind)) {
             return DstPathId ? AllocateTxId() : DestinationMissing();
         }
@@ -589,15 +511,9 @@ private:
 
     ui64 TxId = 0;
     ui64 CdcTableVersion = 0;
-    ui64 TrimRequestId = 0;
-    ui64 DescribeGeneration = 0;
-    bool VerifyTrim = false;
-    bool Trimming = false;
     bool CompletingCdcSetup = false;
     bool ClearingCdcSetup = false;
     NKikimrSchemeOp::TTableReplicationConfig SetupReplicationConfig;
-    TPathId TrimTablePathId;
-    TActorId TrimVerifier;
     bool WaitingForCompletion = false;
     TActorId PipeCache;
     TString AlterError;
@@ -611,12 +527,6 @@ IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorC
 
     const auto desiredState = replication->GetState() == TReplication::EState::Removing
         ? TReplication::EState::Done : replication->GetDesiredState();
-    if (const auto* cdc = TTargetCdc::Cast(target);
-        cdc && cdc->GetCdc().GetPhase() == NKikimrReplicationController::TCdcTarget::TRIMMING)
-    {
-        return new TDstAlterer(ctx.SelfID, replication->GetSchemeShardId(), replication->GetId(), targetId,
-            target->GetDstPathId(), replication->GetPathId(), cdc->GetCdc());
-    }
     if (IsTopicTarget(target->GetKind())) {
         TTopicMirrorSettings topicMirror(replication->GetConfig().GetSrcConnectionParams(),
             target->GetSrcPath(), target->GetStreamConsumerName());

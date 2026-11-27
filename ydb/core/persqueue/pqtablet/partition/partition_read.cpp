@@ -313,9 +313,8 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
                     ctx, consumer.GetName(), 0, IsImportant(consumer), TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs()), "", 0, 0, 0, 0, 0, TInstant::Zero(), {}, false
             );
         }
-        if (ShouldClampConsumerOffset(userInfo->Offset)) {
+        if (userInfo->Offset < (i64)GetStartOffset())
             userInfo->Offset = GetStartOffset();
-        }
         ReadTimestampForOffset(consumer.GetName(), *userInfo, ctx);
     }
     for (auto&& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
@@ -798,7 +797,6 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     auto res = Subscriber.OnTimeout(ev);
     if (!res)
         return;
-    res->Offset = Max(res->Offset, CdcReplicationTrimOffset);
     TReadAnswer answer = res->FormAnswer(
             ctx, nullptr, GetStartOffset(), res->Offset, Partition, nullptr,
             res->Destination, 0, TabletActorId, Config.GetMeteringMode(), IsActive(), GetResultPostProcessor<NKikimrClient::TCmdReadResult>(res->User)
@@ -880,8 +878,6 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
                                                   lastOffset);
 }
 
-static constexpr char LostMessagePartError[] = "client requested not from first part, and this part is lost";
-
 void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     auto* read = ev->Get();
 
@@ -893,10 +889,9 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
                    read->ReplyTo);
         return;
     }
-    const ui64 firstReadableOffset = read->IsInternal() ? CdcReplicationTrimOffset : Max(CdcReplicationTrimOffset, GetStartOffset());
-    if (read->Offset < firstReadableOffset) {
+    if (read->Offset < GetStartOffset() && !read->IsInternal()) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_SMALL_OFFSET].Increment(1);
-        read->Offset = firstReadableOffset;
+        read->Offset = GetStartOffset();
         if (read->PartNo > 0) {
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(
             0);
@@ -911,7 +906,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         ReplyError(
             ctx, read->Cookie,
             NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET,
-            LostMessagePartError,
+            "client requested not from first part, and this part is lost",
             read->ReplyTo);
         return;
       }
@@ -1235,18 +1230,6 @@ void TPartition::ProcessTimestampRead(const TActorContext& ctx) {
     PQ_ENSURE(ReadingTimestamp || UpdateUserInfoTimestamp.empty());
 }
 
-void TPartition::FinishLostMultipartRead(const TReadInfo& info, const TActorContext& ctx) {
-    if (info.IsSubscription) {
-        TabletCounters.Cumulative()[COUNTER_PQ_READ_SUBSCRIPTION_ERROR].Increment(1);
-    }
-    TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_SMALL_OFFSET].Increment(1);
-    const auto latency = info.WaitQuotaTime + (ctx.Now() - info.Timestamp);
-    TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(latency.MilliSeconds());
-    ReplyError(ctx, info.Destination, NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET,
-               LostMessagePartError, info.ReplyTo);
-    OnReadRequestFinished(info.Destination, 0, 0, info.User, ctx);
-}
-
 void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription) {
     ui32 count = 0;
     ui32 size = 0;
@@ -1256,15 +1239,6 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
 
     if (subscription) {
         userInfo.ForgetSubscription(GetEndOffset(), ctx.Now());
-    }
-
-    // A read can wait for quota or new data while a trim commits.
-    if (info.Offset < CdcReplicationTrimOffset) {
-        if (info.PartNo > 0) {
-            FinishLostMultipartRead(info, ctx);
-            return;
-        }
-        info.Offset = CdcReplicationTrimOffset;
     }
 
     TVector<TRequestedBlob> blobs;

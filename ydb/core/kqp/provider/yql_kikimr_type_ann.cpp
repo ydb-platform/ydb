@@ -2929,6 +2929,7 @@ private:
                 "consistency_level",
                 "commit_interval",
                 "initial_scan",
+                "allow_row_for_topics_in_global",
                 "bootstrap",
                 "availability_period",
             };

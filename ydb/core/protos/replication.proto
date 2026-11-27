@@ -181,6 +181,8 @@ message TReplicationConfig {
     optional EBootstrapMode Bootstrap = 13;
     // The controller records this at CREATE so target discovery can resume after a restart.
     optional bool ReplicateChangefeeds = 14 [default = false];
+    // Mirror topic data and consumer offsets independently of global table commits.
+    optional bool AllowRowForTopicsInGlobal = 15 [default = false];
 
     reserved 6; // InitialSync
 }

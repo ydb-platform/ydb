@@ -154,7 +154,9 @@ public:
         const auto previousLag = GetLag();
         const auto res = Targets.emplace(id, CreateTarget(self, id, kind, std::forward<Args>(args)...));
         Y_VERIFY_S(res.second, "Duplicate target: " << id);
-        TLagProvider::AddPendingLag(id);
+        if (!IsTopicTarget(kind)) {
+            TLagProvider::AddPendingLag(id);
+        }
         NotifyLagChanged(previousLag);
         return id;
     }
@@ -347,6 +349,7 @@ public:
         KeepResourceId(Config, config);
         config.SetInitialScan(Config.GetInitialScan());
         config.SetReplicateChangefeeds(Config.GetReplicateChangefeeds());
+        config.SetAllowRowForTopicsInGlobal(Config.GetAllowRowForTopicsInGlobal());
         if (Config.GetSrcConnectionParams().SerializeAsString() != config.GetSrcConnectionParams().SerializeAsString()) {
             // A deferred ALTER installs the config before ResetCredentials.
             // Invalidate the old callbacks immediately, including A -> B -> A.

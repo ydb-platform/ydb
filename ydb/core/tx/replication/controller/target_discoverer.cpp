@@ -164,6 +164,9 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 EraseIf(target.CdcStreams, [](const auto& stream) {
                     return !TTargetCdc::IsUserStream(stream);
                 });
+                if (!target.CdcStreams.empty() && !AllowsTopicMirroring()) {
+                    return RejectTarget(ev->Cookie, "Mirroring changefeeds in GLOBAL replication requires AllowRowForTopicsInGlobal");
+                }
             }
 
             YDB_LOG_INFO("Add target",
@@ -296,9 +299,14 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         MaybeReply();
     }
 
+    bool AllowsTopicMirroring() const {
+        const auto& consistency = Config.GetConsistencySettings();
+        return consistency.HasRow() || (consistency.HasGlobal() && Config.GetAllowRowForTopicsInGlobal());
+    }
+
     bool CheckTopic(const NYdb::NTopic::TTopicDescription& description, TString& error) const {
-        if (Config.GetConsistencySettings().GetLevelCase() != NKikimrReplication::TConsistencySettings::kRow) {
-            error = "Topic replication supports row consistency only";
+        if (!AllowsTopicMirroring()) {
+            error = "Mirroring topics in GLOBAL replication requires AllowRowForTopicsInGlobal";
             return false;
         }
         if (description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy()

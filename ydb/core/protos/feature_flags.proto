@@ -497,7 +497,7 @@ message TFeatureFlags {
     optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
     optional bool EnableColumnShardStats = 395 [default = false];
     optional bool EnableTopicReplication = 396 [default = false];
-    // Requires AllowHugeKeyValueDeletes on every node that can host destination PQ tablets.
+    // Enable only after the destination meets the EnableCdcHandoff rollout requirements.
     optional bool EnableCdcReplication = 403 [default = false];
     optional bool EnableRebuildIndex = 397 [default = false];
     optional bool EnableDefaultFromExpression = 398 [default = false];
@@ -506,9 +506,9 @@ message TFeatureFlags {
     optional bool DisablePgCompatibility = 400 [default = false];
     optional bool EnableBridgeProxyLocalPileFirstGet = 401 [default = false];
     optional bool EnableChecksumTable = 402 [default = false];
-    // Enable on the destination before CDC enrollment, after upgrading its SchemeShard and
-    // every eligible DataShard host. All supported rollback binaries must handle the handoff.
-    // Before downgrading below that floor, stop enrollment, finish enrolled replications,
-    // disable handoff admission and drain accepted handoffs.
+    // Enable before CDC enrollment, once all eligible destination SchemeShard and DataShard
+    // hosts have been upgraded and rollback to a version without CDC handoff is ruled out.
+    // A DataShard restarted on an older binary after PREPARED can detach the table
+    // while ignoring ActivateCdcStreams.
     optional bool EnableCdcHandoff = 404 [default = false];
 }

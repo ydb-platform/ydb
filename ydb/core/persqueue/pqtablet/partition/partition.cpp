@@ -740,70 +740,15 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     }
 }
 
-bool TPartition::ShouldTrimCdcReplication(const NKikimrPQ::TPQTabletConfig& config) const {
-    return !IsSupportive() && !CdcReplicationTrimTxId && config.GetCdcReplication().GetTrimTxId()
-        && Config.HasCdcReplication() && !Config.GetReplicationSourceConsumer().empty()
-        && config.GetReplicationSourceConsumer() == Config.GetReplicationSourceConsumer()
-        && !MirroringEnabled(Config) && !MirroringEnabled(config)
-        && !Config.GetEnableCompactification() && !config.GetEnableCompactification();
-}
-
-void TPartition::PrepareCdcReplicationTrim(TEvKeyValue::TEvRequest& request) {
-    if (!CdcReplicationTrimPending || !ChangeConfig) {
-        return;
-    }
-
-    // Config changes are first in their write cycle. The separate compaction
-    // cycle must have finished too, so neither can restore these data keys.
-    PQ_ENSURE(ChangeConfig && ShouldTrimCdcReplication(ChangeConfig->Config));
-    PQ_ENSURE(!CompactionInProgress);
-    PendingCdcReplicationTrimOffset = GetEndOffset();
-
-    NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeData, Partition);
-    NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeTmpData, Partition);
-
-    NKikimrPQ::TCdcReplicationTrim trim;
-    trim.SetTxId(ChangeConfig->Config.GetCdcReplication().GetTrimTxId());
-    trim.SetOffset(*PendingCdcReplicationTrimOffset);
-
-    auto* write = request.Record.AddCmdWrite();
-    write->SetKey(GetCdcReplicationTrimKey());
-    write->SetValue(trim.SerializeAsString());
-    write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
-}
-
-void TPartition::CompleteCdcReplicationTrim() {
-    if (!PendingCdcReplicationTrimOffset) {
-        return;
-    }
-
-    CdcReplicationTrimOffset = *PendingCdcReplicationTrimOffset;
-    CdcReplicationTrimTxId = ChangeConfig->Config.GetCdcReplication().GetTrimTxId();
-    PendingCdcReplicationTrimOffset.reset();
-    CdcReplicationTrimPending = false;
-
-    FinalizeEmptyBlobEncoder(BlobEncoder, CdcReplicationTrimOffset, true);
-    FinalizeEmptyBlobEncoder(CompactionBlobEncoder, CdcReplicationTrimOffset, true);
-    BlobEncoder.MirroredOffset = Min(BlobEncoder.MirroredOffset, CdcReplicationTrimOffset);
-    BlobEncoder.FirstUncompactedOffset = CdcReplicationTrimOffset;
-    BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
-    CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
-    FirstCompactionPart.Clear();
-    GapOffsets.clear();
-    GapSize = 0;
-}
-
 void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     //Set Start Offset
     auto write = request->Record.AddCmdWrite();
     TKeyPrefix ikey(TKeyPrefix::TypeMeta, Partition);
 
     NKikimrPQ::TPartitionMeta meta;
-    meta.SetStartOffset(PendingCdcReplicationTrimOffset.value_or(GetStartOffset()));
+    meta.SetStartOffset(GetStartOffset());
     meta.SetEndOffset(GetEndOffset());
-    meta.SetMirroredOffset(PendingCdcReplicationTrimOffset
-        ? Min(BlobEncoder.MirroredOffset, *PendingCdcReplicationTrimOffset)
-        : BlobEncoder.MirroredOffset);
+    meta.SetMirroredOffset(BlobEncoder.MirroredOffset);
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
     meta.SetNextMessageIdDeduplicatorWAL(MessageIdDeduplicator.NextMessageIdDeduplicatorWAL);
@@ -1070,14 +1015,14 @@ bool CheckDiskStatus(const TStorageStatusFlags status) {
 }
 
 void TPartition::InitComplete(const TActorContext& ctx) {
-    if (!CdcReplicationTrimTxId && GetStartOffset() == GetEndOffset() && GetMirroredOffset() > GetEndOffset()
+    if (GetStartOffset() == GetEndOffset() && GetMirroredOffset() > GetEndOffset()
         && BlobEncoder.IsEmpty() && CompactionBlobEncoder.IsEmpty()) {
         // Restore the position of an empty mirror before starting consumers and the mirrorer.
         BlobEncoder.StartOffset = BlobEncoder.EndOffset = BlobEncoder.MirroredOffset;
         BlobEncoder.Head.Offset = BlobEncoder.NewHead.Offset = BlobEncoder.MirroredOffset;
     }
 
-    if (!CdcReplicationTrimTxId && BlobEncoder.StartOffset == BlobEncoder.EndOffset && BlobEncoder.EndOffset == 0) {
+    if (BlobEncoder.StartOffset == BlobEncoder.EndOffset && BlobEncoder.EndOffset == 0) {
         for (auto&& [user, info] : UsersInfoStorage->ViewAll()) {
             if (info.Offset > 0 && BlobEncoder.StartOffset < (ui64)info.Offset) {
                  BlobEncoder.Head.Offset = BlobEncoder.EndOffset = BlobEncoder.StartOffset = info.Offset;
@@ -1126,12 +1071,6 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     InitUserInfoForImportantClients(ctx);
 
     FillReadFromTimestamps(ctx);
-    // An older binary can persist the stopped config without applying its trim.
-    // Retrying config processing here makes that intent recoverable on upgrade.
-    if (ShouldTrimCdcReplication(Config)) {
-        auto trim = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, Config);
-        PushFrontDistrTx(trim.Release());
-    }
     ProcessPendingEvents(ctx);
     ProcessTxsAndUserActs(ctx);
 
@@ -1431,9 +1370,6 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
     result.SetStartOffset(GetStartOffset());
     result.SetEndOffset(GetEndOffset());
-    if (CdcReplicationTrimTxId) {
-        result.SetCdcReplicationTrimTxId(CdcReplicationTrimTxId);
-    }
 
     if (filterConsumers) {
         for (TString consumer : requiredConsumers) {
@@ -2338,25 +2274,6 @@ void TPartition::OnReadComplete(TReadInfo& info,
                                 const TEvPQ::TEvBlobResponse* blobResponse,
                                 const TActorContext& ctx)
 {
-    // The blob read may have started before the trim. Finish at the new cursor
-    // without returning a cached head or body gathered for the old range.
-    if (info.Offset < CdcReplicationTrimOffset) {
-        if (info.PartNo > 0) {
-            if (userInfo && info.Destination != 0) {
-                userInfo->ReadDone(ctx, ctx.Now(), 0, 0, info.ClientDC, TabletActorId,
-                                   info.IsExternalRead, GetEndOffset());
-            }
-            FinishLostMultipartRead(info, ctx);
-            return;
-        }
-        info.Offset = CdcReplicationTrimOffset;
-        info.Cached.clear();
-        info.CachedOffset = 0;
-        info.Blobs.clear();
-        info.CompactedBlobsCount = 0;
-        blobResponse = nullptr;
-    }
-
     TReadAnswer answer = info.FormAnswer(
         ctx, blobResponse, GetStartOffset(), GetEndOffset(), Partition, userInfo,
         info.Destination, GetSizeLag(info.Offset), TabletActorId, Config.GetMeteringMode(), IsActive(),
@@ -3408,7 +3325,7 @@ void TPartition::RunPersist() {
                 && encoder.NewHead.GetBatches().empty()
                 && !encoder.PartitionedBlob.IsInited();
         };
-        if (!CdcReplicationTrimTxId && GetStartOffset() == GetEndOffset() && GetMirroredOffset() > GetEndOffset()
+        if (GetStartOffset() == GetEndOffset() && GetMirroredOffset() > GetEndOffset()
             && PendingRequests.empty() && QuotaWaitingRequests.empty()
             && UserActionAndTransactionEvents.empty() && UserActionAndTxPendingWrite.empty()
             && WriteInflightSize == 0 && WriteInfosApplied.empty()
@@ -3417,7 +3334,6 @@ void TPartition::RunPersist() {
             BlobEncoder.Head.Offset = BlobEncoder.NewHead.Offset = GetMirroredOffset();
         }
 
-        PrepareCdcReplicationTrim(*PersistRequest);
         AddMessageDeduplicatorKeys(PersistRequest.Get());
         AddMetaKey(PersistRequest.Get());
 
@@ -3670,13 +3586,8 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         }
         return result;
     } else if (t->ProposeConfig) {
-        const bool trim = ShouldTrimCdcReplication(t->ProposeConfig->Config);
         if (HasPendingCommitsOrPendingWrites()) {
             LOG_D("Wait until the operation with the config becomes the first in the queue");
-            return EProcessResult::Blocked;
-        }
-        CdcReplicationTrimPending = trim;
-        if (trim && CompactionInProgress) {
             return EProcessResult::Blocked;
         }
         t->Predicate = BeginTransactionConfig();
@@ -3689,13 +3600,8 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         PQ_ENSURE(t->ChangeConfig);
 
         PQ_ENSURE(!ChangeConfig && !ChangingConfig);
-        const bool trim = ShouldTrimCdcReplication(t->ChangeConfig->Config);
         if (HasPendingCommitsOrPendingWrites()) {
             LOG_D("Wait until the operation with the config becomes the first in the queue");
-            return EProcessResult::Blocked;
-        }
-        CdcReplicationTrimPending = trim;
-        if (trim && CompactionInProgress) {
             return EProcessResult::Blocked;
         }
         ChangingConfig = true;
@@ -3769,14 +3675,6 @@ void TPartition::TryAppendStaleTxMetaWrites()
         TStaleTxMetaEntry entry = std::move(it->second);
         StaleTxMetaPending.erase(it);
 
-        // The first managed ALTER already registered these producers. A delayed
-        // commit still needs its transaction record, while the config and producer
-        // sequence numbers belong to the installed version.
-        if (Config.HasCdcReplication() && entry.TabletConfig.Defined() && entry.TabletConfig->HasCdcReplication()
-                && entry.BootstrapConfig.Defined() && entry.BootstrapConfig->ExplicitMessageGroupsSize()
-                && Config.GetVersion() >= entry.TabletConfig->GetVersion()) {
-            entry.TabletConfig = Nothing();
-        }
         AddCmdWritePersistStaleTxMeta(entry);
         StaleTxMetaInFlight.emplace(txId, std::move(entry));
     }
@@ -4213,13 +4111,11 @@ void TPartition::RollbackTransaction(TSimpleSharedPtr<TTransaction>& t)
     } else if (t->ProposeConfig) {
         PQ_ENSURE(t->Predicate.Defined());
         ChangingConfig = false;
-        CdcReplicationTrimPending = false;
         ChangePlanStepAndTxId(t->ProposeConfig->Step, t->ProposeConfig->TxId);
     } else {
         PQ_ENSURE(t->ChangeConfig);
         ChangeConfig = nullptr;
         ChangingConfig = false;
-        CdcReplicationTrimPending = false;
     }
 
     ScheduleReplyTxDone(t->Tx->Step, t->Tx->TxId, std::move(t->CommitSpan));
@@ -4280,7 +4176,6 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
     WriteCycleSizeEstimate = 0;
 
     if (ChangeConfig) {
-        CompleteCdcReplicationTrim();
         EndChangePartitionConfig(std::move(ChangeConfig->Config),
                                  PendingExplicitMessageGroups,
                                  ChangeConfig->TopicConverter,
@@ -4322,7 +4217,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                 }
                 UsersInfoStorage->SetImportant(userInfo, actual->Important, actual->AvailabilityPeriod);
             }
-            if (ImporantOrExtendedAvailabilityPeriod(userInfo) && ShouldClampConsumerOffset(userInfo.Offset)) {
+            if (ImporantOrExtendedAvailabilityPeriod(userInfo) && userInfo.Offset < (i64)GetStartOffset()) {
                 userInfo.Offset = GetStartOffset();
             }
 
@@ -4486,12 +4381,6 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
 TString TPartition::GetKeyConfig() const
 {
     return Sprintf("_config_%u", Partition.InternalPartitionId);
-}
-
-TString TPartition::GetCdcReplicationTrimKey() const {
-    // Separate from ordinary metadata writes, including writes by older tablets.
-    const TKeyPrefix prefix{TKeyPrefix::TypeMeta, Partition};
-    return TString(prefix.Data(), prefix.Size()) + "/cdc-trim";
 }
 
 void TPartition::ChangePlanStepAndTxId(ui64 step, ui64 txId)
@@ -4830,10 +4719,6 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
     }
 
     //request in correct session - make it
-
-    if (act.ResetOffsetReply) {
-        act.Offset = Max(act.Offset, CdcReplicationTrimOffset);
-    }
 
     ui64 offset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET ? act.Offset : userInfo.Offset);
 
@@ -5438,13 +5323,15 @@ void TPartition::Handle(NQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const 
 }
 
 bool TPartition::IsCdcReplicationTopic() const {
-    return Config.HasCdcReplication() || CdcReplicationTrimTxId
+    return Config.HasCdcReplication()
         || (ChangeConfig && ChangeConfig->Config.HasCdcReplication());
 }
 
-bool TPartition::IsCurrentMirrorer(const TActorId& sender) const {
-    return Mirrorer && sender == Mirrorer->Actor
-        && (!ChangeConfig || MirroringEnabled(ChangeConfig->Config));
+TActorId TPartition::GetActiveMirrorer() const {
+    if (Mirrorer && (!ChangeConfig || MirroringEnabled(ChangeConfig->Config))) {
+        return Mirrorer->Actor;
+    }
+    return {};
 }
 
 void TPartition::CreateMirrorerActor() {

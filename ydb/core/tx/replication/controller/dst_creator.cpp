@@ -202,7 +202,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void HandleCdcTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
         TString error;
-        if (!Cdc->CheckTable(record, PathId, SchemeShardId, Owner, error)) {
+        if (!Cdc->CheckTable(record, PathId, SchemeShardId, Consistency, Owner, error)) {
             return Error(NKikimrScheme::StatusPreconditionFailed, error);
         }
 
@@ -1170,9 +1170,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 *state.MutableTopicSetup() = Cdc->Topic;
                 state.SetInitialCreateTxId(TxId);
             } else {
-                // Final validation follows a fresh allocation, with no proposal using this id.
                 Cdc->Settings.StreamPathId.ToProto(state.MutableStreamPathId());
-                state.SetTrimRequestId(TxId);
             }
         } else {
             result->PreparingCdc = PrepareCdcTable;
@@ -1298,10 +1296,10 @@ public:
     }
 
     TDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy, const TString& database,
-            const TPathId& replicationPathId, ui64 rid, ui64 tid, const TString& srcPath, TDstCdcSettings&& settings)
+            const TPathId& replicationPathId, ui64 rid, ui64 tid, const TString& srcPath, EConsistencyLevel consistency, TDstCdcSettings&& settings)
         : TDstCreator(parent, schemeShardId, proxy, replicationPathId, rid, tid,
             TReplication::ETargetKind::Topic, srcPath, {}, EReplicationMode::ReadOnly,
-            EConsistencyLevel::Row, database, true, TReplication::EState::Ready, false, {})
+            consistency, database, true, TReplication::EState::Ready, false, {})
     {
         Cdc = std::make_unique<TCdcCreation>(TCdcCreation{.Settings = std::move(settings)});
         NeedToCheck = true;
@@ -1309,8 +1307,8 @@ public:
 
     TDstCreator(const TActorId& parent, ui64 schemeShardId, const TString& database,
             const TPathId& replicationPathId, ui64 rid, ui64 tid,
-            const NKikimrReplicationController::TCdcTarget& birth)
-        : TDstCreator(parent, schemeShardId, {}, database, replicationPathId, rid, tid, {}, TDstCdcSettings{
+            EConsistencyLevel consistency, const NKikimrReplicationController::TCdcTarget& birth)
+        : TDstCreator(parent, schemeShardId, {}, database, replicationPathId, rid, tid, {}, consistency, TDstCdcSettings{
             .TablePathId = TPathId::FromProto(birth.GetTablePathId()),
             .Consumer = birth.GetTopicSetup().GetReplicationSourceConsumer(),
         })
@@ -1476,9 +1474,10 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
     Y_ABORT_UNLESS(target);
 
     if (const auto* cdc = TTargetCdc::Cast(target)) {
+        const auto consistency = ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings());
         if (cdc->GetCdc().HasInitialCreateTxId()) {
             return new TDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetDatabase(),
-                replication->GetPathId(), replication->GetId(), targetId, cdc->GetCdc());
+                replication->GetPathId(), replication->GetId(), targetId, consistency, cdc->GetCdc());
         }
         const auto* table = replication->FindTarget(cdc->GetCdc().GetParentTargetId());
         Y_ABORT_UNLESS(table && table->GetDstPathId());
@@ -1489,7 +1488,7 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
         };
         return new TDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
             replication->GetDatabase(), replication->GetPathId(), replication->GetId(), targetId,
-            target->GetSrcPath(), std::move(settings));
+            target->GetSrcPath(), consistency, std::move(settings));
     }
 
     if (target->GetKind() == TReplication::ETargetKind::Topic) {

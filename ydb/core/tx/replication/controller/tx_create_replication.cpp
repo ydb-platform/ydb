@@ -52,7 +52,6 @@ public:
         const auto& flags = AppData(ctx)->FeatureFlags;
         const bool replicateChangefeeds = config.HasSpecific()
             && config.GetInitialScan()
-            && config.GetConsistencySettings().GetLevelCase() == NKikimrReplication::TConsistencySettings::kRow
             && flags.GetEnableCdcReplication()
             && flags.GetEnableTopicReplication()
             && flags.GetEnableAsyncReplicationTableOwnership();

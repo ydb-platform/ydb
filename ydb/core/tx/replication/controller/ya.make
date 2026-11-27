@@ -32,7 +32,6 @@ PEERDIR(
 )
 
 SRCS(
-    cdc_trim_verifier.cpp
     controller.cpp
     dst_alterer.cpp
     dst_creator.cpp

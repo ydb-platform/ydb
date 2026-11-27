@@ -226,7 +226,7 @@ Y_UNIT_TEST_SUITE(Replication) {
         }
     };
 
-    Y_UNIT_TEST(TopicTargetsWithoutLagKeepAggregateUnknown) {
+    Y_UNIT_TEST(MirroredTopicsDoNotMaskWorkerLag) {
         for (const auto kind : {TReplication::ETargetKind::Topic, TReplication::ETargetKind::CdcTopic}) {
             TLagSetup s;
             TReplication::ITarget::IConfig::TPtr config;
@@ -239,11 +239,11 @@ Y_UNIT_TEST_SUITE(Replication) {
             }
             const auto child = s.Replication->AddTarget(kind, config);
             UNIT_ASSERT(!s.Replication->FindTarget(child)->GetLag());
+            UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(5));
+            s.Target->InvalidateLag(1);
             UNIT_ASSERT(!s.Replication->GetLag());
-            UNIT_ASSERT(s.Target->GetLag() == TDuration::Seconds(5));
             s.Target->UpdateLag(1, TDuration::Seconds(7));
-            UNIT_ASSERT(!s.Replication->GetLag());
-            UNIT_ASSERT(s.Target->GetLag() == TDuration::Seconds(7));
+            UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(7));
             s.Replication->RemoveTarget(child);
             UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(7));
         }

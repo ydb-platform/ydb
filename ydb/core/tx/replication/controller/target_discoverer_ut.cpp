@@ -96,6 +96,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
     class TCdcDiscoveryFixture {
     public:
         TCdcDiscoveryFixture() {
+            Config.MutableConsistencySettings()->MutableRow();
             Runtime.Initialize(TAppPrepare().Unwrap());
             Parent = Runtime.AllocateEdgeActor();
             Proxy = Runtime.AllocateEdgeActor();
@@ -111,12 +112,13 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
             return stream;
         }
 
-        TEvPrivate::TEvDiscoveryTargetsResult::TPtr Discover() {
+        NKikimrReplication::TReplicationConfig Config = CreateConfig({{"/Root/Table", "/Root/Replica"}});
+
+        TEvPrivate::TEvDiscoveryTargetsResult::TPtr Discover(bool expectRegistration = true) {
             auto observer = Runtime.AddObserver<TEvYdbProxy::TEvAlterTopicRequest>([](auto&) {
                 UNIT_FAIL("Discovery must not create source consumers");
             });
-            const auto actor = Runtime.Register(CreateTargetDiscoverer(Parent, 1, Proxy,
-                CreateConfig({{"/Root/Table", "/Root/Replica"}}), Owner));
+            const auto actor = Runtime.Register(CreateTargetDiscoverer(Parent, 1, Proxy, Config, Owner));
             const auto path = Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribePathRequest>(Proxy);
             NYdb::NScheme::TSchemeEntry entry;
             entry.Type = NYdb::NScheme::ESchemeEntryType::Table;
@@ -126,7 +128,9 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
             Runtime.Send(new IEventHandle(actor, Proxy, new TEvYdbProxy::TEvDescribeTableResponse(
                 NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(Description), NYdb::NTable::TDescribeTableSettings()),
                 0, table->Cookie));
-            RegisterChangefeeds(actor);
+            if (expectRegistration) {
+                RegisterChangefeeds(actor);
+            }
             return Runtime.GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(Parent);
         }
 
@@ -181,6 +185,22 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         UNIT_ASSERT_VALUES_EQUAL(streams[0].GetAttributes().at("user"), "value");
         UNIT_ASSERT_VALUES_EQUAL(streams[1].GetName(), "Disabled");
         UNIT_ASSERT(streams[1].GetState() == NYdb::NTable::EChangefeedState::Disabled);
+    }
+
+    Y_UNIT_TEST(GlobalCdcMirroringRequiresRowOptIn) {
+        for (const bool allow : {false, true}) {
+            TCdcDiscoveryFixture env;
+            env.AddCdc("Feed", Ydb::Table::ChangefeedDescription::STATE_ENABLED);
+            env.Config.MutableConsistencySettings()->MutableGlobal();
+            env.Config.SetAllowRowForTopicsInGlobal(allow);
+            const auto result = env.Discover(allow);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->IsSuccess(), allow);
+            if (allow) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->ToAdd.front().CdcStreams.size(), 1);
+            } else {
+                UNIT_ASSERT_STRING_CONTAINS(result->Get()->Failed.front().Error.GetIssues().ToOneLineString(), "AllowRowForTopicsInGlobal");
+            }
+        }
     }
 
     Y_UNIT_TEST(IndexedTable) {
@@ -572,8 +592,10 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
     }
 
     Y_UNIT_TEST(TopicAdmissionRequiresFlagAndRowConsistency) {
-        const auto discover = [](TEnv<>& env, bool global, bool secret = false, const TString& source = "/Root/Topic") {
+        bool allowRowForTopicsInGlobal = false;
+        const auto discover = [&](TEnv<>& env, bool global, bool secret = false, const TString& source = "/Root/Topic") {
             auto config = CreateConfig({{source, "/Root/Replica"}});
+            config.SetAllowRowForTopicsInGlobal(allowRowForTopicsInGlobal);
             if (global) {
                 config.MutableConsistencySettings()->MutableGlobal();
             } else {
@@ -602,6 +624,9 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->ToAdd.front().Kind, TReplication::ETargetKind::Topic);
         result = discover(enabled, true);
         UNIT_ASSERT(!result->Get()->IsSuccess());
+        allowRowForTopicsInGlobal = true;
+        result = discover(enabled, true);
+        UNIT_ASSERT(result->Get()->IsSuccess());
         result = discover(enabled, false, true);
         UNIT_ASSERT(result->Get()->IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->ToAdd.front().Kind, TReplication::ETargetKind::Topic);

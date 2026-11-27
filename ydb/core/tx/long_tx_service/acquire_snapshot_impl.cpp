@@ -22,7 +22,7 @@ namespace NLongTxService {
             , SchemeCache(MakeSchemeCacheID())
             , LeaderPipeCache(MakePipePerNodeCacheID(false))
             , LogPrefix("LongTxService.AcquireSnapshot ")
-            , Span(10, traceId, "Acquire snapshot attempt", NWilson::EFlags::AUTO_END)
+            , Span(10, std::move(traceId), "Acquire snapshot attempt", NWilson::EFlags::AUTO_END)
         { }
 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -233,7 +233,7 @@ namespace NLongTxService {
     private:
         void SendToTablet(ui64 tabletId, THolder<IEventBase> event, const NWilson::TTraceId& traceId, bool subscribe = true) {
             Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), tabletId, subscribe),
-                IEventHandle::FlagTrackDelivery, 0, traceId);
+                IEventHandle::FlagTrackDelivery, 0, NWilson::TTraceId(traceId));
         }
 
     private:
@@ -261,10 +261,10 @@ namespace NLongTxService {
         for (const auto& user : req.UserRequests) {
             const auto trace = user.Span.GetTraceId();
             if (trace && (!parent || trace.GetVerbosity() > parent.GetVerbosity())) {
-                parent = trace;
+                parent = NWilson::TTraceId(trace);
             }
         }
-        req.Span = NWilson::TSpan(10, parent, "Acquire snapshot batch", NWilson::EFlags::AUTO_END);
+        req.Span = NWilson::TSpan(10, std::move(parent), "Acquire snapshot batch", NWilson::EFlags::AUTO_END);
         req.Span.Attribute("ydb.snapshot.batch_id", static_cast<i64>(reqId));
         req.Span.Attribute("ydb.snapshot.request_count", static_cast<i64>(req.UserRequests.size()));
         size_t links = 0;

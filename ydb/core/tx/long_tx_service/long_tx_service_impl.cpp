@@ -427,7 +427,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
         req.Cookie = ev->Cookie;
         req.TableIds = std::move(msg->TableIds);
         req.Orbit = std::move(msg->Orbit);
-        req.Span = NWilson::TSpan(10, ev->TraceId, "Snapshot request queue", NWilson::EFlags::AUTO_END);
+        req.Span = NWilson::TSpan(10, NWilson::TTraceId(ev->TraceId), "Snapshot request queue", NWilson::EFlags::AUTO_END);
         req.Span.Event("request queued");
     }
 

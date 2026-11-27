@@ -109,6 +109,7 @@ public:
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationForAggregation;
     NCommon::TConfSetting<bool, Static> WindowFunctionsV2;
+    NCommon::TConfSetting<bool, Static> EnableNarrowWindowAggregateInput;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizationLevel;
     NCommon::TConfSetting<bool, Static> OptDisallowFuseJoins;
     NCommon::TConfSetting<bool, Static> OptCreateStageForAggregation;
@@ -283,6 +284,7 @@ struct TKikimrConfiguration : public NCommon::TDispatcherAndSettings<TKikimrSett
     bool GetEnableNewRBOPhysicalStagePeephole() const;
     bool GetUseKqpTasksGraphV2() const;
     bool GetWindowFunctionsV2() const;
+    bool GetEnableNarrowWindowAggregateInput() const;
     bool IsAutoIndexSelectionDisabled() const;
     bool IsAutoIndexSelectionForIndexLookupJoinEnabled() const;
     bool GetEnableCsWriteAffinity() const;

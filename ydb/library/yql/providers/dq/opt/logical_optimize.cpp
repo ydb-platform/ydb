@@ -296,7 +296,9 @@ protected:
 
     TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {
         if (node.Cast<TCoInputBase>().Input().Maybe<TDqConnection>()) {
-            return DqExpandWindowFunctions(node, ctx, TypesCtx, true);
+            const bool narrow = Config->EnableNarrowWindowAggregateInput.Get().GetOrElse(
+                TDqSettings::TDefault::EnableNarrowWindowAggregateInput);
+            return DqExpandWindowFunctions(node, ctx, TypesCtx, true, narrow);
         }
         return node;
     }

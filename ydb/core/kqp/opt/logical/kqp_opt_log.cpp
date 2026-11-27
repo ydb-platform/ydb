@@ -412,7 +412,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqExpandWindowFunctions(node, ctx, TypesCtx, !KqpCtx.Config->GetWindowFunctionsV2());
+        TExprBase output = DqExpandWindowFunctions(node, ctx, TypesCtx, !KqpCtx.Config->GetWindowFunctionsV2(), KqpCtx.Config->GetEnableNarrowWindowAggregateInput());
         DumpAppliedRule("ExpandWindowFunctions", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

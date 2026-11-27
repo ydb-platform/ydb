@@ -653,4 +653,8 @@ message TTableServiceConfig {
     // Reject row-table reads in the new RBO to trigger fallback to the YQL optimizer.
     // Requires EnableFallbackToYqlOptimizer; without it these queries fail compilation.
     optional bool EnableFallbackOnRowTables = 157 [default = false, (InvalidateCompileCache) = true];
+
+    // Drop columns a full-frame window aggregate does not read from the aggregate input.
+    // The joined input keeps those columns. Overridable via PRAGMA ydb.EnableNarrowWindowAggregateInput.
+    optional bool EnableNarrowWindowAggregateInput = 158 [default = false, (InvalidateCompileCache) = true];
 };

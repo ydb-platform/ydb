@@ -301,7 +301,7 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
     if (node->DirectChildren.empty()) {
         auto from = node->From;
         auto to = node->To;
-        auto mid = splitParameters.SplitBoundary.GetOrElse(MiddleOf(from, to));
+        auto mid = splitParameters.SplitBoundary ? *splitParameters.SplitBoundary : MiddleOf(from, to);
         if (mid.empty()) {
             LOG_E("Wrong partition key range. Can't get mid", {"partition", partitionId});
             return {.Split = Nothing(), .Remove = true};

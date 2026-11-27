@@ -10,6 +10,7 @@
 // forward declarations
 namespace NKikimrPQ {
     class TPartitionKeyRange;
+    class TPQTabletConfig;
 }
 
 namespace NKikimr {
@@ -137,6 +138,10 @@ private:
     static void ParseBound(const TString& data, TMaybe<TSerializedCellVec>& bound);
 
 }; // TPartitionKeyRange
+
+bool Intersects(const TPartitionKeyRange& lhs, const TPartitionKeyRange& rhs, TConstArrayRef<NScheme::TTypeInfo> keyTypes);
+
+TVector<NScheme::TTypeInfo> MakePartitionKeyTypes(const NKikimrPQ::TPQTabletConfig& tabletConfig);
 
 } // namespace NKikimr::NPQ
 

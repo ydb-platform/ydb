@@ -23,6 +23,12 @@ on:
         required: false
         type: boolean
         default: false
+      # TEMP probe (dev/artifact-midrun-probe): publish run-params artifact, then sleep; skip real tests when > 0.
+      hold_minutes:
+        description: 'TEMP probe: after run-params artifact, sleep N minutes and skip real tests (0 = normal run)'
+        required: false
+        type: string
+        default: '10'
 
 jobs:
   prepare:
@@ -93,9 +99,74 @@ jobs:
             echo "Converted '$BUILD_PRESET_INPUT' to $JSON_PRESETS"
           fi
 
+      - name: Write run-params artifact
+        env:
+          INPUT_TEST_TARGETS: ${{ inputs.test_targets }}
+          INPUT_BUILD_PRESET: ${{ inputs.build_preset }}
+          INPUT_BRANCHES: ${{ inputs.branches }}
+          INPUT_USE_BRANCHES_CONFIG: ${{ inputs.use_branches_config }}
+          INPUT_HOLD_MINUTES: ${{ inputs.hold_minutes }}
+        run: |
+          python3 <<'PY'
+          import json, os
+          payload = {
+              "version": 1,
+              "kind": "run_and_debug_tests.run_params",
+              "repository": os.environ.get("GITHUB_REPOSITORY", ""),
+              "workflow": os.environ.get("GITHUB_WORKFLOW", ""),
+              "workflow_ref": os.environ.get("GITHUB_WORKFLOW_REF", ""),
+              "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+              "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
+              "run_number": os.environ.get("GITHUB_RUN_NUMBER", ""),
+              "job": os.environ.get("GITHUB_JOB", ""),
+              "event_name": os.environ.get("GITHUB_EVENT_NAME", ""),
+              "ref": os.environ.get("GITHUB_REF", ""),
+              "ref_name": os.environ.get("GITHUB_REF_NAME", ""),
+              "sha": os.environ.get("GITHUB_SHA", ""),
+              "actor": os.environ.get("GITHUB_ACTOR", ""),
+              "server_url": os.environ.get("GITHUB_SERVER_URL", ""),
+              "inputs": {
+                  "test_targets": os.environ.get("INPUT_TEST_TARGETS", ""),
+                  "build_preset": os.environ.get("INPUT_BUILD_PRESET", ""),
+                  "branches": os.environ.get("INPUT_BRANCHES", ""),
+                  "use_branches_config": os.environ.get("INPUT_USE_BRANCHES_CONFIG", ""),
+                  "hold_minutes": os.environ.get("INPUT_HOLD_MINUTES", ""),
+              },
+          }
+          with open("run-params.json", "w", encoding="utf-8") as f:
+              json.dump(payload, f, ensure_ascii=False, indent=2)
+              f.write("\n")
+          print(json.dumps(payload, ensure_ascii=False, indent=2))
+          PY
+
+      - name: Upload run-params artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-params
+          path: run-params.json
+          if-no-files-found: error
+          retention-days: 1
+
+  # TEMP probe: keep the run alive after artifact upload so mid-run download can be tested.
+  hold:
+    needs: prepare
+    if: inputs.hold_minutes != '0'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sleep while artifact is available mid-run
+        env:
+          HOLD_MINUTES: ${{ inputs.hold_minutes }}
+        run: |
+          minutes="${HOLD_MINUTES:-10}"
+          echo "Holding for ${minutes} minute(s); artifact run-params should already be downloadable."
+          echo "run_id=${GITHUB_RUN_ID}"
+          echo "run_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          sleep "$((minutes * 60))"
+
   main:
     name: Run and debug tests
     needs: prepare
+    if: inputs.hold_minutes == '0'
     uses: ./.github/workflows/run_tests.yml
     secrets: inherit
     strategy:
@@ -111,5 +182,5 @@ jobs:
 
   collect_combined_summary:
     needs: main
-    if: always()
+    if: always() && inputs.hold_minutes == '0'
     uses: ./.github/workflows/collect_combined_summary.yml

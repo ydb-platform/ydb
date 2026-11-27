@@ -90,6 +90,12 @@ public:
                 }
             }
 
+            // A destination success says nothing about the source: while the stream is failed,
+            // its issue is still the live one and PAUSE never resets it.
+            if (target->GetStreamState() != TReplication::EStreamState::Error) {
+                target->SetIssue({});
+            }
+
             YDB_LOG_NOTICE_CTX(ctx, "Target dst created",
                 {"rid", rid},
                 {"tid", tid},

@@ -30,10 +30,10 @@
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/sys_view/common/path.h>
 #include <ydb/core/sys_view/common/resolver.h>
-#include <ydb/core/sys_view/partition_stats/partition_stats.h>
+#include <ydb/core/sys_view/partition_stats/collector/collector.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
-#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
+#include <ydb/core/tablet_flat/base/bloom_filter_defaults.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/test_tablet/events.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
@@ -1942,14 +1942,14 @@ bool TSchemeShard::CanCreateSingleSnapshot(const TPathId& tablePathId, TTxId txI
     if (txId == snapshotTxId) {
         status = NKikimrScheme::StatusAlreadyExists;
         errStr = TStringBuilder()
-            << "Snapshot with the same txId already presents for table"
+            << "Snapshot with the same txId already present for table"
             << ", tableId:" << tablePathId
             << ", snapshotTxId: " << txId
             << ", snapshotStepId: " << snapshotStepId;
     } else {
         status = NKikimrScheme::StatusSchemeError;
         errStr = TStringBuilder()
-            << "Snapshot with another txId already presents for table, only one snapshot is allowed for table for now"
+            << "Snapshot with another txId already present for table, only one snapshot is allowed for table for now"
             << ", tableId:" << tablePathId
             << ", txId: " << txId
             << ", snapshotTxId: " << snapshotTxId
@@ -2105,6 +2105,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterUserAttributes:
     case TTxState::TxInitializeBuildIndex:
     case TTxState::TxPrepareIndexValidation:
+    case TTxState::TxPrepareVectorIndex:
     case TTxState::TxFinalizeBuildIndex:
     case TTxState::TxCreateLock:
     case TTxState::TxDropLock:
@@ -5399,6 +5400,13 @@ void TSchemeShard::PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NK
         .Key(op.GetTxId())
         .Update(
             NIceDb::TUpdate<Schema::IncrementalRestoreOperations::Operation>(data));
+    PersistedIncrementalRestoreOps[op.GetTxId()] = TPathId(
+        op.GetBackupCollectionPathId().GetOwnerId(), op.GetBackupCollectionPathId().GetLocalId());
+}
+
+void TSchemeShard::PersistRemoveLongIncrementalRestoreOp(NIceDb::TNiceDb& db, ui64 operationId) {
+    db.Table<Schema::IncrementalRestoreOperations>().Key(operationId).Delete();
+    PersistedIncrementalRestoreOps.erase(operationId);
 }
 
 TTabletId TSchemeShard::GetGlobalHive() const {
@@ -5970,6 +5978,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableInitialUniqueIndex = appData->FeatureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = appData->FeatureFlags.GetEnableAddUniqueIndex();
     EnableOnlineAddUniqueIndex = appData->FeatureFlags.GetEnableOnlineAddUniqueIndex();
+    EnableConsistentVectorIndexBuild = appData->FeatureFlags.GetEnableConsistentVectorIndexBuild();
     EnableHnswIndex = appData->FeatureFlags.GetEnableHnswIndex();
     EnableFulltextIndex = appData->FeatureFlags.GetEnableFulltextIndex();
     EnableCompactFulltextIndex = appData->FeatureFlags.GetEnableCompactFulltextIndex();
@@ -6294,6 +6303,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvRecomputeKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvFilterKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvDeltaKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvValidateUniqueIndexResponse, Handle);
@@ -8508,6 +8518,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             descr->SetFamily(colInfo.Family);
             descr->SetNotNull(colInfo.NotNull);
             descr->SetSetNotNullInProgress(colInfo.SetNotNullInProgress);
+            descr->SetIsBuildInProgress(colInfo.IsBuildInProgress);
             if (colInfo.DefaultKind == ETableColumnDefaultKind::FromSequence) {
                 descr->SetDefaultFromSequence(colInfo.DefaultValue);
             }
@@ -9126,6 +9137,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
     EnableInitialUniqueIndex = featureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = featureFlags.GetEnableAddUniqueIndex();
+    EnableConsistentVectorIndexBuild = featureFlags.GetEnableConsistentVectorIndexBuild();
     EnableHnswIndex = featureFlags.GetEnableHnswIndex();
     EnableFulltextIndex = featureFlags.GetEnableFulltextIndex();
     EnableCompactFulltextIndex = featureFlags.GetEnableCompactFulltextIndex();

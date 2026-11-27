@@ -4,7 +4,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/registry.h>
-#include <ydb/core/sys_view/common/scan_actor_base_impl.h>
+#include <ydb/core/sys_view/scan/scan_actor_base_impl.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/common/events/events.h>

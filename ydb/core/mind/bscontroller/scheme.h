@@ -353,6 +353,7 @@ struct Schema : NIceDb::Schema {
         struct VDiskHeapAllocatorNumLeadingDisks : Column<29, NScheme::NTypeIds::Uint32> {};
 
         struct PersistentBufferAllocationMode : Column<30, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+        struct TargetInvariant : Column<31, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TGroupState::ETargetInvariant; };
 
         using TKey = TableKey<BoxId, StoragePoolId>;
 
@@ -360,7 +361,8 @@ struct Schema : NIceDb::Schema {
             DomainLevelBegin, DomainLevelEnd, NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain,
             VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
             Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping,
-            DefaultGroupSizeInUnits, BridgeMode, DDisk, VDiskHeapAllocatorNumLeadingDisks, PersistentBufferAllocationMode>;
+            DefaultGroupSizeInUnits, BridgeMode, DDisk, VDiskHeapAllocatorNumLeadingDisks, PersistentBufferAllocationMode,
+            TargetInvariant>;
     };
 
     struct BoxStoragePoolUser : Table<121> {
@@ -488,10 +490,11 @@ struct Schema : NIceDb::Schema {
         struct FirstErrorTimestamp : Column<5, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
         struct ErrorCount : Column<6, NScheme::NTypeIds::Uint32> {};
         struct EstimatedBytesToCopy : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct EstimateRound : Column<8, NScheme::NTypeIds::Uint64> {}; // BecameUnsyncedGeneration of the scan
 
         using TKey = TableKey<TargetGroupId>;
         using TColumns = TableColumns<TargetGroupId, Stage, LastError, LastErrorTimestamp, FirstErrorTimestamp,
-            ErrorCount, EstimatedBytesToCopy>;
+            ErrorCount, EstimatedBytesToCopy, EstimateRound>;
     };
 
     struct DirectBlockGroupTabletState : Table<133> {
@@ -533,6 +536,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<BoxId, StoragePoolId, Filter>;
     };
 
+    // Table 137 was used for retired BlobDepot S3 namespaces.
 
     using TTables = SchemaTables<
         Node,

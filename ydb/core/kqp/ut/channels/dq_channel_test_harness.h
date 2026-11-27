@@ -352,8 +352,13 @@ public:
 
     // The buffer is released with the actor, which is what the service sees as the channel let go of
     void Finish(bool error, bool aborted, const TString& reason) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST FINISHED SelfId=" << this->SelfId()
-            << ", ChannelId=" << ChannelId << ", Error=" << error << ", Aborted=" << aborted << ", Reason=" << reason);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_CHANNELS, "TEST FINISHED",
+            {"logPrefix", LogPrefix},
+            {"selfId", this->SelfId()},
+            {"channelId", ChannelId},
+            {"error", error},
+            {"aborted", aborted},
+            {"reason", reason});
         auto ev = new TEvTestPrivate::TEvFinished(Role, ChannelId, error, aborted, reason);
         if (Buffer) {
             Buffer->ExportPushStats(ev->PushStats);
@@ -374,7 +379,10 @@ public:
         }
         if (!ResumeTime) {
             ResumeTime = TInstant::Now() + TDuration::MilliSeconds(Settings.PauseDelayMs);
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST PAUSED SelfId=" << this->SelfId() << ", ChannelId=" << ChannelId);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_CHANNELS, "TEST PAUSED",
+                {"logPrefix", LogPrefix},
+                {"selfId", this->SelfId()},
+                {"channelId", ChannelId});
         }
         if (TInstant::Now() < ResumeTime) {
             this->Schedule(ResumeTime, new NActors::TEvents::TEvWakeup());
@@ -382,7 +390,10 @@ public:
         }
         if (!Resumed) {
             Resumed = true;
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST RESUMED SelfId=" << this->SelfId() << ", ChannelId=" << ChannelId);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_CHANNELS, "TEST RESUMED",
+                {"logPrefix", LogPrefix},
+                {"selfId", this->SelfId()},
+                {"channelId", ChannelId});
         }
         return false;
     }
@@ -573,7 +584,10 @@ public:
                 return;
             }
             if (Settings.EarlyFinish && MessageIndex == Settings.MessageCount) {
-                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST EARLY FINISH SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
+                YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_CHANNELS, "TEST EARLY FINISH",
+                    {"logPrefix", LogPrefix},
+                    {"selfId", SelfId()},
+                    {"channelId", ChannelId});
                 Buffer->EarlyFinish();
                 EarlyFinished = true;
                 break;

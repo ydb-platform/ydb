@@ -1,13 +1,22 @@
 LIBRARY()
     SRCS(
         defs.h
+        group_state.cpp
+        group_state.h
+        group_state_barrier.cpp
+        group_state_barrier.h
         mirror3dc_repair.cpp
         syncer.cpp
         syncer.h
     )
 
     PEERDIR(
+        library/cpp/monlib/dynamic_counters
         ydb/core/base
+        ydb/core/blobstorage/bridge
+        ydb/core/blobstorage/groupinfo
         ydb/core/blobstorage/vdisk/common
+        ydb/core/control/lib
+        ydb/library/actors/core
     )
 END()

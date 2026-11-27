@@ -688,6 +688,14 @@ public:
     std::optional<TExpression> OriginalPredicate;
     ESortDir SortDir{ESortDir::None};
     bool RequireSortedRead = false;
+    // VIEW PRIMARY KEY, or automatic index selection disabled: the read stays on the main table, rules do not
+    // redirect it to an index. Indexes are chosen before other rules rebuild the read, so the import, the copy and
+    // the range pushdown keep it.
+    bool ForcePrimary = false;
+    // The index named by VIEW: the read reads this index, and rules do not choose another table for it. The read stays
+    // on the main table until the range pushdown, a lookup join or the expansion of index reads reads the index, and
+    // the read redirected to the index keeps it.
+    TString ForceIndex;
     std::optional<TRangeInfo> RangeInfo;
 
 protected:
@@ -1324,6 +1332,8 @@ public:
     struct TSourceRead {
         TExpression Predicate;
         TVector<TOpRead::TPointPrefix> PointPrefixes;
+        // The index named by VIEW, which a lookup join probes instead of choosing a table.
+        TString ForceIndex;
     };
     std::optional<TSourceRead> SourceRead;
 

@@ -1,8 +1,6 @@
 LIBRARY()
 
 SRCS(
-    counters_memonly.cpp
-    counters_memonly.h
     mon_events.h
     mon.cpp
     mon.h
@@ -13,9 +11,6 @@ SRCS(
 PEERDIR(
     library/cpp/json
     library/cpp/lwtrace/mon
-    library/cpp/monlib/dynamic_counters
-    library/cpp/monlib/encode/json
-    library/cpp/monlib/encode/spack
     library/cpp/protobuf/json
     library/cpp/string_utils/url
     ydb/core/base

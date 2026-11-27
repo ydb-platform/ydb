@@ -351,15 +351,14 @@ TVector<TString> FindConsumingTopSortColumns(const IOperator* op, TExprContext& 
             return {};
         }
 
+        // A read in the key order or in the reverse one can return the rows of the sort.
+        if (!GetKeyReadDirection(sort->GetSortElements())) {
+            return {};
+        }
         TVector<TString> sortColumns;
         const auto& sortElements = sort->GetSortElements().Items();
         sortColumns.reserve(sortElements.size());
-
-        const bool ascending = sortElements.empty() ? true : sortElements.front().second.Ascending;
         for (const auto& [id, order] : sortElements) {
-            if (order.Ascending != ascending || order.NullsFirst != ascending) {
-                return {};
-            }
             sortColumns.push_back(TString(ctx.GetIndexAsString(Substitute(id, copies))));
         }
         return sortColumns;
@@ -385,6 +384,16 @@ bool IsCovering(const TOpRead& read, const TKikimrTableMetadata& indexMeta, cons
         }
     }
     return true;
+}
+
+bool HoldsColumns(const TKikimrTableMetadata& meta, const TVector<TString>& columns) {
+    return std::all_of(columns.begin(), columns.end(), [&](const TString& column) { return meta.Columns.contains(column); });
+}
+
+// As in the old optimizer, a read of the index named by VIEW without ranges warns that it reads the whole index.
+void AddWholeIndexReadWarning(const TString& index, TPositionHandle pos, TExprContext& ctx) {
+    ctx.AddWarning(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
+                            "Given predicate is not suitable for used index: " + index));
 }
 
 bool IsUselessIndex(const TVector<TString>& indexKeyColumns, const TVector<TString>& mainKeyColumns) {
@@ -454,6 +463,30 @@ TExprNode::TPtr BuildTableCallable(const TKikimrTableMetadata& meta, TPositionHa
     // clang-format on
 }
 
+// The metadata of a table, or nothing if it is not loaded: an index table is loaded only when the query uses it.
+TKikimrTableMetadataPtr FindTableMetadata(const NOpt::TKqpOptimizeContext& kqpCtx, const TString& path) {
+    const auto& tables = kqpCtx.Tables->GetTables();
+    const auto it = tables.find(std::make_pair(kqpCtx.Cluster, path));
+    return it != tables.end() ? it->second.Metadata : nullptr;
+}
+
+// The first index whose key starts with the sort columns and which covers the read, so reading it in the key order
+// returns the rows of the read in the order of the sort. A non-covering index would need a lookup into the main table.
+TKikimrTableMetadataPtr FindIndexInSortOrder(const TKikimrTableMetadata& mainMeta, const TVector<TString>& sortColumns, const TOpRead& read,
+                                             const NOpt::TKqpOptimizeContext& kqpCtx, const TInfoUnitRegistry& registry) {
+    for (const auto& index : mainMeta.Indexes) {
+        if (!IsSelectableIndex(index)) {
+            continue;
+        }
+        auto indexMeta = mainMeta.GetIndexMetadata(index.Name).first;
+        if (indexMeta && FindTableMetadata(kqpCtx, indexMeta->Name) && SortMatchesKeyOrder(sortColumns, indexMeta->KeyColumnNames, 0)
+            && IsCovering(read, *indexMeta, registry)) {
+            return indexMeta;
+        }
+    }
+    return nullptr;
+}
+
 } // anonymous namespace
 
 bool TPushRangesRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
@@ -510,6 +543,12 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     YQL_ENSURE(prepareSuccess);
 
     const auto& mainMeta = *tableDesc->Metadata;
+    // As in the old optimizer, a read with VIEW of an index reads that index, and no other table is considered.
+    TKikimrTableMetadataPtr forcedIndexMeta;
+    if (!read->ForceIndex.empty()) {
+        forcedIndexMeta = mainMeta.GetIndexMetadata(read->ForceIndex).first;
+        Y_ENSURE(forcedIndexMeta && FindTable(kqpCtx, forcedIndexMeta->Name), "No metadata of the index " << read->ForceIndex);
+    }
     const auto mainKeyColumns = ResolveExposedKeyColumns(extractorNames, mainMeta.KeyColumnNames);
     const auto sortColumns =
         read->GetTableStorageType() == NYql::EStorageType::RowStorage ? FindConsumingTopSortColumns(input.get(), ctx) : TVector<TString>();
@@ -565,26 +604,57 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         return result->PointPrefixLen;
     };
 
-    std::optional<IPredicateRangeExtractor::TBuildResult> mainBuilt;
-    auto mainMatch = matchKey(mainKeyColumns, mainBuilt);
-
-    if (allPointPrefixes) {
-        addPointPrefix(mainMeta, extractedPointPrefixLen(mainKeyColumns, mainBuilt), mainKeyColumns);
-    }
-
-    auto mainScore = ScoreKeyOrder(mainMatch, mainKeyColumns.size(), sortColumns, mainKeyColumns, true);
     TVector<TReadCandidate> candidates;
-    candidates.push_back(TReadCandidate{
-        .KeyColumns = mainKeyColumns,
-        .Match = std::move(mainMatch),
-        .Covering = true,
-        .Score = std::move(mainScore),
-    });
-    SetTableSize(candidates.front(), mainMeta);
-    built.push_back(std::move(mainBuilt));
-
     TVector<TString> filterPhysical;
-    if (!kqpCtx.Config->IsAutoIndexSelectionDisabled() && !candidates.front().Score.PointCoversKey) {
+    // The index named by VIEW is the only candidate, so neither the read nor a lookup join uses the main table instead.
+    if (forcedIndexMeta) {
+        filterPhysical = FilterPhysicalColumns(*filter, *read, props);
+        auto indexKeyColumns = ResolveExposedKeyColumns(extractorNames, forcedIndexMeta->KeyColumnNames);
+        std::optional<IPredicateRangeExtractor::TBuildResult> indexBuilt;
+        auto indexMatch = matchKey(indexKeyColumns, indexBuilt);
+        const size_t pointPrefixLen = extractedPointPrefixLen(indexKeyColumns, indexBuilt);
+        const bool covering = IsCovering(*read, *forcedIndexMeta, props.InfoUnitRegistry);
+        // Without ranges the expansion of index reads reads the whole index, and the filter stays over the read. As in
+        // the old optimizer, a filter of a non-covering index read which needs only the columns of the index runs on the
+        // index instead, so only the rows it passes are looked up in the main table.
+        if (!indexBuilt->ComputeNode && (covering || !HoldsColumns(*forcedIndexMeta, filterPhysical))) {
+            return input;
+        }
+        if (allPointPrefixes) {
+            addPointPrefix(*forcedIndexMeta, pointPrefixLen, indexKeyColumns);
+        }
+
+        auto score = ScoreKeyOrder(indexMatch, indexKeyColumns.size(), sortColumns, indexKeyColumns, covering);
+        candidates.push_back(TReadCandidate{
+            .IndexMeta = forcedIndexMeta,
+            .IndexName = read->ForceIndex,
+            .KeyColumns = std::move(indexKeyColumns),
+            .Match = std::move(indexMatch),
+            .Covering = covering,
+            .Score = std::move(score),
+        });
+        SetTableSize(candidates.back(), mainMeta);
+        built.push_back(std::move(indexBuilt));
+    } else {
+        std::optional<IPredicateRangeExtractor::TBuildResult> mainBuilt;
+        auto mainMatch = matchKey(mainKeyColumns, mainBuilt);
+        if (allPointPrefixes) {
+            addPointPrefix(mainMeta, extractedPointPrefixLen(mainKeyColumns, mainBuilt), mainKeyColumns);
+        }
+
+        auto mainScore = ScoreKeyOrder(mainMatch, mainKeyColumns.size(), sortColumns, mainKeyColumns, true);
+        candidates.push_back(TReadCandidate{
+            .KeyColumns = mainKeyColumns,
+            .Match = std::move(mainMatch),
+            .Covering = true,
+            .Score = std::move(mainScore),
+        });
+        SetTableSize(candidates.front(), mainMeta);
+        built.push_back(std::move(mainBuilt));
+    }
+    // As in the old optimizer, VIEW PRIMARY KEY keeps the read on the main table.
+    if (!forcedIndexMeta && !kqpCtx.Config->IsAutoIndexSelectionDisabled() && !read->ForcePrimary
+        && !candidates.front().Score.PointCoversKey) {
         filterPhysical = FilterPhysicalColumns(*filter, *read, props);
         for (const auto& index : mainMeta.Indexes) {
             if (!IsSelectableIndex(index)) {
@@ -648,7 +718,8 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     size_t winnerIdx = 0;
     IPredicateRangeExtractor::TBuildResult chosen;
 
-    if (!costBasedSelection) {
+    // The ranges of the index named by VIEW are always built.
+    if (forcedIndexMeta || !costBasedSelection) {
         winnerIdx = order.front();
         chosen = std::move(*built[winnerIdx]);
     } else {
@@ -672,16 +743,30 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Selected non-covering index " << lookupIndexMeta->Name
                                      << " for a read of " << tablePath;
 
-        TOpRead::TRangeInfo rangeInfo{
-            .ComputeNode = lookupResult.ComputeNode,
-            .KeyColumns = lookupIndexMeta->KeyColumnNames,
-            .UsedPrefixLen = lookupResult.UsedPrefixLen,
-            .PointPrefixLen = lookupResult.PointPrefixLen,
-            .ExpectedMaxRanges = lookupResult.ExpectedMaxRanges ? TMaybe<size_t>(*lookupResult.ExpectedMaxRanges) : TMaybe<size_t>(),
-        };
-        rangeInfo.LiteralRange = BuildLiteralRange(lookupResult, winner.KeyColumns, *schemeType, read->Pos, ctx);
+        // Only the index named by VIEW is read without ranges, when its key gives none.
+        std::optional<TOpRead::TRangeInfo> rangeInfo;
+        if (lookupResult.ComputeNode) {
+            rangeInfo = TOpRead::TRangeInfo{
+                .ComputeNode = lookupResult.ComputeNode,
+                .KeyColumns = lookupIndexMeta->KeyColumnNames,
+                .UsedPrefixLen = lookupResult.UsedPrefixLen,
+                .PointPrefixLen = lookupResult.PointPrefixLen,
+                .ExpectedMaxRanges = lookupResult.ExpectedMaxRanges ? TMaybe<size_t>(*lookupResult.ExpectedMaxRanges) : TMaybe<size_t>(),
+            };
+            rangeInfo->LiteralRange = BuildLiteralRange(lookupResult, winner.KeyColumns, *schemeType, read->Pos, ctx);
+        } else {
+            AddWholeIndexReadWarning(read->ForceIndex, read->Pos, ctx);
+        }
+        // The part of the predicate the ranges do not cover, or the whole predicate without ranges.
+        const auto residual = lookupResult.ComputeNode ? TExpression(lookupResult.PrunedLambda, &ctx, &props) : filter->GetFilterExpression();
+        const bool residualIsTrue = lookupResult.ComputeNode && IsPrunedToTrue(lookupResult.PrunedLambda);
+        // The ranges account for the selectivity of the predicate in the statistics of the read, the residual does not add it.
+        const bool partiallyPushedDown = lookupResult.ComputeNode != nullptr;
 
-        const auto lookupReadColumns = BuildIndexReadColumns(mainMeta.KeyColumnNames, filterPhysical);
+        // A chosen index holds the filter columns, so the filter is applied before the lookup. The index named by VIEW may
+        // not hold them, then the filter is applied to the rows the lookup fetches.
+        const bool filterOnIndex = HoldsColumns(*lookupIndexMeta, filterPhysical);
+        const auto lookupReadColumns = BuildIndexReadColumns(mainMeta.KeyColumnNames, filterOnIndex ? filterPhysical : TVector<TString>());
         TUnorderedIUs indexColumns;
         THashMap<TString, TInfoUnitId> indexIds;
         for (const auto& col : lookupReadColumns) {
@@ -694,15 +779,14 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
                                                 BuildTableCallable(*lookupIndexMeta, read->Pos, ctx), nullptr, nullptr,
                                                 std::move(rangeInfo), std::nullopt, ESortDir::None, read->Props, read->Pos);
 
-        TSubstitutions substitutions;
-        for (const auto id : filter->GetFilterIUs(props)) {
-            substitutions.Add(id, indexIds.at(props.InfoUnitRegistry.Get(id).GetColumnName()));
-        }
-
         TIntrusivePtr<IOperator> indexFilter = std::move(indexRead);
-        if (!IsPrunedToTrue(lookupResult.PrunedLambda)) {
-            auto indexPredicate = TExpression(lookupResult.PrunedLambda, &ctx, &props).ApplyRenames(substitutions);
-            indexFilter = MakeIntrusive<TOpFilter>(std::move(indexFilter), filter->Pos, filter->Props, std::move(indexPredicate), true);
+        if (filterOnIndex && !residualIsTrue) {
+            TSubstitutions substitutions;
+            for (const auto id : filter->GetFilterIUs(props)) {
+                substitutions.Add(id, indexIds.at(props.InfoUnitRegistry.Get(id).GetColumnName()));
+            }
+            indexFilter = MakeIntrusive<TOpFilter>(std::move(indexFilter), filter->Pos, filter->Props, residual.ApplyRenames(substitutions),
+                                                   partiallyPushedDown);
         }
 
         TOpTableLookup::TLookupKeys lookupKeys;
@@ -719,9 +803,13 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             lookup->SourceRead = TOpTableLookup::TSourceRead{
                 .Predicate = TExpression(originalLambda, &ctx, &props),
                 .PointPrefixes = std::move(pointPrefixes),
+                .ForceIndex = read->ForceIndex,
             };
         }
-        return lookup;
+        if (filterOnIndex || residualIsTrue) {
+            return lookup;
+        }
+        return MakeIntrusive<TOpFilter>(std::move(lookup), filter->Pos, filter->Props, residual, partiallyPushedDown);
     }
 
     if (!chosen.ComputeNode) {
@@ -762,11 +850,141 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     const auto sortDir = chosenIndexMeta ? ESortDir::None : read->SortDir;
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), storageType, tableCallable, read->OlapFilterLambda,
                                           read->Limit, std::move(rangeInfo), TExpression(originalLambda, &ctx, &props), sortDir, read->Props, read->Pos);
+    newRead->ForcePrimary = read->ForcePrimary;
+    newRead->ForceIndex = read->ForceIndex;
 
     // An always true filter would stand between the read and its consumers, e.g. an OLAP aggregate.
     if (IsPrunedToTrue(chosen.PrunedLambda)) {
         return newRead;
     }
     return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(chosen.PrunedLambda, &ctx, &props), true);
+}
+
+bool TSelectIndexForTopSortRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Sort && CastOperator<TOpSort>(input)->IsTopSort();
+}
+
+// As in the old optimizer (KqpTopSortSelectIndex), a top-N sort over a row table read without ranges reads the table
+// through an index whose key order matches the sort. Then the sorted read rules read the index in that order and stop
+// at the limit, instead of reading the whole table. A read with ranges has its index chosen by the range pushdown,
+// which takes the sort into account as well. A read of the index named by VIEW reads that index.
+TIntrusivePtr<IOperator> TSelectIndexForTopSortRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx, TPlanProps& props) {
+    const auto sort = CastOperator<TOpSort>(input);
+    const auto direction = GetKeyReadDirection(sort->GetSortElements());
+    if (!direction) {
+        return input;
+    }
+    auto& kqpCtx = rboCtx.KqpCtx;
+    // As in the old optimizer, a scan query does not read an index in the reverse order.
+    if (kqpCtx.Config->IsAutoIndexSelectionDisabled() || (!*direction && kqpCtx.IsScanQuery())) {
+        return input;
+    }
+
+    // Follow the sort keys through the maps down to the read columns. The lowest map, if any, consumes the read.
+    TVector<TInfoUnitId> keys;
+    for (const auto& [column, order] : sort->GetSortElements().Items()) {
+        keys.push_back(column);
+    }
+    TIntrusivePtr<IOperator> lowestMap;
+    auto current = sort->GetInput();
+    while (current->Kind == EOperator::Map) {
+        if (current->Parents.size() != 1) {
+            return input;
+        }
+        const auto& mapElements = CastOperator<TOpMap>(current)->GetMapElements();
+        for (auto& key : keys) {
+            if (const auto* element = mapElements.Find(key)) {
+                if (!element->IsColumnAccess()) {
+                    return input;
+                }
+                key = element->GetColumnAccess();
+            }
+        }
+        lowestMap = current;
+        current = CastOperator<IUnaryOperator>(current)->GetInput();
+    }
+    if (current->Kind != EOperator::Source || current->Parents.size() != 1) {
+        return input;
+    }
+    const auto read = CastOperator<TOpRead>(current);
+    if (read->GetTableStorageType() != NYql::EStorageType::RowStorage || read->ForcePrimary || !read->ForceIndex.empty()
+        || read->RangeInfo || read->Limit || read->SortDir != ESortDir::None) {
+        return input;
+    }
+
+    const auto tablePath = TExprBase(read->GetTable()).Cast<TKqpTable>().Path().StringValue();
+    const auto mainMeta = FindTableMetadata(kqpCtx, tablePath);
+    if (!mainMeta || mainMeta->Kind != EKikimrTableKind::Datashard) {
+        return input;
+    }
+
+    TVector<TString> sortColumns;
+    for (const auto key : keys) {
+        if (!read->GetColumns().Contains(key)) {
+            return input;
+        }
+        sortColumns.push_back(props.InfoUnitRegistry.Get(key).GetColumnName());
+    }
+    // The main table already returns the rows in the order of the sort.
+    if (SortMatchesKeyOrder(sortColumns, mainMeta->KeyColumnNames, 0)) {
+        return input;
+    }
+
+    const auto index = FindIndexInSortOrder(*mainMeta, sortColumns, *read, kqpCtx, props.InfoUnitRegistry);
+    if (!index) {
+        return input;
+    }
+    YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Selected index " << index->Name << " for the sort of a read of " << tablePath;
+
+    auto indexRead = MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), NYql::EStorageType::RowStorage,
+                                            BuildTableCallable(*index, read->Pos, rboCtx.ExprCtx), nullptr, nullptr, std::nullopt,
+                                            std::nullopt, ESortDir::None, read->Props, read->Pos);
+    if (!lowestMap) {
+        return MakeIntrusive<TOpSort>(std::move(indexRead), sort->Pos, sort->Props, sort->GetSortElements(), sort->LimitCond, sort->GetSortPhase());
+    }
+    lowestMap->SetChild(0, std::move(indexRead));
+    return MakeIntrusive<TOpSort>(sort->GetInput(), sort->Pos, sort->Props, sort->GetSortElements(), sort->LimitCond, sort->GetSortPhase());
+}
+
+// A read redirected to the index has ranges, so a read without them is still on the main table.
+bool TExpandViewIndexReadRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    if (input->Kind != EOperator::Source) {
+        return false;
+    }
+    const auto read = CastOperator<TOpRead>(input);
+    return !read->ForceIndex.empty() && !read->RangeInfo;
+}
+
+// As in the old optimizer (KqpRewriteIndexRead), the read of the index named by VIEW reads the index table when it
+// covers the read, and otherwise reads the primary keys from the index and looks the rows up in the main table.
+TIntrusivePtr<IOperator> TExpandViewIndexReadRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx, TPlanProps& props) {
+    const auto read = CastOperator<TOpRead>(input);
+    auto& ctx = rboCtx.ExprCtx;
+    const auto tablePath = TExprBase(read->GetTable()).Cast<TKqpTable>().Path().StringValue();
+    const auto mainMeta = FindTableMetadata(rboCtx.KqpCtx, tablePath);
+    Y_ENSURE(mainMeta, "No metadata of the table " << tablePath);
+    const auto indexMeta = mainMeta->GetIndexMetadata(read->ForceIndex).first;
+    Y_ENSURE(indexMeta && FindTableMetadata(rboCtx.KqpCtx, indexMeta->Name), "No metadata of the index " << read->ForceIndex);
+
+    YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Reading the whole index " << indexMeta->Name << " for a read of " << tablePath;
+    AddWholeIndexReadWarning(read->ForceIndex, read->Pos, ctx);
+
+    const auto indexTable = BuildTableCallable(*indexMeta, read->Pos, ctx);
+    if (IsCovering(*read, *indexMeta, props.InfoUnitRegistry)) {
+        return MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), NYql::EStorageType::RowStorage, indexTable, nullptr,
+                                      read->Limit, std::nullopt, std::nullopt, read->SortDir, read->Props, read->Pos,
+                                      read->RequireSortedRead);
+    }
+
+    TUnorderedIUs indexColumns;
+    TOpTableLookup::TLookupKeys lookupKeys;
+    for (const auto& column : mainMeta->KeyColumnNames) {
+        const auto id = props.InfoUnitRegistry.Add(TInfoUnit(read->Alias, column));
+        indexColumns.Add(id);
+        lookupKeys.Append(id, column);
+    }
+    auto indexRead = MakeIntrusive<TOpRead>(read->Alias, std::move(indexColumns), NYql::EStorageType::RowStorage, indexTable,
+                                            nullptr, nullptr, std::nullopt, std::nullopt, ESortDir::None, read->Props, read->Pos);
+    return MakeIntrusive<TOpTableLookup>(std::move(indexRead), read->Pos, read->GetTable(), read->GetColumns(), std::move(lookupKeys));
 }
 } // namespace NKikimr::NKqp

@@ -1,7 +1,8 @@
 #pragma once
 
+#include <ydb/core/kqp/common/simple/kqp_compute_column.h>
+
 #include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
 #include <ydb/library/yql/dq/runtime/dq_compute.h>
@@ -12,12 +13,7 @@ namespace NKikimr::NMiniKQL {
 
 class TKqpComputeContextBase : public NYql::NDq::TDqComputeContextBase {
 public:
-    struct TColumn {
-        NTable::TTag Tag;
-        NScheme::TTypeInfo Type;
-        TString TypeMod;
-        TPgType* PgType = nullptr;
-    };
+    using TColumn = TKqpComputeColumn;
 
     // used only at then building of a computation graph, to inject taskId in runtime nodes
     void SetCurrentTaskId(ui64 taskId) { CurrentTaskId = taskId; }

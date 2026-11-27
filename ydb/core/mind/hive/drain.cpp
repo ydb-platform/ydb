@@ -358,6 +358,12 @@ void THive::ProcessPileDrains() {
     Send(SelfId(), new TEvPrivate::TEvProcessPileDrains());
 }
 
+void THive::HandleInit(TEvPrivate::TEvProcessPileDrains::TPtr&) {
+    // requested while loading (e.g. by a config notification); the load ends with UpdatePiles, which processes
+    // the pile drains once Hive works, so it is only needed to allow scheduling again
+    ProcessPileDrainsScheduled = false;
+}
+
 void THive::Handle(TEvPrivate::TEvProcessPileDrains::TPtr&) {
     ProcessPileDrainsScheduled = false;
     if (!BridgeInfo || std::none_of(BridgePiles.begin(), BridgePiles.end(), [](const auto& item) { return item.second.Drain; })) {

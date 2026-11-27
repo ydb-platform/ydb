@@ -21,11 +21,28 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
+#include <library/cpp/protobuf/util/walk.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NKikimr::NMiniKQL;
 using namespace NYql;
 using namespace NYql::NUdf;
+
+void TQueryData::ValidateNoPgParameters(const NProtoBuf::Map<TBasicString<char>, Ydb::TypedValue>& params) {
+    for (const auto& [name, param] : params) {
+        if (param.type().has_type_id()) {
+            continue;
+        }
+        NProtoBuf::WalkReflection(param.type(), [&name](const NProtoBuf::Message& message, const NProtoBuf::FieldDescriptor* field) {
+            Y_ENSURE(field->containing_type() != Ydb::Type::descriptor() ||
+                field->number() != Ydb::Type::kPgTypeFieldNumber ||
+                !message.GetReflection()->HasField(message, field),
+                "PostgreSQL compatibility is disabled: parameter " << name << " has a PostgreSQL type");
+            return true;
+        });
+    }
+}
 
 TTypedUnboxedValue TKqpExecuterTxResult::GetUV(
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,

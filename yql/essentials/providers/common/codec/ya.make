@@ -23,6 +23,12 @@ PEERDIR(
 
 GENERATE_ENUM_SERIALIZATION(yql_codec_type_flags.h)
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    quality/user_sessions/createlib/qb3/parser
+    transfer_manager/go/cmd/yql/yql_serverd
+)
+
 END()
 
 RECURSE(

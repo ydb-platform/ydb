@@ -19,6 +19,14 @@
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/util/backoff.h>
 
+#include <library/cpp/openssl/crypto/sha.h>
+
+#include <array>
+
+namespace NKikimr::NBlobDepot {
+    struct TS3BalancerEndpoint;
+}
+
 namespace NKikimr {
     struct TNodeWardenConfig;
 
@@ -344,6 +352,7 @@ namespace NKikimr::NStorage {
         TControlWrapper VolatilePhantomFlagStorageBlobSizeLimitBytes;
         TControlWrapper EnableChecksumReadValidationOnVDisk;
         TControlWrapper EnableChecksumWriteValidationOnVDisk;
+        TControlWrapper EnableVDiskSectorPreparation;
 
         TControlWrapper EnableChunkKeeper;
         TControlWrapper SpaceReportPeriodSeconds;
@@ -775,9 +784,9 @@ namespace NKikimr::NStorage {
         // get encryption key for the group
         TEncryptionKey& GetGroupMainKey(ui32 groupId);
 
-        // process group information structure
-        void ApplyGroupInfo(ui32 groupId, ui32 generation, const NKikimrBlobStorage::TGroupInfo *newGroup, bool fromController,
-            bool fromResolver);
+        // Returns whether local syncers changed and their gauges need to be refreshed after the batch.
+        [[nodiscard]] bool ApplyGroupInfo(ui32 groupId, ui32 generation, const NKikimrBlobStorage::TGroupInfo *newGroup,
+            bool fromController, bool fromResolver);
 
         // issue GetGroup request to BSC/GroupResolver actor
         void RequestGroupConfig(ui32 groupId, TGroupRecord& group);
@@ -812,10 +821,23 @@ namespace NKikimr::NStorage {
 
         struct TBlobDepotS3RouterRec {
             TActorId Router;
+            ui32 Generation = 0;
             NKikimrBlobDepot::TS3BackendSettings Settings;
-            THashSet<TActorId> Consumers;
+            std::shared_ptr<NBlobDepot::TS3BalancerEndpoint> LastEndpoint;
+            THashMap<TActorId, ui32> Consumers;
         };
         THashMap<ui64 /*tabletId*/, TBlobDepotS3RouterRec> BlobDepotS3Routers;
+
+        struct TS3EndpointHandoff {
+            ui64 TabletId;
+            ui32 Generation;
+            TMonotonic Expires;
+            NOpenSsl::NSha256::TDigest Route;
+            TString Host;
+            ui16 Port;
+        };
+        std::deque<TS3EndpointHandoff> S3EndpointHandoffs; // ordered by expiration
+        void ExpireS3EndpointHandoffs();
 
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenAcquireBlobDepotS3Router>> ev);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenReleaseBlobDepotS3Router>> ev);
@@ -937,6 +959,20 @@ namespace NKikimr::NStorage {
         };
 
         std::set<TWorkingSyncer> WorkingSyncers;
+        struct TBridgeSyncNodeCounters {
+            using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+            struct TModeCounters {
+                TCounterPtr Running;
+                TCounterPtr WaitingForConfig;
+                TCounterPtr NodeActive;
+            };
+            std::array<TModeCounters, 2> Modes;
+            TCounterPtr AnyNodeActive;
+            TCounterPtr RateLimit;
+
+            explicit TBridgeSyncNodeCounters(const ::NMonitoring::TDynamicCounterPtr& root);
+        };
+        std::optional<TBridgeSyncNodeCounters> BridgeSyncNodeCounters;
 
         // the parts of HOT_STANDBY piles the local bridge proxies have found missing a write, reported to BSC along
         // with the syncer progress; the value tells whether a blob write may have been lost
@@ -976,8 +1012,9 @@ namespace NKikimr::NStorage {
         void Handle(NGroupSyncer::TEvMirror3dcRepairScanResult::TPtr& ev);
 
         void UpdateSyncRateQuoter();
+        void UpdateSyncerCounters();
         void ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
-        void StartSyncerIfNeeded(TWorkingSyncer& syncer);
+        bool StartSyncerIfNeeded(TWorkingSyncer& syncer);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenNotifySyncerFinished>> ev);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenStandbyDirty>> ev);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenRegisterBridgeProxy>> ev);

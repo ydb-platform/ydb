@@ -2,6 +2,9 @@ from collections import Counter
 import logging
 import unittest
 
+import yatest.common
+from google.protobuf.text_format import MessageToString
+
 from ydb.core.protos import blobstorage_base3_pb2, msgbus_pb2
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.common.types import Erasure
@@ -27,6 +30,23 @@ class Mirror3dcTestBase(unittest.TestCase):
 
     def setUp(self):
         super().setUp()
+        self.actions_log_path = yatest.common.test_output_path('mirror3dc_actions.log')
+        handler = logging.FileHandler(self.actions_log_path, mode='w', encoding='utf-8')
+        handler.setFormatter(logging.Formatter(
+            '%(asctime)s.%(msecs)03d [%(threadName)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S',
+        ))
+        self.actions_logger = logging.Logger(f'{self.id()}.actions', level=logging.INFO)
+        self.actions_logger.addHandler(handler)
+
+        def close_actions_log():
+            self.actions_logger.info('CONTROL TEST_FINISHED test=%s', self.id())
+            self.actions_logger.removeHandler(handler)
+            handler.close()
+
+        self.addCleanup(close_actions_log)
+        self._logged_group = None
+        self.actions_logger.info('CONTROL TEST_START test=%s', self.id())
+        logger.info('Mirror3dc actions and KV log: %s', self.actions_log_path)
         config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
             nodes=9,
@@ -37,8 +57,10 @@ class Mirror3dcTestBase(unittest.TestCase):
             )],
         )
         self.cluster = KiKiMR(config)
-        self.addCleanup(self.cluster.stop)
+        self.addCleanup(self._stop_cluster)
+        self.actions_logger.info('CONTROL CLUSTER_START_REQUEST')
         self.cluster.start()
+        self.actions_logger.info('CONTROL CLUSTER_STARTED')
         self.pool, = self.cluster.client.read_storage_pools()
         self.assertEqual(self.pool.Name, 'mirror3dc')
         self.assertEqual(self.pool.ErasureSpecies, 'mirror-3-dc')
@@ -48,9 +70,25 @@ class Mirror3dcTestBase(unittest.TestCase):
         base = self.bsc_client.query_base_config().BaseConfig
         self.node_data_centers = {node.NodeId: node.Location.DataCenter for node in base.Node}
         self.excluded_dcs = set()
+        self.actions_logger.info('CONTROL CLUSTER_TOPOLOGY nodes_by_dc=%s', {
+            dc: sorted(node_id for node_id, node_dc in self.node_data_centers.items() if node_dc == dc)
+            for dc in self.data_centers
+        })
+        self._log_group(group)
         self.path = '/Root/blobs'
+        self.actions_logger.info('CONTROL KV_CREATE_TABLETS_REQUEST path=%s partitions=%s', self.path, self.PARTITIONS)
         response = self.cluster.kv_client.create_tablets(self.PARTITIONS, self.path, binded_channels=['hdd'] * 3)
+        self.actions_logger.info('CONTROL KV_CREATE_TABLETS_RESPONSE status=%s', response.operation.status)
         self.assertEqual(response.operation.status, StatusIds.SUCCESS, str(response))
+
+    def _stop_cluster(self):
+        self.actions_logger.info('CONTROL CLUSTER_STOP_REQUEST')
+        try:
+            self.cluster.stop()
+        except Exception:
+            self.actions_logger.exception('CONTROL CLUSTER_STOP_FAILED')
+            raise
+        self.actions_logger.info('CONTROL CLUSTER_STOPPED')
 
     @property
     def bsc_client(self):
@@ -59,7 +97,29 @@ class Mirror3dcTestBase(unittest.TestCase):
     def get_group(self):
         base = self.bsc_client.query_base_config().BaseConfig
         group, = [g for g in base.Group if g.StoragePoolId == self.pool.StoragePoolId]
+        self._log_group(group)
         return group
+
+    def _log_group(self, group):
+        roles = tuple((realm.DataCenter, realm.State) for realm in group.FailRealms)
+        configuration = (group.GroupGeneration, group.Mirror3dcState, roles)
+        if configuration != self._logged_group:
+            self.actions_logger.info(
+                'CONTROL GROUP_STATE group=%s generation=%s state=%s roles=%s',
+                group.GroupId, group.GroupGeneration, self.GROUP_STATES.EState.Name(group.Mirror3dcState),
+                {dc: self.DC_STATES.EState.Name(role) for dc, role in roles},
+            )
+            self._logged_group = configuration
+
+    def send_config(self, request):
+        self.actions_logger.info('CONTROL CONFIG_REQUEST %s', MessageToString(request, as_one_line=True))
+        try:
+            response = self.bsc_client.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        except Exception:
+            self.actions_logger.exception('CONTROL CONFIG_FAILED')
+            raise
+        self.actions_logger.info('CONTROL CONFIG_RESPONSE %s', MessageToString(response, as_one_line=True))
+        return response
 
     def check_group_ready(self):
         base = self.bsc_client.query_base_config().BaseConfig
@@ -95,11 +155,15 @@ class Mirror3dcTestBase(unittest.TestCase):
         excluded = self.excluded_dcs.copy()
         if state == self.DC_STATES.EXCLUDED:
             excluded.add(dc)
+            matching_roles = (self.DC_STATES.LEAVING, self.DC_STATES.EXCLUDED)
         elif state == self.DC_STATES.INCLUDED:
             excluded.discard(dc)
+            matching_roles = (self.DC_STATES.RECOVERING, self.DC_STATES.INCLUDED)
         else:
             raise ValueError(f'Unsupported DC state: {state}')
         request = msgbus_pb2.TBlobStorageConfigRequest(Domain=1)
+        if len(excluded) == 2 and len(self.excluded_dcs) == 1:
+            request.Request.IgnoreDegradedGroupsChecks = True
         command = request.Request.Command.add().DefineDataCenterStates
         # BSC replaces the entire policy. Preserve the excluded DCs; omitted
         # DCs are included by default. Send INCLUDED explicitly for a returning DC.
@@ -107,14 +171,22 @@ class Mirror3dcTestBase(unittest.TestCase):
             command.DataCenter.add(
                 Name=name, State=self.DC_STATES.EXCLUDED if name in excluded else self.DC_STATES.INCLUDED,
             )
-        logger.info('DefineDataCenterStates: %s', command)
-        response = self.bsc_client.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        response = self.send_config(request)
         self.assertTrue(response.Success, str(response))
         self.assertEqual(len(response.Status), 1, str(response))
         self.assertTrue(response.Status[0].Success, str(response))
         self.excluded_dcs = excluded
         if check_generation:
-            self.assertEqual(self.get_group().GroupGeneration, before.GroupGeneration + 1)
+            before_role, = [realm.State for realm in before.FailRealms if realm.DataCenter == dc]
+
+            def check_dc_applied():
+                group = self.get_group()
+                roles = {realm.DataCenter: realm.State for realm in group.FailRealms}
+                self.assertIn(roles[dc], matching_roles, str(group))
+                if before_role not in matching_roles:
+                    self.assertGreater(group.GroupGeneration, before.GroupGeneration, str(group))
+
+            retry_assertions(check_dc_applied, timeout_seconds=240, step_seconds=1)
 
     def recovered_realm_states(self):
         return {
@@ -140,27 +212,23 @@ class Mirror3dcTestBase(unittest.TestCase):
         )
         # The command uses physical realm order, which need not match sorted DC names.
         definition.FailRealmStates.extend(realm_states[realm.DataCenter] for realm in group.FailRealms)
-        logger.info('DefineGroupState: %s', definition)
-        response = self.bsc_client.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        response = self.send_config(request)
         self.assertTrue(response.Success, str(response))
         self.assertEqual(len(response.Status), 1, str(response))
         self.assertTrue(response.Status[0].Success, str(response))
 
     def check_group_state(self, expected_state, expected_realms):
+        return self.check_group_states((expected_state,), expected_realms)
+
+    def check_group_states(self, expected_states, expected_realms):
         group = self.get_group()
         realms = group.FailRealms
         self.assertTrue(group.HasField('Mirror3dcState'), str(group))
-        logger.info(
-            'Group %s generation %s state %s FailRealms: %s',
-            self.group_id,
-            group.GroupGeneration,
-            self.GROUP_STATES.EState.Name(group.Mirror3dcState),
-            [(realm.DataCenter, self.DC_STATES.EState.Name(realm.State)) for realm in realms],
-        )
-        self.assertEqual(group.Mirror3dcState, expected_state, str(group))
+        self.assertIn(group.Mirror3dcState, expected_states, str(group))
         self.assertEqual(len(realms), 3, str(group))
         self.assertEqual({realm.DataCenter for realm in realms}, set(self.data_centers), str(group))
         self.assertEqual({realm.DataCenter: realm.State for realm in realms}, expected_realms, str(group))
+        return group.Mirror3dcState
 
     def wait_for_group_state(self, expected_state, expected_realms):
         retry_assertions(
@@ -170,15 +238,14 @@ class Mirror3dcTestBase(unittest.TestCase):
     def wait_for_two_copy_recovery(self, _pause_writes=None):
         self.assertEqual(len(self.excluded_dcs), 1)
         states = self.recovered_realm_states()
-        current = self.get_group().Mirror3dcState
-        if current == self.GROUP_STATES.DC_FAILURE:
-            self.define_group_state(self.GROUP_STATES.DC_FAILURE_INV1_PENDING, states)
-            self.wait_for_group_state(self.GROUP_STATES.DC_FAILURE_INV1, states)
-            current = self.GROUP_STATES.DC_FAILURE_INV1
+        ready_states = (
+            self.GROUP_STATES.DC_FAILURE_INV1,
+            self.GROUP_STATES.DC_FAILURE_INV2_PENDING,
+            self.GROUP_STATES.DC_FAILURE_INV2,
+        )
+        current = retry_assertions(lambda: self.check_group_states(ready_states, states), timeout_seconds=240)
         if current == self.GROUP_STATES.DC_FAILURE_INV1:
             self.define_group_state(self.GROUP_STATES.DC_FAILURE_INV2_PENDING, states)
-        else:
-            self.assertIn(current, (self.GROUP_STATES.DC_FAILURE_INV2_PENDING, self.GROUP_STATES.DC_FAILURE_INV2))
         self.wait_for_group_state(self.GROUP_STATES.DC_FAILURE_INV2, states)
 
     def return_dc(self, dc):
@@ -191,7 +258,7 @@ class Mirror3dcTestBase(unittest.TestCase):
         else:
             self.wait_for_group_state(self.GROUP_STATES.NORMAL, realms)
 
-    def run_workload(self, before_action, background_action):
+    def run_workload(self, before_action, background_action, *, workload_started=None):
         return run_kv_workload(
             endpoints=[node.endpoint for node in self.cluster.nodes.values()],
             path=self.path,
@@ -199,10 +266,15 @@ class Mirror3dcTestBase(unittest.TestCase):
             writes_per_thread=self.WRITES_PER_THREAD,
             before_background_action=before_action,
             background_action=background_action,
+            workload_started=workload_started,
+            event_logger=self.actions_logger,
         )
 
-    def snapshot(self):
-        return scan_write2x2(self.viewer_url, group_ids=[self.group_id], timeout=30)
+    def snapshot(self, *, physical=False):
+        return scan_write2x2(
+            self.viewer_url, group_ids=[self.group_id], timeout=30,
+            physical=physical, event_logger=self.actions_logger,
+        )
 
     @staticmethod
     def kv_blobs(layouts):
@@ -231,7 +303,7 @@ class Mirror3dcTestBase(unittest.TestCase):
         self.assertEqual(len(blobs), written, 'Snapshot must contain every acknowledged KV write')
         self.check_blob_layouts(blobs)
         distribution = Counter(tuple(sorted(self.copy_counts(layout))) for layout in blobs.values())
-        logger.info(
+        self.actions_logger.info(
             'Two-copy recovery: %d KV blobs (%d old, %d new), layouts %s',
             len(blobs),
             self.INITIAL_WRITES,
@@ -256,5 +328,5 @@ class Mirror3dcTestBase(unittest.TestCase):
 
         checked = retry_assertions(check_snapshot, timeout_seconds=120, step_seconds=1)
         distribution = Counter(tuple(sorted(self.copy_counts(layout))) for layout in checked.values())
-        logger.info('Under continuous load: %d KV blobs checked for 2+2, layouts %s',
-                    len(checked), dict(distribution))
+        self.actions_logger.info('Under continuous load: %d KV blobs checked for 2+2, layouts %s',
+                                 len(checked), dict(distribution))

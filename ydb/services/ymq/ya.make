@@ -7,19 +7,19 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/grpc/server
     ydb/core/base
-    ydb/core/client/server
     ydb/core/grpc_services
-    ydb/core/mind
-    ydb/public/api/grpc
+    ydb/core/grpc_services/base
+    ydb/core/protos
+    ydb/core/tx/scheme_board
+    ydb/core/ymq/actor
+    ydb/core/ymq/base
+    ydb/library/actors/core
+    ydb/library/grpc/server
+    ydb/library/http_proxy/error
+    ydb/library/services
     ydb/public/api/grpc/draft
-    ydb/public/sdk/cpp/src/library/operation_id
-    ydb/public/sdk/cpp/src/client/resources
-    ydb/services/lib/actors
-    ydb/services/lib/sharding
-    ydb/services/persqueue_v1
-    ydb/services/ydb
+    yql/essentials/public/issue
 )
 
 END()

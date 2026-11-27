@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/protos
+    ydb/core/scheme
     ydb/core/scheme_types
 )
 

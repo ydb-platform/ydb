@@ -158,6 +158,14 @@ public:
                         LOG_D("Path is CDC",
                             {"realPath", realPath});
 
+                        if (!entry.ListNodeEntry || entry.ListNodeEntry->Children.size() != 1) {
+                            SetTopicResults(originals, TTopicInfo{
+                                .Status = EStatus::NotFound,
+                                .CdcStream = true
+                            });
+                            break;
+                        }
+
                         // Copy before mutating PathToOriginalPaths (rehash must not invalidate originals).
                         TVector<TString> originalsCopy = originals;
                         const TString streamImplPath = TStringBuilder() << realPath << "/streamImpl";

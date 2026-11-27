@@ -25,24 +25,6 @@ namespace NKikimr::NStorage {
                               std::unique_ptr<TEvNodeConfigInvokeOnRootResult> response) {
             SendInvokeResult(std::make_unique<IEventHandle>(recipient, sender, response.release(), 0, cookie), sessionId);
         }
-
-        bool IsClusterStateReached(const NKikimrBridge::TClusterState& current, const NKikimrBridge::TClusterState& requested) {
-            if (current.GetGeneration() < requested.GetGeneration()) {
-                return false;
-            }
-            if (current.GetPrimaryPile() != requested.GetPrimaryPile() || current.GetPromotedPile() != requested.GetPromotedPile()) {
-                return false;
-            }
-            if (current.PerPileStateSize() != requested.PerPileStateSize()) {
-                return false;
-            }
-            for (size_t i = 0; i < current.PerPileStateSize(); ++i) {
-                if (current.GetPerPileState(i) != requested.GetPerPileState(i)) {
-                    return false;
-                }
-            }
-            return true;
-        }
     }
 
     TInvokeRequestHandlerActor::TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, TInvokeQuery&& query,
@@ -133,15 +115,6 @@ namespace NKikimr::NStorage {
             OnVStatusError(begin->second);
         }
         if (nodeId == WaitingReplyFromNode) {
-            if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
-                    op && op->Command.HasSwitchBridgeClusterState() &&
-                    // Matching state cannot prove that this invocation won its compare-and-set.
-                    !op->Command.GetSwitchBridgeClusterState().HasExpectedGeneration() &&
-                    Self->StorageConfig && Self->StorageConfig->HasClusterState() &&
-                    IsClusterStateReached(Self->StorageConfig->GetClusterState(),
-                                          op->Command.GetSwitchBridgeClusterState().GetNewClusterState())) {
-                return Finish(TResult::OK, std::nullopt);
-            }
             throw TExRace() << "Hop node disconnected";
         }
     }
@@ -156,6 +129,12 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::ExecuteQuery() {
         std::visit(TOverloaded{
             [&](TInvokeExternalOperation& op) {
+                if (op.SelfHealCommitToConfirm) {
+                    if (!Self->IsCurrentStateStorageSelfHealActor(op.Sender)) {
+                        throw TExRace() << "State Storage self-heal was superseded";
+                    }
+                    return StartCommitConfirmation(op.SelfHealCommitToConfirm);
+                }
                 YDB_LOG_DEBUG("ExecuteQuery",
                     {"marker", "NWDC43"},
                     {"selfId", SelfId()},
@@ -291,18 +270,21 @@ namespace NKikimr::NStorage {
             },
             [&](TProposeConfig& op) {
                 StartProposition(&op.Config);
+            },
+            [&](const TPromoteStaticGroup& op) {
+                PromoteStaticGroup(op);
             }
         }, Query);
     }
 
-    void TInvokeRequestHandlerActor::IssueScatterTask(TEvScatter&& task, TGatherCallback callback) {
+    void TInvokeRequestHandlerActor::IssueScatterTask(TEvScatter&& task, TGatherCallback callback, TMonotonic gatherDeadline) {
         const ui64 cookie = NextScatterCookie++;
         const auto [it, inserted] = ScatterTasks.try_emplace(cookie, std::move(callback));
         Y_ABORT_UNLESS(inserted);
 
         task.SetTaskId(RandomNumber<ui64>());
         task.SetCookie(cookie);
-        Self->IssueScatterTask(SelfId(), std::move(task));
+        Self->IssueScatterTask(SelfId(), std::move(task), {}, gatherDeadline);
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvNodeConfigGather::TPtr ev) {
@@ -334,6 +316,7 @@ namespace NKikimr::NStorage {
                 || !before || !after || *before != *after) {
             throw TExError() << "Use ApplyDataCenterStates to change DC availability";
         }
+        CheckStaticGroupStateUpdate(proposed);
         StartProposition(request->MutableConfig());
     }
 
@@ -615,20 +598,27 @@ namespace NKikimr::NStorage {
         if (msg.ErrorReason) {
             throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
         } else if (RecoveryProposition && !std::holds_alternative<TCollectConfigsAndPropose>(Query)) {
-            Finish(TResult::RACE, "Configuration was recovered; retry the original operation");
-        } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query); op && op->Command.HasApplyDataCenterStates()) {
-            StartDataCenterReconciliation();
-        } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
-                   op && op->Command.HasReplaceStorageConfig() && ControllerOp == EControllerOp::OTHER
-                   && Self->SelfManagementEnabled) {
-            StartCommitConfirmation();
+            RetrySelfHealConfirmationOrFinish(TResult::RACE, "Configuration was recovered; retry the original operation");
+        } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query)) {
+            if (op->Command.HasApplyDataCenterStates()) {
+                StartDataCenterReconciliation(*msg.ProposedConfig);
+            } else {
+                StartCommitConfirmation(msg.ProposedConfig);
+            }
         } else {
-            Finish(TResult::OK, std::nullopt, [&](TResult *record) {
-                if (ReassignGroupDiskResult) {
-                    record->MutableReassignGroupDisk()->CopyFrom(*ReassignGroupDiskResult);
-                }
-            });
+            FinishConfigChange();
         }
+    }
+
+    void TInvokeRequestHandlerActor::FinishConfigChange() {
+        Finish(TResult::OK, std::nullopt, [&](TResult *record) {
+            if (ReassignGroupDiskResult) {
+                record->MutableReassignGroupDisk()->CopyFrom(*ReassignGroupDiskResult);
+            }
+            if (AppliedDataCenterStates) {
+                *record->MutableAppliedDataCenterStates() = std::move(*AppliedDataCenterStates);
+            }
+        });
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -717,6 +707,13 @@ namespace NKikimr::NStorage {
                     // we were asked to commit config, but error has occured
                     Y_ABORT_UNLESS(errorReason);
                     switchToError.emplace(*errorReason);
+                }
+            },
+            [&](const TPromoteStaticGroup& op) {
+                if (op.Sender == Self->StaticGroupStateActor) {
+                    // The coordinator fences proposal acknowledgements by owner and cookie.
+                    TActivationContext::Send(new IEventHandle(op.Sender, Self->SelfId(),
+                        new NGroupSyncer::TEvGroupState::TEvProposalResult, 0, op.Cookie));
                 }
             }
         }, Query);

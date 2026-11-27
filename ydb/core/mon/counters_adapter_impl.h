@@ -1,7 +1,5 @@
 #pragma once
 
-#include "counters_memonly.h"
-
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -16,7 +14,7 @@ struct TCounterLocation {
 class TRateCounterAdapter : public IRate {
 public:
     TRateCounterAdapter(TCounterLocation location)
-        : Counter(NMemOnlyShim::GetCounter(location.Root, location.Value, true, TCountableBase::EVisibility::Public, location.MemOnly))
+        : Counter(location.Root->GetCounter(location.Value, true, TCountableBase::EVisibility::Public, location.MemOnly))
     {
     }
 
@@ -43,7 +41,7 @@ class TRateHistogramAdapter : public IHistogram {
 public:
     TRateHistogramAdapter(TCounterLocation location, IHistogramCollectorPtr collector)
         : IHistogram(true)
-        , Histogram(NMemOnlyShim::GetHistogram(location.Root, location.Value, std::move(collector), true, TCountableBase::EVisibility::Public, location.MemOnly))
+        , Histogram(location.Root->GetHistogram(location.Value, std::move(collector), true, TCountableBase::EVisibility::Public, location.MemOnly))
     {
     }
 

@@ -1,7 +1,7 @@
 #include "single_thread_ic_mock.h"
 #include "testactorsys.h"
 #include <ydb/library/actors/interconnect/events_local.h>
-#include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/base/feature_flags.h>

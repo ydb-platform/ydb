@@ -24,6 +24,7 @@ PEERDIR(
     ydb/core/persqueue/events
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/tablet_flat/base
     ydb/core/util
     ydb/library/conclusion
     ydb/library/mkql_proto/protos

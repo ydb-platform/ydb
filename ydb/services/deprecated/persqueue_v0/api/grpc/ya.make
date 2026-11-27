@@ -11,7 +11,6 @@ SRCS(
 
 PEERDIR(
     ydb/services/deprecated/persqueue_v0/api/protos
-    ydb/public/api/protos
 )
 
 EXCLUDE_TAGS(GO_PROTO)

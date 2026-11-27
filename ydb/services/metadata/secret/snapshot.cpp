@@ -63,7 +63,7 @@ bool TSnapshot::CheckSecretAccess(const TSecretIdOrValue& sIdOrValue, const NACL
                                      if (!findSecrets) {
                                          return nullptr;
                                      }
-                                     AFL_VERIFY(!findSecrets->empty());
+                                     YDB_LOG_VERIFY(!findSecrets->empty());
                                      if (findSecrets->size() > 1) {
                                          return nullptr;
                                      }
@@ -104,14 +104,15 @@ TConclusion<TString> TSnapshot::GetSecretValue(const TSecretIdOrValue& sId) cons
                           },
                           [this](const TSecretName& name) -> TConclusion<TString> {
                               if (const auto findSecrets = IndexByName.FindPtr(name.GetSecretId())) {
-                                  AFL_VERIFY(!findSecrets->empty());
+                                  YDB_LOG_VERIFY(!findSecrets->empty());
                                   if (findSecrets->size() > 1) {
                                       return TConclusionStatus::Fail(TStringBuilder()
                                                                      << "Can't identify secret: More than 1 secret found with such name: "
                                                                      << name.GetSecretId());
                                   }
                                   auto secret = Secrets.find(*findSecrets->begin());
-                                  AFL_VERIFY(secret != Secrets.end())("secret", findSecrets->begin()->SerializeToString());
+                                  YDB_LOG_VERIFY(secret != Secrets.end(),
+                                      {"secret", findSecrets->begin()->SerializeToString()});
                                   return secret->second.GetValue();
                               }
                               return TConclusionStatus::Fail(TStringBuilder() << "No such secret: " << name.SerializeToString());

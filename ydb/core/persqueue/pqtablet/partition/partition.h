@@ -147,7 +147,10 @@ struct TTransaction {
 };
 class TPartitionCompaction;
 
-#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletId)("partition_id", Partition)
+#define PQ_ENSURE(condition, ...) YDB_LOG_ENSURE(condition, \
+    {"tabletId", TabletId},                                 \
+    {"partitionId", Partition},                             \
+    __VA_ARGS__)
 
 class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitializer;
@@ -1055,6 +1058,7 @@ private:
     ui64 PQRBCookie = 0;
     std::optional<TEvPQ::TEvReplicationData::TPtr> PendingReplicationData;
     bool ReplicationDataNeedsApply = false;
+    TInstant LastOffsetsSnapshotSentTime;
 
     THashMap<TString, NKikimr::NPQ::TOwnerInfo> Owners;
     THashSet<TActorId> OwnerPipes;
@@ -1233,6 +1237,7 @@ private:
     void ScheduleNegativeReply(const TMessage& msg);
 
     void SendOffsetsToReplicationConsumer(const TActorContext& ctx, TConstArrayRef<const TUserInfo*> userInfos = {});
+    TDuration GetOffsetsSnapshotSendInterval(const TActorContext& ctx) const;
     void RestoreReadSessionActor(TUserInfo& userInfo, const TString& sessionId,
                                 const TActorId& readSessionActor, const TActorContext& ctx);
 

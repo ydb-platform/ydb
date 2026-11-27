@@ -135,6 +135,7 @@ public:
                 if (state.HaveValue<T::DataCenterStates>()) {
                     auto states = ParseDataCenterStates(state.GetValue<T::DataCenterStates>());
                     Y_VERIFY_S(states.has_value(), states.error());
+                    Self->HasDataCenterPolicy = true;
                     Self->DataCenterStates = std::move(*states);
                 }
             }
@@ -692,9 +693,12 @@ public:
                     .LastErrorTimestamp = bridgeSyncState.GetValue<Table::LastErrorTimestamp>(),
                     .FirstErrorTimestamp = bridgeSyncState.GetValue<Table::FirstErrorTimestamp>(),
                     .ErrorCount = bridgeSyncState.GetValue<Table::ErrorCount>(),
-                    .EstimatedBytesToCopy = bridgeSyncState.HaveValue<Table::EstimatedBytesToCopy>()
+                    // Estimates saved before the round was recorded cannot be attributed to the current rejoin.
+                    .EstimatedBytesToCopy = bridgeSyncState.HaveValue<Table::EstimateRound>() &&
+                            bridgeSyncState.HaveValue<Table::EstimatedBytesToCopy>()
                         ? std::make_optional(bridgeSyncState.GetValue<Table::EstimatedBytesToCopy>())
                         : std::nullopt,
+                    .EstimateRound = bridgeSyncState.GetValueOrDefault<Table::EstimateRound>(),
                 };
                 if (!bridgeSyncState.Next()) {
                     return false;

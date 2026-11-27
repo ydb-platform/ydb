@@ -8,10 +8,12 @@ SRCS(
 
 PEERDIR(
     library/cpp/logger
-    ydb/core/protos
+    ydb/core/testlib/basics
     ydb/core/testlib/default
-    ydb/services/test_shard
-    ydb/core/test_tablet
+    ydb/core/tx/scheme_cache
+    ydb/public/api/grpc
+    ydb/public/sdk/cpp/src/client/resources
+    ydb/public/sdk/cpp/src/library/grpc/client
 )
 
 TIMEOUT(60)

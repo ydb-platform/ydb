@@ -11,19 +11,12 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(udf_module.h)
 
 PEERDIR(
-    ydb/library/actors/core
     ydb/core/base
-    ydb/core/keyvalue
     ydb/core/protos
-    ydb/core/tx/scheme_cache
-    ydb/library/aclib
-    ydb/library/table_creator
-    ydb/services/metadata/request
+    ydb/library/accessor
+    ydb/services/metadata
     ydb/services/metadata/abstract
     ydb/services/metadata/manager
-    ydb/services/metadata
-    yql/essentials/minikql
-    library/cpp/digest/md5
 )
 
 END()

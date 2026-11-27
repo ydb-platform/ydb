@@ -383,6 +383,18 @@ void Deserialize(
     T& message,
     NYson::TYsonPullParserCursor* cursor)
 {
+    MaybeSkipAttributes(cursor);
+
+    if ((*cursor)->GetType() == EYsonItemType::StringValue) {
+        std::string string;
+        Deserialize(string, cursor);
+        if (!TryDeserializeProto(&message, TRef::FromString(string))) {
+            THROW_ERROR_EXCEPTION("Error parsing protobuf message from string")
+                .With("protobuf_type", message.GetTypeName());
+        }
+        return;
+    }
+
     NYson::TProtobufWriterOptions options;
     options.UnknownYsonFieldModeResolver = NYson::TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
         NYson::EUnknownYsonFieldsMode::Keep);
@@ -395,12 +407,8 @@ void Deserialize(
     T& message,
     NYson::TYsonPullParserCursor* cursor)
 {
-    std::string string;
-    Deserialize(string, cursor);
-    if (!TryDeserializeProto(&message, TRef::FromString(string))) {
-        THROW_ERROR_EXCEPTION("Error parsing protobuf message from string")
-            .With("protobuf_type", message.GetTypeName());
-    }
+    using TMessage = std::remove_cvref_t<decltype(T::default_instance())>;
+    Deserialize(static_cast<TMessage&>(message), cursor);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

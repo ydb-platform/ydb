@@ -252,6 +252,13 @@ auto TServiceBase::TMethodDescriptor::SetResponseAttachmentsDptEnabled(bool valu
     return result;
 }
 
+auto TServiceBase::TMethodDescriptor::SetAllowPool(bool value) const -> TMethodDescriptor
+{
+    auto result = *this;
+    result.AllowPool = value;
+    return result;
+}
+
 auto TServiceBase::TMethodDescriptor::SetPooled(bool value) const -> TMethodDescriptor
 {
     auto result = *this;
@@ -2843,7 +2850,7 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
         {RootUserName, runtimeInfo->DefaultRequestQueue.Get()});
 
     runtimeInfo->Heavy.store(descriptor.Options.Heavy);
-    runtimeInfo->Pooled.store(descriptor.Pooled);
+    runtimeInfo->Pooled.store(descriptor.AllowPool && descriptor.Pooled);
     runtimeInfo->QueueSizeLimit.store(descriptor.QueueSizeLimit);
     runtimeInfo->QueueByteSizeLimit.store(descriptor.QueueByteSizeLimit);
     runtimeInfo->ConcurrencyLimit.Reconfigure(descriptor.ConcurrencyLimit);
@@ -2943,7 +2950,9 @@ void TServiceBase::DoConfigure(
             runtimeInfo->ConcurrencyLimit.Reconfigure(methodConfig->ConcurrencyLimit.value_or(descriptor.ConcurrencyLimit));
             runtimeInfo->ConcurrencyByteLimit.Reconfigure(methodConfig->ConcurrencyByteLimit.value_or(descriptor.ConcurrencyByteLimit));
             runtimeInfo->LoggingSuppressionTimeout.store(methodConfig->LoggingSuppressionTimeout.value_or(descriptor.LoggingSuppressionTimeout));
-            runtimeInfo->Pooled.store(methodConfig->Pooled.value_or(config->Pooled.value_or(descriptor.Pooled)));
+            runtimeInfo->Pooled.store(
+                descriptor.AllowPool &&
+                methodConfig->Pooled.value_or(config->Pooled.value_or(descriptor.Pooled)));
             auto logLevel = methodConfig->LogLevel.value_or(descriptor.LogLevel);
             auto errorLogLevel = methodConfig->ErrorLogLevel.value_or(descriptor.ErrorLogLevel.value_or(logLevel));
             runtimeInfo->LogLevel.store(logLevel);

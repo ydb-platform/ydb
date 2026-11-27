@@ -195,7 +195,7 @@ struct TKiExploreTxResults {
     }
 
     void AddWriteOpToQueryBlock(const TExprBase& effect, const TString& name, const TVector<TIndexDescription>& indexes,
-        bool needMainTableRead, bool isUpdate, const THashSet<std::string_view>& updateColumns) {
+        bool needMainTableRead, bool isUpdate, const THashSet<std::string_view>& updateColumns, bool canCreateIndexPrefix = true) {
         THashMap<TString, TPrimitiveYdbOperations> ops;
         if (needMainTableRead || isUpdate) {
             ops[name] |= TPrimitiveYdbOperation::Read;
@@ -213,7 +213,7 @@ struct TKiExploreTxResults {
             TString indexTable;
             TString dictTable;
             TString dataTable;
-            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            if (TIndexDescription::IsVectorIndex(index.Type)) {
                 YQL_ENSURE(indexTables.size() >= 2, "K-means tree index should have at least 2 tables");
                 dataTable = indexTable = indexTables[1];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::NKMeans::PostingTable));
@@ -263,6 +263,13 @@ struct TKiExploreTxResults {
                         ops[dataTable] = TPrimitiveYdbOperation::Write;
                         break;
                     }
+                }
+            }
+            if (index.Type == TIndexDescription::EType::GlobalSyncHnsw && indexTables.size() == 3 && ops.contains(indexTable)) {
+                auto& prefixOps = ops[indexTables[2]];
+                prefixOps |= TPrimitiveYdbOperation::Read;
+                if (canCreateIndexPrefix) {
+                    prefixOps |= TPrimitiveYdbOperation::Write;
                 }
             }
         }
@@ -512,7 +519,8 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
                 }
             }
 
-            txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, needMainTableRead, false, {});
+            txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, needMainTableRead, false, {},
+                tableOp != TYdbOperation::DeleteOn);
         }
 
         if (!write.ReturningColumns().Empty()) {
@@ -606,7 +614,8 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         const bool needMainTableRead = bool(tableOp & KikimrReadOps())
             || !del.ReturningColumns().Empty(); // For RETURNING row existence must be checked.
 
-        txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, needMainTableRead, false, {});
+        txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, needMainTableRead, false, {},
+            /*canCreateIndexPrefix=*/false);
         if (!del.ReturningColumns().Empty()) {
             txRes.AddResult(
                 Build<TResWrite>(ctx, del.Pos())
@@ -1032,11 +1041,12 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             auto type = GetShowCreateType(content.Settings().Ref());
             YQL_ENSURE(!type.empty());
 
+            const auto rewritten = GetSetting(content.Ref(), "sysViewRewritten");
             auto sysViewRewrittenValue = Build<TCoNameValueTuple>(ctx, node.Pos())
                 .Name()
                     .Build("sysViewRewritten")
                 .Value<TCoAtom>()
-                    .Value(key.GetTablePath())
+                    .Value(rewritten ? TString(rewritten->Tail().Content()) : key.GetTablePath())
                     .Build()
                 .Done();
 
@@ -1115,7 +1125,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             YQL_ENSURE(!path.empty(), "Unexpected empty path for SHOW CREATE " << pathType.to_upper());
 
             auto tempTablePath = tablesData->GetTempTablePath(path);
-            if (tempTablePath) {
+            if (tempTablePath && pathType != "StreamingQuery") {
                 path = tempTablePath.value();
             }
 

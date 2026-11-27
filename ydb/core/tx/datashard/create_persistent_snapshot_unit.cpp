@@ -15,7 +15,7 @@ public:
         return true;
     }
 
-    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext&) override {
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         Y_ENSURE(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
@@ -33,6 +33,19 @@ public:
         ui64 step = tx->GetStep();
         ui64 txId = tx->GetTxId();
         Y_ENSURE(step != 0);
+
+        const auto version = params.GetTableSchemaVersion();
+        Y_ENSURE(version);
+
+        TPathId tableId(ownerId, pathId);
+        auto oldInfo = DataShard.FindUserTable(tableId);
+        Y_ENSURE(oldInfo && oldInfo->GetTableSchemaVersion() == version - 1);
+        auto tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, tableId, version, true);
+        TDataShardLocksDb locksDb(DataShard, txc);
+        DataShard.ReplaceUserTable(tableId, tableInfo, locksDb);
+        if (tableInfo->NeedSchemaSnapshots()) {
+            DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+        }
 
         const TSnapshotKey key(ownerId, pathId, step, txId);
 

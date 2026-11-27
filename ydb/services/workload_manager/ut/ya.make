@@ -36,13 +36,39 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
+    library/cpp/json
+    ydb/core/base
+    ydb/core/cms/console
+    ydb/core/kqp/common
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
+    ydb/core/kqp/runtime/scheduler
+    ydb/core/kqp/ut/common
+    ydb/core/protos
+    ydb/core/protos/schemeshard
+    ydb/core/resource_pools
     ydb/core/testlib/basics
+    ydb/core/tx/scheme_cache
+    ydb/core/tx/tx_proxy
+    ydb/library/yql/providers/pq/common
+    ydb/library/yql/providers/pq/proto
     ydb/public/lib/ut_helpers
     ydb/public/sdk/cpp/src/client/operation
+    ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/types
     ydb/public/sdk/cpp/src/client/types/operation
+    ydb/services/metadata
+    ydb/services/metadata/abstract
     ydb/services/metadata/ds_table
+    ydb/services/workload_manager/actors
+    ydb/services/workload_manager/common
+    ydb/services/workload_manager/metadata_subscription/resource_pool_classifier
     ydb/services/workload_manager/service
+    ydb/services/workload_manager/tables
     ydb/services/workload_manager/ut/common
     yql/essentials/sql/pg_dummy
 )

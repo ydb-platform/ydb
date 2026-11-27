@@ -145,14 +145,12 @@ private:
     bool IsStrict_;
 };
 
-} // namespace
-
-TString LegacyFormat(const TLogRecord& rec) {
+TString LegacyFormatImpl(const TLogRecord& rec, TStringBuf timestamp) {
     const auto get = RequiredContextAccessor(rec);
     const auto opt = OptionalContextAccessor(rec);
 
     TStringBuilder out;
-    out << get(EContextKey::DateTime) << ' '
+    out << timestamp << ' '
         << get(EContextKey::Level) << ' '
         << get(EContextKey::ProcessName)
         << "(pid=" << get(EContextKey::ProcessID)
@@ -169,6 +167,19 @@ TString LegacyFormat(const TLogRecord& rec) {
 
     PrintBody(out, rec, unknownContextBegin);
     return out;
+}
+
+} // namespace
+
+TString LegacyFormat(const TLogRecord& rec) {
+    return LegacyFormatImpl(rec, RequiredContextAccessor(rec)(EContextKey::DateTime));
+}
+
+TString LegacyFormatWithYtTimestamp(const TLogRecord& rec) {
+    auto timestamp = RequiredContextAccessor(rec)(EContextKey::DateTime);
+    const auto seconds = timestamp.NextTok('.');
+    // The logger records milliseconds; padding preserves their original precision.
+    return LegacyFormatImpl(rec, TStringBuilder() << seconds << ',' << timestamp << "000");
 }
 
 TString JsonFormat(const TLogRecord& rec) {

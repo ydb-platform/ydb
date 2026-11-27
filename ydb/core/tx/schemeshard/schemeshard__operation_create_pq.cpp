@@ -4,6 +4,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
+#include "common/validation.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/engine/mkql_proto.h>
@@ -11,6 +12,7 @@
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -46,6 +48,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     }
 
     if (op.PartitionsToAddSize()) {
+        status = NKikimrScheme::StatusSchemeError;
         errStr = Sprintf("creating topic with providing of partitions count is forbidden");
         return nullptr;
     }
@@ -59,6 +62,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     if (op.HasPQTabletConfig() && op.GetPQTabletConfig().HasPartitionStrategy()) {
         const auto strategy = op.GetPQTabletConfig().GetPartitionStrategy();
         if (strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
+            status = NKikimrScheme::StatusInvalidParameter;
             errStr = Sprintf("Invalid min and max partition count specified: %u > %u", strategy.GetMinPartitionCount(), strategy.GetMaxPartitionCount());
             return nullptr;
         }
@@ -102,10 +106,26 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
             errStr = Sprintf("Invalid key schema: %s", error.data());
             return nullptr;
         }
+
+        if (op.GetPQTabletConfig().GetSplitByPartitionKey()) {
+            for (size_t i = 0; i < pqGroupInfo->KeySchema.size(); ++i) {
+                if (!NKikimr::IsAllowedKeyType(pqGroupInfo->KeySchema[i])) {
+                    status = NKikimrScheme::StatusSchemeError;
+                    errStr = Sprintf("Key column %s has type %s that is not allowed with SplitByPartitionKey",
+                        op.GetPQTabletConfig().GetPartitionKeySchema(i).GetName().c_str(), NScheme::TypeName(pqGroupInfo->KeySchema[i]).c_str());
+                    return nullptr;
+                }
+            }
+        }
     } else {
         if (op.PartitionBoundariesSize()) {
             status = NKikimrScheme::StatusInvalidParameter;
             errStr = "Missing key schema with specified partition boundaries";
+            return nullptr;
+        }
+        if (op.GetPQTabletConfig().GetSplitByPartitionKey()) {
+            status = NKikimrScheme::StatusInvalidParameter;
+            errStr = "Missing key schema with SplitByPartitionKey";
             return nullptr;
         }
     }
@@ -137,6 +157,23 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
                     }
 
                     cells.resize(pqGroupInfo->KeySchema.size()); // Extend with NULLs
+
+                    if (op.GetPQTabletConfig().GetSplitByPartitionKey()) {
+                        const auto& keyTypes = pqGroupInfo->KeySchema;
+                        if (!NValidation::IsValidTableKey(cells, keyTypes)) {
+                            status = NKikimrScheme::StatusSchemeError;
+                            errStr = Sprintf("Invalid partition boundary at position: %u", i);
+                            return nullptr;
+                        }
+
+                        const auto prevKey = i > 0 ? TSerializedCellVec(prevBound) : TSerializedCellVec(TVector<TCell>(keyTypes.size()));
+                        if (CompareTypedCellVectors(prevKey.GetCells().data(), cells.data(), keyTypes.data(), keyTypes.size()) >= 0) {
+                            status = NKikimrScheme::StatusInvalidParameter;
+                            errStr = Sprintf("Partition boundaries must be strictly increasing and greater than the all-NULL key, position: %u", i);
+                            return nullptr;
+                        }
+                    }
+
                     keyRange->ToBound = TSerializedCellVec::Serialize(cells);
                 } else { // splitMergeEnabled
                     auto range = NDataStreams::V1::RangeFromShardNumber(i, partitionCount);
@@ -394,6 +431,35 @@ public:
 
         bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
         Y_ABORT_UNLESS(parseOk);
+
+        if (parentPath.Base()->IsCdcStream()) {
+            const auto it = context.SS->CdcStreams.find(parentPath.Base()->PathId);
+            Y_ABORT_UNLESS(it != context.SS->CdcStreams.end());
+            const auto& stream = it->second->AlterData ? it->second->AlterData : it->second;
+            const bool keyRangeHeartbeats = stream->HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
+            if (keyRangeHeartbeats != config.GetSplitByPartitionKey()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "SplitByPartitionKey must match the key range heartbeat mode of the CDC stream");
+                return result;
+            }
+
+            if (keyRangeHeartbeats) {
+                const auto tablePathId = parentPath.Parent().Base()->PathId;
+                Y_ABORT_UNLESS(context.SS->Tables.contains(tablePathId));
+                const auto table = context.SS->Tables.at(tablePathId);
+
+                TTopicInfo::TKeySchema tableKeyTypes;
+                for (const auto columnId : table->KeyColumnIds) {
+                    tableKeyTypes.push_back(table->Columns.at(columnId).PType);
+                }
+
+                if (pqGroup->KeySchema != tableKeyTypes) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter,
+                        "PartitionKeySchema must match the key columns of the CDC stream table");
+                    return result;
+                }
+            }
+        }
 
         const PQGroupReserve reserve(config, partitionsToCreate);
 

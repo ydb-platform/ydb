@@ -168,11 +168,10 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         }
 
         void SetupResultsCapture(i64 skip, i64 capture = std::numeric_limits<i64>::max()) {
-            ReverseSkip.store(skip);
-            ReverseCapture.store(capture);
-            for (auto& [_, pipe] : Pipes) {
-                pipe->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
-            }
+            TGuard<TMutex> guard(PipesLock);
+            ReverseSkip = skip;
+            ReverseCapture = capture;
+            ApplyResultsCaptureLocked();
         }
 
         void AllowResults() {
@@ -195,7 +194,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                 auto readtype = TEvDataShard::TEvRead::EventType;
                 auto acktype = TEvDataShard::TEvReadAck::EventType;
                 auto actual = forw->Get()->Get()->Ev->Type();
-                bool isRead = actual == readtype || acktype;
+                const bool isRead = actual == readtype || actual == acktype;
                 if (isRead && ToSkip.fetch_sub(1) <= 0 && ToCapture.fetch_sub(1) > 0) {
                     Cerr << "captured evread -----------------------------------------------------------" << Endl;
                     with_lock(CaptureLock) {
@@ -211,15 +210,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         }
 
         void Forward(TAutoPtr<::NActors::IEventHandle> ev) {
-            TReplyPipeStub* pipe = Pipes[ev->Sender];
-            if (pipe == nullptr) {
-                pipe = Pipes[ev->Sender] = new TReplyPipeStub(SelfId(), ev->Sender);
-                Register(pipe);
-                for (auto& [_, pipe] : Pipes) {
-                    pipe->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
-                }
-            }
-            auto id = pipe->SelfId();
+            const auto id = GetOrCreatePipe(ev->Sender, *this);
             TActor<TReadActorPipeCacheStub>::Forward(ev, id);
         }
 
@@ -229,20 +220,20 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                 tosend.swap(Captured);
             }
             for (auto& ev : tosend) {
-                TReplyPipeStub* pipe = Pipes[ev->Sender];
-                if (pipe == nullptr) {
-                    pipe = Pipes[ev->Sender] = new TReplyPipeStub(SelfId(), ev->Sender);
-                    runtime->Register(pipe);
-                    for (auto& [_, pipe] : Pipes) {
-                        pipe->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
-                    }
-                }
-                auto id = pipe->SelfId();
+                const auto id = GetOrCreatePipe(ev->Sender, *runtime);
                 ev->Rewrite(ev->GetTypeRewrite(), id);
                 runtime->Send(ev.Release());
             }
             if (sendResults) {
-                for (auto& [_, pipe] : Pipes) {
+                // Reply pipes live until runtime shutdown. Release the lock before sending events.
+                TVector<TReplyPipeStub*> pipes;
+                with_lock(PipesLock) {
+                    pipes.reserve(Pipes.size());
+                    for (const auto& [_, pipe] : Pipes) {
+                        pipes.push_back(pipe);
+                    }
+                }
+                for (auto* pipe : pipes) {
                     pipe->SendCaptured(runtime);
                 }
             }
@@ -253,12 +244,33 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         std::atomic<i64> ToCapture;
         std::atomic<i64> ToSkip;
 
-        std::atomic<i64> ReverseCapture;
-        std::atomic<i64> ReverseSkip;
-
         TMutex CaptureLock;
         TVector<THolder<IEventHandle>> Captured;
+
+    private:
+        template <class TRegistrar>
+        TActorId GetOrCreatePipe(const TActorId& sender, TRegistrar& registrar) {
+            // Either thread can see a new sender first. Publish the pipe only after registration and setup.
+            TGuard<TMutex> guard(PipesLock);
+            auto& pipe = Pipes[sender];
+            if (!pipe) {
+                pipe = new TReplyPipeStub(SelfId(), sender);
+                registrar.Register(pipe);
+                ApplyResultsCaptureLocked();
+            }
+            return pipe->SelfId();
+        }
+
+        void ApplyResultsCaptureLocked() {
+            for (const auto& [_, pipe] : Pipes) {
+                pipe->SetupCapture(ReverseSkip, ReverseCapture);
+            }
+        }
+
+        TMutex PipesLock;
         THashMap<TActorId, TReplyPipeStub*> Pipes;
+        i64 ReverseSkip;
+        i64 ReverseCapture;
     };
 
     TString ALL = ",101,102,103,201,202,203,301,302,303,401,402,403,501,502,503,601,602,603,701,702,703,801,802,803";

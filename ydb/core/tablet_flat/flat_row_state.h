@@ -1,6 +1,6 @@
 #pragma once
 
-#include "flat_row_eggs.h"
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include "util_fmt_abort.h"
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>

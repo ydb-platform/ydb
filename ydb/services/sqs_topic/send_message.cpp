@@ -29,7 +29,6 @@
 
 #include <ydb/public/api/grpc/draft/ydb_ymq_v1.pb.h>
 
-#include <ydb/core/client/server/grpc_base.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 
 #include <ydb/library/grpc/server/grpc_server.h>
@@ -191,6 +190,10 @@ namespace NKikimr::NSqsTopic::V1 {
                 this->ReplyWithError(*describerStatus.Error);
                 return;
             }
+            if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                this->ReplyWithError(MapWriteModeError(ev->Get()->Status, ev->Get()->ErrorDescription));
+                return;
+            }
 
             ssize_t successCount = 0;
             ssize_t failedCount = 0;
@@ -303,7 +306,8 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
-            AFL_ENSURE(topicInfo.Info)("path", FullTopicPath_);
+            YDB_LOG_ENSURE(topicInfo.Info,
+                {"path", FullTopicPath_});
             Fifo_ = QueueUrl_->Fifo;
             ApplyContentBasedDeduplication(
                 Fifo_ && topicInfo.Info->Description.GetPQTabletConfig().GetContentBasedDeduplication());

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "spilling_counters.h"
+#include <ydb/library/yql/dq/actors/spilling/counters/spilling_counters.h>
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/actors/core/actor.h>

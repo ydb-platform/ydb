@@ -77,7 +77,7 @@ public:
     }
 
     virtual ~TLongTxWriteBase() {
-        AFL_VERIFY(MemoryInFlight.Sub(InFlightSize) >= 0);
+        YDB_LOG_VERIFY(MemoryInFlight.Sub(InFlightSize) >= 0);
         Counters->OnMemoryInflight(MemoryInFlight.Val(), GetMemoryInFlightLimit());
     }
 
@@ -106,7 +106,7 @@ protected:
         }
 
         auto accessor = ExtractDataAccessor();
-        AFL_VERIFY(!InFlightSize);
+        YDB_LOG_VERIFY(!InFlightSize);
         InFlightSize = accessor->GetSize();
         const i64 sizeInFlight = MemoryInFlight.Add(InFlightSize);
 
@@ -264,7 +264,7 @@ public:
 
 protected:
     std::unique_ptr<NEvWrite::IShardsSplitter::IEvWriteDataAccessor> ExtractDataAccessor() override {
-        AFL_VERIFY(DataAccessor);
+        YDB_LOG_VERIFY(DataAccessor);
         return std::move(DataAccessor);
     }
 

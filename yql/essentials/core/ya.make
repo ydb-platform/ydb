@@ -136,6 +136,11 @@ GENERATE_ENUM_SERIALIZATION(yql_type_annotation.h)
 
 GENERATE_ENUM_SERIALIZATION(yql_cost_function.h)
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    toloka/analytics/programs/yql_parser
+)
+
 END()
 
 RECURSE(

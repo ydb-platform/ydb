@@ -1,5 +1,5 @@
 RECURSE_FOR_TESTS(
-    ut_auditsettings
+    ut_audit
     ut_topic_cloud_events
     ut_background_cleaning
     ut_backup
@@ -78,6 +78,7 @@ RECURSE_FOR_TESTS(
     ut_system_names
     ut_sysview
     ut_sysview_reboots
+    ut_topic_common
     ut_topic_splitmerge
     ut_topic_set_boundaries
     ut_test_shard
@@ -400,9 +401,10 @@ PEERDIR(
     ydb/core/split
     ydb/core/statistics
     ydb/core/sys_view/common
-    ydb/core/sys_view/partition_stats
+    ydb/core/sys_view/partition_stats/collector
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tablet_flat/base
     ydb/core/test_tablet
     ydb/core/tx
     ydb/core/tx/datashard

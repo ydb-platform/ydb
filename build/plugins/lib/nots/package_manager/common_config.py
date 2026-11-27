@@ -110,6 +110,8 @@ def rebase_pnpm_settings(settings, source_dir, target_dir):
         ).replace(os.sep, "/")
         return relative if patch else match[1] + (relative if relative.startswith(".") else "./" + relative)
 
+    if "pnpmfile" in result:
+        result["pnpmfile"] = [rebase(value, True) for value in result["pnpmfile"]]
     for key in pnpm_settings():
         if pnpm_setting_types()[key] not in ("dependency-map", "patch-map", "package-extensions"):
             continue
@@ -149,7 +151,7 @@ def workspace_settings_paths(settings):
 
 
 def common_config_inputs(pj, sources_root, effective_config=None):
-    """Only the target's explicit config and effective patches are build inputs."""
+    """The target's explicit configs, effective patches and pnpmfiles are build inputs."""
     inputs = set()
     if effective_config is None:
         effective_config = load_effective_pnpm_config(pj, sources_root)
@@ -162,7 +164,7 @@ def common_config_inputs(pj, sources_root, effective_config=None):
         inputs.add(os.path.relpath(local_path, sources_root))
     inputs.update(
         os.path.relpath(os.path.normpath(os.path.join(directory, p)), sources_root)
-        for p in settings.get("patchedDependencies", {}).values()
+        for p in [*settings.get("patchedDependencies", {}).values(), *settings.get("pnpmfile", [])]
     )
     return sorted(inputs)
 

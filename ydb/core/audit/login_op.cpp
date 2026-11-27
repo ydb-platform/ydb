@@ -2,6 +2,8 @@
 
 #include <ydb/core/util/address_classifier.h>
 
+#include <util/string/cast.h>
+
 namespace NKikimr::NAudit {
 
 void LogLoginOperationResult(const TString& сomponentName, const TString& peerName, const TString& database,
@@ -19,13 +21,18 @@ void LogLoginOperationResult(const TString& сomponentName, const TString& peerN
     TString detailed_status;
     TString fullReason = reason;
     if (status != Ydb::StatusIds::SUCCESS) {
-        detailed_status = Ydb::StatusIds::StatusCode_Name(status);
+        detailed_status = Ydb::StatusIds::StatusCode_IsValid(status)
+            ? Ydb::StatusIds::StatusCode_Name(status)
+            : ToString(static_cast<int>(status));
         if (errorDetails) {
             if (!fullReason.empty()) {
                 fullReason += ": ";
             }
 
             fullReason += errorDetails;
+        }
+        if (fullReason.empty()) {
+            fullReason = detailed_status;
         }
     }
 

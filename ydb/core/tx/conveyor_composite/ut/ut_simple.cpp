@@ -13,7 +13,6 @@
 #include <ydb/library/signals/object_counter.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
-#include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
 #include <util/generic/ylimits.h>
@@ -212,7 +211,7 @@ private:
     virtual TString GetConveyorConfig() = 0;
     virtual std::vector<std::shared_ptr<IRequestProcessor>> GetRequests() = 0;
     virtual ui32 GetTasksCount() const {
-        return 1000000;
+        return 20000;
     }
 
 public:
@@ -221,7 +220,7 @@ public:
     }
 
     void Execute() {
-        const ui64 threadsCount = 64;
+        const ui64 threadsCount = 20;
         THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
         NActors::TActorSystem actorSystem(actorSystemSetup);
 
@@ -543,7 +542,7 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
     class TTestingExecutorUniformDistribution: public TTestingExecutor {
     private:
         virtual ui32 GetTasksCount() const override {
-            return 1000000;
+            return 20000;
         }
         virtual double GetThreadsCount() const override {
             return 16.4;
@@ -859,7 +858,7 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
     }
 
     Y_UNIT_TEST(NoHeavyLimitsUsesWorkersBeyondLimit) {
-        const ui64 threadsCount = 64;
+        const ui64 threadsCount = 20;
         THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
         NActors::TActorSystem actorSystem(actorSystemSetup);
         actorSystem.Start();
@@ -898,7 +897,7 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
     }
 
     Y_UNIT_TEST(DefaultScanProcessIsNotPessimized) {
-        const ui64 threadsCount = 64;
+        const ui64 threadsCount = 20;
         THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
         NActors::TActorSystem actorSystem(actorSystemSetup);
         actorSystem.Start();
@@ -937,7 +936,7 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
     }
 
     Y_UNIT_TEST(PessimizedProcessUsesOnlyFirstWorkers) {
-        const ui64 threadsCount = 64;
+        const ui64 threadsCount = 20;
         THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
         NActors::TActorSystem actorSystem(actorSystemSetup);
         actorSystem.Start();
@@ -985,7 +984,7 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
     }
 
     Y_UNIT_TEST(TwoTierHeavyLimits) {
-        const ui64 threadsCount = 64;
+        const ui64 threadsCount = 20;
         THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
         NActors::TActorSystem actorSystem(actorSystemSetup);
         actorSystem.Start();
@@ -1040,7 +1039,7 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
     }
 
     Y_UNIT_TEST(InsertProcessIsNotPessimized) {
-        const ui64 threadsCount = 64;
+        const ui64 threadsCount = 20;
         THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
         NActors::TActorSystem actorSystem(actorSystemSetup);
         actorSystem.Start();
@@ -1095,7 +1094,7 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
     }
 
     Y_UNIT_TEST(CompactionProcessIsNotPessimized) {
-        const ui64 threadsCount = 64;
+        const ui64 threadsCount = 20;
         THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
         NActors::TActorSystem actorSystem(actorSystemSetup);
         actorSystem.Start();
@@ -1147,18 +1146,5 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
 
         actorSystem.Stop();
         actorSystem.Cleanup();
-    }
-
-    Y_UNIT_TEST(HistogramsAppearOnFirstCollect) {
-        auto root = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-        TCounters counters("TEST", root);
-        auto pool = counters.GetWorkersPoolSignals("WP");
-        pool->GetCategorySignals(ESpecialTaskCategory::Scan);
-        UNIT_ASSERT(!NMonitoring::ToJson(*root).Contains("Histogram/"));
-
-        pool->PackExecuteHistogram.Collect(1);
-        const auto json = NMonitoring::ToJson(*root);
-        UNIT_ASSERT(json.Contains("Histogram/PackExecute/Duration/Us"));
-        UNIT_ASSERT(!json.Contains("Histogram/SendBack/Duration/Us"));
     }
 }

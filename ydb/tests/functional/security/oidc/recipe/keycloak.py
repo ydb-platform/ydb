@@ -25,6 +25,24 @@ def corrupt_signature(token):
     return '.'.join(parts)
 
 
+def configure_groups_scope(session, realm_admin_url, admin_token, source):
+    # Add the scope after import so Keycloak also creates its built-in client scopes.
+    headers = {'Authorization': 'Bearer ' + admin_token}
+    scope = json.loads((source / 'keycloak.d' / 'groups-scope.json').read_text())
+    scope['name'] = os.environ['OIDC_GROUPS_SCOPE']
+    response = session.post(realm_admin_url + '/client-scopes', json=scope, headers=headers, timeout=15)
+    response.raise_for_status()
+    scope_id = response.headers['Location'].rsplit('/', 1)[1]
+
+    response = session.get(realm_admin_url + '/clients', params={'clientId': 'whoami'}, headers=headers, timeout=15)
+    response.raise_for_status()
+    client, = response.json()
+    response = session.put(
+        f"{realm_admin_url}/clients/{client['id']}/optional-client-scopes/{scope_id}", headers=headers, timeout=15
+    )
+    response.raise_for_status()
+
+
 def start(directory, port):
     directory = Path(directory)
     secret = secrets.token_urlsafe(24)
@@ -90,6 +108,7 @@ def start(directory, port):
             response = session.post(token_url, data=admin_form, timeout=15)
             response.raise_for_status()
             admin_token = response.json()['access_token']
+            configure_groups_scope(session, base + '/admin' + realm_url, admin_token, source)
             response = session.post(
                 issuer + '/protocol/openid-connect/token',
                 data={'grant_type': 'client_credentials'},
@@ -113,6 +132,7 @@ def start(directory, port):
             'OIDC_BAD_TOKEN': corrupt_signature(access_token),
             'OIDC_ADMIN_TOKEN': admin_token,
             'OIDC_ADMIN_EVENTS_URL': base + '/admin' + realm_url + '/events',
+            'OIDC_ADMIN_USERS_URL': base + '/admin' + realm_url + '/users',
         }
     except BaseException:
         try:

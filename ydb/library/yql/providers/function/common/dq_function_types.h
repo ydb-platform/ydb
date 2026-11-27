@@ -17,6 +17,8 @@ struct TDqFunctionDescription {
 
     TString InvokeUrl;
     TString Status;
+    // Optional internal transform implementation, independent of the public function type.
+    TString TransformType;
 };
 
 struct TDqFunctionDescriptionHash {

@@ -26,6 +26,7 @@ PEERDIR(
     ydb/core/fq/libs/row_dispatcher
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/test_connection
+    ydb/core/fq/libs/wasm_services/query
     ydb/core/protos
     ydb/library/actors/core
     ydb/library/actors/http

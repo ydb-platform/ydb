@@ -2,6 +2,8 @@
 
 #include <util/datetime/base.h>
 
+#include <optional>
+
 namespace NYql::NDq {
 
 /*
@@ -75,6 +77,10 @@ struct TDqAsyncStats {
     ui64 QueuedBytes = 0;
     ui64 QueuedRows = 0;
 
+    // A snapshot of the maximum message read lag in the source window, in milliseconds.
+    // Absent for sources that have not measured a message read lag.
+    std::optional<ui64> MaxReadLagMs;
+
     void MergeData(const TDqAsyncStats& other) {
         Bytes += other.Bytes;
         DecompressedBytes += other.DecompressedBytes;
@@ -85,6 +91,9 @@ struct TDqAsyncStats {
         FilteredRows += other.FilteredRows;
         QueuedBytes += other.QueuedBytes;
         QueuedRows += other.QueuedRows;
+        if (other.MaxReadLagMs) {
+            MaxReadLagMs = Max(MaxReadLagMs.value_or(0), *other.MaxReadLagMs);
+        }
     }
 
     void MergeTime(const TDqAsyncStats& other) {

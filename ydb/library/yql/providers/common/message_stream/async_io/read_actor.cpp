@@ -8,6 +8,7 @@
 #include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
+#include <library/cpp/sliding_window/sliding_window.h>
 #include <util/random/random.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -237,6 +238,9 @@ public:
     }
 
     const TDqAsyncStats& GetIngressStats() const override {
+        if (HasReadLag) {
+            IngressStats.MaxReadLagMs = ReadLagWindow.Update(TInstant::Now());
+        }
         return IngressStats;
     }
 
@@ -933,6 +937,7 @@ private:
         void operator()(NFq::TMessageStreamDataEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.PartitionControl);
             auto& partitionInfo = Self.Partitions[partitionKey];
+            const auto readTime = TInstant::Now();
 
             for (const auto& record : event.Records) {
                 if (record.DecompressionError) {
@@ -984,6 +989,11 @@ private:
                 TReadyBatch& activeBatch = Self.ReadyBuffer.back();
 
                 if (!needSkip) {
+                    if (record.WriteTime) {
+                        const ui64 lagMs = readTime >= *record.WriteTime ? (readTime - *record.WriteTime).MilliSeconds() : 0;
+                        Self.ReadLagWindow.Update(lagMs, readTime);
+                        Self.HasReadLag = true;
+                    }
                     auto [item, size] = CreateItem(record);
                     activeBatch.Data.emplace_back(std::move(item));
                     activeBatch.UsedSpace += size;
@@ -1189,6 +1199,9 @@ private:
     const std::unique_ptr<IMessageStreamReadActorState> State;
     THashMap<TPartitionKey, TPartitionProgress>& Partitions;
     TDqAsyncStats& IngressStats;
+    // Ten seconds of read-time samples, with one-second buckets. Reading stats does not reset the window.
+    mutable NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> ReadLagWindow{ TDuration::Seconds(10), 10 };
+    bool HasReadLag = false;
     TInstant& StartingMessageTimestamp;
     const ui64 InputIndex;
     const TActorId ComputeActorId;

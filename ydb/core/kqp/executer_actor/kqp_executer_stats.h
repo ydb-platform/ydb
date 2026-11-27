@@ -414,6 +414,7 @@ struct TAggExecStat {
     ui64 TasksCount = 0;
     ui64 InputBytes = 0;
     ui64 OutputBytes = 0;
+    std::optional<ui64> MaxReadLagMs;
     ui64 HopInputEventsCount = 0;
     ui64 HopLateEventsCount = 0;
 };
@@ -425,6 +426,7 @@ private:
         ui64 ReadIngressBytes = 0;
     };
     std::vector<TCurrentTaskStats> CurrentTaskStats;
+    THashMap<ui64, ui64> TaskReadLagMs; // latest snapshot per task, not a lifetime maximum
     ui64 CurrentMemoryBytes = 0;
     ui64 CurrentReadIngressBytes = 0;
     ui64 CurrentStatsSequenceNo = 0;

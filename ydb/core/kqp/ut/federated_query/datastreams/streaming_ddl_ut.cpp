@@ -400,6 +400,72 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WaitForRowDispatcherMemoryLimit(*this, "SimdJsonMemory");
     }
 
+    Y_UNIT_TEST_TWIN_F(StreamingQueryMaxReadLag, SharedReading, TStreamingTestFixture) {
+        auto* flags = SetupAppConfig().MutableFeatureFlags();
+        flags->SetEnableStreamingQueriesCounters(true);
+        flags->SetEnableSharedReadingInStreamingQueries(true);
+        flags->SetEnableStreamingQueryReadFrom(true);
+        const auto inputTopic = MakeExternalName("readLagInput");
+        const auto outputTopic = MakeExternalName("readLagOutput");
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic);
+        ExecQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE lag_source WITH (
+                SOURCE_TYPE = "Ydb",
+                LOCATION = "{endpoint}",
+                DATABASE_NAME = "{database}",
+                AUTH_METHOD = "NONE",
+                SHARED_READING = "{shared}"
+            );
+        )", "endpoint"_a = YDB_ENDPOINT, "database"_a = YDB_DATABASE, "shared"_a = SharedReading ? "true" : "false"));
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY lag_query WITH (READ_FROM = EARLIEST) AS DO BEGIN
+                PRAGMA pq.Consumer = "test_consumer";
+                INSERT INTO lag_source.`{output}` SELECT Data FROM lag_source.`{input}`;
+            END DO;
+        )", "input"_a = inputTopic, "output"_a = outputTopic));
+        CheckScriptExecutionsCount(1, 1);
+        WaitFor(TDuration::Seconds(60), "streaming query topic read session", [&] {
+            const auto result = GetTopicClient()
+                                    ->DescribeConsumer(inputTopic, "test_consumer", NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true))
+                                    .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+            for (const auto& partition : result.GetConsumerDescription().GetPartitions()) {
+                const auto& stats = partition.GetPartitionConsumerStats();
+                if (stats && !stats->GetReadSessionId().empty()) {
+                    return true;
+                }
+            }
+            return false;
+        });
+        WriteTopicMessage(inputTopic, "message");
+        ReadTopicMessage(outputTopic, "message");
+
+        NMonitoring::TDynamicCounters::TCounterPtr lag;
+        WaitFor(TDuration::Seconds(60), "streaming query read lag sensor", [&] {
+            for (ui32 node = 0; node < GetRuntime().GetNodeCount(); ++node) {
+                // Keep the service root: checkpoint counters add a sibling host subgroup.
+                const auto counters = NKikimr::GetServiceCounters(GetRuntime().GetAppData(node).Counters, "kqp", /* skipAddedLabels */ false);
+                auto group = counters->FindSubgroup("subsystem", "streaming_queries");
+                if (group) {
+                    group = group->FindSubgroup("host", "");
+                }
+                if (group) {
+                    group = group->FindSubgroup("path", "/Root/lag_query");
+                }
+                if (group) {
+                    lag = group->FindCounter("max_read_lag");
+                    if (lag) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        });
+        UNIT_ASSERT_LT(lag->Val(), static_cast<i64>(TDuration::Minutes(1).MilliSeconds()));
+    }
+
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 

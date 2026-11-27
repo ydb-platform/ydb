@@ -14,6 +14,7 @@
 #include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
 #include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 
+#include <library/cpp/sliding_window/sliding_window.h>
 #include <util/generic/queue.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
@@ -380,6 +381,8 @@ private:
     TInstant WaitEventStartedAt;
     ui64 RestartSessionByOffsets = 0;
     TStats Statistics;
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> ReadLagWindow{ TDuration::Seconds(10), 10 };
+    bool HasReadLag = false;
     TTopicSessionMetrics Metrics;
     const ::NMonitoring::TDynamicCounterPtr Counters;
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
@@ -745,6 +748,7 @@ void TTopicSession::CloseTopicSession() {
 void TTopicSession::TTopicEventProcessor::operator()(TMessageStreamDataEvent& event) {
     ui64 dataSize = 0;
     auto& records = event.Records;
+    const auto readTime = TInstant::Now();
 
     for (const auto& record : records) {
         if (!record.WriteTime) {
@@ -781,6 +785,9 @@ void TTopicSession::TTopicEventProcessor::operator()(TMessageStreamDataEvent& ev
             {"logPrefix", LogPrefix},
             {"offset", record.Id.Offset},
             {"dataSize", record.Data->size()});
+        const ui64 lagMs = readTime >= *record.WriteTime ? (readTime - *record.WriteTime).MilliSeconds() : 0;
+        Self.ReadLagWindow.Update(lagMs, readTime);
+        Self.HasReadLag = true;
         dataSize += record.Data->size();
         Self.LastMessageOffset = record.Id.Offset;
     }
@@ -1185,6 +1192,7 @@ void TTopicSession::SendStatistics() {
 
     sessionStatistic.SessionKey = TTopicSessionParams{ ReadGroup, Endpoint, Database, TopicPath, PartitionId };
     sessionStatistic.Clients.reserve(Clients.size());
+    const std::optional<ui64> maxReadLagMs = HasReadLag ? std::make_optional(ReadLagWindow.Update(TInstant::Now())) : std::nullopt;
     for (const auto& [readActorId, infoPtr] : Clients) {
         auto& info = *infoPtr;
         TTopicSessionClientStatistic clientStatistic;
@@ -1200,6 +1208,7 @@ void TTopicSession::SendStatistics() {
         clientStatistic.IsWaiting = LastMessageOffset + 1 < info.NextMessageOffset.value_or(0);
         clientStatistic.ReadLagMessages = info.NextMessageOffset.value_or(0) - LastMessageOffset - 1;
         clientStatistic.InitialOffset = info.InitialOffset;
+        clientStatistic.MaxReadLagMs = maxReadLagMs;
         info.FilteredStat.Clear();
         sessionStatistic.Clients.emplace_back(std::move(clientStatistic));
     }

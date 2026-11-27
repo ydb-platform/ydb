@@ -318,10 +318,12 @@ private:
         bool IsWaitingStartSessionAck = false;
         ui64 QueuedBytes = 0;
         ui64 QueuedRows = 0;
+        std::optional<ui64> MaxReadLagMs;
     };
 
     IPqStaticGateway::TPtr PqGateway;
     TMap<NActors::TActorId, TSession> Sessions;
+    mutable TDqAsyncStats ReportingIngressStats;
     THashMap<ui64, NActors::TActorId> ReadActorByEventQueueId;
     // Set on Children
     const THolderFactory& HolderFactory;
@@ -351,6 +353,8 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters, i64 bufferSize, const IPqStaticGateway::TPtr& pqGateway,
         bool enableStreamingQueriesCounters, TDuration checkPartitionCountPeriod, NActors::TActorId controlPlaneActorId,
         TDqPqRdReadActor* parent = nullptr, const TString& cluster = {});
+
+    const TDqAsyncStats& GetIngressStats() const override;
 
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr& ev);
@@ -924,6 +928,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
     Parent->IngressStats.FilteredRows += ev->Get()->Record.GetFilteredRows();
     session->QueuedBytes = ev->Get()->Record.GetQueuedBytes();
     session->QueuedRows = ev->Get()->Record.GetQueuedRows();
+    session->MaxReadLagMs = ev->Get()->Record.HasMaxReadLagMs() ? std::make_optional(ev->Get()->Record.GetMaxReadLagMs()) : std::nullopt;
     UpdateQueuedSize();
 
     for (auto partition : ev->Get()->Record.GetPartition()) {
@@ -1403,6 +1408,25 @@ void TDqPqRdReadActor::UpdateSessions() {
         ReadActorByEventQueueId[queueId] = rowDispatcherActorId;
     }
     LastUsedPartitionDistribution = LastReceivedPartitionDistribution;
+}
+
+const TDqAsyncStats& TDqPqRdReadActor::GetIngressStats() const {
+    ReportingIngressStats = IngressStats;
+    ReportingIngressStats.MaxReadLagMs.reset();
+    const auto collect = [&](const TDqPqRdReadActor& reader) {
+        for (const auto& [id, session] : reader.Sessions) {
+            if (session.MaxReadLagMs) {
+                ReportingIngressStats.MaxReadLagMs = Max(ReportingIngressStats.MaxReadLagMs.value_or(0), *session.MaxReadLagMs);
+            }
+        }
+    };
+    collect(*this);
+    for (const auto& cluster : Clusters) {
+        if (cluster.Child) {
+            collect(*cluster.Child);
+        }
+    }
+    return ReportingIngressStats;
 }
 
 void TDqPqRdReadActor::UpdateQueuedSize() {

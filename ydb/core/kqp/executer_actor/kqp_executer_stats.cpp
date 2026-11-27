@@ -1285,6 +1285,12 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
         auto index = taskId ? taskId - 1 : 0;
         YDB_LOG_ENSURE(index < TaskCount);
 
+        if (state == NYql::NDqProto::COMPUTE_STATE_EXECUTING && taskStats.HasMaxReadLagMs()) {
+            TaskReadLagMs[taskId] = taskStats.GetMaxReadLagMs();
+        } else {
+            TaskReadLagMs.erase(taskId);
+        }
+
         ComputeCpuTimeUs.SetNonZero(index, taskStats.GetCpuTimeUs());
         if (taskId == 0) {
             UpdateStorageTables(taskStats, txStats);
@@ -1640,6 +1646,10 @@ void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
     metrics->TasksCount = tasksCount;
     metrics->InputBytes = inputBytes;
     metrics->OutputBytes = outputBytes;
+    metrics->MaxReadLagMs.reset();
+    for (const auto& [taskId, lagMs] : TaskReadLagMs) {
+        metrics->MaxReadLagMs = Max(metrics->MaxReadLagMs.value_or(0), lagMs);
+    }
     metrics->HopInputEventsCount = hopInputEventsCount;
     metrics->HopLateEventsCount = hopLateEventsCount;
 }

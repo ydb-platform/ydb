@@ -97,6 +97,7 @@ message TEvStatistics {
     uint64 FilteredRows = 7;
     uint64 QueuedBytes = 8;
     uint64 QueuedRows = 9;
+    optional uint64 MaxReadLagMs = 10;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 

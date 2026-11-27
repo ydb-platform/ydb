@@ -5,6 +5,8 @@
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
+#include <optional>
+
 namespace NFq {
 
 struct TTopicSessionClientStatistic {
@@ -20,6 +22,7 @@ struct TTopicSessionClientStatistic {
     bool IsWaiting = false;   // Current value
     i64 ReadLagMessages = 0;   // Current value
     ui64 InitialOffset = 0;
+    std::optional<ui64> MaxReadLagMs;
 
     void Add(const TTopicSessionClientStatistic& stat) {
         QueuedRows = stat.QueuedRows;
@@ -31,6 +34,7 @@ struct TTopicSessionClientStatistic {
         IsWaiting = stat.IsWaiting;
         ReadLagMessages = stat.ReadLagMessages;
         InitialOffset = stat.InitialOffset;
+        MaxReadLagMs = stat.MaxReadLagMs;
     }
 
     void Clear() {

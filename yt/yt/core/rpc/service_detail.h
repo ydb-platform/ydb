@@ -305,6 +305,14 @@ public:
         return *Response_;
     }
 
+    //! Call after filling the response. Charges the response protobuf to #tracker until the context
+    //! is destroyed and the serialized response body until its last reference is released.
+    void TrackResponseMemory(IMemoryUsageTrackerPtr tracker)
+    {
+        ResponseMemoryGuard_ = TMemoryUsageTrackerGuard::Acquire(tracker, Response_->SpaceUsedLong());
+        ResponseMemoryUsageTracker_ = std::move(tracker);
+    }
+
     using IServiceContext::Reply;
 
     void Reply()
@@ -331,6 +339,9 @@ public:
 
 protected:
     const THandlerInvocationOptions Options_;
+
+    IMemoryUsageTrackerPtr ResponseMemoryUsageTracker_;
+    TMemoryUsageTrackerGuard ResponseMemoryGuard_;
 
     typename TRequestPool::TObjectUniquePtr Request_;
     typename TResponsePool::TObjectUniquePtr Response_;
@@ -388,6 +399,10 @@ protected:
                     NYson::ReflectProtobufMessageType<TResponseMessage>(),
                     formatOptionsYson);
             }
+        }
+
+        if (ResponseMemoryUsageTracker_) {
+            serializedBody = ResponseMemoryUsageTracker_->Track(std::move(serializedBody));
         }
 
         auto responseAttachmentsFuture = AsyncCompressAttachments(Response_->Attachments(), attachmentCodecId);
@@ -668,7 +683,9 @@ protected:
         //! Like #RequestAttachmentsDptEnabled but for the response attachments.
         bool ResponseAttachmentsDptEnabled = false;
 
-        //! If |true| then requests and responses are pooled.
+        //! Allows request and response pooling for this method, including via configuration.
+        bool AllowPool = true;
+        //! Default pooling setting when #AllowPool is enabled.
         bool Pooled = true;
 
         // If |true| then method exception will be handled by |OnMethodError|.
@@ -692,6 +709,7 @@ protected:
         TMethodDescriptor SetStreamingEnabled(bool value) const;
         TMethodDescriptor SetRequestAttachmentsDptEnabled(bool value) const;
         TMethodDescriptor SetResponseAttachmentsDptEnabled(bool value) const;
+        TMethodDescriptor SetAllowPool(bool value) const;
         TMethodDescriptor SetPooled(bool value) const;
         TMethodDescriptor SetHandleMethodError(bool value) const;
     };

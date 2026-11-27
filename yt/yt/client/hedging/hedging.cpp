@@ -112,7 +112,6 @@ public:
     UNSUPPORTED_METHOD(TFuture<NCypressClient::TNodeId>, LinkNode, (const TYPath&, const TYPath&, const TLinkNodeOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, ConcatenateNodes, (const std::vector<TRichYPath>&, const TRichYPath&, const TConcatenateNodesOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, ExternalizeNode, (const TYPath&, NObjectClient::TCellTag, const TExternalizeNodeOptions&));
-    UNSUPPORTED_METHOD(TFuture<void>, InternalizeNode, (const TYPath&, const TInternalizeNodeOptions&));
     UNSUPPORTED_METHOD(TFuture<NObjectClient::TObjectId>, CreateObject, (NObjectClient::EObjectType, const TCreateObjectOptions&));
     UNSUPPORTED_METHOD(IFileWriterPtr, CreateFileWriter, (const TRichYPath&, const TFileWriterOptions&));
     UNSUPPORTED_METHOD(IJournalReaderPtr, CreateJournalReader, (const TYPath&, const TJournalReaderOptions&));

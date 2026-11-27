@@ -2,6 +2,8 @@
 #include "arrow_metadata_constants.h"
 #include "arrow_helpers.h"
 
+#include <yt/yt/core/yson/pull_parser.h>
+
 #include <yt/yt/client/formats/parser.h>
 
 #include <yt/yt/client/table_client/helpers.h>
@@ -21,6 +23,7 @@
 #include <util/generic/buffer.h>
 
 #include <util/stream/buffer.h>
+#include <util/stream/mem.h>
 
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h>
@@ -793,27 +796,27 @@ public:
     // String types.
     arrow20::Status Visit(const arrow20::StringType& /*type*/) override
     {
-        return ParseStringLikeArray<arrow20::StringArray>();
+        return VisitStringLike<arrow20::StringArray>();
     }
 
     arrow20::Status Visit(const arrow20::LargeStringType& /*type*/) override
     {
-        return ParseStringLikeArray<arrow20::LargeStringArray>();
+        return VisitStringLike<arrow20::LargeStringArray>();
     }
 
     arrow20::Status Visit(const arrow20::BinaryType& /*type*/) override
     {
-        return ParseStringLikeArray<arrow20::BinaryArray>();
+        return VisitStringLike<arrow20::BinaryArray>();
     }
 
     arrow20::Status Visit(const arrow20::LargeBinaryType& /*type*/) override
     {
-        return ParseStringLikeArray<arrow20::LargeBinaryArray>();
+        return VisitStringLike<arrow20::LargeBinaryArray>();
     }
 
     arrow20::Status Visit(const arrow20::FixedSizeBinaryType& /*type*/) override
     {
-        return ParseStringLikeArray<arrow20::FixedSizeBinaryArray>();
+        return VisitStringLike<arrow20::FixedSizeBinaryArray>();
     }
 
     // Boolean type.
@@ -830,14 +833,14 @@ public:
 
     arrow20::Status Visit(const arrow20::Decimal128Type& type) override
     {
-        return ParseStringLikeArray<arrow20::Decimal128Array>([&] (TStringBuf value, i64 columnId) {
+        return ParseStringLike<arrow20::Decimal128Array>([&] (TStringBuf value, i64 columnId) {
             return MakeDecimalBinaryValue<TDecimal::TValue128>(value, columnId, type.precision());
         });
     }
 
     arrow20::Status Visit(const arrow20::Decimal256Type& type) override
     {
-        return ParseStringLikeArray<arrow20::Decimal256Array>([&] (TStringBuf value, i64 columnId) {
+        return ParseStringLike<arrow20::Decimal256Array>([&] (TStringBuf value, i64 columnId) {
             return MakeDecimalBinaryValue<TDecimal::TValue256>(value, columnId, type.precision());
         });
     }
@@ -1009,7 +1012,7 @@ private:
     }
 
     template <typename ArrayType>
-    arrow20::Status ParseStringLikeArray(auto makeUnversionedValueFunc)
+    arrow20::Status ParseStringLike(auto makeUnversionedValueFunc)
     {
         auto array = std::static_pointer_cast<ArrayType>(Array_);
         YT_VERIFY(array->length() <= std::ssize(*RowValues_));
@@ -1033,18 +1036,31 @@ private:
     }
 
     template <typename ArrayType>
-    arrow20::Status ParseStringLikeArray()
+    arrow20::Status VisitStringLike()
     {
-        // Note that MakeUnversionedValue actually has third argument in its signature,
-        // which leads to a "too few arguments" in the point of its invocation if we try to pass
-        // it directly to ParseStringLikeArray.
-        return ParseStringLikeArray<ArrayType>([this] (TStringBuf value, i64 columnId) {
-            if (HasYsonTypeInMetadata(SchemaField_)) {
-                ValidateYsonValue(value);
-                return MakeUnversionedAnyValue(value, columnId);
-            } else {
-                return MakeUnversionedStringValue(value, columnId);
-            }
+        if ((!ColumnType_ || *ColumnType_ == ESimpleLogicalValueType::Any) &&
+            HasYsonTypeInMetadata(SchemaField_))
+        {
+            return ParseYson<ArrayType>();
+        } else {
+            return ParseString<ArrayType>();
+        }
+    }
+
+    template <typename ArrayType>
+    arrow20::Status ParseYson()
+    {
+        return ParseStringLike<ArrayType>([] (TStringBuf value, i64 columnId) {
+            ValidateYsonValue(value);
+            return MakeUnversionedAnyValue(value, columnId);
+        });
+    }
+
+    template <typename ArrayType>
+    arrow20::Status ParseString()
+    {
+        return ParseStringLike<ArrayType>([] (TStringBuf value, i64 columnId) {
+            return MakeUnversionedStringValue(value, columnId);
         });
     }
 
@@ -1276,31 +1292,31 @@ public:
     arrow20::Status Visit(const arrow20::StringType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseStringLikeArray<arrow20::StringArray>();
+        return VisitStringLike<arrow20::StringArray>();
     }
 
     arrow20::Status Visit(const arrow20::LargeStringType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseStringLikeArray<arrow20::LargeStringArray>();
+        return VisitStringLike<arrow20::LargeStringArray>();
     }
 
     arrow20::Status Visit(const arrow20::BinaryType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseStringLikeArray<arrow20::BinaryArray>();
+        return VisitStringLike<arrow20::BinaryArray>();
     }
 
     arrow20::Status Visit(const arrow20::LargeBinaryType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseStringLikeArray<arrow20::LargeBinaryArray>();
+        return VisitStringLike<arrow20::LargeBinaryArray>();
     }
 
     arrow20::Status Visit(const arrow20::FixedSizeBinaryType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseStringLikeArray<arrow20::FixedSizeBinaryArray>();
+        return VisitStringLike<arrow20::FixedSizeBinaryArray>();
     }
 
     // Boolean types.
@@ -1339,14 +1355,14 @@ public:
 
     arrow20::Status Visit(const arrow20::Decimal128Type& type) override
     {
-        return ParseStringLikeArray<arrow20::Decimal128Array>([&] (TStringBuf value) {
+        return ParseStringLike<arrow20::Decimal128Array>([&] (TStringBuf value) {
             WriteDecimalBinary<TDecimal::TValue128>(value, type.precision());
         });
     }
 
     arrow20::Status Visit(const arrow20::Decimal256Type& type) override
     {
-        return ParseStringLikeArray<arrow20::Decimal256Array>([&] (TStringBuf value) {
+        return ParseStringLike<arrow20::Decimal256Array>([&] (TStringBuf value) {
             WriteDecimalBinary<TDecimal::TValue256>(value, type.precision());
         });
     }
@@ -1401,22 +1417,45 @@ private:
     }
 
     template <typename ArrayType>
-    arrow20::Status ParseStringLikeArray()
+    arrow20::Status VisitStringLike()
     {
-        return ParseStringLikeArray<ArrayType>([&] (TStringBuf value) {
+        if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Any &&
+            HasYsonTypeInMetadata(SchemaField_))
+        {
+            return ParseYson<ArrayType>();
+        } else {
+            return ParseString<ArrayType>();
+        }
+    }
+
+    template <typename ArrayType>
+    arrow20::Status ParseYson()
+    {
+        return ParseStringLike<ArrayType>([&] (TStringBuf value) {
+            ValidateYsonValue(value);
+            TMemoryInput input(value);
+            NYson::TYsonPullParser parser(&input, NYson::EYsonType::Node);
+            parser.TransferComplexValue(Writer_);
+        });
+    }
+
+    template <typename ArrayType>
+    arrow20::Status ParseString()
+    {
+        return ParseStringLike<ArrayType>([&] (TStringBuf value) {
             Writer_->WriteBinaryString(value);
         });
     }
 
     template <typename ArrayType>
-    arrow20::Status ParseStringLikeArray(auto writeStringValue)
+    arrow20::Status ParseStringLike(auto writeValue)
     {
         auto array = std::static_pointer_cast<ArrayType>(Array_);
         if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
             auto element = array->GetView(RowIndex_);
-            writeStringValue(TStringBuf(element.data(), element.size()));
+            writeValue(TStringBuf(element.data(), element.size()));
         }
         return arrow20::Status::OK();
     }

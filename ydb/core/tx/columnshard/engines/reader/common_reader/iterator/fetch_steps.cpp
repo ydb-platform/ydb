@@ -135,7 +135,7 @@ TConclusion<TExecutionResult> TAllocateMemoryStep::DoExecuteInplace(IDataSource&
     const TMonotonic start = TMonotonic::Now();
     ui64 size = PredefinedSize.value_or(0);
     for (auto&& i : Packs) {
-        ui32 sizeLocal = source.GetColumnsVolume(i.GetColumns().GetColumnIds(), i.GetMemType());
+        ui64 sizeLocal = source.GetColumnsVolume(i.GetColumns().GetColumnIds(), i.GetMemType());
         if (source.GetStageData().GetUseFilter() && i.GetMemType() != EMemType::Blob && source.GetContext()->GetReadMetadata()->HasLimit() &&
             (HasAppData() && !AppDataVerified().ColumnShardConfig.GetUseSlicesFilter())) {
             const ui32 filtered =

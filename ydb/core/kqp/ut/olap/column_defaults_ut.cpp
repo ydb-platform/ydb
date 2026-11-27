@@ -937,7 +937,7 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         CompareYson(R"([[3000u;1u;3001u]])", SelectYson(db, check));
     }
 
-    Y_UNIT_TEST(DictionaryEncodingDefaultsMatchRowTable) {
+    Y_UNIT_TEST(DictionaryEncodingWritesDefaults) {
         auto cs = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         cs->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         cs->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
@@ -946,14 +946,6 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         settings.AppConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
-        ExecScheme(db, R"(
-            CREATE TABLE `/Root/DsDict` (
-                Key Uint64 NOT NULL,
-                Name Utf8,
-                Value Utf8 DEFAULT 'born',
-                PRIMARY KEY (Key)
-            );
-        )");
         ExecScheme(db, R"(
             CREATE TABLE `/Root/CsDict` (
                 Key Uint64 NOT NULL,
@@ -966,29 +958,20 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         )");
         ExecScheme(db,
             "ALTER OBJECT `/Root/CsDict` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`);");
-        const auto insertBoth = [&](const TString& sql) {
-            ExecDml(db, "INSERT INTO `/Root/DsDict` " + sql);
-            ExecDml(db, "INSERT INTO `/Root/CsDict` " + sql);
+        ExecDml(db, "INSERT INTO `/Root/CsDict` (Key, Name) VALUES (1, 'a'), (2, 'b'), (3, 'c');");
+        ExecDml(db, "INSERT INTO `/Root/CsDict` (Key, Name, Value) VALUES (4, 'd', 'x'), (5, 'e', 'x'), (6, 'f', 'x');");
+        ExecDml(db, "INSERT INTO `/Root/CsDict` (Key, Name, Value) VALUES (7, 'g', NULL);");
+        const auto checkAll = [&]() {
+            CompareYson(R"([[1u;["born"]];[2u;["born"]];[3u;["born"]];[4u;["x"]];[5u;["x"]];[6u;["x"]];[7u;#]])",
+                SelectYson(db, "SELECT Key, Value FROM `/Root/CsDict` ORDER BY Key;"));
+            CompareYson(R"([[#;1u];[["born"];3u];[["x"];3u]])",
+                SelectYson(db, "SELECT Value, COUNT(*) FROM `/Root/CsDict` GROUP BY Value ORDER BY Value;"));
+            CompareYson(R"([[#];[["born"]];[["x"]]])",
+                SelectYson(db, "SELECT DISTINCT Value FROM `/Root/CsDict` ORDER BY Value;"));
         };
-        insertBoth("(Key, Name) VALUES (1, 'a'), (2, 'b'), (3, 'c')");
-        insertBoth("(Key, Name, Value) VALUES (4, 'd', 'x'), (5, 'e', 'x'), (6, 'f', 'x')");
-        insertBoth("(Key, Name, Value) VALUES (7, 'g', NULL)");
-        const auto compareAll = [&]() {
-            for (const char* query : {
-                     "SELECT Key, Value FROM $T ORDER BY Key",
-                     "SELECT Value, COUNT(*) FROM $T GROUP BY Value ORDER BY Value",
-                     "SELECT DISTINCT Value FROM $T ORDER BY Value",
-                 }) {
-                TString ds = query;
-                TString csQuery = query;
-                SubstGlobal(ds, "$T", "`/Root/DsDict`");
-                SubstGlobal(csQuery, "$T", "`/Root/CsDict`");
-                CompareYson(SelectYson(db, ds), SelectYson(db, csQuery));
-            }
-        };
-        compareAll();
+        checkAll();
         UNIT_ASSERT(TOneCompactionCommand().Execute(kikimr).IsSuccess());
-        compareAll();
+        checkAll();
         UNIT_ASSERT_STRING_CONTAINS(
             SelectYson(db, "SELECT SUM(Rows) FROM `/Root/CsDict/.sys/primary_index_stats` WHERE Activity == 1 AND EntityName = 'Value'"),
             "7u");

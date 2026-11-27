@@ -38,7 +38,7 @@ TInitializer::TInitializer(TPartition* partition)
     Steps.push_back(MakeHolder<TInitInternalFieldsStep>(this));
     Steps.push_back(MakeHolder<TInitDiskStatusStep>(this));
     Steps.push_back(MakeHolder<TInitMetaStep>(this));
-    Steps.push_back(MakeHolder<TInitLastChangesHistoryStep>(this));
+    Steps.push_back(MakeHolder<TInitSchemaChangesStep>(this));
     Steps.push_back(MakeHolder<TInitInfoRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataStep>(this));
@@ -288,15 +288,15 @@ TInitMetaStep::TInitMetaStep(TInitializer* initializer)
     : TBaseKVStep(initializer, "TInitMetaStep", true) {
 }
 
-TInitLastChangesHistoryStep::TInitLastChangesHistoryStep(TInitializer* initializer)
-    : TBaseKVStep(initializer, "TInitLastChangesHistoryStep", true) {
+TInitSchemaChangesStep::TInitSchemaChangesStep(TInitializer* initializer)
+    : TBaseKVStep(initializer, "TInitSchemaChangesStep", true) {
 }
 
-void TInitLastChangesHistoryStep::Execute(const TActorContext& ctx) {
+void TInitSchemaChangesStep::Execute(const TActorContext& ctx) {
     RequestTopicChangesRange(ctx, Partition()->TabletActorId, PartitionId(), "");
 }
 
-void TInitLastChangesHistoryStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+void TInitSchemaChangesStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     if (!ValidateResponse(*this, ev)) {
         return;
     }

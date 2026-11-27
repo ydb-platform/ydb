@@ -157,7 +157,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitInternalFieldsStep;
     friend TInitDiskStatusStep;
     friend TInitMetaStep;
-    friend TInitLastChangesHistoryStep;
+    friend TInitSchemaChangesStep;
     friend TInitInfoRangeStep;
     friend TInitDataRangeStep;
     friend TDeleteKeysStep;

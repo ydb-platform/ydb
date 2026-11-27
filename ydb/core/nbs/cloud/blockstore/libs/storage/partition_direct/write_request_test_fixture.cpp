@@ -184,11 +184,13 @@ TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
 
 TWriteRequestExecutorPtr TWriteRequestTestFixture::CreateRequestExecutor(
     TRequestHeaders headers,
-    EWriteMode writeMode)
+    EWriteMode writeMode,
+    const TBlockChecksums& checksums)
 {
     auto originalRequest =
         std::make_shared<TWriteBlocksLocalRequest>(std::move(headers));
     originalRequest->Sglist = MakeSgList();
+    originalRequest->Checksums = checksums;
 
     auto bundle = std::make_shared<TWriteRequestBundle>(
         Runtime->GetActorSystem(0),

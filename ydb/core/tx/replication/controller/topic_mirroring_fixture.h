@@ -694,14 +694,14 @@ public:
         const auto description = Source.GetDescription(SourceTopic);
         const auto& partitions = description.GetPathDescription().GetPersQueueGroup().GetPartitions();
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
-        KillTablet(Source, partitions.front().GetTabletId());
+        KillTablet(Source, partitions.Get(0).GetTabletId());
     }
 
     void RestartDestinationTopicTablet() {
         const auto description = Destination.GetDescription(DestinationTopic);
         const auto& partitions = description.GetPathDescription().GetPersQueueGroup().GetPartitions();
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
-        KillTablet(Destination, partitions.front().GetTabletId());
+        KillTablet(Destination, partitions.Get(0).GetTabletId());
     }
 
     void RestartController() {
@@ -733,9 +733,9 @@ public:
             if (!event) {
                 return false;
             }
-            if (auto* start = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+            if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
                 start->Confirm(firstOffset + messages.size());
-            } else if (auto* data = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+            } else if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
                 for (const auto& message : data->GetMessages()) {
                     UNIT_ASSERT(messages.size() < count);
                     TMirroredMessage mirrored;

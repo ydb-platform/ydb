@@ -1,0 +1,5 @@
+platform: standard-v4a
+cores: 4
+memory_gb: 8
+disk_gb: 186
+preset: tiny-worker

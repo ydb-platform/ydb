@@ -134,15 +134,15 @@ void TTxCoordinator::Handle(TEvTxProxy::TEvAcquireReadStep::TPtr& ev, const TAct
         // Allocate trace state only for a sampled detailed request.
         std::shared_ptr<NWilson::TSpan> span;
         if (ev->TraceId && ev->TraceId.GetVerbosity() >= 11) {
-            span = std::make_shared<NWilson::TSpan>(11, ev->TraceId,
+            span = std::make_shared<NWilson::TSpan>(11, NWilson::TTraceId(ev->TraceId),
                 "Coordinator acquire read step", NWilson::EFlags::AUTO_END);
             span->Attribute("ydb.snapshot.wait_reason", TString("read_only_lease"));
             span->Attribute("ydb.coordinator_id", static_cast<i64>(TabletID()));
             span->Event("lease confirmation requested");
         }
-        const auto trace = span ? span->GetTraceId() : ev->TraceId;
-        Executor()->ConfirmReadOnlyLease([this, sender, cookie, step, span, trace]() {
-            Send(sender, new TEvTxProxy::TEvAcquireReadStepResult(TabletID(), step), 0, cookie, trace);
+        const auto trace = span ? span->GetTraceId() : NWilson::TTraceId(ev->TraceId);
+        Executor()->ConfirmReadOnlyLease([this, sender, cookie, step, span, trace = NWilson::TTraceId(trace)]() {
+            Send(sender, new TEvTxProxy::TEvAcquireReadStepResult(TabletID(), step), 0, cookie, NWilson::TTraceId(trace));
             if (span && *span) {
                 span->Attribute("ydb.snapshot.step", static_cast<i64>(step));
                 span->Event("read step response dispatched");
@@ -153,7 +153,7 @@ void TTxCoordinator::Handle(TEvTxProxy::TEvAcquireReadStep::TPtr& ev, const TAct
         return;
     }
 
-    auto& request = VolatileState.AcquireReadStepPending.emplace_back(ev->Sender, ev->Cookie, ev->TraceId, ctx.Monotonic());
+    auto& request = VolatileState.AcquireReadStepPending.emplace_back(ev->Sender, ev->Cookie, NWilson::TTraceId(ev->TraceId), ctx.Monotonic());
     request.Span.Attribute("ydb.snapshot.wait_reason", TString("persist_read_step"));
     request.Span.Attribute("ydb.coordinator_id", static_cast<i64>(TabletID()));
     request.Span.Attribute("ydb.snapshot.flush_pending", VolatileState.AcquireReadStepFlushing);

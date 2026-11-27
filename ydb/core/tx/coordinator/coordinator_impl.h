@@ -421,7 +421,7 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
         TAcquireReadStepRequest(const TActorId& sender, ui64 cookie, NWilson::TTraceId traceId, TMonotonic queuedAt)
             : Sender(sender)
             , Cookie(cookie)
-            , Span(11, traceId, "Coordinator acquire read step", NWilson::EFlags::AUTO_END)
+            , Span(11, std::move(traceId), "Coordinator acquire read step", NWilson::EFlags::AUTO_END)
             , QueuedAt(queuedAt)
         { }
     };

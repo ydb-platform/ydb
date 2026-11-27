@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/deleted_ddisk.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
@@ -58,6 +59,14 @@ public:
     bool ReadAllTouchedVChunks(TTouchedVChunks& out);
     void StoreTouchedVChunkMask(const TTouchedVChunks::TChunk& chunk);
 
+    bool ReadAllDeletedDDisks(TVector<TDeletedDDiskRecordProto>& out);
+    // Appends a deleted-DDisk record using its RecordId as the table key.
+    void AddDeletedDDisk(const TDeletedDDiskRecordProto& record);
+    // Replaces a deleted-DDisk record using its RecordId as the table key.
+    void UpdateDeletedDDisk(const TDeletedDDiskRecordProto& record);
+    // Deletes deleted-DDisk records by their table keys.
+    void DeleteDeletedDDisk(const TVector<ui64>& recordIds);
+
     bool ReadAddHostInProgress(TMaybe<TAddHostInProgress>& addHostInProgress);
     void StoreAddHostInProgress(const TAddHostInProgress& addHostInProgress);
     void ClearAddHostInProgress();
@@ -67,6 +76,9 @@ public:
     void StoreRemoveHostInProgress(
         const TRemoveHostInProgress& removeHostInProgress);
     void ClearRemoveHostInProgress();
+
+private:
+    void WriteDeletedDDisk(const TDeletedDDiskRecordProto& record);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

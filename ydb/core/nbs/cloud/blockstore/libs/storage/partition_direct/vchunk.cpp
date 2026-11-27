@@ -1262,9 +1262,18 @@ void TVChunk::PersistNextPendingConfig()
     const THostMask freshDDisks = GetFreshDDisks(dirtyMapState);
     const TPBufferKey restoreBarrier =
         BlocksDirtyMap->GetTargetRestoreBarrier();
+    TVector<NKikimr::NBsController::TDDiskId> deletedDDiskIds;
+    if (IsTouched()) {
+        for (const THostIndex hostIndex:
+             VChunkConfig.GetDDisks().Exclude(config.GetDDisks()))
+        {
+            deletedDDiskIds.push_back(DirectBlockGroup->GetDDiskId(hostIndex));
+        }
+    }
     auto onPersisted = PartitionDirectService->UpdateVChunkState(
         config,
-        std::move(dirtyMapState));
+        std::move(dirtyMapState),
+        std::move(deletedDDiskIds));
     onPersisted.Subscribe(
         [weakSelf = weak_from_this(),
          executor = Executor,

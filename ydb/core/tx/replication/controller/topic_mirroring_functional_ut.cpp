@@ -45,7 +45,9 @@ Y_UNIT_TEST_SUITE(TopicMirroringFunctional) {
             }
             return token.has_value();
         }, "write session ready to accept");
-        writer->Write(std::move(*token), TWriteMessage("tx-message").Tx(tx));
+        auto txMessage = TWriteMessage("tx-message");
+        txMessage.Tx(tx);
+        writer->Write(std::move(*token), std::move(txMessage));
 
         const auto commit = test.Source.RunCall([&] { return tx.Commit().GetValueSync(); });
         UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());

@@ -53,6 +53,18 @@ We use the following symbols as abbreviations:
     * ㉔ ✅ **Join order and join algorithm selection** for column tables
     * ㉖ 🚧 Universal **Rule based optimizer v2** for row and column tables
     * ㉖ 🚧 Universal **Cost based optimizer v2** for row and column tables
+1. 🚧 ㉖ **Fast analytical joins**
+    * Block and scalar execution for column-oriented and row-oriented tables
+    * Disk spilling when intermediate data exceeds available RAM
+    * Support for INNER, LEFT, SEMI and ANTI joins
+    * Join filters, including non-equality conditions
+    * Non-equi joins without equality keys and CROSS JOIN
+    * Support for decorrelated subqueries, including NULL-safe join keys
+    * 🚧 Mark joins for efficient IN / NOT IN subqueries (optimizer integration in progress)
+    * 🚧 ANY JOIN (optimizer integration in progress)
+1. 🚧 ㉖ **Scalable window function execution**
+    * Disk spilling for window partitioning and sorting when data exceeds available RAM
+    * Optimize full-partition window aggregates using aggregation and joins
 1. 🚧 ㉖ **Read-committed transaction isolation level**
 1. 🚧 ㉕ **Workload Manager**
 1. ✅ **Allow administrators to stop another user’s query**.

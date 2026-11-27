@@ -1829,7 +1829,7 @@ void TDataShard::PersistUnprotectedReadsEnabled(TTransactionContext& txc) {
 
 TUserTable::TPtr TDataShard::AlterTableSchemaVersion(
     const TActorContext&, TTransactionContext& txc,
-    const TPathId& pathId, const ui64 tableSchemaVersion, bool persist)
+    const TPathId& pathId, const ui64 tableSchemaVersion, bool persist, bool cdcOnly)
 {
 
     Y_ENSURE(GetPathOwnerId() == pathId.OwnerId);
@@ -1840,7 +1840,7 @@ TUserTable::TPtr TDataShard::AlterTableSchemaVersion(
     Y_ENSURE(oldTableInfo);
 
     TUserTable::TPtr newTableInfo = new TUserTable(*oldTableInfo);
-    newTableInfo->SetTableSchemaVersion(tableSchemaVersion);
+    newTableInfo->SetTableSchemaVersion(tableSchemaVersion, cdcOnly);
 
     Y_VERIFY_DEBUG_S(oldTableInfo->GetTableSchemaVersion() < newTableInfo->GetTableSchemaVersion(),
                      "pathId " << pathId
@@ -1903,7 +1903,7 @@ TUserTable::TPtr TDataShard::AlterTableAddCdcStream(
     const TPathId& pathId, ui64 tableSchemaVersion,
     const NKikimrSchemeOp::TCdcStreamDescription& streamDesc)
 {
-    auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
+    auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, /*persist=*/false, /*cdcOnly=*/true);
     tableInfo->AddCdcStream(streamDesc);
 
     NIceDb::TNiceDb db(txc.DB);
@@ -1917,7 +1917,7 @@ TUserTable::TPtr TDataShard::AlterTableSwitchCdcStreamState(
     const TPathId& pathId, ui64 tableSchemaVersion,
     const TPathId& streamPathId, NKikimrSchemeOp::ECdcStreamState state)
 {
-    auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
+    auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, /*persist=*/false, /*cdcOnly=*/true);
     tableInfo->SwitchCdcStreamState(streamPathId, state);
 
     NIceDb::TNiceDb db(txc.DB);
@@ -1931,7 +1931,7 @@ TUserTable::TPtr TDataShard::AlterTableDropCdcStreams(
     const TPathId& pathId, ui64 tableSchemaVersion,
     const TVector<TPathId>& streamPathIds)
 {
-    auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
+    auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, /*persist=*/false, /*cdcOnly=*/true);
     for (const auto& streamPathId : streamPathIds) {
         tableInfo->DropCdcStream(streamPathId);
     }
@@ -1948,7 +1948,7 @@ TUserTable::TPtr TDataShard::AlterTableRotateCdcStream(
     const TPathId& oldStreamPathId,
     const NKikimrSchemeOp::TCdcStreamDescription& newStreamDesc)
 {
-    auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
+    auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, /*persist=*/false, /*cdcOnly=*/true);
     tableInfo->SwitchCdcStreamState(oldStreamPathId, NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateDisabled);
     tableInfo->AddCdcStream(newStreamDesc);
 

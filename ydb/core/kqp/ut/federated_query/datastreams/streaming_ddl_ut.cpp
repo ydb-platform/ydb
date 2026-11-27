@@ -2483,6 +2483,103 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         });
     }
 
+    Y_UNIT_TEST_F(StreamLookupContinuesAfterChangefeedAddAndDrop, TStreamingTestFixture) {
+        auto& config = SetupAppConfig();
+        config.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+        config.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinLocalLookups(true);
+
+        const auto inputTopic = MakeExternalName("changefeedLookupInput");
+        const auto outputTopic = MakeExternalName("changefeedLookupOutput");
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic);
+        CreatePqSource("changefeedLookupSource");
+        ExecQuery("CREATE TABLE lookup_cdc (id Int32 NOT NULL, payload String, PRIMARY KEY (id));");
+        ExecQuery(R"(UPSERT INTO lookup_cdc (id, payload) VALUES (1, "A"), (2, "B"), (3, "C");)");
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY lookupCdcQuery AS DO BEGIN
+                $input = SELECT * FROM changefeedLookupSource.`{input}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (id Int32 NOT NULL, event String NOT NULL)
+                );
+                $lookup = SELECT * FROM lookup_cdc;
+                INSERT INTO changefeedLookupSource.`{output}`
+                    SELECT Unwrap(i.event || ":" || l.payload)
+                    FROM $input AS i
+                    LEFT JOIN /*+ streamlookup(TTL 1) */ ANY $lookup AS l ON i.id = l.id;
+            END DO;
+        )", "input"_a = inputTopic, "output"_a = outputTopic));
+
+        WriteTopicMessage(inputTopic, R"({"id":1,"event":"before"})");
+        ReadTopicMessage(outputTopic, "before:A");
+        const auto completed = GetCounters()->GetSubgroup("subsystem", "checkpoint_coordinator")->GetCounter("CompletedCheckpoints", true);
+        const auto initial = completed->Val();
+        WaitFor(TDuration::Seconds(15), "lookup input checkpoint saved", [&](TString& error) {
+            error = TStringBuilder() << "Completed " << completed->Val() << ", need " << initial + 2;
+            return completed->Val() >= initial + 2;
+        });
+
+        ExecQuery(R"(ALTER TABLE lookup_cdc ADD CHANGEFEED changes WITH (MODE = "KEYS_ONLY", FORMAT = "JSON");)");
+        const auto afterAdd = TInstant::Now();
+        WriteTopicMessage(inputTopic, R"({"id":2,"event":"add"})");
+        ReadTopicMessage(outputTopic, "add:B", afterAdd);
+
+        ExecQuery("ALTER TABLE lookup_cdc DROP CHANGEFEED changes;");
+        const auto afterDrop = TInstant::Now();
+        WriteTopicMessage(inputTopic, R"({"id":3,"event":"drop"})");
+        ReadTopicMessage(outputTopic, "drop:C", afterDrop);
+        CheckScriptExecutionsCount(1, 1);
+    }
+
+    Y_UNIT_TEST_F(StreamLookupStopsOnIncompatibleSchemaChange, TStreamingTestFixture) {
+        auto& config = SetupAppConfig();
+        config.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+        config.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinLocalLookups(true);
+
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        const auto inputTopic = MakeExternalName("schemaChangeLookupInput");
+        const auto outputTopic = MakeExternalName("schemaChangeLookupOutput");
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic);
+        CreatePqSource("schemaChangeLookupSource");
+        ExecQuery("CREATE TABLE lookup_schema (id Int32 NOT NULL, payload String, PRIMARY KEY (id));");
+        ExecQuery(R"(UPSERT INTO lookup_schema (id, payload) VALUES (1, "A"), (2, "B");)");
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY lookupSchemaQuery AS DO BEGIN
+                $input = SELECT * FROM schemaChangeLookupSource.`{input}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (id Int32 NOT NULL)
+                );
+                $lookup = SELECT * FROM lookup_schema;
+                INSERT INTO schemaChangeLookupSource.`{output}`
+                    SELECT Unwrap(l.payload)
+                    FROM $input AS i
+                    LEFT JOIN /*+ streamlookup(TTL 1) */ ANY $lookup AS l ON i.id = l.id;
+            END DO;
+        )", "input"_a = inputTopic, "output"_a = outputTopic));
+
+        WriteTopicMessage(inputTopic, R"({"id":1})");
+        ReadTopicMessage(outputTopic, "A");
+        WaitCheckpointUpdate(GetStreamingQueryCheckpointId("lookupSchemaQuery"));
+
+        ExecQuery("ALTER TABLE lookup_schema DROP COLUMN payload;");
+        WriteTopicMessage(inputTopic, R"({"id":2})");
+
+        WaitFor(TDuration::Seconds(30), "stream lookup stops after dropping a referenced column", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT Status, Issues FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            bool stoppedOnSchemaChange = false;
+            CheckScriptResult(result[0], 2, 1, [&](TResultSetParser& row) {
+                const auto status = row.ColumnParser("Status").GetOptionalUtf8().value_or("");
+                const TString issues = row.ColumnParser("Issues").GetOptionalUtf8().value_or("");
+                error = TStringBuilder() << "Status: " << status << ", issues: " << issues;
+                stoppedOnSchemaChange = (status == "SUSPENDED" || status == "FAILED")
+                    && issues.contains("Member not found: payload");
+            });
+            return stoppedOnSchemaChange;
+        });
+    }
+
     Y_UNIT_TEST_F(StreamingQueryWithLocalYdbJoin, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "streamingQueryWithLocalYdbJoinInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithLocalYdbJoinOutputTopic";

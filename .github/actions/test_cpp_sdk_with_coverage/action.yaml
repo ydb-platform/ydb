@@ -68,7 +68,7 @@ runs:
         BASE_COVERAGE_JSON="$BASE_OUT/line_coverage.json"
         PR_COVERAGE_JSON="$PR_OUT/line_coverage.json"
 
-        git fetch origin "$BASE_REF"
+        cached-git fetch origin "$BASE_REF"
         git checkout "origin/$BASE_REF"
         run_sdk_coverage "$BASE_OUT"
 

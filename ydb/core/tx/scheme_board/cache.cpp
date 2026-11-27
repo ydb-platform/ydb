@@ -990,6 +990,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         static bool IsLikeDirectory(TNavigate::EKind kind) {
             switch (kind) {
             case TNavigate::KindSubdomain:
+            case TNavigate::KindOlapStore:
+            case TNavigate::KindBackupCollection:
             case TNavigate::KindPath:
             case TNavigate::KindIndex:
             case TNavigate::KindCdcStream:

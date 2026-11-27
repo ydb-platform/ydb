@@ -1,5 +1,6 @@
 #include "schemeshard_export_helpers.h"
 
+#include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -42,7 +43,7 @@ TString GetExportCompletionPrefix(const Ydb::Export::ExportToS3Settings& setting
     return prefix;
 }
 
-bool ResolveDirectoryExportPrefixes(TVector<TExportObjectPrefix>& items, bool hasMapping, TString& error) {
+bool ResolveDirectoryExportPrefixes(TVector<TExportObjectPrefix>& items, const TDirectoryExportFiles& files, TString& error) {
     TSet<TString> topLevelNames;
     for (const auto& item : items) {
         topLevelNames.emplace(TStringBuf(item.Prefix).Before('/'));
@@ -53,9 +54,14 @@ bool ResolveDirectoryExportPrefixes(TVector<TExportObjectPrefix>& items, bool ha
     }
 
     TMap<TString, TString> occupied;
-    if (hasMapping) {
-        for (const char* name : {"SchemaMapping", "metadata.json", "metadata.json.sha256", "export_complete.json"}) {
-            occupied.emplace(name, "export metadata");
+    if (files.HasMapping) {
+        occupied.emplace("SchemaMapping", "export metadata");
+        occupied.emplace("metadata.json", "export metadata");
+        if (files.Checksums) {
+            occupied.emplace(NBackup::ChecksumKey("metadata.json"), "export metadata");
+        }
+        if (files.CompletionMarker) {
+            occupied.emplace(ExportCompleteFileName, "export metadata");
         }
     }
 
@@ -69,15 +75,20 @@ bool ResolveDirectoryExportPrefixes(TVector<TExportObjectPrefix>& items, bool ha
         const auto it = occupied.lower_bound(childPrefix);
         return it != occupied.end() && it->first.StartsWith(childPrefix) ? &it->second : nullptr;
     };
-    const auto files = [](const TExportObjectPrefix& item) {
+    const auto objectPaths = [&](const TExportObjectPrefix& item) {
         TVector<TString> paths;
         if (item.Directory) {
-            for (const char* name : {"metadata.json", "permissions.pb"}) {
-                for (const char* suffix : {"", ".enc", ".sha256"}) {
-                    paths.emplace_back(TStringBuilder() << item.Prefix << '/' << name << suffix);
+            const auto add = [&](TStringBuf name) {
+                const TString path = TStringBuilder() << item.Prefix << '/' << name;
+                paths.push_back(files.Encrypted ? path + ".enc" : path);
+                if (files.Checksums) {
+                    paths.push_back(NBackup::ChecksumKey(path));
                 }
+            };
+            add("metadata.json");
+            if (files.Permissions) {
+                add("permissions.pb");
             }
-            paths.emplace_back(TStringBuilder() << item.Prefix << '/' << ExportDataCompleteFileName);
         } else {
             paths.push_back(item.Prefix);
         }
@@ -92,20 +103,20 @@ bool ResolveDirectoryExportPrefixes(TVector<TExportObjectPrefix>& items, bool ha
                 continue;
             }
             const TString* owner = nullptr;
-            auto paths = files(item);
+            auto paths = objectPaths(item);
             for (const auto& path : paths) {
                 if ((owner = conflict(path))) {
                     break;
                 }
             }
             if (owner || item.Prefix.empty()) {
-                if (explicitPrefix || !hasMapping) {
+                if (explicitPrefix || !files.HasMapping) {
                     error = TStringBuilder() << "Export destination for " << item.SourcePath
                         << " conflicts with " << (owner ? *owner : TString("the backup root"));
                     return false;
                 }
                 item.Prefix = TStringBuilder() << fallback << '/' << i + 1;
-                paths = files(item);
+                paths = objectPaths(item);
             }
             for (auto& path : paths) {
                 occupied.emplace(std::move(path), item.SourcePath);

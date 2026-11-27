@@ -41,8 +41,16 @@ struct TExportObjectPrefix {
     bool Explicit;
 };
 
+struct TDirectoryExportFiles {
+    bool HasMapping;
+    bool Encrypted;
+    bool Permissions;
+    bool Checksums;
+    bool CompletionMarker;
+};
+
 // Directories may share a prefix with their children, but their own files must
 // never occupy another object's prefix (particularly on a filesystem).
-bool ResolveDirectoryExportPrefixes(TVector<TExportObjectPrefix>& items, bool hasMapping, TString& error);
+bool ResolveDirectoryExportPrefixes(TVector<TExportObjectPrefix>& items, const TDirectoryExportFiles& files, TString& error);
 
 } // namespace NKikimr::NSchemeShard

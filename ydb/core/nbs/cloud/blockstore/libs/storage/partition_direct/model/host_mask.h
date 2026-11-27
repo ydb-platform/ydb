@@ -47,7 +47,8 @@ public:
 
     [[nodiscard]] THostMask LogicalNot() const;
     [[nodiscard]] THostMask LogicalAnd(THostMask other) const;
-    [[nodiscard]] THostMask Include(THostMask other) const;
+    // Returns the union of both masks.
+    [[nodiscard]] THostMask Union(THostMask other) const;
     [[nodiscard]] THostMask Exclude(THostMask other) const;
 
     [[nodiscard]] TIterator begin() const;

@@ -93,21 +93,21 @@ Y_UNIT_TEST_SUITE(THostMaskTest)
 
     Y_UNIT_TEST(ShouldDoLogicalOps)
     {
-        auto first = THostMask::MakeOne(0).Include(THostMask::MakeOne(1));
-        auto second = THostMask::MakeOne(1).Include(THostMask::MakeOne(2));
+        auto first = THostMask::MakeOne(0).Union(THostMask::MakeOne(1));
+        auto second = THostMask::MakeOne(1).Union(THostMask::MakeOne(2));
 
         UNIT_ASSERT_VALUES_EQUAL(1u, first.LogicalAnd(second).Count());
         UNIT_ASSERT(first.LogicalAnd(second).Get(1));
 
-        UNIT_ASSERT_VALUES_EQUAL(3u, first.Include(second).Count());
+        UNIT_ASSERT_VALUES_EQUAL(3u, first.Union(second).Count());
         UNIT_ASSERT_VALUES_EQUAL(1u, first.Exclude(second).Count());
         UNIT_ASSERT(first.Exclude(second).Get(0));
     }
 
     Y_UNIT_TEST(ShouldIterateAscending)
     {
-        auto mask = THostMask::MakeOne(5).Include(
-            THostMask::MakeOne(0).Include(THostMask::MakeOne(2)));
+        auto mask = THostMask::MakeOne(5).Union(
+            THostMask::MakeOne(0).Union(THostMask::MakeOne(2)));
 
         TVector<THostIndex> seen;
         for (auto host: mask) {
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(THostMaskTest)
         UNIT_ASSERT(!THostMask::MakeEmpty().First().has_value());
         UNIT_ASSERT_VALUES_EQUAL(
             3u,
-            *THostMask::MakeOne(7).Include(THostMask::MakeOne(3)).First());
+            *THostMask::MakeOne(7).Union(THostMask::MakeOne(3)).First());
     }
 
     Y_UNIT_TEST(ShouldCompareHostRoutesLexicographically)

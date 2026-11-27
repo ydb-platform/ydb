@@ -11,16 +11,21 @@ void TWriteClientMock::OnWriteBlocksResponse(
     const TWriteRequestResponse& response)
 {
     Y_UNUSED(bundle);
-    AllCompletedWrites = AllCompletedWrites.Include(response.CompletedWrites);
+    AllCompletedWrites = AllCompletedWrites.Union(response.CompletedWrites);
     Response = response;
 }
 
 void TWriteClientMock::OnBelatedWriteBlocksResponse(
     std::shared_ptr<TWriteRequestBundle> bundle,
-    THostMask hosts)
+    THostMask hostsWithSuccessfulWrites,
+    THostMask hostsWithAllWritesAnswered)
 {
     Y_UNUSED(bundle);
-    AllCompletedWrites = AllCompletedWrites.Include(hosts);
+    AllCompletedWrites = AllCompletedWrites.Union(hostsWithSuccessfulWrites);
+    BelatedCompletedWrites =
+        BelatedCompletedWrites.Union(hostsWithSuccessfulWrites);
+    BelatedAllWritesAnswered =
+        BelatedAllWritesAnswered.Union(hostsWithAllWritesAnswered);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

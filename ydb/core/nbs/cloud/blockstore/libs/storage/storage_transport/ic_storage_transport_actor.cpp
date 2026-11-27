@@ -685,13 +685,13 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersUndelivery(
         auto& requestInfo = *r;
         auto& request = *requestInfo.Request;
 
-        // Will reply undelivered only for coordinator.
-        const NKikimrBlobStorage::NDDisk::TDDiskId coordinator[1] = {
-            request.PersistentBufferIds[0]};
+        // Undelivery completes the indirect request for every target.
         auto response = MakeWritePersistentBuffersResult(
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
             UndeliveryErrorMessage,
-            coordinator);
+            std::span(
+                request.PersistentBufferIds.data(),
+                request.PersistentBufferIds.size()));
         request.Reply(response->Record);
         WriteToManyPBuffersRequests.erase(requestId);
     } else {

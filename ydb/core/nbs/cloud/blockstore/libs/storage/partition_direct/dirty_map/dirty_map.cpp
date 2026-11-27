@@ -358,7 +358,8 @@ void TBlocksDirtyMap::WriteFinished(
     TPBufferKey pBufferKey,
     TBlockRange16 range,
     THostMask requested,
-    THostMask confirmed)
+    THostMask confirmed,
+    THostMask allWritesAnswered)
 {
     // Every write is pre-registered as pending at generation time (see
     // RegisterInflightWrite), so the entry always exists here.
@@ -378,7 +379,7 @@ void TBlocksDirtyMap::WriteFinished(
         return;
     }
 
-    inflightItem.OnWritten(requested, confirmed);
+    inflightItem.OnWritten(requested, confirmed, allWritesAnswered);
 }
 
 void TBlocksDirtyMap::FlushFinished(
@@ -462,21 +463,23 @@ void TBlocksDirtyMap::EraseFinished(
     MaybeAdvanceRestoreBarrier();
 }
 
-void TBlocksDirtyMap::UpdateBelatedEraseQueue(
-    THostMask completedWrites,
-    TPBufferKey pBufferKey)
+void TBlocksDirtyMap::OnBelatedWrite(
+    TPBufferKey pBufferKey,
+    THostMask hostsWithSuccessfulWrites,
+    THostMask hostsWithAllWritesAnswered)
 {
-    const auto item = Inflight.GetValue(pBufferKey);
-    const bool unknownLsn = item == std::nullopt;
-    const bool erasingInProgress =
-        item &&
-        (item->Value.GetState() == TInflightInfo::EState::PBufferErasing ||
-         item->Value.GetState() == TInflightInfo::EState::PBufferErased);
+    Y_ABORT_UNLESS(
+        hostsWithSuccessfulWrites.Exclude(hostsWithAllWritesAnswered).Empty());
 
-    if (unknownLsn || erasingInProgress) {
+    if (auto item = Inflight.GetValue(pBufferKey)) {
+        item->Value.MarkWritesAnswered(hostsWithAllWritesAnswered);
+        return;
+    }
+
+    if (!hostsWithSuccessfulWrites.Empty()) {
         ReadyToEraseBelated.emplace(TInfoEraseBelated{
             .PBufferKey = pBufferKey,
-            .Hosts = completedWrites});
+            .Hosts = hostsWithSuccessfulWrites});
     }
 }
 
@@ -1125,7 +1128,7 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
     }
     mask = mask.Exclude(DisabledHosts);
     if (mask.Empty()) {
-        mask = mask.Include(DesiredDDisks);
+        mask = mask.Union(DesiredDDisks);
         // If we don't have enabled hosts, we can return error or fail on
         // assert. Or we can try to use disabled hosts because it could return
         // to life. We choose 2 option and try to read from desired hosts.

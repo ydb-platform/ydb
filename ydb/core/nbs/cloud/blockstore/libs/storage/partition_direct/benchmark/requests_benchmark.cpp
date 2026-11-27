@@ -134,6 +134,7 @@ void InitFixture(TWriteRequestTestFixture& f)
         MakeKey(100),
         TBlockRange16::WithLength(20, 10),
         f.VChunkConfig.GetDesiredPBuffers(),
+        f.VChunkConfig.GetDesiredPBuffers(),
         f.VChunkConfig.GetDesiredPBuffers());
 }
 

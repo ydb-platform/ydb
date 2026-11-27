@@ -936,13 +936,18 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
         const bool isCoordinator = coordinatorHostIndex == *hostIndex;
         coordinatorFound = coordinatorFound || isCoordinator;
 
-        OnResponse(
-            *hostIndex,
-            executionTime,
-            isCoordinator ? EOperation::WriteToManyPBuffers
-                          : EOperation::WriteToPBuffer,
-            isCoordinator,
-            error);
+        // Only the coordinator's health is affected by indirect undelivery.
+        if (isCoordinator || !HasError(error) ||
+            !error.GetMessage().Contains(UndeliveryErrorMessage))
+        {
+            OnResponse(
+                *hostIndex,
+                executionTime,
+                isCoordinator ? EOperation::WriteToManyPBuffers
+                              : EOperation::WriteToPBuffer,
+                isCoordinator,
+                error);
+        }
 
         dbgResponse.Responses.push_back(
             {.HostIndex = *hostIndex, .Error = std::move(error)});

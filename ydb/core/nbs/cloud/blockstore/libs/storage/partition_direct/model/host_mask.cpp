@@ -103,7 +103,7 @@ THostMask THostMask::LogicalAnd(THostMask other) const
     return THostMask(Bits & other.Bits);
 }
 
-THostMask THostMask::Include(THostMask other) const
+THostMask THostMask::Union(THostMask other) const
 {
     return THostMask(Bits | other.Bits);
 }

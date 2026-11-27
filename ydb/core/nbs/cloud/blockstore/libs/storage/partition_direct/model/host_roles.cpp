@@ -106,7 +106,7 @@ THostMask THostRoles::GetHandOff() const
 
 THostMask THostRoles::GetActive() const
 {
-    return GetPrimary().Include(GetHandOff());
+    return GetPrimary().Union(GetHandOff());
 }
 
 TString THostRoles::DebugPrint(bool brief) const

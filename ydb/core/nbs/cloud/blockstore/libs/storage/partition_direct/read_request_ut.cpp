@@ -72,6 +72,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
             MakeKey(100),
             TBlockRange16::WithLength(20, 10),
             VChunkConfig.GetDesiredPBuffers(),
+            VChunkConfig.GetDesiredPBuffers(),
             VChunkConfig.GetDesiredPBuffers());
         auto readHint = DirtyMap->MakeReadHint(range);
         auto readRequest = CreateReadRequestExecutor(
@@ -141,6 +142,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
             MakeKey(100),
             TBlockRange16::WithLength(20, 10),
             VChunkConfig.GetDesiredPBuffers(),
+            VChunkConfig.GetDesiredPBuffers(),
             VChunkConfig.GetDesiredPBuffers());
 
         DirtyMap->RegisterInflightWrite(
@@ -149,6 +151,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         DirtyMap->WriteFinished(
             MakeKey(200),
             TBlockRange16::WithLength(40, 10),
+            VChunkConfig.GetDesiredPBuffers(),
             VChunkConfig.GetDesiredPBuffers(),
             VChunkConfig.GetDesiredPBuffers());
 

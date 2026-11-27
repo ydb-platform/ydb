@@ -6,12 +6,15 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <util/string/cast.h>
+
+#include <optional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -138,9 +141,15 @@ void TWriteRequestExecutor::SendIndirectWriteRequest(THostMask hosts)
 void TWriteRequestExecutor::OnIndirectWriteResponse(
     const TDBGWriteBlocksToManyPBuffersResponse& response)
 {
-    THostMask completedWritesOfCurrentResponse;
+    THostMask hostsWithAllWritesAnswered;
     for (const auto& pbufferResponse: response.Responses) {
         const auto host = pbufferResponse.HostIndex;
+        AnsweredIndirectWrites.Set(host);
+
+        // Undelivery does not fail a non-coordinator: a direct write may land.
+        const bool undeliveredOtherDisk =
+            HasError(pbufferResponse.Error) && !IndirectCoordinator.Get(host) &&
+            pbufferResponse.Error.GetMessage().Contains(UndeliveryErrorMessage);
 
         if (!HasError(pbufferResponse.Error)) {
             LOG_DEBUG(
@@ -150,8 +159,8 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
                 LogTitle.GetWithTime().c_str(),
                 PrintHostAndNode(host).c_str());
 
-            completedWritesOfCurrentResponse.Set(host);
-        } else {
+            CompletedWrites.Set(host);
+        } else if (!undeliveredOtherDisk) {
             LOG_WARN(
                 *ActorSystem,
                 NKikimrServices::NBS_PARTITION,
@@ -161,13 +170,14 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
                 FormatError(pbufferResponse.Error).Quote().c_str());
 
             FailedWrites.Set(host);
-            // The error will be set and replied below.
+        }
+
+        if (GetHostsWithAllWritesAnswered().Get(host)) {
+            hostsWithAllWritesAnswered.Set(host);
         }
     }
 
-    CompletedWrites = CompletedWrites.Include(completedWritesOfCurrentResponse);
-
-    MaybeReplyOrNotifyBelated(completedWritesOfCurrentResponse);
+    MaybeReplyOrNotifyBelated(hostsWithAllWritesAnswered);
     MaybeSendAdditionalDirectWrites();
 }
 
@@ -313,21 +323,26 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
         PrintHostAndNode(host).c_str(),
         FormatError(response.Error).Quote().c_str());
 
+    AnsweredDirectWrites.Set(host);
+    const auto hostsWithAllWritesAnswered =
+        GetHostsWithAllWritesAnswered().LogicalAnd(THostMask::MakeOne(host));
+
+    std::optional<TEndSpanWithError> ender;
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
-        MaybeReplyOrNotifyBelated(THostMask::MakeOne(host));
-        return;
+    } else {
+        FailedWrites.Set(host);
+        ender.emplace(std::move(span), response.Error);
     }
 
-    FailedWrites.Set(host);
-    auto ender = TEndSpanWithError(std::move(span), response.Error);
+    MaybeReplyOrNotifyBelated(hostsWithAllWritesAnswered);
     MaybeSendReplacementDirectWrite(response.Error);
 }
 
 void TWriteRequestExecutor::MaybeSendReplacementDirectWrite(
     const NProto::TError& error)
 {
-    if (IsReplied) {
+    if (!HasError(error) || IsReplied) {
         return;
     }
 
@@ -344,7 +359,7 @@ void TWriteRequestExecutor::MaybeSendReplacementDirectWrite(
     }
 
     const auto candidates = VChunkConfig.GetDesiredPBuffers()
-                                .Include(VChunkConfig.GetSecondaryPBuffers())
+                                .Union(VChunkConfig.GetSecondaryPBuffers())
                                 .Exclude(RequestedDirectWrites)
                                 .Exclude(FailedWrites)
                                 .Exclude(CompletedWrites)
@@ -365,12 +380,10 @@ void TWriteRequestExecutor::MaybeSendReplacementDirectWrite(
 }
 
 void TWriteRequestExecutor::MaybeReplyOrNotifyBelated(
-    THostMask completedOnCurrentResponse)
+    THostMask hostsWithAllWritesAnswered)
 {
     if (IsReplied) {
-        // A write completed after the reply is belated: its copy is on the
-        // PBuffer and has to be erased from there.
-        NotifyBelated(completedOnCurrentResponse);
+        NotifyBelated(hostsWithAllWritesAnswered);
         return;
     }
 
@@ -418,25 +431,32 @@ void TWriteRequestExecutor::Reply(NProto::TError error)
 
     Bundle->Reply(
         std::move(error),
-        RequestedDirectWrites.Include(RequestedIndirectWrites),
-        CompletedWrites);
+        RequestedDirectWrites.Union(RequestedIndirectWrites),
+        CompletedWrites,
+        GetHostsWithAllWritesAnswered());
 }
 
-void TWriteRequestExecutor::NotifyBelated(THostMask completedOnCurrentResponse)
+void TWriteRequestExecutor::NotifyBelated(THostMask hostsWithAllWritesAnswered)
 {
-    if (completedOnCurrentResponse.Empty()) {
+    // This response completes the last outstanding write to these hosts.
+    if (hostsWithAllWritesAnswered.Empty()) {
         return;
     }
 
+    const auto hostsWithSuccessfulWrites =
+        hostsWithAllWritesAnswered.LogicalAnd(CompletedWrites);
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s NotifyBelated %s %s",
+        "%s NotifyBelated %s ok:%s answered:%s",
         LogTitle.GetWithTime().c_str(),
         ExtendedDebugState().c_str(),
-        completedOnCurrentResponse.Print().c_str());
+        hostsWithSuccessfulWrites.Print().c_str(),
+        hostsWithAllWritesAnswered.Print().c_str());
 
-    Bundle->NotifyBelated(completedOnCurrentResponse);
+    Bundle->NotifyBelated(
+        hostsWithSuccessfulWrites,
+        hostsWithAllWritesAnswered);
 }
 
 void TWriteRequestExecutor::ScheduleHedging(TDuration hedgingDelay)
@@ -535,7 +555,7 @@ bool TWriteRequestExecutor::IsQuorumReached() const
 bool TWriteRequestExecutor::IsQuorumReachable() const
 {
     auto maybeSuccess = VChunkConfig.GetDesiredPBuffers()
-                            .Include(VChunkConfig.GetSecondaryPBuffers())
+                            .Union(VChunkConfig.GetSecondaryPBuffers())
                             .Exclude(FailedWrites);
 
     return maybeSuccess.Count() >= QuorumDirectBlockGroupHostCount;
@@ -553,6 +573,15 @@ size_t TWriteRequestExecutor::GetQuorumDeficit() const
 THostMask TWriteRequestExecutor::GetRunningDirectWrites() const
 {
     return RequestedDirectWrites.Exclude(CompletedWrites).Exclude(FailedWrites);
+}
+
+THostMask TWriteRequestExecutor::GetHostsWithAllWritesAnswered() const
+{
+    const auto inFlight =
+        RequestedDirectWrites.Exclude(AnsweredDirectWrites)
+            .Union(RequestedIndirectWrites.Exclude(AnsweredIndirectWrites));
+    return RequestedDirectWrites.Union(RequestedIndirectWrites)
+        .Exclude(inFlight);
 }
 
 TString TWriteRequestExecutor::ExtendedDebugState() const

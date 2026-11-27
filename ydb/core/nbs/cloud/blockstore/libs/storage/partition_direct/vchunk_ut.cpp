@@ -44,7 +44,7 @@ void MakeDirtyMapNeedPersist(TBlocksDirtyMap& dirtyMap)
     const auto pBufferKey = MakeKey(100);
     const auto range = TBlockRange16::WithLength(10, 10);
     dirtyMap.RegisterInflightWrite(pBufferKey, range);
-    dirtyMap.WriteFinished(pBufferKey, range, requested, requested);
+    dirtyMap.WriteFinished(pBufferKey, range, requested, requested, requested);
 
     auto flushHints = dirtyMap.MakeFlushHint(1);
     Y_ABORT_UNLESS(!flushHints.Empty());
@@ -69,6 +69,7 @@ void MakeDirtyMapNeedFlush(TBlocksDirtyMap& dirtyMap)
     dirtyMap.WriteFinished(
         MakeKey(100),
         TBlockRange16::WithLength(10, 10),
+        requested,
         requested,
         requested);
 }
@@ -1621,7 +1622,8 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
                 const auto hosts = THostMask::MakeAll(3);
 
                 dirtyMap.RegisterInflightWrite(MakeKey(100), range);
-                dirtyMap.WriteFinished(MakeKey(100), range, hosts, hosts);
+                dirtyMap
+                    .WriteFinished(MakeKey(100), range, hosts, hosts, hosts);
                 const auto flushHints = dirtyMap.MakeFlushHint(1);
                 for (const auto& [route, hint]: flushHints.GetAllHints()) {
                     dirtyMap.FlushFinished(

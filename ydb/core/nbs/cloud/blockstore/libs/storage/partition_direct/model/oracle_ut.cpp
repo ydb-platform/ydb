@@ -664,7 +664,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::MilliSeconds(40),
             oracle.GetFlushRequestCooldown(
-                THostMask::MakeOne(1).Include(THostMask::MakeOne(3))));
+                THostMask::MakeOne(1).Union(THostMask::MakeOne(3))));
 
         // A mask restricted to the less-penalized host returns its own value.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -675,7 +675,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::Zero(),
             oracle.GetFlushRequestCooldown(
-                THostMask::MakeOne(0).Include(THostMask::MakeOne(4))));
+                THostMask::MakeOne(0).Union(THostMask::MakeOne(4))));
     }
 
     Y_UNIT_TEST(GetFlushRequestCooldownIsClampedToMaxReconnectDelay)

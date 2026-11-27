@@ -476,7 +476,8 @@ void TVChunk::OnWriteBlocksResponse(
             response.PBufferKey,
             bundle->GetVChunkRange(),
             response.RequestedWrites,
-            response.CompletedWrites);
+            response.CompletedWrites,
+            response.AllWritesAnswered);
     }
 
     bool ok = !HasError(response.Error);
@@ -491,7 +492,8 @@ void TVChunk::OnWriteBlocksResponse(
 
 void TVChunk::OnBelatedWriteBlocksResponse(
     std::shared_ptr<TWriteRequestBundle> bundle,
-    THostMask completedWrites)
+    THostMask hostsWithSuccessfulWrites,
+    THostMask hostsWithAllWritesAnswered)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -502,10 +504,12 @@ void TVChunk::OnBelatedWriteBlocksResponse(
         LogTitle.GetWithTime().c_str(),
         bundle->GetVChunkRange().Print().c_str());
 
-    BlocksDirtyMap->UpdateBelatedEraseQueue(
-        completedWrites,
-        bundle->GetPBufferKey());
+    BlocksDirtyMap->OnBelatedWrite(
+        bundle->GetPBufferKey(),
+        hostsWithSuccessfulWrites,
+        hostsWithAllWritesAnswered);
 
+    DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
     MaybeStartPersist();
     ScheduleCleaningUp();

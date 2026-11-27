@@ -4001,6 +4001,58 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(AlterShardsInFlightSurvivesFlagDisable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableAlterShardingInColumnShard(true);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            ColumnShardCount: 2
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "id" Type: "Uint64" NotNull: true }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "id"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto describe = DescribePath(runtime, "/MyRoot/OlapStore/ColumnTable");
+        const ui64 shardId = describe.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards(0);
+
+        const ui64 alterTxId = ++txId;
+        TBlockEvents<TEvColumnShard::TEvProposeTransaction> proposals(runtime,
+            [alterTxId](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+                return ev->Get()->Record.GetTxId() == alterTxId;
+            });
+        TestAlterColumnTable(runtime, alterTxId, "/MyRoot/OlapStore", TStringBuilder()
+            << "Name: \"ColumnTable\" AlterShards { Modification { OpenWriteIds: " << shardId << " } }");
+        runtime.WaitFor("sharding proposal blocked", [&]() { return !proposals.empty(); });
+        const ui64 staleGeneration = proposals.front()->Get()->Record.GetSeqNo().GetGeneration();
+
+        // An accepted sharding op must complete regardless of later flag flips.
+        runtime.GetAppData().FeatureFlags.SetEnableAlterShardingInColumnShard(false);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        const auto isRestored = [&](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+            return ev->Get()->Record.GetSeqNo().GetGeneration() > staleGeneration;
+        };
+        runtime.WaitFor("sharding proposal after reboot", [&]() {
+            return std::any_of(proposals.begin(), proposals.end(), isRestored);
+        });
+        std::erase_if(proposals, [&](const auto& ev) { return !isRestored(ev); });
+
+        proposals.Stop().Unblock();
+        env.TestWaitNotification(runtime, alterTxId);
+    }
+
     Y_UNIT_TEST(InStorePresetColumnFeatureFlagsChecked) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

@@ -136,7 +136,7 @@ bool TOlapIndexesDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& t
             return false;
         }
         if (!IndexesByName.emplace(indexProto.GetName(), indexProto.GetId()).second) {
-            errors.AddError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "Duplicate index name: " << indexProto.GetName());
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Duplicate index name: " << indexProto.GetName());
             return false;
         }
         if (!Indexes.emplace(indexProto.GetId(), std::move(index)).second) {

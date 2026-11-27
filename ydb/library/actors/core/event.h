@@ -12,6 +12,8 @@
 #include <util/system/hp_timer.h>
 #include <util/generic/maybe.h>
 
+#include <new>
+
 namespace NInterconnect::NRdma {
     class IMemPool;
 }
@@ -19,6 +21,10 @@ namespace NInterconnect::NRdma {
 namespace NActors {
     class TChunkSerializer;
     class IActor;
+
+    namespace NEventBundle {
+        struct TAllocation;
+    }
 
     class IEventBase
         : TNonCopyable {
@@ -193,8 +199,13 @@ namespace NActors {
 
         TActorId RewriteRecipient;
         ui32 RewriteType;
+        bool Bundled = false;
 
         THolder<TOnNondelivery> OnNondeliveryHolder; // only for local events
+
+        friend struct NEventBundle::TAllocation;
+
+        static void DestroyBundled(IEventHandle* event) noexcept;
 
     public:
         void Rewrite(ui32 typeRewrite, TActorId recipientRewrite) {
@@ -243,8 +254,31 @@ namespace NActors {
         }
 #endif
 
-        IEventHandle(const TActorId& recipient, const TActorId& sender, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0,
-                     const TActorId* forwardOnNondelivery = nullptr, NWilson::TTraceId traceId = {})
+        static void operator delete(IEventHandle* event, std::destroying_delete_t) noexcept {
+            if (Y_UNLIKELY(event->Bundled)) {
+                DestroyBundled(event);
+            } else {
+                event->~IEventHandle();
+                ::operator delete(event);
+            }
+        }
+
+        static void operator delete(void* event) noexcept {
+            ::operator delete(event);
+        }
+
+        static void operator delete(IEventHandle* event, std::destroying_delete_t, std::align_val_t alignment) noexcept {
+            event->~IEventHandle();
+            ::operator delete(event, alignment);
+        }
+
+        static void operator delete(void* event, std::align_val_t alignment) noexcept {
+            ::operator delete(event, alignment);
+        }
+
+    private:
+        IEventHandle(const TActorId& recipient, const TActorId& sender, THolder<IEventBase> ev, TEventFlags flags,
+                     ui64 cookie, const TActorId* forwardOnNondelivery, NWilson::TTraceId&& traceId, bool bundled)
             : Type(ev->Type())
             , Flags(ApplyGlobals(flags))
             , Recipient(recipient)
@@ -254,12 +288,21 @@ namespace NActors {
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
             , SendTime(0)
 #endif
-            , Event(ev)
+            , Event(std::move(ev))
             , RewriteRecipient(Recipient)
             , RewriteType(Type)
+            , Bundled(bundled)
         {
             if (forwardOnNondelivery)
                 OnNondeliveryHolder.Reset(new TOnNondelivery(*forwardOnNondelivery));
+        }
+
+    public:
+        IEventHandle(const TActorId& recipient, const TActorId& sender, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0,
+                     const TActorId* forwardOnNondelivery = nullptr, NWilson::TTraceId traceId = {})
+            : IEventHandle(recipient, sender, THolder<IEventBase>(ev), flags, cookie, forwardOnNondelivery,
+                std::move(traceId), false)
+        {
         }
 
         IEventHandle(ui32 type,

@@ -1,39 +1,33 @@
 #include "scheduler_cookie.h"
 
 namespace NActors {
-    class TSchedulerCookie2Way: public ISchedulerCookie {
-        TAtomic Value;
+    bool NSchedulerCookie::TTwoWayCookie::IsArmed() noexcept {
+        return AtomicGet(Owners) == 2;
+    }
 
-    public:
-        TSchedulerCookie2Way()
-            : Value(2)
-        {
+    bool NSchedulerCookie::TTwoWayCookie::Detach() noexcept {
+        const ui64 remaining = AtomicDecrement(Owners);
+        Y_ABORT_UNLESS(remaining <= 1);
+        if (remaining == 0) {
+            Destroy();
         }
+        return remaining == 1;
+    }
 
-        bool IsArmed() noexcept override {
-            return (AtomicGet(Value) == 2);
-        }
+    bool NSchedulerCookie::TTwoWayCookie::DetachEvent() noexcept {
+        Y_ABORT();
+    }
 
-        bool Detach() noexcept override {
-            const ui64 x = AtomicDecrement(Value);
-            if (x == 1)
-                return true;
-
-            if (x == 0) {
+    namespace {
+        class TStandaloneTwoWayCookie final : public NSchedulerCookie::TTwoWayCookie {
+            void Destroy() noexcept override {
                 delete this;
-                return false;
             }
-
-            Y_ABORT();
-        }
-
-        bool DetachEvent() noexcept override {
-            Y_ABORT();
-        }
-    };
+        };
+    }
 
     ISchedulerCookie* ISchedulerCookie::Make2Way() {
-        return new TSchedulerCookie2Way();
+        return new TStandaloneTwoWayCookie();
     }
 
     class TSchedulerCookie3Way: public ISchedulerCookie {

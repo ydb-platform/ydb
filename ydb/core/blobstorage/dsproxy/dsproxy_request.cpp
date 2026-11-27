@@ -260,7 +260,8 @@ namespace NKikimr {
         }
         BatchedPutRequestCount++;
 
-        Send(MonActor, new TEvThroughputAddRequest(ev->Get()->HandleClass, bytes));
+        TActivationContext::Send(MakeBundled<TEvThroughputAddRequest>({.Recipient = MonActor, .Sender = SelfId()},
+            ev->Get()->HandleClass, bytes));
         EnableWilsonTracing(ev, Mon->PutSamplePPM);
 
         Y_DEBUG_ABORT_UNLESS(MinHugeBlobInBytes);

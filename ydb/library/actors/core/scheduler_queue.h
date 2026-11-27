@@ -90,10 +90,12 @@ namespace NActors {
                     AtomicStore(&entry.InstantMicroseconds, instantMicrosends);
                     ++WritePosition;
                 } else {
+                    THolder<IEventHandle> pendingEvent(ev);
+                    TSchedulerCookieHolder pendingCookie(cookie);
                     TChunk* next = new TChunk();
                     volatile TEntry& entry = next->Entries[0];
-                    entry.Cookie = cookie;
-                    entry.Ev = ev;
+                    entry.Cookie = pendingCookie.Release();
+                    entry.Ev = pendingEvent.Release();
                     entry.InstantMicroseconds = instantMicrosends;
                     AtomicStore(&WriteTo->Next, next);
                     WriteTo = next;

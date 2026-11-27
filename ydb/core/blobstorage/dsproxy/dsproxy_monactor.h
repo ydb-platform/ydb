@@ -3,9 +3,11 @@
 #include "defs.h"
 #include "dsproxy_mon.h"
 
+#include <ydb/library/actors/core/event_bundle.h>
+
 namespace NKikimr {
 
-struct TEvThroughputAddRequest : public TEventLocal<TEvThroughputAddRequest, TEvBlobStorage::EvThroughputAddRequest> {
+struct TEvThroughputAddRequest final : TEventLocalBundled<TEvThroughputAddRequest, TEvBlobStorage::EvThroughputAddRequest> {
     NKikimrBlobStorage::EPutHandleClass PutHandleClass;
     ui64 Bytes;
 

@@ -2,6 +2,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/tx.h>
@@ -109,19 +110,6 @@ void UpsertDocs(TQueryClient& db, const TString& table = "/Root/Docs") {
             (3u, "cats sleep",          %s, "b"),
             (4u, "birds fly high",      %s, "b");
     )sql", table.c_str(), Emb(1).c_str(), Emb(2).c_str(), Emb(3).c_str(), Emb(4).c_str()));
-}
-
-void UpsertNewSnapshotDocs(TQueryClient& db) {
-    // Deliberately move both branch winners. The old hybrid order is [1,3,2,4], while this state
-    // makes keys 2/3 text-relevant and keys 4/2 vector-nearest. A mixed old/new branch read cannot
-    // accidentally reproduce both complete baseline orders.
-    ExecOk(db, Sprintf(R"sql(
-        UPSERT INTO `/Root/Docs` (Key, Text, Embedding, Category) VALUES
-            (1u, "dogs only",          %s, "a"),
-            (2u, "cats cats cats new", %s, "a"),
-            (3u, "cats new",           %s, "b"),
-            (4u, "birds only",         %s, "b");
-    )sql", Emb(3).c_str(), Emb(1).c_str(), Emb(4).c_str(), Emb(2).c_str()));
 }
 
 void AddFulltextIndex(TQueryClient& db, const TString& table = "/Root/Docs", const TString& name = "ft_idx") {
@@ -1075,7 +1063,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         AddPrefixedVectorIndex(db);
         SetupSearchTerms(db);
 
-        const TString query = TargetDeclWith(R"sql(
+        const TString select = TargetDeclWith(R"sql(
             DECLARE $termKey AS Uint64;
             DECLARE $category AS Utf8;
             DECLARE $minKey AS Uint64;
@@ -1083,6 +1071,8 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             $search = COALESCE((SELECT Term FROM `/Root/SearchTerms` WHERE Key = $termKey), "cats"u);
             SELECT Key FROM `/Root/Docs`
             WHERE Category = $category AND Key >= $minKey
+        )sql";
+        const TString query = select + R"sql(
                 AND Text LIKE ("%"u || $search || "%"u)
             ORDER BY HybridRank(
                 FullTextScore(Text, $search), Knn::CosineDistance(Embedding, $target),
@@ -1103,6 +1093,17 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         AssertKeySet(RunKeys(db, query, params(1, "a", 2), true), {});
         AssertKeySet(RunKeys(db, query, params(1, "missing"), true), {});
         AssertKeySet(RunKeys(db, query, params(4, "a"), true), {1u});
+
+        // In category a, only key 1 matches "cats" and key 2 is the closest vector.
+        // Both pass the residual filter, so the larger vector weight puts key 2 first.
+        const auto keys = RunKeys(db, select + R"sql(
+                AND (Text LIKE ("%"u || $search || "%"u) OR Text LIKE "%foxes%"u)
+            ORDER BY HybridRank(
+                FullTextScore(Text, $search), Knn::CosineDistance(Embedding, $target),
+                ("ft_idx", "vp_idx") AS Indexes, (4, 1) AS Limits, (1, 2) AS Weights)
+            LIMIT 4;
+        )sql", params(1, "a"));
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{2u, 1u}), keys);
     }
 
     Y_UNIT_TEST(SharedFulltextQueryRespectsPrefixValueRestrictions) {
@@ -1987,14 +1988,18 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         )sql");
         UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{3u, 2u, 4u}), offsetOnly);
 
-        auto page = RunKeys(db, TargetDecl + R"sql(
+        const auto params = TParamsBuilder().AddParam("$stem").Utf8("cat").Build().Build();
+        // Key 1 is in both branches. Key 2 is vector rank 1 and key 3 is fulltext rank 2.
+        // The fused order is [1, 2, 3], so the page needs a candidate from each branch.
+        const auto page = RunKeys(db, TargetDeclWith("DECLARE $stem AS Utf8;\n") + R"sql(
+            $search = $stem || "s"u;
             SELECT Key FROM `/Root/Docs`
             ORDER BY HybridRank(
-                FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
-                (4, 4) AS Limits)
+                FullTextScore(Text, $search), Knn::CosineDistance(Embedding, $target),
+                (2, 2) AS Limits)
             LIMIT 2 OFFSET 1;
-        )sql");
-        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{3u, 2u}), page);
+        )sql", params);
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{2u, 3u}), page);
     }
 
     // Nullable indexed columns are absent from the corresponding index branch, but remain eligible via
@@ -2280,9 +2285,8 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
     }
 
     Y_UNIT_TEST_TWIN(SnapshotConsistencyAcrossConcurrentBranchReads, Compact) {
-        // Fake threads let the test stop exactly on TEvRead boundaries. Stream-index writes are
-        // required for online maintenance of the compact fulltext layout; the legacy twin uses the
-        // same path so the only variable is the relevance storage format.
+        // Fake threads let the test stop at specific reads. Stream-index writes maintain
+        // both relevance layouts while the reader's snapshot is pinned.
         auto kikimr = MakeRunner(
             /*enableHybridSearch=*/true,
             /*enableCompactFulltextIndex=*/Compact,
@@ -2291,133 +2295,119 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         auto db = kikimr.GetQueryClient();
         kikimr.RunCall([&] {
             SetupDocs(db);
+            SetupSearchTerms(db);
             return true;
         });
 
-        auto hybridSession = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
         auto writerSession = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        const TString query = TargetDecl + R"sql(
-            SELECT Key FROM `/Root/Docs`
+        const TString query = TargetDeclWith("DECLARE $termKey AS Uint64;\n") + R"sql(
+            $search = Unwrap((SELECT Term FROM `/Root/SearchTerms` WHERE Key = $termKey));
+            SELECT Key, $search AS Search FROM `/Root/Docs`
             ORDER BY HybridRank(
-                FullTextScore(Text, "cats"),
+                FullTextScore(Text, $search),
                 Knn::CosineDistance(Embedding, $target),
-                (4, 4) AS Limits)
+                (4, 1) AS Limits, (1, 2) AS Weights)
             LIMIT 4;
         )sql";
-        auto parseHybrid = [&](TExecuteQueryResult result) {
+        const auto params = TParamsBuilder().AddParam("$termKey").Uint64(1).Build().Build();
+        const auto readSnapshot = [&] {
+            return db.ExecuteQuery(
+                query, TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(), params).ExtractValueSync();
+        };
+        const auto parseHybrid = [](const TExecuteQueryResult& result, const TString& expectedTerm) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             std::vector<ui64> keys;
             TResultSetParser parser(result.GetResultSet(0));
             while (parser.TryNextRow()) {
                 keys.push_back(*parser.ColumnParser("Key").GetOptionalUint64());
+                UNIT_ASSERT_VALUES_EQUAL(TString(parser.ColumnParser("Search").GetUtf8()), expectedTerm);
             }
             return keys;
         };
-        auto executeHybrid = [&](TSession& session) {
-            return parseHybrid(session.ExecuteQuery(
-                query, TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync());
-        };
 
-        const auto oldKeys = kikimr.RunCall([&] { return executeHybrid(hybridSession); });
-        kikimr.RunCall([&] {
-            UpsertNewSnapshotDocs(db);
-            return true;
-        });
-        const auto newKeys = kikimr.RunCall([&] { return executeHybrid(hybridSession); });
-        UNIT_ASSERT_VALUES_UNEQUAL_C(oldKeys, newKeys,
-            "controlled old/new corpora must have distinguishable hybrid orders");
-        kikimr.RunCall([&] {
-            UpsertDocs(db);
-            return true;
-        });
-        UNIT_ASSERT_VALUES_EQUAL(oldKeys, kikimr.RunCall([&] { return executeHybrid(hybridSession); }));
+        // Change the scalar term and both index branches in one write. The vector winner
+        // moves from key 2 to key 4, and the fulltext hits change from keys 1 and 3 to key 1.
+        const TString newSnapshot = Sprintf(R"sql(
+            UPSERT INTO `/Root/SearchTerms` (Key, Term) VALUES (1u, "dogs"u);
+            UPSERT INTO `/Root/Docs` (Key, Text, Embedding, Category) VALUES
+                (1u, "dogs only",          %s, "a"),
+                (2u, "cats cats cats new", %s, "a"),
+                (3u, "cats new",           %s, "b"),
+                (4u, "birds only",         %s, "b");
+        )sql", Emb(3).c_str(), Emb(1).c_str(), Emb(4).c_str(), Emb(2).c_str());
+        const std::vector<ui64> oldKeys{2u, 1u, 3u};
+        const std::vector<ui64> newKeys{4u, 1u};
 
         const auto edge = runtime.AllocateEdgeActor();
-        auto pathId = [&](const TString& path) {
+        const auto pathId = [&](const TString& path) {
             return DescribeTable(&kikimr.GetTestServer(), edge, path).GetPathId();
         };
-        const THashSet<ui64> fulltextPathIds = {
-            pathId("/Root/Docs/ft_idx/indexImplTable"),
-        };
-        const THashSet<ui64> vectorPathIds = {
-            pathId("/Root/Docs/vec_idx/indexImplPostingTable"),
-        };
+        const ui64 termPathId = pathId("/Root/SearchTerms");
+        const ui64 fulltextPathId = pathId("/Root/Docs/ft_idx/indexImplTable");
+        const ui64 vectorPathId = pathId("/Root/Docs/vec_idx/indexImplPostingTable");
 
-        std::vector<std::unique_ptr<IEventHandle>> blockedVectorReads;
-        bool allowVectorReads = false;
-        bool observeHybridReads = true;
-        size_t fulltextReads = 0;
-        size_t vectorReads = 0;
-        auto observer = [&](TAutoPtr<IEventHandle>& event) {
-            if (observeHybridReads && event->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
-                auto* read = event->Get<TEvDataShard::TEvRead>();
-                const ui64 tableId = read->Record.GetTableId().GetTableId();
-                if (fulltextPathIds.contains(tableId)) {
-                    ++fulltextReads;
-                } else if (vectorPathIds.contains(tableId)) {
-                    ++vectorReads;
-                    if (!allowVectorReads) {
-                        blockedVectorReads.emplace_back(event.Release());
-                        return TTestActorRuntime::EEventAction::DROP;
-                    }
-                }
+        for (bool blockTermRead : {true, false}) {
+            if (!blockTermRead) {
+                kikimr.RunCall([&] {
+                    UpsertDocs(db);
+                    ExecOk(db, R"sql(UPSERT INTO `/Root/SearchTerms` (Key, Term) VALUES (1u, "cats"u);)sql");
+                    return true;
+                });
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        auto previousObserver = runtime.SetObserverFunc(observer);
-        Y_DEFER {
-            runtime.SetObserverFunc(previousObserver);
-            for (auto& event : blockedVectorReads) {
-                if (event) {
-                    runtime.Send(event.release());
+            UNIT_ASSERT_VALUES_EQUAL(oldKeys, parseHybrid(kikimr.RunCall(readSnapshot), "cats"));
+
+            size_t termReads = 0;
+            size_t fulltextReads = 0;
+            size_t vectorReads = 0;
+            bool observeReads = true;
+            bool blockReads = true;
+            const ui64 blockedPathId = blockTermRead ? termPathId : vectorPathId;
+            NActors::TBlockEvents<TEvDataShard::TEvRead> blockedReads(runtime, [&](const auto& ev) {
+                if (!observeReads) {
+                    return false;
                 }
+                const ui64 tableId = ev->Get()->Record.GetTableId().GetTableId();
+                termReads += tableId == termPathId;
+                fulltextReads += tableId == fulltextPathId;
+                vectorReads += tableId == vectorPathId;
+                return blockReads && tableId == blockedPathId;
+            });
+            Y_DEFER {
+                blockedReads.Stop().Unblock();
+            };
+
+            auto future = kikimr.RunInThreadPool(readSnapshot);
+            // First commit before the scalar read reaches DataShard. Then repeat with
+            // the vector read held once both posting branches have issued reads.
+            runtime.WaitFor(blockTermRead ? "the search term read" : "both hybrid posting reads", [&] {
+                return future.IsReady() || (!blockedReads.empty() && (blockTermRead || fulltextReads > 0));
+            });
+            UNIT_ASSERT_C(!future.IsReady(), future.GetValueSync().GetIssues().ToString());
+            UNIT_ASSERT(!blockedReads.empty());
+            UNIT_ASSERT_GT(termReads, 0u);
+            if (blockTermRead) {
+                UNIT_ASSERT_VALUES_EQUAL(fulltextReads, 0u);
+                UNIT_ASSERT_VALUES_EQUAL(vectorReads, 0u);
             }
-        };
 
-        auto future = kikimr.RunInThreadPool([&] {
-            return db.ExecuteQuery(
-                query, TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
-        });
-        // Both branches belong to one execution stage, so waiting for a complete fulltext result while
-        // a vector posting read is blocked deadlocks that stage. The closest deterministic boundary is
-        // after both mutable posting reads have been emitted but before the captured vector read reaches
-        // DataShard. SnapshotRO also uses different wire markers for the two implementations, therefore
-        // the observable old/new result oracle below is the authoritative consistency check.
-        TDispatchOptions dispatch;
-        dispatch.FinalEvents.emplace_back([&](IEventHandle&) {
-            return !blockedVectorReads.empty() && fulltextReads > 0;
-        });
-        runtime.DispatchEvents(dispatch);
-        UNIT_ASSERT_C(!blockedVectorReads.empty(), "vector branch read must reach the deterministic barrier");
-        UNIT_ASSERT_C(fulltextReads > 0 && vectorReads > 0,
-            "both hybrid posting branches must reach the observed read boundary");
+            // Allow the writer's index maintenance reads through the barrier.
+            observeReads = false;
+            const auto writeResult = kikimr.RunCall([&] {
+                return writerSession.ExecuteQuery(
+                    newSnapshot, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(writeResult.GetStatus(), EStatus::SUCCESS, writeResult.GetIssues().ToString());
 
-        // Let writer-internal reads pass, but retain the already captured vector request. The write
-        // atomically changes both indexes and the main row versions while the hybrid snapshot is pinned.
-        allowVectorReads = true;
-        observeHybridReads = false;
-        auto writeResult = kikimr.RunCall([&] {
-            return writerSession.ExecuteQuery(
-                Sprintf(R"sql(
-                    UPSERT INTO `/Root/Docs` (Key, Text, Embedding, Category) VALUES
-                        (1u, "dogs only",          %s, "a"),
-                        (2u, "cats cats cats new", %s, "a"),
-                        (3u, "cats new",           %s, "b"),
-                        (4u, "birds only",         %s, "b");
-                )sql", Emb(3).c_str(), Emb(1).c_str(), Emb(4).c_str(), Emb(2).c_str()),
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-        });
-        UNIT_ASSERT_VALUES_EQUAL_C(writeResult.GetStatus(), EStatus::SUCCESS, writeResult.GetIssues().ToString());
-
-        for (auto& event : blockedVectorReads) {
-            runtime.Send(event.release());
+            blockReads = false;
+            observeReads = true;
+            blockedReads.Unblock();
+            UNIT_ASSERT_VALUES_EQUAL_C(oldKeys, parseHybrid(runtime.WaitFuture(future), "cats"),
+                "the scalar term and both posting branches must use the pinned snapshot");
+            UNIT_ASSERT_GT(fulltextReads, 0u);
+            UNIT_ASSERT_GT(vectorReads, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(newKeys, parseHybrid(kikimr.RunCall(readSnapshot), "dogs"));
         }
-        const auto interleavedKeys = parseHybrid(runtime.WaitFuture(future));
-        UNIT_ASSERT_VALUES_EQUAL_C(interleavedKeys, oldKeys,
-            "a query whose fulltext branch started before DML must not mix in the new vector/index version");
-        UNIT_ASSERT_VALUES_EQUAL(newKeys, kikimr.RunCall([&] { return executeHybrid(hybridSession); }));
     }
 
     // FusesBothBranches already covers RRF with a compact relevance index. Exercise the other built-in
@@ -2840,17 +2830,24 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UpsertDocs(db);
         AddPrefixedFulltextIndex(db);
         AddVectorIndex(db);
+        SetupSearchTerms(db);
 
-        auto keys = RunKeys(db, TargetDecl + R"sql(
+        const TString query = TargetDeclWith("DECLARE $termKey AS Uint64;\n") + R"sql(
+            $search = Unwrap((SELECT Term FROM `/Root/SearchTerms` WHERE Key = $termKey));
             SELECT Key FROM `/Root/Docs`
             WHERE Category = "a"
             ORDER BY HybridRank(
-                FullTextScore(Text, "cats"),
+                FullTextScore(Text, $search),
                 Knn::CosineDistance(Embedding, $target),
-                ("ft_idx", "vec_idx") AS Indexes)
+                ("ft_idx", "vec_idx") AS Indexes, (4, 1) AS Limits, (1, 2) AS Weights)
             LIMIT 4;
-        )sql");
-        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 2u}), keys);
+        )sql";
+        const auto term = [](ui64 key) {
+            return TParamsBuilder().AddParam("$termKey").Uint64(key).Build().Build();
+        };
+        // Cats contribute key 1 and the unprefixed vector index contributes key 2.
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{2u, 1u}), RunKeys(db, query, term(1), false));
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{2u}), RunKeys(db, query, term(2), true));
     }
 
     Y_UNIT_TEST(AutoDetectsPrefixedIndexes) {
@@ -3125,17 +3122,27 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         AddMultiPrefixedFulltextIndex(db);
         AddMultiPrefixedVectorIndex(db);
 
+        const auto params = TParamsBuilder()
+            .AddParam("$stem").Utf8("cat").Build()
+            .AddParam("$category").Utf8("a").Build()
+            .AddParam("$region").Utf8("r1").Build()
+            .Build();
         // WHERE order is deliberately reversed relative to the index prefix (Region, Category).
-        auto keys = RunKeys(db, TargetDecl + R"sql(
+        const auto keys = RunKeys(db, TargetDeclWith(R"sql(
+            DECLARE $stem AS Utf8;
+            DECLARE $category AS Utf8;
+            DECLARE $region AS Utf8;
+        )sql") + R"sql(
+            $search = $stem || "s"u;
             SELECT Key FROM `/Root/MultiDocs`
-            WHERE Category = "a" AND Region = "r1"
+            WHERE Category = $category AND Region = $region
             ORDER BY HybridRank(
-                FullTextScore(Text, "cats"),
+                FullTextScore(Text, $search),
                 Knn::CosineDistance(Embedding, $target),
-                ("ft_multi", "vec_multi") AS Indexes)
+                ("ft_multi", "vec_multi") AS Indexes, (4, 1) AS Limits, (1, 2) AS Weights)
             LIMIT 4;
-        )sql");
-        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 2u}), keys);
+        )sql", params);
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{2u, 1u}), keys);
     }
 
     Y_UNIT_TEST_TWIN(PrefixedVectorCrossProduct, EnableVectorSearchActor) {
@@ -3173,6 +3180,8 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             /*useRealThreads=*/true,
             /*enableVectorSearchActor=*/EnableVectorSearchActor);
         auto db = kikimr.GetQueryClient();
+        const auto params = TParamsBuilder().AddParam("$stem").Utf8("cat").Build().Build();
+        const TString prologue = TargetDeclWith("DECLARE $stem AS Utf8;\n") + "$search = $stem || \"s\"u;\n";
         for (const bool multiPrefix : {false, true}) {
             for (const bool nullablePrefix : {false, true}) {
                 for (const bool pkSuffix : {false, true}) {
@@ -3193,16 +3202,16 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
                             << ", nullablePrefix=" << nullablePrefix
                             << ", pkSuffix=" << pkSuffix
                             << ", fusion=" << fusionCase.Name;
-                        const auto keys = RunKeysWithContext(db, TargetDecl + Sprintf(R"sql(
+                        const auto keys = RunKeys(db, prologue + Sprintf(R"sql(
                             SELECT Key FROM `%s`
                             WHERE %s
                             ORDER BY HybridRank(
-                                FullTextScore(Text, "cats"),
+                                FullTextScore(Text, $search),
                                 Knn::%s(Embedding, $target),
                                 ("ft_idx", "vec_idx") AS Indexes%s)
                             LIMIT 4;
                         )sql", table.c_str(), predicates.c_str(), fusionCase.KnnFunction,
-                            fusionCase.Options), context);
+                            fusionCase.Options), params);
                         ++executedQueries;
 
                         if (pkSuffix) {

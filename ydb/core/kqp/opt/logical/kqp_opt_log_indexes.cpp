@@ -2214,6 +2214,23 @@ TExprNode::TPtr BuildFulltextQueryPrecompute(const TExprNode::TPtr& original,
     return value.Ptr();
 }
 
+void CollectEagerFulltextQueryNodes(const TExprNode& node, TNodeSet& eagerNodes)
+{
+    if (!eagerNodes.insert(&node).second) {
+        return;
+    }
+
+    // Only follow inputs known to be evaluated. Even a callable such as Replicate
+    // can skip its value when the count is zero.
+    if (node.IsCallable("Concat")) {
+        for (const auto& child : node.Children()) {
+            CollectEagerFulltextQueryNodes(*child, eagerNodes);
+        }
+    } else if (node.IsCallable({"If", "IfPresent", "Coalesce", "Just", "SafeCast", "StrictCast", "ToString", "Unwrap"})) {
+        CollectEagerFulltextQueryNodes(node.Head(), eagerNodes);
+    }
+}
+
 void BuildFulltextQueryPrecomputes(const TExprNode::TListType& queries,
     TNodeOnNodeOwnedMap& replacements, TExprContext& ctx,
     const TExprNode::TListType& residualQueries = {})
@@ -2222,13 +2239,21 @@ void BuildFulltextQueryPrecomputes(const TExprNode::TListType& queries,
     for (const auto& query : queries) {
         queryRoots.insert(query.Get());
     }
-    for (const auto& query : residualQueries) {
-        queryRoots.insert(query.Get());
+    if (!residualQueries.empty()) {
+        TNodeSet eagerNodes;
+        for (const auto& query : queries) {
+            CollectEagerFulltextQueryNodes(*query, eagerNodes);
+        }
+        for (const auto& query : residualQueries) {
+            if (eagerNodes.contains(query.Get())) {
+                queryRoots.insert(query.Get());
+            }
+        }
     }
 
     // Postorder makes a dependent query consume the shared precompute of every nested
-    // query root, regardless of predicate or hybrid-branch order. Only visit source
-    // queries: an independent residual expression must still run lazily on each row.
+    // query root, regardless of predicate or hybrid-branch order. Residual roots
+    // outside eagerly evaluated source inputs stay inline in the row filter.
     TNodeSet visitedNodes;
     for (const auto& query : queries) {
         VisitExpr(query, [](const TExprNode::TPtr&) { return true; }, [&](const TExprNode::TPtr& node) {

@@ -6035,10 +6035,8 @@ Y_UNIT_TEST_TWIN(PrefixedOneTwoThreeColumnsParameterizedOracle, Compact) {
 }
 
 Y_UNIT_TEST(SelectWithFulltextRelevancePrefixedPerPrefixStats) {
-    // Prefixed relevance index: BM25 statistics (DocCount, SumDocLength, document frequency) must be
-    // aggregated per prefix, not corpus-globally. The same document text under two prefixes scores
-    // differently because each prefix is its own corpus. Built via ALTER ADD INDEX so the plain and
-    // compact (delta-segment) formats share the same build path (compact has no online write maintenance).
+    // Each prefix has its own BM25 corpus, so identical text can score differently.
+    // Build the compact relevance index on populated data.
     auto kikimr = KikimrPrefix(true);
     auto db = kikimr.GetQueryClient();
 
@@ -6062,36 +6060,48 @@ Y_UNIT_TEST(SelectWithFulltextRelevancePrefixedPerPrefixStats) {
             WITH (tokenizer=standard, use_filter_lowercase=true);
     )sql");
 
-    // Prefix 100 corpus: N=2, SumDocLength=1+2=3, avgdl=1.5, df("cats")=1.
-    //   IDF = ln((2-1+0.5)/(1+0.5)+1) = ln(2); doc 1 |d|=1, tf=1
-    //   score = ln(2) * 1/(1 + 1.2*(1-0.75+0.75*1/1.5)) = 0.36481431
-    DoValidateRelevanceQuery(db,
-        R"sql(
-            SELECT Key, FulltextScore(Text, "%s") as Relevance FROM `/Root/Docs` VIEW `fulltext_idx`
-            WHERE UserId = 100 AND FulltextScore(Text, "%s") > 0
-            ORDER BY Relevance DESC
-        )sql",
-        {{"cats", {{1, 0.36481431}}}});
+    const TString query = R"sql(
+        DECLARE $userId AS Uint64;
+        DECLARE $termKey AS Uint64;
+        $search = Unwrap((SELECT Text FROM `/Root/Docs` WHERE Key = $termKey));
+        SELECT Key, FulltextScore(Text, %s) AS Relevance FROM `/Root/Docs` VIEW fulltext_idx
+        WHERE UserId = $userId AND FulltextScore(Text, %s) > 0
+        ORDER BY Relevance DESC;
+    )sql";
+    const auto readScores = [&](ui64 userId, const char* search) {
+        const auto params = TParamsBuilder()
+            .AddParam("$userId").Uint64(userId).Build()
+            .AddParam("$termKey").Uint64(1).Build()
+            .Build();
+        const auto result = db.ExecuteQuery(
+            Sprintf(query.c_str(), search, search), NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        return result.GetResultSet(0);
+    };
 
-    // Prefix 200 corpus: N=1, SumDocLength=1, avgdl=1.0, df("cats")=1.
-    //   IDF = ln((1-1+0.5)/(1+0.5)+1) = ln(4/3); doc 3 |d|=1, tf=1
-    //   score = ln(4/3) * 1/(1 + 1.2*(1-0.75+0.75*1/1.0)) = 0.13076458
-    DoValidateRelevanceQuery(db,
-        R"sql(
-            SELECT Key, FulltextScore(Text, "%s") as Relevance FROM `/Root/Docs` VIEW `fulltext_idx`
-            WHERE UserId = 200 AND FulltextScore(Text, "%s") > 0
-            ORDER BY Relevance DESC
-        )sql",
-        {{"cats", {{3, 0.13076458}}}});
+    struct TScoreCase {
+        ui64 UserId;
+        ui64 Key;
+        double Relevance;
+    };
+    const TScoreCase cases[] = {
+        {100, 1, 0.36481431}, // N=2, avgdl=1.5, IDF=ln(2).
+        {200, 3, 0.13076458}, // N=1, avgdl=1.0, IDF=ln(4/3).
+    };
+    for (const auto& [userId, key, relevance] : cases) {
+        const auto literal = readScores(userId, "\"cats\"u");
+        UNIT_ASSERT_VALUES_EQUAL(literal.RowsCount(), 1u);
+        TResultSetParser parser(literal);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser("Key").GetOptionalUint64(), key);
+        UNIT_ASSERT_DOUBLES_EQUAL(parser.ColumnParser("Relevance").GetDouble(), relevance, 1e-4);
+        const auto computed = readScores(userId, "$search");
+        CompareYson(FormatResultSetYson(literal), FormatResultSetYson(computed),
+            TStringBuilder() << "prefix " << userId);
+    }
 
     // A term present only in one prefix must not leak into another prefix's results.
-    DoValidateRelevanceQuery(db,
-        R"sql(
-            SELECT Key, FulltextScore(Text, "%s") as Relevance FROM `/Root/Docs` VIEW `fulltext_idx`
-            WHERE UserId = 200 AND FulltextScore(Text, "%s") > 0
-            ORDER BY Relevance DESC
-        )sql",
-        {{"dogs", {}}});
+    UNIT_ASSERT_VALUES_EQUAL(readScores(200, "\"dogs\"u").RowsCount(), 0u);
 }
 
 Y_UNIT_TEST_TWIN(SelectWithFulltextRelevancePrefixedWriteMaintenance, KeyPart) {

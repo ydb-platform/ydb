@@ -1,5 +1,10 @@
 #include "kqp_fulltext_ut_common.h"
 
+#include <ydb/core/base/table_index.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+
+#include <library/cpp/json/json_reader.h>
+
 namespace NKikimr::NKqp {
 namespace {
 
@@ -164,14 +169,11 @@ struct TExpressionFixture {
         UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, query);
     }
 
-    TString ExpectIds(const TString& query, const TVector<ui64>& expected, const NYdb::TParams& params,
-        std::optional<bool> fromCache = std::nullopt)
+    NYdb::NQuery::TExecuteQueryResult ExpectResult(const TString& query, const TVector<ui64>& expected,
+        const NYdb::TParams& params, std::optional<bool> fromCache, NYdb::NQuery::EStatsMode statsMode)
     {
-        NYdb::NQuery::TExecuteQuerySettings settings;
-        if (fromCache) {
-            settings.StatsMode(NYdb::NQuery::EStatsMode::Basic);
-        }
-        const auto result = Db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params, settings).ExtractValueSync();
+        const auto settings = NYdb::NQuery::TExecuteQuerySettings().StatsMode(statsMode);
+        auto result = Db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params, settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, query << "\n" << result.GetIssues().ToString());
         if (fromCache) {
             UNIT_ASSERT(result.GetStats());
@@ -181,6 +183,14 @@ struct TExpressionFixture {
         }
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 1, query);
         CheckIds(result.GetResultSet(0), expected, query);
+        return result;
+    }
+
+    TString ExpectIds(const TString& query, const TVector<ui64>& expected, const NYdb::TParams& params,
+        std::optional<bool> fromCache = std::nullopt)
+    {
+        const auto statsMode = fromCache ? NYdb::NQuery::EStatsMode::Basic : NYdb::NQuery::EStatsMode::None;
+        const auto result = ExpectResult(query, expected, params, fromCache, statsMode);
         return NYdb::FormatResultSetYson(result.GetResultSet(0));
     }
 
@@ -239,6 +249,19 @@ Y_UNIT_TEST_QUAD(ScalarExpressions, Compact, Utf8) {
     fixture.ExpectIds(fixture.Query("COALESCE(Nothing(String?), CAST($q AS String))"), {1, 3, 5});
     fixture.ExpectIds(fixture.Query("COALESCE(CAST($q AS Utf8), \"\"u)"), {1, 3, 5});
     fixture.ExpectIds(fixture.Query("IF($choose, $q, $other)"), {9}, fixture.Parameters("альфа"));
+}
+
+Y_UNIT_TEST_QUAD(ComputedPlainIndexQueriesAcrossLayouts, Compact, Prefixed) {
+    TExpressionFixture fixture({.Compact = Compact, .Prefixed = Prefixed});
+    const TString query = fixture.Query("$search", R"sql(
+        $term = (SELECT Pattern FROM `/Root/Patterns` WHERE Id = $lo);
+        $search = COALESCE($term, $q) || $other;
+    )sql");
+    const TVector<ui64> alpha = Prefixed ? TVector<ui64>{1, 5} : TVector<ui64>{1, 3, 5};
+    fixture.ExpectIds(query, alpha, fixture.Parameters("absent", "", true, 1), false);
+    fixture.ExpectIds(query, {5}, fixture.Parameters("absent", " beta", true, 1), true);
+    fixture.ExpectIds(query, {2, 5}, fixture.Parameters("absent", "", true, 2), true);
+    fixture.ExpectIds(query, {}, fixture.Parameters("absent", "", true, 20), true);
 }
 
 Y_UNIT_TEST_QUAD(SubqueryRanges, Compact, Utf8) {
@@ -828,6 +851,7 @@ Y_UNIT_TEST_QUAD(WildcardPostfilter, Compact, Utf8) {
 }
 
 Y_UNIT_TEST_QUAD(CachedWildcardPrecomputeSwitchesBetweenIndexAndScan, Compact, Utf8) {
+    const TString postingTable = TStringBuilder() << "/Root/Docs/fulltext_idx/" << NTableIndex::ImplTable;
     for (bool edge : {false, true}) {
         TExpressionFixture fixture({.Compact = Compact, .Utf8 = Utf8, .Prefixed = true, .Ngram = !edge, .EdgeNgram = edge});
         const TString query = fixture.Query("$search", R"sql(
@@ -845,17 +869,51 @@ Y_UNIT_TEST_QUAD(CachedWildcardPrecomputeSwitchesBetweenIndexAndScan, Compact, U
             {"_eta", {2}},
             {"%absent%", {}},
             {"%alpha%", {1, 4, 5}},
+            {"alpha", {1}},
+        };
+        const auto params = fixture.Parameters();
+        const auto run = [&](const TVector<ui64>& expected, bool fromCache) {
+            return fixture.ExpectResult(query, expected, params, fromCache, NYdb::NQuery::EStatsMode::Full);
         };
         bool first = true;
         for (const auto& [pattern, expected] : cases) {
             fixture.Execute(Sprintf("UPSERT INTO `/Root/Patterns` (Id, Pattern) VALUES (1ul, \"%s\");", pattern.c_str()));
-            fixture.ExpectIds(query, expected, !first);
+            const auto result = run(expected, !first);
+            if (first) {
+                const auto queryPlan = result.GetStats()->GetPlan();
+                UNIT_ASSERT(queryPlan);
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(*queryPlan, &plan, true);
+                const auto indexRead = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
+                UNIT_ASSERT_VALUES_EQUAL_C(indexRead["Index"].GetStringSafe(), "fulltext_idx", *queryPlan);
+                const auto fallback = FindPlanNodeByKv(plan, "IndexSelectionInfo",
+                    "fulltext_idx: fallback when analyzer extracts no search terms");
+                UNIT_ASSERT_VALUES_EQUAL_C(fallback["Name"].GetStringSafe(), "TableFullScan", *queryPlan);
+            }
+            if (pattern == "alpha") {
+                // The index looks up four candidates in p1, of which only one matches exactly.
+                AssertTableStats(result, "/Root/Docs", {.ExpectedReads = 4});
+                const auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                ui64 postingReads = 0;
+                for (const auto& phase : stats.query_phases()) {
+                    for (const auto& access : phase.table_access()) {
+                        if (access.name() == postingTable) {
+                            postingReads += access.reads().rows();
+                        }
+                    }
+                }
+                UNIT_ASSERT_GT(postingReads, 0);
+            } else if (pattern == "%a%") {
+                // Scope is outside the primary key, so the fallback reads all nine rows.
+                AssertTableStats(result, "/Root/Docs", {.ExpectedReads = 9});
+                AssertTableStats(result, postingTable, {.ExpectedReads = 0});
+            }
             first = false;
         }
         fixture.Execute("DELETE FROM `/Root/Patterns` WHERE Id = 1ul;");
-        fixture.ExpectIds(query, {2}, true);
+        run({2}, true);
         fixture.Execute("UPSERT INTO `/Root/Patterns` (Id, Pattern) VALUES (1ul, NULL);");
-        fixture.ExpectIds(query, {2}, true);
+        run({2}, true);
     }
 }
 
@@ -984,26 +1042,44 @@ Y_UNIT_TEST_QUAD(ExplicitPredicateKeepsStringFilters, Compact, Score) {
 
 Y_UNIT_TEST_TWIN(DiscardedPatternDoesNotRunForEmptyInput, Compact) {
     TExpressionFixture fixture({.Compact = Compact, .Ngram = true});
+    const TString declarations = R"sql(
+        DECLARE $q AS Utf8;
+        DECLARE $suffix AS Utf8?;
+        DECLARE $choose AS Bool;
+    )sql";
+    const auto parameters = [](const TString& q, std::optional<std::string> suffix, bool choose = true) {
+        return NYdb::TParamsBuilder()
+            .AddParam("$q").Utf8(q).Build()
+            .AddParam("$suffix").OptionalUtf8(suffix).Build()
+            .AddParam("$choose").Bool(choose).Build()
+            .Build();
+    };
     for (const TString& predicate : {
             TString("StartsWith(Text, Unwrap($suffix))"),
             TString("Text = Unwrap($suffix)")}) {
-        const TString query = R"sql(
-            DECLARE $q AS Utf8;
-            DECLARE $suffix AS Utf8?;
+        const TString query = declarations + R"sql(
             SELECT Id FROM `/Root/Docs` VIEW fulltext_idx
             WHERE FulltextMatch(Text, $q) AND
         )sql" + predicate + " ORDER BY Id;";
-        const auto parameters = [](const TString& q, std::optional<std::string> suffix) {
-            return NYdb::TParamsBuilder()
-                .AddParam("$q").Utf8(q).Build()
-                .AddParam("$suffix").OptionalUtf8(suffix).Build()
-                .Build();
-        };
         fixture.ExpectIds(query, {}, parameters("absent", std::nullopt));
         fixture.ExpectError(query, "Failed to unwrap empty optional", parameters("alpha", std::nullopt),
             NYdb::EStatus::PRECONDITION_FAILED);
         fixture.ExpectIds(query, predicate.StartsWith("StartsWith") ? TVector<ui64>{1, 3, 4, 5} : TVector<ui64>{1, 3},
             parameters("alpha", std::string("alpha")));
+    }
+
+    for (const TString& search : {
+            TString("IF($choose, $q, $p)"),
+            TString("COALESCE(ListHead(ListReplicate($p, IF($choose, 0ul, 1ul))), $q)")}) {
+        const TString query = declarations + Sprintf(R"sql(
+            $p = Unwrap($suffix);
+            SELECT Id FROM `/Root/Docs` VIEW fulltext_idx
+            WHERE FulltextMatch(Text, %s) AND StartsWith(Text, $p)
+            ORDER BY Id;
+        )sql", search.c_str());
+        fixture.ExpectIds(query, {}, parameters("absent", std::nullopt));
+        fixture.ExpectError(query, "Failed to unwrap empty optional", parameters("absent", std::nullopt, false),
+            NYdb::EStatus::PRECONDITION_FAILED);
     }
 }
 

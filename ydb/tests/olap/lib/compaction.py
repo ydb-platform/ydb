@@ -9,6 +9,8 @@ import re
 import time
 import requests
 import logging
+import ydb
+from ydb import _apis, issues
 
 from urllib.parse import quote_plus
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
@@ -42,7 +44,8 @@ def load_json(url):
 
 
 def describe_table(path):
-    url = URL_TABLE_DESCRIPTION.format(url_base=YdbCluster._get_service_url(), path=quote_plus(YdbCluster.get_full_tables_path(path)))
+    full_path = path if path.startswith('/') else YdbCluster.get_full_tables_path(path)
+    url = URL_TABLE_DESCRIPTION.format(url_base=YdbCluster._get_service_url(), path=quote_plus(full_path))
     return load_json(url)
 
 
@@ -118,6 +121,36 @@ def force_datashard_compact_legacy(tables: list[str], timeout: float, threads: i
     with ThreadPool(threads) as pool:
         for _ in pool.imap_unordered(process_task, generate_tasks()):
             pass
+
+
+@allure.step
+def force_datashard_compact_sdk(driver, tables: list[str], timeout: float):
+    deadline = time.monotonic() + timeout
+
+    def request_settings(table):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f'Compacting {table} timed out after {timeout}s')
+        return ydb.BaseRequestSettings().with_timeout(min(remaining, 30))
+
+    with ydb.SessionPool(driver) as pool, pool.checkout(timeout=min(timeout, 10)) as session:
+        for table in tables:
+            # The Python SDK does not expose CompactItem through Session.alter_table.
+            request = _apis.ydb_table.AlterTableRequest(session_id=session.session_id, path=table)
+            request.operation_params.operation_mode = _apis.ydb_operation.OperationParams.ASYNC
+            request.compact.cascade = True
+            request.compact.max_shards_in_flight = 1000
+            operation = driver(request, _apis.TableService.Stub, _apis.TableService.AlterTable,
+                               settings=request_settings(table), preferred_endpoint=session._state.endpoint).operation
+            while not operation.ready:
+                issues._process_response(operation)
+                if not operation.id:
+                    raise RuntimeError(f'YDB returned no compaction operation ID for {table}')
+                time.sleep(min(1, max(0, deadline - time.monotonic())))
+                operation = driver(_apis.ydb_operation.GetOperationRequest(id=operation.id),
+                                   _apis.OperationService.Stub, _apis.OperationService.GetOperation,
+                                   settings=request_settings(table)).operation
+            issues._process_response(operation)
 
 
 def column_compaction_query(tables):

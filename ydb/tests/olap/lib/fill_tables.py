@@ -17,7 +17,7 @@ from uuid import uuid4
 
 import requests
 
-from .compaction import wait_column_compaction
+from .compaction import force_datashard_compact_legacy, force_datashard_compact_sdk, wait_column_compaction
 from .remote_execution import LongRemoteExecution, copy_file, execute_command, is_localhost
 from .ydb_cluster import YdbCluster
 
@@ -246,18 +246,37 @@ class TableFiller:
             for job in jobs:
                 job.result()
 
-    def _wait_compaction(self, dataset: Dataset, timeout: float):
+    def _wait_compaction(self, dataset: Dataset, timeout: float, datashard_compaction: str):
         cli = [self.cli, '-e', YdbCluster.ydb_endpoint, '-d', self.database, *self.auth]
         path = f'{self.database}/{dataset.path.strip("/")}'
         entries = json.loads(execute_command(
             'localhost', cli + ['scheme', 'ls', '--format', 'json', '-l', '-R', path],
             timeout=60,
         ).stdout)
-        if isinstance(entries, dict):
-            tables = [path] if entries['type'] == 'column-table' else []
-        else:
-            tables = [f'{path}/{entry["path"]}' for entry in entries if entry['type'] == 'column-table']
-        if not tables:
+        tables = [(path, entries['type'])] if isinstance(entries, dict) else [
+            (f'{path}/{entry["path"]}', entry['type']) for entry in entries
+        ]
+        row_tables = [table for table, kind in tables if kind == 'table']
+        column_tables = [table for table, kind in tables if kind == 'column-table']
+        if row_tables:
+            LOGGER.info('Compacting %d DataShard tables under %s using %s', len(row_tables), path, datashard_compaction)
+            if datashard_compaction == 'legacy':
+                if not YdbCluster.ydb_mon_port:
+                    raise ValueError('Legacy DataShard compaction requires a monitoring port')
+                force_datashard_compact_legacy(row_tables, timeout)
+            elif self.auth:
+                option, credentials_path = self.auth
+                oauth = Path(credentials_path).read_text().strip() if option == '--token-file' else None
+                iam_file = credentials_path if option == '--sa-key-file' else None
+                driver = YdbCluster._create_ydb_driver(YdbCluster.ydb_endpoint, self.database, oauth=oauth, iam_file=iam_file)
+                try:
+                    force_datashard_compact_sdk(driver, row_tables, timeout)
+                finally:
+                    driver.stop()
+            else:
+                force_datashard_compact_sdk(YdbCluster.get_ydb_driver(), row_tables, timeout)
+
+        if not column_tables:
             return
 
         def execute_query(query, remaining):
@@ -267,11 +286,13 @@ class TableFiller:
             )
             return json.loads(result.stdout)
 
-        LOGGER.info('Waiting for compaction of %s (%d column tables)', path, len(tables))
-        wait_column_compaction(tables, execute_query, timeout=timeout, interval=5)
+        LOGGER.info('Waiting for compaction of %s (%d column tables)', path, len(column_tables))
+        wait_column_compaction(column_tables, execute_query, timeout=timeout, interval=5)
         LOGGER.info('Compaction complete for %s', path)
 
-    def fill(self, datasets: list[Dataset], *, initialize=True, compaction_timeout=3600):
+    def fill(self, datasets: list[Dataset], *, initialize=True, compaction_timeout=3600, datashard_compaction='sdk'):
+        if datashard_compaction not in ('sdk', 'legacy'):
+            raise ValueError(f'Unknown DataShard compaction method: {datashard_compaction}')
         if compaction_timeout < 0:
             raise ValueError('Compaction timeout must be nonnegative')
         paths = sorted(Path(dataset.path.strip('/')).parts for dataset in datasets)
@@ -296,7 +317,7 @@ class TableFiller:
             for job in jobs:
                 job.result()
             if compaction_timeout:
-                jobs = [executor.submit(self._wait_compaction, dataset, compaction_timeout) for dataset in datasets]
+                jobs = [executor.submit(self._wait_compaction, dataset, compaction_timeout, datashard_compaction) for dataset in datasets]
                 for job in jobs:
                     job.result()
 
@@ -313,7 +334,9 @@ def main():
     parser.add_argument('--resource-parts', type=int, default=16)
     parser.add_argument('--attempts', type=int, default=3)
     parser.add_argument('--compaction-timeout', type=int, default=3600,
-                        help='Seconds to wait for column table compaction (default: 3600)')
+                        help='Seconds to wait for table compaction (default: 3600)')
+    parser.add_argument('--datashard-compaction', choices=('sdk', 'legacy'), default='sdk',
+                        help='DataShard compaction method (default: sdk)')
     auth = parser.add_mutually_exclusive_group()
     auth.add_argument('--sa-key-file', default='')
     auth.add_argument('--token-file', default='')
@@ -351,4 +374,4 @@ def main():
     YdbCluster.reset(args.endpoint, args.database.lstrip('/'), args.mon_port, None)
     with TableFiller(args.cli, static_nodes=static_nodes, key_file=args.sa_key_file, token_file=args.token_file,
                      resource_parts=args.resource_parts, attempts=args.attempts) as filler:
-        filler.fill(datasets, compaction_timeout=args.compaction_timeout)
+        filler.fill(datasets, compaction_timeout=args.compaction_timeout, datashard_compaction=args.datashard_compaction)

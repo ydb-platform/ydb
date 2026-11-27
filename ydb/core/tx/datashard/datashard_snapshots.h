@@ -228,7 +228,7 @@ private:
     TSnapshotRetentionPolicy GetSnapshotRetentionPolicy() const;
     TRowVersion GetLeastAcquiredPipelineSnapshot() const;
     bool CleanupRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to,
-        const TSnapshotRetentionPolicy& policy);
+        const TSnapshotRetentionPolicy& policy, const TPathId* onlyTable = nullptr);
 
     void DoRemoveSnapshot(NTable::TDatabase& db, const TSnapshotKey& key);
 

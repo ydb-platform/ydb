@@ -159,12 +159,11 @@ public:
             rowBuilder.AddValue(MakeUnversionedUint64Value(partitionIndex, PartitionIndexColumnId_));
             keyRowsBuilder.AddRow(rowBuilder.GetRow());
 
-            TVersionedLookupRowsOptions options;
-            options.RetentionConfig = New<TRetentionConfig>();
-            options.RetentionConfig->MaxDataVersions = 1;
+            TLookupRowsOptions options;
+            options.ColumnFilter = TColumnFilter({OffsetColumnId_});
             options.ReplicaConsistency = EReplicaConsistency::Sync;
 
-            auto partitionRowset = WaitFor(consumerTransaction->VersionedLookupRows(ConsumerPath_, ConsumerNameTable_, keyRowsBuilder.Build(), options))
+            auto partitionRowset = WaitFor(consumerTransaction->LookupRows(ConsumerPath_, ConsumerNameTable_, keyRowsBuilder.Build(), options))
                 .ValueOrThrow()
                 .Rowset;
             const auto& rows = partitionRowset->GetRows();
@@ -179,12 +178,10 @@ public:
                 partitionIndex);
 
             i64 currentOffset = 0;
-            auto offsetTimestamp = NullTimestamp;
             // If the key doesn't exist, or the offset value is null, the offset is -1 in BigRT terms and 0 in ours.
             if (!rows.empty()) {
-                const auto& offsetValue = rows[0].Values()[0];
+                const auto& offsetValue = rows[0][0];
                 YT_VERIFY(offsetValue.Id == offsetRowsetColumnId);
-                offsetTimestamp = offsetValue.Timestamp;
                 if (offsetValue.Type != EValueType::Null) {
                     currentOffset = FromUnversionedValue<i64>(offsetValue);
                     if (DecrementOffset_) {
@@ -196,8 +193,7 @@ public:
                 YT_TLOG_DEBUG("Read current offset")
                     .With("Consumer", ConsumerPath_)
                     .With("PartitionIndex", partitionIndex)
-                    .With("Offset", currentOffset)
-                    .With("Timestamp", offsetTimestamp);
+                    .With("Offset", currentOffset);
             }
 
             if (currentOffset != *oldOffset) {
@@ -211,8 +207,7 @@ public:
                         .With("partition", partitionIndex)
                         .With("consumer", ConsumerPath_)
                         .With("expected_offset", *oldOffset)
-                        .With("current_offset", currentOffset)
-                        .With("current_offset_timestamp", offsetTimestamp);
+                        .With("current_offset", currentOffset);
             }
         }
 

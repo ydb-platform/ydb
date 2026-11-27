@@ -142,7 +142,40 @@ if __name__ == '__main__':
 
     thinlto_cache.preprocess(opts, cmd)
     cmd = with_lld_threads(cmd, opts.arch, os.environ.get('_YA_LLD_THREADS'))
-    rc = subprocess.call(cmd, shell=False, stderr=sys.stderr, stdout=stdout)
+    # Temporary diagnostic for the ydbd linker comparison PRs.
+    expanded = pcf.get_args(cmd)
+    output = expanded[expanded.index('-o') + 1] if '-o' in expanded else ''
+    if opts.arch == 'LINUX' and ('/' + output).endswith('/ydb/apps/ydbd/ydbd'):
+        import time
+
+        started = time.time()
+        clock_started = time.monotonic()
+        with open(output + '.linker.log', 'w') as linker_log:
+            proc = subprocess.Popen(cmd, stderr=linker_log, stdout=linker_log)
+            _, status, usage = os.wait4(proc.pid, 0)
+        rc = os.waitstatus_to_exitcode(status)
+        proc.returncode = rc
+        metrics = {
+            'started': started,
+            'wall_seconds': time.monotonic() - clock_started,
+            'user_seconds': usage.ru_utime,
+            'system_seconds': usage.ru_stime,
+            'max_rss_kib': usage.ru_maxrss,
+            'read_bytes': usage.ru_inblock * 512,
+            'write_bytes': usage.ru_oublock * 512,
+            'minor_faults': usage.ru_minflt,
+            'major_faults': usage.ru_majflt,
+            'voluntary_context_switches': usage.ru_nvcsw,
+            'involuntary_context_switches': usage.ru_nivcsw,
+            'exit_code': rc,
+            'command': expanded,
+        }
+        with open(output + '.link-stats.json', 'w') as report:
+            json.dump(metrics, report, indent=2)
+        with open(output + '.linker.log') as linker_log:
+            sys.stderr.write(linker_log.read())
+    else:
+        rc = subprocess.call(cmd, shell=False, stderr=sys.stderr, stdout=stdout)
     thinlto_cache.postprocess(opts)
 
     sys.exit(rc)

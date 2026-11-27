@@ -177,10 +177,13 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             if (pipeline) {
                 UNIT_ASSERT(FindAttribute(*pipeline, "ydb.tx_id"));
                 bool selected = false;
+                bool planReady = false;
                 for (const auto& event : pipeline->events()) {
                     selected |= event.name() == "operation selected";
+                    planReady |= event.name() == "plan queue: ready candidate" || event.name() == "plan queue: ready";
                 }
                 UNIT_ASSERT(selected);
+                UNIT_ASSERT(planReady);
             }
         }
     }

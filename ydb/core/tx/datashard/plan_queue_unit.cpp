@@ -36,14 +36,22 @@ TPlanQueueUnit::~TPlanQueueUnit()
 
 bool TPlanQueueUnit::IsReadyToExecute(TOperation::TPtr op) const
 {
-    if (Pipeline.OutOfOrderLimits())
+    if (Pipeline.OutOfOrderLimits()) {
+        op->TracePipelineEvent("plan queue: out-of-order limit");
         return false;
-    if (!Pipeline.CanRunOp(*op))
+    }
+    if (!Pipeline.CanRunOp(*op)) {
+        op->TracePipelineEvent("plan queue: operation cannot run");
         return false;
+    }
 
     auto step = Pipeline.GetLastActivePlannedOpStep();
     auto txId = Pipeline.GetLastActivePlannedOpId();
-    return op == Pipeline.GetNextPlannedOp(step, txId);
+    const auto next = Pipeline.GetNextPlannedOp(step, txId);
+    const bool ready = op == next;
+    op->TracePipelineEvent(ready ? "plan queue: ready" : "plan queue: preceding operation",
+        ready ? nullptr : next.Get());
+    return ready;
 }
 
 TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
@@ -73,6 +81,7 @@ TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
     }
 
     if (op->IsInProgress()) {
+        op->TracePipelineEvent("plan queue: already in progress");
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit::FindReadyOperation: found next planned operation is already in progress",
             {"tabletId", DataShard.TabletID()},
             {"operation", *op});
@@ -80,6 +89,7 @@ TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
     }
 
     if (!Pipeline.CanRunOp(*op)) {
+        op->TracePipelineEvent("plan queue: operation cannot run");
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit::FindReadyOperation: cannot run found next planned operation",
             {"tabletId", DataShard.TabletID()},
             {"operation", *op});
@@ -87,6 +97,7 @@ TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
     }
 
     if (op->GetCurrentUnit() != Kind) {
+        op->TracePipelineEvent("plan queue: another unit");
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit::FindReadyOperation: found next planned operation is executing on another unit",
             {"tabletId", DataShard.TabletID()},
             {"operation", *op},
@@ -94,6 +105,7 @@ TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
         return nullptr;
     }
 
+    op->TracePipelineEvent("plan queue: ready candidate");
     return op;
 }
 

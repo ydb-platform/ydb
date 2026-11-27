@@ -582,7 +582,7 @@ public:
     using EResultStatus = NKikimrTxDataShard::TEvProposeTransactionResult::EStatus;
 
     virtual ~TOperation();
-    void TracePipelineEvent(const char* name, const TOperation* cause = nullptr, bool dryRun = false);
+    void TracePipelineEvent(const char* name, const TOperation* cause = nullptr, bool dryRun = false, ui64 externalCauseTxId = 0);
     void FinishPipelineTrace(const char* boundary);
 
     TActorId GetTarget() const { return Target; }

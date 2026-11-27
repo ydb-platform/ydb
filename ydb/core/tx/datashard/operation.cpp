@@ -55,7 +55,7 @@ TOperation::~TOperation() {
     FinishPipelineTrace("operation_destroyed");
 }
 
-void TOperation::TracePipelineEvent(const char* name, const TOperation* cause, bool dryRun) {
+void TOperation::TracePipelineEvent(const char* name, const TOperation* cause, bool dryRun, ui64 externalCauseTxId) {
     if (PipelineTraceFinished) {
         return;
     }
@@ -107,6 +107,10 @@ void TOperation::TracePipelineEvent(const char* name, const TOperation* cause, b
         }
         attributes["blocker_ids_truncated"] = GetDependencies().size() + GetSpecialDependencies().size() + GetVolatileDependencies().size() > blockers.size();
         attributes["blocker_ids"] = std::move(blockers);
+        if (externalCauseTxId) {
+            attributes["cause_tx_id"] = static_cast<i64>(externalCauseTxId);
+            attributes["cause_trace_context_available"] = false;
+        }
         if (cause) {
             attributes["cause_tx_id"] = static_cast<i64>(cause->GetTxId());
             attributes["cause_step"] = static_cast<i64>(cause->GetStep());
@@ -308,6 +312,8 @@ void TOperation::AddVolatileDependency(ui64 txId) {
 
 void TOperation::RemoveVolatileDependency(ui64 txId, bool success) {
     if (VolatileDependencies.erase(txId)) {
+        TracePipelineEvent(success ? "volatile dependency committed" : "volatile dependency aborted",
+            nullptr, false, txId);
         if (!success) {
             VolatileDependenciesAborted = true;
         }

@@ -43,6 +43,9 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
             ui8 level = 0;
             const auto requests = runtime.AddObserver<TEvTxProxy::TEvAcquireReadStep>(
                 [&](TEvTxProxy::TEvAcquireReadStep::TPtr& ev) {
+                    if (ev->Sender != sender) {
+                        return;
+                    }
                     ev->TraceId = level ? NWilson::TTraceId::NewTraceId(level, 4095) : NWilson::TTraceId();
                 });
             std::vector<NWilson::NTraceProto::Span> spans;

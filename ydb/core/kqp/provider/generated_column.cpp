@@ -2,6 +2,7 @@
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -14,10 +15,6 @@
 #include <util/string/builder.h>
 
 namespace NYql {
-
-TString AssembleGeneratedQuery(const TString& exprBody) {
-    return TStringBuilder() << "SELECT " << exprBody << " FROM `__yql_generated_column_source`;";
-}
 
 namespace {
 
@@ -233,6 +230,332 @@ bool UsesWholeRow(const TExprNode& node, const TExprNode* rowArg, TNodeSet& visi
     return false;
 }
 
+const THashSet<TStringBuf>& AllowedGeneratedCallables() {
+    static const THashSet<TStringBuf> callables = {
+        // Type expressions used by constructors and casts.
+        "DataType",
+        "DictType",
+        "ListType",
+        "OptionalType",
+        "PgType",
+        "StructType",
+        "TaggedType",
+        "TupleType",
+        "VariantType",
+        "VoidType",
+
+        // Values, optionals and row-local containers.
+        "AsDict",
+        "AsList",
+        "AsStruct",
+        "AsTagged",
+        "AsVariant",
+        "Dict",
+        "Enum",
+        "Just",
+        "JsonVariables",
+        "List",
+        "Nothing",
+        "Null",
+        "Struct",
+        "ToList",
+        "ToOptional",
+        "Untag",
+        "Variant",
+        "Void",
+
+        // Scalar operations.
+        "!=",
+        "%",
+        "*",
+        "+",
+        "-",
+        "/",
+        "<",
+        "<=",
+        "==",
+        ">",
+        ">=",
+        "Abs",
+        "AddTimezone",
+        "And",
+        "BitCast",
+        "BitNot",
+        "ByteAt",
+        "CheckedAdd",
+        "CheckedDiv",
+        "CheckedMinus",
+        "CheckedMod",
+        "CheckedMul",
+        "CheckedSub",
+        "Coalesce",
+        "Concat",
+        "Contains",
+        "Convert",
+        "CountBits",
+        "Dec",
+        "Default",
+        "EndsWith",
+        "EndsWithIgnoreCase",
+        "EqualsIgnoreCase",
+        "Exists",
+        "Find",
+        "FromString",
+        "If",
+        "IfPresent",
+        "IfStrict",
+        "Inc",
+        "IsDistinctFrom",
+        "Length",
+        "Max",
+        "Member",
+        "Min",
+        "Minus",
+        "Mod",
+        "Mul",
+        "Not",
+        "Nth",
+        "Or",
+        "Plus",
+        "RFind",
+        "RemoveTimezone",
+        "SafeCast",
+        "ShiftLeft",
+        "ShiftRight",
+        "Size",
+        "SqlConcat",
+        "SqlIn",
+        "StartsWith",
+        "StartsWithIgnoreCase",
+        "StringContains",
+        "StringContainsIgnoreCase",
+        "Sub",
+        "Substring",
+        "ToBytes",
+        "ToString",
+        "Xor",
+
+        // Deterministic, order-preserving transformations of collections
+        // constructed from the current row. Lambdas and their bodies are
+        // validated recursively.
+        "Append",
+        "DictFromKeys",
+        "Enumerate",
+        "FlatListIf",
+        "FlatOptionalIf",
+        "Fold",
+        "Fold1",
+        "Head",
+        "Insert",
+        "Last",
+        "ListIf",
+        "Lookup",
+        "OptionalIf",
+        "OrderedExtend",
+        "OrderedExtract",
+        "OrderedFilter",
+        "OrderedFlatMap",
+        "OrderedFlatMapWarn",
+        "OrderedMap",
+        "Prepend",
+        "Reverse",
+        "Skip",
+        "Take",
+        "UniqStable",
+        "Zip",
+        "ZipAll",
+
+        // Pure structural and optimizer-only wrappers.
+        "AddMember",
+        "DependsOn",
+        "ForceRemoveMember",
+        "Guess",
+        "IfType",
+        "InnerDependsOn",
+        "Likely",
+        "MatchType",
+        "NoPush",
+        "RemoveMember",
+        "ReplaceMember",
+        "TypeOf",
+        "Unessential",
+        "VariantItem",
+        "Visit",
+    };
+    return callables;
+}
+
+bool IsAllowedGeneratedUdf(const TExprNode& udf) {
+    if (!TCoUdf::Match(&udf)
+        || udf.ChildrenSize() <= TCoUdf::idx_FileAlias
+        || !udf.Head().IsAtom())
+    {
+        return false;
+    }
+
+    // A non-empty file alias denotes a user-supplied UDF. Being linked into
+    // the server is necessary, but not sufficient: every function below is
+    // still audited and listed by its normalized name.
+    const auto* fileAlias = udf.Child(TCoUdf::idx_FileAlias);
+    if (!fileAlias->IsAtom() || !fileAlias->Content().empty()) {
+        return false;
+    }
+
+    return udf.Head().Content() == "Unicode.ToLower";
+}
+
+bool IsSafeOptionalMap(const TExprNode& node) {
+    // UDF AutoMap uses the unordered spelling even for an Optional input.
+    // Such an input has at most one item, so its result has no observable
+    // ordering ambiguity. Map over a List/Stream remains default-denied.
+    return node.IsCallable("Map")
+        && node.ChildrenSize() == 2
+        && node.Head().GetTypeAnn()
+        && node.Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
+}
+
+bool HasLiteralJsonPath(const TExprNode& node) {
+    return node.ChildrenSize() > 1 && node.Child(1)->IsCallable("Utf8");
+}
+
+bool IsSafeJsonCallable(const TExprNode& node) {
+    if (!HasLiteralJsonPath(node)) {
+        return false;
+    }
+
+    if (TCoJsonExists::Match(&node)) {
+        // The absent fourth child represents ERROR ON ERROR.
+        return node.ChildrenSize() == 4;
+    }
+
+    if (TCoJsonQuery::Match(&node)) {
+        return node.ChildrenSize() == 6
+            && node.Child(TCoJsonQuery::idx_OnEmpty)->IsAtom()
+            && node.Child(TCoJsonQuery::idx_OnEmpty)->Content() != "Error"
+            && node.Child(TCoJsonQuery::idx_OnError)->IsAtom()
+            && node.Child(TCoJsonQuery::idx_OnError)->Content() != "Error";
+    }
+
+    if (TCoJsonValue::Match(&node)) {
+        if (node.ChildrenSize() < 7
+            || !node.Child(TCoJsonValue::idx_OnEmptyMode)->IsAtom()
+            || node.Child(TCoJsonValue::idx_OnEmptyMode)->Content() == "Error"
+            || !node.Child(TCoJsonValue::idx_OnErrorMode)->IsAtom()
+            || node.Child(TCoJsonValue::idx_OnErrorMode)->Content() == "Error")
+        {
+            return false;
+        }
+
+        const auto& onError = *node.Child(TCoJsonValue::idx_OnError);
+        if (onError.IsCallable("Null")) {
+            return true;
+        }
+
+        // A failed cast of DEFAULT ON ERROR is lowered to Ensure(false).
+        // Accept the handler only when that cast is complete for every value.
+        return onError.GetTypeAnn() && node.GetTypeAnn()
+            && CastResult<true>(onError.GetTypeAnn(), node.GetTypeAnn()) == NUdf::ECastOptions::Complete;
+    }
+
+    return false;
+}
+
+class TGeneratedExprValidator {
+public:
+    TGeneratedExprValidator(const TString& columnName, TExprContext& ctx)
+        : ColumnName_(columnName)
+        , Ctx_(ctx)
+    {
+    }
+
+    bool Validate(const TExprNode& node) {
+        if (!Visited_.insert(&node).second) {
+            return true;
+        }
+
+        if (node.IsWorld()) {
+            return Reject(node, "World");
+        }
+
+        if (!node.IsCallable()) {
+            return ValidateChildren(node);
+        }
+
+        if (TCoApply::Match(&node)) {
+            return ValidateApply(node);
+        }
+
+        if (IsSafeOptionalMap(node)) {
+            // Its lambda body is checked by ValidateChildren below.
+        } else if (TCoJsonQueryBase::Match(&node)) {
+            if (!IsSafeJsonCallable(node)) {
+                return Reject(node);
+            }
+        } else if (!TCoDataCtor::Match(&node) && !AllowedGeneratedCallables().contains(node.Content())) {
+            return Reject(node);
+        }
+
+        return ValidateChildren(node);
+    }
+
+private:
+    bool ValidateApply(const TExprNode& node) {
+        if (node.ChildrenSize() == 0) {
+            return Reject(node);
+        }
+
+        const auto& callable = node.Head();
+        if (TCoUdf::Match(&callable)) {
+            if (!IsAllowedGeneratedUdf(callable)) {
+                return Reject(callable, callable.ChildrenSize() && callable.Head().IsAtom()
+                    ? callable.Head().Content()
+                    : callable.Content());
+            }
+
+            if (callable.ChildrenSize() > TCoUdf::idx_RunConfigValue
+                && !Validate(*callable.Child(TCoUdf::idx_RunConfigValue)))
+            {
+                return false;
+            }
+        } else if (!callable.IsLambda()) {
+            return Reject(node);
+        } else if (!Validate(callable)) {
+            return false;
+        }
+
+        for (ui32 i = 1; i < node.ChildrenSize(); ++i) {
+            if (!Validate(*node.Child(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool ValidateChildren(const TExprNode& node) {
+        for (const auto& child : node.Children()) {
+            if (!Validate(*child)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool Reject(const TExprNode& node, TStringBuf callable = {}) {
+        if (callable.empty()) {
+            callable = node.Content();
+        }
+        Ctx_.AddError(TIssue(Ctx_.GetPosition(node.Pos()), TStringBuilder()
+            << "Callable " << callable << " is not allowed in a generated column expression"
+            << " for column " << ColumnName_));
+        return false;
+    }
+
+private:
+    const TString& ColumnName_;
+    TExprContext& Ctx_;
+    TNodeSet Visited_;
+};
+
 bool EmitOutOfRowError(const TGeneratedFindings& findings, bool readsDataIsSubquery,
     const TString& columnName, TExprContext& ctx, TPositionHandle pos)
 {
@@ -270,7 +593,11 @@ bool EmitOutOfRowError(const TGeneratedFindings& findings, bool readsDataIsSubqu
     return false;
 }
 
-}   // namespace
+} // namespace
+
+TString AssembleGeneratedQuery(const TString& exprBody) {
+    return TStringBuilder() << "SELECT " << exprBody << " FROM `__yql_generated_column_source`;";
+}
 
 TExprNode::TPtr CompileGeneratedExpr(const TString& sqlText, const TString& columnName, TExprContext& ctx,
     NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder, const IModuleResolver::TPtr& moduleResolver)
@@ -316,6 +643,10 @@ TExprNode::TPtr CompileGeneratedExpr(const TString& sqlText, const TString& colu
     }
 
     return checks.ProjectionLambda;
+}
+
+bool ValidateGeneratedExpr(const TExprNode& lambda, const TString& columnName, TExprContext& ctx) {
+    return TGeneratedExprValidator(columnName, ctx).Validate(lambda);
 }
 
 }   // namespace NYql

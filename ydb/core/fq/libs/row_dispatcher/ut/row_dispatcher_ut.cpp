@@ -1,6 +1,7 @@
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/actors_factory.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
 #include <ydb/core/fq/libs/row_dispatcher/probes.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
@@ -252,6 +253,38 @@ public:
 
         MockMessageBatch(partId, topicSessionActorId, readActorId, generation);
         ExpectMessageBatch(readActorId);
+    }
+
+    // Send a mock TEvSessionStatistic from a topic session actor to the RowDispatcher.
+    // This simulates the topic session reporting current queue state for a given partition.
+    void MockSessionStatistic(NActors::TActorId topicSessionId, const NYql::NPq::NProto::TDqPqTopicSource& source, NActors::TActorId readActorId,
+        ui32 partitionId, i64 queuedBytes)
+    {
+        NFq::TTopicSessionStatistic stat;
+        stat.SessionKey.ReadGroup = source.GetReadGroup();
+        stat.SessionKey.Endpoint = source.GetEndpoint();
+        stat.SessionKey.Database = source.GetDatabase();
+        stat.SessionKey.TopicPath = source.GetTopicPath();
+        stat.SessionKey.PartitionId = partitionId;
+        stat.Common.QueuedBytes = queuedBytes;
+
+        NFq::TTopicSessionClientStatistic clientStat;
+        clientStat.ReadActorId = readActorId;
+        clientStat.Generation = 1;
+        clientStat.PartitionId = partitionId;
+        clientStat.QueuedBytes = queuedBytes;
+        stat.Clients.push_back(clientStat);
+
+        auto event = std::make_unique<NFq::TEvRowDispatcher::TEvSessionStatistic>(stat);
+        Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release()));
+    }
+
+    // Grab the next TEvStatistics event delivered to the given read actor
+    // and return the QueuedBytes field from it.
+    ui64 ExpectStatisticsQueuedBytes(NActors::TActorId readActorId) {
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStatistics>(readActorId, TDuration::Seconds(5));
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+        return eventHolder->Get()->Record.GetQueuedBytes();
     }
 
     TActorSystemStub actorSystemStub;
@@ -659,6 +692,34 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
 
         MockHeartbeat(PartitionId0, ReadActorId1, generation);
         ExpectNoSession(ReadActorId1, generation);
+    }
+
+    Y_UNIT_TEST_F(QueuedBytesFromAllPartitionsIncludedInStatistics, TFixture) {
+        MockAddSession(Source1, { PartitionId0, PartitionId1 }, ReadActorId1);
+        auto topicSession0 = ExpectRegisterTopicSession();   // for PartitionId0 (100)
+        auto topicSession1 = ExpectRegisterTopicSession();   // for PartitionId1 (101)
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(topicSession0);
+        ExpectStartSession(topicSession1);
+
+        const i64 queuedBytes0 = 100;
+        const i64 queuedBytes1 = 50;
+
+        MockSessionStatistic(topicSession0, Source1, ReadActorId1, PartitionId0, queuedBytes0);
+        MockSessionStatistic(topicSession1, Source1, ReadActorId1, PartitionId1, queuedBytes1);
+
+        Runtime.SimulateSleep(TDuration::Seconds(2));
+        ui64 firstQueuedBytes = ExpectStatisticsQueuedBytes(ReadActorId1);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            firstQueuedBytes, queuedBytes0 + queuedBytes1, "First statistics send: expected combined queued bytes from both partitions");
+
+        MockSessionStatistic(topicSession0, Source1, ReadActorId1, PartitionId0, queuedBytes0);
+
+        Runtime.SimulateSleep(TDuration::Seconds(2));
+        ui64 secondQueuedBytes = ExpectStatisticsQueuedBytes(ReadActorId1);
+        UNIT_ASSERT_VALUES_EQUAL_C(secondQueuedBytes, queuedBytes0 + queuedBytes1,
+            "Second statistics send: QueuedBytes from all partitions (including ones without "
+            "recent updates) must be included — QueuedBytes is a snapshot, not an increment");
     }
 
     Y_UNIT_TEST_F(TwoSessionsFatalError, TFixture) {

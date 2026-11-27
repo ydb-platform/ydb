@@ -3067,6 +3067,31 @@
                 "ColumnId": 18,
                 "ColumnName": "LoadSplitLineage",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "HnswWaitRequired",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 20,
+                "ColumnName": "HnswSchemaVersion",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 21,
+                "ColumnName": "HnswWaitStartedAt",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "HnswProbeRound",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 23,
+                "ColumnName": "HnswReplicaSettingsRequested",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -3090,7 +3115,12 @@
                     15,
                     16,
                     17,
-                    18
+                    18,
+                    19,
+                    20,
+                    21,
+                    22,
+                    23
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5460,6 +5490,16 @@
                 "ColumnId": 60,
                 "ColumnName": "RebuildIndexName",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 61,
+                "ColumnName": "HnswWaitStartedAt",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 63,
+                "ColumnName": "HnswProbeRound",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -5525,7 +5565,9 @@
                     57,
                     58,
                     59,
-                    60
+                    60,
+                    61,
+                    63
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -10759,6 +10801,56 @@
                 "Columns": [
                     1,
                     2
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 142,
+        "TableName": "HnswReplicaFailures",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "TxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "Error",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "ExpiresAt",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
                 ],
                 "RoomID": 0,
                 "Codec": 0,

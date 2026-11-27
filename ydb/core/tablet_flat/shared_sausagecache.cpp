@@ -191,13 +191,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         return Min(AliveInMemoryBytes + remainInFlyLimit, TargetInMemoryBytes);
     }
 
-    void SanitizeConfig(const TActorContext& ctx) {
-        const double ratio = Config.GetTryKeepInMemoryMaxRatio();
-        // Legacy config notifications and direct actor creation may bypass config validation.
+    static void SanitizeInMemoryRatio(TSharedCacheConfig& config, double fallbackRatio, const TActorContext& ctx) {
+        const double ratio = config.GetTryKeepInMemoryMaxRatio();
         if (!(ratio >= 0.0 && ratio <= 1.0)) {
             LOG_ERROR_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE,
-                "Invalid TryKeepInMemoryMaxRatio: " << ratio << "; using the default");
-            Config.ClearTryKeepInMemoryMaxRatio();
+                "Invalid TryKeepInMemoryMaxRatio: " << ratio << ", using " << fallbackRatio);
+            config.SetTryKeepInMemoryMaxRatio(fallbackRatio);
         }
     }
 
@@ -225,7 +224,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
 
         // Share one continuation between total-limit and tier-cap decreases. Other events must
         // not apply another step while that continuation is pending.
-        const ui64 decreaseStep = LimitDecreaseScheduled ? 0 : Config.GetMaxLimitDecreaseStepBytes();
+        const ui64 configuredStep = Config.GetMaxLimitDecreaseStepBytes();
+        const ui64 maxDecrease = configuredStep ? configuredStep : Max<ui64>();
+        const ui64 decreaseStep = LimitDecreaseScheduled ? 0 : maxDecrease;
         const auto adjustLimit = [decreaseStep](ui64 current, ui64 target) {
             return current > target ? current - Min(current - target, decreaseStep) : target;
         };
@@ -1663,11 +1664,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             } else {
                 config.MergeFrom(appData->SharedCacheConfig);
             }
+            SanitizeInMemoryRatio(config, Config.GetTryKeepInMemoryMaxRatio(), ctx);
             LOG_NOTICE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Update config " << config.ShortDebugString());
             Config.Swap(&config);
         }
 
-        SanitizeConfig(ctx);
         ActualizeCacheSizeLimit();
 
         AsyncRequests.Limit = Config.GetAsyncQueueInFlyLimit();
@@ -1763,9 +1764,9 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        SanitizeInMemoryRatio(Config, TSharedCacheConfig::default_instance().GetTryKeepInMemoryMaxRatio(), ctx);
         LOG_NOTICE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Bootstrap with config " << Config.ShortDebugString());
 
-        SanitizeConfig(ctx);
         MemLimitBytes = Config.HasMemoryLimit()
             ? Config.GetMemoryLimit()
             : 128_MB; // soon will be updated by MemoryController

@@ -283,8 +283,10 @@ void TCacheBTreeWalkController::AdvanceWalk(TCacheBTreeWalk& walk, const TLogoBl
 
             // Index pages always live in the main group; its mode decides how they are fetched.
             if (indexCollection->GetCacheMode() == ECacheMode::TryKeepInMemory) {
-                // Wait for loader progress; a self-continuation cannot unblock a capacity-limited index read.
                 QueueInMemoryPages(*indexCollection, toRequest);
+                // Sticky owners fetch and pin these index pages even when the preload tier is full.
+                // Hand over their locations before waiting for a page to arrive.
+                FlushPagesToNotify(walk);
             } else {
                 Host.FetchWalkIndexLevel(*indexCollection, std::move(toRequest), walkCollectionId);
             }

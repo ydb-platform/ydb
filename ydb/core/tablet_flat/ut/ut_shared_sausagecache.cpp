@@ -289,6 +289,21 @@ void WaitInFlyDrain(TMyEnvBase& env, THolder<TSharedPageCacheCounters>& counters
     UNIT_ASSERT_VALUES_EQUAL(counters->LoadInFlyPages->Val(), 0);
 }
 
+void CheckNoIdlePageFetches(TMyEnvBase& env, THolder<TSharedPageCacheCounters>& counters) {
+    WaitInFlyDrain(env, counters);
+    UNIT_ASSERT_GT(counters->TargetInMemoryBytes->Val(), counters->ActiveInMemoryBytes->Val());
+
+    ui64 fetchedPages = 0;
+    auto observer = env->AddObserver<NBlockIO::TEvFetch>([&](const auto& ev) {
+        fetchedPages += ev->Get()->Pages.size();
+    });
+    for (ui32 i = 0; i < 10; ++i) {
+        WakeupSharedCache(env);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(fetchedPages, 0);
+    UNIT_ASSERT_VALUES_EQUAL(counters->LoadInFlyPages->Val(), 0);
+}
+
 void DoReadRows(TMyEnvBase& env, TTxReadRows* read, bool retry = false) {
     env.SendSync(new NFake::TEvExecute{ read }, retry);
 
@@ -1665,6 +1680,7 @@ Y_UNIT_TEST_TWIN(TryKeepInMemoryMode_BTreeIndex_V2_TableLargerThanMemory, Limite
 
     UNIT_ASSERT_VALUES_EQUAL(retried.at(0), 200);
     UNIT_ASSERT(retried.size() <= 10);
+    CheckNoIdlePageFetches(env, counters);
 }
 
 Y_UNIT_TEST_TWIN(TryKeepInMemoryMode_TableLargerThanMemory, LimitedRatio) {
@@ -1703,6 +1719,7 @@ Y_UNIT_TEST_TWIN(TryKeepInMemoryMode_TableLargerThanMemory, LimitedRatio) {
 
     UNIT_ASSERT_VALUES_EQUAL(retried.at(0), 200);
     UNIT_ASSERT(retried.size() <= 10);
+    CheckNoIdlePageFetches(env, counters);
 }
 
 Y_UNIT_TEST(TryKeepInMemoryMode_ReloadEvictedPage_Touched) {

@@ -58,7 +58,7 @@ namespace NKikimr::NConsole {
                 const auto& navigation = *ev->Get()->Request;
                 if (navigation.ResultSet.size() == 1 && navigation.ResultSet.front().Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown)
                 {
-                    return Fail(Ydb::StatusIds::NOT_FOUND, "Database disappeared while applying freeze");
+                    return Fail(Ydb::StatusIds::NOT_FOUND, "Database disappeared while applying data_read_only");
                 }
                 if (navigation.ErrorCount || navigation.ResultSet.size() != 1 || !navigation.ResultSet.front().DomainInfo)
                 {
@@ -66,7 +66,7 @@ namespace NKikimr::NConsole {
                 }
                 const auto& domain = *navigation.ResultSet.front().DomainInfo;
                 if (domain.DomainKey != TPathId(Operation.GetDomainOwnerId(), Operation.GetDomainLocalPathId())) {
-                    return Fail(Ydb::StatusIds::ABORTED, "Database incarnation changed while applying freeze");
+                    return Fail(Ydb::StatusIds::ABORTED, "Database incarnation changed while applying data_read_only");
                 }
                 SchemeShardId = domain.Params.HasSchemeShard()
                                     ? domain.Params.GetSchemeShard()
@@ -224,10 +224,10 @@ namespace NKikimr::NConsole {
             }
             const auto& request = Request->Get()->Record.GetRequest();
             // A whitelist makes a future AlterDatabase field incompatible with
-            // freeze by default, including explicitly present false-valued fields.
+            // data_read_only by default, including explicitly present false-valued fields.
             std::vector<const google::protobuf::FieldDescriptor*> fields;
             if (!request.GetReflection()->GetUnknownFields(request).empty()) {
-                return fail(Ydb::StatusIds::BAD_REQUEST, "freeze cannot be combined with unknown database settings");
+                return fail(Ydb::StatusIds::BAD_REQUEST, "data_read_only cannot be combined with unknown database settings");
             }
             request.GetReflection()->ListFields(request, &fields);
             for (const auto* field : fields) {
@@ -239,11 +239,11 @@ namespace NKikimr::NConsole {
                     case 15:
                         break;
                     default:
-                        return fail(Ydb::StatusIds::BAD_REQUEST, "freeze cannot be combined with other database changes");
+                        return fail(Ydb::StatusIds::BAD_REQUEST, "data_read_only cannot be combined with other database changes");
                 }
             }
             if (request.operation_params().has_cancel_after() || request.operation_params().has_forget_after()) {
-                return fail(Ydb::StatusIds::UNSUPPORTED, "cancel_after and forget_after are not supported for database freeze");
+                return fail(Ydb::StatusIds::UNSUPPORTED, "cancel_after and forget_after are not supported for data_read_only");
             }
             auto tenant = Self->GetTenant(CanonizePath(request.path()));
             if (!tenant) {
@@ -256,8 +256,8 @@ namespace NKikimr::NConsole {
                 const auto key = std::make_pair(tenant->DomainId, TString(request.idempotency_key()));
                 if (const auto found = Self->DatabaseFreezeIdempotencyKeys.find(key); found != Self->DatabaseFreezeIdempotencyKeys.end()) {
                     const auto& operation = Self->DatabaseFreezeOperations.at(found->second);
-                    if (operation.GetFreeze() != request.freeze()) {
-                        return fail(Ydb::StatusIds::BAD_REQUEST, "Idempotency key has a different freeze value");
+                    if (operation.GetFreeze() != request.data_read_only()) {
+                        return fail(Ydb::StatusIds::BAD_REQUEST, "Idempotency key has a different data_read_only value");
                     }
                     Self->FillDatabaseFreezeOperation(found->second, result);
                     return true;
@@ -267,11 +267,11 @@ namespace NKikimr::NConsole {
                 return fail(Ydb::StatusIds::BAD_REQUEST, "Tenant generation does not match requested generation");
             }
             if (Self->IsDatabaseFreezePending(tenant)
-                && Self->DatabaseFreezeOperations.at(tenant->FreezeEpoch).GetFreeze() == request.freeze())
+                && Self->DatabaseFreezeOperations.at(tenant->FreezeEpoch).GetFreeze() == request.data_read_only())
             {
                 if (request.idempotency_key()) {
                     return fail(Ydb::StatusIds::UNAVAILABLE,
-                                "A database freeze operation for this state is already in progress");
+                                "A data_read_only operation for this state is already in progress");
                 }
                 Self->FillDatabaseFreezeOperation(tenant->FreezeEpoch, result);
                 return true;
@@ -283,7 +283,7 @@ namespace NKikimr::NConsole {
                 Cancelled.CopyFrom(Self->DatabaseFreezeOperations.at(CancelledEpoch));
                 Cancelled.SetReady(true);
                 Cancelled.SetStatus(Ydb::StatusIds::CANCELLED);
-                Cancelled.SetIssue("Superseded by another database freeze request");
+                Cancelled.SetIssue("Superseded by another data_read_only request");
                 db.Table<Schema::DatabaseFreezeOperations>().Key(CancelledEpoch).Update<Schema::DatabaseFreezeOperations::State>(Cancelled.SerializeAsString());
             }
             Epoch = Self->NextDatabaseFreezeEpoch++;
@@ -293,7 +293,7 @@ namespace NKikimr::NConsole {
             operation.SetDomainOwnerId(tenant->DomainId.OwnerId);
             operation.SetDomainLocalPathId(tenant->DomainId.LocalPathId);
             operation.SetEpoch(Epoch);
-            operation.SetFreeze(request.freeze());
+            operation.SetFreeze(request.data_read_only());
             operation.SetIdempotencyKey(request.idempotency_key());
             db.Table<Schema::DatabaseFreezeOperations>().Key(Epoch).Update<Schema::DatabaseFreezeOperations::State>(operation.SerializeAsString());
             tenant->FreezeEpoch = Epoch;
@@ -391,7 +391,7 @@ namespace NKikimr::NConsole {
             // Progress is disposable. Persist only the final result, and rebuild
             // diagnostics from SchemeShard after a Console restart.
             auto& progress = DatabaseFreezeProgress[epoch];
-            progress.set_progress(result.GetIssue());
+            progress.set_details(result.GetIssue());
             const auto now = ctx.Now();
             progress.mutable_update_time()->set_seconds(now.Seconds());
             progress.mutable_update_time()->set_nanos((now.MicroSeconds() % 1000000) * 1000);

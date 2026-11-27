@@ -1,4 +1,4 @@
-* Added `ydb admin database freeze` and `ydb admin database unfreeze` commands to freeze database schema changes and writes, wait for CDC delivery to topics, and remove the freeze. Both commands wait for completion and support a client `--timeout`.
+* Added `ydb admin database data-read-only` and `ydb admin database data-read-write` commands to enable data-read-only mode, wait for outstanding updates and CDC delivery to topics, and resume database modifications. Both commands wait for completion and support a client `--timeout`.
 * `ydb tools dump` now prefetches the next result part while writing the current part of a column-oriented table to CSV.
 * On servers that support `PRAGMA kikimr.OptEnableOlapSortedRead`, `ydb tools dump` uses it to reduce server memory used to sort large column-oriented tables during a dump.
 * Added support for exporting table data in Apache Parquet format with the `ydb export s3` command. Added the `--file-format` option to select the data file format and `--parquet-row-group-size` to set the number of rows per Parquet row group.

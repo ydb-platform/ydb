@@ -110,7 +110,7 @@ namespace NYdb::NConsoleClient {
             }
 
             int Run(bool freeze, const TVector<TString>& extraArgs = {}) {
-                TVector<TString> args = {"admin", "database", freeze ? "freeze" : "unfreeze", "--timeout", "5s"};
+                TVector<TString> args = {"admin", "database", freeze ? "data-read-only" : "data-read-write", "--timeout", "5s"};
                 args.insert(args.end(), extraArgs.begin(), extraArgs.end());
                 TVector<char*> argv;
                 for (auto& arg : args) {
@@ -133,16 +133,16 @@ namespace NYdb::NConsoleClient {
                 UNIT_ASSERT_C(received.Wait(TDuration::Seconds(5)), "CLI did not call AlterDatabase");
                 const auto& request = received.GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(request.path(), "/Root/Database");
-                UNIT_ASSERT(request.has_freeze());
-                UNIT_ASSERT_VALUES_EQUAL(request.freeze(), freeze);
+                UNIT_ASSERT(request.has_data_read_only());
+                UNIT_ASSERT_VALUES_EQUAL(request.data_read_only(), freeze);
                 UNIT_ASSERT(request.operation_params().operation_mode() == Ydb::Operations::OperationParams::SYNC);
             }
         };
 
     } // namespace
 
-    Y_UNIT_TEST_SUITE(DatabaseFreezeCommand) {
-        Y_UNIT_TEST(FreezeAndUnfreezeSendExplicitFlag) {
+    Y_UNIT_TEST_SUITE(DatabaseReadOnlyCommand) {
+        Y_UNIT_TEST(ReadOnlyAndReadWriteSendExplicitFlag) {
             for (const bool freeze : {true, false}) {
                 TServer server;
                 UNIT_ASSERT_VALUES_EQUAL(server.Run(freeze), EXIT_SUCCESS);
@@ -151,7 +151,7 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        Y_UNIT_TEST(FreezeAndUnfreezeWaitForOperationCompletion) {
+        Y_UNIT_TEST(ReadOnlyAndReadWriteWaitForOperationCompletion) {
             for (const bool freeze : {true, false}) {
                 // Exercise the SDK fallback when an endpoint returns a pending
                 // operation despite SYNC. Acceptance must not finish the command.
@@ -192,10 +192,10 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        Y_UNIT_TEST(LegacyServerCannotAcknowledgeFreezeOrUnfreeze) {
+        Y_UNIT_TEST(LegacyServerCannotAcknowledgeReadOnlyOrReadWrite) {
             for (const bool freeze : {true, false}) {
                 TServer server({.HasOperationId = false});
-                UNIT_ASSERT_EXCEPTION_CONTAINS(server.Run(freeze), yexception, "Server does not support database freeze operations");
+                UNIT_ASSERT_EXCEPTION_CONTAINS(server.Run(freeze), yexception, "Server does not support data_read_only operations");
                 server.CheckRequest(freeze);
             }
         }
@@ -208,6 +208,6 @@ namespace NYdb::NConsoleClient {
                 UNIT_ASSERT(!server.Cms.Request.GetFuture().HasValue());
             }
         }
-    } // Y_UNIT_TEST_SUITE(DatabaseFreezeCommand)
+    } // Y_UNIT_TEST_SUITE(DatabaseReadOnlyCommand)
 
 } // namespace NYdb::NConsoleClient

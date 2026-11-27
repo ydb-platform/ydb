@@ -1088,7 +1088,7 @@ private:
     ui64 NextDatabaseFreezeEpoch = 1;
     THashMap<ui64, NKikimrConsole::TDatabaseFreezeOperation> DatabaseFreezeOperations;
     THashMap<std::pair<TDomainId, TString>, ui64> DatabaseFreezeIdempotencyKeys;
-    THashMap<ui64, Ydb::Cms::DatabaseFreezeMetadata> DatabaseFreezeProgress;
+    THashMap<ui64, Ydb::Cms::DatabaseReadOnlyMetadata> DatabaseFreezeProgress;
     THashMap<ui64, TActorId> DatabaseFreezeWorkers;
     THashMap<ui64, TVector<TActorId>> DatabaseFreezeSubscribers;
     TTenantsConfig Config;

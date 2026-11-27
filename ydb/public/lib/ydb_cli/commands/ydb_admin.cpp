@@ -40,27 +40,27 @@ public:
         AddCommand(std::make_unique<TCommandDatabaseDump>());
         AddCommand(std::make_unique<TCommandDatabaseRestore>());
         AddCommand(std::make_unique<TCommandDatabaseAttribute>());
-        AddCommand(std::make_unique<TCommandDatabaseFreeze>(true));
-        AddCommand(std::make_unique<TCommandDatabaseFreeze>(false));
+        AddCommand(std::make_unique<TCommandDatabaseReadOnly>(true));
+        AddCommand(std::make_unique<TCommandDatabaseReadOnly>(false));
     }
 };
 
-TCommandDatabaseFreeze::TCommandDatabaseFreeze(bool freeze)
-    : TYdbSimpleCommand(freeze ? "freeze" : "unfreeze", {},
-        freeze ? "Freeze database schema changes and writes, and wait for CDC delivery to topics"
-               : "Unfreeze database schema changes and writes")
-    , Freeze(freeze)
+TCommandDatabaseReadOnly::TCommandDatabaseReadOnly(bool dataReadOnly)
+    : TYdbSimpleCommand(dataReadOnly ? "data-read-only" : "data-read-write", {},
+        dataReadOnly ? "Enable data-read-only mode and wait for outstanding updates and CDC delivery to topics"
+                     : "Disable data-read-only mode and resume database modifications")
+    , DataReadOnly(dataReadOnly)
 {}
 
-void TCommandDatabaseFreeze::Config(TConfig& config) {
+void TCommandDatabaseReadOnly::Config(TConfig& config) {
     TYdbSimpleCommand::Config(config);
     config.SetFreeArgsNum(0);
 }
 
-int TCommandDatabaseFreeze::Run(TConfig& config) {
+int TCommandDatabaseReadOnly::Run(TConfig& config) {
     auto driver = CreateDriver(config);
     NCms::TCmsClient client(driver);
-    auto settings = NCms::TAlterDatabaseSettings().Freeze(Freeze);
+    auto settings = NCms::TAlterDatabaseSettings().DataReadOnly(DataReadOnly);
     auto status = client.AlterDatabase(config.Database, FillSettings(settings)).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
     return EXIT_SUCCESS;

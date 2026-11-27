@@ -1,5 +1,5 @@
 
-* Added `TAlterDatabaseSettings::Freeze(bool)` to fence database row-table writes and wait for CDC delivery, or resume writes. `OperationTimeout` limits the wait without cancelling the accepted operation.
+* Added `TAlterDatabaseSettings::DataReadOnly(bool)` to enable data-read-only mode, wait for outstanding row-table updates and CDC delivery to topics, or resume writes. `OperationTimeout` limits the wait without cancelling the accepted operation.
 
 ## v3.28.0
 

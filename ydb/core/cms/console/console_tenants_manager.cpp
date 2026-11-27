@@ -3648,7 +3648,7 @@ void TTenantsManager::DbUpdateScaleRecommenderPolicies(TTenant::TPtr tenant,
 void TTenantsManager::Handle(TEvConsole::TEvAlterTenantRequest::TPtr &ev, const TActorContext &ctx)
 {
     Counters.Inc(COUNTER_ALTER_REQUESTS);
-    if (ev->Get()->Record.GetRequest().has_freeze()) {
+    if (ev->Get()->Record.GetRequest().has_data_read_only()) {
         TxProcessor->ProcessTx(CreateTxFreezeTenant(ev), ctx);
     } else {
         ProcessOrDelayTx(CreateTxAlterTenant(ev), ctx);

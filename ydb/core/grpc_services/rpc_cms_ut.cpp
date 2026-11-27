@@ -39,10 +39,10 @@ namespace NKikimr::NGRpcService {
             if (!operation.has_metadata()) {
                 return {};
             }
-            Ydb::Cms::DatabaseFreezeMetadata metadata;
+            Ydb::Cms::DatabaseReadOnlyMetadata metadata;
             UNIT_ASSERT_C(operation.metadata().UnpackTo(&metadata), "Unexpected freeze metadata: " << operation.DebugString());
             UNIT_ASSERT(metadata.has_update_time());
-            return metadata.progress();
+            return metadata.details();
         }
 
         NKqp::TKikimrSettings Settings(ui32 dynamicNodeCount = 1) {
@@ -144,7 +144,7 @@ namespace NKikimr::NGRpcService {
                                               const TString& key = {})
             {
                 Ydb::Cms::AlterDatabaseRequest request;
-                request.set_freeze(freeze);
+                request.set_data_read_only(freeze);
                 request.set_idempotency_key(key);
                 request.mutable_operation_params()->set_operation_mode(mode);
                 return Alter(std::move(request));
@@ -309,18 +309,18 @@ namespace NKikimr::NGRpcService {
         Y_UNIT_TEST(SdkPreservesFreezePresence) {
             Ydb::Cms::AlterDatabaseRequest request;
             NYdb::NCms::TAlterDatabaseSettings().SerializeTo(request);
-            UNIT_ASSERT(!request.has_freeze());
-            NYdb::NCms::TAlterDatabaseSettings().Freeze(false).SerializeTo(request);
-            UNIT_ASSERT(request.has_freeze());
-            UNIT_ASSERT(!request.freeze());
-            NYdb::NCms::TAlterDatabaseSettings().Freeze(true).SerializeTo(request);
-            UNIT_ASSERT(request.has_freeze() && request.freeze());
-            const auto settings = NYdb::NCms::TAlterDatabaseSettings().Freeze(false);
+            UNIT_ASSERT(!request.has_data_read_only());
+            NYdb::NCms::TAlterDatabaseSettings().DataReadOnly(false).SerializeTo(request);
+            UNIT_ASSERT(request.has_data_read_only());
+            UNIT_ASSERT(!request.data_read_only());
+            NYdb::NCms::TAlterDatabaseSettings().DataReadOnly(true).SerializeTo(request);
+            UNIT_ASSERT(request.has_data_read_only() && request.data_read_only());
+            const auto settings = NYdb::NCms::TAlterDatabaseSettings().DataReadOnly(false);
             const auto copy = settings;
             request.Clear();
             copy.SerializeTo(request);
-            UNIT_ASSERT(request.has_freeze());
-            UNIT_ASSERT(!request.freeze());
+            UNIT_ASSERT(request.has_data_read_only());
+            UNIT_ASSERT(!request.data_read_only());
         }
 
         Y_UNIT_TEST(OperationWaitsForTopicAckAndThawRestoresWrites) {
@@ -377,7 +377,7 @@ namespace NKikimr::NGRpcService {
                         continue;
                     }
                     Ydb::Cms::AlterDatabaseRequest request;
-                    request.set_freeze(freeze);
+                    request.set_data_read_only(freeze);
                     const auto* reflection = request.GetReflection();
                     UNIT_ASSERT_C(field->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE, field->full_name());
                     if (field->is_repeated()) {
@@ -390,7 +390,7 @@ namespace NKikimr::NGRpcService {
                     UNIT_ASSERT_VALUES_EQUAL_C(result.status(), Ydb::StatusIds::BAD_REQUEST, field->name());
                 }
                 Ydb::Cms::AlterDatabaseRequest request;
-                request.set_freeze(freeze);
+                request.set_data_read_only(freeze);
                 request.GetReflection()->MutableUnknownFields(&request)->AddVarint(100, 1);
                 UNIT_ASSERT_VALUES_EQUAL(env.Alter(std::move(request)).status(), Ydb::StatusIds::BAD_REQUEST);
             }
@@ -402,18 +402,18 @@ namespace NKikimr::NGRpcService {
             for (const bool freeze : {false, true}) {
                 Ydb::Cms::AlterDatabaseRequest missing;
                 missing.set_path("/Root/DoesNotExist");
-                missing.set_freeze(freeze);
+                missing.set_data_read_only(freeze);
                 UNIT_ASSERT_VALUES_EQUAL(env.Alter(std::move(missing)).status(), Ydb::StatusIds::NOT_FOUND);
 
                 Ydb::Cms::AlterDatabaseRequest stale;
-                stale.set_freeze(freeze);
+                stale.set_data_read_only(freeze);
                 stale.set_generation(Max<ui64>());
                 UNIT_ASSERT_VALUES_EQUAL(env.Alter(std::move(stale)).status(), Ydb::StatusIds::BAD_REQUEST);
 
                 for (const auto mode : {Ydb::Operations::OperationParams::SYNC, Ydb::Operations::OperationParams::ASYNC}) {
                     for (const bool cancel : {false, true}) {
                         Ydb::Cms::AlterDatabaseRequest request;
-                        request.set_freeze(freeze);
+                        request.set_data_read_only(freeze);
                         auto* params = request.mutable_operation_params();
                         params->set_operation_mode(mode);
                         if (cancel) {
@@ -489,7 +489,7 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT(env.Write("UPSERT INTO `Table` (key, value) VALUES (1, 10);").IsSuccess());
             env.Runtime.WaitFor("undelivered CDC write", [&] { return !delivery.empty(); });
             Ydb::Cms::AlterDatabaseRequest request;
-            request.set_freeze(true);
+            request.set_data_read_only(true);
             request.set_idempotency_key("timeout");
             auto* params = request.mutable_operation_params();
             params->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
@@ -528,7 +528,7 @@ namespace NKikimr::NGRpcService {
             NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(env.Kikimr.GetEndpoint()).SetDatabase("/Root"));
             NYdb::NCms::TCmsClient client(driver, NYdb::TCommonClientSettings().DiscoveryMode(NYdb::EDiscoveryMode::Off));
             const auto result = client.AlterDatabase(Database,
-                NYdb::NCms::TAlterDatabaseSettings().Freeze(true).OperationTimeout(TDuration::Seconds(1)));
+                NYdb::NCms::TAlterDatabaseSettings().DataReadOnly(true).OperationTimeout(TDuration::Seconds(1)));
             // Do not set ClientTimeout or Deadline: neither may mask a missing
             // OperationTimeout. This wait only bounds the test itself.
             const auto deadline = TInstant::Now() + TDuration::Seconds(10);
@@ -774,7 +774,7 @@ namespace NKikimr::NGRpcService {
             auto freezeOther = [&](bool freeze, const TString& key) {
                 Ydb::Cms::AlterDatabaseRequest request;
                 request.set_path(otherDatabase);
-                request.set_freeze(freeze);
+                request.set_data_read_only(freeze);
                 request.set_idempotency_key(key);
                 request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::ASYNC);
                 return env.Alter(std::move(request));
@@ -956,7 +956,7 @@ namespace NKikimr::NGRpcService {
             using TAlter = TGrpcRequestOperationCall<Ydb::Cms::AlterDatabaseRequest, Ydb::Cms::AlterDatabaseResponse>;
             Ydb::Cms::AlterDatabaseRequest request;
             request.set_path(Database);
-            request.set_freeze(false);
+            request.set_data_read_only(false);
             request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::ASYNC);
             auto thawFuture = NRpcService::DoLocalRpc<TAlter>(std::move(request), "", "", env.Runtime.GetActorSystem(0));
             env.Runtime.WaitFor("Console cancellation awaiting commit", [&] { return !commits.empty(); });

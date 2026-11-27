@@ -101,10 +101,10 @@ private:
         if constexpr (std::is_same_v<TCmsResponse, TEvConsole::TEvAlterTenantResponse>) {
             // Older Console versions ignore an unknown AlterDatabase field.
             // Their immediate SUCCESS must not masquerade as a completed fence.
-            if (this->GetProtoRequest()->has_freeze() && operation.ready()
+            if (this->GetProtoRequest()->has_data_read_only() && operation.ready()
                 && operation.status() == Ydb::StatusIds::SUCCESS && operation.id().empty())
             {
-                this->Request_->RaiseIssue(NYql::TIssue("Console does not support database freeze operations"));
+                this->Request_->RaiseIssue(NYql::TIssue("Console does not support data_read_only operations"));
                 this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::UNSUPPORTED);
                 return Die(ctx);
             }

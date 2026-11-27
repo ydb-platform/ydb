@@ -27,8 +27,8 @@ namespace {
     public:
         const TReply Reply;
         std::atomic<ui32> Requests = 0;
-        std::atomic<bool> HasFreeze = false;
-        std::atomic<bool> Freeze = false;
+        std::atomic<bool> HasDataReadOnly = false;
+        std::atomic<bool> DataReadOnly = false;
         std::atomic<int> OperationMode = Ydb::Operations::OperationParams::OPERATION_MODE_UNSPECIFIED;
         std::atomic<i64> OperationTimeoutSeconds = 0;
 
@@ -40,8 +40,8 @@ namespace {
         grpc::Status AlterDatabase(grpc::ServerContext*, const Ydb::Cms::AlterDatabaseRequest* request,
                                    Ydb::Cms::AlterDatabaseResponse* response) override {
             ++Requests;
-            HasFreeze = request->has_freeze();
-            Freeze = request->freeze();
+            HasDataReadOnly = request->has_data_read_only();
+            DataReadOnly = request->data_read_only();
             OperationMode = request->operation_params().operation_mode();
             OperationTimeoutSeconds = request->operation_params().operation_timeout().seconds();
             if (Reply.TransportFailure) {
@@ -122,34 +122,34 @@ namespace {
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE(CmsFreezeClient) {
+Y_UNIT_TEST_SUITE(CmsDataReadOnlyClient) {
     Y_UNIT_TEST(SerializationPreservesOptionalFalseCopyAndReset) {
         Ydb::Cms::AlterDatabaseRequest request;
         NYdb::NCms::TAlterDatabaseSettings settings;
         settings.SerializeTo(request);
-        UNIT_ASSERT(!request.has_freeze());
+        UNIT_ASSERT(!request.has_data_read_only());
         for (const bool freeze : {false, true}) {
-            settings.Freeze(freeze);
+            settings.DataReadOnly(freeze);
             const auto copy = settings;
             request.Clear();
             copy.SerializeTo(request);
-            UNIT_ASSERT(request.has_freeze());
-            UNIT_ASSERT_VALUES_EQUAL(request.freeze(), freeze);
+            UNIT_ASSERT(request.has_data_read_only());
+            UNIT_ASSERT_VALUES_EQUAL(request.data_read_only(), freeze);
         }
-        settings.Freeze(std::nullopt);
+        settings.DataReadOnly(std::nullopt);
         request.Clear();
         settings.SerializeTo(request);
-        UNIT_ASSERT(!request.has_freeze());
+        UNIT_ASSERT(!request.has_data_read_only());
     }
 
-    Y_UNIT_TEST(LegacyServerCannotAcknowledgeFreezeOrThaw) {
+    Y_UNIT_TEST(LegacyServerCannotAcknowledgeReadOnlyOrReadWrite) {
         for (const bool freeze : {false, true}) {
             TServer server({.HasOperationId = false});
-            const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().Freeze(freeze));
+            const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().DataReadOnly(freeze));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::UNSUPPORTED);
-            UNIT_ASSERT(server.Cms.HasFreeze);
-            UNIT_ASSERT_VALUES_EQUAL(server.Cms.Freeze.load(), freeze);
-            UNIT_ASSERT(result.GetIssues().ToString().find("freeze") != std::string::npos);
+            UNIT_ASSERT(server.Cms.HasDataReadOnly);
+            UNIT_ASSERT_VALUES_EQUAL(server.Cms.DataReadOnly.load(), freeze);
+            UNIT_ASSERT(result.GetIssues().ToString().find("data_read_only") != std::string::npos);
         }
     }
 
@@ -158,17 +158,17 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
         const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().AlterAttributes({{"test", "value"}}));
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(server.Cms.Requests.load(), 1);
-        UNIT_ASSERT(!server.Cms.HasFreeze);
+        UNIT_ASSERT(!server.Cms.HasDataReadOnly);
         UNIT_ASSERT_VALUES_EQUAL(server.Cms.OperationMode.load(), static_cast<int>(Ydb::Operations::OperationParams::OPERATION_MODE_UNSPECIFIED));
     }
 
-    Y_UNIT_TEST(FreezeAndThawWithOperationIdSucceed) {
+    Y_UNIT_TEST(ReadOnlyAndReadWriteWithOperationIdSucceed) {
         for (const bool freeze : {false, true}) {
             TServer server;
-            const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().Freeze(freeze));
+            const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().DataReadOnly(freeze));
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT(server.Cms.HasFreeze);
-            UNIT_ASSERT_VALUES_EQUAL(server.Cms.Freeze.load(), freeze);
+            UNIT_ASSERT(server.Cms.HasDataReadOnly);
+            UNIT_ASSERT_VALUES_EQUAL(server.Cms.DataReadOnly.load(), freeze);
             UNIT_ASSERT_VALUES_EQUAL(server.Cms.OperationMode.load(), static_cast<int>(Ydb::Operations::OperationParams::SYNC));
         }
     }
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
     Y_UNIT_TEST(OperationTimeoutIsForwardedInSyncMode) {
         for (const bool freeze : {false, true}) {
             TServer server;
-            const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().Freeze(freeze).OperationTimeout(TDuration::Seconds(1)));
+            const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().DataReadOnly(freeze).OperationTimeout(TDuration::Seconds(1)));
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(server.Cms.OperationMode.load(), static_cast<int>(Ydb::Operations::OperationParams::SYNC));
             UNIT_ASSERT_VALUES_EQUAL(server.Cms.OperationTimeoutSeconds.load(), 1);
@@ -185,34 +185,34 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
 
     Y_UNIT_TEST(AsyncOperationIsPolledUntilCompletion) {
         TServer server({.Pending = true});
-        const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().Freeze(true));
+        const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().DataReadOnly(true));
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT(server.Operations.Polls > 0);
     }
 
     Y_UNIT_TEST(ServerErrorWithoutOperationIdIsPreserved) {
         TServer server({.Status = Ydb::StatusIds::UNAUTHORIZED, .HasOperationId = false});
-        const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().Freeze(true));
+        const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().DataReadOnly(true));
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::UNAUTHORIZED);
         UNIT_ASSERT(result.GetIssues().ToString().find("Injected server error") != std::string::npos);
     }
 
     Y_UNIT_TEST(TransportFailureCompletesFuture) {
         TServer server({.TransportFailure = true});
-        const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().Freeze(true));
+        const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().DataReadOnly(true));
         UNIT_ASSERT(!result.IsSuccess());
         UNIT_ASSERT(result.IsTransportError());
     }
 
-    Y_UNIT_TEST(FreezeWithAttributesIsRejectedBeforeRpc) {
+    Y_UNIT_TEST(DataReadOnlyWithAttributesIsRejectedBeforeRpc) {
         for (const bool freeze : {false, true}) {
             // An empty attribute value requests removal, so it also conflicts.
             for (const auto* value : {"value", ""}) {
                 TServer server({.HasOperationId = false});
                 const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings()
-                    .Freeze(freeze).AlterAttributes({{"test", value}}));
+                    .DataReadOnly(freeze).AlterAttributes({{"test", value}}));
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
-                UNIT_ASSERT(result.GetIssues().ToString().find("freeze cannot be combined") != std::string::npos);
+                UNIT_ASSERT(result.GetIssues().ToString().find("data_read_only cannot be combined") != std::string::npos);
                 UNIT_ASSERT_VALUES_EQUAL(server.Cms.Requests.load(), 0);
                 UNIT_ASSERT_VALUES_EQUAL(server.Operations.Polls.load(), 0);
             }
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
             for (const bool cancel : {false, true}) {
                 TServer server;
                 NYdb::NCms::TAlterDatabaseSettings settings;
-                settings.Freeze(freeze);
+                settings.DataReadOnly(freeze);
                 if (cancel) {
                     settings.CancelAfter(TDuration::Seconds(1));
                 } else {
@@ -239,15 +239,15 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
         }
     }
 
-    Y_UNIT_TEST(EmptyAttributesDoNotConflictWithFreeze) {
+    Y_UNIT_TEST(EmptyAttributesDoNotConflictWithDataReadOnly) {
         for (const bool freeze : {false, true}) {
             TServer server;
             const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings()
-                .Freeze(freeze).AlterAttributes({}));
+                .DataReadOnly(freeze).AlterAttributes({}));
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(server.Cms.Requests.load(), 1);
-            UNIT_ASSERT(server.Cms.HasFreeze);
-            UNIT_ASSERT_VALUES_EQUAL(server.Cms.Freeze.load(), freeze);
+            UNIT_ASSERT(server.Cms.HasDataReadOnly);
+            UNIT_ASSERT_VALUES_EQUAL(server.Cms.DataReadOnly.load(), freeze);
         }
     }
 
@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
             NYdb::NCms::TCmsClient client(driver, NYdb::TCommonClientSettings().DiscoveryMode(NYdb::EDiscoveryMode::Off));
             // Do not use TServer::Alter: its ClientTimeout would mask the bug.
             const auto result = client.AlterDatabase("/Root/Database",
-                NYdb::NCms::TAlterDatabaseSettings().Freeze(freeze).OperationTimeout(TDuration::Seconds(1)));
+                NYdb::NCms::TAlterDatabaseSettings().DataReadOnly(freeze).OperationTimeout(TDuration::Seconds(1)));
             const bool completed = result.Wait(TDuration::Seconds(5));
             // Stop pending polls before asserting so a regression cannot leave
             // an unbounded request running during test teardown.
@@ -276,4 +276,4 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
             UNIT_ASSERT_VALUES_EQUAL(server.Operations.Cancellations.load(), 0);
         }
     }
-} // Y_UNIT_TEST_SUITE(CmsFreezeClient)
+} // Y_UNIT_TEST_SUITE(CmsDataReadOnlyClient)

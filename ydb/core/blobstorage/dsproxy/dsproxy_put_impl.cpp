@@ -169,6 +169,16 @@ ui64 TPutImpl::GetTimeToAccelerateNs(TLogContext &logCtx) {
     return *MaxElement(nthWorstPredictedNsVec.begin(), nthWorstPredictedNsVec.end());
 }
 
+THistory::TPredictionsEntry TPutImpl::GetPredictionSnapshot(THistory::EPredictionStage stage) const {
+    const auto queueId = HandleClassToQueueId(Blackboard.PutHandleClass);
+    TVector<ui64> predictions;
+    predictions.reserve(Info->GetTotalVDisksNum());
+    for (ui32 orderNumber = 0; orderNumber < Info->GetTotalVDisksNum(); ++orderNumber) {
+        predictions.push_back(Blackboard.GroupQueues->GetPredictedDelayNsByOrderNumber(orderNumber, queueId));
+    }
+    return History.CreatePredictions(true, stage, queueId, std::move(predictions));
+}
+
 TString TPutImpl::DumpFullState() const {
     TStringStream str;
     str << "{Info# " << Info->ToString();

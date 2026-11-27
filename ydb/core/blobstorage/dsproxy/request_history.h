@@ -257,7 +257,76 @@ public:
         AccelerationType Type;
     };
 
-    using TEntry = std::variant<TVPutEntry, TVGetEntry, TVPutResultEntry, TVGetResultEntry, TAccelerationEntry>;
+    enum class EPredictionStage {
+        Initial,
+        Current,
+        Final,
+    };
+
+    struct TPredictionsEntry : public TBaseEntry {
+        bool IsPut;
+        EPredictionStage Stage;
+        NKikimrBlobStorage::EVDiskQueueId QueueId;
+        // Keep snapshots out of line, without increasing every history entry's size.
+        TVector<ui64> Predictions;
+
+        TPredictionsEntry(TMonotonic startTime, bool isPut, EPredictionStage stage,
+                NKikimrBlobStorage::EVDiskQueueId queueId, TVector<ui64>&& predictions)
+            : TBaseEntry(startTime)
+            , IsPut(isPut)
+            , Stage(stage)
+            , QueueId(queueId)
+            , Predictions(std::move(predictions))
+        {}
+
+        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
+            Y_UNUSED(info);
+            str << (IsPut ? "PutPredictions" : "GetPredictions")
+                << "{ TimestampMs# " << Timestamp.MillisecondsFloat()
+                << " Stage# " << (Stage == EPredictionStage::Initial ? "Initial"
+                    : Stage == EPredictionStage::Final ? "Final" : "Current")
+                << " QueueId# " << NKikimrBlobStorage::EVDiskQueueId_Name(QueueId)
+                << " Predictions# [";
+            for (ui32 orderNumber = 0; orderNumber < Predictions.size(); ++orderNumber) {
+                if (orderNumber) {
+                    str << ", ";
+                }
+                str << Predictions[orderNumber];
+            }
+            str << "] }";
+        }
+    };
+
+    struct TAccelerationScheduleEntry : public TBaseEntry {
+        bool IsPut;
+        ui32 Attempt;
+        ui64 PredictedDelayNs;
+        TDuration TimeToAccelerate;
+        TDuration Delay;
+
+        TAccelerationScheduleEntry(TMonotonic startTime, bool isPut, ui32 attempt,
+                ui64 predictedDelayNs, TDuration timeToAccelerate, TDuration delay)
+            : TBaseEntry(startTime)
+            , IsPut(isPut)
+            , Attempt(attempt)
+            , PredictedDelayNs(predictedDelayNs)
+            , TimeToAccelerate(timeToAccelerate)
+            , Delay(delay)
+        {}
+
+        void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
+            Y_UNUSED(info);
+            str << (IsPut ? "PutAccelerationSchedule" : "GetAccelerationSchedule")
+                << "{ TimestampMs# " << Timestamp.MillisecondsFloat()
+                << " Attempt# " << Attempt
+                << " PredictedDelayNs# " << PredictedDelayNs
+                << " TimeToAccelerateMs# " << TimeToAccelerate.MillisecondsFloat()
+                << " DelayMs# " << Delay.MillisecondsFloat() << " }";
+        }
+    };
+
+    using TEntry = std::variant<TVPutEntry, TVGetEntry, TVPutResultEntry, TVGetResultEntry, TAccelerationEntry,
+        TPredictionsEntry, TAccelerationScheduleEntry>;
 
 private:
 
@@ -324,6 +393,21 @@ public:
         Entries.emplace_back(TAccelerationEntry(StartTime, type));
     }
 
+    TPredictionsEntry CreatePredictions(bool isPut, EPredictionStage stage,
+            NKikimrBlobStorage::EVDiskQueueId queueId, TVector<ui64>&& predictions) const {
+        return TPredictionsEntry(StartTime, isPut, stage, queueId, std::move(predictions));
+    }
+
+    void AddPredictions(TPredictionsEntry&& entry) {
+        Entries.emplace_back(std::move(entry));
+    }
+
+    void AddAccelerationSchedule(bool isPut, ui32 attempt, ui64 predictedDelayNs,
+            TDuration timeToAccelerate, TDuration delay) {
+        Entries.emplace_back(TAccelerationScheduleEntry(StartTime, isPut, attempt, predictedDelayNs,
+            timeToAccelerate, delay));
+    }
+
     void AddAllWaiting() {
         for (TEntry& entry : WaitingEntries) {
             std::visit([&](auto& e) {
@@ -334,13 +418,17 @@ public:
         WaitingEntries.clear();
     }
 
-    TString Print() const {
+    TString Print(const TPredictionsEntry* predictions = nullptr) const {
         TStringStream str("THistory { Entries# [");
         for (const TEntry& entry : Entries) {
             str << " ";
             std::visit([&](const auto& e) {
                 e.Output(str, Info);
             }, entry);
+        }
+        if (predictions) {
+            str << " ";
+            predictions->Output(str, Info);
         }
         str << " ] }";
         return str.Str();

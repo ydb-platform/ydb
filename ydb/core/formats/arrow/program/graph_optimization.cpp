@@ -297,6 +297,27 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
 
 namespace {
 
+template <class TOptimize>
+TConclusionStatus OptimizeUntilNoChanges(const std::map<ui64, std::shared_ptr<TGraphNode>>& nodes, const TOptimize& optimize) {
+    while (true) {
+        bool changed = false;
+        for (const auto& [_, node] : nodes) {
+            auto conclusion = optimize(*node);
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
+            if (*conclusion) {
+                // A rewrite may remove the current node. Restart without advancing the invalidated iterator.
+                changed = true;
+                break;
+            }
+        }
+        if (!changed) {
+            return TConclusionStatus::Success();
+        }
+    }
+}
+
 TGraphNode* GetSingleInputProducer(const TGraphNode* node, const TResourceId resourceId) {
     TGraphNode* result = nullptr;
     for (const auto& [addr, inputNode] : node->GetInputDataDependencies()) {
@@ -838,9 +859,6 @@ TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(TGraphNode* cNode) {
 }
 
 TConclusionStatus TGraph::Collapse() {
-    bool hasChanges = true;
-    //    Cerr << DebugJson() << Endl;
-
     std::vector<TGraphNode*> filters;
     for (auto&& [_, n] : Nodes) {
         if (n->Is(EProcessorType::Filter)) {
@@ -868,95 +886,33 @@ TConclusionStatus TGraph::Collapse() {
         RegisterProducer(finalResourceId, mergeNode.get());
     }
 
-    while (hasChanges) {
-        hasChanges = false;
-        for (auto&& [_, n] : Nodes) {
-            {
-                auto conclusion = OptimizeFilterWithCoalesce(n.get());
-                if (conclusion.IsFail()) {
-                    return conclusion;
-                }
-                if (*conclusion) {
-                    hasChanges = true;
-                    break;
-                }
-            }
-
-            {
-                auto conclusion = OptimizeConditionsForIndexes(n.get());
-                if (conclusion.IsFail()) {
-                    return conclusion;
-                }
-                if (*conclusion) {
-                    hasChanges = true;
-                    break;
-                }
-            }
-
-            {
-                auto conclusion = OptimizeConditionsForPatternHints(n.get());
-                if (conclusion.IsFail()) {
-                    return conclusion;
-                }
-                if (*conclusion) {
-                    hasChanges = true;
-                    break;
-                }
-            }
-
-            //            {
-            //                auto conclusion = OptimizeConditionsForHeadersCheck(n.get());
-            //                if (conclusion.IsFail()) {
-            //                    return conclusion;
-            //                }
-            //                if (*conclusion) {
-            //                    hasChanges = true;
-            //                    break;
-            //                }
-            //            }
-
-            {
-                auto conclusion = FlattenNestedLogicalOperations(n.get());
-                if (conclusion.IsFail()) {
-                    return conclusion;
-                }
-                if (*conclusion) {
-                    hasChanges = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    hasChanges = true;
-    while (hasChanges) {
-        hasChanges = false;
-        for (auto&& [_, n] : Nodes) {
-            auto conclusion = OptimizeForFetchSubColumns(n.get());
-            if (conclusion.IsFail()) {
+    auto status = OptimizeUntilNoChanges(Nodes, [this](TGraphNode& node) -> TConclusion<bool> {
+        for (auto rule : { &TGraph::OptimizeFilterWithCoalesce, &TGraph::OptimizeConditionsForIndexes,
+                 &TGraph::OptimizeConditionsForPatternHints, &TGraph::FlattenNestedLogicalOperations }) {
+            auto conclusion = (this->*rule)(&node);
+            if (conclusion.IsFail() || *conclusion) {
                 return conclusion;
             }
-            if (*conclusion) {
-                hasChanges = true;
-                break;
-            }
         }
+        return false;
+    });
+    if (status.IsFail()) {
+        return status;
     }
 
-    THashSet<ui32> requiredDataColumnIds = CollectRequiredDataColumnIdsFromGraph();
-    hasChanges = true;
-    while (hasChanges) {
-        hasChanges = false;
-        for (auto&& [_, n] : Nodes) {
-            auto conclusion = OptimizeForFetchDictionaryOnly(n.get(), requiredDataColumnIds);
-            if (conclusion.IsFail()) {
-                return conclusion;
-            }
-            if (*conclusion) {
-                hasChanges = true;
-                break;
-            }
-        }
+    status = OptimizeUntilNoChanges(Nodes, [this](TGraphNode& node) {
+        return OptimizeForFetchSubColumns(&node);
+    });
+    if (status.IsFail()) {
+        return status;
+    }
+
+    const auto requiredDataColumnIds = CollectRequiredDataColumnIdsFromGraph();
+    status = OptimizeUntilNoChanges(Nodes, [this, &requiredDataColumnIds](TGraphNode& node) {
+        return OptimizeForFetchDictionaryOnly(&node, requiredDataColumnIds);
+    });
+    if (status.IsFail()) {
+        return status;
     }
 
     {

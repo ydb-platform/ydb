@@ -273,7 +273,10 @@ public:
             YDB_LOG_VERIFY(!Finished);
             Finished = true;
             TGraph graph(std::move(Processors), Resolver, ReserveIndexMemory);
-            graph.Collapse();
+            auto status = graph.Collapse();
+            if (status.IsFail()) {
+                return status;
+            }
             return graph.Compile();
         }
     };

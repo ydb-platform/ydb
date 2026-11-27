@@ -487,6 +487,23 @@ public:
 } // namespace
 
 Y_UNIT_TEST_SUITE(ProgramStep) {
+    Y_UNIT_TEST(BuilderPropagatesOptimizationError) {
+        TSchemaColumnResolver resolver(arrow::schema({ arrow::field("predicate", arrow::boolean()) }));
+        NOptimization::TGraph::TBuilder builder(resolver);
+        auto coalesce = TCalculationOperation::Build(TColumnChainInfo::BuildVector({ 1, 2 }), TColumnChainInfo(3),
+            std::make_shared<TSimpleFunction>(EOperation::Add),
+            std::make_shared<TSimpleKernelLogic>((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce)).DetachResult();
+        // Make Coalesce invalid so that Collapse reports an error instead of compiling the graph.
+        coalesce->RemoveInput(2);
+        builder.Add(coalesce);
+        builder.Add(std::make_shared<TFilterOperation>(TColumnChainInfo(3)));
+        builder.Add(std::make_shared<TProjectionOperation>(TColumnChainInfo::BuildVector({ 1 })));
+
+        const auto graph = builder.Finish();
+        UNIT_ASSERT(graph.IsFail());
+        UNIT_ASSERT_STRING_CONTAINS(graph.GetErrorMessage(), "incorrect coalesce incoming columns (!= 2) : 1");
+    }
+
     Y_UNIT_TEST(DependencyKindsAndResourcesAreRemovedIndependently) {
         NOptimization::TGraphNode producer(1, std::make_shared<TFetchOriginalDataOperation>(std::vector<ui32>{ 1, 2 }));
         NOptimization::TGraphNode consumer(2, std::make_shared<TProjectionOperation>(TColumnChainInfo::BuildVector({ 1, 2 })));

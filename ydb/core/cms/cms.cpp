@@ -3099,6 +3099,9 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
 
     ClusterInfo->SetPriorityToCheck(priority);
     bool ok = CheckPermissionRequest(rec, resp->Record, scheduled.Request, reqId, ctx);
+    if (!ok && !scheduled.Request.ActionsSize()) {
+        scheduled.Request.ClearEvictVDisks();
+    }
     ClusterInfo->ResetPriorityToCheck();
     ClusterInfo->LogManager.RollbackOperations();
 
@@ -3199,6 +3202,12 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
     // Schedule request if required.
     if (rec.GetDryRun()) {
         Reply(ev, std::move(resp), ctx);
+    } else if (!ok && request.Request.GetEvictVDisks()
+        && request.Request.ActionsSize() && !scheduled.Request.ActionsSize())
+    {
+        ClusterInfo->UnscheduleActions(request.RequestId);
+        auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
+        Execute(CreateTxRemoveRequest(rec.GetRequestId(), std::move(ev->Release()), handle), ctx);
     } else {
         TAutoPtr<TRequestInfo> copy;
         auto order = request.Order;

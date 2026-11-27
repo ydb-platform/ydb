@@ -34,7 +34,9 @@ Y_UNIT_TEST_SUITE(TopicMirroringData) {
         auto writer = client.CreateSimpleBlockingWriteSession(TWriteSessionSettings()
             .Path(test.SourceTopic).ProducerId("identity-producer").MessageGroupId("identity-producer").Codec(ECodec::RAW));
         const auto createTime = TInstant::MilliSeconds(TInstant::Now().MilliSeconds() - 5000);
-        UNIT_ASSERT(writer->Write(TWriteMessage("identity").SeqNo(42).CreateTimestamp(createTime)));
+        auto identityMessage = TWriteMessage("identity");
+        identityMessage.SeqNo(42).CreateTimestamp(createTime);
+        UNIT_ASSERT(writer->Write(std::move(identityMessage)));
         UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
 
         const auto messages = test.ReadMessages(0, 1);
@@ -52,7 +54,9 @@ Y_UNIT_TEST_SUITE(TopicMirroringData) {
         TTopicClient client(test.Source.GetDriver());
         auto writer = client.CreateSimpleBlockingWriteSession(TWriteSessionSettings()
             .Path(test.SourceTopic).ProducerId("meta-producer").MessageGroupId("meta-producer").Codec(ECodec::RAW));
-        UNIT_ASSERT(writer->Write(TWriteMessage("with-meta").MessageMeta({{"user-key", "user-value"}})));
+        auto metaMessage = TWriteMessage("with-meta");
+        metaMessage.MessageMeta({{"user-key", "user-value"}});
+        UNIT_ASSERT(writer->Write(std::move(metaMessage)));
         UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
 
         const auto messages = test.ReadMessages(0, 1);
@@ -151,7 +155,7 @@ Y_UNIT_TEST_SUITE(TopicMirroringData) {
         test.WriteAndReadBack("before-drop", 0);
         NYdb::NTopic::TTopicClient source(test.Source.GetDriver());
         const auto altered = source.AlterTopic(test.SourceTopic, NYdb::NTopic::TAlterTopicSettings()
-            .DropConsumers({test.MirrorConsumer.c_str()})).GetValueSync();
+            .AppendDropConsumers(test.MirrorConsumer.c_str())).GetValueSync();
         UNIT_ASSERT_C(altered.IsSuccess(), altered.GetIssues().ToString());
 
         test.WriteAndReadBack("after-drop", 1);

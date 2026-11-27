@@ -165,9 +165,14 @@ void TStatisticPath::PopBack()
 
 bool TStatisticPath::StartsWith(const TStatisticPath& prefix) const
 {
-    // TODO(pavook) std::ranges::starts_with(*this, prefix) when C++23 arrives.
-    auto [selfIt, prefixIt] = std::ranges::mismatch(*this, prefix);
-    return prefixIt == prefix.end();
+    auto prefixLength = prefix.Path_.size();
+    if (prefixLength == Path_.size()) {
+        return Path_ == prefix.Path_;
+    }
+    // A shorter byte prefix must end at a component boundary.
+    return prefixLength < Path_.size() &&
+        Path_[prefixLength] == Delimiter &&
+        Path_.starts_with(prefix.Path_);
 }
 
 bool TStatisticPath::EndsWith(const TStatisticPath& suffix) const

@@ -60,7 +60,7 @@ static void PullEvents(grpc::ServerCompletionQueue* cq, TIntrusivePtr<::NMonitor
 }
 
 void TGrpcServiceProtectiable::StopService() noexcept {
-    AtomicSet(ShuttingDown_, 1);
+    ShuttingDown_.store(true);
 
     for (auto& shard : Shards_) {
         with_lock(shard.Lock_) {

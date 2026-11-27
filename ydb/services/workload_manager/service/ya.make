@@ -5,18 +5,16 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/monlib/dynamic_counters
     ydb/core/base
     ydb/core/cms/console/events
-    ydb/core/kqp/common
     ydb/core/kqp/common/events
-    ydb/core/kqp/runtime
+    ydb/core/kqp/common/simple
     ydb/core/mind
     ydb/core/protos
     ydb/core/resource_pools
-    ydb/library/aclib
     ydb/library/actors/core
     ydb/library/actors/interconnect
-    ydb/services/metadata
     ydb/services/workload_manager
     ydb/services/workload_manager/actors
     ydb/services/workload_manager/common

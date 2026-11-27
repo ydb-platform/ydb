@@ -1,7 +1,12 @@
 LIBRARY()
 
 PEERDIR(
+    ydb/core/grpc_services
+    ydb/core/grpc_services/base
     ydb/core/persqueue/public/schema
+    ydb/core/ydb_convert
+    ydb/library/persqueue/topic_parser
+    ydb/public/api/protos
     ydb/services/persqueue_v1/actors/schema/common
 )
 

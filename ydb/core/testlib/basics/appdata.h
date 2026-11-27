@@ -62,6 +62,7 @@ namespace NKikimr {
             std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory;
             std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
             std::shared_ptr<NSchemeShard::IOperationFactory> SchemeOperationFactory;
+            std::shared_ptr<NSysView::ISystemViewScanFactory> SystemViewScanFactory;
 
             ~TMine();
         };

@@ -1,5 +1,7 @@
 #include "yql_facade_run.h"
 
+#include <yql/essentials/core/project_settings/convert/convert.h>
+
 #include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -203,6 +205,8 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     }
 
     THashSet<TString> sqlFlags;
+    TString qstorageDir = ".";
+    bool qstorageCrashAware = false;
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
@@ -250,7 +254,7 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         Params = TFileInput(file).ReadAll();
     });
     opts.AddLongOption("project-settings-json", "Project settings in JSON format").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
-        ProjectSettings = TProjectSettings::FromJson(TFileInput(file).ReadAll());
+        ProjectSettings = ProjectSettingsFromJson(TFileInput(file).ReadAll());
     });
     opts.AddLongOption("yson-attrs", "Provide operation yson attribues").Optional().RequiredArgument("VALUE").StoreResult(&YsonAttrs);
     opts.AddLongOption('G', "gateways", TStringBuilder() << "Used gateways, available: " << JoinSeq(",", SupportedGateways_)).DefaultValue(JoinSeq(",", GatewayTypes)).Handler1T<TString>([this](const TString& gateways) {
@@ -416,9 +420,10 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
             });
     }
     if (EnableQPlayer) {
-        opts.AddLongOption("qstorage-dir", "Directory for QStorage").RequiredArgument("DIR").Handler1T<TString>([this](const TString& dir) {
-            QPlayerStorage_ = MakeFileQStorage(dir);
-        });
+        opts.AddLongOption("qstorage-dir", "Directory for QStorage").RequiredArgument("DIR").StoreResult(&qstorageDir);
+        opts.AddLongOption("qstorage-crash-aware", "Flush captured QStorage records and index after each write, before commit")
+            .NoArgument()
+            .SetFlag(&qstorageCrashAware);
         opts.AddLongOption("op-id", "QStorage operation id").StoreResult(&OperationId).DefaultValue("dummy_op");
         opts.AddLongOption("capture", "Write query metadata to QStorage").NoArgument().Handler0([this]() {
             if (EQPlayerMode::None != QPlayerMode) {
@@ -479,11 +484,19 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     }
 
     auto res = NLastGetopt::TOptsParseResult(&opts, argc, argv);
+    if (!res.Has("langver") && ProjectSettings.LangVer) {
+        LangVer = *ProjectSettings.LangVer;
+    }
 
+    if (qstorageCrashAware && QPlayerMode != EQPlayerMode::Capture) {
+        throw yexception() << "qstorage-crash-aware requires capture or capture-full";
+    }
     if (QPlayerMode != EQPlayerMode::None) {
-        if (!QPlayerStorage_) {
-            QPlayerStorage_ = MakeFileQStorage(".");
-        }
+        const TFileQStorageSettings settings{
+            .BufferUntilCommit = !qstorageCrashAware,
+            .AlwaysFlushIndex = qstorageCrashAware,
+        };
+        QPlayerStorage_ = MakeFileQStorage(qstorageDir, settings);
         if (EQPlayerMode::Replay == QPlayerMode) {
             try {
                 auto reader = QPlayerStorage_->MakeReader(OperationId, {});

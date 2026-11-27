@@ -30,6 +30,8 @@ public:
     NCommon::TConfSetting<ui64, Static> PoisonTimeoutSec;
     NCommon::TConfSetting<ui64, Static> RoundRobinStageTimeoutMs;
     NCommon::TConfSetting<ui64, Static> LabelsListingLimit;
+    NCommon::TConfSetting<ui64, Static> WriteMaxRequestsInflight;
+    NCommon::TConfSetting<ui64, Static> WriteMaxPointsPerRequest;
 };
 
 struct TSolomonConfiguration: public NCommon::TDispatcherAndSettings<TSolomonSettings> {

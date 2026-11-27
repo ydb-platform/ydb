@@ -1,3 +1,5 @@
+NO_BUILD_IF(SANITIZER_TYPE)
+
 IF (NOT WINDOWS)
     G_BENCHMARK(dom-benchmark)
 

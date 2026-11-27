@@ -70,7 +70,7 @@ void TIndexInfo::Register(TRegistrar registrar)
         .Default(ETableToIndexCorrespondence::Invalid);
     registrar.Parameter("predicate", &TThis::Predicate)
         .Optional();
-    registrar.Parameter("unfolded_column", &TThis::UnfoldedColumns)
+    registrar.Parameter("unfolded_columns", &TThis::UnfoldedColumns)
         .Optional();
     registrar.Parameter("evaluated_columns_schema", &TThis::EvaluatedColumnsSchema)
         .Optional();

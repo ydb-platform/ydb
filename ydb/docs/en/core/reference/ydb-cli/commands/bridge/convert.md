@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-Use the `admin cluster bridge convert` command to convert a non-bridged cluster into a [bridge cluster](../../../../concepts/bridge.md) with one pile. Conversion preserves existing data and is irreversible.
+Use the `admin cluster bridge convert` command to convert a non-bridged cluster into a [bridge cluster](../../../../concepts/bridge.md) with one pile. Conversion preserves existing data. Subject to the rollback requirements, the cluster can be [returned to ordinary mode](rollback.md).
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -29,8 +29,8 @@ View command help:
 
 ## Requirements {#requirements}
 
-- Configuration V2 and self-management must be enabled.
-- Every static and dynamic node must run a supporting build and must have been restarted with a single-pile `bridge_config`.
+- Configuration V2 and automatic configuration management (`self_management_config.enabled: true`) must be enabled.
+- Every static and dynamic node must run a {{ ydb-short-name }} build that supports conversion to bridge mode and must have been restarted with a single-pile `bridge_config`.
 - The configuration must contain exactly one pile.
 - With `--skip-storage-pool-conversion`, `bridge_config.enable_non_uniform_storage` must be `true`. With default conversion, it must be unset until conversion completes.
 
@@ -52,4 +52,4 @@ Convert system storage and leave existing database pools ordinary:
 
 ### Verifying the result {#verify}
 
-Use [list](list.md) to wait until conversion is complete. While the output contains `Conversion from non-bridged cluster is in progress, piles can't be added yet`, the pile list cannot be changed. After completion, the single pile is shown as `PRIMARY`.
+Use [list piles](list.md#piles) to wait until conversion is complete. While the output contains `Conversion from non-bridged cluster is in progress, piles can't be added yet`, the pile list cannot be changed. After completion, the single pile is shown as `PRIMARY`. To diagnose synchronization of individual databases, use `admin cluster bridge list databases --not-synced`.

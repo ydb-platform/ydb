@@ -97,6 +97,7 @@ SRCS(
     viewer_request.cpp
     viewer_request.h
     viewer_storage.h
+    viewer_storage_nbs.h
     viewer_storage_stats.h
     viewer_storage_usage.h
     viewer_sysinfo.h
@@ -863,6 +864,7 @@ PEERDIR(
     ydb/core/health_check
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
+    ydb/core/kqp/script_executions/common
     ydb/core/mon
     ydb/core/node_whiteboard
     ydb/core/path_aliasing

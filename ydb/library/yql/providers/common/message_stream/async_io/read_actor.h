@@ -3,8 +3,8 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/invoke.h>
 #include <ydb/library/actors/util/datetime.h>
+#include <ydb/library/yql/dq/actors/common/dq_schedulable.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 #include <ydb/library/yql/dq/runtime/streaming/partition_key.h>
 #include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
 #include <ydb/library/yql/providers/common/message_stream/partition.h>

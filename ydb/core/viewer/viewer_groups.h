@@ -4,6 +4,7 @@
 #include "viewer_helper.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_outofspace.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <algorithm>
 
 namespace NKikimr::NViewer {
 
@@ -124,6 +125,7 @@ enum class EGroupFields : ui8 {
     BridgeSyncErrorCount,
     BridgeMode,
     BridgeGroups,
+    BridgeSyncSecondsLeft,
     COUNT
 };
 
@@ -348,6 +350,10 @@ public:
             return BscInfo && BscInfo->HasProxyGroupId() ? BscInfo->GetProxyGroupId() : GroupId;
         }
 
+        bool IsBridgeGroup(bool hasPeers) const {
+            return BscInfo && (BscInfo->HasBridgePileId() || BscInfo->HasProxyGroupId() || hasPeers);
+        }
+
         static TString PrintDomains(const std::vector<ui8>& failedDomains) {
             TString result;
             result += ::ToString(failedDomains.size());
@@ -407,7 +413,7 @@ public:
         }
 
         // none: ok, dead:1
-        // block-4-2: ok, replicating:1 starting:1, degraded:1, degraded:2, dead:3
+        // block-4-2 / block-8-2: ok, replicating:1 starting:1, degraded:1, degraded:2, dead:3
         // mirror-3-dc: ok, degraded:1(1), degraded:1(2), degraded:1(3), degraded:2(3,1), dead:3(3,1,1)
 
         void CalcState() {
@@ -457,7 +463,8 @@ public:
                     State = TStringBuilder() << state << ':' << MissingDisks;
                     StateInfo.SetStatus(state);
                     StateInfo.MutableCount()->MutableDisks()->SetValue(static_cast<ui32>(MissingDisks));
-                } else if (ErasureSpecies == TErasureType::Erasure4Plus2Block) {
+                } else if (ErasureSpecies == TErasureType::Erasure4Plus2Block
+                        || ErasureSpecies == TErasureType::Erasure8Plus2Block) {
                     TString state;
                     if (MissingDisks > 2) {
                         Overall = NKikimrViewer::EFlag::Red;
@@ -756,7 +763,8 @@ public:
                                                      .set(+EGroupFields::BridgeSyncLastErrorTimestamp)
                                                      .set(+EGroupFields::BridgeSyncErrorCount)
                                                      .set(+EGroupFields::BridgeMode)
-                                                     .set(+EGroupFields::BridgeGroups);
+                                                     .set(+EGroupFields::BridgeGroups)
+                                                     .set(+EGroupFields::BridgeSyncSecondsLeft);
     const TFieldsType FieldsBsGroups = TFieldsType().set(+EGroupFields::GroupId)
                                                     .set(+EGroupFields::Erasure)
                                                     .set(+EGroupFields::Latency)
@@ -915,6 +923,8 @@ public:
             result = EGroupFields::BridgeSyncRemainingBytes;
         } else if (field == "BridgeSyncRemainingBytesComplete") {
             result = EGroupFields::BridgeSyncRemainingBytesComplete;
+        } else if (field == "BridgeSyncSecondsLeft") {
+            result = EGroupFields::BridgeSyncSecondsLeft;
         } else if (field == "BridgeSyncRunning") {
             result = EGroupFields::BridgeSyncRunning;
         } else if (field == "BridgeSyncLastErrorTimestamp") {
@@ -1446,6 +1456,7 @@ public:
                 case EGroupFields::BridgeSyncCopyBytesPerSecond:
                 case EGroupFields::BridgeSyncRemainingBytes:
                 case EGroupFields::BridgeSyncRemainingBytesComplete:
+                case EGroupFields::BridgeSyncSecondsLeft:
                 case EGroupFields::BridgeSyncRunning:
                 case EGroupFields::BridgeSyncLastErrorTimestamp:
                 case EGroupFields::BridgeSyncErrorCount:
@@ -1457,7 +1468,7 @@ public:
     }
 
     void ApplySort() {
-        if (SortBy == EGroupFields::BridgeSyncStatus && !CanShowBridgeSync()) {
+        if ((SortBy == EGroupFields::BridgeSyncStatus || SortBy == EGroupFields::BridgeMode) && !CanShowBridgeSync()) {
             return;
         }
         if (NeedSort && FieldsAvailable.test(+SortBy)) {
@@ -1513,6 +1524,11 @@ public:
                 case EGroupFields::BridgeSyncStatus:
                     SortCollection(GroupView, [](const TGroup* group) { return group->GetBridgeSyncStatus(); }, ReverseSort);
                     break;
+                case EGroupFields::BridgeMode:
+                    std::stable_partition(GroupView.begin(), GroupView.end(), [this](const TGroup* group) {
+                        return group->IsBridgeGroup(BridgeGroups.contains(group->GetBridgeGroupId())) == ReverseSort;
+                    });
+                    break;
                 case EGroupFields::Latency:
                     SortCollection(GroupView, [](const TGroup* group) { return group->GetLatencyForSort(); }, ReverseSort);
                     break;
@@ -1545,10 +1561,10 @@ public:
                 case EGroupFields::BridgeSyncCopyBytesPerSecond:
                 case EGroupFields::BridgeSyncRemainingBytes:
                 case EGroupFields::BridgeSyncRemainingBytesComplete:
+                case EGroupFields::BridgeSyncSecondsLeft:
                 case EGroupFields::BridgeSyncRunning:
                 case EGroupFields::BridgeSyncLastErrorTimestamp:
                 case EGroupFields::BridgeSyncErrorCount:
-                case EGroupFields::BridgeMode:
                 case EGroupFields::BridgeGroups:
                 case EGroupFields::COUNT:
                     break;
@@ -2103,9 +2119,21 @@ public:
     void ProcessWhiteboardGroups() {
         if (GroupData.empty()) {
             std::unordered_map<ui32, const NKikimrWhiteboard::TBSGroupStateInfo*> latestGroupInfo;
+            std::unordered_set<ui32> ddiskGroups;
+            if (GetGroupsResponse && GetGroupsResponse->IsOk()) {
+                for (const auto& entry : GetGroupsResponse->Get()->Record.GetEntries()) {
+                    if (entry.GetInfo().GetDDisk()) {
+                        ddiskGroups.insert(entry.GetKey().GetGroupId());
+                    }
+                }
+            }
             for (const auto& [nodeId, bsGroupStateResponse] : BSGroupStateResponse) {
                 if (bsGroupStateResponse.IsOk()) {
                     for (const NKikimrWhiteboard::TBSGroupStateInfo& info : bsGroupStateResponse->Record.GetBSGroupStateInfo()) {
+                        if (info.GetDDisk()) {
+                            ddiskGroups.insert(info.GetGroupID());
+                            continue;
+                        }
                         TString storagePoolName = info.GetStoragePoolName();
                         if (storagePoolName.empty()) {
                             continue;
@@ -2125,6 +2153,10 @@ public:
                 }
             }
             for (const auto& [groupId, info] : latestGroupInfo) {
+                // A legacy Whiteboard report can omit the DDisk flag for a group identified by the controller or another node.
+                if (ddiskGroups.contains(groupId)) {
+                    continue;
+                }
                 TGroup& group = GroupData.emplace_back();
                 group.GroupId = groupId;
                 group.GroupGeneration = info->GetGroupGeneration();
@@ -2688,7 +2720,7 @@ public:
                     const auto& info = *group->BscInfo;
                     const auto peers = BridgeGroups.find(group->GetBridgeGroupId());
                     if (FieldsRequested.test(+EGroupFields::BridgeMode)) {
-                        jsonGroup.SetBridgeMode(info.HasBridgePileId() || info.HasProxyGroupId() || peers != BridgeGroups.end());
+                        jsonGroup.SetBridgeMode(group->IsBridgeGroup(peers != BridgeGroups.end()));
                     }
                     if (FieldsRequested.test(+EGroupFields::BridgeGroups) && peers != BridgeGroups.end()) {
                         for (const TGroup* peer : peers->second) {
@@ -2696,6 +2728,9 @@ public:
                                 auto& link = *jsonGroup.AddBridgeGroups();
                                 link.SetGroupId(::ToString(peer->GroupId));
                                 link.SetPileName(peer->PileName);
+                                if (peer->BscInfo->HasBridgeSyncStatus()) {
+                                    link.SetBridgeSyncStatus(peer->BscInfo->GetBridgeSyncStatus());
+                                }
                             }
                         }
                     }
@@ -2726,6 +2761,12 @@ public:
                     if (FieldsAvailable.test(+EGroupFields::BridgeSyncRemainingBytesComplete) && FieldsRequested.test(+EGroupFields::BridgeSyncRemainingBytesComplete) &&
                             info.HasBridgeSyncRemainingBytesComplete()) {
                         jsonGroup.SetBridgeSyncRemainingBytesComplete(info.GetBridgeSyncRemainingBytesComplete());
+                    }
+                    if (FieldsRequested.test(+EGroupFields::BridgeSyncSecondsLeft) &&
+                            (info.GetBridgeSyncStatus() == NKikimrBridge::SYNCING || info.GetBridgeSyncStatus() == NKikimrBridge::PENDING) &&
+                            info.HasBridgeSyncRemainingBytes() &&
+                            info.GetBridgeSyncRemainingBytesComplete() && info.GetBridgeSyncCopyBytesPerSecond()) {
+                        jsonGroup.SetBridgeSyncSecondsLeft(info.GetBridgeSyncRemainingBytes() / info.GetBridgeSyncCopyBytesPerSecond());
                     }
                     if (FieldsAvailable.test(+EGroupFields::BridgeSyncRunning) && FieldsRequested.test(+EGroupFields::BridgeSyncRunning) &&
                             info.HasBridgeSyncRunning()) {
@@ -2851,6 +2892,7 @@ public:
                           * `MissingDisks`
                           * `State`
                           * `StateInfo` (alias for `State`)
+                          * `BridgeMode` (ordinary groups first, or bridge groups first with `-BridgeMode`)
                           * `BridgeSyncStatus`
                           * `Usage`
                           * `GroupId`
@@ -2942,6 +2984,7 @@ public:
                           * `BridgeSyncCopyBytesPerSecond`
                           * `BridgeSyncRemainingBytes`
                           * `BridgeSyncRemainingBytesComplete`
+                          * `BridgeSyncSecondsLeft`
                           * `BridgeSyncRunning`
                           * `BridgeSyncLastErrorTimestamp`
                           * `BridgeSyncErrorCount`
@@ -3014,7 +3057,7 @@ public:
         stateInfo["properties"]["Status"]["description"] = "one of: ok, starting, replicating, degraded, dead";
         YAML::Node count(stateInfo["properties"]["Count"]);
         count["description"] =
-            "Number after the colon in State, with explicit units: Disks.Value for none/block-4-2, "
+            "Number after the colon in State, with explicit units: Disks.Value for none/block-4-2/block-8-2, "
             "FailRealms.Value for mirror-3-dc. Exactly one count kind is present. Omitted for ok.";
         count["properties"].remove("Kind"); // protobuf oneof name is not a JSON property
         for (const char* kind : {"Disks", "FailRealms"}) {
@@ -3023,7 +3066,7 @@ public:
             count["oneOf"].push_back(alternative);
         }
         count["properties"]["Disks"]["properties"]["Value"]["description"] =
-            "Number of missing or not-ready disks for none/block-4-2.";
+            "Number of missing or not-ready disks for none/block-4-2/block-8-2.";
         count["properties"]["FailRealms"]["properties"]["Value"]["description"] =
             "Number of affected fail realms for mirror-3-dc. "
             "Only disks with a known non-READY status contribute; disks without status data are excluded.";
@@ -3062,7 +3105,7 @@ public:
         storageGroupProperties["BridgeMode"]["description"] =
             "Whether the group belongs to a bridge group, including inline and proxy groups. Omitted without BSC data.";
         storageGroupProperties["BridgeGroups"]["description"] =
-            "Other physical parts of the same bridge group, with GroupId and PileName for navigation. "
+            "Other physical parts of the same bridge group, with GroupId, PileName and the observed BridgeSyncStatus when available. "
             "Excludes this group; includes peers outside the current filter or page. Omitted when empty or unavailable.";
         storageGroupProperties["BridgeSyncStage"]["description"] =
             "Bridge synchronization stage as reported by the storage controller. Omitted when unavailable.";
@@ -3077,6 +3120,8 @@ public:
             "Blob bytes left to copy. A lower bound while BridgeSyncRemainingBytesComplete is false. Omitted when unavailable.";
         storageGroupProperties["BridgeSyncRemainingBytesComplete"]["description"] =
             "The remaining-byte estimate is based on a full scan of the current or preceding stage.";
+        storageGroupProperties["BridgeSyncSecondsLeft"]["description"] =
+            "Estimated seconds left at the current copy rate. Requires a complete remaining-byte estimate and a positive rate.";
         storageGroupProperties["BridgeSyncRunning"]["description"] =
             "BSC currently has an assigned syncer for this physical group. Omitted when unavailable.";
         storageGroupProperties["BridgeSyncLastErrorTimestamp"]["description"] =

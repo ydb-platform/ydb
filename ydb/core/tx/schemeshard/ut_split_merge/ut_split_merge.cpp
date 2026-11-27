@@ -1,6 +1,7 @@
 #include <ydb/core/protos/counters_schemeshard.pb.h>
 #include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/util_fmt_cell.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -310,7 +311,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         TTestEnvOptions opts;
         opts.EnableBackgroundCompaction(false);
-        opts.EnableTablePgTypes(true);
+        opts.EnableTablePgTypes(true).DisablePgCompatibility(false);
         opts.DataShardStatsReportIntervalSeconds(1);
 
         TTestEnv env(runtime, opts);
@@ -2987,6 +2988,107 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitMergeValidation) {
             SourceTabletId: 72075186233409546
             SourceTabletId: 72075186233409546
         )", {{NKikimrScheme::StatusInvalidParameter, "Duplicate SourceTabletId"}});
+    }
+
+    NKikimrSchemeOp::TPersQueueGroupDescription MakePgKeyRangeTopic(const TString& pgTypeName) {
+        NKikimrSchemeOp::TPersQueueGroupDescription topic;
+        topic.SetName("Topic");
+        topic.SetTotalGroupCount(1);
+        topic.SetPartitionPerTablet(1);
+        auto& config = *topic.MutablePQTabletConfig();
+        config.MutablePartitionConfig()->SetLifetimeSeconds(10);
+        auto& keyComponent = *config.AddPartitionKeySchema();
+        keyComponent.SetName("key");
+        const auto pgType = NScheme::ProtoColumnTypeFromTypeInfoMod(NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName(pgTypeName)), "");
+        keyComponent.SetTypeId(pgType.TypeId);
+        if (pgType.TypeInfo) {
+            *keyComponent.MutableTypeInfo() = *pgType.TypeInfo;
+        }
+        auto& strategy = *config.MutablePartitionStrategy();
+        strategy.SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig::CAN_SPLIT);
+        strategy.SetMinPartitionCount(1);
+        strategy.SetMaxPartitionCount(10);
+        config.SetSplitByPartitionKey(true);
+        return topic;
+    }
+
+    void CreatePgNumericKeyRangeTopic(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", MakePgKeyRangeTopic("pgnumeric").ShortDebugString());
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    TString MakeTopicSplit(const TString& boundaryValue) {
+        NKikimrSchemeOp::TPersQueueGroupDescription alter;
+        alter.SetName("Topic");
+        auto* split = alter.AddSplit();
+        split->SetPartition(0);
+        const TVector<TCell> boundary = {TCell(boundaryValue.data(), boundaryValue.size())};
+        split->SetSplitBoundary(TSerializedCellVec::Serialize(boundary));
+        return alter.ShortDebugString();
+    }
+
+    Y_UNIT_TEST(ShouldRejectSplitBoundaryWhenPgKeyIsMalformed) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        CreatePgNumericKeyRangeTopic(runtime, env, txId);
+
+        // when
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", MakeTopicSplit("\xff\xff\xff"),
+            {{NKikimrScheme::StatusInvalidParameter, "Split boundary must be a table key strictly inside the partition"}});
+
+        // then
+        const auto described = DescribePath(runtime, "/MyRoot/Topic");
+        UNIT_ASSERT_VALUES_EQUAL(described.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 1);
+    }
+
+    Y_UNIT_TEST(ShouldRejectPartitionBoundaryWhenPgKeyIsMalformed) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        auto topic = MakePgKeyRangeTopic("pgnumeric");
+        topic.SetTotalGroupCount(2);
+        topic.AddPartitionBoundaries()->AddTuple()->MutableOptional()->SetBytes("\xff\xff\xff");
+
+        // when
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", topic.ShortDebugString(),
+            {{NKikimrScheme::StatusSchemeError, "Invalid partition boundary at position: 0"}});
+
+        // then
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(ShouldRejectSplitByPartitionKeyWhenPgKeyIsNotComparable) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // when
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", MakePgKeyRangeTopic("pgpoint").ShortDebugString(),
+            {{NKikimrScheme::StatusSchemeError, "is not allowed with SplitByPartitionKey"}});
+
+        // then
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(ShouldSplitByPgKeyWhenBoundaryIsValid) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        CreatePgNumericKeyRangeTopic(runtime, env, txId);
+        const auto boundary = NPg::PgNativeBinaryFromNativeText("5", NPg::TypeDescFromPgTypeName("pgnumeric")).Str;
+
+        // when
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", MakeTopicSplit(boundary));
+        env.TestWaitNotification(runtime, txId);
+
+        // then
+        const auto described = DescribePath(runtime, "/MyRoot/Topic");
+        UNIT_ASSERT_VALUES_EQUAL(described.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 3);
     }
 }
 

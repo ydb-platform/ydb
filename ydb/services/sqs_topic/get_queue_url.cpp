@@ -31,7 +31,6 @@
 
 #include <ydb/public/api/grpc/draft/ydb_ymq_v1.pb.h>
 
-#include <ydb/core/client/server/grpc_base.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 
 #include <ydb/library/grpc/server/grpc_server.h>
@@ -88,8 +87,10 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
-            AFL_ENSURE(topicInfo.Info)("path", this->TopicPath);
-            AFL_ENSURE(topicInfo.Self)("path", this->TopicPath);
+            YDB_LOG_ENSURE(topicInfo.Info,
+                {"path", this->TopicPath});
+            YDB_LOG_ENSURE(topicInfo.Self,
+                {"path", this->TopicPath});
             PQGroup = topicInfo.Info->Description;
             SelfInfo = topicInfo.Self->Info;
             ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), ConsumerName, ActorContext());

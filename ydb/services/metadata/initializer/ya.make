@@ -13,11 +13,14 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/core
+    library/cpp/threading/future
+    library/cpp/time_provider
     ydb/core/base
-    ydb/core/grpc_services/local_rpc
-    ydb/core/grpc_services/base
     ydb/core/grpc_services
+    ydb/core/grpc_services/local_rpc
+    ydb/library/accessor
+    ydb/library/actors/core
+    ydb/services/metadata/abstract
     ydb/services/metadata/request
 )
 

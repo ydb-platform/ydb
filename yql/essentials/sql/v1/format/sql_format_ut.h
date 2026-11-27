@@ -262,6 +262,17 @@ Y_UNIT_TEST(ShowCreateExternalTable) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(ShowCreateStreamingQuery) {
+    TCases cases = {
+        {"show create streaming query my_query;", "SHOW CREATE STREAMING QUERY my_query;\n"},
+        {"use ydb;show create streaming query `/Root/MyFolder/MyQuery`;",
+         "USE ydb;\n\nSHOW CREATE STREAMING QUERY `/Root/MyFolder/MyQuery`;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(Use) {
     TCases cases = {
         {"use user;", "USE user;\n"},

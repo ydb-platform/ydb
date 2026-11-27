@@ -18,6 +18,13 @@ PEERDIR(
     contrib/python/cryptography/next/rust/src/rust
 )
 
+IF (EXPORT_CMAKE OR OS_WINDOWS OR OS_EMSCRIPTEN OR MAPSMOBI_BUILD_TARGET)
+    # DO NOT RENAME
+ELSE()
+    NO_LTO()
+    AR_PLUGIN(ar)
+ENDIF()
+
 SRCS(_openssl.c)
 
 # Match upstream cryptography-cffi: CPython's stable ABI starts at 3.7.

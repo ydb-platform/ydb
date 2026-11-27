@@ -268,108 +268,104 @@ TExprBase KqpApplyLimitToOlapReadTable(TExprBase node, TExprContext& ctx, const 
 
 namespace {
 
-// Helper function to extract KNN distance info from an Apply node.
-// Returns candidate interpretations: {column, method, target} tuples where one arg is a Member (table column).
-// Multiple candidates are returned because either Apply argument could be the column reference.
-TVector<std::tuple<TString, TString, TExprNode::TPtr>> ExtractKnnDistanceCandidates(
-    const TCoApply& apply,
-    const TNodeMap<TExprNode::TPtr>& argSubstitutions = {}) {
-
-    TVector<std::tuple<TString, TString, TExprNode::TPtr>> result;
-
-    auto udf = apply.Callable().Maybe<TCoUdf>();
-    if (!udf || !udf.Cast().MethodName().Value().StartsWith("Knn.")) {
-        return result;
-    }
-
-    const auto methodName = TString(udf.Cast().MethodName().Value());
-
-    // Collect resolved arguments (skip the callable itself)
-    TVector<std::pair<TExprNode::TPtr, TExprBase>> resolvedArgs;
-    for (const auto& arg : apply.Args()) {
-        if (arg.Raw() == apply.Callable().Raw()) continue;
-        auto it = argSubstitutions.find(arg.Raw());
-        auto resolved = (it != argSubstitutions.end()) ? it->second : arg.Ptr();
-        resolvedArgs.emplace_back(resolved, TExprBase(resolved));
-    }
-
-    if (resolvedArgs.size() != 2) {
-        return result;
-    }
-
-    // Return interpretations where one argument is a Member (column reference)
-    for (size_t i = 0; i < 2; ++i) {
-        if (auto member = resolvedArgs[i].second.Maybe<TCoMember>()) {
-            result.emplace_back(TString(member.Cast().Name().Value()), methodName, resolvedArgs[1 - i].first);
-        }
-    }
-    return result;
-}
-
-// Recursively extract KNN distance info, unwrapping Just/FlatMap wrappers.
-// Returns candidate interpretations for the innermost KNN distance Apply node.
-TVector<std::tuple<TString, TString, TExprNode::TPtr>> UnwrapAndExtractKnnDistance(
-    const TExprBase& expr, TNodeMap<TExprNode::TPtr> argSubstitutions = {}) {
-
-    if (auto apply = expr.Maybe<TCoApply>()) {
-        return ExtractKnnDistanceCandidates(apply.Cast(), argSubstitutions);
-    }
-    if (auto just = expr.Maybe<TCoJust>()) {
-        return UnwrapAndExtractKnnDistance(just.Cast().Input(), argSubstitutions);
-    }
-    if (auto flatMap = expr.Maybe<TCoFlatMap>()) {
-        if (flatMap.Cast().Lambda().Args().Size() == 1) {
-            argSubstitutions[flatMap.Cast().Lambda().Args().Arg(0).Raw()] = flatMap.Cast().Input().Ptr();
-        }
-        return UnwrapAndExtractKnnDistance(flatMap.Cast().Lambda().Body(), argSubstitutions);
+// Only follow operators that preserve the input rows one-for-one.
+TMaybeNode<TExprBase> GetRowPreservingInput(const TExprBase& node) {
+    if (node.Maybe<TCoToFlow>() || node.Maybe<TCoFromFlow>() || node.Maybe<TCoToStream>()
+        || node.Maybe<TCoExtractMembers>())
+    {
+        return TExprBase(node.Ref().HeadPtr());
     }
     return {};
 }
 
-// Find column expression in AsStruct by name
-TMaybeNode<TExprBase> FindColumnExprInStruct(const TExprBase& structExpr, const TStringBuf& columnName) {
-    if (auto asStruct = structExpr.Maybe<TCoAsStruct>()) {
-        for (const auto& item : asStruct.Cast()) {
-            if (auto tuple = item.Maybe<TCoNameValueTuple>()) {
-                if (tuple.Cast().Name().Value() == columnName) {
-                    return tuple.Cast().Value();
+TMaybeNode<TExprBase> GetSingletonItem(const TExprBase& node) {
+    if (auto just = node.Maybe<TCoJust>()) {
+        return just.Cast().Input();
+    }
+    if (auto list = node.Maybe<TCoAsList>(); list && list.Cast().ArgCount() == 1) {
+        return list.Cast().Arg(0);
+    }
+    return {};
+}
+
+TMaybeNode<TCoMapBase> GetMap(const TExprBase& node) {
+    if (node.Maybe<TCoMap>() || node.Maybe<TCoOrderedMap>()) {
+        return node.Cast<TCoMapBase>();
+    }
+    return {};
+}
+
+struct TVectorProjection {
+    TCoArgument Row;
+    TExprBase Value;
+};
+
+struct TVectorReadPath {
+    TVector<TVectorProjection> Projections;
+
+    TExprBase Follow(TExprBase node) {
+        for (;;) {
+            if (auto input = GetRowPreservingInput(node)) {
+                node = input.Cast();
+                continue;
+            }
+
+            const auto map = GetMap(node);
+            const auto flatMap = node.Maybe<TCoFlatMapBase>();
+            if (!map && !flatMap) {
+                return node;
+            }
+            const auto lambda = map ? map.Cast().Lambda() : flatMap.Cast().Lambda();
+            const auto value = map ? TMaybeNode<TExprBase>(lambda.Body()) : GetSingletonItem(lambda.Body());
+            if (!value || lambda.Args().Size() != 1 || lambda.Ref().ChildrenSize() != 2) {
+                return node;
+            }
+            Projections.push_back({lambda.Args().Arg(0), value.Cast()});
+            node = map ? map.Cast().Input() : flatMap.Cast().Input();
+        }
+    }
+};
+
+// Resolve a field through the projections between the sort and the read.
+bool ResolveVectorMember(TExprBase& expr, TCoArgument& row, TConstArrayRef<TVectorProjection>& projections,
+    TExprContext& ctx, bool preserveColumn = false)
+{
+    while (const auto member = expr.Maybe<TCoMember>()) {
+        if (member.Cast().Struct().Raw() != row.Raw() || projections.empty()) {
+            break;
+        }
+
+        const auto& projection = projections.front();
+        row = projection.Row;
+        projections = projections.subspan(1);
+        if (projection.Value.Raw() == row.Raw()) {
+            expr = TExprBase(ctx.ChangeChild(member.Cast().Ref(), TCoMember::idx_Struct, row.Ptr()));
+            continue;
+        }
+        const auto fields = projection.Value.Maybe<TCoAsStruct>();
+        if (!fields) {
+            return false;
+        }
+        bool found = false;
+        for (const auto& field : fields.Cast()) {
+            const auto item = field.Cast<TCoNameValueTuple>();
+            if (item.Name().Value() == member.Cast().Name().Value()) {
+                expr = item.Value().Cast();
+                if (preserveColumn) {
+                    const auto projectedMember = expr.Maybe<TCoMember>();
+                    if (!projectedMember || projectedMember.Cast().Name().Value() != member.Cast().Name().Value()) {
+                        return false;
+                    }
                 }
+                found = true;
+                break;
             }
         }
-    }
-    return {};
-}
-
-// Unwrap Just/FlatMap to find AsStruct
-TMaybeNode<TCoAsStruct> UnwrapToStruct(const TExprBase& body) {
-    if (auto asStruct = body.Maybe<TCoAsStruct>()) {
-        return asStruct;
-    }
-    if (auto just = body.Maybe<TCoJust>()) {
-        return just.Cast().Input().Maybe<TCoAsStruct>();
-    }
-    if (auto flatMap = body.Maybe<TCoFlatMap>()) {
-        return UnwrapToStruct(flatMap.Cast().Lambda().Body());
-    }
-    return {};
-}
-
-// Find KNN info in computed column (alias) within Map/FlatMap structures
-TVector<std::tuple<TString, TString, TExprNode::TPtr>> FindKnnInfoInComputedColumn(
-    const TExprBase& body, const TStringBuf& aliasName) {
-
-    if (auto asStruct = UnwrapToStruct(body)) {
-        if (auto columnExpr = FindColumnExprInStruct(asStruct.Cast(), aliasName)) {
-            return UnwrapAndExtractKnnDistance(columnExpr.Cast());
+        if (!found) {
+            return false;
         }
     }
-    if (auto map = body.Maybe<TCoMap>()) {
-        return FindKnnInfoInComputedColumn(map.Cast().Lambda().Body(), aliasName);
-    }
-    if (auto flatMap = body.Maybe<TCoFlatMapBase>()) {
-        return FindKnnInfoInComputedColumn(flatMap.Cast().Lambda().Body(), aliasName);
-    }
-    return {};
+    return true;
 }
 
 // Get metric name from Knn method if sort direction matches
@@ -389,349 +385,180 @@ TString GetMetricFromMethodName(const TString& methodName, bool isAsc) {
     return {};
 }
 
-// Find first valid KNN candidate (column exists, metric valid for direction)
-TMaybe<std::tuple<TString, TString, TExprNode::TPtr>> FindValidKnnCandidate(
-    const TVector<std::tuple<TString, TString, TExprNode::TPtr>>& candidates,
-    const TKikimrTableDescription& tableDesc, bool isAsc, TString& outMetric) {
+struct TVectorSortKey {
+    TString Column;
+    TString Metric;
+    TExprBase Target;
+};
 
-    for (const auto& [col, method, target] : candidates) {
-        if (!tableDesc.Metadata->Columns.contains(col)) continue;
-        TString metric = GetMetricFromMethodName(method, isAsc);
-        if (!metric.empty()) {
-            outMetric = metric;
-            return std::make_tuple(col, method, target);
-        }
-    }
-    return {};
-}
-
-// Extract KNN info from TopSort key selector
-TVector<std::tuple<TString, TString, TExprNode::TPtr>> ExtractKnnInfoFromTopSort(
-    const TCoTopSort& topSort, const TMaybeNode<TCoFlatMapBase>& maybeFlatMap = {}) {
-
-    auto lambdaBody = topSort.KeySelectorLambda().Body();
-    auto result = UnwrapAndExtractKnnDistance(lambdaBody);
-    if (result.empty()) {
-        if (auto member = lambdaBody.Maybe<TCoMember>()) {
-            auto aliasName = member.Cast().Name().Value();
-            result = maybeFlatMap ? FindKnnInfoInComputedColumn(maybeFlatMap.Cast(), aliasName)
-                                  : FindKnnInfoInComputedColumn(topSort.Input(), aliasName);
-        }
-    }
-    return result;
-}
-
-// Wrap expression in precompute if not a simple literal/parameter
-TExprNode::TPtr WrapInPrecompute(const TExprBase& expr, TExprContext& ctx) {
-    if (expr.Maybe<TCoString>() || expr.Maybe<TCoParameter>() ||
-        expr.Maybe<TCoUint64>() || expr.Maybe<TCoArgument>()) {
-        return expr.Ptr();
-    }
-    return KqpPrecomputeParameter(expr, ctx).Ptr();
-}
-
-// Replace stage input at given index
-TVector<TExprBase> ReplaceStageInput(const TDqStage& stage, size_t index, TExprBase newInput) {
-    TVector<TExprBase> inputs;
-    for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
-        inputs.push_back(i == index ? newInput : stage.Inputs().Item(i));
-    }
-    return inputs;
-}
-
-} // anonymous namespace
-
-TExprBase KqpApplyVectorTopKToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (!node.Maybe<TCoTopSort>()) {
-        return node;
-    }
-    auto topSort = node.Cast<TCoTopSort>();
-
-    auto input = topSort.Input();
-
-    // Check if input is directly TKqpReadTableRanges
-    bool isReadTableRanges = input.Maybe<TKqpReadTableRanges>().IsValid();
-
-    // Track various intermediate nodes
-    TMaybeNode<TDqCnUnionAll> maybeCnUnionAll;
-    TMaybeNode<TDqStage> maybeStage;
-    TMaybeNode<TKqpReadTableRanges> maybeReadTableRanges;
-    TMaybeNode<TDqSource> maybeDqSource;
-    TMaybeNode<TKqpReadRangesSourceSettings> maybeSourceSettings;
-    TMaybeNode<TCoFlatMapBase> maybeFlatMap;
-    size_t sourceInputIndex = 0;
-    TExprBase flatMapInput = input;
-
-    // Check for FlatMap/Map (used when ORDER BY references an alias/computed column or subquery)
-    if (input.Maybe<TCoFlatMapBase>()) {
-        maybeFlatMap = input.Cast<TCoFlatMapBase>();
-        flatMapInput = maybeFlatMap.Cast().Input();
-    } else if (input.Maybe<TCoMap>()) {
-        // TCoMap is used when the target vector comes from a subquery
-        flatMapInput = input.Cast<TCoMap>().Input();
-        if (flatMapInput.Maybe<TCoFlatMapBase>()) {
-            flatMapInput = flatMapInput.Cast<TCoFlatMapBase>().Input();
-        }
-    }
-
-    if (!isReadTableRanges && flatMapInput.Maybe<TDqCnUnionAll>()) {
-        maybeCnUnionAll = flatMapInput.Cast<TDqCnUnionAll>();
-        maybeStage = maybeCnUnionAll.Cast().Output().Stage().Maybe<TDqStage>();
-        if (maybeStage) {
-            auto stage = maybeStage.Cast();
-            auto stageBody = stage.Program().Body();
-
-            maybeReadTableRanges = stageBody.Maybe<TKqpReadTableRanges>();
-            if (maybeReadTableRanges) {
-                isReadTableRanges = true;
-                input = maybeReadTableRanges.Cast();
-            }
-
-            // Check if the stage body is a FlatMap over TKqpReadTableRanges
-            // This happens when ORDER BY references an alias computed in the FlatMap
-            if (!isReadTableRanges && stageBody.Maybe<TCoFlatMapBase>()) {
-                auto stageFlatMap = stageBody.Cast<TCoFlatMapBase>();
-                maybeReadTableRanges = stageFlatMap.Input().Maybe<TKqpReadTableRanges>();
-                if (maybeReadTableRanges) {
-                    isReadTableRanges = true;
-                    input = maybeReadTableRanges.Cast();
-                    if (!maybeFlatMap) {
-                        maybeFlatMap = stageFlatMap;
-                    }
-                }
-            }
-
-            // Check if the stage has a DqSource with KqpReadRangesSourceSettings
-            // This happens for data queries where reads are converted to sources
-            if (!isReadTableRanges) {
-                for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
-                    if (auto dqSource = stage.Inputs().Item(i).Maybe<TDqSource>()) {
-                        if (auto sourceSettings = dqSource.Cast().Settings().Maybe<TKqpReadRangesSourceSettings>()) {
-                            maybeDqSource = dqSource.Cast();
-                            maybeSourceSettings = sourceSettings.Cast();
-                            sourceInputIndex = i;
-                            isReadTableRanges = true;
-                            break;
-                        }
-                    }
-                }
-                if (isReadTableRanges && stageBody.Maybe<TCoFlatMapBase>() && !maybeFlatMap) {
-                    maybeFlatMap = stageBody.Cast<TCoFlatMapBase>();
-                }
-            }
-        }
-    }
-
-    if (!isReadTableRanges) {
-        return node;
-    }
-
-    // Get table path and settings
-    TCoAtom tablePath = maybeSourceSettings
-        ? maybeSourceSettings.Cast().Table().Path()
-        : GetReadTablePath(input, true);
-    TKqpReadTableSettings settings = maybeSourceSettings
-        ? TKqpReadTableSettings::Parse(maybeSourceSettings.Cast().Settings())
-        : GetReadTableSettings(input, true);
-    TExprBase rangesExpr = maybeSourceSettings
-        ? maybeSourceSettings.Cast().RangesExpr()
-        : input.Cast<TKqpReadTableRanges>().Ranges();
-
-    // Only apply to full table scans (no WHERE clause filtering)
-    if (!TCoVoid::Match(rangesExpr.Raw())) {
-        return node;
-    }
-
-    // Reject filtering FlatMaps (OptionalIf/ListIf), allow projection FlatMaps (ORDER BY alias)
-    if (maybeFlatMap) {
-        auto flatMapBody = maybeFlatMap.Cast().Lambda().Body();
-        if (flatMapBody.Maybe<TCoOptionalIf>() || flatMapBody.Maybe<TCoListIf>()) {
-            return node;
-        }
-    }
-
-    auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, tablePath);
-
-    // Only for datashard tables
-    if (tableDesc.Metadata->Kind != EKikimrTableKind::Datashard) {
-        return node;
-    }
-
-    if (settings.Sampling) {
-        // DataShard cannot combine sampling with vector top-k.
-        return node;
-    }
-
-    if (settings.VectorTopKColumn) {
-        return node; // already set
-    }
-
-    // Check sort direction
-    ESortDirection direction = GetSortDirection(topSort.SortDirections());
+TMaybe<TVectorSortKey> GetVectorSortKey(const TCoTopSort& topSort, const TVectorReadPath& path,
+    const TCoAtomList& columns, TExprContext& ctx)
+{
+    const auto direction = GetSortDirection(topSort.SortDirections());
     if (direction != ESortDirection::Forward && direction != ESortDirection::Reverse) {
-        return node;
-    }
-    const bool isAsc = (direction == ESortDirection::Forward);
-
-    // Extract and validate KNN info
-    TString metric;
-    auto knnInfo = FindValidKnnCandidate(ExtractKnnInfoFromTopSort(topSort, maybeFlatMap), tableDesc, isAsc, metric);
-    if (!knnInfo) {
-        return node;
+        return {};
     }
 
-    auto [columnName, _, targetExpr] = *knnInfo;
-    settings.VectorTopKColumn = columnName;
-    settings.VectorTopKMetric = metric;
-    settings.VectorTopKTarget = WrapInPrecompute(TExprBase(targetExpr), ctx);
-    settings.VectorTopKLimit = WrapInPrecompute(topSort.Count(), ctx);
+    const auto lambda = topSort.KeySelectorLambda();
+    if (lambda.Args().Size() != 1 || lambda.Ref().ChildrenSize() != 2) {
+        return {};
+    }
+    auto expr = lambda.Body();
+    auto row = lambda.Args().Arg(0);
+    TConstArrayRef<TVectorProjection> projections = path.Projections;
+    if (!ResolveVectorMember(expr, row, projections, ctx)) {
+        return {};
+    }
 
-    // Handle source-based read (data queries)
-    if (maybeSourceSettings && maybeStage) {
-        auto stage = maybeStage.Cast();
-        auto oldSourceSettings = maybeSourceSettings.Cast();
+    // Only unwrap optional maps that supply one of the two distance operands.
+    TNodeMap<TExprBase> bindings;
+    while (true) {
+        if (auto just = expr.Maybe<TCoJust>()) {
+            expr = just.Cast().Input();
+        } else if (auto flatMap = expr.Maybe<TCoFlatMap>()) {
+            const auto input = flatMap.Cast().Input();
+            const auto fn = flatMap.Cast().Lambda();
+            const auto type = input.Ref().GetTypeAnn();
+            if (!type || type->GetKind() != ETypeAnnotationKind::Optional || fn.Args().Size() != 1 || fn.Ref().ChildrenSize() != 2) {
+                return {};
+            }
+            bindings.emplace(fn.Args().Arg(0).Raw(), input);
+            expr = fn.Body();
+        } else {
+            break;
+        }
+    }
 
-        auto newSettingsNode = settings.BuildNode(ctx, oldSourceSettings.Settings().Pos());
-        auto newSourceSettings = Build<TKqpReadRangesSourceSettings>(ctx, oldSourceSettings.Pos())
-            .Table(oldSourceSettings.Table())
-            .Columns(oldSourceSettings.Columns())
-            .Settings(newSettingsNode)
-            .RangesExpr(oldSourceSettings.RangesExpr())
-            .ExplainPrompt(oldSourceSettings.ExplainPrompt())
-            .Done();
-        auto newSource = Build<TDqSource>(ctx, maybeDqSource.Cast().Pos())
-            .Settings(newSourceSettings)
-            .DataSource(maybeDqSource.Cast().DataSource())
-            .Done();
-        auto newStage = Build<TDqStage>(ctx, stage.Pos())
-            .Inputs()
-                .Add(ReplaceStageInput(stage, sourceInputIndex, newSource))
-                .Build()
-            .Program(stage.Program())
-            .Settings(stage.Settings())
-            .Done();
-        auto newCnUnionAll = Build<TDqCnUnionAll>(ctx, maybeCnUnionAll.Cast().Pos())
-            .Output()
-                .Stage(newStage)
-                .Index(maybeCnUnionAll.Cast().Output().Index())
-                .Build()
-            .Done();
+    const auto apply = expr.Maybe<TCoApply>();
+    if (!apply || apply.Cast().Ref().ChildrenSize() != 3) {
+        return {};
+    }
+    const auto udf = apply.Cast().Callable().Maybe<TCoUdf>();
+    if (!udf) {
+        return {};
+    }
+    const auto metric = GetMetricFromMethodName(udf.Cast().MethodName().StringValue(), direction == ESortDirection::Forward);
+    if (!metric) {
+        return {};
+    }
 
-        TExprBase newTopSortInput = newCnUnionAll;
-        if (maybeFlatMap && maybeFlatMap.Cast().Raw() != stage.Program().Body().Raw()) {
-            if (maybeFlatMap.Cast().Maybe<TCoOrderedFlatMap>()) {
-                newTopSortInput = Build<TCoOrderedFlatMap>(ctx, maybeFlatMap.Cast().Pos())
-                    .Input(newCnUnionAll)
-                    .Lambda(maybeFlatMap.Cast().Lambda())
-                    .Done();
-            } else {
-                newTopSortInput = Build<TCoFlatMap>(ctx, maybeFlatMap.Cast().Pos())
-                    .Input(newCnUnionAll)
-                    .Lambda(maybeFlatMap.Cast().Lambda())
-                    .Done();
+    auto unwrapOperand = [&](TExprBase operand) {
+        for (auto it = bindings.find(operand.Raw()); it != bindings.end(); it = bindings.find(operand.Raw())) {
+            operand = it->second;
+            bindings.erase(it);
+        }
+        return operand;
+    };
+    const auto left = unwrapOperand(TExprBase(apply.Cast().Ref().ChildPtr(1)));
+    const auto right = unwrapOperand(TExprBase(apply.Cast().Ref().ChildPtr(2)));
+    if (!bindings.empty()) {
+        return {};
+    }
+
+    for (const auto& [operand, targetExpr] : {std::pair{left, right}, std::pair{right, left}}) {
+        auto column = operand;
+        auto columnRow = row;
+        auto remaining = projections;
+        if (!ResolveVectorMember(column, columnRow, remaining, ctx, true) || !remaining.empty()) {
+            continue;
+        }
+        const auto member = column.Maybe<TCoMember>();
+        if (member && member.Cast().Struct().Raw() == columnRow.Raw()) {
+            const auto name = member.Cast().Name().Value();
+            for (const auto& readColumn : columns) {
+                if (readColumn.Value() == name) {
+                    return TVectorSortKey{TString(name), metric, targetExpr};
+                }
             }
         }
-
-        return Build<TCoTopSort>(ctx, topSort.Pos())
-            .Input(newTopSortInput)
-            .Count(topSort.Count())
-            .SortDirections(topSort.SortDirections())
-            .KeySelectorLambda(topSort.KeySelectorLambda())
-            .Done();
-    }
-
-    auto newReadNode = BuildReadNode(node.Pos(), ctx, input, settings);
-
-    if (maybeStage) {
-        auto stage = maybeStage.Cast();
-        auto stageBody = stage.Program().Body();
-        TExprBase newStageBody = newReadNode;
-
-        // Preserve FlatMap structure if present
-        if (auto orderedFlatMap = stageBody.Maybe<TCoOrderedFlatMap>()) {
-            if (orderedFlatMap.Cast().Input().Maybe<TKqpReadTableRanges>()) {
-                newStageBody = Build<TCoOrderedFlatMap>(ctx, orderedFlatMap.Cast().Pos())
-                    .Input(newReadNode)
-                    .Lambda(orderedFlatMap.Cast().Lambda())
-                    .Done();
-            }
-        } else if (auto flatMap = stageBody.Maybe<TCoFlatMap>()) {
-            if (flatMap.Cast().Input().Maybe<TKqpReadTableRanges>()) {
-                newStageBody = Build<TCoFlatMap>(ctx, flatMap.Cast().Pos())
-                    .Input(newReadNode)
-                    .Lambda(flatMap.Cast().Lambda())
-                    .Done();
-            }
-        }
-
-        auto newStage = Build<TDqStage>(ctx, stage.Pos())
-            .Inputs(stage.Inputs())
-            .Program()
-                .Args(stage.Program().Args())
-                .Body(newStageBody)
-                .Build()
-            .Settings(stage.Settings())
-            .Done();
-        auto newCnUnionAll = Build<TDqCnUnionAll>(ctx, maybeCnUnionAll.Cast().Pos())
-            .Output()
-                .Stage(newStage)
-                .Index(maybeCnUnionAll.Cast().Output().Index())
-                .Build()
-            .Done();
-
-        return Build<TCoTopSort>(ctx, topSort.Pos())
-            .Input(newCnUnionAll)
-            .Count(topSort.Count())
-            .SortDirections(topSort.SortDirections())
-            .KeySelectorLambda(topSort.KeySelectorLambda())
-            .Done();
-    }
-
-    return Build<TCoTopSort>(ctx, topSort.Pos())
-        .Input(newReadNode)
-        .Count(topSort.Count())
-        .SortDirections(topSort.SortDirections())
-        .KeySelectorLambda(topSort.KeySelectorLambda())
-        .Done();
-}
-
-namespace {
-
-// Find TopSort in stage body (through Map/FlatMap/ToFlow wrappers)
-TMaybeNode<TCoTopSort> FindTopSortInBody(const TExprBase& body) {
-    if (auto t = body.Maybe<TCoTopSort>()) {
-        return t;
-    }
-    if (auto m = body.Maybe<TCoMap>()) {
-        return FindTopSortInBody(m.Cast().Lambda().Body());
-    }
-    if (auto f = body.Maybe<TCoFlatMapBase>()) {
-        return FindTopSortInBody(f.Cast().Lambda().Body());
-    }
-    if (auto t = body.Maybe<TCoToFlow>()) {
-        return FindTopSortInBody(t.Cast().Input());
     }
     return {};
 }
 
-// Build precompute to extract column from subquery result
-TExprNode::TPtr BuildSubqueryTargetPrecompute(
-    const TCoMember& member, const TDqPhyPrecompute& precompute, TExprContext& ctx) {
+// A source used by another branch of the stage cannot be truncated.
+bool HasSingleUse(const TExprBase& body, const TExprBase& input) {
+    TNodeMap<size_t> uses;
+    const auto countUses = [&](const auto& self, const TExprNode& node) -> size_t {
+        if (&node == input.Raw()) {
+            return 1;
+        }
+        if (node.IsArguments()) {
+            return 0;
+        }
+        if (const auto it = uses.find(&node); it != uses.end()) {
+            return it->second;
+        }
+        size_t count = 0;
+        for (const auto& child : node.Children()) {
+            count += self(self, *child);
+            if (count > 1) {
+                break;
+            }
+        }
+        uses.emplace(&node, count);
+        return count;
+    };
+    return countUses(countUses, body.Ref()) == 1;
+}
 
-    auto newArg = Build<TCoArgument>(ctx, member.Pos())
-        .Name("_kqp_extract_arg")
-        .Done();
+TMaybe<size_t> FindReadSource(const TDqStage& stage, const TExprBase& input) {
+    const auto args = stage.Program().Args();
+    for (size_t i = 0; i < args.Size() && i < stage.Inputs().Size(); ++i) {
+        if (input.Raw() == args.Arg(i).Raw()) {
+            const auto source = stage.Inputs().Item(i).Maybe<TDqSource>();
+            if (source && source.Cast().Settings().Maybe<TKqpReadRangesSourceSettings>()
+                && HasSingleUse(stage.Program().Body(), input))
+            {
+                return i;
+            }
+            break;
+        }
+    }
+    return {};
+}
 
-    // Build: Unwrap(Member(Unwrap(arg), "column_name"))
-    auto memberExpr = Build<TCoMember>(ctx, member.Pos())
-        .Struct<TCoUnwrap>()
-            .Optional(newArg)
-            .Build()
-        .Name(member.Name())
-        .Done();
-    auto extractExpr = Build<TCoUnwrap>(ctx, member.Pos())
-        .Optional(memberExpr)
-        .Done();
+TMaybeNode<TCoTopSort> FindStageTopSort(TExprBase node) {
+    for (;;) {
+        if (auto top = node.Maybe<TCoTopSort>()) {
+            return top;
+        }
+        if (auto input = GetRowPreservingInput(node)) {
+            node = input.Cast();
+            continue;
+        }
+        if (auto item = GetSingletonItem(node)) {
+            node = item.Cast();
+            continue;
+        }
+
+        const auto map = GetMap(node);
+        const auto flatMap = node.Maybe<TCoFlatMapBase>();
+        if (!map && !flatMap) {
+            return {};
+        }
+        const auto input = map ? map.Cast().Input() : flatMap.Cast().Input();
+        if (const auto item = GetSingletonItem(input)) {
+            if (const auto top = FindStageTopSort(item.Cast())) {
+                return top;
+            }
+            // With a singleton input the sort in the lambda runs only once.
+            const auto lambda = map ? map.Cast().Lambda() : flatMap.Cast().Lambda();
+            if (lambda.Ref().ChildrenSize() != 2) {
+                return {};
+            }
+            node = lambda.Body();
+        } else {
+            node = input;
+        }
+    }
+}
+
+// Read a scalar subquery field in a precompute independent of the source.
+TExprNode::TPtr BuildSubqueryReadValue(
+    const TCoMember& member, const TDqPhyPrecompute& precompute, TExprContext& ctx)
+{
+    auto arg = Build<TCoArgument>(ctx, member.Pos()).Name("_kqp_extract_arg").Done();
+    auto value = Build<TCoMember>(ctx, member.Pos()).Struct(arg).Name(member.Name()).Done();
 
     return Build<TDqPhyPrecompute>(ctx, member.Pos())
         .Connection<TDqCnValue>()
@@ -741,10 +568,10 @@ TExprNode::TPtr BuildSubqueryTargetPrecompute(
                         .Add(precompute)
                         .Build()
                     .Program()
-                        .Args({newArg})
+                        .Args({arg})
                         .Body<TCoToStream>()
                             .Input<TCoAsList>()
-                                .Add(extractExpr)
+                                .Add(value)
                                 .Build()
                             .Build()
                         .Build()
@@ -756,133 +583,171 @@ TExprNode::TPtr BuildSubqueryTargetPrecompute(
         .Done().Ptr();
 }
 
-// Resolve target expression for stage-based queries (handles subquery Member references)
-TExprNode::TPtr ResolveStageTarget(const TExprBase& expr, const TDqStage& stage, TExprContext& ctx) {
-    // Handle subquery: Member(arg, "column") where arg maps to DqPhyPrecompute input
-    if (auto member = expr.Maybe<TCoMember>()) {
-        if (auto arg = member.Cast().Struct().Maybe<TCoArgument>()) {
-            auto stageArgs = stage.Program().Args();
-            for (size_t i = 0; i < stageArgs.Size() && i < stage.Inputs().Size(); ++i) {
-                if (stageArgs.Arg(i).Raw() == arg.Cast().Raw()) {
-                    if (auto precompute = stage.Inputs().Item(i).Maybe<TDqPhyPrecompute>()) {
-                        return BuildSubqueryTargetPrecompute(member.Cast(), precompute.Cast(), ctx);
-                    }
+TExprNode::TPtr ResolveReadValue(const TExprBase& expr, const TMaybeNode<TDqStage>& stage, TExprContext& ctx,
+    bool target)
+{
+    auto type = expr.Ref().GetTypeAnn();
+    if (!type) {
+        return {};
+    }
+
+    if (target && type->GetKind() == ETypeAnnotationKind::Optional) {
+        type = type->Cast<TOptionalExprType>()->GetItemType();
+    }
+    if (target && type->GetKind() == ETypeAnnotationKind::Tagged) {
+        type = type->Cast<TTaggedExprType>()->GetBaseType();
+    }
+    if (type->GetKind() != ETypeAnnotationKind::Data
+        || type->Cast<TDataExprType>()->GetSlot() != (target ? EDataSlot::String : EDataSlot::Uint64))
+    {
+        return {};
+    }
+
+    const auto member = expr.Maybe<TCoMember>();
+    const auto dependency = member ? member.Cast().Struct() : expr;
+    if (stage && dependency.Maybe<TCoArgument>()) {
+        const auto args = stage.Cast().Program().Args();
+        const auto inputs = stage.Cast().Inputs();
+        for (size_t i = 0; i < args.Size() && i < inputs.Size(); ++i) {
+            if (args.Arg(i).Raw() == dependency.Raw()) {
+                if (auto precompute = inputs.Item(i).Maybe<TDqPhyPrecompute>()) {
+                    return member ? BuildSubqueryReadValue(member.Cast(), precompute.Cast(), ctx) : precompute.Cast().Ptr();
                 }
+                return {};
             }
         }
     }
 
-    // Reject expressions containing unresolved arguments
-    bool hasArgument = false;
-    VisitExpr(expr.Ref(), [&](const TExprNode& n) {
-        if (n.IsArgument()) { hasArgument = true; return false; }
-        return true;
-    });
-    if (hasArgument) {
-        return nullptr;
+    if (!expr.Ref().IsComplete()) {
+        return {};
+    }
+    if (expr.Maybe<TCoString>() || expr.Maybe<TCoUint64>() || expr.Maybe<TCoParameter>() ||
+        expr.Maybe<TDqPhyPrecompute>())
+    {
+        return expr.Ptr();
+    }
+    return KqpPrecomputeParameter(expr, ctx, /*unwrapOptional=*/false).Ptr();
+}
+
+bool SetVectorTopK(const TCoTopSort& topSort, const TVectorReadPath& path, const TCoAtomList& columns,
+    const TExprBase& ranges, const TCoAtom& table, const TMaybeNode<TDqStage>& stage,
+    TKqpReadTableSettings& settings, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
+{
+    if (!ranges.Maybe<TCoVoid>() || settings.Sampling || settings.VectorTopKColumn || settings.ItemsLimit
+        || kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, table).Metadata->Kind != EKikimrTableKind::Datashard)
+    {
+        return false;
+    }
+    const auto key = GetVectorSortKey(topSort, path, columns, ctx);
+    if (!key) {
+        return false;
     }
 
-    return WrapInPrecompute(expr, ctx);
+    auto target = ResolveReadValue(key->Target, stage, ctx, true);
+    auto limit = ResolveReadValue(topSort.Count(), stage, ctx, false);
+    if (!target || !limit) {
+        return false;
+    }
+    settings.VectorTopKColumn = key->Column;
+    settings.VectorTopKMetric = key->Metric;
+    settings.VectorTopKTarget = std::move(target);
+    settings.VectorTopKLimit = std::move(limit);
+    return true;
+}
+
+TMaybeNode<TDqStage> PushVectorTopKToSource(const TDqStage& stage, const TCoTopSort& topSort,
+    const TVectorReadPath& path, const TExprBase& input, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
+{
+    const auto index = FindReadSource(stage, input);
+    if (!index) {
+        return {};
+    }
+    const auto source = stage.Inputs().Item(*index).Cast<TDqSource>();
+    const auto read = source.Settings().Cast<TKqpReadRangesSourceSettings>();
+    auto settings = TKqpReadTableSettings::Parse(read.Settings());
+    if (!SetVectorTopK(topSort, path, read.Columns(), read.RangesExpr(), read.Table().Path(), stage, settings, ctx, kqpCtx)) {
+        return {};
+    }
+
+    auto newRead = ctx.ChangeChild(read.Ref(), TKqpReadRangesSourceSettings::idx_Settings,
+        settings.BuildNode(ctx, read.Settings().Pos()).Ptr());
+    auto newSource = ctx.ChangeChild(source.Ref(), TDqSource::idx_Settings, std::move(newRead));
+    auto inputs = ctx.ChangeChild(stage.Inputs().Ref(), *index, std::move(newSource));
+    return TDqStage(ctx.ChangeChild(stage.Ref(), TDqStage::idx_Inputs, std::move(inputs)));
 }
 
 } // anonymous namespace
 
-TExprBase KqpApplyVectorTopKToStageWithSource(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (!node.Maybe<TDqStage>()) {
+TExprBase KqpApplyVectorTopKToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    const auto topSort = node.Cast<TCoTopSort>();
+    TVectorReadPath path;
+    const auto outerInput = path.Follow(topSort.Input());
+    auto input = outerInput;
+    TMaybeNode<TDqStage> stage;
+    const auto connection = outerInput.Maybe<TDqCnUnionAll>();
+    if (connection) {
+        stage = connection.Cast().Output().Stage().Maybe<TDqStage>();
+        if (!stage || stage.Cast().Program().Ref().ChildrenSize() != 2
+            || connection.Cast().Output().Index().Value() != "0") {
+            return node;
+        }
+        input = path.Follow(stage.Cast().Program().Body());
+    }
+
+    if (!HasSingleUse(topSort.Input(), outerInput)) {
         return node;
     }
-    auto stage = node.Cast<TDqStage>();
+    TExprNode::TPtr newInput;
+    if (const auto read = input.Maybe<TKqpReadTableRanges>()) {
+        const auto tableRead = read.Cast();
+        auto settings = TKqpReadTableSettings::Parse(tableRead.Settings());
+        // The inline read's settings cannot refer to owning stage arguments.
+        if (!SetVectorTopK(topSort, path, tableRead.Columns(), tableRead.Ranges(), tableRead.Table().Path(),
+            {}, settings, ctx, kqpCtx))
+        {
+            return node;
+        }
+        newInput = BuildReadNode(node.Pos(), ctx, tableRead, settings).Ptr();
+    } else if (!stage) {
+        return node;
+    }
 
-    // Find DqSource with KqpReadRangesSourceSettings
-    TMaybeNode<TDqSource> maybeDqSource;
-    TMaybeNode<TKqpReadRangesSourceSettings> maybeSourceSettings;
-    size_t sourceInputIndex = 0;
-
-    for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
-        if (auto dqSource = stage.Inputs().Item(i).Maybe<TDqSource>()) {
-            if (auto sourceSettings = dqSource.Cast().Settings().Maybe<TKqpReadRangesSourceSettings>()) {
-                maybeDqSource = dqSource.Cast();
-                maybeSourceSettings = sourceSettings.Cast();
-                sourceInputIndex = i;
-                break;
+    if (stage) {
+        TExprNode::TPtr newStage;
+        if (newInput) {
+            const auto program = stage.Cast().Program();
+            if (!HasSingleUse(program.Body(), input)) {
+                return node;
             }
+            auto newProgram = ctx.ReplaceNode(program.Ptr(), input.Ref(), std::move(newInput));
+            newStage = ctx.ChangeChild(stage.Cast().Ref(), TDqStage::idx_Program, std::move(newProgram));
+        } else if (auto rewritten = PushVectorTopKToSource(stage.Cast(), topSort, path, input, ctx, kqpCtx)) {
+            newStage = rewritten.Cast().Ptr();
+        } else {
+            return node;
+        }
+        const auto output = connection.Cast().Output();
+        auto newOutput = ctx.ChangeChild(output.Ref(), TDqOutput::idx_Stage, std::move(newStage));
+        newInput = ctx.ChangeChild(connection.Cast().Ref(), TDqCnUnionAll::idx_Output, std::move(newOutput));
+    }
+
+    auto newTopInput = ctx.ReplaceNodes(topSort.Input().Ptr(), {{outerInput.Raw(), newInput}});
+    return TExprBase(ctx.ChangeChild(topSort.Ref(), TCoTopSort::idx_Input, std::move(newTopInput)));
+}
+
+TExprBase KqpApplyVectorTopKToStageWithSource(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    const auto stage = node.Cast<TDqStage>();
+    if (stage.Program().Ref().ChildrenSize() != 2) {
+        return node;
+    }
+    if (const auto topSort = FindStageTopSort(stage.Program().Body())) {
+        TVectorReadPath path;
+        const auto input = path.Follow(topSort.Cast().Input());
+        if (auto rewritten = PushVectorTopKToSource(stage, topSort.Cast(), path, input, ctx, kqpCtx)) {
+            return rewritten.Cast();
         }
     }
-
-    if (!maybeSourceSettings) {
-        return node;
-    }
-
-    auto sourceSettings = maybeSourceSettings.Cast();
-    auto settings = TKqpReadTableSettings::Parse(sourceSettings.Settings());
-
-    if (settings.Sampling) {
-        // DataShard cannot combine sampling with vector top-k.
-        return node;
-    }
-
-    // Skip if already has VectorTopK or not a full table scan
-    if (settings.VectorTopKColumn || !TCoVoid::Match(sourceSettings.RangesExpr().Raw())) {
-        return node;
-    }
-
-    auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sourceSettings.Table().Path());
-    if (tableDesc.Metadata->Kind != EKikimrTableKind::Datashard) {
-        return node;
-    }
-
-    // Find TopSort in stage body
-    auto maybeTopSort = FindTopSortInBody(stage.Program().Body());
-    if (!maybeTopSort) {
-        return node;
-    }
-    auto topSort = maybeTopSort.Cast();
-
-    // Check sort direction
-    ESortDirection direction = GetSortDirection(topSort.SortDirections());
-    if (direction != ESortDirection::Forward && direction != ESortDirection::Reverse) {
-        return node;
-    }
-    const bool isAsc = (direction == ESortDirection::Forward);
-
-    // Extract and validate KNN info
-    TString metric;
-    auto knnInfo = FindValidKnnCandidate(ExtractKnnInfoFromTopSort(topSort), tableDesc, isAsc, metric);
-    if (!knnInfo) {
-        return node;
-    }
-
-    auto [columnName, _, targetExpr] = *knnInfo;
-    TExprNode::TPtr resolvedTarget = ResolveStageTarget(TExprBase(targetExpr), stage, ctx);
-    if (!resolvedTarget) {
-        return node;
-    }
-
-    settings.VectorTopKColumn = columnName;
-    settings.VectorTopKMetric = metric;
-    settings.VectorTopKTarget = resolvedTarget;
-    settings.VectorTopKLimit = WrapInPrecompute(topSort.Count(), ctx);
-
-    auto newSettingsNode = settings.BuildNode(ctx, sourceSettings.Settings().Pos());
-    auto newSourceSettings = Build<TKqpReadRangesSourceSettings>(ctx, sourceSettings.Pos())
-        .Table(sourceSettings.Table())
-        .Columns(sourceSettings.Columns())
-        .Settings(newSettingsNode)
-        .RangesExpr(sourceSettings.RangesExpr())
-        .ExplainPrompt(sourceSettings.ExplainPrompt())
-        .Done();
-    auto newSource = Build<TDqSource>(ctx, maybeDqSource.Cast().Pos())
-        .Settings(newSourceSettings)
-        .DataSource(maybeDqSource.Cast().DataSource())
-        .Done();
-
-    return Build<TDqStage>(ctx, stage.Pos())
-        .Inputs()
-            .Add(ReplaceStageInput(stage, sourceInputIndex, newSource))
-            .Build()
-        .Program(stage.Program())
-        .Settings(stage.Settings())
-        .Done();
+    return node;
 }
 
 } // namespace NKikimr::NKqp::NOpt

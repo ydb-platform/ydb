@@ -1,6 +1,6 @@
 #pragma once
 
-#include "flat_row_eggs.h"
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include "util_basics.h"
 #include "util_fmt_abort.h"
 #include <util/generic/deque.h>

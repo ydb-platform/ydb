@@ -1537,7 +1537,7 @@ Y_UNIT_TEST(TableTtlObjectKeyPrefix) {
             PRIMARY KEY(ts)
         ) WITH (
             STORE = COLUMN,
-            TTL = Interval("P1D") TO EXTERNAL DATA SOURCE `/Root/tier1`.`archive//2026:09`,
+            TTL = Interval("P1D") TO EXTERNAL DATA SOURCE `/Root/tier1`.`archive//2026:09``utc`,
                   Interval("P2D") TO EXTERNAL DATA SOURCE `/Root/tier1`.`cold`,
                   Interval("P3D") DELETE ON ts
         );
@@ -1704,6 +1704,7 @@ Y_UNIT_TEST(Table) {
     TTestEnv env(1, 4, {
         .StoragePools = 3,
         .ShowCreateTable = true,
+        .EnablePgCompatibility = true,
         .EnableFulltextIndex = true,
         .EnableSuperLemmer = true,
     });
@@ -2531,7 +2532,7 @@ Y_UNIT_TEST(TableSequences) {
 }
 
 Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnablePgCompatibility = true});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -2901,7 +2902,7 @@ Y_UNIT_TEST(TableColumnUpsertIndex) {
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_ngramm_filter_index, TYPE=BLOOM_NGRAMM_FILTER,
                 FEATURES=`{"column_name" : "Col3", "ngramm_size" : 3,
                         "false_positive_probability" : 0.01, "case_sensitive" : false,
-                        "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"b.c.d"'}}`);
+                        "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"b.c.\x60\x60d"'}}`);
             ALTER OBJECT `Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_filter_index, TYPE=BLOOM_FILTER,
                     FEATURES=`{"column_name" : "Col2", "false_positive_probability" : 0.01, "bits_storage_type": "BITSET"}`);
         )", "test_show_create",
@@ -2920,7 +2921,7 @@ Y_UNIT_TEST(TableColumnUpsertIndex) {
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = count_min_sketch_index, TYPE = COUNT_MIN_SKETCH, FEATURES = `{"column_names":["Col2"]}`);
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_ngramm_filter_index, TYPE = BLOOM_NGRAMM_FILTER, FEATURES = `{"false_positive_probability":0.01,"case_sensitive":false,"ngramm_size":3,"data_extractor":{"class_name":"SUB_COLUMN","sub_column_name":"\\\"b.c.d\\\""},"bits_storage_type":"SIMPLE_STRING","column_name":"Col3"}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_ngramm_filter_index, TYPE = BLOOM_NGRAMM_FILTER, FEATURES = `{"false_positive_probability":0.01,"case_sensitive":false,"ngramm_size":3,"data_extractor":{"class_name":"SUB_COLUMN","sub_column_name":"\\\"b.c.````d\\\""},"bits_storage_type":"SIMPLE_STRING","column_name":"Col3"}`);
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_filter_index, TYPE = BLOOM_FILTER, FEATURES = `{"false_positive_probability":0.01,"data_extractor":{"class_name":"DEFAULT"},"bits_storage_type":"BITSET","column_name":"Col2"}`);
         )"

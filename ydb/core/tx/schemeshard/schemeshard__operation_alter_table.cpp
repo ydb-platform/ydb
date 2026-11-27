@@ -336,6 +336,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
     const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
         .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
+        .DisablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility(),
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
         .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
@@ -850,6 +851,7 @@ public:
         bool hasLegacyReplicationStream = false;
         bool hasSchemaReplicationStream = false;
         bool hasSchemaCdcStream = false;
+        bool hasKeyRangeCdcStream = false;
         if (path.Base()->GetAliveChildren()) {
             for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
                 Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
@@ -862,6 +864,7 @@ public:
                 Y_ABORT_UNLESS(context.SS->CdcStreams.contains(childPathId));
                 const auto& stream = context.SS->CdcStreams.at(childPathId);
                 hasSchemaCdcStream |= stream->SchemaChanges;
+                hasKeyRangeCdcStream |= stream->HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
 
                 if (!childPath->AsyncReplication.IsDefined()) {
                     continue;
@@ -885,6 +888,12 @@ public:
         }
 
         Y_ABORT_UNLESS(alterData->AlterVersion == table->AlterVersion + 1);
+
+        if (hasKeyRangeCdcStream && alterData->KeyColumnIds.size() > table->KeyColumnIds.size()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Key columns cannot be added to a table with a key range CDC stream");
+            return result;
+        }
 
         if (hasSchemaCdcStream) {
             for (const auto& family : alterData->PartitionConfigFull().GetColumnFamilies()) {

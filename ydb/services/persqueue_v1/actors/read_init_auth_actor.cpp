@@ -91,7 +91,7 @@ void TReadInitAndAuthActor::Bootstrap(const TActorContext &ctx) {
 void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext&) {
     absl::flat_hash_set<TString> topics;
     for (const auto& topic : Topics) {
-        AFL_ENSURE(topic.second.DiscoveryConverter->IsValid());
+        YDB_LOG_ENSURE(topic.second.DiscoveryConverter->IsValid());
         topics.insert(topic.second.DiscoveryConverter->GetPrimaryPath());
     }
     DescribePaths(std::move(topics));
@@ -159,7 +159,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         THashMap<TString, TTopicHolder>::iterator topicsIter,
         const TActorContext& ctx
 ) {
-    AFL_ENSURE(topicInfo.Info);
+    YDB_LOG_ENSURE(topicInfo.Info);
     // Scheme board describe leaves TopicPath empty. Metacache filled it from the
     // navigate path before UpgradeToFullConverter; do the same here.
     auto pqInfo = topicInfo.Info;
@@ -202,7 +202,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         AppData(ctx)->PQConfig.GetTestDatabaseRoot(),
         topicsIter->second.CdcStreamPath
     );
-    AFL_ENSURE(topicsIter->second.FullConverter->IsValid());
+    YDB_LOG_ENSURE(topicsIter->second.FullConverter->IsValid());
     return CheckTopicACL(topicInfo, topicsIter->first, ctx);
 }
 
@@ -220,19 +220,28 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
         TVector<TString> originals{path};
         if (secondaryPass) {
             auto mapped = SecondaryToOriginal.find(path);
-            AFL_ENSURE(mapped != SecondaryToOriginal.end())("path", path);
+            YDB_LOG_ENSURE(mapped != SecondaryToOriginal.end(),
+                {"path", path});
             originals = mapped->second;
         }
 
         for (const auto& original : originals) {
             auto it = Topics.find(original);
-            AFL_ENSURE(it != Topics.end())("path", original);
+            YDB_LOG_ENSURE(it != Topics.end(),
+                {"path", original});
 
             if (topicInfo.Status == NPQ::NDescriber::EStatus::Success) {
                 if (!ProcessTopicSchemeCacheResponse(topicInfo, it, ctx)) {
                     return;
                 }
                 continue;
+            }
+
+            if (topicInfo.CdcStream && topicInfo.Status == NPQ::NDescriber::EStatus::NotFound) {
+                return CloseSession(
+                    TStringBuilder() << "CDC stream '" << original
+                        << "' describe error, reason: could not retrieve child topic description",
+                    PersQueue::ErrorCode::ERROR, ctx);
             }
 
             // Metacache looks up the legacy primary path first and, on a miss,
@@ -318,7 +327,7 @@ void TReadInitAndAuthActor::HandleClientSchemeCacheResponse(
     TEvTxProxySchemeCache::TEvNavigateKeySetResult* msg = ev->Get();
     const NSchemeCache::TSchemeCacheNavigate* navigate = msg->Request.Get();
 
-    AFL_ENSURE(navigate->ResultSet.size() == 1);
+    YDB_LOG_ENSURE(navigate->ResultSet.size() == 1);
     auto& entry = navigate->ResultSet.front();
     auto path = "/" + JoinPath(entry.Path); // ToDo [migration] - through converter ?
     if (navigate->ErrorCount > 0) {

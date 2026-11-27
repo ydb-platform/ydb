@@ -7,6 +7,7 @@
 #include <util/generic/yexception.h>
 #include <util/system/hp_timer.h>
 
+#include <functional>
 #include <optional>
 
 namespace NActors {
@@ -20,6 +21,8 @@ public:
     struct TOptions {
         NHdrf::NDynamic::TQueryPtr Query;
         bool IsSchedulable;
+        TTimeProviderPtr TimeProvider = {};
+        std::function<ui64()> Random = {};
     };
 
     explicit TSchedulableBase(const TOptions& options);
@@ -31,6 +34,7 @@ public:
     void StopExecution();
     void NotifyResumed(bool byScheduler);
     void RegisterForResume(const NActors::TActorId& actorId);
+    void RegisterForResume(std::function<void()> resume);
 
     const NHdrf::TFullPoolId& GetFullPoolId() const {
         Y_ENSURE(IsAccountable());
@@ -57,8 +61,11 @@ private:
     TSchedulableTaskPtr SchedulableTask;
     const NHdrf::TFullPoolId FullPoolId;
     const bool IsSchedulable;
+    const TTimeProviderPtr TimeProvider;
+    const std::function<ui64()> Random;
 
     THPTimer Timer;
+    TMonotonic StartTime; // injected clock, if set
     bool Executed = false;
     bool Throttled = false;
     bool ForcedResume = false;

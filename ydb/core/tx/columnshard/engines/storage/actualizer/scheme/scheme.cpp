@@ -13,20 +13,19 @@ namespace NKikimr::NOlap::NActualizer {
 
 std::optional<NKikimr::NOlap::NActualizer::TSchemeActualizer::TFullActualizationInfo> TSchemeActualizer::BuildActualizationInfo(
     const TPortionInfo& portion) const {
-    YDB_LOG_VERIFY(TargetSchema);
-    const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
-    auto portionSchema = portion.GetSchema(VersionedIndex);
-    if (portionSchema->GetVersion() < TargetSchema->GetVersion()) {
-        auto storagesWrite = TargetSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
-        auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
-        TRWAddress address(std::move(storagesRead), std::move(storagesWrite));
-        return TFullActualizationInfo(std::move(address), TargetSchema);
+    if (!portion.NeedSchemeActualization(VersionedIndex)) {
+        return {};
     }
-    return {};
+    const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
+    const auto writeSchema = portion.GetRewriteSchema(VersionedIndex);   // the latest schema at the time of the rewrite
+    auto storagesWrite = writeSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
+    auto storagesRead = portion.GetSchema(VersionedIndex)->GetIndexInfo().GetUsedStorageIds(currentTierName);
+    return TFullActualizationInfo(TRWAddress(std::move(storagesRead), std::move(storagesWrite)), writeSchema);
 }
 
 void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext& addContext) {
-    if (!TargetSchema) {
+    PortionsInFlight.erase(info.GetPortionId());
+    if (!VersionedIndex.GetSchemeActualizationThreshold()) {
         TSchemeGlobalCounters::OnEmptyTargetSchema();
         return;
     }
@@ -51,6 +50,8 @@ void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExterna
 void TSchemeActualizer::DoRemovePortion(const ui64 portionId) {
     auto it = PortionsInfo.find(portionId);
     if (it == PortionsInfo.end()) {
+        // not queued: a portion handed to a task, removed from the granule now that its rewrite is committed
+        PortionsInFlight.erase(portionId);
         TSchemeGlobalCounters::OnSkipPortionToRemove();
         return;
     }
@@ -88,13 +89,13 @@ void TSchemeActualizer::DoExtractTasks(
                 }
             }
             auto info = BuildActualizationInfo(*portion);
-            if (!info) {   // its possible through chains with equivalent schemas collapsed
+            if (!info) {   // not expected: queued by the same test, the queue is rebuilt whenever the threshold changes
                 portionsToRemove.emplace(portion->GetPortionId());
                 continue;
             }
             auto portionScheme = portion->GetSchema(VersionedIndex);
-            TPortionEvictionFeatures features(
-                portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
+            TPortionEvictionFeatures features(portion->GetSchemaVersionVerified(), portionScheme, info->GetTargetScheme(),
+                portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
             features.SetTargetTierName(portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
 
             bool limitExceeded = false;
@@ -110,6 +111,7 @@ void TSchemeActualizer::DoExtractTasks(
                 case TTieringProcessContext::EAddPortionResult::PORTION_LOCKED:
                     break;
                 case TTieringProcessContext::EAddPortionResult::SUCCESS:
+                    PortionsInFlight.emplace(portion->GetPortionId());
                     portionsToRemove.emplace(portion->GetPortionId());
                     break;
             }
@@ -139,15 +141,15 @@ void TSchemeActualizer::DoExtractTasks(
 }
 
 void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {
-    TargetSchema = VersionedIndex.GetLastCriticalSchema();
-    if (!TargetSchema) {
+    NYDBTest::TControllers::GetColumnShardController()->AddPortionForActualizer(-1 * PortionsInfo.size());
+    PortionsInfo.clear();
+    PortionsToActualizeScheme.clear();
+    PortionsInFlight.clear();
+    if (!VersionedIndex.GetSchemeActualizationThreshold()) {
+        // SchemeNeedActualization set back to false: the actualization stops
         TSchemeGlobalCounters::OnRefreshEmpty();
-        YDB_LOG_VERIFY(PortionsInfo.empty());
     } else {
         TSchemeGlobalCounters::OnRefreshValue();
-        NYDBTest::TControllers::GetColumnShardController()->AddPortionForActualizer(-1 * PortionsInfo.size());
-        PortionsInfo.clear();
-        PortionsToActualizeScheme.clear();
         for (auto&& i : externalContext.GetPortions()) {
             AddPortion(i.second, externalContext);
         }

@@ -50,6 +50,7 @@ public:
     FEATURE_FLAG_SETTER(EnableUniqConstraint)
     FEATURE_FLAG_SETTER(EnableUuidAsPrimaryKey)
     FEATURE_FLAG_SETTER(EnableTablePgTypes)
+    FEATURE_FLAG_SETTER(DisablePgCompatibility)
     FEATURE_FLAG_SETTER(EnableServerlessExclusiveDynamicNodes)
     FEATURE_FLAG_SETTER(EnableAddColumsWithDefaults)
     FEATURE_FLAG_SETTER(EnableReplaceIfExistsForExternalEntities)
@@ -91,6 +92,7 @@ public:
     FEATURE_FLAG_SETTER(EnableTopicDeferredPublish)
     FEATURE_FLAG_SETTER(TransferInternalDataDecompression)
     FEATURE_FLAG_SETTER(EnableCdcAggregator)
+    FEATURE_FLAG_SETTER(EnableCdcKeyRangeHeartbeats)
     #undef FEATURE_FLAG_SETTER
 };
 

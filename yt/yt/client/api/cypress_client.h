@@ -180,11 +180,6 @@ struct TExternalizeNodeOptions
     , public TTransactionalOptions
 { };
 
-struct TInternalizeNodeOptions
-    : public TTimeoutOptions
-    , public TTransactionalOptions
-{ };
-
 ////////////////////////////////////////////////////////////////////////////////
 
 struct ICypressClientBase
@@ -256,9 +251,6 @@ struct ICypressClientBase
         NObjectClient::TCellTag cellTag,
         const TExternalizeNodeOptions& options = {}) = 0;
 
-    virtual TFuture<void> InternalizeNode(
-        const NYPath::TYPath& path,
-        const TInternalizeNodeOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

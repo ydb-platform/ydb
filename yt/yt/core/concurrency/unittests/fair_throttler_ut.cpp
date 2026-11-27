@@ -5,6 +5,7 @@
 
 #include <library/cpp/testing/common/env.h>
 
+#include <tuple>
 #include <vector>
 
 namespace NYT::NConcurrency {
@@ -326,6 +327,169 @@ TEST_F(TConcurrentFairThrottlerTest, TwoBuckets)
     ASSERT_LE(firstComplete, 30);
     ASSERT_LE(secondComplete, 30);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr int LeaderMask = 1;
+constexpr int FollowerMask = 2;
+
+void CheckIpcReconfiguration(int reconfigureMask)
+{
+    std::string testName = ::testing::UnitTest::GetInstance()->current_test_info()->name();
+    auto config = New<TFairThrottlerConfig>();
+    config->IpcPath = (GetOutputPath() / (testName + ".throttler")).GetPath();
+    config->TotalLimit = 100;
+    auto bucketConfig = New<TFairThrottlerBucketConfig>();
+
+    auto leader = CreateFairThrottler(config, Logger, NProfiling::TProfiler{});
+    auto first = leader->CreateBucketThrottler("first", bucketConfig);
+    // Elect the first throttler before creating its peer.
+    ASSERT_TRUE(WaitFor(first->Throttle(1).WithTimeout(TDuration::Seconds(5))).IsOK());
+
+    auto follower = CreateFairThrottler(config, Logger, NProfiling::TProfiler{});
+    auto second = follower->CreateBucketThrottler("second", bucketConfig);
+    auto reconfigure = [&] (const TFairThrottlerConfigPtr& newConfig) {
+        if (reconfigureMask & LeaderMask) {
+            leader->Reconfigure(newConfig, {});
+        }
+        if (reconfigureMask & FollowerMask) {
+            follower->Reconfigure(newConfig, {});
+        }
+    };
+
+    std::vector<TFuture<void>> firstRequests, secondRequests;
+    for (int index = 0; index < 1000; ++index) {
+        firstRequests.push_back(first->Throttle(10));
+        secondRequests.push_back(second->Throttle(10));
+    }
+
+    auto localConfig = New<TFairThrottlerConfig>();
+    localConfig->TotalLimit = config->TotalLimit;
+    for (int iteration = 0; iteration < 2; ++iteration) {
+        reconfigure(localConfig);
+        ASSERT_EQ(first, leader->CreateBucketThrottler("first", bucketConfig));
+        ASSERT_EQ(second, follower->CreateBucketThrottler("second", bucketConfig));
+
+        auto firstBefore = CountCompleted(firstRequests);
+        auto secondBefore = CountCompleted(secondRequests);
+        Sleep(TDuration::Seconds(2));
+
+        // Both throttlers now have independent budgets, including the former IPC peer.
+        EXPECT_GE(CountCompleted(firstRequests) - firstBefore, 15);
+        EXPECT_GE(CountCompleted(secondRequests) - secondBefore, 15);
+
+        reconfigure(config);
+        ASSERT_EQ(first, leader->CreateBucketThrottler("first", bucketConfig));
+        ASSERT_EQ(second, follower->CreateBucketThrottler("second", bucketConfig));
+        Sleep(TDuration::MilliSeconds(500));
+        firstBefore = CountCompleted(firstRequests);
+        secondBefore = CountCompleted(secondRequests);
+        Sleep(TDuration::Seconds(2));
+
+        // Rejoining IPC restores a single budget shared between both throttlers.
+        auto firstCompleted = CountCompleted(firstRequests) - firstBefore;
+        auto secondCompleted = CountCompleted(secondRequests) - secondBefore;
+        EXPECT_GE(firstCompleted, 5);
+        EXPECT_GE(secondCompleted, 5);
+        EXPECT_LE(firstCompleted + secondCompleted, 28);
+    }
+
+    for (const auto& request : firstRequests) {
+        request.Cancel(TError("Test finished"));
+    }
+    for (const auto& request : secondRequests) {
+        request.Cancel(TError("Test finished"));
+    }
+}
+
+class TFairThrottlerIpcReconfigurationTest
+    : public ::testing::TestWithParam<int>
+{ };
+
+TEST_P(TFairThrottlerIpcReconfigurationTest, IpcReconfiguration)
+{
+    CheckIpcReconfiguration(GetParam());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    TFairThrottlerIpcReconfigurationTest,
+    TFairThrottlerIpcReconfigurationTest,
+    ::testing::Values(FollowerMask, LeaderMask, LeaderMask | FollowerMask));
+
+////////////////////////////////////////////////////////////////////////////////
+
+void CheckLocalStatePreservation(bool useIpcBefore, bool useIpcAfter)
+{
+    std::string testName = ::testing::UnitTest::GetInstance()->current_test_info()->name();
+    auto ipcPath = (GetOutputPath() / (testName + ".throttler")).GetPath();
+    auto oldConfig = New<TFairThrottlerConfig>();
+    oldConfig->TotalLimit = 100;
+    oldConfig->DistributionPeriod = TDuration::Hours(1);
+    if (useIpcBefore) {
+        oldConfig->IpcPath = ipcPath;
+    }
+
+    auto throttler = CreateFairThrottler(oldConfig, Logger, NProfiling::TProfiler{});
+    auto probe = throttler->CreateBucketThrottler("probe", New<TFairThrottlerBucketConfig>());
+    // Wait for the initial tick. The next tick is an hour away, so it cannot mask a reset.
+    ASSERT_TRUE(WaitFor(probe->Throttle(1).WithTimeout(TDuration::Seconds(5))).IsOK());
+
+    auto bucketConfig = New<TFairThrottlerBucketConfig>();
+    bucketConfig->Limit = 100;
+    auto bucket = throttler->CreateBucketThrottler("main", bucketConfig);
+    // A limited bucket cannot draw from the shared reserve, so only local quota is observed.
+    bucket->Release(100);
+    ASSERT_EQ(bucket->GetAvailable(), 100);
+
+    auto newConfig = New<TFairThrottlerConfig>();
+    newConfig->TotalLimit = oldConfig->TotalLimit;
+    newConfig->DistributionPeriod = oldConfig->DistributionPeriod;
+    if (useIpcAfter) {
+        newConfig->IpcPath = ipcPath;
+    }
+    throttler->Reconfigure(newConfig, {{"main", bucketConfig}, {"new", bucketConfig}});
+
+    ASSERT_EQ(bucket, throttler->CreateBucketThrottler("main", bucketConfig));
+    auto newBucket = throttler->CreateBucketThrottler("new", bucketConfig);
+    EXPECT_EQ(newBucket->GetAvailable(), 0);
+    newBucket->Release(25);
+    EXPECT_EQ(bucket->GetAvailable(), 100);
+    EXPECT_TRUE(bucket->TryAcquire(100));
+    EXPECT_FALSE(bucket->TryAcquire(1));
+
+    bucket->Acquire(50);
+    throttler->Reconfigure(oldConfig, {});
+    EXPECT_EQ(bucket->GetAvailable(), -50);
+    EXPECT_EQ(newBucket->GetAvailable(), 25);
+    EXPECT_TRUE(bucket->IsOverdraft());
+
+    bucket->Release(50);
+    auto request = bucket->Throttle(10);
+    ASSERT_FALSE(request.IsSet());
+    throttler->Reconfigure(newConfig, {});
+    EXPECT_EQ(bucket->GetQueueTotalAmount(), 10);
+    EXPECT_FALSE(request.IsSet());
+    request.Cancel(TError("Test finished"));
+}
+
+class TFairThrottlerLocalStatePreservationTest
+    : public ::testing::TestWithParam<std::tuple<bool, bool>>
+{ };
+
+TEST_P(TFairThrottlerLocalStatePreservationTest, LocalStatePreservation)
+{
+    auto [useIpcBefore, useIpcAfter] = GetParam();
+    CheckLocalStatePreservation(useIpcBefore, useIpcAfter);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    TFairThrottlerLocalStatePreservationTest,
+    TFairThrottlerLocalStatePreservationTest,
+    ::testing::Values(
+        std::tuple(true, false),
+        std::tuple(false, true),
+        std::tuple(false, false),
+        std::tuple(true, true)));
 
 ////////////////////////////////////////////////////////////////////////////////
 

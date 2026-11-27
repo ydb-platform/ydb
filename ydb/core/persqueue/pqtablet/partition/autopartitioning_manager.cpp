@@ -578,6 +578,10 @@ IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabl
         return new TSupportiveAutopartitioningManager(config, partitionId.OriginalPartitionId);
     }
 
+    if (config.GetSplitByPartitionKey()) {
+        return new TNoneAutopartitioningManager(config);
+    }
+
     return new TStatefulAutopartitioningManager(config, partitionId.OriginalPartitionId);
 }
 

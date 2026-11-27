@@ -9,10 +9,9 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
-#include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 #include <ydb/core/protos/counters_replication.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/core/transfer/transfer_writer.h>
+#include <ydb/core/tx/replication/common/transfer_writer_stats.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -225,7 +224,8 @@ public:
             return; // old controller: do not authorize further source commits
         }
         const auto id = GetWorkerId(ev->Sender);
-        AFL_VERIFY_DEBUG(HasWorker(id))("worker", id);
+        YDB_LOG_VERIFY_DEBUG(HasWorker(id),
+            {"worker", id});
         auto& record = ev->Get()->Record;
         id.Serialize(*record.MutableWorker());
         ctx.Send(ev->Forward(ActorId));
@@ -301,6 +301,7 @@ public:
         IndexBuildWorkers.erase(id);
         PendingIndexTxIds.erase(id);
         DataEnded.erase(id);
+        RemoveWorkerHeartbeat(id);
         Workers.erase(it);
     }
 
@@ -315,6 +316,7 @@ public:
         IndexBuildWorkers.erase(it->second);
         PendingIndexTxIds.erase(it->second);
         DataEnded.erase(it->second);
+        RemoveWorkerHeartbeat(it->second);
         Workers.erase(it->second);
 
         PendingStatsValues.erase(it->second);
@@ -537,6 +539,18 @@ public:
     }
 
 private:
+    void RemoveWorkerHeartbeat(const TWorkerId& id) {
+        const auto version = Workers.at(id).Heartbeat;
+        WorkersWithHeartbeat.erase(id);
+        const auto it = WorkersByHeartbeat.find(version);
+        if (it != WorkersByHeartbeat.end()) {
+            it->second.erase(id);
+            if (it->second.empty()) {
+                WorkersByHeartbeat.erase(it);
+            }
+        }
+    }
+
     static void SendTxIdResult(IActorOps* ops, const TActorId& recipient, const TMap<TRowVersion, ui64>& result) {
         auto ev = MakeHolder<TEvService::TEvTxIdResult>();
 
@@ -800,9 +814,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             const ITransferWriterFactory* transferWriterFactory)
     {
         if (!CompilationService) {
-            CompilationService = Register(
-                NFq::NRowDispatcher::CreatePurecalcCompileService({}, MakeIntrusive<NMonitoring::TDynamicCounters>())
-            );
+            CompilationService = Register(transferWriterFactory->CreateCompilationService());
         }
 
         return [

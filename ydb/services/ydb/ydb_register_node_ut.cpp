@@ -176,11 +176,11 @@ void CheckAccessDeniedRegisterNode(const NDiscovery::TNodeRegistrationResult& re
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), expectedError);
 }
 
-Y_UNIT_TEST_TWIN(DatabasePathResolvesAgainstDomain, enableRelativePaths) {
+Y_UNIT_TEST_TWIN(DatabasePathKeepsLegacySemantics, enableRelativePaths) {
     TKikimrServerForTestNodeRegistration server({.EnableRelativePaths = enableRelativePaths});
     TDriverConfig config;
     config.UseSecureConnection(TKikimrTestWithAuthAndSsl::GetCACertAndKey().Certificate.c_str())
-        .SetDatabase("/Root")
+        .SetDatabase("Root")
         .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())
         .SetAuthToken(BUILTIN_ACL_ROOT);
     TDriver driver(config);
@@ -195,18 +195,12 @@ Y_UNIT_TEST_TWIN(DatabasePathResolvesAgainstDomain, enableRelativePaths) {
     auto relativeSettings = GetNodeRegistrationSettings();
     relativeSettings.Path("Root");
     auto relative = client.NodeRegistration(relativeSettings).GetValueSync();
-    if (enableRelativePaths) {
-        // Slashless Root is relative: /Root/Root does not exist.
-        UNIT_ASSERT_C(!relative.IsTransportError(), relative.GetIssues().ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL_C(relative.GetStatus(), EStatus::GENERIC_ERROR, relative.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(relative.GetIssues().ToOneLineString(), "Perhaps the database /Root/Root does not exist");
-    } else {
-        CheckGood(relative);
-        UNIT_ASSERT_VALUES_EQUAL(relative.GetScopeTabletId(), absolute.GetScopeTabletId());
-        UNIT_ASSERT_VALUES_EQUAL(relative.GetScopePathId(), absolute.GetScopePathId());
-        UNIT_ASSERT_VALUES_EQUAL(relative.GetDomainPath(), "Root");
-    }
+    CheckGood(relative);
+    UNIT_ASSERT_VALUES_EQUAL(relative.GetScopeTabletId(), absolute.GetScopeTabletId());
+    UNIT_ASSERT_VALUES_EQUAL(relative.GetScopePathId(), absolute.GetScopePathId());
+    UNIT_ASSERT_VALUES_EQUAL(relative.GetDomainPath(), "Root");
     CheckGood(client.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync());
+    CheckGood(RegisterNode(config.SetDatabase("/Root")));
     driver.Stop(true);
 }
 

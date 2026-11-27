@@ -45,12 +45,14 @@ struct TUserTable : public TThrRefBase {
             , Codec(ExtractDbCodec(family))
             , Cache(ExtractDbCache(family))
             , CacheMode(ExtractDbCacheMode(family))
+            , KeyIndexInDescriptor(family.GetKeyIndexInDescriptor())
+            , GroupIndexesInDescriptor(family.GetGroupIndexesInDescriptor())
             , Room(new TStorageRoom(family.GetRoom()))
             , Name(family.GetName())
         {
         }
 
-        void Update(const NKikimrSchemeOp::TFamilyDescription& family) {
+        void Update(const NKikimrSchemeOp::TFamilyDescription& family, bool hasFullRoomMap = false) {
             if (family.HasColumnCodec()) {
                 ColumnCodec = family.GetColumnCodec();
                 Codec = ToDbCodec(ColumnCodec);
@@ -68,6 +70,12 @@ struct TUserTable : public TThrRefBase {
             if (family.HasColumnCacheMode()) {
                 ColumnCacheMode = family.GetColumnCacheMode();
                 CacheMode = ToDbCacheMode(ColumnCacheMode);
+            }
+            if (family.HasKeyIndexInDescriptor()) {
+                KeyIndexInDescriptor = family.GetKeyIndexInDescriptor();
+            }
+            if (family.HasGroupIndexesInDescriptor()) {
+                GroupIndexesInDescriptor = family.GetGroupIndexesInDescriptor();
             }
             if (family.GetStorageConfig().HasDataThreshold()) {
                 OuterThreshold = SaveGetThreshold(family.GetStorageConfig().GetDataThreshold());
@@ -102,7 +110,10 @@ struct TUserTable : public TThrRefBase {
                     StorageConfig.SetExternalChannelsCount(srcStorage.GetExternalChannelsCount());
                 }
             }
-            Room.Reset(new TStorageRoom(family.GetRoom()));
+            // SchemeShard omits Room for families assigned to room 0 in a full room map.
+            if (family.HasRoom() || hasFullRoomMap) {
+                Room.Reset(new TStorageRoom(family.GetRoom()));
+            }
         }
 
         static ui32 SaveGetThreshold(ui32 value) {
@@ -130,6 +141,8 @@ struct TUserTable : public TThrRefBase {
         ECodec Codec;
         ECache Cache;
         ECacheMode CacheMode;
+        bool KeyIndexInDescriptor;
+        bool GroupIndexesInDescriptor;
         TStorageRoom::TPtr Room;
 
         ui32 GetCodecLevel() const {
@@ -310,6 +323,7 @@ struct TUserTable : public TThrRefBase {
         ui32 Family = 0;
         bool NotNull = false;
         bool SetNotNullInProgress = false;
+        bool IsBuildInProgress = false;
         // Set when the column default is a sequence: the path as written in the DDL
         // (possibly relative to the table). The data shard resolves it against its own
         // table path when it needs to address the sequence.
@@ -611,6 +625,7 @@ struct TUserTable : public TThrRefBase {
     ui64 GetTableSchemaVersion() const { return TableSchemaVersion; }
     void SetTableSchemaVersion(ui64 schemaVersion);
     bool ResetTableSchemaVersion();
+    bool FinishColumnBuilding();
 
     NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetDetailedMetricsLevel() const {
         return DetailedMetricsLevel;

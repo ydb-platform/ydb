@@ -104,6 +104,11 @@ void IViewer::DeleteOldSharedCacheData() {
     SharedCacheState->ClearOld();
 }
 
+std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse> IViewer::GetCachedStoragePools(bool& needUpdate) {
+    TDuration age;
+    return SharedCacheState->StoragePools.GetFromCache(age, needUpdate);
+}
+
 void IViewer::UpdateSharedCacheData(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse> ev) {
     std::visit(TOverloaded{
         [&](const std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse>& r) { SharedCacheState->StorageGroups.UpdateCache(r); },
@@ -757,7 +762,8 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> 
     return MakeRequestToPipe<NSysView::TEvSysView::TEvGetPDisksResponse>(pipeClient, request.release());
 }
 
-TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVDiskInfo(ui32 nodeId, ui32 pdiskId) {
+TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVDiskInfo(
+        ui32 nodeId, ui32 pdiskId, bool includeDDiskPoolNames) {
     TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
     auto request = std::make_unique<NSysView::TEvSysView::TEvGetVSlotsRequest>();
     request->Record.SetInclusiveFrom(true);
@@ -768,6 +774,9 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> 
     request->Record.MutableTo()->SetNodeId(nodeId);
     request->Record.MutableTo()->SetPDiskId(pdiskId);
     request->Record.MutableTo()->SetVSlotId(std::numeric_limits<ui32>::max());
+    if (includeDDiskPoolNames) {
+        request->Record.SetIncludeDDiskPoolNames(true);
+    }
     return MakeRequestToPipe<NSysView::TEvSysView::TEvGetVSlotsResponse>(pipeClient, request.release());
 }
 
@@ -811,24 +820,32 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResp
     return RequestBSControllerPools();
 }
 
-TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVSlots() {
-    TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+static auto MakeBSControllerVSlotsRequest(bool includeDDiskPoolNames) {
     auto request = std::make_unique<NSysView::TEvSysView::TEvGetVSlotsRequest>();
+    if (includeDDiskPoolNames) {
+        request->Record.SetIncludeDDiskPoolNames(true);
+    }
+    return request;
+}
+
+TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVSlots(bool includeDDiskPoolNames) {
+    TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+    auto request = MakeBSControllerVSlotsRequest(includeDDiskPoolNames);
     return MakeRequestToPipe<NSysView::TEvSysView::TEvGetVSlotsResponse>(pipeClient, request.release());
 }
 
-TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::MakeCachedRequestBSControllerVSlots() {
+TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::MakeCachedRequestBSControllerVSlots(bool includeDDiskPoolNames) {
     if (UseCache && Viewer) {
         bool needUpdate = false;
         auto cachedData = Viewer->SharedCacheState->StorageVSlots.GetFromCache(CachedDataMaxAge, needUpdate);
         if (needUpdate) {
-            UpdateSharedCacheTablet(GetBSControllerId(), std::make_unique<NSysView::TEvSysView::TEvGetVSlotsRequest>());
+            UpdateSharedCacheTablet(GetBSControllerId(), MakeBSControllerVSlotsRequest(includeDDiskPoolNames));
         }
         if (cachedData) {
             return cachedData;
         }
     }
-    return RequestBSControllerVSlots();
+    return RequestBSControllerVSlots(includeDDiskPoolNames);
 }
 
 TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> TViewerPipeClient::RequestBSControllerPDisks() {

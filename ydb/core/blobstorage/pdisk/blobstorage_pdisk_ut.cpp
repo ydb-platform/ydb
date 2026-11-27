@@ -1,6 +1,7 @@
 #include "blobstorage_pdisk_ut.h"
 
 #include "blobstorage_pdisk_abstract.h"
+#include "blobstorage_pdisk_completion_impl.h"
 #include "blobstorage_pdisk_impl.h"
 #include "blobstorage_pdisk_params.h"
 #include "blobstorage_pdisk_tools.h"
@@ -68,6 +69,140 @@ NPDisk::TEvChunkWrite::TPartsPtr GenParts(TReallyFastRng32& rng, size_t size) {
 }
 
 Y_UNIT_TEST_SUITE(TPDiskTest) {
+    Y_UNIT_TEST(CommitRecordValidation) {
+        using namespace NPDisk;
+        TTestActorRuntime runtime;
+        auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
+        runtime.Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}, {}});
+        auto context = std::make_shared<TPDiskCtx>(runtime.GetActorSystem(0), 12345, runtime.AllocateEdgeActor());
+        auto config = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
+            TPDiskCategory(DEVICE_TYPE_ROT, 0).GetRaw());
+        auto disk = MakeHolder<TPDisk>(context, config, MakeIntrusive<::NMonitoring::TDynamicCounters>());
+        disk->ChunkState = TVector<TChunkState>(8);
+        const TOwner owner = OwnerBeginUser;
+        TLogRecordHeader header(owner, TLogSignature(0, true), 8);
+        auto& ownerData = disk->OwnerData[owner];
+        ownerData.VDiskId = TVDiskID(0, 1, 0, 0, 0);
+
+        auto makeRecord = [](TString data, const TVector<ui32>& commits = {},
+                const TVector<ui32>& deletes = {}, const TVector<ui32>& dirties = {}) {
+            TCommitRecordFooter footer(data.size(), 8, commits.size(), deletes.size(), dirties.size(), true);
+            auto append = [&](const auto& value) {
+                data.append(reinterpret_cast<const char*>(&value), sizeof(value));
+            };
+            for (ui32 chunk : commits) { append(chunk); }
+            for (size_t i = 0; i < commits.size(); ++i) { append(ui64{42}); }
+            for (ui32 chunk : deletes) { append(chunk); }
+            if (TPDisk::IS_SHRED_ENABLED) {
+                for (ui32 chunk : dirties) { append(chunk); }
+            }
+            append(footer);
+            return data;
+        };
+        auto footerRecord = [](const TCommitRecordFooter& footer) {
+            TString data = "abc";
+            data.append(reinterpret_cast<const char*>(&footer), sizeof(footer));
+            return data;
+        };
+        TVector<std::pair<TString, TStringBuf>> invalidRecords = {
+            {TString(), "footer"},
+            {TString(sizeof(TCommitRecordFooter) - 1, '\0'), "footer"},
+            {footerRecord({3, 8, Max<ui32>(), 0, 0, true}), "CommitCount"},
+            {footerRecord({3, 8, 0, Max<ui32>(), 0, true}), "DeleteCount"},
+            {footerRecord({Max<ui64>(), 8, 0, 0, 0, true}), "UserDataSize"},
+            {footerRecord({0, 8, 0, 0, 0, true}), "UserDataSize"},
+            {makeRecord("abc", {1, 8}, {2}, {3}), "CommitChunks"},
+            {makeRecord("abc", {1}, {2, Max<ui32>()}, {3}), "DeleteChunks"},
+        };
+#ifdef ENABLE_PDISK_SHRED
+        invalidRecords.emplace_back(footerRecord({3, 8, 0, Max<ui32>(), Max<ui32>(), true}), "DirtyCount");
+        invalidRecords.emplace_back(makeRecord("abc", {1}, {2}, {3, 8}), "DirtyChunks");
+#endif
+        for (bool isInitial : {false, true}) {
+            auto resetOwner = [&] {
+                ownerData.CurrentFirstLsnToKeep = 4;
+                ownerData.LogRecordsInitiallyRead = 5;
+                ownerData.LogRecordsConsequentlyRead = 6;
+                ownerData.LastSeenLsn = 7;
+                ownerData.StartingPoints.clear();
+            };
+            for (const auto& [record, field] : invalidRecords) {
+                resetOwner();
+                TString data = record;
+                TMap<ui32, TChunkState> chunks;
+                chunks[0].Nonce = 77;
+                TEvReadLogResult result(NKikimrProto::OK, {}, {}, true, 0, "", owner);
+                UNIT_ASSERT_C(!disk->ProcessReadLogRecord(header, data, owner, 0, &result, &chunks,
+                    isInitial, true), field);
+                UNIT_ASSERT_STRING_CONTAINS(result.ErrorReason, field);
+                UNIT_ASSERT_VALUES_EQUAL(data, record);
+                UNIT_ASSERT_VALUES_EQUAL(chunks.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(chunks.at(0).Nonce, 77);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.CurrentFirstLsnToKeep, 4);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.LogRecordsInitiallyRead, 5);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.LogRecordsConsequentlyRead, 6);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.LastSeenLsn, 7);
+                UNIT_ASSERT(ownerData.StartingPoints.empty());
+                UNIT_ASSERT(result.Results.empty());
+            }
+            for (bool hasArrays : {false, true}) {
+                resetOwner();
+                TString data = hasArrays ? makeRecord("abc", {1}, {2}, {3}) : makeRecord("");
+                TMap<ui32, TChunkState> chunks;
+                TEvReadLogResult result(NKikimrProto::OK, {}, {}, true, 0, "", owner);
+                UNIT_ASSERT_C(disk->ProcessReadLogRecord(header, data, owner, 0, &result, &chunks,
+                    isInitial, true), result.ErrorReason);
+                UNIT_ASSERT_VALUES_EQUAL(data, hasArrays ? "abc" : "");
+                UNIT_ASSERT_VALUES_EQUAL(result.Results.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(result.Results.front().Data.Slice(), data);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.CurrentFirstLsnToKeep, isInitial ? 8 : 4);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.LogRecordsInitiallyRead, isInitial ? 6 : 5);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.LogRecordsConsequentlyRead, isInitial ? 6 : 7);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.LastSeenLsn, 8);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.StartingPoints.size(), isInitial ? 1 : 0);
+                UNIT_ASSERT_VALUES_EQUAL(chunks.size(), isInitial && hasArrays ? 2 + TPDisk::IS_SHRED_ENABLED : 0);
+                if (isInitial && hasArrays) {
+                    UNIT_ASSERT_VALUES_EQUAL(chunks.at(1).OwnerId, owner);
+                    UNIT_ASSERT_VALUES_EQUAL(chunks.at(1).Nonce, 42);
+                    UNIT_ASSERT_VALUES_EQUAL(chunks.at(2).OwnerId, OwnerUnallocated);
+                    UNIT_ASSERT(chunks.at(2).IsDirty.load());
+                    if (TPDisk::IS_SHRED_ENABLED) {
+                        UNIT_ASSERT(chunks.at(3).IsDirty.load());
+                    }
+                }
+            }
+        }
+    }
+
+#ifdef ENABLE_PDISK_SHRED
+    Y_UNIT_TEST(InvalidDirtyChunkRejectedBeforeCommit) {
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        const ui32 chunk = *vdisk.Chunks[EChunkState::RESERVED].begin();
+        const auto [invalidChunk, committed, uncommitted, isDirty] = testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            return std::make_tuple(ui32(p->ChunkState.size()), p->Mon.CommitedDataChunks->Val(),
+                p->Mon.UncommitedDataChunks->Val(), p->ChunkState[chunk].IsDirty.load());
+        });
+        NPDisk::TCommitRecord commit;
+        commit.CommitChunks = {chunk};
+        commit.DirtyChunks = {chunk, invalidChunk};
+        const auto result = testCtx.TestResponse<NPDisk::TEvLogResult>(new NPDisk::TEvLog(
+            vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0, commit, TRcBuf(TString("abc")),
+            vdisk.GetLsnSeg(), nullptr), NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result->ErrorReason, "DirtyChunks");
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            UNIT_ASSERT_VALUES_EQUAL(p->ChunkState[chunk].CommitsInProgress, 0);
+            UNIT_ASSERT_VALUES_EQUAL(p->ChunkState[chunk].CommitState, NPDisk::TChunkState::DATA_RESERVED);
+            UNIT_ASSERT_VALUES_EQUAL(p->ChunkState[chunk].IsDirty.load(), isDirty);
+            UNIT_ASSERT_VALUES_EQUAL(p->Mon.CommitedDataChunks->Val(), committed);
+            UNIT_ASSERT_VALUES_EQUAL(p->Mon.UncommitedDataChunks->Val(), uncommitted);
+        });
+        vdisk.CommitReservedChunks();
+    }
+#endif
+
     // A reservation that was never committed leaves no persistent trace, so the owner's
     // next incarnation cannot reference it. PDisk releases it at YardInit instead of
     // keeping it DATA_RESERVED -- holding quota that nobody can free -- until the PDisk
@@ -783,6 +918,386 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     "recycled chunkIdx# " << chunk << " still serves the data of its previous owner");
             }
         }
+    }
+
+    // Sectors an owner seals itself (TEvChunkWrite::PreformattedSectors) must be exactly what PDisk writes: byte for
+    // byte, read back the ordinary way by PDisk, and opened by the owner after a RawSectors read. The write and the
+    // reads are long enough to go to the device in several pieces.
+    void TestPreformattedSectors(bool encrypt) {
+        TActorTestContext testCtx({.EnableSectorEncryption = encrypt});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        UNIT_ASSERT(vdisk.FormatContext);
+        const NPDisk::TFormatContextPtr format = vdisk.FormatContext;
+        const ui32 payloadSize = format->GetSectorPayloadSize();
+        const ui32 sectorSize = format->GetSectorSize();
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.PDiskParams->AppendBlockSize, payloadSize);
+        const NPDisk::TOwner owner = vdisk.PDiskParams->Owner;
+        const NPDisk::TOwnerRound ownerRound = vdisk.PDiskParams->OwnerRound;
+
+        vdisk.ReserveChunk(2);
+        const TSet<TChunkIdx> reserved = vdisk.Chunks[EChunkState::RESERVED];
+        const TChunkIdx sealedChunk = *reserved.begin();
+        const TChunkIdx pdiskChunk = *reserved.rbegin();
+        const ui64 sealedNonce = vdisk.ChunkNonces->Get(sealedChunk).value();
+        const ui64 pdiskNonce = vdisk.ChunkNonces->Get(pdiskChunk).value();
+
+        // 300 sectors from sector 2 on, the last one half full
+        const ui32 firstSector = 2;
+        const ui32 sectors = 300;
+        const TString payload = PrepareData((sectors - 1) * payloadSize + payloadSize / 2);
+        const ui32 offset = firstSector * payloadSize;
+
+        auto seal = [&](TChunkIdx chunkIdx, ui64 chunkNonce) {
+            TRcBuf buf = TRcBuf::UninitializedPageAligned(sectors * sectorSize);
+            NPDisk::TFormatContext::TSealer sealer(format, chunkIdx, chunkNonce, {});
+            for (ui32 i = 0; i < sectors; ++i) {
+                const ui32 size = Min<ui32>(payloadSize, payload.size() - i * payloadSize);
+                sealer.Seal(reinterpret_cast<ui8*>(buf.GetDataMut()) + (ui64)i * sectorSize,
+                    payload.data() + (ui64)i * payloadSize, size, firstSector + i);
+            }
+            return buf;
+        };
+        auto preformattedWrite = [&](TChunkIdx chunkIdx, ui32 writeOffset, ui64 firstSectorNonce, TRcBuf buf) {
+            const size_t size = buf.size();
+            NPDisk::TEvChunkWrite *ev = new NPDisk::TEvChunkWrite(owner, ownerRound, chunkIdx, writeOffset,
+                new NPDisk::TEvChunkWrite::TRopeAlignedParts(TRope(std::move(buf)), size), nullptr, false, 0);
+            ev->PreformattedSectors = true;
+            ev->FirstSectorNonce = firstSectorNonce;
+            return ev;
+        };
+        auto rawRead = [&](TChunkIdx chunkIdx, ui64 chunkNonce) {
+            NPDisk::TEvChunkRead *ev = new NPDisk::TEvChunkRead(owner, ownerRound, chunkIdx, offset, payload.size(), 0, nullptr);
+            ev->RawSectors = true;
+            THolder<NPDisk::TEvChunkReadResult> res = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(ev, NKikimrProto::OK);
+            UNIT_ASSERT(res->RawSectors);
+            UNIT_ASSERT_VALUES_EQUAL(res->ChunkNonce, chunkNonce);
+            UNIT_ASSERT_VALUES_EQUAL(res->Offset, firstSector * sectorSize);
+            UNIT_ASSERT_VALUES_EQUAL(res->Data.Size(), sectors * sectorSize);
+            const ui8 *raw = res->Data.RawDataPtr(0, sectors * sectorSize);
+            return TString(reinterpret_cast<const char*>(raw), sectors * sectorSize);
+        };
+
+        // what PDisk refuses
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            preformattedWrite(sealedChunk, offset, sealedNonce + firstSector + 1, seal(sealedChunk, sealedNonce)),
+            NKikimrProto::ERROR);
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            preformattedWrite(sealedChunk, offset + 1, sealedNonce + firstSector, seal(sealedChunk, sealedNonce)),
+            NKikimrProto::ERROR);
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            preformattedWrite(0, offset, firstSector, seal(sealedChunk, sealedNonce)),
+            NKikimrProto::ERROR);
+
+        // sealed by the owner: PDisk writes exactly these bytes and reads them back the ordinary way
+        const TRcBuf sealed = seal(sealedChunk, sealedNonce);
+        const TString sealedBytes(sealed.data(), sealed.size());
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            preformattedWrite(sealedChunk, offset, sealedNonce + firstSector, sealed), NKikimrProto::OK);
+        auto readTraffic = [&] {
+            return testCtx.SafeRunOnPDisk([](NPDisk::TPDisk* p) {
+                return std::pair{p->Mon.BandwidthPChunkReadPayload->Val(), p->Mon.BandwidthPChunkReadSectorFooter->Val()};
+            });
+        };
+        auto checkReadTraffic = [&](auto before) {
+            const auto after = readTraffic();
+            const ui64 footerBytes = sectors * sizeof(NPDisk::TDataSectorFooter);
+            UNIT_ASSERT_VALUES_EQUAL(after.first - before.first, sectors * sectorSize - footerBytes);
+            UNIT_ASSERT_VALUES_EQUAL(after.second - before.second, footerBytes);
+        };
+        const auto beforeRaw = readTraffic();
+        UNIT_ASSERT(rawRead(sealedChunk, sealedNonce) == sealedBytes);
+        checkReadTraffic(beforeRaw);
+        const auto beforeOrdinary = readTraffic();
+        {
+            const THolder<NPDisk::TEvChunkReadResult> res = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+                new NPDisk::TEvChunkRead(owner, ownerRound, sealedChunk, offset + 123, payload.size() - 173, 0,
+                    nullptr),
+                NKikimrProto::OK);
+            UNIT_ASSERT(res->Data.IsReadable());
+            const TRcBuf data = res->Data.ToString();
+            UNIT_ASSERT(TString(data.data(), data.size()) == payload.substr(123, payload.size() - 173));
+        }
+
+        checkReadTraffic(beforeOrdinary);
+
+        // written by PDisk: byte for byte what the owner would have sealed, and it opens to the payload
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            new NPDisk::TEvChunkWrite(owner, ownerRound, pdiskChunk, offset,
+                new NPDisk::TEvChunkWrite::TAlignedParts(TString(payload)), nullptr, false, 0),
+            NKikimrProto::OK);
+        TString raw = rawRead(pdiskChunk, pdiskNonce);
+        const TRcBuf expected = seal(pdiskChunk, pdiskNonce);
+        UNIT_ASSERT(raw == TString(expected.data(), expected.size()));
+        NPDisk::TFormatContext::TOpener opener(format, pdiskChunk, pdiskNonce, {});
+        TString opened = TString::Uninitialized(sectors * payloadSize);
+        for (ui32 i = 0; i < sectors; ++i) {
+            UNIT_ASSERT_C(opener.Open(reinterpret_cast<ui8*>(opened.Detach()) + (ui64)i * payloadSize,
+                reinterpret_cast<ui8*>(raw.Detach()) + (ui64)i * sectorSize, firstSector + i, 0, payloadSize),
+                "sector# " << firstSector + i);
+        }
+        UNIT_ASSERT(opened.substr(0, payload.size()) == payload);
+        UNIT_ASSERT(opened.substr(payload.size()) == TString(opened.size() - payload.size(), '\0'));
+    }
+
+    // No TEvChunkWriteResult arrives within a second. With nothing at all to deliver the test runtime throws instead
+    // of timing out, which means the same.
+    bool NoMoreWriteAnswers(TActorTestContext& testCtx) {
+        try {
+            return !testCtx.GetRuntime()->GrabEdgeEvent<NPDisk::TEvChunkWriteResult>(TDuration::Seconds(1));
+        } catch (const NActors::TEmptyEventQueueException&) {
+            return true;
+        }
+    }
+
+    // Long writes go to the device in pieces; a PDiskStop that drops the pieces still queued must leave every write
+    // answered exactly once (with an error if it was cut short), never waiting forever.
+    void TestWritesInPiecesAnsweredOnStop(bool preformatted) {
+        TActorTestContext testCtx({});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        const NPDisk::TFormatContextPtr format = vdisk.FormatContext;
+        const ui32 payloadSize = format->GetSectorPayloadSize();
+        const ui32 sectorSize = format->GetSectorSize();
+        const NPDisk::TOwner owner = vdisk.PDiskParams->Owner;
+        const NPDisk::TOwnerRound ownerRound = vdisk.PDiskParams->OwnerRound;
+        vdisk.ReserveChunk();
+        const TChunkIdx chunkIdx = *vdisk.Chunks[EChunkState::RESERVED].begin();
+        const ui64 chunkNonce = vdisk.ChunkNonces->Get(chunkIdx).value();
+
+        const ui32 writes = 4;
+        const ui32 sectors = 1000; // many Forseti pieces each
+        const TString payload = PrepareData(sectors * payloadSize);
+        for (ui32 w = 0; w < writes; ++w) {
+            const ui32 firstSector = w * sectors;
+            NPDisk::TEvChunkWrite *ev;
+            if (preformatted) {
+                TRcBuf buf = TRcBuf::UninitializedPageAligned(sectors * sectorSize);
+                NPDisk::TFormatContext::TSealer sealer(format, chunkIdx, chunkNonce, {});
+                for (ui32 i = 0; i < sectors; ++i) {
+                    sealer.Seal(reinterpret_cast<ui8*>(buf.GetDataMut()) + (ui64)i * sectorSize,
+                        payload.data() + (ui64)i * payloadSize, payloadSize, firstSector + i);
+                }
+                ev = new NPDisk::TEvChunkWrite(owner, ownerRound, chunkIdx, firstSector * payloadSize,
+                    new NPDisk::TEvChunkWrite::TRopeAlignedParts(TRope(std::move(buf)), sectors * sectorSize),
+                    reinterpret_cast<void*>(w + 1), false, 0);
+                ev->PreformattedSectors = true;
+                ev->FirstSectorNonce = chunkNonce + firstSector;
+            } else {
+                ev = new NPDisk::TEvChunkWrite(owner, ownerRound, chunkIdx, firstSector * payloadSize,
+                    new NPDisk::TEvChunkWrite::TAlignedParts(TString(payload)), reinterpret_cast<void*>(w + 1), false, 0);
+            }
+            testCtx.Send(ev);
+        }
+        testCtx.Send(new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr));
+
+        // one answer per write, whatever its status; a missing one would hang here, a second one would repeat a cookie
+        // (where exactly the stop falls is up to timing; WritePiecesAccounting covers the cases one by one)
+        TSet<ui64> answered;
+        while (answered.size() < writes) {
+            const THolder<NPDisk::TEvChunkWriteResult> res = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+            const ui64 cookie = reinterpret_cast<ui64>(res->Cookie);
+            UNIT_ASSERT_C(cookie >= 1 && cookie <= writes, cookie);
+            UNIT_ASSERT_C(answered.insert(cookie).second, "write# " << cookie << " answered twice");
+        }
+        testCtx.Recv<NPDisk::TEvYardControlResult>();
+        UNIT_ASSERT_C(NoMoreWriteAnswers(testCtx), "an extra write answer");
+    }
+
+    // The accounting of a write's pieces, driven by hand: a write whose first piece was done and the others dropped
+    // is answered once, with an error, however the pieces interleave; a write answered already is not answered
+    // again. The answers are checked in order, so a missing or a repeated one shows.
+    Y_UNIT_TEST(WritePiecesAccounting) {
+        TActorTestContext testCtx({});
+        TActorSystem *actorSystem = testCtx.SafeRunOnPDisk([](NPDisk::TPDisk *pdisk) {
+            return pdisk->PCtx->ActorSystem;
+        });
+
+        struct TWrite {
+            TIntrusivePtr<NPDisk::TChunkWrite> Write;
+            std::vector<std::unique_ptr<NPDisk::TChunkWritePiece>> Pieces;
+        };
+        auto makeWrite = [&](ui64 cookie, bool preformatted, ui32 pieces) {
+            NPDisk::TEvChunkWrite ev(1, 1, 1, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(4096, 'x')),
+                reinterpret_cast<void*>(cookie), false, 0);
+            ev.PreformattedSectors = preformatted;
+            TWrite res;
+            res.Write = new NPDisk::TChunkWrite(ev, testCtx.Sender, NPDisk::TReqId(NPDisk::TReqId::Test0, cookie), {});
+            res.Write->Completion = MakeHolder<NPDisk::TCompletionChunkWrite>(testCtx.Sender,
+                new NPDisk::TEvChunkWriteResult(NKikimrProto::OK, 1, reinterpret_cast<void*>(cookie), 0, TString()),
+                nullptr, 0, HPNow(), 4096, 0, [] {}, NPDisk::TReqId(), NWilson::TSpan());
+            if (preformatted) {
+                res.Write->PreformattedPieceCount = pieces;
+                res.Write->PreformattedPiecesInFlight.store(pieces);
+            }
+            for (ui32 i = 0; i < pieces; ++i) {
+                res.Pieces.emplace_back(new NPDisk::TChunkWritePiece(res.Write, i * 4096, 4096, NWilson::TSpan()));
+            }
+            return res;
+        };
+        auto pieceSent = [&](TWrite& w) { // a preformatted piece handed to the device
+            return new NPDisk::TCompletionChunkWritePreformattedPiece(w.Write.Get());
+        };
+
+        // 1: ordinary, first piece done, the rest dropped
+        TWrite w1 = makeWrite(1, false, 3);
+        w1.Write->PieceDone(actorSystem);
+        w1.Pieces[1]->Abort(actorSystem);
+        w1.Pieces[2]->Abort(actorSystem);
+
+        // 2: ordinary, refused already (SendChunkWriteError), then the rest dropped: no second answer
+        TWrite w2 = makeWrite(2, false, 3);
+        w2.Write->IsReplied = true;
+        w2.Write->PieceDone(actorSystem);
+        w2.Pieces[1]->Abort(actorSystem);
+        w2.Pieces[2]->Abort(actorSystem);
+
+        // 3: preformatted, first piece done on the device, the rest dropped
+        TWrite w3 = makeWrite(3, true, 3);
+        pieceSent(w3)->Exec(actorSystem);
+        w3.Pieces[1]->Abort(actorSystem);
+        w3.Pieces[2]->Abort(actorSystem);
+
+        // 4: preformatted, the rest dropped while the first piece is still on the device
+        TWrite w4 = makeWrite(4, true, 3);
+        NPDisk::TCompletionChunkWritePreformattedPiece *inFlight = pieceSent(w4);
+        w4.Pieces[1]->Abort(actorSystem);
+        w4.Pieces[2]->Abort(actorSystem);
+        inFlight->Exec(actorSystem);
+
+        // 5: preformatted, all pieces done: one answer, OK
+        TWrite w5 = makeWrite(5, true, 2);
+        pieceSent(w5)->Exec(actorSystem);
+        pieceSent(w5)->Exec(actorSystem);
+
+        // 6: ordinary, every piece dropped before any was sent
+        TWrite w6 = makeWrite(6, false, 2);
+        w6.Pieces[0]->Abort(actorSystem);
+        w6.Pieces[1]->Abort(actorSystem);
+
+        const std::pair<ui64, NKikimrProto::EReplyStatus> expected[] = {
+            {1, NKikimrProto::CORRUPTED}, {3, NKikimrProto::CORRUPTED}, {4, NKikimrProto::CORRUPTED},
+            {5, NKikimrProto::OK}, {6, NKikimrProto::CORRUPTED}};
+        for (const auto& [cookie, status] : expected) {
+            const THolder<NPDisk::TEvChunkWriteResult> res = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+            UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<ui64>(res->Cookie), cookie);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Status, status, cookie);
+        }
+        UNIT_ASSERT_C(NoMoreWriteAnswers(testCtx), "an extra write answer");
+    }
+
+    Y_UNIT_TEST(ChunkLockIsAllOrNothing) {
+        for (bool useMock : {false, true}) {
+            TActorTestContext testCtx({.UsePDiskMock = useMock});
+            TVDiskMock vdisk(&testCtx);
+            vdisk.InitFull();
+            const auto owner = vdisk.PDiskParams->Owner;
+            auto lock = [&](ui32 count) {
+                return testCtx.TestResponse<NPDisk::TEvChunkLockResult>(
+                    new NPDisk::TEvChunkLock(NPDisk::TEvChunkLock::PERSONAL_QUOTA, owner, count,
+                        NKikimrBlobStorage::TPDiskSpaceColor::GREEN), NKikimrProto::OK);
+            };
+            const auto first = lock(1);
+            UNIT_ASSERT_VALUES_EQUAL(first->LockedChunks.size(), 1);
+            const ui32 free = first->AvailableChunksCount;
+            UNIT_ASSERT_GT(free, 2);
+            for (ui32 count : {free - 1, free, free + 1}) {
+                const auto res = lock(count);
+                UNIT_ASSERT(res->LockedChunks.empty());
+                UNIT_ASSERT_VALUES_EQUAL(res->AvailableChunksCount, free);
+            }
+            const auto unlocked = testCtx.TestResponse<NPDisk::TEvChunkUnlockResult>(
+                new NPDisk::TEvChunkUnlock(NPDisk::TEvChunkLock::PERSONAL_QUOTA, owner), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(unlocked->UnlockedChunks, 1);
+        }
+    }
+
+    Y_UNIT_TEST(PreformattedWriteReportsEarlierDeviceError) {
+        using namespace NPDisk;
+        TManualEvent readFailed;
+        TManualEvent resume;
+        TRcBuf readBuffer;
+        TActorTestContext testCtx({});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        const auto format = vdisk.FormatContext;
+        const auto chunk = *vdisk.Chunks[EChunkState::RESERVED].begin();
+        const ui64 nonce = vdisk.ChunkNonces->Get(chunk).value();
+        const ui32 sectorSize = format->GetSectorSize();
+        readBuffer = TRcBuf::UninitializedPageAligned(sectorSize);
+        const TString payload = PrepareData(format->GetSectorPayloadSize());
+        TRcBuf sealed = TRcBuf::UninitializedPageAligned(sectorSize);
+        TFormatContext::TSealer(format, chunk, nonce, {}).Seal(
+            reinterpret_cast<ui8*>(sealed.GetDataMut()), payload.data(), payload.size(), 0);
+
+        // A failed read on the completion thread would normally stop the device immediately.
+        // Hold that thread so the write can succeed and only the ordered completion sees the earlier error.
+        struct TFailedRead : TCompletionAction {
+            TManualEvent& Failed;
+            TManualEvent& Resume;
+
+            TFailedRead(TManualEvent& failed, TManualEvent& resume)
+                : Failed(failed)
+                , Resume(resume)
+            {}
+
+            void Exec(TActorSystem*) override {
+                delete this;
+            }
+
+            void Release(TActorSystem*) override {
+                Failed.Signal();
+                Resume.WaitI();
+                delete this;
+            }
+        };
+
+        const auto map = testCtx.TestCtx.SectorMap;
+        Y_SCOPE_EXIT(&) {
+            map->ReadIoErrorEveryNthRequests = 0;
+            resume.Signal();
+        };
+        const ui64 offset = testCtx.SafeRunOnPDisk([&](TPDisk* p) {
+            const ui64 offset = p->Format.Offset(chunk, 0);
+            map->ReadIoErrorEveryNthRequests = 1;
+            p->BlockDevice->PreadAsync(readBuffer.GetDataMut(), readBuffer.size(), offset + sectorSize,
+                new TFailedRead(readFailed, resume), TReqId(TReqId::Test0, 1), nullptr);
+            return offset;
+        });
+        UNIT_ASSERT_C(readFailed.WaitT(TDuration::Seconds(10)), "the earlier read did not fail");
+        map->ReadIoErrorEveryNthRequests = 0;
+
+        auto* ev = new TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, chunk, 0,
+            new TEvChunkWrite::TRopeAlignedParts(TRope(sealed), sectorSize), nullptr, false, 0);
+        ev->PreformattedSectors = true;
+        ev->FirstSectorNonce = nonce;
+        testCtx.Send(ev);
+        auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<TEvChunkWriteResult>(testCtx.Sender, TDuration::Seconds(10));
+        UNIT_ASSERT_C(reply, "the write did not answer");
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::CORRUPTED);
+        UNIT_ASSERT_STRING_CONTAINS(reply->Get()->ErrorReason, "an earlier device operation failed");
+        UNIT_ASSERT_STRING_CONTAINS(reply->Get()->ErrorReason, TStringBuilder() << "offset# " << offset + sectorSize);
+        UNIT_ASSERT(map->Read(reinterpret_cast<ui8*>(readBuffer.GetDataMut()), sectorSize, offset));
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(readBuffer.data(), sectorSize), TStringBuf(sealed.data(), sectorSize));
+        resume.Signal();
+        UNIT_ASSERT_C(NoMoreWriteAnswers(testCtx), "an extra write answer");
+    }
+
+    Y_UNIT_TEST(WritesInPiecesAnsweredOnStopPreformatted) {
+        TestWritesInPiecesAnsweredOnStop(true);
+    }
+
+    Y_UNIT_TEST(WritesInPiecesAnsweredOnStopEncrypted) {
+        TestWritesInPiecesAnsweredOnStop(false);
+    }
+
+    Y_UNIT_TEST(PreformattedSectorsEncrypted) {
+        TestPreformattedSectors(true);
+    }
+
+    Y_UNIT_TEST(PreformattedSectorsNotEncrypted) {
+        TestPreformattedSectors(false);
     }
 
     Y_UNIT_TEST(TestAbstractPDiskInterface) {

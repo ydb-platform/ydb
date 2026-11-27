@@ -192,6 +192,8 @@ message TDDiskStateInfo {
     optional EComponentStatus PersistentBufferStatus = 16;
     optional string DDiskStatusReason = 17;
     optional string PersistentBufferStatusReason = 18;
+    // Underlying PDisk state name, filled by CMS for tablet diagnostics.
+    optional string PDiskState = 19;
 }
 
 message TEvPDiskStateRequest {

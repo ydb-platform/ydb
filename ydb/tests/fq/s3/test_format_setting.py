@@ -921,7 +921,14 @@ Pear;15;33'''
         query = client.execute(sql)
         query.check()
 
-    @pytest.mark.parametrize("pg_types", [False, True], ids=["yql_types", "pg_types"])
+    @pytest.mark.parametrize(
+        ("kikimr_settings", "pg_types"),
+        [
+            pytest.param({}, False, id="yql_types"),
+            pytest.param({"disable_pg_compatibility": False}, True, id="pg_types"),
+        ],
+        indirect=["kikimr_settings"],
+    )
     def test_precompute_with_pg_binding(self, kikimr, s3, client, pg_types, unique_prefix):
         test_suffix = "_{}".format(1 if pg_types else 0)
         resource = boto3.resource(

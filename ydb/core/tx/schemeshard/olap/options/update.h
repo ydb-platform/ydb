@@ -53,12 +53,25 @@ public:
                 errors.AddError(container.GetErrorMessage());
                 return false;
             }
+            if (!container->HasObject()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, "Metadata manager constructor is not specified (missing or empty class name)");
+                return false;
+            }
             MetadataManagerConstructor = container.DetachResult();
         }
         if (options.HasCompactionPlannerConstructor()) {
             auto container = NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(options.GetCompactionPlannerConstructor());
             if (container.IsFail()) {
                 errors.AddError(container.GetErrorMessage());
+                return false;
+            }
+            if (!container->HasObject()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, "Compaction planner constructor is not specified (missing or empty class name)");
+                return false;
+            }
+            auto validateConclusion = container->GetObjectVerified().Validate();
+            if (validateConclusion.IsFail()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, validateConclusion.GetErrorMessage());
                 return false;
             }
             CompactionPlannerConstructor = container.DetachResult();

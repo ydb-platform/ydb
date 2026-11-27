@@ -3535,6 +3535,26 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BadTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true StorageId: "__MEMORY" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Unsupported STORAGE_ID '__MEMORY' for column 'timestamp'")});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BadTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true StorageId: "__LOCAL_METADATA" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Unsupported STORAGE_ID '__LOCAL_METADATA' for column 'timestamp'")});
+
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
             AlterSchema {
@@ -3592,6 +3612,32 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 }
             }
         )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "unknown class name 'BOGUS'")});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BadTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Id: 1 Name: "id" Type: "Uint64" NotNull: true }
+                Columns { Id: 2 Name: "data" Type: "Utf8" }
+                KeyColumnNames: "id"
+                Indexes {
+                    Id: 3 Name: "noclass"
+                }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Incorrect index 'noclass'")});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BadTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Id: 1 Name: "id" Type: "Uint64" NotNull: true }
+                Columns { Id: 2 Name: "data" Type: "Utf8" }
+                KeyColumnNames: "id"
+                Indexes {
+                    Id: 3 Name: "nopayload" ClassName: "BLOOM_FILTER"
+                }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Incorrect index 'nopayload'")});
     }
 
     Y_UNIT_TEST(UnknownUpsertIndexClassRejectedOnAlter) {
@@ -3612,6 +3658,15 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 }
             }
         )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Unknown or unparsed index class name 'BOGUS' for index 'bad'")});
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                UpsertIndexes {
+                    Name: "bad2"
+                }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Failed to convert index 'bad2' to altering config")});
     }
 
     Y_UNIT_TEST(CraftedShardingInfoRejectedOnCreate) {
@@ -3758,6 +3813,30 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "Unsupported scan reader policy name 'BOGUS'")});
     }
 
+    Y_UNIT_TEST(DuplicateCompactionSelectorRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BadCompaction"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "id" Type: "Uint64" NotNull: true }
+                KeyColumnNames: "id"
+                Options {
+                    CompactionPlannerConstructor {
+                        ClassName: "lc-buckets"
+                        LCBuckets {
+                            Selectors { ClassName: "Empty" Name: "default" Empty {} }
+                            Selectors { ClassName: "Empty" Name: "default" Empty {} }
+                        }
+                    }
+                }
+            }
+        )", {TExpectedResult(NKikimrScheme::StatusSchemeError, "duplicate selector name 'default' in lc-buckets compaction planner constructor")});
+    }
+
     Y_UNIT_TEST(InStoreScanReaderPolicyNameValidated) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -3809,6 +3888,19 @@ Y_UNIT_TEST_SUITE(TOlap) {
             ColumnShardCount: 1
             Schema {
                 Columns { Name: "id" Type: "Uint64" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "id"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // An empty DefaultValue message is what the column serializer emits for
+        // plain columns; it must not be treated as a default value.
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EmptyDefaultOk"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "id" Type: "Uint64" NotNull: true DefaultValue {} }
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "id"
             }
@@ -3884,9 +3976,10 @@ Y_UNIT_TEST_SUITE(TOlap) {
         }
     }
 
-    Y_UNIT_TEST(AlterShardsRejectedWhenShardingDisabled) {
+    Y_UNIT_TEST(AlterShardsWorksWhenShardingDisabled) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        UNIT_ASSERT(!runtime.GetAppData().FeatureFlags.GetEnableAlterShardingInColumnShard());
         ui64 txId = 100;
 
         TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
@@ -3897,10 +3990,15 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
-            Name: "ColumnTable"
-            AlterShards { Modification { OpenReadIds: 1 } }
-        )", {TExpectedResult(NKikimrScheme::StatusPreconditionFailed, "Alter sharding is disabled for OLAP tables")});
+        const auto describe = DescribePath(runtime, "/MyRoot/OlapStore/ColumnTable");
+        const ui64 shardId = describe.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards(0);
+
+        // Direct AlterShards is an internal-sharding API: it must stay usable with the
+        // feature flag off so that in-flight sharding chains can finish.
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", TStringBuilder()
+            << "Name: \"ColumnTable\" AlterShards { Modification { OpenReadIds: " << shardId << " } }",
+            {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, txId);
     }
 
     Y_UNIT_TEST(InStorePresetColumnFeatureFlagsChecked) {

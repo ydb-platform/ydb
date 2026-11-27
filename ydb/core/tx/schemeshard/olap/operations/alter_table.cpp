@@ -256,8 +256,7 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        const bool isAlterSharding = Transaction.HasAlterColumnTable()
-            && (Transaction.GetAlterColumnTable().HasReshardColumnTable() || Transaction.GetAlterColumnTable().HasAlterShards());
+        const bool isAlterSharding = Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().HasReshardColumnTable();
         if (isAlterSharding && !AppData()->FeatureFlags.GetEnableAlterShardingInColumnShard()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "Alter sharding is disabled for OLAP tables");
             return result;

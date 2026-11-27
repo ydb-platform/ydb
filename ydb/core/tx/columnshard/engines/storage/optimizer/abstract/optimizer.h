@@ -474,6 +474,10 @@ public:
 
     virtual ~IOptimizerPlannerConstructor() = default;
 
+    virtual TConclusionStatus Validate() const {
+        return TConclusionStatus::Success();
+    }
+
     bool ApplyToCurrentObject(const std::shared_ptr<IOptimizerPlanner>& current) const {
         if (!current) {
             return false;

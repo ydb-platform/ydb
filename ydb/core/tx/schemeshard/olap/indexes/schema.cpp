@@ -14,7 +14,10 @@ void TOlapIndexSchema::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& 
 bool TOlapIndexSchema::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& indexSchema) {
     Id = indexSchema.GetId();
     Name = indexSchema.GetName();
-    return IndexMeta.DeserializeFromProto(indexSchema);
+    if (!IndexMeta.DeserializeFromProto(indexSchema) || !IndexMeta.HasObject()) {
+        return false;
+    }
+    return true;
 }
 
 bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexUpsert& upsert, IErrorCollector& errors) {

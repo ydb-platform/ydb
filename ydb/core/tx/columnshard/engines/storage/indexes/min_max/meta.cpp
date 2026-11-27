@@ -54,8 +54,9 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
 }
 
 bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
-    YDB_LOG_VERIFY(TBase::DoDeserializeFromProto(proto));
-    YDB_LOG_VERIFY(proto.HasMinMaxIndex());
+    if (!TBase::DoDeserializeFromProto(proto) || !proto.HasMinMaxIndex()) {
+        return false;
+    }
     auto& minMax = proto.GetMinMaxIndex();
     AddColumnId(minMax.GetColumnId());
     if (!MutableDataExtractor().DeserializeFromProto(minMax.GetDataExtractor())) {

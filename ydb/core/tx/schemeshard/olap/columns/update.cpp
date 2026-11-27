@@ -35,7 +35,7 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
         if (!NKikimr::NOlap::NBlobOperations::IsValidColumnStorageId(*StorageId)) {
             errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
                 << "Unsupported STORAGE_ID '" << *StorageId << "' for column '" << Name
-                << "': only '__DEFAULT', '__MEMORY', '__LOCAL_METADATA' or an empty value are allowed for column tables");
+                << "': only '__DEFAULT' or an empty value are allowed for column tables");
             return false;
         }
     }
@@ -99,7 +99,7 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
     if (!NKikimr::NOlap::NBlobOperations::IsValidColumnStorageId(StorageId)) {
         errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
             << "Unsupported STORAGE_ID '" << StorageId << "' for column '" << Name
-            << "': only '__DEFAULT', '__MEMORY', '__LOCAL_METADATA' or an empty value are allowed for column tables");
+            << "': only '__DEFAULT' or an empty value are allowed for column tables");
         return false;
     }
     if (columnSchema.HasColumnFamilyId()) {

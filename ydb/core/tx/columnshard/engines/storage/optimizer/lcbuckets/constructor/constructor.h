@@ -26,6 +26,7 @@ private:
     virtual bool DoApplyToCurrentObject(IOptimizerPlanner& current) const override;
 
     virtual TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override;
+    virtual TConclusionStatus Validate() const override;
 
 public:
     virtual TString GetClassName() const override {

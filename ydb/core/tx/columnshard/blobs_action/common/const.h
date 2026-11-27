@@ -9,10 +9,7 @@ public:
     static const inline TString MemoryStorageId = "__MEMORY";
     static const inline TString LocalMetadataStorageId = "__LOCAL_METADATA";
 };
-
 inline bool IsValidColumnStorageId(const TString& storageId) {
-    return !storageId || storageId == TGlobal::DefaultStorageId || storageId == TGlobal::MemoryStorageId ||
-           storageId == TGlobal::LocalMetadataStorageId;
+    return !storageId || storageId == TGlobal::DefaultStorageId;
 }
-
 }   // namespace NKikimr::NOlap::NBlobOperations

@@ -49,7 +49,9 @@ public:
         if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
             if (description.HasSchema()) {
                 for (const auto& column : description.GetSchema().GetColumns()) {
-                    if (column.HasDefaultValue() || (column.GetDataAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
+                    if ((column.HasDefaultValue() && column.GetDefaultValue().HasScalar()
+                            && column.GetDefaultValue().GetScalar().Value_case() != NKikimrColumnShardColumnDefaults::TScalar::VALUE_NOT_SET)
+                        || (column.GetDataAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
                         errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
                             << "Sparsed columns are disabled for column tables: column '" << column.GetName()
                             << "' has a default value or a sparsed accessor");

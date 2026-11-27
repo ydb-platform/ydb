@@ -67,7 +67,7 @@ bool TOlapIndexUpsert::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexReq
     if (indexSchema.HasInheritPortionStorage()) {
         InheritPortionStorage = indexSchema.GetInheritPortionStorage();
     }
-    if (!IndexConstructor.DeserializeFromProto(indexSchema)) {
+    if (!IndexConstructor.DeserializeFromProto(indexSchema) || !IndexConstructor.HasObject()) {
         errors.AddError(TStringBuilder() << "Unknown or unparsed index class name '" << indexSchema.GetClassName()
             << "' for index '" << indexSchema.GetName() << "'");
         return false;

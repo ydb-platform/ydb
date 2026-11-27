@@ -309,7 +309,8 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
             UNIT_ASSERT_EQUAL(count->Val(), cnt);
             i64 cntStart = cnt;
             ui16 missedSeqno = ++seqno;
-            const ui16 lastSeqno = (missedSeqno - 1) + TLight::MaxSeqnoDistance; // the farthest from the current state
+            // the farthest from the current state that the missed one is still waited for
+            const ui16 lastSeqno = (missedSeqno - 1) + TLight::MaxReorderingDistance;
             bool st = false;
             while (seqno != lastSeqno) {
                 bool stPrev = st;
@@ -465,6 +466,126 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         Sleep(sleep);
         l.Update();
         UNIT_ASSERT_GE(l.GetGreenMs(), sleep.MilliSeconds() / 2);
+    }
+
+    Y_UNIT_TEST(LightDelayedProducer) {
+        TLight l;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
+        l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
+        auto state = c->GetCounter("l_state");
+        auto count = c->GetCounter("l_count");
+
+        l.Set(false, 1);
+
+        // A producer has got its seqno and is delayed before Set(), while the other one keeps publishing.
+        const ui16 delayedSeqno = 2;
+        ui16 seqno = delayedSeqno;
+
+        // The light waits for the delayed event while the others are close enough to the current state.
+        while (seqno != 1 + TLight::MaxReorderingDistance) {
+            l.Set(true, ++seqno);
+            UNIT_ASSERT_EQUAL(state->Val(), 0);
+            UNIT_ASSERT_EQUAL(count->Val(), 0);
+        }
+
+        // Once they are too far, it drops the pending events and goes on from the newest one.
+        l.Set(true, ++seqno);
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+        l.Set(false, ++seqno);
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+
+        // The delayed event changes nothing when it finally arrives.
+        l.Set(true, delayedSeqno);
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+
+        // The light keeps following the events.
+        l.Set(true, ++seqno);
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 2);
+    }
+
+    Y_UNIT_TEST(LightProducerDelayedBeyondSeqnoDistance) {
+        // The number of events published while the producer is delayed: the delayed event is either still known to be
+        // behind the current state, or mistaken for a fresh one, or has the seqno of the current state.
+        for (const ui32 published : {ui32(TLight::MaxSeqnoDistance) + 1, 40000u, 1u << 16, (1u << 16) + 5000, 100000u}) {
+            TLight l;
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
+            l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
+            auto state = c->GetCounter("l_state");
+
+            l.Set(false, 1);
+            const ui16 delayedSeqno = 2;
+            ui32 seqno = delayedSeqno;
+            for (ui32 i = 0; i < published; ++i) {
+                l.Set(i % 2 == 0, ui16(++seqno));
+            }
+            l.Set(true, delayedSeqno);
+
+            // Whatever the delayed event is taken for, the light catches up within the seqno range.
+            for (ui32 i = 0; i < (1u << 16); ++i) {
+                l.Set(false, ui16(++seqno));
+            }
+            l.Set(true, ui16(++seqno));
+            UNIT_ASSERT_EQUAL_C(state->Val(), 1, "published# " << published);
+            l.Set(false, ui16(++seqno));
+            UNIT_ASSERT_EQUAL_C(state->Val(), 0, "published# " << published);
+        }
+    }
+
+    Y_UNIT_TEST(LightInitialEventDelayedForTooLong) {
+        TLight l;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
+        l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
+        auto state = c->GetCounter("l_state");
+        auto count = c->GetCounter("l_count");
+
+        // The state is unknown while the light waits for the initial event.
+        ui16 seqno = 1;
+        while (seqno != 1 + TLight::MaxReorderingDistance) {
+            l.Set(true, ++seqno);
+            UNIT_ASSERT_EQUAL(state->Val(), 0);
+            UNIT_ASSERT_EQUAL(count->Val(), 0);
+        }
+
+        // Then the light goes on from the newest event without it.
+        l.Set(true, ++seqno);
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+
+        l.Set(false, 1);
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+
+        l.Set(false, ++seqno);
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+    }
+
+    Y_UNIT_TEST(LightDuplicateEvent) {
+        TLight l;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
+        l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
+        auto state = c->GetCounter("l_state");
+        auto count = c->GetCounter("l_count");
+
+        l.Set(true, 1);
+        l.Set(false, 2);
+        l.Set(true, 2); // the current state
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+
+        l.Set(true, 4);
+        l.Set(false, 4); // a pending event
+        l.Set(false, 3);
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 2);
+
+        l.Set(false, 1); // an event consumed already
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 2);
     }
 
     Y_UNIT_TEST(DriveEstimator) {

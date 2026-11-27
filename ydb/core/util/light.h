@@ -174,14 +174,21 @@ private:
     ui16 Seqno = 1; // Expected first seqno, then seqno of the current state
     TStackVec<TItem, 32> Data; // In theory should have not more than thread count items
 public:
-    // Events with seqno further ahead of the current state are treated as stale
+    // Seqno distance from the current state, modulo ui16, tells the events ahead of it from the ones behind
     static constexpr ui16 MaxSeqnoDistance = (1u << 15) - 1;
+    // The light waits for a missing event until some other event gets further ahead of the current state than this
+    static constexpr ui16 MaxReorderingDistance = MaxSeqnoDistance / 2;
 
     TLight() {
         InitData();
     }
 
     // Events must have consecutive seqnos starting with 1, modulo ui16.
+    //
+    // A producer gets its seqno before calling Set() and may be delayed in between while the others publish any
+    // number of events. So when an event is missing for too long, the light drops the pending ones and goes on from
+    // the newest; the missing one is dropped when it finally arrives. An event delayed for more than MaxSeqnoDistance
+    // others can't be told from a fresh one: the light may take it for one, and catches up after that.
     void Set(bool state, ui16 seqno) {
         TGuard<TSpinLock> g(Lock);
         NHPTimer::STime now = Now();
@@ -213,10 +220,19 @@ private:
     void Push(bool state, ui16 seqno, NHPTimer::STime now) {
         ui16 diff = seqno;
         diff -= Seqno; // Underflow is fine
-        // The head seqno advances only after all the preceding seqnos have been consumed,
-        // so a seqno behind it is a duplicate or a stale event, never a late one.
-        Y_ABORT_UNLESS(diff <= MaxSeqnoDistance, "stale event headSeqno# %d seqno# %d state# %d filled# %d",
-                 (int)Seqno, (int)seqno, (int)state, (int)CountFilled());
+        if (diff > MaxSeqnoDistance) {
+            return; // The event is behind the current state, the light has not waited for it
+        }
+        if (diff > MaxReorderingDistance) {
+            // Some event is missing for too long: the pending ones are dropped, and this one follows the current state
+            const TItem head = Data[HeadIdx];
+            const ui16 known = head.Filled ? 1 : 0; // No current state until the initial event
+            InitData(head.State, head.Filled);
+            FilledCount = known;
+            Seqno = seqno;
+            Seqno -= known; // Underflow is fine
+            diff = known;
+        }
         size_t size = Data.size();
         while (size <= diff) { // Buffer is full -- extend and move wrapped part
             Data.resize(size * 2);
@@ -227,8 +243,9 @@ private:
             size = Data.size();
         }
         TItem& item = Data[(HeadIdx + diff) % Data.size()];
-        Y_ABORT_UNLESS(!item.Filled, "ordering overflow or duplicate event headSeqno# %d seqno# %d state# %d filled# %d",
-                 (int)Seqno, (int)seqno, (int)state, (int)CountFilled());
+        if (item.Filled) {
+            return; // A duplicate, or an event delayed for too long to be told from a fresh one
+        }
         item.Filled = true;
         item.State = state;
         ++FilledCount;
@@ -257,14 +274,6 @@ private:
             InitData(state, true);
         }
         return true;
-    }
-
-    size_t CountFilled() const {
-        size_t ret = 0;
-        for (const TItem& item : Data) {
-            ret += item.Filled;
-        }
-        return ret;
     }
 };
 

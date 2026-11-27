@@ -170,8 +170,7 @@ TString ComputeIndexItemPath(
 }
 
 TString ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx) {
-    Ydb::Export::ExportToS3Settings settings;
-    Y_ABORT_UNLESS(settings.ParseFromString(exportInfo.Settings));
+    const auto& settings = exportInfo.GetSettings<Ydb::Export::ExportToS3Settings>();
     return ComputeIndexItemPath(ss, exportInfo.Items.at(itemIdx), itemIdx, exportInfo, settings);
 }
 
@@ -297,8 +296,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     switch (exportInfo.Kind) {
     case TExportInfo::EKind::YT:
         {
-            Ydb::Export::ExportToYtSettings exportSettings;
-            Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
+            const auto& exportSettings = exportInfo.GetSettings<Ydb::Export::ExportToYtSettings>();
 
             task.SetNumberOfRetries(exportSettings.number_of_retries());
             auto& backupSettings = *task.MutableYTSettings();
@@ -314,8 +312,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
     case TExportInfo::EKind::S3:
         {
-            Ydb::Export::ExportToS3Settings exportSettings;
-            Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
+            const auto& exportSettings = exportInfo.GetSettings<Ydb::Export::ExportToS3Settings>();
 
             task.SetNumberOfRetries(exportSettings.number_of_retries());
             auto& backupSettings = *task.MutableS3Settings();
@@ -371,8 +368,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         break;
     case TExportInfo::EKind::FS:
         {
-            Ydb::Export::ExportToFsSettings exportSettings;
-            Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
+            const auto& exportSettings = exportInfo.GetSettings<Ydb::Export::ExportToFsSettings>();
 
             task.SetNumberOfRetries(exportSettings.number_of_retries());
             auto& backupSettings = *task.MutableFSSettings();

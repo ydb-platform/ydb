@@ -1,5 +1,4 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
-#include <ydb/core/blobstorage/vdisk/scrub/blob_recovery.h>
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 #include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -252,45 +251,81 @@ Y_UNIT_TEST_SUITE(ScrubFast) {
         env.CheckBlob(target, info->GetVDiskId(targetDisk), partId, data);
     }
 
-    Y_UNIT_TEST(RecoverBlobInExtendedGroup) {
+    Y_UNIT_TEST(RecoverCorruptedPartWithoutReadQuorum) {
+        using TRealm = NKikimrBlobStorage::TDataCenterState;
+        using TGroupState = NKikimrBlobStorage::TGroupState;
+        using TLayout = TEvBlobStorage::TEvCaptureVDiskLayoutResult;
         TEnvironmentSetup env{{
-            .NodeCount = 12,
             .VDiskReplPausedAtStart = true,
             .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
         }};
-        NKikimrBlobStorage::TGroupGeometry geometry;
-        geometry.SetNumFailRealms(3);
-        geometry.SetNumFailDomainsPerFailRealm(4);
-        geometry.SetNumVDisksPerFailDomain(1);
-        env.CreateBoxAndPool(1, 1, 0, NKikimrBlobStorage::EPDiskType::ROT, geometry);
+        env.CreateBoxAndPool();
+        env.UpdateSettings(false, false);
         env.Sim(TDuration::Minutes(1));
-        const auto info = env.GetGroupInfo(env.GetGroups().front());
-        const TString data = "surviving replica";
+
+        const ui32 groupId = env.GetGroups().front();
+        auto info = env.GetGroupInfo(groupId);
+        const TString data(1_MB, 'x');
         const TLogoBlobID id(1, 1, 1, 0, data.size(), 0);
-        TBlobStorageGroupInfo::TOrderNums nums;
-        info->GetTopology().PickSubgroup(id.Hash(), nums);
-        // With replication paused, only VDisks outside the old AddBlobQuery range hold data.
-        for (ui32 i = 0; i < nums.size(); ++i) {
-            if (nums[i] >= info->Type.BlobSubgroupSize()) {
-                env.PutBlob(info->GetVDiskId(nums[i]), TLogoBlobID(id, i % 3 + 1), data);
+        TBlobStorageGroupInfo::TOrderNums subgroup;
+        info->GetTopology().PickSubgroup(id.Hash(), subgroup);
+        UNIT_ASSERT_VALUES_EQUAL(info->GetTotalVDisksNum(), 9);
+        const auto target = info->GetActorId(subgroup[0]);
+        const TLogoBlobID partId(id, 1);
+        env.PutBlob(info->GetVDiskId(subgroup[0]), partId, data);
+        env.PutBlob(info->GetVDiskId(subgroup[1]), TLogoBlobID(id, 2), data);
+
+        NKikimrBlobStorage::TConfigRequest config;
+        config.SetIgnoreGroupFailModelChecks(true);
+        auto* definition = config.AddCommand()->MutableDefineGroupState()->AddGroups();
+        definition->SetGroupId(groupId);
+        definition->SetGroupState(TGroupState::DC_RECOVERY_INV1);
+        const ui32 recoveringRealm = info->GetVDiskId(subgroup[2]).FailRealm;
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            definition->AddFailRealmStates(realm == recoveringRealm ? TRealm::RECOVERING : TRealm::INCLUDED);
+        }
+        const auto response = env.Invoke(config);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        env.Sim(TDuration::Seconds(5));
+
+        // Lose one peer in each Included realm while keeping both copies and the controller online.
+        for (ui32 column = 0; column < 2; ++column) {
+            ui32 node = info->GetActorId(subgroup[3 + column]).NodeId();
+            if (node == env.Settings.ControllerNodeId) {
+                node = info->GetActorId(subgroup[6 + column]).NodeId();
+            }
+            env.StopNode(node);
+        }
+        env.Sim(TDuration::Seconds(10));
+        info = env.GetGroupInfo(groupId);
+        UNIT_ASSERT(info->GetMirror3dcState().State == TGroupState::DC_RECOVERY_INV1);
+
+        // Pass the damaged extent to recovery as the compaction worker would.
+        const auto [nodeId, pdiskId, slotId] = DecomposeVDiskServiceId(target);
+        const auto& pdisk = env.PDiskMockStates.at({nodeId, pdiskId});
+        const auto layout = env.SyncQuery<TLayout, TEvBlobStorage::TEvCaptureVDiskLayout>(target);
+        std::vector<TEvRestoreCorruptedBlob::TItem> items;
+        for (const auto& item : layout->Layout) {
+            if (item.RecordType == TLayout::ERecordType::HugeBlob && item.BlobId.FullID() == id) {
+                const auto& loc = item.Location;
+                pdisk->SetCorruptedArea(loc.ChunkIdx, loc.Offset, loc.Offset + loc.Size, true);
+                items.emplace_back(id, NMatrix::TVectorType::MakeOneHot(0, info->Type.TotalPartCount()),
+                    info->Type, loc);
             }
         }
-
-        const auto vdisk = info->GetActorId(nums[0]);
-        const auto edge = env.Runtime->AllocateEdgeActor(vdisk.NodeId());
-        const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(1);
-        auto request = std::make_unique<TEvRecoverBlob>();
-        request->Deadline = deadline;
-        request->Items.emplace_back(id, NMatrix::TVectorType::MakeOneHot(0, 3), info->Type, TDiskPart());
-        auto event = std::make_unique<IEventHandle>(vdisk, edge, request.release());
-        event->Rewrite(TEvBlobStorage::EvForwardToSkeleton, vdisk);
+        UNIT_ASSERT_VALUES_EQUAL(items.size(), 1);
+        const auto edge = env.Runtime->AllocateEdgeActor(target.NodeId());
+        const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(5);
+        auto request = std::make_unique<TEvRestoreCorruptedBlob>(deadline, std::move(items), false, true);
+        auto event = std::make_unique<IEventHandle>(target, edge, request.release());
+        event->Rewrite(TEvBlobStorage::EvForwardToSkeleton, target);
         env.Runtime->Send(event.release(), edge.NodeId());
-        const auto result = env.WaitForEdgeActorEvent<TEvRecoverBlobResult>(edge, true, deadline + TDuration::Seconds(1));
-        UNIT_ASSERT_C(result, "Timed out waiting for TEvRecoverBlobResult");
+        const auto result = env.WaitForEdgeActorEvent<TEvRestoreCorruptedBlobResult>(edge, true, deadline);
+        UNIT_ASSERT_C(result, "Timed out restoring the part from the reachable Included realm");
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Items.size(), 1);
-        const auto& item = result->Get()->Items.front();
-        UNIT_ASSERT_VALUES_EQUAL(item.Status, NKikimrProto::OK);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetPartData(TLogoBlobID(id, 1)).ConvertToString(), data);
+        const auto& restored = result->Get()->Items.front();
+        UNIT_ASSERT_VALUES_EQUAL(restored.Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetPartData(partId).ConvertToString(), data);
     }
 
     Y_UNIT_TEST(SingleBlob) {

@@ -234,6 +234,7 @@ namespace NKikimr {
                     if (!ev) {
                         ev.reset(new TEvRecoverBlob);
                         ev->Deadline = Deadline;
+                        ev->IgnoreConnectionQuorum = true; // A reachable peer may still have the needed part.
                     }
                     ev->Items.emplace_back(item.BlobId, TStackVec<TRope, 8>(item.Parts), item.PartsMask, item.Needed, TDiskPart(), i);
                     YDB_LOG_DEBUG(VDISKP(LogPrefix, "IssueQuery item"),

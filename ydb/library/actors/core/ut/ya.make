@@ -12,6 +12,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/library/actors/async
     ydb/library/actors/interconnect
     ydb/library/actors/struct_log
     ydb/library/actors/testlib

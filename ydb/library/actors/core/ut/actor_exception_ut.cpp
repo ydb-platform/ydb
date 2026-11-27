@@ -6,6 +6,7 @@
 #include "scheduler_basic.h"
 #include "actor_benchmark_helper.h"
 
+#include <ydb/library/actors/async/async.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/platform.h>
@@ -244,6 +245,32 @@ Y_UNIT_TEST_SUITE(ActorException) {
             }
         };
 
+        class TCoroutineOverrideOnlyActor final: public TActor<TCoroutineOverrideOnlyActor> {
+        public:
+            explicit TCoroutineOverrideOnlyActor(ui32)
+                : TActor(&TThis::StateWork)
+            {
+            }
+
+            STFUNC(StateWork) {
+                Y_UNUSED(ev);
+                FailInCoroutine();
+                _exit(0); // The coroutine exception was swallowed.
+            }
+
+        private:
+            void FailInCoroutine() {
+                co_await std::suspend_never{};
+                ThrowStarted = true;
+                throw std::runtime_error("unhandled coroutine exception");
+            }
+
+            bool OnUnhandledException(const std::exception_ptr&) override {
+                ExceptionHandlerCalled = true;
+                return true;
+            }
+        };
+
         class TDecliningNonStdExceptionActor final
             : public TActorWithExceptionHandler<TUnhandledExceptionActor>
         {
@@ -398,6 +425,10 @@ Y_UNIT_TEST_SUITE(ActorException) {
 
     Y_UNIT_TEST(OverridingHandlerDoesNotOptIntoCatching) {
         CheckFatalException<TOverrideOnlyActor>(4);
+    }
+
+    Y_UNIT_TEST(OverridingPointerHandlerDoesNotOptIntoCoroutineExceptions) {
+        CheckFatalException<TCoroutineOverrideOnlyActor>(4);
     }
 
     Y_UNIT_TEST(DefaultHandlerDeclinesNonStdException) {

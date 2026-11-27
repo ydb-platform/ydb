@@ -145,6 +145,10 @@ to that method and declines other thrown objects. Override that overload to
 handle non-standard exceptions. Cancellation never enters this catch block.
 Overriding a handler method on an ordinary actor alone does not opt into catching.
 
+If an exception escapes a top-level coroutine, its promise checks
+`HasExceptionHandler()` before calling the actor's handler. It calls
+`std::terminate()` if the actor has no handler or the handler declines.
+
 Actors without an exception handler dispatch events outside Receive's catch
 block. This avoids unwinding the actor handler merely to rethrow an exception
 that cannot be handled. On runtimes that terminate before unwinding an uncaught
@@ -152,7 +156,8 @@ exception, the original actor frames remain available to crash stack collection.
 Actors opting into exception handling retain the catch/handler path; if the
 handler declines the exception, its original frames have already been unwound.
 
-A declined exception is rethrown through the non-inlined virtual method
+If the handler declines an exception caught by `Receive`, that exception
+is rethrown through the non-inlined virtual method
 `TActor<TDerived>::RethrowUnhandledException()`. The fatal stack therefore
 identifies the CRTP actor type even after its state function has unwound. This
 does not reconstruct the original throw site or its local variables. A subclass

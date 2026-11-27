@@ -40,7 +40,8 @@ def metric(text, name, **labels):
 
 class ExecutableCase(unittest.IsolatedAsyncioTestCase):
     async def make(self, start=True, **options):
-        root = Path(yatest.common.output_path("e2e_" + uuid.uuid4().hex))
+        output_root = yatest.common.output_ram_drive_path() or yatest.common.output_path()
+        root = Path(output_root) / ("e2e_" + uuid.uuid4().hex)
         root.mkdir(mode=0o700)
         environment = Environment(yatest.common.binary_path(BINARY), root, **options)
         self.addAsyncCleanup(environment.close)

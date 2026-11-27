@@ -464,25 +464,25 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
         const auto probe = schemeClient.DescribePath(config.Database, TDescribePathSettings().Header(capability)).GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(probe);
         const auto [begin, end] = probe.GetResponseMetadata().equal_range(YDB_SERVER_HINTS);
-        if (std::any_of(begin, end, [](const auto& hint) { return hint.second == YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT; })) {
+        const bool serverExpandsDirectories = std::any_of(begin, end,
+            [](const auto& hint) { return hint.second == YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT; });
+        if (settings.Item_.empty()) {
+            constexpr bool isFs = std::is_same_v<TSettings, NExport::TExportToFsSettings>;
+            TString source = CommonSourcePath ? CommonSourcePath : config.Database;
+            if (serverExpandsDirectories) {
+                NConsoleClient::AdjustPath(source, config);
+            }
+            settings.AppendItem(typename TSettings::TItem{.Src = source, .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
+        }
+        if (serverExpandsDirectories) {
             settings.Header(capability);
             // The probe and export can reach different nodes during an upgrade.
             // A node without the capability must filter out the entire request.
             settings.AppendExcludeRegexp(".*");
-            if (settings.Item_.empty()) {
-                TString source = CommonSourcePath ? CommonSourcePath : config.Database;
-                NConsoleClient::AdjustPath(source, config);
-                settings.AppendItem(typename TSettings::TItem{.Src = source});
-            }
             for (const auto& pattern : ExclusionPatterns) {
                 settings.AppendExcludeRegexp(pattern.GetRegExpr());
             }
         } else {
-            if (settings.Item_.empty()) {
-                constexpr bool isFs = std::is_same_v<TSettings, NExport::TExportToFsSettings>;
-                settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database,
-                    .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
-            }
             ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
             if (settings.Item_.empty()) {
                 Cerr << (ExclusionPatterns.empty() ? "No items to export" : "No items to export after applying exclude filters") << Endl;

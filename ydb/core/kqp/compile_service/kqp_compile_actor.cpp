@@ -429,9 +429,10 @@ private:
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
         Config->FeatureFlags.SetDisablePgCompatibility(QueryId.DisablePgCompatibility());
 
+        // Retain the session's temporary-table snapshot for compilation retries.
         KqpHost = CreateKqpHost(Gateway, TString(QueryId.Cluster()), TString(QueryId.Database()), Config, ModuleResolverState->ModuleResolver,
             FederatedQuerySetup, UserToken, GUCSettings, QueryServiceConfig, ApplicationName, AppData(ctx)->FunctionRegistry,
-            false, false, std::move(TempTablesState), nullptr, SplitCtx.get(), UserRequestContext, UsePessimisticLocks);
+            false, false, TempTablesState, nullptr, SplitCtx.get(), UserRequestContext, UsePessimisticLocks);
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = QueryId.Settings().DocumentApiRestricted;

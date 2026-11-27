@@ -2,7 +2,7 @@
 
 #include "misc.h"
 
-#include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include <ydb/core/tablet_flat/flat_row_column.h>
 #include <ydb/core/tablet_flat/flat_sausage_solid.h>
 #include <ydb/core/scheme/scheme_tablecell.h>

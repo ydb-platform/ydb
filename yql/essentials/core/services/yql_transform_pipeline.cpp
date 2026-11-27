@@ -19,6 +19,7 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/yson/node/node_io.h>
+#include <util/generic/algorithm.h>
 #include <util/system/env.h>
 
 namespace NYql {
@@ -28,6 +29,26 @@ const TString LineageResultLabel = "LineageResult";
 const TString StandaloneLineageLabel = "StandaloneLineage";
 
 namespace {
+
+const TString LineageFlagsLabel = "LineageFlags";
+
+void RestoreLineageReplayFlags(TTypeAnnotationContext& typeCtx) {
+    const auto loaded = typeCtx.QContext.GetReader()->Get({.Component = LineageComponent, .Label = LineageFlagsLabel}).GetValueSync();
+    // Older captures have no LineageFlags record; treat their flags as empty.
+    const auto captured = loaded ? NYT::NodeFromYsonString(loaded->Value) : NYT::TNode::CreateList();
+    THashSet<TString> replayFlags;
+    for (const auto& flag : captured.AsList()) {
+        replayFlags.insert(flag.AsString());
+    }
+    typeCtx.LineageSettings.Flags = std::move(replayFlags);
+}
+
+void SaveLineageReplayFlags(const TTypeAnnotationContext& typeCtx) {
+    TVector<TString> flags(typeCtx.LineageSettings.Flags.begin(), typeCtx.LineageSettings.Flags.end());
+    Sort(flags);
+    const auto captured = NYT::TNode::CreateList(NYT::TNode::TListType(flags.begin(), flags.end()));
+    typeCtx.QContext.GetWriter()->Put({.Component = LineageComponent, .Label = LineageFlagsLabel}, NYT::NodeToYsonString(captured)).GetValueSync();
+}
 
 bool IsLineageResourceLimitError(const std::exception& error) {
     const TStringBuf message = error.what();
@@ -217,6 +238,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                                 auto loaded = typeCtx->QContext.GetReader()->Get({.Component = LineageComponent, .Label = LineageResultLabel}).GetValueSync();
                                 if (loaded.Defined()) {
                                     loadedLineage = loaded->Value;
+                                    RestoreLineageReplayFlags(*typeCtx);
                                 } else {
                                     YQL_LOG(INFO) << "There is no lineage in QStorage, lineage calculation is skipped in replay mode";
                                     return IGraphTransformer::TStatus::Ok;
@@ -254,6 +276,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                             EnsureLineageCalculated(lineageError, lineageResourceLimitExceeded);
                             if (typeCtx->QContext && typeCtx->QContext.CanWrite() && *typeCtx->LineageStats.Correct) {
                                 typeCtx->QContext.GetWriter()->Put({.Component = LineageComponent, .Label = LineageResultLabel}, calculatedLineage).GetValueSync();
+                                SaveLineageReplayFlags(*typeCtx);
                                 YQL_LOG(INFO) << "Lineage is saved to QStorage";
                             }
                             return IGraphTransformer::TStatus::Ok;
@@ -337,6 +360,13 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
         CreateSinglePassFunctorTransformer(
             [typeCtx = TypeAnnotationContext_, &lineageOut](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 output = input;
+                TMaybe<TQItem> loaded;
+                if (typeCtx->QContext && typeCtx->QContext.CanRead()) {
+                    loaded = typeCtx->QContext.GetReader()->Get({.Component = LineageComponent, .Label = StandaloneLineageLabel}).GetValueSync();
+                    if (loaded) {
+                        RestoreLineageReplayFlags(*typeCtx);
+                    }
+                }
                 try {
                     TLineageRunOptions lineageOptions;
                     lineageOptions.Standalone = true;
@@ -368,17 +398,14 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
                     EnsureLineageCalculated(std::current_exception(), IsLineageResourceLimitError(e));
                     lineageOut = MakeLineageErrorYson(e.what());
                 }
-                if (typeCtx->QContext && typeCtx->QContext.CanRead()) {
-                    auto loaded = typeCtx->QContext.GetReader()->Get({.Component = LineageComponent, .Label = StandaloneLineageLabel}).GetValueSync();
-                    if (loaded.Defined()) {
-                        try {
-                            CheckEquvalentLineages(*lineageOut, loaded->Value);
-                            YQL_LOG(INFO) << "Lineage replay is the same";
-                        } catch (const std::exception& e) {
-                            YQL_LOG(ERROR) << "Lineage in replay is different for standalone mode:\n"
-                                           << e.what();
-                            throw yexception() << "Lineage in replay is different";
-                        }
+                if (loaded) {
+                    try {
+                        CheckEquvalentLineages(*lineageOut, loaded->Value);
+                        YQL_LOG(INFO) << "Lineage replay is the same";
+                    } catch (const std::exception& e) {
+                        YQL_LOG(ERROR) << "Lineage in replay is different for standalone mode:\n"
+                                       << e.what();
+                        throw yexception() << "Lineage in replay is different";
                     }
                 }
                 if (typeCtx->LineageSettings.EnableStandaloneLineage) {
@@ -387,6 +414,7 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
                             // need to check correctness of lineage output before saving, e.g. if column-wise lineage section is empty
                             ValidateLineage(*lineageOut);
                             typeCtx->QContext.GetWriter()->Put({.Component = LineageComponent, .Label = StandaloneLineageLabel}, *lineageOut).GetValueSync();
+                            SaveLineageReplayFlags(*typeCtx);
                             YQL_LOG(INFO) << "Standalone Lineage is saved to QStorage";
                         } catch (const std::exception& e) {
                             typeCtx->LineageStats.CorrectStandalone = false;

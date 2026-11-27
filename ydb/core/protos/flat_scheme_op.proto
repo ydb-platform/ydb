@@ -1489,6 +1489,14 @@ message TInitiateBuildIndexMainTable {
     optional string TableName = 1;
 }
 
+// Takes a snapshot of the main table and switches the vector index to WriteOnly.
+message TPrepareVectorIndex {
+    optional string IndexName = 1;
+
+    // Autodetected vector index settings to be persisted with the WriteOnly state.
+    optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 2;
+}
+
 message TBuildIndexOutcome {
     message TCancel {
         // Path id of the index whose creation was cancelled
@@ -1513,6 +1521,8 @@ message TFinalizeBuildIndexMainTable {
     optional uint64 SnapshotTxId = 2;
     optional uint64 BuildIndexId = 3;
     optional TBuildIndexOutcome Outcome = 4;
+    // Additional snapshot to drop in the same transaction (vector index delta scan).
+    optional uint64 ExtraSnapshotTxId = 5;
 }
 
 message TPrepareIndexValidation {
@@ -2206,6 +2216,8 @@ message TModifyScheme {
 
     // Conditional replication cleanup: skip if the table is owned by another replication.
     optional NKikimrProto.TPathID ExpectedReplicationOwnerPathId = 97;
+
+    optional TPrepareVectorIndex PrepareVectorIndex = 98;
 
     // Some entries are grouped by semantics, so are out of order
 }

@@ -1053,6 +1053,7 @@ message TReadVectorTopK {
     repeated uint32 DistinctColumns = 5;
     // Logical HNSW index identity on the local table. Omitted by legacy callers.
     optional NKikimrProto.TPathID HnswIndexId = 6;
+    optional uint32 HnswEfSearch = 7 [default = 15];
 }
 
 message TKqpStreamLookupSettings {
@@ -1082,6 +1083,7 @@ message TKqpStreamLookupSettings {
     // Gated by the EnableStreamLookupJoinCookieV2 feature flag so the new format
     // is only emitted once every node in the cluster understands it.
     optional uint32 CookieFormatVersion = 23 [default = 0];
+    optional bool LookupJoinUniqueKeys = 24;
 }
 
 message TKqpFullTextSourceSettings {

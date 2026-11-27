@@ -18,6 +18,7 @@ PEERDIR(
     contrib/python/cryptography/next/rust/src/rust
 )
 
+AR_PLUGIN(ar)
 SRCS(_openssl.c)
 
 # Match upstream cryptography-cffi: CPython's stable ABI starts at 3.7.

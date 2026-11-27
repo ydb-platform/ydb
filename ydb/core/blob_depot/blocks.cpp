@@ -165,8 +165,7 @@ namespace NKikimr::NBlobDepot {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             ui32 maxItems = 10'000;
             Finished = Self->Data->OnTabletDeleted(TabletId, maxItems, txc, this);
-            if (Finished) {
-                // the data is gone, so the barriers that used to guard it are not needed either
+            if (Finished && Self->DropBarriersOnTabletDeletion) {
                 Self->BarrierServer->OnTabletDeleted(TabletId, txc);
             }
             return true;
@@ -443,9 +442,6 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::TBlocksManager::OnTabletDeleted(ui64 tabletId) {
-        if (!Self->CollectByCompleteDeletionBlock) {
-            return; // the data is collected by the hard barrier Hive sends after the block
-        }
         if (!TabletsToDelete.insert(tabletId).second) {
             return; // already queued
         }

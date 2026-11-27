@@ -2,7 +2,7 @@
 #include "flat_iterator_ops.h"
 #include "flat_mem_iter.h"
 #include "flat_part_iter.h"
-#include "flat_row_eggs.h"
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include "flat_row_remap.h"
 #include "flat_row_state.h"
 #include "flat_range_cache.h"

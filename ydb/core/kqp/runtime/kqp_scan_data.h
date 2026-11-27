@@ -11,7 +11,7 @@
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/tablet_flat/flat_database.h>
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/formats/arrow/validation/validation.h>

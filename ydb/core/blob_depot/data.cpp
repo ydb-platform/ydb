@@ -90,7 +90,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     template<typename TLocal>
-    bool TData::AccountValueChain(const TValueChain& chain, ES3ReferenceAction action,
+    bool TData::AccountValueChain(const TKey& key, const TValueChain& chain, ES3ReferenceAction action,
             TLocal&& accountLocal, std::vector<TS3ObjectKey>* unreferenced) {
         bool hasS3References = false;
         for (const auto& link : chain) {
@@ -98,7 +98,7 @@ namespace NKikimr::NBlobDepot {
                 accountLocal,
                 [&](TS3Locator locator) {
                     hasS3References = true;
-                    UpdateS3Reference(link, locator, action, unreferenced);
+                    UpdateS3Reference(key, link, locator, action, unreferenced);
                 }
             });
         }
@@ -155,7 +155,7 @@ namespace NKikimr::NBlobDepot {
                         Y_ABORT_UNLESS(rc != Max<ui32>());
                     }
                 };
-                hasS3References = AccountValueChain(value.ValueChain, ES3ReferenceAction::Remove,
+                hasS3References = AccountValueChain(key, value.ValueChain, ES3ReferenceAction::Remove,
                     [&](TLogoBlobID id, ui32, ui32) { dropRefCount(RefCountBlobs, id, deleteBlobs); }, &deleteS3);
             }
 
@@ -222,7 +222,7 @@ namespace NKikimr::NBlobDepot {
                 }
             };
             const auto s3Action = outcome != EUpdateOutcome::DROP ? ES3ReferenceAction::Add : ES3ReferenceAction::Discard;
-            hasS3References |= AccountValueChain(value.ValueChain, s3Action, accountLocalBlob, &deleteS3);
+            hasS3References |= AccountValueChain(key, value.ValueChain, s3Action, accountLocalBlob, &deleteS3);
 
             NIceDb::TNiceDb db(txc.DB);
 
@@ -236,6 +236,7 @@ namespace NKikimr::NBlobDepot {
 
                 const size_t size = id.BlobSize();
                 InFlightTrashSize += size;
+                HotBytesPendingTrashCommit += size;
                 Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_IN_FLIGHT_TRASH_SIZE] = InFlightTrashSize;
                 TotalStoredDataSize -= size;
                 Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_DATA_SIZE] = TotalStoredDataSize;
@@ -257,7 +258,7 @@ namespace NKikimr::NBlobDepot {
                 const auto locator = it->second.GetLocator(objectKey);
                 RefCountS3.erase(it);
                 TotalS3DataSize -= locator.Len;
-                if (!RetriedS3PutsLoaded || (!S3ReferencesLoaded && Self->Config.GetEverAuthorizedDataCooling())) {
+                if (!S3ReferencesLoaded) {
                     // Recovery may still find a retried PUT or another owner of this pack.
                     // Record the candidate in the same transaction as the mapping change.
                     if (PendingS3RefChecks.emplace(objectKey, locator.Len).second) {
@@ -273,6 +274,8 @@ namespace NKikimr::NBlobDepot {
                     {"BDT", Self->TabletID()},
                     {"key", key},
                     {"locator", locator});
+                // A confirmed last release supersedes any outstanding startup check for the pack.
+                PendingS3RefChecks.erase(objectKey);
                 AddToS3Trash(locator, txc, cookie);
                 return false; // keep this blob in deletion queue
             };
@@ -320,6 +323,9 @@ namespace NKikimr::NBlobDepot {
                 if (Self->MoveData.Key && *Self->MoveData.Key == binaryKey &&
                         Self->MoveData.BlobLocator.HasBlobSeqId() && mappingChanged) {
                     Self->MoveData.RecordTouched = true;
+                    if (Self->CancelInternalHotWriteWait(Self->MoveData.GetCopyBytes(), Self->SelfId())) {
+                        Self->Send(Self->SelfId(), new TEvMoveDataContinue);
+                    }
                 }
                 if (outcome != EUpdateOutcome::DROP && !Self->MoveData.NeedsAnotherPass &&
                         (inserted || value.ValueVersion != valueVersionBefore)) {
@@ -392,7 +398,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::SetHotWriteOrder(TValue& value) {
-        if (Self->HasAsyncS3History()) {
+        if (Self->Config.GetS3BackendSettings().HasAsyncMode()) {
             value.HotWriteGeneration = Self->Executor()->Generation();
             value.HotWriteSequence = NextHotWriteSequence++;
         }
@@ -710,7 +716,7 @@ namespace NKikimr::NBlobDepot {
                 AddFirstMentionedBlob(key);
             }
         };
-        if (AccountValueChain(it->second.ValueChain, ES3ReferenceAction::Add,
+        if (AccountValueChain(it->first, it->second.ValueChain, ES3ReferenceAction::Add,
                 [&](TLogoBlobID id, ui32, ui32) { addRefCount(RefCountBlobs, id); })) {
             UpdateS3Counters();
         }
@@ -964,7 +970,7 @@ namespace NKikimr::NBlobDepot {
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_DATA_SIZE] = TotalStoredDataSize;
     }
 
-    void TData::UpdateS3Reference(const NKikimrBlobDepot::TValueChain& link, TS3Locator locator,
+    void TData::UpdateS3Reference(const TKey& key, const NKikimrBlobDepot::TValueChain& link, TS3Locator locator,
             ES3ReferenceAction action, std::vector<TS3ObjectKey>* unreferenced) {
         const auto objectKey = locator.GetObjectKey();
         const auto [it, inserted] = RefCountS3.try_emplace(objectKey, TS3References{.Len = locator.Len});
@@ -983,28 +989,40 @@ namespace NKikimr::NBlobDepot {
             --object.RefCount;
         }
 
-        const ui64 begin = link.GetSubrangeBegin();
-        const ui64 end = link.HasSubrangeEnd() ? link.GetSubrangeEnd() : object.Len;
-        if (action != ES3ReferenceAction::Discard && begin < end && end <= object.Len && (begin || end < object.Len)) {
-            const std::pair<ui32, ui32> range{static_cast<ui32>(begin), static_cast<ui32>(end)};
+        const bool trackOwners = action != ES3ReferenceAction::Discard && Self->CoolingIndex &&
+            Self->CoolingIndex->IsRepackingEnabled();
+        const auto range = GetValueChainRange(link, object.Len);
+        if (action != ES3ReferenceAction::Discard && range && range->first != range->second &&
+                (range->first || range->second < object.Len)) {
+            const auto [begin, end] = *range;
             if (action == ES3ReferenceAction::Add) {
                 if (!object.Partial) {
                     object.Partial = std::make_unique<TS3PartialReferences>();
                 }
                 auto& partial = *object.Partial;
                 ++partial.RefCount;
+                if (trackOwners) {
+                    ++partial.Keys[key];
+                }
                 // Pack ranges are disjoint. Identical references share the same bytes.
-                if (!partial.Ranges[range]++) {
+                if (!partial.Ranges[*range]++) {
                     partial.LiveBytes += end - begin;
                 }
             } else {
                 Y_ABORT_UNLESS(object.Partial);
                 auto& partial = *object.Partial;
-                const auto rangeIt = partial.Ranges.find(range);
+                const auto rangeIt = partial.Ranges.find(*range);
                 Y_ABORT_UNLESS(rangeIt != partial.Ranges.end());
                 if (!--rangeIt->second) {
                     partial.Ranges.erase(rangeIt);
                     partial.LiveBytes -= end - begin;
+                }
+                if (trackOwners) {
+                    const auto keyIt = partial.Keys.find(key);
+                    Y_ABORT_UNLESS(keyIt != partial.Keys.end());
+                    if (!--keyIt->second) {
+                        partial.Keys.erase(keyIt);
+                    }
                 }
                 if (!--partial.RefCount) {
                     object.Partial.reset();
@@ -1014,6 +1032,9 @@ namespace NKikimr::NBlobDepot {
 
         const ui64 liveBytes = object.GetLiveBytes();
         TotalS3LiveBytes = TotalS3LiveBytes - previousLiveBytes + liveBytes;
+        if (trackOwners) {
+            Self->CoolingIndex->UpdateObjectOccupancy(objectKey, object.Len, liveBytes);
+        }
         if (!object.RefCount) {
             Y_ABORT_UNLESS(unreferenced);
             unreferenced->push_back(objectKey);
@@ -1028,7 +1049,14 @@ namespace NKikimr::NBlobDepot {
     }
 
     bool TData::IsS3ObjectReferenced(const TS3Locator& locator) const {
+        Y_DEBUG_ABORT_UNLESS(IsLoaded());
         return RefCountS3.contains(locator.GetObjectKey());
+    }
+
+    const std::map<TData::TKey, ui32>& TData::GetS3PartialKeys(const TS3ObjectKey& key) const {
+        const auto& object = RefCountS3.at(key);
+        Y_ABORT_UNLESS(object.Partial);
+        return object.Partial->Keys;
     }
 
     void TData::AccountBlob(TLogoBlobID id, bool add) {

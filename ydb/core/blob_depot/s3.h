@@ -17,7 +17,6 @@ namespace NKikimr::NBlobDepot {
         TString Bucket;
         std::shared_ptr<const TString> DeleteRoute;
 
-        bool GarbageCollectionEnabled = false;
 
         ui64 NextKeyId = 1;
 
@@ -75,6 +74,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void HandlePrepareWriteS3(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev);
+        void StartPrepareWriteS3(TAgent& agent, TEvBlobDepot::TEvPrepareWriteS3::TPtr ev);
         void NotifyPutSlowDown();
         void HandlePutThrottleWakeup();
         void RunPendingPrepareWritesIfPossible();

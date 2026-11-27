@@ -13,6 +13,7 @@ LIBRARY()
     PEERDIR(
         library/cpp/monlib/dynamic_counters
         ydb/core/base
+        ydb/core/blobstorage/bridge
         ydb/core/blobstorage/groupinfo
         ydb/core/blobstorage/vdisk/common
         ydb/core/control/lib

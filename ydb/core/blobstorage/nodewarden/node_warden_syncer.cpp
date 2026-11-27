@@ -398,6 +398,7 @@ namespace NKikimr::NStorage {
 
         // report syncer progress
         auto& stats = *syncer.SyncerDataStats;
+        const bool scanFinished = stats.ScanFinished;
         auto res = false;
         forceProgress |= std::exchange(syncer.ForceProgressReport, false);
 
@@ -421,8 +422,7 @@ namespace NKikimr::NStorage {
 
 #undef ISSUE_METRIC
 
-        if (const bool scanFinished = stats.ScanFinished;
-                forceProgress || syncer.ReportedScanFinished != scanFinished) {
+        if (forceProgress || syncer.ReportedScanFinished != scanFinished) {
             item->SetScanFinished(scanFinished);
             syncer.ReportedScanFinished = scanFinished;
             res = true;

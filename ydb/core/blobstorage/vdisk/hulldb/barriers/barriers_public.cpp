@@ -30,11 +30,10 @@ namespace NKikimr {
         TBarriersDs::TBarriersDs(const TLevelIndexSettings &settings, std::shared_ptr<TRopeArena> arena)
             : TBase(settings, std::move(arena))
             , VDiskLogPrefix(settings.HullCtx->VCtx->VDiskLogPrefix)
-            , CollectByCompleteDeletionBlock(settings.HullCtx->CollectByCompleteDeletionBlock)
             , MemView(std::make_unique<TMemView>(
                 TIngressCache::Create(settings.HullCtx->VCtx->Top, settings.HullCtx->VCtx->ShortSelfVDisk),
                 settings.HullCtx->VCtx->VDiskLogPrefix,
-                settings.HullCtx->GCOnlySynced))
+                settings.HullCtx->GCOnlySynced, settings.HullCtx->DropBarriersOnTabletDeletion))
         {}
 
         TBarriersDs::TBarriersDs(
@@ -44,11 +43,10 @@ namespace NKikimr {
                 std::shared_ptr<TRopeArena> arena)
             : TBase(settings, pb, entryPointLsn, std::move(arena))
             , VDiskLogPrefix(settings.HullCtx->VCtx->VDiskLogPrefix)
-            , CollectByCompleteDeletionBlock(settings.HullCtx->CollectByCompleteDeletionBlock)
             , MemView(std::make_unique<TMemView>(
                 TIngressCache::Create(settings.HullCtx->VCtx->Top, settings.HullCtx->VCtx->ShortSelfVDisk),
                 settings.HullCtx->VCtx->VDiskLogPrefix,
-                settings.HullCtx->GCOnlySynced))
+                settings.HullCtx->GCOnlySynced, settings.HullCtx->DropBarriersOnTabletDeletion))
         {}
 
 
@@ -77,15 +75,11 @@ namespace NKikimr {
         }
 
         void TBarriersDs::MarkTabletDeleted(ui64 tabletId) {
-            if (CollectByCompleteDeletionBlock) {
-                MemView->MarkTabletDeleted(tabletId);
-            }
+            MemView->MarkTabletDeleted(tabletId);
         }
 
         void TBarriersDs::MarkTabletsDeleted(const THashSet<ui64> &tabletIds) {
-            if (CollectByCompleteDeletionBlock) {
-                MemView->MarkTabletsDeleted(tabletIds);
-            }
+            MemView->MarkTabletsDeleted(tabletIds);
         }
 
         void TBarriersDs::UpdateMemView(const TBarriersSst &sst) {

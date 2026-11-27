@@ -14,7 +14,6 @@ namespace NKikimr::NOlap::NDataSharing {
 
 NKikimr::TConclusionStatus TDestinationSession::DataReceived(
     THashMap<TInternalPathId, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& /*manager*/) {
-    auto guard = index.GranulesStorage->GetStats()->StartPackModification();
     for (auto&& i : data) {
         auto it = PathIds.find(i.first);
         YDB_LOG_VERIFY(it != PathIds.end(),

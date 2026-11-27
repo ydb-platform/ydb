@@ -40,9 +40,6 @@ namespace NKikimr::NBlobDepot {
             // An incremental namespace scan covers arrivals beyond this window.
             PutWatchWindow = ClampVal((ioTimeout + TDuration::MilliSeconds(connectMs)) * 22,
                 TDuration::Hours(1), TDuration::Days(1));
-            const auto prefixError = ValidateS3BasePath(BasePath);
-            // Legacy depots could share both the prefix and the tablet-local locator numbers.
-            GarbageCollectionEnabled = Self->Config.GetS3NamespaceValidated() && !prefixError;
             if (Self->IsDataCoolingEnabled()) {
                 UploadPutsInFlight = settings->GetAsyncMode().GetUploadPutsInFlight();
             }
@@ -55,7 +52,6 @@ namespace NKikimr::NBlobDepot {
                 RunDeletersIfNeeded();
             }
         } else {
-            GarbageCollectionEnabled = false;
             DeleteRoute.reset();
         }
     }
@@ -113,7 +109,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TS3Manager::OnDataLoaded() {
-        if (WrapperId && GarbageCollectionEnabled) {
+        if (WrapperId) {
             if (NextOrphanScan > TActivationContext::Now()) {
                 ScheduleScan(NextOrphanScan - TActivationContext::Now());
             } else {

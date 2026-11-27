@@ -15,7 +15,6 @@ LIBRARY()
         SRCS(
             s3.cpp
             s3_delete.cpp
-            s3_retire.cpp
             s3_scan.cpp
             s3_upload.cpp
             s3_write.cpp
@@ -59,6 +58,7 @@ LIBRARY()
         garbage_collection.h
         given_id_range.cpp
         group_metrics_exchange.cpp
+        hot_write_admission.cpp
         mon_main.cpp
         mon_main.h
         move_data.cpp

@@ -1,9 +1,9 @@
 #pragma once
 
-#include "bloom_filter_defaults.h"
+#include <ydb/core/tablet_flat/base/bloom_filter_defaults.h>
 #include "flat_page_iface.h"
 #include "flat_part_slots.h"
-#include "flat_row_eggs.h"
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 
 #include <ydb/core/scheme/scheme_tablecell.h>
 

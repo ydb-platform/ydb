@@ -24,7 +24,6 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr RequestCacheHits;
     NMonitoring::TDynamicCounters::TCounterPtr RequestCacheMisses;
-    NMonitoring::TDynamicCounters::TCounterPtr RequestCacheWaiting;
     NMonitoring::TDynamicCounters::TCounterPtr RequestInflight;
 
     NMonitoring::THistogramPtr RequestLatency;
@@ -64,10 +63,6 @@ public:
 
     void OnRequestCacheMiss(const ui64 count = 1) const {
         RequestCacheMisses->Add(count);
-    }
-
-    void OnRequestCacheWaiting(const ui64 count = 1) const {
-        RequestCacheWaiting->Add(count);
     }
 
     void OnRequestStart() const {

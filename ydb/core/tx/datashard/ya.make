@@ -488,6 +488,7 @@ PEERDIR(
     ydb/core/split
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tablet_flat/base
     ydb/core/tx/cdc_aggregator/public
     ydb/core/tx/datashard/hnsw_index
     ydb/core/tx/datashard/snapshot_retention

@@ -8,18 +8,18 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/monlib/dynamic_counters
     ydb/core/base
-    ydb/core/client/server
     ydb/core/grpc_services
+    ydb/core/grpc_services/base
     ydb/core/mind/address_classification
     ydb/core/mon
-    ydb/core/persqueue/public
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/protos
     ydb/core/util
-    ydb/public/api/grpc
+    ydb/library/actors/core
+    ydb/library/grpc/server
     ydb/public/api/grpc/draft
-    ydb/public/api/protos
     ydb/services/persqueue_cluster_discovery/cluster_ordering
 )
 

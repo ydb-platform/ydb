@@ -142,9 +142,7 @@ namespace NKikimr::NBlobDepot {
             const ui32 begin = value.SubrangeBegin;
             const ui32 end = value.SubrangeEnd;
 
-            const ui32 itemLen = value.Blob ? std::get<0>(*value.Blob).BlobSize() :
-                value.S3Locator ? value.S3Locator->Len : 0;
-            if (end <= begin || itemLen < end) {
+            if (!value.IsRangeValid()) {
                 error = "incorrect SubrangeBegin/SubrangeEnd pair";
                 YDB_LOG_CRIT(error,
                     {"marker", "BDA24"},
@@ -187,7 +185,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         if (size) {
-            error = "incorrect offset/size provided";
+            error = "value chain is shorter than the requested logical range";
             YDB_LOG_ERROR(error,
                 {"marker", "BDA25"},
                 {"agentId", Agent.LogId},
@@ -452,7 +450,7 @@ namespace NKikimr::NBlobDepot {
                 // the object is checked by reading the range the value refers to: this is all the agent can tell about
                 // the data stored in S3
                 TString key = locator->MakeObjectName(Agent.S3BasePath);
-                if (value.SubrangeBegin >= value.SubrangeEnd || value.SubrangeEnd > locator->Len) {
+                if (!value.IsRangeValid()) {
                     checkContext->Result->Status = NKikimrProto::ERROR;
                     checkContext->AddErrorReason(key, "invalid S3 value chain range");
                     continue;

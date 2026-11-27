@@ -10,6 +10,7 @@
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
+#include <ydb/core/util/token_bucket.h>
 
 namespace NKikimr::NTesting {
 
@@ -33,6 +34,8 @@ namespace NKikimr::NBlobDepot {
                 EvCommitCertainKeys,
                 EvDoGroupMetricsExchange,
                 EvKickSpaceMonitor,
+                EvRunHotWriteAdmission,
+                EvWakeHotWriteAdmission,
                 EvUpdateThroughputs,
                 EvDeliver,
                 EvJsonTimer,
@@ -107,7 +110,7 @@ namespace NKikimr::NBlobDepot {
         TControlWrapper S3MaxObjectsToDeleteAtOnce = 10;
 
         // EnableCollectByCompleteDeletionBlock, taken once at tablet start
-        bool CollectByCompleteDeletionBlock = false;
+        bool DropBarriersOnTabletDeletion = false;
 
         bool IsDataCoolingEnabled() const { return bool(CoolingIndex); }
 
@@ -124,6 +127,8 @@ namespace NKikimr::NBlobDepot {
             TInstant ExpirationTimestamp;
             std::optional<ui64> AgentInstanceId;
             bool SupportsIdRangeExpiry = false;
+            ui64 HotWriteCreditBytes = 0;
+            TMonotonic LastHotWriteCreditRecall;
 
             // Channel -> highest step whose blob sequence numbers were reclaimed while this agent was away. Handed
             // to the agent in every TEvRegisterAgentResult (not just the first one after the expiry: the result may
@@ -245,11 +250,40 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnSpaceColorChange(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare);
 
-        void ProcessRegisterAgentQ();
+        ui64 HotWriteCreditBytes = 0;
+        std::deque<TEvBlobDepot::TEvHotWriteCredit::TPtr> HotWriteCreditQueue;
+        std::map<TBlobSeqId, ui64> InternalHotWriteCredits;
+        // Smallest first so an unavailable large copy doesn't block another writer that fits.
+        std::map<std::pair<ui64, TActorId>, ui32> InternalHotWriteWaiters;
+        // Charged before the retry event is sent, then transferred to the allocated sequence.
+        std::map<TActorId, ui64> InternalHotWriteGrants;
+        bool PreferInternalHotWrite = true;
+        TTokenBucketBase<TMonotonic> HotWriteBucket;
+        bool HotWriteAdmissionScheduled = false;
+        TWakeupTimer HotWriteAdmissionTimer;
 
-        bool HasAsyncS3History() const {
-            return Config.GetS3NamespacePinned() || Config.GetS3BackendSettings().HasAsyncMode();
-        }
+        void Handle(TEvBlobDepot::TEvHotWriteCredit::TPtr ev);
+        bool IsHotWriteAdmissionEnabled() const;
+        ui64 GetHotWriteHeadroom() const;
+        ui64 GetHotWriteCoolingBytesNeeded() const;
+        void ScheduleHotWriteAdmission();
+        void RunHotWriteAdmission();
+        void WakeHotWriteAdmission(TAutoPtr<IEventHandle> ev);
+        void UpdateHotWriteWaiterCount();
+        void DropHotWriteCredits(TAgent& agent);
+        void RecallHotWriteCredits();
+        void RefreshHotWriteRate();
+        ui64 GetAvailableHotWriteBytes() const;
+        void ChargeHotWriteCredits(ui64 bytes);
+        void ReleaseHotWriteCredits(ui64 bytes);
+        void WaitForInternalHotWrite(ui64 bytes, TActorId actor, ui32 eventType);
+        bool CancelInternalHotWriteWait(ui64 bytes, TActorId actor);
+        void ReleaseInternalHotWriteGrant(TActorId actor);
+        void ReleaseInternalBlobSeqId(const TBlobSeqId& blobSeqId);
+        std::optional<TBlobSeqId> TryAllocateInternalBlobSeqId(TChannelInfo& channel, ui64 bytes, TActorId actor);
+        void ReleaseInternalHotWrite(const TBlobSeqId& id);
+
+        void ProcessRegisterAgentQ();
 
         bool ReadyForAgentQueries() const;
 
@@ -272,7 +306,7 @@ namespace NKikimr::NBlobDepot {
                 TControlBoard::RegisterSharedControl(S3MaxDeletesInFlight, controls.S3MaxDeletesInFlight);
                 TControlBoard::RegisterSharedControl(S3MaxObjectsToDeleteAtOnce, controls.S3MaxObjectsToDeleteAtOnce);
             }
-            CollectByCompleteDeletionBlock = AppData()->FeatureFlags.GetEnableCollectByCompleteDeletionBlock();
+            DropBarriersOnTabletDeletion = AppData()->FeatureFlags.GetEnableCollectByCompleteDeletionBlock();
             Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 1;
             ExecuteTxInitSchema();
@@ -404,6 +438,12 @@ namespace NKikimr::NBlobDepot {
                 return Phase != EPhase::Idle;
             }
 
+            ui64 GetCopyBytes() const {
+                return ui64(BlobLocator.GetTotalDataLen()) + BlobLocator.GetFooterLen();
+            }
+
+            void ScanFromCurrentKey(ui32 valueChainIndex = 0);
+
             bool IsBlobMovingInProgress() const {
                 return Phase == EPhase::ScanningIndex ||
                     Phase == EPhase::CopyingBlob ||
@@ -426,7 +466,6 @@ namespace NKikimr::NBlobDepot {
         TMoveDataState::ETrashStatus GetTrashStatus();
         void CheckTrash();
         bool StartMoveDataBlobCopy();
-        void ReleaseMoveDataBlobSeqId(const TBlobSeqId& blobSeqId);
         void RestartMoveDataScan();
         void ProcessMoveDataQueue();
         void FinishMoveData(const TActorContext& ctx);

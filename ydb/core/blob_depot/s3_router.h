@@ -37,11 +37,4 @@ namespace NKikimr::NBlobDepot {
     IActor* CreateBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings, ui64 tabletId,
         std::shared_ptr<TS3BalancerEndpoint> lastEndpoint = {});
 
-    // A retirement sweep owns its router and shares cleanup workers and metrics across retired tablets.
-    inline IActor* CreateRetiredS3Router(NKikimrBlobDepot::TS3BackendSettings settings) {
-        return CreateBlobDepotS3Router(std::move(settings), 0);
-    }
-
-    IActor* CreateRetiredS3Sweep(TActorId parent, ui64 tabletId, const NKikimrBlobDepot::TBlobDepotConfig& config);
-
 } // NKikimr::NBlobDepot

@@ -573,7 +573,7 @@ void TClusterInfo::UpdatePDiskState(const TPDiskID &id, const NKikimrWhiteboard:
     // treats the fully-up Normal state as UP; consumers that need to
     // distinguish "still starting up" from "genuinely broken" (e.g. the NBS
     // 2.0 DDisk availability check) should use IsPDiskStateUp(RawState)
-    // instead, see IsDDiskAvailable()/GetDDiskStateName().
+    // when the owning node is available.
     pdisk.State = info.GetState() == NKikimrBlobStorage::TPDiskState::Normal ? UP : DOWN;
     pdisk.RawState = info.GetState();
 }

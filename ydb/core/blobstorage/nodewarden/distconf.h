@@ -151,8 +151,13 @@ namespace NKikimr::NStorage {
 
             struct TEvConfigProposed : TEventLocal<TEvConfigProposed, EvConfigProposed> {
                 std::optional<TString> ErrorReason;
+                std::optional<TStorageConfigMeta> ProposedConfig;
 
-                TEvConfigProposed(std::optional<TString> errorReason)
+                explicit TEvConfigProposed(const NKikimrBlobStorage::TStorageConfig& config)
+                    : ProposedConfig(std::in_place, config)
+                {}
+
+                explicit TEvConfigProposed(TString errorReason)
                     : ErrorReason(std::move(errorReason))
                 {}
             };
@@ -202,7 +207,7 @@ namespace NKikimr::NStorage {
             ui64 Cookie; // cookie presented in original TEvNodeConfig push message
             TActorId SessionId; // interconnect session for this peer
             THashSet<ui64> ScatterTasks; // unanswered scatter queries
-            THashSet<ui64> ExpiredScatterTasks;
+            THashMap<ui64, TMonotonic> ExpiredScatterTasks;
             THashSet<TNodeIdentifier> BoundNodeIds; // subtree nodes, including this peer
             ui32 LastReportedRootNodeId;
             std::optional<ui32> ReportedSubtreeHeight;
@@ -275,6 +280,10 @@ namespace NKikimr::NStorage {
                 if (Request.HasCookie()) {
                     Response.SetCookie(Request.GetCookie());
                 }
+            }
+
+            TMonotonic GetRequestDeadline() const {
+                return StartTimestamp + TDuration::MicroSeconds(Request.GetTimeoutUs());
             }
         };
 
@@ -393,6 +402,7 @@ namespace NKikimr::NStorage {
         std::set<std::tuple<ui32, ui64>> AddedNodesScatterTasks;
 
         std::optional<TActorId> StateStorageSelfHealActor;
+        bool IsCurrentStateStorageSelfHealActor(TActorId actorId) const;
         class TStateStorageSelfHealRefreshActor;
         std::optional<TActorId> StateStorageSelfHealRefreshActor;
         bool StateStorageSelfHealRefreshStarted = false;
@@ -735,7 +745,8 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Scatter/gather logic
 
-        void IssueScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, std::span<const TNodeIdentifier> targetedNodes = {});
+        void IssueScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, std::span<const TNodeIdentifier> targetedNodes = {},
+            TMonotonic gatherDeadline = TMonotonic::Max());
         void PrepareScatterTaskRequest(ui64 cookie, const TScatterTask& task, ui32 subtreeHeight, TEvScatter& request);
         void IssueAddedNodeScatterTask(ui32 nodeId, ui64 cookie, TScatterTask& task);
         void CheckCompleteScatterTask(TScatterTasks::iterator it);
@@ -757,6 +768,9 @@ namespace NKikimr::NStorage {
             TActorId Sender;
             TActorId SessionId;
             ui64 Cookie;
+            std::optional<TStorageConfigMeta> SelfHealCommitToConfirm = {};
+            std::optional<TStorageConfigMeta> ObservedNewerCommit = {};
+            bool FullCommitConfirmationNeeded = false;
         };
 
         struct TFreshConfigQueryGroup {

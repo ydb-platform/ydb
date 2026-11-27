@@ -11,4 +11,9 @@ YQL_LIBRARY()
         yql/essentials/providers/common/provider
     )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    logos/projects/ads/mldwh/querygen
+)
+
 END()

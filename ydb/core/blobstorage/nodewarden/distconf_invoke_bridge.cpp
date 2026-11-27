@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 
 #include <ydb/core/protos/bridge.pb.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NStorage {
 
@@ -123,6 +124,21 @@ namespace NKikimr::NStorage {
             } else if (current.GetGeneration() + 1 != newClusterState.GetGeneration()) {
                 throw TExError() << "New cluster state generation# " << newClusterState.GetGeneration()
                     << " expected# " << current.GetGeneration() + 1;
+            }
+
+            const auto primary = TBridgePileId::FromProto(&newClusterState, &NKikimrBridge::TClusterState::GetPrimaryPile);
+            const auto promoted = TBridgePileId::FromProto(&newClusterState, &NKikimrBridge::TClusterState::GetPromotedPile);
+            const auto oldPrimary = Self->BridgeInfo->PrimaryPile->BridgePileId;
+            if (primary != oldPrimary || (numDifferent && onlyDisconnects)) {
+                const bool emergency = numDifferent && onlyDisconnects && (primary == oldPrimary ||
+                    newClusterState.GetPerPileState(oldPrimary.GetPileIndex()) == NKikimrBridge::TClusterState::DISCONNECTED);
+                if (!CheckBootstrapPlacement(*Self->StorageConfig, primary) && !emergency) {
+                    return Finish(TResult::PRECONDITION_FAILED, JoinSeq("\n", BootstrapPlacementWarnings));
+                }
+            }
+            if (promoted != primary && newClusterState.GetPromotedPile() != current.GetPromotedPile() &&
+                    !CheckBootstrapPlacement(*Self->StorageConfig, promoted)) {
+                return Finish(TResult::PRECONDITION_FAILED, JoinSeq("\n", BootstrapPlacementWarnings));
             }
         }
 

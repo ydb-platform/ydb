@@ -197,9 +197,6 @@ EValidationResult IConfigSwissKnife::ValidateConfig(
     return EValidationResult::Ok;
 }
 
-namespace {
-
-// These transform and validator inputs must be resolved with every section group.
 const TVector<TString>& SharedValidationInputs() {
     static const TVector<TString> sections = [] {
         TVector<TString> result = {
@@ -216,6 +213,8 @@ const TVector<TString>& SharedValidationInputs() {
     }();
     return sections;
 }
+
+namespace {
 
 TVector<TVector<TString>> ValidationGroups(
     NFyaml::TDocument& doc, const TVector<TVector<TString>>& dependencies)

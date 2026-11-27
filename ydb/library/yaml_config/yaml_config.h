@@ -91,6 +91,9 @@ NKikimrConfig::TAppConfig YamlToProto(
     bool preTransform = true,
     TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector = nullptr);
 
+// Sections needed to apply the YAML transforms when validating a projection.
+const TVector<TString>& SharedValidationInputs();
+
 /**
  * Resolves config for given labels and stores result to appConfig
  * Stores intermediate resolve data in resolvedYamlConfig and resolvedJsonConfig if given

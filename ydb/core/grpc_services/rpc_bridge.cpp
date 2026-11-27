@@ -257,6 +257,12 @@ private:
             newClusterState.SetPerPileState(pileId.GetPileIndex(), internalState);
         }
 
+        // A planned takedown suspends the old primary and promotes its replacement in one update.
+        const auto oldPrimary = TBridgePileId::FromProto(&currentClusterState, &NKikimrBridge::TClusterState::GetPrimaryPile);
+        if (!finalPrimary && finalPromoted && updates.contains(*finalPromoted) &&
+                newClusterState.GetPerPileState(oldPrimary.GetPileIndex()) == NKikimrBridge::TClusterState::SUSPENDED) {
+            finalPrimary = finalPromoted;
+        }
         if (!finalPrimary) {
             self->Reply(Ydb::StatusIds::BAD_REQUEST, "Request must result in a state with one primary pile", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
             return;
@@ -338,12 +344,14 @@ private:
             return;
         }
         if (!success) {
-            self->Reply(Ydb::StatusIds::INTERNAL_ERROR, response.GetErrorReason(),
+            const auto status = response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::PRECONDITION_FAILED
+                ? Ydb::StatusIds::PRECONDITION_FAILED : Ydb::StatusIds::INTERNAL_ERROR;
+            self->Reply(status, response.GetErrorReason(),
                 NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
             return;
         }
         Ydb::Bridge::UpdateClusterStateResult result;
-        self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
+        self->ReplyWithResult(Ydb::StatusIds::SUCCESS, response.GetIssues(), result, self->ActorContext());
     }
 };
 

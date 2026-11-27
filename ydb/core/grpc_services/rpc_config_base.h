@@ -217,7 +217,7 @@ protected:
         } else {
             TResultRecord result;
             self->FillDistconfResult(record, result);
-            self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
+            self->ReplyWithResult(Ydb::StatusIds::SUCCESS, record.GetIssues(), result, self->ActorContext());
         }
     }
 

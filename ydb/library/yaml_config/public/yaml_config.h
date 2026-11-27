@@ -212,6 +212,13 @@ void EnumerateDistinctProjections(
     const TVector<TString>& sections,
     const std::function<void(NFyaml::TNodeRef)>& onProjection);
 
+// The predicate tests whether a projection can apply to a node with the given known labels.
+using TProjectionMatches = std::function<bool(const TMap<TString, TString>&)>;
+void EnumerateDistinctProjections(
+    NFyaml::TDocument& doc,
+    const TVector<TString>& sections,
+    const std::function<void(NFyaml::TNodeRef, const TProjectionMatches&)>& onProjection);
+
 // Collect top-level section paths from the base config and all selector overrides.
 TSet<TString> CollectConfigSections(NFyaml::TDocument& doc);
 

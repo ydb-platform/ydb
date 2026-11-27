@@ -1412,6 +1412,24 @@ public:
         return Universe;
     }
 
+    bool Matches(TId region, const TMap<TString, TString>& knownLabels) {
+        for (const auto& [name, value] : knownLabels) {
+            const auto it = Domains.find(name);
+            if (it == Domains.end()) {
+                continue;
+            }
+            const auto& domain = it->second;
+            if (const auto pos = domain.Values.find(value); pos != domain.Values.end()) {
+                region = And(region, Equal(domain, pos->second));
+            } else if (domain.Labels->begin()->Type == TLabel::EType::Negative) {
+                region = And(region, Equal(domain, 0)); // all other values of an open label
+            } else {
+                return false;
+            }
+        }
+        return region != 0;
+    }
+
     TId MatchValues(const TString& name, const TSet<TString>& values) {
         const auto it = Domains.find(name);
         if (it == Domains.end()) {
@@ -1639,6 +1657,16 @@ void EnumerateDistinctProjections(
     const TVector<TString>& sectionPrefixes,
     const std::function<void(NFyaml::TNodeRef)>& onProjection)
 {
+    EnumerateDistinctProjections(doc, sectionPrefixes, [&](NFyaml::TNodeRef config, const TProjectionMatches&) {
+        onProjection(config);
+    });
+}
+
+void EnumerateDistinctProjections(
+    NFyaml::TDocument& doc,
+    const TVector<TString>& sectionPrefixes,
+    const std::function<void(NFyaml::TNodeRef, const TProjectionMatches&)>& onProjection)
+{
     auto model = ParseConfig(doc);
     TVector<TString> names;
     TVector<std::pair<TString, TSet<TLabel>>> labels;
@@ -1729,7 +1757,7 @@ void EnumerateDistinctProjections(
         regions.CollectGarbage(roots);
     }
     for (auto& [key, state] : states) {
-        onProjection(state.Config.Root());
+        onProjection(state.Config.Root(), [&](const auto& labels) { return regions.Matches(state.Region, labels); });
     }
 }
 

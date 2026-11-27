@@ -159,6 +159,8 @@ namespace NKikimr::NStorage {
         std::optional<ui64> MainYamlVersion;
         std::optional<ui64> StorageYamlVersion;
         bool IsDryRun = false;
+        std::vector<TString> BootstrapPlacementWarnings;
+        bool CheckBootstrapPlacement(const NKikimrBlobStorage::TStorageConfig& config, TBridgePileId targetPile = {});
 
         static constexpr TDuration CommitConfirmationTimeout = TDuration::Seconds(30);
         TDuration NextDisableRetryOffset = TDuration::Seconds(1);

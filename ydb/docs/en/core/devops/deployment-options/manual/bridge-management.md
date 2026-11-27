@@ -219,7 +219,7 @@ Adding a pile allocates its storage and synchronizes bridged data without stoppi
         # ... other static nodes in pile-b
     ```
 
-    If `system_tablets` explicitly lists node IDs, include nodes from the new pile so system tablets can run there after a switchover or failover.
+    If `system_tablets` or `bootstrap_config.tablet` explicitly lists node IDs, include nodes from the new pile in each affected tablet's node list. In a multi-pile cluster, `config replace` warns if a system tablet has no configured node where it can start in a pile. To check an existing cluster, fetch its current configuration and run `admin cluster config replace -f config.yaml --dry-run` with the unchanged file.
 
 4. Apply the updated configuration through an available node:
 
@@ -378,6 +378,8 @@ ORDER BY GroupId;
 Here, `<box-id>` and `<storage-pool-id>` are the IDs returned by the first query. Inspect physical group-part rows with `BridgePileId` set. Redundant rows may show `BLOCKS` before they disappear. Cleanup is complete only when no redundant physical groups remain; `NOT_REQUIRED` in `bridge list` alone does not prove this.
 
 ## Switching piles {#switching}
+
+If a required system tablet has no configured bootstrap node in the target pile, `switchover` and `takedown --new-primary` reject the change. Emergency `failover --new-primary` reports a warning and can proceed if its other requirements are met.
 
 ### View current state {#list}
 

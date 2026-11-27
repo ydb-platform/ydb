@@ -7,6 +7,7 @@ import "ydb/core/protos/bridge.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
 
 package NKikimrBlobStorage;
 
@@ -459,6 +460,7 @@ message TEvNodeConfigInvokeOnRootResult {
         RACE = 3; // race in requests with other entities
         CONTINUE_BSC = 4; // process this request with BSC
         GENERATION_MISMATCH = 5; // compare-and-set guard failed; the request was not applied
+        PRECONDITION_FAILED = 6; // the requested operation was rejected before changing the configuration
     }
 
     message TScepter {
@@ -519,6 +521,7 @@ message TEvNodeConfigInvokeOnRootResult {
     EStatus Status = 1;
     optional string ErrorReason = 2;
     TScepter Scepter = 3;
+    repeated Ydb.Issue.IssueMessage Issues = 18;
 
     reserved 4, 6, 7, 8, 9;
 

@@ -6,6 +6,8 @@
 #include <ydb/core/util/address_classifier.h>
 
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
@@ -646,6 +648,13 @@ namespace NKikimr::NStorage {
         record.SetStatus(status);
         if (errorReason) {
             record.SetErrorReason(errorReason->data(), errorReason->size());
+        }
+        if (status == TResult::OK) {
+            for (const auto& warning : BootstrapPlacementWarnings) {
+                auto *issue = record.AddIssues();
+                issue->set_severity(NYql::TSeverityIds::S_WARNING);
+                issue->set_message(warning);
+            }
         }
         if (Self->Scepter) {
             auto *s = record.MutableScepter();

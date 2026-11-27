@@ -173,7 +173,7 @@ int TCommandStorageConfigReplace::Run(TConfig& config) {
         }
     }();
 
-    NStatusHelpers::ThrowOnError(status);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
 
     if (!status.GetIssues()) {
         Cout << status << Endl;

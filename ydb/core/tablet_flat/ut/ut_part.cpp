@@ -662,24 +662,41 @@ Y_UNIT_TEST_SUITE(TPart) {
     Y_UNIT_TEST(FinalConsecutiveErasesKeepNewestConflictVersion)
     {
         TLayoutCook lay;
-        lay.Col(0, 0, NScheme::NTypeIds::Uint32).Key({ 0 });
+        lay.Col(0, 0, NScheme::NTypeIds::Uint32)
+            .Col(0, 1, NScheme::NTypeIds::String)
+            .Key({ 0 });
         const auto key = *TSchemedCookRow(*lay).Col(1_u32);
+        const TString payload(4096, 'x');
+        const auto row = *TSchemedCookRow(*lay).Col(1_u32, payload);
+        const TRowVersion firstErase(50, 1);
+        const TRowVersion boundary(75, 1);
+        const NPage::TConf conf{true, 8 * 1024}; // Keep the payload inline in the history page.
 
         // The newer erase is a write conflict at 75/1, while the older erase
         // must still hide the insertion for reads between 50/1 and 100/1.
-        const auto eggs = TPartCook(lay, PageConf())
+        const auto eggs = TPartCook(lay, conf)
             .Ver({100, 1}).Add(key, ERowOp::Erase)
-            .Ver({50, 1}).Add(key, ERowOp::Erase)
-            .Ver({10, 1}).Add(key)
+            .Ver(firstErase).Add(key, ERowOp::Erase)
+            .Ver({10, 1}).Add(row)
             .Finish();
         CheckRetainedEraseStats(eggs, {100, 1});
+        const auto& garbage = *eggs.Lone()->GarbageStats;
+        UNIT_ASSERT_VALUES_EQUAL(garbage.GetGarbageBytes(firstErase.Prev()), 0u);
+        UNIT_ASSERT(garbage.GetGarbageBytes(firstErase) >= payload.size());
+        UNIT_ASSERT_VALUES_EQUAL(garbage.GetGarbageBytes(boundary), garbage.GetGarbageBytes(firstErase));
         CheckLatestCommittedErase(eggs, 1, {100, 1});
         TCheckIter(eggs, { })
             .Seek(key, ESeek::Exact).IsOp(ERowOp::Erase, key).IsVer({100, 1})
-            .Ver({75, 1}).IsOp(ERowOp::Erase, key).IsVer({50, 1})
-            .Ver({50, 1}).IsOp(ERowOp::Erase, key).IsVer({50, 1})
-            .Ver({49, 1}).Is(key).IsVer({10, 1})
+            .Ver(boundary).IsOp(ERowOp::Erase, key).IsVer(firstErase)
+            .Ver(firstErase).IsOp(ERowOp::Erase, key).IsVer(firstErase)
+            .Ver({49, 1}).Is(row).IsVer({10, 1})
             .Ver({9, 1}).Is(EReady::Gone);
+
+        TRowVersionRanges removed;
+        removed.Add(TRowVersion::Min(), boundary);
+        const auto compacted = TCompaction(nullptr, conf).WithRemovedRowVersions(removed).Do(eggs);
+        UNIT_ASSERT_VALUES_EQUAL(compacted.Lone()->Stat.HiddenRows, 0u);
+        CheckLatestCommittedErase(compacted, 1, {100, 1});
     }
 
     Y_UNIT_TEST(FinalEraseKeepsConflictAcrossRemovedVersionGaps)

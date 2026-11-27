@@ -1620,7 +1620,8 @@ TSelectRowVersionResult TTable::SelectRowVersionByKeyPrefix(
     }
 
     const TCelled key(keyPrefix, *Scheme->Keys, true);
-    TSelectRowVersionResult res(NTable::EReady::Gone);
+    TSelectRowVersionResult lockedRow(EReady::Gone);
+    TSkipToCommittedResult liveRow;
 
     auto iter = Iterate(key, {} /*tags*/, env, ESeek::Lower, TRowVersion::Max(), nullptr, nullptr);
 
@@ -1647,28 +1648,42 @@ TSelectRowVersionResult TTable::SelectRowVersionByKeyPrefix(
         if (ready == EReady::Page) {
             break;
         }
-        const bool hasLiveLock = lockMode != ELockMode::None
+        const bool firstLock = lockedRow.LockMode == ELockMode::None && lockMode != ELockMode::None
             && !CommittedTransactions.Contains(lockTxId) && !RemovedTransactions.Contains(lockTxId);
-        if (!hasLiveLock && (ready == EReady::Gone || iter->Row().GetRowState() == ERowOp::Erase)) {
-            continue;
+        if (firstLock) {
+            lockedRow.Ready = ready;
+            lockedRow.LockMode = lockMode;
+            lockedRow.LockTxId = lockTxId;
         }
-        // A lock without an underlying row must preserve the committed version found earlier in the prefix.
-        res.Ready = ready;
         if (ready == EReady::Data) {
-            res.RowVersion = iter->GetRowVersion();
-            res.RowTxId = iter->GetDeltaTxId();
-            res.RowOp = iter->Row().GetRowState();
+            const auto rowOp = iter->Row().GetRowState();
+            if (rowOp != ERowOp::Erase) {
+                liveRow = {iter->GetRowVersion(), iter->GetDeltaTxId(), rowOp};
+            } else if (firstLock) {
+                lockedRow.RowVersion = iter->GetRowVersion();
+                lockedRow.RowTxId = iter->GetDeltaTxId();
+                lockedRow.RowOp = rowOp;
+            }
         }
-        if (hasLiveLock) {
-            res.LockMode = lockMode;
-            res.LockTxId = lockTxId;
-            return res;
+        if (lockedRow.LockMode != ELockMode::None && liveRow) {
+            break;
         }
     }
     if (ready == NTable::EReady::Page) {
         return TSelectRowVersionResult(ready);
     }
-    return res;
+    if (lockedRow.LockMode == ELockMode::None) {
+        return TSelectRowVersionResult(liveRow);
+    }
+    if (liveRow) {
+        lockedRow.RowOp = liveRow.RowOp;
+        // Conflict checks need the newest version and its corresponding transaction id.
+        if (liveRow.RowVersion >= lockedRow.RowVersion) {
+            lockedRow.RowVersion = liveRow.RowVersion;
+            lockedRow.RowTxId = liveRow.RowTxId;
+        }
+    }
+    return lockedRow;
 }
 
 void TTable::DebugDump(IOutputStream& str, IPages* env, const NScheme::TTypeRegistry& reg) const

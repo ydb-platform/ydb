@@ -1722,21 +1722,40 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
         const ui64 shard = shards.front();
 
-        // Write an erase directly so there is no older index entry for this key.
-        Write(runtime, sender, shard, MakeWriteRequest(std::nullopt, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
-            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE, tableId,
-            {1, 2}, {TCell::Make(i32(42)), TCell::Make(i32(1))}), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        // Planned writes return their exact MVCC versions, which we can use on lock retries.
+        using TOperation = NKikimrDataEvents::TEvWrite::TOperation;
+        auto writeKey = [&](ui64 txId, TOperation::EOperationType op, i32 pk) {
+            const auto prepared = Write(runtime, sender, shard,
+                MakeWriteRequest(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE, op, tableId,
+                    {1, 2}, {TCell::Make(i32(42)), TCell::Make(pk)}),
+                NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+            UNIT_ASSERT_VALUES_EQUAL(prepared.GetDomainCoordinators().size(), 1u);
+            SendProposeToCoordinator(runtime, sender, {shard}, {
+                .TxId = txId,
+                .Coordinator = prepared.GetDomainCoordinators(0),
+                .MinStep = prepared.GetMinStep(),
+                .MaxStep = prepared.GetMaxStep(),
+            });
+            const auto committed = WaitForWriteCompleted(runtime, sender);
+            return TRowVersion(committed.GetStep(), committed.GetOrderId());
+        };
+        const auto erased = writeKey(10001, TOperation::OPERATION_DELETE, 2);
+        const auto inserted = writeKey(10002, TOperation::OPERATION_UPSERT, 1);
+        UNIT_ASSERT(erased < inserted);
 
         TTestPipe pipe(runtime, shard);
         TLockRowsHelper lockRows(runtime, pipe);
-        auto lockIndexKey = [&](const TLockHandle& owner, i32 pk) {
-            return lockRows.SendRequest(owner, tableId, TKeysBuilder(2).Add(42).Add(pk).Build(), [](auto* req) {
+        auto lockIndexKey = [&](const TLockHandle& owner, i32 pk, std::optional<TRowVersion> snapshot = {}) {
+            return lockRows.SendRequest(owner, tableId, TKeysBuilder(2).Add(42).Add(pk).Build(), [&](auto* req) {
                 req->Record.AddColumnIds(2);
+                if (snapshot) {
+                    snapshot->ToProto(req->Record.MutableSnapshot());
+                }
             });
         };
         TLockHandle first(123, runtime.GetActorSystem(0));
         TLockHandle second(234, runtime.GetActorSystem(0));
-        lockRows.ExpectResult(lockIndexKey(first, 1));
+        lockRows.ExpectResult(lockIndexKey(first, 2));
 
         auto compact = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
         compact->Record.SetCompactSinglePartedShards(true);
@@ -1745,8 +1764,13 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
         UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK,
             result->Get()->Record.ShortDebugString());
 
+        const auto beforeInsert = lockRows.ExpectResult(lockIndexKey(first, 2, erased));
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", beforeInsert->Record.GetModifiedKeys()), "0");
+        const auto atInsert = lockRows.ExpectResult(lockIndexKey(first, 2, inserted));
+        UNIT_ASSERT(atInsert->Record.GetModifiedKeys().empty());
+
         // Different physical keys share the same unique prefix. The second lock must wait.
-        const auto pending = lockIndexKey(second, 2);
+        const auto pending = lockIndexKey(second, 1);
         lockRows.ExpectNoResult();
         first.Reset();
         lockRows.ExpectResult(pending);

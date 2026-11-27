@@ -169,9 +169,10 @@ public:
             const ITransactionObserverPtr& observer = nullptr) const;
     // Works in the same way as SelectRowVersion, but for a range specified
     // by key prefix. Used to check row conflicts in unique indexes.
-    // Returns either the first locked row or any non-deleted committed row
-    // from the range if no rows are locked in range. Feeds uncommitted
-    // non-lock-only deltas to the specified observer.
+    // Returns the first live lock and looks up the committed live row independently.
+    // With a lock, Ready describes the locked key. RowOp reflects the live row if present,
+    // and RowVersion/RowTxId identify the newer of that row and the locked committed erase.
+    // Feeds uncommitted non-lock-only deltas to the specified observer.
     TSelectRowVersionResult SelectRowVersionByKeyPrefix(
             TArrayRef<const TCell> keyPrefix, IPages* env,
             const ITransactionObserverPtr& observer) const;

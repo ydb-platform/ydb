@@ -491,8 +491,8 @@ namespace NTable {
                 }
             }
 
-            // Count overhead bytes if everything up to LastWritten is removed
-            Current.GarbageStatsBuilder.Add(KeyState.LastWritten, overheadBytes);
+            // A history row stops being visible at its erase or at the next stored version.
+            Current.GarbageStatsBuilder.Add(Min(maxVersion, KeyState.LastWritten), overheadBytes);
             if (Current.GarbageStatsBuilder.Size() > GarbageStatsMaxBuildSize) {
                 Current.GarbageStatsBuilder.ShrinkTo(GarbageStatsMaxSize);
             }

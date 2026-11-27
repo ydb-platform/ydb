@@ -189,7 +189,8 @@ NUdf::TUnboxedValue DqBuildInputValue(
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& outputs,NUdf::IPgBuilder* pgBuilder, TMaybe<ui8> minFillPercentage)
+    TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder,
+    NMiniKQL::EValuePackerVersion packerVersion, TMaybe<ui8> minFillPercentage)
 {
     TMaybe<ui32> outputWidth;
     if (type->IsMulti()) {
@@ -214,6 +215,7 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
                 std::move(outputs),
                 std::move(keyColumns),
                 type, holderFactory,
+                packerVersion,
                 minFillPercentage,
                 outputDesc.GetHashPartition(),
                 pgBuilder
@@ -240,16 +242,20 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& channels, TMaybe<ui8> minFillPercentage)
+    TVector<IDqOutput::TPtr>&& channels, NMiniKQL::EValuePackerVersion packerVersion,
+    TMaybe<ui8> minFillPercentage)
 {
-    return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(channels), nullptr, minFillPercentage);
+    return DqBuildOutputConsumer(
+        outputDesc, type, typeEnv, holderFactory, std::move(channels), nullptr, packerVersion, minFillPercentage);
 }
 
 IDqOutputConsumer::TPtr TDqTaskRunnerExecutionContextBase::CreateOutputConsumer(const TTaskOutput& outputDesc,
     const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext*, const TTypeEnvironment& typeEnv,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory, TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder) const
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, TVector<IDqOutput::TPtr>&& outputs,
+    NUdf::IPgBuilder* pgBuilder, NMiniKQL::EValuePackerVersion packerVersion) const
 {
-    return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(outputs), pgBuilder, {});
+    return DqBuildOutputConsumer(
+        outputDesc, type, typeEnv, holderFactory, std::move(outputs), pgBuilder, packerVersion, {});
 }
 
 inline TCollectStatsLevel StatsModeToCollectStatsLevel(NDqProto::EDqStatsMode statsMode) {
@@ -602,6 +608,7 @@ public:
         TBindTerminator term(AllocatedHolder->ProgramParsed.CompGraph->GetTerminator());
 
         auto& typeEnv = TypeEnv();
+        const auto packerVersion = FromProto(task.GetValuePackerVersion());
 
         SpillingTaskCounters = execCtx.GetSpillingTaskCounters();
         if (SpillerFactory) {
@@ -683,7 +690,7 @@ public:
                         .DstStageId = inputChannelDesc.GetDstStageId(),
                         .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
                         .TransportVersion = inputChannelDesc.GetTransportVersion(),
-                        .PackerVersion = FromProto(task.GetValuePackerVersion()),
+                        .PackerVersion = packerVersion,
                         .DatumValidationMode = RuntimeSettings->DatumValidation.Get(),
                         .MaxStoredBytes = memoryLimits.ChannelBufferSize,
                         .ChannelQuotaManager = memoryLimits.ChannelQuotaManager,
@@ -859,7 +866,7 @@ public:
                         .DstStageId = outputChannelDesc.GetDstStageId(),
                         .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
                         .TransportVersion = outputChannelDesc.GetTransportVersion(),
-                        .PackerVersion = FromProto(task.GetValuePackerVersion()),
+                        .PackerVersion = packerVersion,
                         .DatumValidationMode = RuntimeSettings->DatumValidation.Get(),
                         .MaxStoredBytes = memoryLimits.ChannelBufferSize,
                         .ChannelQuotaManager = memoryLimits.ChannelQuotaManager,
@@ -894,7 +901,7 @@ public:
             if (transform) {
                 auto guard = BindAllocator();
                 transform->TransformOutput = execCtx.CreateOutputConsumer(outputDesc, transform->TransformOutputType,
-                    Context.ApplyCtx, typeEnv, holderFactory, std::move(outputs), PgBuilder_.get());
+                    Context.ApplyCtx, typeEnv, holderFactory, std::move(outputs), PgBuilder_.get(), packerVersion);
 
                 outputs.clear();
                 outputs.emplace_back(transform->TransformInput);
@@ -903,7 +910,7 @@ public:
             {
                 auto guard = BindAllocator();
                 outputConsumers[i] = execCtx.CreateOutputConsumer(outputDesc, entry->OutputItemTypes[i],
-                    Context.ApplyCtx, typeEnv, holderFactory, std::move(outputs), PgBuilder_.get());
+                    Context.ApplyCtx, typeEnv, holderFactory, std::move(outputs), PgBuilder_.get(), packerVersion);
             }
         }
 

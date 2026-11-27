@@ -2271,12 +2271,14 @@ private:
             && IsIn({NKikimrScheme::StatusSuccess, NKikimrScheme::StatusAlreadyExists,
                 NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAccepted}, record.GetStatus())) {
             const auto dst = TPath::Resolve(item.DstPathName, Self);
-            if (!CanReuseDirectory(dst, *importInfo, item)) {
+            const bool creatingParent = record.GetStatus() == NKikimrScheme::StatusMultipleModifications
+                && !dst.IsResolved() && dst.FirstExistedParent().IsUnderCreating();
+            if (!creatingParent && !CanReuseDirectory(dst, *importInfo, item)) {
                 Self->TxIdToImport.erase(txId);
                 return CancelAndPersist(db, importInfo, itemIdx,
                     TStringBuilder() << "Expected a directory at " << item.DstPathName, "invalid destination");
             }
-            if (!dst.IsUnderOperation()) {
+            if (!creatingParent && !dst.IsUnderOperation()) {
                 CompletedTxId = txId;
                 return OnNotifyResult(txc, ctx);
             }

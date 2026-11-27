@@ -1465,7 +1465,7 @@ void ImportEmptyDirectoriesImpl(TBackupTestFixture& f) {
         UNIT_ASSERT(empty.GetChildren().empty());
         f.ValidateHasYdbTables({target + "/Table2"});
     };
-    const auto check = [&](const TString& target, const TString& owner, const TString& team, bool inheritInterrupted) {
+    const auto check = [&](const TString& target, const std::string& owner, const TString& team, bool inheritInterrupted) {
         const auto desc = scheme.DescribePath(target).GetValueSync();
         UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
         const auto& entry = desc.GetEntry();
@@ -1490,6 +1490,20 @@ void ImportEmptyDirectoriesImpl(TBackupTestFixture& f) {
     restore("/Root/existing");
     check("/Root/existing", "target@builtin", "target", false);
     UNIT_ASSERT(scheme.DescribePath("/Root/existing/keep").GetValueSync().IsSuccess());
+
+    auto noAcl = traits.MakeImportSettings(f, "/Root");
+    noAcl.NoACL(true).AppendItem(traits.MakeImportItem("/Root/no-acl", "dir2"));
+    f.WaitOpSuccess(traits.Import(f, noAcl));
+    const auto noAclDesc = scheme.DescribePath("/Root/no-acl").GetValueSync();
+    UNIT_ASSERT_C(noAclDesc.IsSuccess(), noAclDesc.GetIssues().ToString());
+    UNIT_ASSERT(noAclDesc.GetEntry().Owner != "backup@builtin");
+    check("/Root/no-acl", noAclDesc.GetEntry().Owner, "source", false);
+
+    auto leaf = traits.MakeImportSettings(f, "/Root");
+    leaf.AppendItem(traits.MakeImportItem("/Root/leaf-only/orders", "dir2/Table2"));
+    f.WaitOpSuccess(traits.Import(f, leaf));
+    f.ValidateHasYdbTables({"/Root/leaf-only/orders"});
+    f.ValidateDoesNotHaveYdbTables({"/Root/leaf-only/dir3"});
 
     auto conflict = traits.MakeImportSettings(f, "/Root");
     conflict.AppendItem(traits.MakeImportItem("/Root/existing/Table2", "dir2/dir3"));

@@ -47,7 +47,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateDirectoryPropose(
     tx.SetWorkingDir(dst.first);
     tx.MutableMkDir()->SetName(dst.second);
     tx.SetInternal(true);
-    tx.SetFailOnExist(true);
+    // MkDir reports AlreadyExists for a stable directory and never applies
+    // this proposal's attributes or permissions to the existing path.
+    tx.SetFailOnExist(false);
     for (const auto& [key, value] : *item.Metadata.GetDirectoryAttributes()) {
         if (TUserAttributes::ParseName(key) != EAttribute::USER) {
             error = TStringBuilder() << "Unexpected system directory attribute: " << key;

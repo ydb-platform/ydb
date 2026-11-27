@@ -7,10 +7,11 @@
 #include <ydb/library/yql/dq/actors/compute/dq_async_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_channels.h>
-#include <ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.h>
+#include <ydb/library/yql/dq/actors/task_runner/task_runner_actor.h>
 
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_watermark.h>
 
 namespace NYql::NDq {
 namespace {
@@ -20,21 +21,25 @@ using namespace NKikimr::NMiniKQL;
 using namespace NTaskRunnerActor;
 
 // Closing output stops new production but leaves buffered chunks until Pop/Drop.
-class TOutputChannelMock : public NTaskRunnerProxy::IOutputChannel {
+class TOutputChannelMock : public IDqOutputChannel {
 public:
-    NDqProto::TPopResponse Pop(TDqSerializedBatch& data) override {
-        NDqProto::TPopResponse response;
-        if (BufferedChunks > 0) {
-            data.Proto.SetTransportVersion(NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
-            data.Proto.SetRows(1);
-            data.Proto.SetRaw("data");
-            response.SetResult(true);
-            --BufferedChunks;
+    bool Pop(TDqSerializedBatch& data) override {
+        if (BufferedChunks == 0) {
+            return false;
         }
-        return response;
+        data.Proto.SetTransportVersion(NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
+        data.Proto.SetRows(1);
+        data.Proto.SetRaw("data");
+        --BufferedChunks;
+        return true;
     }
 
+    bool Pop(NDqProto::TWatermark&) override { return false; }
+    bool Pop(NDqProto::TCheckpoint&) override { return false; }
+    bool PopAll(TDqSerializedBatch& data) override { return Pop(data); }
     bool IsFinished() const override { return Finished && BufferedChunks == 0; }
+    bool IsEarlyFinished() const override { return Finished; }
+    bool HasData() const override { return BufferedChunks != 0; }
     void Finish() override { Finished = true; ++FinishCalls; }
 
     ui64 Drop() override {
@@ -44,39 +49,68 @@ public:
         return dropped;
     }
 
+    ui64 GetChannelId() const override { return 10; }
+    ui64 GetValuesCount() const override { return BufferedChunks; }
+    const TDqOutputChannelStats& GetPopStats() const override { return Stats; }
+    const TDqOutputStats& GetPushStats() const override { return Stats; }
+    EDqFillLevel GetFillLevel() const override { return SoftLimit; }
+    EDqFillLevel UpdateFillLevel() override { return GetFillLevel(); }
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override {}
+    void Push(NUdf::TUnboxedValue&&) override { Y_ABORT("Unexpected push"); }
+    void WidePush(NUdf::TUnboxedValue*, ui32) override { Y_ABORT("Unexpected push"); }
+    void Push(NDqProto::TWatermark&&) override { Y_ABORT("Unexpected watermark"); }
+    void Push(NDqProto::TCheckpoint&&) override { Y_ABORT("Unexpected checkpoint"); }
+    void Flush() override {}
+    TType* GetOutputType() const override { return nullptr; }
+    void Terminate() override {}
+    void Bind(TActorId, TActorId) override {}
+    bool IsLocal() const override { return false; }
+
     bool Finished = false;
     ui32 BufferedChunks = 1;
     ui32 DroppedChunks = 0;
     ui32 DropCalls = 0;
     ui32 FinishCalls = 0;
+    TDqOutputChannelStats Stats{};
 };
 
-class TTaskRunnerMock : public NTaskRunnerProxy::ITaskRunner {
+class TTaskRunnerMock : public IDqTaskRunner {
 public:
     TTaskRunnerMock(TScopedAlloc& alloc, TTypeEnvironment& env, THolderFactory& holders)
         : Alloc(alloc), Env(env), Holders(holders)
     {}
 
     ui64 GetTaskId() const override { return 1; }
-    NDqProto::TPrepareResponse Prepare(const TDqTaskRunnerMemoryLimits&) override { return {}; }
-    NDqProto::TRunResponse Run() override {
-        NDqProto::TRunResponse response;
-        response.SetResult(static_cast<ui32>(Output->IsFinished() ? ERunStatus::Finished : ERunStatus::PendingOutput));
-        return response;
+    void Prepare(const TDqTaskSettings&, const TDqTaskRunnerMemoryLimits&,
+        const IDqTaskRunnerExecutionContext&, TDqComputeActorWatermarks*, TDqWatermarkGeneratorTracker*) override {}
+    ERunStatus Run() override {
+        return Output->IsFinished() ? ERunStatus::Finished : ERunStatus::PendingOutput;
     }
-    NTaskRunnerProxy::IInputChannel::TPtr GetInputChannel(ui64) override { Y_ABORT("Unexpected input"); }
-    NTaskRunnerProxy::IOutputChannel::TPtr GetOutputChannel(ui64) override { return Output; }
-    IDqAsyncInputBuffer* GetSource(ui64) override { Y_ABORT("Unexpected source"); }
+    bool HasEffects() const override { return false; }
+    IDqInputChannel::TPtr GetInputChannel(ui64) override { Y_ABORT("Unexpected input"); }
+    IDqOutputChannel::TPtr GetOutputChannel(ui64) override { return Output; }
+    IDqAsyncInputBuffer::TPtr GetSource(ui64) override { Y_ABORT("Unexpected source"); }
     IDqAsyncOutputBuffer::TPtr GetSink(ui64) override { Y_ABORT("Unexpected sink"); }
+    std::optional<std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> GetInputTransform(ui64) override { return {}; }
+    TDqComputeActorWatermarks* GetInputTransformWatermarksTracker(ui64) override { return nullptr; }
+    std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64) override { Y_ABORT("Unexpected output transform"); }
+    IRandomProvider* GetRandomProvider() const override { return nullptr; }
     const THashMap<TString, TString>& GetTaskParams() const override { return Params; }
     const TVector<TString>& GetReadRanges() const override { return ReadRanges; }
     const THashMap<TString, TString>& GetSecureParams() const override { return Params; }
     const TTypeEnvironment& GetTypeEnv() const override { return Env; }
     const THolderFactory& GetHolderFactory() const override { return Holders; }
+    TScopedAlloc& GetAllocator() const override { return Alloc; }
     TGuard<TScopedAlloc> BindAllocator(TMaybe<ui64>) override { return TGuard<TScopedAlloc>(Alloc); }
     bool IsAllocatorAttached() override { return false; }
-    i32 GetProtocolVersion() override { return 1; }
-    TStatus GetStatus() override { return {0, {}}; }
+    const TDqTaskRunnerStats* GetStats() const override { return &Stats; }
+    const TDqMeteringStats* GetMeteringStats() const override { return &MeteringStats; }
+    TString Save() const override { Y_ABORT("Unexpected save"); }
+    void Load(TStringBuf) override { Y_ABORT("Unexpected load"); }
+    void SetWatermarkIn(TInstant) override { Y_ABORT("Unexpected watermark"); }
+    const TWatermark& GetWatermark() const override { return Watermark; }
+    void SetSpillerFactory(std::shared_ptr<ISpillerFactory>) override { Y_ABORT("Unexpected spilling"); }
+    TString GetOutputDebugString() override { return {}; }
 
     TIntrusivePtr<TOutputChannelMock> Output = MakeIntrusive<TOutputChannelMock>();
 
@@ -86,23 +120,9 @@ private:
     THolderFactory& Holders;
     THashMap<TString, TString> Params;
     TVector<TString> ReadRanges;
-};
-
-class TProxyFactoryMock : public NTaskRunnerProxy::IProxyFactory {
-public:
-    explicit TProxyFactoryMock(TIntrusivePtr<TTaskRunnerMock> runner)
-        : Runner(std::move(runner))
-    {}
-
-    NTaskRunnerProxy::ITaskRunner::TPtr GetOld(std::shared_ptr<TScopedAlloc>, const TDqTaskSettings&, const TString&) override {
-        return Runner;
-    }
-    TIntrusivePtr<IDqTaskRunner> Get(std::shared_ptr<TScopedAlloc>, const TDqTaskSettings&, NDqProto::EDqStatsMode, const TString&) override {
-        Y_ABORT("Unexpected direct task runner");
-    }
-
-private:
-    TIntrusivePtr<TTaskRunnerMock> Runner;
+    TDqTaskRunnerStats Stats{};
+    TDqMeteringStats MeteringStats{};
+    TWatermark Watermark;
 };
 
 class TTestRuntime : public TTestActorRuntimeBase {
@@ -152,8 +172,10 @@ struct TEarlyFinishFixture : NUnitTest::TBaseFixture {
         channel->SetTransportVersion(NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
         ActorIdToProto(Consumer, channel->MutableDstEndpoint()->MutableActorId());
 
-        auto factory = CreateTaskRunnerActorFactory(
-            MakeIntrusive<TProxyFactoryMock>(Runner), MakeIntrusive<NDqs::TTaskRunnerInvokerFactory>());
+        auto factory = CreateLocalTaskRunnerActorFactory(
+            [runner = Runner](std::shared_ptr<TScopedAlloc>, const TDqTaskSettings&, NDqProto::EDqStatsMode, const TLogFunc&) {
+                return runner;
+            });
         TComputeRuntimeSettings settings;
         settings.StatsMode = NDqProto::DQ_STATS_MODE_NONE;
         TComputeMemoryLimits limits;
@@ -186,7 +208,7 @@ struct TEarlyFinishFixture : NUnitTest::TBaseFixture {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TAsyncComputeActorEarlyFinish) {
-    Y_UNIT_TEST_F(StopsProxyProducer, TEarlyFinishFixture) {
+    Y_UNIT_TEST_F(StopsLocalProducer, TEarlyFinishFixture) {
         auto actor = StartComputeActor();
         auto data = Runtime.GrabEdgeEvent<TEvDqCompute::TEvChannelData>(Consumer, TDuration::Seconds(5));
         UNIT_ASSERT(data);

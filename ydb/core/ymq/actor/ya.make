@@ -80,6 +80,7 @@ PEERDIR(
     ydb/core/persqueue/events
     ydb/core/persqueue/public/describer
     ydb/core/protos
+    ydb/core/quoter/public
     ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy

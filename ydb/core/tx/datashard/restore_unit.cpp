@@ -81,9 +81,9 @@ protected:
         schemeOp->Success = result->Success;
         const TRowVersion version(op->GetStep(), op->GetTxId());
         const auto* download = DataShard.FindS3Download(op->GetTxId());
-        const bool writtenAtVersion =
-            download ? download->WrittenRows == result->RowsWritten && download->HasWrittenAtVersion(version)
-                     : result->RowsWritten == 0;
+        const bool writtenAtVersion = download
+            ? download->WrittenRows == result->RowsWritten && download->HasWrittenAtVersion(version)
+            : result->RowsWritten == 0;
         schemeOp->PlanStep = result->Success && writtenAtVersion ? version.Step : 0;
         schemeOp->Error = std::move(result->Error);
         schemeOp->BytesProcessed = result->BytesWritten;

@@ -3,6 +3,13 @@
 
 namespace NKikimr::NDataShard {
 
+bool TDataShard::ShouldCancelS3Upload(const TEvDataShard::TEvS3UploadRowsRequest& request,
+        const TActorId& sender)
+{
+    return !IsUserTableWriteBlocked()
+        && !IsActiveImport(request.TxId, request.Record.GetTableId(), sender);
+}
+
 TDataShard::TTxS3UploadRows::TTxS3UploadRows(TDataShard* ds, TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev)
     : TBase(ds)
     , TCommonUploadOps(ev, false, false)
@@ -12,13 +19,12 @@ TDataShard::TTxS3UploadRows::TTxS3UploadRows(TDataShard* ds, TEvDataShard::TEvS3
 
 bool TDataShard::TTxS3UploadRows::Execute(TTransactionContext& txc, const TActorContext&) {
     const auto* request = GetRequest();
-    const bool writeBlocked = Self->IsUserTableWriteBlocked();
-    if (!writeBlocked && !Self->IsActiveImport(request->TxId, request->Record.GetTableId(), GetSender())) {
+    if (Self->ShouldCancelS3Upload(*request, GetSender())) {
         Cancelled = true;
         return true;
     }
     // Frozen writes take the normal rejection path even if the restore is absent
-    auto op = writeBlocked ? TOperation::TPtr{} : Self->Pipeline.FindOp(request->TxId);
+    auto op = Self->IsUserTableWriteBlocked() ? TOperation::TPtr{} : Self->Pipeline.FindOp(request->TxId);
     const auto mvccVersion = Self->GetMvccVersion(op.Get());
 
     // NOTE: will not throw TNeedGlobalTxId since we set breakLocks to false
@@ -45,7 +51,7 @@ void TDataShard::TTxS3UploadRows::Complete(const TActorContext&) {
     --Self->DatabaseFreezeLocalWrites;
     if (Cancelled) {
         Self->Send(GetSender(), new TEvDataShard::TEvS3UploadRowsResponse(
-                               Self->TabletID(), NKikimrTxDataShard::TError::EXECUTION_CANCELLED));
+            Self->TabletID(), NKikimrTxDataShard::TError::EXECUTION_CANCELLED));
         return;
     }
     TActorId target;

@@ -38,7 +38,7 @@ struct TEvTableChecksum {
         TString Error;
 
         TEvResult(ui64 operationId, ui32 itemIdx, Ydb::StatusIds::StatusCode status, const TTableChecksum& checksum,
-            const TString& error)
+                const TString& error)
             : OperationId(operationId)
             , ItemIdx(itemIdx)
             , Status(status)

@@ -5,6 +5,7 @@
 #include <util/generic/maybe.h>
 
 namespace NKikimr {
+
 struct TRowVersion;
 
 namespace NDataShard {

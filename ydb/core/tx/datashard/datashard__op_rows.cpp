@@ -308,9 +308,9 @@ void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TA
         return;
     }
 
-    if (!IsUserTableWriteBlocked() && !IsActiveImport(ev->Get()->TxId, ev->Get()->Record.GetTableId(), ev->Sender)) {
+    if (ShouldCancelS3Upload(*ev->Get(), ev->Sender)) {
         ctx.Send(ev->Sender, new TEvDataShard::TEvS3UploadRowsResponse(TabletID(),
-                                 NKikimrTxDataShard::TError::EXECUTION_CANCELLED), 0, ev->Cookie);
+            NKikimrTxDataShard::TError::EXECUTION_CANCELLED), 0, ev->Cookie);
         return;
     }
 

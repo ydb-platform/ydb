@@ -136,7 +136,7 @@ namespace {
     class TChecksumItem {
     public:
         TChecksumItem(TActorId alias, TActorId hostId, TActorId replyTo, TEvTableChecksum::TOwnerPtr owner,
-            TEvTableChecksum::TItem item)
+                TEvTableChecksum::TItem item)
             : Alias(alias)
             , HostId(hostId)
             , ReplyTo(replyTo)

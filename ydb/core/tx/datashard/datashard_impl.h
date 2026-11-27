@@ -1501,6 +1501,8 @@ class TDataShard
     void Handle(TEvDataShard::TEvS3DirectWriteFinish::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3DirectWriteAbort::TPtr& ev, const TActorContext& ctx);
     bool IsActiveImport(ui64 txId, ui64 tableId, const TActorId& sender);
+    bool ShouldCancelS3Upload(
+        const TEvDataShard::TEvS3UploadRowsRequest& request, const TActorId& sender);
     TString CheckDirectImportSpace();
     void AbortDirectImportsForSpace();
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);

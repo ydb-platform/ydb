@@ -9,10 +9,15 @@ namespace NKikimr {
 namespace NDataShard {
 
 bool TS3Download::HasWrittenAtVersion(const TRowVersion& version) const {
+    if (WrittenRows == 0) {
+        return true;
+    }
+
     const auto& progress = DownloadState.GetRestoreWriteProgress();
-    return WrittenRows == 0 || (progress.HasVersion() && progress.HasWrittenRows() &&
-                                  TRowVersion::FromProto(progress.GetVersion()) == version &&
-                                  progress.GetWrittenRows() == WrittenRows);
+    return progress.HasVersion()
+        && progress.HasWrittenRows()
+        && TRowVersion::FromProto(progress.GetVersion()) == version
+        && progress.GetWrittenRows() == WrittenRows;
 }
 
 void TS3Download::Out(IOutputStream& out) const {

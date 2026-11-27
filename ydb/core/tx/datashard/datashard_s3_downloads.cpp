@@ -60,8 +60,9 @@ const TS3Download& TS3DownloadsManager::Store(
     Y_ENSURE(newInfo.DataETag);
     Y_ENSURE(info.DataETag.GetOrElse(*newInfo.DataETag) == *newInfo.DataETag);
     // Only the shard's previous committed checkpoint can attest to earlier rows
-    const bool canTrackWrite =
-        writeVersion && newInfo.WrittenRows >= info.WrittenRows && info.HasWrittenAtVersion(*writeVersion);
+    const bool canTrackWrite = writeVersion
+        && newInfo.WrittenRows >= info.WrittenRows
+        && info.HasWrittenAtVersion(*writeVersion);
     info = newInfo;
     info.DownloadState.ClearRestoreWriteProgress();
     if (canTrackWrite) {

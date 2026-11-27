@@ -330,8 +330,9 @@ Y_UNIT_TEST_SUITE_F(YdbWorkloadScheme, TSchemeWorkloadFixture) {
     }
 
     Y_UNIT_TEST(AllOperationsWithoutConfig) {
+        // Keep spare ready objects so each operation can visit both types regardless of response order.
         const auto output = RunYdb({"workload", "scheme", "run"}, {"--path", Path, "--tables", "2", "--topics", "2",
-            "--partitions", "2", "--operations", "create=2,alter=2,describe=2,list=1", "-t", "1", "-s", "5"});
+            "--partitions", "2", "--operations", "create=2,alter=1,describe=1,list=1", "-t", "1", "-s", "5"});
         UNIT_ASSERT_STRING_CONTAINS(output, "CreateTable\t2\n");
         UNIT_ASSERT_STRING_CONTAINS(output, "CreateTopic\t2\n");
         for (const TString& operation : {"AddColumns", "AddConsumers", "DescribeTable", "DescribeTopic", "ListDirectory"}) {

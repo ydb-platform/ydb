@@ -34,7 +34,7 @@ public:
         config.Opts->AddLongOption('t', "threads", "Number of workload threads for preparing and starting operations.")
             .DefaultValue(NYdbWorkload::NScheme::DEFAULT_WORKLOAD_THREADS).StoreResult(&Threads_);
         if (!Init_) {
-            config.Opts->AddLongOption('s', "seconds", "Duration of CREATE/ALTER traffic after schema validation; waits for outstanding requests afterwards.")
+            config.Opts->AddLongOption('s', "seconds", "Duration of workload traffic after schema validation; waits for outstanding requests afterwards.")
                 .DefaultValue(60).StoreResult(&Seconds_);
         }
     }

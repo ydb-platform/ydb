@@ -4208,12 +4208,16 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                     << ": ");
             };
 
-            if (ev.Offset % Format.SectorSize) {
+            if (errStatus != NKikimrProto::OK) {
+                errorPrefix() << "invalid owner or round";
+            } else if (ev.Offset % Format.SectorSize) {
                 errorPrefix() << "unaligned offset";
             } else if (ev.Size % Format.SectorSize) {
                 errorPrefix() << "unaligned size";
             } else if (!ev.Size) {
                 errorPrefix() << "zero size";
+            } else if (ev.Offset > Format.ChunkSize || ev.Size > Format.ChunkSize - ev.Offset) {
+                errorPrefix() << "request goes past the end of the chunk";
             } else if (!ev.ChunkIdx || ChunkState.size() <= ev.ChunkIdx) {
                 errorPrefix() << "incorrect chunk index";
             } else if (TChunkState& state = ChunkState[ev.ChunkIdx]; state.OwnerId != ev.Owner) {
@@ -4240,7 +4244,8 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 return false;
             }
 
-            PCtx->ActorSystem->Send(ev.Sender, new TEvChunkReadRawResult(NKikimrProto::ERROR, err.Str()), ev.Cookie);
+            PCtx->ActorSystem->Send(ev.Sender, new TEvChunkReadRawResult(
+                errStatus == NKikimrProto::OK ? NKikimrProto::ERROR : errStatus, err.Str()), 0, ev.Cookie);
             delete request;
             return false;
         }
@@ -4256,12 +4261,16 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                     << ": ");
             };
 
-            if (ev.Offset % Format.SectorSize) {
+            if (errStatus != NKikimrProto::OK) {
+                errorPrefix() << "invalid owner or round";
+            } else if (ev.Offset % Format.SectorSize) {
                 errorPrefix() << "unaligned offset";
             } else if (ev.Data.size() % Format.SectorSize) {
                 errorPrefix() << "unaligned size";
             } else if (!ev.Data.size()) {
                 errorPrefix() << "zero size";
+            } else if (ev.Offset > Format.ChunkSize || ev.Data.size() > Format.ChunkSize - ev.Offset) {
+                errorPrefix() << "request goes past the end of the chunk";
             } else if (!ev.ChunkIdx || ChunkState.size() <= ev.ChunkIdx) {
                 errorPrefix() << "incorrect chunk index";
             } else if (TChunkState& state = ChunkState[ev.ChunkIdx]; state.OwnerId != ev.Owner) {
@@ -4298,7 +4307,8 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 return false;
             }
 
-            PCtx->ActorSystem->Send(ev.Sender, new TEvChunkWriteRawResult(NKikimrProto::ERROR, err.Str()), ev.Cookie);
+            PCtx->ActorSystem->Send(ev.Sender, new TEvChunkWriteRawResult(
+                errStatus == NKikimrProto::OK ? NKikimrProto::ERROR : errStatus, err.Str()), 0, ev.Cookie);
             delete request;
             return false;
         }

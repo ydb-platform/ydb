@@ -1,3 +1,5 @@
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/tx/columnshard/engines/storage/data_stats/shard_data_stats.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
 
@@ -112,6 +114,24 @@ Y_UNIT_TEST_SUITE(TShardDataStatsTests) {
         UNIT_ASSERT_VALUES_EQUAL(granule.GetUncommitted().GetRecordsCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(granule.GetAll().GetRecordsCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(granule.GetSmallBlobs().Count, 1);
+    }
+
+    Y_UNIT_TEST(TableStatsReportActiveRowsAndAllStoredBytes) {
+        NColumnShard::TShardDataStats stats(TTestStoragesManager::GetInstance(), 1);
+        stats.AddCommittedPortion(NTest::MakeTestWrittenPortion(PathId, 1, 1, Committed));
+        stats.AddCommittedPortion(MakeCompacted(2, 2, std::nullopt));
+        stats.AddUncommittedPortion(NTest::MakeTestUncommittedPortion(PathId, 3, 4));
+        stats.AddCommittedPortion(MakeCompacted(4, 8, Removed));
+
+        NKikimrTableStats::TTableStats table, total;
+        stats.FillTableStats(PathId, table);
+        TActorSystemStub actorSystem;
+        stats.FillTotalTableStats(total);
+        for (const auto* report : { &table, &total }) {
+            UNIT_ASSERT_VALUES_EQUAL(report->GetRowCount(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(report->GetDataSize(), 4 * TestPortionColumnBlobBytes);
+            UNIT_ASSERT_VALUES_EQUAL(report->GetSmallBlobsCount(), 4);
+        }
     }
 
     Y_UNIT_TEST(UncommittedPortionMovesToWrittenOnCommit) {

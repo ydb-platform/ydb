@@ -26,10 +26,10 @@ EPortionGroup GetCommittedPortionGroup(const NOlap::TPortionInfo& portion) {
     return portion.GetPortionType() == NOlap::EPortionType::Written ? EPortionGroup::Written : EPortionGroup::Compacted;
 }
 
-void FillPortionStats(
-    NKikimrTableStats::TTableStats& to, const NOlap::TSimplePortionsGroupInfo& from, const NOlap::TSmallBlobsStat& smallBlobs) {
-    to.SetRowCount(from.GetRecordsCount());
-    to.SetDataSize(from.GetBlobBytes());
+void FillPortionStats(NKikimrTableStats::TTableStats& to, const TStorageStats& storage) {
+    to.SetRowCount(storage.GetWritten().GetRecordsCount() + storage.GetCompacted().GetRecordsCount());
+    to.SetDataSize(storage.GetAll().GetBlobBytes());
+    const auto smallBlobs = storage.GetSmallBlobs();
     to.SetSmallBlobsVolumeBytes(smallBlobs.VolumeBytes);
     to.SetSmallBlobsCount(smallBlobs.Count);
 }
@@ -126,13 +126,11 @@ bool TShardDataStats::HasSchemaVersion(const ui64 fromVersion, const ui64 versio
 }
 
 void TShardDataStats::FillTableStats(const TInternalPathId pathId, NKikimrTableStats::TTableStats& tableStats) const {
-    const TDataStatsByStorage& granule = GetGranuleStats(pathId);
-    FillPortionStats(tableStats, granule.GetAll(GetBlobStorageId()), granule.GetSmallBlobs(GetBlobStorageId()));
+    FillPortionStats(tableStats, GetGranuleStats(pathId).GetStorageStats(GetBlobStorageId()));
 }
 
 void TShardDataStats::FillTotalTableStats(NKikimrTableStats::TTableStats& tableStats) {
-    const auto& blobStorage = GetStorageStats(GetBlobStorageId());
-    FillPortionStats(tableStats, blobStorage.GetAll(), blobStorage.GetSmallBlobs());
+    FillPortionStats(tableStats, GetStorageStats(GetBlobStorageId()));
 
     NOlap::TSmallBlobsStat toDelete;
     for (auto&& i : StoragesManager->GetStorages()) {

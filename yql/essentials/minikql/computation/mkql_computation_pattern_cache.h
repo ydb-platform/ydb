@@ -33,7 +33,6 @@ struct TPatternCacheEntry {
     std::atomic<bool> IsInCache = false; // set only by cache
 
     bool CompilationIsNotRequired = false;
-    bool UsesAsyncUdf = false;
 
     void UpdateSizeForCache() {
         Y_DEBUG_ABORT_UNLESS(!SizeForCache);

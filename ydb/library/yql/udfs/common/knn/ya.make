@@ -33,6 +33,7 @@ IF (MODULE_TAG != "YQL_UDF_SHARED")
         ydb/core/protos
         ydb/library/actors/http
         ydb/library/actors/interconnect/poller
+        ydb/library/yql/public/udf
     )
 ENDIF()
 

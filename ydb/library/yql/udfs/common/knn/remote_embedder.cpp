@@ -5,7 +5,7 @@
 
 #include <ydb/library/actors/http/http.h>
 
-#include <yql/essentials/public/udf/udf_async_waiter.h>
+#include <ydb/library/yql/public/udf/udf_async_waiter.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 
 #include <library/cpp/json/json_reader.h>

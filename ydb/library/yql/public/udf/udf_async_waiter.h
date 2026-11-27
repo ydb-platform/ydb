@@ -5,8 +5,8 @@
 
 namespace NYql::NUdf {
 
-// Internal hook for statically linked UDFs that need to park a query evaluation.
-// The runtime binds it only while the computation is executing.
+// Internal hook for statically linked YDB UDFs that need to suspend evaluation.
+// DQ binds it only while the computation is executing.
 class IAsyncUdfWaiter {
 public:
     virtual bool Wait(const NThreading::TFuture<void>& ready, NMonotonic::TMonotonic deadline) = 0;

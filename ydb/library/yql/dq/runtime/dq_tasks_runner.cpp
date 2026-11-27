@@ -17,6 +17,7 @@
 #include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
+#include <ydb/library/yql/public/udf/udf_async_waiter.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
@@ -27,7 +28,6 @@
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
 #include <yql/essentials/public/udf/udf_value.h>
-#include <yql/essentials/public/udf/udf_async_waiter.h>
 #include <yql/essentials/core/user_data/yql_user_data.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
@@ -53,6 +53,12 @@ namespace NYql::NDq {
 namespace {
 
 constexpr const ui32 COMPUTATION_LOG_TAIL_MAX_ENTRIES = 100;
+
+struct TDqPatternCacheEntry final : TPatternCacheEntry {
+    using TPatternCacheEntry::TPatternCacheEntry;
+
+    bool UsesAsyncUdf = false;
+};
 
 bool UsesAsyncUdf(TNode* node) {
     if (!node->GetType()->IsCallable()) {
@@ -540,10 +546,10 @@ public:
         return opts;
     }
 
-    std::shared_ptr<TPatternCacheEntry> CreateComputationPattern(const TDqTaskSettings& task, const TString& rawProgram, bool forCache, bool& canBeCached) {
+    std::shared_ptr<TDqPatternCacheEntry> CreateComputationPattern(const TDqTaskSettings& task, const TString& rawProgram, bool forCache, bool& canBeCached) {
         canBeCached = true;
         const bool useSeparatePattern = UseSeparatePatternAlloc(task);
-        auto entry = TComputationPatternLRUCache::CreateCacheEntry(useSeparatePattern);
+        auto entry = std::make_shared<TDqPatternCacheEntry>(useSeparatePattern);
         auto& patternAlloc = useSeparatePattern ? entry->Alloc : Alloc();
         auto& patternEnv = useSeparatePattern ? entry->Env : TypeEnv();
         patternAlloc.Ref().UseRefLocking = forCache;
@@ -650,7 +656,7 @@ public:
         return entry;
     }
 
-    std::shared_ptr<TPatternCacheEntry> BuildTask(const TDqTaskSettings& task) {
+    std::shared_ptr<TDqPatternCacheEntry> BuildTask(const TDqTaskSettings& task) {
         LOG(TStringBuilder() << "Build task: " << TaskId);
         auto startTime = TInstant::Now();
 
@@ -658,7 +664,7 @@ public:
         YQL_ENSURE(program.GetRuntimeVersion());
         YQL_ENSURE(program.GetRuntimeVersion() <= NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
 
-        std::shared_ptr<TPatternCacheEntry> entry;
+        std::shared_ptr<TDqPatternCacheEntry> entry;
         bool canBeCached;
         if (UseSeparatePatternAlloc(task) && Context.PatternCache) {
             auto& cache = Context.PatternCache;
@@ -680,7 +686,8 @@ public:
                     throw;
                 }
             } else {
-                entry = future.GetValueSync();
+                // DQ is the sole producer of entries in the task runner's cache.
+                entry = std::static_pointer_cast<TDqPatternCacheEntry>(future.GetValueSync());
             }
         }
 

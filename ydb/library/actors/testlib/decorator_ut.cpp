@@ -255,6 +255,16 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
         }
     };
 
+    struct TDropConditionRecipient : TActorBootstrapped<TDropConditionRecipient> {
+        void Bootstrap() {
+            Become(&TDropConditionRecipient::State);
+        }
+
+        STATEFN(State) {
+            Y_UNUSED(ev);
+        }
+    };
+
     struct TCounters {
         ui64 SendedCount = 0;
         ui64 ReceivedCount = 0;
@@ -323,5 +333,37 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
         auto ev = runtime.GrabEdgeEventRethrow<TEvents::TEvPing>(handle);
         UNIT_ASSERT(ev);
         Write("Stop test");
+    }
+
+    Y_UNIT_TEST(CustomFinalConditionStopsDispatchAfterDroppedEvent) {
+        TTestActorRuntimeBase runtime(1, false);
+        runtime.Initialize();
+
+        const TActorId recipient = runtime.Register(new TDropConditionRecipient());
+        bool dropped = false;
+        bool processedAfterDrop = false;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvents::TEvPing::EventType) {
+                dropped = true;
+                return TTestActorRuntimeBase::EEventAction::DROP;
+            }
+            if (ev->GetTypeRewrite() == TEvents::TEvPong::EventType) {
+                processedAfterDrop = true;
+                return TTestActorRuntimeBase::EEventAction::DROP;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+
+        runtime.SendAsync(new IEventHandle(recipient, TActorId(), new TEvents::TEvPing()));
+        runtime.SendAsync(new IEventHandle(recipient, TActorId(), new TEvents::TEvPong()));
+
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] {
+            return dropped;
+        };
+        UNIT_ASSERT(runtime.DispatchEvents(options));
+
+        UNIT_ASSERT(dropped);
+        UNIT_ASSERT(!processedAfterDrop);
     }
 }

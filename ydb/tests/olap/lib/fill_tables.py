@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+from tempfile import TemporaryDirectory
 from time import sleep
 from urllib.parse import urlsplit
 from uuid import uuid4
@@ -177,6 +178,30 @@ class TableFiller:
             command.append('--clear')
         execute_command('localhost', command)
 
+    @staticmethod
+    def _stage_query_suite(suite_path, data_path, directory, host, remote):
+        if not remote and not data_path:
+            return suite_path
+
+        source = Path(suite_path).absolute()
+        staged = f'{directory}/suite'
+        if not data_path:
+            copy_file(str(source), host, staged, prepare_destination=False)
+            return staged
+
+        def exclude_bundled_data(path, names):
+            return {'import'} if Path(path) == source and 'import' in names else set()
+
+        execute_command(host, ['test', '-d', data_path], timeout=30)
+        if remote:
+            with TemporaryDirectory() as temp:
+                prepared = shutil.copytree(source, Path(temp) / 'suite', ignore=exclude_bundled_data)
+                copy_file(str(prepared), host, staged, prepare_destination=False)
+        else:
+            shutil.copytree(source, staged, ignore=exclude_bundled_data)
+        execute_command(host, ['ln', '-sT', '--', data_path, f'{staged}/import'], timeout=30)
+        return staged
+
     def _import_part(self, dataset, worker, index, part, count, resource):
         host = worker.host if worker.remote else 'localhost'
         directory = f'{worker.directory}/dataset-{index}/part-{part}'
@@ -187,14 +212,18 @@ class TableFiller:
             resource_id = resource['id']
             name = Path(resource.get('file_name') or '').name
             data_path = f'{directory}/data/{name or resource_id}'
-            if name.endswith(('.tar', '.tar.gz', '.tgz', '.tar.zst')):
+            if resource.get('multifile'):
+                # ya download materializes multifile resources as directories.
+                data_path = f'{directory}/data'
+                output_options = ['--output', data_path]
+            elif name.endswith(('.tar', '.tar.gz', '.tgz', '.tar.zst')):
                 data_path = f'{directory}/data'
                 output_options = ['--untar', '--output', data_path]
             else:
                 output_options = ['--output', data_path]
             execute_command(host, ['ya', 'download', *output_options, f'sbr:{resource_id}'], timeout=7200)
         else:
-            data_path = dataset.input_path
+            data_path = os.path.abspath(dataset.input_path) if dataset.input_path else ''
             if data_path and worker.remote:
                 data_path = f'{directory}/input/{Path(dataset.input_path).name}'
                 execute_command(host, ['mkdir', '-p', f'{directory}/input'], timeout=30)
@@ -205,15 +234,7 @@ class TableFiller:
         elif dataset.workload == 'clickbench':
             command += ['files', '--input', data_path]
         else:
-            suite_path = dataset.suite_path
-            if worker.remote:
-                suite_path = f'{directory}/suite'
-                copy_file(dataset.suite_path, host, suite_path, prepare_destination=False)
-            elif resource:
-                suite_path = f'{directory}/suite'
-                shutil.copytree(dataset.suite_path, suite_path)
-            if resource:
-                execute_command(host, ['ln', '-s', data_path, f'{suite_path}/import'])
+            suite_path = self._stage_query_suite(dataset.suite_path, data_path, directory, host, worker.remote)
             command += ['--suite-path', suite_path]
         if dataset.tables:
             command += ['--tables', dataset.tables]

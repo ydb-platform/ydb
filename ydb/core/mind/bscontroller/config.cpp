@@ -1657,10 +1657,19 @@ namespace NKikimr::NBsController {
                 throw TExError() << "TPDiskFilter did not specify Type property";
             }
 
-            // Keep plain filters readable by pre-V2 builds. Loaded V2 rows must retain their original keys.
-            if (serialized || filter.Location || filter.IsUnsupported
-                    || !proto.GetReflection()->GetUnknownFields(proto).empty()) {
-                filter.SerializedFilter = serialized ? *serialized : proto.SerializeAsString();
+            if (serialized) {
+                // Loaded V2 rows must retain their original keys.
+                filter.SerializedFilter = *serialized;
+            } else if (filter.IsUnsupported || !proto.GetReflection()->GetUnknownFields(proto).empty()) {
+                // Opaque content keeps its exact wire bytes: field order decides which oneof alternative a newer
+                // reader selects.
+                filter.SerializedFilter = proto.SerializeAsString();
+            } else if (filter.Location) {
+                // A fully understood filter gets a canonical key, so the property order of a request does not
+                // create a second row for the same predicate. Plain filters stay readable by pre-V2 builds.
+                NKikimrBlobStorage::TPDiskFilter canonical;
+                Serialize(&canonical, filter);
+                filter.SerializedFilter = canonical.SerializeAsString();
             }
             return filter;
         }

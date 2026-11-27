@@ -49,9 +49,13 @@ namespace NKikimr::NBsController {
             throw TExError() << "invalid ErasureSpecies in storage pool pile override";
         }
         result.SetGroupGeometry(effective.GetGeometry());
-        result.PDiskFilters.clear();
-        for (const auto& filter : effective.GetPDiskFilter()) {
-            result.PDiskFilters.insert(TStoragePoolInfo::TPDiskFilter::Parse(std::get<0>(id), std::get<1>(id), filter));
+        if (rule->HasPDiskFilters()) {
+            // Only the override's own filters are parsed here. The stored set stays as loaded: a branch that this
+            // binary keeps inactive would throw from Parse, and layout calculation runs this during startup.
+            result.PDiskFilters.clear();
+            for (const auto& filter : effective.GetPDiskFilter()) {
+                result.PDiskFilters.insert(TStoragePoolInfo::TPDiskFilter::Parse(std::get<0>(id), std::get<1>(id), filter));
+            }
         }
         return result;
     }

@@ -347,6 +347,84 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
         UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 0);
         UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 0);
     }
+
+    Y_UNIT_TEST(SerializedFilterKeyDoesNotDependOnPropertyOrder) {
+        TFixture f;
+        f.Transaction([&] { f.Db.Materialize<Schema>(); });
+        NKikimrBlobStorage::TPDiskFilter first;
+        first.AddProperty()->SetType(NKikimrBlobStorage::ROT);
+        first.AddProperty()->SetKind(9);
+        first.AddProperty()->SetSharedWithOs(false);
+        first.AddProperty()->MutableLocation()->SetDataCenter("dc1");
+        NKikimrBlobStorage::TPDiskFilter reversed;
+        for (int i = first.PropertySize(); i > 0; --i) {
+            *reversed.AddProperty() = first.GetProperty(i - 1);
+        }
+        UNIT_ASSERT(first.SerializeAsString() != reversed.SerializeAsString());
+        const TFilters a{TFilter::Parse(7, 11, first)};
+        const TFilters b{TFilter::Parse(7, 11, reversed)};
+        CheckFilters(a, b);
+        f.Update({}, a);
+        f.Update({}, b);
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 1);
+        const auto loaded = f.Load(7, 11);
+        CheckFilters(loaded, b);
+        // A redefinition in either order edits the same row instead of writing a second encoding.
+        for (const auto* request : {&first, &reversed}) {
+            NKikimrBlobStorage::TDefineStoragePool command;
+            *command.AddPDiskFilter() = *request;
+            CheckFilters(TPool::ParsePDiskFilters(7, 11, command.GetPDiskFilter(), &loaded), loaded);
+        }
+        f.Update(loaded, {});
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 0);
+    }
+
+    Y_UNIT_TEST(GeometryOnlyPileOverrideKeepsInactiveStoredFilters) {
+        TFixture f;
+        f.Transaction([&] { f.Db.Materialize<Schema>(); });
+        NKikimrBlobStorage::TPDiskFilter invalid;
+        invalid.AddProperty()->SetKind(1); // No Type: Parse rejects it, load keeps it inactive.
+        f.InsertV2(invalid.SerializeAsString());
+
+        TPool pool;
+        pool.Name = "pool";
+        pool.Kind = "kind";
+        pool.ErasureSpecies = TBlobStorageGroupType::ErasureNone;
+        pool.VDiskKind = NKikimrBlobStorage::TVDiskKind::Default;
+        pool.NumGroups = 0;
+        pool.RandomizeGroupMapping = false;
+        pool.DefaultGroupSizeInUnits = 0;
+        f.Transaction([&] { UNIT_ASSERT(pool.LoadPDiskFilters(f.Db, {7, 11})); });
+        UNIT_ASSERT_VALUES_EQUAL(pool.PDiskFilters.size(), 1);
+        UNIT_ASSERT(pool.PDiskFilters.begin()->IsUnsupported);
+
+        TBridgeInfo bridgeInfo;
+        auto& pile = bridgeInfo.Piles.emplace_back();
+        pile.BridgePileId = TBridgePileId::FromPileIndex(0);
+        pile.Name = "pile";
+        TStoragePoolPileOverrideRules rules;
+        auto* rule = rules.Add();
+        rule->AddPileName("pile");
+        rule->AddKind("kind");
+        rule->SetErasureSpecies("block-4-2");
+        rule->MutableGeometry();
+
+        // The override changes only erasure and geometry, so the stored filters pass through as loaded. Layout
+        // calculation takes this path at startup; a throwing reparse here would restart the tablet.
+        const auto resolved = TBlobStorageController::ResolveStoragePoolForPile({7, 11}, pool, pile.BridgePileId,
+            &bridgeInfo, &rules);
+        UNIT_ASSERT(resolved.ErasureSpecies == TBlobStorageGroupType::Erasure4Plus2Block);
+        CheckFilters(resolved.PDiskFilters, pool.PDiskFilters);
+        UNIT_ASSERT(resolved.PDiskFilters.begin()->IsUnsupported);
+
+        // An override with its own filters replaces the stored set.
+        rule->MutablePDiskFilters()->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::SSD);
+        const auto replaced = TBlobStorageController::ResolveStoragePoolForPile({7, 11}, pool, pile.BridgePileId,
+            &bridgeInfo, &rules);
+        UNIT_ASSERT_VALUES_EQUAL(replaced.PDiskFilters.size(), 1);
+        UNIT_ASSERT(!replaced.PDiskFilters.begin()->IsUnsupported);
+        UNIT_ASSERT(replaced.PDiskFilters.begin()->Type == NKikimrBlobStorage::SSD);
+    }
 }
 
 } // namespace NKikimr::NBsController

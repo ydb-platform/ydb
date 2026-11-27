@@ -71,3 +71,22 @@ class TestPDiskLocationFilter(unittest.TestCase):
                 self.assertFalse(self.matches())
                 self.pool.PDiskFilter.add().Property.add(Type=common.EPDiskType.ROT)
                 self.assertTrue(self.matches())
+
+    def test_invalid_branches_do_not_match_or_hide_alternatives(self):
+        for variant in ('missing_type', 'duplicate_property', 'legacy_location'):
+            with self.subTest(variant=variant):
+                self.setUp()
+                del self.pool.PDiskFilter[:]
+                invalid = self.pool.PDiskFilter.add()
+                if variant == 'missing_type':
+                    invalid.Property.add(Kind=self.pdisk.Kind)
+                elif variant == 'duplicate_property':
+                    invalid.Property.add(Type=common.EPDiskType.ROT)
+                    invalid.Property.add(Type=common.EPDiskType.ROT)
+                else:
+                    invalid.Property.add(Type=common.EPDiskType.ROT)
+                    invalid.Property.add().Location.DataCenterNum = 1
+                    self.location.DataCenterNum = 1
+                self.assertFalse(self.matches())  # The controller keeps this branch inactive.
+                self.pool.PDiskFilter.add().Property.add(Type=common.EPDiskType.ROT)
+                self.assertTrue(self.matches())

@@ -50,6 +50,38 @@ TEST(TChaosLeaseTest, FailedAbortIsReportedAndRetried)
     EXPECT_TRUE(aborted);
 }
 
+TEST(TChaosLeaseTest, CanceledAbortWaitDoesNotAffectOtherCallers)
+{
+    static const NLogging::TLoggingTagList LoggingTags;
+    auto connection = New<StrictMock<TMockConnection>>();
+    EXPECT_CALL(*connection, GetLoggingTags())
+        .WillRepeatedly(ReturnRef(LoggingTags));
+
+    auto removePromise = NewPromise<void>();
+    auto client = New<StrictMock<TMockClient>>();
+    EXPECT_CALL(*client, GetConnection())
+        .WillRepeatedly(Return(connection));
+    EXPECT_CALL(*client, RemoveNode(_, _))
+        .WillOnce(Return(removePromise.ToFuture()));
+
+    auto lease = CreateChaosLease(
+        client,
+        NChaosClient::TChaosLeaseId(TGuid::Create()),
+        TDuration::Minutes(1),
+        /*pingAncestors*/ false,
+        NLogging::TLogger("Test"));
+
+    auto futureFirstAbort = lease->Abort();
+    auto futureSecondAbort = lease->Abort();
+
+    futureFirstAbort.Cancel(TError("Canceled"));
+    EXPECT_FALSE(futureSecondAbort.IsSet());
+    EXPECT_TRUE(futureFirstAbort.IsSet());
+
+    removePromise.Set();
+    EXPECT_TRUE(WaitFor(futureSecondAbort).IsOK());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

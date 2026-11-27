@@ -2751,8 +2751,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto res = session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/LimitProj` (
                 a Int64 NOT NULL,
-                class Utf8,
-                payload JsonDocument,
+                name Utf8,
+                jsonDoc JsonDocument,
                 primary key(a)
             )
             PARTITION BY HASH(a)
@@ -2761,14 +2761,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
         auto insertRes = session2.ExecuteQuery(R"(
-            INSERT INTO `/Root/LimitProj` (a, class, payload) VALUES
-                (1, 'FileSystemActivity', JsonDocument('{"activity_name":"Open","actor":{"user":{"name":"alice"}}}'));
-            INSERT INTO `/Root/LimitProj` (a, class, payload) VALUES
-                (2, 'FileSystemActivity', JsonDocument('{"activity_name":"Open","actor":{"user":{"name":"bob"}}}'));
-            INSERT INTO `/Root/LimitProj` (a, class, payload) VALUES
-                (3, 'FileSystemActivity', JsonDocument('{"activity_name":"Close","actor":{"user":{"name":"carol"}}}'));
-            INSERT INTO `/Root/LimitProj` (a, class, payload) VALUES
-                (4, 'Other', JsonDocument('{"activity_name":"Open","actor":{"user":{"name":"dave"}}}'));
+            INSERT INTO `/Root/LimitProj` (a, name, jsonDoc) VALUES
+                (1, 'foo', JsonDocument('{"file":"aa","name":"red"}'));
+            INSERT INTO `/Root/LimitProj` (a, name, jsonDoc) VALUES
+                (2, 'foo', JsonDocument('{"file":"aa","name":"blue"}'));
+            INSERT INTO `/Root/LimitProj` (a, name, jsonDoc) VALUES
+                (3, 'foo', JsonDocument('{"file":"bb","name":"green"}'));
+            INSERT INTO `/Root/LimitProj` (a, name, jsonDoc) VALUES
+                (4, 'bar', JsonDocument('{"file":"aa","name":"gold"}'));
         )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(insertRes.IsSuccess(), insertRes.GetIssues().ToString());
 
@@ -2830,10 +2830,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL_C(executed.GetStatus(), EStatus::SUCCESS, executed.GetIssues().ToString());
             const TString yson = FormatResultSetYson(executed.GetResultSet(0));
             if (offsetEitherMatch) {
-                if (yson.Contains("alice")) {
-                    CompareYson(R"([[1;["Open"];["alice"]]])", yson);
+                if (yson.Contains("red")) {
+                    CompareYson(R"([[1;["aa"];["red"]]])", yson);
                 } else {
-                    CompareYson(R"([[2;["Open"];["bob"]]])", yson);
+                    CompareYson(R"([[2;["aa"];["blue"]]])", yson);
                 }
             } else {
                 CompareYsonUnordered(expectedRows, yson);
@@ -2842,28 +2842,28 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         const TString pragma = "PRAGMA Kikimr.OptEnableOlapPushdownProjections = \"true\";\n";
 
-        // Two JSON paths of one column, same shape as queries/sql/json/1h/03.sql.
+        // Two JSON paths of one column.
         check(
             pragma + R"(
                 SELECT a,
-                    JSON_VALUE(payload, "$.activity_name") AS activity_name,
-                    JSON_VALUE(payload, "$.actor.user.name") AS actor_user_name
+                    JSON_VALUE(jsonDoc, "$.file") AS file,
+                    JSON_VALUE(jsonDoc, "$.name") AS label
                 FROM `/Root/LimitProj`
-                WHERE class = 'FileSystemActivity'
-                    AND JSON_VALUE(payload, "$.activity_name") = 'Open'
+                WHERE name = 'foo'
+                    AND JSON_VALUE(jsonDoc, "$.file") = 'aa'
                 LIMIT 10;
             )",
-            R"([[1;["Open"];["alice"]];[2;["Open"];["bob"]]])",
+            R"([[1;["aa"];["red"]];[2;["aa"];["blue"]]])",
             10, true, false);
 
         check(
             pragma + R"(
                 SELECT a,
-                    JSON_VALUE(payload, "$.activity_name") AS activity_name,
-                    JSON_VALUE(payload, "$.actor.user.name") AS actor_user_name
+                    JSON_VALUE(jsonDoc, "$.file") AS file,
+                    JSON_VALUE(jsonDoc, "$.name") AS label
                 FROM `/Root/LimitProj`
-                WHERE class = 'FileSystemActivity'
-                    AND JSON_VALUE(payload, "$.activity_name") = 'Open'
+                WHERE name = 'foo'
+                    AND JSON_VALUE(jsonDoc, "$.file") = 'aa'
                 LIMIT 1 OFFSET 1;
             )",
             "",
@@ -2872,11 +2872,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         // Stored columns only: the limit is on the read, as before.
         check(
             pragma + R"(
-                SELECT a, class
+                SELECT a, name
                 FROM `/Root/LimitProj`
                 LIMIT 10;
             )",
-            R"([[1;["FileSystemActivity"]];[2;["FileSystemActivity"]];[3;["FileSystemActivity"]];[4;["Other"]]])",
+            R"([[1;["foo"]];[2;["foo"]];[3;["foo"]];[4;["bar"]]])",
             10, false, false);
 
         // CAST is not an OLAP projection, so it stays in the FlatMap and the limit must not move under it.
@@ -2884,7 +2884,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             pragma + R"(
                 SELECT a, CAST(a AS Utf8) AS s
                 FROM `/Root/LimitProj`
-                WHERE class = 'FileSystemActivity'
+                WHERE name = 'foo'
                 LIMIT 10;
             )",
             R"([[1;"1"];[2;"2"];[3;"3"]])",
@@ -2894,9 +2894,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         // The limit must stay above that predicate: rows 1-3 fail it, and LIMIT 1 has to return row 4.
         {
             const TString query = pragma + R"(
-                SELECT a, JSON_VALUE(payload, "$.activity_name") AS activity_name
+                SELECT a, JSON_VALUE(jsonDoc, "$.file") AS file
                 FROM `/Root/LimitProj`
-                WHERE Unwrap(Unicode::ToLower(class)) = 'other'
+                WHERE Unwrap(Unicode::ToLower(name)) = 'bar'
                 LIMIT 1;
             )";
             auto explained = session2.ExecuteQuery(
@@ -2910,7 +2910,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto executed = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(executed.GetStatus(), EStatus::SUCCESS, executed.GetIssues().ToString());
-            CompareYson(R"([[4;["Open"]]])", FormatResultSetYson(executed.GetResultSet(0)));
+            CompareYson(R"([[4;["aa"]]])", FormatResultSetYson(executed.GetResultSet(0)));
         }
     }
 

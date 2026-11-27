@@ -9,7 +9,7 @@ import ydb
 from decimal import Decimal
 
 from testowners_utils import get_testowners_for_tests
-from ydb_wrapper import YDBWrapper
+from ydb_wrapper import YDBWrapper, is_ydb_qa_disabled
 
 max_characters_for_status_description = int(7340032/3)  #workaround for error "cannot split batch in according to limits: there is row with size more then limit (7340032)"
 
@@ -335,6 +335,10 @@ def main():
                         required=True, help='job id of workflow')
 
     args = parser.parse_args()
+
+    if is_ydb_qa_disabled():
+        print("YDB QA disabled via CI_DISABLE_YDB_QA, skipping")
+        return 0
 
     try:
         with YDBWrapper() as wrapper:

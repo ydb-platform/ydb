@@ -170,6 +170,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         for (const ui8 level : {0, 9, 10}) {
             ClearUploader(*uploader);
             const auto manager = runtime.Register(NKqp::CreateKqpSnapshotManager("/Root", TDuration::Seconds(30)));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
             auto trace = level ? TTraceId::NewTraceId(level, 4095) : TTraceId();
             runtime.Send(new IEventHandle(manager, sender,
                 new NKqp::TEvKqpSnapshot::TEvCreateSnapshotRequest(TVector<TTableId>{}, 17),
@@ -1001,10 +1002,15 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         for (bool traced : {false, true}) {
             auto traceId = traced ? NWilson::TTraceId::NewTraceId(15, 4095) : NWilson::TTraceId();
             const auto manager = runtime.Register(NKqp::CreateKqpSnapshotManager("/Root", TDuration::Seconds(30)));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
             bool forwarded = false;
             const auto checkTrace = [&](auto& ev) {
                 if (ev->Sender == manager) {
-                    UNIT_ASSERT(ev->TraceId == traceId);
+                    UNIT_ASSERT_VALUES_EQUAL(bool(ev->TraceId), bool(traceId));
+                    if (traceId) {
+                        UNIT_ASSERT(TString(static_cast<const char*>(ev->TraceId.GetTraceIdPtr()), ev->TraceId.GetTraceIdSize())
+                            == TString(static_cast<const char*>(traceId.GetTraceIdPtr()), traceId.GetTraceIdSize()));
+                    }
                     forwarded = true;
                 }
             };

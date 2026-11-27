@@ -32,6 +32,8 @@
 namespace NKikimr::NMiniKQL {
 
 class TBridgeChannel;
+class IAsyncCheckpoint;
+namespace NAsync { class TExecutionServices; }
 
 inline const TDefaultListRepresentation* GetDefaultListRepresentation(const NUdf::TUnboxedValuePod& value) {
     return reinterpret_cast<const TDefaultListRepresentation*>(NUdf::TBoxedValueAccessor::GetListRepresentation(*value.AsBoxed()));
@@ -80,6 +82,8 @@ struct TComputationOptsFull: public TComputationOpts {
     const NYql::TRuntimeSettings::TConstPtr RuntimeSettings;
     const NUdf::EBridgeMode BridgeMode;
     const TString BridgeBinaryPath;
+    std::shared_ptr<NAsync::TExecutionServices> AsyncServices;
+    std::shared_ptr<IAsyncCheckpoint> AsyncCheckpoint;
 };
 
 struct TWideFieldsInitInfo {
@@ -89,6 +93,7 @@ struct TWideFieldsInitInfo {
 };
 
 struct TComputationMutables {
+    bool HasAsyncComputation = false;
     ui32 CurValueIndex = 0U;
     std::vector<ui32> SerializableValues; // Indices of values that need to be saved in IComputationGraph::SaveGraphState() and restored in IComputationGraph::LoadGraphState().
     ui32 CurWideFieldsIndex = 0U;
@@ -144,6 +149,11 @@ struct TComputationContext: public TComputationContextLLVM {
     // If computation node receives Yield fetch status and
     // FlushingMode is set, then the node must flush its accumulated buffers
     bool FlushingMode = false;
+    std::shared_ptr<NAsync::TExecutionServices> AsyncServices;
+    std::shared_ptr<IAsyncCheckpoint> AsyncCheckpoint;
+    // Node-owned, pure state hydration registered during InitNode. These run
+    // after graph state parsing, including for lazy Stream/Flow adapters.
+    std::vector<std::function<void()>> AsyncStateLoaders;
 
     TComputationContext(const THolderFactory& holderFactory,
                         const NUdf::IValueBuilder* builder,

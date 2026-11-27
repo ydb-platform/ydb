@@ -286,6 +286,10 @@ namespace NKikimr::NBlobDepot {
         void ProcessRegisterAgentQ();
 
         bool ReadyForAgentQueries() const;
+        bool CheckBridgeGeneration(ui32 generation) const {
+            return !Config.HasBridgeGroupGeneration() || generation == Config.GetBridgeGroupGeneration();
+        }
+        void Handle(TEvBlobDepot::TEvBridgeScan::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

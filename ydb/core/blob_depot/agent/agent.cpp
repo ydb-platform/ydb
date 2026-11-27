@@ -17,6 +17,7 @@ namespace NKikimr::NBlobDepot {
         , BlobMappingCachePtr(new TBlobMappingCache(*this))
         , BlobMappingCache(*BlobMappingCachePtr)
     {
+        GroupInfo = info;
         if (info) {
             Y_ABORT_UNLESS(info->BlobDepotId);
             TabletId = *info->BlobDepotId;

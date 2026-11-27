@@ -432,6 +432,7 @@ namespace NKikimr::NBlobDepot {
             TKey End;
             TScanFlags Flags = {};
             ui64 MaxKeys = 0;
+            bool RequireValueChain = false;
             ui32 PrechargeRows = 0;
             ui64 PrechargeBytes = 0;
 #ifndef NDEBUG
@@ -688,6 +689,9 @@ namespace NKikimr::NBlobDepot {
 #ifndef NDEBUG
                 Y_ABORT_UNLESS(range.KeysInRange.insert(key).second); // ensure that the generated key is unique
 #endif
+                if (range.RequireValueChain && value.ValueChain.empty()) {
+                    return true;
+                }
                 if (!callback(key, value) || !--range.MaxKeys) {
                     return false; // scan aborted by user or finished scanning the required range
                 } else {
@@ -882,7 +886,7 @@ namespace NKikimr::NBlobDepot {
         template<typename TRecord>
         bool LoadMissingKeys(const TRecord& record, NTabletFlatExecutor::TTransactionContext& txc);
 
-        std::optional<TString> CheckKeyAgainstBarrier(const TKey& key);
+        std::optional<TString> CheckKeyAgainstBarrier(const TKey& key, bool issueKeep = false);
 
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

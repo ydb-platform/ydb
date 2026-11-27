@@ -164,6 +164,7 @@ namespace NKikimr::NBlobDepot {
                     | (range.GetIncludeEnding() ? EScanFlags::INCLUDE_END : TScanFlags())
                     | (range.GetReverse() ? EScanFlags::REVERSE : TScanFlags());
                 Range->MaxKeys = range.GetMaxKeys();
+                Range->RequireValueChain = Self->Config.HasBridgeGroupGeneration();
             }
             auto callback = [&](const TKey& key, const TValue& value) {
                 IssueResponseItem(cookie, key, value, mustRestoreFirst);
@@ -218,6 +219,9 @@ namespace NKikimr::NBlobDepot {
                 item.SetCookie(*cookie);
             }
             item.SetKey(key.MakeBinaryKey());
+            if (Self->Config.HasBridgeGroupGeneration()) {
+                item.SetKeepState(value.KeepState);
+            }
             if (value.GoingToAssimilate && Self->Config.GetIsDecommittingGroup()) {
                 Y_ABORT_UNLESS(!value.UncertainWrite);
                 auto *out = item.AddValueChain();
@@ -261,7 +265,7 @@ namespace NKikimr::NBlobDepot {
             if (item.HasErrorReason()) {
                 item.ClearValueChain();
             } else {
-                if (!item.ValueChainSize()) {
+                if (!item.ValueChainSize() && !Self->Config.HasBridgeGroupGeneration()) {
                     YDB_LOG_WARN("Empty ValueChain on Resolve",
                         {"marker", "BDT48"},
                         {"id", Self->GetLogId()},

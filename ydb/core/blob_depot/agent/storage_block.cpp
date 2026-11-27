@@ -47,15 +47,20 @@ namespace NKikimr::NBlobDepot {
             void HandleBlockResult(TRequestContext::TPtr context, TEvBlobDepot::TEvBlockResult& msg) {
                 if (!msg.Record.HasStatus()) {
                     EndWithError(NKikimrProto::ERROR, "incorrect TEvBlockResult response");
-                } else if (const auto status = msg.Record.GetStatus(); status != NKikimrProto::OK) {
+                } else if (const auto status = msg.Record.GetStatus(); status != NKikimrProto::OK &&
+                        !(Request.IsIdempotent && status == NKikimrProto::ALREADY)) {
                     EndWithError(status, msg.Record.GetErrorReason(),
                         msg.Record.GetIsTabletStorageInfoVersionObsolete(), msg.Record.GetActualGeneration());
                 } else {
                     // update blocks cache
                     auto& blockContext = context->Obtain<TBlockContext>();
-                    if (Request.WriteSource != TWriteSource::SyncerMergeBlock) {
+                    if (msg.Record.GetStatus() == NKikimrProto::OK &&
+                            (Request.WriteSource != TWriteSource::SyncerMergeBlock || !(Request.TabletId >> 63))) {
+                        // Only QueryBlocks registers a renewable read lease with the managed tablet.
+                        const auto ttl = Agent.ManagedBridgeChild ? TDuration::Zero()
+                            : TDuration::MilliSeconds(msg.Record.GetTimeToLiveMs());
                         Agent.BlocksManager.SetBlockForTablet(Request.TabletId, Request.Generation,
-                            blockContext.Timestamp, TDuration::MilliSeconds(msg.Record.GetTimeToLiveMs()));
+                            blockContext.Timestamp, ttl);
                     }
                     EndWithSuccess(std::make_unique<TEvBlobStorage::TEvBlockResult>(NKikimrProto::OK));
                 }

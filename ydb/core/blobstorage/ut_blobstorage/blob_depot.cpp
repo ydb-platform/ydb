@@ -1100,6 +1100,151 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         }
     }
 
+    Y_UNIT_TEST(ManagedBridgeInventoryAndGenerationFence) {
+        TEnvironmentSetup env(MakeCoolingTestSettings());
+        auto& runtime = *env.Runtime;
+        ui32 generation = 10;
+        bool staleCommit = false;
+        bool holdReadResult = false;
+        ui32 heldNode = 0;
+        std::unique_ptr<IEventHandle> heldResolve;
+        runtime.FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobDepot::EvApplyConfig) {
+                auto *config = ev->Get<TEvBlobDepot::TEvApplyConfig>()->Record.MutableConfig();
+                config->SetBridgeGroupGeneration(generation);
+                config->SetBackupConfigRevision(1);
+            } else if (holdReadResult && ev->GetTypeRewrite() == TEvBlobDepot::EvResolveResult) {
+                holdReadResult = false;
+                heldNode = node;
+                heldResolve = std::move(ev);
+                return false;
+            } else if (staleCommit && ev->GetTypeRewrite() == TEvBlobDepot::EvCommitBlobSeq) {
+                // A prepared foreground write arrives after the controller has advanced its child's generation.
+                ev->Get<TEvBlobDepot::TEvCommitBlobSeq>()->Record.SetBridgeGroupGeneration(generation - 1);
+            }
+            return true;
+        };
+        NKikimrBlobDepot::TS3BackendSettings::TAsyncMode async;
+        const ui32 group = CreateS3VirtualGroup(env, "bridge-inventory", &async);
+        const auto edge = runtime.AllocateEdgeActor(1);
+        const auto deadline = runtime.GetClock() + TDuration::Minutes(2);
+        auto send = [&]<class TResult>(auto request, std::optional<ui32> fence, std::type_identity<TResult>) {
+            request->ForceGroupGeneration = fence;
+            runtime.WrapInActorContext(edge, [&] { SendToBSProxy(edge, group, request.release()); });
+            auto response = env.WaitForEdgeActorEvent<TResult>(edge, false, deadline);
+            UNIT_ASSERT(response);
+            return response;
+        };
+        const TString body = "kept payload";
+        const ui64 tablet = 100500;
+        const TLogoBlobID id(tablet, 1, 1, 0, body.size(), 0);
+        auto put = [&](const TLogoBlobID& blob, std::optional<ui32> fence) {
+            auto request = std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
+                .BlobId = blob,
+                .Buffer = TRope(body),
+                .Deadline = deadline,
+                .IssueKeepFlag = true,
+                .IgnoreBlock = true,
+            });
+            return send(std::move(request), fence, std::type_identity<TEvBlobStorage::TEvPutResult>{});
+        };
+
+        auto block = std::make_unique<TEvBlobStorage::TEvBlock>(tablet, 1, deadline, TWriteSource::SyncerMergeBlock);
+        block->IsIdempotent = true;
+        UNIT_ASSERT_VALUES_EQUAL(send(std::move(block), generation,
+            std::type_identity<TEvBlobStorage::TEvBlockResult>{})->Get()->Status, NKikimrProto::OK);
+
+        auto versionBlock = std::make_unique<TEvBlobStorage::TEvBlock>(~tablet, 7, deadline, TWriteSource::SyncerMergeBlock);
+        versionBlock->IsIdempotent = true;
+        UNIT_ASSERT_VALUES_EQUAL(send(std::move(versionBlock), generation,
+            std::type_identity<TEvBlobStorage::TEvBlockResult>{})->Get()->Status, NKikimrProto::OK);
+
+        auto flags = std::make_unique<TVector<TLogoBlobID>>();
+        for (ui32 step = 2; step <= 1025; ++step) {
+            flags->emplace_back(tablet, 1, step, 0, body.size(), 0);
+        }
+        // Install the barrier before the restore PUT. Only the PUT's keep flag can keep this key alive.
+        auto gc = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tablet, 1, 1, 0, true, 1, 1025,
+            flags.release(), nullptr, deadline, true, TWriteSource::SyncerMergeGC, false, true);
+        UNIT_ASSERT_VALUES_EQUAL(send(std::move(gc), generation,
+            std::type_identity<TEvBlobStorage::TEvCollectGarbageResult>{})->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(put(id, generation)->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(put(id, std::nullopt)->Get()->Status, NKikimrProto::ERROR);
+
+        auto scan = [&](std::optional<TLogoBlobID> cursor, ui32 fence) {
+            auto request = std::make_unique<TEvBlobStorage::TEvAssimilate>(
+                cursor ? std::optional<ui64>(0) : std::nullopt,
+                cursor ? std::optional(std::tuple<ui64, ui8>{}) : std::nullopt, cursor, true, true);
+            return send(std::move(request), fence, std::type_identity<TEvBlobStorage::TEvAssimilateResult>{});
+        };
+        auto first = scan(std::nullopt, generation);
+        UNIT_ASSERT_VALUES_EQUAL(first->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(first->Get()->Blocks.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(first->Get()->Blocks.front().TabletId, ~tablet);
+        UNIT_ASSERT_VALUES_EQUAL(first->Get()->Blocks.front().BlockedGeneration, 7);
+        UNIT_ASSERT_VALUES_EQUAL(first->Get()->Blocks.back().TabletId, tablet);
+        UNIT_ASSERT_VALUES_EQUAL(first->Get()->Barriers.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(first->Get()->Barriers.front().Soft.CollectStep, 1025);
+        UNIT_ASSERT(!first->Get()->Blobs.empty());
+        UNIT_ASSERT(first->Get()->Blobs.front().Keep);
+        UNIT_ASSERT(!first->Get()->Blobs.front().HasData);
+        const TLogoBlobID last = first->Get()->Blobs.back().Id;
+        auto next = scan(last, generation);
+        UNIT_ASSERT_VALUES_EQUAL(next->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT(!next->Get()->Blobs.empty());
+        UNIT_ASSERT(next->Get()->Blobs.front().Id < last);
+        UNIT_ASSERT_VALUES_EQUAL(first->Get()->Blobs.size() + next->Get()->Blobs.size(), 1025);
+        UNIT_ASSERT_VALUES_EQUAL(next->Get()->Blobs.back().Id, id);
+        UNIT_ASSERT(next->Get()->Blobs.back().HasData);
+        UNIT_ASSERT(next->Get()->Blobs.back().Keep);
+        UNIT_ASSERT(scan(id, generation)->Get()->Blobs.empty());
+
+        // A flag-only row sorts after the last readable blob. Discover must skip those rows in its max-keys scan.
+        auto discover = std::make_unique<TEvBlobStorage::TEvDiscover>(tablet, 1, true, true, deadline, 0, true);
+        const auto discovered = send(std::move(discover), generation, std::type_identity<TEvBlobStorage::TEvDiscoverResult>{});
+        UNIT_ASSERT_VALUES_EQUAL(discovered->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(discovered->Get()->Id, id);
+        UNIT_ASSERT_VALUES_EQUAL(discovered->Get()->Buffer, body);
+        UNIT_ASSERT_VALUES_EQUAL(discovered->Get()->BlockedGeneration, 1);
+
+        const TLogoBlobID patched(tablet, 2, 4, 0, body.size(), 0);
+        TArrayHolder<TEvBlobStorage::TEvPatch::TDiff> diffs(new TEvBlobStorage::TEvPatch::TDiff[1]);
+        diffs[0].Set(TString("test"), 0);
+        auto patch = std::make_unique<TEvBlobStorage::TEvPatch>(group, id, patched, 0, std::move(diffs), 1, deadline);
+        UNIT_ASSERT_VALUES_EQUAL(send(std::move(patch), generation,
+            std::type_identity<TEvBlobStorage::TEvPatchResult>{})->Get()->Status, NKikimrProto::OK);
+        auto read = std::make_unique<TEvBlobStorage::TEvGet>(patched, 2, 5, deadline, NKikimrBlobStorage::FastRead);
+        const auto result = send(std::move(read), generation, std::type_identity<TEvBlobStorage::TEvGetResult>{});
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Buffer.ConvertToString(), "st pa");
+
+        // Hold the lookup reply while the tablet applies the next generation.
+        const auto reader = runtime.AllocateEdgeActor(2);
+        holdReadResult = true;
+        runtime.WrapInActorContext(reader, [&] {
+            auto get = std::make_unique<TEvBlobStorage::TEvGet>(id, 1, 4, deadline, NKikimrBlobStorage::FastRead);
+            get->ForceGroupGeneration = generation;
+            SendToBSProxy(reader, group, get.release());
+        });
+        WaitForS3Condition(env, [&] { return bool(heldResolve); });
+        ++generation;
+        ReconfigureS3Group(env, MakeS3Settings("bridge-inventory", &async));
+        WaitForS3Condition(env, [&] { return scan(id, generation)->Get()->Status == NKikimrProto::OK; });
+        runtime.Send(std::move(heldResolve), heldNode);
+        auto staleRead = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(reader, false, deadline);
+        UNIT_ASSERT(staleRead);
+        UNIT_ASSERT_VALUES_EQUAL(staleRead->Get()->Status, NKikimrProto::RACE);
+        UNIT_ASSERT_VALUES_EQUAL(staleRead->Get()->RacingGeneration, generation);
+
+        auto rejected = put(id, generation - 1);
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Status, NKikimrProto::RACE);
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->RacingGeneration, generation);
+        staleCommit = true;
+        auto delayed = put(TLogoBlobID(tablet, 2, 1, 0, body.size(), 0), generation);
+        UNIT_ASSERT_VALUES_EQUAL(delayed->Get()->Status, NKikimrProto::RACE);
+        UNIT_ASSERT_VALUES_EQUAL(delayed->Get()->RacingGeneration, generation);
+        runtime.FilterFunction = {};
+    }
+
     void PutToS3VirtualGroup(TEnvironmentSetup& env, const TActorId& edge, ui32 groupId, const TLogoBlobID& id,
             const TString& data, bool waitForHttp = false) {
         const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);

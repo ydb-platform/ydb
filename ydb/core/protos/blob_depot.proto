@@ -69,6 +69,43 @@ message TResolvedValueChain {
 
 
 
+// Logical inventory served by the BlobDepot tablet. Cursors are exclusive.
+message TEvBridgeScan {
+    optional uint32 BridgeGroupGeneration = 1;
+    optional bool Reverse = 2;
+    optional fixed64 SkipBlocksUpTo = 3;
+    optional fixed64 SkipBarrierTabletId = 4;
+    optional uint32 SkipBarrierChannel = 5;
+    optional NKikimrProto.TLogoBlobID SkipBlobsUpTo = 6;
+    // A generation check for an agent request that might otherwise be served entirely from cache.
+    optional bool CheckGenerationOnly = 7;
+}
+
+message TEvBridgeScanResult {
+    message TBlock {
+        optional fixed64 TabletId = 1;
+        optional uint32 Generation = 2;
+    }
+    message TBarrier {
+        optional fixed64 TabletId = 1;
+        optional uint32 Channel = 2;
+        optional fixed64 SoftGenCtr = 3;
+        optional fixed64 Soft = 4;
+        optional fixed64 HardGenCtr = 5;
+        optional fixed64 Hard = 6;
+    }
+    message TBlob {
+        optional NKikimrProto.TLogoBlobID Id = 1;
+        optional EKeepState KeepState = 2;
+        optional bool HasData = 3;
+    }
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional uint32 BridgeGroupGeneration = 2;
+    repeated TBlock Blocks = 3;
+    repeated TBarrier Barriers = 4;
+    repeated TBlob Blobs = 5;
+}
+
 message TEvApplyConfig {
     optional uint64 TxId = 1;
     optional NKikimrBlobDepot.TBlobDepotConfig Config = 2;
@@ -109,6 +146,7 @@ message TEvRegisterAgentResult {
     // queries, because the tablet may already have garbage collected the blobs behind them.
     repeated TEvPushNotify.TInvalidatedStep InvalidatedSteps = 8;
     optional uint64 HotWriteCreditEpoch = 9;
+    optional uint32 BridgeGroupGeneration = 11;
 }
 
 message TEvAllocateIds {
@@ -130,9 +168,11 @@ message TEvBlock {
     optional uint32 WriteSourceOp = 5;
     // Backing blocks inherit the initiating query's bridge accounting.
     optional bool SkipBridgeAccountingForSubrequests = 6;
+    optional uint32 BridgeGroupGeneration = 7;
 }
 
 message TEvBlockResult {
+    optional uint32 BridgeGroupGeneration = 6;
     optional NKikimrProto.EReplyStatus Status = 1;
     optional string ErrorReason = 2;
     optional uint32 TimeToLiveMs = 3;
@@ -183,9 +223,11 @@ message TEvCollectGarbage {
     optional uint32 CollectGeneration = 8;
     optional uint64 CollectStep = 9;
     optional bool IgnoreBlock = 10;
+    optional uint32 BridgeGroupGeneration = 11;
 }
 
 message TEvCollectGarbageResult {
+    optional uint32 BridgeGroupGeneration = 3;
     optional NKikimrProto.EReplyStatus Status = 1;
     optional string ErrorReason = 2;
 }
@@ -212,9 +254,11 @@ message TEvCommitBlobSeq {
     }
 
     repeated TItem Items = 1;
+    optional uint32 BridgeGroupGeneration = 2;
 }
 
 message TEvCommitBlobSeqResult {
+    optional uint32 BridgeGroupGeneration = 2;
     message TItem {
         optional NKikimrProto.EReplyStatus Status = 1;
         optional string ErrorReason = 2;
@@ -281,6 +325,7 @@ message TEvResolveResult {
         optional string ErrorReason = 6; // if set, this means value wasn't resolved due to error
         optional uint32 ValueVersion = 7; // ValueChain version, gets increased every time value is changed
         optional bool ReliablyWritten = 8; // MustRestoreFirst was either set, or the blob is in local storage
+        optional EKeepState KeepState = 9;
     }
     optional NKikimrProto.EReplyStatus Status = 1; // OVERRUN means there are more messages on the way
     optional string ErrorReason = 2;

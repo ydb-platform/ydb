@@ -123,6 +123,11 @@ namespace NKikimr::NBlobDepot {
                         hotWriteCharge = dataBytes + footerBytes;
                     }
 
+                    if (!Self->CheckBridgeGeneration(Request->Get()->Record.GetBridgeGroupGeneration())) {
+                        responseRecord->SetBridgeGroupGeneration(Self->Config.GetBridgeGroupGeneration());
+                        finishWithError(NKikimrProto::RACE, "bridge group generation changed");
+                        continue;
+                    }
                     if (!TData::TValue::Validate(item)) {
                         finishWithError(NKikimrProto::ERROR, "TEvCommitBlobSeq item protobuf is not valid");
                         continue;
@@ -188,7 +193,7 @@ namespace NKikimr::NBlobDepot {
                         continue;
                     }
 
-                    if (auto error = Self->Data->CheckKeyAgainstBarrier(key)) {
+                    if (auto error = Self->Data->CheckKeyAgainstBarrier(key, item.GetIssueKeepFlag())) {
                         finishWithError(NKikimrProto::ERROR, TStringBuilder() << "BlobId# " << key.ToString()
                             << " is being put beyond the barrier: " << *error);
                         continue;

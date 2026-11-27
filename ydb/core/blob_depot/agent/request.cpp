@@ -44,7 +44,16 @@ namespace NKikimr::NBlobDepot {
             const size_t num = SubrequestRelays.erase(executionRelay);
             Y_ABORT_UNLESS(num);
         }
-        ProcessResponse(requestInFlight.Id, std::move(requestInFlight.Context), std::move(response));
+        if (dynamic_cast<TBridgeGenerationCheck*>(requestInFlight.Context.get())) {
+            auto& query = dynamic_cast<TBlobDepotAgent::TQuery&>(*this);
+            if (auto *scan = std::get_if<TEvBlobDepot::TEvBridgeScanResult*>(&response)) {
+                query.HandleGenerationCheck((*scan)->Record);
+            } else {
+                query.EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
+            }
+        } else {
+            ProcessResponse(requestInFlight.Id, std::move(requestInFlight.Context), std::move(response));
+        }
     }
 
     void TRequestSender::RegisterRequestInFlight(TRequestInFlight *requestInFlight) {
@@ -94,6 +103,15 @@ namespace NKikimr::NBlobDepot {
             {"match", ev->Sender == PipeServerId});
         if (ev->Sender == PipeServerId) {
             Y_ABORT_UNLESS(IsConnected || ev->GetTypeRewrite() == TEvBlobDepot::EvRegisterAgentResult);
+            if constexpr (requires { ev->Get()->Record.GetBridgeGroupGeneration(); }) {
+                if (auto it = TabletRequestInFlight.find(ev->Cookie); it != TabletRequestInFlight.end()) {
+                    if (auto *query = dynamic_cast<TQuery*>(it->Sender)) {
+                        if (ev->Get()->Record.HasBridgeGroupGeneration()) {
+                            query->RacingGeneration = ev->Get()->Record.GetBridgeGroupGeneration();
+                        }
+                    }
+                }
+            }
             OnRequestComplete(ev->Cookie, ev->Get(), TabletRequestInFlight);
         }
     }
@@ -105,6 +123,7 @@ namespace NKikimr::NBlobDepot {
     template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvQueryBlocksResult::TPtr ev);
     template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvCollectGarbageResult::TPtr ev);
     template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvCommitBlobSeqResult::TPtr ev);
+    template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvBridgeScanResult::TPtr ev);
     template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvResolveResult::TPtr ev);
     template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvPrepareWriteS3Result::TPtr ev);
 

@@ -85,4 +85,7 @@ message TBlobDepotConfig {
     optional TS3BackendSettings S3BackendSettings = 8;
     optional string Name = 9;
     reserved 10 to 12, 15, 16;
+    // Present on a managed bridge child. Every logical operation is fenced by this generation.
+    optional uint32 BridgeGroupGeneration = 13;
+    optional uint64 BackupConfigRevision = 14;
 }

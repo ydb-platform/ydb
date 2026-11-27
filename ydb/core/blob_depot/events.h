@@ -32,6 +32,8 @@ namespace NKikimr {
             EvPrepareWriteS3Result,
             EvHotWriteCredit,
             EvHotWriteCreditResult,
+            EvBridgeScan,
+            EvBridgeScanResult,
         };
 
 #define BLOBDEPOT_PARAM_ARG(ARG) std::optional<std::decay_t<decltype(Record.Get##ARG())>> param##ARG,
@@ -79,6 +81,8 @@ namespace NKikimr {
         BLOBDEPOT_EVENT_PB(EvPushMetrics, BytesRead, BytesWritten);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvPrepareWriteS3);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvPrepareWriteS3Result);
+        BLOBDEPOT_EVENT_PB_NO_ARGS(EvBridgeScan);
+        BLOBDEPOT_EVENT_PB_NO_ARGS(EvBridgeScanResult);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvHotWriteCredit);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvHotWriteCreditResult);
 
@@ -92,6 +96,7 @@ namespace NKikimr {
         template<> struct TResponseFor<TEvQueryBlocks>    { using Type = TEvQueryBlocksResult; };
         template<> struct TResponseFor<TEvCollectGarbage> { using Type = TEvCollectGarbageResult; };
         template<> struct TResponseFor<TEvCommitBlobSeq>  { using Type = TEvCommitBlobSeqResult; };
+        template<> struct TResponseFor<TEvBridgeScan> { using Type = TEvBridgeScanResult; };
         template<> struct TResponseFor<TEvResolve>        { using Type = TEvResolveResult; };
         template<> struct TResponseFor<TEvPrepareWriteS3> { using Type = TEvPrepareWriteS3Result; };
         template<> struct TResponseFor<TEvHotWriteCredit>  { using Type = TEvHotWriteCreditResult; };
@@ -113,6 +118,7 @@ namespace NKikimr {
         template<> struct TEventFor<NKikimrBlobDepot::TEvCollectGarbage> { using Type = TEvCollectGarbage; };
         template<> struct TEventFor<NKikimrBlobDepot::TEvQueryBlocks> { using Type = TEvQueryBlocks; };
         template<> struct TEventFor<NKikimrBlobDepot::TEvBlock> { using Type = TEvBlock; };
+        template<> struct TEventFor<NKikimrBlobDepot::TEvBridgeScan> { using Type = TEvBridgeScan; };
         template<> struct TEventFor<NKikimrBlobDepot::TEvResolve> { using Type = TEvResolve; };
         template<> struct TEventFor<NKikimrBlobDepot::TEvCommitBlobSeq> { using Type = TEvCommitBlobSeq; };
         template<> struct TEventFor<NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq> { using Type = TEvDiscardSpoiledBlobSeq; };

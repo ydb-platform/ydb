@@ -19,6 +19,8 @@
 #include <ydb/core/tx/data_events/events.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/wilson/wilson_event_budget.h>
+#include <optional>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 #include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
@@ -449,6 +451,7 @@ private:
     }
 
     void PassAway() final {
+        TraceLookupSummary("pass_away");
         ShardReadTrace.Finish(LookupActorSpan);
         Counters->StreamLookupActorsCount->Dec();
 
@@ -495,9 +498,12 @@ private:
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& maybeWatermark, bool& finished, i64 freeSpace) final {
         YQL_ENSURE(!batch.IsWide(), "Wide stream is not supported");
         SentResultsAvailable = false;
+        ++TracePollCalls;
+        PollPerformedFetch = false;
 
         if (ResolveShardsInProgress) {
             finished = false;
+            TraceLookupState("lookup poll resolving", freeSpace, 0, false);
             return 0;
         }
 
@@ -565,6 +571,11 @@ private:
         }
 
         finished = inputRowsFinished && allReadsFinished && allRowsProcessed;
+        TraceLookupState("lookup poll returned", freeSpace, replyResultStats.ResultRowsCount, finished);
+        if (finished && !TraceFinishedReported) {
+            TraceFinishedReported = true;
+            LookupEvents.Event(LookupActorSpan, 10, "lookup finished reported", NWilson::TSpanEventBudget::EKind::Terminal);
+        }
 
         YDB_LOG_DEBUG("Returned lookup results",
             {"logPrefix", this->LogPrefix},
@@ -665,6 +676,15 @@ private:
         auto& read = readIt->second;
         ShardReadTrace.ReadResult(LookupActorSpan, read.ShardId, ev->Sender.NodeId(),
             record.GetReadId(), record.GetRowCount(), record.GetStatus().GetCode(), record.GetFinished());
+        LookupEvents.Event(LookupActorSpan, 12, "lookup read result handled", [&] {
+            NWilson::TKeyValueList attributes;
+            attributes["read_id"] = static_cast<i64>(record.GetReadId());
+            attributes["shard_id"] = static_cast<i64>(read.ShardId);
+            attributes["rows"] = static_cast<i64>(record.GetRowCount());
+            attributes["finished"] = record.GetFinished();
+            attributes["status"] = static_cast<i64>(record.GetStatus().GetCode());
+            return attributes;
+        });
         ui64 shardId = read.ShardId;
 
         TStringBuilder txLocks;
@@ -935,10 +955,14 @@ private:
         YQL_ENSURE(!Input.IsInvalid());
         if (Input.IsFinish() || !Input.HasValue()) {
             LastFetchStatus = NUdf::EFetchStatus::Finish;
+            TraceUpstreamEofObserved = true;
+            TraceLookupState("lookup terminal input observed", std::nullopt, 0, false);
             return;
         }
 
         size_t fetchCount = 0;
+        PollPerformedFetch = true;
+        ++TraceFreshFetchCalls;
         i64 bytesBefore = allocState->GetAllocated();
         while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
             if (StreamLockWorker) {
@@ -956,6 +980,44 @@ private:
             if (fetchCount >= MaxRowsProcessing || static_cast<i64>(allocState->GetAllocated()) - bytesBefore > static_cast<i64>(MaxBytesPerFetch)) {
                 break;
             }
+        }
+        TraceUpstreamEofObserved = TraceUpstreamEofObserved || LastFetchStatus == NUdf::EFetchStatus::Finish;
+        TraceLookupState("lookup input fetch returned", std::nullopt, fetchCount, false);
+    }
+
+    void TraceLookupState(const char* name, std::optional<i64> freeSpace, ui64 rows, bool finished) {
+        LookupEvents.Event(LookupActorSpan, 10, name, [&] {
+            NWilson::TKeyValueList attributes;
+            if (freeSpace) {
+                attributes["downstream_free_bytes"] = *freeSpace;
+            }
+            attributes["rows"] = static_cast<i64>(rows);
+            attributes["fetch_performed_this_poll"] = PollPerformedFetch;
+            attributes["last_observed_fetch_status"] = static_cast<i64>(LastFetchStatus);
+            attributes["in_flight_reads"] = static_cast<i64>(Reads.InFlightReads());
+            attributes["in_flight_locks"] = static_cast<i64>(Reads.InFlightLocks());
+            attributes["scheduled_requests"] = static_cast<i64>(StreamLookupWorker->ScheduledRequestsCount());
+            attributes["pending_results"] = StreamLookupWorker->HasPendingResults();
+            attributes["all_rows_processed"] = StreamLookupWorker->AllRowsProcessed();
+            attributes["unmodified_rows"] = static_cast<i64>(UnmodifiedOutputRows.size());
+            attributes["resolving"] = ResolveShardsInProgress;
+            attributes["finished_reported"] = finished;
+            return attributes;
+        });
+    }
+
+    void TraceLookupSummary(const char* outcome) {
+        if (LookupActorSpan) {
+            LookupActorSpan.Attribute("ydb.lookup.termination", TString(outcome));
+            LookupActorSpan.Attribute("ydb.lookup.poll_calls", static_cast<i64>(TracePollCalls));
+            LookupActorSpan.Attribute("ydb.lookup.fresh_fetch_calls", static_cast<i64>(TraceFreshFetchCalls));
+            LookupActorSpan.Attribute("ydb.lookup.upstream_eof_observed", TraceUpstreamEofObserved);
+            LookupActorSpan.Attribute("ydb.lookup.finished_reported", TraceFinishedReported);
+            LookupActorSpan.Attribute("ydb.lookup.reads_at_termination", static_cast<i64>(Reads.InFlightReads()));
+            LookupActorSpan.Attribute("ydb.lookup.locks_at_termination", static_cast<i64>(Reads.InFlightLocks()));
+            LookupEvents.Event(LookupActorSpan, 10, "lookup termination", NWilson::TSpanEventBudget::EKind::Terminal);
+            LookupActorSpan.Attribute("ydb.trace.event_budget.scope", TString("lookup_lifecycle"));
+            LookupEvents.Annotate(LookupActorSpan);
         }
     }
 
@@ -1443,6 +1505,7 @@ private:
         NYql::TIssues issues;
         issues.AddIssue(std::move(issue));
 
+        TraceLookupSummary("runtime_error");
         ShardReadTrace.Finish(LookupActorSpan);
         if (LookupActorSpan) {
             AddReadTraceAttributes(LookupActorSpan, LookupTablePath, ReadRowsCount, TotalRetryAttempts);
@@ -1517,6 +1580,12 @@ private:
 
     TShardReadTrace ShardReadTrace;
     NWilson::TSpan LookupActorSpan;
+    NWilson::TSpanEventBudget LookupEvents;
+    ui64 TracePollCalls = 0;
+    ui64 TraceFreshFetchCalls = 0;
+    bool PollPerformedFetch = false;
+    bool TraceUpstreamEofObserved = false;
+    bool TraceFinishedReported = false;
     NWilson::TSpan LookupActorStateSpan;
 
     THashMap<ui64, TInstant> LockSendTime;

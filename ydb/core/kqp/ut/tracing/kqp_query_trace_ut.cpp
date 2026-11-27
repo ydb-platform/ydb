@@ -1787,6 +1787,38 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         }
     }
 
+    Y_UNIT_TEST(LookupLifecycleSeparatesSummaryAndDetailedEvents) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+        auto [runtime, server, sender] = CreateServer(1, config);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+        ExecSQL(runtime, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1u, 10u);", 0);
+        auto* uploader = RegisterUploader(runtime);
+        for (ui8 level : {0, 6, 10, 12}) {
+            ClearUploader(*uploader);
+            ExecSQL(runtime, sender, R"(
+                $keys = AsList(AsStruct(1u AS key), AsStruct(4000000000u AS key));
+                SELECT b.value FROM AS_TABLE($keys) AS a JOIN `/Root/table-1` AS b ON a.key = b.key;
+            )", level);
+            const auto* lookup = FindSpan(*uploader, "Lookup rows");
+            if (!level) {
+                UNIT_ASSERT(!lookup);
+                continue;
+            }
+            UNIT_ASSERT(lookup);
+            UNIT_ASSERT(FindAttribute(*lookup, "ydb.lookup.upstream_eof_observed")->value().bool_value());
+            UNIT_ASSERT(FindAttribute(*lookup, "ydb.lookup.finished_reported")->value().bool_value());
+            bool state = false;
+            bool perRead = false;
+            for (const auto& event : lookup->events()) {
+                state |= event.name() == "lookup poll returned";
+                perRead |= event.name() == "lookup read result handled";
+            }
+            UNIT_ASSERT_VALUES_EQUAL(state, level >= 10);
+            UNIT_ASSERT_VALUES_EQUAL(perRead, level >= 12);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(RetriedReadAppearsInTaskDiagnostics, Lookup) {
         NKikimrConfig::TAppConfig config;
         config.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);

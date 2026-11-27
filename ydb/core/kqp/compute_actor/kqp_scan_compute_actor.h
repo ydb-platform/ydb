@@ -2,9 +2,9 @@
 
 #include "kqp_scan_common.h"
 #include "kqp_scan_events.h"
+#include "kqp_schedulable_compute_actor.h"
 
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>

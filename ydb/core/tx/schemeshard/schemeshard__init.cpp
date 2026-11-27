@@ -1651,6 +1651,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 TSubDomainInfo::TPtr rootDomainInfo = new TSubDomainInfo(version, Self->RootPathId());
+                Self->BindSmallBlobsQuotaConfig(*rootDomainInfo);
                 rootDomainInfo->SetSchemeLimits(rootLimits, Self);
                 rootDomainInfo->SetSecurityStateVersion(row.GetValueOrDefault<Schema::SubDomains::SecurityStateVersion>());
 
@@ -1694,6 +1695,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         planResolution,
                         timeCastBuckets,
                         resourcesDomainId);
+                    Self->BindSmallBlobsQuotaConfig(*domainInfo);
                     Self->SubDomains.Set(pathId, domainInfo);
 
                     TTabletId sharedHiveId = rowset.GetValue<Schema::SubDomains::SharedHiveId>();
@@ -1790,6 +1792,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         planResolution,
                         timeCastBuckets,
                         resourcesDomainId);
+                    Self->BindSmallBlobsQuotaConfig(*alter);
 
                     TTabletId sharedHiveId = rowset.GetValue<Schema::SubDomainsAlterData::SharedHiveId>();
                     alter->SetSharedHive(sharedHiveId);

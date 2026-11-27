@@ -13,6 +13,7 @@ public:
     }
 
     TNodePtr Build(const TRule_checksum_table_stmt& rule);
+    TNodePtr Build(const TRule_check_index_stmt& rule);
 
 private:
     bool ParseChangefeeds(const TRule_table_setting_value& value, TVector<TString>& changefeeds);

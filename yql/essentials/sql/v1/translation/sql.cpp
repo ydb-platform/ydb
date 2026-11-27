@@ -207,6 +207,7 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore72: // drop symlink
         case TRule_sql_stmt_core::kAltSqlStmtCore73: // kill session
         case TRule_sql_stmt_core::kAltSqlStmtCore74: // checksum table
+        case TRule_sql_stmt_core::kAltSqlStmtCore75: // check index
             return false;
         case TRule_sql_stmt_core::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");

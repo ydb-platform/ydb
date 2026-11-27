@@ -766,6 +766,8 @@ private:
                 read.SetBlocked();
                 return RetryTableRead(read);
             }
+            case Ydb::StatusIds::SCHEME_ERROR:
+                return replyError("Read schema error", NYql::NDqProto::StatusIds::SCHEME_ERROR);
             default: {
                 return replyError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED);
             }

@@ -1807,6 +1807,27 @@ Y_UNIT_TEST(RejectsViewAndSubqueryDefinitions) {
 
 } // Y_UNIT_TEST_SUITE(ChecksumTable)
 
+Y_UNIT_TEST_SUITE(CheckTableIndex) {
+Y_UNIT_TEST(QuotedIndexName) {
+    const auto result = SqlToYql("CHECK TABLE plato.Input INDEX `Index with spaces`;", 10, "kikimr");
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+    const auto* read = FindNodeByChildAtomContent(result.Root, 0, "KiCheckIndex!");
+    UNIT_ASSERT(read);
+    UNIT_ASSERT_VALUES_EQUAL(read->GetChildrenCount(), 5);
+    const auto* indexName = read->GetChild(4);
+    UNIT_ASSERT(indexName->IsList());
+    UNIT_ASSERT_VALUES_EQUAL(indexName->GetChildrenCount(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(indexName->GetChild(0)->GetContent(), "quote");
+    UNIT_ASSERT_VALUES_EQUAL(indexName->GetChild(1)->GetContent(), "Index with spaces");
+}
+
+Y_UNIT_TEST(RejectsOtherProviders) {
+    const auto result = SqlToYql("CHECK TABLE plato.Input INDEX idx;", 10, "yt");
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "CHECK TABLE INDEX is unsupported for yt tables");
+}
+} // Y_UNIT_TEST_SUITE(CheckTableIndex)
+
 Y_UNIT_TEST_SUITE(Transfer) {
 Y_UNIT_TEST(SettingsErrorPositions) {
     const TString create = "USE plato; CREATE TRANSFER transfer FROM topic TO tab USING ($x) -> { RETURN $x; } WITH (\n";

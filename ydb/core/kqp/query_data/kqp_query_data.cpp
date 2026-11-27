@@ -322,6 +322,19 @@ void TQueryData::ParseParameters(const google::protobuf::Map<TBasicString<char>,
     }
 }
 
+void TQueryData::ValidateIndexValidationParameters(const NKqpProto::TKqpPhyQuery& query) const {
+    using TBinding = NKqpProto::TKqpPhyInternalBinding;
+    for (const auto& tx : query.GetTransactions()) {
+        for (const auto& binding : tx.GetParamBindings()) {
+            const auto type = binding.GetInternalBinding().GetType();
+            if (type == TBinding::PARAM_INDEX_VALIDATION_SNAPSHOT_STEP || type == TBinding::PARAM_INDEX_VALIDATION_SNAPSHOT_TX_ID) {
+                YQL_ENSURE(!UnboxedData.contains(binding.GetName()),
+                    "Parameter " << binding.GetName() << " is reserved for CHECK TABLE INDEX");
+            }
+        }
+    }
+}
+
 
 bool TQueryData::AddUVParam(const TString& name, NKikimr::NMiniKQL::TType* type, const NUdf::TUnboxedValue& value) {
     auto g = TypeEnv().BindAllocator();
@@ -346,6 +359,13 @@ bool TQueryData::AddMkqlParam(const TString& name, const NKikimrMiniKQL::TType& 
 std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> TQueryData::GetInternalBindingValue(
     const NKqpProto::TKqpPhyParamBinding& paramBinding)
 {
+    const auto type = paramBinding.GetInternalBinding().GetType();
+    using TBinding = NKqpProto::TKqpPhyInternalBinding;
+    if (type == TBinding::PARAM_INDEX_VALIDATION_SNAPSHOT_STEP || type == TBinding::PARAM_INDEX_VALIDATION_SNAPSHOT_TX_ID) {
+        YQL_ENSURE(IndexValidationSnapshot, "Index validation snapshot is unavailable");
+        const auto [step, txId] = *IndexValidationSnapshot;
+        return {TypeEnv().GetUi64Lazy(), TUnboxedValuePod(type == TBinding::PARAM_INDEX_VALIDATION_SNAPSHOT_STEP ? step : txId)};
+    }
     return AllocState->GetInternalBindingValue(paramBinding);
 }
 
@@ -509,6 +529,7 @@ NDqProto::TData TQueryData::SerializeParamValue(const TString& name) {
 }
 
 void TQueryData::Clear() {
+    IndexValidationSnapshot.reset();
     {
         auto g = TypeEnv().BindAllocator();
         Params.clear();

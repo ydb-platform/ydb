@@ -11,6 +11,7 @@ RECURSE_FOR_TESTS(
     effects
     federated_query
     indexes
+    index_validation
     idx_test
     join
     knn

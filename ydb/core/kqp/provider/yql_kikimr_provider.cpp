@@ -49,6 +49,7 @@ struct TKikimrData {
         DataSourceNames.insert(TKiReadTableScheme::CallableName());
         DataSourceNames.insert(TKiReadTableList::CallableName());
         DataSourceNames.insert(TKiChecksumTable::CallableName());
+        DataSourceNames.insert(TKiCheckIndex::CallableName());
 
         DataSinkNames.insert(TKiAlterDatabase::CallableName());
 

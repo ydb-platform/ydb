@@ -455,8 +455,18 @@ public:
 
     void FiilTablesAndViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& infos);
 
+    bool IsIndexValidation() const {
+        return PreparedQuery && PreparedQuery->GetPhysicalQuery().IndexValidationsSize();
+    }
+
+    bool BufferIndexValidationResult() const {
+        return IsIndexValidation() && IsStreamResult();
+    }
+
+    bool CheckingIndexValidationResult = false;
+
     bool NeedCheckTableVersions() const {
-        return CompileStats.FromCache;
+        return CompileStats.FromCache || IsIndexValidation();
     }
 
     TString ExtractQueryText() const {

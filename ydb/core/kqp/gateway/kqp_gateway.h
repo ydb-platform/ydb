@@ -140,6 +140,7 @@ public:
         {}
 
         bool AllowTrailingResults = false;
+        bool BufferResult = false;
         NKikimrKqp::EQueryType QueryType = NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED;
         NKikimr::TControlWrapper PerRequestDataSizeLimit;
         NKikimr::TControlWrapper MaxShardCount;

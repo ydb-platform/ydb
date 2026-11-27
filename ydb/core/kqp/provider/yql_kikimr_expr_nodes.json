@@ -80,6 +80,17 @@
             ]
         },
         {
+            "Name": "TKiCheckIndex",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiCheckIndex!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSource", "Type": "TKiDataSource"},
+                {"Index": 2, "Name": "TableKey", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Index", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKiReadTable",
             "Base": "TKiReadBase",
             "Definition": "Custom",

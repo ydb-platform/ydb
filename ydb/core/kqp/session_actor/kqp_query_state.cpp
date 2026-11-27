@@ -38,13 +38,23 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
     Y_ENSURE(response.Request);
     const auto& navigate = *response.Request;
 
+    const bool strict = IsIndexValidation();
+    if (strict && navigate.ResultSet.size() != TableVersions.size()) {
+        return false;
+    }
     for (const auto& entry : navigate.ResultSet) {
+        if (strict && entry.Status != TSchemeCacheNavigate::EStatus::Ok) {
+            return false;
+        }
         switch (entry.Status) {
             case TSchemeCacheNavigate::EStatus::Ok: {
                 auto expectedVersion = TableVersions.FindPtr(TTableId(entry.TableId.PathId));
                 if (!expectedVersion) {
                     YDB_LOG_WARN("Unexpected tableId in scheme cache navigate reply",
                         {"tableId", entry.TableId});
+                    if (strict) {
+                        return false;
+                    }
                     continue;
                 }
 
@@ -53,7 +63,7 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
                     continue;
                 }
 
-                if (entry.TableId.SchemaVersion && entry.TableId.SchemaVersion != *expectedVersion) {
+                if ((strict || entry.TableId.SchemaVersion) && entry.TableId.SchemaVersion != *expectedVersion) {
                     YDB_LOG_INFO("Scheme version mismatch",
                         {"pathId", entry.TableId.PathId},
                         {"expectedVersion", *expectedVersion},
@@ -85,6 +95,28 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
                     {"pathId", entry.TableId.PathId},
                     {"status", entry.Status});
                 break;
+        }
+    }
+
+    if (strict) {
+        for (const auto& index : PreparedQuery->GetPhysicalQuery().GetIndexValidations()) {
+            const TPathId id(index.GetBaseTableId().GetOwnerId(), index.GetBaseTableId().GetTableId());
+            const auto table = FindIf(navigate.ResultSet, [&](const auto& entry) {
+                return entry.TableId.PathId == id;
+            });
+            if (table == navigate.ResultSet.end()) {
+                return false;
+            }
+            const auto published = FindIf(table->Indexes, [&](const auto& current) {
+                return current.GetName() == index.GetName()
+                    && current.GetState() == NKikimrSchemeOp::EIndexStateReady
+                    && current.GetLocalPathId() == index.GetLocalPathId()
+                    && current.GetPathOwnerId() == index.GetPathOwnerId()
+                    && current.GetSchemaVersion() == index.GetSchemaVersion();
+            });
+            if (published == table->Indexes.end()) {
+                return false;
+            }
         }
     }
 
@@ -127,7 +159,7 @@ std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildN
         entry.TableId = tableId;
         entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
-        entry.SyncVersion = false;
+        entry.SyncVersion = IsIndexValidation();
         entry.ShowPrivatePath = true;
         navigate->ResultSet.emplace_back(entry);
     }

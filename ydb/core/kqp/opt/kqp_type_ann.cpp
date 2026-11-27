@@ -2276,6 +2276,31 @@ TStatus AnnotateKqpStreamEnumerate(const TExprNode::TPtr& node, TExprContext& ct
     return TStatus::Ok;
 }
 
+TStatus AnnotateIndexValidationSnapshot(const TExprNode::TPtr& node, TExprContext& ctx) {
+    const bool isStep = TKqpIndexValidationSnapshotStep::Match(node.Get());
+    if (!EnsureArgsCount(*node, isStep ? 1 : 0, ctx)) {
+        return TStatus::Error;
+    }
+    if (isStep) {
+        auto& indexes = *node->ChildPtr(TKqpIndexValidationSnapshotStep::idx_Indexes);
+        if (!EnsureTuple(indexes, ctx) || !EnsureMinArgsCount(indexes, 1, ctx)) {
+            return TStatus::Error;
+        }
+        for (const auto& index : indexes.Children()) {
+            if (!EnsureTuple(*index, ctx) || !EnsureArgsCount(*index, 6, ctx)) {
+                return TStatus::Error;
+            }
+            for (const auto& field : index->Children()) {
+                if (!EnsureAtom(*field, ctx)) {
+                    return TStatus::Error;
+                }
+            }
+        }
+    }
+    node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Uint64));
+    return TStatus::Ok;
+}
+
 TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->ChildrenSize() != 3 && node->ChildrenSize() != 5) {
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "FulltextAnalyze requires 3 or 5 arguments"));
@@ -4204,6 +4229,8 @@ public:
         AddHandler({TKqpProgram::CallableName()}, Hndl(&AnnotateKqpProgram));
         AddHandler({TKqpEnsure::CallableName()}, Hndl(&AnnotateKqpEnsure));
         AddHandler({TKqpLockAndCheck::CallableName()}, HndlInt(&AnnotateKqpLockAndCheck));
+        AddHandler({TKqpIndexValidationSnapshotStep::CallableName(), TKqpIndexValidationSnapshotTxId::CallableName()},
+            Hndl(&AnnotateIndexValidationSnapshot));
         AddHandler({TFulltextAnalyze::CallableName()}, Hndl(&AnnotateFulltextAnalyze));
         AddHandler({TKqpStreamEnumerate::CallableName()}, Hndl(&AnnotateKqpStreamEnumerate));
         AddHandler({TKqpStreamingAggregation::CallableName()}, Hndl(&TKiTypeAnnotationTransformer::HandleStreamingAggregation));

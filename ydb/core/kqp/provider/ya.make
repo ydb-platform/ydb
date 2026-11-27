@@ -1,6 +1,8 @@
 YQL_LIBRARY()
 
 SRCS(
+    check_index.cpp
+    fulltext_analyze.cpp
     generated_column.cpp
     read_attributes_utils.cpp
     rewrite_io_utils.cpp

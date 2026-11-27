@@ -145,9 +145,9 @@ void IndexProtoToMetadata(const TIndexProto& indexes, NYql::TKikimrTableMetadata
         YQL_ENSURE(indexState != NKikimrSchemeOp::EIndexState::EIndexStateInvalid,
             "Unexpected index state, probably SchemeShard/SchemeCache bug!");
 
-        // Skip index if the state is NotReady - index just has been created but mark as not
-        // ready to use.
+        // Preserve the name for validation without loading the implementation tables.
         if (indexState == NKikimrSchemeOp::EIndexState::EIndexStateNotReady) {
+            tableMeta->NotReadyIndexNames.push_back(index.GetName());
             continue;
         }
 

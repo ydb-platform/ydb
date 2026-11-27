@@ -9,6 +9,7 @@
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cbo_factory.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
@@ -29,6 +30,7 @@
 #include <ydb/library/yql/providers/ydb_external/provider/yql_ydb_external_provider.h>
 
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
@@ -121,6 +123,26 @@ bool HasSamplingRead(const TExprNode::TPtr& root) {
         return HasSetting(settings, "samplingrate") || HasSetting(settings, "samplingseed") ||
             HasSetting(settings, "samplingmemtablestride");
     }) != nullptr;
+}
+
+bool ValidateStandaloneIndexCheck(const TExprNode::TPtr& root, TExprContext& ctx) {
+    const auto check = FindNode(root, [](const TExprNode::TPtr& node) {
+        return TKiCheckIndex::Match(node.Get());
+    });
+    if (!check) {
+        return true;
+    }
+
+    const auto writes = FindNodes(root, [](const TExprNode::TPtr& node) {
+        return TCoWrite::Match(node.Get());
+    });
+    if (writes.size() == 1) {
+        return true;
+    }
+
+    ctx.AddError(YqlIssue(ctx.GetPosition(check->Pos()), TIssuesIds::KIKIMR_UNSUPPORTED,
+        "CHECK TABLE INDEX must run as a standalone statement"));
+    return false;
 }
 
 class TKqpResultWriter : public IResultWriter {
@@ -1526,15 +1548,27 @@ private:
         }
         YQL_CLOG(INFO, CoreDq) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);
 
-        if (!CheckIsBatch(queryExpr, ctx)) {
+        if (!CheckIsBatch(queryExpr, ctx) || !ValidateStandaloneIndexCheck(queryExpr, ctx)) {
             return result;
         }
 
-        if (HasSamplingRead(queryExpr)) {
+        const auto validation = FindNode(queryExpr, [](const TExprNode::TPtr& node) {
+            return TKiCheckIndex::Match(node.Get()) || TKqpIndexValidationSnapshotStep::Match(node.Get());
+        });
+        const auto queryType = SessionCtx->Query().Type;
+        if (validation && (queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming)) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(validation->Pos()), TIssuesIds::KIKIMR_UNSUPPORTED,
+                "CHECK TABLE INDEX is not supported by ExecuteYqlScript"));
+            return result;
+        }
+        const bool sampling = HasSamplingRead(queryExpr);
+        if (sampling) {
             // Sampling requires the read ranges source even for scan queries.
             SessionCtx->ConfigPtr()->SetEnableKqpScanQuerySourceRead(true);
-            // RBO read operators do not preserve sampling settings. Select the
-            // legacy pipeline before optimization, independently of error fallback.
+        }
+        if (sampling || validation) {
+            // The new RBO cannot represent sampling settings or the left-row
+            // lookups used by index validation.
             SessionCtx->ConfigPtr()->SetEnableNewRBO(false);
             TypesCtx->IgnoreExpandPg = false;
         }

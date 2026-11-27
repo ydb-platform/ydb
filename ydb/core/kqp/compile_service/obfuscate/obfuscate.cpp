@@ -410,6 +410,9 @@ void TReplayMessageObfuscator::AddTableMetadataImpl(const NKikimrKqp::TKqpTableM
             GetOrCreateColumnName(dataCol);
         }
     }
+    for (const auto& name : meta.GetNotReadyIndexNames()) {
+        GetOrCreateIndexName(name);
+    }
 
     // Recurse into secondary global index metadata
     for (const auto& secondaryMeta : meta.GetSecondaryGlobalIndexMetadata()) {
@@ -473,6 +476,12 @@ NKikimrKqp::TKqpTableMetadataProto TReplayMessageObfuscator::ObfuscateMetadata(
             if (!mapped.empty()) {
                 *idx->MutableDataColumns(j) = mapped;
             }
+        }
+    }
+    for (auto& name : *result.MutableNotReadyIndexNames()) {
+        mapped = MapIdentifier(name);
+        if (!mapped.empty()) {
+            name = mapped;
         }
     }
 

@@ -39,6 +39,8 @@
 
 #include <util/string/join.h>
 
+#include <algorithm>
+
 namespace NKikimr {
     namespace NMiniKQL {
         class IFunctionRegistry;
@@ -1088,6 +1090,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
     // Indexes and ImplTables must be in same order
     TVector<TIndexDescription> Indexes;
     TVector<TIntrusivePtr<TKikimrTableMetadata>> ImplTables;
+    // These indexes are not loaded or used for ordinary reads and writes.
+    TVector<TString> NotReadyIndexNames;
 
     TVector<TMultiColumnStatisticsDescription> MultiColumnStatistics;
 
@@ -1148,6 +1152,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         , DataSize(message->GetDataSize())
         , StatsLoaded(message->GetStatsLoaded())
         , KeyColumnNames(message->GetKeyColunmNames().begin(), message->GetKeyColunmNames().end())
+        , NotReadyIndexNames(message->GetNotReadyIndexNames().begin(), message->GetNotReadyIndexNames().end())
 
     {
         for(auto& attr: message->GetAttributes()) {
@@ -1250,6 +1255,10 @@ struct TKikimrTableMetadata : public TThrRefBase {
             index.ToMessage(message->AddIndexes());
         }
 
+        for (const auto& name : NotReadyIndexNames) {
+            message->AddNotReadyIndexNames(name);
+        }
+
         for(auto implTable: ImplTables) {
             // Local indexes (e.g. column-store bloom / bloom-ngram / min-max) have no impl
             // table, so their slot is null. FromMessage reconstructs the null slot from the
@@ -1283,6 +1292,25 @@ struct TKikimrTableMetadata : public TThrRefBase {
     std::pair<TIntrusivePtr<TKikimrTableMetadata>, TIndexDescription::EIndexState> GetIndexMetadata(std::string_view indexName) const {
         auto [implTable, index] = GetIndex(indexName);
         return {std::move(implTable), index ? index->State : TIndexDescription::EIndexState::Invalid};
+    }
+
+    bool IsIndexNotReady(std::string_view indexName) const {
+        return std::find(NotReadyIndexNames.begin(), NotReadyIndexNames.end(), indexName) != NotReadyIndexNames.end();
+    }
+
+    std::pair<TIntrusivePtr<TKikimrTableMetadata>, const TIndexDescription*> FindRowIdMappingIndex() const {
+        YQL_ENSURE(Indexes.size() == ImplTables.size(), "index metadata has not been loaded yet");
+        for (size_t i = 0; i < Indexes.size(); ++i) {
+            const auto& index = Indexes[i];
+            if (index.Type == TIndexDescription::EType::GlobalSyncUnique
+                && index.State == TIndexDescription::EIndexState::Ready
+                && index.KeyColumns.size() == 1
+                && index.KeyColumns.front() == NKikimr::NTableIndex::NFulltext::RowIdColumn)
+            {
+                return {ImplTables[i], &index};
+            }
+        }
+        return {nullptr, nullptr};
     }
 
     bool IsOlap() const {

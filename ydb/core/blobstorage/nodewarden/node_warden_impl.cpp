@@ -966,13 +966,11 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
         return;
     }
 
-    auto escape = [&](auto& value) { return value ? std::make_optional('"' + EscapeC(*value) + '"') : std::nullopt; };
-
     YDB_LOG_DEBUG_COMP(BS_NODE, "Persisting new configurations",
         {"marker", "NW63"},
-        {"mainYaml", escape(mainYaml)},
+        {"mainYamlBytes", mainYaml ? std::optional(mainYaml->size()) : std::nullopt},
         {"mainYamlVersion", mainYamlVersion},
-        {"storageYaml", escape(storageYaml)},
+        {"storageYamlBytes", storageYaml ? std::optional(storageYaml->size()) : std::nullopt},
         {"storageYamlVersion", storageYamlVersion},
         {"yamlConfig", YamlConfig});
 

@@ -2,6 +2,7 @@
 #include "console_configs_provider.h"
 #include "console_audit.h"
 
+#include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/config/validation/validators.h>
 #include <ydb/library/aclib/aclib.h>
@@ -249,12 +250,12 @@ public:
         logData.AddAffectedKinds(NKikimrConsole::TConfigItem::MainYamlConfigChangeItem);
 
         auto& yamlConfigChange = *logData.MutableMainYamlConfigChange();
-        yamlConfigChange.SetOldYamlConfig(Self->MainYamlConfig);
-        yamlConfigChange.SetNewYamlConfig(UpdatedMainConfig);
+        yamlConfigChange.SetOldYamlConfig(NYaml::ConfigTextForDiagnostics(Self->MainYamlConfig));
+        yamlConfigChange.SetNewYamlConfig(NYaml::ConfigTextForDiagnostics(UpdatedMainConfig));
         for (auto& [id, config] : Self->VolatileYamlConfigs) {
             auto& oldVolatileConfig = *yamlConfigChange.AddOldVolatileYamlConfigs();
             oldVolatileConfig.SetId(id);
-            oldVolatileConfig.SetConfig(config);
+            oldVolatileConfig.SetConfig(NYaml::ConfigTextForDiagnostics(config));
         }
 
         Self->Logger.DbLogData(UserToken.GetUserSID(), logData, txc, ctx);
@@ -378,8 +379,8 @@ public:
 
         auto& databaseConfigChange = *logData.MutableDatabaseYamlConfigChange();
         databaseConfigChange.SetDatabase(TargetDatabase);
-        databaseConfigChange.SetOldYamlConfig(oldConfig);
-        databaseConfigChange.SetNewYamlConfig(UpdatedDatabaseConfig);
+        databaseConfigChange.SetOldYamlConfig(NYaml::ConfigTextForDiagnostics(oldConfig));
+        databaseConfigChange.SetNewYamlConfig(NYaml::ConfigTextForDiagnostics(UpdatedDatabaseConfig));
 
         Self->Logger.DbLogData(UserToken.GetUserSID(), logData, txc, ctx);
     }

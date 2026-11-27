@@ -516,6 +516,7 @@ void NKikimr::NStorage::OutputPrettyMessage(IOutputStream& out, const NProtoBuf:
     };
 
     NProtoBuf::TextFormat::Printer p;
+    p.SetRedactDebugString(true);
     p.SetDefaultFieldValuePrinter(new TFieldPrinter);
 
     TString s;

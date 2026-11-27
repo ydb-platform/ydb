@@ -7,6 +7,7 @@ option java_package = "com.yandex.ydb.config.proto";
 option java_outer_classname = "ConfigProtos";
 option java_multiple_files = true;
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "google/protobuf/empty.proto";
 
@@ -55,14 +56,14 @@ message ReplaceConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
     message ConfigBundle {
-        optional string main_config = 1;
-        optional string storage_config = 2;
+        optional string main_config = 1 [(Ydb.sensitive) = true];
+        optional string storage_config = 2 [(Ydb.sensitive) = true];
     }
 
     oneof action {
         // Replaces config on cluster.
         // By default awaits config with matching metadata (kind MainConfig, right cluster and version + 1)
-        string replace = 2;
+        string replace = 2 [(Ydb.sensitive) = true];
 
         // Replaces storage and/or main configs on cluster in dedicated storage config mode
         // By default awaits either MainConfig or StorageConfig or both with matching metadata
@@ -74,7 +75,7 @@ message ReplaceConfigRequest {
 
         // Replaces main config on cluster in single config mode **AND** disables dedicated storage config mode
         // By default awaits MainConfig with matching metadata
-        string replace_disable_dedicated_storage_section = 5;
+        string replace_disable_dedicated_storage_section = 5 [(Ydb.sensitive) = true];
     }
 
     // Try to apply config(s) without making real changes
@@ -181,7 +182,7 @@ message FetchConfigResponse {
 // For example filtering out fetch result based on some specific rules
 message ConfigEntry {
     ConfigIdentity identity = 1;
-    string config = 2;
+    string config = 2 [(Ydb.sensitive) = true];
 }
 
 message FetchConfigResult {

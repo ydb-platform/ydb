@@ -55,7 +55,7 @@ TOperation::~TOperation() {
     FinishPipelineTrace("operation_destroyed");
 }
 
-void TOperation::TracePipelineEvent(const char* name, const TOperation* cause, bool dryRun, ui64 externalCauseTxId) {
+void TOperation::TracePipelineEvent(const char* name, const TOperation* cause, bool dryRun, ui64 externalCauseTxId, std::optional<ui32> executionStatus) {
     if (PipelineTraceFinished) {
         return;
     }
@@ -81,6 +81,13 @@ void TOperation::TracePipelineEvent(const char* name, const TOperation* cause, b
         attributes["executing"] = IsExecuting();
         attributes["completed"] = IsCompleted();
         attributes["immediate"] = IsImmediate();
+        attributes["readsets_loaded"] = HasLoadedInRSFlag();
+        if (HasLoadedInRSFlag()) {
+            attributes["remaining_readsets"] = static_cast<i64>(GetRemainReadSets());
+        }
+        if (executionStatus) {
+            attributes["execution_status"] = static_cast<i64>(*executionStatus);
+        }
         NWilson::TArrayValue blockers;
         auto append = [&](const auto& dependencies, const char* kind) {
             for (const auto& dependency : dependencies) {
@@ -157,8 +164,12 @@ void TOperation::AddInReadSet(const TReadSetKey &rsKey,
                 Y_ENSURE(InputDataRef().RemainReadSets > 0, "RemainReadSets counter underflow");
                 --InputDataRef().RemainReadSets;
             }
+            TracePipelineEvent("readset accounted");
+        } else {
+            TracePipelineEvent("duplicate readset ignored");
         }
     } else {
+        TracePipelineEvent("unexpected readset ignored");
         YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Discarded readset",
             {"operation", *this},
             {"from", rsKey.From},
@@ -172,6 +183,7 @@ void TOperation::AddDependency(const TOperation::TPtr &op) {
 
     if (Dependencies.insert(op).second) {
         op->Dependents.insert(this);
+        TracePipelineEvent("normal dependency added", op.Get());
     }
 }
 
@@ -180,6 +192,7 @@ void TOperation::AddSpecialDependency(const TOperation::TPtr &op) {
 
     if (SpecialDependencies.insert(op).second) {
         op->SpecialDependents.insert(this);
+        TracePipelineEvent("special dependency added", op.Get());
     }
 }
 
@@ -307,7 +320,9 @@ void TOperation::ClearRepeatableReadConflicts() {
 }
 
 void TOperation::AddVolatileDependency(ui64 txId) {
-    VolatileDependencies.insert(txId);
+    if (VolatileDependencies.insert(txId).second) {
+        TracePipelineEvent("volatile dependency added", nullptr, false, txId);
+    }
 }
 
 void TOperation::RemoveVolatileDependency(ui64 txId, bool success) {

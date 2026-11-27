@@ -1968,6 +1968,7 @@ EExecutionStatus TPipeline::RunExecutionUnit(TOperation::TPtr op, TTransactionCo
         {"unitKind", unit.GetKind()});
 
     if (!unit.IsReadyToExecute(op)) {
+        op->TracePipelineEvent("execution readiness blocked");
         YDB_LOG_TRACE_CTX(ctx, "Operation is not ready to execute on unit",
             {"operation", *op},
             {"tabletId", Self->TabletID()},
@@ -1975,9 +1976,11 @@ EExecutionStatus TPipeline::RunExecutionUnit(TOperation::TPtr op, TTransactionCo
         return EExecutionStatus::Continue;
     }
 
+    op->TracePipelineEvent("unit execution started");
     NCpuTime::TCpuTimer timer;
     auto status = unit.Execute(op, txc, ctx);
     op->AddExecutionTime(timer.GetTime());
+    op->TracePipelineEvent("unit execution returned", nullptr, false, 0, static_cast<ui32>(status));
 
     YDB_LOG_TRACE_CTX(ctx, "Execution status for operation",
         {"operation", *op},
@@ -2008,6 +2011,7 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
             {"unitKind", unit.GetKind()});
 
         if (!unit.IsReadyToExecute(op)) {
+            op->TracePipelineEvent("execution readiness blocked");
             YDB_LOG_TRACE_CTX(ctx, "Operation is not ready to execute on unit",
                 {"operation", *op},
                 {"tabletId", Self->TabletID()},
@@ -2024,14 +2028,17 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
                 {"tabletId", Self->TabletID()},
                 {"unitKind", unit.GetKind()});
 
+            op->TracePipelineEvent("unit execution rescheduled: restart forbidden");
             return EExecutionStatus::Reschedule;
         }
 
         NWilson::TSpan unitSpan(TWilsonTablet::TabletDetailed, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
 
+        op->TracePipelineEvent("unit execution started");
         NCpuTime::TCpuTimer timer;
         auto status = unit.Execute(op, txc, ctx);
         op->AddExecutionTime(timer.GetTime());
+        op->TracePipelineEvent("unit execution returned", nullptr, false, 0, static_cast<ui32>(status));
 
         if (unitSpan) {
             unitSpan.Attribute("Type", TypeName(unit))

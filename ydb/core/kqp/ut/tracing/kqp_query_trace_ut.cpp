@@ -178,12 +178,22 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 UNIT_ASSERT(FindAttribute(*pipeline, "ydb.tx_id"));
                 bool selected = false;
                 bool planReady = false;
+                bool executionStarted = false;
+                bool executionReturned = false;
                 for (const auto& event : pipeline->events()) {
                     selected |= event.name() == "operation selected";
+                    executionStarted |= event.name() == "unit execution started";
+                    if (event.name() == "unit execution returned") {
+                        executionReturned = true;
+                        UNIT_ASSERT(std::ranges::any_of(event.attributes(), [](const auto& attribute) {
+                            return attribute.key() == "execution_status";
+                        }));
+                    }
                     planReady |= event.name() == "plan queue: ready candidate" || event.name() == "plan queue: ready";
                 }
                 UNIT_ASSERT(selected);
                 UNIT_ASSERT(planReady);
+                UNIT_ASSERT(executionStarted && executionReturned);
             }
         }
     }

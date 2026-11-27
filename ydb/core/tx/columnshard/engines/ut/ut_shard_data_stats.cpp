@@ -11,7 +11,6 @@ Y_UNIT_TEST_SUITE(TShardDataStatsTests) {
     const TSnapshot Removed(2, 1);
     const TString BlobStorage = NBlobOperations::TGlobal::DefaultStorageId;
     const TString Tier = "tier1";
-    using NColumnShard::EPortionGroup;
     using NTest::TestPortionColumnBlobBytes;
 
     std::shared_ptr<TPortionInfo> MakeCompacted(const ui64 portionId, const ui32 recordsCount, const std::optional<TSnapshot>& removeSnapshot,
@@ -22,12 +21,12 @@ Y_UNIT_TEST_SUITE(TShardDataStatsTests) {
 
     Y_UNIT_TEST(EachPortionGoesToItsStorageAndGroup) {
         NColumnShard::TShardDataStats stats(TTestStoragesManager::GetInstance(), 1);
-        stats.AddPortion(NTest::MakeTestWrittenPortion(PathId, 1, 1, Committed), EPortionGroup::Written);
-        stats.AddPortion(MakeCompacted(2, 2, std::nullopt), EPortionGroup::Compacted);
-        stats.AddPortion(NTest::MakeTestWrittenPortion(PathId, 3, 4, Committed, Tier), EPortionGroup::Written);
-        stats.AddPortion(MakeCompacted(4, 8, std::nullopt, Tier), EPortionGroup::Compacted);
-        stats.AddPortion(MakeCompacted(5, 16, Removed), EPortionGroup::Removed);
-        stats.AddPortion(MakeCompacted(6, 32, Removed, Tier), EPortionGroup::Removed);
+        stats.AddCommittedPortion(NTest::MakeTestWrittenPortion(PathId, 1, 1, Committed));
+        stats.AddCommittedPortion(MakeCompacted(2, 2, std::nullopt));
+        stats.AddCommittedPortion(NTest::MakeTestWrittenPortion(PathId, 3, 4, Committed, Tier));
+        stats.AddCommittedPortion(MakeCompacted(4, 8, std::nullopt, Tier));
+        stats.AddCommittedPortion(MakeCompacted(5, 16, Removed));
+        stats.AddCommittedPortion(MakeCompacted(6, 32, Removed, Tier));
 
         const auto& granule = stats.GetGranuleStats(PathId);
         UNIT_ASSERT_VALUES_EQUAL(granule.GetWritten(BlobStorage).GetRecordsCount(), 1);
@@ -43,31 +42,31 @@ Y_UNIT_TEST_SUITE(TShardDataStatsTests) {
         NColumnShard::TShardDataStats stats(TTestStoragesManager::GetInstance(), 1);
         const auto written = NTest::MakeTestWrittenPortion(PathId, 1, 1, Committed);
         const auto removed = MakeCompacted(2, 2, Removed, Tier, 50);
-        stats.AddPortion(written, EPortionGroup::Written);
-        stats.AddPortion(removed, EPortionGroup::Removed);
-        stats.RemovePortion(written, EPortionGroup::Written);
+        stats.AddCommittedPortion(written);
+        stats.AddCommittedPortion(removed);
+        stats.RemoveCommittedPortion(written);
         UNIT_ASSERT(!stats.GetGranuleStats(PathId).IsEmpty());
-        stats.RemovePortion(removed, EPortionGroup::Removed);
+        stats.RemoveCommittedPortion(removed);
         UNIT_ASSERT(stats.GetGranuleStats(PathId).IsEmpty());
     }
 
     Y_UNIT_TEST(PortionBelowThresholdIsSmallBlob) {
         NColumnShard::TShardDataStats stats(TTestStoragesManager::GetInstance(), 1);
-        stats.AddPortion(MakeCompacted(1, 1, std::nullopt, {}, 50), EPortionGroup::Compacted);
+        stats.AddCommittedPortion(MakeCompacted(1, 1, std::nullopt, {}, 50));
         UNIT_ASSERT_VALUES_EQUAL(stats.GetGranuleStats(PathId).GetSmallBlobs().VolumeBytes, TestPortionColumnBlobBytes + 50);
         UNIT_ASSERT_VALUES_EQUAL(stats.GetGranuleStats(PathId).GetSmallBlobs().Count, 1);
     }
 
     Y_UNIT_TEST(PortionAboveThresholdIsNotSmallBlob) {
         NColumnShard::TShardDataStats stats(TTestStoragesManager::GetInstance(), 1);
-        stats.AddPortion(MakeCompacted(1, 1, std::nullopt, {}, 1 << 20), EPortionGroup::Compacted);
+        stats.AddCommittedPortion(MakeCompacted(1, 1, std::nullopt, {}, 1 << 20));
         UNIT_ASSERT_VALUES_EQUAL(stats.GetGranuleStats(PathId).GetSmallBlobs().Count, 0);
         UNIT_ASSERT_VALUES_EQUAL(stats.GetStorageStats(BlobStorage).GetSmallBlobs().Count, 0);
     }
 
     Y_UNIT_TEST(EvictedPortionIndexesAreBlobStorageSmallBlobs) {
         NColumnShard::TShardDataStats stats(TTestStoragesManager::GetInstance(), 1);
-        stats.AddPortion(MakeCompacted(1, 1, std::nullopt, Tier, 50), EPortionGroup::Compacted);
+        stats.AddCommittedPortion(MakeCompacted(1, 1, std::nullopt, Tier, 50));
         UNIT_ASSERT_VALUES_EQUAL(stats.GetGranuleStats(PathId).GetSmallBlobs(BlobStorage).VolumeBytes, 50);
         UNIT_ASSERT_VALUES_EQUAL(stats.GetGranuleStats(PathId).GetSmallBlobs(Tier).VolumeBytes, 0);
         UNIT_ASSERT_VALUES_EQUAL(stats.GetStorageStats(Tier).GetSmallBlobs().Count, 0);
@@ -76,10 +75,10 @@ Y_UNIT_TEST_SUITE(TShardDataStatsTests) {
     Y_UNIT_TEST(ShardTotalsSumGranulesByStorage) {
         NColumnShard::TShardDataStats stats(TTestStoragesManager::GetInstance(), 1);
         const auto secondPathId = TInternalPathId::FromRawValue(2);
-        stats.AddPortion(NTest::MakeTestWrittenPortion(PathId, 1, 1, Committed), EPortionGroup::Written);
-        stats.AddPortion(NTest::MakeTestWrittenPortion(secondPathId, 2, 2, Committed), EPortionGroup::Written);
-        stats.AddPortion(MakeCompacted(3, 4, std::nullopt, Tier, 50), EPortionGroup::Compacted);
-        stats.AddPortion(NTest::MakeTestCompactedPortion(secondPathId, 4, 1, 2, 8, Committed, Removed, Tier, 25), EPortionGroup::Removed);
+        stats.AddCommittedPortion(NTest::MakeTestWrittenPortion(PathId, 1, 1, Committed));
+        stats.AddCommittedPortion(NTest::MakeTestWrittenPortion(secondPathId, 2, 2, Committed));
+        stats.AddCommittedPortion(MakeCompacted(3, 4, std::nullopt, Tier, 50));
+        stats.AddCommittedPortion(NTest::MakeTestCompactedPortion(secondPathId, 4, 1, 2, 8, Committed, Removed, Tier, 25));
 
         const auto& blobStorage = stats.GetStorageStats(BlobStorage);
         UNIT_ASSERT_VALUES_EQUAL(blobStorage.GetWritten().GetRecordsCount(), 3);
@@ -94,13 +93,13 @@ Y_UNIT_TEST_SUITE(TShardDataStatsTests) {
     Y_UNIT_TEST(ReAddedPortionCountsOnce) {
         NColumnShard::TShardDataStats stats(TTestStoragesManager::GetInstance(), 1);
         const auto portion = MakeCompacted(1, 1, std::nullopt, Tier, 50);
-        stats.AddPortion(portion, EPortionGroup::Compacted);
-        stats.RemovePortion(portion, EPortionGroup::Compacted);
+        stats.AddCommittedPortion(portion);
+        stats.RemoveCommittedPortion(portion);
         UNIT_ASSERT(stats.GetGranuleStats(PathId).IsEmpty());
         UNIT_ASSERT_VALUES_EQUAL(stats.GetStorageStats(Tier).GetAll().GetCount(), 0);
         UNIT_ASSERT_VALUES_EQUAL(stats.GetStorageStats(BlobStorage).GetSmallBlobs().Count, 0);
 
-        stats.AddPortion(portion, EPortionGroup::Compacted);
+        stats.AddCommittedPortion(portion);
         UNIT_ASSERT_VALUES_EQUAL(stats.GetStorageStats(Tier).GetAll().GetCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.GetStorageStats(BlobStorage).GetSmallBlobs().Count, 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.GetGranuleStats(PathId).GetSmallBlobs().Count, 1);
@@ -108,7 +107,7 @@ Y_UNIT_TEST_SUITE(TShardDataStatsTests) {
 
     Y_UNIT_TEST(UncommittedPortionIsCountedAsStored) {
         NColumnShard::TShardDataStats stats(TTestStoragesManager::GetInstance(), 1);
-        stats.AddPortion(NTest::MakeTestUncommittedPortion(PathId, 1, 1), EPortionGroup::Uncommitted);
+        stats.AddUncommittedPortion(NTest::MakeTestUncommittedPortion(PathId, 1, 1));
         const auto& granule = stats.GetGranuleStats(PathId);
         UNIT_ASSERT_VALUES_EQUAL(granule.GetUncommitted().GetRecordsCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(granule.GetAll().GetRecordsCount(), 1);
@@ -118,10 +117,10 @@ Y_UNIT_TEST_SUITE(TShardDataStatsTests) {
     Y_UNIT_TEST(UncommittedPortionMovesToWrittenOnCommit) {
         NColumnShard::TShardDataStats stats(TTestStoragesManager::GetInstance(), 1);
         const auto portion = NTest::MakeTestUncommittedPortion(PathId, 1, 1);
-        stats.AddPortion(portion, EPortionGroup::Uncommitted);
+        stats.AddUncommittedPortion(portion);
         portion->SetCommitSnapshot(Committed);
-        stats.RemovePortion(portion, EPortionGroup::Uncommitted);
-        stats.AddPortion(portion, EPortionGroup::Written);
+        stats.RemoveUncommittedPortion(portion);
+        stats.AddCommittedPortion(portion);
         const auto& granule = stats.GetGranuleStats(PathId);
         UNIT_ASSERT(granule.GetUncommitted().IsEmpty());
         UNIT_ASSERT_VALUES_EQUAL(granule.GetWritten().GetRecordsCount(), 1);
@@ -131,11 +130,11 @@ Y_UNIT_TEST_SUITE(TShardDataStatsTests) {
     Y_UNIT_TEST(UncommittedPortionMovesToRemovedOnAbort) {
         NColumnShard::TShardDataStats stats(TTestStoragesManager::GetInstance(), 1);
         const auto portion = NTest::MakeTestUncommittedPortion(PathId, 1, 1);
-        stats.AddPortion(portion, EPortionGroup::Uncommitted);
+        stats.AddUncommittedPortion(portion);
         portion->SetRemoveSnapshot(Removed);
         portion->SetCommitSnapshot(Removed);
-        stats.RemovePortion(portion, EPortionGroup::Uncommitted);
-        stats.AddPortion(portion, EPortionGroup::Removed);
+        stats.RemoveUncommittedPortion(portion);
+        stats.AddCommittedPortion(portion);
         const auto& granule = stats.GetGranuleStats(PathId);
         UNIT_ASSERT(granule.GetUncommitted().IsEmpty());
         UNIT_ASSERT_VALUES_EQUAL(granule.GetRemoved().GetRecordsCount(), 1);

@@ -49,12 +49,17 @@ private:
     ui64 NormalizeSmallBlobsCount(const ui64 rawCount);
     ui64 GetSmallBlobThreshold(const TString& storageId);
 
+    void AddPortion(const NOlap::TPortionInfo& portion, EPortionGroup group);
+    void RemovePortion(const NOlap::TPortionInfo& portion, EPortionGroup group);
+
 public:
     TShardDataStats(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId);
     ~TShardDataStats();
 
-    void AddPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion, const EPortionGroup group);
-    void RemovePortion(const std::shared_ptr<NOlap::TPortionInfo>& portion, const EPortionGroup group);
+    void AddCommittedPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
+    void AddUncommittedPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
+    void RemoveCommittedPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
+    void RemoveUncommittedPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
 
     const TDataStatsByStorage& GetGranuleStats(const TInternalPathId pathId) const;
 

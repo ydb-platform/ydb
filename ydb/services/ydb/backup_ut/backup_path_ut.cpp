@@ -11,6 +11,7 @@
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <arrow/api.h>
 
@@ -635,6 +636,47 @@ void ExportEmptyDirectoriesImpl(TBackupTestFixture& f) {
     }
     UNIT_ASSERT(names.contains(""));
     UNIT_ASSERT(names.contains("metadata.json"));
+
+    // The child's destination is derived from its parent's explicit prefix.
+    // It may move in the mapping, while two explicit destinations must fail.
+    auto inherited = traits.MakeExportSettingsCustomDest(f, parent, "inherited");
+    inherited.AppendItem(typename TExportSettings::TItem{.Src = "dir3", .Dst = "archive"});
+    f.WaitOpSuccess(traits.Export(f, inherited));
+    auto explicitCollision = traits.MakeExportSettingsCustomDest(f, parent, "conflict");
+    explicitCollision.AppendItem(typename TExportSettings::TItem{.Src = "dir3", .Dst = "archive"});
+    explicitCollision.AppendItem(typename TExportSettings::TItem{.Src = "dir3/metadata.json", .Dst = "archive/metadata.json"});
+    f.WaitOpStatus(traits.Export(f, explicitCollision), EStatus::BAD_REQUEST);
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
+void ExportEmptyDirectoriesWithCliFiltersImpl(TBackupTestFixture& f) {
+    TBackupTraits<TExportSettings> traits;
+    auto& flags = f.Server().GetRuntime()->GetAppData().FeatureFlags;
+    flags.SetEnableFsBackups(true);
+    flags.SetEnableDirectoryExport(true);
+    const TString root = "/Root/RecursiveFolderProcessing/dir1/dir2";
+    auto settings = traits.MakeExportSettings(f, root);
+    settings.AppendItem(typename TExportSettings::TItem{.Src = root});
+    settings.AppendExcludeRegexp(".*");
+    settings.AppendExcludeRegexp("^/Root/RecursiveFolderProcessing/dir1/dir2(/Table2)?$");
+    // A node unaware of the CLI capability rejects the same body without
+    // scheduling an export, even if it usually handles relative filters.
+    f.WaitOpStatus(traits.Export(f, settings), EStatus::BAD_REQUEST);
+
+    settings.Header({{YDB_CLIENT_CAPABILITIES, YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT}});
+    f.WaitOpSuccess(traits.Export(f, settings));
+    const auto name = traits.FilePrefix() + "SchemaMapping/mapping.json";
+    TString json;
+    if constexpr (std::is_same_v<TExportSettings, NExport::TExportToS3Settings>) {
+        json = f.GetS3Data().at(name);
+    } else {
+        json = TFileInput(TFsPath(f.GetTempDir().Path()) / name).ReadAll();
+    }
+    NKikimr::NBackup::TSchemaMapping mapping;
+    TString error;
+    UNIT_ASSERT_C(mapping.Deserialize(json, error), error);
+    UNIT_ASSERT_VALUES_EQUAL(mapping.Items.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(mapping.Items.front().ObjectPath, "dir3");
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
@@ -2433,6 +2475,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
     Y_UNIT_TEST(ExportEmptyDirectories) {
         ExportEmptyDirectoriesImpl<NExport::TExportToFsSettings>(*this);
     }
+    Y_UNIT_TEST(ExportEmptyDirectoriesWithCliFilters) {
+        ExportEmptyDirectoriesWithCliFiltersImpl<NExport::TExportToFsSettings>(*this);
+    }
     Y_UNIT_TEST(ExportWholeDatabase) {
         ExportWholeDatabaseImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
@@ -2609,6 +2654,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
     }
     Y_UNIT_TEST(ExportEmptyDirectories) {
         ExportEmptyDirectoriesImpl<NExport::TExportToS3Settings>(*this);
+    }
+    Y_UNIT_TEST(ExportEmptyDirectoriesWithCliFilters) {
+        ExportEmptyDirectoriesWithCliFiltersImpl<NExport::TExportToS3Settings>(*this);
     }
 
     Y_UNIT_TEST_TWIN(ExportRecursiveWithoutDestinationPrefix, IsOlap) {

@@ -32,6 +32,9 @@ message TCreateExportRequest {
         Ydb.Export.ExportToS3Settings ExportToS3Settings = 3;
         Ydb.Export.ExportToFsSettings ExportToFsSettings = 4;
     }
+    // An item can inherit its prefix during directory traversal. Unlike a
+    // caller-specified destination, this prefix may move in the schema mapping.
+    repeated uint32 InheritedDestinationItems = 5;
 }
 
 message TEvCreateExportRequest {

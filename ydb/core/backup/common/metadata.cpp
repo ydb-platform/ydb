@@ -167,11 +167,12 @@ TString TMetadata::Serialize() const {
 
 TMetadata TMetadata::Deserialize(const TString& metadata) {
     NJson::TJsonValue json;
-    NJson::ReadJsonTree(metadata, &json);
+    const bool parsed = NJson::ReadJsonTree(metadata, &json);
     const auto& value = json["version"];
 
     TMetadata result;
     if (json.Has("object_type")) {
+        Y_ENSURE(parsed, "Invalid backup object metadata JSON");
         Y_ENSURE(json["object_type"].GetStringSafe() == "directory", "Unsupported backup object type");
         result.DirectoryAttributes.emplace();
         if (json.Has("user_attributes")) {

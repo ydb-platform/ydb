@@ -659,10 +659,13 @@ void ExportEmptyDirectoriesWithCliFiltersImpl(TBackupTestFixture& f) {
     flags.SetEnableFsBackups(true);
     flags.SetEnableDirectoryExport(true);
     const TString root = "/Root/RecursiveFolderProcessing/dir1/dir2";
+    const auto repeated = f.YdbSchemeClient().MakeDirectory(root + "/abab").GetValueSync();
+    UNIT_ASSERT_C(repeated.IsSuccess(), repeated.GetIssues().ToString());
     auto settings = traits.MakeExportSettings(f, root);
     settings.AppendItem(typename TExportSettings::TItem{.Src = root});
     settings.AppendExcludeRegexp(".*");
     settings.AppendExcludeRegexp("^/Root/RecursiveFolderProcessing/dir1/dir2(/Table2)?$");
+    settings.AppendExcludeRegexp(R"(/(ab)\1$)");
     // A node unaware of the CLI capability rejects the same body without
     // scheduling an export, even if it usually handles relative filters.
     f.WaitOpStatus(traits.Export(f, settings), EStatus::BAD_REQUEST);

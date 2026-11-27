@@ -168,13 +168,15 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         auto [runtime, server, sender] = CreateServer();
         auto* uploader = RegisterUploader(runtime);
         const auto service = NLongTxService::MakeLongTxServiceID(runtime.GetNodeId());
-        for (ui64 cookie : {1u, 2u}) {
-            runtime.Send(new IEventHandle(service, sender,
+        const TActorId requesters[] = {sender, runtime.AllocateEdgeActor()};
+        ui64 cookie = 0;
+        for (const auto requester : requesters) {
+            runtime.Send(new IEventHandle(service, requester,
                 new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot("/Root"),
-                0, cookie, nullptr, TTraceId::NewTraceId(11, 4095)));
+                0, ++cookie, nullptr, TTraceId::NewTraceId(11, 4095)));
         }
-        for (size_t i = 0; i < 2; ++i) {
-            const auto response = runtime.GrabEdgeEventRethrow<NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
+        for (const auto requester : requesters) {
+            const auto response = runtime.GrabEdgeEventRethrow<NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult>(requester);
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, Ydb::StatusIds::SUCCESS);
         }
         runtime.SimulateSleep(TDuration::Seconds(1));

@@ -351,7 +351,7 @@ message TEvHandshake {
     // Older controllers compare complete serialized schema reports.
     optional bool SupportsIndexMetadata = 2 [default = false];
     optional bool SupportsSourceOffsets = 3 [default = false];
-    optional bool SupportsFulltextIndexMetadata = 4 [default = false];
+    optional uint64 SchemaCapabilities = 4;
 }
 
 message TEvStatus {
@@ -400,8 +400,9 @@ message TIndexBuildState {
     repeated TAssignment Assignments = 3;
     optional uint64 ReadyTxId = 4;
     optional uint64 SnapshotTxId = 5;
-    // Shared by the backing-table targets of one fulltext/JSON index.
+    // Shared by the backing-table targets of one index.
     optional uint64 IndexGroupId = 6;
+    optional uint64 DependsOnTargetId = 7;
 }
 
 message TEvIndexBuildProgress {

@@ -8106,7 +8106,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             for (ui32 outcome = 0; outcome != 3; ++outcome) {
                 TPortManager ports;
                 NKikimrConfig::TFeatureFlags flags;
-                flags.SetEnableFulltextIndexReplication(true);
+                flags.SetEnableIndexCreateReplication(true);
                 flags.SetEnableCompactFulltextIndex(Compact);
                 TServer::TPtr server = new TServer(TServerSettings(ports.GetPort(), {}, DefaultPQConfig())
                     .SetUseRealThreads(false).SetDomainName("Root").SetFeatureFlags(flags));

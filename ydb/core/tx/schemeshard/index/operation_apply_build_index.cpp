@@ -147,7 +147,12 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         if (!indexName.empty()) {
             TPath index = table.Child(indexName);
             index.Base()->PathId.ToProto(op->MutableOutcome()->MutableApply()->MutableIndexPathId());
-            if (config.GetForReplication() && !config.GetSnapshotTxId() && !config.GetBuildIndexId()) {
+            // A replica build can use source CDC without creating a local snapshot.
+            if (config.GetForReplication()
+                && !context.SS->HasTableSnapshot(table.Base()->PathId, TTxId(config.GetSnapshotTxId())))
+            {
+                op->ClearSnapshotTxId();
+                op->ClearBuildIndexId();
                 op->MutableOutcome()->SetSkipLocalSnapshot(true);
             }
         }
@@ -274,7 +279,12 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         if (!indexName.empty()) {
             TPath index = table.Child(indexName);
             index.Base()->PathId.ToProto(op->MutableOutcome()->MutableCancel()->MutableIndexPathId());
-            if (config.GetForReplication() && !config.GetSnapshotTxId() && !config.GetBuildIndexId()) {
+            // A replica build can use source CDC without creating a local snapshot.
+            if (config.GetForReplication()
+                && !context.SS->HasTableSnapshot(table.Base()->PathId, TTxId(config.GetSnapshotTxId())))
+            {
+                op->ClearSnapshotTxId();
+                op->ClearBuildIndexId();
                 op->MutableOutcome()->SetSkipLocalSnapshot(true);
             }
         }

@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
     Y_UNIT_TEST_TWIN(PreservesExistingFulltextRowIdSequence, Compact) {
         TFeatureFlags flags;
-        flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
+        flags.FeatureFlags.SetEnableIndexCreateReplication(true);
         flags.FeatureFlags.SetEnableCompactFulltextIndex(Compact);
         TEnv env(flags, true, ERuntimeMode::Simulated);
         NYdb::NTable::TTableClient client(env.GetDriver());
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
     Y_UNIT_TEST(ReportsPendingSourceIndexAndClearsStatus) {
         TFeatureFlags flags;
-        flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
+        flags.FeatureFlags.SetEnableIndexCreateReplication(true);
         TEnv env(flags, true, ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         NYdb::NTable::TTableClient client(env.GetDriver());
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(table), NYdb::NTable::TDescribeTableSettings()),
             0, request->Cookie));
         const auto waiting = runtime.GrabEdgeEvent<TEvPrivate::TEvSourceStatus>(env.GetSender());
-        UNIT_ASSERT_STRING_CONTAINS(waiting->Get()->Issue, "Waiting for source fulltext/JSON index builds");
+        UNIT_ASSERT_STRING_CONTAINS(waiting->Get()->Issue, "Waiting for source index builds");
         UNIT_ASSERT_STRING_CONTAINS(waiting->Get()->Issue, "/Root/Source: idx");
         runtime.Send(creator, env.GetSender(), new TEvents::TEvWakeup());
         const auto retry = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTableRequest>(proxy);
@@ -1736,7 +1736,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     Y_UNIT_TEST_TWIN(FulltextAttachment, Compact) {
         for (bool mismatch : {false, true}) {
             TFeatureFlags flags;
-            flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
+            flags.FeatureFlags.SetEnableIndexCreateReplication(true);
             flags.FeatureFlags.SetEnableCompactFulltextIndex(Compact);
             TEnv env(flags);
             NYdb::NTable::TTableClient client(env.GetDriver());

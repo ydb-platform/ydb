@@ -26,24 +26,17 @@ public:
     struct TIndexTableConfig: public TConfigBase {
         using TPtr = std::shared_ptr<TIndexTableConfig>;
 
-        TIndexTableConfig(const TString& srcPath, const TString& dstPath, bool srcIsImpl, bool rowIdIndex = false, bool fulltextOrJsonIndex = false)
+        TIndexTableConfig(const TString& srcPath, const TString& dstPath, bool srcIsImpl)
             : TConfigBase(ETargetKind::IndexTable, srcPath, dstPath)
             , SrcIsImpl(srcIsImpl)
-            , RowIdIndex(rowIdIndex)
-            , FulltextOrJsonIndex(fulltextOrJsonIndex)
         {}
 
         bool GetSrcIsImpl() const override {
             return SrcIsImpl;
         }
 
-        bool IsRowIdIndex() const override { return RowIdIndex; }
-        bool IsFulltextOrJsonIndex() const override { return FulltextOrJsonIndex; }
-
     private:
         const bool SrcIsImpl;
-        const bool RowIdIndex;
-        const bool FulltextOrJsonIndex;
     };
 
     explicit TTargetIndexTable(TReplication* replication,

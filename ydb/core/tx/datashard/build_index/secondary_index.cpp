@@ -541,7 +541,7 @@ public:
             !(columnBuildSettings.columnSize() == 1
                 && columnBuildSettings.column(0).GetColumnName() == NTableIndex::NFulltext::RowIdColumn
                 && (!tableInfo.GetSchemaChangesCdcStreams().empty()
-                    || AppData()->FeatureFlags.GetEnableFulltextIndexReplication()))) {
+                    || AppData()->FeatureFlags.GetEnableIndexCreateReplication()))) {
         Y_ENSURE(columnBuildSettings.columnSize() > 0);
         UploadColumnsTypes = BuildTypes(tableInfo, columnBuildSettings);
         UploadMode = NTxProxy::EUploadRowsMode::UpsertIfExists;

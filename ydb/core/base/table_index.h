@@ -49,6 +49,12 @@ inline bool IsCompactFulltextIndex(NKikimrSchemeOp::EIndexType type) {
         || type == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact;
 }
 
+inline bool IsOnlineReplicationIndex(NKikimrSchemeOp::EIndexType type) {
+    return type == NKikimrSchemeOp::EIndexTypeGlobal
+        || type == NKikimrSchemeOp::EIndexTypeGlobalUnique
+        || IsCompactFulltextIndex(type);
+}
+
 inline bool IsIntegerPrimaryKeyType(NScheme::TTypeId type) {
     return type == NScheme::NTypeIds::Uint64 || type == NScheme::NTypeIds::Int64
         || type == NScheme::NTypeIds::Uint32 || type == NScheme::NTypeIds::Int32;

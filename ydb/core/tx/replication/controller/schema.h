@@ -101,10 +101,6 @@ struct TControllerSchema: NIceDb::Schema {
         };
         struct IndexBuild: Column<20, NScheme::NTypeIds::String> {};
         struct SrcIsImpl: Column<21, NScheme::NTypeIds::Bool> {};
-        struct RowIdIndex: Column<22, NScheme::NTypeIds::Bool> {
-            static constexpr bool Default = false;
-        };
-        struct FulltextOrJsonIndex: Column<23, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<ReplicationId, Id>;
         using TColumns = TableColumns<
@@ -128,9 +124,7 @@ struct TControllerSchema: NIceDb::Schema {
             PendingDstPathOwnerId,
             PendingDstPathLocalId,
             IndexBuild,
-            SrcIsImpl,
-            RowIdIndex,
-            FulltextOrJsonIndex
+            SrcIsImpl
         >;
     };
 
@@ -176,11 +170,11 @@ struct TControllerSchema: NIceDb::Schema {
         struct Applied: Column<5, NScheme::NTypeIds::Bool> {};
         struct Completed: Column<6, NScheme::NTypeIds::Bool> {};
         struct Offset: Column<7, NScheme::NTypeIds::Uint64> {};
-        struct IndexMetadata: Column<8, NScheme::NTypeIds::Bool> {};
-        struct FulltextIndexMetadata: Column<9, NScheme::NTypeIds::Bool> {};
+        struct IndexMetadata: Column<8, NScheme::NTypeIds::Bool> {}; // Legacy.
+        struct SchemaCapabilities: Column<10, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
-        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Reported, Applied, Completed, Offset, IndexMetadata, FulltextIndexMetadata>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Reported, Applied, Completed, Offset, IndexMetadata, SchemaCapabilities>;
     };
 
     // Checkpoints outlive live Workers rows: re-registration must retain the

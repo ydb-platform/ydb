@@ -5,17 +5,22 @@
 
 namespace NKikimr::NReplication {
 
-bool HasFulltextIndexMetadata(const NKikimrReplication::TSchemaChange& schema) {
+ui64 GetSchemaCapabilities(const NKikimrReplication::TSchemaChange& schema) {
+    if (!schema.HasIndexes()) {
+        return 0;
+    }
     for (const auto& index : schema.GetIndexes().GetItems()) {
         if (index.HasFulltextSettings()) {
-            return true;
+            return SchemaIndexMetadata | SchemaFulltextIndexSettings;
         }
     }
-    return false;
+    return SchemaIndexMetadata;
 }
 
-void ClearFulltextIndexMetadata(NKikimrReplication::TSchemaChange& schema) {
-    if (schema.HasIndexes()) {
+void FilterSchemaMetadata(NKikimrReplication::TSchemaChange& schema, ui64 capabilities) {
+    if (!(capabilities & SchemaIndexMetadata)) {
+        schema.ClearIndexes();
+    } else if (!(capabilities & SchemaFulltextIndexSettings) && schema.HasIndexes()) {
         for (auto& index : *schema.MutableIndexes()->MutableItems()) {
             index.ClearFulltextSettings();
         }

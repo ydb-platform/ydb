@@ -529,7 +529,7 @@ void TController::CreateSession(ui32 nodeId, const TActorContext& ctx) {
 
     auto ev = MakeHolder<TEvService::TEvHandshake>(TabletID(), Executor()->Generation());
     ev->Record.SetSupportsIndexMetadata(true);
-    ev->Record.SetSupportsFulltextIndexMetadata(true);
+    ev->Record.SetSchemaCapabilities(SchemaIndexMetadata | SchemaFulltextIndexSettings);
     ev->Record.SetSupportsSourceOffsets(true);
     ui32 flags = 0;
     if (SelfId().NodeId() != nodeId) {
@@ -1056,11 +1056,7 @@ void TController::ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id) {
     auto result = MakeHolder<TEvService::TEvSchemaChangeResult>();
     id.Serialize(*result->Record.MutableWorker());
     result->Record.MutableSchema()->CopyFrom(barrier->second.Schema);
-    if (!barrier->second.IndexMetadataWorkers.contains(id)) {
-        result->Record.MutableSchema()->ClearIndexes();
-    } else if (!barrier->second.FulltextIndexMetadataWorkers.contains(id)) {
-        ClearFulltextIndexMetadata(*result->Record.MutableSchema());
-    }
+    FilterSchemaMetadata(*result->Record.MutableSchema(), state.GetWorkerSchemaCapabilities(id));
 
     result->Record.SetOffset(offset->second);
 

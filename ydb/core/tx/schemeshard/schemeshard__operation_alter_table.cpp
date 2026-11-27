@@ -931,7 +931,7 @@ public:
                 const bool altersExistingColumn = table->GetColumnIdByNameSlow(column.GetName())
                     != TTableInfo::InvalidColumnId;
                 const bool fulltextRowIdProvision = Transaction.GetInternal()
-                    && AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
+                    && AppData()->FeatureFlags.GetEnableIndexCreateReplication()
                     && Transaction.GetLockGuard().GetOwnerTxId()
                     && !altersExistingColumn && column.GetIsBuildInProgress()
                     && column.GetName() == NTableIndex::NFulltext::RowIdColumn

@@ -854,7 +854,8 @@ bool TCheckSchemeTxUnit::CheckFinalizeBuildIndex(TActiveTransaction *activeTx) {
     const auto table = DataShard.FindUserTable(pathId);
     bool sourceSnapshot = false;
     if (table && !finalize.GetSnapshotStep() && !finalize.GetSnapshotTxId()
-        && !finalize.GetBuildIndexId() && finalize.HasOutcome()
+        && !finalize.GetBuildIndexId() && finalize.GetOutcome().GetSkipLocalSnapshot()
+        && (finalize.GetOutcome().HasApply() || finalize.GetOutcome().HasCancel())
         && table->ReplicationConfig.Mode != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE)
     {
         const auto& outcome = finalize.GetOutcome();
@@ -864,9 +865,8 @@ bool TCheckSchemeTxUnit::CheckFinalizeBuildIndex(TActiveTransaction *activeTx) {
         table->GetSchema(schema);
         for (const auto& index : schema.GetTableIndexes()) {
             if (TPathId(index.GetPathOwnerId(), index.GetLocalPathId()) == indexId) {
-                sourceSnapshot = NTableIndex::IsFulltextOrJsonIndex(index.GetType())
-                    || (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique && index.KeyColumnNamesSize() == 1
-                        && index.GetKeyColumnNames(0) == NTableIndex::NFulltext::RowIdColumn);
+                sourceSnapshot = NTableIndex::IsOnlineReplicationIndex(index.GetType());
+                break;
             }
         }
     }

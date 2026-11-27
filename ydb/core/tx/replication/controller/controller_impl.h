@@ -73,12 +73,16 @@ private:
         NKikimrReplication::TSchemaChange Schema;
         THashSet<TWorkerId> ExpectedWorkers;
         THashSet<TWorkerId> ReportedWorkers;
-        THashSet<TWorkerId> IndexMetadataWorkers;
-        THashSet<TWorkerId> FulltextIndexMetadataWorkers;
+        THashMap<TWorkerId, ui64> WorkerSchemaCapabilities;
         THashSet<TWorkerId> AppliedWorkers;
         THashSet<TWorkerId> CompletedWorkers;
         THashMap<TWorkerId, ui64> WorkerOffsets;
         ui64 DstAlterTxId = 0;
+
+        ui64 GetWorkerSchemaCapabilities(const TWorkerId& id) const {
+            const auto it = WorkerSchemaCapabilities.find(id);
+            return it != WorkerSchemaCapabilities.end() ? it->second : 0;
+        }
 
         // These IDs remain in AssignedTxIds after their target-only commits.
         // The next ordinary global commit retires them across all targets.

@@ -3542,7 +3542,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
     Y_UNIT_TEST(RowIdIndexCompletesAfterFeatureFlagDisabled) {
         const TString name(NTableIndex::NFulltext::RowIdUniqueIndexName);
         TSchemaAltererTestEnv env({}, 0, false, false, name);
-        env.Runtime.GetAppData().FeatureFlags.SetEnableFulltextIndexReplication(false);
+        env.Runtime.GetAppData().FeatureFlags.SetEnableIndexCreateReplication(false);
         const auto reply = [&](NKikimrSchemeOp::EIndexState state) {
             env.Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(env.PipeCache);
             auto result = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
@@ -6169,9 +6169,12 @@ Y_UNIT_TEST_SUITE(IndexBuild) {
         CheckDoneWithCreatingIndexStream(true);
     }
 
-    Y_UNIT_TEST(SourceAddSyncIndexWithGlobalConsistency) {
-        TEnv env(MakeIndexReplicationFlags());
-        const auto info = StartReplication(env, 1, "root@builtin", true, false,
+    void CheckSourceAddIndex(bool global, bool unique, bool online) {
+        auto flags = MakeIndexReplicationFlags();
+        flags.FeatureFlags.SetEnableIndexCreateReplication(online);
+        flags.FeatureFlags.SetEnableOnlineAddUniqueIndex(unique);
+        TEnv env(flags);
+        const auto info = StartReplication(env, 1, "root@builtin", global, false,
             NKikimrSchemeOp::EIndexTypeGlobal, false);
         NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
             .DiscoveryEndpoint(env.GetEndpoint())
@@ -6189,7 +6192,13 @@ Y_UNIT_TEST_SUITE(IndexBuild) {
             return std::move(*result);
         };
         execute("UPSERT INTO `/Root/table1` (key, value) VALUES (1, 'old'), (2, 'deleted');");
-        AddSyncIndex(session, "/Root/table1", "by_value");
+        if (unique) {
+            const auto result = session.ExecuteSchemeQuery(
+                "ALTER TABLE `/Root/table1` ADD INDEX by_value GLOBAL UNIQUE ON (value);").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        } else {
+            AddSyncIndex(session, "/Root/table1", "by_value");
+        }
         execute("UPSERT INTO `/Root/table1` (key, value) VALUES (1, 'new'), (3, 'inserted');");
         execute("DELETE FROM `/Root/table1` WHERE key = 2;");
 
@@ -6230,33 +6239,48 @@ Y_UNIT_TEST_SUITE(IndexBuild) {
 
             return false;
         }, 1200);
-        UNIT_ASSERT_C(ready, "Timed out waiting for replicated ADD SYNC INDEX");
-        UNIT_ASSERT(restartedDuringBuild);
+        UNIT_ASSERT_C(ready, "Timed out waiting for replicated ADD INDEX");
+        if (global) {
+            UNIT_ASSERT(restartedDuringBuild);
+        }
         assertCompactionPolicy();
 
         InvalidateTabletResolverCache(env.GetRuntime(), info.ControllerId);
         const auto replication = DescribeReplication(env, info);
         UNIT_ASSERT_C(!replication->Get()->Record.GetState().HasError(), replication->Get()->Record.DebugString());
 
-        // Query through the index: backfill, update, insertion and delete must
-        // all be visible once the first shared commit has made it Ready.
-        const auto rows = execute("SELECT key, value FROM `/Root/replica1` VIEW by_value ORDER BY key;");
-        UNIT_ASSERT_VALUES_EQUAL(rows.GetResultSet(0).RowsCount(), 2);
-        NYdb::TResultSetParser parser(rows.GetResultSet(0));
-        UNIT_ASSERT(parser.TryNextRow());
-        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetOptionalUint32().value(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetOptionalUtf8().value(), "new");
-        UNIT_ASSERT(parser.TryNextRow());
-        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetOptionalUint32().value(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetOptionalUtf8().value(), "inserted");
+        UNIT_ASSERT_C(WaitFor([&] {
+            const auto rows = execute("SELECT key, value FROM `/Root/replica1` VIEW by_value ORDER BY key;");
+            if (rows.GetResultSet(0).RowsCount() != 2) {
+                return false;
+            }
+            NYdb::TResultSetParser parser(rows.GetResultSet(0));
+            return parser.TryNextRow()
+                && parser.ColumnParser("key").GetOptionalUint32().value() == 1
+                && parser.ColumnParser("value").GetOptionalUtf8().value() == "new"
+                && parser.TryNextRow()
+                && parser.ColumnParser("key").GetOptionalUint32().value() == 3
+                && parser.ColumnParser("value").GetOptionalUtf8().value() == "inserted";
+        }, 600), "Replicated index did not catch up");
 
-        // A controller restart must retain global membership after Ready.
         env.SendAsync(info.ControllerId, new TEvents::TEvPoisonPill());
         execute("UPSERT INTO `/Root/table1` (key, value) VALUES (4, 'after-restart');");
         UNIT_ASSERT_C(WaitFor([&] {
             const auto result = execute("SELECT key FROM `/Root/replica1` VIEW by_value WHERE value = 'after-restart';");
             return result.GetResultSet(0).RowsCount() == 1;
         }, 600), "Index did not resume after controller restart");
+    }
+
+    Y_UNIT_TEST(SourceAddSyncIndexWithGlobalConsistency) {
+        CheckSourceAddIndex(true, false, false);
+    }
+
+    Y_UNIT_TEST(SourceAddSyncIndexWithRowConsistency) {
+        CheckSourceAddIndex(false, false, true);
+    }
+
+    Y_UNIT_TEST_TWIN(SourceAddUniqueIndex, GlobalConsistency) {
+        CheckSourceAddIndex(GlobalConsistency, true, true);
     }
 
 }

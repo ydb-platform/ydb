@@ -180,8 +180,9 @@ public:
 
         ActorId = ev->Sender;
         Generation = generation;
-        SupportsIndexMetadata = ev->Get()->Record.GetSupportsIndexMetadata();
-        SupportsFulltextIndexMetadata = ev->Get()->Record.GetSupportsFulltextIndexMetadata();
+        const auto& handshake = ev->Get()->Record;
+        SchemaCapabilities = handshake.HasSchemaCapabilities() ? handshake.GetSchemaCapabilities()
+            : (handshake.GetSupportsIndexMetadata() ? ui64(SchemaIndexMetadata) : 0);
         SupportsSourceOffsets = ev->Get()->Record.GetSupportsSourceOffsets();
 
         auto status = MakeHolder<TEvService::TEvStatus>();
@@ -527,11 +528,7 @@ public:
         }
 
         id.Serialize(*ev->Get()->Record.MutableWorker());
-        if (!SupportsIndexMetadata) {
-            ev->Get()->Record.MutableSchema()->ClearIndexes();
-        } else if (!SupportsFulltextIndexMetadata) {
-            ClearFulltextIndexMetadata(*ev->Get()->Record.MutableSchema());
-        }
+        FilterSchemaMetadata(*ev->Get()->Record.MutableSchema(), SchemaCapabilities);
 
         ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
     }
@@ -570,8 +567,7 @@ private:
 private:
     TActorId ActorId;
     ui64 Generation;
-    bool SupportsIndexMetadata = false;
-    bool SupportsFulltextIndexMetadata = false;
+    ui64 SchemaCapabilities = 0;
     bool SupportsSourceOffsets = false;
     const ui64 ControllerTabletId;
     THashMap<TWorkerId, TWorkerInfo> Workers;

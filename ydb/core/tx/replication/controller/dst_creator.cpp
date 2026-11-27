@@ -300,11 +300,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         const auto description = result.GetTableDescription();
         const auto& sourceTable = NYdb::TProtoAccessor::GetProto(description);
         if (Kind == TReplication::ETargetKind::Table
-            && AppData()->FeatureFlags.GetEnableFulltextIndexReplication())
+            && AppData()->FeatureFlags.GetEnableIndexCreateReplication())
         {
-            const auto pendingIndexes = GetBuildingFulltextIndexes(sourceTable);
+            const auto pendingIndexes = GetBuildingReplicationIndexes(sourceTable);
             if (!pendingIndexes.empty()) {
-                ReportStatus(TStringBuilder() << "Waiting for source fulltext/JSON index builds on "
+                ReportStatus(TStringBuilder() << "Waiting for source index builds on "
                     << SrcPath << ": " << JoinSeq(", ", pendingIndexes));
                 return Retry();
             }
@@ -313,12 +313,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         Ydb::Table::CreateTableRequest scheme;
         description.SerializeTo(scheme);
-        if (DiscoveredIndexes) {
-            // A specialized index added after discovery has no bootstrap build.
+        if (DiscoveredIndexes && AppData()->FeatureFlags.GetEnableIndexCreateReplication()) {
+            // An index added after discovery has no bootstrap target.
             // Its schema barrier will create the index and register its targets.
             for (const auto& source : sourceTable.indexes()) {
                 if (DiscoveredIndexes->contains(source.name())
-                    || (!IsFulltextIndex(source) && !IsFulltextRowIdIndex(source)))
+                    || !IsOnlineReplicationIndex(source))
                 {
                     continue;
                 }
@@ -1334,11 +1334,6 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
             replication->GetId(), target->GetId(), target->GetSrcPath(), target->GetDstPath(), std::move(topicMirror));
     }
 
-    // Online specialized indexes initialize from their own CDC scan even when
-    // the base table was bootstrapped without one. Their new backing tables
-    // must not be treated as destinations awaiting an external import.
-    const bool scanSpecializedIndex = target->IsIndexBuild()
-        && (target->GetConfig()->IsFulltextOrJsonIndex() || target->GetConfig()->IsRowIdIndex());
     std::optional<THashSet<TString>> discoveredIndexes;
     if (target->GetKind() == TReplication::ETargetKind::Table && replication->GetConfig().GetInitialScan()) {
         discoveredIndexes.emplace();
@@ -1355,7 +1350,7 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
         replication->GetDatabase(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
         EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()),
-        replication->GetConfig().GetInitialScan() || scanSpecializedIndex, replication->GetDesiredState(),
+        replication->GetConfig().GetInitialScan() || target->IsIndexBuild(), replication->GetDesiredState(),
         IsSwitchover(replication->GetConfig()), std::move(discoveredIndexes),
         target->GetStreamSchemaChanges().value_or(false));
 }

@@ -14,42 +14,29 @@ inline bool EqualFulltextSettings(const Ydb::Table::FulltextIndexSettings& left,
     return google::protobuf::util::MessageDifferencer::Equivalent(left, right);
 }
 
-inline bool IsFulltextRowIdIndex(const NKikimrSchemeOp::TIndexDescription& index) {
-    return index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique
-        && index.KeyColumnNamesSize() == 1
-        && index.GetKeyColumnNames(0) == NTableIndex::NFulltext::RowIdColumn;
-}
-
-inline bool IsFulltextRowIdIndex(const Ydb::Table::TableIndexDescription& index) {
-    return index.has_global_unique_index() && index.index_columns_size() == 1
-        && index.index_columns(0) == NTableIndex::NFulltext::RowIdColumn;
-}
-
 inline bool IsFulltextRowIdIndex(const NKikimrReplication::TSchemaChange::TIndex& index) {
     return index.GetType() == "GlobalUnique" && index.IndexColumnsSize() == 1
         && index.GetIndexColumns(0) == NTableIndex::NFulltext::RowIdColumn;
 }
 
-inline bool IsFulltextIndex(const Ydb::Table::TableIndexDescription& index) {
-    return index.has_global_fulltext_plain_index()
+inline bool IsOnlineReplicationIndex(const Ydb::Table::TableIndexDescription& index) {
+    return index.has_global_index()
+        || index.has_global_unique_index()
+        || index.has_global_fulltext_plain_index()
         || index.has_global_fulltext_relevance_index()
         || index.has_global_json_index();
 }
 
-inline TVector<TString> GetBuildingFulltextIndexes(const Ydb::Table::DescribeTableResult& table) {
+inline TVector<TString> GetBuildingReplicationIndexes(const Ydb::Table::DescribeTableResult& table) {
     TVector<TString> result;
     for (const auto& index : table.indexes()) {
-        if ((IsFulltextIndex(index) || IsFulltextRowIdIndex(index))
+        if (IsOnlineReplicationIndex(index)
             && index.status() != Ydb::Table::TableIndexDescription::STATUS_READY)
         {
             result.emplace_back(index.name());
         }
     }
     return result;
-}
-
-inline bool HasBuildingFulltextIndex(const Ydb::Table::DescribeTableResult& table) {
-    return !GetBuildingFulltextIndexes(table).empty();
 }
 
 inline NKikimrSchemeOp::EIndexType GetSchemaIndexType(const NKikimrReplication::TSchemaChange::TIndex& index) {

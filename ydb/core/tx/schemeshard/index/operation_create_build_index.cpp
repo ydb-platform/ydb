@@ -115,16 +115,13 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     auto tableInfo = context.SS->Tables.at(table.Base()->PathId);
     const bool forReplication = op.GetForReplication();
     const auto& flags = AppData()->FeatureFlags;
-    const bool fulltextReplication = flags.GetEnableFulltextIndexReplication()
-        && flags.GetEnableCompactFulltextIndex() && flags.GetEnableFulltextIndexRowId();
-    const bool rowIdReplication = fulltextReplication
-        && GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalUnique
-        && indexDesc.KeyColumnNamesSize() == 1
-        && indexDesc.GetKeyColumnNames(0) == NTableIndex::NFulltext::RowIdColumn;
-    if (forReplication && (!tx.GetInternal() || !table.IsAsyncReplicaTable()
-        || (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobal
-            && !(fulltextReplication
-                && NTableIndex::IsCompactFulltextIndex(GetIndexType(indexDesc))) && !rowIdReplication) || op.GetIsRebuild()))
+    const auto indexType = GetIndexType(indexDesc);
+    const bool onlineReplication = flags.GetEnableIndexCreateReplication()
+        && NTableIndex::IsOnlineReplicationIndex(indexType);
+    const bool replicatedFulltext = forReplication && NTableIndex::IsCompactFulltextIndex(indexType);
+    if (forReplication && (!tx.GetInternal() || !table.IsAsyncReplicaTable() || op.GetIsRebuild()
+        || (indexType != NKikimrSchemeOp::EIndexTypeGlobal && !onlineReplication)
+        || (replicatedFulltext && (!flags.GetEnableCompactFulltextIndex() || !flags.GetEnableFulltextIndexRowId()))))
     {
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter,
             "Replication index creation requires an internal supported index on a replica")};
@@ -212,7 +209,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     TString errStr;
     if (!isRebuild) {
-        const bool replicatedFulltext = forReplication && NTableIndex::IsCompactFulltextIndex(GetIndexType(indexDesc));
         const bool replicatedRowId = replicatedFulltext && (tableInfo->KeyColumnIds.size() != 1
             || !NTableIndex::IsIntegerPrimaryKeyType(tableInfo->Columns.at(tableInfo->KeyColumnIds.front()).PType.GetTypeId()));
         if (replicatedFulltext) {
@@ -306,8 +302,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         auto& snapshot = *outTx.MutableInitiateBuildIndexMainTable();
         snapshot.SetTableName(table.LeafName());
-        snapshot.SetSkipLocalSnapshot(forReplication
-            && (NTableIndex::IsFulltextOrJsonIndex(GetIndexType(indexDesc)) || rowIdReplication));
+        snapshot.SetSkipLocalSnapshot(forReplication && onlineReplication);
 
         result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
     }
@@ -360,7 +355,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         return CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx, localSequences);
     };
 
-    const auto indexType = GetIndexType(indexDesc);
     switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:

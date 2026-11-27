@@ -508,6 +508,6 @@ message TFeatureFlags {
     optional bool EnableConsistentVectorIndexBuild = 405 [default = true];
     optional bool EnableReadSecretRpcHandler = 406 [default = false];
     optional bool EnableCdcKeyRangeHeartbeats = 407 [default = false];
-    // Enables backing-table replication for fulltext and JSON indexes.
-    optional bool EnableFulltextIndexReplication = 408 [default = false];
+    // Enables online index creation through source changefeeds in row and global replication.
+    optional bool EnableIndexCreateReplication = 408 [default = false];
 }

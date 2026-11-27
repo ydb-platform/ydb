@@ -120,17 +120,15 @@ public:
             DataShard.AddSchemaSnapshot(pathId, schemaVersion, op->GetStep(), op->GetTxId(), txc, ctx);
         }
 
-        if (schemeTx.HasCreateCdcStreamNotice() && AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
+        if (schemeTx.HasCreateCdcStreamNotice() && AppData()->FeatureFlags.GetEnableIndexCreateReplication()) {
             const auto& stream = schemeTx.GetCreateCdcStreamNotice().GetStreamDescription();
             if (stream.GetSchemaChanges()) {
                 NKikimrSchemeOp::TTableDescription schema;
                 tableInfo->GetSchema(schema);
                 for (const auto& index : schema.GetTableIndexes()) {
-                    const bool rowId = index.GetName() == NTableIndex::NFulltext::RowIdUniqueIndexName
-                        && index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique && index.KeyColumnNamesSize() == 1
-                        && index.GetKeyColumnNames(0) == NTableIndex::NFulltext::RowIdColumn;
                     if (index.GetState() == NKikimrSchemeOp::EIndexStateReady
-                        && (NTableIndex::IsFulltextOrJsonIndex(index.GetType()) || rowId))
+                        && (NTableIndex::IsOnlineReplicationIndex(index.GetType())
+                            || NTableIndex::IsFulltextOrJsonIndex(index.GetType())))
                     {
                         // Discovery precedes stream creation. Capture indexes
                         // finalized in between in the new stream's first record.

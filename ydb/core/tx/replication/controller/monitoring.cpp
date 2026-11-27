@@ -521,12 +521,12 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
             }
             table.Row(key.first, key.second, phase, barrier.Schema.GetSourceSchemaVersion(),
                 barrier.Schema.GetVersion().ShortDebugString(), barrier.ExpectedWorkers.size(), barrier.ReportedWorkers.size(),
-                barrier.IndexMetadataWorkers.size(), barrier.AppliedWorkers.size(), barrier.CompletedWorkers.size(), barrier.DstAlterTxId,
+                barrier.WorkerSchemaCapabilities.size(), barrier.AppliedWorkers.size(), barrier.CompletedWorkers.size(), barrier.DstAlterTxId,
                 TStringBuilder() << barrier.NextTargetFlushTxId << "/" << barrier.TargetFlushTxIds.size(), BlocksGlobalCommit(barrier));
         }
     }
     {
-        auto table = makeTable("Schema barrier workers", {"Replication", "Target", "Worker", "Reported", "Index metadata", "Applied", "Completed", "Offset"});
+        auto table = makeTable("Schema barrier workers", {"Replication", "Target", "Worker", "Reported", "Schema capabilities", "Applied", "Completed", "Offset"});
         for (const auto& [key, barrier] : SchemaBarriers) {
             if (!matches(key.first)) {
                 continue;
@@ -536,7 +536,7 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
             for (const auto& id : workers) {
                 auto offset = barrier.WorkerOffsets.find(id);
                 table.Row(key.first, key.second, id.WorkerId(), barrier.ReportedWorkers.contains(id),
-                    barrier.IndexMetadataWorkers.contains(id), barrier.AppliedWorkers.contains(id), barrier.CompletedWorkers.contains(id),
+                    barrier.GetWorkerSchemaCapabilities(id), barrier.AppliedWorkers.contains(id), barrier.CompletedWorkers.contains(id),
                     offset == barrier.WorkerOffsets.end() ? "unknown" : ToString(offset->second));
             }
         }
@@ -662,8 +662,8 @@ public:
         } else if (TableName == "SchemaBarrierWorkers") {
             return ReadTable<S::SchemaBarrierWorkers, S::SchemaBarrierWorkers::ReplicationId,
                 S::SchemaBarrierWorkers::TargetId, S::SchemaBarrierWorkers::WorkerId, S::SchemaBarrierWorkers::Reported,
-                S::SchemaBarrierWorkers::IndexMetadata, S::SchemaBarrierWorkers::Applied, S::SchemaBarrierWorkers::Completed,
-                S::SchemaBarrierWorkers::Offset>(db, {"Replication", "Target", "Worker", "Reported", "Index metadata", "Applied", "Completed", "Offset"});
+                S::SchemaBarrierWorkers::IndexMetadata, S::SchemaBarrierWorkers::SchemaCapabilities, S::SchemaBarrierWorkers::Applied, S::SchemaBarrierWorkers::Completed,
+                S::SchemaBarrierWorkers::Offset>(db, {"Replication", "Target", "Worker", "Reported", "Index metadata", "Schema capabilities", "Applied", "Completed", "Offset"});
         } else if (TableName == "IndexBuildWorkers") {
             return ReadTable<S::IndexBuildWorkers, S::IndexBuildWorkers::ReplicationId, S::IndexBuildWorkers::TargetId,
                 S::IndexBuildWorkers::WorkerId, S::IndexBuildWorkers::Progress>(db,

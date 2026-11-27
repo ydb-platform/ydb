@@ -457,15 +457,15 @@ Y_UNIT_TEST_SUITE(ServiceSchemaProtocol) {
             })json"));
             const auto first = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeReport>(edge);
             UNIT_ASSERT_VALUES_EQUAL(first->Get()->Record.GetSchema().HasIndexes(), supportsIndexes);
-            UNIT_ASSERT(!HasFulltextIndexMetadata(first->Get()->Record.GetSchema()));
+            UNIT_ASSERT(!(GetSchemaCapabilities(first->Get()->Record.GetSchema()) & SchemaFulltextIndexSettings));
             auto next = MakeHolder<TEvService::TEvHandshake>(42, 2);
             next->Record.SetSupportsIndexMetadata(!supportsIndexes);
-            next->Record.SetSupportsFulltextIndexMetadata(!supportsIndexes);
+            next->Record.SetSchemaCapabilities(!supportsIndexes ? SchemaIndexMetadata | SchemaFulltextIndexSettings : 0);
             runtime.Send(new IEventHandle(service, edge, next.Release()));
             runtime.GrabEdgeEvent<TEvService::TEvStatus>(edge);
             const auto replay = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeReport>(edge);
             UNIT_ASSERT_VALUES_EQUAL(replay->Get()->Record.GetSchema().HasIndexes(), !supportsIndexes);
-            UNIT_ASSERT_VALUES_EQUAL(HasFulltextIndexMetadata(replay->Get()->Record.GetSchema()), !supportsIndexes);
+            UNIT_ASSERT_VALUES_EQUAL(bool(GetSchemaCapabilities(replay->Get()->Record.GetSchema()) & SchemaFulltextIndexSettings), !supportsIndexes);
         }
     }
 }
@@ -513,7 +513,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         auto conflicting = enriched;
         conflicting.MutableIndexes()->MutableItems(0)->MutableFulltextSettings()->mutable_columns(0)->set_column("other");
         UNIT_ASSERT(!IsSameSchemaChange(enriched, conflicting));
-        ClearFulltextIndexMetadata(merged);
+        FilterSchemaMetadata(merged, SchemaIndexMetadata);
         UNIT_ASSERT_VALUES_EQUAL(merged.SerializeAsString(), legacy.SerializeAsString());
     }
 

@@ -73,13 +73,9 @@ public:
             DataShard.GetSnapshotManager().AddSnapshot(
                 txc.DB, key, params.GetSnapshotName(), flags, TDuration::Zero());
         } else {
-            // Specialized replica builds scan the source changefeed snapshot.
             Y_ENSURE(tableInfo->ReplicationConfig.Mode
                 != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
-            const auto& index = params.GetIndexDescription();
-            Y_ENSURE(NTableIndex::IsFulltextOrJsonIndex(index.GetType())
-                || (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique && index.KeyColumnNamesSize() == 1
-                    && index.GetKeyColumnNames(0) == NTableIndex::NFulltext::RowIdColumn));
+            Y_ENSURE(NTableIndex::IsOnlineReplicationIndex(params.GetIndexDescription().GetType()));
         }
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);

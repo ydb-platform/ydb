@@ -341,7 +341,7 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             auto* added = Alter.MutableAlterTable()->AddColumns();
             added->SetName(desired.GetName());
             added->SetType(desired.GetType());
-            if (AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
+            if (AppData()->FeatureFlags.GetEnableIndexCreateReplication()
                 && desired.GetName() == NTableIndex::NFulltext::RowIdColumn)
             {
                 const auto& flags = AppData()->FeatureFlags;
@@ -420,17 +420,20 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
         for (const auto& [name, index] : desired) {
             const auto indexType = GetSchemaIndexType(*index);
             const bool fulltext = NTableIndex::IsFulltextOrJsonIndex(indexType);
-            const bool rowId = IsFulltextRowIdIndex(*index);
-            if (index->GetType() == "GlobalSync" || fulltext || rowId) {
-                if (fulltext || rowId) {
-                    const auto& flags = AppData()->FeatureFlags;
-                    if (!flags.GetEnableFulltextIndexReplication() || !flags.GetEnableCompactFulltextIndex()
-                        || !flags.GetEnableFulltextIndexRowId())
-                    {
-                        error = TStringBuilder() << "Online fulltext/JSON replication requires fulltext replication, compact and row-id support: " << name;
+            const auto& flags = AppData()->FeatureFlags;
+            if (NTableIndex::IsOnlineReplicationIndex(indexType)) {
+                if (!flags.GetEnableIndexCreateReplication()
+                    && (indexType != NKikimrSchemeOp::EIndexTypeGlobal || !GlobalConsistency))
+                {
+                    error = TStringBuilder() << "Online index replication is disabled: " << name;
+                    return false;
+                }
+                if (fulltext) {
+                    if (!flags.GetEnableCompactFulltextIndex() || !flags.GetEnableFulltextIndexRowId()) {
+                        error = TStringBuilder() << "Online fulltext/JSON replication requires compact and row-id support: " << name;
                         return false;
                     }
-                    if (fulltext && (!NTableIndex::IsCompactFulltextIndex(indexType) || !index->HasFulltextSettings())) {
+                    if (!index->HasFulltextSettings()) {
                         error = TStringBuilder() << "Unsupported source fulltext/JSON index format or missing settings: " << name;
                         return false;
                     }
@@ -445,14 +448,14 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             }
 
             const auto& type = index->GetType();
-            if (index->HasFulltextSettings() || type.StartsWith("GlobalFulltext") || type.StartsWith("GlobalJson")) {
-                error = TStringBuilder() << "Unsupported fulltext/JSON index type '" << type << "': " << name;
+            if (fulltext || index->HasFulltextSettings() || type.StartsWith("GlobalFulltext") || type.StartsWith("GlobalJson")) {
+                error = TStringBuilder() << "Unsupported source fulltext/JSON index format '" << type << "': " << name;
                 return false;
             }
             // Keep the same filtering as initial destination creation. An
             // index excluded there does not become an ADD on a later snapshot.
             const bool asyncReplication = AppData()->FeatureFlags.GetEnableAsyncIndexReplication();
-            if (type == "GlobalUnique" || (type == "GlobalAsync" && asyncReplication)) {
+            if (type == "GlobalAsync" && asyncReplication) {
                 error = TStringBuilder() << "ADD INDEX replication is not supported: " << name;
                 return false;
             }
@@ -460,11 +463,6 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
 
         if (added) {
             const auto type = GetSchemaIndexType(*added);
-            if (!GlobalConsistency && !NTableIndex::IsFulltextOrJsonIndex(type) && !IsFulltextRowIdIndex(*added)) {
-                error = "ADD SYNC INDEX replication requires global consistency";
-                return false;
-            }
-
             if (NTableIndex::IsFulltextOrJsonIndex(type)
                 && type != NKikimrSchemeOp::EIndexTypeGlobalJson
                 && type != NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
@@ -547,12 +545,7 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             const auto state = index.GetState();
             const bool validState = state == NKikimrSchemeOp::EIndexStateWriteOnly
                 || state == NKikimrSchemeOp::EIndexStateReady;
-            // Existing reserved indexes must still complete after the creation
-            // feature flag is disabled. Validate their identity and shape.
-            const bool rowId = IsFulltextRowIdIndex(index);
-            if ((index.GetType() != NKikimrSchemeOp::EIndexTypeGlobal
-                && !NTableIndex::IsFulltextOrJsonIndex(index.GetType()) && !rowId) || !validState)
-            {
+            if (!NTableIndex::IsOnlineReplicationIndex(index.GetType()) || !validState) {
                 error = "Unexpected replica index type or state";
                 return NKikimrScheme::StatusPreconditionFailed;
             }
@@ -597,7 +590,7 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
         const auto& table = record.GetPathDescription().GetTable();
         RowIdColumnChange = false;
         PreparingRowIdSequence = false;
-        if (!ReadyIndex && AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
+        if (!ReadyIndex && AppData()->FeatureFlags.GetEnableIndexCreateReplication()) {
             for (const auto& column : DesiredSchema.GetColumns()) {
                 if (column.GetName() == NTableIndex::NFulltext::RowIdColumn) {
                     RowIdColumnChange = true;

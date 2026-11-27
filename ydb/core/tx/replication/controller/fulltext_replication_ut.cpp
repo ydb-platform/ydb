@@ -54,7 +54,7 @@ void RunReplication(const TReplicationSettings& settings) {
         dropDuringScan, prefixAndCovering, attach, raceDiscovery, splitMerge, dropDuringReadiness,
         pauseBeforeFinish, finishDuringInitialization, restartDuringCancellation] = settings;
     NTestHelpers::TFeatureFlags flags;
-    flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
+    flags.FeatureFlags.SetEnableIndexCreateReplication(true);
     flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
     flags.FeatureFlags.SetEnableCompactFulltextIndex(true);
     NTestHelpers::TEnv env(flags, true, stall || raceDiscovery || finish || splitMerge || dropDuringReadiness || finishDuringInitialization
@@ -660,7 +660,7 @@ void RunReplication(const TReplicationSettings& settings) {
 
 void RunUnsupportedOnlineIndex(bool sourceCompact, bool destinationCompact, bool destinationRowId, TStringBuf expectedError) {
     NTestHelpers::TFeatureFlags sourceFlags;
-    sourceFlags.FeatureFlags.SetEnableFulltextIndexReplication(true);
+    sourceFlags.FeatureFlags.SetEnableIndexCreateReplication(true);
     sourceFlags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
     sourceFlags.FeatureFlags.SetEnableCompactFulltextIndex(sourceCompact);
     auto destinationFlags = sourceFlags;
@@ -712,7 +712,7 @@ void RunUnsupportedOnlineIndex(bool sourceCompact, bool destinationCompact, bool
 Y_UNIT_TEST_SUITE(FulltextReplication) {
     Y_UNIT_TEST(SourceIndexWaitIsVisibleDuringDiscovery) {
         NTestHelpers::TFeatureFlags flags;
-        flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
+        flags.FeatureFlags.SetEnableIndexCreateReplication(true);
         NTestHelpers::TEnv env(flags, true, NTestHelpers::ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         NYdb::NQuery::TQueryClient client(env.GetDriver());
@@ -752,7 +752,7 @@ Y_UNIT_TEST_SUITE(FulltextReplication) {
             return env.Send<NMon::TEvRemoteHttpInfoRes>(controller,
                 new NMon::TEvRemoteHttpInfo(std::move(request)))->Get()->Html;
         };
-        const TString reason = "Waiting for source fulltext/JSON index builds on /Root/source: idx";
+        const TString reason = "Waiting for source index builds on /Root/source: idx";
         const auto deadline = TInstant::Now() + TDuration::Seconds(30);
         while (!monitoring().Contains(reason)) {
             UNIT_ASSERT_C(TInstant::Now() < deadline, "Source index wait was not visible in controller monitoring");
@@ -868,8 +868,8 @@ Y_UNIT_TEST_SUITE(FulltextReplication) {
     }
 
     Y_UNIT_TEST(OnlineBuildRequiresCompactAndRowIdSupport) {
-        RunUnsupportedOnlineIndex(true, false, true, "requires fulltext replication, compact and row-id support");
-        RunUnsupportedOnlineIndex(true, true, false, "requires fulltext replication, compact and row-id support");
+        RunUnsupportedOnlineIndex(true, false, true, "requires compact and row-id support");
+        RunUnsupportedOnlineIndex(true, true, false, "requires compact and row-id support");
         RunUnsupportedOnlineIndex(false, true, true, "Unsupported source fulltext/JSON index format");
     }
 

@@ -171,10 +171,10 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
             const auto description = result.GetTableDescription();
             const auto& sourceTable = NYdb::TProtoAccessor::GetProto(description);
-            if (AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
-                const auto pendingIndexes = GetBuildingFulltextIndexes(sourceTable);
+            if (AppData()->FeatureFlags.GetEnableIndexCreateReplication()) {
+                const auto pendingIndexes = GetBuildingReplicationIndexes(sourceTable);
                 if (!pendingIndexes.empty()) {
-                    ReportStatus(*it, TStringBuilder() << "Waiting for source fulltext/JSON index builds on "
+                    ReportStatus(*it, TStringBuilder() << "Waiting for source index builds on "
                         << path.first << ": " << JoinSeq(", ", pendingIndexes));
                     Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup(ui64(*it) + 1));
                     return;

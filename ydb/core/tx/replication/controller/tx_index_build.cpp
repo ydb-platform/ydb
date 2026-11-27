@@ -305,21 +305,10 @@ class TController::TTxIndexBuild: public TTxBase {
     }
 
     void Progress(NIceDb::TNiceDb& db) {
-        THashSet<std::pair<ui64, ui64>> cancelledRowIdBases;
-        for (const auto& [key, build] : Self->IndexBuilds) {
-            const auto replication = Self->Find(key.first);
-            const auto* target = replication ? replication->FindTarget(key.second) : nullptr;
-            if (!target || !target->GetConfig()->IsRowIdIndex()
-                || replication->GetDesiredState() != TReplication::EState::Done
-                || build.GetPhase() == TBuild::MAKING_READY || build.GetPhase() == TBuild::READY)
-            {
-                continue;
-            }
-            if (const auto* base = replication->FindBaseTableTarget(*target)) {
-                cancelledRowIdBases.emplace(key.first, base->GetId());
-            }
-        }
-
+        const auto needsCancellation = [](const TBuild& build) {
+            const auto phase = build.GetPhase();
+            return phase == TBuild::FILLING || phase == TBuild::JOINING || IsCancelledIndexBuild(build);
+        };
         for (auto& [key, build] : Self->IndexBuilds) {
             auto replication = Self->Find(key.first);
             auto* target = replication ? replication->FindTarget(key.second) : nullptr;
@@ -331,14 +320,13 @@ class TController::TTxIndexBuild: public TTxBase {
 
             const bool finishing = replication->GetDesiredState() == TReplication::EState::Done;
             const auto* base = replication->FindBaseTableTarget(*target);
-            const bool lostDependency = target->GetConfig()->IsFulltextOrJsonIndex() && base && build.GetPhase() != TBuild::READY
-                && cancelledRowIdBases.contains(std::make_pair(key.first, base->GetId()));
+            const auto dependency = Self->IndexBuilds.find({key.first, build.GetDependsOnTargetId()});
+            const bool lostDependency = build.GetPhase() != TBuild::READY
+                && dependency != Self->IndexBuilds.end() && needsCancellation(dependency->second);
             if (finishing && !IsCancelledIndexBuild(build) && !Self->HasActiveSchemaBarrier(key.first)
-                && (lostDependency || AnyOf(Self->GetIndexBuildGroup(key), [this](const auto& peerKey) {
-                    const auto phase = Self->IndexBuilds.at(peerKey).GetPhase();
-                    // Cancel the entire index if any backing table is unfinished.
-                    // Include CANCELLING so the decision survives iteration and recovery.
-                    return phase == TBuild::FILLING || phase == TBuild::JOINING || phase == TBuild::CANCELLING;
+                && (lostDependency || AnyOf(Self->GetIndexBuildGroup(key), [&](const auto& peerKey) {
+                    // A cancellation decision applies to every backing table in the group.
+                    return needsCancellation(Self->IndexBuilds.at(peerKey));
                 })))
             {
                 // Stop every writer before dropping its table. Persist this
@@ -541,30 +529,25 @@ void TController::StartIndexReady(const std::pair<ui64, ui64>& key, const TActor
     }
 
     const auto& build = IndexBuilds.at(key);
-    if (target->GetConfig()->IsFulltextOrJsonIndex() && build.GetPhase() != TBuild::CANCELLING) {
-        for (const auto* peer : replication->GetTargets()) {
-            if (!peer->GetConfig()->IsRowIdIndex() || replication->FindBaseTableTarget(*peer) != base) {
+    if (build.GetPhase() == TBuild::CANCELLING) {
+        // Cancel dependent builds before removing the backing table they need.
+        auto peer = IndexBuilds.lower_bound({key.first, 0});
+        for (; peer != IndexBuilds.end() && peer->first.first == key.first; ++peer) {
+            const auto& dependent = peer->second;
+            if (dependent.GetDependsOnTargetId() != key.second
+                || dependent.GetPhase() == TBuild::READY || dependent.GetPhase() == TBuild::CANCELLED)
+            {
                 continue;
             }
-            const auto dependency = IndexBuilds.find({key.first, peer->GetId()});
-            if (dependency != IndexBuilds.end() && dependency->second.GetPhase() != TBuild::READY) {
+            const auto* peerTarget = replication->FindTarget(peer->first.second);
+            if (peerTarget && peerTarget->GetDstState() != TReplication::EDstState::Removing) {
                 return;
             }
         }
-    }
-    if (target->GetConfig()->IsRowIdIndex() && build.GetPhase() == TBuild::CANCELLING) {
-        for (const auto* peer : replication->GetTargets()) {
-            if (!peer->GetConfig()->IsFulltextOrJsonIndex() || replication->FindBaseTableTarget(*peer) != base
-                || peer->GetDstState() == TReplication::EDstState::Removing)
-            {
-                continue;
-            }
-            const auto dependent = IndexBuilds.find({key.first, peer->GetId()});
-            if (dependent != IndexBuilds.end() && dependent->second.GetPhase() != TBuild::READY
-                && dependent->second.GetPhase() != TBuild::CANCELLED)
-            {
-                return;
-            }
+    } else if (build.HasDependsOnTargetId()) {
+        const auto dependency = IndexBuilds.find({key.first, build.GetDependsOnTargetId()});
+        if (dependency != IndexBuilds.end() && dependency->second.GetPhase() != TBuild::READY) {
+            return;
         }
     }
     if (build.HasIndexGroupId()) {

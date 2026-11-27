@@ -298,6 +298,11 @@ public:
             if (const auto lag = target->GetLag()) {
                 item.SetLagMilliSeconds(lag->MilliSeconds());
             }
+            if (target->GetIssue()) {
+                auto& issue = *item.AddIssues();
+                issue.set_severity(static_cast<uint32_t>(NYdb::NIssue::ESeverity::Error));
+                issue.set_message(target->GetIssue());
+            }
 
             if (PrivEv && HasInitialScan(target->GetKind())) {
                 const auto& result = PrivEv->Get()->Result;

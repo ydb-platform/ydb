@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import time
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import Mock, call
 
 import grpc
 import pytest
@@ -8,9 +9,35 @@ import ydb
 
 from common import BridgeKiKiMRTest
 
+from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
 from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.harness import daemon
+
+
+@pytest.mark.parametrize("first_status", [None, StatusIds.UNAVAILABLE, StatusIds.INTERNAL_ERROR])
+def test_failover_aborted_requires_ambiguous_write(first_status):
+    client, survivor = Mock(), Mock()
+    updates = [PileState(pile_name="r1", state=PileState.DISCONNECTED), PileState(pile_name="r2", state=PileState.PRIMARY)]
+    statuses = [StatusIds.ABORTED] if first_status is None else [first_status, StatusIds.ABORTED]
+    client.update_cluster_state.side_effect = [bridge.UpdateClusterStateResponse(operation={"status": s}) for s in statuses]
+
+    def state_at(generation, piles):
+        reply = bridge.GetClusterStateResponse(operation={"status": StatusIds.SUCCESS})
+        reply.operation.result.Pack(bridge.GetClusterStateResult(generation=generation, pile_states=piles))
+        return reply
+
+    if first_status == StatusIds.INTERNAL_ERROR:
+        initial = [PileState(pile_name="r1", state=PileState.PRIMARY), PileState(pile_name="r2", state=PileState.SYNCHRONIZED)]
+        survivor.get_cluster_state.side_effect = [state_at(1, initial), state_at(2, updates)]
+        BridgeKiKiMRTest().update_and_confirm_failover(client, survivor, updates, 1)
+        assert survivor.get_cluster_state.call_count == 2
+    else:
+        survivor.get_cluster_state.return_value = state_at(2, updates)
+        with pytest.raises(AssertionError):
+            BridgeKiKiMRTest().update_and_confirm_failover(client, survivor, updates, 1)
+        survivor.get_cluster_state.assert_not_called()
+    assert client.update_cluster_state.call_args_list == [call(updates, expected_generation=1)] * len(statuses)
 
 
 class TestBridgeBasic(BridgeKiKiMRTest):
@@ -73,8 +100,9 @@ class TestBridgeBasic(BridgeKiKiMRTest):
             PileState(pile_name="r1", state=PileState.DISCONNECTED),
             PileState(pile_name="r2", state=PileState.PRIMARY),
         ]
-        self.update_cluster_state(self.bridge_client, updates)
-        self.wait_for_cluster_state(self.secondary_bridge_client, {"r1": PileState.DISCONNECTED, "r2": PileState.PRIMARY})
+        self.update_and_confirm_failover(
+            self.bridge_client, self.secondary_bridge_client, updates, expected_generation=initial_result.generation,
+        )
 
     def test_takedown(self):
         initial_result = self.get_cluster_state(self.bridge_client)

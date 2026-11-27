@@ -632,7 +632,10 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
                     "Can't append blob for key",
                     {"key", k.Key}
                 );
-                PQ_ENSURE(false)("reason", "Something went wrong")("topic", TopicName())("key", k.Key.ToString());
+                PQ_ENSURE(false,
+                    {"reason", "Something went wrong"},
+                    {"topic", TopicName()},
+                    {"key", k.Key});
                 return;
             }
 
@@ -922,15 +925,15 @@ void TPartition::CheckTimestampsOrderInZones(TStringBuf validateReason) const {
         for (const TDataKey& k : seq) {
             const auto curr = k.Timestamp;
             const bool disorder = (curr < prev);
-            PQ_ENSURE(!disorder)
-                ("prev_tmestamp", prev.MicroSeconds())
-                ("curr_timestamp", curr.MicroSeconds())
-                ("zone", zoneName)
-                ("offset", k.Key.GetOffset())
-                ("part_no", k.Key.GetPartNo())
-                ("pos", pos)
-                ("in_zone_pos", in_zone_pos)
-                ("validate_reason", validateReason);
+            PQ_ENSURE(!disorder,
+                {"prevTmestamp", prev.MicroSeconds()},
+                {"currTimestamp", curr.MicroSeconds()},
+                {"zone", zoneName},
+                {"offset", k.Key.GetOffset()},
+                {"partNo", k.Key.GetPartNo()},
+                {"pos", pos},
+                {"inZonePos", in_zone_pos},
+                {"validateReason", validateReason});
            prev = curr;
             ++pos;
             ++in_zone_pos;

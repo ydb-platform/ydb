@@ -319,6 +319,8 @@ message TKqpPhyVectorTopK {
     TKqpPhyValue Limit = 4;
     repeated uint32 DistinctColumns = 5;
     NKikimrProto.TPathID HnswIndexId = 6;
+    // Absent means NKMeans::DefaultHnswEfSearch; proto3 cannot declare a nonzero default.
+    optional uint32 HnswEfSearch = 7;
 }
 
 message TKqpPhyCnStreamLookup {
@@ -336,9 +338,23 @@ message TKqpPhyCnStreamLookup {
     repeated string InputColumns = 12;
     // RowSeqNo cookie wire format version (0 = legacy, 1 = fixed bit budget).
     uint32 CookieFormatVersion = 13;
+    bool LookupJoinUniqueKeys = 14;
 }
 
 message TKqpPhyCnVectorResolve {
+    enum EIndexType {
+        INDEX_TYPE_UNSPECIFIED = 0;
+        INDEX_TYPE_KMEANS_TREE = 1;
+        INDEX_TYPE_HNSW = 2;
+    }
+
+    enum EOperation {
+        OPERATION_UNSPECIFIED = 0;
+        OPERATION_UPSERT = 1;
+        OPERATION_DELETE = 2;
+    }
+
+    reserved 13, 14;
     optional Ydb.Table.VectorIndexSettings IndexSettings = 1;
     TKqpPhyTableId Table = 2;
     TKqpPhyTableId LevelTable = 3;
@@ -351,6 +367,8 @@ message TKqpPhyCnVectorResolve {
     optional uint32 RootClusterColumnIndex = 10;
     optional uint32 OverlapClusters = 11;
     optional double OverlapRatio = 12;
+    EIndexType IndexType = 15;
+    EOperation Operation = 16;
 }
 
 message TKqpPhyCnVectorSearch {
@@ -370,6 +388,10 @@ message TKqpPhyCnVectorSearch {
     // __ydb_parent id alongside the target vector.
     bool HasPrefix = 13;
     NKikimrProto.TPathID HnswIndexId = 14;
+    // Unprefixed hnsw searches every partition-local graph.
+    bool FullRangeHnsw = 15;
+    // Absent means NKMeans::DefaultHnswEfSearch; proto3 cannot declare a nonzero default.
+    optional uint32 HnswEfSearch = 16;
 }
 
 message TKqpPhyCnSequencer {

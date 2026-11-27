@@ -469,6 +469,32 @@ public:
 };
 
 /**
+ * Read a row table without ranges through an index whose key order matches the top-N sort over the read.
+ */
+class TSelectIndexForTopSortRule: public ISimplifiedRule {
+public:
+    TSelectIndexForTopSortRule()
+        : ISimplifiedRule("Select index for top sort", ERuleProperties::RequireParents) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Read the whole index named by VIEW for a read which neither the range pushdown nor a lookup join redirected to it.
+ */
+class TExpandViewIndexReadRule: public ISimplifiedRule {
+public:
+    TExpandViewIndexReadRule()
+        : ISimplifiedRule("Expand view index read") {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
  * Push down filter to olap read.
  */
 class TPushOlapFilterRule : public ISimplifiedRule {

@@ -111,7 +111,7 @@ class TestDataType(RestartToAnotherVersionFixture):
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for query in querys:
-                session_pool.execute_with_retries(query)
+                session_pool.execute_with_retries(query, retry_settings=ydb.RetrySettings(idempotent=True))
 
     def check_table(self):
         queries = []
@@ -228,7 +228,7 @@ class TestDataType(RestartToAnotherVersionFixture):
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for query, parameters in queries_with_parameters:
-                session_pool.execute_with_retries(query, parameters)
+                session_pool.execute_with_retries(query, parameters, retry_settings=ydb.RetrySettings(idempotent=True))
 
     def parametrized_check_table(self):
         queries_with_parameters = []
@@ -291,6 +291,9 @@ class TestDataType(RestartToAnotherVersionFixture):
 
     @pytest.mark.parametrize("store_type", ["ROW", "COLUMN"], indirect=True)
     def test_parametrized_data_type(self):
+        if self.store_type == "COLUMN" and min(self.versions) < (26, 3):
+            pytest.skip("Timestamp equality pushdown needs the #51991 fix, absent in stable-26-2 and earlier")
+
         if any("Decimal" in type_name for type_name in self.all_types.keys()) and self.store_type == "COLUMN":
             if (min(self.versions) < (25, 1)):
                 types_not_supported_yet_in_columnshard.add("Decimal")

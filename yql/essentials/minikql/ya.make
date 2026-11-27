@@ -121,6 +121,12 @@ IF (MKQL_RUNTIME_VERSION)
     )
 ENDIF()
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    yql/udfs/logs/tamus$
+    yql/udfs/logs/usersessions$
+)
+
 END()
 
 RECURSE(

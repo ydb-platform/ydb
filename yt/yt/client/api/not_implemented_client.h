@@ -186,10 +186,6 @@ public:
         NObjectClient::TCellTag /*cellTag*/,
         const TExternalizeNodeOptions& /*options*/))
 
-    UNIMPLEMENTED_METHOD(TFuture<void>, InternalizeNode, (
-        const NYPath::TYPath& /*path*/,
-        const TInternalizeNodeOptions& /*options*/))
-
     // Objects
     UNIMPLEMENTED_METHOD(TFuture<NObjectClient::TObjectId>, CreateObject, (
         NObjectClient::EObjectType /*type*/,

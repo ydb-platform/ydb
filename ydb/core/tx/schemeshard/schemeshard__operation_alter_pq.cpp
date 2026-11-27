@@ -2,6 +2,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
+#include "common/validation.h"
 
 #include <library/cpp/containers/absl/flat_hash_set.h>
 #include <library/cpp/containers/top_keeper/top_keeper.h>
@@ -13,6 +14,7 @@
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range_sequence.h>
 #include <ydb/core/persqueue/public/partition_index_generator/partition_index_generator.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/scheme/scheme_types_defs.h>
 
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -27,6 +29,24 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 using google::protobuf::util::MessageDifferencer;
+
+bool IsTableKeyStrictlyInsidePartition(const TString& key, const TMaybe<TTopicTabletInfo::TKeyRange>& partition,
+        const TTopicTabletInfo::TKeySchema& keyTypes)
+{
+    TSerializedCellVec cells;
+    if (!TSerializedCellVec::TryParse(key, cells) || !NValidation::IsValidTableKey(cells.GetCells(), keyTypes)) {
+        return false;
+    }
+
+    auto compareWith = [&](const TString& bound) {
+        const TSerializedCellVec boundCells(bound);
+        return CompareTypedCellVectors(cells.GetCells().data(), boundCells.GetCells().data(), keyTypes.data(), keyTypes.size());
+    };
+    const TString minKey = TSerializedCellVec::Serialize(TVector<TCell>(keyTypes.size()));
+    const bool afterStart = compareWith(partition && partition->FromBound ? *partition->FromBound : minKey) > 0;
+    const bool beforeEnd = !partition || !partition->ToBound || compareWith(*partition->ToBound) < 0;
+    return afterStart && beforeEnd;
+}
 
 bool ShouldCreateSiblingAtRootLevel(const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit& split, const TTopicInfo::TPtr& topic) {
     // return if we should create one child at the root level in the case when another child already exists
@@ -163,9 +183,19 @@ public:
 
         TTopicInfo::TPtr params = new TTopicInfo();
         const bool hasKeySchema = tabletConfig->PartitionKeySchemaSize();
+        const bool splitByPartitionKey = tabletConfig->GetSplitByPartitionKey();
 
         if (!splitMergeEnabled && (alter.MergeSize() || alter.SplitSize() || alter.RootPartitionBoundariesSize())) {
             errStr = "Split and merge operations disabled";
+            return nullptr;
+        }
+
+        const bool changesRootBounds = alter.RootPartitionBoundariesSize() > 0;
+        const auto& alterStrategy = alter.GetPQTabletConfig().GetPartitionStrategy();
+        const bool changesStrategy = alterStrategy.HasPartitionStrategyType()
+            && alterStrategy.GetPartitionStrategyType() != tabletConfig->GetPartitionStrategy().GetPartitionStrategyType();
+        if (splitByPartitionKey && (changesRootBounds || changesStrategy)) {
+            errStr = "Root partition bounds and the strategy of a topic split by partition key cannot change";
             return nullptr;
         }
 
@@ -194,6 +224,10 @@ public:
                 }
                 if (!split.HasSplitBoundary()) {
                     errStr = "SplitBoundary must be specified for split operation";
+                    return nullptr;
+                }
+                if (splitByPartitionKey && split.GetCreateRootLevelSibling()) {
+                    errStr = "Root level siblings are not supported for topics split by partition key";
                     return nullptr;
                 }
             }
@@ -233,7 +267,7 @@ public:
                 errStr = Sprintf("Invalid min and max partition count specified: %u > %u", strategy.GetMinPartitionCount(), strategy.GetMaxPartitionCount());
                 return nullptr;
             }
-            if (strategy.GetMinPartitionCount() > topic->ActivePartitionCount) { // request will increase active partitions
+            if (!tabletConfig->GetSplitByPartitionKey() && strategy.GetMinPartitionCount() > topic->ActivePartitionCount) { // request will increase active partitions
                 if (alter.MergeSize() || alter.SplitSize() || alter.RootPartitionBoundariesSize()) {
                     errStr = Sprintf("Can't increase active partitions and Split/Merge or change root boundaries at the same time");
                     return nullptr;
@@ -365,6 +399,10 @@ public:
             }
 
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
+            alterConfig.ClearSplitByPartitionKey();
+            if (splitByPartitionKey) {
+                alterConfig.SetSplitByPartitionKey(true);
+            }
             Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig);
             alterConfig.Swap(tabletConfig);
         }
@@ -771,7 +809,7 @@ public:
             }
 
             const bool partitionHeartbeats = stream->ResolvedTimestamps != TDuration::Zero()
-                && stream->HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect;
+                && stream->HeartbeatMode != NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated;
             // Attachment keeps the bare producer groups, which cannot contribute to the partition quorum.
             if (attachCdcTopic && (partitionHeartbeats || stream->SchemaChanges)) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed,
@@ -931,7 +969,13 @@ public:
                     return result;
                 }
                 const auto keyRange = splittedPartition->KeyRange;
-                if (keyRange) {
+                if (tabletConfig.GetSplitByPartitionKey()) {
+                    if (!IsTableKeyStrictlyInsidePartition(splitBoundary, keyRange, topic->KeySchema)) {
+                        result->SetError(NKikimrScheme::StatusInvalidParameter,
+                            "Split boundary must be a table key strictly inside the partition");
+                        return result;
+                    }
+                } else if (keyRange) {
                     if (keyRange->FromBound && splitBoundary <= *keyRange->FromBound) {
                         errStr = TStringBuilder()
                                  << "Split boundary less or equals FromBound of partition: '" << Hex(splitBoundary)
@@ -1075,7 +1119,13 @@ public:
             if (alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy()) {
                 size_t activePartitionCount = CountTopicActivePartitions(topic);
                 auto requestedMinPartitionCount = alter.GetPQTabletConfig().GetPartitionStrategy().GetMinPartitionCount();
-                if (requestedMinPartitionCount > activePartitionCount) {
+                const bool splitByPartitionKey = tabletConfig.GetSplitByPartitionKey();
+                if (splitByPartitionKey && requestedMinPartitionCount > tabletConfig.GetPartitionStrategy().GetMinPartitionCount()) {
+                    errStr = "Increasing the minimum partition count is not supported for topics split by partition key";
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                    return result;
+                }
+                if (!splitByPartitionKey && requestedMinPartitionCount > activePartitionCount) {
                     // select exisisting active partitions for split
                     auto numPartitionsToSplit = requestedMinPartitionCount - activePartitionCount;
                     struct TPartitionsComparer {

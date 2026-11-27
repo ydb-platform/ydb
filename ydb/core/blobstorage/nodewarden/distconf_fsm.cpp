@@ -858,7 +858,7 @@ namespace NKikimr::NStorage {
             ApplyCommittedStorageConfig(proposition.StorageConfig);
 
             // this proposition came from actor -- we notify that actor and finish operation
-            Send(proposition.ActorId, new TEvPrivate::TEvConfigProposed(std::nullopt));
+            Send(proposition.ActorId, new TEvPrivate::TEvConfigProposed(proposition.StorageConfig));
         } else {
             YDB_LOG_DEBUG("No quorum for ProposedStorageConfig",
                 {"marker", "NWDC47"},
@@ -1224,7 +1224,7 @@ namespace NKikimr::NStorage {
         auto addPerDiskConfig = [&](const TEvGather::TCollectConfigs::TPersistentConfig& item, auto addFunc, auto& set,
                 const auto& nodesToIgnore, bool configValidated) {
             const auto& config = item.GetConfig();
-            if (metadataOnly && !configValidated && !CheckFingerprint(config)) {
+            if (!configValidated && !CheckFingerprint(config)) {
                 for (const auto& disk : item.GetDisks()) {
                     if (!nodesToIgnore.contains(TNodeIdentifier(disk.GetNodeId()))) {
                         response->AddErrors()->CopyFrom(disk);

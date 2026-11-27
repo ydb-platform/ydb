@@ -21,14 +21,18 @@ PEERDIR(
     ydb/core/cms/console/events
     ydb/core/engine/minikql
     ydb/core/protos
+    ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tx
     ydb/library/aclib
     ydb/library/actors/core
     ydb/services/metadata
     ydb/services/metadata/request
     ydb/services/udf_store
     ydb/services/udf_store/compile_controller/protos
+    ydb/services/udf_store/metadata_subscription
+    ydb/services/udf_store/wasm
 )
 
 YQL_LAST_ABI_VERSION()

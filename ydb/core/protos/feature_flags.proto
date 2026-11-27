@@ -411,10 +411,8 @@ message TFeatureFlags {
     optional bool EnableAsyncReplicationSchemaChanges = 338 [default = false];
     optional bool EnableColumnshardMoveData = 339 [default = false];
     optional bool EnableColumnshardCutHistory = 340 [default = false];
-    // Treats a block with generation Max<ui32>() (the complete tablet deletion tombstone written by
-    // Hive) as enough to drop all the tablet's data and barrier records in VDisk and BlobDepot,
-    // without waiting for the hard barrier that follows it. Turning it off after it has been on is
-    // safe, but may leave some garbage of already deleted tablets until it is turned on again.
+    // Allows VDisk and BlobDepot to discard barrier records for tablets with a Max<ui32>() generation
+    // block. The block always marks the tablet's blobs as deleted, including after a restart.
     optional bool EnableCollectByCompleteDeletionBlock = 341 [default = true, (RequireRestart) = true];
     optional bool EnableKqpRuntimeStats = 342 [default = false];
     // Under space pressure, lets PDisk choose which level compaction runs on the disk: one at a time, the one
@@ -497,18 +495,24 @@ message TFeatureFlags {
     optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
     optional bool EnableColumnShardStats = 395 [default = false];
     optional bool EnableTopicReplication = 396 [default = false];
-    // Enable only after the destination meets the EnableCdcHandoff rollout requirements.
-    optional bool EnableCdcReplication = 403 [default = false];
     optional bool EnableRebuildIndex = 397 [default = false];
     optional bool EnableDefaultFromExpression = 398 [default = false];
     optional bool ShareShardedMkqlProgram = 399 [default = false];
     // Disables client access to built-in PostgreSQL compatibility in YDB.
-    optional bool DisablePgCompatibility = 400 [default = false];
+    optional bool DisablePgCompatibility = 400 [default = true];
     optional bool EnableBridgeProxyLocalPileFirstGet = 401 [default = false];
     optional bool EnableChecksumTable = 402 [default = false];
+    // Enable after all nodes support packed S3 mappings and the rollback window has closed.
+    optional bool EnableBlobDepotDataCooling = 403 [default = false];
+    optional bool EnableAsyncReplicationSnapshotProvenance = 404 [default = false];
+    optional bool EnableConsistentVectorIndexBuild = 405 [default = true];
+    optional bool EnableReadSecretRpcHandler = 406 [default = false];
+    optional bool EnableCdcKeyRangeHeartbeats = 407 [default = false];
     // Enable before CDC enrollment, once all eligible destination SchemeShard and DataShard
     // hosts have been upgraded and rollback to a version without CDC handoff is ruled out.
     // A DataShard restarted on an older binary after PREPARED can detach the table
     // while ignoring ActivateCdcStreams.
-    optional bool EnableCdcHandoff = 404 [default = false];
+    optional bool EnableCdcHandoff = 408 [default = false];
+    // Enable only after the destination meets the EnableCdcHandoff rollout requirements.
+    optional bool EnableCdcReplication = 409 [default = false];
 }

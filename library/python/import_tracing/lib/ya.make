@@ -12,4 +12,12 @@ PY_SRCS(
     converters/raw.py
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    library/python/import_tracing/constructor
+    library/python/testing/import_test
+)
+
+PEERDIR_FROM_POLICY(DENY .*)
+
 END()

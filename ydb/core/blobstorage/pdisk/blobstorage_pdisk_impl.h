@@ -386,7 +386,7 @@ public:
     void DeleteChunk(ui32 chunkIdx, TOwner owner);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Log reading
-    void ProcessReadLogRecord(TLogRecordHeader &header, TString &data, TOwner owner, ui64 nonce,
+    bool ProcessReadLogRecord(TLogRecordHeader &header, TString &data, TOwner owner, ui64 nonce,
         TEvReadLogResult* result, TMap<ui32, TChunkState> *outChunkOwnerMap, bool isInitial,
         bool parseCommitMessage);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

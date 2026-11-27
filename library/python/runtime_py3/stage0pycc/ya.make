@@ -22,6 +22,11 @@ ELSE()
     )
 ENDIF()
 
-SRCS(main.cpp)
+SRCS(
+    command_file_args.cpp
+    main.cpp
+)
 
 END()
+
+RECURSE_FOR_TESTS(it)

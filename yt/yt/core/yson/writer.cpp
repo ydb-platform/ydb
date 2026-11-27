@@ -15,6 +15,7 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <utility>
 
 namespace NYT::NYson {
@@ -175,7 +176,7 @@ Y_NO_INLINE size_t EscapeShortStringToBuffer(char* buffer, TStringBuf value, siz
 }
 
 template <class TOutput>
-void BufferedEscapeC(const char* str, size_t len, TOutput& output)
+void BufferedEscapeC(const char* str, size_t len, TOutput* output)
 {
     size_t literalBegin = 0;
     for (size_t index = 0; index < len; ++index) {
@@ -183,31 +184,31 @@ void BufferedEscapeC(const char* str, size_t len, TOutput& output)
             continue;
         }
 
-        output.Write(str + literalBegin, index - literalBegin);
+        output->Write(str + literalBegin, index - literalBegin);
         literalBegin = index + 1;
 
-        auto* buffer = output.GetDirectWriteBuffer();
-        output.AdvanceDirectWrite(EscapeC(str[index], GetNextCharOrZero(str, len, index), buffer));
+        auto* buffer = output->GetDirectWriteBuffer();
+        output->AdvanceDirectWrite(EscapeC(str[index], GetNextCharOrZero(str, len, index), buffer));
     }
 
-    output.Write(str + literalBegin, len - literalBegin);
+    output->Write(str + literalBegin, len - literalBegin);
 }
 
 template <class TOutput>
-void BufferedWriteUtf8String(const char* str, size_t len, TOutput& output)
+void BufferedWriteUtf8String(const char* str, size_t len, TOutput* output)
 {
     const auto* ustr = reinterpret_cast<const unsigned char*>(str);
     for (size_t i = 0; i < len;) {
         size_t runeLen;
         YT_VERIFY(RECODE_OK == GetUTF8CharLen(runeLen, ustr + i, ustr + len));
         if (runeLen > 1) {
-            output.Write(ustr + i, runeLen);
+            output->Write(ustr + i, runeLen);
             i += runeLen;
         } else {
             YT_ASSERT(1 == runeLen);
             // #EscapeC() handles single-byte characters, including control ones like `\t` and `\n`.
-            auto* buffer = output.GetDirectWriteBuffer();
-            output.AdvanceDirectWrite(EscapeC(ustr[i], GetNextCharOrZero(str, len, i), buffer));
+            auto* buffer = output->GetDirectWriteBuffer();
+            output->AdvanceDirectWrite(EscapeC(ustr[i], GetNextCharOrZero(str, len, i), buffer));
             ++i;
         }
     }
@@ -598,6 +599,12 @@ void TBufferedYsonWriter::EndCollection(char ch)
 void TBufferedYsonWriter::WriteStringScalar(TStringBuf value)
 {
     if (Format_ == EYsonFormat::Binary) {
+        if (value.length() > std::numeric_limits<i32>::max()) [[unlikely]] {
+            THROW_ERROR_EXCEPTION("Binary YSON string length exceeds the signed 32-bit limit")
+                .With("length", value.length())
+                .With("limit", std::numeric_limits<i32>::max());
+        }
+
         static_assert(MaxDirectWriteSize >= 1 + MaxVarInt32Size);
         auto* buffer = Buffer_.GetDirectWriteBuffer();
         buffer[0] = NDetail::StringMarker;
@@ -635,9 +642,9 @@ Y_NO_INLINE void TBufferedYsonWriter::WriteTextStringScalarSlow(TStringBuf value
 {
     Buffer_.Write('"');
     if (PassThroughUtf8Characters_ && IsUtf(value)) {
-        BufferedWriteUtf8String(value.data(), value.length(), Buffer_);
+        BufferedWriteUtf8String(value.data(), value.length(), &Buffer_);
     } else {
-        BufferedEscapeC(value.data(), value.length(), Buffer_);
+        BufferedEscapeC(value.data(), value.length(), &Buffer_);
     }
     Buffer_.Write('"');
 }

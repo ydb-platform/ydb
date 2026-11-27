@@ -2,6 +2,7 @@ YQL_LIBRARY()
 
 SRCS(
     create_external_data_source_formatter.cpp
+    create_streaming_query_formatter.cpp
     create_table_formatter.cpp
     create_view_formatter.cpp
     formatters_common.cpp
@@ -10,14 +11,17 @@ SRCS(
 PEERDIR(
     contrib/libs/apache/arrow
     library/cpp/json
+    library/cpp/protobuf/interop
     ydb/core/base
     ydb/core/tx/columnshard/engines/storage/indexes/helper
     ydb/core/formats/arrow/serializer
+    ydb/core/kqp/gateway/behaviour/streaming_query/common
     ydb/core/protos
     ydb/core/tx/columnshard/engines/scheme/defaults/protos
     ydb/core/tx/sequenceproxy
     ydb/core/ydb_convert
     ydb/library/formats/arrow/protos
+    ydb/library/yql/providers/pq/proto
     ydb/public/api/protos
     ydb/public/lib/json_value
     ydb/public/lib/ydb_cli/dump/util
@@ -25,6 +29,7 @@ PEERDIR(
     yql/essentials/ast
     yql/essentials/minikql
     yql/essentials/public/issue
+    yql/essentials/public/udf
     yql/essentials/sql/settings
     yql/essentials/sql/v1/translation
     yql/essentials/sql/v1/lexer/antlr4

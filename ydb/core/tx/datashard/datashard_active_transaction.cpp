@@ -119,7 +119,10 @@ ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)
     EResult result = EngineBay.Validate();
     if (allowErrors) {
         if (result != EResult::Ok) {
-            ErrStr = EngineBay.GetEngine()->GetErrors();
+            ErrStr = EngineBay.GetKeyValidator().GetBuildingColumnError();
+            if (ErrStr.empty()) {
+                ErrStr = EngineBay.GetEngine()->GetErrors();
+            }
             ErrCode = ConvertErrCode(result);
             return 0;
         }
@@ -136,7 +139,10 @@ bool TValidatedDataTx::ReValidateKeys(const NTable::TScheme& scheme)
 
     EResult result = EngineBay.ReValidateKeys();
     if (result != EResult::Ok) {
-        ErrStr = EngineBay.GetEngine()->GetErrors();
+        ErrStr = EngineBay.GetKeyValidator().GetBuildingColumnError();
+        if (ErrStr.empty()) {
+            ErrStr = EngineBay.GetEngine()->GetErrors();
+        }
         ErrCode = ConvertErrCode(result);
         return false;
     }

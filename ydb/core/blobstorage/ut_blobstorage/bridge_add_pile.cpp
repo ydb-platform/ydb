@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
+#include <util/generic/scope.h>
+
 using namespace NBridgeTest;
 
 namespace {
@@ -407,7 +409,10 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
         bool spoofValidation = true;
         ui32 numSpoofed = 0;
         ui32 numNotifications = 0;
-        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+        TBscNotificationRetry retry(env, [](const auto& config) {
+            return config.GetClusterStateDetails().GetPendingPileOperation().HasErrorReason();
+        });
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDistconfResponse && spoofValidation) {
                 auto& record = ev->Get<TEvBlobStorage::TEvControllerDistconfResponse>()->Record;
                 if (record.GetStatus() == NKikimrBlobStorage::TEvControllerDistconfResponse::Error) {
@@ -415,15 +420,21 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
                     record.ClearErrorReason();
                     ++numSpoofed;
                 }
-            } else if (GetBridgePileOperationNotification(*ev)) {
+            } else if (const auto *notify = GetBridgePileOperationNotification(*ev)) {
                 ++numNotifications;
+                if (notify->GetNotifyBridgePileOperation().HasErrorReason()) {
+                    retry.ObserveNotification(*ev);
+                }
             }
-            return true;
+            return retry.Filter(nodeId, ev);
         };
+        Y_DEFER { env.Runtime->FilterFunction = {}; };
         res = AddPile(env, "pile_3");
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
         UNIT_ASSERT_VALUES_EQUAL(numSpoofed, 1);
         spoofValidation = false;
+
+        retry.CheckRetryWaitsForCommit();
 
         WaitUntil(env, [&] {
             return QueryStorageConfig(env).GetClusterStateDetails().GetPendingPileOperation().HasErrorReason();

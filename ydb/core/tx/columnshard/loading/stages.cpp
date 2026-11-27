@@ -200,7 +200,7 @@ bool TSpecialValuesInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionCon
 bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
     TTablesManager tablesManagerLocal(
-        Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(), Self->Counters.GetPortionIndexCounters(), Self->TabletID());
+        Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(), Self->DataStats, Self->TabletID());
     {
         TMemoryProfileGuard g("TTxInit/TTablesManager");
         if (!tablesManagerLocal.InitFromDB(db, Self->Info(), &LoadDurations)) {
@@ -227,8 +227,9 @@ bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
 
 std::shared_ptr<NKikimr::ITxReader> TTablesManagerInitializer::BuildNextReaderAfterLoad() {
     if (Self->TablesManager.HasPrimaryIndex()) {
+        const bool deferPortions = Self->DeferredPortionLoader.DecideOnStart();
         return Self->TablesManager.MutablePrimaryIndex().BuildLoader(
-            std::make_shared<TBlobGroupSelector>(Self->Info()), Self->GetOperationsManager().GetUncommittedPortionAddresses());
+            std::make_shared<TBlobGroupSelector>(Self->Info()), Self->GetOperationsManager().GetUncommittedPortionAddresses(), !deferPortions);
     } else {
         return nullptr;
     }

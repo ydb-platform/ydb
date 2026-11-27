@@ -1,5 +1,5 @@
 #pragma once
-#include "abstract.h"
+#include <ydb/core/formats/arrow/program/index_check/index_check.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>

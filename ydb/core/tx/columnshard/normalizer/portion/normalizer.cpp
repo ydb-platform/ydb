@@ -25,8 +25,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    NColumnShard::TTablesManager tablesManager(
-        controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), 0);
+    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), controller.GetDataAccessorsManager(),
+        std::make_shared<TShardDataStats>(controller.GetStoragesManager(), 0), 0);
     if (!tablesManager.InitFromDB(db, nullptr)) {
         YDB_LOG_TRACE_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
             {"normalizer", "TPortionsNormalizer"},

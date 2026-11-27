@@ -1,10 +1,10 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
-#include <ydb/core/tx/columnshard/counters/portion_index.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
+#include <ydb/core/tx/columnshard/engines/storage/data_stats/shard_data_stats.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineCleanupTables) {
             const auto versionInfo = MakeVersionInfo();
             TColumnEngineForLogs engine(0, std::make_shared<TSchemaObjectsCache>(), std::make_shared<TNoDataAccessorsManager>(),
                 TTestStoragesManager::GetInstance(), TSnapshot(1, 1), 1, IColumnEngine::TSchemaVersionView(versionInfo),
-                std::make_shared<NColumnShard::TPortionIndexStats>());
+                std::make_shared<NColumnShard::TShardDataStats>(TTestStoragesManager::GetInstance(), 0));
             const auto dataLocksManager = std::make_shared<NDataLocks::TManager>();
             const auto pathId = TInternalPathId::FromRawValue(1);
             engine.RegisterTableToLoad(pathId);

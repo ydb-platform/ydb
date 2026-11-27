@@ -611,17 +611,19 @@ struct TEvPQ {
     };
 
     struct TEvError : public TEventLocal<TEvError, EvError> {
-        TEvError(const NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, ui64 cookie, bool internal = false)
+        TEvError(const NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, ui64 cookie, bool internal = false, bool closeSession = false)
         : ErrorCode(errorCode)
         , Error(error)
         , Cookie(cookie)
         , IsInternal(internal)
+        , CloseSession(closeSession)
         {}
 
         NPersQueue::NErrorCode::EErrorCode ErrorCode;
         TString Error;
         ui64 Cookie;
         bool IsInternal = false;
+        bool CloseSession = false;
     };
 
     struct TEvBlobRequest : public TEventLocal<TEvBlobRequest, EvBlobRequest> {

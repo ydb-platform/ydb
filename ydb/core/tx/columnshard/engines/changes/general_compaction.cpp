@@ -68,11 +68,10 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
 
         std::vector<TReadPortionInfoWithBlobs> portions = TReadPortionInfoWithBlobs::RestorePortions(accessors, Blobs, context.SchemaVersions);
         THashSet<ui64> usedPortionIds;
-        YDB_LOG_VERIFY(PortionsIndexSnapshot);
         std::vector<std::shared_ptr<ISubsetToMerge>> currentToMerge;
         for (auto&& i : portions) {
             YDB_LOG_VERIFY(usedPortionIds.emplace(i.GetPortionInfo().GetPortionId()).second);
-            currentToMerge.emplace_back(std::make_shared<TReadPortionToMerge>(std::move(i), GranuleMeta, PortionsIndexSnapshot));
+            currentToMerge.emplace_back(std::make_shared<TReadPortionToMerge>(std::move(i), GranuleMeta, HasDeletions, PortionsIndexSnapshot));
         }
 
         const auto buildPortionsToMerge = [&](const std::vector<std::shared_ptr<ISubsetToMerge>>& toMerge, const bool useDeletion) {
@@ -98,7 +97,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                     auto merged = BuildAppendedPortionsByChunks(context, buildPortionsToMerge(toMerge, false), resultFiltered, stats);
                     if (merged.size()) {
                         appendedToMerge.emplace_back(
-                            std::make_shared<TWritePortionsToMerge>(std::move(merged), GranuleMeta, PortionsIndexSnapshot));
+                            std::make_shared<TWritePortionsToMerge>(std::move(merged), GranuleMeta, HasDeletions, PortionsIndexSnapshot));
                     }
                     toMerge.clear();
                     sumMemory = 0;
@@ -115,7 +114,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                 if (appendedToMerge.size()) {
                     if (merged.size()) {
                         appendedToMerge.emplace_back(
-                            std::make_shared<TWritePortionsToMerge>(std::move(merged), GranuleMeta, PortionsIndexSnapshot));
+                            std::make_shared<TWritePortionsToMerge>(std::move(merged), GranuleMeta, HasDeletions, PortionsIndexSnapshot));
                     }
                 } else {
                     context.Counters.OnCompactionCorrectMemory(totalSumMemory);
@@ -168,9 +167,8 @@ void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TC
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     YDB_LOG_VERIFY(PrioritiesAllocationGuard);
     TBase::DoStart(self);
-    auto& g = *GranuleMeta;
-    self.Counters.GetCSCounters().OnSplitCompactionInfo(
-        g.GetAdditiveSummary().GetCompacted().GetTotalPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
+    const TSimplePortionsGroupInfo compacted = GranuleMeta->GetDataStats().GetCompacted();
+    self.Counters.GetCSCounters().OnSplitCompactionInfo(compacted.GetBlobBytes(), compacted.GetCount());
 }
 
 NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

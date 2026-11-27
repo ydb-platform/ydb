@@ -1,4 +1,5 @@
 import ydb.apps.dstool.lib.common as common
+import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import sys
 
 description = 'Set storage pool settings that are not part of the pool definition'
@@ -12,6 +13,14 @@ def add_options(p):
                    'applied when a VDisk starts')
     g.add_argument('--reset-vdisk-heap-allocator-num-leading-disks', action='store_true',
                    help='Make the pool inherit blob_storage_config.vdisk_heap_allocator_num_leading_disks again')
+    g.add_argument(
+        '--target-invariant',
+        choices=kikimr_bs3.TGroupState.ETargetInvariant.keys(),
+        help='Set the target invariant for a mirror-3-dc pool',
+    )
+    g.add_argument(
+        '--reset-target-invariant', action='store_true', help='Use the default target invariant (NO_INVARIANT)'
+    )
     common.add_basic_format_options(p)
 
 
@@ -27,6 +36,10 @@ def create_request(args, storage_pools):
             cmd.Settings.VDiskHeapAllocatorNumLeadingDisks = args.vdisk_heap_allocator_num_leading_disks
         if args.reset_vdisk_heap_allocator_num_leading_disks:
             cmd.Reset.append('VDiskHeapAllocatorNumLeadingDisks')
+        if args.target_invariant is not None:
+            cmd.Settings.TargetInvariant = kikimr_bs3.TGroupState.ETargetInvariant.Value(args.target_invariant)
+        if args.reset_target_invariant:
+            cmd.Reset.append('TargetInvariant')
     return request
 
 

@@ -34,9 +34,9 @@ struct TTopicOffsets {
     ui64 Committed;
 };
 
-std::optional<TTopicOffsets> GetTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer);
+std::optional<TTopicOffsets> GetTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer, ui32 partitionId = 0);
 void WaitForTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer,
-    const std::function<bool(const TTopicOffsets&)>& ready, const TString& description);
+    const std::function<bool(const TTopicOffsets&)>& ready, const TString& description, ui32 partitionId = 0);
 
 struct TTopicRecord {
     TString Data;

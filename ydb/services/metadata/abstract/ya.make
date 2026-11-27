@@ -14,11 +14,13 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(kqp_common.h)
 
 PEERDIR(
+    contrib/libs/protobuf
+    library/cpp/json
+    library/cpp/json/writer
     ydb/core/base
     ydb/library/accessor
     ydb/library/actors/core
     ydb/public/api/protos
-    ydb/public/sdk/cpp/src/client/resources
     yql/essentials/core/expr_nodes
 )
 

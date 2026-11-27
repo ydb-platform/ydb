@@ -166,6 +166,14 @@ public:
                 {"error", Ev->Get()->Error});
         }
 
+        // A reserved CDC CREATE is still pending. A source failure has its own live issue.
+        if (target->GetDstState() != TReplication::EDstState::Creating
+            && target->GetDstState() != TReplication::EDstState::Error
+            && target->GetStreamState() != TReplication::EStreamState::Error)
+        {
+            target->SetIssue({});
+        }
+
         db.Table<Schema::Replications>().Key(rid).Update(
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
             NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())

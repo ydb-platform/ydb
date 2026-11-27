@@ -12,5 +12,6 @@ RECURSE(
     olap
     kv
     streaming
+    fq_streaming
     result_set_format
 )

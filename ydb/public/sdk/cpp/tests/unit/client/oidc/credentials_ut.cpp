@@ -809,7 +809,7 @@ Y_UNIT_TEST(DeviceRejectsStreamingTokenReceivedAfterExpiry) {
     server.Enqueue(TString("{\"device_code\":\"code\",\"user_code\":\"ABCD\",\"verification_uri\":\"") +
         server.Issuer() + "/verify\",\"expires_in\":2,\"interval\":1}", HTTP_OK);
     server.Enqueue(R"({"access_token":"late","token_type":"Bearer","expires_in":600})", HTTP_OK);
-    server.SetTokenReplyDelay(TDuration::MilliSeconds(100));
+    server.SetTokenReplyDelay(TDuration::MilliSeconds(40));
     auto config = server.ClientConfig().Acceptor(std::make_shared<TTestAcceptor>());
     config.FlowConfig = TDeviceOidcConfig{"public-client", {}};
     auto provider = CreateOidcProviderFactory(config)->CreateProvider();

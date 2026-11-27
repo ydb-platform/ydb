@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import grpc
 from typing import Any, Callable, Optional, Tuple, TYPE_CHECKING, cast
 
 from ydb import issues
@@ -47,15 +48,7 @@ class ConnectionsCache(_ConnectionsCache):
         if preferred_endpoint is not None and preferred_endpoint.endpoint in self.connections:
             return self.connections[preferred_endpoint.endpoint]  # type: ignore[return-value]
 
-        for conn_lst in self.conn_lst_order:
-            try:
-                endpoint, connection = conn_lst.popitem(last=False)
-                conn_lst[endpoint] = connection
-                return connection  # type: ignore[return-value]
-            except KeyError:
-                continue
-
-        raise issues.ConnectionLost("Couldn't find valid connection")
+        return self._get_balanced_connection()  # type: ignore[return-value]
 
     def add(self, connection: Optional[Connection], preferred: bool = False) -> bool:  # type: ignore[override]  # async Connection type
         if connection is None:
@@ -81,7 +74,8 @@ class ConnectionsCache(_ConnectionsCache):
         self._fast_fail_event.set()
 
     def remove(self, connection: Connection) -> None:  # type: ignore[override]  # async Connection type
-        self.connections_by_node_id.pop(connection.node_id, None)
+        if cast(Any, self.connections_by_node_id.get(connection.node_id)) is connection:
+            self.connections_by_node_id.pop(connection.node_id, None)
         self.preferred.pop(connection.endpoint, None)
         self.connections.pop(connection.endpoint, None)
         self.outdated.pop(connection.endpoint, None)
@@ -137,19 +131,21 @@ class Discovery:
         if resolve_details is None:
             return False
 
-        resolved_endpoints = set(
-            endpoint
+        endpoint_locations = {
+            endpoint: resolved_endpoint.location
             for resolved_endpoint in resolve_details.endpoints
             for endpoint, endpoint_options in resolved_endpoint.endpoints_with_options()
-        )
+        }
         for cached_endpoint in self._cache.values():
-            if cached_endpoint.endpoint not in resolved_endpoints:
+            if cached_endpoint.endpoint not in endpoint_locations:
                 self._cache.make_outdated(cached_endpoint)
 
         local_dc = resolve_details.self_location
+        priorities = resolve_details.bridge_priorities(True) if self._driver_config.prefer_primary_pile else None
+        restoring_locality = self._cache.set_bridge_priorities(priorities, endpoint_locations, local_dc)
 
         # Detect local DC using TCP latency if enabled and preferred is meaningful
-        if self._driver_config.detect_local_dc and not self._driver_config.use_all_nodes:
+        if priorities is None and self._driver_config.detect_local_dc and not self._driver_config.use_all_nodes:
             # Use only endpoints that match the SSL requirements for detection
             ssl_filtered_endpoints = [
                 endpoint
@@ -164,6 +160,8 @@ class Discovery:
                     )
                     if detected_location:
                         local_dc = detected_location
+                        if restoring_locality and local_dc != resolve_details.self_location:
+                            self._cache.set_local_dc(endpoint_locations, local_dc)
                         self.logger.info(
                             "Detected local DC via TCP latency: %s (server reported: %s)",
                             local_dc,
@@ -200,13 +198,24 @@ class Discovery:
                 endpoint,
                 endpoint_options,
             ) in resolved_endpoint.endpoints_with_options():
-                if self._cache.size >= self._max_size or self._cache.already_exists(endpoint):
+                if self._cache.already_exists(endpoint) or not self._cache.connection_slot(endpoint, self._max_size)[0]:
                     continue
 
                 ready_connection = Connection(endpoint, self._driver_config, endpoint_options=endpoint_options)
-                await ready_connection.connection_ready(ready_timeout=self._ready_timeout)
-
-                self._cache.add(ready_connection, preferred)
+                try:
+                    await ready_connection.connection_ready(ready_timeout=self._ready_timeout)
+                except BaseException as error:
+                    await ready_connection.close(grace=0)
+                    if priorities is not None and isinstance(error, (asyncio.TimeoutError, grpc.RpcError)):
+                        continue
+                    raise
+                allowed, replacement = self._cache.connection_slot(endpoint, self._max_size)
+                if allowed:
+                    if replacement is not None:
+                        self._cache.make_outdated(replacement)
+                    self._cache.add(ready_connection, preferred)
+                else:
+                    await ready_connection.close()
 
         await self._cache.cleanup_outdated()
         return self._cache.size > 0

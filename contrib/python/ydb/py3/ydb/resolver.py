@@ -7,13 +7,15 @@ import threading
 import random
 import itertools
 import typing
-from typing import Any, ContextManager, List, Optional, Iterator
+from typing import Any, ContextManager, Dict, List, Optional, Iterator
 from . import connection as conn_impl, driver, issues, settings as settings_impl, _apis
 
 try:
     from ydb.public.api.protos import ydb_discovery_pb2
+    from ydb.public.api.protos import ydb_bridge_common_pb2
 except ImportError:
     from contrib.ydb.public.api.protos import ydb_discovery_pb2
+    from contrib.ydb.public.api.protos import ydb_bridge_common_pb2
 
 
 logger = logging.getLogger(__name__)
@@ -30,6 +32,7 @@ class EndpointInfo(object):
         "ipv6_addrs",
         "ssl_target_name_override",
         "node_id",
+        "bridge_pile_name",
     )
 
     def __init__(self, endpoint_info: ydb_discovery_pb2.EndpointInfo):
@@ -42,6 +45,7 @@ class EndpointInfo(object):
         self.ipv6_addrs = tuple(endpoint_info.ip_v6)
         self.ssl_target_name_override = endpoint_info.ssl_target_name_override
         self.node_id = endpoint_info.node_id
+        self.bridge_pile_name = endpoint_info.bridge_pile_name
 
     def endpoints_with_options(self) -> typing.Generator[typing.Tuple[str, conn_impl.EndpointOptions], None, None]:
         ssl_target_name_override = None
@@ -94,9 +98,30 @@ def _list_endpoints_request_factory(connection_params: driver.DriverConfig) -> _
 
 
 class DiscoveryResult(object):
-    def __init__(self, self_location: str, endpoints: "list[EndpointInfo]"):
+    def __init__(
+        self, self_location: str, endpoints: "list[EndpointInfo]", pile_states: Optional[Dict[str, int]] = None
+    ):
         self.self_location = self_location
         self.endpoints = endpoints
+        self.pile_states = pile_states or {}
+
+    def _pile_priority(self, info: EndpointInfo) -> int:
+        state = self.pile_states.get(info.bridge_pile_name)
+        if state in (ydb_bridge_common_pb2.PileState.PRIMARY, ydb_bridge_common_pb2.PileState.PROMOTED):
+            return 0
+        if state == ydb_bridge_common_pb2.PileState.SYNCHRONIZED:
+            return 1
+        return 2
+
+    def bridge_priorities(self, enabled: bool) -> Optional[Dict[str, int]]:
+        if not enabled or not self.pile_states:
+            return None
+        priorities = {}
+        for info in self.endpoints:
+            priority = self._pile_priority(info)
+            for endpoint, _ in info.endpoints_with_options():
+                priorities[endpoint] = priority
+        return priorities
 
     def __str__(self):
         return "DiscoveryResult <self_location: %s, endpoints %s>" % (
@@ -113,6 +138,7 @@ class DiscoveryResult(object):
         rpc_state: conn_impl._RpcState,
         response: ydb_discovery_pb2.ListEndpointsResponse,
         use_all_nodes: bool = False,
+        prefer_primary_pile: bool = False,
     ) -> DiscoveryResult:
         issues._process_response(response.operation)
         message = _apis.ydb_discovery.ListEndpointsResult()
@@ -125,20 +151,14 @@ class DiscoveryResult(object):
             else:
                 unique_different_set.add(EndpointInfo(info))
 
-        result: List[EndpointInfo] = []
-        local_endpoints = list(unique_local_set)
-        different_endpoints = list(unique_different_set)
-        if use_all_nodes:
-            result.extend(local_endpoints)
-            result.extend(different_endpoints)
-            random.shuffle(result)
-        else:
-            random.shuffle(local_endpoints)
-            random.shuffle(different_endpoints)
-            result.extend(local_endpoints)
-            result.extend(different_endpoints)
-
-        return cls(message.self_location, result)
+        endpoints = list(unique_local_set) + list(unique_different_set)
+        result = cls(message.self_location, endpoints, {pile.pile_name: pile.state for pile in message.pile_states})
+        random.shuffle(endpoints)
+        if prefer_primary_pile and result.pile_states:
+            endpoints.sort(key=result._pile_priority)
+        elif not use_all_nodes:
+            endpoints.sort(key=lambda info: info.location != message.self_location)
+        return result
 
 
 class DiscoveryEndpointsResolver(object):
@@ -196,7 +216,7 @@ class DiscoveryEndpointsResolver(object):
                 _apis.DiscoveryService.ListEndpoints,
                 DiscoveryResult.from_response,
                 settings=settings_impl.BaseRequestSettings().with_timeout(self._ready_timeout),
-                wrap_args=(self._driver_config.use_all_nodes,),
+                wrap_args=(self._driver_config.use_all_nodes, self._driver_config.prefer_primary_pile),
             )
 
             self._add_debug_details(

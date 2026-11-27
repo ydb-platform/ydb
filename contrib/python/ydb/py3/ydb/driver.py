@@ -113,6 +113,7 @@ class DriverConfig(object):
         "compression",
         "disable_discovery",
         "detect_local_dc",
+        "prefer_primary_pile",
         "_additional_sdk_headers",
     )
 
@@ -141,6 +142,7 @@ class DriverConfig(object):
         disable_discovery: bool = False,
         detect_local_dc: bool = False,
         *,
+        prefer_primary_pile: bool = False,
         _additional_sdk_headers: Tuple[str, ...] = (),
     ) -> None:
         """
@@ -167,6 +169,9 @@ class DriverConfig(object):
         server-provided self_location. **Note**: This option only affects endpoint selection when use_all_nodes=False.\
         When use_all_nodes=True (default), all endpoints are used regardless of detected location.
         :param _additional_sdk_headers: Reserved for SDK integrations (e.g. dbapi, sqlalchemy). Do not use in application code.
+        :param prefer_primary_pile: Prefer PRIMARY/PROMOTED Bridge endpoints, with synchronized-pile fallback.\
+        Disabled by default and has no effect without Bridge metadata. Overrides locality while in Bridge mode;\
+        admitting the first preferred connection to a full cache can interrupt sessions on the evicted connection.
 
         """
         self.endpoint = endpoint
@@ -196,6 +201,7 @@ class DriverConfig(object):
         self.compression = compression
         self.disable_discovery = disable_discovery
         self.detect_local_dc = detect_local_dc
+        self.prefer_primary_pile = prefer_primary_pile
         self._additional_sdk_headers = _additional_sdk_headers
 
     def set_database(self, database: str) -> "DriverConfig":

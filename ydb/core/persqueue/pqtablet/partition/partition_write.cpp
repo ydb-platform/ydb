@@ -776,13 +776,6 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         return;
     }
 
-    const bool cdcMirrorWrite = ev->Get()->FromMirrorer && IsCdcReplicationTopic();
-    const auto mirrorer = cdcMirrorWrite ? GetActiveMirrorer() : TActorId{};
-    if (cdcMirrorWrite && !mirrorer) {
-        ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR, "CDC mirroring has stopped");
-        return;
-    }
-
     const bool replicatedPartition = ReplicationEnabled(Config);
     const bool replicationDisabled = replicatedPartition
         && AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled();
@@ -792,6 +785,12 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
 
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR,
                    "Topic replication is temporarily disabled");
+        return;
+    }
+
+    const auto mirrorer = ev->Get()->FromMirrorer ? GetActiveMirrorer() : TActorId{};
+    if (ev->Get()->FromMirrorer && !mirrorer) {
+        ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR, "Mirroring has stopped");
         return;
     }
 
@@ -1210,7 +1209,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p,
 {
     if (p.MirrorerActor && p.MirrorerActor != GetActiveMirrorer()) {
         WriteInflightSize -= p.Msg.Data.size();
-        ScheduleReplyError(p.Cookie, false, NPersQueue::NErrorCode::ERROR, "CDC mirroring has stopped");
+        ScheduleReplyError(p.Cookie, false, NPersQueue::NErrorCode::ERROR, "Mirroring has stopped");
         return EProcessResult::ContinueDrop;
     }
 
@@ -1410,7 +1409,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     const auto& ctx = ActorContext();
 
     if (p.MirrorerActor && p.MirrorerActor != GetActiveMirrorer()) {
-        ScheduleReplyError(p.Cookie, false, NPersQueue::NErrorCode::ERROR, "CDC mirroring has stopped");
+        ScheduleReplyError(p.Cookie, false, NPersQueue::NErrorCode::ERROR, "Mirroring has stopped");
         return false;
     }
 

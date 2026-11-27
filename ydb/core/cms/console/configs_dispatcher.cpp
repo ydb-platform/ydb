@@ -36,8 +36,6 @@
 #include <util/string/join.h>
 #include <util/string/subst.h>
 
-#include <algorithm>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONFIGS_DISPATCHER
 
 namespace NKikimr::NConsole {
@@ -1184,14 +1182,7 @@ try {
     google::protobuf::util::MessageDifferencer md;
     auto fieldComparator = google::protobuf::util::DefaultFieldComparator();
     md.set_field_comparator(&fieldComparator);
-    const auto hasBackup = [](const NKikimrConfig::TAppConfig& config) {
-        return std::ranges::any_of(config.GetBridgeConfig().GetPiles(), [](const auto& pile) { return pile.HasBackup(); });
-    };
-    if (hasBackup(BaseConfig) || hasBackup(CandidateStartupConfig)) {
-        StartupConfigInfo = "Detailed configuration changes are hidden for backup piles.";
-    } else {
-        md.ReportDifferencesToString(&StartupConfigInfo);
-    }
+    md.ReportDifferencesToString(&StartupConfigInfo);
     StartupConfigProcessDiff = !md.Compare(BaseConfig, CandidateStartupConfig);
     *StartupConfigChanged = StartupConfigProcessDiff ? 1 : 0;
 }

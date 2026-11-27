@@ -1,4 +1,3 @@
-* Added `ydb workload scheme` to load-test CREATE, ALTER, DESCRIBE and directory listing through YAML configuration or command-line options.
 
 ## 2.36.0 ##
 

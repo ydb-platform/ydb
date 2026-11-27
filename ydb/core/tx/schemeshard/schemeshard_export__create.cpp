@@ -18,10 +18,13 @@
 #include <ydb/core/backup/common/feature_flags.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 
+#include <util/folder/pathsplit.h>
 #include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
+#include <util/string/printf.h>
 
 #include <utility>
 
@@ -43,6 +46,7 @@ bool IsPathTypeTransferrable(const NKikimr::NSchemeShard::TExportInfo::TItem& it
 
 bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
     switch (item.SourcePathType) {
+    case NKikimrSchemeOp::EPathTypeDir:
     case NKikimrSchemeOp::EPathTypeView:
     case NKikimrSchemeOp::EPathTypePersQueueGroup:
     case NKikimrSchemeOp::EPathTypeKesus:
@@ -69,6 +73,28 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 using namespace NBackup::NFieldsWrappers;
+
+namespace {
+
+TString RelativeExportPath(const TString& sourcePath, const TString& root) {
+    const TString path = CanonizePath(sourcePath);
+    if (path == root) {
+        return {};
+    }
+    TStringBuf relative(path);
+    if (relative.SkipPrefix(root) && relative.SkipPrefix("/")) {
+        return TString(relative);
+    }
+    return NBackup::NormalizeItemPath(path);
+}
+
+template <typename TSettings>
+TString DefaultItemPrefix(const TSettings& settings, ui32 index, const TString& relativePath) {
+    return settings.has_encryption_settings() ? Sprintf("%03u", index + 1) : relativePath;
+}
+
+} // namespace
+
 // Erases encryption key from settings, if settings type supports it
 // Returns true if settings changed
 template <class TSettings, class = decltype(std::declval<TSettings>().encryption_settings())> // Function for TSettings that have encryption_settings()
@@ -336,7 +362,7 @@ private:
     }
 
     template <typename TSettings>
-    bool FillItems(TExportInfo& exportInfo, const TSettings& settings, TString& explain) {
+    bool FillItems(TExportInfo& exportInfo, TSettings& settings, TString& explain) {
         TVector<TExportInfo::TItem> indexItems;
 
         exportInfo.Items.reserve(settings.items().size());
@@ -368,6 +394,10 @@ private:
             }
 
             if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToYtSettings>) {
+                if (path.Base()->IsDirectory()) {
+                    explain = "Directory export to YT is not supported";
+                    return false;
+                }
                 if (path.Base()->IsKesus()) {
                     explain = "Coordination node export to YT is not supported";
                     return false;
@@ -400,6 +430,45 @@ private:
                         indexItems.emplace_back(implTableRelPath, implTablePathId, childPath->PathType, itemIdx);
                     }
                 }
+            }
+        }
+
+        if constexpr (!std::is_same_v<TSettings, Ydb::Export::ExportToYtSettings>) {
+            if (AnyOf(exportInfo.Items, [](const auto& item) { return item.SourcePathType == NKikimrSchemeOp::EPathTypeDir; })) {
+                const TString root = settings.source_path().empty() ? CanonizePath(Self->RootPathElements) : CanonizePath(settings.source_path());
+                const auto& inheritedIndices = Request->Get()->Record.GetRequest().GetInheritedDestinationItems();
+                const THashSet<ui32> inherited(inheritedIndices.begin(), inheritedIndices.end());
+                TVector<TExportObjectPrefix> prefixes;
+                for (ui32 i : xrange(exportInfo.Items.size())) {
+                    const auto& item = settings.items(i);
+                    const auto& destination = GetItemDestination(item);
+                    TString prefix = destination.empty()
+                        ? DefaultItemPrefix(settings, i, RelativeExportPath(item.source_path(), root))
+                        : NBackup::NormalizeItemPrefix(destination);
+                    if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
+                        if (prefix) {
+                            prefix = NBackup::NormalizeItemPrefix(TPathSplit(prefix).Reconstruct());
+                        }
+                    }
+                    prefixes.push_back({item.source_path(), std::move(prefix),
+                        exportInfo.Items[i].SourcePathType == NKikimrSchemeOp::EPathTypeDir, !destination.empty() && !inherited.contains(i)});
+                }
+                const TDirectoryExportFiles files{
+                    .HasMapping = !GetCommonDestination(settings).empty(),
+                    .Encrypted = settings.has_encryption_settings(),
+                    .Permissions = exportInfo.EnablePermissions,
+                    .Checksums = exportInfo.EnableChecksums,
+                    .CompletionMarker = std::is_same_v<TSettings, Ydb::Export::ExportToS3Settings>,
+                };
+                if (!ResolveDirectoryExportPrefixes(prefixes, files, explain)) {
+                    return false;
+                }
+                for (ui32 i : xrange(prefixes.size())) {
+                    if (!prefixes[i].Explicit) {
+                        MutableItemDestination(*settings.mutable_items(i)) = std::move(prefixes[i].Prefix);
+                    }
+                }
+                exportInfo.Settings = settings.SerializeAsString();
             }
         }
 
@@ -650,12 +719,7 @@ private:
             auto& exportItem = *exportSettings.mutable_items(itemIndex - 1);
             NKikimrSchemeOp::TExportMetadata::TSchemaMappingItem& schemaMappingItem = *exportInfo.ExportMetadata.AddSchemaMapping();
 
-            // remove source path prefix
-            TString exportPath = CanonizePath(exportItem.source_path());
-            if (exportPath.StartsWith(sourcePathRoot)) {
-                exportPath = exportPath.substr(sourcePathRoot.size() + 1); // cut all prefix + '/'
-            }
-            exportPath = NBackup::NormalizeItemPath(exportPath); // Path without leading slash
+            const TString exportPath = RelativeExportPath(exportItem.source_path(), sourcePathRoot);
             schemaMappingItem.SetSourcePath(exportPath);
 
             TString destinationPrefix;
@@ -663,14 +727,7 @@ private:
                 TString& itemPrefix = MutableItemDestination(exportItem);
                 destinationPrefix = itemPrefix = NBackup::NormalizeItemPrefix(itemPrefix);
             } else {
-                std::stringstream itemPrefix;
-                if (exportSettings.has_encryption_settings()) {
-                    // Anonymize object name in export
-                    itemPrefix << std::setfill('0') << std::setw(3) << std::right << itemIndex;
-                } else {
-                    itemPrefix << exportPath;
-                }
-                destinationPrefix = itemPrefix.str();
+                destinationPrefix = DefaultItemPrefix(exportSettings, itemIndex - 1, exportPath);
             }
             schemaMappingItem.SetDestinationPrefix(destinationPrefix);
             if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {

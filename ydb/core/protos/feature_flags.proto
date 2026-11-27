@@ -506,4 +506,6 @@ message TFeatureFlags {
     optional bool EnableBlobDepotDataCooling = 403 [default = false];
     optional bool EnableAsyncReplicationSnapshotProvenance = 404 [default = false];
     optional bool EnableConsistentVectorIndexBuild = 405 [default = true];
+    // Enable writing user directories after the rollback version can import them.
+    optional bool EnableDirectoryExport = 406 [default = false];
 }

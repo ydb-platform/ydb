@@ -169,6 +169,10 @@ private:
                         }
                     }
                 }
+                if (AppData()->FeatureFlags.GetEnableDirectoryExport()
+                    && this->Request_->HasClientCapability(NYdb::YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT)) {
+                    this->Request_->AddServerHint(NYdb::YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT);
+                }
                 return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
             }
             case NKikimrScheme::StatusPathDoesNotExist:

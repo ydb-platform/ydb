@@ -15,6 +15,7 @@ extern const char* YDB_SERVER_HINTS;
 extern const char* YDB_CLIENT_CAPABILITIES;
 extern const char* YDB_SESSION_CLOSE;
 extern const char* YDB_CLIENT_CAPABILITY_SESSION_BALANCER;
+extern const char* YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT;
 extern const char* YDB_APPLICATION_NAME;
 extern const char* YDB_CLIENT_PID;
 

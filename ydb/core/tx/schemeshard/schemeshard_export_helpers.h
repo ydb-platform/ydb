@@ -4,6 +4,8 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/vector.h>
+
 namespace NKikimrSchemeOp {
     enum EPathType : int;
 }
@@ -31,5 +33,24 @@ inline constexpr TStringBuf ExportDataCompleteFileName = "data_complete.json";
 inline constexpr TStringBuf ExportCompleteFileName = "export_complete.json";
 
 TString GetExportCompletionPrefix(const Ydb::Export::ExportToS3Settings& settings);
+
+struct TExportObjectPrefix {
+    TString SourcePath;
+    TString Prefix;
+    bool Directory;
+    bool Explicit;
+};
+
+struct TDirectoryExportFiles {
+    bool HasMapping;
+    bool Encrypted;
+    bool Permissions;
+    bool Checksums;
+    bool CompletionMarker;
+};
+
+// Directories may share a prefix with their children, but their own files must
+// never occupy another object's prefix (particularly on a filesystem).
+bool ResolveDirectoryExportPrefixes(TVector<TExportObjectPrefix>& items, const TDirectoryExportFiles& files, TString& error);
 
 } // namespace NKikimr::NSchemeShard

@@ -2,6 +2,7 @@
 
 #include "schemeshard.h"
 #include "schemeshard_xxport__helpers.h"
+#include "user_attributes.h"
 
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
@@ -492,9 +493,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
         this->Become(&TThis::StateDescribe);
     }
 
-    bool FillExportProperties(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
-        PathType = GetPathType(describeResult);
-
+    bool FillExportProperties(TString& error) {
         auto properties = PathTypeToXxportProperties(PathType);
         if (!properties) {
             error = TStringBuilder() << "unable to find file properties for " << PathType;
@@ -507,7 +506,18 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
     }
 
     bool BuildSchemeToUpload(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
-        if (!FillExportProperties(describeResult, error)) {
+        PathType = GetPathType(describeResult);
+        if (PathType == NKikimrSchemeOp::EPathTypeDir) {
+            TMap<TString, TString> attributes;
+            for (const auto& attr : describeResult.GetPathDescription().GetUserAttributes()) {
+                if (TUserAttributes::ParseName(attr.GetKey()) == EAttribute::USER) {
+                    attributes.emplace(attr.GetKey(), attr.GetValue());
+                }
+            }
+            Metadata.SetDirectoryAttributes(std::move(attributes));
+            return true;
+        }
+        if (!FillExportProperties(error)) {
             return false;
         }
 
@@ -585,12 +595,13 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
     }
 
     void StartUploadFiles() {
-        if (!Scheme) {
-            return Finish(false, TStringBuilder() << this->GetObjectKey(FileName, IV.Defined()) << ": cannot infer scheme");
-        }
-
-        if (!AddFileWithChecksum(FileName, Scheme, SchemeFileType)) {
-            return;
+        if (PathType != NKikimrSchemeOp::EPathTypeDir) {
+            if (!Scheme) {
+                return Finish(false, TStringBuilder() << this->GetObjectKey(FileName, IV.Defined()) << ": cannot infer scheme");
+            }
+            if (!AddFileWithChecksum(FileName, Scheme, SchemeFileType)) {
+                return;
+            }
         }
 
         if (PathType == NKikimrSchemeOp::EPathTypeKesus) {

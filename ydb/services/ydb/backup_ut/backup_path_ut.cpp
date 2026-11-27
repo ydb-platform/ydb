@@ -11,6 +11,7 @@
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <arrow/api.h>
 
@@ -588,6 +589,103 @@ void OnlyOneEmptyDirectoryImpl(TBackupTestFixture& f, bool /*isOlap*/) {
         .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/dir2/dir3"});
     auto res = traits.Export(f, exportSettings);
     UNIT_ASSERT_EQUAL_C(res.Status().GetStatus(), EStatus::BAD_REQUEST, "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
+void ExportEmptyDirectoriesImpl(TBackupTestFixture& f) {
+    using namespace NKikimr;
+    TBackupTraits<TExportSettings> traits;
+    auto& flags = f.Server().GetRuntime()->GetAppData().FeatureFlags;
+    flags.SetEnableFsBackups(true);
+    flags.SetEnableDirectoryExport(true);
+    const TString parent = "/Root/RecursiveFolderProcessing/dir1/dir2";
+    Tests::TClient client(*f.Server().ServerSettings);
+    UNIT_ASSERT_VALUES_EQUAL(client.AlterUserAttributes(parent, "dir3", {{"team", "billing"}}), NMsgBusProxy::MSTATUS_OK);
+    auto status = f.YdbSchemeClient().MakeDirectory(parent + "/dir3/metadata.json").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+    auto settings = traits.MakeExportSettings(f, parent + "/dir3");
+    f.WaitOpSuccess(traits.Export(f, settings));
+    const auto read = [&](const TString& name) -> TString {
+        const TString path = traits.FilePrefix() + name;
+        if constexpr (std::is_same_v<TExportSettings, NExport::TExportToS3Settings>) {
+            const auto& data = f.GetS3Data();
+            UNIT_ASSERT_C(data.contains(path), path);
+            return data.at(path);
+        } else {
+            return TFileInput(TFsPath(f.GetTempDir().Path()) / path).ReadAll();
+        }
+    };
+    NKikimr::NBackup::TSchemaMapping mapping;
+    TString error;
+    UNIT_ASSERT_C(mapping.Deserialize(read("SchemaMapping/mapping.json"), error), error);
+    UNIT_ASSERT_VALUES_EQUAL(mapping.Items.size(), 2);
+    THashSet<TString> names;
+    for (const auto& entry : mapping.Items) {
+        names.insert(entry.ObjectPath);
+        const TString prefix = NKikimr::NBackup::NormalizeItemPrefix(entry.ExportPrefix) + "/";
+        const auto metadata = NKikimr::NBackup::TMetadata::Deserialize(read(prefix + "metadata.json"));
+        UNIT_ASSERT(metadata.GetDirectoryAttributes());
+        if (entry.ObjectPath.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(metadata.GetDirectoryAttributes()->at("team"), "billing");
+        } else {
+            UNIT_ASSERT(metadata.GetDirectoryAttributes()->empty());
+        }
+        read(prefix + "permissions.pb");
+        read(prefix + "metadata.json.sha256");
+    }
+    UNIT_ASSERT(names.contains(""));
+    UNIT_ASSERT(names.contains("metadata.json"));
+
+    // The child's destination is derived from its parent's explicit prefix.
+    // It may move in the mapping, while two explicit destinations must fail.
+    auto inherited = traits.MakeExportSettingsCustomDest(f, parent, "inherited");
+    inherited.AppendItem(typename TExportSettings::TItem{.Src = "dir3", .Dst = "archive"});
+    f.WaitOpSuccess(traits.Export(f, inherited));
+    auto explicitCollision = traits.MakeExportSettingsCustomDest(f, parent, "conflict");
+    explicitCollision.AppendItem(typename TExportSettings::TItem{.Src = "dir3", .Dst = "archive"});
+    explicitCollision.AppendItem(typename TExportSettings::TItem{.Src = "dir3/metadata.json", .Dst = "archive/metadata.json"});
+    f.WaitOpStatus(traits.Export(f, explicitCollision), EStatus::BAD_REQUEST);
+    auto available = traits.MakeExportSettingsCustomDest(f, parent, "available");
+    available.AppendItem(typename TExportSettings::TItem{.Src = "dir3", .Dst = "archive"});
+    available.AppendItem(typename TExportSettings::TItem{.Src = "dir3/metadata.json", .Dst = "archive/permissions.pb.enc"});
+    f.WaitOpSuccess(traits.Export(f, available));
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
+void ExportEmptyDirectoriesWithCliFiltersImpl(TBackupTestFixture& f) {
+    TBackupTraits<TExportSettings> traits;
+    auto& flags = f.Server().GetRuntime()->GetAppData().FeatureFlags;
+    flags.SetEnableFsBackups(true);
+    flags.SetEnableDirectoryExport(true);
+    const TString root = "/Root/RecursiveFolderProcessing/dir1/dir2";
+    const auto repeated = f.YdbSchemeClient().MakeDirectory(root + "/abab").GetValueSync();
+    UNIT_ASSERT_C(repeated.IsSuccess(), repeated.GetIssues().ToString());
+    auto settings = traits.MakeExportSettings(f, root);
+    settings.AppendItem(typename TExportSettings::TItem{.Src = root});
+    settings.AppendExcludeRegexp(".*");
+    // TRegExMatch disables automatic captures. Named groups still get a number
+    // in each expression, so the second filter must keep its own group 1.
+    settings.AppendExcludeRegexp("^/Root/RecursiveFolderProcessing/dir1/dir2(?<table>/Table2)?$");
+    settings.AppendExcludeRegexp(R"(/(?<pair>ab)\1$)");
+    // A node unaware of the CLI capability rejects the same body without
+    // scheduling an export, even if it usually handles relative filters.
+    f.WaitOpStatus(traits.Export(f, settings), EStatus::BAD_REQUEST);
+
+    settings.Header({{YDB_CLIENT_CAPABILITIES, YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT}});
+    f.WaitOpSuccess(traits.Export(f, settings));
+    const auto name = traits.FilePrefix() + "SchemaMapping/mapping.json";
+    TString json;
+    if constexpr (std::is_same_v<TExportSettings, NExport::TExportToS3Settings>) {
+        json = f.GetS3Data().at(name);
+    } else {
+        json = TFileInput(TFsPath(f.GetTempDir().Path()) / name).ReadAll();
+    }
+    NKikimr::NBackup::TSchemaMapping mapping;
+    TString error;
+    UNIT_ASSERT_C(mapping.Deserialize(json, error), error);
+    UNIT_ASSERT_VALUES_EQUAL(mapping.Items.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(mapping.Items.front().ObjectPath, "dir3");
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
@@ -1388,6 +1486,102 @@ void ImportWithExcludeRegexpsImpl(TBackupTestFixture& f, bool isOlap) {
             TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix2/dir1/dir2/Table2", isOlap),
         });
     }
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
+void ImportEmptyDirectoriesImpl(TBackupTestFixture& f) {
+    using namespace NKikimr;
+    TBackupTraits<TExportSettings> traits;
+    auto& flags = f.Server().GetRuntime()->GetAppData().FeatureFlags;
+    flags.SetEnableFsBackups(true);
+    flags.SetEnableDirectoryExport(true);
+    auto& scheme = f.YdbSchemeClient();
+    Tests::TClient client(*f.Server().ServerSettings);
+    const TString parent = "/Root/RecursiveFolderProcessing/dir1";
+    UNIT_ASSERT_VALUES_EQUAL(client.AlterUserAttributes(parent, "dir2", {{"team", "source"}}), NMsgBusProxy::MSTATUS_OK);
+    const auto permissions = NYdb::NScheme::TModifyPermissionsSettings().AddChangeOwner("backup@builtin")
+        .AddGrantPermissions(NYdb::NScheme::TPermissions("reader@builtin", {"ydb.generic.read"})).AddInterruptInheritance(true);
+    auto status = scheme.ModifyPermissions(parent + "/dir2", permissions).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    const auto inserted = f.YdbQueryClient().ExecuteQuery(
+        "UPSERT INTO `/Root/RecursiveFolderProcessing/dir1/dir2/Table2` (key) VALUES (42u)",
+        NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+    auto exportSettings = traits.MakeExportSettings(f, parent);
+    exportSettings.AppendItem(typename TExportSettings::TItem{.Src = "dir2"});
+    constexpr bool encrypted = std::is_same_v<TExportSettings, NExport::TExportToS3Settings>;
+    const TString key = "Cool random key!";
+    if constexpr (encrypted) {
+        traits.SetEncryption(exportSettings, NExport::TEncryptionAlgorithm::AES_128_GCM, key);
+    }
+    f.WaitOpSuccess(traits.Export(f, exportSettings));
+
+    const auto importSettings = [&] {
+        auto settings = traits.MakeImportSettings(f, "/Root");
+        if constexpr (encrypted) {
+            traits.SetDecryptionKey(settings, key);
+        }
+        return settings;
+    };
+    const auto restore = [&](const TString& target) {
+        auto settings = importSettings();
+        settings.AppendItem(traits.MakeImportItem(target, "dir2"));
+        f.WaitOpSuccess(traits.Import(f, settings));
+        const auto empty = scheme.ListDirectory(target + "/dir3").GetValueSync();
+        UNIT_ASSERT_C(empty.IsSuccess(), empty.GetIssues().ToString());
+        UNIT_ASSERT(empty.GetChildren().empty());
+        const auto result = f.YdbQueryClient().ExecuteQuery(fmt::format("SELECT key FROM `{}/Table2`", target.c_str()),
+            NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        auto rows = result.GetResultSetParser(0);
+        UNIT_ASSERT_VALUES_EQUAL(rows.RowsCount(), 1);
+        UNIT_ASSERT(rows.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser(0).GetUint32(), 42);
+    };
+    const auto check = [&](const TString& target, const std::string& owner, const TString& team, bool inheritInterrupted) {
+        const auto desc = scheme.DescribePath(target).GetValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        const auto& entry = desc.GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.Owner, owner);
+        UNIT_ASSERT_VALUES_EQUAL(entry.InterruptInheritance, inheritInterrupted);
+        UNIT_ASSERT_VALUES_EQUAL(AnyOf(entry.Permissions, [](const auto& acl) { return acl.Subject == "reader@builtin"; }),
+            inheritInterrupted);
+        const auto result = client.Describe(f.Server().GetRuntime(), target);
+        UNIT_ASSERT(AnyOf(result.GetPathDescription().GetUserAttributes(), [&](const auto& attr) {
+            return attr.GetKey() == "team" && attr.GetValue() == team;
+        }));
+    };
+    restore("/Root/fresh");
+    check("/Root/fresh", "backup@builtin", "source", true);
+
+    status = scheme.MakeDirectory("/Root/existing/keep").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    status = scheme.ModifyPermissions("/Root/existing",
+        NYdb::NScheme::TModifyPermissionsSettings().AddChangeOwner("target@builtin")).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(client.AlterUserAttributes("/Root", "existing", {{"team", "target"}}), NMsgBusProxy::MSTATUS_OK);
+    restore("/Root/existing");
+    check("/Root/existing", "target@builtin", "target", false);
+    UNIT_ASSERT(scheme.DescribePath("/Root/existing/keep").GetValueSync().IsSuccess());
+
+    auto noAcl = importSettings();
+    noAcl.NoACL(true).AppendItem(traits.MakeImportItem("/Root/no-acl", "dir2"));
+    f.WaitOpSuccess(traits.Import(f, noAcl));
+    const auto noAclDesc = scheme.DescribePath("/Root/no-acl").GetValueSync();
+    UNIT_ASSERT_C(noAclDesc.IsSuccess(), noAclDesc.GetIssues().ToString());
+    UNIT_ASSERT(noAclDesc.GetEntry().Owner != "backup@builtin");
+    check("/Root/no-acl", noAclDesc.GetEntry().Owner, "source", false);
+
+    auto leaf = importSettings();
+    leaf.AppendItem(traits.MakeImportItem("/Root/leaf-only/orders", "dir2/Table2"));
+    f.WaitOpSuccess(traits.Import(f, leaf));
+    f.ValidateHasYdbTables({"/Root/leaf-only/orders"});
+    f.ValidateDoesNotHaveYdbTables({"/Root/leaf-only/dir3"});
+
+    auto conflict = importSettings();
+    conflict.AppendItem(traits.MakeImportItem("/Root/existing/Table2", "dir2/dir3"));
+    f.WaitOpStatus(traits.Import(f, conflict), {EStatus::BAD_REQUEST, EStatus::CANCELLED});
+    f.ValidateHasYdbTables({"/Root/existing/Table2"});
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
@@ -2329,6 +2523,24 @@ void CancelWhileProcessingImpl(TBackupTestFixture& f, bool isOlap) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE_F(PathAliasingExplicitExport, TPathAliasExplicitExportFixture) {
+    Y_UNIT_TEST(ExportEmptyDirectoriesWithAliasedCliPath) {
+        auto& flags = Server().GetRuntime()->GetAppData().FeatureFlags;
+        flags.SetEnableRelativePaths(true);
+        flags.SetEnableDirectoryExport(true);
+        auto settings = MakeExportSettings("/Root/export-base-alias");
+        settings.AppendItem(NExport::TExportToFsSettings::TItem{.Src = "/Root/export-base-alias"});
+        settings.Header({{YDB_CLIENT_CAPABILITIES, YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT}});
+        settings.AppendExcludeRegexp(".*");
+        settings.AppendExcludeRegexp("^/Root/export-base-alias(?:$|/(?!dir1/dir2/dir3$))");
+        WaitOpSuccess(YdbExportClient().ExportToFs(settings).GetValueSync());
+        NKikimr::NBackup::TSchemaMapping mapping;
+        TString error;
+        const auto path = TFsPath(GetTempDir().Path()) / "SchemaMapping" / "mapping.json";
+        UNIT_ASSERT_C(mapping.Deserialize(TFileInput(path).ReadAll(), error), error);
+        UNIT_ASSERT_VALUES_EQUAL(mapping.Items.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(mapping.Items.front().ObjectPath, "dir1/dir2/dir3");
+    }
+
     Y_UNIT_TEST(RelativeExportAndImportItemsUseAliases) {
         Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
         auto exportSettings = MakeExportSettings("export-base-alias/");
@@ -2383,6 +2595,12 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
     Y_UNIT_TEST(OnlyOneEmptyDirectory) {
         OnlyOneEmptyDirectoryImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
+    Y_UNIT_TEST(ExportEmptyDirectories) {
+        ExportEmptyDirectoriesImpl<NExport::TExportToFsSettings>(*this);
+    }
+    Y_UNIT_TEST(ExportEmptyDirectoriesWithCliFilters) {
+        ExportEmptyDirectoriesWithCliFiltersImpl<NExport::TExportToFsSettings>(*this);
+    }
     Y_UNIT_TEST(ExportWholeDatabase) {
         ExportWholeDatabaseImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
@@ -2409,6 +2627,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
     }
     Y_UNIT_TEST(ImportWithExcludeRegexps) {
         ImportWithExcludeRegexpsImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
+    }
+    Y_UNIT_TEST(ImportEmptyDirectories) {
+        ImportEmptyDirectoriesImpl<NExport::TExportToFsSettings>(*this);
     }
     Y_UNIT_TEST(ImportFilterByPrefix) {
         ImportFilterByPrefixImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
@@ -2490,6 +2711,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
     Y_UNIT_TEST_TWIN(ImportWithExcludeRegexps, IsOlap) {
         ImportWithExcludeRegexpsImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
+    Y_UNIT_TEST(ImportEmptyDirectories) {
+        ImportEmptyDirectoriesImpl<NExport::TExportToS3Settings>(*this);
+    }
 
     Y_UNIT_TEST_TWIN(ExportWithCommonSourcePathAndExplicitTableInside, IsOlap) {
         ExportWithCommonSourcePathAndExplicitTableInsideImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
@@ -2556,6 +2780,12 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
 
     Y_UNIT_TEST_TWIN(OnlyOneEmptyDirectory, IsOlap) {
         OnlyOneEmptyDirectoryImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
+    }
+    Y_UNIT_TEST(ExportEmptyDirectories) {
+        ExportEmptyDirectoriesImpl<NExport::TExportToS3Settings>(*this);
+    }
+    Y_UNIT_TEST(ExportEmptyDirectoriesWithCliFilters) {
+        ExportEmptyDirectoriesWithCliFiltersImpl<NExport::TExportToS3Settings>(*this);
     }
 
     Y_UNIT_TEST_TWIN(ExportRecursiveWithoutDestinationPrefix, IsOlap) {

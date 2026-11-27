@@ -4096,6 +4096,10 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         ui32 ParentIdx = Max<ui32>();
         TVector<ui32> ChildItems;
 
+        // Derived from the selected destination paths; separate from index impl tables.
+        ui32 DstParentIdx = Max<ui32>();
+        TVector<ui32> DstChildren;
+
         TItem() = default;
 
         explicit TItem(const TString& dstPathName)
@@ -4133,6 +4137,8 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TString Issue;
     TVector<TItem> Items;
     int WaitingSchemeObjects = 0;
+    bool DstPathsIndexed = false;
+    void IndexDstPaths();
 
     TSet<TActorId> Subscribers;
 

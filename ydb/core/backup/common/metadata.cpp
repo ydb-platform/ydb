@@ -31,6 +31,14 @@ const TString& TMetadata::GetSourceDatabase() const {
     return SourceDatabase;
 }
 
+void TMetadata::SetDirectoryAttributes(TMap<TString, TString> attributes) {
+    DirectoryAttributes = std::move(attributes);
+}
+
+const std::optional<TMap<TString, TString>>& TMetadata::GetDirectoryAttributes() const {
+    return DirectoryAttributes;
+}
+
 void TMetadata::AddChangefeed(const TChangefeedMetadata& changefeed) {
     if (!Changefeeds) {
         Changefeeds.emplace();
@@ -91,6 +99,12 @@ TString TMetadata::Serialize() const {
     }
     if (EnablePermissions) {
         m["permissions"] = static_cast<int>(*EnablePermissions);
+    }
+    if (DirectoryAttributes) {
+        m["object_type"] = "directory";
+        for (const auto& [key, value] : *DirectoryAttributes) {
+            m["user_attributes"][key] = value;
+        }
     }
 
     NJson::TJsonArray fullBackups;
@@ -153,10 +167,20 @@ TString TMetadata::Serialize() const {
 
 TMetadata TMetadata::Deserialize(const TString& metadata) {
     NJson::TJsonValue json;
-    NJson::ReadJsonTree(metadata, &json);
+    const bool parsed = NJson::ReadJsonTree(metadata, &json);
     const auto& value = json["version"];
 
     TMetadata result;
+    if (json.Has("object_type")) {
+        Y_ENSURE(parsed, "Invalid backup object metadata JSON");
+        Y_ENSURE(json["object_type"].GetStringSafe() == "directory", "Unsupported backup object type");
+        result.DirectoryAttributes.emplace();
+        if (json.Has("user_attributes")) {
+            for (const auto& [key, attribute] : json["user_attributes"].GetMapSafe()) {
+                result.DirectoryAttributes->emplace(key, attribute.GetStringSafe());
+            }
+        }
+    }
     if (json.Has("source_database")) {
         result.SourceDatabase = json["source_database"].GetStringSafe();
     }

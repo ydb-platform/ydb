@@ -626,7 +626,15 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
 
         auto nextStep = [this]() {
-            StartDownloadingScheme();
+            if (ImportInfo->Items.at(ItemIdx).Metadata.GetDirectoryAttributes()) {
+                if (NeedDownloadPermissions) {
+                    StartDownloadingPermissions();
+                } else {
+                    Reply();
+                }
+            } else {
+                StartDownloadingScheme();
+            }
         };
 
         if (NeedValidateChecksums) {
@@ -1243,7 +1251,10 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     }
 
     void StartDownloadingAdditionalObjects() {
-        if (auto& item = ImportInfo->Items.at(ItemIdx); item.Kesus) {
+        auto& item = ImportInfo->Items.at(ItemIdx);
+        if (item.Metadata.GetDirectoryAttributes()) {
+            Reply();
+        } else if (item.Kesus) {
             if (!ValidateKesusMetadata()) {
                 return;
             }

@@ -6,6 +6,23 @@
 namespace NKikimr::NBackup {
 
 Y_UNIT_TEST_SUITE(BackupMetadataTest) {
+    Y_UNIT_TEST(DirectoryAttributes) {
+        TMetadata metadata;
+        UNIT_ASSERT(!TMetadata::Deserialize(metadata.Serialize()).GetDirectoryAttributes());
+        metadata.SetDirectoryAttributes({});
+        auto empty = TMetadata::Deserialize(metadata.Serialize());
+        UNIT_ASSERT(empty.GetDirectoryAttributes());
+        UNIT_ASSERT(empty.GetDirectoryAttributes()->empty());
+
+        metadata.SetDirectoryAttributes({{"team", "billing"}, {"label", ""}});
+        auto restored = TMetadata::Deserialize(metadata.Serialize());
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetDirectoryAttributes()->at("team"), "billing");
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetDirectoryAttributes()->at("label"), "");
+        UNIT_ASSERT_EXCEPTION(TMetadata::Deserialize(R"({"object_type":"directory","user_attributes":{"key":42}})"), yexception);
+        UNIT_ASSERT_EXCEPTION(TMetadata::Deserialize(R"({"object_type":"directory","user_attributes":[]})"), yexception);
+        UNIT_ASSERT_EXCEPTION(TMetadata::Deserialize(R"({"object_type":"directory"} trailing)"), yexception);
+    }
+
     Y_UNIT_TEST(SourceDatabase) {
         TMetadata metadata;
         UNIT_ASSERT(TMetadata::Deserialize(metadata.Serialize()).GetSourceDatabase().empty());

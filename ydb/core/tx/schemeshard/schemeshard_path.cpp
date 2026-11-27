@@ -8,6 +8,7 @@
 #include <ydb/core/sys_view/common/path.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/naming_conventions/scheme_object_names.h>
 
 #include <util/string/join.h>
 
@@ -1933,6 +1934,9 @@ bool TPath::IsSupportedInExports() const {
     Y_ABORT_UNLESS(IsResolved());
 
     switch (Base()->PathType) {
+        case NKikimrSchemeOp::EPathTypeDir:
+            return AppData()->FeatureFlags.GetEnableDirectoryExport() && !Base()->IsRoot()
+                && IsCommonSensePath() && !NNaming::IsInternalName(Base()->Name);
         case NKikimrSchemeOp::EPathTypeView:
             return AppData()->FeatureFlags.GetEnableViewExport();
         case NKikimrSchemeOp::EPathTypeColumnTable:

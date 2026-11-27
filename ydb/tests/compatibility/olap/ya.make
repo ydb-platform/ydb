@@ -15,6 +15,7 @@ TEST_SRCS(
     test_encoding.py
     test_tiering.py
     test_ttl_types.py
+    test_ilike_not_null.py
 )
 
 SIZE(LARGE)

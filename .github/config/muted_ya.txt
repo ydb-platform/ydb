@@ -2,10 +2,14 @@ ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiB
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_blob_depot BlobDepotMoveData.KeepDoesNotTouchMovingRecord
 ydb/core/blobstorage/ut_blobstorage/ut_blob_depot BlobDepotMoveData.MoveDataCanceledByYellowStop
+ydb/core/blobstorage/ut_blobstorage/ut_blob_depot BlobDepotMoveData.MoveDataGroupIdMismatch
+ydb/core/blobstorage/ut_blobstorage/ut_blob_depot BlobDepotMoveData.TrashNotEmptyDuringCheckTrash
+ydb/core/blobstorage/ut_blobstorage/ut_blob_depot BlobDepotMoveData.ValueChainChangeNeedsAnotherPass
 ydb/core/blobstorage/ut_blobstorage/ut_blob_depot unittest.sole chunk
 ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.VCompactCutLogRecordMissingFromSyncLogAfterRestart
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
+ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo/statistics/join_order KqpJoinOrderAnalyzedStatistics.TPCDS+ColumnStore
 ydb/core/kqp/ut/rbo/statistics/join_order KqpJoinOrderAnalyzedStatistics.TPCDS-ColumnStore
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerTests.FetchThrottledAtMinMessages
@@ -14,7 +18,9 @@ ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.ReadRuleGeneration
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.ReadRuleGeneration
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectReadNotCached
+ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSessionTest.RebootBalancerOnlyCombinedStress
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSessionTest.RebootBothTabletsCombinedStress
+ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSessionTest.RebootTabletOnlyCombinedStress
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut unittest.sole chunk
 ydb/tests/compatibility/common test_checksum_table.py.TestChecksumTable.test_checksum_survives_upgrade[restart_stable-26-3-1_to_stable-26-4-1]
 ydb/tests/compatibility/common test_checksum_table.py.TestChecksumTable.test_checksum_survives_upgrade[restart_stable-26-4-1_to_prestable-27-1-1]
@@ -37,6 +43,8 @@ ydb/tests/compatibility/topics py3test.[test_topic.py */*] chunk
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/topics test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-27-1-1_and_stable-26-4-1]
+ydb/tests/fq/streaming/logbroker test_logbroker.py.TestLogbroker.test_stop_cluster[kikimr0-partition_balancing-one_cluster]
+ydb/tests/fq/streaming/logbroker test_logbroker.py.TestLogbroker.test_stop_cluster[kikimr0-partition_balancing-three_clusters]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/mirror3dc test_mirror3dc.py.TestMirror3dc.test_exclude_one_dc_external_recovery
 ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy

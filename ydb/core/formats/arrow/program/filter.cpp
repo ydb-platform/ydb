@@ -65,7 +65,7 @@ private:
     }
 };
 
-TConclusion<TExecutionResult> TFilterProcessor::DoExecute(
+TConclusion<TExecutionResult> TFilterOperation::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
     std::vector<std::shared_ptr<IChunkedArray>> inputColumns;
     if (nodeContext.GetRemoveResourceIds().contains(GetInputColumnIdOnce())) {

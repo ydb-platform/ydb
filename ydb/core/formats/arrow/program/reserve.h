@@ -4,9 +4,9 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-class TReserveMemoryProcessor: public IResourceProcessor {
+class TReserveMemoryOperation: public IProgramOperation {
 private:
-    using TBase = IResourceProcessor;
+    using TBase = IProgramOperation;
 
     THashMap<ui32, IDataSource::TDataAddress> DataAddresses;
     THashMap<ui32, IDataSource::TFetchIndexContext> IndexContext;
@@ -49,7 +49,7 @@ private:
     }
 
 public:
-    TReserveMemoryProcessor(const TOriginalColumnDataProcessor& original, const std::shared_ptr<IMemoryCalculationPolicy>& policy)
+    TReserveMemoryOperation(const TFetchOriginalDataOperation& original, const std::shared_ptr<IMemoryCalculationPolicy>& policy)
         : TBase({}, {}, EProcessorType::ReserveMemory)
         , DataAddresses(original.GetDataAddresses())
         , IndexContext(original.GetIndexContext())

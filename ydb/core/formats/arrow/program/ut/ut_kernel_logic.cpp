@@ -10,7 +10,7 @@
 #include <ydb/core/formats/arrow/program/execution.h>
 #include <ydb/core/formats/arrow/program/filter.h>
 #include <ydb/core/formats/arrow/program/kernel_logic.h>
-#include <ydb/core/formats/arrow/program/stream_logic.h>
+#include <ydb/core/formats/arrow/program/short_circuit_logic.h>
 #include <ydb/core/formats/arrow/program/visitor.h>
 
 #include <ydb/library/formats/arrow/helpers/array.h>
@@ -101,16 +101,16 @@ std::shared_ptr<NAccessor::IChunkedArray> BuildSlicedDictionaryPredicate() {
     return sliced;
 }
 
-class TStreamLogicTest {
+class TShortCircuitLogicTest {
 private:
     TFailDataSource DataSource;
     TProcessorContext Context;
-    TStreamLogicProcessor Processor;
+    TShortCircuitLogicOperation Processor;
     TExecutionNodeContext NodeContext;
     const ui32 OutputId;
 
 public:
-    TStreamLogicTest(const ui32 recordsCount, const std::initializer_list<ui32> inputIds, const ui32 outputId,
+    TShortCircuitLogicTest(const ui32 recordsCount, const std::initializer_list<ui32> inputIds, const ui32 outputId,
                      const NKikimr::NKernels::EOperation operation)
         : Context(DataSource, std::make_unique<NAccessor::TAccessorsCollection>(recordsCount), std::nullopt, false)
         , Processor(TColumnChainInfo::BuildVector(inputIds), TColumnChainInfo(outputId), operation)
@@ -159,7 +159,7 @@ void AssertFilteredRows(const std::shared_ptr<NAccessor::IChunkedArray>& predica
     auto resources = std::make_unique<NAccessor::TAccessorsCollection>(predicate->GetRecordsCount());
     resources->AddVerified(1, predicate, false);
     TProcessorContext context(dataSource, std::move(resources), std::nullopt, false);
-    UNIT_ASSERT(TFilterProcessor(TColumnChainInfo(1)).Execute(context, TExecutionNodeContext()).IsSuccess());
+    UNIT_ASSERT(TFilterOperation(TColumnChainInfo(1)).Execute(context, TExecutionNodeContext()).IsSuccess());
 
     std::vector<std::optional<ui8>> rows;
     for (ui8 i = 0; i < predicate->GetRecordsCount(); ++i) {
@@ -172,7 +172,7 @@ void AssertFilteredRows(const std::shared_ptr<NAccessor::IChunkedArray>& predica
 
 void AssertAndResult(const std::shared_ptr<NAccessor::IChunkedArray>& predicate,
                      const std::vector<std::optional<ui8>>& expected) {
-    TStreamLogicTest test(predicate->GetRecordsCount(), {1, 2}, 3, NKikimr::NKernels::EOperation::And);
+    TShortCircuitLogicTest test(predicate->GetRecordsCount(), {1, 2}, 3, NKikimr::NKernels::EOperation::And);
     test.AddAccessor(1, predicate);
     std::vector<std::optional<ui8>> allTrue(predicate->GetRecordsCount(), 1);
     test.AddArray(2, NKikimr::NKernels::UInt8VecToArray(allTrue));
@@ -184,7 +184,7 @@ void AssertAndResult(const std::shared_ptr<NAccessor::IChunkedArray>& predicate,
 template <class TInput>
 void AssertNullConstantWithInput(const NKikimr::NKernels::EOperation operation, const std::shared_ptr<TInput>& input,
                                  const std::vector<std::optional<ui8>>& expected, const bool nullFirst) {
-    TStreamLogicTest test(expected.size(), {1, 2}, 3, operation);
+    TShortCircuitLogicTest test(expected.size(), {1, 2}, 3, operation);
     test.AddScalar(1, arrow::MakeNullScalar(arrow::uint8()));
     test.AddInput(2, input);
     UNIT_ASSERT(!test.ProcessInput(nullFirst ? 1 : 2));
@@ -300,8 +300,8 @@ Y_UNIT_TEST_SUITE(KernelLogic) {
     }
 
 
-    Y_UNIT_TEST(NullIntermediateAndResultDoesNotFinishStream) {
-        TStreamLogicTest test(2, {1, 2, 3}, 4, NKikimr::NKernels::EOperation::And);
+    Y_UNIT_TEST(NullIntermediateAndResultDoesNotShortCircuit) {
+        TShortCircuitLogicTest test(2, {1, 2, 3}, 4, NKikimr::NKernels::EOperation::And);
         test.AddArray(1, NKikimr::NKernels::UInt8VecToArray({std::nullopt, 1}));
         test.AddArray(2, NKikimr::NKernels::UInt8VecToArray({1, std::nullopt}));
         test.AddArray(3, NKikimr::NKernels::UInt8VecToArray({0, 0}));
@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(KernelLogic) {
         AssertAndResult(predicate, {std::nullopt, std::nullopt});
     }
 
-    Y_UNIT_TEST(NullOrFalseDoesNotFinishStream) {
+    Y_UNIT_TEST(NullOrFalseDoesNotShortCircuit) {
         const auto values = NKikimr::NKernels::UInt8VecToArray({1, 1});
         const auto nullable = NKikimr::NKernels::UInt8VecToArray({std::nullopt, 1});
         auto predicate = std::make_shared<arrow::UInt8Array>(
@@ -328,7 +328,7 @@ Y_UNIT_TEST_SUITE(KernelLogic) {
         UNIT_ASSERT(predicate->IsNull(0));
         UNIT_ASSERT_C(predicate->raw_values()[0] == 1, "NULL payload must be nonzero to exercise the Or finish check");
 
-        TStreamLogicTest test(2, {1, 2}, 3, NKikimr::NKernels::EOperation::Or);
+        TShortCircuitLogicTest test(2, {1, 2}, 3, NKikimr::NKernels::EOperation::Or);
         test.AddArray(1, predicate);
         test.AddArray(2, NKikimr::NKernels::UInt8VecToArray({0, 0}));
         UNIT_ASSERT(!test.ProcessInput(1));
@@ -336,8 +336,8 @@ Y_UNIT_TEST_SUITE(KernelLogic) {
         test.AssertResult({std::nullopt, 1});
     }
 
-    Y_UNIT_TEST(NullOrTrueFinishesStream) {
-        TStreamLogicTest test(2, {1, 2}, 3, NKikimr::NKernels::EOperation::Or);
+    Y_UNIT_TEST(NullOrTrueShortCircuits) {
+        TShortCircuitLogicTest test(2, {1, 2}, 3, NKikimr::NKernels::EOperation::Or);
         test.AddArray(1, NKikimr::NKernels::UInt8VecToArray({std::nullopt, 1}));
         test.AddArray(2, NKikimr::NKernels::UInt8VecToArray({1, 1}));
         UNIT_ASSERT(!test.ProcessInput(1));
@@ -412,7 +412,7 @@ public:
     }
 };
 
-// Testing KernelLogic + kernel call integration inside TCalculationProcessor
+// Testing KernelLogic + kernel call integration inside TCalculationOperation
 void AssertCoalesceProcessor(const std::shared_ptr<NAccessor::IChunkedArray>& first, const bool expectedShortcut) {
     ui32 materializations = 0;
     auto second = std::make_shared<TCountingSparsedArray>(std::make_shared<arrow::UInt8Scalar>(1), first->GetRecordsCount(), materializations);
@@ -428,7 +428,7 @@ void AssertCoalesceProcessor(const std::shared_ptr<NAccessor::IChunkedArray>& fi
     arrow::compute::ScalarKernel kernel;
     const auto type = first->GetDataType();
     kernel.signature = arrow::compute::KernelSignature::Make({type, type}, type);
-    auto processor = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1, 2}), TColumnChainInfo(3),
+    auto processor = TCalculationOperation::Build(TColumnChainInfo::BuildVector({1, 2}), TColumnChainInfo(3),
                                                   std::make_shared<TKernelFunction>(function), std::make_shared<TCoalesceKernelLogic>(kernel));
     UNIT_ASSERT(processor.IsSuccess());
     UNIT_ASSERT((*processor)->Execute(context, TExecutionNodeContext()).IsSuccess());
@@ -543,7 +543,7 @@ Y_UNIT_TEST_SUITE(CoalesceKernelLogic) {
     }
 }; // Y_UNIT_TEST_SUITE(CoalesceKernelLogic)
 
-Y_UNIT_TEST_SUITE(StreamLogic) {
+Y_UNIT_TEST_SUITE(ShortCircuitLogic) {
     void AssertNeutralOperandForwardsSparseInput(const NKernels::EOperation operation, const bool neutralFirst) {
         auto source = std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({ 0, 1, 0 }));
         auto varying = NAccessor::TSparsedArray::Make(*source, std::make_shared<arrow::UInt8Scalar>(0));
@@ -552,7 +552,7 @@ Y_UNIT_TEST_SUITE(StreamLogic) {
             ? NAccessor::TSparsedArray::BuildTrueArrayUI8(recordsCount)
             : NAccessor::TSparsedArray::BuildFalseArrayUI8(recordsCount);
 
-        TStreamLogicTest test(recordsCount, {1, 2}, 3, operation);
+        TShortCircuitLogicTest test(recordsCount, {1, 2}, 3, operation);
         test.AddAccessor(1, neutralFirst ? neutral : varying);
         test.AddAccessor(2, neutralFirst ? varying : neutral);
         UNIT_ASSERT(!test.ProcessInput(1));
@@ -560,14 +560,14 @@ Y_UNIT_TEST_SUITE(StreamLogic) {
         UNIT_ASSERT_VALUES_EQUAL(test.GetOutputAccessor().get(), varying.get());
     }
 
-    void AssertAbsorbingOperandFinishesStream(const NKernels::EOperation operation, const bool absorbingFirst) {
+    void AssertAbsorbingOperandShortCircuits(const NKernels::EOperation operation, const bool absorbingFirst) {
         auto source = std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({ 0, 1, 0 }));
         auto varying = NAccessor::TSparsedArray::Make(*source, std::make_shared<arrow::UInt8Scalar>(0));
         const bool absorbingValue = operation == NKernels::EOperation::Or;
         auto absorbing = absorbingValue ? NAccessor::TSparsedArray::BuildTrueArrayUI8(varying->GetRecordsCount())
                                         : NAccessor::TSparsedArray::BuildFalseArrayUI8(varying->GetRecordsCount());
 
-        TStreamLogicTest test(varying->GetRecordsCount(), { 1, 2 }, 3, operation);
+        TShortCircuitLogicTest test(varying->GetRecordsCount(), { 1, 2 }, 3, operation);
         test.AddAccessor(1, absorbingFirst ? absorbing : varying);
         test.AddAccessor(2, absorbingFirst ? varying : absorbing);
         UNIT_ASSERT_VALUES_EQUAL(test.ProcessInput(1), absorbingFirst);
@@ -585,7 +585,7 @@ Y_UNIT_TEST_SUITE(StreamLogic) {
         auto neutral = absorbingValue ? NAccessor::TSparsedArray::BuildFalseArrayUI8(expected.size())
                                       : NAccessor::TSparsedArray::BuildTrueArrayUI8(expected.size());
 
-        TStreamLogicTest test(expected.size(), {1, 2}, 3, operation);
+        TShortCircuitLogicTest test(expected.size(), {1, 2}, 3, operation);
         test.AddAccessor(1, neutral);
         test.AddScalar(2, std::make_shared<arrow::UInt8Scalar>(absorbingValue));
         UNIT_ASSERT(!test.ProcessInput(1));
@@ -610,19 +610,19 @@ Y_UNIT_TEST_SUITE(StreamLogic) {
     }
 
     Y_UNIT_TEST(AndKeepsAbsorbingAccumulator) {
-        AssertAbsorbingOperandFinishesStream(NKernels::EOperation::And, true);
+        AssertAbsorbingOperandShortCircuits(NKernels::EOperation::And, true);
     }
 
     Y_UNIT_TEST(OrKeepsAbsorbingAccumulator) {
-        AssertAbsorbingOperandFinishesStream(NKernels::EOperation::Or, true);
+        AssertAbsorbingOperandShortCircuits(NKernels::EOperation::Or, true);
     }
 
     Y_UNIT_TEST(AndFinishesOnAbsorbingInput) {
-        AssertAbsorbingOperandFinishesStream(NKernels::EOperation::And, false);
+        AssertAbsorbingOperandShortCircuits(NKernels::EOperation::And, false);
     }
 
     Y_UNIT_TEST(OrFinishesOnAbsorbingInput) {
-        AssertAbsorbingOperandFinishesStream(NKernels::EOperation::Or, false);
+        AssertAbsorbingOperandShortCircuits(NKernels::EOperation::Or, false);
     }
 
     Y_UNIT_TEST(AndFinishesOnAbsorbingScalarAfterNeutralAccumulator) {
@@ -645,7 +645,7 @@ Y_UNIT_TEST_SUITE(StreamLogic) {
         TProcessorContext context(dataSource, std::move(resources), std::nullopt, false);
         NGraph::NExecution::TExecutionVisitor visitor(std::move(context));
         auto processor =
-            std::make_shared<TStreamLogicProcessor>(TColumnChainInfo::BuildVector({ 1, 2, 3 }), TColumnChainInfo(4), NKernels::EOperation::And);
+            std::make_shared<TShortCircuitLogicOperation>(TColumnChainInfo::BuildVector({ 1, 2, 3 }), TColumnChainInfo(4), NKernels::EOperation::And);
         NGraph::NExecution::TCompiledGraph::TNode node(5, processor);
         UNIT_ASSERT(visitor.OnEnter(node).IsSuccess());
         UNIT_ASSERT(visitor.OnComeback(node, TColumnChainInfo::BuildVector({ 1 })).IsSuccess());
@@ -665,7 +665,7 @@ Y_UNIT_TEST_SUITE(StreamLogic) {
         auto neutral = absorbingValue ? NAccessor::TSparsedArray::BuildFalseArrayUI8(expected.size())
                                       : NAccessor::TSparsedArray::BuildTrueArrayUI8(expected.size());
 
-        TStreamLogicTest test(expected.size(), { 1, 2 }, 3, operation);
+        TShortCircuitLogicTest test(expected.size(), { 1, 2 }, 3, operation);
         test.AddAccessor(1, neutral);
         test.AddAccessor(2, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray(expected)));
         UNIT_ASSERT(!test.ProcessInput(1));
@@ -682,7 +682,7 @@ Y_UNIT_TEST_SUITE(StreamLogic) {
     }
 
     Y_UNIT_TEST(AndDoesNotFinishForNullableInput) {
-        TStreamLogicTest test(2, { 1, 2 }, 3, NKernels::EOperation::And);
+        TShortCircuitLogicTest test(2, { 1, 2 }, 3, NKernels::EOperation::And);
         test.AddScalar(1, std::make_shared<arrow::UInt8Scalar>(1));
         test.AddArray(2, NKikimr::NKernels::UInt8VecToArray({ 0, std::nullopt }));
         UNIT_ASSERT(!test.ProcessInput(1));

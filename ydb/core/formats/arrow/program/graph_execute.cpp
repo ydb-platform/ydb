@@ -34,10 +34,10 @@ public:
 
 class TStepResourcesUsage {
 private:
-    YDB_READONLY_DEF(THashSet<ui32>, LastUsageResources);
+    YDB_READONLY_DEF(THashSet<TResourceId>, LastUsageResources);
 
 public:
-    void OnLastUsage(const ui32 resourceId) {
+    void OnLastUsage(const TResourceId resourceId) {
         YDB_LOG_VERIFY(LastUsageResources.emplace(resourceId).second);
     }
 };
@@ -49,10 +49,10 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
     for (auto&& n : original.GetNodes()) {
         auto itTo = Nodes.find(n.first);
         YDB_LOG_VERIFY(itTo != Nodes.end());
-        for (auto&& from : n.second->GetInputEdges()) {
-            auto itFrom = Nodes.find(from.first.GetNodeId());
+        for (const auto& [address, _] : n.second->GetInputDependencies()) {
+            auto itFrom = Nodes.find(address.GetNodeId());
             YDB_LOG_VERIFY(itFrom != Nodes.end());
-            itFrom->second->ConnectTo(itTo->second.get());
+            itFrom->second->ConnectTo(*itTo->second);
         }
     }
     std::vector<TNode*> currentNodes;
@@ -75,12 +75,12 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
                 YDB_LOG_VERIFY(!neighbor->HasWeight());
                 bool hasWeight = true;
                 ui64 sumWeight = 0;
-                for (auto&& test : neighbor->GetInputEdges()) {
-                    if (!test->HasWeight()) {
+                for (const auto* input : neighbor->GetInputEdges()) {
+                    if (!input->HasWeight()) {
                         hasWeight = false;
                         break;
                     }
-                    sumWeight += test->GetWeight();
+                    sumWeight += input->GetWeight();
                 }
                 if (hasWeight) {
                     weightByNode[neighbor->GetIdentifier()] = sumWeight;
@@ -122,7 +122,7 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
             Nodes.erase(i);
         }
     }
-    THashMap<ui32, TResourceUsageInfo> usage;
+    THashMap<TResourceId, TResourceUsageInfo> usage;
     std::vector<TNode*> sortedNodes;
     {
         ui32 currentIndex = 0;
@@ -209,7 +209,7 @@ NJson::TJsonValue TCompiledGraph::DebugJson() const {
         auto& jsonProcessor = jsonEdges.AppendValue(NJson::JSON_MAP);
         jsonProcessor.InsertValue("owner_id", i.first);
         auto& jsonInputs = jsonProcessor.InsertValue("inputs", NJson::JSON_ARRAY);
-        for (auto&& input : i.second->GetInputEdges()) {
+        for (const auto* input : i.second->GetInputEdges()) {
             auto& jsonEdge = jsonInputs.AppendValue(NJson::JSON_MAP);
             jsonEdge.InsertValue("from", input->GetIdentifier());
         }
@@ -250,9 +250,8 @@ TString TCompiledGraph::DebugDOT(const THashSet<ui32>& special) const {
         }
         result << "];" << Endl;
         ui32 idx = 1;
-        for (auto&& input : i.second->GetInputEdges()) {
-            result << "N" << input->GetIdentifier() << " -> " << "N" << i.second->GetIdentifier() << "[label=\"" + ::ToString(idx) + "\"];"
-                   << Endl;
+        for (const auto* input : i.second->GetInputEdges()) {
+            result << "N" << input->GetIdentifier() << " -> " << "N" << i.second->GetIdentifier() << "[label=\"" << idx << "\"];" << Endl;
             ++idx;
         }
     }
@@ -325,7 +324,7 @@ TConclusionStatus TCompiledGraph::TIterator::ProvideCurrentToExecute() {
         if (it == Statuses.end()) {
             YDB_LOG_VERIFY(Statuses.emplace(CurrentNode->GetIdentifier(), ENodeStatus::InProgress).second);
             bool needInput = false;
-            for (auto&& input : CurrentNode->GetInputEdges()) {
+            for (auto* input : CurrentNode->GetInputEdges()) {
                 auto it = Statuses.find(input->GetIdentifier());
                 if (it == Statuses.end()) {
                     CurrentNode = input;
@@ -414,27 +413,29 @@ TConclusion<bool> TCompiledGraph::TIterator::Next() {
         auto owner = NodesStack[NodesStack.size() - 2];
         YDB_LOG_VERIFY(owner);
         bool found = false;
-        for (ui32 idx = 0; idx < owner->GetInputEdges().size(); ++idx) {
+        for (auto* input : owner->GetInputEdges()) {
             if (found) {
-                auto itStatus = Statuses.find(owner->GetInputEdges()[idx]->GetIdentifier());
+                auto itStatus = Statuses.find(input->GetIdentifier());
                 if (itStatus == Statuses.end()) {
-                    nextNode = owner->GetInputEdges()[idx];
+                    nextNode = input;
                     break;
                 } else {
                     YDB_LOG_VERIFY(itStatus->second == ENodeStatus::Finished);
                 }
-            } else if (owner->GetInputEdges()[idx]->GetIdentifier() == CurrentNode->GetIdentifier()) {
+            } else if (input == CurrentNode) {
                 if (Visitor) {
                     std::vector<TColumnChainInfo> columnsInput;
-                    for (auto&& out : owner->GetInputEdges()[idx]->GetProcessor()->GetOutput()) {
-                        if (owner->GetProcessor()->HasInput(out.GetColumnId())) {
-                            columnsInput.emplace_back(out.GetColumnId());
+                    for (const auto& output : input->GetProcessor()->GetOutput()) {
+                        if (owner->GetProcessor()->HasInput(output.GetColumnId())) {
+                            columnsInput.emplace_back(output.GetColumnId());
                         }
                     }
-                    YDB_LOG_VERIFY(columnsInput.size());
-                    auto conclusion = Visitor->OnComeback(*owner, columnsInput);
-                    if (conclusion.IsFail()) {
-                        return conclusion;
+                    // Ordering-only prerequisites need not produce any of the owner's inputs.
+                    if (!columnsInput.empty()) {
+                        auto conclusion = Visitor->OnComeback(*owner, columnsInput);
+                        if (conclusion.IsFail()) {
+                            return conclusion;
+                        }
                     }
                 }
                 found = true;

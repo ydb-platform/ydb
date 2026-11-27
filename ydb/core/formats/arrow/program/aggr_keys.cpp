@@ -84,7 +84,7 @@ TString TWithKeysAggregationOption::DebugString() const {
     return sb;
 }
 
-TConclusion<TExecutionResult> TWithKeysAggregationProcessor::DoExecute(
+TConclusion<TExecutionResult> TGroupedAggregationOperation::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     CH::GroupByOptions funcOpts;
     funcOpts.assigns.reserve(AggregationKeys.size() + Aggregations.size());
@@ -153,7 +153,7 @@ TConclusion<TExecutionResult> TWithKeysAggregationProcessor::DoExecute(
     return TExecutionResult::Done();
 }
 
-TConclusion<std::shared_ptr<TWithKeysAggregationProcessor>> TWithKeysAggregationProcessor::TBuilder::Finish() {
+TConclusion<std::shared_ptr<TGroupedAggregationOperation>> TGroupedAggregationOperation::TBuilder::Finish() {
     YDB_LOG_VERIFY(!Finished);
     Finished = true;
     if (Keys.empty()) {
@@ -181,11 +181,11 @@ TConclusion<std::shared_ptr<TWithKeysAggregationProcessor>> TWithKeysAggregation
     for (auto&& i : output) {
         outputChainColumns.emplace_back(i);
     }
-    return std::shared_ptr<TWithKeysAggregationProcessor>(new TWithKeysAggregationProcessor(
+    return std::shared_ptr<TGroupedAggregationOperation>(new TGroupedAggregationOperation(
         std::move(inputChainColumns), std::move(outputChainColumns), std::move(Keys), std::move(Aggregations)));
 }
 
-TConclusionStatus TWithKeysAggregationProcessor::TBuilder::AddGroupBy(
+TConclusionStatus TGroupedAggregationOperation::TBuilder::AddGroupBy(
     const std::vector<TColumnChainInfo>& input, const TColumnChainInfo& output, const EAggregate aggrType) {
     if (input.size() > 1) {
         return TConclusionStatus::Fail("a lot of columns for aggregation: " + JoinSeq(", ", input));
@@ -502,7 +502,7 @@ public:
 };
 }   // namespace
 
-std::shared_ptr<IResourcesAggregator> TWithKeysAggregationProcessor::BuildResultsAggregator() const {
+std::shared_ptr<IResourcesAggregator> TGroupedAggregationOperation::BuildResultsAggregator() const {
     std::vector<TColumnChainInfo> input = AggregationKeys;
     std::vector<TResultsAggregatorWithKeys::TColumnAggregationInfo> aggrOptions;
     for (auto&& i : Aggregations) {

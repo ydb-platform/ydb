@@ -1,6 +1,6 @@
 #include "custom_registry.h"
 #include "execution.h"
-#include "stream_logic.h"
+#include "short_circuit_logic.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
@@ -20,14 +20,14 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<TExecutionResult> TStreamLogicProcessor::DoExecute(
+TConclusion<TExecutionResult> TShortCircuitLogicOperation::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     YDB_LOG_VERIFY(context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce()));
     return TExecutionResult::Done();
 }
 
 // Returns whether no further inputs can change the result.
-bool TStreamLogicProcessor::HandleMonoValue(const bool monoValue, const bool isAccumulatorInput,
+bool TShortCircuitLogicOperation::HandleMonoValue(const bool monoValue, const bool isAccumulatorInput,
     const std::shared_ptr<IChunkedArray>& accumulatedResult, const TProcessorContext& context) const {
     const bool isAbsorbingValue = Operation == NKernels::EOperation::And ? !monoValue : monoValue;
     if ((!isAbsorbingValue && accumulatedResult) || (isAbsorbingValue && isAccumulatorInput)) {
@@ -45,7 +45,7 @@ bool TStreamLogicProcessor::HandleMonoValue(const bool monoValue, const bool isA
     return isAbsorbingValue;
 }
 
-TConclusion<bool> TStreamLogicProcessor::CombineInput(const ui32 inputId, const TProcessorContext& context) const {
+TConclusion<bool> TShortCircuitLogicOperation::CombineInput(const ui32 inputId, const TProcessorContext& context) const {
     auto result = Function->Call(TColumnChainInfo::BuildVector({ GetOutputColumnIdOnce(), inputId }), context.GetResources());
     if (result.IsFail()) {
         return result;
@@ -56,7 +56,7 @@ TConclusion<bool> TStreamLogicProcessor::CombineInput(const ui32 inputId, const 
     return IsFinishAccessor(accessor);
 }
 
-TConclusion<bool> TStreamLogicProcessor::OnInputReady(
+TConclusion<bool> TShortCircuitLogicOperation::OnInputReady(
     const ui32 inputId, const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     YDB_LOG_VERIFY(!context.GetResources().HasMarker(FinishMarker));
     const auto& accumulatedResult = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
@@ -117,7 +117,7 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
     }
 }
 
-ui64 TStreamLogicProcessor::DoGetWeight() const {
+ui64 TShortCircuitLogicOperation::DoGetWeight() const {
     return 1;
 }
 
@@ -173,9 +173,9 @@ public:
     }
 };
 
-TStreamLogicProcessor::TStreamLogicProcessor(
+TShortCircuitLogicOperation::TShortCircuitLogicOperation(
     std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, const NKernels::EOperation op)
-    : TBase(std::move(input), { output }, EProcessorType::StreamLogic)
+    : TBase(std::move(input), { output }, EProcessorType::ShortCircuitLogic)
     , Operation(op) {
     if (Operation == NKernels::EOperation::And) {
         Function = std::make_shared<TKernelFunction>(Singleton<TSpecFunctionsOperator>()->GetANDKernel());
@@ -186,13 +186,13 @@ TStreamLogicProcessor::TStreamLogicProcessor(
     }
 }
 
-NJson::TJsonValue TStreamLogicProcessor::DoDebugJson() const {
+NJson::TJsonValue TShortCircuitLogicOperation::DoDebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     result.InsertValue("op", ::ToString(Operation));
     return result;
 }
 
-bool TStreamLogicProcessor::IsFinishAccessor(const std::shared_ptr<IChunkedArray>& accessor) const {
+bool TShortCircuitLogicOperation::IsFinishAccessor(const std::shared_ptr<IChunkedArray>& accessor) const {
     const auto arrChecker = [&](const arrow::Array& arr) {
         YDB_LOG_VERIFY(arr.type()->id() == arrow::uint8()->id());
         const arrow::UInt8Array& ui8Arr = static_cast<const arrow::UInt8Array&>(arr);
@@ -224,7 +224,7 @@ bool TStreamLogicProcessor::IsFinishAccessor(const std::shared_ptr<IChunkedArray
     return result;
 }
 
-TConclusion<std::optional<bool>> TStreamLogicProcessor::GetMonoInput(const std::shared_ptr<IChunkedArray>& inputArray) const {
+TConclusion<std::optional<bool>> TShortCircuitLogicOperation::GetMonoInput(const std::shared_ptr<IChunkedArray>& inputArray) const {
     std::shared_ptr<arrow::Scalar> monoValue;
     const auto isMonoValue = inputArray->CheckOneValueAccessor(monoValue);
     if (!isMonoValue || !*isMonoValue || !monoValue->is_valid) {
@@ -237,7 +237,7 @@ TConclusion<std::optional<bool>> TStreamLogicProcessor::GetMonoInput(const std::
     return !*isFalseConclusion;
 }
 
-TConclusion<bool> TStreamLogicProcessor::GetMonoInput(const std::shared_ptr<arrow::Scalar>& scalar) const {
+TConclusion<bool> TShortCircuitLogicOperation::GetMonoInput(const std::shared_ptr<arrow::Scalar>& scalar) const {
     YDB_LOG_VERIFY(scalar);
     YDB_LOG_VERIFY(scalar->type->id() == arrow::uint8()->id(),
         {"type", scalar->type->ToString()});

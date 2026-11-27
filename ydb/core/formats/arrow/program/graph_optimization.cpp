@@ -8,7 +8,7 @@
 #include "index.h"
 #include "original.h"
 #include "reserve.h"
-#include "stream_logic.h"
+#include "short_circuit_logic.h"
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
@@ -25,71 +25,50 @@
 
 namespace NKikimr::NArrow::NSSA::NGraph::NOptimization {
 
-void TGraphNode::AddEdgeTo(TGraphNode* to, const ui32 resourceId) {
-    YDB_LOG_VERIFY(OutputEdges.emplace(TAddress(to->GetIdentifier(), resourceId), to).second);
+void TGraphNode::AddDependencyTo(TGraphNode& to, const TDependency dependency) {
+    YDB_LOG_VERIFY(this != &to);
+    YDB_LOG_VERIFY(OutputDependencies.emplace(TAddress(to.GetIdentifier(), dependency), &to).second);
+    YDB_LOG_VERIFY(to.InputDependencies.emplace(TAddress(GetIdentifier(), dependency), this).second);
 }
 
-void TGraphNode::AddEdgeFrom(TGraphNode* from, const ui32 resourceId) {
-    YDB_LOG_VERIFY(InputEdges.emplace(TAddress(from->GetIdentifier(), resourceId), from).second);
+void TGraphNode::RemoveDependencyTo(TGraphNode& to, const TDependency dependency) {
+    YDB_LOG_VERIFY(OutputDependencies.erase(TAddress(to.GetIdentifier(), dependency)));
+    YDB_LOG_VERIFY(to.InputDependencies.erase(TAddress(GetIdentifier(), dependency)));
 }
 
-void TGraphNode::RemoveEdgeTo(const ui32 identifier, const ui32 resourceId) {
-    YDB_LOG_VERIFY(OutputEdges.erase(TAddress(identifier, resourceId)));
+void TGraph::AddDependency(TGraphNode& from, TGraphNode& to, const TDependency dependency) {
+    from.AddDependencyTo(to, dependency);
 }
 
-void TGraphNode::RemoveEdgeFrom(const ui32 identifier, const ui32 resourceId) {
-    YDB_LOG_VERIFY(InputEdges.erase(TAddress(identifier, resourceId)));
-}
-
-bool TGraphNode::HasEdgeFrom(const ui32 nodeId, const ui32 resourceId) const {
-    return InputEdges.contains(TAddress(nodeId, resourceId));
-}
-
-bool TGraphNode::HasEdgeTo(const ui32 nodeId, const ui32 resourceId) const {
-    return OutputEdges.contains(TAddress(nodeId, resourceId));
-}
-
-bool TGraph::HasEdge(const TGraphNode* from, const TGraphNode* to, const ui32 resourceId) const {
-    const bool hasEdgeTo = from->HasEdgeTo(to->GetIdentifier(), resourceId);
-    const bool hasEdgeFrom = to->HasEdgeFrom(from->GetIdentifier(), resourceId);
-    YDB_LOG_VERIFY(hasEdgeTo == hasEdgeFrom,
-        {"from", hasEdgeFrom},
-        {"to", hasEdgeTo});
-    return hasEdgeFrom;
-}
-
-void TGraph::AddEdge(TGraphNode* from, TGraphNode* to, const ui32 resourceId) {
-    from->AddEdgeTo(to, resourceId);
-    to->AddEdgeFrom(from, resourceId);
-}
-
-void TGraph::RemoveEdge(TGraphNode* from, TGraphNode* to, const ui32 resourceId) {
-    from->RemoveEdgeTo(to->GetIdentifier(), resourceId);
-    to->RemoveEdgeFrom(from->GetIdentifier(), resourceId);
+void TGraph::RemoveDependency(TGraphNode& from, TGraphNode& to, const TDependency dependency) {
+    from.RemoveDependencyTo(to, dependency);
 }
 
 void TGraph::RemoveNode(const ui32 idenitifier) {
     auto it = Nodes.find(idenitifier);
     YDB_LOG_VERIFY(it != Nodes.end());
-    for (auto&& i : it->second->GetInputEdges()) {
-        i.second->RemoveEdgeTo(it->second->GetIdentifier(), i.first.GetResourceId());
+    auto* node = it->second.get();
+    while (!node->GetInputDependencies().empty()) {
+        const auto& [address, from] = *node->GetInputDependencies().begin();
+        RemoveDependency(*from, *node, address.GetDependency());
     }
-    for (auto&& i : it->second->GetOutputEdges()) {
-        i.second->RemoveEdgeFrom(it->second->GetIdentifier(), i.first.GetResourceId());
+    while (!node->GetOutputDependencies().empty()) {
+        const auto& [address, to] = *node->GetOutputDependencies().begin();
+        RemoveDependency(*node, *to, address.GetDependency());
     }
     Nodes.erase(it);
 }
 
-TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver, const bool reserveIndexMemory)
+TGraph::TGraph(std::vector<std::shared_ptr<IProgramOperation>>&& processors, const IColumnResolver& resolver, const bool reserveIndexMemory)
     : ReserveIndexMemory(reserveIndexMemory)
     , Resolver(resolver) {
     NextResourceId = 0;
     for (auto&& i : processors) {
         for (auto&& input : i->GetInput()) {
-            NextResourceId = std::max<ui32>(NextResourceId, input.GetColumnId());
+            NextResourceId = std::max<TResourceId>(NextResourceId, input.GetColumnId());
         }
         for (auto&& input : i->GetOutput()) {
-            NextResourceId = std::max<ui32>(NextResourceId, input.GetColumnId());
+            NextResourceId = std::max<TResourceId>(NextResourceId, input.GetColumnId());
         }
     }
     ++NextResourceId;
@@ -106,13 +85,13 @@ TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, co
 
             const IDataSource::TDataAddress dataAddr(
                 input.GetColumnId(), Resolver.GetColumnName(input.GetColumnId()), NAccessor::NSubColumns::TCanonicalSubColumnName{});
-            auto inputFetcher = AddNode(std::make_shared<TOriginalColumnDataProcessor>(input.GetColumnId(), dataAddr));
+            auto inputFetcher = AddNode(std::make_shared<TFetchOriginalDataOperation>(input.GetColumnId(), dataAddr));
             //            YDB_LOG_VERIFY(Producers.emplace(input.GetColumnId(), inputFetcher.get()).second);
 
             auto nodeInputAssembler =
-                AddNode(std::make_shared<TOriginalColumnAccessorProcessor>(input.GetColumnId(), input.GetColumnId(), dataAddr));
+                AddNode(std::make_shared<TAssembleOriginalDataOperation>(input.GetColumnId(), input.GetColumnId(), dataAddr));
             YDB_LOG_VERIFY(Producers.emplace(input.GetColumnId(), nodeInputAssembler.get()).second);
-            AddEdge(inputFetcher.get(), nodeInputAssembler.get(), input.GetColumnId());
+            AddDependency(*inputFetcher, *nodeInputAssembler, TDependency::Data(input.GetColumnId()));
         }
     }
     for (auto&& [_, i] : Nodes) {
@@ -122,32 +101,32 @@ TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, co
                 continue;
             }
             auto node = GetProducerVerified(p.GetColumnId());
-            AddEdge(node, i.get(), p.GetColumnId());
+            AddDependency(*node, *i, TDependency::Data(p.GetColumnId()));
         }
     }
 }
 
-TConclusion<bool> TGraph::OptimizeConditionsForStream(TGraphNode* condNode) {
-    if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::StreamLogic) {
+TConclusion<bool> TGraph::FlattenNestedLogicalOperations(TGraphNode* condNode) {
+    if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::ShortCircuitLogic) {
         return false;
     }
-    if (condNode->GetOutputEdges().size() != 1) {
+    if (condNode->GetOutputDataDependenciesCount() != 1) {
         return false;
     }
-    auto* nodeOwner = condNode->GetOutputEdges().begin()->second;
-    if (nodeOwner->GetProcessor()->GetProcessorType() != EProcessorType::StreamLogic) {
+    auto* nodeOwner = condNode->GetOutputDataDependencies().begin()->second;
+    if (nodeOwner->GetProcessor()->GetProcessorType() != EProcessorType::ShortCircuitLogic) {
         return false;
     }
-    auto streamChildrenCalc = condNode->GetProcessorAs<TStreamLogicProcessor>();
-    auto streamOwnerCalc = nodeOwner->GetProcessorAs<TStreamLogicProcessor>();
-    if (streamChildrenCalc->GetOperation() != streamOwnerCalc->GetOperation()) {
+    auto childLogic = condNode->GetProcessorAs<TShortCircuitLogicOperation>();
+    auto parentLogic = nodeOwner->GetProcessorAs<TShortCircuitLogicOperation>();
+    if (childLogic->GetOperation() != parentLogic->GetOperation()) {
         return false;
     }
-    for (auto&& [connectInfo, inputNode] : condNode->GetInputEdges()) {
-        AddEdge(inputNode, nodeOwner, connectInfo.GetResourceId());
-        nodeOwner->GetProcessor()->AddInput(connectInfo.GetResourceId());
+    for (auto&& [connectInfo, inputNode] : condNode->GetInputDataDependencies()) {
+        AddDependency(*inputNode, *nodeOwner, connectInfo.GetDependency());
+        nodeOwner->GetProcessor()->AddInput(connectInfo.GetDependency().GetResourceId());
     }
-    nodeOwner->GetProcessor()->RemoveInput(condNode->GetOutputEdges().begin()->first.GetResourceId());
+    nodeOwner->GetProcessor()->RemoveInput(condNode->GetOutputDataDependencies().begin()->first.GetDependency().GetResourceId());
     RemoveNode(condNode->GetIdentifier());
     return true;
 }
@@ -156,14 +135,14 @@ TConclusion<bool> TGraph::OptimizeForFetchSubColumns(TGraphNode* condNode) {
     if (!condNode->Is(EProcessorType::AssembleOriginalData)) {
         return false;
     }
-    if (condNode->GetProcessorAs<TOriginalColumnAccessorProcessor>()->GetDataAddress().HasSubColumns()) {
+    if (condNode->GetProcessorAs<TAssembleOriginalDataOperation>()->GetDataAddress().HasSubColumns()) {
         return false;
     }
-    auto originalAssemble = condNode->GetProcessorAs<TOriginalColumnAccessorProcessor>();
+    auto originalAssemble = condNode->GetProcessorAs<TAssembleOriginalDataOperation>();
     std::vector<TGraphNode*> removeTo;
-    std::vector<ui32> removeResourceId;
+    std::vector<TResourceId> removeResourceId;
     THashMap<TResourceAddress, TGraphNode*> resourceProducers;
-    for (auto&& [_, i] : condNode->GetOutputEdges()) {
+    for (auto&& [_, i] : condNode->GetOutputDataDependencies()) {
         if (!i->Is(EProcessorType::Calculation)) {
             continue;
         }
@@ -178,28 +157,28 @@ TConclusion<bool> TGraph::OptimizeForFetchSubColumns(TGraphNode* condNode) {
         auto it = resourceProducers.find(*addr);
         if (it == resourceProducers.end()) {
             const IDataSource::TDataAddress dataAddr(addr->GetColumnId(), Resolver.GetColumnName(addr->GetColumnId()), addr->GetSubColumnName());
-            auto inputFetcher = AddNode(std::make_shared<TOriginalColumnDataProcessor>(addr->GetColumnId(), dataAddr));
+            auto inputFetcher = AddNode(std::make_shared<TFetchOriginalDataOperation>(addr->GetColumnId(), dataAddr));
             auto nodeInputAssembler =
-                AddNode(std::make_shared<TOriginalColumnAccessorProcessor>(addr->GetColumnId(), addr->GetColumnId(), dataAddr));
-            AddEdge(inputFetcher.get(), nodeInputAssembler.get(), addr->GetColumnId());
+                AddNode(std::make_shared<TAssembleOriginalDataOperation>(addr->GetColumnId(), addr->GetColumnId(), dataAddr));
+            AddDependency(*inputFetcher, *nodeInputAssembler, TDependency::Data(addr->GetColumnId()));
             it = resourceProducers.emplace(*addr, nodeInputAssembler.get()).first;
         }
-        AddEdge(it->second, i, addr->GetColumnId());
+        AddDependency(*it->second, *i, TDependency::Data(addr->GetColumnId()));
         removeTo.emplace_back(i);
         removeResourceId.emplace_back(addr->GetColumnId());
     }
     ui32 idx = 0;
     for (auto&& i : removeTo) {
-        RemoveEdge(condNode, i, removeResourceId[idx++]);
+        RemoveDependency(*condNode, *i, TDependency::Data(removeResourceId[idx++]));
     }
-    if (condNode->GetOutputEdges().empty()) {
+    if (condNode->GetOutputDependencies().empty()) {
         RemoveBranch(condNode, false);
     }
     return (bool)removeTo.size();
 }
 
 TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
-    if (!baseNode->GetOutputEdges().empty()) {
+    if (!baseNode->GetOutputDependencies().empty()) {
         return false;
     }
     if (FetchersMerged.contains(baseNode->GetIdentifier())) {
@@ -216,19 +195,19 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         if (!i.second->AddOptimizerMarker(EOptimizerMarkers::FetchMerged)) {
             continue;
         }
-        if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().size() +
-                i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetIndexContext().size() +
-                i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetHeaderContext().size() >
+        if (i.second->GetProcessorAs<TFetchOriginalDataOperation>()->GetDataAddresses().size() +
+                i.second->GetProcessorAs<TFetchOriginalDataOperation>()->GetIndexContext().size() +
+                i.second->GetProcessorAs<TFetchOriginalDataOperation>()->GetHeaderContext().size() >
             1) {
             continue;
         }
-        if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().size()) {
+        if (i.second->GetProcessorAs<TFetchOriginalDataOperation>()->GetDataAddresses().size()) {
             dataAddresses.emplace_back(i.second);
         }
-        if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetIndexContext().size()) {
+        if (i.second->GetProcessorAs<TFetchOriginalDataOperation>()->GetIndexContext().size()) {
             indexes.emplace_back(i.second);
         }
-        if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetHeaderContext().size()) {
+        if (i.second->GetProcessorAs<TFetchOriginalDataOperation>()->GetHeaderContext().size()) {
             headers.emplace_back(i.second);
         }
     }
@@ -237,19 +216,19 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
     if (dataAddresses.size() > 1) {
         THashSet<ui32> columnIds;
         for (auto&& i : dataAddresses) {
-            columnIds.emplace(i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetOutputColumnIdOnce());
+            columnIds.emplace(i->GetProcessorAs<TFetchOriginalDataOperation>()->GetOutputColumnIdOnce());
         }
-        auto proc = std::make_shared<TOriginalColumnDataProcessor>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
+        auto proc = std::make_shared<TFetchOriginalDataOperation>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
         for (auto&& i : dataAddresses) {
-            for (auto&& addr : i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses()) {
+            for (auto&& addr : i->GetProcessorAs<TFetchOriginalDataOperation>()->GetDataAddresses()) {
                 proc->Add(addr.second);
             }
         }
         nodeFetch = AddNode(proc).get();
         FetchersMerged.emplace(nodeFetch->GetIdentifier());
         for (auto&& i : dataAddresses) {
-            for (auto&& to : i->GetOutputEdges()) {
-                AddEdge(nodeFetch, to.second, to.first.GetResourceId());
+            for (auto&& to : i->GetOutputDataDependencies()) {
+                AddDependency(*nodeFetch, *to.second, to.first.GetDependency());
             }
             RemoveNode(i->GetIdentifier());
         }
@@ -265,11 +244,9 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
             policy = std::make_shared<TFetchingCalculationPolicy>();
         }
         YDB_LOG_VERIFY(policy);
-        auto reserveMemory = std::make_shared<TReserveMemoryProcessor>(*fetchNode->GetProcessorAs<TOriginalColumnDataProcessor>(), policy);
+        auto reserveMemory = std::make_shared<TReserveMemoryOperation>(*fetchNode->GetProcessorAs<TFetchOriginalDataOperation>(), policy);
         auto nodeReserve = AddNode(reserveMemory);
-        nodeReserve->GetProcessor()->AddOutput(0);
-        fetchNode->GetProcessor()->AddInput(0);
-        AddEdge(nodeReserve.get(), fetchNode, 0);
+        AddDependency(*nodeReserve, *fetchNode, TDependency::Execution());
         changed = true;
     };
     if (nodeFetch) {
@@ -279,32 +256,32 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
     if (indexes.size() + headers.size() > 1) {
         THashSet<ui32> columnIds;
         for (auto&& i : indexes) {
-            columnIds.emplace(i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetOutputColumnIdOnce());
+            columnIds.emplace(i->GetProcessorAs<TFetchOriginalDataOperation>()->GetOutputColumnIdOnce());
         }
         for (auto&& i : headers) {
-            columnIds.emplace(i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetOutputColumnIdOnce());
+            columnIds.emplace(i->GetProcessorAs<TFetchOriginalDataOperation>()->GetOutputColumnIdOnce());
         }
-        auto proc = std::make_shared<TOriginalColumnDataProcessor>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
+        auto proc = std::make_shared<TFetchOriginalDataOperation>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
         for (auto&& i : indexes) {
-            for (auto&& addr : i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetIndexContext()) {
+            for (auto&& addr : i->GetProcessorAs<TFetchOriginalDataOperation>()->GetIndexContext()) {
                 proc->Add(addr.second);
             }
         }
         for (auto&& i : headers) {
-            for (auto&& addr : i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetHeaderContext()) {
+            for (auto&& addr : i->GetProcessorAs<TFetchOriginalDataOperation>()->GetHeaderContext()) {
                 proc->Add(addr.second);
             }
         }
         auto nodeFetch = AddNode(proc);
         for (auto&& i : indexes) {
-            for (auto&& to : i->GetOutputEdges()) {
-                AddEdge(nodeFetch.get(), to.second, to.first.GetResourceId());
+            for (auto&& to : i->GetOutputDataDependencies()) {
+                AddDependency(*nodeFetch, *to.second, to.first.GetDependency());
             }
             RemoveNode(i->GetIdentifier());
         }
         for (auto&& i : headers) {
-            for (auto&& to : i->GetOutputEdges()) {
-                AddEdge(nodeFetch.get(), to.second, to.first.GetResourceId());
+            for (auto&& to : i->GetOutputDataDependencies()) {
+                AddDependency(*nodeFetch, *to.second, to.first.GetDependency());
             }
             RemoveNode(i->GetIdentifier());
         }
@@ -320,10 +297,10 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
 
 namespace {
 
-TGraphNode* GetSingleInputProducer(const TGraphNode* node, const ui32 resourceId) {
+TGraphNode* GetSingleInputProducer(const TGraphNode* node, const TResourceId resourceId) {
     TGraphNode* result = nullptr;
-    for (const auto& [addr, inputNode] : node->GetInputEdges()) {
-        if (addr.GetResourceId() != resourceId) {
+    for (const auto& [addr, inputNode] : node->GetInputDataDependencies()) {
+        if (addr.GetDependency().GetResourceId() != resourceId) {
             continue;
         }
         if (result) {
@@ -337,12 +314,12 @@ TGraphNode* GetSingleInputProducer(const TGraphNode* node, const ui32 resourceId
 }   // namespace
 
 TGraphNode* TGraph::FindSingleSubColumnJsonKeyFetch(TGraphNode* markerNode, const ui32 dataColumnId) const {
-    const auto marker = markerNode->GetProcessorAs<TDistinctMarkerProcessor>();
+    const auto marker = markerNode->GetProcessorAs<TDistinctMarkerOperation>();
     TGraphNode* calcNode = GetSingleInputProducer(markerNode, marker->GetKeyColumnId());
     if (!calcNode || !calcNode->Is(EProcessorType::Calculation)) {
         return nullptr;
     }
-    const auto calc = calcNode->GetProcessorAs<TCalculationProcessor>();
+    const auto calc = calcNode->GetProcessorAs<TCalculationOperation>();
     if (!calc->GetKernelLogic() || calc->GetKernelLogic()->GetClassName() != TGetJsonPath::GetClassNameStatic()) {
         return nullptr;
     }
@@ -358,7 +335,7 @@ TGraphNode* TGraph::FindSingleSubColumnJsonKeyFetch(TGraphNode* markerNode, cons
     if (!assembleNode || !assembleNode->Is(EProcessorType::AssembleOriginalData)) {
         return nullptr;
     }
-    const auto& assembleAddr = assembleNode->GetProcessorAs<TOriginalColumnAccessorProcessor>()->GetDataAddress();
+    const auto& assembleAddr = assembleNode->GetProcessorAs<TAssembleOriginalDataOperation>()->GetDataAddress();
     if (assembleAddr.GetColumnId() != dataColumnId || assembleAddr.GetSubColumnNames(false).size() != 1) {
         return nullptr;
     }
@@ -366,7 +343,7 @@ TGraphNode* TGraph::FindSingleSubColumnJsonKeyFetch(TGraphNode* markerNode, cons
     if (!fetchNode || !fetchNode->Is(EProcessorType::FetchOriginalData)) {
         return nullptr;
     }
-    const auto fetchProc = fetchNode->GetProcessorAs<TOriginalColumnDataProcessor>();
+    const auto fetchProc = fetchNode->GetProcessorAs<TFetchOriginalDataOperation>();
     if (!fetchProc) {
         return nullptr;
     }
@@ -381,7 +358,7 @@ TGraphNode* TGraph::FindSingleSubColumnJsonKeyFetch(TGraphNode* markerNode, cons
         if (n.get() == fetchNode || !n->Is(EProcessorType::FetchOriginalData)) {
             continue;
         }
-        const auto otherProc = n->GetProcessorAs<TOriginalColumnDataProcessor>();
+        const auto otherProc = n->GetProcessorAs<TFetchOriginalDataOperation>();
         if (!otherProc) {
             return nullptr;
         }
@@ -394,14 +371,14 @@ TGraphNode* TGraph::FindSingleSubColumnJsonKeyFetch(TGraphNode* markerNode, cons
 
 bool TGraph::SetDictionaryOnlyOnFetch(const ui32 columnId) {
     TGraphNode* producer = GetProducerVerified(columnId);
-    for (const auto& [addr, inputNode] : producer->GetInputEdges()) {
-        if (addr.GetResourceId() != columnId) {
+    for (const auto& [addr, inputNode] : producer->GetInputDataDependencies()) {
+        if (addr.GetDependency().GetResourceId() != columnId) {
             continue;
         }
         if (!inputNode->Is(EProcessorType::FetchOriginalData)) {
             break;
         }
-        auto proc = inputNode->GetProcessorAs<TOriginalColumnDataProcessor>();
+        auto proc = inputNode->GetProcessorAs<TFetchOriginalDataOperation>();
         if (proc) {
             const auto& addrs = proc->GetDataAddresses();
             auto it = addrs.find(columnId);
@@ -432,7 +409,7 @@ TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const
     const ui32 columnId = *requiredDataColumnIds.begin();
 
     if (node->Is(EProcessorType::DistinctMarker)) {
-        const auto distinctMarker = node->GetProcessorAs<TDistinctMarkerProcessor>();
+        const auto distinctMarker = node->GetProcessorAs<TDistinctMarkerOperation>();
         if (!distinctMarker) {
             return false;
         }
@@ -441,7 +418,7 @@ TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const
             if (!fetchNode) {
                 return false;
             }
-            auto proc = fetchNode->GetProcessorAs<TOriginalColumnDataProcessor>();
+            auto proc = fetchNode->GetProcessorAs<TFetchOriginalDataOperation>();
             if (!proc) {
                 return false;
             }
@@ -455,7 +432,7 @@ TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const
             return true;
         }
     } else if (node->Is(EProcessorType::Aggregation)) {
-        const auto aggrProc = node->GetProcessorAs<NAggregation::TWithKeysAggregationProcessor>();
+        const auto aggrProc = node->GetProcessorAs<NAggregation::TGroupedAggregationOperation>();
         if (!aggrProc) {
             return false;
         }
@@ -502,28 +479,28 @@ TConclusion<bool> TGraph::OptimizeIndexesToApply(TGraphNode* condNode) {
     if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::CheckIndexData) {
         return false;
     }
-    if (condNode->GetProcessorAs<TIndexCheckerProcessor>()->GetApplyToFilter()) {
+    if (condNode->GetProcessorAs<TCheckIndexOperation>()->GetApplyToFilter()) {
         return false;
     }
     if (condNode->GetProcessor()->GetOutput().size() != 1) {
         return false;
     }
-    if (condNode->GetOutputEdges().size() != 1) {
+    if (condNode->GetOutputDataDependenciesCount() != 1) {
         return false;
     }
-    const auto* dest = condNode->GetOutputEdges().begin()->second;
-    if (dest->GetProcessor()->GetProcessorType() != EProcessorType::StreamLogic) {
+    const auto* dest = condNode->GetOutputDataDependencies().begin()->second;
+    if (dest->GetProcessor()->GetProcessorType() != EProcessorType::ShortCircuitLogic) {
         return false;
     }
-    if (dest->GetProcessorAs<TStreamLogicProcessor>()->GetOperation() != NKernels::EOperation::And) {
+    if (dest->GetProcessorAs<TShortCircuitLogicOperation>()->GetOperation() != NKernels::EOperation::And) {
         return false;
     }
-    if (dest->GetOutputEdges().size() != 1) {
+    if (dest->GetOutputDataDependenciesCount() != 1) {
         return false;
     }
-    const auto* destDest = dest->GetOutputEdges().begin()->second;
+    const auto* destDest = dest->GetOutputDataDependencies().begin()->second;
     if (destDest->GetProcessor()->GetProcessorType() == EProcessorType::Filter) {
-        condNode->GetProcessorAs<TIndexCheckerProcessor>()->SetApplyToFilter();
+        condNode->GetProcessorAs<TCheckIndexOperation>()->SetApplyToFilter();
         return true;
     }
     return false;
@@ -531,13 +508,13 @@ TConclusion<bool> TGraph::OptimizeIndexesToApply(TGraphNode* condNode) {
 
 std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode) const {
     if (condNode->GetProcessor()->GetProcessorType() == EProcessorType::AssembleOriginalData) {
-        const auto proc = condNode->GetProcessorAs<TOriginalColumnAccessorProcessor>();
+        const auto proc = condNode->GetProcessorAs<TAssembleOriginalDataOperation>();
         if (proc->GetDataAddress().GetSubColumnNames(true).size() > 1) {
             return std::nullopt;
         }
         return TResourceAddress(proc->GetDataAddress().GetColumnId(), *proc->GetDataAddress().GetSubColumnNames(true).begin());
     } else if (condNode->GetProcessor()->GetProcessorType() == EProcessorType::Calculation) {
-        const auto proc = condNode->GetProcessorAs<TCalculationProcessor>();
+        const auto proc = condNode->GetProcessorAs<TCalculationOperation>();
         if (!proc->GetKernelLogic()) {
             return std::nullopt;
         }
@@ -566,7 +543,7 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
         if (!nodePath->Is(EProcessorType::Const)) {
             return std::nullopt;
         }
-        auto constProc = nodePath->GetProcessorAs<TConstProcessor>();
+        auto constProc = nodePath->GetProcessorAs<TConstantOperation>();
         if (constProc->GetScalarConstant()->type->id() == arrow::utf8()->id() ||
             constProc->GetScalarConstant()->type->id() == arrow::binary()->id()) {
             return TResourceAddress(nodeData->GetProcessor()->GetOutput()[0].GetColumnId(),
@@ -587,12 +564,12 @@ TConclusion<bool> TGraph::OptimizeConditionsForPatternHints(TGraphNode* condNode
     if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
         return false;
     }
-    auto calc = condNode->GetProcessorAs<TCalculationProcessor>();
+    auto calc = condNode->GetProcessorAs<TCalculationOperation>();
     if (!calc->GetKernelLogic()) {
         return false;
     }
     const auto& hints = calc->GetKernelLogic()->GetIndexHints();
-    if (hints.empty() || condNode->GetOutputEdges().size() != 1) {
+    if (hints.empty() || condNode->GetOutputDataDependenciesCount() != 1) {
         return false;
     }
     if (IndexesConstructed.contains(condNode->GetIdentifier())) {
@@ -619,49 +596,49 @@ TConclusion<bool> TGraph::OptimizeConditionsForPatternHints(TGraphNode* condNode
     }
     IndexesConstructed.emplace(condNode->GetIdentifier());
 
-    auto* dest = condNode->GetOutputEdges().begin()->second;
-    const ui32 destResourceId = condNode->GetOutputEdges().begin()->first.GetResourceId();
-    RemoveEdge(condNode, dest, destResourceId);
+    auto* dest = condNode->GetOutputDataDependencies().begin()->second;
+    const TResourceId destResourceId = condNode->GetOutputDataDependencies().begin()->first.GetDependency().GetResourceId();
+    RemoveDependency(*condNode, *dest, TDependency::Data(destResourceId));
 
-    std::vector<ui32> andInputs;
+    std::vector<TResourceId> andInputs;
     std::vector<TGraphNode*> andSources;
-    const ui32 calcResourceId = BuildNextResourceId();
+    const TResourceId calcResourceId = BuildNextResourceId();
     RegisterProducer(calcResourceId, condNode);
     calc->SetOutputResourceIdOnce(calcResourceId);
     andInputs.push_back(calcResourceId);
     andSources.push_back(condNode);
 
     for (const auto& item : resolved) {
-        const ui32 constId = BuildNextResourceId();
+        const TResourceId constId = BuildNextResourceId();
         auto scalar = std::make_shared<arrow::BinaryScalar>(
             arrow::Buffer::FromString(std::string(item.Value.data(), item.Value.size())), arrow::binary());
-        auto constNode = AddNode(std::make_shared<TConstProcessor>(scalar, constId));
+        auto constNode = AddNode(std::make_shared<TConstantOperation>(scalar, constId));
         RegisterProducer(constId, constNode.get());
 
-        const ui32 fetchId = BuildNextResourceId();
+        const TResourceId fetchId = BuildNextResourceId();
         IDataSource::TFetchIndexContext fetchContext(item.Addr.GetColumnId(),
             IDataSource::TFetchIndexContext::TOperationsBySubColumn().Add(item.Addr.GetSubColumnName(), item.Operation));
-        auto fetchNode = AddNode(std::make_shared<TOriginalColumnDataProcessor>(fetchId, fetchContext));
+        auto fetchNode = AddNode(std::make_shared<TFetchOriginalDataOperation>(fetchId, fetchContext));
         RegisterProducer(fetchId, fetchNode.get());
 
-        const ui32 checkId = BuildNextResourceId();
+        const TResourceId checkId = BuildNextResourceId();
         const auto columnName = Resolver.GetColumnName(item.Addr.GetColumnId(), false);
         IDataSource::TCheckIndexContext checkContext(item.Addr.GetColumnId(), item.Addr.GetSubColumnName(), item.Operation,
             columnName.empty() ? "COLUMN_NAME_NOT_RESOLVED" : columnName);
-        auto checkNode = AddNode(std::make_shared<TIndexCheckerProcessor>(fetchId, constId, checkContext, checkId));
+        auto checkNode = AddNode(std::make_shared<TCheckIndexOperation>(fetchId, constId, checkContext, checkId));
         RegisterProducer(checkId, checkNode.get());
-        AddEdge(fetchNode.get(), checkNode.get(), fetchId);
-        AddEdge(constNode.get(), checkNode.get(), constId);
+        AddDependency(*fetchNode, *checkNode, TDependency::Data(fetchId));
+        AddDependency(*constNode, *checkNode, TDependency::Data(constId));
         andInputs.push_back(checkId);
         andSources.push_back(checkNode.get());
     }
 
-    auto andNode = AddNode(std::make_shared<TStreamLogicProcessor>(
+    auto andNode = AddNode(std::make_shared<TShortCircuitLogicOperation>(
         TColumnChainInfo::BuildVector(andInputs), TColumnChainInfo(destResourceId), NKernels::EOperation::And));
     for (size_t i = 0; i < andInputs.size(); ++i) {
-        AddEdge(andSources[i], andNode.get(), andInputs[i]);
+        AddDependency(*andSources[i], *andNode, TDependency::Data(andInputs[i]));
     }
-    AddEdge(andNode.get(), dest, destResourceId);
+    AddDependency(*andNode, *dest, TDependency::Data(destResourceId));
     ResetProducer(destResourceId, andNode.get());
     return true;
 }
@@ -670,14 +647,14 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
         return false;
     }
-    auto calc = condNode->GetProcessorAs<TCalculationProcessor>();
+    auto calc = condNode->GetProcessorAs<TCalculationOperation>();
     if (!calc->GetKernelLogic()) {
         return false;
     }
     if (condNode->GetProcessor()->GetInput().size() != 2) {
         return false;
     }
-    if (condNode->GetOutputEdges().size() != 1) {
+    if (condNode->GetOutputDataDependenciesCount() != 1) {
         return false;
     }
     auto dataNode = GetProducerVerified(calc->GetInput().front().GetColumnId());
@@ -692,8 +669,8 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     if (!dataAddr) {
         return false;
     }
-    auto* dest = condNode->GetOutputEdges().begin()->second;
-    const ui32 destResourceId = condNode->GetOutputEdges().begin()->first.GetResourceId();
+    auto* dest = condNode->GetOutputDataDependencies().begin()->second;
+    const TResourceId destResourceId = condNode->GetOutputDataDependencies().begin()->first.GetDependency().GetResourceId();
     auto indexChecker = calc->GetKernelLogic()->GetIndexCheckerOperation();
     if (!indexChecker) {
         return false;
@@ -701,37 +678,37 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     if (!IndexesConstructed.emplace(condNode->GetIdentifier()).second) {
         return false;
     }
-    RemoveEdge(condNode, dest, destResourceId);
+    RemoveDependency(*condNode, *dest, TDependency::Data(destResourceId));
 
-    const ui32 resourceIdxFetch = BuildNextResourceId();
+    const TResourceId resourceIdxFetch = BuildNextResourceId();
     IDataSource::TFetchIndexContext indexContext(
         dataAddr->GetColumnId(), IDataSource::TFetchIndexContext::TOperationsBySubColumn().Add(dataAddr->GetSubColumnName(), *indexChecker));
-    auto indexFetchProc = std::make_shared<TOriginalColumnDataProcessor>(resourceIdxFetch, indexContext);
+    auto indexFetchProc = std::make_shared<TFetchOriginalDataOperation>(resourceIdxFetch, indexContext);
     auto indexFetchNode = AddNode(indexFetchProc);
     RegisterProducer(resourceIdxFetch, indexFetchNode.get());
 
-    const ui32 resourceIdIndexToAnd = BuildNextResourceId();
+    const TResourceId resourceIdIndexToAnd = BuildNextResourceId();
     auto resolvedColumnName = Resolver.GetColumnName(dataAddr->GetColumnId(), false);
     IDataSource::TCheckIndexContext checkIndexContext(dataAddr->GetColumnId(), dataAddr->GetSubColumnName(), *indexChecker,
         resolvedColumnName.empty() ? "COLUMN_NAME_NOT_RESOLVED" : resolvedColumnName);
-    auto indexCheckProc = std::make_shared<TIndexCheckerProcessor>(
+    auto indexCheckProc = std::make_shared<TCheckIndexOperation>(
         resourceIdxFetch, constNode->GetProcessor()->GetOutputColumnIdOnce(), checkIndexContext, resourceIdIndexToAnd);
     auto indexProcNode = AddNode(indexCheckProc);
     RegisterProducer(resourceIdIndexToAnd, indexProcNode.get());
-    AddEdge(indexFetchNode.get(), indexProcNode.get(), resourceIdxFetch);
-    AddEdge(constNode, indexProcNode.get(), constNode->GetProcessor()->GetOutputColumnIdOnce());
+    AddDependency(*indexFetchNode, *indexProcNode, TDependency::Data(resourceIdxFetch));
+    AddDependency(*constNode, *indexProcNode, TDependency::Data(constNode->GetProcessor()->GetOutputColumnIdOnce()));
 
-    const ui32 resourceIdEqToAnd = BuildNextResourceId();
+    const TResourceId resourceIdEqToAnd = BuildNextResourceId();
     RegisterProducer(resourceIdEqToAnd, condNode);
     calc->SetOutputResourceIdOnce(resourceIdEqToAnd);
 
-    auto andProcessor = std::make_shared<TStreamLogicProcessor>(
+    auto andProcessor = std::make_shared<TShortCircuitLogicOperation>(
         TColumnChainInfo::BuildVector({ resourceIdEqToAnd, resourceIdIndexToAnd }), TColumnChainInfo(destResourceId), NKernels::EOperation::And);
     auto andNode = AddNode(andProcessor);
-    AddEdge(andNode.get(), dest, destResourceId);
+    AddDependency(*andNode, *dest, TDependency::Data(destResourceId));
 
-    AddEdge(indexProcNode.get(), andNode.get(), resourceIdIndexToAnd);
-    AddEdge(condNode, andNode.get(), resourceIdEqToAnd);
+    AddDependency(*indexProcNode, *andNode, TDependency::Data(resourceIdIndexToAnd));
+    AddDependency(*condNode, *andNode, TDependency::Data(resourceIdEqToAnd));
     ResetProducer(destResourceId, andNode.get());
     return true;
 }
@@ -743,12 +720,12 @@ TConclusion<bool> TGraph::OptimizeConditionsForHeadersCheck(TGraphNode* condNode
     if (condNode->GetProcessor()->GetInput().empty()) {
         return false;
     }
-    auto calc = condNode->GetProcessorAs<TCalculationProcessor>();
-    if (condNode->GetOutputEdges().size() != 1) {
+    auto calc = condNode->GetProcessorAs<TCalculationOperation>();
+    if (condNode->GetOutputDataDependenciesCount() != 1) {
         return false;
     }
-    auto* dest = condNode->GetOutputEdges().begin()->second;
-    const ui32 destResourceId = condNode->GetOutputEdges().begin()->first.GetResourceId();
+    auto* dest = condNode->GetOutputDataDependencies().begin()->second;
+    const TResourceId destResourceId = condNode->GetOutputDataDependencies().begin()->first.GetDependency().GetResourceId();
     if (!calc->GetKernelLogic() || !calc->GetKernelLogic()->IsBoolInResult()) {
         return false;
     }
@@ -764,32 +741,32 @@ TConclusion<bool> TGraph::OptimizeConditionsForHeadersCheck(TGraphNode* condNode
     if (!HeaderCheckConstructed.emplace(condNode->GetIdentifier()).second) {
         return false;
     }
-    RemoveEdge(condNode, dest, destResourceId);
+    RemoveDependency(*condNode, *dest, TDependency::Data(destResourceId));
 
-    const ui32 resourceIdxFetch = BuildNextResourceId();
+    const TResourceId resourceIdxFetch = BuildNextResourceId();
     IDataSource::TFetchHeaderContext headerContext(dataAddr->GetColumnId(), { dataAddr->GetSubColumnName() });
-    auto indexFetchProc = std::make_shared<TOriginalColumnDataProcessor>(resourceIdxFetch, headerContext);
+    auto indexFetchProc = std::make_shared<TFetchOriginalDataOperation>(resourceIdxFetch, headerContext);
     auto indexFetchNode = AddNode(indexFetchProc);
     RegisterProducer(resourceIdxFetch, indexFetchNode.get());
 
-    const ui32 resourceIdIndexToAnd = BuildNextResourceId();
+    const TResourceId resourceIdIndexToAnd = BuildNextResourceId();
     IDataSource::TCheckHeaderContext checkHeaderContext(dataAddr->GetColumnId(), dataAddr->GetSubColumnName());
-    auto indexCheckProc = std::make_shared<THeaderCheckerProcessor>(resourceIdxFetch, checkHeaderContext, resourceIdIndexToAnd);
+    auto indexCheckProc = std::make_shared<TCheckHeaderOperation>(resourceIdxFetch, checkHeaderContext, resourceIdIndexToAnd);
     auto indexProcNode = AddNode(indexCheckProc);
     RegisterProducer(resourceIdIndexToAnd, indexProcNode.get());
-    AddEdge(indexFetchNode.get(), indexProcNode.get(), resourceIdxFetch);
+    AddDependency(*indexFetchNode, *indexProcNode, TDependency::Data(resourceIdxFetch));
 
-    const ui32 resourceIdEqToAnd = BuildNextResourceId();
+    const TResourceId resourceIdEqToAnd = BuildNextResourceId();
     RegisterProducer(resourceIdEqToAnd, condNode);
     calc->SetOutputResourceIdOnce(resourceIdEqToAnd);
 
-    auto andProcessor = std::make_shared<TStreamLogicProcessor>(
+    auto andProcessor = std::make_shared<TShortCircuitLogicOperation>(
         TColumnChainInfo::BuildVector({ resourceIdEqToAnd, resourceIdIndexToAnd }), TColumnChainInfo(destResourceId), NKernels::EOperation::And);
     auto andNode = AddNode(andProcessor);
-    AddEdge(andNode.get(), dest, destResourceId);
+    AddDependency(*andNode, *dest, TDependency::Data(destResourceId));
 
-    AddEdge(indexProcNode.get(), andNode.get(), resourceIdIndexToAnd);
-    AddEdge(condNode, andNode.get(), resourceIdEqToAnd);
+    AddDependency(*indexProcNode, *andNode, TDependency::Data(resourceIdIndexToAnd));
+    AddDependency(*condNode, *andNode, TDependency::Data(resourceIdEqToAnd));
     ResetProducer(destResourceId, andNode.get());
     return true;
 }
@@ -798,7 +775,7 @@ TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(TGraphNode* cNode) {
     if (cNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
         return false;
     }
-    const auto calc = cNode->GetProcessorAs<TCalculationProcessor>();
+    const auto calc = cNode->GetProcessorAs<TCalculationOperation>();
     if (!calc->GetKernelLogic()->GetYqlOperationId()) {
         return false;
     }
@@ -806,7 +783,7 @@ TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(TGraphNode* cNode) {
         NYql::TKernelRequestBuilder::EBinaryOp::Coalesce) {
         return false;
     }
-    if (cNode->GetOutputEdges().size() != 1) {
+    if (cNode->GetOutputDataDependenciesCount() != 1) {
         return false;
     }
     if (calc->GetInput().size() != 2) {
@@ -817,21 +794,21 @@ TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(TGraphNode* cNode) {
     if (argNode->GetProcessor()->GetProcessorType() != EProcessorType::Const) {
         return false;
     }
-    auto scalar = argNode->GetProcessorAs<TConstProcessor>()->GetScalarConstant();
+    auto scalar = argNode->GetProcessorAs<TConstantOperation>()->GetScalarConstant();
     if (!scalar) {
         return TConclusionStatus::Fail("coalesce with null arg is impossible");
     }
 
-    auto* nextNode = cNode->GetOutputEdges().begin()->second;
+    auto* nextNode = cNode->GetOutputDataDependencies().begin()->second;
     if (nextNode->GetProcessor()->GetProcessorType() != EProcessorType::Filter) {
-        if (nextNode->GetProcessor()->GetProcessorType() != EProcessorType::StreamLogic) {
+        if (nextNode->GetProcessor()->GetProcessorType() != EProcessorType::ShortCircuitLogic) {
             return false;
         }
-        const auto outputCalc = nextNode->GetProcessorAs<TStreamLogicProcessor>();
+        const auto outputCalc = nextNode->GetProcessorAs<TShortCircuitLogicOperation>();
         if (outputCalc->GetOperation() != NKernels::EOperation::And) {
             return false;
         }
-        if (nextNode->GetOutputEdges().size() != 1) {
+        if (nextNode->GetOutputDataDependenciesCount() != 1) {
             return false;
         }
     }
@@ -852,7 +829,7 @@ TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(TGraphNode* cNode) {
         }
     }
     nextNode->GetProcessor()->ExchangeInput(cNode->GetProcessor()->GetOutputColumnIdOnce(), dataNode->GetProcessor()->GetOutputColumnIdOnce());
-    AddEdge(dataNode, nextNode, dataNode->GetProcessor()->GetOutputColumnIdOnce());
+    AddDependency(*dataNode, *nextNode, TDependency::Data(dataNode->GetProcessor()->GetOutputColumnIdOnce()));
     RemoveNode(cNode->GetIdentifier());
     if (argNode->IsDisconnected()) {
         RemoveNode(argNode->GetIdentifier());
@@ -871,23 +848,23 @@ TConclusionStatus TGraph::Collapse() {
         }
     }
     if (filters.size() > 1) {
-        const ui32 finalResourceId = BuildNextResourceId();
-        auto filterNode = AddNode(std::make_shared<TFilterProcessor>(finalResourceId));
-        std::vector<ui32> inputs;
+        const TResourceId finalResourceId = BuildNextResourceId();
+        auto filterNode = AddNode(std::make_shared<TFilterOperation>(finalResourceId));
+        std::vector<TResourceId> inputs;
         std::vector<TGraphNode*> inputNodes;
         for (auto&& i : filters) {
             inputs.emplace_back(i->GetProcessor()->GetInputColumnIdOnce());
             inputNodes.emplace_back(GetProducerVerified(i->GetProcessor()->GetInputColumnIdOnce()));
             RemoveNode(i->GetIdentifier());
         }
-        auto mergeNode = AddNode(std::make_shared<TStreamLogicProcessor>(
+        auto mergeNode = AddNode(std::make_shared<TShortCircuitLogicOperation>(
             TColumnChainInfo::BuildVector(inputs), TColumnChainInfo(finalResourceId), NKernels::EOperation::And));
         ui32 idx = 0;
         for (auto&& i : inputNodes) {
-            AddEdge(i, mergeNode.get(), inputs[idx]);
+            AddDependency(*i, *mergeNode, TDependency::Data(inputs[idx]));
             ++idx;
         }
-        AddEdge(mergeNode.get(), filterNode.get(), finalResourceId);
+        AddDependency(*mergeNode, *filterNode, TDependency::Data(finalResourceId));
         RegisterProducer(finalResourceId, mergeNode.get());
     }
 
@@ -939,7 +916,7 @@ TConclusionStatus TGraph::Collapse() {
             //            }
 
             {
-                auto conclusion = OptimizeConditionsForStream(n.get());
+                auto conclusion = FlattenNestedLogicalOperations(n.get());
                 if (conclusion.IsFail()) {
                     return conclusion;
                 }
@@ -1035,13 +1012,13 @@ THashMap<ui32, TGraphNode*> TGraph::GetBranch(TGraphNode* from, const bool backO
     while (current.size()) {
         THashMap<ui32, TGraphNode*> next;
         for (auto&& [_, i] : current) {
-            for (auto&& [_, e] : i->GetInputEdges()) {
+            for (auto&& [_, e] : i->GetInputDependencies()) {
                 if (nodeIdsResult.emplace(e->GetIdentifier(), e).second) {
                     next.emplace(e->GetIdentifier(), e);
                 }
             }
             if (!backOnly) {
-                for (auto&& [_, e] : i->GetOutputEdges()) {
+                for (auto&& [_, e] : i->GetOutputDependencies()) {
                     if (nodeIdsResult.emplace(e->GetIdentifier(), e).second) {
                         next.emplace(e->GetIdentifier(), e);
                     }
@@ -1066,7 +1043,7 @@ THashSet<ui32> TGraph::CollectRequiredDataColumnIdsFromGraph() const {
         if (!node->Is(EProcessorType::FetchOriginalData)) {
             continue;
         }
-        const auto proc = node->GetProcessorAs<TOriginalColumnDataProcessor>();
+        const auto proc = node->GetProcessorAs<TFetchOriginalDataOperation>();
         for (const auto& [colId, _] : proc->GetDataAddresses()) {
             columnIds.insert(colId);
         }

@@ -32,7 +32,7 @@ ENDIF()
 
 SRCS(
     abstract.cpp
-    stream_logic.cpp
+    short_circuit_logic.cpp
     visitor.cpp
     index.cpp
     header.cpp

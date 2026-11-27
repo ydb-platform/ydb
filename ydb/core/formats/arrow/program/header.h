@@ -6,10 +6,10 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-class THeaderCheckerProcessor: public IResourceProcessor {
+class TCheckHeaderOperation: public IProgramOperation {
 private:
     IDataSource::TCheckHeaderContext HeaderContext;
-    using TBase = IResourceProcessor;
+    using TBase = IProgramOperation;
 
     virtual bool HasSubColumns() const override {
         return !!HeaderContext.GetSubColumnName();
@@ -44,7 +44,7 @@ public:
         return HeaderContext;
     }
 
-    THeaderCheckerProcessor(const ui32 inputDataId, const IDataSource::TCheckHeaderContext& context, const ui32 outputId)
+    TCheckHeaderOperation(const ui32 inputDataId, const IDataSource::TCheckHeaderContext& context, const ui32 outputId)
         : TBase({ inputDataId }, { outputId }, EProcessorType::CheckHeaderData)
         , HeaderContext(context) {
     }

@@ -156,9 +156,9 @@ public:
     static CH::AggFunctionId GetHouseFunction(const EAggregate op);
 };
 
-class TWithKeysAggregationProcessor: public IResourceProcessor {
+class TGroupedAggregationOperation: public IProgramOperation {
 private:
-    using TBase = IResourceProcessor;
+    using TBase = IProgramOperation;
 
     std::vector<TColumnChainInfo> AggregationKeys;
     std::vector<TWithKeysAggregationOption> Aggregations;
@@ -167,7 +167,7 @@ private:
 
     virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
-    TWithKeysAggregationProcessor(std::vector<TColumnChainInfo>&& input, std::vector<TColumnChainInfo>&& output,
+    TGroupedAggregationOperation(std::vector<TColumnChainInfo>&& input, std::vector<TColumnChainInfo>&& output,
         std::vector<TColumnChainInfo>&& aggregationKeys, std::vector<TWithKeysAggregationOption>&& aggregations)
         : TBase(std::move(input), std::move(output), EProcessorType::Aggregation)
         , AggregationKeys(std::move(aggregationKeys))
@@ -222,7 +222,7 @@ public:
             return AddGroupBy(std::vector<TColumnChainInfo>({ input }), output, aggrType);
         }
 
-        TConclusion<std::shared_ptr<TWithKeysAggregationProcessor>> Finish();
+        TConclusion<std::shared_ptr<TGroupedAggregationOperation>> Finish();
     };
 };
 

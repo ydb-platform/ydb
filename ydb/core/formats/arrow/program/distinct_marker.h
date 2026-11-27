@@ -3,11 +3,11 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-// Stateless marker processor for DISTINCT(dictionary-only optimization).
+// Stateless marker operation for DISTINCT(dictionary-only optimization).
 // It does not perform filtering itself; filtering/early-stop is handled by reader sync points.
-class TDistinctMarkerProcessor: public IResourceProcessor {
+class TDistinctMarkerOperation: public IProgramOperation {
 private:
-    using TBase = IResourceProcessor;
+    using TBase = IProgramOperation;
     const ui32 KeyColumnId;
 
     virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
@@ -17,7 +17,7 @@ private:
     }
 
 public:
-    explicit TDistinctMarkerProcessor(const ui32 keyColumnId)
+    explicit TDistinctMarkerOperation(const ui32 keyColumnId)
         : TBase({ TColumnChainInfo(keyColumnId) }, {}, EProcessorType::DistinctMarker)
         , KeyColumnId(keyColumnId)
     {

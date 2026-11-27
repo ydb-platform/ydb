@@ -6,9 +6,9 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-class TStreamLogicProcessor: public IResourceProcessor {
+class TShortCircuitLogicOperation: public IProgramOperation {
 private:
-    using TBase = IResourceProcessor;
+    using TBase = IProgramOperation;
     static inline TAtomicCounter Counter = 0;
     const i64 FinishMarker = Counter.Inc();
     const NKernels::EOperation Operation;
@@ -35,7 +35,7 @@ public:
         return Operation;
     }
     TConclusion<bool> OnInputReady(const ui32 inputId, const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const;
-    TStreamLogicProcessor(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, const NKernels::EOperation op);
+    TShortCircuitLogicOperation(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, const NKernels::EOperation op);
 };
 
 }   // namespace NKikimr::NArrow::NSSA

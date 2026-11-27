@@ -5,7 +5,7 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<TExecutionResult> TCalculationProcessor::DoExecute(
+TConclusion<TExecutionResult> TCalculationOperation::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     if (KernelLogic) {
         auto resultKernel = KernelLogic->Execute(GetInput(), GetOutput(), context.MutableResources());
@@ -28,7 +28,7 @@ TConclusion<TExecutionResult> TCalculationProcessor::DoExecute(
     return TExecutionResult::Done();
 }
 
-TConclusion<std::shared_ptr<TCalculationProcessor>> TCalculationProcessor::Build(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output,
+TConclusion<std::shared_ptr<TCalculationOperation>> TCalculationOperation::Build(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output,
     const std::shared_ptr<IStepFunction>& function, const std::shared_ptr<IKernelLogic>& kernelLogic) {
     if (!function) {
         return TConclusionStatus::Fail("null function is impossible for processor construct");
@@ -39,21 +39,21 @@ TConclusion<std::shared_ptr<TCalculationProcessor>> TCalculationProcessor::Build
         return checkStatus;
     }
     std::vector<TColumnChainInfo> outputColumns = { output };
-    return std::shared_ptr<TCalculationProcessor>(new TCalculationProcessor(std::move(input), std::move(outputColumns), function, kernelLogic));
+    return std::shared_ptr<TCalculationOperation>(new TCalculationOperation(std::move(input), std::move(outputColumns), function, kernelLogic));
 }
 
-NJson::TJsonValue TCalculationProcessor::DoDebugJson() const {
+NJson::TJsonValue TCalculationOperation::DoDebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     result.InsertValue("kernel", KernelLogic->DebugJson());
     result.InsertValue("function", Function->DebugJson());
     return result;
 }
 
-ui64 TCalculationProcessor::DoGetWeight() const {
+ui64 TCalculationOperation::DoGetWeight() const {
     return (ui64)KernelLogic->GetWeight();
 }
 
-TString TCalculationProcessor::DoGetSignalCategoryName() const {
+TString TCalculationOperation::DoGetSignalCategoryName() const {
     return ::ToString(GetProcessorType()) + "::" + KernelLogic->SignalDescription();
 }
 

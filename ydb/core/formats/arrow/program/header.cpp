@@ -5,7 +5,7 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<TExecutionResult> THeaderCheckerProcessor::DoExecute(
+TConclusion<TExecutionResult> TCheckHeaderOperation::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     auto& source = context.GetDataSource();
     auto conclusion = source.CheckHeader(context, HeaderContext);

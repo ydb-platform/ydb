@@ -3,9 +3,9 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-class TConstProcessor: public IResourceProcessor {
+class TConstantOperation: public IProgramOperation {
 private:
-    using TBase = IResourceProcessor;
+    using TBase = IProgramOperation;
     YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, ScalarConstant);
 
     virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
@@ -17,7 +17,7 @@ private:
     }
 
 public:
-    TConstProcessor(const std::shared_ptr<arrow::Scalar>& scalar, const ui32 columnId)
+    TConstantOperation(const std::shared_ptr<arrow::Scalar>& scalar, const ui32 columnId)
         : TBase(std::vector<TColumnChainInfo>(), std::vector<TColumnChainInfo>({ TColumnChainInfo(columnId) }), EProcessorType::Const)
         , ScalarConstant(scalar) {
         YDB_LOG_VERIFY(ScalarConstant);

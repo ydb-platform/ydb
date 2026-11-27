@@ -46,7 +46,7 @@ namespace NKikimr::NOlap::NReader {
         TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, ui64, TString, TString),                                 \
         NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", \
             "totalReservedBytes", "executionResult", "details"))                                                                                \
-    PROBE(ProgramStreamLogic, GROUPS("DataSource"),                                                                                             \
+    PROBE(ProgramShortCircuitLogic, GROUPS("DataSource"),                                                                                       \
         TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, ui64, TString, TString),                                 \
         NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", \
             "totalReservedBytes", "executionResult", "details"))                                                                                \

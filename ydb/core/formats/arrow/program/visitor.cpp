@@ -1,4 +1,4 @@
-#include "stream_logic.h"
+#include "short_circuit_logic.h"
 #include "visitor.h"
 
 namespace NKikimr::NArrow::NSSA::NGraph::NExecution {
@@ -29,10 +29,10 @@ TConclusionStatus TExecutionVisitor::DoOnComeback(const TCompiledGraph::TNode& n
     YDB_LOG_VERIFY(!ExecutionNode,
         {"id", node.GetIdentifier()},
         {"ready", JoinSeq(",", TColumnChainInfo::ExtractColumnIds(readyInputs))});
-    if (SkipActivity.empty() && node.GetProcessor()->GetProcessorType() == EProcessorType::StreamLogic) {
-        const TStreamLogicProcessor* streamProc = static_cast<const TStreamLogicProcessor*>(node.GetProcessor().get());
+    if (SkipActivity.empty() && node.GetProcessor()->GetProcessorType() == EProcessorType::ShortCircuitLogic) {
+        const TShortCircuitLogicOperation* logicProcessor = static_cast<const TShortCircuitLogicOperation*>(node.GetProcessor().get());
         for (auto&& i : readyInputs) {
-            auto conclusion = streamProc->OnInputReady(i.GetColumnId(), Context, node);
+            auto conclusion = logicProcessor->OnInputReady(i.GetColumnId(), Context, node);
             if (conclusion.IsFail()) {
                 return conclusion;
             }

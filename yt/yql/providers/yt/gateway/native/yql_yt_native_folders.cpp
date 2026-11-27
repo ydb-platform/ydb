@@ -96,10 +96,11 @@ IYtGateway::TBatchFolderResult::TFolderItem MakeFolderItem(const NYT::TNode& nod
     return item;
 }
 
-const TTransactionCache::TEntry::TFolderCache::value_type& StoreResInCache(const TTransactionCache::TEntry::TPtr& entry, TVector<IYtGateway::TBatchFolderResult::TFolderItem>&& items, const TString& cacheKey) {
+const TTransactionCache::TEntry::TFolderCache::value_type& StoreResInCache(const TTransactionCache::TEntry::TPtr& entry, const TVector<IYtGateway::TBatchFolderResult::TFolderItem>& items, const TString& cacheKey) {
     std::vector<std::tuple<TString, TString, NYT::TNode>> cache;
+    cache.reserve(items.size());
     for (const auto& item : items) {
-        cache.emplace_back(std::move(item.Type), std::move(item.Path), std::move(item.Attributes));
+        cache.emplace_back(item.Type, item.Path, item.Attributes);
     }
     with_lock(entry->Lock_) {
         const auto [it, _] = entry->FolderCache.insert_or_assign(cacheKey, std::move(cache));
@@ -208,7 +209,7 @@ IYtGateway::TBatchFolderResult ExecGetFolder(const TExecContext<IYtGateway::TBat
                         path << node.AsString();
                         folderItems.push_back(MakeFolderItem(node, path));
                     }
-                    StoreResInCache(entry, std::move(folderItems), cacheKey);
+                    StoreResInCache(entry, folderItems, cacheKey);
                     return MakeFuture(std::move(folderItems));
                 }
                 catch (const NYT::TErrorResponse& e) {

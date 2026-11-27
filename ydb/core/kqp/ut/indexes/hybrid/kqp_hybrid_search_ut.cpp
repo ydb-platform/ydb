@@ -47,7 +47,8 @@ TKikimrRunner MakeRunner(bool enableHybridSearch = true, bool enableCompactFullt
     return TKikimrRunner(settings);
 }
 
-TKikimrRunner MakeRunnerWithCompact(bool compact, bool enableFulltextPrefix = false) {
+TKikimrRunner MakeRunnerWithCompact(bool compact, bool enableFulltextPrefix = false,
+        bool enableVectorSearchActor = true) {
     NSchemeShard::gVectorIndexSeed = 1337;
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
@@ -56,6 +57,7 @@ TKikimrRunner MakeRunnerWithCompact(bool compact, bool enableFulltextPrefix = fa
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
     settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
     settings.AppConfig.MutableTableServiceConfig()->SetEnableHybridSearch(true);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
     return TKikimrRunner(settings);
 }
 
@@ -2079,6 +2081,32 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             LIMIT 4;
         )sql");
         UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 2u}), keys);
+    }
+
+    // Regression test for "TKqpTasksGraph(): requirement resultsSize == 1 failed" on hybrid search.
+    // The bug only reproduced without EnableVectorSearchActor.
+    Y_UNIT_TEST(ScanScriptingWithPrefixedIndexes) {
+        auto kikimr = MakeRunnerWithCompact(/*compact=*/true, /*enableFulltextPrefix=*/true,
+            /*enableVectorSearchActor=*/false);
+        auto db = kikimr.GetQueryClient();
+        CreateDocs(db);
+        UpsertDocs(db);
+        AddPrefixedFulltextIndex(db);
+        AddPrefixedVectorIndex(db);
+
+        NScripting::TScriptingClient client(kikimr.GetDriver());
+        auto it = client.StreamExecuteYqlScript(TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            WHERE Category = "a"
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"),
+                Knn::CosineDistance(Embedding, $target),
+                ("ft_idx", "vp_idx") AS Indexes)
+            LIMIT 4;
+        )sql").ExtractValueSync();
+
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        CompareYson(R"([[[1u]];[[2u]]])", CollectStreamResult(it).ResultSetYson);
     }
 
     Y_UNIT_TEST(UsesFullPrefixWithPkInVectorIndex) {

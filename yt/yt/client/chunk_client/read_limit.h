@@ -7,6 +7,8 @@
 #include <yt/yt/client/table_client/key_bound.h>
 #include <yt/yt/client/table_client/unversioned_row.h>
 
+#include <yt/yt/core/phoenix/type_decl.h>
+
 #include <yt/yt/core/yson/consumer.h>
 
 #include <yt/yt/core/ytree/public.h>
@@ -175,6 +177,13 @@ public:
     TReadLimit Invert() const;
 
     bool operator==(const TReadLimit& other) const;
+
+private:
+    using TLoadContext = NTableClient::TLoadContext;
+    using TSaveContext = NTableClient::TSaveContext;
+    using TPersistenceContext = NTableClient::TPersistenceContext;
+
+    PHOENIX_DECLARE_TYPE(TReadLimit, 0x7a2ac0d5);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

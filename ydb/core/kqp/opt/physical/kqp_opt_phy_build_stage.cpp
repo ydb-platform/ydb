@@ -780,10 +780,10 @@ NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, N
         .Done();
 }
 
-NYql::NNodes::TExprBase KqpPrecomputeParameter(NYql::NNodes::TExprBase param, NYql::TExprContext& ctx) {
+NYql::NNodes::TExprBase KqpPrecomputeParameter(NYql::NNodes::TExprBase param, NYql::TExprContext& ctx, bool unwrapOptional) {
     auto type = param.Raw()->GetTypeAnn();
     YQL_ENSURE(type);
-    if (type->GetKind() == ETypeAnnotationKind::Optional) {
+    if (unwrapOptional && type->GetKind() == ETypeAnnotationKind::Optional) {
         param = Build<TCoUnwrap>(ctx, param.Pos())
             .Optional(param)
             .Done();

@@ -2,6 +2,103 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 
 Y_UNIT_TEST_SUITE(IndexRestoreGet) {
+    Y_UNIT_TEST(DoNotKeepBeforeAndAfterSoftBarrier) {
+        TEnvironmentSetup env({
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+        });
+        env.CreateBoxAndPool(1, 1);
+        const ui32 groupId = env.GetGroups().front();
+        const TString data = "blob";
+        const TLogoBlobID id(1, 1, 1, 0, data.size(), 0);
+        env.PutBlob(groupId, id, data);
+
+        auto collect = [&](bool advanceBarrier) {
+            const auto edge = env.Runtime->AllocateEdgeActor(1);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), id.Generation(),
+                    advanceBarrier ? 2 : 1, id.Channel(), advanceBarrier, id.Generation(), id.Step(), nullptr,
+                    advanceBarrier ? nullptr : new TVector<TLogoBlobID>{id}, TInstant::Max(), false));
+            });
+            auto reply = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::OK);
+        };
+
+        for (bool advanceBarrier : {false, true}) {
+            collect(advanceBarrier);
+            for (bool indexOnly : {false, true}) {
+                const auto edge = env.Runtime->AllocateEdgeActor(1);
+                env.Runtime->WrapInActorContext(edge, [&] {
+                    SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                        NKikimrBlobStorage::FastRead, false, indexOnly));
+                });
+                auto reply = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Get()->ResponseSz, 1);
+                const auto& item = reply->Get()->Responses[0];
+                UNIT_ASSERT_VALUES_EQUAL(item.Status, advanceBarrier ? NKikimrProto::NODATA : NKikimrProto::OK);
+                UNIT_ASSERT(!item.Keep);
+                if (!advanceBarrier) {
+                    UNIT_ASSERT(item.DoNotKeep);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(item.Buffer.ConvertToString(), !advanceBarrier && !indexOnly ? data : TString());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(HandoffMarkedForDeletionStillReportsLocalPart) {
+        TEnvironmentSetup env({
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        });
+        env.CreateBoxAndPool(1, 1);
+        auto info = env.GetGroupInfo(env.GetGroups().front());
+        const TLogoBlobID id(1, 1, 1, 0, 4096, 0);
+        const TLogoBlobID partId(id, 1);
+        const auto handoff = info->GetVDiskInSubgroup(info->Type.TotalPartCount(), id.Hash());
+        const TString data(info->Type.PartSize(partId), 'x');
+        env.PutBlob(handoff, partId, data);
+
+        // Balancing drops the handoff obligation before compaction removes the local bytes.
+        TIngress deletion;
+        deletion.DeleteHandoff(&info->GetTopology(), handoff, partId);
+        const auto vdiskActor = info->GetActorId(handoff);
+        const auto edge = env.Runtime->AllocateEdgeActor(vdiskActor.NodeId());
+        auto ev = std::make_unique<IEventHandle>(vdiskActor, edge, new TEvDelLogoBlobDataSyncLog(id, deletion, 0));
+        ev->Rewrite(TEvBlobStorage::EvForwardToSkeleton, vdiskActor);
+        env.Runtime->Send(ev.release(), edge.NodeId());
+        env.WaitForEdgeActorEvent<TEvDelLogoBlobDataSyncLogResult>(edge);
+
+        env.WithQueueId(handoff, NKikimrBlobStorage::EVDiskQueueId::GetFastRead, [&](TActorId queue) {
+            using TVGet = TEvBlobStorage::TEvVGet;
+            using TVGetResult = TEvBlobStorage::TEvVGetResult;
+            auto index = env.SyncQueryFactory<TVGetResult>(queue, [&] {
+                return TVGet::CreateExtremeIndexQuery(handoff, TInstant::Max(), NKikimrBlobStorage::FastRead,
+                    TVGet::EFlags::ShowInternals, {}, {id});
+            });
+            UNIT_ASSERT_VALUES_EQUAL(index->Record.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(index->Record.ResultSize(), 1);
+            const auto& item = index->Record.GetResult(0);
+            UNIT_ASSERT_VALUES_EQUAL(item.GetStatus(), NKikimrProto::NODATA);
+            UNIT_ASSERT(item.HasIngress());
+            const TIngress ingress(item.GetIngress());
+            UNIT_ASSERT(ingress.PartsWeMustHaveLocally(&info->GetTopology(), handoff, id).Empty());
+            UNIT_ASSERT(ingress.LocalParts(info->Type).Get(0));
+            UNIT_ASSERT_VALUES_EQUAL(item.PartsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(item.GetParts(0), 1);
+
+            auto body = env.SyncQueryFactory<TVGetResult>(queue, [&] {
+                return TVGet::CreateExtremeDataQuery(handoff, TInstant::Max(), NKikimrBlobStorage::FastRead,
+                    TVGet::EFlags::None, {}, {partId});
+            });
+            UNIT_ASSERT_VALUES_EQUAL(body->Record.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(body->Record.ResultSize(), 1);
+            const auto& part = body->Record.GetResult(0);
+            UNIT_ASSERT_VALUES_EQUAL(part.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(body->GetBlobData(part).ConvertToString(), data);
+        });
+    }
+
     Y_UNIT_TEST(BlobRecovery) {
         TEnvironmentSetup env(TEnvironmentSetup::TSettings{
             .NodeCount = 8,

@@ -17,14 +17,16 @@ PEERDIR(
     library/cpp/testing/unittest
     library/cpp/threading/future
     ydb/core/persqueue/events
-    ydb/core/testlib/default
     ydb/core/testlib/actors
+    ydb/core/testlib/default
+    ydb/core/tx/scheme_cache
+    ydb/core/tx/tx_proxy
     ydb/public/api/grpc
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
-    ydb/services/persqueue_v1
+    ydb/services/persqueue_v1/actors
 )
 
 SRCS(

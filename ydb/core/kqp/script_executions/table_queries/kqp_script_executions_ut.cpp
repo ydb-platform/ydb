@@ -578,6 +578,36 @@ public:
 }   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
+    Y_UNIT_TEST(FetchUnpublishedResultSet) {
+        TScriptExecutionsYdbSetup ydb;
+        const auto executionId = ydb.CreateQueryInDb();
+        const auto initial = ydb.FetchScriptResults(executionId, /* resultSetId */ 0);
+        UNIT_ASSERT_VALUES_EQUAL(initial->Get()->Status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT(initial->Get()->ResultSetNotReady);
+        UNIT_ASSERT_STRING_CONTAINS(initial->Get()->Issues.ToString(), "Result set index is invalid");
+
+        auto* runtime = ydb.GetRuntime();
+        const auto edge = runtime->AllocateEdgeActor();
+        runtime->Register(CreateSaveScriptExecutionResultMetaActor(edge, TestDatabase, executionId, R"([{}])", /* leaseGeneration */ 1));
+        const auto saved = runtime->GrabEdgeEvent<TEvSaveScriptResultMetaFinished>(edge, TestTimeout);
+        UNIT_ASSERT(saved);
+        UNIT_ASSERT_VALUES_EQUAL(saved->Get()->Status, Ydb::StatusIds::SUCCESS);
+
+        const auto legacy = ydb.FetchScriptResults(executionId, /* resultSetId */ 0);
+        UNIT_ASSERT_VALUES_EQUAL(legacy->Get()->Status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT(legacy->Get()->ResultSetNotReady);
+        UNIT_ASSERT_STRING_CONTAINS(legacy->Get()->Issues.ToString(), "Results are not ready");
+
+        const auto unpublished = ydb.FetchScriptResults(executionId, /* resultSetId */ 1);
+        UNIT_ASSERT_VALUES_EQUAL(unpublished->Get()->Status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT(unpublished->Get()->ResultSetNotReady);
+
+        const auto negative = ydb.FetchScriptResults(executionId, /* resultSetId */ -1);
+        UNIT_ASSERT_VALUES_EQUAL(negative->Get()->Status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT(!negative->Get()->ResultSetNotReady);
+        UNIT_ASSERT_STRING_CONTAINS(negative->Get()->Issues.ToString(), "Result set index is invalid");
+    }
+
     Y_UNIT_TEST(FetchScriptResultsThroughProxy) {
         TScriptExecutionsYdbSetup ydb(false, /* secureScriptExecutions */ true);
         const auto executionId =
@@ -593,6 +623,10 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         NYdb::TResultSetParser parser(*response.ResultSet);
         UNIT_ASSERT(parser.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetInt32(), 2);
+
+        const auto missing = ydb.FetchScriptResults(executionId, /* resultSetId */ 1);
+        UNIT_ASSERT_VALUES_EQUAL(missing->Get()->Status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT(!missing->Get()->ResultSetNotReady);
 
         const auto denied = ydb.FetchScriptResults(executionId, 0, 0, 1, "another-user");
         UNIT_ASSERT_VALUES_EQUAL(denied->Get()->Status, Ydb::StatusIds::UNAUTHORIZED);

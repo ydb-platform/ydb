@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/vdisk/scrub/blob_recovery.h>
 #include <ydb/core/util/lz4_data_generator.h>
 
 Y_UNIT_TEST_SUITE(CorruptedReads) {
@@ -16,7 +17,13 @@ Y_UNIT_TEST_SUITE(CorruptedReads) {
         const TString data(1024 * 1024, 'x');
         const TLogoBlobID fullId(1, 1, 1, 0, data.size(), 0);
         const TLogoBlobID partId(fullId, 1);
-        env.PutBlob(info->GroupID.GetRawId(), fullId, data);
+        const auto writer = env.Runtime->AllocateEdgeActor(1);
+        env.Runtime->WrapInActorContext(writer, [&] {
+            SendToBSProxy(writer, info->GroupID, new TEvBlobStorage::TEvPut(fullId, data, TInstant::Max(),
+                NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticMaxThroughput, /*issueKeepFlag=*/ true));
+        });
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(writer)->Get()->Status,
+            NKikimrProto::OK);
         TDataPartSet parts;
         info->Type.SplitData(TErasureType::CrcModeNone, data, parts);
         const auto vdiskId = info->GetVDiskInSubgroup(0, fullId.Hash());
@@ -43,7 +50,7 @@ Y_UNIT_TEST_SUITE(CorruptedReads) {
         }
         UNIT_ASSERT_VALUES_EQUAL(corruptedParts, 1);
 
-        auto read = [&](bool suppressRestoration, NKikimrProto::EReplyStatus status) {
+        auto read = [&](bool suppressRestoration, NKikimrProto::EReplyStatus status, bool expectDoNotKeep) {
             const auto edge = env.Runtime->AllocateEdgeActor(actorId.NodeId(), __FILE__, __LINE__);
             auto get = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdiskId, TInstant::Max(),
                 NKikimrBlobStorage::FastRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, {partId});
@@ -57,15 +64,48 @@ Y_UNIT_TEST_SUITE(CorruptedReads) {
             const auto& record = result->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
             UNIT_ASSERT_VALUES_EQUAL(record.ResultSize(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(record.GetResult(0).GetStatus(), status);
+            const auto& item = record.GetResult(0);
+            UNIT_ASSERT_VALUES_EQUAL(item.GetStatus(), status);
+            UNIT_ASSERT_VALUES_EQUAL(item.GetKeep(), !expectDoNotKeep);
+            UNIT_ASSERT_VALUES_EQUAL(item.GetDoNotKeep(), expectDoNotKeep);
             if (status == NKikimrProto::OK) {
-                UNIT_ASSERT_VALUES_EQUAL(result->Get()->GetBlobData(record.GetResult(0)).ConvertToString(),
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->GetBlobData(item).ConvertToString(),
                     parts.Parts[0].OwnedString.ConvertToString());
             }
         };
-        read(true, NKikimrProto::CORRUPTED);
-        read(false, NKikimrProto::OK);
-        read(true, NKikimrProto::OK);
+        read(true, NKikimrProto::CORRUPTED, false);
+
+        // The first recovery attempt sees a released Keep on peers that cannot supply bytes.
+        // The retry sees the old Keep on the peers that supply the payload.
+        ui32 recoveryAttempts = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (!recoveryAttempts && ev->GetTypeRewrite() == TEvBlobStorage::EvVGetResult) {
+                const auto* recipient = env.Runtime->GetActor(ev->GetRecipientRewrite());
+                if (recipient && recipient->GetActivityType() == NKikimrServices::TActivity::BS_BLOB_RECOVERY_ACTOR) {
+                    for (auto& item : *ev->Get<TEvBlobStorage::TEvVGetResult>()->Record.MutableResult()) {
+                        if (LogoBlobIDFromLogoBlobID(item.GetBlobID()).FullID() == fullId) {
+                            item.SetStatus(NKikimrProto::NODATA);
+                            item.ClearPayload();
+                            item.ClearKeep();
+                            item.SetDoNotKeep(true);
+                        }
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvRecoverBlobResult) {
+                for (const auto& item : ev->Get<TEvRecoverBlobResult>()->Items) {
+                    if (item.BlobId == fullId) {
+                        UNIT_ASSERT_VALUES_EQUAL(item.Status, recoveryAttempts ? NKikimrProto::OK : NKikimrProto::NODATA);
+                        UNIT_ASSERT_VALUES_EQUAL(item.DoNotKeep, recoveryAttempts == 0);
+                        ++recoveryAttempts;
+                    }
+                }
+            }
+            return true;
+        };
+        read(false, NKikimrProto::OK, true);
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL(recoveryAttempts, 2);
+        read(true, NKikimrProto::OK, false);
     }
 
     Y_UNIT_TEST(Basic) {

@@ -18,6 +18,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/scope.h>
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
@@ -36,14 +37,15 @@ class TMirrorReaderFactory : public NPQ::TPersQueueMirrorReaderFactory {
         using TSettings = NYdb::NTopic::TReadSessionGetEventSettings;
 
     public:
-        TReadSession(const TMirrorReaderFactory& factory, std::shared_ptr<NYdb::NTopic::IReadSession> session)
+        TReadSession(const TMirrorReaderFactory& factory, ui32 partition, std::shared_ptr<NYdb::NTopic::IReadSession> session)
             : Factory(factory)
+            , Partition(partition)
             , Session(std::move(session))
         {}
 
         NThreading::TFuture<void> WaitEvent() override {
             TGuard<TMutex> guard(Factory.Mutex);
-            if (Factory.Resumed.Initialized()) {
+            if (Factory.IsPaused(Partition)) {
                 return Factory.Resumed.GetFuture();
             }
             return Session->WaitEvent();
@@ -51,7 +53,7 @@ class TMirrorReaderFactory : public NPQ::TPersQueueMirrorReaderFactory {
 
         std::optional<TEvent> GetEvent(bool block, size_t maxByteSize) override {
             TGuard<TMutex> guard(Factory.Mutex);
-            if (Factory.Resumed.Initialized()) {
+            if (Factory.IsPaused(Partition)) {
                 return std::nullopt;
             }
             return Session->GetEvent(block, maxByteSize);
@@ -83,6 +85,7 @@ class TMirrorReaderFactory : public NPQ::TPersQueueMirrorReaderFactory {
 
     private:
         const TMirrorReaderFactory& Factory;
+        const ui32 Partition;
         std::shared_ptr<NYdb::NTopic::IReadSession> Session;
     };
 
@@ -92,13 +95,14 @@ public:
             std::shared_ptr<NYdb::ICredentialsProviderFactory> credentials,
             ui64 maxMemoryUsageBytes, TMaybe<TLog> logger = Nothing()) const override
     {
-        return std::make_shared<TReadSession>(*this, TPersQueueMirrorReaderFactory::GetReadSession(
+        return std::make_shared<TReadSession>(*this, partition, TPersQueueMirrorReaderFactory::GetReadSession(
             config, partition, std::move(credentials), maxMemoryUsageBytes, std::move(logger)));
     }
 
-    void Pause() {
+    void Pause(std::optional<ui32> partition = std::nullopt) {
         TGuard<TMutex> guard(Mutex);
         UNIT_ASSERT(!Resumed.Initialized());
+        PausedPartition = partition;
         Resumed = NThreading::NewPromise<void>();
     }
 
@@ -114,7 +118,12 @@ public:
     }
 
 private:
+    bool IsPaused(ui32 partition) const {
+        return Resumed.Initialized() && (!PausedPartition || *PausedPartition == partition);
+    }
+
     mutable TMutex Mutex;
+    std::optional<ui32> PausedPartition;
     NThreading::TPromise<void> Resumed;
 };
 
@@ -137,7 +146,7 @@ class TTopicMirroringFixture {
         ui64 Committed;
     };
 
-    static TOffsets GetOffsets(TEnv<>& env, const TString& topic, const TString& consumer) {
+    static TOffsets GetOffsets(TEnv<>& env, const TString& topic, const TString& consumer, ui32 partitionId = 0) {
         NYdb::NTopic::TTopicClient client(env.GetDriver());
         const auto result = env.RunCall([&] {
             return client.DescribeConsumer(topic, consumer, NYdb::NTopic::TDescribeConsumerSettings()
@@ -145,9 +154,11 @@ class TTopicMirroringFixture {
         });
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         const auto& partitions = result.GetConsumerDescription().GetPartitions();
-        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
-        const auto& partition = partitions.front();
-        UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
+        const auto selected = FindIf(partitions, [partitionId](const auto& partition) {
+            return partition.GetPartitionId() == partitionId;
+        });
+        UNIT_ASSERT_C(selected != partitions.end(), "Missing partition " << partitionId << " on " << topic);
+        const auto& partition = *selected;
         UNIT_ASSERT(partition.GetPartitionStats());
         UNIT_ASSERT(partition.GetPartitionConsumerStats());
         return {partition.GetPartitionStats()->GetEndOffset(), partition.GetPartitionConsumerStats()->GetCommittedOffset()};
@@ -168,7 +179,7 @@ public:
     // The simulated runtime installs a process-wide clock, so the DONE test uses one cluster.
     explicit TTopicMirroringFixture(const TString& sourceHost = "localhost", bool stopBeforeCreateResult = false,
             TMirrorReaderFactory* mirrorReaderFactory = nullptr, const TString& sourceWriteMode = {},
-            EStart start = EStart::Immediate)
+            EStart start = EStart::Immediate, ui32 partitionCount = 1)
         : RemoteSource(stopBeforeCreateResult ? std::nullopt : std::optional<TEnv<>>(std::in_place, Flags()))
         , Destination(Flags(), true, stopBeforeCreateResult ? ERuntimeMode::Simulated : ERuntimeMode::RealThreads)
         , Source(RemoteSource ? *RemoteSource : Destination)
@@ -176,6 +187,7 @@ public:
         Source.RunCall([&] {
             UNIT_ASSERT_VALUES_EQUAL(Source.MkDir("/Root", "src"), NMsgBusProxy::MSTATUS_OK);
             auto topic = MakeTopicDescription({.Name = "topic"});
+            topic->SetTotalGroupCount(partitionCount);
             topic->MutablePQTabletConfig()->AddConsumers()->SetName(Consumer);
             UNIT_ASSERT_VALUES_EQUAL(Source.CreateTopic("/Root/src", *topic), NMsgBusProxy::MSTATUS_OK);
         });
@@ -319,12 +331,12 @@ public:
         UNIT_ASSERT(!Config().GetPartitionConfig().HasMirrorFrom());
     }
 
-    NYdb::TStatus CommitSourceConsumerOffset(ui64 offset) {
-        return CommitConsumerOffset(Source, SourceTopic, offset);
+    NYdb::TStatus CommitSourceConsumerOffset(ui64 offset, ui32 partitionId = 0) {
+        return CommitConsumerOffset(Source, SourceTopic, offset, partitionId);
     }
 
-    NYdb::TStatus CommitDestinationConsumerOffset(ui64 offset) {
-        return CommitConsumerOffset(Destination, DestinationTopic, offset);
+    NYdb::TStatus CommitDestinationConsumerOffset(ui64 offset, ui32 partitionId = 0) {
+        return CommitConsumerOffset(Destination, DestinationTopic, offset, partitionId);
     }
 
     void CheckClientModificationsBlocked(ui64 offset) {
@@ -371,38 +383,38 @@ public:
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
-    void CheckBacklog(ui64 before, ui64 end) {
-        const auto source = GetOffsets(Source, SourceTopic, MirrorConsumer);
+    void CheckBacklog(ui64 before, ui64 end, ui32 partitionId = 0) {
+        const auto source = GetOffsets(Source, SourceTopic, MirrorConsumer, partitionId);
         UNIT_ASSERT_VALUES_EQUAL(source.End, end);
         UNIT_ASSERT_VALUES_EQUAL(source.Committed, before);
-        UNIT_ASSERT_VALUES_EQUAL(GetOffsets(Destination, DestinationTopic, Consumer).End, before);
-        UNIT_ASSERT_C(before < end, "Expected a backlog on partition 0");
+        UNIT_ASSERT_VALUES_EQUAL(GetOffsets(Destination, DestinationTopic, Consumer, partitionId).End, before);
+        UNIT_ASSERT_C(before < end, "Expected a backlog on partition " << partitionId);
     }
 
-    void WaitForOffsets(ui64 end, ui64 appOffset) {
+    void WaitForOffsets(ui64 end, ui64 appOffset, ui32 partitionId = 0) {
         TString description;
         Wait([&] {
-            const auto destination = GetOffsets(Destination, DestinationTopic, Consumer);
-            description = TStringBuilder() << "destination partition 0 to reach end offset " << end
+            const auto destination = GetOffsets(Destination, DestinationTopic, Consumer, partitionId);
+            description = TStringBuilder() << "destination partition " << partitionId << " to reach end offset " << end
                 << " and application offset " << appOffset << " (observed " << destination.End
                 << " and " << destination.Committed << ')';
             return destination.End == end && destination.Committed == appOffset;
         }, description);
 
         Wait([&] {
-            const auto source = GetOffsets(Source, SourceTopic, MirrorConsumer);
+            const auto source = GetOffsets(Source, SourceTopic, MirrorConsumer, partitionId);
             description = TStringBuilder() << "source mirror consumer " << MirrorConsumer
-                << " to commit partition 0 through offset " << end << " (observed " << source.Committed << ')';
+                << " to commit partition " << partitionId << " through offset " << end << " (observed " << source.Committed << ')';
             return source.End == end && source.Committed == end;
         }, description);
     }
 
-    void Write(const TVector<TString>& payloads) {
-        Write(Source, SourceTopic, "producer", payloads);
+    void Write(const TVector<TString>& payloads, ui32 partitionId = 0) {
+        Write(Source, SourceTopic, "producer", payloads, partitionId);
     }
 
-    void WriteDestination(const TVector<TString>& payloads) {
-        Write(Destination, DestinationTopic, "destination-producer", payloads);
+    void WriteDestination(const TVector<TString>& payloads, ui32 partitionId = 0) {
+        Write(Destination, DestinationTopic, "destination-producer", payloads, partitionId);
     }
 
     void ReadBack(const TVector<TString>& payloads, ui64 firstOffset) {
@@ -413,8 +425,8 @@ public:
         ReadBack(Source, SourceTopic, payloads, 0, Consumer);
     }
 
-    void ReadDestinationAsConsumer(const TVector<TString>& payloads, ui64 firstOffset) {
-        ReadBack(Destination, DestinationTopic, payloads, firstOffset, Consumer);
+    void ReadDestinationAsConsumer(const TVector<TString>& payloads, ui64 firstOffset, ui32 partitionId = 0) {
+        ReadBack(Destination, DestinationTopic, payloads, firstOffset, Consumer, partitionId);
     }
 
     void WriteAndReadBack(const TString& payload, ui64 offset) {
@@ -423,9 +435,9 @@ public:
     }
 
 private:
-    static NYdb::TStatus CommitConsumerOffset(TEnv<>& env, const TString& topic, ui64 offset) {
+    static NYdb::TStatus CommitConsumerOffset(TEnv<>& env, const TString& topic, ui64 offset, ui32 partitionId) {
         NYdb::NTopic::TTopicClient client(env.GetDriver());
-        return client.CommitOffset(topic, 0, Consumer, offset).GetValueSync();
+        return client.CommitOffset(topic, partitionId, Consumer, offset).GetValueSync();
     }
 
     void CheckWriteBlocked(TEnv<>& env, const TString& topic) {
@@ -456,19 +468,22 @@ private:
         }, TStringBuilder() << "client write rejection on " << topic);
     }
 
-    static void Write(TEnv<>& env, const TString& topic, const TString& producer, const TVector<TString>& payloads) {
+    static void Write(TEnv<>& env, const TString& topic, const TString& producer,
+            const TVector<TString>& payloads, ui32 partitionId)
+    {
         using namespace NYdb::NTopic;
         TTopicClient client(env.GetDriver());
+        const TString partitionProducer = TStringBuilder() << producer << "-" << partitionId;
         auto writer = client.CreateSimpleBlockingWriteSession(TWriteSessionSettings()
-            .Path(topic).ProducerId(producer).MessageGroupId(producer).Codec(ECodec::RAW));
+            .Path(topic).ProducerId(partitionProducer).MessageGroupId(partitionProducer).PartitionId(partitionId).Codec(ECodec::RAW));
         for (const auto& payload : payloads) {
-            UNIT_ASSERT(writer->Write(payload));
+            UNIT_ASSERT_C(writer->Write(payload), "Write failed on " << topic << " partition " << partitionId);
         }
-        UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
+        UNIT_ASSERT_C(writer->Close(TDuration::Seconds(30)), "Writer close failed on " << topic << " partition " << partitionId);
     }
 
     void ReadBack(TEnv<>& env, const TString& topic, const TVector<TString>& payloads, ui64 firstOffset,
-            const char* consumer)
+            const char* consumer, ui32 partitionId = 0)
     {
         using namespace NYdb::NTopic;
         TTopicClient client(env.GetDriver());
@@ -478,7 +493,7 @@ private:
         } else {
             settings.WithoutConsumer();
         }
-        auto reader = client.CreateReadSession(settings.AppendTopics(TTopicReadSettings(topic).AppendPartitionIds(0)));
+        auto reader = client.CreateReadSession(settings.AppendTopics(TTopicReadSettings(topic).AppendPartitionIds(partitionId)));
         size_t index = 0;
         Wait([&] {
             auto event = reader->GetEvent();
@@ -722,6 +737,52 @@ Y_UNIT_TEST_SUITE(TopicMirroring) {
         UNIT_ASSERT_C(destinationCommit.IsSuccess(), destinationCommit.GetIssues().ToString());
         test.WriteDestination({"after-failover"});
         test.ReadDestinationAsConsumer({"after-failover"}, end);
+    }
+
+    Y_UNIT_TEST(TopicFailoverAcrossPartitions) {
+        constexpr ui32 partitionCount = 3;
+        constexpr ui32 laggingPartition = partitionCount - 1;
+        TMirrorReaderFactory mirrorReader;
+        TTopicMirroringFixture test("[::1]", false, &mirrorReader, {},
+            TTopicMirroringFixture::EStart::Deferred, partitionCount);
+
+        TVector<TVector<TString>> unread(partitionCount);
+        TVector<ui64> ends(partitionCount);
+        for (ui32 partition = 0; partition < partitionCount; ++partition) {
+            TVector<TString> consumed(partition + 1, TStringBuilder() << "consumed-" << partition);
+            for (ui32 index = 0; index < (partition + 1) * 32; ++index) {
+                unread[partition].push_back(TStringBuilder() << "unread-" << partition << "-" << index);
+            }
+            test.Write(consumed, partition);
+            const auto commit = test.CommitSourceConsumerOffset(consumed.size(), partition);
+            UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
+            test.Write(unread[partition], partition);
+            ends[partition] = consumed.size() + unread[partition].size();
+        }
+
+        mirrorReader.Pause(laggingPartition);
+        Y_DEFER { mirrorReader.Resume(); };
+        test.Start("[::1]");
+        test.Source.GetRuntime().GetAppData().FeatureFlags.SetEnableClientModifications(false);
+
+        for (ui32 partition = 0; partition < laggingPartition; ++partition) {
+            test.WaitForOffsets(ends[partition], partition + 1, partition);
+        }
+        test.CheckBacklog(0, ends[laggingPartition], laggingPartition);
+        mirrorReader.Resume();
+        test.WaitForOffsets(ends[laggingPartition], laggingPartition + 1, laggingPartition);
+
+        test.Done();
+        test.WaitMirror(false);
+        for (ui32 partition = 0; partition < partitionCount; ++partition) {
+            test.ReadDestinationAsConsumer(unread[partition], partition + 1, partition);
+            const auto commit = test.CommitDestinationConsumerOffset(ends[partition], partition);
+            UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
+
+            const TVector<TString> local = {TStringBuilder() << "local-" << partition};
+            test.WriteDestination(local, partition);
+            test.ReadDestinationAsConsumer(local, ends[partition], partition);
+        }
     }
 
     Y_UNIT_TEST(DrainsBurstBacklog) {

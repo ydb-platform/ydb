@@ -3,7 +3,7 @@
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
-#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/fetcher.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/index_fetching.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/tiering/tier/identifier.h>

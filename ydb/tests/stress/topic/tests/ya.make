@@ -9,7 +9,6 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
-TAG(ya:fat)
 
 REQUIREMENTS(ram:32 cpu:4)
 
@@ -30,5 +29,7 @@ PEERDIR(
     ydb/tests/library/stress
     ydb/tests/stress/topic/workload
 )
+
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 END()

@@ -1316,16 +1316,30 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     }
 }
 
-TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, bool newRboEnabled, const TString& poolId) {
+TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId) {
     TVector<const TString> txPlans;
     for (const auto& execStats: queryStats.GetExecutions()) {
         for (const auto& txPlan: execStats.GetTxPlansWithStats()) {
-            txPlans.push_back(txPlan);
+            if (!txPlan.empty()) {
+                txPlans.push_back(txPlan);
+            }
         }
     }
 
-    if (newRboEnabled) {
-        return SerializeRBOAnalyzePlan(txPlans, queryStats, poolId);
+    if (!txPlans.empty()) {
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(txPlans.front(), &plan, true);
+        // Fallback retries one compilation request, not the entire client
+        // request. Ordinary queries supply plans from that compilation;
+        // scripting serializes each subquery separately, and split CTAS
+        // contributes execution plans only from its data-loading part.
+        // The first nonempty plan therefore identifies the format here,
+        // independently of the session or last statement's optimizer flag.
+        // RBO transaction plans carry SimplifiedPlan; legacy plans acquire
+        // it when the transaction plans are assembled into a query plan.
+        if (plan.Has("SimplifiedPlan")) {
+            return SerializeRBOAnalyzePlan(txPlans, queryStats, poolId);
+        }
     }
 
     NJsonWriter::TBuf writer;
@@ -1385,8 +1399,12 @@ TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {
             writer.WriteKey("Plan");
             writer.WriteJsonValue(dqPlan, false, PREC_NDIGITS, 17);
             writer.WriteKey("SimplifiedPlan");
-            auto simplifiedPlan = SimplifyQueryPlan(*dqPlan);
-            writer.WriteJsonValue(&simplifiedPlan, false, PREC_NDIGITS, 17);
+            if (auto existingSimplifiedPlan = planMap.FindPtr("SimplifiedPlan")) {
+                writer.WriteJsonValue(existingSimplifiedPlan, false, PREC_NDIGITS, 17);
+            } else {
+                auto simplifiedPlan = SimplifyQueryPlan(*dqPlan);
+                writer.WriteJsonValue(&simplifiedPlan, false, PREC_NDIGITS, 17);
+            }
         }
         writer.EndObject();
     }

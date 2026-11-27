@@ -74,6 +74,7 @@ namespace NKikimr::NBsController {
         ::NMonitoring::TDynamicCounterPtr Counters;
         std::map<TString, TPileCounters> Piles;
         std::map<TKey, TPoolCounters> Pools;
+        std::map<TString, ::NMonitoring::TDynamicCounters::TCounterPtr> LogicalGroupsAssigned;
 
     public:
         TBridgeSyncCounters(::NMonitoring::TDynamicCounterPtr root)
@@ -93,7 +94,26 @@ namespace NKikimr::NBsController {
             GetPool(key).SyncBytesCopied->Add(bytes);
         }
 
-        void Update(const std::map<TString, TPileValues>& piles, const std::map<TKey, TValues>& values) {
+        void Update(const std::map<TString, TPileValues>& piles, const std::map<TKey, TValues>& values,
+                const std::map<TString, ui64>& logicalGroupsAssigned) {
+            for (auto it = LogicalGroupsAssigned.begin(); it != LogicalGroupsAssigned.end(); ) {
+                if (logicalGroupsAssigned.contains(it->first)) {
+                    ++it;
+                } else {
+                    const auto& pool = it->first;
+                    Counters->RemoveSubgroupChain({{"database", GetDatabase(pool)}, {"storagePool", pool}});
+                    it = LogicalGroupsAssigned.erase(it);
+                }
+            }
+            for (const auto& [pool, count] : logicalGroupsAssigned) {
+                auto& counter = LogicalGroupsAssigned[pool];
+                if (!counter) {
+                    counter = Counters->GetSubgroup("database", GetDatabase(pool))->GetSubgroup("storagePool", pool)
+                        ->GetCounter("LogicalGroupsAssigned");
+                }
+                counter->Set(count);
+            }
+
             for (auto it = Pools.begin(); it != Pools.end(); ) {
                 if (values.contains(it->first)) {
                     ++it;

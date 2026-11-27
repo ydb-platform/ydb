@@ -157,6 +157,25 @@ TEST(TStatisticPathTest, StartsWith)
     EXPECT_FALSE(("A"_L / "B"_L).StartsWith("B"_L));
 }
 
+TEST(TStatisticPathTest, StartsWithBoundaryCases)
+{
+    TStatisticPath emptyPath;
+    EXPECT_TRUE(emptyPath.StartsWith(emptyPath));
+    EXPECT_FALSE(emptyPath.StartsWith("A"_L));
+    EXPECT_FALSE(TStatisticPath("A"_L).StartsWith("B"_L));
+
+    TStatisticPath slashLiteral("A/B"_L);
+    EXPECT_FALSE(slashLiteral.StartsWith("A"_L));
+    EXPECT_TRUE((slashLiteral / "C"_L).StartsWith(slashLiteral));
+
+    for (TChar character : {TChar('\x02'), TChar('\x80'), TChar('\xff')}) {
+        TStatisticPath prefix(TStatisticPathLiteral(std::string("A") + character + "B"));
+        EXPECT_TRUE(prefix.StartsWith(prefix));
+        EXPECT_TRUE((prefix / "C"_L).StartsWith(prefix));
+        EXPECT_FALSE(prefix.StartsWith("A"_L));
+    }
+}
+
 TEST(TStatisticPathTest, EndsWith)
 {
     // Simple suffix.

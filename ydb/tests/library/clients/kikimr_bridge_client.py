@@ -111,11 +111,13 @@ class BridgeClient(object):
         response.operation.result.Unpack(result)
         return result
 
-    def update_cluster_state(self, updates, quorum_piles=None):
+    def update_cluster_state(self, updates, quorum_piles=None, expected_generation=None):
         request = bridge_api.UpdateClusterStateRequest()
         request.updates.extend(updates)
         if quorum_piles is not None:
             request.quorum_piles.extend(quorum_piles)
+        if expected_generation is not None:
+            request.expected_generation = expected_generation
         return self.invoke(request, 'UpdateClusterState')
 
     def update_cluster_state_result(self, updates, quorum_piles=None, expected_status=StatusIds.SUCCESS):

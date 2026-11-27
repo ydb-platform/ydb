@@ -6,7 +6,6 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
-TAG(ya:fat)
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:4)
@@ -20,5 +19,7 @@ PEERDIR(
     ydb/tests/oss/ydb_sdk_import
     ydb/public/sdk/python
 )
+
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 END()

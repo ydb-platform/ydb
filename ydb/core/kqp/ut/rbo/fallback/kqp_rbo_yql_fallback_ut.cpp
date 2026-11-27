@@ -253,6 +253,127 @@ using namespace NYqlTests;
 
 Y_UNIT_TEST_SUITE(KqpRboYql) {
 
+    Y_UNIT_TEST_TWIN(RowTableFallback, FallbackOnRowTables) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(FallbackOnRowTables);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        CreateSimpleTable(kikimr);
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        const auto execute = [&](const TString& query, bool expectFallback) {
+            const auto before = GetNewRBOCompileCounters(kikimr);
+            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(HasFallbackIssue(result.GetIssues()), expectFallback,
+                query << ": " << result.GetIssues().ToString());
+            if (expectFallback) {
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Fallback due to row table flag");
+            }
+            const auto after = GetNewRBOCompileCounters(kikimr);
+            UNIT_ASSERT_VALUES_EQUAL_C(after.first, before.first + (expectFallback ? 0 : 1), query);
+            UNIT_ASSERT_VALUES_EQUAL_C(after.second, before.second + (expectFallback ? 1 : 0), query);
+            return result;
+        };
+
+        // A values-only write does not read a row table and must stay on the new RBO.
+        execute("INSERT INTO `/Root/t1` (a, b) VALUES (1, 10), (2, 20), (3, 30);", false);
+
+        auto selected = execute("SELECT a FROM `/Root/t1` WHERE b >= 20 ORDER BY a;", FallbackOnRowTables);
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(selected.GetResultSet(0)), "[[2];[3]]");
+
+        // Predicate writes import their input through RewriteReadOrEffectInput.
+        execute("UPDATE `/Root/t1` SET b = b + 1 WHERE b >= 20;", FallbackOnRowTables);
+        auto updated = execute("SELECT a, b FROM `/Root/t1` ORDER BY a;", FallbackOnRowTables);
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(updated.GetResultSet(0)), "[[1;[10]];[2;[21]];[3;[31]]]");
+
+        execute("DELETE FROM `/Root/t1` WHERE b >= 30;", FallbackOnRowTables);
+        // Use distinct query text so verification also exercises compilation, not the cache.
+        auto remaining = execute("SELECT a, b FROM `/Root/t1` ORDER BY a DESC;", FallbackOnRowTables);
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(remaining.GetResultSet(0)), "[[2;[21]];[1;[10]]]");
+    }
+
+    Y_UNIT_TEST(RowTableFallbackPreservesTempTables) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(true);
+        appConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false).SetEnableTempTables(true));
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto created = session.ExecuteQuery(R"(
+            CREATE TEMP TABLE Temp (
+                Key Uint64 NOT NULL,
+                PRIMARY KEY (Key)
+            );
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+
+        // The first read in this fresh session must compile and retain the session mapping on retry.
+        const auto before = GetNewRBOCompileCounters(kikimr);
+        auto selected = session.ExecuteQuery("SELECT Key FROM Temp;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(selected.IsSuccess(), selected.GetIssues().ToString());
+        UNIT_ASSERT_C(HasFallbackIssue(selected.GetIssues()), selected.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(selected.GetIssues().ToString(), "Fallback due to row table flag");
+        UNIT_ASSERT_VALUES_EQUAL(selected.GetResultSets().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(selected.GetResultSet(0).RowsCount(), 0);
+        const auto after = GetNewRBOCompileCounters(kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(after.first, before.first);
+        UNIT_ASSERT_VALUES_EQUAL(after.second, before.second + 1);
+    }
+
+    Y_UNIT_TEST_TWIN(RowTableFallbackWithoutYqlRetry, FallbackOnRowTables) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(FallbackOnRowTables);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        CreateSimpleTable(kikimr);
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        const auto before = GetNewRBOCompileCounters(kikimr);
+        auto selected = session.ExecuteQuery("SELECT a FROM `/Root/t1`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(selected.IsSuccess(), !FallbackOnRowTables, selected.GetIssues().ToString());
+        UNIT_ASSERT_C(!HasFallbackIssue(selected.GetIssues()), selected.GetIssues().ToString());
+        if (FallbackOnRowTables) {
+            UNIT_ASSERT_STRING_CONTAINS(selected.GetIssues().ToString(), "Fallback due to row table flag");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(selected.GetResultSets().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(selected.GetResultSet(0).RowsCount(), 0);
+        }
+        const auto after = GetNewRBOCompileCounters(kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(after.first, before.first + (FallbackOnRowTables ? 0 : 1));
+        UNIT_ASSERT_VALUES_EQUAL(after.second, before.second + (FallbackOnRowTables ? 1 : 0));
+    }
+
+    Y_UNIT_TEST(RowTableFallbackLeavesColumnTablesOnNewRBO) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto schema = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/column_table` (
+                a Int64 NOT NULL,
+                PRIMARY KEY (a)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        const auto before = GetNewRBOCompileCounters(kikimr);
+        auto result = session.ExecuteQuery("SELECT a FROM `/Root/column_table`;", NQuery::TTxControl::NoTx(),
+            NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(!HasFallbackIssue(result.GetIssues()), result.GetIssues().ToString());
+        const auto after = GetNewRBOCompileCounters(kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(after.first, before.first + 1);
+        UNIT_ASSERT_VALUES_EQUAL(after.second, before.second);
+    }
+
     Y_UNIT_TEST(QualifiedStarSubqueryFallsBackToYqlOptimizer) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

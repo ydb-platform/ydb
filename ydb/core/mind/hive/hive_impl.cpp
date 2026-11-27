@@ -4226,6 +4226,7 @@ STFUNC(THive::StateInit) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(TEvPrivate::TEvProcessBootQueue, HandleInit);
+        hFunc(TEvPrivate::TEvProcessPileDrains, HandleInit);
         hFunc(TEvPrivate::TEvProcessTabletBalancer, HandleInit);
         hFunc(TEvPrivate::TEvCheckNamedResourceEstimates, HandleInit);
         hFunc(TEvNodeWardenStorageConfig, HandleInit);

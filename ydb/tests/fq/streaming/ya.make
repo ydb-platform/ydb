@@ -3,9 +3,14 @@ PY3TEST()
 STYLE_PYTHON()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/vm_metadata_emulator/recipe/recipe.inc)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/iam_grpc_emulator/recipe/recipe.inc)
+
 ENV(YDB_DEFAULT_CLUSTERADMIN=root@builtin)
+
+ENV(YDB_ENABLE_SIGNAL_BACKTRACE=1)
 
 TEST_SRCS(
     test_iam.py
@@ -28,7 +33,9 @@ PY_SRCS(
 )
 
 REQUIREMENTS(cpu:1)
+
 REQUIREMENTS(ram:16)
+
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

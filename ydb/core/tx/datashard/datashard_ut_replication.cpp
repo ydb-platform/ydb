@@ -1,12 +1,14 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "const.h"
 #include "datashard_active_transaction.h"
+#include "datashard_impl.h"
 #include "datashard_ut_common_kqp.h"
 #include "datashard_user_table.h"
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tablet_flat/flat_table_observer.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
@@ -56,6 +58,77 @@ namespace {
             .Replicated(true)
             .ReplicationConsistencyLevel(EConsistencyLevel::Row);
     }
+
+    class TReplicationSetupTx : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+    public:
+        using TCallback = std::function<void(NTabletFlatExecutor::TTransactionContext&)>;
+
+        TReplicationSetupTx(TDataShard* shard, TCallback callback, bool& done)
+            : TBase(shard)
+            , Callback(std::move(callback))
+            , Done(done)
+        {}
+
+        bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext&) override {
+            Callback(txc);
+            return true;
+        }
+
+        void Complete(const TActorContext&) override { Done = true; }
+
+    private:
+        TCallback Callback;
+        bool& Done;
+    };
+
+    class TSubmitReplicationSetupTx : public TActorBootstrapped<TSubmitReplicationSetupTx> {
+    public:
+        TSubmitReplicationSetupTx(NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor,
+                TAutoPtr<NTabletFlatExecutor::ITransaction> tx)
+            : Executor(executor)
+            , Tx(std::move(tx))
+        {}
+
+        void Bootstrap() {
+            Executor->Enqueue(Tx);
+            PassAway();
+        }
+
+    private:
+        NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* Executor;
+        TAutoPtr<NTabletFlatExecutor::ITransaction> Tx;
+    };
+
+    class TAdvanceMediatorOnOffset : public NTable::ITableObserver {
+    public:
+        TAdvanceMediatorOnOffset(TMediatorTimecastSharedEntry::TPtr step, ui64 nextStep)
+            : Step(std::move(step))
+            , NextStep(nextStep)
+        {}
+
+        void OnUpdate(NTable::ERowOp, TArrayRef<const TRawTypeValue>,
+                TArrayRef<const NTable::TUpdateOp>, TRowVersion) override
+        {
+            ++Updates;
+            Step->Set(NextStep);
+        }
+
+        void OnUpdateTx(NTable::ERowOp, TArrayRef<const TRawTypeValue>,
+                TArrayRef<const NTable::TUpdateOp>, ui64) override
+        {
+            UNIT_FAIL("Unexpected uncommitted replication offset");
+        }
+
+        void OnLockRowTx(NTable::ELockMode, TArrayRef<const TRawTypeValue>, ui64) override {
+            UNIT_FAIL("Unexpected replication offset lock");
+        }
+
+        ui32 Updates = 0;
+
+    private:
+        TMediatorTimecastSharedEntry::TPtr Step;
+        const ui64 NextStep;
+    };
 
 } // anonymous namespace
 
@@ -1004,6 +1077,148 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
             TChange{.Offset = 3, .WriteTxId = 0, .Key = 1, .Value = 33, .Operation = TChange::EOperation::Reset},
         });
         WaitForContent(server, indexPath, "value = 33, key = 1");
+    }
+
+    enum class EAsyncIndexBatch {
+        EmptyUpsert,
+        NonIndexedUpdate,
+        CompositeIndexUpdate,
+    };
+
+    void CheckAsyncIndexAfterMediatorProgress(EAsyncIndexBatch scenario) {
+        const bool compositeIndex = scenario == EAsyncIndexBatch::CompositeIndexUpdate;
+        const bool emptyUpsert = scenario == EAsyncIndexBatch::EmptyUpsert;
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false);
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        TVector<TString> indexColumns = {"value"};
+        if (compositeIndex) {
+            indexColumns.push_back("value2");
+        }
+        const TString indexPath = "/Root/table-1/by_value/indexImplTable";
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "Uint32", false, false},
+                {"value2", "Uint32", false, false},
+            })
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row)
+            .Indexes({{"by_value", std::move(indexColumns), {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}}));
+        const ui64 tabletId = shards.at(0);
+
+        using TUpdates = TVector<std::pair<ui32, ui32>>;
+        const auto apply = [&](i64 offset, const TVector<TUpdates>& batch) {
+            auto request = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>(tableId.PathId, tableId.SchemaVersion);
+            request->Record.SetSource("source");
+            request->Record.SetDatabaseName("/Root");
+            const TCell key = TCell::Make<ui32>(1);
+            const auto serializedKey = TSerializedCellVec::Serialize({&key, 1});
+            for (const auto& updates : batch) {
+                auto* change = request->Record.AddChanges();
+                change->SetSourceOffset(offset++);
+                change->SetKey(serializedKey);
+                auto* upsert = change->MutableUpsert();
+                TVector<TCell> cells;
+                for (const auto& [tag, value] : updates) {
+                    upsert->AddTags(tag);
+                    cells.push_back(TCell::Make(value));
+                }
+                upsert->SetData(TSerializedCellVec::Serialize(cells));
+            }
+            runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+            const auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(sender);
+            UNIT_ASSERT_C(result->Get()->Record.GetStatus() ==
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK,
+                result->Get()->Record.ShortDebugString());
+        };
+
+        // Create the source before observing offsets so the observer sees only batch updates.
+        if (compositeIndex) {
+            apply(0, {{{2, 10}, {3, 20}}});
+            WaitForContent(server, indexPath, "value = 10, value2 = 20, key = 1");
+        } else {
+            apply(0, {});
+        }
+
+        const auto shardActor = ResolveTablet(runtime, tabletId);
+        auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(shardActor));
+        UNIT_ASSERT(shard);
+        auto* executor = dynamic_cast<NTabletFlatExecutor::NFlatExecutorSetup::IExecutor*>(
+            runtime.FindActor(shard->ExecutorID()));
+        UNIT_ASSERT(executor);
+
+        // Use the normal registration result to give this shard a controllable
+        // shared mediator step, above its existing read/write edges.
+        constexpr ui64 initialStepAdvance = 10000;
+        constexpr ui64 concurrentStepAdvance = 100;
+        const ui64 initialStep = shard->GetMvccVersion().Step + initialStepAdvance;
+        auto step = MakeIntrusive<TMediatorTimecastSharedEntry>();
+        step->Set(initialStep);
+        auto entry = MakeIntrusive<TMediatorTimecastEntry>(step, step);
+        runtime.Send(new IEventHandle(shardActor, sender,
+            new TEvMediatorTimecast::TEvRegisterTabletResult(tabletId, entry)));
+
+        const auto runTx = [&](TReplicationSetupTx::TCallback callback) {
+            bool done = false;
+            runtime.Register(new TSubmitReplicationSetupTx(executor,
+                new TReplicationSetupTx(shard, std::move(callback), done)));
+            runtime.WaitFor("replication setup transaction", [&] { return done; });
+        };
+        auto advance = MakeIntrusive<TAdvanceMediatorOnOffset>(step, initialStep + concurrentStepAdvance);
+        runTx([&](auto& txc) {
+            UNIT_ASSERT_VALUES_EQUAL(shard->GetMvccVersion().Step, initialStep);
+            txc.DB.SetTableObserver(txc.DB.GetScheme().TableNames.at("ReplicationSourceOffsets"), advance);
+        });
+
+        THashSet<ui64> enqueued, removed;
+        auto enqueueObserver = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>([&](auto& ev) {
+            if (ev->Sender == shardActor) {
+                for (const auto& record : ev->Get()->Records) {
+                    enqueued.insert(record.Order);
+                }
+            }
+        });
+        auto removeObserver = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == shardActor) {
+                for (ui64 order : ev->Get()->Records) {
+                    if (enqueued.contains(order)) {
+                        removed.insert(order);
+                    }
+                }
+            }
+        });
+
+        const TUpdates secondUpdate = emptyUpsert ? TUpdates{} : TUpdates{{3, 21}};
+        apply(compositeIndex ? 1 : 0, {{{2, 11}}, secondUpdate});
+        UNIT_ASSERT_VALUES_EQUAL(advance->Updates, 2);
+        UNIT_ASSERT_VALUES_EQUAL(step->Get(), initialStep + concurrentStepAdvance);
+        runTx([&](auto& txc) {
+            txc.DB.SetTableObserver(txc.DB.GetScheme().TableNames.at("ReplicationSourceOffsets"), nullptr);
+        });
+
+        // Wait for the entire batch before checking the final index contents.
+        runtime.WaitFor("all replication index records delivered", [&] {
+            return !enqueued.empty() && enqueued == removed;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), emptyUpsert
+            ? "key = 1, value = 11, value2 = (empty maybe)\n"
+            : "key = 1, value = 11, value2 = 21\n");
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, indexPath), compositeIndex
+            ? "value = 11, value2 = 21, key = 1\n"
+            : "value = 11, key = 1\n");
+    }
+
+    Y_UNIT_TEST_TWIN(AsyncIndexReadsOwnBatchWritesAfterMediatorProgress, EmptyUpsert) {
+        CheckAsyncIndexAfterMediatorProgress(EmptyUpsert ? EAsyncIndexBatch::EmptyUpsert : EAsyncIndexBatch::NonIndexedUpdate);
+    }
+
+    Y_UNIT_TEST(AsyncIndexReadsOwnBatchWritesAfterMediatorProgressCompositeIndex) {
+        CheckAsyncIndexAfterMediatorProgress(EAsyncIndexBatch::CompositeIndexUpdate);
     }
 
     Y_UNIT_TEST(AsyncIndexRejectsOversizedKeyAtomically) {

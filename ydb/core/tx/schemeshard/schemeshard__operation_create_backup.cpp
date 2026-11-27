@@ -71,6 +71,7 @@ struct TBackup {
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         NKikimrSchemeOp::TBackupTask backup = table->BackupSettings;
+        backup.SetSourceDatabase(TPath::Init(pathId, context.SS).GetDomainPathString());
         backup.SetSnapshotStep(snapshotTime.Step);
         backup.SetSnapshotTxId(snapshotTime.TxId);
 

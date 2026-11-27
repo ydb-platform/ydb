@@ -915,7 +915,9 @@
                 {"Index": 1, "Name": "Alias", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
                 {"Index": 3, "Name": "SourceType", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "UniqueId", "Type": "TCoAtom"}
+                {"Index": 4, "Name": "UniqueId", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true},
+                {"Index": 6, "Name": "Index", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {

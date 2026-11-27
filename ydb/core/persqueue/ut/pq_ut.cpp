@@ -16,6 +16,7 @@
 
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -398,6 +399,81 @@ void WaitRetentionCleanup(TTestContext& tc,
     }
 
     PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
+}
+
+Y_UNIT_TEST_TWIN(ReadAndCommitRestrictedByWriteMode, kafka) {
+    for (const size_t size : {16u, 600u * 1024, 3u * 1024 * 1024}) {
+        for (const ui32 count : {1u, 2u}) {
+            TTestContext tc;
+            TFinalizer finalizer(tc);
+            tc.Prepare();
+            tc.Runtime->SetScheduledLimit(5000);
+            SetEnableTopicMessagesBatching(tc);
+            const TVector<TConsumerPreparationParameters> consumers = {
+                {.Name = "replication", .Type = NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION},
+            };
+            PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, consumers, *tc.Runtime, tc.TabletId, tc.Edge);
+
+            const TString data(size, 'x');
+            if (kafka) {
+                CmdWriteKafkaBatch(0, "source", 1, TVector<TString>(count, data), tc, 10);
+            } else {
+                TVector<std::pair<ui64, TString>> messages;
+                for (ui32 i = 0; i < count; ++i) {
+                    messages.emplace_back(i + 1, data);
+                }
+                CmdWrite(0, "source", messages, tc, false, {}, true, "", -1, 10);
+            }
+
+            TPQCmdReadSettings readSettings{"", 0, 0, count, 16_MB, count};
+            auto checkRead = [&] {
+                const auto result = CmdReadAndGetResult(readSettings, tc);
+                UNIT_ASSERT(result.ResultSize() > 0);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResult(0).GetOffset(), 10);
+            };
+            checkRead();
+
+            ui32 version = 1'000'000;
+            auto setMode = [&](NKikimrPQ::TPQTabletConfig::EWriteMode mode) {
+                auto config = MakePQTabletConfig({.partitions = 1, .writeSpeed = 50_MB}, consumers, *tc.Runtime, ++version);
+                config.SetWriteMode(mode);
+                SendPQTabletConfig(*tc.Runtime, tc.TabletId, tc.Edge, config, version, version);
+            };
+            i64 committed = CmdGetOffset(0, "user", 0, tc);
+            ui64 offset = 10;
+            for (auto mode : {NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE, NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED}) {
+                setMode(mode);
+                auto checkError = [&] {
+                    TAutoPtr<IEventHandle> handle;
+                    const auto* response = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+                    UNIT_ASSERT(response);
+                    const auto expected = mode == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE
+                        ? NPersQueue::NErrorCode::ERROR : NPersQueue::NErrorCode::BAD_REQUEST;
+                    UNIT_ASSERT_C(response->Record.GetErrorCode() == expected, response->Record.DebugString());
+                    UNIT_ASSERT(response->Record.GetPartitionResponse().GetCloseSession());
+                    UNIT_ASSERT(!response->Record.GetPartitionResponse().HasCmdReadResult());
+                };
+                BeginCmdRead(readSettings, tc);
+                checkError();
+
+                auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+                auto* partition = request->Record.MutablePartitionRequest();
+                partition->SetPartition(0);
+                partition->MutableCmdSetClientOffset()->SetClientId("user");
+                partition->MutableCmdSetClientOffset()->SetOffset(offset);
+                tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+                checkError();
+                CmdGetOffset(0, "user", committed, tc);
+                CmdSetOffset(0, "replication", offset, false, tc);
+                CmdGetOffset(0, "replication", offset, tc);
+
+                setMode(NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE);
+                checkRead();
+                CmdSetOffset(0, "user", offset, false, tc);
+                committed = CmdGetOffset(0, "user", offset++, tc);
+            }
+        }
+    }
 }
 
 Y_UNIT_TEST(TestCompaction) {

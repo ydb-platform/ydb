@@ -281,16 +281,17 @@ public:
         const auto& channelOne = peers.front();
         const auto& channelTwo = peers.back();
 
-        auto getLoad = [] (const auto& channel) {
-            return channel.second->GetInflightRequestCount();
-        };
+        auto channelOneLoad = channelOne.second->GetInflightRequestCount();
+        auto channelTwoLoad = channelTwo.second->GetInflightRequestCount();
 
-        const auto& theWinner = getLoad(channelOne) < getLoad(channelTwo) ? channelOne : channelTwo;
+        const auto& theWinner = channelOneLoad < channelTwoLoad ? channelOne : channelTwo;
 
         YT_TLOG_DEBUG("Selected a peer via the power of two choices strategy")
             .With("RequestId", request ? request->GetRequestId() : TRequestId())
-            .With("Peer1", channelOne.first)
-            .With("Peer2", channelTwo.first)
+            .With("FirstPeer", channelOne.first)
+            .With("FirstPeerLoad", channelOneLoad)
+            .With("SecondPeer", channelTwo.first)
+            .With("SecondPeerLoad", channelTwoLoad)
             .With("Winner", theWinner.first);
 
         return theWinner.second;

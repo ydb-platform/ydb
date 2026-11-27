@@ -69,9 +69,13 @@ message TLoggingConfig {
         message TJsonFormat {
         };
 
+        message TLegacyFormatWithYtTimestamp {
+        };
+
         oneof Format {
             TLegacyFormat LegacyFormat = 1;
             TJsonFormat JsonFormat = 2;
+            TLegacyFormatWithYtTimestamp LegacyFormatWithYtTimestamp = 4;
         };
 
         optional bool IsStrict = 3 [default = true];

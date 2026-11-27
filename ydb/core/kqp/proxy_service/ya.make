@@ -25,6 +25,8 @@ PEERDIR(
     ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration
     ydb/core/kqp/federated_query/streaming
     ydb/core/kqp/gateway/behaviour/streaming_query
+    ydb/core/kqp/runtime/scheduler
+    ydb/core/kqp/runtime/scheduler/service
     ydb/core/kqp/script_executions/finalization
     ydb/core/kqp/script_executions/table_queries
     ydb/core/kqp/tracing
@@ -39,6 +41,7 @@ PEERDIR(
     ydb/library/query_actor
     ydb/library/security
     ydb/library/table_creator
+    ydb/library/yql/dq/actors/common
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/pq/proto

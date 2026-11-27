@@ -51,6 +51,9 @@
 #ifndef REQUIRE_NONZERO_RECOVERY_BASE
 #define REQUIRE_NONZERO_RECOVERY_BASE 1
 #endif
+#ifndef CONFIRM_MUTATION
+#define CONFIRM_MUTATION 1
+#endif
 #if (SCENARIO == 37 && VARIANT > 2) || (SCENARIO == 40 && VARIANT > 5)
 #error Unknown VARIANT
 #endif
@@ -116,7 +119,6 @@ bool scratch_fresh;
 
 byte root;
 bool root_new = true;
-bool replace_request = true;
 byte root_epoch = 1;
 byte operation;
 byte op_cookie = 1;
@@ -616,12 +618,11 @@ inline complete_recovery_vote(node) {
     fi
 }
 
-inline reply_ok() {
-    assert(operation != NONE && learned && !replied);
-    if
-    :: root_new && replace_request -> count_reads(); assert(committed_copies[operation] >= Q)
-    :: else -> assert(votes >= Q)
-    fi;
+#define COMMITTED_REPLY(node) (received[node] && read_owner[node] == op_cookie && read_c[node] == operation)
+
+inline record_client_ok(needs_confirmation) {
+    assert(operation != NONE && learned && votes >= Q && !replied);
+    require(!(needs_confirmation) || COMMITTED_REPLY(A) + COMMITTED_REPLY(B) + COMMITTED_REPLY(C) >= Q, 17);
     require(ok_value[GEN(operation)] == NONE || ok_value[GEN(operation)] == operation, 1);
     ok_value[GEN(operation)] = operation; ok_count++;
     history_value = BASE;
@@ -638,6 +639,18 @@ inline reply_ok() {
     history_value = NONE;
     if :: last_admin == operation -> expected = operation :: else -> skip fi;
     replied = true
+}
+
+inline try_reply_ok() {
+    if :: root_new -> count_reads() :: else -> skip fi;
+    if
+    :: !root_new || !CONFIRM_MUTATION || committed_copies[operation] >= Q -> record_client_ok(root_new)
+    :: else -> skip
+    fi
+}
+
+inline reply_ok() {
+    try_reply_ok(); assert(replied)
 }
 
 inline abandon_request() {
@@ -1290,18 +1303,17 @@ inline complete_refill(node) {
 #endif
 }
 
-inline acknowledge_on_AB() {
-    replace_request = false;
+inline acknowledge_before_upgrade_on_AB() {
     stop_node(C); start_write(X);
-    complete_vote(A); complete_vote(B); learn(); reply_ok()
+    complete_vote(A); complete_vote(B); learn(); record_client_ok(false)
 }
 
 inline advance_on_BC(value) {
     complete_commit(B); complete_commit(C); start_write(value);
     if :: GEN(value) <= GEN(X) -> violation = 12 :: else -> skip fi;
     assert(GEN(value) > GEN(X));
-    complete_vote(B); complete_vote(C); learn(); reply_ok();
-    complete_commit(B); complete_commit(C)
+    complete_vote(B); complete_vote(C); learn();
+    complete_commit(B); complete_commit(C); collect_mask(6); reply_ok()
 }
 
 init {
@@ -1431,8 +1443,7 @@ init {
         if :: complete_commit(A) :: skip fi;
         if :: complete_commit(B) :: deliver_commit(B) :: skip fi;
         if :: complete_commit(C) :: deliver_commit(C) :: skip fi;
-        collect_mask(7); count_reads();
-        if :: committed_copies[X] >= Q -> reply_ok() :: else -> skip fi;
+        collect_mask(7); try_reply_ok();
         change_root(C, true);
 #elif SCENARIO == 12
         /* Confirmation snapshots span a format, while the root stays alive. */
@@ -1649,13 +1660,13 @@ init {
         fi;
         assert(max_bad == 1);
 #elif SCENARIO == 49
-        generation[BASE] = 0; replace_request = false; change_root(C, true);
+        generation[BASE] = 0; change_root(C, true);
         start_write(X); complete_vote(A); complete_vote(B); learn();
         assert(disk_c[A] == BASE && disk_c[B] == BASE && applied[C] == X);
         do :: len(writes[C]) != 0 -> writes[C]?scratch_c,scratch_p,scratch_v,scratch_cookie :: else -> break od;
         lose_commits(A); lose_commits(B);
         start_write(Y);
-        complete_vote(A); complete_vote(B); learn(); reply_ok();
+        complete_vote(A); complete_vote(B); learn(); record_client_ok(false);
         do :: len(writes[C]) != 0 -> writes[C]?scratch_c,scratch_p,scratch_v,scratch_cookie :: else -> break od;
         lose_commits(A); lose_commits(B);
         start_write(Z); complete_vote(B);
@@ -1666,7 +1677,7 @@ init {
         change_root(C, true); collect_mask(7); select_recovery();
         require(blocked && recovered == NONE, 16);
 #elif SCENARIO == 47
-        acknowledge_on_AB();
+        acknowledge_before_upgrade_on_AB();
         lose_commits(B);
         collect_mask(3); select_recovery(); complete_recovery_proposal();
         assert(!blocked && memory_c[root] == X && previous[X] == BASE);
@@ -1681,7 +1692,7 @@ init {
         assert(!blocked && !recovery_pending);
         advance_on_BC(Z); abandon_request();
 #elif SCENARIO == 46
-        acknowledge_on_AB();
+        acknowledge_before_upgrade_on_AB();
         lose_commits(B); restart_node(C); stop_node(A);
         change_root(C, true); collect_mask(6); select_recovery();
         require(recovery_pending && applied[B] == BASE && applied[C] == BASE, 14);
@@ -1696,7 +1707,6 @@ init {
         require(!blocked && !recovery_pending, 11);
         advance_on_BC(Y); abandon_request();
 #elif SCENARIO == 44
-        replace_request = false;
         start_write(X); complete_vote(B); stop_node(A); change_root(C, true);
         collect_mask(6); select_recovery();
         require(recovery_pending && applied[B] == BASE && applied[C] == BASE, 14);
@@ -1742,8 +1752,23 @@ init {
         require(blocked && recovered == NONE, 13);
 #endif
 #endif
+#elif SCENARIO == 38
+        start_write(X); complete_vote(A); complete_vote(B); learn();
+        if :: complete_commit(A) :: skip fi;
+        if :: complete_commit(B) :: skip fi;
+        if :: collect_mask(3) :: collect_mask(5) :: collect_mask(6) fi;
+        try_reply_ok();
+        if
+        :: !replied ->
+            complete_commit(A); complete_commit(B);
+            collect_mask(5); try_reply_ok(); assert(!replied);
+            collect_mask(6); try_reply_ok(); assert(!replied);
+            collect_mask(3); reply_ok()
+        :: else -> skip
+        fi;
+        assert(ok_count == 1 && disk_c[C] == BASE); abandon_request();
 #elif SCENARIO == 37
-        assert(!ALL_OLD && root_new); acknowledge_on_AB();
+        assert(!ALL_OLD && root_new); acknowledge_before_upgrade_on_AB();
         if :: drain_disk(A) :: skip fi;
         lose_commits(B); restart_node(C); stop_node(A);
 #if VARIANT == 1

@@ -53,6 +53,7 @@ SCENARIOS = {
     35: "legacy_repair_must_not_bypass_higher_proposed_quorum",
     36: "legacy_repair_requires_stateful_read_quorum",
     37: "acknowledged_history_survives_quorum_turnover",
+    38: "ordinary_mutation_waits_for_committed_quorum",
     40: "possible_proposals_require_consistent_read_ancestry",
     44: "unpublished_recovery_waits_for_proposal_quorum_across_double_turnover",
     46: "exact_reproposal_preserves_acknowledged_history_after_partial_recovery",
@@ -85,9 +86,12 @@ VIOLATIONS = {
     14: "configuration_visible_without_durable_choice",
     15: "recovery_reproposal_cannot_get_quorum",
     16: "nonbootstrap_history_fell_back_to_zero_generation",
+    17: "client_OK_without_committed_quorum",
 }
+EARLY_MUTATION_OK = ("confirm_mutation", 0, 17, "early_mutation_OK")
 CONTROLS = (
     ("conservative_recovery", 0, 10, "old_recovery_history_loss"),
+    EARLY_MUTATION_OK,
     ("recovery_repropose", 0, 14, "unsafe_recovery_publication"),
     ("recovery_fresh_generation", 1, 10, "fresh_recovery_history_loss"),
     ("parent_witness", 0, 10, "normal_child_history_loss"),
@@ -107,7 +111,7 @@ def command(args, directory, log_name, timeout):
 def check(source, directory, scenario, kind, timeout, depth, *, all_old=False,
           variant=0, legacy_repair=1, conservative_recovery=1, recovery_repropose=1,
           recovery_fresh_generation=0, parent_witness=1, require_nonzero_recovery_base=1,
-          proof_part=None):
+          confirm_mutation=1, proof_part=None):
     directory.mkdir()
     shutil.copy2(source, directory / source.name)
     definitions = [f"-DSCENARIO={scenario}", f"-DVARIANT={variant}",
@@ -116,7 +120,8 @@ def check(source, directory, scenario, kind, timeout, depth, *, all_old=False,
                    f"-DRECOVERY_REPROPOSE={recovery_repropose}",
                    f"-DRECOVERY_FRESH_GENERATION={recovery_fresh_generation}",
                    f"-DPARENT_WITNESS={parent_witness}",
-                   f"-DREQUIRE_NONZERO_RECOVERY_BASE={require_nonzero_recovery_base}"]
+                   f"-DREQUIRE_NONZERO_RECOVERY_BASE={require_nonzero_recovery_base}",
+                   f"-DCONFIRM_MUTATION={confirm_mutation}"]
     if scenario in LEGACY_SCENARIOS:
         definitions.append(f"-DLEGACY_REPAIR={legacy_repair}")
         if proof_part:
@@ -150,6 +155,7 @@ def check(source, directory, scenario, kind, timeout, depth, *, all_old=False,
         "recovery_fresh_generation": bool(recovery_fresh_generation),
         "parent_witness": bool(parent_witness),
         "require_nonzero_recovery_base": bool(require_nonzero_recovery_base),
+        "confirm_mutation": bool(confirm_mutation),
         "directory": str(directory),
     }
     if scenario in LEGACY_SCENARIOS:
@@ -202,6 +208,8 @@ def main():
                         help="Disable the explicit legacy repair for negative controls")
     parser.add_argument("--conservative-recovery", type=int, choices=[0, 1], default=1,
                         help="Set 0 for scenario 37's history-loss negative control (safety only)")
+    parser.add_argument("--confirm-mutation", type=int, choices=[0, 1], default=1,
+                        help="Set 0 to acknowledge scenario 38 on proposal quorum (negative control, safety only)")
     parser.add_argument("--recovery-repropose", type=int, choices=[0, 1], default=1,
                         help="Set 0 for scenario 44's unsafe immediate-publication control (safety only)")
     parser.add_argument("--recovery-fresh-generation", type=int, choices=[0, 1], default=0,
@@ -225,6 +233,8 @@ def main():
         parser.error("--decompose requires legacy cases with --legacy-repair 1")
     if not args.conservative_recovery and (set(args.scenario) != {37} or args.check == "liveness"):
         parser.error("--conservative-recovery 0 requires scenario 37 and safety/all checks")
+    if not args.confirm_mutation and (set(args.scenario) != {38} or args.check == "liveness"):
+        parser.error("--confirm-mutation 0 requires scenario 38 and safety/all checks")
     if not args.recovery_repropose and (set(args.scenario) != {44} or args.check == "liveness"
                                       or not args.conservative_recovery):
         parser.error("--recovery-repropose 0 requires scenario 44, conservative recovery and safety/all checks")
@@ -252,7 +262,8 @@ def main():
     summary = {
         "model": str(source), "sha256": hashlib.sha256(snapshot.read_bytes()).hexdigest(),
         "scope": "Bounded N=3/Q=2, one disk/node, fixed membership; the common observer checks chosen values extend all acknowledged history. "
-                 "Recovery varies IO/read cuts and replay/ancestry; normal OK may follow proposal quorum, while Replace waits for committed quorum. "
+                 "Upgraded roots acknowledge external writes after observing the target committed on a quorum. "
+                 "Recovery also covers ordinary writes acknowledged on proposal quorum before upgrade. "
                  "Fair stable suffix; full tree transport, bridge quorum changes and emergency/Scepter orchestration are outside scope.",
         "suite": args.suite,
         "tools": {
@@ -285,11 +296,16 @@ def main():
         decomposed = args.decompose and scenario in {30, 31, 32, 33}
         if decomposed:
             case_checks = ["safety", "liveness"]
+        runs = [(kind, args.confirm_mutation, control) for kind in case_checks]
+        if args.suite == "all" and scenario == 38 and "safety" in case_checks and args.confirm_mutation:
+            runs.append(("safety", 0, EARLY_MUTATION_OK[2:]))
         for variant, variant_name in enumerate(VARIANTS.get(scenario, (SCENARIOS[scenario],))):
             variant_suffix = f"-v{variant}" if scenario in VARIANTS else ""
-            for kind in case_checks:
+            for kind, confirm_mutation, run_control in runs:
                 proof_part = ("closure" if kind == "safety" else "fair_reach") if decomposed else None
                 directory = output / f"s{scenario}{variant_suffix}-{proof_part or kind}"
+                if confirm_mutation != args.confirm_mutation:
+                    directory = directory.with_name(f"{directory.name}-early-ok")
                 try:
                     result = check(snapshot, directory, scenario, kind, args.timeout, args.max_depth,
                                    variant=variant, legacy_repair=args.legacy_repair,
@@ -298,14 +314,15 @@ def main():
                                    recovery_fresh_generation=args.recovery_fresh_generation,
                                    parent_witness=args.parent_witness,
                                    require_nonzero_recovery_base=args.require_nonzero_recovery_base,
+                                   confirm_mutation=confirm_mutation,
                                    proof_part=proof_part)
                 except (RuntimeError, OSError) as error:
                     result = {"scenario": scenario, "variant": variant, "variant_name": variant_name,
                               "check": kind, "status": "tool_error", "detail": str(error),
                               "directory": str(directory)}
                 result["assessment"] = assess(result, references.get((scenario, kind)))
-                if control and result["status"] != "tool_error":
-                    violation, name = control
+                if run_control and result["status"] != "tool_error":
+                    violation, name = run_control
                     if result["status"] == "counterexample" and result.get("violation") == VIOLATIONS[violation]:
                         result["assessment"] = f"expected_{name}"
                     else:

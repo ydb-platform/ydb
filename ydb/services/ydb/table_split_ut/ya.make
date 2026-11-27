@@ -17,27 +17,19 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
-    library/cpp/getopt
-    ydb/public/sdk/cpp/src/library/grpc/client
-    library/cpp/regex/pcre
-    library/cpp/svnversion
-    ydb/core/kqp/ut/common
-    ydb/core/testlib/default
-    ydb/core/grpc_services/base
+    ydb/core/client
+    ydb/core/formats/arrow
     ydb/core/testlib
-    yql/essentials/minikql/dom
-    yql/essentials/minikql/jsonpath
-    ydb/public/lib/experimental
-    ydb/public/lib/json_value
-    ydb/public/lib/yson_value
-    ydb/public/sdk/cpp/src/client/draft
-    ydb/public/sdk/cpp/src/client/coordination
-    ydb/public/sdk/cpp/src/client/export
-    ydb/public/sdk/cpp/src/client/extension_common
-    ydb/public/sdk/cpp/src/client/operation
+    ydb/core/testlib/default
+    ydb/core/tx/datashard
+    ydb/library/formats/arrow/switch
+    ydb/public/api/grpc
+    ydb/public/sdk/cpp/src/client/params
     ydb/public/sdk/cpp/src/client/scheme
-    ydb/public/sdk/cpp/src/client/monitoring
-    ydb/services/ydb
+    ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/types
+    ydb/public/sdk/cpp/src/client/value
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

@@ -18,6 +18,11 @@ INCLUDE(../ya.make.inc)
 
 PROVIDES(mkql_invoke_builtins)
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    toloka/analytics/programs/yql_parser
+)
+
 END()
 
 RECURSE_FOR_TESTS(

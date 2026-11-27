@@ -35,6 +35,8 @@ RESOURCE_FILES(
     resources/submodule/bar.txt
 )
 
+INCLUDE(${ARCADIA_ROOT}/library/python/runtime_py3/peerdir_policy.inc)
+
 END()
 
 RECURSE_FOR_TESTS(

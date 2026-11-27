@@ -9,8 +9,20 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/base
     ydb/core/cms/console/events
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
+    ydb/core/kqp/runtime/scheduler
+    ydb/core/protos
+    ydb/core/protos/schemeshard
+    ydb/core/resource_pools
+    ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy
+    ydb/library/aclib
+    ydb/library/actors/core
+    ydb/library/query_actor
+    ydb/library/table_creator
     ydb/services/workload_manager/common
     ydb/services/workload_manager/tables
 )

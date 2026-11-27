@@ -3,16 +3,20 @@ UNITTEST()
 YQL_LAST_ABI_VERSION()
 
 PEERDIR(
+    library/cpp/digest/md5
     library/cpp/json
     library/cpp/resource
     library/cpp/testing/unittest
     ydb/core/protos
     ydb/library/wasm/api
     ydb/library/wasm/engine
+    ydb/public/lib/udf/manifest
     ydb/services/udf_store/wasm
     ydb/services/udf_store/wasm/object_framework
+    yql/essentials/ast
     yql/essentials/minikql
     yql/essentials/minikql/computation
+    yql/essentials/public/udf
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 )

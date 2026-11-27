@@ -175,6 +175,7 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
             .Stats = TStats(item.stats()),
             .SrcChangefeedName = item.has_source_changefeed_name()
                 ? std::make_optional(item.source_changefeed_name()) : std::nullopt,
+            .Issues = IssuesFromMessage(item.issues()),
         });
     }
 

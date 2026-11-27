@@ -4,7 +4,7 @@
 
 #include <ydb/public/api/grpc/draft/ydb_datastreams_v1.pb.h>
 
-#include <ydb/core/client/server/grpc_base.h>
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 
 #include <ydb/library/grpc/server/grpc_server.h>

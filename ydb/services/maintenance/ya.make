@@ -6,9 +6,10 @@ SRCS(
 
 PEERDIR(
     ydb/core/grpc_services
-    ydb/public/api/grpc
+    ydb/core/grpc_services/base
     ydb/library/actors/core
     ydb/library/grpc/server
+    ydb/public/api/grpc/draft
 )
 
 END()

@@ -682,6 +682,14 @@ namespace NKikimr::NBsController {
                     TStoragePoolInfo::UpdatePDiskFilters(txc.DB,
                         previous ? &previous->second.PDiskFilters : nullptr,
                         current ? &current->second.PDiskFilters : nullptr);
+                    if (previous && current && previous->second.TargetInvariant != current->second.TargetInvariant) {
+                        const auto& groups = state.StoragePoolGroups.Get();
+                        const TBoxStoragePoolId& poolId = current->first;
+                        for (auto it = groups.lower_bound({poolId, TGroupId::Zero()});
+                                it != groups.end() && it->first == poolId; ++it) {
+                            state.GroupStateUpdates.insert(it->second.GetRawId());
+                        }
+                    }
                 }
             }
             if (state.Nodes.Changed()) {
@@ -1467,6 +1475,9 @@ namespace NKikimr::NBsController {
             if (pool.VDiskHeapAllocatorNumLeadingDisks) {
                 pb->SetVDiskHeapAllocatorNumLeadingDisks(*pool.VDiskHeapAllocatorNumLeadingDisks);
             }
+            if (pool.TargetInvariant) {
+                pb->SetTargetInvariant(*pool.TargetInvariant);
+            }
         }
 
         bool TBlobStorageController::TStoragePoolInfo::LoadPDiskFilters(NIceDb::TNiceDb& db,
@@ -1687,6 +1698,9 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(std::get<0>(group.StoragePoolId));
             pb->SetStoragePoolId(std::get<1>(group.StoragePoolId));
             pb->SetSeenOperational(group.SeenOperational);
+            if (group.DDisk) {
+                pb->SetDDisk(true);
+            }
             if (group.GroupSizeInUnits != 0) {
                 pb->SetGroupSizeInUnits(group.GroupSizeInUnits);
             }

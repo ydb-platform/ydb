@@ -101,26 +101,55 @@ void TPDisk::ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap) {
     }
 }
 
-void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDisk::TOwner owner, ui64 nonce,
+bool TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDisk::TOwner owner, ui64 nonce,
     NPDisk::TEvReadLogResult* result, TMap<ui32, TChunkState> *outChunkOwnerMap, bool isInitial,
     bool parseCommitMessage) {
 
     if (isInitial || header.OwnerId == owner) {
         if (header.Signature.HasCommitRecord()) {
+            auto invalidRecord = [&](TStringBuf field) {
+                result->ErrorReason = TStringBuilder() << "Invalid commit record " << field
+                    << " ownerId# " << (ui32)header.OwnerId << " lsn# " << header.OwnerLsn
+                    << " size# " << data.size();
+                return false;
+            };
+            if (data.size() < sizeof(TCommitRecordFooter)) {
+                return invalidRecord("footer");
+            }
             TCommitRecordFooter *footer = (TCommitRecordFooter*)
                 ((ui8*)data.data() + data.size() - sizeof(TCommitRecordFooter));
     #ifdef ENABLE_PDISK_SHRED
-            ui32 *dirties = (ui32*)((ui8*)footer - footer->DirtyCount * sizeof(ui32));
             ui32 dirtyCount = footer->DirtyCount;
     #else
-            ui32 *dirties = nullptr;
             ui32 dirtyCount = 0;
     #endif
-            ui32 *deletes = (ui32*)((ui8*)footer - (footer->DeleteCount + dirtyCount) * sizeof(ui32));
+            const ui64 arraySize = ui64(footer->CommitCount) * (sizeof(ui32) + sizeof(ui64))
+                + (ui64(footer->DeleteCount) + dirtyCount) * sizeof(ui32);
+            if (arraySize > data.size() - sizeof(*footer)) {
+                return invalidRecord("CommitCount/DeleteCount/DirtyCount");
+            }
+            if (footer->UserDataSize != data.size() - sizeof(*footer) - arraySize) {
+                return invalidRecord("UserDataSize");
+            }
+            ui32 *dirties = (ui32*)((ui8*)footer - dirtyCount * sizeof(ui32));
+            ui32 *deletes = (ui32*)((ui8*)dirties - footer->DeleteCount * sizeof(ui32));
             ui64 *commitNonces = (ui64*)((ui8*)deletes - footer->CommitCount * sizeof(ui64));
             ui32 *commits = (ui32*)((ui8*)commitNonces - footer->CommitCount * sizeof(ui32));
             {
                 TGuard<TMutex> guard(StateMutex);
+                auto validChunks = [&](const ui32 *chunks, ui32 count, TStringBuf field) {
+                    for (ui32 i = 0; i < count; ++i) {
+                        if (ReadUnaligned<ui32>(&chunks[i]) >= ChunkState.size()) {
+                            return invalidRecord(field);
+                        }
+                    }
+                    return true;
+                };
+                if (!validChunks(commits, footer->CommitCount, "CommitChunks")
+                        || !validChunks(deletes, footer->DeleteCount, "DeleteChunks")
+                        || !validChunks(dirties, dirtyCount, "DirtyChunks")) {
+                    return false;
+                }
                 TOwnerData &ownerData = OwnerData[header.OwnerId];
                 if (isInitial) {
                     if (parseCommitMessage) {
@@ -202,6 +231,7 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
             result->Results.push_back(NPDisk::TLogRecord(header.Signature.GetUnmasked(), TRcBuf(data), header.OwnerLsn));
         }
     }
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -401,7 +431,7 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
     if (badOffsets.size()) {
         bool isOk = RegisterBadOffsets(badOffsets);
         if (!isOk) {
-            YDB_LOG_P_LOG(PRI_ERROR, "Log is damaged and unrevocerable",
+            YDB_LOG_P_LOG(PRI_ERROR, "Log is damaged and unrecoverable",
                 {"marker", "BPD01"});
 
             ReplyError();
@@ -1149,8 +1179,13 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                     << " LastRecordHeader.OwnerLsn# " << LastRecordHeader.OwnerLsn
                     << " pageHeader# " << pageHeader->ToString());
 
-                PDisk->ProcessReadLogRecord(LastRecordHeader, LastRecordData, Owner, sectorFooter->Nonce,
-                        Result.Get(), ChunkOwnerMap.Get(), IsInitial, ParseCommits);
+                if (!PDisk->ProcessReadLogRecord(LastRecordHeader, LastRecordData, Owner, sectorFooter->Nonce,
+                        Result.Get(), ChunkOwnerMap.Get(), IsInitial, ParseCommits)) {
+                    YDB_LOG_P_LOG(PRI_ERROR, Result->ErrorReason,
+                        {"marker", "BPD103"});
+                    ReplyError();
+                    return true;
+                }
                 LastRecordData = TString();
             }
         }// while OffsetInSector <= maxOffsetInSector

@@ -6,11 +6,12 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/base
     ydb/core/kqp/gateway/actors
     ydb/core/kqp/gateway/utils
     ydb/core/protos
+    ydb/core/protos/schemeshard
     ydb/core/resource_pools
-
     ydb/services/metadata
     ydb/services/metadata/abstract
     ydb/services/metadata/manager

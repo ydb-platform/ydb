@@ -11,4 +11,11 @@ SRCS(
     proto_parser.cpp
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    classifieds/vsdwh/tools/ci/jobs/yql_udf/parser
+    extsearch/geo/tools/yql_formatter
+    logos/projects/ads/mldwh/querygen
+)
+
 END()

@@ -629,5 +629,9 @@ IActor* TTransferWriterFactory::Create(const Parameters& p) const {
     return new TTransferWriter(p.TransformLambda, p.TablePathId, p.CompileServiceId, p.BatchingSettings, p.DirectoryPath, p.Database);
 }
 
+IActor* TTransferWriterFactory::CreateCompilationService() const {
+    return CreatePurecalcCompileService({}, MakeIntrusive<NMonitoring::TDynamicCounters>());
+}
+
 }
 

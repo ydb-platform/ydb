@@ -216,6 +216,16 @@ namespace NKikimr::NKqp {
                 return *this;
             }
 
+            TSettingsBuilder& EfSearch(ui32 value) {
+                Settings.SetHnswEfSearch(value);
+                return *this;
+            }
+
+            TSettingsBuilder& FullRangeHnsw() {
+                Settings.SetFullRangeHnsw(true);
+                return *this;
+            }
+
             TSettingsBuilder& Prefixed() {
                 Settings.SetHasPrefix(true);
                 return *this;
@@ -1111,6 +1121,95 @@ namespace NKikimr::NKqp {
             UNIT_ASSERT_VALUES_EQUAL(env.Observed().size(), 0u);
         }
 
+        Y_UNIT_TEST(FullRangeHnswPreservesReadConsistency) {
+            for (const auto& [withSnapshot, followers] : {
+                std::pair{true, false}, std::pair{true, true},
+                std::pair{false, false}, std::pair{false, true}})
+            {
+                auto builder = TSettingsBuilder().FullRangeHnsw().Covered().TopK(1).EfSearch(75);
+                if (followers) {
+                    builder.Followers();
+                }
+                auto indexSettings = builder.Build();
+                if (!withSnapshot) {
+                    indexSettings.ClearSnapshot();
+                    indexSettings.SetAllowInconsistentReads(true);
+                }
+                auto* graphSettings = indexSettings.MutableIndexSettings();
+                graphSettings->set_m(24);
+                graphSettings->set_ef_construction(64);
+                graphSettings->set_min_rows(1);
+                graphSettings->set_delta_rows(100);
+                TSearchEnv env(std::move(indexSettings));
+                env.Poll();
+
+                UNIT_ASSERT_VALUES_EQUAL(env.CreatedReads(EReadKind::Level), 0u);
+                const auto& settings = env.ObservedRead(EReadKind::Posting)->Settings;
+                UNIT_ASSERT(settings.HasFullRange());
+                UNIT_ASSERT(!settings.HasRanges());
+                const TSerializedTableRange range(settings.GetFullRange());
+                UNIT_ASSERT(range.ToTableRange().IsFullRange(settings.KeyColumnTypesSize()));
+                UNIT_ASSERT_VALUES_EQUAL(settings.GetVectorTopK().GetLimit(), 1u);
+                UNIT_ASSERT_VALUES_EQUAL(settings.GetVectorTopK().GetHnswEfSearch(), 75u);
+                const auto& forwarded = settings.GetVectorTopK().GetSettings();
+                UNIT_ASSERT_VALUES_EQUAL(forwarded.m(), 24u);
+                UNIT_ASSERT_VALUES_EQUAL(forwarded.ef_construction(), 64u);
+                UNIT_ASSERT_VALUES_EQUAL(forwarded.min_rows(), 1u);
+                UNIT_ASSERT_VALUES_EQUAL(forwarded.delta_rows(), 100u);
+                UNIT_ASSERT_VALUES_EQUAL(settings.GetVectorTopK().DistinctColumnsSize(), 0u);
+                UNIT_ASSERT_VALUES_EQUAL(settings.GetUseFollowers(), followers && !withSnapshot);
+                UNIT_ASSERT_VALUES_EQUAL(settings.HasSnapshot(), withSnapshot);
+                UNIT_ASSERT_VALUES_EQUAL(settings.GetAllowInconsistentReads(), !withSnapshot);
+
+                auto& posting = env.Read(EReadKind::Posting);
+                posting.Push({{ui64(7), FarVec}, {ui64(8), NearVec}}, true);
+                env.Wake(posting);
+                UNIT_ASSERT(env.Finished());
+                UNIT_ASSERT_VALUES_EQUAL(env.CreatedReads(EReadKind::Main), 0u);
+                UNIT_ASSERT_VALUES_EQUAL(env.RowKeys(), (TVector<TString>{"8"}));
+            }
+        }
+
+        Y_UNIT_TEST(FullRangeHnswDeduplicatesOverlappingPostings) {
+            TSearchEnv env(TSettingsBuilder().FullRangeHnsw().Covered().Overlap(3).TopK(2).Build());
+            env.Poll();
+            UNIT_ASSERT_VALUES_EQUAL(env.CreatedReads(EReadKind::Level), 0u);
+            const auto& settings = env.ObservedRead(EReadKind::Posting)->Settings;
+            UNIT_ASSERT(settings.HasFullRange());
+            UNIT_ASSERT_VALUES_EQUAL(settings.GetVectorTopK().DistinctColumnsSize(), 1u);
+
+            auto& posting = env.Read(EReadKind::Posting);
+            posting.Push({{ui64(7), NearVec}, {ui64(7), NearVec}, {ui64(8), FarVec}}, true);
+            env.Wake(posting);
+            UNIT_ASSERT(env.Finished());
+            UNIT_ASSERT_VALUES_EQUAL(env.RowKeys(), (TVector<TString>{"7", "8"}));
+        }
+
+        Y_UNIT_TEST(FullRangeHnswLooksUpUncoveredColumns) {
+            TSearchEnv env(TSettingsBuilder().FullRangeHnsw().PostingEmbedding().Followers().Lock(555).Build());
+            env.Poll();
+            UNIT_ASSERT_VALUES_EQUAL(env.CreatedReads(EReadKind::Level), 0u);
+            const auto& settings = env.ObservedRead(EReadKind::Posting)->Settings;
+            UNIT_ASSERT(settings.HasFullRange());
+            UNIT_ASSERT(settings.HasVectorTopK());
+            UNIT_ASSERT(!settings.GetUseFollowers());
+            UNIT_ASSERT(settings.HasSnapshot());
+            UNIT_ASSERT_VALUES_EQUAL(settings.GetLockTxId(), 555u);
+
+            auto& posting = env.Read(EReadKind::Posting);
+            posting.Push({{ui64(7), NearVec}}, true);
+            env.Wake(posting);
+            UNIT_ASSERT_VALUES_EQUAL(env.CreatedReads(EReadKind::Main), 1u);
+            const auto& mainSettings = env.ObservedRead(EReadKind::Main)->Settings;
+            UNIT_ASSERT(mainSettings.HasSnapshot());
+            UNIT_ASSERT_VALUES_EQUAL(mainSettings.GetLockTxId(), 555u);
+            auto& main = env.Read(EReadKind::Main);
+            main.Push({{ui64(7), NearVec}}, true);
+            env.Wake(main);
+            UNIT_ASSERT(env.Finished());
+            UNIT_ASSERT_VALUES_EQUAL(env.RowKeys(), (TVector<TString>{"7"}));
+        }
+
         // ---- level traversal ----
 
         Y_UNIT_TEST(LevelThenPostingThenMain) {
@@ -1366,20 +1465,23 @@ namespace NKikimr::NKqp {
         }
 
         Y_UNIT_TEST(HnswIdentityIsForwardedOnlyToPostingRead) {
-            auto settings = TSettingsBuilder().PostingEmbedding().Build();
+            auto settings = TSettingsBuilder().PostingEmbedding().EfSearch(75).Build();
             settings.MutableHnswIndexId()->SetOwnerId(42);
             settings.MutableHnswIndexId()->SetLocalId(99);
             TSearchEnv env(std::move(settings));
             RunSingleLevel(env);
             UNIT_ASSERT(!env.ObservedRead(EReadKind::Level)->Settings.GetVectorTopK().HasHnswIndexId());
+            UNIT_ASSERT(!env.ObservedRead(EReadKind::Level)->Settings.GetVectorTopK().HasHnswEfSearch());
             const auto& postingTop = env.ObservedRead(EReadKind::Posting)->Settings.GetVectorTopK();
             UNIT_ASSERT(postingTop.HasHnswIndexId());
             UNIT_ASSERT_VALUES_EQUAL(postingTop.GetHnswIndexId().GetOwnerId(), 42u);
             UNIT_ASSERT_VALUES_EQUAL(postingTop.GetHnswIndexId().GetLocalId(), 99u);
+            UNIT_ASSERT_VALUES_EQUAL(postingTop.GetHnswEfSearch(), 75u);
             auto& posting = env.Read(EReadKind::Posting);
             posting.Push({{ui64(7), NearVec}}, true);
             env.Wake(posting);
             UNIT_ASSERT(!env.ObservedRead(EReadKind::Main)->Settings.GetVectorTopK().HasHnswIndexId());
+            UNIT_ASSERT(!env.ObservedRead(EReadKind::Main)->Settings.GetVectorTopK().HasHnswEfSearch());
             auto& main = env.Read(EReadKind::Main);
             main.Push({{ui64(7), NearVec}}, true);
             env.Wake(main);

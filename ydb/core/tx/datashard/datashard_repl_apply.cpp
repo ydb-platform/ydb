@@ -464,11 +464,13 @@ public:
         TReplicationSourceOffsetsDb rdb(txc);
         source.AdvanceMaxOffset(rdb, keyCellVec.GetCells(), sourceOffset);
 
+        if (!MvccVersion && (!writeTxId || collector)) {
+            // Index collection must see earlier immediate writes in this batch.
+            MvccVersion = userDb.GetMvccVersion();
+        }
+
         if (writeTxId) {
             if (collector) {
-                if (!MvccVersion) {
-                    MvccVersion = Self->GetMvccVersion();
-                }
                 if (!collector->OnUpdate(tableId, userTable.LocalTid, rop, key, update, *MvccVersion, nullptr)) {
                     throw TNotReadyTabletException();
                 }
@@ -480,10 +482,6 @@ public:
             Self->UpdateHnswIndex(userTable.LocalTid, rop, keyCellVec.GetCells(), update, txc.DB, TRowVersion::Min(), writeTxId);
             Self->GetConflictsCache().GetTableCache(userTable.LocalTid).AddUncommittedWrite(keyCellVec.GetCells(), writeTxId, txc.DB);
         } else {
-            if (!MvccVersion) {
-                MvccVersion = Self->GetMvccVersion();
-            }
-
             Self->SysLocksTable().BreakLocks(tableId, keyCellVec.GetCells());
             if (collector && !collector->OnUpdate(tableId, userTable.LocalTid, rop, key, update, *MvccVersion, nullptr)) {
                 throw TNotReadyTabletException();

@@ -89,6 +89,9 @@ message DescribeReplicationResult {
         optional string source_changefeed_name = 3;
         uint64 id = 4;
         Stats stats = 5;
+        // Issues reported for this item. An item can carry issues while the replication
+        // itself still reports running.
+        repeated Ydb.Issue.IssueMessage issues = 6;
     }
 
     message RunningState {

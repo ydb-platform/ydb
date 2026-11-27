@@ -1,8 +1,6 @@
 YQL_LIBRARY()
 
 SRCS(
-    configured_tablet_bootstrapper.cpp
-    configured_tablet_bootstrapper.h
     defs.h
     dynamic_nameserver.cpp
     dynamic_nameserver.h
@@ -50,49 +48,33 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/core
+    library/cpp/monlib/service/pages
+    library/cpp/random_provider
     ydb/core/actorlib_impl
     ydb/core/base
-    ydb/core/blobstorage
-    ydb/core/control
-    ydb/core/mon
-    ydb/core/blobstorage/crypto
-    ydb/core/blobstorage/dsproxy/mock
-    ydb/core/blobstorage/groupinfo
-    ydb/core/blobstorage/incrhuge
-    ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/base
     ydb/core/engine/minikql
-    ydb/core/kesus/tablet
-    ydb/core/keyvalue
-    ydb/core/mind/bscontroller
+    ydb/core/mon
     ydb/core/node_whiteboard
     ydb/core/protos
-    ydb/core/sys_view/processor
+    ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
-    ydb/core/test_tablet
-    ydb/core/tx/replication/controller
     ydb/core/tx/scheme_board
     ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard
+    ydb/core/util
+    ydb/library/actors/core
+    ydb/library/actors/interconnect
+    ydb/library/actors/util
+    ydb/library/services
 )
-
-DEFAULT(YDB_EMBEDDED_NBS_ENABLED yes)
-
-IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
-    CFLAGS(
-        -DYDB_EMBEDDED_NBS_ENABLED
-    )
-
-    PEERDIR(
-        ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller
-    )
-ENDIF()
 
 END()
 
 RECURSE(
     address_classification
+    bootstrapper
     bscontroller
     hive
 )

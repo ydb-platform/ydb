@@ -9,6 +9,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/algorithm.h>
 #include <util/string/printf.h>
 
 namespace NKikimr::NReplication::NController {
@@ -53,6 +54,13 @@ class TLiveCdcMirror {
             if (record.GetState().HasError()) {
                 UNIT_ASSERT_C(state == NKikimrReplication::TReplicationState::kError, record.GetState().ShortDebugString());
                 UNIT_ASSERT_STRING_CONTAINS(record.GetState().ShortDebugString(), expectedIssue);
+            }
+            if (record.GetState().HasDone()) {
+                const auto* feed = FindIfPtr(record.GetTargets(), [](const auto& item) {
+                    return item.GetDstPath() == DestinationFeed;
+                });
+                UNIT_ASSERT(feed);
+                UNIT_ASSERT_C(feed->GetIssues().empty(), feed->ShortDebugString());
             }
             return record.GetState().GetStateCase() == state;
         }, "replication controller state");

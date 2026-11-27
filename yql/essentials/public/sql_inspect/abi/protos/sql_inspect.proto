@@ -1,0 +1,36 @@
+syntax = "proto2";
+
+package NYql.NSqlInspect.NAbi.NProto;
+
+import "yql/essentials/public/issue/protos/issue_message.proto";
+
+message TSymbolsRequest {
+    optional string Sql = 1;
+    optional bool Ansi = 2 [default = false];
+    optional bool Imports = 3 [default = true];
+    optional bool Exports = 4 [default = true];
+    optional bool Parameters = 5 [default = true];
+    optional uint32 LangVer = 6;
+}
+
+message TImportSymbol {
+    optional string Name = 1;
+    repeated string Module = 2;
+    optional bool IsAbsolute = 3 [default = false];
+}
+
+message TExportSymbol {
+    optional string Name = 1;
+}
+
+message TParameterSymbol {
+    optional string Name = 1;
+}
+
+message TSymbolsResponse {
+    optional bool Success = 1;
+    repeated NYql.NIssue.NProto.IssueMessage Issues = 2;
+    repeated TImportSymbol Imports = 3;
+    repeated TExportSymbol Exports = 4;
+    repeated TParameterSymbol Parameters = 5;
+}

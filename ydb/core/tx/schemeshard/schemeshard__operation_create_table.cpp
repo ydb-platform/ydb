@@ -3,7 +3,9 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -191,6 +193,35 @@ std::optional<TString> InferDefaultPoolKind(const TStoragePools& storagePools, c
     return result;
 }
 
+void FillInitialHnswCentroid(const TSchemeShard& ss, TPathId tableId, TTxId txId,
+        NKikimrTxDataShard::TFlatSchemeTransaction& tx)
+{
+    const auto& path = ss.PathsById.at(tableId);
+    if (path->Name != NTableIndex::NKMeans::LevelTable) {
+        return;
+    }
+    const auto indexIt = ss.Indexes.find(path->ParentPathId);
+    if (indexIt == ss.Indexes.end()) {
+        return;
+    }
+    const auto& indexPath = ss.PathsById.at(path->ParentPathId);
+    const auto& basePath = ss.PathsById.at(indexPath->ParentPathId);
+    if (indexPath->CreateTxId != txId || basePath->CreateTxId != txId) {
+        // Online index builds populate their own level table.
+        return;
+    }
+    const auto index = indexIt->second->AlterData ? indexIt->second->AlterData : indexIt->second;
+    if (index->Type != NKikimrSchemeOp::EIndexTypeGlobalHnsw || index->IndexKeys.size() != 1) {
+        return;
+    }
+    const auto& hnsw = std::get<NKikimrSchemeOp::THnswIndexDescription>(index->SpecializedIndexDescription);
+    TString error;
+    auto clusters = NKikimr::NKMeans::CreateClusters(
+        NKikimr::NKMeans::MakeDistanceSettings(hnsw.GetSettings().settings()), 0, error);
+    Y_ENSURE(clusters, error);
+    tx.SetInitialHnswCentroid(clusters->GetEmptyRow());
+}
+
 class TConfigureParts: public TSubOperationState {
     virtual const char* Name() const override final { return "TConfigureParts"; }
 
@@ -221,6 +252,7 @@ public:
 
         NKikimrTxDataShard::TFlatSchemeTransaction txTemplate;
         context.SS->FillAsyncIndexInfo(txState->TargetPathId, txTemplate);
+        FillInitialHnswCentroid(*context.SS, txState->TargetPathId, OperationId.GetTxId(), txTemplate);
 
         txState->ClearShardsInProgress();
 

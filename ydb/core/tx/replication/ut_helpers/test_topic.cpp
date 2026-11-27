@@ -10,6 +10,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/datetime/base.h>
+#include <util/generic/algorithm.h>
 
 namespace NKikimr::NReplication::NTestHelpers {
 
@@ -53,7 +54,7 @@ void WaitForReplicationUntil(TEnv<true>& env, const auto& ready, const TString& 
 }
 
 std::optional<TTopicOffsets> DescribeTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer,
-        NYdb::TDeadline deadline) {
+        NYdb::TDeadline deadline, ui32 partitionId) {
     NYdb::NTopic::TTopicClient client(env.GetDriver());
     NYdb::NTopic::TDescribeConsumerSettings settings;
     settings.IncludeStats(true);
@@ -67,9 +68,11 @@ std::optional<TTopicOffsets> DescribeTopicOffsets(TEnv<true>& env, const TString
     }
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     const auto& partitions = result.GetConsumerDescription().GetPartitions();
-    UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
-    const auto& partition = partitions.front();
-    UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
+    const auto selected = FindIf(partitions, [partitionId](const auto& partition) {
+        return partition.GetPartitionId() == partitionId;
+    });
+    UNIT_ASSERT_C(selected != partitions.end(), "Missing partition " << partitionId << " on " << topic);
+    const auto& partition = *selected;
     const auto& stats = partition.GetPartitionStats();
     const auto& consumerStats = partition.GetPartitionConsumerStats();
     if (!stats || !consumerStats) {
@@ -102,14 +105,14 @@ std::optional<TDuration> DescribeTopicLag(TEnv<true>& env, const TString& replic
     return std::nullopt;
 }
 
-std::optional<TTopicOffsets> GetTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer) {
-    return DescribeTopicOffsets(env, topic, consumer, NYdb::TDeadline::Max());
+std::optional<TTopicOffsets> GetTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer, ui32 partitionId) {
+    return DescribeTopicOffsets(env, topic, consumer, NYdb::TDeadline::Max(), partitionId);
 }
 
 void WaitForTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer,
-        const std::function<bool(const TTopicOffsets&)>& ready, const TString& description) {
+        const std::function<bool(const TTopicOffsets&)>& ready, const TString& description, ui32 partitionId) {
     WaitForReplicationUntil(env, [&](NYdb::TDeadline deadline) {
-        const auto offsets = DescribeTopicOffsets(env, topic, consumer, deadline);
+        const auto offsets = DescribeTopicOffsets(env, topic, consumer, deadline, partitionId);
         return offsets && ready(*offsets);
     }, description);
 }

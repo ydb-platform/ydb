@@ -158,8 +158,12 @@ class TController::TTxAlterReplication: public TTxBase {
             // The DDL may already be committed, so this barrier must survive
             // the lifecycle request. Let its unfinished workers recover.
             target->SetDstState(TReplication::EDstState::Ready);
+            if (target->GetStreamState() != TReplication::EStreamState::Error) {
+                target->SetIssue({});
+            }
             db.Table<Schema::Targets>().Key(key.first, key.second).Update(
-                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
+                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
+                NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue()));
         }
 
         // A failure in any target can stop workers across the replication.
@@ -255,8 +259,12 @@ class TController::TTxAlterReplication: public TTxBase {
         for (const auto targetId : targetsToRecover) {
             auto* target = Replication->FindTarget(targetId);
             target->SetDstState(TReplication::EDstState::Ready);
+            if (target->GetStreamState() != TReplication::EStreamState::Error) {
+                target->SetIssue({});
+            }
             db.Table<Schema::Targets>().Key(Replication->GetId(), targetId).Update(
-                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
+                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
+                NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue()));
         }
     }
 
@@ -353,13 +361,17 @@ public:
                         target->Shutdown(ctx);
                         target->SetDstState(TReplication::EDstState::Done);
                         state.SetPhase(NKikimrReplicationController::TCdcTarget::FINISHED);
+                        if (target->GetStreamState() != TReplication::EStreamState::Error) {
+                            target->SetIssue({});
+                        }
                     } else {
                         // An admitted initial CREATE can finish locally even when the source is offline.
                         state.SetPhase(NKikimrReplicationController::TCdcTarget::STOPPING);
                     }
                     db.Table<Schema::Targets>().Key(Replication->GetId(), target->GetId()).Update(
                         NIceDb::TUpdate<Schema::Targets::Cdc>(state.SerializeAsString()),
-                        NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
+                        NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
+                        NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue()));
                 }
             }
         }

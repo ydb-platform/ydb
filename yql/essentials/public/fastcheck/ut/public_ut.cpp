@@ -1,7 +1,10 @@
 #include <yql/essentials/public/fastcheck/fastcheck.h>
 #include <yql/essentials/public/fastcheck/linter.h>
+#include <yql/essentials/public/fastcheck/abi/serialization/serialization.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <limits>
 
 namespace NYql::NFastCheck {
 namespace {
@@ -21,6 +24,43 @@ constexpr TStringBuf Metadata = R"json({
 } // namespace
 
 Y_UNIT_TEST_SUITE(TFastCheckPublic) {
+Y_UNIT_TEST(AllowedStatementKindsIgnoreUnknownWireValues) {
+    NAbi::NProto::TLinterRequest message;
+    auto* kinds = message.MutableAllowedStatementKinds();
+    for (const int value : {static_cast<int>(EStatementKind::First) - 1, -256, static_cast<int>(EStatementKind::Last) + 1, 256, std::numeric_limits<int>::max()}) {
+        kinds->AddItems(value);
+    }
+    TChecksRequest decoded;
+    NAbi::Decode(message, decoded);
+    UNIT_ASSERT(decoded.AllowedStatementKinds);
+    UNIT_ASSERT(decoded.AllowedStatementKinds->empty());
+    const TSet<EStatementKind> expected = {EStatementKind::InnerDML, EStatementKind::DML, EStatementKind::DDL, EStatementKind::TxControl};
+    for (const auto statementKind : expected) {
+        kinds->AddItems(static_cast<int>(statementKind));
+    }
+    NAbi::Decode(message, decoded);
+    UNIT_ASSERT(decoded.AllowedStatementKinds);
+    UNIT_ASSERT(*decoded.AllowedStatementKinds == expected);
+}
+
+Y_UNIT_TEST(AllowedStatementKindsPreservePresence) {
+    TChecksRequest request;
+    TChecksRequest decoded;
+    NAbi::NProto::TLinterRequest message;
+    NAbi::Encode(request, message);
+    NAbi::Decode(message, decoded);
+    UNIT_ASSERT(!decoded.AllowedStatementKinds);
+    request.AllowedStatementKinds.ConstructInPlace();
+    NAbi::Encode(request, message);
+    NAbi::Decode(message, decoded);
+    UNIT_ASSERT(decoded.AllowedStatementKinds);
+    UNIT_ASSERT(decoded.AllowedStatementKinds->empty());
+    request.AllowedStatementKinds.Clear();
+    NAbi::Encode(request, message);
+    NAbi::Decode(message, decoded);
+    UNIT_ASSERT(!decoded.AllowedStatementKinds);
+}
+
 Y_UNIT_TEST(MovedMetadataOwnsCookieAndPreservesViews) {
     TMaybe<TUdfMeta::TMeta> view;
     const auto metadata = [&] {

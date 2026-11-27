@@ -62,8 +62,7 @@ public:
         HcCount = 7
     };
 
-private:
-    static TString GetHandleClassName(EHandleClass handleClass) {
+    static const char* GetHandleClassName(EHandleClass handleClass) {
         switch (handleClass) {
             case HcPutTabletLog:
                 return "PutTabletLog";
@@ -85,6 +84,7 @@ private:
         return "Unknown";
     }
 
+private:
     static bool IsReducedHandleClass(EHandleClass handleClass) {
         return (handleClass == HcPutAsync
             || handleClass == HcGetAsync
@@ -101,7 +101,7 @@ private:
       {"256", "4096", "262144", "1048576", "4194304", "16777216"};
 
 public:
-    static ui32 SizeClassFromSizeBytes(ui32 requestBytes) {
+    static ui32 SizeClassFromSizeBytes(ui64 requestBytes) {
         if (requestBytes <= 4*1024) {
             if (requestBytes <= 256) {
                 return 0;
@@ -137,7 +137,7 @@ private:
       {"262144", "1048576", "16777216"};
 
 public:
-    static ui32 ReducedSizeClassFromSizeBytes(ui32 requestBytes) {
+    static ui32 ReducedSizeClassFromSizeBytes(ui64 requestBytes) {
         if (requestBytes <= 256*1024) {
             return 0;
         } else if (requestBytes <= 1*1024*1024) {
@@ -160,17 +160,17 @@ private:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> PoolGroup;
 
 public:
+    static ui32 GetSizeClass(EHandleClass handleClass, ui64 bytes) {
+        return IsReducedHandleClass(handleClass) ? ReducedSizeClassFromSizeBytes(bytes) : SizeClassFromSizeBytes(bytes);
+    }
+
+    static const char* GetSizeClassName(EHandleClass handleClass, ui32 index) {
+        return IsReducedHandleClass(handleClass) ? ReducedSizeClassName(index) : SizeClassName(index);
+    }
+
     TRequestMonItem& GetItem(EHandleClass handleClass, ui32 requestBytes) {
         Y_ABORT_UNLESS((ui32)handleClass < (ui32)HcCount);
-        ui32 sizeClassIdx = 0;
-        if (IsReducedHandleClass(handleClass)) {
-            sizeClassIdx = ReducedSizeClassFromSizeBytes(requestBytes);
-            Y_ABORT_UNLESS(sizeClassIdx <= MaxReducedSizeClassBucketIdx);
-        } else {
-            sizeClassIdx = SizeClassFromSizeBytes(requestBytes);
-            Y_ABORT_UNLESS(sizeClassIdx <= MaxSizeClassBucketIdx);
-        }
-        return RequestMon[(ui32)handleClass][sizeClassIdx];
+        return RequestMon[handleClass][GetSizeClass(handleClass, requestBytes)];
     }
 
     TStoragePoolCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters, const TString &storagePoolName,
@@ -179,18 +179,11 @@ public:
         , PoolGroup(counters->GetSubgroup("storagePool", storagePoolName))
     {
         for (ui32 handleClass = 0; handleClass < (ui32)HcCount; ++handleClass) {
-            TString handleClassName = GetHandleClassName((EHandleClass)handleClass);
-            TIntrusivePtr<::NMonitoring::TDynamicCounters> hcGroup = PoolGroup->GetSubgroup("handleClass", handleClassName);
-            if (IsReducedHandleClass((EHandleClass)handleClass)) {
-                for (ui32 sizeClassIdx = 0; sizeClassIdx <= MaxReducedSizeClassBucketIdx; ++sizeClassIdx) {
-                    TString sizeClassName = ReducedSizeClassName(sizeClassIdx);
-                    RequestMon[handleClass][sizeClassIdx].Init(hcGroup->GetSubgroup("sizeClass", sizeClassName), type);
-                }
-            } else {
-                for (ui32 sizeClassIdx = 0; sizeClassIdx <= MaxSizeClassBucketIdx; ++sizeClassIdx) {
-                    TString sizeClassName = SizeClassName(sizeClassIdx);
-                    RequestMon[handleClass][sizeClassIdx].Init(hcGroup->GetSubgroup("sizeClass", sizeClassName), type);
-                }
+            const auto hc = static_cast<EHandleClass>(handleClass);
+            const auto hcGroup = PoolGroup->GetSubgroup("handleClass", GetHandleClassName(hc));
+            const ui32 maxIdx = IsReducedHandleClass(hc) ? MaxReducedSizeClassBucketIdx : MaxSizeClassBucketIdx;
+            for (ui32 idx = 0; idx <= maxIdx; ++idx) {
+                RequestMon[handleClass][idx].Init(hcGroup->GetSubgroup("sizeClass", GetSizeClassName(hc, idx)), type);
             }
         }
 

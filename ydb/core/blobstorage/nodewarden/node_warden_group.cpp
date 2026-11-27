@@ -10,6 +10,7 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
+
 namespace NKikimr::NStorage {
 
     TIntrusivePtr<TBlobStorageGroupInfo> TNodeWarden::NeedGroupInfo(ui32 groupId) {
@@ -100,11 +101,11 @@ namespace NKikimr::NStorage {
             : Cfg->TenantKey;
     }
 
-    void TNodeWarden::ApplyGroupInfo(ui32 groupId, ui32 generation, const NKikimrBlobStorage::TGroupInfo *newGroup,
+    bool TNodeWarden::ApplyGroupInfo(ui32 groupId, ui32 generation, const NKikimrBlobStorage::TGroupInfo *newGroup,
             bool fromController, bool fromResolver) {
         // if the group is marked as 'ejected', this is a race
         if (EjectedGroups.count(groupId)) {
-            return;
+            return false;
         }
 
         // some basic consistency checks
@@ -155,23 +156,24 @@ namespace NKikimr::NStorage {
             const bool firstInvalidEncryptionMode = !ep.HasEncryptionMode() && !incomingEncryptionModeIsKnown;
             const bool encryptionModeChanged = ep.HasEncryptionMode() && ep.GetEncryptionMode() != incomingEncryptionMode;
             if (firstInvalidEncryptionMode || encryptionModeChanged) {
-                STLOG(PRI_ERROR, BS_NODE, NW113, "ApplyGroupInfo EncryptionMode diagnostics",
-                    (GroupId, groupId),
-                    (GroupGeneration, generation),
-                    (FromController, fromController),
-                    (FromResolver, fromResolver),
-                    (StoredHasEncryptionMode, ep.HasEncryptionMode()),
-                    (StoredEncryptionModeRaw, ep.GetEncryptionMode()),
-                    (IncomingHasEncryptionMode, newGroup->HasEncryptionMode()),
-                    (IncomingEncryptionModeRaw, incomingEncryptionMode),
-                    (StoredLifeCyclePhase, ep.GetLifeCyclePhase()),
-                    (IncomingLifeCyclePhase, newGroup->GetLifeCyclePhase()),
-                    (HadCurrentGroup, hadCurrentGroup),
-                    (PrevCurrentGroupGeneration, prevCurrentGroupGeneration),
-                    (PrevCurrentGroupEncryptionModeRaw, prevCurrentGroupEncryptionMode),
-                    (MaxKnownGeneration, group.MaxKnownGeneration),
-                    (StoredEncryptionParams, ep),
-                    (IncomingGroup, *newGroup));
+                YDB_LOG_ERROR("ApplyGroupInfo EncryptionMode diagnostics",
+                    {"marker", "NW113"},
+                    {"groupId", groupId},
+                    {"groupGeneration", generation},
+                    {"fromController", fromController},
+                    {"fromResolver", fromResolver},
+                    {"storedHasEncryptionMode", ep.HasEncryptionMode()},
+                    {"storedEncryptionModeRaw", ep.GetEncryptionMode()},
+                    {"incomingHasEncryptionMode", newGroup->HasEncryptionMode()},
+                    {"incomingEncryptionModeRaw", incomingEncryptionMode},
+                    {"storedLifeCyclePhase", ep.GetLifeCyclePhase()},
+                    {"incomingLifeCyclePhase", newGroup->GetLifeCyclePhase()},
+                    {"hadCurrentGroup", hadCurrentGroup},
+                    {"prevCurrentGroupGeneration", prevCurrentGroupGeneration},
+                    {"prevCurrentGroupEncryptionModeRaw", prevCurrentGroupEncryptionMode},
+                    {"maxKnownGeneration", group.MaxKnownGeneration},
+                    {"storedEncryptionParams", ep},
+                    {"incomingGroup", *newGroup});
             }
 
             Y_VERIFY_S(!encryptionModeChanged,
@@ -331,10 +333,12 @@ namespace NKikimr::NStorage {
             group.GroupResolver = {};
         }
 
+        bool syncersChanged = false;
         for (auto it = WorkingSyncers.lower_bound(TWorkingSyncer{.BridgeProxyGroupId = TGroupId::FromValue(groupId)});
                 it != WorkingSyncers.end() && it->BridgeProxyGroupId.GetRawId() == groupId; ++it) {
-            StartSyncerIfNeeded(const_cast<TWorkingSyncer&>(*it));
+            syncersChanged |= StartSyncerIfNeeded(const_cast<TWorkingSyncer&>(*it));
         }
+        return syncersChanged;
     }
 
     void TNodeWarden::RequestGroupConfig(ui32 groupId, TGroupRecord& group) {
@@ -356,6 +360,7 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::ApplyGroupInfoFromServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet,
             bool isStatic, bool comprehensive) {
+        bool syncersChanged = false;
         std::unordered_set<ui32> seenGroupIds;
         for (const auto& group : serviceSet.GetGroups()) {
             const ui32 groupId = group.GetGroupID();
@@ -365,8 +370,11 @@ namespace NKikimr::NStorage {
                 if (isStatic) {
                     seenGroupIds.insert(groupId);
                 }
-                ApplyGroupInfo(groupId, group.GetGroupGeneration(), &group, true, false);
+                syncersChanged |= ApplyGroupInfo(groupId, group.GetGroupGeneration(), &group, true, false);
             }
+        }
+        if (syncersChanged) {
+            UpdateSyncerCounters();
         }
         if (isStatic && comprehensive) {
             for (const ui32 groupId : StaticGroupIds) {
@@ -422,7 +430,10 @@ namespace NKikimr::NStorage {
             it->second.GroupResolver = {};
             fromResolver = true;
         }
-        ApplyGroupInfo(msg->GroupId.GetRawId(), msg->GroupGeneration, msg->GroupInfo ? &*msg->GroupInfo : nullptr, false, fromResolver);
+        if (ApplyGroupInfo(msg->GroupId.GetRawId(), msg->GroupGeneration,
+                msg->GroupInfo ? &*msg->GroupInfo : nullptr, false, fromResolver)) {
+            UpdateSyncerCounters();
+        }
     }
 
     void TNodeWarden::HandleGetGroup(TAutoPtr<IEventHandle> ev) {

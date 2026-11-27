@@ -22,7 +22,6 @@ ydb/tests/compatibility/common test_snapshot_isolation.py.TestSnapshotIsolation.
 ydb/tests/compatibility/common test_snapshot_isolation.py.TestSnapshotIsolation.test_row_tables[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableMixedCluster.test_external_data_source[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/kv test_inflight_limit.py.TestKvInflightLimitCompatibility.test_current_proxy_returns_overloaded[mixed_current_and_intermediate-limit_enabled]
-ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRestart.test_rename_table[restart_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/topics py3test.[test_topic.py */*] chunk
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/topics test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-4-1_to_prestable-27-1-1]

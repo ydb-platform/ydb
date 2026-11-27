@@ -33,7 +33,8 @@ TAG(ya:not_autocheck)
 PEERDIR(
     ydb/tests/fq/streaming_common
     ydb/tests/library/compatibility
-    ydb/tests/library/harness
+    ydb/tests/library
+    ydb/tests/tools/datastreams_helpers
 )
 
 DEPENDS(

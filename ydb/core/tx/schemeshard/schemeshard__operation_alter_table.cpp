@@ -115,7 +115,7 @@ TString CheckCdcActivation(const TTxTransaction& tx, const TPath& tablePath, TOp
         }
         const auto topic = context.SS->Topics.at(topicPath.Base()->PathId);
         const auto topicConfig = topic->GetTabletConfig();
-        if (topic->AlterData || !topicConfig.HasCdcReplication() || topicConfig.GetReplicationSourceConsumer().empty()
+        if (topic->AlterData || !topicConfig.GetCdcReplication() || topicConfig.GetReplicationSourceConsumer().empty()
             || topicConfig.GetPartitionConfig().HasMirrorFrom())
         {
             return "CDC activation requires a managed stream topic with mirroring stopped";

@@ -28,7 +28,7 @@ void ParsePQTabletConfig(NKikimrPQ::TPQTabletConfig& config,
 }
 
 bool SanitizeCdcReplication(NKikimrPQ::TPQTabletConfig& config, bool allowCdcReplication) {
-    if (!config.HasCdcReplication()) {
+    if (!config.GetCdcReplication()) {
         return false;
     }
     if (allowCdcReplication && !config.GetReplicationSourceConsumer().empty()) {
@@ -453,9 +453,9 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         ParsePQTabletConfig(config, *pqGroup);
         if (SanitizeCdcReplication(config, cdcTopic && !create)) {
             Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&pqGroup->AlterData->TabletConfig);
-        } else if (config.HasCdcReplication()) {
+        } else if (config.GetCdcReplication()) {
             const auto previous = pqGroup->GetTabletConfig();
-            if (!previous.HasCdcReplication() || previous.GetReplicationSourceConsumer().empty()) {
+            if (!previous.GetCdcReplication() || previous.GetReplicationSourceConsumer().empty()) {
                 attachedCdcConsumer = config.GetReplicationSourceConsumer();
             }
         }

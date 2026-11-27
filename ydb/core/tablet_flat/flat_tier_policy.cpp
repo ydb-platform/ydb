@@ -5,7 +5,7 @@ namespace NTable {
 
 namespace {
 
-    void BoundToProto(const TTierBound& bound, NTabletFlatScheme::TTierBoundSettings& proto) {
+    void BoundToProto(const TTierBound& bound, NKikimrSchemeOp::TTierBoundSettings& proto) {
         if (const auto* relative = std::get_if<TTierRelativeBound>(&bound)) {
             proto.SetRelativeOffsetUs(relative->Offset.MicroSeconds());
         } else {
@@ -13,11 +13,11 @@ namespace {
         }
     }
 
-    TTierBound BoundFromProto(const NTabletFlatScheme::TTierBoundSettings& proto) {
+    TTierBound BoundFromProto(const NKikimrSchemeOp::TTierBoundSettings& proto) {
         switch (proto.GetKindCase()) {
-            case NTabletFlatScheme::TTierBoundSettings::kRelativeOffsetUs:
+            case NKikimrSchemeOp::TTierBoundSettings::kRelativeOffsetUs:
                 return TTierRelativeBound{ TDuration::MicroSeconds(proto.GetRelativeOffsetUs()) };
-            case NTabletFlatScheme::TTierBoundSettings::kAbsoluteMicros:
+            case NKikimrSchemeOp::TTierBoundSettings::kAbsoluteMicros:
                 return TTierAbsoluteBound{ proto.GetAbsoluteMicros() };
             default:
                 Y_ENSURE(false, "Tier bound has no value");
@@ -26,7 +26,7 @@ namespace {
 
 } // namespace
 
-    void TieringPolicyToProto(const TTieringPolicy& policy, NTabletFlatScheme::TTieringPolicySettings& proto) {
+    void TieringPolicyToProto(const TTieringPolicy& policy, NKikimrSchemeOp::TTieringPolicySettings& proto) {
         proto.Clear();
         proto.SetColumnTag(policy.ColumnTag);
         proto.SetUnit(policy.Unit);
@@ -46,7 +46,7 @@ namespace {
         }
     }
 
-    TTieringPolicy TieringPolicyFromProto(const NTabletFlatScheme::TTieringPolicySettings& proto) {
+    TTieringPolicy TieringPolicyFromProto(const NKikimrSchemeOp::TTieringPolicySettings& proto) {
         TTieringPolicy policy;
         policy.ColumnTag = proto.GetColumnTag();
         policy.Unit = proto.GetUnit();

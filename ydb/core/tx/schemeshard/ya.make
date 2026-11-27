@@ -310,6 +310,7 @@ SRCS(
     schemeshard_import_kesus_restorer.cpp
     schemeshard_import_scheme_query_executor.cpp
     schemeshard_info_types.cpp
+    schemeshard_tiers.cpp
     schemeshard_info_types.h
     schemeshard_path.cpp
     schemeshard_path.h

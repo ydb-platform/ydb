@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
+#include <ydb/core/tx/schemeshard/index/index_utils.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <util/string/printf.h>
@@ -59,6 +60,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
         return policy;
     }
 
+    Y_UNIT_TEST(IndexImplTableDoesNotInheritNamedTierBindings) {
+        NKikimrSchemeOp::TPartitionConfig table;
+        auto* tier = table.AddTiers();
+        tier->SetName("archive");
+        tier->SetId(42);
+        auto* policy = table.MutableCompactionPolicy();
+        *policy = CompactionPolicyWithGenerationIds({0, 1});
+        policy->MutableGeneration(1)->SetTierId(42);
+        policy->MutableGeneration(1)->SetCountToCompact(17);
+
+        const auto index = NTableIndex::CalcVectorKmeansTreeLevelImplTableDesc(table, {});
+        const auto& indexConfig = index.GetPartitionConfig();
+        UNIT_ASSERT_VALUES_EQUAL(indexConfig.TiersSize(), 0);
+        auto expectedPolicy = *policy;
+        expectedPolicy.MutableGeneration(1)->ClearTierId();
+        UNIT_ASSERT_VALUES_EQUAL(indexConfig.GetCompactionPolicy().DebugString(), expectedPolicy.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(policy->GetGeneration(1).GetTierId(), 42u);
+    }
+
     Y_UNIT_TEST(CompactionPolicyRejectsInvalidGenerationIds) {
         struct TCase {
             TVector<std::optional<ui32>> Ids;
@@ -91,6 +111,78 @@ Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
             TString error;
             UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCompactionPolicy(policy, error), error);
         }
+    }
+
+    Y_UNIT_TEST(NamedTiersKeepExistingGenerationBindings) {
+        NKikimrSchemeOp::TPartitionConfig source;
+        source.AddColumnFamilies()->MutableStorageConfig();
+        source.AddColumnFamilies()->SetId(7);
+        auto* tier = source.AddTiers();
+        tier->SetId(42);
+        tier->SetName("archive");
+        auto& policy = *source.MutableCompactionPolicy();
+        policy = CompactionPolicyWithGenerationIds({0, 1, 2});
+        policy.MutableGeneration(1)->SetTierId(7);
+        policy.MutableGeneration(2)->SetTierId(42);
+        TString error;
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCreateParams(source, nullptr, false, error), error);
+
+        auto reordered = source;
+        reordered.MutableCompactionPolicy()->MutableGeneration(1)->SetTierId(42);
+        reordered.MutableCompactionPolicy()->MutableGeneration(2)->SetTierId(7);
+        UNIT_ASSERT(!TPartitionConfigMerger::VerifyAlterParams(source, reordered, nullptr, false, error));
+    }
+
+    Y_UNIT_TEST(AddTierPreservesImplicitAndExplicitlyEmptyCompactionPolicies) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataTiering(true);
+        NKikimrSchemeOp::TPartitionConfig changes;
+        auto* tier = changes.AddTiers();
+        tier->SetName("archive");
+        tier->SetId(42);
+        const auto defaults = NLocalDb::CreateDefaultUserTablePolicy();
+        for (bool hasEmptyPolicy : {false, true}) {
+            NKikimrSchemeOp::TPartitionConfig source;
+            if (hasEmptyPolicy) {
+                source.MutableCompactionPolicy();
+            }
+            NKikimrSchemeOp::TPartitionConfig result;
+            TString error;
+            UNIT_ASSERT_C(TPartitionConfigMerger::ApplyChanges(result, source, changes, {},
+                &runtime.GetAppData(), false, error), error);
+            UNIT_ASSERT_C(TPartitionConfigMerger::VerifyAlterParams(source, result,
+                &runtime.GetAppData(), false, error), error);
+            const NLocalDb::TCompactionPolicy policy(result.GetCompactionPolicy());
+            const size_t hotCount = hasEmptyPolicy ? 0 : defaults->Generations.size();
+            UNIT_ASSERT_VALUES_EQUAL(policy.Generations.size(), hotCount + 1);
+            for (size_t i = 0; i < hotCount; ++i) {
+                UNIT_ASSERT(policy.Generations[i] == defaults->Generations[i]);
+            }
+            auto expected = defaults->Generations.back();
+            expected.TierId = 42;
+            UNIT_ASSERT(policy.Generations.back() == expected);
+        }
+    }
+
+    Y_UNIT_TEST(NamedTiersReserveLevelsForFinalParts) {
+        NKikimrSchemeOp::TPartitionConfig config;
+        auto* tier = config.AddTiers();
+        tier->SetId(42);
+        tier->SetName("archive");
+        auto& policy = *config.MutableCompactionPolicy();
+        for (ui32 i = 0; i < 253; ++i) {
+            policy.AddGeneration()->SetGenerationId(i);
+        }
+        policy.MutableGeneration(252)->SetTierId(42);
+        TString error;
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCreateParams(config, nullptr, false, error), error);
+
+        auto* extra = policy.AddGeneration();
+        extra->SetGenerationId(253);
+        extra->SetTierId(42);
+        UNIT_ASSERT(!TPartitionConfigMerger::VerifyCreateParams(config, nullptr, false, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "final levels");
     }
 
     Y_UNIT_TEST(CreateAndAlterRejectInvalidCompactionGenerationIds) {

@@ -13,6 +13,7 @@
 #include "schemeshard_svp_migration.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/logoblob.h>
 #include <ydb/core/base/metadata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tx_processing.h>
@@ -98,6 +99,20 @@ struct TDirectoryEntry {
     TString Owner;
     TMaybe<NKikimrSysView::ESysViewType> SysViewType;
 };
+
+NKikimrSchemeOp::TFamilyDescription MakeTierFamily(const NKikimrSchemeOp::TTierDescription& tier) {
+    NKikimrSchemeOp::TFamilyDescription family;
+    family.SetId(tier.GetId());
+    ApplyTierSettingsToFamily(tier, family);
+    return family;
+}
+
+void ProjectTierFamilies(NKikimrSchemeOp::TPartitionConfig& config) {
+    for (const auto& tier : config.GetTiers()) {
+        *config.AddColumnFamilies() = MakeTierFamily(tier);
+    }
+    config.ClearTiers();
+}
 
 }   // anonymous namespace
 
@@ -1133,18 +1148,11 @@ bool TSchemeShard::GetBindingsRooms(
 
     THashMap<ChannelsKey, ui32, decltype(keyHasher)> roomByChannels;
 
-    for (const auto& family : partitionConfig.GetColumnFamilies()) {
-        if (family.GetId() == 0) {
-            continue; // already handled
-        }
-        if (!family.HasStorageConfig()) {
-            continue; // will use the default room
-        }
-
+    auto bindRoom = [&](ui32 familyId, const NKikimrSchemeOp::TStorageConfig& storage) {
         TStorageRoom newRoom(rooms.size());
         if (!ApplyStorageConfig(
                 storagePools,
-                family.GetStorageConfig(),
+                storage,
                 channelsBinding,
                 reverseBinding,
                 newRoom,
@@ -1156,15 +1164,15 @@ bool TSchemeShard::GetBindingsRooms(
         ui32 dataChannel = newRoom.GetChannel(NKikimrStorageSettings::TChannelPurpose::Data, primaryData);
         TSet<ui32> externalChannels = newRoom.GetExternalChannels(0);
         if (dataChannel == primaryData && externalChannels == primaryExternals) {
-            continue; // will use the default room
+            return true; // will use the default room
         }
 
         ChannelsKey cookie = { externalChannels, dataChannel };
 
         auto it = roomByChannels.find(cookie);
         if (it != roomByChannels.end()) {
-            familyRooms[family.GetId()] = it->second;
-            continue;
+            familyRooms[familyId] = it->second;
+            return true;
         }
 
         auto& room = rooms.emplace_back(rooms.size());
@@ -1177,7 +1185,25 @@ bool TSchemeShard::GetBindingsRooms(
             }
         }
         roomByChannels[cookie] = room.GetId();
-        familyRooms[family.GetId()] = room.GetId();
+        familyRooms[familyId] = room.GetId();
+        return true;
+    };
+
+    for (const auto& family : partitionConfig.GetColumnFamilies()) {
+        if (family.GetId() != 0 && family.HasStorageConfig() &&
+            !bindRoom(family.GetId(), family.GetStorageConfig())) {
+            return false;
+        }
+    }
+    for (const auto& tier : partitionConfig.GetTiers()) {
+        if (tier.HasStorageConfig() && !bindRoom(tier.GetId(), MakeTierFamily(tier).GetStorageConfig())) {
+            return false;
+        }
+    }
+    if (channelsBinding.size() > TLogoBlobID::MaxChannel + 1) {
+        errorMsg = TStringBuilder() << "Table storage requires " << channelsBinding.size()
+            << " channels, maximum is " << TLogoBlobID::MaxChannel + 1;
+        return false;
     }
 
     return true;
@@ -8530,6 +8556,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
     }
 
     proto->MutablePartitionConfig()->CopyFrom(alterData->PartitionConfigCompatible());
+    ProjectTierFamilies(*proto->MutablePartitionConfig());
 
     if (auto* patch = tableInfo->PerShardPartitionConfig.FindPtr(shardIdx)) {
         ApplyPartitionConfigStoragePatch(
@@ -8652,6 +8679,9 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
         tinfo->TableDescription.SetPath(PathToString(pinfo));
     }
     tableDescr->CopyFrom(tinfo->TableDescription);
+    if (tableDescr->HasPartitionConfig()) {
+        ProjectTierFamilies(*tableDescr->MutablePartitionConfig());
+    }
 
     FillHnswPostingTableDescription(*this, tableId, newTable, tableDescr);
 

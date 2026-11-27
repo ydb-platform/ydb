@@ -24,8 +24,6 @@
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
-#include <contrib/libs/zstd/include/zstd.h>
-
 #include <util/generic/algorithm.h>
 
 namespace {
@@ -1279,6 +1277,37 @@ inline THashMap<ui32, size_t> DeduplicateRepeatedById(
     return posById;
 }
 
+void AddMissingTierGenerations(NKikimrSchemeOp::TPartitionConfig& config, size_t firstTier) {
+    if (firstTier == config.TiersSize()) {
+        return;
+    }
+
+    // DataShard uses the standard user policy for tables without a saved policy.
+    if (!config.HasCompactionPolicy()) {
+        NLocalDb::CreateDefaultUserTablePolicy()->Serialize(*config.MutableCompactionPolicy());
+    }
+    auto& policy = *config.MutableCompactionPolicy();
+    THashSet<ui32> boundTiers;
+    for (const auto& generation : policy.GetGeneration()) {
+        boundTiers.insert(generation.GetTierId());
+    }
+    for (size_t index = firstTier; index < config.TiersSize(); ++index) {
+        const ui32 tierId = config.GetTiers(index).GetId();
+        if (!boundTiers.insert(tierId).second) {
+            continue;
+        }
+        const ui32 generationId = policy.GenerationSize();
+        auto* generation = policy.AddGeneration();
+        if (generationId) {
+            generation->CopyFrom(policy.GetGeneration(generationId - 1));
+        } else {
+            NLocalDb::CreateDefaultUserTablePolicy()->Generations.back().Serialize(*generation);
+        }
+        generation->SetGenerationId(generationId);
+        generation->SetTierId(tierId);
+    }
+}
+
 }
 
 NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TAppData* appData, const std::optional<TString>& defaultPoolKind) {
@@ -1318,6 +1347,10 @@ bool TPartitionConfigMerger::ApplyChanges(
     result.CopyFrom(src); // inherit all data from src
 
     if (!ApplyChangesInColumnFamilies(result, src, changes, columns, isServerlessDomain, errDescr)) {
+        return false;
+    }
+
+    if (!ApplyChangesInTiers(result, changes, appData, isServerlessDomain, errDescr)) {
         return false;
     }
 
@@ -1364,6 +1397,10 @@ bool TPartitionConfigMerger::ApplyChanges(
         policyPtr->Serialize(*result.MutableCompactionPolicy());
     }
 
+    // A replacement policy must account for existing named tiers. A newly added tier
+    // without an explicit generation inherits the last generation's tuning.
+    const bool replacesPolicy = changes.HasCompactionPolicy() || changes.HasNamedCompactionPolicy();
+    AddMissingTierGenerations(result, replacesPolicy ? src.TiersSize() : 0);
 
     if (changes.FollowerGroupsSize()) {
         // use FollowerGroups
@@ -1584,8 +1621,23 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
     TString &errDescr)
 {
     result.MutableColumnFamilies()->CopyFrom(src.GetColumnFamilies());
-    TColumnFamiliesMerger merger(result);
+    ui32 lastReservedId = 0;
+    if (src.TiersSize() || changes.TiersSize()) {
+        // Allocate implicit family IDs after all IDs reserved by this table and request.
+        for (const auto& tier : src.GetTiers()) {
+            lastReservedId = Max(lastReservedId, tier.GetId());
+        }
+        for (const auto& tier : changes.GetTiers()) {
+            lastReservedId = Max(lastReservedId, tier.GetId());
+        }
+        for (const auto& family : changes.GetColumnFamilies()) {
+            lastReservedId = Max(lastReservedId, family.GetId());
+        }
+    }
+    TColumnFamiliesMerger merger(result, lastReservedId);
 
+    const auto isDefaultTier = [](const auto& tier) { return tier.GetName() == "default"; };
+    const bool updatesDefaultTier = AnyOf(changes.GetTiers(), isDefaultTier) || AnyOf(changes.GetAlterTiers(), isDefaultTier);
     THashSet<ui32> changedCFamilies;
 
     for (const auto& changesFamily : changes.GetColumnFamilies()) {
@@ -1651,16 +1703,10 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
             dstFamily.SetColumnCodecLevel(changesFamily.GetColumnCodecLevel());
         }
 
-        if (dstFamily.HasColumnCodecLevel()) {
-            if (dstFamily.GetColumnCodec() != NKikimrSchemeOp::ColumnCodecZSTD) {
-                errDescr = "COMPRESSION_LEVEL is supported only for ZSTD compression";
-                return false;
-            }
-            const auto maxLevel = ZSTD_maxCLevel();
-            if (dstFamily.GetColumnCodecLevel() < 0 || dstFamily.GetColumnCodecLevel() > maxLevel) {
-                errDescr = TStringBuilder() << "COMPRESSION_LEVEL for ZSTD must be in range [0, " << maxLevel << "]";
-                return false;
-            }
+        // If the default tier is also updated, validate family 0 after merging both sets of settings.
+        if (dstFamily.HasColumnCodecLevel() && (familyId != 0 || !updatesDefaultTier) &&
+            !ValidateColumnCodecLevel(dstFamily.GetColumnCodec(), dstFamily.GetColumnCodecLevel(), errDescr)) {
+            return false;
         }
 
         if (changesFamily.HasColumnCache()) {
@@ -1674,6 +1720,13 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
                 return false;
             }
             dstFamily.SetColumnCacheMode(changesFamily.GetColumnCacheMode());
+        }
+
+        if (changesFamily.HasKeyIndexInDescriptor()) {
+            dstFamily.SetKeyIndexInDescriptor(changesFamily.GetKeyIndexInDescriptor());
+        }
+        if (changesFamily.HasGroupIndexesInDescriptor()) {
+            dstFamily.SetGroupIndexesInDescriptor(changesFamily.GetGroupIndexesInDescriptor());
         }
 
         if (changesFamily.HasStorage()) {
@@ -1887,6 +1940,46 @@ bool TPartitionConfigMerger::VerifyCreateParams(
         return false;
     }
 
+    if (config.TiersSize()) {
+        THashSet<ui32> familyIds{0};
+        for (const auto& family : config.GetColumnFamilies()) {
+            familyIds.insert(family.GetId());
+        }
+        for (const auto& tier : config.GetTiers()) {
+            if (!familyIds.insert(tier.GetId()).second) {
+                errDescr = TStringBuilder() << "Tier '" << tier.GetName()
+                    << "' shares id " << tier.GetId() << " with another tier or column family";
+                return false;
+            }
+            if (tier.HasStorageConfig() && !hasStorageConfig) {
+                errDescr = TStringBuilder() << "A storage pool for tier '" << tier.GetName()
+                    << "' requires StorageConfig on the default column family";
+                return false;
+            }
+        }
+        const auto& policy = config.GetCompactionPolicy();
+        THashSet<ui32> boundTiers{0}; // The default tier always has a final level.
+        for (const auto& generation : policy.GetGeneration()) {
+            const ui32 tierId = generation.GetTierId();
+            if (!familyIds.contains(tierId)) {
+                errDescr = TStringBuilder() << "Compaction generation " << generation.GetGenerationId()
+                    << " refers to unknown tier " << tierId;
+                return false;
+            }
+            boundTiers.insert(tierId);
+        }
+        for (const auto& tier : config.GetTiers()) {
+            if (!boundTiers.contains(tier.GetId())) {
+                errDescr = TStringBuilder() << "Tier '" << tier.GetName() << "' has no compaction generation";
+                return false;
+            }
+        }
+        if (policy.GenerationSize() + boundTiers.size() > Max<ui8>()) {
+            errDescr = "Compaction generations and tier final levels must fit into levels 1..255";
+            return false;
+        }
+    }
+
     for (const auto& family : config.GetColumnFamilies()) {
         ui32 fId = family.GetId();
         auto fName = family.GetName();
@@ -2046,10 +2139,20 @@ bool TPartitionConfigMerger::VerifyAlterParams(
         if (!VerifyCompactionPolicy(dstConfig.GetCompactionPolicy(), errDescr)) {
             return false;
         }
-        NLocalDb::TCompactionPolicy oldPolicy(srcConfig.GetCompactionPolicy());
+        const auto oldPolicy = !srcConfig.HasCompactionPolicy() && dstConfig.TiersSize()
+            ? NLocalDb::CreateDefaultUserTablePolicy()
+            : MakeIntrusive<NLocalDb::TCompactionPolicy>(srcConfig.GetCompactionPolicy());
         NLocalDb::TCompactionPolicy newPolicy(dstConfig.GetCompactionPolicy());
-        if (!NLocalDb::ValidateCompactionPolicyChange(oldPolicy, newPolicy, errDescr)) {
+        if (!NLocalDb::ValidateCompactionPolicyChange(*oldPolicy, newPolicy, errDescr)) {
             return false;
+        }
+        if (dstConfig.TiersSize()) {
+            for (size_t i = 0; i < oldPolicy->Generations.size(); ++i) {
+                if (oldPolicy->Generations[i].TierId.value_or(0) != newPolicy.Generations[i].TierId.value_or(0)) {
+                    errDescr = TStringBuilder() << "Cannot change TierId of existing compaction generation " << i;
+                    return false;
+                }
+            }
         }
     }
 
@@ -2077,30 +2180,8 @@ bool TPartitionConfigMerger::VerifyCompactionPolicy(const NKikimrCompaction::TCo
         }
     }
 
-    // Check constructor preconditions before building a runtime policy.
-    for (size_t index = 0; index < policy.GenerationSize(); ++index) {
-        const auto& generation = policy.GetGeneration(index);
-        if (generation.GetGenerationId() != index) {
-            err = TStringBuilder()
-                << "Compaction generation " << index
-                << ": expected GenerationId " << index
-                << ", got " << generation.GetGenerationId();
-            return false;
-        }
-
-        // The runtime policy derives omitted sizes by dividing by CountToCompact.
-        if (generation.HasCountToCompact() && generation.GetCountToCompact() == 0 &&
-            (!generation.HasExtraCompactionExpMaxSize() || !generation.HasUpliftPartSize()))
-        {
-            err = TStringBuilder()
-                << "Compaction generation " << index
-                << ": CountToCompact must be nonzero when "
-                   "ExtraCompactionExpMaxSize or UpliftPartSize is omitted";
-            return false;
-        }
-    }
-
-    return NLocalDb::ValidateCompactionPolicy(NLocalDb::TCompactionPolicy(policy), err);
+    auto parsed = NLocalDb::TryParseCompactionPolicy(policy, err);
+    return parsed && NLocalDb::ValidateCompactionPolicy(*parsed, err);
 }
 
 bool TPartitionConfigMerger::VerifyCommandOnFrozenTable(const NKikimrSchemeOp::TPartitionConfig &srcConfig, const NKikimrSchemeOp::TPartitionConfig &dstConfig)
@@ -3386,9 +3467,10 @@ bool TImportInfo::IsExcludedFromImport(const TString& path) const {
     return false;
 }
 
-TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)
+TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container, ui32 lastReservedId)
     : Container(container)
     , DeduplicationById(TPartitionConfigMerger::DeduplicateColumnFamiliesById(Container))
+    , NextAutogenId(lastReservedId)
 {
     IdByName["default"] = 0;
 

@@ -662,6 +662,35 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         me.ToLine().Commit();
     }
 
+    Y_UNIT_TEST(UniqueIndexLockOnlyKeyPreservesCommittedPrefixVersion) {
+        TDbExec me;
+        constexpr ui32 table = 1;
+        constexpr ui64 rowTxId = 101;
+        constexpr ui64 lockTxId = 102;
+        const TRowVersion version(1, 11);
+
+        me.ToLine().Begin().Apply(*TAlter()
+            .AddTable("index", table)
+            .AddColumn(table, "uniq", 1, ETypes::Uint64, false, false)
+            .AddColumn(table, "pk", 2, ETypes::Uint64, false, false)
+            .AddColumnToKey(table, 1)
+            .AddColumnToKey(table, 2));
+        me.ToLine().WriteTx(rowTxId).PutN(table, 1_u64, 1_u64).Commit();
+        me.ToLine().Begin().WriteVer(version).CommitTx(table, rowTxId).Commit();
+        me.ToLine().Begin().WriteTx(lockTxId).LockRowN(table, ELockMode::Exclusive, 1_u64, 2_u64).Commit();
+
+        me.ToLine().Begin();
+        const TVector<TCell> prefix{TCell::Make(1_u64)};
+        const auto row = me.ToLine()->SelectRowVersionByKeyPrefix(table, prefix, nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(row.Ready, EReady::Gone);
+        UNIT_ASSERT_VALUES_EQUAL(row.RowVersion, version);
+        UNIT_ASSERT_VALUES_EQUAL(row.RowTxId, rowTxId);
+        UNIT_ASSERT_VALUES_EQUAL(row.RowOp, ERowOp::Upsert);
+        UNIT_ASSERT_VALUES_EQUAL(row.LockMode, ELockMode::Exclusive);
+        UNIT_ASSERT_VALUES_EQUAL(row.LockTxId, lockTxId);
+        me.ToLine().Commit();
+    }
+
     Y_UNIT_TEST(UniqueIndexRowLocks) {
         TDbExec me;
 

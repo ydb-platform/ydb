@@ -93,15 +93,17 @@ namespace NCompGen {
                     TotalRows += delta;
                 }
 
-                ui64 partRows = partView->Stat.Rows;
-                ui64 partDrops = partView->Stat.Drops;
+                const auto& stat = partView->Stat;
+                const ui64 partRows = stat.Rows;
+                ui64 partDrops = stat.Drops;
 
                 // A final positive-version erase cannot be removed before
                 // version cleanup reaches it. Garbage stats track that point.
-                partDrops -= Min(partDrops, partView->Stat.RetainedErases);
+                partDrops -= Min(partDrops, stat.RetainedErases);
 
-                // Assume worst case: every drop has a hidden row that won't go away
-                partDrops -= Min(partDrops, partView->Stat.HiddenRows);
+                // A hidden value may still be readable. A historical erase can hide a value in an older part.
+                const ui64 hiddenValues = stat.HiddenRows - Min(stat.HiddenRows, stat.HiddenDrops);
+                partDrops -= Min(partDrops, hiddenValues);
 
                 if (TotalRows >= partRows) {
                     // N.B. this also handles Max<ui64>() if it ever happens

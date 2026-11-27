@@ -482,6 +482,85 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
         UNIT_ASSERT_VALUES_EQUAL(strategy.GetLastFinishedForcedCompactionTs(), TInstant::Seconds(60));
     }
 
+    Y_UNIT_TEST(ForcedCompactionByConsecutiveErasesOverOlderValues) {
+        TSimpleBackend backend;
+        TSimpleBroker broker;
+        TSimpleLogger logger;
+        TSimpleTime time;
+        constexpr ui64 keys = 16;
+        const TRowVersion boundary(75, 1);
+        const TRowVersion lastErase(100, 1);
+        {
+            auto db = backend.Begin();
+            db.Materialize<Schema>();
+            TCompactionPolicy policy;
+            policy.DroppedRowsPercentToCompact = 50;
+            auto& gen = policy.Generations.emplace_back(
+                10 * 1024 * 1024, 2, 10, 100 * 1024 * 1024, "compact_gen1", true);
+            gen.ExtraCompactionPercent = 0;
+            gen.ExtraCompactionMinSize = 0;
+            gen.ExtraCompactionExpPercent = 0;
+            gen.ExtraCompactionExpMaxSize = 0;
+            backend.DB.Alter().SetCompactionPolicy(Table, policy);
+            backend.Commit();
+        }
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, &logger, "suffix");
+        strategy.Start({ });
+        {
+            auto db = backend.Begin();
+            for (ui64 key = 0; key < keys; ++key) {
+                db.Table<Schema::Data>().Key(key).UpdateV<Schema::Data::Value>(TRowVersion(10, 1), 42);
+            }
+            backend.Commit();
+        }
+        backend.SimpleMemCompaction(&strategy);
+        const auto originalParts = backend.TableParts(Table);
+        UNIT_ASSERT_VALUES_EQUAL(originalParts.size(), 1u);
+        const auto originalLabel = originalParts.front()->Label;
+        {
+            auto db = backend.Begin();
+            for (ui64 key = 0; key < keys; ++key) {
+                db.Table<Schema::Data>().Key(key).DeleteV(TRowVersion(50, 1));
+                db.Table<Schema::Data>().Key(key).DeleteV(lastErase);
+            }
+            backend.DB.RemoveRowVersions(Table, TRowVersion::Min(), boundary);
+            backend.Commit();
+        }
+        backend.SimpleMemCompaction(&strategy);
+        const auto parts = backend.TableParts(Table);
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 2u);
+        // The flush kept both erases per key, but neither part reports reclaimable bytes at the boundary.
+        for (const auto& part : parts) {
+            UNIT_ASSERT(!part->GarbageStats || part->GarbageStats->GetGarbageBytes(boundary) == 0);
+            if (part->Label != originalLabel) {
+                UNIT_ASSERT_VALUES_EQUAL(part->Stat.Drops, keys);
+                UNIT_ASSERT_VALUES_EQUAL(part->Stat.HiddenRows, keys);
+                UNIT_ASSERT_VALUES_EQUAL(part->Stat.HiddenDrops, keys);
+                UNIT_ASSERT_VALUES_EQUAL(part->Stat.RetainedErases, 0u);
+            }
+        }
+        UNIT_ASSERT(!strategy.AllowForcedCompaction());
+        UNIT_ASSERT(broker.RunPending());
+        auto outcome = backend.RunCompaction();
+        UNIT_ASSERT(outcome.Params->IsFinal);
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Params->Parts.size(), 2u);
+        auto changes = strategy.CompactionFinished(
+            outcome.CompactionId, std::move(outcome.Params), std::move(outcome.Result));
+        backend.ApplyChanges(Table, std::move(changes));
+
+        const auto finalParts = backend.TableParts(Table);
+        UNIT_ASSERT_VALUES_EQUAL(finalParts.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(finalParts.front()->Stat.HiddenRows, 0u);
+        backend.Begin();
+        for (ui64 key = 0; key < keys; ++key) {
+            const TCell cell = TCell::Make(key);
+            const auto row = backend.DB.SelectRowVersion(Table, { &cell, 1 });
+            UNIT_ASSERT_VALUES_EQUAL(row.RowOp, ERowOp::Erase);
+            UNIT_ASSERT_VALUES_EQUAL(row.RowVersion, lastErase);
+        }
+        backend.Commit();
+    }
+
     Y_UNIT_TEST(RetainedEraseDoesNotRepeatForcedCompaction) {
         TSimpleBackend backend;
         TSimpleBroker broker;

@@ -1652,7 +1652,8 @@ TSelectRowVersionResult TTable::SelectRowVersionByKeyPrefix(
         if (!hasLiveLock && (ready == EReady::Gone || iter->Row().GetRowState() == ERowOp::Erase)) {
             continue;
         }
-        res = TSelectRowVersionResult(ready);
+        // A lock without an underlying row must preserve the committed version found earlier in the prefix.
+        res.Ready = ready;
         if (ready == EReady::Data) {
             res.RowVersion = iter->GetRowVersion();
             res.RowTxId = iter->GetDeltaTxId();

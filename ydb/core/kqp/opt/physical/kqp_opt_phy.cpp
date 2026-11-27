@@ -70,6 +70,7 @@ public:
         AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<false>));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildPureFlatmapStage));
         AddHandler(0, &TCoCombineByKey::Match, HNDL(PushCombineToStage<false>));
+        AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(NarrowPartitionsByKeysInput<false>));
         AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage<false>));
         AddHandler(0, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<false>));
         AddHandler(0, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<false>));
@@ -126,6 +127,7 @@ public:
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<true>));
         AddHandler(1, &TCoCombineByKey::Match, HNDL(PushCombineToStage<true>));
         AddHandler(1, &TCoCombineByKey::Match, HNDL(PushCombineToStageDependsOnOtherStage<true>));
+        AddHandler(1, &TCoPartitionsByKeys::Match, HNDL(NarrowPartitionsByKeysInput<true>));
         AddHandler(1, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage<true>));
         AddHandler(1, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<true>));
         AddHandler(1, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<true>));
@@ -552,13 +554,24 @@ protected:
     }
 
     template <bool IsGlobal>
+    TMaybeNode<TExprBase> NarrowPartitionsByKeysInput(TExprBase node, TExprContext& ctx,
+        IOptimizationContext&, const TGetParents& getParents)
+    {
+        if (!KqpCtx.Config->GetEnableNarrowWindowAggregateInput()) {
+            return node;
+        }
+        TExprBase output = DqNarrowPartitionsByKeysInput(node, ctx, *getParents(), IsGlobal);
+        DumpAppliedRule("NarrowPartitionsByKeysInput", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildPartitionsStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
         bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleEliminationForAggregation());
         const bool windowFunctionsV2 = KqpCtx.Config->GetWindowFunctionsV2();
-        const bool narrowInput = KqpCtx.Config->GetEnableNarrowWindowAggregateInput();
-        TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination, windowFunctionsV2, narrowInput);
+        TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination, windowFunctionsV2);
         DumpAppliedRule("BuildPartitionsStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

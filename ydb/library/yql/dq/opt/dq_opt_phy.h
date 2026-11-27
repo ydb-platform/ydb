@@ -73,9 +73,11 @@ NNodes::TExprBase DqBuildPartitionsStage(
     bool allowStageMultiUsage = true,
     TTypeAnnotationContext* typeCtx = nullptr,
     bool enableShuffleElimination = false,
-    bool useSortForPartitionsByKeys = false,
-    bool narrowInput = false
+    bool useSortForPartitionsByKeys = false
 );
+
+NNodes::TExprBase DqNarrowPartitionsByKeysInput(NNodes::TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap,
+    bool allowStageMultiUsage = true);
 
 NNodes::TExprBase DqBuildPartitionStage(
     NNodes::TExprBase node,

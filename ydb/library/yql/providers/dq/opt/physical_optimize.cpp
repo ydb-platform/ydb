@@ -41,6 +41,7 @@ public:
         AddHandler(0, &TCoAssumeDistinct::Match, HNDL(PushAssumeDistinctToStage<false>));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
         AddHandler(0, &TCoCombineByKey::Match, HNDL(PushCombineToStage<false>));
+        AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(NarrowPartitionsByKeysInput<false>));
         AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage<false>));
         AddHandler(0, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<false>));
         AddHandler(0, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<false>));
@@ -83,6 +84,7 @@ public:
         AddHandler(1, &TCoAssumeDistinct::Match, HNDL(PushAssumeDistinctToStage<true>));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<true>));
         AddHandler(1, &TCoCombineByKey::Match, HNDL(PushCombineToStage<true>));
+        AddHandler(1, &TCoPartitionsByKeys::Match, HNDL(NarrowPartitionsByKeysInput<true>));
         AddHandler(1, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage<true>));
         AddHandler(1, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<true>));
         AddHandler(1, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<true>));
@@ -196,10 +198,16 @@ protected:
     }
 
     template <bool IsGlobal>
+    TMaybeNode<TExprBase> NarrowPartitionsByKeysInput(TExprBase node, TExprContext& ctx, IOptimizationContext&, const TGetParents& getParents) {
+        if (!Config->EnableNarrowWindowAggregateInput.Get().GetOrElse(TDqSettings::TDefault::EnableNarrowWindowAggregateInput)) {
+            return node;
+        }
+        return DqNarrowPartitionsByKeysInput(node, ctx, *getParents(), IsGlobal);
+    }
+
+    template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildPartitionsStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        const bool narrowInput = Config->EnableNarrowWindowAggregateInput.Get().GetOrElse(
-            TDqSettings::TDefault::EnableNarrowWindowAggregateInput);
-        return DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, nullptr, false, false, narrowInput);
+        return DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>

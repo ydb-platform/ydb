@@ -141,6 +141,21 @@ TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr &tableInfo) {
     return result;
 }
 
+void FilterIndexTableTierIds(NKikimrSchemeOp::TPartitionConfig& config) {
+    if (!config.HasCompactionPolicy()) {
+        return;
+    }
+    THashSet<ui32> familyIds{0}; // The default family can be implicit.
+    for (const auto& family : config.GetColumnFamilies()) {
+        familyIds.insert(family.GetId());
+    }
+    for (auto& generation : *config.MutableCompactionPolicy()->MutableGeneration()) {
+        if (!familyIds.contains(generation.GetTierId())) {
+            generation.ClearTierId();
+        }
+    }
+}
+
 namespace {
 
 NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
@@ -172,7 +187,6 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
     if (baseTablePartitionConfig.HasPipelineConfig()) {
         result.MutablePipelineConfig()->CopyFrom(baseTablePartitionConfig.GetPipelineConfig());
     }
-    THashSet<ui32> inheritedFamilyIds{0}; // The default family can be implicit.
     for (const auto& family : baseTablePartitionConfig.GetColumnFamilies()) {
         const bool isDefaultFamily = (
             (!family.HasId() && !family.HasName()) ||
@@ -180,7 +194,6 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
             (family.HasName() && family.GetName() == "default"));
         if (isDefaultFamily) {
             result.AddColumnFamilies()->CopyFrom(family);
-            inheritedFamilyIds.insert(family.GetId());
         }
     }
     // Resolve presets before filtering their generation-to-family references.
@@ -200,13 +213,7 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
         // Older tables may have no stored policy. Derive their index from the domain default.
         AppData()->DomainsInfo->GetDefaultUserTablePolicy()->Serialize(*result.MutableCompactionPolicy());
     }
-    if (result.HasCompactionPolicy()) {
-        for (auto& generation : *result.MutableCompactionPolicy()->MutableGeneration()) {
-            if (!inheritedFamilyIds.contains(generation.GetTierId())) {
-                generation.ClearTierId();
-            }
-        }
-    }
+    FilterIndexTableTierIds(result);
     if (baseTablePartitionConfig.HasResourceProfile()) {
         result.SetResourceProfile(baseTablePartitionConfig.GetResourceProfile());
     }

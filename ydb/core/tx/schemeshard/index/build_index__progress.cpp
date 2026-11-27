@@ -13,6 +13,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/base/auth.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -584,6 +585,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     if (buildInfo.IsBuildPrefixedVectorIndex() && buildInfo.KMeans.Level == 1) {
         op.SetName(TString::Join(PostingTable, suffix));
         NTableIndex::FillIndexTableColumns(tableInfo->Columns, implTableColumns.Keys, implTableColumns.Columns, op);
+        // This temporary table uses the domain default and has only the implicit default family.
+        auto& config = *op.MutablePartitionConfig();
+        AppData()->DomainsInfo->GetDefaultUserTablePolicy()->Serialize(*config.MutableCompactionPolicy());
+        NTableIndex::FilterIndexTableTierIds(config);
         auto& policy = *resetPartitionsSettings();
         // Prevent merging partitions
         policy.SetMinPartitionsCount(maxShardsInPath);

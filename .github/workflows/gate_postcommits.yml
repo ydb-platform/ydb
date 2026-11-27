@@ -17,11 +17,18 @@ jobs:
         gate_config='${{ vars.POSTCOMMIT_GATE_CONFIG }}'
         max_age_hours=$(jq -r '.ignore_pr_check_older_than_hours // 6' <<<"${gate_config:-{}}")
         max_age_seconds=$(jq -n --argjson h "$max_age_hours" '$h * 3600')
+        queue_threshold='${{ vars.POSTCOMMIT_QUEUE_THRESHOLD }}'
 
         queued_json=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
           https://api.github.com/repos/${{github.repository}}/actions/runs?per_page=1000\&page=1\&status=queued\&event=pull_request_target)
 
-        queue_size=$(jq --argjson max_age "$max_age_seconds" '
+        queue_items=$(jq --argjson max_age "$max_age_seconds" '
+          def fmt_duration:
+            if . < 60 then "\(.|floor)s"
+            elif . < 3600 then "\((./60)|floor)m"
+            elif . < 86400 then "\((./3600)|floor)h \(((./60)|floor % 60))m"
+            else "\((./86400)|floor)d \(((./3600)|floor % 24))h"
+            end;
           [.workflow_runs[]
             | select(.name == "PR-check")
             | . + {
@@ -29,19 +36,61 @@ jobs:
                 age_seconds: (now - (.created_at | fromdate))
               }
             | select(.waiting_seconds > 60 and .age_seconds <= $max_age)
+            | {
+                id,
+                title: (.display_title // .head_branch // ("run #" + (.id|tostring))),
+                html_url,
+                branch: .head_branch,
+                waiting: (.waiting_seconds | fmt_duration),
+                waiting_seconds,
+                age: (.age_seconds | fmt_duration)
+              }
+          ]
+          | sort_by(-.waiting_seconds)
+        ' <<<"$queued_json")
+        queue_size=$(jq 'length' <<<"$queue_items")
+        ignored_stale=$(jq --argjson max_age "$max_age_seconds" '
+          [.workflow_runs[]
+            | select(.name == "PR-check")
+            | select((now - (.updated_at | fromdate)) > 60)
+            | select((now - (.created_at | fromdate)) > $max_age)
           ] | length
         ' <<<"$queued_json")
+
         echo "Queue size: $queue_size"
-        echo "Queue threshold: ${{ vars.POSTCOMMIT_QUEUE_THRESHOLD }}"
-        
-        if (( queue_size > ${{ vars.POSTCOMMIT_QUEUE_THRESHOLD }} ));then
+        echo "Queue threshold: $queue_threshold"
+
+        if (( queue_size > queue_threshold )); then
+          gate_action="closed"
           echo "Close gate for postcommits"
           query='.runners[] | select(any(.labels[].name; .=="build-preset-relwithdebinfo" or .=="build-preset-asan" or .=="build-preset-tsan" or .=="build-preset-msan")) | select(any(.labels[].name; .=="postcommit")) | select((any(.labels[].name; startswith("pool:") and endswith("-postcommit"))) | not) | .id'
         else
+          gate_action="open"
           echo "Open gate for postcommits"
           query='.runners[] | select(any(.labels[].name; .=="build-preset-relwithdebinfo" or .=="build-preset-asan" or .=="build-preset-tsan" or .=="build-preset-msan")) | select(all(.labels[].name; .!="postcommit")) | .id'
         fi
-        
+
+        {
+          echo "## Postcommit gate: ${gate_action}"
+          echo ""
+          echo "| | |"
+          echo "|---|---|"
+          echo "| Decision | **${gate_action}** |"
+          echo "| Queue size | ${queue_size} (threshold ${queue_threshold}) |"
+          echo "| Max age filter | ${max_age_hours}h |"
+          echo "| Ignored stale PR-check | ${ignored_stale} |"
+          echo ""
+          if (( queue_size > 0 )); then
+            echo "### Queued PR-check (>60s)"
+            echo ""
+            echo "| Waiting | Age | Branch | Run |"
+            echo "|---------|-----|--------|-----|"
+            jq -r '.[] | "| \(.waiting) | \(.age) | `\(.branch)` | [\(.title|gsub("\\|"; "\\|"))](\(.html_url)) |"' <<<"$queue_items"
+          else
+            echo "_No recent queued PR-check runs._"
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"
+
         echo "Requesting a list of runners to update labels..."
         j1=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
           -H "X-GitHub-Api-Version: 2022-11-28" -w "%{http_code}\n" \
@@ -53,11 +102,10 @@ jobs:
           echo "$j1"
           exit 1
         fi
-        # echo "$j1"
-        
+
         echo "$j1" | sed '$d' | jq "$query" | while read x;do
           echo "Runner: $x"
-          if (( queue_size > ${{ vars.POSTCOMMIT_QUEUE_THRESHOLD }} ));then
+          if (( queue_size > queue_threshold )); then
             curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -X DELETE -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
               https://api.github.com/repos/${{github.repository}}/actions/runners/$x/labels/postcommit

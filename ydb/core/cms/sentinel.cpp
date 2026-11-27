@@ -190,6 +190,20 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
     }
 }
 
+EMaintenanceStatus::E TPDiskStatusComputer::ComputeMaintenanceStatus(EMaintenanceStatus::E current) const {
+    if (current == EMaintenanceStatus::NOT_SET) {
+        // BSC has not reported the status, so it is not managed
+        return current;
+    }
+
+    if (TargetMaintenanceStatus == EMaintenanceStatus::NOT_SET) {
+        // CMS has no request of its own
+        return current;
+    }
+
+    return TargetMaintenanceStatus;
+}
+
 EPDiskState TPDiskStatusComputer::GetState() const {
     return State;
 }
@@ -279,7 +293,7 @@ bool TPDiskStatus::IsChanged() const {
 }
 
 bool TPDiskStatus::IsMaintenanceStatusChanged() const {
-    return CurrentMaintenanceStatus != GetTargetMaintenanceStatus();
+    return CurrentMaintenanceStatus != ComputeMaintenanceStatus(CurrentMaintenanceStatus);
 }
 
 void TPDiskStatus::ApplyChanges(TString& reason) {
@@ -297,7 +311,7 @@ void TPDiskStatus::ApplyDriveStatusChanges(TString& reason) {
 }
 
 void TPDiskStatus::ApplyMaintenanceStatusChanges() {
-    CurrentMaintenanceStatus = GetTargetMaintenanceStatus();
+    CurrentMaintenanceStatus = ComputeMaintenanceStatus(CurrentMaintenanceStatus);
 }
 
 EPDiskStatus TPDiskStatus::GetStatus() const {
@@ -306,6 +320,10 @@ EPDiskStatus TPDiskStatus::GetStatus() const {
 
 EMaintenanceStatus::E TPDiskStatus::GetMaintenanceStatus() const {
     return CurrentMaintenanceStatus;
+}
+
+void TPDiskStatus::ResetMaintenanceStatus(EMaintenanceStatus::E status) {
+    CurrentMaintenanceStatus = status;
 }
 
 bool TPDiskStatus::IsNewStatusGood() const {
@@ -368,6 +386,16 @@ TPDiskInfo::TPDiskInfo(
 void TPDiskInfo::AddState(EPDiskState state, bool isNodeLocked) {
     TPDiskStatus::AddState(state, isNodeLocked);
     Touch();
+}
+
+void TPDiskInfo::SyncMaintenanceStatus(EMaintenanceStatus::E bscStatus) {
+    if (GetMaintenanceStatus() != BscMaintenanceStatus) {
+        // the request of CMS is not acknowledged yet, and the status reported may be older than the request
+        return;
+    }
+
+    BscMaintenanceStatus = bscStatus;
+    ResetMaintenanceStatus(bscStatus);
 }
 
 /// TNodeInfo
@@ -705,9 +733,9 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                 TPDiskID id(pdisk.GetNodeId(), pdisk.GetPDiskId());
 
                 if (pdisks.contains(id)) {
-                    auto pdiskInfo = pdisks.at(id);
-                    pdiskInfo->Touch();
-                    pdiskInfo->BscMaintenanceStatus = pdisk.GetMaintenanceStatus();
+                    auto& info = *pdisks.at(id);
+                    info.Touch();
+                    info.SyncMaintenanceStatus(pdisk.GetMaintenanceStatus());
                     continue;
                 }
 
@@ -1194,12 +1222,6 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         TGuardian changed(SentinelState, Config.DataCenterRatio, Config.RoomRatio, Config.RackRatio, Config.PileRatio, Config.FaultyPDisksThresholdPerNode);
         TClusterMap::TPDiskIDSet alwaysAllowed;
 
-        const auto needsMaintenanceUpdate = [](const TPDiskInfo& info) {
-            const auto target = info.GetTargetMaintenanceStatus();
-            return info.IsMaintenanceStatusChanged()
-                || (target != EMaintenanceStatus::NOT_SET && target != info.BscMaintenanceStatus);
-        };
-
         for (auto& pdisk : SentinelState->PDisks) {
             const TPDiskID& id = pdisk.first;
             TPDiskInfo& info = *(pdisk.second);
@@ -1227,7 +1249,15 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
             info.ResetForcedStatus();
 
-            bool needsMaintenanceStatus = false;
+            // CMS has a maintenance request only while the node has the faulty marker and withdraws it (NO_REQUEST)
+            // once the marker is gone, even if BSC had the status before: Sentinel can't tell after a restart.
+            // Without a request the status kept in BSC is left as is, since it may have been set by someone else
+            const bool maintenanceWasRequested =
+                info.GetTargetMaintenanceStatus() == EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
+            info.SetTargetMaintenanceStatus(maintenanceWasRequested
+                ? EMaintenanceStatus::NO_REQUEST
+                : EMaintenanceStatus::NOT_SET);
+
             if (it->second.HasFaultyMarker()) {
                 switch (Config.EvictVDisksStatus) {
                     case EEvictVDisksStatus::Faulty:
@@ -1235,27 +1265,17 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                         info.SetForcedStatus(EPDiskStatus::FAULTY);
                         break;
                     case EEvictVDisksStatus::Maintenance:
-                        needsMaintenanceStatus = true;
+                        info.SetTargetMaintenanceStatus(EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED);
                         break;
                     case EEvictVDisksStatus::Disabled:
                         break;
                 }
             }
 
-            const bool maintenanceWasRequested = info.GetTargetMaintenanceStatus() == EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
-            const bool maintenanceClearPending = info.InFlightToBscMaintenanceStatus == EMaintenanceStatus::NO_REQUEST;
-            auto newTargetMaintenance = EMaintenanceStatus::NOT_SET;
-            if (needsMaintenanceStatus) {
-                newTargetMaintenance = EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
-            } else if (maintenanceWasRequested || maintenanceClearPending) {
-                newTargetMaintenance = EMaintenanceStatus::NO_REQUEST;
-            }
-            info.SetTargetMaintenanceStatus(newTargetMaintenance);
-
             all.AddPDisk(id, hasGoodState);
 
             const bool driveChanged = info.IsDriveStatusChanged();
-            const bool maintenanceChanged = needsMaintenanceUpdate(info);
+            const bool maintenanceChanged = info.IsMaintenanceStatusChanged();
 
             if (driveChanged) {
                 if (info.IsNewStatusGood() || info.HasForcedStatus()) {
@@ -1312,7 +1332,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             info->IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED;
 
             const bool driveChanged = info->IsDriveStatusChanged();
-            const bool maintenanceChanged = needsMaintenanceUpdate(*info);
+            const bool maintenanceChanged = info->IsMaintenanceStatusChanged();
 
             if (driveChanged && !info->IsChangingAllowed()) {
                 info->AllowChanging();
@@ -1348,7 +1368,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             pdisk->DisallowChanging();
             pdisk->IgnoreReason = reason;
 
-            if (needsMaintenanceUpdate(*pdisk)) {
+            if (pdisk->IsMaintenanceStatusChanged()) {
                 const EPDiskStatus status = pdisk->GetStatus();
                 const EMaintenanceStatus::E maintenanceStatus = pdisk->GetMaintenanceStatus();
                 pdisk->ApplyMaintenanceStatusChanges();
@@ -1458,12 +1478,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             command.SetPDiskId(id.DiskId);
             command.SetStatus(info->GetStatus());
             command.SetSkipIfPileCutOff(true);
-
-            EMaintenanceStatus::E maintenanceStatus = info->GetMaintenanceStatus();
-            if (maintenanceStatus != EMaintenanceStatus::NOT_SET && maintenanceStatus != info->BscMaintenanceStatus) {
-                command.SetMaintenanceStatus(maintenanceStatus);
+            if (info->GetMaintenanceStatus() != info->BscMaintenanceStatus) {
+                command.SetMaintenanceStatus(info->GetMaintenanceStatus());
             }
-            info->InFlightToBscMaintenanceStatus = command.GetMaintenanceStatus();
         }
         request->Record.MutableRequest()->SetIgnoreDisintegratedGroupsChecks(true);
 
@@ -1572,7 +1589,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                     entry.MutableInfo()->SetStatusChangeFailed(info->StatusChangeFailed);
                     entry.MutableInfo()->SetMaintenanceStatus(info->BscMaintenanceStatus);
                     entry.MutableInfo()->SetDesiredMaintenanceStatus(info->GetMaintenanceStatus());
-                    // entry.MutableInfo()->SetPrevDesiredMaintenanceStatus(info->PrevMaintenanceStatus);
+                    entry.MutableInfo()->SetPrevDesiredMaintenanceStatus(info->PrevBscMaintenanceStatus);
                 }
             }
 
@@ -1613,12 +1630,8 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             info.StatusChangeFailed = false;
             info.PrevStatus = info.ActualStatus;
             info.ActualStatus = info.GetStatus();
-            
-            if (info.InFlightToBscMaintenanceStatus != EMaintenanceStatus::NOT_SET) {
-                info.BscMaintenanceStatus = info.InFlightToBscMaintenanceStatus;
-            }
-            info.InFlightToBscMaintenanceStatus = EMaintenanceStatus::NOT_SET;
-            
+            info.PrevBscMaintenanceStatus = info.BscMaintenanceStatus;
+            info.BscMaintenanceStatus = info.GetMaintenanceStatus();
             info.LastStatusChange = Now();
             info.PrevStatusChangeAttempt = info.StatusChangeAttempt;
             info.StatusChangeAttempt = SentinelState->StatusChangeAttempt;

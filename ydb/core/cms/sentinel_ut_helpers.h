@@ -132,6 +132,26 @@ public:
         UNIT_FAIL("Target PDisk is missing from Sentinel state");
     }
 
+    // collects maintenance statuses Sentinel asks BSC to set for the PDisk
+    auto ObserveMaintenanceRequests(const TPDiskID& id, TVector<EMaintenanceStatus::E>& requested) {
+        return AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([this, id, &requested](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+            if (event->Sender != Sentinel) {
+                return;
+            }
+            for (const auto& command : event->Get()->Record.GetRequest().GetCommand()) {
+                if (!command.HasUpdateDriveStatus()) {
+                    continue;
+                }
+                const auto& update = command.GetUpdateDriveStatus();
+                if (update.GetHostKey().GetNodeId() == id.NodeId
+                        && update.GetPDiskId() == id.DiskId
+                        && update.GetMaintenanceStatus() != EMaintenanceStatus::NOT_SET) {
+                    requested.push_back(update.GetMaintenanceStatus());
+                }
+            }
+        });
+    }
+
     TSet<TPDiskID> GetSentinelPDisks() {
         auto request = MakeHolder<TEvCms::TEvGetSentinelStateRequest>();
         request->Record.SetShow(NKikimrCms::TGetSentinelStateRequest::ALL);

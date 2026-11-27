@@ -26,6 +26,7 @@ public:
 
     void AddState(EPDiskState state, bool isNodeLocked);
     EPDiskStatus Compute(EPDiskStatus current, TString& reason) const;
+    EMaintenanceStatus::E ComputeMaintenanceStatus(EMaintenanceStatus::E current) const;
 
     EPDiskState GetState() const;
     EPDiskState GetPrevState() const;
@@ -39,8 +40,8 @@ public:
 
     bool IsInitialDeploymentGracePeriod() const;
 
+    // NOT_SET target means that CMS has no maintenance request of its own, the status kept in BSC is left as is
     void SetTargetMaintenanceStatus(EMaintenanceStatus::E status);
-
     EMaintenanceStatus::E GetTargetMaintenanceStatus() const;
 
 private:
@@ -90,6 +91,7 @@ public:
     EPDiskStatus GetStatus() const;
     bool IsNewStatusGood() const;
     EMaintenanceStatus::E GetMaintenanceStatus() const;
+    void ResetMaintenanceStatus(EMaintenanceStatus::E status);
 
     bool IsChangingAllowed() const;
     void AllowChanging();
@@ -124,10 +126,10 @@ struct TPDiskInfo
 
     EPDiskStatus ActualStatus = EPDiskStatus::ACTIVE;
     EPDiskStatus PrevStatus = EPDiskStatus::UNKNOWN;
-    // From BSC.
+    // what BSC has as far as Sentinel knows: the status reported by BSC upon config update, or the request of CMS
+    // acknowledged by BSC after that
     EMaintenanceStatus::E BscMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
-    // CMS already requested to set. 
-    EMaintenanceStatus::E InFlightToBscMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
+    EMaintenanceStatus::E PrevBscMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
     TInstant LastStatusChange;
     bool StatusChangeFailed = false;
     // means that this pdisk status change last time was the reason of whole request failure
@@ -150,6 +152,10 @@ struct TPDiskInfo
     void ClearTouched() { Touched = false; }
 
     void AddState(EPDiskState state, bool isNodeLocked);
+
+    // takes the maintenance status BSC reports upon config update, so that the one changed in BSC by someone else is
+    // not mistaken for the one CMS has requested
+    void SyncMaintenanceStatus(EMaintenanceStatus::E bscStatus);
 
 private:
     bool Touched;

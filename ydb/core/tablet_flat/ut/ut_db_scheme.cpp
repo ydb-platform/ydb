@@ -329,14 +329,28 @@ namespace {
         alter.SetFamilyCompression(TableId, tier, ECodec::LZ4);
     }
 
+    NLocalDb::TCompactionPolicyPtr TieredCompactionPolicy() {
+        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+        auto generation = policy->Generations.back();
+        for (ui32 tier : {HddTier, ArchiveTier}) {
+            generation.TierId = tier;
+            policy->Generations.push_back(generation);
+            policy->Generations.push_back(generation);
+        }
+        return policy;
+    }
+
     // TModel table with a timestamp column, a cold room and two tiers
-    TAlter BuildTiered() {
+    TAlter BuildTiered(bool withGenerations = true) {
         TAlter alter = TModel().Build();
         alter.AddColumn(TableId, "created_at", TimeColumn, NScheme::NTypeIds::Timestamp, false, false);
         alter.AddColumnToFamily(TableId, TimeColumn, TModel::GroupId1);
         alter.SetRoom(TableId, ColdRoom, TModel::ChannelOut + 1, {TModel::ChannelBlobs + 1}, TModel::ChannelOut + 1);
         AddTier(alter, HddTier);
         AddTier(alter, ArchiveTier);
+        if (withGenerations) {
+            alter.SetCompactionPolicy(TableId, *TieredCompactionPolicy());
+        }
         return alter;
     }
 
@@ -394,6 +408,16 @@ namespace {
         return changes;
     }
 
+    void CheckRejectedUnchanged(TScheme& scheme, const TSchemeChanges& changes, TStringBuf error) {
+        const auto before = scheme.GetSnapshot()->SerializeAsString();
+        TSchemeRollbackState rollback;
+        TSchemeModifier modifier(scheme, &rollback);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(modifier.Apply(changes), yexception, error);
+        UNIT_ASSERT_VALUES_EQUAL(scheme.GetSnapshot()->SerializeAsString(), before);
+        UNIT_ASSERT(rollback.Tables.empty());
+        UNIT_ASSERT(modifier.Affects.empty());
+    }
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeTiering) {
@@ -440,6 +464,80 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
         const auto changes = change.Flush();
         UNIT_ASSERT_EXCEPTION_CONTAINS(TSchemeModifier(scheme).Apply(*changes), yexception, "contiguous block");
         UNIT_ASSERT(Table(scheme).CompactionPolicy == original);
+    }
+
+    Y_UNIT_TEST(TieringRulesRequireGenerationBindings) {
+        TScheme scheme = Apply(BuildTiered(false));
+        TAlter premature;
+        premature.SetTieringPolicy(TableId, RelativePolicy());
+        CheckRejectedUnchanged(scheme, *premature.Flush(), "has no compaction generation");
+
+        TAlter bind;
+        bind.SetCompactionPolicy(TableId, *TieredCompactionPolicy());
+        bind.SetTieringPolicy(TableId, RelativePolicy());
+        UNIT_ASSERT(TSchemeModifier(scheme).Apply(*bind.Flush()));
+        UNIT_ASSERT(Table(scheme).TieringPolicy == RelativePolicy());
+
+        TAlter family;
+        AddTier(family, ExtraTier);
+        UNIT_ASSERT(TSchemeModifier(scheme).Apply(*family.Flush()));
+        for (ui32 ruleIndex : {0, 1}) {
+            auto policy = RelativePolicy();
+            policy.Rules[ruleIndex].TierId = ExtraTier;
+            TAlter invalid;
+            invalid.SetTieringPolicy(TableId, policy);
+            CheckRejectedUnchanged(scheme, *invalid.Flush(), "has no compaction generation");
+        }
+    }
+
+    Y_UNIT_TEST(GenerationBindingsRequireExistingFamilies) {
+        TScheme scheme = Apply(BuildTiered());
+        auto policy = TieredCompactionPolicy();
+        auto generation = policy->Generations.back();
+        generation.TierId = ExtraTier;
+        policy->Generations.push_back(generation);
+        TAlter premature;
+        premature.SetCompactionPolicy(TableId, *policy);
+        CheckRejectedUnchanged(scheme, *premature.Flush(), "is not a family of the table");
+
+        TAlter bind;
+        AddTier(bind, ExtraTier);
+        bind.SetCompactionPolicy(TableId, *policy);
+        UNIT_ASSERT(TSchemeModifier(scheme).Apply(*bind.Flush()));
+        UNIT_ASSERT(*Table(scheme).CompactionPolicy == *policy);
+        UNIT_ASSERT(Table(scheme).Families.contains(ExtraTier));
+    }
+
+    Y_UNIT_TEST(CompactionPolicyMustPreserveEveryTieringTarget) {
+        auto build = BuildTiered();
+        build.SetTieringPolicy(TableId, RelativePolicy());
+        TScheme scheme = Apply(build);
+        for (ui32 removed : {HddTier, ArchiveTier}) {
+            auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+            auto generation = policy->Generations.back();
+            generation.TierId = removed == HddTier ? ArchiveTier : HddTier;
+            policy->Generations.push_back(generation);
+            TAlter invalid;
+            invalid.SetCompactionPolicy(TableId, *policy);
+            CheckRejectedUnchanged(scheme, *invalid.Flush(), "has no compaction generation");
+        }
+    }
+
+    Y_UNIT_TEST(GenerationReferencesKeepFamiliesAfterTieringIsReset) {
+        for (bool reset : {false, true}) {
+            auto build = BuildTiered();
+            if (reset) {
+                build.SetTieringPolicy(TableId, RelativePolicy());
+                build.ResetTieringPolicy(TableId);
+            }
+            TScheme scheme = Apply(build);
+            UNIT_ASSERT(!Table(scheme).TieringPolicy);
+            for (ui32 tier : {HddTier, ArchiveTier}) {
+                TAlter drop;
+                drop.DropFamily(TableId, tier);
+                CheckRejectedUnchanged(scheme, *drop.Flush(), "used by compaction generation");
+            }
+        }
     }
 
     Y_UNIT_TEST(PolicyProtoRoundTrip) {
@@ -494,11 +592,20 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
             UNIT_ASSERT(Table(restored).Families.contains(HddTier));
             UNIT_ASSERT(Table(restored).Families.contains(ArchiveTier));
             UNIT_ASSERT(!Table(restored).Families.contains(ExtraTier));
+            UNIT_ASSERT(*Table(restored).CompactionPolicy == *TieredCompactionPolicy());
+            THashMap<ui32, ui32> generations;
+            for (const auto& generation : Table(restored).CompactionPolicy->Generations) {
+                ++generations[generation.TierId.value_or(0)];
+            }
+            UNIT_ASSERT_VALUES_EQUAL(generations.at(0), NLocalDb::CreateDefaultUserTablePolicy()->Generations.size());
+            UNIT_ASSERT_VALUES_EQUAL(generations.at(HddTier), 2);
+            UNIT_ASSERT_VALUES_EQUAL(generations.at(ArchiveTier), 2);
         }
     }
 
     Y_UNIT_TEST(AlterTiersAndPolicy) {
         auto alter = BuildTiered();
+        AddTier(alter, ExtraTier);
         TScheme scheme = Apply(alter);
 
         // Change a tier, set and reset the policy, drop an unused tier
@@ -517,27 +624,29 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
 
         TAlter reset;
         reset.ResetTieringPolicy(TableId);
-        reset.DropFamily(TableId, ArchiveTier);
+        reset.DropFamily(TableId, ExtraTier);
         UNIT_ASSERT(TSchemeModifier(scheme).Apply(*reset.Flush()));
         UNIT_ASSERT(!Table(scheme).TieringPolicy);
-        UNIT_ASSERT(!Table(scheme).Families.contains(ArchiveTier));
+        UNIT_ASSERT(!Table(scheme).Families.contains(ExtraTier));
+        UNIT_ASSERT(Table(scheme).Families.contains(ArchiveTier));
         UNIT_ASSERT(Table(scheme).Families.contains(HddTier));
 
         // Dropping a missing family is a no-op
         TAlter missing;
-        missing.DropFamily(TableId, ArchiveTier);
+        missing.DropFamily(TableId, ExtraTier);
         UNIT_ASSERT(!TSchemeModifier(scheme).Apply(*missing.Flush()));
     }
 
     Y_UNIT_TEST(Rollback) {
         auto alter = BuildTiered();
+        AddTier(alter, ExtraTier);
         TScheme scheme = Apply(alter);
         const TScheme::TTableInfo before = Table(scheme);
 
         TAlter change;
         change.SetTieringPolicy(TableId, RelativePolicy());
         change.ResetTieringPolicy(TableId);
-        change.DropFamily(TableId, ArchiveTier);
+        change.DropFamily(TableId, ExtraTier);
 
         TSchemeRollbackState rollback;
         TSchemeModifier(scheme, &rollback).Apply(*change.Flush());
@@ -674,7 +783,9 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
 
     Y_UNIT_TEST(InvalidDropFamily) {
         auto drop = [](ui32 family) {
-            TScheme scheme = Apply(BuildTiered());
+            auto build = BuildTiered();
+            AddTier(build, ExtraTier);
+            TScheme scheme = Apply(build);
             TAlter alter;
             alter.DropFamily(TableId, family);
             TSchemeModifier(scheme).Apply(*alter.Flush());
@@ -683,8 +794,8 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(drop(TModel::GroupId1), yexception, "Cannot drop the leader family");
         UNIT_ASSERT_EXCEPTION_CONTAINS(drop(TModel::GroupId2), yexception, "Cannot drop family 3 of column 2");
 
-        // Families without columns can be dropped
-        drop(HddTier);
+        // A family unused by columns, generations and rules can be dropped.
+        drop(ExtraTier);
     }
 
     Y_UNIT_TEST(DropUsedTierOrColumn) {
@@ -765,14 +876,28 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
         }
 
         {
-            // Families are checked against the policy that the record leaves
+            // An unused family can be dropped in the record that resets the policy.
             TScheme scheme = Apply(alter);
             TAlter change;
             change.ResetTieringPolicy(TableId);
-            change.DropFamily(TableId, HddTier);
+            change.DropFamily(TableId, ExtraTier);
             UNIT_ASSERT(TSchemeModifier(scheme).Apply(*AsOneRecord(change)));
             UNIT_ASSERT(!Table(scheme).TieringPolicy);
-            UNIT_ASSERT(!Table(scheme).Families.contains(HddTier));
+            UNIT_ASSERT(!Table(scheme).Families.contains(ExtraTier));
+            UNIT_ASSERT(Table(scheme).Families.contains(HddTier));
+        }
+
+        {
+            // Resetting rules does not remove a generation's family reference.
+            TScheme scheme = Apply(alter);
+            TAlter change;
+            change.SetColdBorrow(TableId, true);
+            change.ResetTieringPolicy(TableId);
+            change.DropFamily(TableId, HddTier);
+            CheckRejectedUnchanged(scheme, *AsOneRecord(change), "used by compaction generation");
+            UNIT_ASSERT(Table(scheme).TieringPolicy == RelativePolicy());
+            UNIT_ASSERT(Table(scheme).Families.contains(HddTier));
+            UNIT_ASSERT(!Table(scheme).ColdBorrow);
         }
     }
 }

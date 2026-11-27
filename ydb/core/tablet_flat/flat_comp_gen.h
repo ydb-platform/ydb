@@ -16,6 +16,8 @@ namespace NCompGen {
 
     public:
         ui32 Generation = Max<ui32>();
+        bool TieringForced = false;
+        ui32 PreferredLevel = 255;
     };
 
     class TGenCompactionStrategy final
@@ -49,6 +51,8 @@ namespace NCompGen {
             ui64 compactionId,
             THolder<TCompactionParams> params,
             THolder<TCompactionResult> result) override;
+        void CompactionCancelled(ui64 compactionId, const TCompactionParams& params) override;
+        bool TryReserveCompaction(TCompactionParams& params) override;
         void PartMerged(TPartView part, ui32 level) override;
         void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) override;
         TCompactionChanges PartsRemoved(TArrayRef<const TLogoBlobID> parts) override;
@@ -56,6 +60,11 @@ namespace NCompGen {
         TCompactionChanges ApplyChanges() override;
         bool AllowForcedCompaction() override;
         void OutputHtml(IOutputStream& out) override;
+
+        ui32 GetTierCompactionConflicts(ui32 generation) const;
+        std::optional<ui32> GetSerialTierCompactionGeneration() const {
+            return SerialTierGeneration;
+        }
 
     public:
         enum class EState {
@@ -206,8 +215,24 @@ namespace NCompGen {
             TCompactionTask Task;
         };
 
+        struct TFinalTier {
+            TFinalState State;
+            TList<TPartInfo> Parts;
+        };
+
         struct TPartAggregator;
         struct TExtraState;
+
+        struct TTierCompaction {
+            ui64 CompactionId = 0;
+            TIntrusiveConstPtr<TCompactionContext> Context;
+            TCompactionParams* Params = nullptr;
+        };
+
+        struct TTierConflicts {
+            ui32 Count = 0;
+            std::optional<ui64> WaitRevision;
+        };
 
     private:
         void SubmitTask(TCompactionTask& task, TString type, ui32 priority, ui32 generation);
@@ -239,6 +264,32 @@ namespace NCompGen {
             ui32 generation,
             TExtraState& extra);
 
+        ui32 TierForLevel(ui32 level) const;
+        TList<TPartInfo>& GetFinalParts(ui32 level);
+        const TList<TPartInfo>& GetFinalParts(ui32 level) const;
+        TFinalState& GetFinalState(ui32 level);
+        const TFinalState& GetFinalState(ui32 level) const;
+        bool IsLastTierGeneration(ui32 generation) const;
+        size_t UnloadedPartsAtLevel(ui32 level) const;
+        void ValidateTierEpochs() const;
+        void RebuildTierStats();
+        void CheckTierGenerations();
+        bool CanStartTierCompaction(ui32 generation) const;
+        bool HasFreeTierInputs(ui32 generation) const;
+        void ReleaseTierCompaction(ui32 generation, ui64 compactionId, bool success);
+        void DeferTierCompaction(ui32 generation);
+        void NoteTierCompactionConflict(ui32 generation);
+        void CancelTierCompactions();
+        void BeginTierGenCompaction(TTaskId taskId, ui32 generation);
+        ui64 PrepareTierCompaction(TTaskId taskId, TSnapEdge edge, ui32 generation,
+            TExtraState& extra, bool forced, bool sweep);
+        TCompactionChanges FinishTierCompaction(ui64 compactionId,
+            TGenCompactionParams& params, TCompactionResult& result);
+        ui32 ChooseTierLevel(ui32 tierId, TEpoch epoch, ui32 preferredLevel) const;
+        ui32 UpliftTierLevel(ui32 tierId, TEpoch epoch, const TStats& outputStats,
+            ui32 preferredLevel) const;
+        void ScheduleTierSweep();
+
         void UpdateStats();
         void UpdateOverload();
 
@@ -260,6 +311,16 @@ namespace NCompGen {
 
         TIntrusiveConstPtr<TCompactionPolicy> Policy;
 
+        bool TierManaged = false;
+        THashMap<ui32, TTierCompaction> TierCompactions;
+        THashMap<TLogoBlobID, ui32> BusyTierParts;
+        // Count actual conflicts, retrying only after the reservation set changes.
+        THashMap<ui32, TTierConflicts> TierConflicts;
+        std::optional<ui32> SerialTierGeneration;
+        ui64 TierOccupancyRevision = 0;
+        std::optional<ui32> TierSweepGeneration;
+        size_t NextTierSweep = 0;
+
         ui64 MemCompactionId = 0;
         ui64 FinalCompactionId = 0;
         ui32 FinalCompactionLevel = 0;
@@ -276,6 +337,7 @@ namespace NCompGen {
         TVector<TGeneration> Generations;
         TFinalState FinalState;
         TList<TPartInfo> FinalParts;
+        THashMap<ui32, TFinalTier> TierFinals;
         TList<TIntrusiveConstPtr<TColdPart>> ColdParts;
         THashMap<TLogoBlobID, ui32> KnownParts;
         TStats Stats;

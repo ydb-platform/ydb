@@ -32,6 +32,8 @@ public:
     };
 
     struct TRoom /* Storage unit settings (page collection) */ {
+        bool operator==(const TRoom&) const = default;
+
         TRoom() = default;
 
         TRoom(ui32 channel)
@@ -49,6 +51,8 @@ public:
         tiering policy refers to the family (such a family has no columns)
      */
     struct TFamily {
+        bool operator==(const TFamily&) const = default;
+
         using ECodec = NPage::ECodec;
         using ECacheMode = NPage::ECacheMode;
 
@@ -260,6 +264,7 @@ public:
     TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec); // legacy
     TAlter& SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large);
     TAlter& SetFamilyIndexPlacement(ui32 table, ui32 family, bool keyIndexInDescriptor, bool groupIndexesInDescriptor);
+    // The family must be unused by columns, compaction generations and tiering rules.
     TAlter& DropFamily(ui32 table, ui32 family);
     TAlter& SetRoom(ui32 table, ui32 room, ui32 main, const TSet<ui32>& blobs, ui32 outer);
     TAlter& SetRedo(ui32 annex);
@@ -269,12 +274,14 @@ public:
     TAlter& SetExecutorLogFlushPeriod(TDuration flushPeriod);
     TAlter& SetExecutorLimitInFlyTx(ui32 limitTxInFly);
     TAlter& SetExecutorResourceProfile(const TString &name);
+    // Referenced tier families must already exist; keep generations for all active tiering rules.
     TAlter& SetCompactionPolicy(ui32 tableId, const TCompactionPolicy& newPolicy);
     TAlter& SetByKeyFilter(ui32 tableId, bool enabled);
     TAlter& SetByKeyFilterPrefixes(ui32 tableId, const TVector<TScheme::TTableInfo::TByKeyFilterPrefix>& prefixes);
     TAlter& SetColdBorrow(ui32 tableId, bool enabled);
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
     TAlter& SetSpecialTableType(ui32 tableId, ui32 type);
+    // Create the target families and their compaction generations before setting the rules.
     TAlter& SetTieringPolicy(ui32 tableId, const TTieringPolicy& policy);
     TAlter& ResetTieringPolicy(ui32 tableId);
     TAlter& SetRewrite();

@@ -3565,6 +3565,55 @@ partitioning_settings {
         TestGetExport(Runtime(), exportB, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
 
+    Y_UNIT_TEST(ImportEmptyDirectoriesReusesConcurrentMkdirAfterReboot) {
+        auto& env = Env();
+        auto& runtime = Runtime();
+        runtime.GetAppData().FeatureFlags.SetEnableDirectoryExport(true);
+        TestMkDir(runtime, 100, "/MyRoot", "Source", {NKikimrScheme::StatusAccepted},
+            AlterUserAttrs({{"team", "backup"}}));
+        env.TestWaitNotification(runtime, 100);
+        TestExport(runtime, 101, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d" scheme: HTTP
+                items { source_path: "/MyRoot/Source" destination_prefix: "backup" }
+            }
+        )", S3Port()));
+        env.TestWaitNotification(runtime, 101);
+        TestGetExport(runtime, 101, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> mkdir(runtime, [](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.TransactionSize() == 1 && record.GetTransaction(0).GetMkDir().GetName() == "Restored";
+        });
+        TestImport(runtime, 102, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d" scheme: HTTP
+                items { source_prefix: "backup" destination_path: "/MyRoot/Restored" }
+            }
+        )", S3Port()));
+        runtime.WaitFor("import proposed mkdir", [&] { return !mkdir.empty(); });
+        const ui64 importMkdirTxId = mkdir.front()->Get()->Record.GetTxId();
+        mkdir.Stop();
+        TestMkDir(runtime, 103, "/MyRoot", "Restored", {NKikimrScheme::StatusAccepted},
+            AlterUserAttrs({{"team", "local"}}));
+        env.TestWaitNotification(runtime, 103);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransactionResult> reply(runtime, [importMkdirTxId](const auto& ev) {
+            return ev->Get()->Record.GetTxId() == importMkdirTxId;
+        });
+        mkdir.Unblock();
+        runtime.WaitFor("import mkdir found the concurrent directory", [&] { return !reply.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(reply.front()->Get()->Record.GetStatus(), NKikimrScheme::StatusAlreadyExists);
+        reply.Stop();
+        // Lose the reply so recovery must resolve the destination again.
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        env.TestWaitNotification(runtime, 102);
+        TestGetImport(runtime, 102, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Restored"), {
+            NLs::IsDirectory, NLs::UserAttrsHas({{"team", "local"}}),
+        });
+    }
+
     Y_UNIT_TEST(ShouldSucceedOnConcurrentImport) {
         Env(); // Init test env
         ui64 txId = 100;

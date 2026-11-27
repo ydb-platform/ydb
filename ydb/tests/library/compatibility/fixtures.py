@@ -113,6 +113,15 @@ all_binary_combinations_ids_restart = [
 ]
 
 
+def wait_driver(driver, timeout=60):
+    try:
+        driver.wait(timeout=timeout)
+    except Exception:
+        driver.stop()
+        raise
+    return driver
+
+
 class CompatibilityReadinessMixin:
     def _new_readiness_table_name(self):
         self._readiness_seq = getattr(self, "_readiness_seq", 0) + 1
@@ -177,10 +186,12 @@ class CompatibilityReadinessMixin:
             raise AssertionError("readiness data probe returned no rows for %s" % table_name)
 
     def _wait_for_readiness(self, *, probe_data=False):
+        # Retry create_driver here: node.start() waits for pid, not gRPC.
+        reconnect = getattr(self, "recreate_driver", False) or getattr(self, "driver", None) is None
         if getattr(self, "recreate_driver", False):
-            self.driver = self.create_driver()
+            self.stop_driver()
 
-        timeout = 120
+        timeout = 180 if reconnect else 120
         interval = 2
         request_timeout = 30
         settings = (
@@ -208,6 +219,14 @@ class CompatibilityReadinessMixin:
                     PRIMARY KEY (id)
                 ) """ % table_name
                 try:
+                    if self.driver is None:
+                        driver_timeout = max(1.0, min(30.0, remaining))
+                        logger.info(
+                            "Creating driver (timeout=%.0fs) for readiness attempt %d",
+                            driver_timeout,
+                            attempt,
+                        )
+                        self.driver = self.create_driver(timeout=driver_timeout)
                     logger.info("Readiness check attempt %d on %s", attempt, table_name)
                     try:
                         self._execute_scheme_query(query, settings)
@@ -227,13 +246,26 @@ class CompatibilityReadinessMixin:
                         time.time() - start_time,
                         e,
                     )
+                    if reconnect:
+                        self.stop_driver()
                     if self._is_path_creating(e):
                         abandoned.append(table_name)
                         table_name = self._new_readiness_table_name()
                     time.sleep(min(interval, max(0.0, deadline - time.time())))
         finally:
-            for name in abandoned:
-                self._drop_readiness_table(name, settings, best_effort=True)
+            if abandoned:
+                if self.driver is None:
+                    try:
+                        self.driver = self.create_driver(timeout=30)
+                    except Exception as e:
+                        logger.warning(
+                            "Leaving readiness tables behind (no driver): %s: %r",
+                            abandoned,
+                            e,
+                        )
+                        abandoned = []
+                for name in abandoned:
+                    self._drop_readiness_table(name, settings, best_effort=True)
 
         raise last_exception or RuntimeError("readiness check timed out")
 
@@ -250,15 +282,16 @@ class RestartToAnotherVersionFixture(CompatibilityReadinessMixin):
             self.driver.stop()
             self.driver = None
 
-    def create_driver(self):
-        driver = ydb.Driver(
-            ydb.DriverConfig(
-                database=self.database_path,
-                endpoint=self.endpoint,
-            )
+    def create_driver(self, timeout=60):
+        return wait_driver(
+            ydb.Driver(
+                ydb.DriverConfig(
+                    database=self.database_path,
+                    endpoint=self.endpoint,
+                )
+            ),
+            timeout=timeout,
         )
-        driver.wait(timeout=60)
-        return driver
 
     def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))
@@ -300,7 +333,6 @@ class RestartToAnotherVersionFixture(CompatibilityReadinessMixin):
 
         self.stop_driver()
         self.cluster.update_configurator_and_restart(self.config)
-        self.driver = self.create_driver()
 
         logger.info("Waiting for cluster initialization")
         self._wait_for_readiness(probe_data=True)
@@ -331,15 +363,16 @@ class MixedClusterFixture:
             self.driver.stop()
             self.driver = None
 
-    def create_driver(self):
-        driver = ydb.Driver(
-            ydb.DriverConfig(
-                database=self.database_path,
-                endpoint=self.endpoint
-            )
+    def create_driver(self, timeout=60):
+        return wait_driver(
+            ydb.Driver(
+                ydb.DriverConfig(
+                    database=self.database_path,
+                    endpoint=self.endpoint,
+                )
+            ),
+            timeout=timeout,
         )
-        driver.wait(timeout=60)
-        return driver
 
     def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))
@@ -403,15 +436,16 @@ class RollingUpgradeAndDowngradeFixture(CompatibilityReadinessMixin):
             self.driver.stop()
             self.driver = None
 
-    def create_driver(self):
-        driver = ydb.Driver(
-            ydb.DriverConfig(
-                database=self.database_path,
-                endpoint=self.endpoints[0]
-            )
+    def create_driver(self, timeout=60):
+        return wait_driver(
+            ydb.Driver(
+                ydb.DriverConfig(
+                    database=self.database_path,
+                    endpoint=self.endpoints[0],
+                )
+            ),
+            timeout=timeout,
         )
-        driver.wait(timeout=60)
-        return driver
 
     def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))

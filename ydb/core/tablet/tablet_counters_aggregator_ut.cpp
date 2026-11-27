@@ -5,7 +5,6 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/mon/counters_memonly.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -15,6 +14,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <library/cpp/monlib/service/monservice.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -740,7 +740,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             const TString service = follower ? "followers" : "tablets";
             TStringStream out;
             GetServiceCounters(runtime.GetAppData(0).Counters, service)->Accept(TString(), TString(),
-                *NMonitoring::NMemOnlyShim::CreateEncoder(&out, NMonitoring::EFormat::JSON));
+                *NMonitoring::CreateEncoder(&out, NMonitoring::EFormat::JSON));
             NJson::TJsonValue json;
             UNIT_ASSERT(NJson::ReadJsonTree(out.Str(), &json));
             bool sawAll = false, sawOther = false;

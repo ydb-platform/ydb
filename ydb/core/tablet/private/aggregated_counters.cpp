@@ -1,5 +1,4 @@
 #include "aggregated_counters.h"
-#include <ydb/core/mon/counters_memonly.h>
 #include <ydb/core/protos/labeled_counters.pb.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
@@ -56,7 +55,7 @@ void TAggregatedSimpleCounters::AddSimpleCounter(
     TString sumName = Sprintf("SUM(%s)", name);
 
     auto fnAddCounter = [this](const char* name, TCountersVector& container) {
-        auto counter = NMonitoring::NMemOnlyShim::GetCounter(CounterGroup, name, false, Visibility, MemOnly);
+        auto counter = CounterGroup->GetCounter(name, false, Visibility, MemOnly);
         container.push_back(counter);
     };
     fnAddCounter(maxName.data(), MaxSimpleCounters);
@@ -219,7 +218,7 @@ void TAggregatedCumulativeCounters::AddCumulativeCounter(
     TString maxName = Sprintf("MAX(%s)", name);
 
     auto fnAddCounter = [this](const char* name, TCountersVector& container) {
-        auto counter = NMonitoring::NMemOnlyShim::GetCounter(CounterGroup, name, false, Visibility, MemOnly);
+        auto counter = CounterGroup->GetCounter(name, false, Visibility, MemOnly);
         container.push_back(counter);
     };
     fnAddCounter(maxName.data(), MaxCumulativeCounters);
@@ -380,8 +379,8 @@ bool TAggregatedHistogramCounters::AddCounter(
         bucketBounds.push_back(percentileCounter.GetRangeBound(i));
     }
 
-    auto histogram = NMonitoring::NMemOnlyShim::GetHistogram(
-        CounterGroup, name, NMonitoring::ExplicitHistogram(bucketBounds), isDerivative, Visibility, MemOnly);
+    auto histogram = CounterGroup->GetHistogram(
+        name, NMonitoring::ExplicitHistogram(bucketBounds), isDerivative, Visibility, MemOnly);
 
     if (histogramAggregate) {
         // either simple or cumulative aggregate will handle this histogram,

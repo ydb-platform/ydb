@@ -1,6 +1,5 @@
 #include "aggregated_tablet_counters.h"
 
-#include <ydb/core/mon/counters_memonly.h>
 #include <ydb/core/protos/sys_view.pb.h>
 
 namespace NKikimr::NPrivate {
@@ -80,7 +79,7 @@ void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters, 
             } else {
                 AggregatedCumulativeCounters.AddCumulativeCounter(name);
             }
-            auto counter = NMonitoring::NMemOnlyShim::GetCounter(CounterGroup, name, true, Visibility, MemOnly);
+            auto counter = CounterGroup->GetCounter(name, true, Visibility, MemOnly);
             CumulativeCounters.push_back(counter);
         }
     }

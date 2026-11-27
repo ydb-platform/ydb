@@ -15,7 +15,8 @@ public:
     void Reset();
 
     const TS3Download* Find(ui64 txId) const;
-    const TS3Download& Store(NIceDb::TNiceDb& db, ui64 txId, const TS3Download& newInfo);
+    const TS3Download& Store(
+        NIceDb::TNiceDb& db, ui64 txId, const TS3Download& newInfo, const TRowVersion* writeVersion = nullptr);
 
 private:
     THashMap<ui64, TS3Download> Downloads;

@@ -3902,7 +3902,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         UNIT_ASSERT_C(!missing.IsSuccess(), missing.GetIssues().ToString());
         auto missingIssues = missing.GetIssues().ToOneLineString();
         SubstGlobal(missingIssues, "OptEnableOlapSortedReadMissing", "OptEnableOlapSortedRead");
-        UNIT_ASSERT_C(NBackup::IsUnknownOlapSortedReadPragma(TStringBuf(missingIssues.data(), missingIssues.size())), missingIssues);
+        UNIT_ASSERT_C(NYdb::NBackup::IsUnknownOlapSortedReadPragma(TStringBuf(missingIssues.data(), missingIssues.size())), missingIssues);
 
         ExecuteQuery(session, Sprintf(R"(
                 CREATE TABLE `%s` (
@@ -3932,9 +3932,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             ExecuteQuery(session, query);
         }
 
-        const TString fullScan = TString(NBackup::OlapSortedReadPragmaSql) + Sprintf(
+        const TString fullScan = TString(NYdb::NBackup::OlapSortedReadPragmaSql) + Sprintf(
             "SELECT `k`, `subkey`, `value` FROM `%s` ORDER BY `k`, `subkey`;", table);
-        const TString resume = TString(NBackup::OlapSortedReadPragmaSql) + Sprintf(R"(
+        const TString resume = TString(NYdb::NBackup::OlapSortedReadPragmaSql) + Sprintf(R"(
                 DECLARE $pk AS Tuple<Uint64, Uint64>;
                 SELECT `k`, `subkey`, `value` FROM `%s`
                 WHERE (`k`, `subkey`) > $pk
@@ -4053,7 +4053,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
             // runs the dump's read query and returns the values and the keys of the rows it produced, in order
             const auto readFrom = [&](const TMaybe<TValue>& lastWrittenPK) {
-                const auto [query, params] = NBackup::BuildSelectQueryAndParams(desc, c.Table, lastWrittenPK);
+                const auto [query, params] = NYdb::NBackup::BuildSelectQueryAndParams(desc, c.Table, lastWrittenPK);
                 const auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), "query:\n" << query << "\nissues:\n" << result.GetIssues().ToString());
                 TVector<TString> values;

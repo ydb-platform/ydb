@@ -4,6 +4,7 @@
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
+#include <ydb/core/backup/common/table_checksum_factory.h>
 #include <ydb/core/kqp/common/warmup/warmup.h>
 #include <ydb/core/kqp/common/dynamic_function_registry/dynamic_function_registry.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -1627,6 +1628,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     if (pathMapping.RulesSize()) {
         AppData->SetPathNormalizer(std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping, Counters));
     }
+    AppData->TableChecksumFactory = &NBackup::GetTableChecksumFactory();
     AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;
     if (ModuleFactories && !ModuleFactories->PersQueueMirrorReaderFactory && runConfig.AppConfig.GetFeatureFlags().GetEnableInsecureMirrorFactory()) {

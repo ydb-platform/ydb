@@ -1681,8 +1681,11 @@ void TDataShard::ScheduleRemoveAbandonedSchemaSnapshots() {
 }
 
 void TDataShard::PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperation &op) {
-    db.Table<Schema::SchemaOperations>().Key(op.TxId).Update(
-        NIceDb::TUpdate<Schema::SchemaOperations::Success>(op.Success),
+    auto row = db.Table<Schema::SchemaOperations>().Key(op.TxId);
+    if (op.IsRestore()) {
+        row.Update(NIceDb::TUpdate<Schema::SchemaOperations::PlanStep>(op.PlanStep));
+    }
+    row.Update(NIceDb::TUpdate<Schema::SchemaOperations::Success>(op.Success),
         NIceDb::TUpdate<Schema::SchemaOperations::Error>(op.Error),
         NIceDb::TUpdate<Schema::SchemaOperations::DataSize>(op.BytesProcessed),
         NIceDb::TUpdate<Schema::SchemaOperations::Rows>(op.RowsProcessed)

@@ -105,6 +105,15 @@ NKikimrPQ::TPQTabletConfig MakeSplitTabletConfig() {
     return config;
 }
 
+NKikimrPQ::TPQTabletConfig MakeSplitTabletConfigWithChildCreatedInVersion(ui64 createVersion, ui64 currentVersion) {
+    auto config = MakeSplitTabletConfig();
+    auto& child = *config.MutablePartitions(2);
+    UNIT_ASSERT_VALUES_EQUAL(child.GetPartitionId(), 2);
+    child.SetCreateVersion(createVersion);
+    config.SetVersion(currentVersion);
+    return config;
+}
+
 NKikimrPQ::TPartitions MakeParentPartitionsData() {
     NKikimrPQ::TPartitions data;
     auto& parent = *data.AddPartition();
@@ -138,6 +147,22 @@ Y_UNIT_TEST_SUITE(TExplicitMessageGroupsTest) {
     Y_UNIT_TEST(ShouldRegisterOnlyIntersectingGroupsWhenGroupsHaveKeyRanges) {
         // given
         const auto tabletConfig = MakeTabletConfig(true);
+        const auto bootstrapConfig = MakeBootstrapConfig(true);
+
+        // when
+        const auto groups = CreateExplicitMessageGroups(bootstrapConfig, {}, tabletConfig, TPartitionGraph(), 1);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(GetGroupIds(groups), "ds2");
+    }
+
+    Y_UNIT_TEST(ShouldRegisterIntersectingBootstrapGroupsWhenTopicIsCreated) {
+        // given
+        auto tabletConfig = MakeTabletConfig(true);
+        tabletConfig.SetVersion(0);
+        for (auto& partition : *tabletConfig.MutablePartitions()) {
+            partition.SetCreateVersion(1);
+        }
         const auto bootstrapConfig = MakeBootstrapConfig(true);
 
         // when
@@ -188,15 +213,6 @@ Y_UNIT_TEST_SUITE(TExplicitMessageGroupsTest) {
         // then
         UNIT_ASSERT_VALUES_EQUAL(GetGroupIds(groups), "ds1,ds2");
         UNIT_ASSERT_VALUES_EQUAL(groups->at("ds1").SeqNo, 5);
-    }
-
-    NKikimrPQ::TPQTabletConfig MakeSplitTabletConfigWithChildCreatedInVersion(ui64 createVersion, ui64 currentVersion) {
-        auto config = MakeSplitTabletConfig();
-        auto& child = *config.MutablePartitions(2);
-        UNIT_ASSERT_VALUES_EQUAL(child.GetPartitionId(), 2);
-        child.SetCreateVersion(createVersion);
-        config.SetVersion(currentVersion);
-        return config;
     }
 
     Y_UNIT_TEST(ShouldInheritParentGroupsWhenTopicVersionCreatesTheChild) {

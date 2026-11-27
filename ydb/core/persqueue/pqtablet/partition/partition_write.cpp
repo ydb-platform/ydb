@@ -950,7 +950,8 @@ void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const T
             if (Config.GetSplitByPartitionKey() && it->second.KeyRange) {
                 NKikimrPQ::TPartitionKeyRange keyRange;
                 it->second.KeyRange->Serialize(keyRange);
-                if (body.KeyRange && body.KeyRange->SerializeAsString() != keyRange.SerializeAsString()) {
+                if (body.KeyRange && (body.KeyRange->GetFromBound() != keyRange.GetFromBound()
+                        || body.KeyRange->GetToBound() != keyRange.GetToBound())) {
                     return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
                         "Key range does not match the split registration");
                 }

@@ -26,6 +26,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/scope.h>
 #include <util/generic/string.h>
+#include <util/string/join.h>
 #include <util/system/types.h>
 
 #include "make_config.h"
@@ -434,6 +435,8 @@ protected:
                                TString message,
                                const TActorId& suppPartitionId);
     void WaitForCalcPredicateResult(ui64 txId, bool predicate);
+
+    void RegisterChildBySplit(const NKikimrPQ::TPartitionKeyRange& childRange);
 
     // OldPlanStep*: partition meta ahead of commit (stale SerializedTx persist before TEvTxDone).
     static constexpr ui64 StaleReplayMetaPlanStep = 99999;
@@ -1484,6 +1487,23 @@ void TPartitionFixture::AssertStaleMetaKvHasTxKey(
         }
     }
     UNIT_ASSERT_C(false, failCtx << ": missing CmdWrite for serialized tx key " << expectedKey);
+}
+
+void TPartitionFixture::RegisterChildBySplit(const NKikimrPQ::TPartitionKeyRange& childRange)
+{
+    SendEvent(new TEvPQ::TEvRegisterMessageGroup(1, "parent", Nothing(), 0, false));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 1});
+
+    TVector<TEvPQ::TEvSplitMessageGroup::TDeregisterBody> parents;
+    parents.emplace_back("parent");
+    TVector<TEvPQ::TEvSplitMessageGroup::TRegisterBody> children;
+    children.emplace_back("child", childRange, 0, false);
+    SendEvent(new TEvPQ::TEvSplitMessageGroup(2, std::move(parents), std::move(children)));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 2});
 }
 
 void TPartitionFixture::SendChangePartitionConfig(const TConfigParams& config)
@@ -2753,44 +2773,114 @@ void PutMessagesInNewHead(THead& newHead, ui64 offset, TVector<TClientBlob> mess
     newHead.AddBatch(batch);
 }
 
+TString SerializeKey(ui64 value) {
+    return TSerializedCellVec::Serialize({TCell::Make(value)});
+}
+
+NKikimrPQ::TPartitionKeyRange MakeKeyRange(TMaybe<ui64> fromBound, TMaybe<ui64> toBound) {
+    NKikimrPQ::TPartitionKeyRange range;
+    if (fromBound) {
+        range.SetFromBound(SerializeKey(*fromBound));
+    }
+    if (toBound) {
+        range.SetToBound(SerializeKey(*toBound));
+    }
+    return range;
+}
+
+NKikimrPQ::TMessageGroupInfo GetWrittenMessageGroup(const TEvKeyValue::TEvRequest& request, const TString& id) {
+    const auto* write = FindIfPtr(request.Record.GetCmdWrite(), [&](const auto& cmd) {
+        const auto& key = cmd.GetKey();
+        return key.size() > TKeyPrefix::MarkedSize() && key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkProtoSourceId
+            && key.substr(TKeyPrefix::MarkedSize()) == id;
+    });
+    UNIT_ASSERT(write);
+    NKikimrPQ::TMessageGroupInfo info;
+    UNIT_ASSERT(info.ParseFromString(write->GetValue()));
+    return info;
+}
+
+TString GetWrittenMessageGroupIds(const TEvKeyValue::TEvRequest& request, ui32 partitionId) {
+    const TString prefixKey = TKeyPrefix(TKeyPrefix::TypeInfo, TPartitionId(partitionId), TKeyPrefix::MarkProtoSourceId).ToString();
+
+    TVector<TString> ids;
+    for (const auto& cmd : request.Record.GetCmdWrite()) {
+        if (cmd.GetKey().StartsWith(prefixKey)) {
+            ids.push_back(cmd.GetKey().substr(prefixKey.size()));
+        }
+    }
+    Sort(ids);
+    return JoinSeq(",", ids);
+}
+
+NKikimrPQ::TPQTabletConfig MakeSplitByPartitionKeyTabletConfig() {
+    NKikimrPQ::TPQTabletConfig config;
+    config.SetVersion(2);
+    config.SetSplitByPartitionKey(true);
+    config.MutablePartitionStrategy()->SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig::CAN_SPLIT);
+    auto& key = *config.AddPartitionKeySchema();
+    key.SetName("key");
+    key.SetTypeId(NScheme::NTypeIds::Uint64);
+
+    auto addPartition = [&](ui32 id, ui64 createVersion, TMaybe<ui64> fromBound, TMaybe<ui64> toBound) {
+        for (auto* partition : {config.AddPartitions(), config.AddAllPartitions()}) {
+            partition->SetPartitionId(id);
+            partition->SetCreateVersion(createVersion);
+            *partition->MutableKeyRange() = MakeKeyRange(fromBound, toBound);
+        }
+    };
+    addPartition(0, 1, Nothing(), 100);
+    addPartition(1, 2, 100, 200);
+    return config;
+}
+
+NKikimrPQ::TBootstrapConfig MakeKeyRangeBootstrapConfig() {
+    NKikimrPQ::TBootstrapConfig config;
+    auto addGroup = [&](const TString& id, TMaybe<ui64> fromBound, TMaybe<ui64> toBound) {
+        auto& group = *config.AddExplicitMessageGroups();
+        group.SetId(id);
+        *group.MutableKeyRange() = MakeKeyRange(fromBound, toBound);
+    };
+    addGroup("ds1", Nothing(), 100);
+    addGroup("ds2", 100, 200);
+    addGroup("ds3", 200, Nothing());
+    return config;
+}
+
 } // namespace
 
 Y_UNIT_TEST_F(ShouldPreserveSourceKeyRangeWhenSplitRegistrationIsConfirmed, TPartitionFixture)
 {
     // given
     CreatePartition({}, {.SplitByPartitionKey = true});
-    SendEvent(new TEvPQ::TEvRegisterMessageGroup(1, "parent", Nothing(), 0, false));
-    WaitCmdWrite();
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProxyResponse({.Cookie = 1});
-
-    const ui64 boundary = 50;
-    const TString upperBound = TSerializedCellVec::Serialize({TCell::Make(boundary)});
-    TMaybe<NKikimrPQ::TPartitionKeyRange> childRange;
-    childRange.ConstructInPlace().SetToBound(upperBound);
-    TVector<TEvPQ::TEvSplitMessageGroup::TDeregisterBody> parents;
-    parents.emplace_back("parent");
-    TVector<TEvPQ::TEvSplitMessageGroup::TRegisterBody> children;
-    children.emplace_back("child", std::move(childRange), 0, false);
-    SendEvent(new TEvPQ::TEvSplitMessageGroup(2, std::move(parents), std::move(children)));
-    WaitCmdWrite();
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProxyResponse({.Cookie = 2});
+    RegisterChildBySplit(MakeKeyRange(Nothing(), 50));
 
     // when
     SendEvent(new TEvPQ::TEvRegisterMessageGroup(3, "child", Nothing(), 0, true));
 
     // then
     auto write = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
-    const auto* group = FindIfPtr(write->Record.GetCmdWrite(), [](const auto& cmd) {
-        const auto& key = cmd.GetKey();
-        return key.size() > TKeyPrefix::MarkedSize() && key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkProtoSourceId
-            && key.substr(TKeyPrefix::MarkedSize()) == "child";
-    });
-    UNIT_ASSERT(group);
-    NKikimrPQ::TMessageGroupInfo info;
-    UNIT_ASSERT(info.ParseFromString(group->GetValue()));
-    UNIT_ASSERT_VALUES_EQUAL(info.GetKeyRange().GetToBound(), upperBound);
+    UNIT_ASSERT_VALUES_EQUAL(GetWrittenMessageGroup(*write, "child").GetKeyRange().GetToBound(), SerializeKey(50));
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 3});
+}
+
+Y_UNIT_TEST_F(ShouldConfirmSplitRegistrationWhenUpperBoundIsPresentButEmpty, TPartitionFixture)
+{
+    // given
+    CreatePartition({}, {.SplitByPartitionKey = true});
+    RegisterChildBySplit(MakeKeyRange(50, Nothing()));
+    auto confirmationRange = MakeKeyRange(50, Nothing());
+    confirmationRange.SetToBound(TString());
+
+    // when
+    SendEvent(new TEvPQ::TEvRegisterMessageGroup(3, "child", std::move(confirmationRange), 0, true));
+
+    // then
+    auto write = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
+    const auto keyRange = GetWrittenMessageGroup(*write, "child").GetKeyRange();
+    UNIT_ASSERT_VALUES_EQUAL(keyRange.GetFromBound(), SerializeKey(50));
+    UNIT_ASSERT(!keyRange.HasToBound());
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProxyResponse({.Cookie = 3});
 }
@@ -2799,29 +2889,10 @@ Y_UNIT_TEST_F(ShouldRejectSplitRegistrationConfirmationWhenKeyRangeDiffers, TPar
 {
     // given
     CreatePartition({}, {.SplitByPartitionKey = true});
-    SendEvent(new TEvPQ::TEvRegisterMessageGroup(1, "parent", Nothing(), 0, false));
-    WaitCmdWrite();
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProxyResponse({.Cookie = 1});
-
-    const ui64 boundary = 50;
-    TMaybe<NKikimrPQ::TPartitionKeyRange> childRange;
-    childRange.ConstructInPlace().SetToBound(TSerializedCellVec::Serialize({TCell::Make(boundary)}));
-    TVector<TEvPQ::TEvSplitMessageGroup::TDeregisterBody> parents;
-    parents.emplace_back("parent");
-    TVector<TEvPQ::TEvSplitMessageGroup::TRegisterBody> children;
-    children.emplace_back("child", std::move(childRange), 0, false);
-    SendEvent(new TEvPQ::TEvSplitMessageGroup(2, std::move(parents), std::move(children)));
-    WaitCmdWrite();
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProxyResponse({.Cookie = 2});
-
-    const ui64 otherBoundary = 100;
-    TMaybe<NKikimrPQ::TPartitionKeyRange> confirmationRange;
-    confirmationRange.ConstructInPlace().SetToBound(TSerializedCellVec::Serialize({TCell::Make(otherBoundary)}));
+    RegisterChildBySplit(MakeKeyRange(Nothing(), 50));
 
     // when
-    SendEvent(new TEvPQ::TEvRegisterMessageGroup(3, "child", std::move(confirmationRange), 0, true));
+    SendEvent(new TEvPQ::TEvRegisterMessageGroup(3, "child", MakeKeyRange(Nothing(), 100), 0, true));
 
     // then
     WaitErrorResponse({.Cookie = 3, .ErrorCode = NPersQueue::NErrorCode::BAD_REQUEST});
@@ -2832,44 +2903,40 @@ Y_UNIT_TEST_F(ShouldStoreConfirmedKeyRangeWhenTopicIsNotSplitByPartitionKey, TPa
 {
     // given
     CreatePartition();
-    SendEvent(new TEvPQ::TEvRegisterMessageGroup(1, "parent", Nothing(), 0, false));
-    WaitCmdWrite();
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProxyResponse({.Cookie = 1});
-
-    const ui64 boundary = 50;
-    TMaybe<NKikimrPQ::TPartitionKeyRange> childRange;
-    childRange.ConstructInPlace().SetToBound(TSerializedCellVec::Serialize({TCell::Make(boundary)}));
-    TVector<TEvPQ::TEvSplitMessageGroup::TDeregisterBody> parents;
-    parents.emplace_back("parent");
-    TVector<TEvPQ::TEvSplitMessageGroup::TRegisterBody> children;
-    children.emplace_back("child", std::move(childRange), 0, false);
-    SendEvent(new TEvPQ::TEvSplitMessageGroup(2, std::move(parents), std::move(children)));
-    WaitCmdWrite();
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProxyResponse({.Cookie = 2});
-
-    const ui64 otherBoundary = 100;
-    const TString confirmedUpperBound = TSerializedCellVec::Serialize({TCell::Make(otherBoundary)});
-    TMaybe<NKikimrPQ::TPartitionKeyRange> confirmationRange;
-    confirmationRange.ConstructInPlace().SetToBound(confirmedUpperBound);
+    RegisterChildBySplit(MakeKeyRange(Nothing(), 50));
 
     // when
-    SendEvent(new TEvPQ::TEvRegisterMessageGroup(3, "child", std::move(confirmationRange), 0, true));
+    SendEvent(new TEvPQ::TEvRegisterMessageGroup(3, "child", MakeKeyRange(Nothing(), 100), 0, true));
 
     // then
     auto write = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
-    const auto* group = FindIfPtr(write->Record.GetCmdWrite(), [](const auto& cmd) {
-        const auto& key = cmd.GetKey();
-        return key.size() > TKeyPrefix::MarkedSize() && key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkProtoSourceId
-            && key.substr(TKeyPrefix::MarkedSize()) == "child";
-    });
-    UNIT_ASSERT(group);
-    NKikimrPQ::TMessageGroupInfo info;
-    UNIT_ASSERT(info.ParseFromString(group->GetValue()));
-    UNIT_ASSERT_VALUES_EQUAL(info.GetKeyRange().GetToBound(), confirmedUpperBound);
+    UNIT_ASSERT_VALUES_EQUAL(GetWrittenMessageGroup(*write, "child").GetKeyRange().GetToBound(), SerializeKey(100));
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProxyResponse({.Cookie = 3});
+}
+
+Y_UNIT_TEST_F(ShouldPersistOnlyIntersectingGroupsOfNewPartitionsWhenStaleConfigTxSplitsByPartitionKey, TPartitionFixture)
+{
+    // given
+    const TPartitionId partition{3};
+    const ui64 step = 12345;
+    const ui64 txId = 67890;
+    CreatePartitionStaleReplayAhead(partition, 0, 10);
+
+    // when
+    SendCommitTx(step, txId, {
+        .SerializedTx = MakeStaleSerializedTxBody(partition, step, txId),
+        .TabletConfig = MakeSplitByPartitionKeyTabletConfig(),
+        .BootstrapConfig = MakeKeyRangeBootstrapConfig(),
+        .PartitionsData = NKikimrPQ::TPartitions(),
+    });
+
+    // then
+    auto kv = GrabStaleMetaKvRequest("expected KV request with stale tx meta persist");
+    UNIT_ASSERT_VALUES_EQUAL(GetWrittenMessageGroupIds(*kv, 0), "");
+    UNIT_ASSERT_VALUES_EQUAL(GetWrittenMessageGroupIds(*kv, 1), "ds2");
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitCommitTxDone({.TxId = txId, .Partition = partition});
 }
 
 // FROM_WRITTEN_AT must read a multi-message blob and commit to the first message

@@ -398,7 +398,7 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
                 "runner": cls(),
                 "schedule": sched,
                 "ui_group": _BRIDGE_UI_GROUP,
-                # Per-type /api/schedule still uses this planner. The boundary scheduler does not:
+                # Compatibility planner metadata; explicit target dispatch uses pile_inject_fanout:
                 # target_kind PILE fans out over the pile it already chose (see pile_inject_fanout).
                 "planner_factory": _bridge_pile_fanout_planner_factory,
                 "target_kind": TargetKind.PILE,

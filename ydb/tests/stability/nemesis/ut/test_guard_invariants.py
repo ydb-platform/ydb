@@ -96,7 +96,11 @@ def _scheduler(guard, inventory, dispatched, probe, rng, **overrides):
         rng=rng,
     )
     kwargs.update(overrides)
-    return BoundaryNemesisScheduler(**kwargs)
+    from inspect import signature
+    from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.fault_engine import FaultEngine
+    engine = FaultEngine(**{k: v for k, v in kwargs.items() if k in signature(FaultEngine).parameters})
+    return BoundaryNemesisScheduler(engine=engine, **{
+        k: v for k, v in kwargs.items() if k in signature(BoundaryNemesisScheduler).parameters})
 
 
 def _assert_within_budget(guard, where: str) -> None:
@@ -150,6 +154,9 @@ def test_budget_is_never_exceeded_across_many_ticks(topology, seed):
 
 
 class ProbeStub:
+    def check_workload(self):
+        pass
+
     def start(self) -> None:
         pass
 

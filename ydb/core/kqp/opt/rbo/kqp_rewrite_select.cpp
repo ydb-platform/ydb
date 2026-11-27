@@ -553,6 +553,10 @@ TExprNode::TPtr BuildViewIndexOpRead(const TKqlReadTableIndexRanges& read, TStri
             return nullptr;
     }
 
+    if (kqpCtx.Config->GetEnableFallbackOnRowTables()) {
+        Y_ENSURE(false, "Fallback due to row table flag");
+    }
+
     // clang-format off
     return Build<TKqpOpRead>(ctx, pos)
         .Table(read.Table())

@@ -294,6 +294,51 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(remaining.GetResultSet(0)), "[[2;[21]];[1;[10]]]");
     }
 
+    Y_UNIT_TEST_QUAD(ViewIndexRowTableFallback, FallbackOnRowTables, FallbackToYql) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(FallbackToYql);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(FallbackOnRowTables);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        CreateSimpleTable(kikimr);
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto inserted = session.ExecuteQuery(
+            "INSERT INTO `/Root/t1` (a, b, c) VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300);",
+            NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto indexed = tableSession.ExecuteSchemeQuery(
+            "ALTER TABLE `/Root/t1` ADD INDEX idx_b GLOBAL ON (b);").GetValueSync();
+        UNIT_ASSERT_C(indexed.IsSuccess(), indexed.GetIssues().ToString());
+
+        const std::vector<std::pair<TString, TString>> cases = {
+            // Covering and non-covering reads, with and without index ranges.
+            {"SELECT a FROM `/Root/t1` VIEW idx_b WHERE b = 20;", "[[2]]"},
+            {"SELECT a, c FROM `/Root/t1` VIEW idx_b WHERE b = 20;", "[[2;[200]]]"},
+            {"SELECT a FROM `/Root/t1` VIEW idx_b ORDER BY a;", "[[1];[2];[3]]"},
+            {"SELECT a, c FROM `/Root/t1` VIEW idx_b ORDER BY a;", "[[1;[100]];[2;[200]];[3;[300]]]"},
+        };
+        for (const auto& [query, expected] : cases) {
+            const auto before = GetNewRBOCompileCounters(kikimr);
+            auto selected = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(selected.IsSuccess(), !FallbackOnRowTables || FallbackToYql,
+                query << ": " << selected.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(HasFallbackIssue(selected.GetIssues()), FallbackOnRowTables && FallbackToYql,
+                query << ": " << selected.GetIssues().ToString());
+            if (FallbackOnRowTables) {
+                UNIT_ASSERT_STRING_CONTAINS(selected.GetIssues().ToString(), "Fallback due to row table flag");
+            }
+            if (selected.IsSuccess()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(selected.GetResultSet(0)), expected, query);
+            }
+            const auto after = GetNewRBOCompileCounters(kikimr);
+            UNIT_ASSERT_VALUES_EQUAL_C(after.first, before.first + (FallbackOnRowTables ? 0 : 1), query);
+            UNIT_ASSERT_VALUES_EQUAL_C(after.second, before.second + (FallbackOnRowTables ? 1 : 0), query);
+        }
+    }
+
     Y_UNIT_TEST(RowTableFallbackPreservesTempTables) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

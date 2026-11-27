@@ -15,6 +15,6 @@ class IAuditCtx;
 // logins log
 void AuditLogLogin(IAuditCtx* ctx, const TString& database, const Ydb::Auth::LoginRequest& request,
                    const Ydb::Auth::LoginResponse& response, const TString& errorDetails,
-                   const TString& sanitizedToken, bool isAdmin = false);
+                   const TString& sanitizedToken, bool isAdmin = false, const TString& userSID = {});
 
 } // namespace NKikimr::NGRpcService

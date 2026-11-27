@@ -582,14 +582,15 @@ message ChangefeedFormat {
 }
 
 message ChangefeedCompression {
-    enum Codec {
-        CODEC_NONE = 0;
-        CODEC_ZSTD = 1;
+    message Zstd {
+        // ZSTD compression level. If unspecified, level 3 is used.
+        optional int32 level = 2 [(Ydb.value) = "[1; 22]"];
     }
 
-    Codec codec = 1;
-    // ZSTD compression level. If unspecified, level 3 is used.
-    optional int32 level = 2 [(Ydb.value) = "[1; 22]"];
+    oneof codec {
+        google.protobuf.Empty none = 1;
+        Zstd zstd = 2;
+    }
 }
 
 message Changefeed {

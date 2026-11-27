@@ -230,6 +230,22 @@ class TestBlobSan:
                            + self._trace(['block-4-2'], data))
         return self._canonical_file('output.txt', '\n\n'.join(results) + '\n')
 
+    def test_block82(self):
+        # PickSubgroup uses Hash() % 12 == 5 for this blob.
+        order = tuple(range(5, 12)) + tuple(range(5))
+        for num_parts in (10, 8, 7):
+            data = snapshot(keep=1, barrier='soft', indexes=tuple(range(12)),
+                            subgroup_order=order, part_count=10, known_nodes=tuple(range(10)),
+                            local_realms=(), local_parts={order[node]: (node,) for node in range(num_parts)})
+            result = self._trace(['block-8-2'], data, capture_stdout=True)
+            assert 'Exit Status: 0' in result
+            if num_parts == 10:
+                # The dump includes the two high parts without truncating ingress.
+                assert 'local: 0 0 0 0 0 0 0 0 1 0' in result
+                assert 'local: 0 0 0 0 0 0 0 0 0 1' in result
+            assert ('Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]' in result) == (num_parts == 8)
+            assert ('TrashSize# 560' in result) == (num_parts == 7)
+
     def test_write2x2_candidates(self):
         cases = [
             ('above barriers', {},

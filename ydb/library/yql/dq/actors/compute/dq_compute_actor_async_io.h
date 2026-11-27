@@ -330,6 +330,7 @@ public:
         size_t MaxKeysInRequest;
         const bool IsMultiMatches;
         const TCollectStatsLevel StatsLevel;
+        const TMaybe<TString> PoolId;
     };
 
     struct TSinkArguments {

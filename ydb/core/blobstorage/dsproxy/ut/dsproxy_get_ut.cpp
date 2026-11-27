@@ -31,12 +31,32 @@ do {                            \
 
 Y_UNIT_TEST_SUITE(TDSProxyGetTest) {
 
+Y_UNIT_TEST(MirrorReadChoiceReplayRejectsIncompleteCapture) {
+    TReadChoiceTrace choice;
+    choice.Candidates = {{7, 0, 10, true, false}, {7, 1, 11, true, false},
+        {1, 2, 12, false, false}};
+    auto replay = ReplayMirrorReadChoice(choice);
+    UNIT_ASSERT(replay.Valid && replay.Selected && *replay.Selected == 0);
+    choice.Candidates[0].Eligible = false;
+    replay = ReplayMirrorReadChoice(choice);
+    UNIT_ASSERT(replay.Valid && replay.Selected && *replay.Selected == 1);
+    choice.Candidates[1].Eligible = false;
+    replay = ReplayMirrorReadChoice(choice);
+    UNIT_ASSERT(replay.Valid && !replay.Selected);
+    choice.Candidates[1].SubgroupIndex = 0;
+    UNIT_ASSERT(!ReplayMirrorReadChoice(choice).Valid);
+    choice.Candidates[1].SubgroupIndex = 1;
+    choice.Complete = false;
+    UNIT_ASSERT(!ReplayMirrorReadChoice(choice).Valid);
+}
+
 Y_UNIT_TEST(VGetTracePreservesPerItemNoData) {
-    for (const ui8 level : {0, 12, 13}) {
+    for (const ui8 level : {0, 12, 13, 14}) {
         TTestBasicRuntime runtime(1, false);
         SetupRuntime(runtime);
         TDSProxyEnv env;
-        env.Configure(runtime, TBlobStorageGroupType(TErasureType::ErasureNone), 0, 0);
+        env.Configure(runtime, TBlobStorageGroupType(level == 14
+            ? TErasureType::ErasureMirror3dc : TErasureType::ErasureNone), 0, 0);
         TTestState state(runtime, env.Info);
         const auto uploader = runtime.AllocateEdgeActor();
         runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploader);
@@ -65,7 +85,37 @@ Y_UNIT_TEST(VGetTracePreservesPerItemNoData) {
         }
         runtime.SimulateSleep(TDuration::MilliSeconds(10));
         bool detailed = false;
+        bool replayed = false;
         for (const auto& span : spans) {
+            for (const auto& event : span.events()) {
+                if (event.name() != "Mirror read candidate choice") {
+                    continue;
+                }
+                TReadChoiceTrace choice;
+                for (const auto& attr : event.attributes()) {
+                    if (attr.key() == "candidates_complete") {
+                        choice.Complete = attr.value().bool_value();
+                    } else if (attr.key() == "selected_subgroup_index") {
+                        choice.Selected = attr.value().int_value();
+                    } else if (attr.key() == "candidates") {
+                        for (const auto& value : attr.value().array_value().values()) {
+                            TReadCandidateTrace candidate{};
+                            for (const auto& field : value.kvlist_value().values()) {
+                                if (field.key() == "score") { candidate.Score = field.value().int_value(); }
+                                if (field.key() == "subgroup_index") { candidate.SubgroupIndex = field.value().int_value(); }
+                                if (field.key() == "disk_order") { candidate.DiskOrder = field.value().int_value(); }
+                                if (field.key() == "eligible") { candidate.Eligible = field.value().bool_value(); }
+                                if (field.key() == "slow") { candidate.Slow = field.value().bool_value(); }
+                            }
+                            choice.Candidates.push_back(candidate);
+                        }
+                    }
+                }
+                const auto replay = ReplayMirrorReadChoice(choice);
+                UNIT_ASSERT(replay.Valid);
+                UNIT_ASSERT(replay.Selected == choice.Selected);
+                replayed = true;
+            }
             if (span.name() != "DSProxy VGet roundtrip") {
                 continue;
             }
@@ -84,6 +134,7 @@ Y_UNIT_TEST(VGetTracePreservesPerItemNoData) {
             UNIT_ASSERT(sawNoData);
         }
         UNIT_ASSERT_VALUES_EQUAL(detailed, level >= 13);
+        UNIT_ASSERT_VALUES_EQUAL(replayed, level >= 14);
     }
 }
 

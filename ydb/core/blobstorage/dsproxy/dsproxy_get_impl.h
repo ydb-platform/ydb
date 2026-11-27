@@ -64,6 +64,8 @@ class TGetImpl {
     TAccelerationParams AccelerationParams;
 
     THistory History;
+    const char* TraceStrategy = "unknown";
+    ui64 TraceDecisionSequence = 0;
 
     bool CheckVDiskReadFailure(const TVDiskID& vdisk, NKikimrProto::EReplyStatus status);
 
@@ -336,6 +338,9 @@ protected:
     bool Step(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &outVPuts,
             TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult) {
+        if (Blackboard.TraceReadChoice || Blackboard.TraceSlowDisks) {
+            ++TraceDecisionSequence;
+        }
         switch (auto outcome = RunStrategies(logCtx)) {
             case EStrategyOutcome::IN_PROGRESS: {
                 const ui32 numRequests = outVGets.size() + outVPuts.size();

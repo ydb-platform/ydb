@@ -203,6 +203,83 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         return index;
     }
 
+    NWilson::TKeyValueList TraceDecisionAttributes(const TBlobState& state) {
+        NWilson::TKeyValueList attrs;
+        attrs["capture_version"] = i64(1);
+        attrs["decision_id"] = static_cast<i64>(GetImpl.TraceDecisionSequence);
+        attrs["strategy"] = TString(GetImpl.TraceStrategy);
+        attrs["group_generation"] = static_cast<i64>(Info->GroupGeneration);
+        attrs["erasure"] = static_cast<i64>(Info->Type.GetErasure());
+        if (const auto index = TraceBlobIndex(state.Id)) {
+            attrs["blob_index"] = static_cast<i64>(*index);
+        } else {
+            attrs["blob_index_truncated"] = true;
+        }
+        attrs["full_request_replay_supported"] = false;
+        return attrs;
+    }
+
+    void TraceReadChoice(const TBlobState& state, const TReadChoiceTrace& choice) {
+        if (auto* owner = Span.GetWilsonSpanPtr(); owner && *owner) {
+            TraceEvents.Event(*owner, 14, "Mirror read candidate choice", [&] {
+                auto attrs = TraceDecisionAttributes(state);
+                attrs["replay_scope"] = TString("mirror3dc_candidate_choice");
+                attrs["candidates_complete"] = choice.Complete;
+                attrs["new_request"] = choice.NewRequest;
+                attrs["selected"] = bool(choice.Selected);
+                if (choice.Selected) {
+                    attrs["selected_subgroup_index"] = static_cast<i64>(*choice.Selected);
+                }
+                NWilson::TArrayValue candidates;
+                for (const auto& candidate : choice.Candidates) {
+                    NWilson::TKeyValueList item;
+                    item["score"] = static_cast<i64>(candidate.Score);
+                    item["subgroup_index"] = static_cast<i64>(candidate.SubgroupIndex);
+                    item["disk_order"] = static_cast<i64>(candidate.DiskOrder);
+                    item["eligible"] = candidate.Eligible;
+                    item["slow"] = candidate.Slow;
+                    candidates.emplace_back(std::move(item));
+                }
+                attrs["candidates"] = std::move(candidates);
+                return attrs;
+            });
+        }
+    }
+
+    void TraceSlowDisks(const TBlobState& state, const TDiskDelayPredictions& predictions,
+            ui64 threshold, bool isPut) {
+        if (auto* owner = Span.GetWilsonSpanPtr(); owner && *owner) {
+            TraceEvents.Event(*owner, 14, "Slow disk decision inputs", [&] {
+                auto attrs = TraceDecisionAttributes(state);
+                attrs["is_put"] = isPut;
+                attrs["prediction_age_known"] = false;
+                attrs["slow_threshold_ns"] = static_cast<i64>(threshold);
+                attrs["prediction_multiplier"] = double(AccelerationParams.PredictedDelayMultiplier);
+                attrs["slow_disk_threshold"] = double(AccelerationParams.SlowDiskThreshold);
+                attrs["max_slow_disks"] = static_cast<i64>(AccelerationParams.MaxNumOfSlowDisks);
+                attrs["queue_id"] = static_cast<i64>(isPut
+                    ? HandleClassToQueueId(GetImpl.Blackboard.PutHandleClass)
+                    : HandleClassToQueueId(GetImpl.Blackboard.GetHandleClass));
+                NWilson::TArrayValue disks;
+                for (const auto& prediction : predictions) {
+                    if (disks.size() == 32) {
+                        break;
+                    }
+                    const auto& disk = state.Disks[prediction.DiskIdx];
+                    NWilson::TKeyValueList item;
+                    item["subgroup_index"] = static_cast<i64>(prediction.DiskIdx);
+                    item["disk_order"] = static_cast<i64>(disk.OrderNumber);
+                    item["scaled_prediction_ns"] = static_cast<i64>(prediction.PredictedNs);
+                    item["slow"] = disk.IsSlow;
+                    disks.emplace_back(std::move(item));
+                }
+                attrs["predictions_truncated"] = predictions.size() > 32;
+                attrs["predictions"] = std::move(disks);
+                return attrs;
+            });
+        }
+    }
+
     void TraceVGetSent(const TEvBlobStorage::TEvVGet& event, ui32 disk, const char* cause) {
         auto* owner = Span.GetWilsonSpanPtr();
         if (!owner || !*owner || owner->GetTraceId().GetVerbosity() < 13) {
@@ -639,6 +716,15 @@ public:
         if (auto* wilson = Span.GetWilsonSpanPtr(); wilson && *wilson && wilson->GetTraceId().GetVerbosity() >= 13) {
             // Reuse the existing bounded cause-cookie mechanism for Wilson too.
             RootCauseTrack.IsOn = true;
+            if (wilson->GetTraceId().GetVerbosity() >= 14) {
+                GetImpl.Blackboard.TraceReadChoice = [this](const TBlobState& state, const TReadChoiceTrace& choice) {
+                    TraceReadChoice(state, choice);
+                };
+                GetImpl.Blackboard.TraceSlowDisks = [this](const TBlobState& state,
+                        const TDiskDelayPredictions& predictions, ui64 threshold, bool isPut) {
+                    TraceSlowDisks(state, predictions, threshold, isPut);
+                };
+            }
         }
     }
 

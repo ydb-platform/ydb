@@ -3,6 +3,7 @@
 
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/issue/yql_issue.h>
 
 #include <google/protobuf/util/time_util.h>
 
@@ -109,6 +110,7 @@ void ConvertItem(
     if (from.HasInitialScanProgress()) {
         to.mutable_stats()->set_initial_scan_progress(from.GetInitialScanProgress());
     }
+    to.mutable_issues()->CopyFrom(from.GetIssues());
 }
 
 void ConvertStats(

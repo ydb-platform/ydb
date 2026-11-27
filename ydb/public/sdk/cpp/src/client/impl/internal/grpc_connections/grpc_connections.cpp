@@ -604,6 +604,7 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
                     return NThreading::MakeFuture(std::move(result));
                 }
                 const bool expired = polling && result.DiscoveryStatus.Status == EStatus::CLIENT_DEADLINE_EXCEEDED;
+                const bool reset = polling && result.DiscoveryStatus.Status == EStatus::ABORTED;
                 if (!expired) {
                     if (strong->LongPolling && strong->DiscoveryMode == EDiscoveryMode::Sync) {
                         std::unique_lock lock(strong->LastDiscoveryStatusRWLock);
@@ -611,7 +612,7 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
                     }
                     strong->DiscoverySnapshotHash = result.DiscoveryStatus.Ok() ? std::string(result.Result.snapshot_hash()) : std::string{};
                 }
-                const bool repeat = expired || !strong->DiscoverySnapshotHash.empty();
+                const bool repeat = expired || reset || !strong->DiscoverySnapshotHash.empty();
                 result.RetryDiscovery = strong->LongPolling.exchange(repeat) && !repeat && !result.DiscoveryStatus.Ok();
                 if (repeat) {
                     const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - started);

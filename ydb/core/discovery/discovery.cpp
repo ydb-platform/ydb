@@ -4,6 +4,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/rediscovery.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -18,6 +19,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
 #include <util/random/shuffle.h>
+#include <util/string/cast.h>
 
 namespace NKikimr {
 
@@ -627,6 +629,7 @@ class TDiscoverer: public TActorBootstrapped<TDiscoverer> {
     std::shared_ptr<const NDiscovery::TListEndpointsOptions> Options;
     const bool WaitForChange;
     TString PollPath;
+    TMaybe<ui64> RediscoveryVersion;
 
     THolder<TEvDiscovery::TEvDiscoveryData> LookupResponse;
     THolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult> SchemeCacheResponse;
@@ -659,6 +662,9 @@ public:
     }
 
     void PassAway() override {
+        if (RediscoveryVersion) {
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove());
+        }
         if (!PollPath.empty()) {
             Send(CacheId, new TEvDiscovery::TEvCancelPoll(PollPath));
         }
@@ -678,6 +684,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDiscovery::TEvDiscoveryData, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -698,6 +705,17 @@ public:
         LookupResponse.Reset(ev->Release().Release());
 
         MaybeReply();
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev) {
+        if (RediscoveryVersion) {
+            for (const auto& attr : ev->Get()->Result->GetPathDescription().GetUserAttributes()) {
+                if (attr.GetKey() == RediscoveryAttribute && FromStringWithDefault<ui64>(attr.GetValue(), 0) > *RediscoveryVersion) {
+                    return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::REDISCOVERY_REQUESTED,
+                        "Rediscovery requested. Repeat ListEndpoints without a snapshot hash."));
+                }
+            }
+        }
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -745,6 +763,10 @@ public:
         }
 
         auto info = entry.DomainInfo;
+        if (WaitForChange && !ResolveResources) {
+            RediscoveryVersion = FromStringWithDefault<ui64>(entry.Attributes.Value(RediscoveryAttribute, TString()), 0);
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(info->DomainKey));
+        }
         if (NeedResolveResources(info)) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::DISCOVERY, "Resolve resources domain",
                 {"domainKey", info->DomainKey},
@@ -845,6 +867,7 @@ public:
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         entry.RedirectRequired = false;
         FillNavigateKey(id, entry);
+        entry.SyncVersion = WaitForChange && entry.RequestType == NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
         SchemeCacheResponse.Reset();

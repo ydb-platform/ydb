@@ -115,6 +115,8 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
             }
             LastUpdateTime_ = TInstant::Now().MicroSeconds();
             removed = Elector_.SetNewState(std::move(records));
+        } else if (result.NextPoll.Initialized() && result.DiscoveryStatus.Status == EStatus::ABORTED) {
+            removed = Elector_.SetNewState({});
         }
         if (result.NextPoll.Initialized() && result.DiscoveryStatus.Status == EStatus::CLIENT_DEADLINE_EXCEEDED) {
             result.DiscoveryStatus = {};

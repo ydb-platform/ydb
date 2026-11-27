@@ -10,8 +10,10 @@ import pytest
 import yatest.common
 from hamcrest import assert_that, is_, not_
 
+from ydb.public.api.grpc.draft.ydb_database_management_v1_pb2_grpc import DatabaseManagementServiceStub
 from ydb.public.api.grpc.ydb_discovery_v1_pb2_grpc import DiscoveryServiceStub
 from ydb.public.api.protos import ydb_discovery_pb2 as discovery
+from ydb.public.api.protos.draft import ydb_database_management_pb2 as database_management
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -77,15 +79,25 @@ def _discovery_snapshot(reply):
     return result
 
 
-@pytest.mark.parametrize("enabled", [False, True])
-def test_discovery_long_poll_hash(enabled):
+@pytest.fixture(scope="module", params=[False, True])
+def discovery_cluster(request):
+    enabled = request.param
     config = KikimrConfigGenerator(
-        nodes=2, erasure=types.Erasure.NONE,
+        nodes=2, erasure=types.Erasure.NONE, default_clusteradmin="root@builtin",
+        extra_grpc_services=["database_management"],
         extra_feature_flags=["enable_discovery_long_polling"] if enabled else [],
     )
+    cluster = KiKiMR(config)
+    cluster.start()
+    try:
+        yield cluster, enabled
+    finally:
+        cluster.stop()
+
+
+def test_discovery_long_poll_hash(discovery_cluster):
+    cluster, enabled = discovery_cluster
     with ExitStack() as resources:
-        cluster = KiKiMR(config).start()
-        resources.callback(cluster.stop)
         ports = {n.grpc_port for n in cluster.nodes.values()}
         rpcs = [DiscoveryServiceStub(resources.enter_context(grpc.insecure_channel(n.endpoint))).ListEndpoints
                 for n in cluster.nodes.values()]
@@ -119,6 +131,88 @@ def test_discovery_long_poll_hash(enabled):
         assert expired.value.code() == grpc.StatusCode.DEADLINE_EXCEEDED
         for poll in polls:
             assert poll.cancel()
+
+
+def test_trigger_rediscovery(discovery_cluster):
+    cluster, enabled = discovery_cluster
+    admin = "root@builtin"
+    with ExitStack() as resources:
+        channels = [resources.enter_context(grpc.insecure_channel(n.endpoint)) for n in cluster.nodes.values()]
+        rpcs = [DiscoveryServiceStub(channel).ListEndpoints for channel in channels]
+
+        management = DatabaseManagementServiceStub(channels[0])
+
+        def reset(database, token=admin):
+            metadata = [("x-ydb-auth-ticket", token)]
+            if database is not None:
+                metadata.append(("x-ydb-database", database))
+            return management.TriggerRediscovery(
+                database_management.TriggerRediscoveryRequest(), metadata=metadata, timeout=10, wait_for_ready=True).operation
+
+        if not enabled:
+            assert reset("/Root").status == StatusIds.UNSUPPORTED
+            return
+
+        assert reset("/Root").status == StatusIds.SUCCESS
+        shared = cluster.create_hostel_database("/Root/shared", {"hdd": 1}, token=admin)
+        slot, = cluster.register_and_start_slots(shared)
+        cluster.wait_tenant_up(shared, token=admin)
+        first, second = "/Root/first", "/Root/second"
+        owner = "first-owner@builtin"
+        for database, permissions in (
+            (first, ydb.ModifyPermissionsSettings().change_owner(owner)),
+            (second, ydb.ModifyPermissionsSettings().grant_permissions(owner, ["ydb.database.connect"])),
+        ):
+            cluster.create_serverless_database(database, hostel_db=shared, token=admin)
+            with ydb.Driver(ydb.DriverConfig(slot.endpoint, database, auth_token=admin)) as driver:
+                driver.wait(timeout=10)
+                driver.scheme_client.modify_permissions(database, permissions)
+
+        def snapshot(rpc, database):
+            return _discovery_snapshot(rpc(discovery.ListEndpointsRequest(database=database), timeout=5))
+
+        def boards_ready():
+            try:
+                return all({ep.port for ep in snapshot(rpc, db).endpoints} == {slot.grpc_port}
+                           for db in (first, second) for rpc in rpcs)
+            except (grpc.RpcError, AssertionError):
+                return False
+
+        assert wait_for(boards_ready, timeout_seconds=20)
+
+        def watch(db):
+            hashes = [snapshot(rpc, db).snapshot_hash for rpc in rpcs]
+            assert all(hashes)
+            calls = [rpc.future(discovery.ListEndpointsRequest(database=db, snapshot_hash=value), timeout=45)
+                     for rpc, value in zip(rpcs, hashes)]
+            return hashes, calls
+
+        def still_waiting(calls):
+            for call in calls:
+                with pytest.raises(grpc.FutureTimeoutError):
+                    call.result(timeout=0.5)
+
+        def trigger(db, caller, calls):
+            operation = reset(db, caller)
+            assert operation.ready and operation.status == StatusIds.SUCCESS, operation.issues
+            for call in calls:
+                reply = call.result(timeout=10).operation
+                assert reply.ready and reply.status == StatusIds.ABORTED and not reply.HasField("result")
+
+        first_hashes, first_calls = watch(first)
+        _, second_calls = watch(second)
+        for db in (None, ""):
+            assert reset(db).status == StatusIds.BAD_REQUEST
+        assert reset(second, owner).status == StatusIds.UNAUTHORIZED
+        still_waiting(first_calls + second_calls)
+        trigger(first, owner, first_calls)
+
+        fresh_hashes, fresh_calls = watch(first)
+        assert fresh_hashes == first_hashes
+        still_waiting(second_calls + fresh_calls)
+        trigger(second, admin, second_calls)
+        still_waiting(fresh_calls)
+        trigger(first, owner, fresh_calls)
 
 
 class TestDiscoveryExtEndpoint(object):

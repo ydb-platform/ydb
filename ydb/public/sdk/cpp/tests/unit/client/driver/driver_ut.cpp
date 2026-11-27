@@ -653,7 +653,8 @@ not-base64
             }
             resume.Signal();
             UNIT_ASSERT(session.Wait(TDuration::Seconds(10)));
-            UNIT_ASSERT_VALUES_EQUAL(session.GetValue().GetStatus(), keepsEndpoints || queued ? EStatus::SUCCESS : EStatus::UNAVAILABLE);
+            const auto emptyStatus = status == Ydb::StatusIds::ABORTED ? EStatus::ABORTED : EStatus::UNAVAILABLE;
+            UNIT_ASSERT_VALUES_EQUAL(session.GetValue().GetStatus(), keepsEndpoints || queued ? EStatus::SUCCESS : emptyStatus);
             UNIT_ASSERT(legacyReply.WaitT(TDuration::Seconds(10)));
             UNIT_ASSERT(!unexpectedPoll.WaitT(TDuration::MilliSeconds(500)));
             UNIT_ASSERT(client.CreateSession().GetValueSync().IsSuccess());
@@ -662,6 +663,10 @@ not-base64
 
     Y_UNIT_TEST(LongPollAfterEmptyList) {
         CheckLongPollRecovery(Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(LongPollAfterOperatorReset) {
+        CheckLongPollRecovery(Ydb::StatusIds::ABORTED);
     }
 
     Y_UNIT_TEST(LongPollUnavailableKeepsEndpoints) {

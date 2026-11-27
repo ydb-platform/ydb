@@ -147,6 +147,7 @@
 #include <ydb/services/distributed_storage/grpc_service.h>
 #include <ydb/services/test_shard/grpc_service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
+#include <ydb/services/ydb/ydb_database_management.h>
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/services/ydb/ydb_export.h>
 #include <ydb/services/ydb/ydb_import.h>
@@ -932,6 +933,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         names["cms"] = &hasCms;
         TServiceCfg hasMaintenance = services.empty();
         names["maintenance"] = &hasMaintenance;
+        TServiceCfg hasDatabaseManagement = false;
+        names["database_management"] = &hasDatabaseManagement;
         TServiceCfg hasKesus = services.empty();
         names["locking"] = names["kesus"] = &hasKesus;
         TServiceCfg hasMonitoring = services.empty();
@@ -1238,6 +1241,11 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         if (hasMaintenance) {
             server.AddService(new NGRpcService::TGRpcMaintenanceService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasMaintenance.IsRlAllowed()));
+        }
+
+        if (hasDatabaseManagement) {
+            server.AddService(new NGRpcService::TGRpcDatabaseManagementService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasDatabaseManagement.IsRlAllowed()));
         }
 
         if (hasDiscovery) {

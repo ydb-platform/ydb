@@ -2,6 +2,8 @@
 
 #include "schemeshard_user_attr_limits.h"
 
+#include <ydb/core/base/rediscovery.h>
+
 #include <library/cpp/json/json_reader.h>
 
 #include <util/string/cast.h>
@@ -93,7 +95,10 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
     }
 
     bool TUserAttributes::CheckLimits(TString& errStr) const {
-        const ui64 bytes = Bytes();
+        ui64 bytes = Bytes();
+        if (const auto it = Attrs.find(RediscoveryAttribute); it != Attrs.end()) {
+            bytes -= it->first.size() + it->second.size();
+        }
         if (bytes > TUserAttributesLimits::MaxBytes) {
             errStr = Sprintf("UserAttributes::CheckLimits: user attributes too big: %" PRIu64, bytes);
             return false;

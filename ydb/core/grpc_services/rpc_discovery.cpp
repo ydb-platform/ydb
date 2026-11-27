@@ -121,6 +121,7 @@ public:
             case TEvDiscovery::TEvError::RESOLVE_ERROR: return Ydb::StatusIds::UNAVAILABLE;
             case TEvDiscovery::TEvError::DATABASE_NOT_EXIST: return Ydb::StatusIds::NOT_FOUND;
             case TEvDiscovery::TEvError::ACCESS_DENIED: return Ydb::StatusIds::NOT_FOUND;
+            case TEvDiscovery::TEvError::REDISCOVERY_REQUESTED: return Ydb::StatusIds::ABORTED;
             default: return Ydb::StatusIds::BAD_REQUEST;
         }
     }

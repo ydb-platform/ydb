@@ -30,6 +30,7 @@ struct TEvDiscovery {
             RESOLVE_ERROR,
             DATABASE_NOT_EXIST,
             ACCESS_DENIED,
+            REDISCOVERY_REQUESTED,
         };
 
         EStatus Status;

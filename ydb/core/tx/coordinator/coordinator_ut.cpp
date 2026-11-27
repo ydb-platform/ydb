@@ -1,5 +1,6 @@
 #include "coordinator_impl.h"
 #include "coordinator_hooks.h"
+#include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
@@ -28,6 +29,42 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
     using namespace Tests;
 
     Y_UNIT_TEST_SUITE(Coordinator) {
+
+        Y_UNIT_TEST(AcquireReadStepTraceVerbosity) {
+            TPortManager pm;
+            TServerSettings settings(pm.GetPort(2134));
+            settings.SetDomainName("Root").SetUseRealThreads(false);
+            Tests::TServer::TPtr server = new TServer(settings);
+            auto& runtime = *server->GetRuntime();
+            const auto sender = runtime.AllocateEdgeActor();
+            const auto uploader = runtime.AllocateEdgeActor();
+            runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploader);
+            const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+            ui8 level = 0;
+            const auto requests = runtime.AddObserver<TEvTxProxy::TEvAcquireReadStep>(
+                [&](TEvTxProxy::TEvAcquireReadStep::TPtr& ev) {
+                    ev->TraceId = level ? NWilson::TTraceId::NewTraceId(level, 4095) : NWilson::TTraceId();
+                });
+            std::vector<NWilson::NTraceProto::Span> spans;
+            const auto traceEvents = runtime.AddObserver<NWilson::TEvWilson>(
+                [&](NWilson::TEvWilson::TPtr& ev) {
+                    if (ev->Get()->Span.name() == "Coordinator acquire read step") {
+                        spans.push_back(ev->Get()->Span);
+                    }
+                });
+            for (ui8 verbosity : {0, 10, 11}) {
+                level = verbosity;
+                spans.clear();
+                ForwardToTablet(runtime, coordinator, sender, new TEvTxProxy::TEvAcquireReadStep(coordinator));
+                runtime.GrabEdgeEvent<TEvTxProxy::TEvAcquireReadStepResult>(sender);
+                runtime.SimulateSleep(TDuration::Seconds(1));
+                UNIT_ASSERT_VALUES_EQUAL(spans.size(), verbosity >= 11 ? 1u : 0u);
+                if (!spans.empty()) {
+                    UNIT_ASSERT_VALUES_EQUAL(spans.front().status().code(), NWilson::NTraceProto::Status::STATUS_CODE_OK);
+                    UNIT_ASSERT_VALUES_EQUAL(spans.front().events(spans.front().events_size() - 1).name(), "read step response dispatched");
+                }
+            }
+        }
 
         Y_UNIT_TEST(ReadStepSubscribe) {
             TPortManager pm;

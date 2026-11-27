@@ -66,6 +66,7 @@ bool GetColumn(const NYql::NConnector::NApi::TExpression& expression, TString& c
         case NYql::NConnector::NApi::TExpression::kPredicate:
         case NYql::NConnector::NApi::TExpression::kStructMember:
         case NYql::NConnector::NApi::TExpression::kTupleNth:
+        case NYql::NConnector::NApi::TExpression::kVariantGuess:
         case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
             return false;
     }
@@ -89,6 +90,7 @@ bool GetTypedValue(const NYql::NConnector::NApi::TExpression& expression, Ydb::T
         case NYql::NConnector::NApi::TExpression::kPredicate:
         case NYql::NConnector::NApi::TExpression::kStructMember:
         case NYql::NConnector::NApi::TExpression::kTupleNth:
+        case NYql::NConnector::NApi::TExpression::kVariantGuess:
         case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
             return false;
     }
@@ -438,6 +440,7 @@ Triple MatchComparison(const TMap<TString, TColumnStatistics>& columns, const NY
         case NYql::NConnector::NApi::TExpression::kPredicate:
         case NYql::NConnector::NApi::TExpression::kStructMember:
         case NYql::NConnector::NApi::TExpression::kTupleNth:
+        case NYql::NConnector::NApi::TExpression::kVariantGuess:
         case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
             return Triple::Unknown;
     }

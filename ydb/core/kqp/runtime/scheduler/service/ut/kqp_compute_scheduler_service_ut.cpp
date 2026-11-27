@@ -151,6 +151,75 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         }
     }
 
+    Y_UNIT_TEST(WakesThrottledTaskWhenCpuFairShareBecomesPositive) {
+        using TTask = NScheduler::TSchedulableTask;
+        TCpuLimitFixture f;
+        f.AddPool("pool", 0, -1);
+        const auto a = f.Scheduler->AddOrUpdateQuery("db", "pool", 1);
+        const auto b = f.Scheduler->AddOrUpdateQuery("db", "pool", 2);
+        const auto workerA = f.Runtime.AllocateEdgeActor();
+        const auto workerB = f.Runtime.AllocateEdgeActor();
+        const auto taskA = std::make_shared<TTask>(a);
+        const auto taskB = std::make_shared<TTask>(b);
+        taskA->RegisterForResume(workerA);
+        taskB->RegisterForResume(workerB);
+        taskA->IncreaseThrottle();
+        taskB->IncreaseThrottle();
+        UNIT_ASSERT_VALUES_EQUAL(a->ResumeTasks(1), 0); // No actor context on the test thread.
+
+        auto grabWakeup = [&](const TActorId& worker) {
+            return f.Runtime.GrabEdgeEvent<TTask::TResumeEventType>(worker, TDuration::MilliSeconds(10));
+        };
+        f.Tick(8);
+        UNIT_ASSERT_VALUES_EQUAL(a->GetSnapshot()->CpuFairShare, 0);
+        UNIT_ASSERT_VALUES_EQUAL(b->GetSnapshot()->CpuFairShare, 0);
+        UNIT_ASSERT(!grabWakeup(workerA));
+        UNIT_ASSERT(!grabWakeup(workerB));
+
+        NResourcePool::TPoolSettings settings;
+        settings.TotalCpuLimitPercentPerNode = 12.5;
+        f.Runtime.Send(new IEventHandle(f.Service, f.Sender,
+            new NWorkloadManager::TEvUpdatePoolInfo("db", "pool", settings, std::nullopt)));
+        f.Tick(8);
+        const auto wakeupA = grabWakeup(workerA);
+        const auto wakeupB = grabWakeup(workerB);
+        UNIT_ASSERT(wakeupA && TTask::IsResumeEvent(wakeupA));
+        UNIT_ASSERT(wakeupB && TTask::IsResumeEvent(wakeupB));
+        UNIT_ASSERT_VALUES_EQUAL(a->GetSnapshot()->CpuFairShare, 1);
+        UNIT_ASSERT_VALUES_EQUAL(b->GetSnapshot()->CpuFairShare, 1);
+        // Both are notified, but only one can use the shared slot.
+        UNIT_ASSERT(taskA->TryIncreaseUsage());
+        UNIT_ASSERT(!taskB->TryIncreaseUsage());
+        taskA->DecreaseUsage(TDuration::Zero(), TTask::CPU_DEFAULT);
+
+        f.Tick(8);
+        UNIT_ASSERT(!grabWakeup(workerA)); // No extra wakeup when the share stays positive.
+        UNIT_ASSERT(!grabWakeup(workerB));
+    }
+
+    Y_UNIT_TEST(WakesQueryWhenPoolFairShareStaysPositive) {
+        using TTask = NScheduler::TSchedulableTask;
+        TCpuLimitFixture f;
+        f.AddPool("pool", 12.5, -1);
+        const auto a = f.AddDemand("pool", 1, 1);
+        const auto b = f.Scheduler->AddOrUpdateQuery("db", "pool", 2);
+        f.Tick(8);
+        UNIT_ASSERT_VALUES_EQUAL(a->GetSnapshot()->CpuFairShare, 1);
+        UNIT_ASSERT_VALUES_EQUAL(b->GetSnapshot()->CpuFairShare, 0);
+
+        const auto worker = f.Runtime.AllocateEdgeActor();
+        const auto task = std::make_shared<TTask>(b);
+        task->RegisterForResume(worker);
+        task->IncreaseThrottle();
+
+        f.Tick(8);
+        const auto wakeup = f.Runtime.GrabEdgeEvent<TTask::TResumeEventType>(worker, TDuration::MilliSeconds(10));
+        UNIT_ASSERT(wakeup);
+        UNIT_ASSERT(TTask::IsResumeEvent(wakeup));
+        UNIT_ASSERT_VALUES_EQUAL(a->GetSnapshot()->CpuFairShare, 1);
+        UNIT_ASSERT_VALUES_EQUAL(b->GetSnapshot()->CpuFairShare, 1);
+    }
+
     Y_UNIT_TEST(ResizeRetriesDesiredPercentagesAfterSiblingRemoval) {
         TCpuLimitFixture f;
         f.Tick(2);

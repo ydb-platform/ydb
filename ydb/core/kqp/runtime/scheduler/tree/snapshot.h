@@ -6,6 +6,8 @@
 
 namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
+    using TQueriesToResume = std::vector<std::pair<NDynamic::TQueryPtr, ui64>>;
+
     struct TTreeElement : public virtual TTreeElementBase<ETreeType::SNAPSHOT>, public TStaticAttributes {
         const std::weak_ptr<NDynamic::TTreeElement> Origin;
 
@@ -31,11 +33,11 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
         virtual void AccountSnapshotDuration(TDuration period);
         virtual void UpdateBottomUp(ui64 totalCpuLimit, TDuration period);
-        void UpdateTopDown();
+        TQueriesToResume UpdateTopDown();
 
     private:
         void UpdateMemoryTopDown();
-        void UpdateCpuTopDown();
+        void UpdateCpuTopDown(TQueriesToResume& queriesToResume);
         void DistributeFairShare();
     };
 
@@ -44,6 +46,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
         explicit TQuery(const NDynamic::TQueryPtr& origin);
 
         void UpdateBottomUp(ui64 totalCpuLimit, TDuration period) override;
+        NDynamic::TQueryPtr PublishSnapshot();
 
         ui64 CpuUsage = 0;
         ui64 CpuThrottle = 0;
@@ -93,8 +96,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
         void RemoveDatabase(const TDatabaseId& databaseId);
         TDatabasePtr GetDatabase(const TDatabaseId& databaseId) const;
 
-        // Calculates the snapshot relative to the previous one
-        void Update(const TRootPtr& previous);
+        // Returns runtime queries whose CPU fair share became positive, with their new shares.
+        TQueriesToResume Update(const TRootPtr& previous);
 
     public:
         const TMonotonic Timestamp;

@@ -307,14 +307,16 @@ void TComputeScheduler::UpdateFairShare() {
         snapshot = NHdrf::NSnapshot::TRootPtr(Root->TakeSnapshot());
     }
 
-    snapshot->Update(Root->GetSnapshot());
+    const auto queriesToResume = snapshot->Update(Root->GetSnapshot());
 
     {
         TWriteGuard lock(Mutex);
-        // Never publish effective values for an obsolete configuration after a replacement.
-        if (snapshot->StaticTree == Root->GetStaticTree()) {
-            Root->SetSnapshot(snapshot);
-        }
+        Root->SetSnapshot(snapshot);
+    }
+    updateLock.Release();
+
+    for (const auto& [query, cpuFairShare] : queriesToResume) {
+        query->ResumeTasks(Min<ui64>(cpuFairShare, std::numeric_limits<ui32>::max()));
     }
 
     Counters.UpdateFairShare->Add((TMonotonic::Now() - startTime).MicroSeconds());

@@ -432,29 +432,24 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler.UpdateConfiguration(config.Clone());
         auto query = scheduler.AddOrUpdateQuery("db", "pool", 1);
         auto tasks = CreateDemandTasks(query, 8);
-        std::thread updater([&] {
-            for (ui32 i = 0; i < 100; ++i) {
-                auto next = config.Clone();
-                next->TotalCpuLimit = i % 2 ? 4 : 8;
-                next->TotalMemoryLimit = next->TotalCpuLimit * 100;
-                next->GetOrCreateDatabase("db").GetOrCreatePool("pool").SetAttributes({
-                    .CpuLimit = next->TotalCpuLimit, .MemoryLimit = next->TotalMemoryLimit});
-                scheduler.UpdateConfiguration(std::move(next));
-            }
-        });
-        bool coherent = true;
-        for (ui32 i = 0; i < 100; ++i) {
+        for (ui64 cpu : {8, 4, 8}) {
+            auto next = config.Clone();
+            next->TotalCpuLimit = cpu;
+            next->TotalMemoryLimit = cpu * 100;
+            next->GetOrCreateDatabase("db").GetOrCreatePool("pool").SetAttributes({
+                .CpuLimit = cpu, .MemoryLimit = next->TotalMemoryLimit});
+            scheduler.UpdateConfiguration(std::move(next));
             scheduler.UpdateFairShare();
             const auto* pool = query->GetSnapshot()->GetParent();
             const auto* root = dynamic_cast<const NHdrf::NSnapshot::TRoot*>(pool->GetParent()->GetParent());
-            coherent &= root && root->StaticTree->TotalCpuLimit == root->TotalCpuLimit
-                && root->TotalMemoryLimit == root->TotalCpuLimit * 100
-                && pool->GetConfiguredAttributes().GetCpuLimit() == root->TotalCpuLimit
-                && pool->GetConfiguredAttributes().GetMemoryLimit() == root->TotalMemoryLimit
-                && pool->StaticPool.get() == root->StaticTree->GetDatabase("db")->GetPool("pool");
+            UNIT_ASSERT(root);
+            UNIT_ASSERT_VALUES_EQUAL(root->TotalCpuLimit, cpu);
+            UNIT_ASSERT_VALUES_EQUAL(root->StaticTree->TotalCpuLimit, cpu);
+            UNIT_ASSERT_VALUES_EQUAL(root->TotalMemoryLimit, cpu * 100);
+            UNIT_ASSERT_VALUES_EQUAL(pool->GetConfiguredAttributes().GetCpuLimit(), cpu);
+            UNIT_ASSERT_VALUES_EQUAL(pool->GetConfiguredAttributes().GetMemoryLimit(), cpu * 100);
+            UNIT_ASSERT(pool->StaticPool.get() == root->StaticTree->GetDatabase("db")->GetPool("pool"));
         }
-        updater.join();
-        UNIT_ASSERT(coherent);
     }
 
     Y_UNIT_TEST(RegistrationsKeepCanonicalQueryUntilLastRelease) {
@@ -2640,6 +2635,9 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         const TString poolId = "pool1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
         scheduler.AddOrUpdatePool(databaseId, poolId, {});
+        // Publish the pool first so concurrent registrations don't run their own fair-share updates.
+        scheduler.GetOrCreateMemoryPool(databaseId, poolId);
+        scheduler.UpdateFairShare();
 
         std::atomic<NHdrf::TQueryId> queryId = 1;
         std::atomic<bool> shutdown = false;

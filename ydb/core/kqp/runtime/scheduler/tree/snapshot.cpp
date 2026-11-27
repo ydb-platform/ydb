@@ -210,10 +210,12 @@ void TTreeElement::DistributeFairShare() {
     FillDemand(children, unsatisfiedDemand, leftFairShare);
 }
 
-void TTreeElement::UpdateTopDown() {
+TQueriesToResume TTreeElement::UpdateTopDown() {
     // Memory goes first, since the CPU pass publishes snapshots of queries.
     UpdateMemoryTopDown();
-    UpdateCpuTopDown();
+    TQueriesToResume queriesToResume;
+    UpdateCpuTopDown(queriesToResume);
+    return queriesToResume;
 }
 
 void TTreeElement::UpdateMemoryTopDown() {
@@ -229,7 +231,7 @@ void TTreeElement::UpdateMemoryTopDown() {
     });
 }
 
-void TTreeElement::UpdateCpuTopDown() {
+void TTreeElement::UpdateCpuTopDown(TQueriesToResume& queriesToResume) {
     // At this moment we know own fair-share. Need to calibrate children.
 
     if (!IsPool()) {
@@ -241,7 +243,7 @@ void TTreeElement::UpdateCpuTopDown() {
         DistributeFairShare();
 
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
-            child->UpdateCpuTopDown();
+            child->UpdateCpuTopDown(queriesToResume);
         });
     }
     // All-equal variant (when children are queries)
@@ -252,8 +254,8 @@ void TTreeElement::UpdateCpuTopDown() {
                 query->CpuFairShare = CpuFairShare;
             }
 
-            if (auto originalQuery = query->Origin.lock()) {
-                static_cast<NDynamic::TQuery&>(*originalQuery).SetSnapshot(query->shared_from_this());
+            if (auto origin = query->PublishSnapshot()) {
+                queriesToResume.emplace_back(std::move(origin), query->CpuFairShare);
             }
         });
     }
@@ -268,6 +270,16 @@ TQuery::TQuery(const NDynamic::TQueryPtr& origin)
     , TTreeElement(origin)
     , NHdrf::TQuery<ETreeType::SNAPSHOT>(std::get<TQueryId>(origin->GetId()))
 {
+}
+
+NDynamic::TQueryPtr TQuery::PublishSnapshot() {
+    if (auto origin = std::static_pointer_cast<NDynamic::TQuery>(Origin.lock())) {
+        const auto previous = origin->SetSnapshot(shared_from_this());
+        if (CpuFairShare > 0 && previous && previous->CpuFairShare == 0) {
+            return origin;
+        }
+    }
+    return {};
 }
 
 void TQuery::UpdateBottomUp(ui64 totalCpuLimit, TDuration period) {
@@ -380,7 +392,7 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
     return std::static_pointer_cast<TDatabase>(GetPool(databaseId));
 }
 
-void TRoot::Update(const TRootPtr& previous) {
+TQueriesToResume TRoot::Update(const TRootPtr& previous) {
     const auto period = previous && Timestamp > previous->Timestamp ? Timestamp - previous->Timestamp : TDuration::Zero();
 
     UpdateBottomUp(TotalCpuLimit, period);
@@ -399,11 +411,12 @@ void TRoot::Update(const TRootPtr& previous) {
 
     const ui64 memoryLimit = Min<ui64>(GetMemoryLimit(), TotalMemoryLimit);
     MemoryFairShare = memoryLimit > defaultPoolsUsage ? memoryLimit - defaultPoolsUsage : 0;
-    UpdateTopDown();
+    auto queriesToResume = UpdateTopDown();
 
     if (period) {
         AccountSnapshotDuration(period);
     }
+    return queriesToResume;
 }
 
 } // namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot

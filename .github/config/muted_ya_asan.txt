@@ -11,6 +11,9 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_mirror3d
 ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_mirror3of4
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/client/ut TFlatTest.SplitEmptyAndWrite
+ydb/core/client/ut TFlatTest.WriteMergeAndRead
+ydb/core/client/ut TFlatTest.WriteSplitAndRead
+ydb/core/client/ut TFlatTest.WriteSplitWriteSplit
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ReadFromLocalTopicsWithAuth

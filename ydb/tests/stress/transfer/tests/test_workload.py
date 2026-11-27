@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# CI monitoring experiment: rerun this suite with CPU/cgroup diagnostics.
 import os
 import pytest
 import yatest

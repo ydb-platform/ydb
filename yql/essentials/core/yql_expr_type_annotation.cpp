@@ -5847,9 +5847,32 @@ EDataSlot GetDateTypeByLevel(ui32 level) {
     }
 }
 
+TAsyncExpressionEffects GetAsyncExpressionEffects(const TExprNode& node) {
+    TNodeSet visited;
+    TVector<const TExprNode*> pending{&node};
+    while (!pending.empty()) {
+        const auto* current = pending.back();
+        pending.pop_back();
+        if (!visited.insert(current).second) {
+            continue;
+        }
+        if (current->IsCallable("AsyncInvoke")) {
+            return {true, true};
+        }
+        for (const auto& child : current->Children()) {
+            pending.push_back(child.Get());
+        }
+    }
+    return {};
+}
+
 bool IsPureIsolatedLambdaImpl(const TExprNode& lambdaBody, TNodeSet& visited, TSyncMap* syncList) {
     if (!visited.emplace(&lambdaBody).second) {
         return true;
+    }
+
+    if (lambdaBody.IsCallable("AsyncInvoke")) {
+        return false;
     }
 
     if (lambdaBody.IsCallable("TypeOf")) {

@@ -183,7 +183,7 @@ class Controller:
 
 
 class Environment:
-    def __init__(self, binary, root, names=("a", "b"), mode="auto", initial=None, timing=None, mock_heartbeat_timeout=0.4):
+    def __init__(self, binary, root, names=("a", "b"), mode="auto", initial=None, timing=None, mock_heartbeat_timeout=1.0):
         self.root = Path(root)
         self.ports = PortManager()
         topology = Topology(

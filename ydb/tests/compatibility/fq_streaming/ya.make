@@ -38,6 +38,7 @@ PEERDIR(
 )
 
 DEPENDS(
+    ydb/apps/ydb
     ydb/tests/library/compatibility/binaries
 )
 

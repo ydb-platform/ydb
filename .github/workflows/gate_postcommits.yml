@@ -13,9 +13,6 @@ jobs:
     - name: main
       shell: bash
       run: |
-        # Count only recent queued PR-check runs (see POSTCOMMIT_GATE_CONFIG).
-        # Avoid ${var:-{}} — bash treats the first } as end of expansion and
-        # leaves a stray }, which breaks jq JSON parsing.
         gate_config='${{ vars.POSTCOMMIT_GATE_CONFIG }}'
         if [ -z "$gate_config" ]; then
           gate_config='{}'

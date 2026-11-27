@@ -59,7 +59,7 @@ double TSchedulableBase::GetSchedulingWeight() const {
         return 1;
     }
     const auto snapshot = SchedulableTask->Query->GetSnapshot();
-    return snapshot ? Max<double>(1e-9, snapshot->FairShare) : 1;
+    return snapshot ? Max<double>(1e-9, snapshot->CpuFairShare) : 1;
 }
 
 std::optional<TDuration> TSchedulableBase::TryStartExecution(TMonotonic now) {

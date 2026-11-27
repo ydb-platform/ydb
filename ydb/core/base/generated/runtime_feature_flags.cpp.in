@@ -21,18 +21,18 @@ ui64 TRuntimeFeatureFlags::FromProto_{{ slot.name }}(const NKikimrConfig::TFeatu
     auto [bits, mask] = BitsFromProto_{{ slot.name }}(flags);
     return (value & ~mask) | bits;
 }
+{% endfor %}
 
-void TRuntimeFeatureFlags::Update_{{ slot.name }}(ui64 bits, ui64 mask) {
-    ui64 slot = {{ slot.name }}_.load(std::memory_order_relaxed);
+static void UpdateSlot(std::atomic<ui64>& slotVar, ui64 bits, ui64 mask) {
+    ui64 slot = slotVar.load(std::memory_order_relaxed);
     for (;;) {
         ui64 updated = (slot & ~mask) | bits;
         // We perform a CAS so unrelated updates by concurrent threads are not lost
-        if ({{ slot.name }}_.compare_exchange_weak(slot, updated, std::memory_order_relaxed)) {
+        if (slotVar.compare_exchange_weak(slot, updated, std::memory_order_relaxed)) {
             break;
         }
     }
 }
-{% endfor %}
 
 TRuntimeFeatureFlags::TRuntimeFeatureFlags()
 {%- for slot in slots %}
@@ -80,7 +80,7 @@ void TRuntimeFeatureFlags::MergeFrom(const NKikimrConfig::TFeatureFlags& flags) 
     auto [{{ slot.name }}_bits, {{ slot.name }}_mask] = BitsFromProto_{{ slot.name }}(flags);
 {%- endfor %}
 {%- for slot in slots %}
-    Update_{{ slot.name }}({{ slot.name }}_bits, {{ slot.name }}_mask);
+    UpdateSlot({{ slot.name }}_, {{ slot.name }}_bits, {{ slot.name }}_mask);
 {%- endfor %}
 }
 
@@ -89,7 +89,7 @@ void TRuntimeFeatureFlags::CopyRuntimeFrom(const NKikimrConfig::TFeatureFlags& f
     ui64 {{ slot.name }} = FromProto_{{ slot.name }}(flags, {{ slot.default_value }}ULL);
 {%- endfor %}
 {%- for slot in slots %}
-    Update_{{ slot.name }}({{ slot.name }} & {{ slot.runtime_flags_mask }}ULL, {{ slot.runtime_flags_mask }}ULL);
+    UpdateSlot({{ slot.name }}_, {{ slot.name }} & {{ slot.runtime_flags_mask }}ULL, {{ slot.runtime_flags_mask }}ULL);
 {%- endfor %}
 }
 
@@ -116,11 +116,11 @@ bool TRuntimeFeatureFlags::Get{{ field.name }}() const {
 }
 
 void TRuntimeFeatureFlags::Set{{ field.name }}(bool value) {
-    Update_{{ field.slot.name }}(value ? {{ field.full_mask }}ULL : {{ field.has_mask }}ULL, {{ field.full_mask}}ULL);
+    UpdateSlot({{ field.slot.name }}_, value ? {{ field.full_mask }}ULL : {{ field.has_mask }}ULL, {{ field.full_mask}}ULL);
 }
 
 void TRuntimeFeatureFlags::Clear{{ field.name }}() {
-    Update_{{ field.slot.name }}({{ field.default_value }}ULL, {{ field.full_mask }}ULL);
+    UpdateSlot({{ field.slot.name }}_, {{ field.default_value }}ULL, {{ field.full_mask }}ULL);
 }
 {% endfor %}
 

@@ -47,7 +47,6 @@ private:
 {%- for slot in slots %}
     static std::tuple<ui64, ui64> BitsFromProto_{{ slot.name }}(const NKikimrConfig::TFeatureFlags& flags);
     static ui64 FromProto_{{ slot.name }}(const NKikimrConfig::TFeatureFlags& flags, ui64 value);
-    void Update_{{ slot.name }}(ui64 bits, ui64 mask);
 {%- endfor %}
 
 private:

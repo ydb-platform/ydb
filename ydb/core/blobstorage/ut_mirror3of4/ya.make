@@ -5,7 +5,7 @@ SRCS(
 )
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/apps/version

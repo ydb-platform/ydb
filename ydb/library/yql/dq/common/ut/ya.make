@@ -8,5 +8,5 @@ PEERDIR(
     library/cpp/testing/unittest
 )
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 END()

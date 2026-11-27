@@ -1,6 +1,7 @@
 #include "yql_pq_provider.h"
 #include "yql_pq_settings.h"
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 
@@ -13,6 +14,15 @@ public:
     explicit TKafkaConfigurationProvider(TPqState::TPtr state)
         : State(std::move(state))
         , Configuration(State->KafkaConfiguration, *State->Types, "kafka")
+        , TypeAnnotation(CreateFunctorTransformer([](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+            output = input;
+            if (!EnsureMinArgsCount(*input, 2, ctx) || !EnsureWorldType(input->Head(), ctx) ||
+                !EnsureSpecificDataSource(*input->Child(1), "kafka", ctx)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            input->SetTypeAnn(input->Head().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }))
     {
     }
 
@@ -34,9 +44,15 @@ public:
         return Configuration;
     }
 
+    IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
+        Y_UNUSED(instantOnly);
+        return *TypeAnnotation;
+    }
+
 private:
     const TPqState::TPtr State;
     NCommon::TProviderConfigurationTransformer Configuration;
+    THolder<IGraphTransformer> TypeAnnotation;
 };
 
 }   // namespace

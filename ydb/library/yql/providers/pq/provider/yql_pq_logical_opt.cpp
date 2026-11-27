@@ -1,5 +1,6 @@
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_pushdown.h"
+#include "yql_pq_settings.h"
 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
@@ -210,7 +211,13 @@ public:
             const auto watermarkExpr = maybeWatermarkExpr.Cast();
             GetUsedWatermarkColumnNames(watermarkExpr, usedColumnNames);
         }
-        GetUsedWatermarkGeneratorColumnNames(usedColumnNames, *State_);
+        const auto* cluster = State_->Configuration->ClustersConfigurationSettings.FindPtr(pqTopic.Cluster().StringValue());
+        YQL_ENSURE(cluster, "Unknown topic cluster");
+        if (!cluster->Kafka) {
+            // Kafka reading does not support watermarks. Retain only metadata
+            // requested by the query instead of requiring PQ write timestamps.
+            GetUsedWatermarkGeneratorColumnNames(usedColumnNames, *State_);
+        }
 
         const auto oldRowType = pqTopic.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         const auto oldRowColumnsCount = oldRowType->GetSize();

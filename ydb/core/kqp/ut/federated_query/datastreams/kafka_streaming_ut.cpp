@@ -56,7 +56,9 @@ public:
 
     void WaitCommitted(ui64 nextOffset) const {
         auto consumer = CreateClient<RdKafka::KafkaConsumer>();
-        NTestUtils::WaitFor(TDuration::Seconds(30), "Kafka group commits after sink acknowledgement", [&](TString& error) {
+        // The mock broker can wait a full session.timeout.ms (45s by default)
+        // before rebalancing a group after a member leaves.
+        NTestUtils::WaitFor(TDuration::Minutes(1), "Kafka group commits after sink acknowledgement", [&](TString& error) {
             std::vector<std::unique_ptr<RdKafka::TopicPartition>> owned;
             std::vector<RdKafka::TopicPartition*> partitions;
             for (int id = 0; id < 2; ++id) {
@@ -102,6 +104,10 @@ private:
 class TKafkaStreamingFixture: public TStreamingTestFixture {
 public:
     void CheckSourceStateHasNoOffsets(const TString& query) {
+        // Checkpoint metadata is created by the streaming service user.
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata/streaming` TO `" BUILTIN_ACL_ROOT "`");
         const auto graphId = GetStreamingQueryCheckpointId(query);
         const auto results = ExecQuery(fmt::format(R"(
             SELECT blob, is_compressed, blob_seq_num
@@ -176,8 +182,8 @@ Y_UNIT_TEST_SUITE(KafkaStreamingQueries) {
         } else {
             ExecQuery("ALTER STREAMING QUERY kafkaIngest SET (RUN = TRUE)");
         }
-        ReadTopicMessages(output, { "before-0", "before-1", "after-0", "after-1" }, TInstant::Zero(), true);
         kafka.WaitCommitted(2);
+        ReadTopicMessages(output, { "before-0", "before-1", "after-0", "after-1" }, TInstant::Zero(), true);
         EnsureTopicEndOffset(output, 4);
         const TString active = NewQuery ? "kafkaResumed" : "kafkaIngest";
         CheckSourceStateHasNoOffsets(active);

@@ -172,9 +172,14 @@ public:
     }
 
     ~TKafkaReadSession() override {
-        if (ConsumerQueue) {
-            rd_kafka_queue_cb_event_enable(ConsumerQueue, nullptr, nullptr);
-            rd_kafka_queue_destroy(ConsumerQueue);
+        if (Consumer) {
+            // Actor-system shutdown can destroy the polling actor before its
+            // asynchronous close completes. Serve rebalance callbacks before
+            // destroying the client, which otherwise waits for them forever.
+            Closing = true;
+            while (!PollClose()) {
+                CloseQueue->poll(100);
+            }
         }
     }
 
@@ -485,9 +490,11 @@ private:
                 control->Active = false;
             }
             Controls.clear();
-            rd_kafka_queue_cb_event_enable(ConsumerQueue, nullptr, nullptr);
-            rd_kafka_queue_destroy(ConsumerQueue);
-            ConsumerQueue = nullptr;
+            if (ConsumerQueue) {
+                rd_kafka_queue_cb_event_enable(ConsumerQueue, nullptr, nullptr);
+                rd_kafka_queue_destroy(ConsumerQueue);
+                ConsumerQueue = nullptr;
+            }
             CloseQueue.reset(RdKafka::Queue::create(Consumer.get()));
             std::unique_ptr<RdKafka::Error> error(Consumer->close(CloseQueue.get()));
             if (error) {

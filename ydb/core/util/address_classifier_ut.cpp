@@ -43,6 +43,35 @@ Y_UNIT_TEST_SUITE(AddressClassifierTest) {
         UNIT_ASSERT_STRINGS_EQUAL(ExtractAddress("192.168.0.1"), "192.168.0.1");
     }
 
+    Y_UNIT_TEST(TestIPAddressExtraction) {
+        for (const auto& [peer, expected] : std::vector<std::pair<TString, TString>>{
+            {"ipv4:192.0.2.1:2135", "192.0.2.1"},
+            {"ipv4:192.0.2.1", "192.0.2.1"},
+            {"192.0.2.1:2135", "192.0.2.1"},
+            {"192.0.2.1", "192.0.2.1"},
+            {"ipv6:[2001:db8::1]:2135", "2001:db8::1"},
+            {"[2001:db8::1]:2135", "2001:db8::1"},
+            {"[2001:db8::1]", "2001:db8::1"},
+            {"2001:db8::1", "2001:db8::1"},
+            {"::1", "::1"},
+            {"ipv6:[fe80::1%2]:2135", "fe80::1%2"},
+            {"ipv6:[fe80::1%25]:2135", "fe80::1%25"},
+            {"[fe80::1%2]:2135", "fe80::1%2"},
+            {"[fe80::1%2]", "fe80::1%2"},
+            {"fe80::1%2", "fe80::1%2"},
+            {"ipv6:[2001:db8::1%0]:2135", "2001:db8::1"},
+            {"", ""},
+            {"localhost", ""},
+            {"localhost:2135", ""},
+            {"unix:/tmp/grpc.sock", ""},
+            {"ipv4:invalid:2135", ""},
+            {"ipv6:[invalid]:2135", ""},
+            {"[2001:db8::1", ""},
+        }) {
+            UNIT_ASSERT_VALUES_EQUAL_C(ExtractIPAddress(peer), expected, peer);
+        }
+    }
+
     Y_UNIT_TEST(TestAddressParsing) {
         auto parse = [](const TString& address) {
             TString host;

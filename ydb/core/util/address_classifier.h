@@ -14,6 +14,9 @@ namespace NKikimr::NAddressClassifier {
 
 TString ExtractAddress(const TString& peer);
 
+// Extract a numeric IPv4/IPv6 address without resolving hostnames.
+TString ExtractIPAddress(const TString& peer);
+
 TString ParseAddress(const TString& address, TString& hostname, ui32& port);
 
 class TAddressClassifier {

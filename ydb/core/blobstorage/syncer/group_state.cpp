@@ -77,7 +77,8 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     ui64 NextCookie = 0;
 
     void EraseQueries(ui32 groupId) {
-        if (const auto it = QueryCookiesByGroup.find(groupId); it != QueryCookiesByGroup.end()) {
+        std::map<ui32, TVector<ui64>>::iterator it = QueryCookiesByGroup.find(groupId);
+        if (it != QueryCookiesByGroup.end()) {
             for (ui64 cookie : it->second) {
                 Queries.erase(cookie);
             }
@@ -128,30 +129,31 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             return;
         }
         const TEvGroupState::TEvUpdate& message = *ev->Get();
-        if (auto it = Groups.find(message.GroupId); it != Groups.end() && message.Info
+        std::map<ui32, TGroup>::iterator it = Groups.find(message.GroupId);
+        if (it != Groups.end() && message.Info
                 && it->second.Info.Generation == message.Info->Generation
-                && it->second.Info.TargetExcluded == message.Info->TargetExcluded) {
+                && it->second.Info.PolicyStep == message.Info->PolicyStep) {
             return;
         }
         EraseQueries(message.GroupId);
         StatusPollGroups.erase(message.GroupId);
         RepairGroups.erase(message.GroupId);
-        if (const auto it = Groups.find(message.GroupId); it != Groups.end()) {
+        if (it != Groups.end()) {
             ClearRepair(&it->second, true);
             Proposals.erase(it->second.ProposalCookie);
             Groups.erase(it);
         }
         std::optional<TMirror3dcGroupConfiguration> config = message.Info ? GetConfiguration(*message.Info) : std::nullopt;
         if (config && message.Info->Topology && !message.Info->VDisks.empty()) {
-            auto policyStep = message.Info->TargetExcluded ? NextDataCenterTransition(*config, *message.Info->TargetExcluded) : std::nullopt;
-            auto next = policyStep ? policyStep : RecoveringComplete(*config);
+            std::optional<TMirror3dcGroupConfiguration> next = message.Info->PolicyStep
+                ? message.Info->PolicyStep : RecoveringComplete(*config);
             if (!next) {
                 return;
             }
             TGroup& group = Groups[message.GroupId];
             group.Info = *message.Info;
             group.Next = *next;
-            if (policyStep) {
+            if (message.Info->PolicyStep) {
                 group.Stage = EStage::Propose;
                 RepairGroups.insert(message.GroupId);
                 ProposeState(message.GroupId, &group);
@@ -211,13 +213,12 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         if (group->ProposalCookie) {
             return;
         }
-        const TMirror3dcGroupConfiguration& next = group->Next;
-        Y_ABORT_UNLESS(IsAllowedMirror3dcGroupTransition(*group->Info.GroupState, next.State));
+        Y_ABORT_UNLESS(IsAllowedMirror3dcGroupTransition(*group->Info.GroupState, group->Next.State));
         // Policy-driven proposals must still be able to cancel recovery.
         if (group->Stage != EStage::Propose && !group->Barrier && BarrierControls.IsSelected(groupId)) {
             group->Barrier = std::make_unique<TGroupStateBarrier>(groupId, SelfId(), BarrierControls);
         }
-        if (group->Barrier && group->Barrier->ShouldHold(group->Info.Generation, *group->Info.GroupState, next.State)) {
+        if (group->Barrier && group->Barrier->ShouldHold(group->Info.Generation, *group->Info.GroupState, group->Next.State)) {
             if (WaitForRecoveringVDiskStartup(*group->Info.GroupState)) {
                 // Startup confirmations may become stale during a hold. Recheck all returning VDisks
                 // before expanding W from 2 to 2+2, including after the barrier is released.
@@ -230,7 +231,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         }
         group->ProposalCookie = ++NextCookie;
         Proposals.emplace(group->ProposalCookie, groupId);
-        Send(OwnerId, new TEvGroupState::TEvPropose(groupId, group->Info.Generation, next), 0, group->ProposalCookie);
+        Send(OwnerId, new TEvGroupState::TEvPropose(groupId, group->Info.Generation, group->Next), 0, group->ProposalCookie);
     }
 
     void FinishStatusRound(ui32 groupId, TGroup* group) {
@@ -249,12 +250,13 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     }
 
     void RunRepairs() {
-        auto it = LastStartedRepairGroup ? RepairGroups.upper_bound(*LastStartedRepairGroup) : RepairGroups.begin();
+        std::set<ui32>::iterator it = LastStartedRepairGroup
+            ? RepairGroups.upper_bound(*LastStartedRepairGroup) : RepairGroups.begin();
         for (size_t remaining = RepairGroups.size(); remaining; --remaining) {
             if (it == RepairGroups.end()) {
                 it = RepairGroups.begin();
             }
-            const ui32 groupId = *it++;
+            ui32 groupId = *it++;
             TGroup& group = Groups.at(groupId);
             if (group.Stage == EStage::Propose) {
                 ProposeState(groupId, &group);
@@ -267,7 +269,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
 
     void Poll() {
         for (ui32 groupId : ActiveGroups) {
-            if (auto it = Groups.find(groupId); it != Groups.end() && it->second.Pending) {
+            if (std::map<ui32, TGroup>::iterator it = Groups.find(groupId); it != Groups.end() && it->second.Pending) {
                 it->second.Pending = 0;
                 FinishStatusRound(groupId, &it->second);
             }
@@ -276,7 +278,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         Queries.clear();
         QueryCookiesByGroup.clear();
         if (!StatusPollGroups.empty()) {
-            auto it = StatusPollGroups.lower_bound(Cursor);
+            std::set<ui32>::iterator it = StatusPollGroups.lower_bound(Cursor);
             ui32 count = Min<ui32>(GroupsPerRound, StatusPollGroups.size());
             for (ui32 index = 0; index < count; ++index) {
                 if (it == StatusPollGroups.end()) {
@@ -292,7 +294,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
                 if (group.ProposalCookie) {
                     continue;
                 }
-                const bool checkPromotion = group.Stage == EStage::CheckPromotion;
+                bool checkPromotion = group.Stage == EStage::CheckPromotion;
                 if (checkPromotion || WaitForRecoveringVDiskStartup(*group.Info.GroupState)) {
                     // These transitions require a fresh set of replies, including on proposal retries.
                     group.ConfirmedDisks.assign(group.Info.VDisks.size(), false);
@@ -318,11 +320,11 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     }
 
     void Handle(TEvGroupState::TEvProposalResult::TPtr& ev) {
-        const auto proposal = Proposals.find(ev->Cookie);
+        std::map<ui64, ui32>::iterator proposal = Proposals.find(ev->Cookie);
         if (proposal == Proposals.end() || ev->Sender != OwnerId) {
             return;
         }
-        if (const auto group = Groups.find(proposal->second); group != Groups.end()
+        if (std::map<ui32, TGroup>::iterator group = Groups.find(proposal->second); group != Groups.end()
                 && group->second.ProposalCookie == ev->Cookie) {
             group->second.ProposalCookie = 0;
         }
@@ -330,7 +332,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     }
 
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr& ev) {
-        const auto it = Queries.find(ev->Cookie);
+        std::map<ui64, TQuery>::iterator it = Queries.find(ev->Cookie);
         if (it == Queries.end()) {
             return;
         }
@@ -352,7 +354,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     }
 
     void Handle(TEvRunMirror3dcRepairResult::TPtr& ev) {
-        const auto running = RunningRepairs.find(ev->Cookie);
+        std::map<ui64, ui32>::iterator running = RunningRepairs.find(ev->Cookie);
         if (running == RunningRepairs.end()) {
             return;
         }
@@ -373,7 +375,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        const auto it = RunningRepairs.find(ev->Cookie);
+        std::map<ui64, ui32>::iterator it = RunningRepairs.find(ev->Cookie);
         if (it != RunningRepairs.end() && ev->Get()->SourceType == TEvRunMirror3dcRepair::EventType) {
             ClearRepair(&Groups.at(it->second), true);
         }

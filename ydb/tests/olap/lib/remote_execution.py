@@ -519,7 +519,6 @@ def _scp(local_path: str, host: str, remote_path: str) -> None:
     yatest.common.execute(['scp', *_ssh_options(), *recursive, '--', local_path, f'{target}:{remote_path}'])
 
 
-
 def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: bool = True) -> dict:
     """
     Разворачивает бинарный файл на хосте
@@ -638,6 +637,7 @@ class LongRemoteExecution(AbstractContextManager):
         self._return_code = None
         self._out = None
         self._err = None
+        self._err_path = None
         self._finished = False
         self.allure = None
         self.env = env or {}
@@ -652,6 +652,8 @@ class LongRemoteExecution(AbstractContextManager):
         script_path = f'{self._directory}/run.sh'
         env_script = ''.join(f'export {var}={shlex.quote(val)}\n' for var, val in self.env.items())
         script = (
+            # Keep the wrapper alive to record the exit code when terminating the process group.
+            "trap ':' TERM\n"
             f'printf "%s" "$$" >{shlex.quote(self._pid_path)}\n'
             f'{env_script}{self.cmd} >{shlex.quote(self._out_path)} 2>{shlex.quote(self._err_path)}\n'
             f'printf "%s" "$?" >{shlex.quote(self._return_code_path)}\n'
@@ -698,10 +700,14 @@ class LongRemoteExecution(AbstractContextManager):
             self._out = self._get_content(self._out_path)
         return self._out or ''
 
+    def read_stderr(self) -> str:
+        path = self._err_path
+        return (self._get_content(path) or '') if path else ''
+
     @property
     def stderr(self) -> str:
         if self._err is None:
-            self._err = self._get_content(self._err_path)
+            self._err = self.read_stderr()
         return self._err or ''
 
     @property

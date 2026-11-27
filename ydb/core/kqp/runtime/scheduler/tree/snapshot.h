@@ -84,7 +84,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
     class TRoot : public TPool {
     public:
-        explicit TRoot(const NStatic::TRootPtr& tree);
+        explicit TRoot(const NStatic::TRootPtr& tree, TMonotonic timestamp = TMonotonic::Now());
 
         bool IsRoot() const final {
             return true;
@@ -98,7 +98,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
         void Update(const TRootPtr& previous);
 
     public:
-        const TMonotonic Timestamp = TMonotonic::Now();
+        const TMonotonic Timestamp;
         const NStatic::TRootPtr StaticTree;
         ui64 TotalCpuLimit = Infinity();
         ui64 TotalMemoryLimit = Infinity();

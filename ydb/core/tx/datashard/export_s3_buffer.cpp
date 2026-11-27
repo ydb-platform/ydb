@@ -59,6 +59,11 @@ public:
         return Buffer.Size();
     }
 
+    // The frame has consumed data (ready output or not), so ending it produces output.
+    bool HasInput() const {
+        return BytesAdded > 0;
+    }
+
 private:
     enum ECompressionResult {
         CONTINUE,
@@ -287,10 +292,14 @@ bool TS3Buffer::IsFilled() const {
     // Some formats (e.g. Parquet) keep encoded output inside the format itself
     // until a flush, so it is not yet reflected in Buffer/Compression.
     readyOutputBytes += DataFormat->GetReadyOutputBytes();
-    // Nothing encoded yet (Parquet keeps the rows in a pending row group): a part
-    // with no data is useless, and S3 rejects it with EntityTooSmall. So even with
-    // MinBytes = 0, a non-final part needs some output.
-    if (readyOutputBytes == 0 || readyOutputBytes < MinBytes) {
+    if (readyOutputBytes < MinBytes) {
+        return false;
+    }
+    // Even with MinBytes = 0, a non-final part needs a payload: a part with no data is
+    // useless, and S3 rejects it with EntityTooSmall. A compressor that has consumed rows
+    // yields them when its frame ends, but Parquet keeps the rows of an unfinished row
+    // group for the next part, so a buffer holding only those is not filled.
+    if (readyOutputBytes == 0 && !(Compression && Compression->HasInput())) {
         return false;
     }
     // After MinBytes, MaxBytes caps the uncompressed size and the memory held.

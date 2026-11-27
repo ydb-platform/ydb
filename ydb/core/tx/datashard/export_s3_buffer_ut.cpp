@@ -9,6 +9,7 @@
 #include <util/generic/array_ref.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/mem.h>
+#include <util/string/join.h>
 
 #ifndef KIKIMR_DISABLE_S3_OPS
 
@@ -349,6 +350,50 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
         // of a single part to exceed MaxBytes
         UNIT_ASSERT_GT_C(rawBytesPerFlush, maxBytes * 4, "rawBytesPerFlush=" << rawBytesPerFlush);
         Cerr << "Raw bytes per flush: " << rawBytesPerFlush << ", max memory: " << maxMemoryBytes << Endl;
+
+        TMemoryInput compressedInput(compressed);
+        TZstdDecompress decompress(&compressedInput);
+        UNIT_ASSERT_VALUES_EQUAL(decompress.ReadAll(), expected);
+    }
+
+    // With no minimum, the row limit sends a part even while zstd has consumed the rows
+    // without emitting output yet: ending the frame produces the part.
+    Y_UNIT_TEST(RowsLimitFlushesZstdBeforeOutput) {
+        const ui32 maxRows = 10;
+        Settings()
+            .WithCompression(TS3ExportBufferSettings::ZstdCompression(1))
+            .WithMaxRows(maxRows)
+            .WithMinBytes(0)
+            .WithMaxBytes(1_MB);
+
+        const auto dataFormat = EDataFormat::YdbDump;
+        TString expected;
+        TString compressed;
+        TVector<ui32> filledAfterRow;
+        for (ui32 i = 0; i < 3 * maxRows; ++i) {
+            UNIT_ASSERT(CollectKeyValue(dataFormat, i, "v"));
+            expected += ToString(i);
+            for (ui32 tag = 1; tag < Columns.size(); ++tag) {
+                expected += TStringBuilder() << ",\"v_" << tag << "_" << i << "\"";
+            }
+            expected += "\n";
+
+            auto* buffer = Buffer(dataFormat);
+            if (!buffer->IsFilled()) {
+                continue;
+            }
+            filledAfterRow.push_back(i + 1);
+
+            NExportScan::IBuffer::TStats stats;
+            THolder<NActors::IEventBase> event(buffer->PrepareEvent(false, stats));
+            UNIT_ASSERT_C(event, buffer->GetError());
+            auto* evBuffer = dynamic_cast<TEvExportScan::TEvBuffer<TBuffer>*>(event.Get());
+            UNIT_ASSERT(evBuffer);
+            UNIT_ASSERT_C(evBuffer->Buffer.Size() > 0, "empty part after row " << i);
+            UNIT_ASSERT_VALUES_EQUAL(stats.Rows, maxRows);
+            compressed.append(evBuffer->Buffer.Data(), evBuffer->Buffer.Size());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", filledAfterRow), "10,20,30");
 
         TMemoryInput compressedInput(compressed);
         TZstdDecompress decompress(&compressedInput);

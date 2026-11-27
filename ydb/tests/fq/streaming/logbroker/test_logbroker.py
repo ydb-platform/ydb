@@ -1,3 +1,5 @@
+import datetime
+import json
 import logging
 import time
 from contextlib import ExitStack
@@ -95,6 +97,30 @@ class TestLogbroker(StreamingTestBase):
         kikimr.ydb_client.create_external_data_source("logbroker", logbroker_federation.discovery_endpoint, database)
         cleanup.callback(kikimr.ydb_client.query, "DROP EXTERNAL DATA SOURCE `logbroker`;")
 
+    def init_different_partition_counts(self, kikimr, logbroker_federation, cleanup, query_name):
+        partition_counts = {"cluster_a": 2, "cluster_b": 4, "cluster_c": 6}
+        self.init(
+            kikimr,
+            logbroker_federation,
+            cleanup,
+            query_name=query_name,
+            partitions_count=min(partition_counts.values()),
+        )
+        assert self.logbrokers_client.keys() == partition_counts.keys()
+        for cluster_name, partitions_count in partition_counts.items():
+            topic_client = self.logbrokers_client[cluster_name].driver.topic_client
+            if partitions_count != min(partition_counts.values()):
+                topic_client.alter_topic(self.input_topic, set_min_active_partitions=partitions_count)
+            assert wait_for(
+                lambda: {
+                    partition.partition_id for partition in topic_client.describe_topic(self.input_topic).partitions
+                }
+                == set(range(partitions_count)),
+                timeout_seconds=60,
+                step_seconds=0.5,
+            ), f"Expected {partitions_count} partitions on {cluster_name}"
+        return partition_counts
+
     def start_query(self, kikimr, cleanup, use_partition_balancing=False):
         logging.info("Starting streaming query %s", self.query_name)
         pragma = 'PRAGMA pq.MaxPartitionReadSkew = "10s";' if use_partition_balancing else ""
@@ -139,27 +165,12 @@ class TestLogbroker(StreamingTestBase):
 
     def test_read_different_partition_counts_after_restart(self, kikimr, logbroker_federation):
         with ExitStack() as cleanup:
-            partition_counts = {"cluster_a": 2, "cluster_b": 4, "cluster_c": 6}
-            self.init(
+            partition_counts = self.init_different_partition_counts(
                 kikimr,
                 logbroker_federation,
                 cleanup,
                 query_name="different_partition_counts",
-                partitions_count=min(partition_counts.values()),
             )
-            assert self.logbrokers_client.keys() == partition_counts.keys()
-            for cluster_name, partitions_count in partition_counts.items():
-                topic_client = self.logbrokers_client[cluster_name].driver.topic_client
-                if partitions_count != min(partition_counts.values()):
-                    topic_client.alter_topic(self.input_topic, set_min_active_partitions=partitions_count)
-                assert wait_for(
-                    lambda: {
-                        partition.partition_id for partition in topic_client.describe_topic(self.input_topic).partitions
-                    }
-                    == set(range(partitions_count)),
-                    timeout_seconds=60,
-                    step_seconds=0.5,
-                ), f"Expected {partitions_count} partitions on {cluster_name}"
 
             self.start_query(kikimr, cleanup)
             expected_messages = []
@@ -204,6 +215,94 @@ class TestLogbroker(StreamingTestBase):
             kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{self.query_name}` SET (RUN = TRUE);")
             self.wait_completed_checkpoints(kikimr, self.query_name)
             check_output()
+
+    @pytest.mark.parametrize("watermark_cluster", ["cluster_a", "cluster_b", "cluster_c"])
+    def test_watermark_from_last_partition_closes_windows(self, kikimr, logbroker_federation, watermark_cluster):
+        with ExitStack() as cleanup:
+            partition_counts = self.init_different_partition_counts(
+                kikimr,
+                logbroker_federation,
+                cleanup,
+                query_name=f"partition_watermarks_{watermark_cluster}",
+            )
+            idle_timeout_seconds = 5
+            kikimr.ydb_client.query(f'''
+                CREATE STREAMING QUERY `{self.query_name}` AS DO BEGIN
+                    PRAGMA ydb.MaxTasksPerStage = '1';
+                    $input = SELECT CAST(ts AS Timestamp) AS event_time, key, value
+                    FROM `logbroker`.`{self.input_topic}` WITH (
+                        FORMAT = json_each_row,
+                        SCHEMA (ts String NOT NULL, key String NOT NULL, value Uint64 NOT NULL),
+                        WATERMARK = CAST(ts AS Timestamp) - Interval('PT1S'),
+                        WATERMARK_IDLE_TIMEOUT = 'PT{idle_timeout_seconds}S'
+                    );
+                    $windows = SELECT key, CAST(HOP_END() AS String) AS window_end,
+                        COUNT(*) AS count, SUM(value) AS total
+                    FROM $input
+                    WHERE key != 'clock'
+                    GROUP BY key, HoppingWindow(event_time, 'PT10S', 'PT20S');
+                    INSERT INTO `logbroker`.`{self.output_topic}`
+                    SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) FROM $windows;
+                END DO;
+            ''')
+            cleanup.callback(kikimr.ydb_client.query, f"DROP STREAMING QUERY `{self.query_name}`;")
+            self.wait_completed_checkpoints(kikimr, self.query_name)
+
+            # Keep both windows ahead of write-time watermarks and within the five-minute future limit.
+            base = (int(time.time()) // 20) * 20 + 120
+
+            def timestamp(seconds):
+                return (
+                    datetime.datetime.fromtimestamp(base + seconds, datetime.timezone.utc)
+                    .isoformat()
+                    .replace("+00:00", "Z")
+                )
+
+            def event(seconds, key, value):
+                return json.dumps({"ts": timestamp(seconds), "key": key, "value": value})
+
+            expected = []
+            input_bytes = self.get_streaming_query_metric(kikimr, self.query_name, "streaming.query.input.bytes")
+            for cluster_name, partitions_count in partition_counts.items():
+                for partition_id in range(partitions_count):
+                    key = f"{cluster_name}:{partition_id}"
+                    messages = [event(1, key, 1), event(2, key, 2)]
+                    self.logbrokers_client[cluster_name].topic_write(
+                        self.input_topic, messages, partition_id=partition_id
+                    )
+                    input_bytes += sum(len(message.encode()) for message in messages)
+                    # Both events belong to the overlapping windows ending at base + 10 and base + 20.
+                    expected.extend(
+                        {"key": key, "window_end": timestamp(end), "count": 2, "total": 3} for end in (10, 20)
+                    )
+            self.wait_streaming_query_metric(
+                kikimr, self.query_name, "streaming.query.input.bytes", expected_value=input_bytes
+            )
+            self.wait_completed_checkpoints(kikimr, self.query_name)
+
+            # Let all other partitions become idle before advancing only the selected partition.
+            time.sleep(2 * idle_timeout_seconds)
+            counts = wait_topic_messages(self.logbrokers_client, self.output_topic, 0, timeout=30)
+            assert all(count == 0 for count in counts.values()), counts
+
+            watermark_partition = partition_counts[watermark_cluster] - 1
+            self.logbrokers_client[watermark_cluster].topic_write(
+                self.input_topic, [event(40, "clock", 0)], partition_id=watermark_partition
+            )
+            self.wait_completed_checkpoints(kikimr, self.query_name)
+            counts = wait_topic_messages(self.logbrokers_client, self.output_topic, len(expected), timeout=60)
+            assert time.time() < base + 10, "Write-time watermarks could have closed the windows"
+            assert sum(counts.values()) == len(expected), counts
+            actual = []
+            for cluster_name, count in counts.items():
+                if count:
+                    actual.extend(
+                        json.loads(message)
+                        for message in self.logbrokers_client[cluster_name].topic_read(
+                            self.output_topic, self.consumer, count
+                        )
+                    )
+            assert sorted(actual, key=lambda row: (row["key"], row["window_end"])) == expected, counts
 
     def wait_available_clusters(self, kikimr, expected_count, timeout=120):
         path = f"{kikimr.get_database_name()}/{self.query_name}"

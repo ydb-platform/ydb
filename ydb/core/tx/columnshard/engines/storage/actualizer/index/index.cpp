@@ -72,7 +72,7 @@ void TGranuleActualizationIndex::StartMoveData(
     THashSet<ui32> targetGroups, const TAddExternalContext& context, const TWrittenPortionsById& uncommitted) {
     AFL_VERIFY(!MoveDataActualizer);
     MoveDataActualizer = std::make_shared<TMoveDataActualizer>(std::move(targetGroups), VersionedIndex);
-    MoveDataActualizer->Seed(context, uncommitted);
+    MoveDataActualizer->InitializePortionQueue(context, uncommitted);
     Actualizers.emplace_back(MoveDataActualizer);
 }
 

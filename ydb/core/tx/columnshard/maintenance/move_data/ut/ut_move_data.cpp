@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         auto portion = MakeDefaultTierPortion(1);
         THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
         const NOlap::NActualizer::TAddExternalContext context(TInstant::Seconds(1000), portions);
-        actualizer.Seed(context, {});
+        actualizer.InitializePortionQueue(context, {});
 
         portions.emplace(2, MakeDefaultTierPortion(2));
         actualizer.AddPortion(portions.at(2), context);
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         const TInstant start = TInstant::Seconds(1000);
         const THashMap<ui64, std::shared_ptr<NOlap::TWrittenPortionInfo>> noUncommitted;
         THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, MakeDefaultTierPortion(1) } };
-        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(start, portions), noUncommitted);
+        actualizer.InitializePortionQueue(NOlap::NActualizer::TAddExternalContext(start, portions), noUncommitted);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Pending, 1);
 
         ClassifyPortion(actualizer, portions.at(1), OldGroup);
@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         auto portion = MakeDefaultTierPortion(1);
         portion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
         THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
-        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(start, portions), noUncommitted);
+        actualizer.InitializePortionQueue(NOlap::NActualizer::TAddExternalContext(start, portions), noUncommitted);
 
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Pending, 1);
         ClassifyPortion(actualizer, portion, OldGroup);
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             auto actualizer = std::make_shared<NOlap::NActualizer::TMoveDataActualizer>(THashSet<ui32>{ OldGroup }, schema.Index);
             auto portion = MakeDefaultTierPortion(1);
             THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
-            actualizer->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
+            actualizer->InitializePortionQueue(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
             portion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
             actualizer->UpdatePortionStates(portions, {});
             UNIT_ASSERT_VALUES_EQUAL(actualizer->GetMoveDataQueueSizes().Pending, 1);
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         auto portion = MakeDefaultTierPortion(1);
         portion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
         THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
-        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
+        actualizer.InitializePortionQueue(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
         portions.erase(1);
         actualizer.UpdatePortionStates(portions, {});
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
@@ -282,7 +282,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         for (ui64 id = 1; id <= PortionCount; ++id) {
             portions.emplace(id, MakeDefaultTierPortion(id));
         }
-        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
+        actualizer.InitializePortionQueue(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
         // Reject interleaved candidates before the first bounded pass.
         for (ui64 id = 1; id <= PortionCount; ++id) {
             ClassifyPortion(actualizer, portions.at(id), id % 2 ? NewGroup : OldGroup);
@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         NOlap::NActualizer::TMoveDataActualizer actualizer({ OldGroup }, schema.Index);
         auto portion = MakeDefaultTierPortion(1);
         THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
-        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
+        actualizer.InitializePortionQueue(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
         ClassifyPortion(actualizer, portion, OldGroup);
         auto locks = std::make_shared<NOlap::NDataLocks::TManager>();
         NColumnShard::TEngineLogsCounters counters;
@@ -379,7 +379,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_GT(wideMemory, (PortionsCount - 1) * narrowMemory);
         NOlap::NActualizer::TMoveDataMetadataBudget budget(totalMemory + 1);
         auto actualizer = std::make_shared<NOlap::NActualizer::TMoveDataActualizer>(THashSet<ui32>{ 100 }, schema.Index);
-        actualizer->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
+        actualizer->InitializePortionQueue(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
         const auto requests = actualizer->BuildMoveDataMetadataRequests(portions, {}, actualizer, budget);
         UNIT_ASSERT_VALUES_EQUAL(budget.Memory, totalMemory);
         UNIT_ASSERT_VALUES_EQUAL_C(requests.size(), 1, "the sum of per-portion estimates fits in one batch");
@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
         auto buildWithLimit = [&](const ui64 softLimit, const THashMap<ui64, NOlap::TPortionInfo::TPtr>& knownPortions) {
             auto actualizer = std::make_shared<NOlap::NActualizer::TMoveDataActualizer>(targetGroups, schema.Index);
-            actualizer->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
+            actualizer->InitializePortionQueue(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
             actualizer->UpdatePortionStates(knownPortions, {});
             std::vector<NOlap::TCSMetadataRequest> requests;
             while (actualizer->GetMoveDataQueueSizes().Pending) {
@@ -467,8 +467,8 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         THashMap<ui64, NOlap::TPortionInfo::TPtr> secondPortions{ { 2, MakeDefaultTierPortion(2) }, { 3, MakeDefaultTierPortion(3) } };
         auto first = std::make_shared<NOlap::NActualizer::TMoveDataActualizer>(THashSet<ui32>{ OldGroup }, schema.Index);
         auto second = std::make_shared<NOlap::NActualizer::TMoveDataActualizer>(THashSet<ui32>{ OldGroup }, schema.Index);
-        first->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), firstPortions), {});
-        second->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), secondPortions), {});
+        first->InitializePortionQueue(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), firstPortions), {});
+        second->InitializePortionQueue(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), secondPortions), {});
         const ui64 memory = firstPortions.at(1)->PredictAccessorsMemory(firstPortions.at(1)->GetSchema(schema.Index));
         for (const bool limitByMemory : { false, true }) {
             NOlap::NActualizer::TMoveDataMetadataBudget budget(limitByMemory ? memory + 1 : 100 * memory);
@@ -492,7 +492,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         for (ui64 id = 1; id <= PortionCount; ++id) {
             portions.emplace(id, MakeDefaultTierPortion(id));
         }
-        actualizer->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
+        actualizer->InitializePortionQueue(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
         THashSet<ui64> requested;
         for (ui32 pass = 0; pass < 3; ++pass) {
             NOlap::NActualizer::TMoveDataMetadataBudget budget(Max<ui64>());
@@ -544,7 +544,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             TActualizerSchema schema(MakeMinMaxIndexInfo(false));
             NOlap::NActualizer::TMoveDataActualizer actualizer(targetGroups, schema.Index);
             const THashMap<ui64, NOlap::TPortionInfo::TPtr> portions = { { 1, MakeTieredPortion(1, "tier1", schema.GetIndexInfo()) } };
-            actualizer.Seed(NOlap::NActualizer::TAddExternalContext(start, portions), {});
+            actualizer.InitializePortionQueue(NOlap::NActualizer::TAddExternalContext(start, portions), {});
             UNIT_ASSERT_VALUES_EQUAL_C(
                 actualizer.GetMoveDataQueueSizes().Pending, 1, "tiered portion with its index in BlobStorage must be admitted");
         }
@@ -554,7 +554,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             TActualizerSchema schema(MakeMinMaxIndexInfo(true));
             NOlap::NActualizer::TMoveDataActualizer actualizer(targetGroups, schema.Index);
             const THashMap<ui64, NOlap::TPortionInfo::TPtr> portions = { { 2, MakeTieredPortion(2, "tier1", schema.GetIndexInfo()) } };
-            actualizer.Seed(NOlap::NActualizer::TAddExternalContext(start, portions), {});
+            actualizer.InitializePortionQueue(NOlap::NActualizer::TAddExternalContext(start, portions), {});
             UNIT_ASSERT_VALUES_EQUAL_C(
                 actualizer.GetMoveDataQueueSizes().GetTotal(), 0, "tiered portion with every entity in tier storage must be skipped");
         }

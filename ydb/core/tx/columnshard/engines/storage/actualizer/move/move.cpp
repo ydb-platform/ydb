@@ -17,6 +17,8 @@ namespace NKikimr::NOlap::NActualizer {
 
 namespace {
 
+using EPortionState = TPortionQueue::EPortionState;
+
 class TMoveDataActualizationReply: public IMetadataAccessorResultProcessor {
 private:
     std::weak_ptr<TMoveDataActualizer> MoveDataActualizer;
@@ -59,34 +61,6 @@ TTieringProcessContext::EAddPortionResult AddPortionToMove(
 }
 
 }   // anonymous namespace
-
-ui64& TMoveDataActualizer::TPortionQueue::Count(EPortionState state) {
-    return const_cast<ui64&>(std::as_const(*this).Count(state));
-}
-
-const ui64& TMoveDataActualizer::TPortionQueue::Count(EPortionState state) const {
-    return StateCounts[static_cast<size_t>(state)];
-}
-
-void TMoveDataActualizer::TPortionQueue::SetState(EPortionState& state, EPortionState next) {
-    AFL_VERIFY(Count(state));
-    --Count(state);
-    ++Count(next);
-    state = next;
-}
-
-void TMoveDataActualizer::TPortionQueue::ErasePortion(TPortions::iterator portion) {
-    AFL_VERIFY(portion->second == EPortionState::Finished || portion->second == EPortionState::Rejected);
-    const auto next = std::next(portion);
-    for (auto* cursor : { &StateUpdateCursor, &RewriteCursor, &MetadataCursor }) {
-        if (*cursor == portion) {
-            *cursor = next;
-        }
-    }
-    PortionsById.erase(portion->first);
-    Portions.erase(portion);
-    // Terminal counters are cumulative; only active states count towards the completion gate.
-}
 
 void TMoveDataActualizer::DoExtractTasks(
     TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext&) {
@@ -220,27 +194,10 @@ TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes() const {
     return Queue.GetSizes();
 }
 
-TMoveDataQueueSizes TMoveDataActualizer::TPortionQueue::GetSizes() const {
-    return TMoveDataQueueSizes{
-        .Pending = Count(EPortionState::Pending),
-        .ConfirmedToMove = Count(EPortionState::Ready),
-        .RewriteStarted = Count(EPortionState::RewriteStarted),
-        .Uncommitted = Count(EPortionState::Uncommitted),
-        .Retired = Count(EPortionState::Retired),
-        .Rejected = Count(EPortionState::Rejected),
-    };
-}
-
-void TMoveDataActualizer::TPortionQueue::Add(ui64 portionId) {
-    const auto entry = Portions.emplace(Portions.end(), portionId, EPortionState::Pending);
-    AFL_VERIFY(PortionsById.emplace(portionId, entry).second);
-    ++Count(EPortionState::Pending);
-}
-
-void TMoveDataActualizer::Seed(
+void TMoveDataActualizer::InitializePortionQueue(
     const TAddExternalContext& externalContext, const TWrittenPortionsById& uncommitted) {
-    AFL_VERIFY(!Seeded);
-    Seeded = true;
+    AFL_VERIFY(!PortionQueueInitialized);
+    PortionQueueInitialized = true;
     const auto add = [this](const auto& source) {
         for (const auto& [portionId, portion] : source) {
             if (portion->HasBlobsInBlobStorage(portion->GetSchema(VersionedIndex)->GetIndexInfo())) {

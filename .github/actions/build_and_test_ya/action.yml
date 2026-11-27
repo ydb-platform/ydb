@@ -868,6 +868,24 @@ runs:
             -d '{"state":"success","description":"The check has been completed successfully","context":"build_${{inputs.build_preset}}"}'
         fi
 
+    - name: Revalidate tests against current mute rules
+      if: (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && inputs.run_tests == 'true' && steps.build.outputs.status == 'true'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        rm -f mute_revalidation_comment.txt
+        if python3 .github/scripts/tests/revalidate_muted_tests.py apply --report "$LAST_BUILD_RESULTS_REPORT"; then
+          if [ -f mute_revalidation_comment.txt ]; then
+            .github/scripts/tests/comment-pr.py --color green < mute_revalidation_comment.txt
+            echo success > statusrep.txt
+            echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/revalidated_report.json" >> "$GITHUB_ENV"
+            echo "TEST_REVALIDATED=true" >> "$GITHUB_ENV"
+          fi
+        else
+          echo "::warning::Could not revalidate tests; keeping the original result"
+        fi
+
     - name: analyze tests results
       shell: bash
       env:
@@ -876,7 +894,9 @@ runs:
         set -x
         if [ true = ${{ inputs.run_tests }} ]; then
           teststatus=$(cat statusrep.txt)
-          if [[ $teststatus == "success" ]]; then
+          if [[ "${TEST_REVALIDATED:-}" == "true" ]]; then
+            testmessage="Revalidated: remaining failures are now muted; tests not rerun"
+          elif [[ $teststatus == "success" ]]; then
             testmessage="The check has been completed successfully"
           else
             testmessage="The check has been failed"
@@ -888,14 +908,6 @@ runs:
           if [[ $teststatus != "success" ]]; then
             echo "status=failed" >> $GITHUB_OUTPUT
           fi
-        fi
-
-    - name: check test results
-      if: inputs.run_tests
-      shell: bash
-      run: |
-        if [ $IS_TEST_RESULT_IGNORED == 0 ]; then
-          .github/scripts/tests/fail-checker.py "$LAST_BUILD_RESULTS_REPORT"
         fi
 
     - name: sync results to s3 and publish links
@@ -922,6 +934,10 @@ runs:
         . .github/scripts/utils/analytics/github_actions/analytics.sh
         conclusion="${{ job.status }}"
         if [ -z "$conclusion" ]; then
+          conclusion=failure
+        fi
+        # The final test checker runs after reporting so it can record eligibility.
+        if [ "$conclusion" == success ] && [ "${IS_TEST_RESULT_IGNORED:-1}" == 0 ] && [ -f statusrep.txt ] && [ "$(cat statusrep.txt)" != success ]; then
           conclusion=failure
         fi
         analytics send --conclusion "$conclusion"
@@ -1004,6 +1020,25 @@ runs:
         BUILD_PRESET: ${{ inputs.build_preset }}
         GITHUB_TOKEN: ${{ github.token }}
       run:  echo "Check cancelled" | .github/scripts/tests/comment-pr.py --color black
+
+    # Record eligibility only after all build/reporting steps succeeded. The only
+    # failing step after this upload is the test checker (cleanup is best effort).
+    - name: check test results
+      if: inputs.run_tests
+      shell: bash
+      env:
+        IS_PR: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+        BUILD_SUCCEEDED: ${{ steps.build.outputs.status == 'true' }}
+      run: |
+        if [ "$IS_TEST_RESULT_IGNORED" == 0 ]; then
+          if [ "$IS_PR" == "true" ] && [ "$BUILD_SUCCEEDED" == "true" ]; then
+            python3 .github/scripts/tests/revalidate_muted_tests.py record --report "$LAST_BUILD_RESULTS_REPORT" || echo "::warning::Test failures are not eligible for revalidation"
+            if [ -f "$PUBLIC_DIR/mute_revalidation.json" ]; then
+              s3cmd put --acl-public "$PUBLIC_DIR/mute_revalidation.json" "$S3_BUCKET_PATH/mute_revalidation.json"
+            fi
+          fi
+          .github/scripts/tests/fail-checker.py "$LAST_BUILD_RESULTS_REPORT"
+        fi
 
     - name: cleanup tmp
       if: always() && steps.prepare_s3cmd.outcome == 'success'

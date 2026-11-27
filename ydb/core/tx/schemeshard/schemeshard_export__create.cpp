@@ -18,12 +18,13 @@
 #include <ydb/core/backup/common/feature_flags.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 
+#include <util/folder/pathsplit.h>
 #include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
 #include <util/string/printf.h>
-#include <util/folder/pathsplit.h>
 
 #include <utility>
 
@@ -93,6 +94,7 @@ TString DefaultItemPrefix(const TSettings& settings, ui32 index, const TString& 
 }
 
 } // namespace
+
 // Erases encryption key from settings, if settings type supports it
 // Returns true if settings changed
 template <class TSettings, class = decltype(std::declval<TSettings>().encryption_settings())> // Function for TSettings that have encryption_settings()
@@ -434,6 +436,8 @@ private:
         if constexpr (!std::is_same_v<TSettings, Ydb::Export::ExportToYtSettings>) {
             if (AnyOf(exportInfo.Items, [](const auto& item) { return item.SourcePathType == NKikimrSchemeOp::EPathTypeDir; })) {
                 const TString root = settings.source_path().empty() ? CanonizePath(Self->RootPathElements) : CanonizePath(settings.source_path());
+                const auto& inheritedIndices = Request->Get()->Record.GetRequest().GetInheritedDestinationItems();
+                const THashSet<ui32> inherited(inheritedIndices.begin(), inheritedIndices.end());
                 TVector<TExportObjectPrefix> prefixes;
                 for (ui32 i : xrange(exportInfo.Items.size())) {
                     const auto& item = settings.items(i);
@@ -447,7 +451,7 @@ private:
                         }
                     }
                     prefixes.push_back({item.source_path(), std::move(prefix),
-                        exportInfo.Items[i].SourcePathType == NKikimrSchemeOp::EPathTypeDir, !destination.empty()});
+                        exportInfo.Items[i].SourcePathType == NKikimrSchemeOp::EPathTypeDir, !destination.empty() && !inherited.contains(i)});
                 }
                 if (!ResolveDirectoryExportPrefixes(prefixes, !GetCommonDestination(settings).empty(), explain)) {
                     return false;

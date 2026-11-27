@@ -14,6 +14,8 @@
 #include <util/string/builder.h>
 #include <util/string/hex.h>
 
+#include <algorithm>
+
 namespace NYdb {
 namespace NConsoleClient {
 
@@ -464,6 +466,12 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
         const auto [begin, end] = probe.GetResponseMetadata().equal_range(YDB_SERVER_HINTS);
         if (std::any_of(begin, end, [](const auto& hint) { return hint.second == YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT; })) {
             settings.Header(capability);
+            // The probe and export can reach different nodes during an upgrade.
+            // A node without the capability must filter out the entire request.
+            settings.AppendExcludeRegexp(".*");
+            if (settings.Item_.empty()) {
+                settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database});
+            }
             for (const auto& pattern : ExclusionPatterns) {
                 settings.AppendExcludeRegexp(pattern.GetRegExpr());
             }

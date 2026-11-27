@@ -160,6 +160,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     struct TExportItemInfo {
         TString Destination;
         bool Resolved = false;
+        bool ExplicitDestination = false;
     };
 
     enum class EStage {
@@ -235,6 +236,9 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         auto* exportSettings = TTraits::GetSettings(createExport);
         *exportSettings = request.settings();
+        if (AbsoluteExcludePaths) {
+            exportSettings->mutable_exclude_regexps()->DeleteSubrange(0, 1);
+        }
 
         if constexpr (TTraits::HasSourcePath) {
             TTraits::SetSourcePath(exportSettings, CommonSourcePath);
@@ -246,6 +250,10 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         exportSettings->clear_items();
         for (const auto& [sourcePath, info] : ExportItems) {
+            if ((IsS3Export || IsFsExport) && AppData()->FeatureFlags.GetEnableDirectoryExport()
+                && info.Destination && !info.ExplicitDestination) {
+                createExport.AddInheritedDestinationItems(exportSettings->items_size());
+            }
             auto* item = exportSettings->add_items();
             item->set_source_path(sourcePath);
             TTraits::SetDestination(item, info.Destination);
@@ -280,6 +288,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 return false;
             }
             it->second.Destination = TTraits::GetDestination(item);
+            it->second.ExplicitDestination = !it->second.Destination.empty();
         }
 
         if constexpr (TTraits::HasSourcePath) {
@@ -461,14 +470,15 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                         << path << "\" does not have list entry");
                 }
                 const bool isRoot = path == canonizedDatabasePath;
-                const auto directory = std::move(it->second);
+                auto directory = std::move(it->second);
                 DirectoryItems.erase(it);
                 if (NBackup::IsOmittedFromBackup(entry.Attributes)) {
                     ExportItems.erase(path);
                     continue;
                 }
                 if (IsItemSupportedInExport(entry) && !IsExcludedFromExport(path)) {
-                    ExportItems.try_emplace(path, TExportItemInfo{.Destination = directory.Destination, .Resolved = true});
+                    directory.Resolved = true;
+                    ExportItems.try_emplace(path, directory);
                 } else {
                     ExportItems.erase(path);
                 }
@@ -636,7 +646,21 @@ public:
         }
 
         try {
-            ExcludeRegexps = NBackup::CombineRegexps(settings.exclude_regexps());
+            if (AbsoluteExcludePaths) {
+                if (!AppData()->FeatureFlags.GetEnableDirectoryExport()) {
+                    return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Directory export is disabled");
+                }
+                auto filters = settings.exclude_regexps();
+                // An old node reached after capability discovery must reject
+                // the entire selection before it can recursively export it.
+                if (filters.empty() || filters.Get(0) != ".*") {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Missing directory export filter guard");
+                }
+                filters.DeleteSubrange(0, 1);
+                ExcludeRegexps = NBackup::CombineRegexps(filters);
+            } else {
+                ExcludeRegexps = NBackup::CombineRegexps(settings.exclude_regexps());
+            }
         } catch (const std::exception& ex) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid regexp: " << ex.what());
         }

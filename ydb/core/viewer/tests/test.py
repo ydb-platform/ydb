@@ -49,7 +49,10 @@ class TestViewer(object):
             'enable_extra_sids_control_for_http_viewer': True,
             'enable_column_statistics': True,
             },
-            enable_static_auth=True)
+            enable_static_auth=True,
+            # Topology canons / multi-tenant layout assume the historical 2-group default pool.
+            dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0, num_groups=2)],
+            )
         config.yaml_config['blob_storage_config']['infer_pdisk_slot_count_settings'] = {
             'rot': {
                 'unit_size': 4 * 1024**3,

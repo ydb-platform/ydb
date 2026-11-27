@@ -115,7 +115,8 @@ class BaseCanonicalTest(object):
                 udfs_path=yatest.common.build_path("yql/udfs"),
                 domain_name='local',
                 use_in_memory_pdisks=True,
-                extra_feature_flags=["enable_resource_pools", "enable_fulltext_index"]
+                extra_feature_flags=["enable_resource_pools", "enable_fulltext_index"],
+                dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0, num_groups=2)],
             )
         )
         cls.cluster.start()

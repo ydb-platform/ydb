@@ -14,20 +14,38 @@ namespace {
 
     const double TWO_COLUMNS_DEFAULT_SELECTIVITY = 0.3;
 
+    const TColumnStatistics& FindColumnStatistics(const TOptimizerStatistics& stats, const TString& attributeName) {
+        static const TColumnStatistics empty;
+        const auto& data = stats.ColumnStatistics->Data;
+        if (const auto it = data.find(attributeName); it != data.end()) {
+            return it->second;
+        }
+        if (const auto dotPos = attributeName.find('.'); dotPos != TString::npos) {
+            if (const auto it = data.find(attributeName.substr(dotPos + 1)); it != data.end()) {
+                return it->second;
+            }
+        }
+        return empty;
+    }
+
+    // The default equality selectivity must not depend on the row estimate of the plan node the
+    // predicate is attached to: equivalent query forms (for example, a chain of filters vs a
+    // single merged filter, see ydb-platform/ydb#55470) place the same predicate at nodes with
+    // different Nrows, and node-dependent estimates make the optimizer path-dependent. Use the
+    // per-column distinct count when available, otherwise a fixed default.
     double DefaultEqualitySelectivity(const std::shared_ptr<NKikimr::NKqp::TOptimizerStatistics>& stats, const TString& attributeName) {
         if (stats == nullptr) {
             return 1.0;
         }
 
-        if (stats->KeyColumns && stats->KeyColumns->Data.size() == 1 && attributeName == stats->KeyColumns->Data[0]) {
-            return 1.0 / std::max<double>(stats->Nrows, 1.0);
-        } else {
-            if (stats->Nrows > 1) {
-                return 0.1;
+        if (stats->ColumnStatistics) {
+            const auto distinctCount = FindColumnStatistics(*stats, attributeName).GetDistinctCount();
+            if (distinctCount && *distinctCount > 0) {
+                return 1.0 / std::max<double>(*distinctCount, 1.0);
             }
-
-            return 1.0;
         }
+
+        return 0.1;
     }
 
     double DefaultInequalitySelectivity(const std::shared_ptr<NKikimr::NKqp::TOptimizerStatistics>& stats, const TString& attributeName) {
@@ -343,24 +361,6 @@ namespace NKikimr::NKqp {
 
 using namespace NPredicateTree;
 
-namespace {
-
-const TColumnStatistics& FindColumnStatistics(const TOptimizerStatistics& stats, const TString& attributeName) {
-    static const TColumnStatistics empty;
-    const auto& data = stats.ColumnStatistics->Data;
-    if (const auto it = data.find(attributeName); it != data.end()) {
-        return it->second;
-    }
-    if (const auto dotPos = attributeName.find('.'); dotPos != TString::npos) {
-        if (const auto it = data.find(attributeName.substr(dotPos + 1)); it != data.end()) {
-            return it->second;
-        }
-    }
-    return empty;
-}
-
-} // anonymous namespace
-
 double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
     const TExprBase& left,
     const TExprBase& right,
@@ -390,10 +390,16 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
             if (const auto eqWidthHistogram = FindColumnStatistics(*Stats, attributeName).EqWidthHistogramEstimator) {
                 const auto columnType = FindColumnStatistics(*Stats, attributeName).Type;
                 TMaybe<ui64> estimation = EstimateInequalityPredicateByHistogram(right, columnType, eqWidthHistogram, predicate);
-                if (!estimation.Defined() || !Stats->Nrows) {
+                // The histogram counts rows of the base relation: normalize by its own element
+                // count, not by the current plan node's row estimate (see ydb-platform/ydb#55470:
+                // node-dependent normalization makes equivalent query forms estimate differently).
+                const double baseRows = eqWidthHistogram->GetNumElements() > 0
+                    ? static_cast<double>(eqWidthHistogram->GetNumElements())
+                    : Stats->Nrows;
+                if (!estimation.Defined() || baseRows <= 0) {
                     return DefaultInequalitySelectivity(Stats, attributeName);
                 }
-                return estimation.GetRef() / std::max(Stats->Nrows, 1e-4);
+                return estimation.GetRef() / std::max(baseRows, 1e-4);
             }
             return DefaultInequalitySelectivity(Stats, attributeName);
         }
@@ -430,10 +436,16 @@ double TPredicateSelectivityComputer::ComputeEqualitySelectivity(
             if (const auto countMinSketch = FindColumnStatistics(*Stats, attributeName).CountMinSketch) {
                 const auto columnType = FindColumnStatistics(*Stats, attributeName).Type;
                 TMaybe<ui32> estimation = EstimateEqualityPredicateBySketch(right, columnType, countMinSketch);
-                if (!estimation.Defined() || !Stats->Nrows) {
+                // The sketch stores row counts of the base relation: normalize by its own element
+                // count, not by the current plan node's row estimate (see ydb-platform/ydb#55470:
+                // node-dependent normalization makes equivalent query forms estimate differently).
+                const double baseRows = countMinSketch->GetElementCount() > 0
+                    ? static_cast<double>(countMinSketch->GetElementCount())
+                    : Stats->Nrows;
+                if (!estimation.Defined() || baseRows <= 0) {
                     return DefaultEqualitySelectivity(Stats, attributeName);
                 }
-                return estimation.GetRef() / std::max(Stats->Nrows, 1e-4);
+                return estimation.GetRef() / std::max(baseRows, 1e-4);
             }
             return DefaultEqualitySelectivity(Stats, attributeName);
         }
@@ -500,10 +512,15 @@ double TPredicateSelectivityComputer::ReComputeEstimation(const TString& attribu
                 countMinSketch
             );
 
-            if (!estimation.Defined()) {
+            // Normalize by the sketch's own element count (rows of the base relation), not by the
+            // plan node's row estimate (see ydb-platform/ydb#55470).
+            const double baseRows = countMinSketch->GetElementCount() > 0
+                ? static_cast<double>(countMinSketch->GetElementCount())
+                : Stats->Nrows;
+            if (!estimation.Defined() || baseRows <= 0) {
                 return DefaultEqualitySelectivity(Stats, attributeName);
             }
-            return (double) estimation.GetRef() / std::max(Stats->Nrows, 1e-4);
+            return (double) estimation.GetRef() / std::max(baseRows, 1e-4);
         }
 
         return DefaultEqualitySelectivity(Stats, attributeName);
@@ -537,10 +554,14 @@ double TPredicateSelectivityComputer::ReComputeEstimation(const TString& attribu
                 rightInequalitySign
             );
 
-            if (!estimation.Defined()) {
+            // Normalize by the histogram's own element count (see ydb-platform/ydb#55470).
+            const double baseRows = eqWidthHistogram->GetNumElements() > 0
+                ? static_cast<double>(eqWidthHistogram->GetNumElements())
+                : Stats->Nrows;
+            if (!estimation.Defined() || baseRows <= 0) {
                 return DefaultInequalitySelectivity(Stats, attributeName);
             }
-            return (double) estimation.GetRef() / std::max(Stats->Nrows, 1e-4);
+            return (double) estimation.GetRef() / std::max(baseRows, 1e-4);
         }
 
         return DefaultInequalitySelectivity(Stats, attributeName);
@@ -576,10 +597,14 @@ double TPredicateSelectivityComputer::ReComputeEstimation(const TString& attribu
             inequalitySign
         );
 
-        if (!estimation.Defined()) {
+        // Normalize by the histogram's own element count (see ydb-platform/ydb#55470).
+        const double baseRows = eqWidthHistogram->GetNumElements() > 0
+            ? static_cast<double>(eqWidthHistogram->GetNumElements())
+            : Stats->Nrows;
+        if (!estimation.Defined() || baseRows <= 0) {
             return DefaultInequalitySelectivity(Stats, attributeName);
         }
-        return (double) estimation.GetRef() / std::max(Stats->Nrows, 1e-4);
+        return (double) estimation.GetRef() / std::max(baseRows, 1e-4);
     }
 
     return DefaultInequalitySelectivity(Stats, attributeName);

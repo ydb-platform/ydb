@@ -66,12 +66,9 @@ namespace {
     }
 
     ui32 ResolveColdPartLevel(ui32 level, const NLocalDb::TCompactionPolicy& policy) {
-        if (level == 255) {
-            return level;
-        }
-        Y_ENSURE(level > 0 && level <= policy.Generations.size(),
-            "Unloaded compaction part refers to an unknown generation");
-        return policy.Generations[level - 1].TierId.value_or(0) == 0 ? level : 255;
+        Y_ENSURE(level > 0, "Invalid unloaded compaction part level");
+        return policy.GetTierForLevel(level) == 0
+            ? level : NLocalDb::TCompactionPolicy::DefaultFinalLevel;
     }
 
     TVector<TCompactionPartInfo> DescribeCompactionParts(
@@ -79,36 +76,31 @@ namespace {
             TConstArrayRef<TIntrusiveConstPtr<TColdPart>> coldParts,
             const TCompactionState& state, const NLocalDb::TCompactionPolicy& policy)
     {
-        auto tierForLevel = [&](ui32 level) {
-            if (level == 255) {
-                return ui32(0);
-            }
-            Y_ENSURE(level > 0 && level <= policy.Generations.size(),
-                "Compaction part refers to an unknown generation");
-            return policy.Generations[level - 1].TierId.value_or(0);
-        };
-
         TVector<TCompactionPartInfo> result;
         result.reserve(parts.size() + coldParts.size());
         for (const auto& part : parts) {
             Y_ENSURE(part, "Missing compaction part");
-            const ui32 level = state.PartLevels.Value(part->Label, 255);
-            result.emplace_back(part, level, tierForLevel(level));
+            const ui32 level = state.PartLevels.Value(part->Label,
+                NLocalDb::TCompactionPolicy::DefaultFinalLevel);
+            Y_ENSURE(level > 0, "Invalid compaction part level");
+            result.emplace_back(part, level, policy.GetTierForLevel(level));
         }
         for (const auto& part : coldParts) {
             Y_ENSURE(part, "Missing unloaded compaction part");
-            const ui32 savedLevel = state.PartLevels.Value(part->Label, 255);
+            const ui32 savedLevel = state.PartLevels.Value(part->Label,
+                NLocalDb::TCompactionPolicy::DefaultFinalLevel);
             const ui32 level = ResolveColdPartLevel(savedLevel, policy);
             result.emplace_back(part, level, 0);
         }
         return result;
     }
 
-    TCompactionContext::TCompactionContext(std::optional<TCompactionEpochRange> epochs,
+    TCompactionContext::TCompactionContext(TEpoch outputEpoch, std::optional<TCompactionEpochRange> epochs,
             TVector<TCompactionPartInfo> inputs, TVector<TCompactionPartInfo> remaining,
             TVector<ui32> inputTiers, TVector<TEpoch> extraEpochs,
             TVector<ui32> extraInputTiers, const TSubset* initialSubset)
-        : Epochs(std::move(epochs))
+        : OutputEpoch(outputEpoch)
+        , Epochs(std::move(epochs))
         , Inputs(std::move(inputs))
         , Remaining(std::move(remaining))
         , InputTiers(std::move(inputTiers))
@@ -174,6 +166,12 @@ namespace {
         }
         std::sort(extra.begin(), extra.end());
 
+        const TEpoch outputEpoch = epochs ? epochs->Max : TEpoch::Min();
+        if (initialSubset && !*initialSubset) {
+            // A flush of tx statuses alone preserves their epoch and rewrites no rows.
+            epochs.reset();
+        }
+
         TVector<TCompactionPartInfo> inputs;
         TVector<TCompactionPartInfo> remaining;
         TVector<ui32> inputTiers;
@@ -197,7 +195,7 @@ namespace {
                 remaining.push_back(std::move(part));
             }
         }
-        return new TCompactionContext(std::move(epochs), std::move(inputs),
+        return new TCompactionContext(outputEpoch, std::move(epochs), std::move(inputs),
             std::move(remaining), std::move(inputTiers), std::move(extra), std::move(extraTiers),
             initialSubset);
     }
@@ -295,8 +293,7 @@ namespace {
                 Y_ENSURE(status.erase(part.Get()), "Compaction transaction-status source has changed");
             }
         }
-        Y_ENSURE(subset.Epoch() == (Epochs ? Epochs->Max : TEpoch::Min()),
-            "Compaction output epoch differs from the closed interval");
+        Y_ENSURE(subset.Epoch() == OutputEpoch, "Compaction output epoch differs from its prepared inputs");
     }
 
     bool TCompactionContext::IsCurrent(TConstArrayRef<TCompactionPartInfo> parts) const {

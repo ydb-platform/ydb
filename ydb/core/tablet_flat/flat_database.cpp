@@ -812,7 +812,7 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
             prefix.EvAnnex(blobs);
         }
 
-        DatabaseImpl->CommitTransaction(Change->Stamp, annex, prefix);
+        DatabaseImpl->CommitTransaction(*Change, annex, prefix);
 
         if (Alter_ && *Alter_) {
             auto delta = Alter_->Flush();

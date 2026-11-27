@@ -24,7 +24,7 @@ TLoader::TLoader(TPartComponents components, TVector<TIntrusivePtr<TPageCollecti
 
 TLoader::~TLoader() { }
 
-void TLoader::StageParseMeta()
+void TLoader::StageParseMeta(bool preferBTreeIndex)
 {
     if (PageCollections.size() < Components.PageCollectionComponents.size()) {
         PageCollections.resize(Components.PageCollectionComponents.size());
@@ -139,7 +139,7 @@ void TLoader::StageParseMeta()
         // Offline readers of a page collection have no feature flags to consult, and then whatever
         // index the part holds is kept, the V2 root included.
         if (HasAppData()) {
-            if (!AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex() && FlatGroupIndexes) {
+            if (FlatGroupIndexes && !preferBTreeIndex && !AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex()) {
                 BTreeGroupIndexes.clear();
                 BTreeHistoricIndexes.clear();
             }

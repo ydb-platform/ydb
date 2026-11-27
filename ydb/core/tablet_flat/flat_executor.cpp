@@ -10,6 +10,8 @@
 #include "flat_executor_snapshot.h"
 #include "flat_scan_actor.h"
 #include "flat_ops_compact.h"
+#include "flat_compaction_config.h"
+#include "flat_compaction_prepare.h"
 #include "flat_part_loader.h"
 #include "flat_store_hotdog.h"
 #include "flat_store_solid.h"
@@ -282,7 +284,7 @@ void TExecutor::RecreatePrivateCache()
         const auto& cacheModes = GetCacheModes(it.first);
         const auto stickyColumns = GetStickyColumns(it.first);
         for (auto &partView : subset->Flatten) {
-            AddPartStorePageCollections(partView, cacheModes, stickyColumns, replayStickyWalks);
+            AddPartStorePageCollections(it.first, partView, cacheModes, stickyColumns, replayStickyWalks);
         }
     }
 
@@ -463,6 +465,7 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
     Y_ENSURE(!LogicAlter);
 
     Database = loadedState->Database;
+    PartTiers = std::move(loadedState->PartTiers);
     BorrowLogic = loadedState->Loans;
 
     Y_ENSURE(!CompactionLogic);
@@ -503,6 +506,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CommitManager = loadedState->CommitManager;
     Database = loadedState->Database;
+    PartTiers = std::move(loadedState->PartTiers);
     LogicSnap = loadedState->Snap;
     GcLogic = loadedState->GcLogic;
     LogicRedo = loadedState->Redo;
@@ -825,7 +829,7 @@ TVector<bool> MakeStickyGroups(const NTable::TPartView& partView, const THashSet
 
 } // namespace
 
-void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
+void TExecutor::AddPartStorePageCollections(ui32 tableId, const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
     const THashSet<NTable::TTag>& stickyColumns, bool replayStickyWalks)
 {
     auto *partStore = partView.As<NTable::TPartStore>();
@@ -838,9 +842,10 @@ void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, c
             Stats->PacksMetaBytes += pack->Meta.Raw.size();
     }
 
+    const auto tierMode = GetTierCacheMode(tableId, partView->Label);
     for (ui32 slot : xrange(partStore->Slots.SlotsCount())) {
         partStore->PageCollections[slot]->SetCacheMode(
-            GetCacheMode(partView->Scheme->Groups[partStore->Slots.SlotLeaderGroup(slot)].Columns, cacheModes)
+            GetCacheMode(tierMode, partView->Scheme->Groups[partStore->Slots.SlotLeaderGroup(slot)].Columns, cacheModes)
         );
     }
 
@@ -881,6 +886,7 @@ void TExecutor::AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCo
 void TExecutor::DropPartStorePageCollections(const NTable::TPart &part)
 {
     auto *partStore = CheckedCast<const NTable::TPartStore*>(&part);
+    PartTiers.erase(part.Label);
 
     {
         ui32 room = 0;
@@ -922,7 +928,7 @@ void TExecutor::UpdateCachePagesForDatabase(bool pendingOnly) {
             auto subset = Database->Subset(tid, NTable::TEpoch::Max(), { } , { });
             for (auto& partView: subset->Flatten) {
                 if (updateCacheModes) {
-                    UpdateCacheModesForPartStore(partView, cacheModes, stickyColumns);
+                    UpdateCacheModesForPartStore(tid, partView, cacheModes, stickyColumns);
                 }
                 if (requestStickyColumns) {
                     RequestStickyPagesForPartStore(partView, stickyColumns);
@@ -1361,11 +1367,15 @@ void TExecutor::AddFollowerPartSwitch(
     partSwitch.TableId = switchProto.GetTableId();
     partSwitch.Step = step;
 
-    if (switchProto.HasIntroducedParts() && switchProto.GetIntroducedParts().BundlesSize()) {
-        Y_ENSURE(aux && aux->HotBundlesSize() == switchProto.GetIntroducedParts().BundlesSize());
+    const auto& introduced = switchProto.GetIntroducedParts();
+    if (introduced.BundlesSize()) {
+        Y_ENSURE(aux && aux->HotBundlesSize() == introduced.BundlesSize());
+        const ui32 sharedLevel = introduced.HasCompactionLevel()
+            ? introduced.GetCompactionLevel() : NLocalDb::TCompactionPolicy::DefaultFinalLevel;
         for (auto x : xrange(aux->HotBundlesSize())) {
+            const auto& bundle = introduced.GetBundles(x);
             NTable::TPartComponents c = TPageCollectionProtoHelper::MakePageCollectionComponents(aux->GetHotBundles(x));
-            PrepareExternalPart(partSwitch, std::move(c));
+            PrepareExternalPart(partSwitch, std::move(c), bundle.HasCompactionLevel() ? bundle.GetCompactionLevel() : sharedLevel);
         }
     }
 
@@ -1420,7 +1430,7 @@ void TExecutor::AddFollowerPartSwitch(
     }
 }
 
-bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPartComponents &&pc) {
+bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPartComponents &&pc, ui32 level) {
     Y_ENSURE(pc);
 
     const ui32 tableId = partSwitch.TableId;
@@ -1444,7 +1454,8 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPar
         }
     }
 
-    auto &bundle = partSwitch.NewBundles.emplace_back(std::move(pc));
+    const ui32 tierId = tableScheme.UsesTiering() ? tableScheme.CompactionPolicy->GetTierForLevel(level) : 0;
+    auto &bundle = partSwitch.NewBundles.emplace_back(std::move(pc), tierId);
 
     return PrepareExternalPart(partSwitch, bundle);
 }
@@ -1629,17 +1640,18 @@ bool TExecutor::ApplyReadyPartSwitches() {
     return true;
 }
 
-void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
+void TExecutor::UpdateCacheModesForPartStore(ui32 tableId, const NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
     const THashSet<NTable::TTag>& stickyColumns) {
     Y_DEBUG_ABORT_UNLESS(cacheModes);
 
     auto* partStore = partView.As<NTable::TPartStore>();
     const auto stickyGroups = MakeStickyGroups(partView, stickyColumns);
+    const auto tierMode = GetTierCacheMode(tableId, partView->Label);
     TVector<bool> modeChanged(partStore->PageCollections.size(), false);
 
     for (ui32 slot : xrange(partStore->Slots.SlotsCount())) {
         const size_t groupIndex = partStore->Slots.SlotLeaderGroup(slot);
-        ECacheMode cacheMode = GetCacheMode(partView->Scheme->Groups[groupIndex].Columns, cacheModes);
+        ECacheMode cacheMode = GetCacheMode(tierMode, partView->Scheme->Groups[groupIndex].Columns, cacheModes);
         auto* pageCollection = partStore->PageCollections[slot].Get();
 
         modeChanged[slot] = PrivatePageCache->UpdateCacheMode(cacheMode, pageCollection);
@@ -1661,6 +1673,20 @@ void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const 
         auto* pageCollection = partStore->PageCollections[partStore->DataSlot(groupId)].Get();
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode(),
             MakeBtreeSeeds(*partStore, groupIndex, stickyGroups)));
+    }
+}
+
+void TExecutor::ResetMovedPartCacheModes(ui32 destinationTable, const TVector<NTable::TPartView>& parts) {
+    if (PartTiers.empty()) {
+        return;
+    }
+    const auto cacheModes = GetCacheModes(destinationTable);
+    const auto stickyColumns = GetStickyColumns(destinationTable);
+    for (const auto& part : parts) {
+        // A moved part keeps its registered collections and enters the destination's default tier.
+        if (PartTiers.erase(part->Label)) {
+            UpdateCacheModesForPartStore(destinationTable, part, cacheModes, stickyColumns);
+        }
     }
 }
 
@@ -1731,7 +1757,18 @@ THashSet<NTable::TTag> TExecutor::GetStickyColumns(ui32 tableId) {
     return stickyColumns;
 }
 
-ECacheMode TExecutor::GetCacheMode(const TVector<NTable::TPartScheme::TColumn>& columns, const THashMap<NTable::TTag, ECacheMode>& cacheModes) {
+std::optional<ECacheMode> TExecutor::GetTierCacheMode(ui32 tableId, const TLogoBlobID& label) const {
+    if (const auto* tier = PartTiers.FindPtr(label)) {
+        return Scheme().Tables.at(tableId).Families.at(*tier).CacheMode;
+    }
+    return std::nullopt;
+}
+
+ECacheMode TExecutor::GetCacheMode(std::optional<ECacheMode> tierMode, const TVector<NTable::TPartScheme::TColumn>& columns,
+    const THashMap<NTable::TTag, ECacheMode>& cacheModes) {
+    if (tierMode) {
+        return *tierMode;
+    }
     ECacheMode cacheMode = ECacheMode::Regular;
     for (const auto& column : columns) {
         if (const auto* mode = cacheModes.FindPtr(column.Tag); mode && *mode == ECacheMode::TryKeepInMemory) {
@@ -1751,7 +1788,10 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
     for (auto &bundle : partSwitch.NewBundles) {
         auto* stage = bundle.GetStage<TPendingPartSwitch::TResultStage>();
         Y_ENSURE(stage && stage->PartView, "Missing bundle result in part switch");
-        AddPartStorePageCollections(stage->PartView, cacheModes, stickyColumns);
+        if (bundle.TierId) {
+            PartTiers.emplace(stage->PartView->Label, bundle.TierId);
+        }
+        AddPartStorePageCollections(partSwitch.TableId, stage->PartView, cacheModes, stickyColumns);
         if (stickyColumns) {
             RequestStickyPagesForPartStore(stage->PartView, stickyColumns);
         }
@@ -1813,30 +1853,19 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
             DropPartStorePageCollections(*gone);
 
         Send(Owner->Tablet(), new TEvTablet::TEvFGcAck(Owner->TabletID(), Generation(), partSwitch.FollowerUpdateStep));
-    } else {
-        bool merged = false;
-        for (auto &partView : newParts) {
+    } else if (newParts || newColdParts || newTxStatus) {
+        for (const auto& partView : newParts) {
             Database->Merge(partSwitch.TableId, partView);
-            merged = true;
-
-            if (CompactionLogic) {
-                CompactionLogic->BorrowedPart(partSwitch.TableId, std::move(partView));
-            }
         }
-        for (auto &part : newColdParts) {
+        for (const auto& part : newColdParts) {
             Database->Merge(partSwitch.TableId, part);
-            merged = true;
-
-            if (CompactionLogic) {
-                CompactionLogic->BorrowedPart(partSwitch.TableId, std::move(part));
-            }
         }
         for (auto &txStatus : newTxStatus) {
             Database->Merge(partSwitch.TableId, txStatus);
-            merged = true;
         }
-        if (merged) {
-            Database->MergeDone(partSwitch.TableId);
+        Database->MergeDone(partSwitch.TableId);
+        if (CompactionLogic && (newParts || newColdParts)) {
+            CompactionLogic->BorrowedParts(partSwitch.TableId, newParts, newColdParts);
         }
     }
 
@@ -1855,11 +1884,11 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
             }
         }
 
+        TVector<NTable::TPartView> rebased(Reserve(partSwitch.Moves.size()));
         // N.B. there should be a single source table per part switch
         for (auto& [sourceTable, state] : perTable) {
             // Rebase source parts to their respective new epochs
             auto srcSubset = Database->PartSwitchSubset(sourceTable, NTable::TEpoch::Zero(), state.Bundles, { });
-            TVector<NTable::TPartView> rebased(Reserve(srcSubset->Flatten.size()));
             for (const auto& partView : srcSubset->Flatten) {
                 Y_ENSURE(!partView->TxIdStats, "Cannot move parts with uncommitted deltas");
                 NTable::TEpoch epoch = state.BundleToEpoch.Value(partView->Label, partView->Epoch);
@@ -1872,18 +1901,17 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
             if (CompactionLogic) {
                 CompactionLogic->RemovedParts(sourceTable, state.Bundles);
             }
-
-            // Merge rebased parts to the destination table
-            for (auto& partView : rebased) {
-                Database->Merge(partSwitch.TableId, partView);
-
-                if (CompactionLogic) {
-                    CompactionLogic->BorrowedPart(partSwitch.TableId, std::move(partView));
-                }
-            }
         }
 
+        // Merge rebased parts to the destination table
+        ResetMovedPartCacheModes(partSwitch.TableId, rebased);
+        for (const auto& partView : rebased) {
+            Database->Merge(partSwitch.TableId, partView);
+        }
         Database->MergeDone(partSwitch.TableId);
+        if (CompactionLogic) {
+            CompactionLogic->BorrowedParts(partSwitch.TableId, rebased);
+        }
     }
 }
 
@@ -2567,7 +2595,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
 
         if (auto alter = std::move(change->Scheme)) {
             LogicAlter->WriteLog(*commit, std::move(alter));
-            auto reflectResult = CompactionLogic->ReflectSchemeChanges();
+            auto reflectResult = CompactionLogic->ReflectSchemeChanges(change->AlteredTables);
 
             ReadResourceProfile();
             ReflectSchemeSettings();
@@ -2762,11 +2790,12 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
                     }
 
                     // Add rebased parts to the destination table
-                    for (auto& partView : rebased) {
+                    ResetMovedPartCacheModes(dst, rebased);
+                    for (const auto& partView : rebased) {
                         Database->Merge(dst, partView);
-                        CompactionLogic->BorrowedPart(dst, partView);
                     }
                     Database->MergeDone(dst);
+                    CompactionLogic->BorrowedParts(dst, rebased);
 
                     // Serialize rebased parts as moved from the source table
                     NKikimrExecutorFlat::TTablePartSwitch proto;
@@ -2909,7 +2938,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
                 LogoBlobIDFromLogoBlobID(glob.Logo, bySwitchAux->MutablePartSwitchRef());
             }
 
-            PrepareExternalPart(partSwitch, std::move(loaned->PartComponents));
+            PrepareExternalPart(partSwitch, std::move(loaned->PartComponents), CompactionLogic->BorrowedPartLevel());
         }
         for (auto &loaned : env.LoanTxStatus) {
             auto& partSwitch = PendingPartSwitches.emplace_back();
@@ -3013,9 +3042,10 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             auto *bySwitchAux = aux.AddBySwitchAux();
 
             for (size_t i = 0; i < result->Parts.size(); ++i) {
-                auto partView = result->Parts[i].CloneWithEpoch(partEpoch);
+                auto& partView = result->Parts[i];
+                partView = partView.CloneWithEpoch(partEpoch);
 
-                AddPartStorePageCollections(partView, cacheModes, stickyColumns);
+                AddPartStorePageCollections(attachTableId, partView, cacheModes, stickyColumns);
 
                 auto *partStore = partView.As<NTable::TPartStore>();
                 Y_ENSURE(partStore, "Direct write produced an unexpected part type");
@@ -3030,12 +3060,12 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
                 }
 
                 Database->Merge(attachTableId, partView);
-                CompactionLogic->BorrowedPart(attachTableId, partView);
 
                 TPageCollectionProtoHelper::Snap(snap, partView, attachTableId, CompactionLogic->BorrowedPartLevel());
                 TPageCollectionProtoHelper(true).Do(bySwitchAux->AddHotBundles(), partView);
             }
             Database->MergeDone(attachTableId);
+            CompactionLogic->BorrowedParts(attachTableId, result->Parts);
 
             {
                 auto body = proto.SerializeAsString();
@@ -3948,15 +3978,16 @@ void TExecutor::Handle(NOps::TEvResult::TPtr &ev) {
 void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) {
     THPTimer partSwitchCpuTimer;
 
+    const ui32 tableId = msg->Params->Table;
+    const auto* currentTable = Scheme().GetTableInfo(tableId);
+
     if (msg->Params->TaskId != 0) {
         // We have taken over this task, mark it as finished in the broker
         auto status = cancelled ? EResourceStatus::Cancelled : EResourceStatus::Finished;
         Broker->FinishTask(msg->Params->TaskId, status);
     }
 
-    const ui32 tableId = msg->Params->Table;
-
-    const bool abandoned = cancelled || !Scheme().GetTableInfo(tableId);
+    const bool abandoned = cancelled || !currentTable;
 
     TProdCompact::TResults results = std::move(msg->Results);
     TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> newTxStatus = std::move(msg->TxStatus);
@@ -3980,7 +4011,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     }
 
     if (abandoned) {
-        if (cancelled && Scheme().GetTableInfo(tableId)) {
+        if (cancelled && currentTable) {
             CompactionLogic->CancelledCompaction(ops->Serial, std::move(msg->Params));
         }
         return;
@@ -4038,7 +4069,12 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         for (const auto &result : results) {
             const auto &newPart = result.Part;
 
-            AddPartStorePageCollections(newPart, cacheModes, stickyColumns);
+            if (const auto& tiering = msg->Params->Tiering) {
+                if (const ui32 tier = tiering->OutputTiers.at(result.OutputId)) {
+                    PartTiers.emplace(newPart->Label, tier);
+                }
+            }
+            AddPartStorePageCollections(tableId, newPart, cacheModes, stickyColumns);
 
             auto *partStore = newPart.As<NTable::TPartStore>();
 
@@ -5225,10 +5261,13 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
             return true;
         }
 
+        const auto* tierId = PartTiers.FindPtr(partView->Label);
+        const auto* tierFamily = tierId ? &tableInfo.Families.at(*tierId) : nullptr;
+        static const NTable::TScheme::TFamily defaultFamilySettings;
         for (size_t index : xrange(rowScheme.Families.size())) {
-            auto familyId = rowScheme.Families[index];
-            static const NTable::TScheme::TFamily defaultFamilySettings;
-            const auto& family = tableInfo.Families.ValueRef(familyId, defaultFamilySettings); // Workaround for KIKIMR-17222
+            // Preserve the missing-family fallback for ordinary column groups (KIKIMR-17222).
+            const auto& family = tierFamily ? *tierFamily
+                : tableInfo.Families.ValueRef(rowScheme.Families[index], defaultFamilySettings);
 
             const auto* schemeGroupRoom = tableInfo.Rooms.FindPtr(family.Room);
             Y_ENSURE(schemeGroupRoom, "Cannot find room " << family.Room << " in table " << tableInfo.Id);
@@ -5380,46 +5419,34 @@ void TExecutor::ReleaseWritePart(ui32 step)
     CheckCollectionBarrier(barrier);
 }
 
+bool TExecutor::IsDataTieringEnabled() const
+{
+    return AppData()->FeatureFlags.GetEnableDataTiering();
+}
+
+void TExecutor::RequestMemCompactionRetry(ui32 table)
+{
+    CompactionLogic->RequestMemCompactionRetry(table);
+    PlanCompactionChangesActivation();
+}
+
 ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 {
+    Y_ENSURE(params->Tiering || params->Mode == NTable::TCompactionParams::EMode::Regular,
+        "Tier-aware compaction requires a managed strategy operation");
+
     if (auto logl = Logger->Log(ELnLev::Info))
         logl << NFmt::Do(*this) << " starting compaction";
-
-    using NTable::NPage::ECache;
 
     auto table = params->Table;
     auto snapshot = PrepareScanSnapshot(table, params.Get());
 
     auto rowScheme = RowScheme(table);
     auto *tableInfo = Scheme().GetTableInfo(table);
-    auto *policy = tableInfo->CompactionPolicy.Get();
-
-    const ECache cache = params->KeepInCache ? ECache::Once : ECache::None;
 
     TAutoPtr<TCompactCfg> comp = new TCompactCfg(std::move(params));
-    auto& output = comp->Outputs.emplace_back();
 
     comp->Epoch = snapshot->Subset->Epoch(); /* narrows requested to actual */
-    output.Layout.Final = comp->Params->IsFinal;
-    const bool writeBTreeIndexV1 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
-    const bool writeBTreeIndexV2 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
-    const bool writeBTreeIndex = writeBTreeIndexV1 || writeBTreeIndexV2;
-    output.Layout.WriteBTreeIndexV1 = writeBTreeIndexV1;
-    output.Layout.WriteBTreeIndexV2 = writeBTreeIndexV2;
-    // V2 b-tree index replaces the flat index
-    output.Layout.WriteFlatIndex = !writeBTreeIndexV2 && AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
-    output.Writer.StickyFlatIndex = !writeBTreeIndex;
-    output.Writer.WriteBTreeIndexV1 = writeBTreeIndexV1;
-    output.Writer.WriteBTreeIndexV2 = writeBTreeIndexV2;
-    output.Layout.MaxRows = snapshot->Subset->MaxRows();
-    for (const auto& p : tableInfo->ByKeyFilterPrefixes) {
-        output.Layout.ByKeyFilterPrefixes.push_back({p.PrefixLength, p.FalsePositiveProbability});
-    }
-    output.Layout.UnderlayMask = comp->Params->UnderlayMask.Get();
-    output.Layout.SplitKeys = comp->Params->SplitKeys.Get();
-    output.Layout.MinRowVersion = snapshot->Subset->MinRowVersion();
-    output.Layout.Groups.resize(rowScheme->Families.size());
-    output.Writer.Groups.resize(rowScheme->Families.size());
 
     // Detect fulltext compact tables
     if (tableInfo->SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
@@ -5443,80 +5470,9 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         }
     }
 
-    auto addChannel = [&](ui8 channel) {
-        auto group = Owner->Info()->GroupFor(channel, Generation());
-
-        output.Writer.Slots.emplace_back(channel, group);
-    };
-
-    auto addChannels = [&](const std::vector<ui8>& channels) {
-        for (auto channel : channels) {
-            addChannel(channel);
-        }
-    };
-
-    ui8 descriptorChannel = NTable::TScheme::DefaultChannel;
-
-    for (size_t group : xrange(rowScheme->Families.size())) {
-        auto familyId = rowScheme->Families[group];
-        static const NTable::TScheme::TFamily defaultFamilySettings;
-        const auto& family = tableInfo->Families.ValueRef(familyId, defaultFamilySettings); // Workaround for KIKIMR-17222
-
-        auto* room = tableInfo->Rooms.FindPtr(family.Room);
-        Y_ENSURE(room, "Cannot find room " << family.Room << " in table " << table);
-
-        auto& pageGroup = output.Layout.Groups.at(group);
-        auto& writeGroup = output.Writer.Groups.at(group);
-
-        pageGroup.Codec = family.Codec;
-        pageGroup.CodecLevel = family.CodecLevel;
-        pageGroup.PageSize = policy->MinDataPageSize;
-        pageGroup.BTreeIndexNodeTargetSize = policy->MinBTreeIndexNodeSize;
-        pageGroup.BTreeIndexNodeKeysMin = policy->MinBTreeIndexNodeKeys;
-
-        writeGroup.Cache = Max(family.Cache, cache);
-        writeGroup.CacheMode = family.CacheMode;
-        writeGroup.MaxBlobSize = NBlockIO::BlockSize;
-        writeGroup.Channel = room->Main;
-        addChannel(room->Main);
-
-        if (group == 0) {
-            // Small/Large edges are taken from the leader family
-            output.Layout.SmallEdge = family.Small;
-            output.Layout.LargeEdge = family.Large;
-            output.MaterializeExtEdge = family.Large;
-
-            // Small/Large channels are taken from the leader family
-            output.Writer.BlobsChannels = room->Blobs;
-            output.Writer.OuterChannel = room->Outer;
-            addChannels(room->Blobs);
-            addChannel(room->Outer);
-
-            output.Writer.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
-
-            descriptorChannel = room->Main;
-        }
-    }
-
-    // Transaction status uses the extra channel even when the leader family
-    // stores its data in another room.
-    addChannel(output.Writer.ExtraChannel);
-
-    // Data of the main group is written to the leader family channel too until tier compaction,
-    // so parts keep descriptor pages and main group data in a single page collection
-    if (NWriter::ApplyDescriptorChannel(output.Layout, output.Writer, descriptorChannel)) {
-        // The descriptor channel differs from the main group channel then and may be missing from
-        // the slots (e.g. of a tier output); a slot of an already added channel is merged
-        addChannel(descriptorChannel);
-    }
-
     if (const auto& ranges = Database->GetRemovedRowVersions(table)) {
-        // Make a copy of removed versions for compacted table
-        // Version removal cannot be undone, so it's still valid at commit time
+        // Version removal cannot be undone, so the snapshot remains valid at commit time.
         comp->RemovedRowVersions = ranges.Snapshot();
-
-        // We have to adjust MinRowVersion, so it correctly expects an adjusted version
-        output.Layout.MinRowVersion = comp->RemovedRowVersions.AdjustDown(output.Layout.MinRowVersion);
     }
 
     bool compactTxStatus = false;
@@ -5551,12 +5507,51 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         snapshot->Subset->TxStatus.clear();
     }
 
+    if (comp->Params->Tiering) {
+        Y_ENSURE(!comp->IsFulltextCompact, "Tier-aware fulltext compaction is not supported");
+        NTable::PrepareTieringCompaction(*comp->Params, *tableInfo,
+            *snapshot->Subset, TableParts(table), TableColdParts(table),
+            IsDataTieringEnabled(), Time->Now());
+        comp->Epoch = comp->Params->Context->OutputEpoch;
+        if (!CompactionLogic->TryReserveCompaction(*comp->Params)) {
+            // Preparation may have frozen memory, but no data was replaced
+            // and no blobs were written. The caller still owns its broker task.
+            CheckCollectionBarrier(snapshot->Barrier);
+            return 0;
+        }
+    }
+
+    TCompactionOutputSettings outputSettings;
+    outputSettings.WriteBTreeIndexV1 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    outputSettings.WriteBTreeIndexV2 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
+    outputSettings.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
+    outputSettings.MaxBlobSize = NBlockIO::BlockSize;
+    outputSettings.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
+    PrepareCompactionOutputs(*comp, *tableInfo, *rowScheme, *snapshot->Subset, outputSettings,
+        [&](ui8 channel) { return Owner->Info()->GroupFor(channel, Generation()); });
+
+    if (comp->Params->Tiering) {
+        for (const auto& output : comp->Outputs) {
+            Y_ENSURE(comp->Params->Tiering->OutputTiers.emplace(output.OutputId, output.TierId).second,
+                "Duplicate compaction output identity");
+        }
+    }
+
     comp->DataKind = DataKindByTabletType(Owner->TabletType());
 
     TLogoBlobID mask(Owner->TabletID(), Generation(),
                     snapshot->Barrier->Step, Max<ui8>(), 0, 0);
 
-    auto *scan = new TOpsCompact(SelfId(), mask, comp, MakeHolder<TDefaultCompactionRouter>());
+    THolder<ICompactionRouter> router;
+    if (comp->Params->Mode == NTable::TCompactionParams::EMode::TierAware) {
+        const auto& settings = *comp->Params->Tiering;
+        router = MakeHolder<TTierCompactionRouter>(*comp,
+            settings.AllowCooling ? tableInfo->TieringPolicy : std::nullopt,
+            settings.Now, settings.TierOrder, settings.AllowCooling);
+    } else {
+        router = MakeHolder<TDefaultCompactionRouter>();
+    }
+    auto *scan = new TOpsCompact(SelfId(), mask, comp, std::move(router));
 
     NOps::TConf conf;
 

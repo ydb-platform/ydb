@@ -290,12 +290,12 @@ namespace NTable {
             wrap.Truncated = true;
         }
 
-        void CommitTransaction(TTxStamp stamp, TArrayRef<const TMemGlob> annex, NRedo::TWriter& writer)
+        void CommitTransaction(TChange& change, TArrayRef<const TMemGlob> annex, NRedo::TWriter& writer)
         {
-            Y_ENSURE(Stamp <= stamp, "Executor tx stamp cannot go to the past");
-            Stamp = stamp;
+            Y_ENSURE(Stamp <= change.Stamp, "Executor tx stamp cannot go to the past");
+            Stamp = change.Stamp;
 
-            CommitScheme(annex);
+            CommitScheme(annex, change.AlteredTables);
 
             for (ui32 tid : Prepared) {
                 auto it = Tables.find(tid);
@@ -353,7 +353,7 @@ namespace NTable {
             InTransaction = false;
         }
 
-        void CommitScheme(TArrayRef<const TMemGlob> annex)
+        void CommitScheme(TArrayRef<const TMemGlob> annex, TVector<ui32>& alteredTables)
         {
             if (!SchemeRollbackState.Tables.empty() || SchemeRollbackState.Redo) {
                 // Table or redo settings have changed
@@ -361,8 +361,10 @@ namespace NTable {
             }
 
             TScheme& scheme = *Scheme;
+            alteredTables.reserve(SchemeRollbackState.Tables.size());
             for (auto& pr : SchemeRollbackState.Tables) {
                 ui32 tid = pr.first;
+                alteredTables.push_back(tid);
                 auto* info = scheme.GetTableInfo(tid);
                 if (!info) {
                     // This table doesn't exist in current schema,

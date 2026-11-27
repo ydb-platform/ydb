@@ -37,7 +37,12 @@ TCompactionLogic::~TCompactionLogic()
 {}
 
 void TCompactionLogic::Start() {
-    auto result = ReflectSchemeChanges();
+    const auto& tables = Backend->DatabaseScheme().Tables;
+    TVector<ui32> tableIds(Reserve(tables.size()));
+    for (const auto& entry : tables) {
+        tableIds.push_back(entry.first);
+    }
+    auto result = ReflectSchemeChanges(tableIds);
     Y_ENSURE(!result.StrategyChanges);
     State->Snapshots.clear();
 }
@@ -88,6 +93,19 @@ void TCompactionLogic::RequestChanges(ui32 table)
     tableInfo->ChangesRequested = true;
 }
 
+void TCompactionLogic::RequestMemCompactionRetry(ui32 table) {
+    if (auto* info = State->Tables.FindPtr(table)) {
+        info->MemCompactionRetryRequested = true;
+        info->ChangesRequested = true;
+    }
+}
+
+bool TCompactionLogic::TryReserveCompaction(NTable::TCompactionParams& params) {
+    auto* info = State->Tables.FindPtr(params.Table);
+    Y_ENSURE(info && info->Strategy, "Cannot reserve inputs of a dropped table");
+    return info->Strategy->TryReserveCompaction(params);
+}
+
 TVector<TTableCompactionChanges> TCompactionLogic::ApplyChanges()
 {
     TVector<TTableCompactionChanges> results;
@@ -101,6 +119,13 @@ TVector<TTableCompactionChanges> TCompactionLogic::ApplyChanges()
             result.Table = tableId;
             result.Changes = tableInfo->Strategy->ApplyChanges();
             result.Strategy = tableInfo->StrategyType;
+            if (std::exchange(tableInfo->MemCompactionRetryRequested, false)
+                    && tableInfo->InMem.CompactionTask.TaskId == 0
+                    && tableInfo->InMem.CompactionTask.CompactionId == 0) {
+                // A reservation conflict retains the request in its scan
+                // state, without owning a broker task. Retry only on a wakeup.
+                ResubmitMemCompaction(*tableInfo);
+            }
         }
     }
 
@@ -242,41 +267,48 @@ void TCompactionLogic::AllowBorrowedGarbageCompaction(ui32 table) {
     tableInfo->Strategy->AllowBorrowedGarbageCompaction();
 }
 
-TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
+TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges(TArrayRef<const ui32> tableIds)
 {
     TReflectSchemeChangesResult result;
 
     const auto& scheme = Backend->DatabaseScheme();
 
-    for (const auto &xpair : scheme.Tables) {
-        auto &info = xpair.second;
-        auto &table = State->Tables[info.Id];
-        table.TableId = info.Id;
+    for (ui32 tableId : tableIds) {
+        const auto* info = scheme.GetTableInfo(tableId);
+        if (!info) {
+            if (auto it = State->Tables.find(tableId); it != State->Tables.end()) {
+                StopTable(it->second);
+                State->Tables.erase(it);
+            }
+            continue;
+        }
+        auto &table = State->Tables[tableId];
+        table.TableId = tableId;
 
         if (auto *policy = table.Policy.Get()) {
             TString err;
-            bool ok = NLocalDb::ValidateCompactionPolicyChange(*policy, *info.CompactionPolicy, err);
-            Y_ENSURE(ok, "Cannot change compaction policy for table " << info.Name << " id " << info.Id << ": " << err);
+            bool ok = NLocalDb::ValidateCompactionPolicyChange(*policy, *info->CompactionPolicy, err);
+            Y_ENSURE(ok, "Cannot change compaction policy for table " << info->Name << " id " << tableId << ": " << err);
         }
 
-        table.Policy = info.CompactionPolicy;
+        table.Policy = info->CompactionPolicy;
 
-        auto newStrategyType = scheme.CompactionStrategyFor(info.Id);
+        auto newStrategyType = scheme.CompactionStrategyFor(tableId);
         Y_ENSURE(newStrategyType != NKikimrCompaction::CompactionStrategyUnset);
 
         if (table.StrategyType != newStrategyType) {
             if (table.StrategyType != NKikimrCompaction::CompactionStrategyUnset) {
-                result.StrategyChanges.push_back({ info.Id, newStrategyType });
+                result.StrategyChanges.push_back({ tableId, newStrategyType });
                 StrategyChanging(table);
             }
 
             Y_ENSURE(!table.Strategy);
             table.StrategyType = newStrategyType;
-            table.Strategy = CreateStrategy(info.Id, newStrategyType);
+            table.Strategy = CreateStrategy(tableId, newStrategyType);
             Y_ENSURE(table.Strategy);
 
             // Time to start the new strategy
-            if (auto* snapshot = State->Snapshots.FindPtr(info.Id)) {
+            if (auto* snapshot = State->Snapshots.FindPtr(tableId)) {
                 table.InMem.Steps = snapshot->InMemSteps;
                 if (snapshot->Strategy == newStrategyType) {
                     table.Strategy->Start(std::move(snapshot->State));
@@ -295,20 +327,11 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
             }
 
             if (!table.MemTableMemoryConsumer) {
-                MemTableMemoryConsumersCollection->Register(info.Id);
+                MemTableMemoryConsumersCollection->Register(tableId);
             }
         } else {
             Y_ENSURE(table.Strategy);
             table.Strategy->ReflectSchema();
-        }
-    }
-
-    for (auto it = State->Tables.begin(), end = State->Tables.end(); it != end; ) {
-        if (scheme.Tables.contains(it->first)) {
-            ++it;
-        } else {
-            StopTable(it->second);
-            it = State->Tables.erase(it);
         }
     }
 
@@ -360,6 +383,7 @@ void TCompactionLogic::StopTable(TCompactionLogicState::TTableInfo &table)
     }
 
     table.ChangesRequested = false;
+    table.MemCompactionRetryRequested = false;
 
     auto &inMem = table.InMem;
     switch (inMem.State) {
@@ -390,58 +414,29 @@ void TCompactionLogic::StrategyChanging(TCompactionLogicState::TTableInfo &table
     }
 
     table.ChangesRequested = false;
+    table.MemCompactionRetryRequested = false;
 
     // Compactions have been cancelled, we may need to resubmit
-    ResubmitCompactions(table);
+    ResubmitMemCompaction(table);
 }
 
-void TCompactionLogic::ResubmitCompactions(TCompactionLogicState::TTableInfo &table)
+void TCompactionLogic::ResubmitMemCompaction(TCompactionLogicState::TTableInfo &table)
 {
     auto &inMem = table.InMem;
-
-    auto resubmit = [&](const TString& type, ui32 priority) {
-        if (table.ForcedCompactionState == EForcedCompactionState::CompactingMem) {
-            table.ForcedCompactionState = EForcedCompactionState::PendingMem;
-        }
-        inMem.CompactionTask.TaskId = 0;
-        inMem.CompactionTask.CompactionId = 0;
-        SubmitCompactionTask(table.TableId, 0, type, priority, inMem.CompactionTask);
-    };
-
-    switch (inMem.State) {
-        case ECompactionState::Pending:
-        case ECompactionState::PendingBackground:
-        case ECompactionState::SnapshotPending:
-            // Keep currently pending tasks
-            break;
-
-        case ECompactionState::Compaction:
-            // Compaction has been cancelled, resubmit
-            resubmit(
-                table.Policy->InMemResourceBrokerTask,
-                table.Policy->DefaultTaskPriority);
-            inMem.State = ECompactionState::Pending;
-            break;
-
-        case ECompactionState::SnapshotCompaction:
-            // Compaction has been cancelled, resubmit
-            resubmit(
-                table.Policy->SnapshotResourceBrokerTask,
-                table.Policy->DefaultTaskPriority);
-            inMem.State = ECompactionState::SnapshotPending;
-            break;
-
-        default:
-            break;
+    if (inMem.State != ECompactionState::Compaction && inMem.State != ECompactionState::SnapshotCompaction) {
+        return;
     }
-
-    if (table.Strategy &&
-        table.ForcedCompactionState == EForcedCompactionState::None &&
-        table.Strategy->GetLastFinishedForcedCompactionId() < table.LastStartedFullCompactionId)
-    {
-        // We need to start a new forced compaction cycle
-        PrepareForceCompaction(table.TableId);
+    if (table.ForcedCompactionState == EForcedCompactionState::CompactingMem) {
+        table.ForcedCompactionState = EForcedCompactionState::PendingMem;
     }
+    inMem.CompactionTask.TaskId = 0;
+    inMem.CompactionTask.CompactionId = 0;
+    // A snapshot may have arrived after the original flush was started or deferred.
+    const bool snapshot = !table.SnapRequests.empty();
+    inMem.State = snapshot ? ECompactionState::SnapshotPending : ECompactionState::Pending;
+    SubmitCompactionTask(table.TableId, 0,
+        snapshot ? table.Policy->SnapshotResourceBrokerTask : table.Policy->InMemResourceBrokerTask,
+        table.Policy->DefaultTaskPriority, inMem.CompactionTask);
 }
 
 void TCompactionLogic::UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size, bool compactionComplete) {
@@ -598,6 +593,12 @@ bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
     }
 
     inMem.CompactionTask.CompactionId = tableInfo->Strategy->BeginMemCompaction(taskId, edge, forcedCompactionId);
+    if (inMem.CompactionTask.CompactionId == 0) {
+        // No scan was started. Keep Steps, SnapRequests and forced ids intact;
+        // the strategy wakes this request after conflicting work is released.
+        inMem.CompactionTask.TaskId = 0;
+        return false;
+    }
     return true;
 }
 
@@ -700,19 +701,24 @@ TCompactionLogic::CancelledCompaction(
         ui64 compactionId,
         THolder<NTable::TCompactionParams> params)
 {
-    HandleCompaction(compactionId, params.Get(), nullptr);
+    auto* table = State->Tables.FindPtr(params->Table);
+    Y_ENSURE(table, "Cancelled compaction belongs to a dropped table");
+    if (table->InMem.CompactionTask.CompactionId == compactionId) {
+        // A cancelled memory scan has not consumed its steps or snapshot
+        // request. Retain forced ids and resubmit the original request.
+        table->Strategy->CompactionCancelled(compactionId, *params);
+        ResubmitMemCompaction(*table);
+        return;
+    }
+    table = HandleCompaction(compactionId, params.Get(), nullptr);
+    table->Strategy->CompactionCancelled(compactionId, *params);
 }
 
-void TCompactionLogic::BorrowedPart(ui32 tableId, NTable::TPartView partView) {
+void TCompactionLogic::BorrowedParts(ui32 tableId, TConstArrayRef<NTable::TPartView> parts,
+        TConstArrayRef<TIntrusiveConstPtr<NTable::TColdPart>> coldParts) {
     auto *tableInfo = State->Tables.FindPtr(tableId);
     Y_ENSURE(tableInfo);
-    tableInfo->Strategy->PartMerged(std::move(partView), 255);
-}
-
-void TCompactionLogic::BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TColdPart> part) {
-    auto *tableInfo = State->Tables.FindPtr(tableId);
-    Y_ENSURE(tableInfo);
-    tableInfo->Strategy->PartMerged(std::move(part), 255);
+    tableInfo->Strategy->PartsMerged(parts, coldParts, BorrowedPartLevel());
 }
 
 ui32 TCompactionLogic::BorrowedPartLevel() {
@@ -726,8 +732,13 @@ TTableCompactionChanges TCompactionLogic::RemovedParts(ui32 tableId, TArrayRef<c
     ret.Table = tableId;
     ret.Changes = tableInfo->Strategy->PartsRemoved(parts);
     ret.Strategy = tableInfo->StrategyType;
-    // A call to PartsRemoved has cancelled all ongoing compactions, resubmit them again
-    ResubmitCompactions(*tableInfo);
+    // PartsRemoved restarted the strategy, including any forced disk compaction.
+    ResubmitMemCompaction(*tableInfo);
+    if (tableInfo->ForcedCompactionState == EForcedCompactionState::None &&
+        tableInfo->Strategy->GetLastFinishedForcedCompactionId() < tableInfo->LastStartedFullCompactionId)
+    {
+        PrepareForceCompaction(tableId);
+    }
     return ret;
 }
 

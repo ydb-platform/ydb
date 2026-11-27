@@ -179,6 +179,10 @@ namespace NTable {
 
             // Marks that all data pages from the main group should be loaded
             bool PreloadData = false;
+
+            // A writer that produced a B-tree may have already released the flat index pages.
+            // Use the B-tree when opening its result, even if the feature flags changed meanwhile.
+            bool PreferBTreeIndex = false;
         };
 
         TLoader(TPartComponents components, TVector<TIntrusivePtr<TPageCollection>> prebuiltPageCollections = {});
@@ -191,7 +195,7 @@ namespace NTable {
 
                 switch (Stage) {
                     case EStage::Meta:
-                        StageParseMeta();
+                        StageParseMeta(options.PreferBTreeIndex);
                         break;
                     case EStage::PartView:
                         fetch = StageCreatePartView(options.PreloadIndex);
@@ -299,7 +303,7 @@ namespace NTable {
             Y_ENSURE(Root.HasEpoch(), "TPart meta has no epoch info");
         }
 
-        void StageParseMeta();
+        void StageParseMeta(bool preferBTreeIndex);
         TFetch StageCreatePartView(bool preloadIndex);
         TFetch StageSliceBounds();
         void StageDeltas();

@@ -128,6 +128,7 @@ namespace NBoot {
                 }
 
                 auto &schema = Back->DatabaseImpl->Scheme->Tables.at(se.Table);
+                const bool tierManaged = schema.UsesTiering();
 
                 auto processBundles = [&](TVector<TSwitch::TBundle> &bundles) {
                     for (auto &bundle: bundles) {
@@ -150,6 +151,9 @@ namespace NBoot {
                                 continue;
                             }
 
+                            if (const ui32 tier = tierManaged ? schema.CompactionPolicy->GetTierForLevel(bundle.Level) : 0) {
+                                Logic->Result().PartTiers.emplace(bundle.LargeGlobIds.front().Lead, tier);
+                            }
                             Pending += Spawn<TBundleLoadStep>(se.Table, bundle);
                         }
                     }

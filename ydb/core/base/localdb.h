@@ -13,6 +13,8 @@ namespace NKikimr {
 namespace NLocalDb {
 
 struct TCompactionPolicy : public TThrRefBase {
+    static constexpr ui32 DefaultFinalLevel = 255;
+
     struct TBackgroundPolicy {
         ui32 Threshold;
         ui32 PriorityBase;
@@ -109,6 +111,14 @@ struct TCompactionPolicy : public TThrRefBase {
 
     void Serialize(NKikimrCompaction::TCompactionPolicy& policyPb) const;
 
+    // Slot 0 belongs to default; other slots follow the first generation of
+    // each tier. Existing slots remain reserved when a tier is retired.
+    TVector<ui32> GetTierIds() const;
+    ui32 GetFinalLevel(ui32 tierId) const;
+    bool IsFinalLevel(ui32 level) const;
+    // Level 0 is memory. Ordinary generations and final levels share one code space.
+    ui32 GetTierForLevel(ui32 level) const;
+
     bool operator ==(const TCompactionPolicy& p) const {
         return InMemSizeToSnapshot == p.InMemSizeToSnapshot
                 && InMemStepsToSnapshot == p.InMemStepsToSnapshot
@@ -143,6 +153,7 @@ TCompactionPolicyPtr CreateDefaultTablePolicy();
 TCompactionPolicyPtr CreateDefaultUserTablePolicy();
 
 bool ValidateCompactionPolicy(const TCompactionPolicy& policy, TString& err);
+// Existing generations retain their TierId; omitted and explicit zero are equivalent.
 bool ValidateCompactionPolicyChange(const TCompactionPolicy& oldPolicy, const TCompactionPolicy& newPolicy, TString& err);
 
 // Get Resource Broker task type name by Compaction Broker queue ID.

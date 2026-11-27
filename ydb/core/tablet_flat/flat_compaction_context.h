@@ -31,11 +31,12 @@ namespace NKikimr::NTable {
     };
 
     // Resolve unloaded parts' runtime placement in the default tier, preserving
-    // default-generation levels and normalizing non-default generations to 255.
+    // default-generation levels and normalizing non-default generations/finals to 255.
     ui32 ResolveColdPartLevel(ui32 level, const NLocalDb::TCompactionPolicy& policy);
 
     // Build a runtime placement view without modifying state.PartLevels.
-    // Missing levels, FinalParts (level 255), and unloaded parts belong to default.
+    // Final levels are decoded using the policy's stable tier slots. Missing
+    // bindings and unloaded parts belong to the default tier.
     // Normalized levels are not a snapshot of persisted bindings; do not write
     // them back to state.PartLevels when saving compaction state.
     TVector<TCompactionPartInfo> DescribeCompactionParts(
@@ -66,9 +67,8 @@ namespace NKikimr::NTable {
             TConstArrayRef<TEpoch> extraEpochs = {},
             TConstArrayRef<ui32> extraInputTiers = {});
 
-        // Frozen memtables and tx-status parts contribute to the output epoch,
-        // and therefore to both bounds of the interval that must be closed.
-        // This overload also pins and checks the identity of those sources.
+        // Pins frozen memtables and tx-status parts. Both contribute to the
+        // output epoch. Closing a range of disk parts requires a row input.
         static TIntrusiveConstPtr<TCompactionContext> Build(
             TVector<TCompactionPartInfo> parts, const TSubset& initialSubset);
 
@@ -82,7 +82,8 @@ namespace NKikimr::NTable {
         // schema, channel configuration and the frozen memory snapshots.
         bool IsCurrent(TConstArrayRef<TCompactionPartInfo> parts) const;
 
-        const std::optional<TCompactionEpochRange> Epochs;
+        const TEpoch OutputEpoch;
+        const std::optional<TCompactionEpochRange> Epochs; // Row epochs reserved by the strategy.
         const TVector<TCompactionPartInfo> Inputs;
         const TVector<TCompactionPartInfo> Remaining;
         const TVector<ui32> InputTiers;
@@ -93,7 +94,7 @@ namespace NKikimr::NTable {
             TConstArrayRef<TEpoch> extraEpochs, TConstArrayRef<ui32> extraInputTiers,
             const TSubset* initialSubset);
 
-        TCompactionContext(std::optional<TCompactionEpochRange> epochs,
+        TCompactionContext(TEpoch outputEpoch, std::optional<TCompactionEpochRange> epochs,
             TVector<TCompactionPartInfo> inputs, TVector<TCompactionPartInfo> remaining,
             TVector<ui32> inputTiers, TVector<TEpoch> extraEpochs,
             TVector<ui32> extraInputTiers, const TSubset* initialSubset);

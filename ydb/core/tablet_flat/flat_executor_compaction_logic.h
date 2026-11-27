@@ -103,6 +103,7 @@ struct TCompactionLogicState {
         ui64 LastStartedFullCompactionId = 0;
 
         bool ChangesRequested = false;
+        bool MemCompactionRetryRequested = false;
 
         bool AllowBorrowedGarbageCompaction = false;
 
@@ -184,7 +185,7 @@ class TCompactionLogic {
 
     void StopTable(TCompactionLogicState::TTableInfo &table);
     void StrategyChanging(TCompactionLogicState::TTableInfo &table);
-    void ResubmitCompactions(TCompactionLogicState::TTableInfo &table);
+    void ResubmitMemCompaction(TCompactionLogicState::TTableInfo &table);
 
     TCompactionLogicState::TTableInfo* HandleCompaction(
         ui64 compactionId,
@@ -213,6 +214,8 @@ public:
 
     // Strategy of this table wants to apply some changes
     void RequestChanges(ui32 tableId);
+    void RequestMemCompactionRetry(ui32 tableId);
+    bool TryReserveCompaction(NTable::TCompactionParams& params);
     TVector<TTableCompactionChanges> ApplyChanges();
 
     //
@@ -230,7 +233,7 @@ public:
 
     void AllowBorrowedGarbageCompaction(ui32 table);
 
-    TReflectSchemeChangesResult ReflectSchemeChanges();
+    TReflectSchemeChangesResult ReflectSchemeChanges(TArrayRef<const ui32> tableIds);
     void ProvideMemTableMemoryConsumer(ui32 table, TIntrusivePtr<NMemory::IMemoryConsumer> memTableMemoryConsumer);
     void ReflectRemovedRowVersions(ui32 table);
     void UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size, bool compactionComplete = false);
@@ -250,8 +253,8 @@ public:
         ui64 compactionId,
         THolder<NTable::TCompactionParams> params);
 
-    void BorrowedPart(ui32 tableId, NTable::TPartView partView);
-    void BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TColdPart> part);
+    void BorrowedParts(ui32 tableId, TConstArrayRef<NTable::TPartView> parts,
+        TConstArrayRef<TIntrusiveConstPtr<NTable::TColdPart>> coldParts = {});
     ui32 BorrowedPartLevel();
 
     TTableCompactionChanges RemovedParts(ui32 tableId, TArrayRef<const TLogoBlobID> parts);

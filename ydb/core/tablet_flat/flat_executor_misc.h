@@ -48,6 +48,9 @@ namespace NTabletFlatExecutor {
             ui32 MaterializeOuterEdge;
             ui32 MaterializeExtEdge;
             ui32 OutputId = 0;
+            ui32 TierId = 0;
+            // Layout holds a raw pointer; each output owns its own cursor.
+            THolder<NTable::NPage::IKeySpace> OwnedUnderlayMask;
         };
 
         explicit TCompactCfg(THolder<NTable::TCompactionParams> params)

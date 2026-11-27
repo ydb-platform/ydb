@@ -16,6 +16,9 @@ namespace NCompGen {
 
     public:
         ui32 Generation = Max<ui32>();
+        ui64 ForcedMemRequestId = 0; // User Full request whose MemTable is being flushed.
+        bool TieringForced = false; // Disk pass over all tiers, including automatic compactions.
+        ui32 PreferredLevel = 255;
     };
 
     class TGenCompactionStrategy final
@@ -49,8 +52,10 @@ namespace NCompGen {
             ui64 compactionId,
             THolder<TCompactionParams> params,
             THolder<TCompactionResult> result) override;
-        void PartMerged(TPartView part, ui32 level) override;
-        void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) override;
+        void CompactionCancelled(ui64 compactionId, const TCompactionParams& params) override;
+        bool TryReserveCompaction(TCompactionParams& params) override;
+        void PartsMerged(TConstArrayRef<TPartView> parts,
+            TConstArrayRef<TIntrusiveConstPtr<TColdPart>> coldParts, ui32 level) override;
         TCompactionChanges PartsRemoved(TArrayRef<const TLogoBlobID> parts) override;
         TCompactionState SnapshotState() override;
         TCompactionChanges ApplyChanges() override;
@@ -173,6 +178,7 @@ namespace NCompGen {
 
         struct TCompactionTask {
             TTaskId TaskId = 0;
+            TString Type;
             ui32 Priority = 0;
             TInstant SubmissionTimestamp;
             ui64 CompactionId = 0;
@@ -199,6 +205,7 @@ namespace NCompGen {
             TPartInfo& PushBack(TPartView partView);
             void PopFront();
             void PopBack();
+            void RebuildStats();
         };
 
         struct TFinalState {
@@ -206,20 +213,42 @@ namespace NCompGen {
             TCompactionTask Task;
         };
 
+        struct TFinalTier {
+            TFinalState State;
+            TList<TPartInfo> Parts;
+        };
+
+        struct TGenerationInputs {
+            ui64 BackingSize = 0;
+            ui64 EpochCount = 0;
+            size_t FinalCount = 0;
+        };
+
         struct TPartAggregator;
         struct TExtraState;
+
+        struct TTierCompaction {
+            ui64 CompactionId = 0;
+            std::optional<TCompactionEpochRange> Epochs;
+            bool HasMemoryInputs = false;
+        };
 
     private:
         void SubmitTask(TCompactionTask& task, TString type, ui32 priority, ui32 generation);
         void UpdateTask(TCompactionTask& task, TString type, ui32 priority);
 
         void BeginGenCompaction(TTaskId taskId, ui32 generation);
+        bool HasRunningCompactions() const;
+        void ResumePendingGenerationTasks();
+        void FinishReservationModeChange();
+        void MergeFinalPart(TPartView partView, ui32 level, TList<TPartInfo>& finalParts);
 
         void OnForcedGenCompactionDone();
 
+        ui64 BackgroundCompactionPercentage(ui32 generation, const TGenerationInputs& inputs) const;
         ui32 ComputeBackgroundPriority(
             ui32 generation,
-            const TCompactionPolicy::TGenerationPolicy& policy,
+            const TGenerationInputs& inputs,
             TInstant now) const;
 
         ui32 ComputeBackgroundPriority(
@@ -230,14 +259,41 @@ namespace NCompGen {
 
         void CheckOverload(ui32 generation);
         void CheckGeneration(ui32 generation);
-        EDesiredMode DesiredMode(ui32 generation) const;
-        bool NeedToCompactAfterSplit(ui32 generation) const;
+        TGenerationInputs GetGenerationInputs(ui32 generation) const;
+        EDesiredMode DesiredMode(ui32 generation, const TGenerationInputs& inputs) const;
+        bool NeedToCompactAfterSplit(ui32 generation, size_t finalCount) const;
 
         ui64 PrepareCompaction(
             TTaskId taskId,
             TSnapEdge edge,
             ui32 generation,
             TExtraState& extra);
+
+        ui32 TierForLevel(ui32 level) const;
+        TList<TPartInfo>& GetFinalParts(ui32 level);
+        const TList<TPartInfo>& GetFinalParts(ui32 level) const;
+        TFinalState& GetFinalState(ui32 level);
+        const TFinalState& GetFinalState(ui32 level) const;
+        bool IsLastTierGeneration(ui32 generation) const;
+        size_t UnloadedPartsAtLevel(ui32 level) const;
+        void InitializeLevelStats();
+        void ValidateTierEpochs() const;
+        void CheckTierGenerations();
+        bool CanStartTierCompaction(ui32 generation) const;
+        bool OverlapsReservedEpochs(const TCompactionEpochRange& epochs) const;
+        bool IsEpochReserved(TEpoch epoch) const;
+        bool HasFreeTierInputs(ui32 generation) const;
+        void ReleaseTierCompaction(ui32 generation, ui64 compactionId);
+        void DeferTierCompaction(ui32 generation);
+        void CancelTierCompactions();
+        void BeginTierGenCompaction(TTaskId taskId, ui32 generation);
+        ui64 PrepareTierCompaction(TTaskId taskId, TSnapEdge edge, ui32 generation,
+            TExtraState& extra, ui64 forcedMemRequestId = 0);
+        TCompactionChanges FinishTierCompaction(ui64 compactionId,
+            TGenCompactionParams& params, TCompactionResult& result);
+        ui32 ChooseTierLevel(ui32 tierId, TEpoch epoch, ui32 preferredLevel) const;
+        ui32 UpliftTierLevel(ui32 tierId, TEpoch epoch, const TStats& outputStats,
+            ui32 preferredLevel) const;
 
         void UpdateStats();
         void UpdateOverload();
@@ -260,6 +316,13 @@ namespace NCompGen {
 
         TIntrusiveConstPtr<TCompactionPolicy> Policy;
 
+        bool TierManaged = false;
+        bool ReservationModeChangePending = false;
+        THashMap<ui32, TTierCompaction> TierCompactions;
+        // Blocked generations retry after the reservation set changes.
+        THashMap<ui32, ui64> TierWaitRevisions;
+        ui64 TierOccupancyRevision = 0;
+
         ui64 MemCompactionId = 0;
         ui64 FinalCompactionId = 0;
         ui32 FinalCompactionLevel = 0;
@@ -276,6 +339,7 @@ namespace NCompGen {
         TVector<TGeneration> Generations;
         TFinalState FinalState;
         TList<TPartInfo> FinalParts;
+        THashMap<ui32, TFinalTier> TierFinals;
         TList<TIntrusiveConstPtr<TColdPart>> ColdParts;
         THashMap<TLogoBlobID, ui32> KnownParts;
         TStats Stats;

@@ -285,15 +285,23 @@ std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetAbsentColumnFill(
 }
 
 ui64 ISnapshotSchema::GetAbsentColumnValueBytes(const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill) {
-    ui64 valueBytes = 8;
-    if (fill && fill->is_valid) {
-        if (const auto* binary = dynamic_cast<const arrow::BaseBinaryScalar*>(fill.get()); binary && binary->value) {
-            valueBytes = binary->value->size() + sizeof(ui32);
-        } else if (const auto* fixed = dynamic_cast<const arrow::FixedWidthType*>(type.get())) {
-            valueBytes = std::max<ui64>(1, fixed->bit_width() / 8);
-        }
+    static constexpr ui64 UnknownTypeValueBytes = 16;
+    if (const auto* fixed = dynamic_cast<const arrow::FixedWidthType*>(type.get())) {
+        return std::max<ui64>(1, fixed->bit_width() / 8);
     }
-    return valueBytes;
+    if (dynamic_cast<const arrow::BaseBinaryType*>(type.get())) {
+        ui64 valueBytes = dynamic_cast<const arrow::LargeBinaryType*>(type.get()) ? sizeof(i64) : sizeof(i32);
+        if (fill && fill->is_valid) {
+            if (const auto* binary = dynamic_cast<const arrow::BaseBinaryScalar*>(fill.get()); binary && binary->value) {
+                valueBytes += binary->value->size();
+            }
+        }
+        return valueBytes;
+    }
+    YDB_LOG_WARN("",
+        {"event", "absent_column_value_bytes_unknown_type"},
+        {"type", type->ToString()});
+    return UnknownTypeValueBytes;
 }
 
 ui32 ISnapshotSchema::GetAbsentColumnChunkRecords(

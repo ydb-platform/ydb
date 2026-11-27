@@ -1981,6 +1981,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
     // part in distconf anymore: it doesn't serve requests with either of the configurations
     Y_UNIT_TEST(ConfigFingerprintMismatchHalts) {
         auto committed = MakeStorageConfig(1, 1);
+        committed.SetDataCenterQuorumEnabled(true);
         committed.MutableSelfManagementConfig()->SetEnabled(true);
         committed.MutableSelfManagementConfig()->SetAutomaticBootstrap(false);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&committed);
@@ -3887,6 +3888,7 @@ selector_config: []
 
     Y_UNIT_TEST(CommittedProposalReplayPreservesAcceptedProposal) {
         auto committed = MakeStorageConfig(1, 1);
+        committed.SetDataCenterQuorumEnabled(true);
         committed.MutableSelfManagementConfig()->SetEnabled(true);
         committed.MutableSelfManagementConfig()->SetAutomaticBootstrap(false);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&committed);
@@ -5133,6 +5135,21 @@ selector_config: []
         UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, root).GetQueryConfig().GetConfig().GetFingerprint(), newer.GetFingerprint());
     }
 
+    bool HideDataCenterQuorumSupport(IEventHandle& event, ui32 nodeId) {
+        if (event.GetTypeRewrite() != NStorage::TEvNodeConfigGather::EventType) {
+            return false;
+        }
+        auto& record = event.Get<NStorage::TEvNodeConfigGather>()->Record;
+        if (!record.HasCollectConfigs()) {
+            return false;
+        }
+        auto *nodes = record.MutableCollectConfigs()->MutableDataCenterQuorumCapableNodeIds();
+        auto end = std::remove(nodes->begin(), nodes->end(), nodeId);
+        bool found = end != nodes->end();
+        nodes->erase(end, nodes->end());
+        return found;
+    }
+
     Y_UNIT_TEST(DataCenterQuorumActivationNeedsLegacyWriteQuorum) {
         TCommitConfirmationFixture fixture(true);
         fixture.Config.ClearDataCenterQuorumEnabled();
@@ -5149,6 +5166,10 @@ selector_config: []
         for (ui32 id : {1, 2, 3}) {
             *fixture.Metadata(id).MutableCommittedStorageConfig() = fixture.Config;
         }
+        fixture.Runtime.FilterFunction = [](ui32, std::unique_ptr<IEventHandle>& ev) {
+            HideDataCenterQuorumSupport(*ev, 3);
+            return true;
+        };
         fixture.Start(true);
         NKikimrBlobStorage::TStorageConfig activation = MakeNextConfig(fixture.Config);
         activation.SetDataCenterQuorumEnabled(true);
@@ -5177,16 +5198,8 @@ selector_config: []
         bool upgrading = true;
         bool sawLegacyKeeper = false;
         fixture.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
-            if (upgrading && ev->GetTypeRewrite() == NStorage::TEvNodeConfigGather::EventType) {
-                auto& record = ev->Get<NStorage::TEvNodeConfigGather>()->Record;
-                if (record.HasCollectConfigs()) {
-                    auto *nodes = record.MutableCollectConfigs()->MutableDataCenterQuorumCapableNodeIds();
-                    auto end = std::remove(nodes->begin(), nodes->end(), 3u);
-                    if (end != nodes->end()) {
-                        nodes->erase(end, nodes->end());
-                        sawLegacyKeeper = true;
-                    }
-                }
+            if (upgrading && HideDataCenterQuorumSupport(*ev, 3)) {
+                sawLegacyKeeper = true;
             }
             return true;
         };
@@ -5504,6 +5517,7 @@ selector_config: []
         }
 
         auto expanded = MakeStorageConfig(6, 3, {1, 2, 3}, TBlobStorageGroupType::ErasureMirror3dc);
+        expanded.SetDataCenterQuorumEnabled(fixture.Config.GetDataCenterQuorumEnabled());
         expanded.MutableSelfManagementConfig()->CopyFrom(fixture.Config.GetSelfManagementConfig());
         for (ui32 nodeId : {4, 5, 6}) {
             expanded.MutableAllNodes(nodeId - 1)->MutableLocation()->CopyFrom(
@@ -5673,6 +5687,7 @@ selector_config: []
         CheckDurableConfigConverges(fixture, fixture.Config);
 
         auto expanded = MakeStorageConfig(6, 3, {1, 2, 3}, TBlobStorageGroupType::ErasureMirror3dc);
+        expanded.SetDataCenterQuorumEnabled(fixture.Config.GetDataCenterQuorumEnabled());
         expanded.MutableSelfManagementConfig()->CopyFrom(fixture.Config.GetSelfManagementConfig());
         for (auto& node : *expanded.MutableAllNodes()) {
             node.MutableLocation()->CopyFrom(fixture.Config.GetAllNodes((node.GetNodeId() - 1) % 3).GetLocation());
@@ -6756,6 +6771,7 @@ selector_config: []
     void CheckRepeatedEmptyRebind(bool duringProposal) {
         TCommitConfirmationFixture fixture(false, 4);
         fixture.Config = MakeStorageConfig(4, 1, {1});
+        fixture.Config.SetDataCenterQuorumEnabled(true);
         fixture.Config.MutableSelfManagementConfig()->SetEnabled(true);
         for (auto& node : *fixture.Config.MutableAllNodes()) {
             node.MutableLocation()->SetDataCenter("dc-1");
@@ -8764,6 +8780,7 @@ selector_config: []
             fixture.Metadata(node.GetNodeId()).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
         }
         auto expanded = MakeStorageConfig(18, 3, {1, 2, 3}, TBlobStorageGroupType::ErasureMirror3dc);
+        expanded.SetDataCenterQuorumEnabled(fixture.Config.GetDataCenterQuorumEnabled());
         expanded.MutableSelfManagementConfig()->CopyFrom(fixture.Config.GetSelfManagementConfig());
         for (auto& node : *expanded.MutableAllNodes()) {
             node.MutableLocation()->CopyFrom(fixture.Config.GetAllNodes((node.GetNodeId() - 1) % 9).GetLocation());
@@ -9001,6 +9018,7 @@ selector_config: []
     Y_UNIT_TEST(SelfHealDoesNotDisableHealthyRingWithoutQuorum) {
         TCommitConfirmationFixture fixture(false, 4);
         fixture.Config = MakeStorageConfig(4, 1, {1});
+        fixture.Config.SetDataCenterQuorumEnabled(true);
         fixture.Config.MutableSelfManagementConfig()->SetEnabled(true);
         fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageManagement(true);
         fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageBoardManagement(false);
@@ -9164,6 +9182,7 @@ selector_config: []
     Y_UNIT_TEST(SelfHealDoesNotReadSentCommand) {
         TCommitConfirmationFixture fixture(false, 4);
         fixture.Config = MakeStorageConfig(4, 1, {1});
+        fixture.Config.SetDataCenterQuorumEnabled(true);
         fixture.Config.MutableSelfManagementConfig()->SetEnabled(true);
         fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageManagement(true);
         fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageBoardManagement(false);

@@ -58,6 +58,27 @@ static TTransactionProposal MakeTransactionProposal(TEvTxProxy::TEvProposeTransa
         s.AffectedFlags = x.GetFlags();
     }
 
+    if (ev->TraceId && ev->TraceId.GetVerbosity() >= 11) {
+        proposal.Trace = std::make_shared<TCoordinatorPlanTrace>(NWilson::TTraceId(ev->TraceId));
+        auto& span = proposal.Trace->Span;
+        span.Attribute("ydb.tx_id", static_cast<i64>(proposal.TxId));
+        span.Attribute("ydb.plan.min_step", static_cast<i64>(proposal.MinStep));
+        span.Attribute("ydb.plan.max_step", static_cast<i64>(proposal.MaxStep));
+        span.Attribute("ydb.plan.participant_count", static_cast<i64>(proposal.AffectedSet.size()));
+        NWilson::TArrayValue participants;
+        for (const auto& participant : proposal.AffectedSet) {
+            if (participants.size() == 32) { break; }
+            NWilson::TKeyValueList item;
+            item["tablet_id"] = static_cast<i64>(participant.TabletId);
+            item["affected_flags"] = static_cast<i64>(participant.AffectedFlags);
+            // Coordinator flags describe read/write effects, not base/index roles.
+            item["table_role_known"] = false;
+            participants.push_back(std::move(item));
+        }
+        span.Attribute("ydb.plan.participants_truncated", proposal.AffectedSet.size() > participants.size());
+        span.Attribute("ydb.plan.participants", std::move(participants));
+        proposal.Trace->Event("proposal received");
+    }
     counter->Inc();
     return proposal;
 }
@@ -133,16 +154,23 @@ void TTxCoordinator::Die(const TActorContext &ctx) {
 
 void TTxCoordinator::PlanTx(TTransactionProposal &&proposal, const TActorContext &ctx) {
     proposal.AcceptMoment = ctx.Now();
+    if (proposal.Trace) {
+        proposal.Trace->Span.Attribute("ydb.coordinator_id", static_cast<i64>(TabletID()));
+        proposal.Trace->Span.Attribute("ydb.coordinator_generation_at_request", static_cast<i64>(Executor()->Generation()));
+        proposal.Trace->Event("planning entered");
+    }
     MonCounters.PlanTxCalls->Inc();
 
     if (proposal.MaxStep <= VolatileState.LastPlanned) {
         MonCounters.PlanTxOutdated->Inc();
+        if (proposal.Trace) { proposal.Trace->Finish("proposal_outdated"); }
         return SendTransactionStatus(proposal.Proxy
                                      , TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated
                                      , proposal.TxId, 0, ctx, TabletID());
     }
 
     if (Stopping) {
+        if (proposal.Trace) { proposal.Trace->Finish("coordinator_stopping"); }
         return SendTransactionStatus(proposal.Proxy,
                 TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting,
                 proposal.TxId, 0, ctx, TabletID());
@@ -169,10 +197,16 @@ void TTxCoordinator::PlanTx(TTransactionProposal &&proposal, const TActorContext
 
     if (planStep >= proposal.MaxStep) {
         MonCounters.PlanTxOutdated->Inc();
+        if (proposal.Trace) { proposal.Trace->Finish("proposal_outdated"); }
         return SendTransactionStatus(proposal.Proxy,
             TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated, proposal.TxId, 0, ctx, TabletID());
     }
 
+    if (proposal.Trace) {
+        proposal.Trace->Span.Attribute("ydb.plan.accepted_step", static_cast<i64>(planStep));
+        proposal.Trace->Span.Attribute("ydb.plan.volatile_requested", volatilePlan);
+        proposal.Trace->Event("proposal accepted and queued");
+    }
     MonCounters.PlanTxAccepted->Inc();
     SendTransactionStatus(proposal.Proxy, TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted,
         proposal.TxId, planStep, ctx, TabletID());
@@ -202,11 +236,13 @@ void TTxCoordinator::HandleEnqueue(TEvTxProxy::TEvProposeTransaction::TPtr &ev, 
         {"txid", proposal.TxId});
 
     if (Y_UNLIKELY(Stopping)) {
+        if (proposal.Trace) { proposal.Trace->Finish("coordinator_stopping"); }
         return SendTransactionStatus(proposal.Proxy,
                 TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting,
                 proposal.TxId, 0, ctx, TabletID());
     }
 
+    if (proposal.Trace) { proposal.Trace->Event("proposal queued while initializing"); }
     if (!VolatileState.Queue.Unsorted)
         VolatileState.Queue.Unsorted.emplace();
 

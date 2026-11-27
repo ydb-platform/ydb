@@ -4382,10 +4382,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
             CreateMirrorerActor();
         }
     } else {
-        if (Mirrorer) {
-            ctx.Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
-            Mirrorer.Reset();
-        }
+        DestroyMirrorer();
     }
 
     if (SendChangeConfigReply) {
@@ -5362,6 +5359,13 @@ void TPartition::Handle(NQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const 
     }
 }
 
+TActorId TPartition::GetActiveMirrorer() const {
+    if (Mirrorer && (!ChangeConfig || MirroringEnabled(ChangeConfig->Config))) {
+        return Mirrorer->Actor;
+    }
+    return {};
+}
+
 void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
         RegisterWithSameMailbox(CreateMirrorer(TabletId, TabletActorId, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, GetEndOffset(), Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters))
@@ -5370,6 +5374,8 @@ void TPartition::CreateMirrorerActor() {
 
 void TPartition::DestroyMirrorer() {
     if (Mirrorer) {
+        PendingReplicationData.reset();
+        ReplicationDataNeedsApply = false;
         Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
         Mirrorer.Reset();
     }

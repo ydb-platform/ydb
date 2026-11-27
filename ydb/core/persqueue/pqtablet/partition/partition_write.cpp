@@ -788,11 +788,17 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     const bool replicationDisabled = replicatedPartition
         && AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled();
 
-    if (ev->Get()->FromMirrorer && replicationDisabled) {
+    const auto& mirrorer = ev->Get()->MirrorerActor;
+    if (mirrorer && replicationDisabled) {
         DestroyMirrorer();
 
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR,
                    "Topic replication is temporarily disabled");
+        return;
+    }
+
+    if (mirrorer && mirrorer != GetActiveMirrorer()) {
+        ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR, "Mirroring has stopped");
         return;
     }
 
@@ -909,7 +915,9 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         size += msg.Data.size();
         TString sourceId = msg.SourceId;
         bool needToChangeOffset = msg.PartNo + 1 == msg.TotalParts;
-        EmplacePendingRequest(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg), ev->Get()->InitialSeqNo}, NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.Partition.WriteMessage"), ctx);
+        TWriteMsg write{ev->Get()->Cookie, offset, std::move(msg), ev->Get()->InitialSeqNo};
+        write.MirrorerActor = mirrorer;
+        EmplacePendingRequest(std::move(write), NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.Partition.WriteMessage"), ctx);
         PendingRequests.back().Span.Attribute("source_id", std::move(sourceId));
         if (KVWriteInProgress) { // We are currently writing previous blob
             PendingRequests.back().WaitPreviousWriteSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(PendingRequests.back().Span.GetTraceId()), "Topic.Partition.WaitPreviousWrite");
@@ -1217,6 +1225,12 @@ void TPartition::ExecRequest(TEmitHeartbeatMsg& msg, ProcessParameters& paramete
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p,
                                                          TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
+    if (p.MirrorerActor && p.MirrorerActor != GetActiveMirrorer()) {
+        WriteInflightSize -= p.Msg.Data.size();
+        ScheduleReplyError(p.Cookie, false, NPersQueue::NErrorCode::ERROR, "Mirroring has stopped");
+        return EProcessResult::ContinueDrop;
+    }
+
     if (!CanWrite()) {
         WriteInflightSize -= p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false, InactivePartitionErrorCode,
@@ -1411,6 +1425,11 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     WriteInflightSize -= p.Msg.Data.size();
 
     const auto& ctx = ActorContext();
+
+    if (p.MirrorerActor && p.MirrorerActor != GetActiveMirrorer()) {
+        ScheduleReplyError(p.Cookie, false, NPersQueue::NErrorCode::ERROR, "Mirroring has stopped");
+        return false;
+    }
 
     ui64& curOffset = parameters.CurOffset;
     auto& sourceIdBatch = parameters.SourceIdBatch;

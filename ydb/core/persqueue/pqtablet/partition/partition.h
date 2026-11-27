@@ -238,6 +238,7 @@ private:
                                NPersQueue::NErrorCode::EErrorCode errorCode);
     void CreateMirrorerActor();
     void DestroyMirrorer();
+    TActorId GetActiveMirrorer() const;
     void NotifyMirrorerPersistDone();
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);

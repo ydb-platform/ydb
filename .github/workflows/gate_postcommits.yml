@@ -151,9 +151,9 @@ jobs:
             echo "|------|---------|-----|--------|-----|"
             jq -r '
               def paint($s):
-                if .ignored then "<span style=\"color:#9a6700\">\($s)</span>" else $s end;
+                if .ignored then "~~\($s)~~" else $s end;
               .[]
-              | (if .ignored then "<span style=\"color:#9a6700\">ignored</span>" else "counted" end) as $gate
+              | (if .ignored then "ignored" else "counted" end) as $gate
               | "| \($gate) | \(paint(.waiting)) | \(paint(.age)) | \(paint("`\(.branch)`")) | \(paint("[\(.title|gsub("\\|"; "\\|"))](\(.html_url))")) |"
             ' <<<"$pr_check_items"
           else

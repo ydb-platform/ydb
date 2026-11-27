@@ -4,6 +4,8 @@
 #include <ydb/library/actors/interconnect/outgoing_stream.h>
 #include <ydb/library/actors/interconnect/ut/protos/interconnect_test.pb.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/wilson/wilson_uploader.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -157,7 +159,7 @@ TVector<TXdcPushData> ExtractPushDataCommands(const TString& packet, ui32* descr
     return result;
 }
 
-TSerializedEvent SerializeEvent(bool useXxhash, bool allowDisablingPayloadChecksums, ui32 eventFlags) {
+TSerializedEvent SerializeEvent(bool useXxhash, bool allowDisablingPayloadChecksums, ui32 eventFlags, ui8 traceLevel = 0) {
     auto common = MakeIntrusive<TInterconnectProxyCommon>();
     common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
 
@@ -184,7 +186,8 @@ TSerializedEvent SerializeEvent(bool useXxhash, bool allowDisablingPayloadChecks
         TActorId(),
         TActorId(),
         ev,
-        eventFlags);
+        eventFlags, 0, nullptr,
+        traceLevel ? NWilson::TTraceId::NewTraceId(traceLevel, 4095) : NWilson::TTraceId());
 
     channel.Push(*evHandle, pool, TInstant::Zero());
 
@@ -373,6 +376,50 @@ void AssertXdcDeclareNotSerialized(IEventBase* ev, ui32 maxSerializedEventSize) 
 } // namespace
 
 Y_UNIT_TEST_SUITE(EventOutputChannel) {
+    Y_UNIT_TEST(QueueTraceHasLocalClockBoundariesAtMaximumVerbosity) {
+        class TSerializeActor : public TActorBootstrapped<TSerializeActor> {
+        public:
+            TSerializeActor(TActorId edge, ui8 level)
+                : Edge(edge), Level(level) {}
+            void Bootstrap() {
+                SerializeEvent(false, false, 0, Level);
+                Send(Edge, new TEvents::TEvWakeup());
+                PassAway();
+            }
+            TActorId Edge;
+            ui8 Level;
+        };
+        TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto uploader = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploader);
+        TVector<NWilson::NTraceProto::Span> spans;
+        const auto observer = runtime.AddObserver<NWilson::TEvWilson>([&](NWilson::TEvWilson::TPtr& ev) {
+            spans.push_back(ev->Get()->Span);
+        });
+        for (ui8 level : {14, 15}) {
+            spans.clear();
+            runtime.Register(new TSerializeActor(edge, level));
+            runtime.GrabEdgeEvent<TEvents::TEvWakeup>(edge);
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(spans.size(), level == 15 ? 1u : 0u);
+            if (!spans.empty()) {
+                const auto& span = spans.front();
+                UNIT_ASSERT_VALUES_EQUAL(span.name(), "Interconnect.Queue");
+                UNIT_ASSERT_VALUES_EQUAL(span.events_size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(span.events(0).name(), "FeedBuf:INITIAL");
+                UNIT_ASSERT_VALUES_EQUAL(span.events(1).name(), "descriptor buffered");
+                bool epoch = false, boundary = false;
+                for (const auto& attr : span.attributes()) {
+                    epoch |= attr.key() == "ydb.process.epoch";
+                    boundary |= attr.key() == "ydb.ic.end_boundary" && attr.value().string_value() == "descriptor_buffered";
+                }
+                UNIT_ASSERT(epoch && boundary);
+            }
+        }
+    }
+
     Y_UNIT_TEST(GluesSmallMainChannelProtobufEventsIntoSingleSpan) {
         auto common = MakeIntrusive<TInterconnectProxyCommon>();
         common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();

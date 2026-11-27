@@ -106,9 +106,6 @@ void ConvertItem(
         *to.mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
             from.GetLagMilliSeconds());
     }
-    if (from.HasTopicDataLagOffsets()) {
-        to.mutable_stats()->set_topic_data_lag_offsets(from.GetTopicDataLagOffsets());
-    }
     if (from.HasInitialScanProgress()) {
         to.mutable_stats()->set_initial_scan_progress(from.GetInitialScanProgress());
     }

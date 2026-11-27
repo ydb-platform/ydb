@@ -9,9 +9,6 @@
 #include <library/cpp/string_utils/url/url.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/hash.h>
-
-#include <algorithm>
 
 namespace NKikimr::NReplication::NController {
 
@@ -105,54 +102,6 @@ Ydb::Topic::CreateTopicRequest BuildTopicMirrorRequest(const NYdb::NTopic::TTopi
     });
 
     return request;
-}
-
-std::optional<ui64> GetTopicDataLagOffsets(const Ydb::Topic::DescribeTopicResult& source,
-        const Ydb::Topic::DescribeTopicResult& destination)
-{
-    if (source.partitions().empty() || source.partitions_size() != destination.partitions_size()) {
-        return std::nullopt;
-    }
-
-    THashMap<i64, const Ydb::Topic::DescribeTopicResult::PartitionInfo*> partitions;
-    for (const auto& part : source.partitions()) {
-        if (!part.partition_stats().has_partition_offsets()
-            || !partitions.emplace(part.partition_id(), &part).second)
-        {
-            return std::nullopt;
-        }
-    }
-
-    ui64 maxLag = 0;
-    for (const auto& part : destination.partitions()) {
-        auto it = partitions.find(part.partition_id());
-        if (it == partitions.end() || !part.partition_stats().has_partition_offsets()) {
-            return std::nullopt;
-        }
-        const auto& srcPart = *it->second;
-        if (part.active() != srcPart.active()
-            || part.key_range().from_bound() != srcPart.key_range().from_bound()
-            || part.key_range().to_bound() != srcPart.key_range().to_bound()
-            || !std::ranges::is_permutation(part.parent_partition_ids(), srcPart.parent_partition_ids())
-            || !std::ranges::is_permutation(part.child_partition_ids(), srcPart.child_partition_ids()))
-        {
-            return std::nullopt;
-        }
-        const auto& src = srcPart.partition_stats().partition_offsets();
-        const auto& dst = part.partition_stats().partition_offsets();
-        // A hole between retained ranges, or a missing retained prefix, precludes a complete sample.
-        if (src.start() < 0 || src.end() < src.start() || dst.start() < 0 || dst.end() < dst.start()
-            || dst.end() < src.start() || dst.start() > src.start())
-        {
-            return std::nullopt;
-        }
-        if (src.end() > dst.end()) {
-            maxLag = Max(maxLag, static_cast<ui64>(src.end() - dst.end()));
-        }
-        partitions.erase(it);
-    }
-
-    return maxLag;
 }
 
 TTopicMirrorSettings::TTopicMirrorSettings()

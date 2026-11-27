@@ -84,7 +84,7 @@ void WaitForReplication(TEnv<true>& env, const std::function<bool()>& ready, con
     WaitForReplicationUntil(env, [&](NYdb::TDeadline) { return ready(); }, description);
 }
 
-std::optional<ui64> DescribeTopicDataLag(TEnv<true>& env, const TString& replication, const TString& target,
+std::optional<TDuration> DescribeTopicLag(TEnv<true>& env, const TString& replication, const TString& target,
         bool includeStats)
 {
     NYdb::NReplication::TReplicationClient client(env.GetDriver());
@@ -95,7 +95,7 @@ std::optional<ui64> DescribeTopicDataLag(TEnv<true>& env, const TString& replica
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     for (const auto& item : result.GetReplicationDescription().GetItems()) {
         if (item.DstPath == target) {
-            return item.Stats.GetTopicDataLagOffsets();
+            return item.Stats.GetLag();
         }
     }
     UNIT_FAIL("Missing replication target " << target);

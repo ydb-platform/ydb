@@ -3,7 +3,6 @@
 #include <util/generic/string.h>
 
 #include <memory>
-#include <optional>
 
 namespace NKikimrPQ {
     class TMirrorPartitionConfig;
@@ -19,16 +18,12 @@ namespace NYdb::inline Dev::NTopic {
 
 namespace Ydb::Topic {
     class CreateTopicRequest;
-    class DescribeTopicResult;
 }
 
 namespace NKikimr::NReplication::NController {
 
 Ydb::Topic::CreateTopicRequest BuildTopicMirrorRequest(const NYdb::NTopic::TTopicDescription& description,
     const TString& consumer);
-
-std::optional<ui64> GetTopicDataLagOffsets(const Ydb::Topic::DescribeTopicResult& source,
-    const Ydb::Topic::DescribeTopicResult& destination);
 
 struct TTopicMirrorSettings {
     std::unique_ptr<NKikimrPQ::TMirrorPartitionConfig> Config;

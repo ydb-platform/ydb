@@ -2,59 +2,15 @@
 #include "target_cdc.h"
 #include "target_table.h"
 #include "target_topic.h"
-#include "topic_mirror.h"
 #include "util.h"
 
 #include <ydb/core/protos/replication.pb.h>
-#include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NReplication::NController {
 
 Y_UNIT_TEST_SUITE(Replication) {
-    Y_UNIT_TEST(TopicDataLagRequiresComparablePartitions) {
-        Ydb::Topic::DescribeTopicResult source;
-        Ydb::Topic::DescribeTopicResult destination;
-        auto addPartition = [](auto& topic, i64 id, i64 start, i64 end) {
-            auto* part = topic.add_partitions();
-            part->set_partition_id(id);
-            auto* offsets = part->mutable_partition_stats()->mutable_partition_offsets();
-            offsets->set_start(start);
-            offsets->set_end(end);
-        };
-
-        UNIT_ASSERT(!GetTopicDataLagOffsets(source, destination));
-        addPartition(source, 0, 0, 0);
-        addPartition(source, 1, 10, 20);
-        addPartition(destination, 1, 5, 17);
-        UNIT_ASSERT(!GetTopicDataLagOffsets(source, destination));
-        addPartition(destination, 0, 0, 0);
-        UNIT_ASSERT(GetTopicDataLagOffsets(source, destination) == 3);
-
-        auto* part = destination.mutable_partitions(0);
-        auto* offsets = part->mutable_partition_stats()->mutable_partition_offsets();
-        offsets->set_end(21);
-        UNIT_ASSERT(GetTopicDataLagOffsets(source, destination) == 0);
-        offsets->set_end(9);
-        UNIT_ASSERT(!GetTopicDataLagOffsets(source, destination));
-        offsets->set_end(20);
-        offsets->set_start(11);
-        UNIT_ASSERT(!GetTopicDataLagOffsets(source, destination));
-        offsets->set_start(10);
-        part->set_partition_id(0);
-        UNIT_ASSERT(!GetTopicDataLagOffsets(source, destination));
-        part->set_partition_id(1);
-        part->add_child_partition_ids(2);
-        UNIT_ASSERT(!GetTopicDataLagOffsets(source, destination));
-        part->clear_child_partition_ids();
-        part->mutable_key_range()->set_to_bound("split");
-        UNIT_ASSERT(!GetTopicDataLagOffsets(source, destination));
-        part->clear_key_range();
-        part->clear_partition_stats();
-        UNIT_ASSERT(!GetTopicDataLagOffsets(source, destination));
-    }
-
     Y_UNIT_TEST(SourceRetryClassification) {
         struct TCase {
             NYdb::EStatus Status;

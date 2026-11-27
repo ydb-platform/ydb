@@ -80,7 +80,6 @@ const TDuration& TGlobalConsistency::GetCommitInterval() const {
 TStats::TStats(const Ydb::Replication::DescribeReplicationResult_Stats& stats)
     : Lag_(stats.has_lag() ? std::make_optional(DurationToDuration(stats.lag())) : std::nullopt)
     , InitialScanProgress_(stats.has_initial_scan_progress() ? std::make_optional(stats.initial_scan_progress()) : std::nullopt)
-    , TopicDataLagOffsets_(stats.has_topic_data_lag_offsets() ? std::make_optional(stats.topic_data_lag_offsets()) : std::nullopt)
 {
 }
 
@@ -90,10 +89,6 @@ const std::optional<TDuration>& TStats::GetLag() const {
 
 const std::optional<float>& TStats::GetInitialScanProgress() const {
     return InitialScanProgress_;
-}
-
-const std::optional<uint64_t>& TStats::GetTopicDataLagOffsets() const {
-    return TopicDataLagOffsets_;
 }
 
 TRunningState::TRunningState(const TStats& stats)

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/datetime/base.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -38,7 +39,7 @@ std::optional<TTopicOffsets> GetTopicOffsets(TEnv<true>& env, const TString& top
 void WaitForTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer,
     const std::function<bool(const TTopicOffsets&)>& ready, const TString& description);
 
-std::optional<ui64> DescribeTopicDataLag(TEnv<true>& env, const TString& replication, const TString& target,
+std::optional<TDuration> DescribeTopicLag(TEnv<true>& env, const TString& replication, const TString& target,
     bool includeStats = true);
 
 struct TTopicRecord {

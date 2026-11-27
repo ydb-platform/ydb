@@ -1107,6 +1107,8 @@ message TKqpFullTextSourceSettings {
         repeated TPatternQuery PatternQueries = 5;
         // An individual explicit keyword query may be empty even when Query is not.
         optional bool HasEmptyQuery = 6 [default = false];
+        // Individual resolved keyword arguments when the read has more than one.
+        repeated bytes QueryArguments = 7;
     }
 
     message TIndexTable {

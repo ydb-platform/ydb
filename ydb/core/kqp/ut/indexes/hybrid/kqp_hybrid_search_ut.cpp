@@ -1054,6 +1054,50 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(SeparateHybridResultsKeepSearchesConsistent, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+        const TString query = SearchPragma + R"sql(
+            $search = IF(Random(true) < 0.5, "cats"u, "dogs"u);
+
+            SELECT Key, $search AS Search FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, $search), FullTextScore(Text, "love"u), (4, 4) AS Limits)
+            LIMIT 4;
+
+            SELECT Key, $search AS Search FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, $search), FullTextScore(Text, "birds"u), (4, 4) AS Limits)
+            LIMIT 4;
+        )sql";
+        const auto check = [](const TResultSet& rows, ui64 otherKey) {
+            TResultSetParser parser(rows);
+            std::vector<ui64> keys;
+            TString search;
+            while (parser.TryNextRow()) {
+                keys.push_back(*parser.ColumnParser("Key").GetOptionalUint64());
+                const TString current(parser.ColumnParser("Search").GetUtf8());
+                if (search.empty()) {
+                    search = current;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(current, search);
+            }
+            UNIT_ASSERT_C(search == "cats" || search == "dogs", search);
+            const std::set<ui64> expected = search == "cats"
+                ? std::set<ui64>{1u, 3u, otherKey} : std::set<ui64>{2u, otherKey};
+            AssertKeySet(keys, expected);
+        };
+        for (ui32 iteration = 0; iteration < 16; ++iteration) {
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
+            // Each result must agree with its own search value. The two sorts can run in separate phases.
+            check(result.GetResultSet(0), 1u);
+            check(result.GetResultSet(1), 4u);
+        }
+    }
+
     Y_UNIT_TEST(ReadBackedFulltextQueryPreservesPrefixedResiduals) {
         auto kikimr = MakeRunnerWithCompact(/*compact=*/true, /*enableFulltextPrefix=*/true);
         auto db = kikimr.GetQueryClient();
@@ -1150,6 +1194,30 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_STRING_CONTAINS(RunBadRequestIssues(db,
             queryFor("IF(Random(true) < 0.5, $term, \"dogs\"u)"), params("cats")),
             "requires equality predicates on every prefix column");
+    }
+
+    Y_UNIT_TEST_TWIN(VolatileFulltextQueryIsSharedWithLimit, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+        const TString query = SearchPragma + R"sql(
+            $search = IF(Random(true) < 0.5, "cats"u, "dogs"u);
+            $limit = IF($search = "cats"u, 1ul, 2ul);
+            SELECT Key, $search AS Search FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, $search), FullTextScore(Text, "love"u), (4, 4) AS Limits)
+            LIMIT $limit;
+        )sql";
+        for (ui32 iteration = 0; iteration < 32; ++iteration) {
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            const auto& rows = result.GetResultSet(0);
+            TResultSetParser parser(rows);
+            UNIT_ASSERT(parser.TryNextRow());
+            const TString search(parser.ColumnParser("Search").GetUtf8());
+            UNIT_ASSERT_C(search == "cats" || search == "dogs", search);
+            UNIT_ASSERT_VALUES_EQUAL_C(rows.RowsCount(), search == "cats" ? 1u : 2u, NYdb::FormatResultSetYson(rows));
+        }
     }
 
     Y_UNIT_TEST(ReadBackedRowsetsFeedLinearFusion) {

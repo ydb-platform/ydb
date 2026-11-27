@@ -2609,11 +2609,13 @@ private:
 
             const auto& queries = Settings->GetQuerySettings();
             const auto& expr = queries.GetQuery();
-            if (queries.GetHasEmptyQuery() || (expr.empty() && queries.GetPatternQueries().empty())) {
+            const auto& queryArguments = queries.GetQueryArguments();
+            const bool hasKeywordQuery = !expr.empty() || !queryArguments.empty();
+            if (queries.GetHasEmptyQuery() || (!hasKeywordQuery && queries.GetPatternQueries().empty())) {
                 RuntimeError("Expected non-empty query", NYql::NDqProto::StatusIds::BAD_REQUEST);
                 return false;
             }
-            YQL_ENSURE(expr.empty() || queries.GetPatternQueries().empty(), "String predicates must remain residual filters beside fulltext queries");
+            YQL_ENSURE(!hasKeywordQuery || queries.GetPatternQueries().empty(), "String predicates must remain residual filters beside fulltext queries");
             const auto& settings = Settings->GetIndexDescription().GetSettings();
             YQL_ENSURE(settings.columns_size() == 1);
             const auto& column = settings.columns(0);
@@ -2632,10 +2634,23 @@ private:
                     addWord(term, true);
                 }
             }
-            if (!expr.empty()) {
-                for (const auto& term : NFulltext::BuildSearchTermsStructured(expr, column.analyzers())) {
+            const auto addQuery = [&](const TString& expression) {
+                const auto terms = NFulltext::BuildSearchTermsStructured(expression, column.analyzers());
+                for (const auto& term : terms) {
                     addWord(term.Token, term.Required);
                 }
+                return !terms.empty();
+            };
+            if (!queryArguments.empty()) {
+                for (const auto& argument : queryArguments) {
+                    if (!addQuery(argument)) {
+                        Words.clear();
+                        break;
+                    }
+                }
+            } else if (!expr.empty()) {
+                // Single-argument searches and settings sent by older executors.
+                addQuery(expr);
             }
         }
 

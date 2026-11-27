@@ -2896,6 +2896,7 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     {
         TStringBuilder queryBuilder;
         const auto& queryValues = fullTextSource.GetQuerySettings().GetQueryValue();
+        auto* querySettings = settings->MutableQuerySettings();
         // Logical planning interleaves explicit query values with single-space separators.
         // Validate that contract before using positions to distinguish query arguments.
         YQL_ENSURE(queryValues.empty() || queryValues.size() % 2 == 1,
@@ -2909,6 +2910,9 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
             const TStringBuf resolved(value.AsStringRef());
             if (explicitQuery) {
                 hasEmptyQuery |= resolved.empty();
+                if (queryValues.size() > 1) {
+                    querySettings->AddQueryArguments(TString(resolved));
+                }
             } else {
                 YQL_ENSURE(resolved == " ", "Expected a single-space fulltext query separator");
             }
@@ -2916,8 +2920,8 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
             explicitQuery = !explicitQuery;
         }
 
-        settings->MutableQuerySettings()->SetQuery(TString(queryBuilder));
-        settings->MutableQuerySettings()->SetHasEmptyQuery(hasEmptyQuery);
+        querySettings->SetQuery(TString(queryBuilder));
+        querySettings->SetHasEmptyQuery(hasEmptyQuery);
     }
 
     for (const auto& query : fullTextSource.GetQuerySettings().GetPatternQueries()) {

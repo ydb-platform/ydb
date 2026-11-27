@@ -1618,7 +1618,9 @@ bool FloatingPointOrParameter(const TExprBase& exprBase) {
 
 } // anonymous namespace
 
-TExprNode::TPtr BuildPostfiltersForMatch(TExprContext& ctx, TPositionHandle pos, TExprNode::TPtr pattern, TExprNode::TPtr column)  {
+TExprNode::TPtr BuildPostfiltersForMatch(TExprContext& ctx, TPositionHandle pos,
+    TExprNode::TPtr pattern, TExprNode::TPtr column, bool caseSensitive)
+{
     auto patternExpr = ctx.Builder(pos)
         .Callable("Apply")
             .Callable(0, "Udf")
@@ -1639,7 +1641,7 @@ TExprNode::TPtr BuildPostfiltersForMatch(TExprContext& ctx, TPositionHandle pos,
                 .List(0)
                     .Atom(0, "CaseSensitive")
                     .Callable(1, "Bool")
-                        .Atom(0, "false", TNodeFlags::Default)
+                        .Atom(0, caseSensitive ? "true" : "false", TNodeFlags::Default)
                     .Seal()
                 .Seal()
             .Seal()
@@ -1726,13 +1728,6 @@ struct TFulltextQuery {
         if (!member) {
             return false;
         }
-        if (matchContext && (member.Cast().Name().Value() != matchContext->Column ||
-            member.Cast().Struct().Raw() != matchContext->Row ||
-            (PatternMode == "ILIKE" && !matchContext->Analyzers->use_filter_lowercase())))
-        {
-            return false;
-        }
-
         auto invalid = [&](const TString& message) {
             // An implicit string predicate may remain a residual filter. Only explicit
             // fulltext builtins require a usable index search for every occurrence.
@@ -1741,6 +1736,18 @@ struct TFulltextQuery {
             }
             return false;
         };
+
+        if (matchContext) {
+            if (member.Cast().Struct().Raw() != matchContext->Row ||
+                (PatternMode == "ILIKE" && !matchContext->Analyzers->use_filter_lowercase()))
+            {
+                return false;
+            }
+            if (member.Cast().Name().Value() != matchContext->Column) {
+                return invalid(TStringBuilder() << Node->Content() << " must reference indexed column '"
+                    << matchContext->Column << "'.");
+            }
+        }
 
         if (!Query->IsComplete()) {
             return invalid("Fulltext search expression must not depend on the table row.");
@@ -1796,6 +1803,9 @@ struct TFulltextQuery {
                 mode.to_lower();
                 if (mode != "keywords" && mode != "wildcard") {
                     return invalid("Fulltext Mode must be 'Keywords' or 'Wildcard'.");
+                }
+                if (mode == "wildcard" && matchContext && PatternMode.empty()) {
+                    return invalid("FulltextMatch Mode 'Wildcard' requires an n-gram index.");
                 }
                 continue;
             }
@@ -1926,12 +1936,15 @@ TExprNode::TPtr FindScoreOrScoreOverMemberOfStruct(const TExprNode::TPtr& node) 
         return node;
     }
 
-    auto exprBase = TExprBase(node);
-    if (exprBase.Maybe<TCoMember>()) {
-        auto member = exprBase.Cast<TCoMember>();
-        for(const auto& child : member.Struct().Cast<TCoAsStruct>()) {
-            if (child.Item(1).Ptr()->Content() == "FulltextScore") {
-                return child.Item(1).Ptr();
+    if (const auto maybeMember = TExprBase(node).Maybe<TCoMember>()) {
+        const auto member = maybeMember.Cast();
+        if (const auto fields = member.Struct().Maybe<TCoAsStruct>()) {
+            for (const auto& field : fields.Cast()) {
+                if (field.Item(0).Cast<TCoAtom>().Value() == member.Name().Value() &&
+                    field.Item(1).Ref().IsCallable("FulltextScore"))
+                {
+                    return field.Item(1).Ptr();
+                }
             }
         }
     }
@@ -1940,7 +1953,7 @@ TExprNode::TPtr FindScoreOrScoreOverMemberOfStruct(const TExprNode::TPtr& node) 
 }
 
 void VisitExprSkipOptionalIfValue(const TExprNode::TPtr& node, const TExprVisitPtrFunc& preFunc,
-     TNodeSet& visitedNodes, TExprNode::TPtr& scoreRestriction)
+    const TExprVisitPtrFunc& isMatchedScore, TNodeSet& visitedNodes, TExprNode::TPtr& scoreRestriction)
 {
     if (!visitedNodes.emplace(node.Get()).second) {
         return;
@@ -1949,41 +1962,34 @@ void VisitExprSkipOptionalIfValue(const TExprNode::TPtr& node, const TExprVisitP
     if (!preFunc || preFunc(node)) {
         if (node->Content() == "OptionalIf") {
             auto optionalIf = TExprBase(node).Maybe<TCoOptionalIf>().Cast();
-            VisitExprSkipOptionalIfValue(optionalIf.Predicate().Ptr(), preFunc, visitedNodes, scoreRestriction);
+            VisitExprSkipOptionalIfValue(optionalIf.Predicate().Ptr(), preFunc, isMatchedScore, visitedNodes, scoreRestriction);
             return;
         }
 
         if (node->Content() == "AsStruct") {
             auto asStruct = TExprBase(node).Maybe<TCoAsStruct>().Cast();
             for (auto child : asStruct) {
-                VisitExprSkipOptionalIfValue(child.Item(1).Ptr(), preFunc, visitedNodes, scoreRestriction);
+                VisitExprSkipOptionalIfValue(child.Item(1).Ptr(), preFunc, isMatchedScore, visitedNodes, scoreRestriction);
             }
             return;
         }
 
         if (node->Content() == ">" || node->Content() == "<") {
-            auto compare = TExprBase(node).Maybe<TCoCompare>().Cast();
-            if (compare.Left().Maybe<TCoIntegralCtor>() && compare.Left().Cast<TCoIntegralCtor>().Literal().Value() == "0" && node->Content() == "<") {
-                auto score = FindScoreOrScoreOverMemberOfStruct(compare.Right().Ptr());
-                if (score) {
+            const auto compare = TExprBase(node).Cast<TCoCompare>();
+            const bool greater = node->Content() == ">";
+            const auto threshold = (greater ? compare.Right() : compare.Left()).Maybe<TCoIntegralCtor>();
+            if (threshold && threshold.Cast().Literal().Value() == "0") {
+                const auto score = FindScoreOrScoreOverMemberOfStruct((greater ? compare.Left() : compare.Right()).Ptr());
+                if (score && isMatchedScore(score)) {
                     scoreRestriction = node;
-                    VisitExprSkipOptionalIfValue(score, preFunc, visitedNodes, scoreRestriction);
+                    VisitExprSkipOptionalIfValue(score, preFunc, isMatchedScore, visitedNodes, scoreRestriction);
                 }
             }
-
-            if (compare.Right().Maybe<TCoIntegralCtor>() && compare.Right().Cast<TCoIntegralCtor>().Literal().Value() == "0" && node->Content() == ">") {
-                auto score = FindScoreOrScoreOverMemberOfStruct(compare.Left().Ptr());
-                if (score) {
-                    scoreRestriction = node;
-                    VisitExprSkipOptionalIfValue(score, preFunc, visitedNodes, scoreRestriction);
-                }
-            }
-
             return;
         }
 
         for (const auto& child : node->Children()) {
-            VisitExprSkipOptionalIfValue(child, preFunc, visitedNodes, scoreRestriction);
+            VisitExprSkipOptionalIfValue(child, preFunc, isMatchedScore, visitedNodes, scoreRestriction);
         }
     }
 }
@@ -2105,6 +2111,8 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         }
 
         return true;
+    }, [&](const TExprNode::TPtr& score) {
+        return matchQuery(score) != nullptr;
     }, visitedNodes, result.ScoreRestriction);
 
     VisitExpr(node.Ptr(), [&] (const TExprNode::TPtr& expr) {
@@ -2291,7 +2299,7 @@ void BuildFulltextPredicateReplacements(TFullTextApplyParseResult& result,
                 .Done().Ptr());
         } else if (query.IsMatchQuery()) {
             auto replacement = !query.PatternMode.empty()
-                ? BuildPostfiltersForMatch(ctx, pos, query.Query, query.Column)
+                ? BuildPostfiltersForMatch(ctx, pos, query.Query, query.Column, query.PatternMode == "LIKE")
                 : Build<TCoBool>(ctx, pos).Literal().Build("true").Done().Ptr();
             result.Replaces.emplace(query.Node.Get(), std::move(replacement));
         }
@@ -2303,7 +2311,8 @@ void BuildFulltextPredicateReplacements(TFullTextApplyParseResult& result,
             // driver wins. Reuse source dependencies without materializing this filter.
             YQL_ENSURE(!query.PatternMode.empty());
             auto value = ctx.ReplaceNodes(TExprNode::TPtr(query.Query), result.Replaces);
-            result.Replaces.emplace(query.Node.Get(), BuildPostfiltersForMatch(ctx, pos, value, query.Column));
+            result.Replaces.emplace(query.Node.Get(),
+                BuildPostfiltersForMatch(ctx, pos, value, query.Column, query.PatternMode == "LIKE"));
         }
     }
 
@@ -2535,14 +2544,23 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
     const auto driver = MaxElementBy(result.Queries, [](const auto& query) { return query.Priority(); });
     const auto priority = driver->Priority();
     std::iter_swap(result.Queries.begin(), driver);
-    // Only free-text Match/Score needs other predicates to remain residual for scoring/MSM.
+    // Free-text queries use only their own terms for scoring and minimum-should-match.
     TVector<TFulltextQuery> residualQueries;
     std::erase_if(result.Queries, [&](const auto& query) {
-        if (priority == 2 && query.Priority() < priority) {
-            residualQueries.push_back(query);
-            return true;
+        if (query.Priority() == priority) {
+            return false;
         }
-        return false;
+        if (priority == 1) {
+            // A wildcard driver can use literal and parameter patterns alongside it.
+            // A computed implicit pattern may fail and must wait for candidate rows.
+            const auto value = TExprBase(query.Query);
+            const auto pattern = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
+            if (pattern.Maybe<TCoDataCtor>() || pattern.Maybe<TCoParameter>()) {
+                return false;
+            }
+        }
+        residualQueries.push_back(query);
+        return true;
     });
     BuildFulltextPredicateReplacements(result, residualQueries, ctx, node.Pos());
 
@@ -4144,7 +4162,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         .Callable("OrderedMap")
             .Callable(0, "TopSort")
                 .Add(0, augmented)
-                .Add(1, top.Count().Ptr())
+                .Add(1, ctx.ReplaceNodes(top.Count().Ptr(), fulltextQueryReplacements))
                 .Callable(2, "Bool").Atom(0, "false", TNodeFlags::Default).Seal()
                 .Lambda(3).Param("r").Callable("Member").Arg(0, "r").Atom(1, rrfCol).Seal().Seal()
             .Seal()

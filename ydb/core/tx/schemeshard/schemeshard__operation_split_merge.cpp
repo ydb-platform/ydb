@@ -900,8 +900,8 @@ public:
             }
             const auto& topic = it->second;
             const auto config = topic->GetTabletConfig();
-            const bool attached = config.HasCdcReplication() && !config.GetReplicationSourceConsumer().empty();
-            if (!attached && topic->AlterData && topic->AlterData->GetTabletConfig().HasCdcReplication()) {
+            const bool attached = config.GetCdcReplication() && !config.GetReplicationSourceConsumer().empty();
+            if (!attached && topic->AlterData && topic->AlterData->GetTabletConfig().GetCdcReplication()) {
                 setResultError(NKikimrScheme::StatusMultipleModifications, "CDC topic attachment is in progress");
                 return result;
             }

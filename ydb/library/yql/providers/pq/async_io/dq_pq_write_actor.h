@@ -13,6 +13,8 @@
 #include <util/system/types.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
+#include <functional>
+
 namespace NYql::NDq {
 
 constexpr i64 DqPqDefaultFreeSpace = 16_MB;
@@ -27,6 +29,8 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(NP
 void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const IPqStaticGateway::TPtr& pqGateway,
     const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(),
-    bool enableStreamingQueriesCounters = true, bool enableDeduplicationFeatureFlag = true);
+    bool enableStreamingQueriesCounters = true, std::function<bool()> getEnableDeduplicationFeatureFlag = [] {
+        return true;
+    });
 
 }   // namespace NYql::NDq

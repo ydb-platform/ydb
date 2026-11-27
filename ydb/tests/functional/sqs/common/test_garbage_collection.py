@@ -228,3 +228,5 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
             message_set_2 = set([res['MessageId'] for res in read_result_2])
             message_set_3 = set([res['MessageId'] for res in read_result_3])
             assert_that(len(message_set_2 & message_set_3), equal_to(len(message_set_2)))
+
+# CI baseline for #59292: keep the original waits.

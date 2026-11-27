@@ -1022,3 +1022,5 @@ class KikimrSqsTestBase(object):
             self.queue_name += '.fifo'
         if tables_format is not None:
             self._set_tables_format(tables_format=tables_format)
+
+# CI baseline for #59292: keep the original waits.

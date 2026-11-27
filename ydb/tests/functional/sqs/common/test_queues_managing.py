@@ -412,3 +412,5 @@ class TestQueuesManagingWithTenant(get_test_with_sqs_tenant_installation(QueuesM
 
 class TestQueuesManagingWithPathTestQueuesManagingWithPath(get_test_with_sqs_installation_by_path(QueuesManagingTest)):
     pass
+
+# CI baseline for #59292: keep the original waits.

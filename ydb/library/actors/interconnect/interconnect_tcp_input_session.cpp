@@ -6,6 +6,7 @@
 #include "rdma/mem_pool.h"
 #include <ydb/library/actors/core/probes.h>
 #include <ydb/library/actors/util/datetime.h>
+#include <ydb/library/actors/wilson/wilson_process_epoch.h>
 
 #include <variant>
 
@@ -227,6 +228,7 @@ namespace NActors {
             TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket, TIntrusivePtr<TReceiveContext> context,
             std::shared_ptr<IInterconnectMetrics> metrics, ui32 nodeId, ui64 lastConfirmed,
             TDuration deadPeerTimeout, TSessionParams params) {
+        TraceConnectionEpoch = 0;
         SessionId = sessionId;
         Socket = std::move(socket);
         XdcSocket = std::move(xdcSocket);
@@ -1241,10 +1243,29 @@ namespace NActors {
             if (ev) {
                 // Give the direct-session interface a chance to consume the event via a registered
                 // receiver; otherwise fall back to normal actor-system delivery.
+                NWilson::TSpan handoff(15, NWilson::TTraceId(ev->TraceId),
+                    "Interconnect.ReceiverHandoff", NWilson::EFlags::AUTO_END);
+                if (handoff) {
+                    if (!TraceConnectionEpoch) {
+                        TraceConnectionEpoch = RandomNumber<ui64>(Max<i64>()) + 1;
+                    }
+                    handoff.Attribute("ydb.process.epoch", static_cast<i64>(NWilson::GetProcessTraceEpoch()));
+                    handoff.Attribute("ydb.ic.receive_connection_epoch", static_cast<i64>(TraceConnectionEpoch));
+                    handoff.Attribute("ydb.ic.peer_node_id", static_cast<i64>(NodeId));
+                    handoff.Attribute("ydb.ic.event_type", static_cast<i64>(descr.Type));
+                    handoff.Event("event reconstructed", {{"monotonic_us", static_cast<i64>(TMonotonic::Now().MicroSeconds())}});
+                    ev->TraceId = handoff.GetTraceId();
+                }
                 TAutoPtr<IEventHandle> evPtr(ev.release());
                 if (!Context->DirectSession->DeliverIncoming(evPtr)) {
-                    TActivationContext::Send(evPtr.Release());
+                    const bool accepted = TActivationContext::Send(evPtr.Release());
+                    handoff.Attribute("ydb.ic.delivery_route", TString("actor_system"));
+                    handoff.Attribute("ydb.ic.actor_system_send_accepted", accepted);
+                } else {
+                    handoff.Attribute("ydb.ic.delivery_route", TString("direct_session"));
                 }
+                handoff.Event("receiver handoff returned", {{"monotonic_us", static_cast<i64>(TMonotonic::Now().MicroSeconds())}});
+                handoff.End();
             }
         }
     }

@@ -97,8 +97,9 @@ enum class EBalancerType {
     SpreadNeighbours,
     Storage,
     ScatterNamed, // balancing of a named resource, see TBalancerSettings::NamedResource
+    ScatterDataCenter, // balancing of tablet counts between data centers, see THive::CheckDataCenterBalance
 
-    Last = ScatterNamed,
+    Last = ScatterDataCenter,
 };
 
 constexpr std::size_t EBalancerTypeSize = static_cast<std::size_t>(EBalancerType::Last) + 1;
@@ -385,6 +386,25 @@ struct TDrainSettings {
     bool Forward = true;
 };
 
+struct TNodeFilter {
+    TVector<TSubDomainKey> AllowedDomains;
+    TVector<TNodeId> AllowedNodes;
+    NKikimrHive::TDataCentersGroup AllowedDataCenters;
+    TSubDomainKey ObjectDomain;
+    TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
+    bool MustBePrimaryPile = true;
+
+    const THive* Hive;
+
+    explicit TNodeFilter(const THive& hive);
+
+    TArrayRef<const TSubDomainKey> GetEffectiveAllowedDomains() const;
+
+    bool IsAllowedDataCenter(TDataCenterId dc) const;
+
+    bool IsAllowedPile(TBridgePileId pile) const;
+};
+
 struct TBalancerSettings {
     EBalancerType Type = EBalancerType::Manual;
     int MaxMovements = 0;
@@ -396,6 +416,8 @@ struct TBalancerSettings {
     // When set, the balancer moves tablets to even out usage of this named resource
     // (FilterNodeIds are the source nodes), ResourceToBalance is ignored
     TString NamedResource;
+    // When set, tablets are moved only to the nodes matching it, in addition to their own filters
+    std::optional<TNodeFilter> TargetNodeFilter;
     // why this balancer was started, for the log: a short constant kind and the numbers behind the decision
     TString Trigger = "manual";
     TString TriggerDetails;
@@ -473,25 +495,6 @@ struct TBalancerStats {
     TInstant LastRunTimestamp;
     ui64 LastRunMovements = 0;
     TBalancerRunStats LastRun;
-};
-
-struct TNodeFilter {
-    TVector<TSubDomainKey> AllowedDomains;
-    TVector<TNodeId> AllowedNodes;
-    NKikimrHive::TDataCentersGroup AllowedDataCenters;
-    TSubDomainKey ObjectDomain;
-    TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
-    bool MustBePrimaryPile = true;
-
-    const THive* Hive;
-
-    explicit TNodeFilter(const THive& hive);
-
-    TArrayRef<const TSubDomainKey> GetEffectiveAllowedDomains() const;
-
-    bool IsAllowedDataCenter(TDataCenterId dc) const;
-
-    bool IsAllowedPile(TBridgePileId pile) const;
 };
 
 struct TFollowerUpdates {

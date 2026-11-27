@@ -767,7 +767,8 @@ protected:
     struct TNotEnoughResources {};
     using TBestNodeResult = std::variant<TNodeInfo*, TNoNodeFound, TTooManyTabletsStarting, TNotEnoughResources>;
 
-    TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0);
+    // When targetNodeFilter is set, only the nodes matching it are considered
+    TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0, const TNodeFilter* targetNodeFilter = nullptr);
 
     struct TSelectedNode {
         double Usage;
@@ -1194,6 +1195,14 @@ public:
         return CurrentConfig.GetLessSystemTabletsMoves();
     }
 
+    double GetDataCenterImbalanceToBalance() const {
+        return std::max(0.0, CurrentConfig.GetDataCenterImbalanceToBalance());
+    }
+
+    int GetMaxMovementsOnDataCenterBalancer() const {
+        return static_cast<int>(std::min<ui64>(CurrentConfig.GetMaxMovementsOnDataCenterBalancer(), std::numeric_limits<int>::max()));
+    }
+
     ui64 GetMaxPingsInFlight() const {
         return CurrentConfig.GetMaxPingsInFlight();
     }
@@ -1323,6 +1332,20 @@ protected:
     THiveStats GetStats() const;
     template<std::forward_iterator TIter>
     THiveStats GetStats(TIter begin, TIter end) const;
+
+    // Tablet counts per data center among the nodes of one segment. Only nodes which are alive, not down
+    // and have a known data center are considered.
+    template<std::forward_iterator TIter>
+    TDataCenterBalanceStats GetDataCenterBalanceStats(TIter begin, TIter end) const;
+    // Leaders not tied to particular data centers: without data center preferences and not sticking together in one
+    bool IsTabletCountedForDataCenterBalance(const TTabletInfo& tablet) const;
+    // Recounts a running tablet in its node's DataCenterBalanceTablets after its settings changed
+    void UpdateTabletCountedForDataCenterBalance(TTabletInfo& tablet);
+    // If tablet counts in data centers of the segment need balancing, returns settings of the balancer
+    template<std::forward_iterator TIter>
+    std::optional<TBalancerSettings> CheckDataCenterBalance(const TSegmentId& segmentId, TIter begin, TIter end) const;
+    // Max data center imbalance over the segments, for counters
+    double GetMaxDataCenterImbalance() const;
     void RemoveNodeFromSegments(TNodeInfo* node);
     void RemoveNodeFromSegments(TNodeId nodeId);
     void UpdateNodeSegments(TNodeInfo* node);

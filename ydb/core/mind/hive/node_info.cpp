@@ -97,6 +97,9 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
         if (tablet->HasCounter() && tablet->IsLeader()) {
             Hive.UpdateObjectCount(tablet->AsLeader(), *this, -1);
         }
+        if (std::exchange(tablet->CountedForDataCenterBalance, false)) {
+            --DataCenterBalanceTablets;
+        }
     }
     if (IsResourceDrainingState(newState)) {
         if (Tablets[newState].insert(tablet).second) {
@@ -126,6 +129,10 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
         Hive.UpdateDomainTabletsAlive(tablet->GetLeader().ObjectDomain, +1, GetServicedDomain());
         if (tablet->HasCounter() && tablet->IsLeader()) {
             Hive.UpdateObjectCount(tablet->AsLeader(), *this, +1);
+        }
+        if (Hive.IsTabletCountedForDataCenterBalance(*tablet)) {
+            tablet->CountedForDataCenterBalance = true;
+            ++DataCenterBalanceTablets;
         }
     }
     return true;
@@ -213,9 +220,12 @@ bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debu
         return false;
     }
 
-    ui64 maxCount = GetMaxCountForTabletType(filter.TabletType);
-    if (maxCount == 0) {
-        return false;
+    // a filter not bound to a tablet type (e.g. a balancer's target filter) does not check the tablet limits
+    if (filter.TabletType != TTabletTypes::TypeInvalid) {
+        ui64 maxCount = GetMaxCountForTabletType(filter.TabletType);
+        if (maxCount == 0) {
+            return false;
+        }
     }
 
     if (checkPile && Hive.BridgeInfo) {

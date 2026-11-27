@@ -1556,7 +1556,7 @@ TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNod
     return selectedNodes;
 }
 
-THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId) {
+THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId, const TNodeFilter* targetNodeFilter) {
     YDB_LOG_DEBUG("[FBN] finding best node for tablet",
         {"logPrefix", GetLogPrefix()},
         {"tablet", tablet});
@@ -1679,6 +1679,9 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
     bool thereAreNodesWithManyStarts = false;
 
     for (auto& [_, nodeInfo] : Nodes) {
+        if (targetNodeFilter != nullptr && !nodeInfo.MatchesFilter(*targetNodeFilter)) {
+            continue;
+        }
         if (nodeInfo.IsAlive()) {
             if (nodeInfo.IsAllowedToRunTablet(tablet, &debugState)) {
                 if (nodeInfo.IsAbleToScheduleTablet()) {
@@ -3155,6 +3158,186 @@ double THive::GetUsage() const {
     return stats.MaxUsage;
 }
 
+double TDataCenterBalanceStats::GetImbalance(const TDataCenterId& from, const TDataCenterId& to, i64 moved) const {
+    if (DataCenters.size() < 2) {
+        return 0;
+    }
+    double maxPerNode = std::numeric_limits<double>::lowest();
+    double minPerNode = std::numeric_limits<double>::max();
+    for (const auto& [dataCenterId, stat] : DataCenters) {
+        i64 tablets = stat.Tablets;
+        if (dataCenterId == from) {
+            tablets -= moved;
+        }
+        if (dataCenterId == to) {
+            tablets += moved;
+        }
+        const double perNode = static_cast<double>(tablets) / stat.Nodes;
+        maxPerNode = std::max(maxPerNode, perNode);
+        minPerNode = std::min(minPerNode, perNode);
+    }
+    if (maxPerNode <= 0) {
+        return 0;
+    }
+    return (maxPerNode - minPerNode) / maxPerNode;
+}
+
+std::pair<TDataCenterId, TDataCenterId> TDataCenterBalanceStats::GetHeaviestAndLightest() const {
+    std::pair<TDataCenterId, TDataCenterId> result;
+    double maxPerNode = std::numeric_limits<double>::lowest();
+    double minPerNode = std::numeric_limits<double>::max();
+    for (const auto& [dataCenterId, stat] : DataCenters) {
+        const double perNode = static_cast<double>(stat.Tablets) / stat.Nodes;
+        if (perNode > maxPerNode) {
+            maxPerNode = perNode;
+            result.first = dataCenterId;
+        }
+        if (perNode < minPerNode) {
+            minPerNode = perNode;
+            result.second = dataCenterId;
+        }
+    }
+    return result;
+}
+
+int TDataCenterBalanceStats::GetMovementsToBalance(int maxMovements) const {
+    if (DataCenters.size() < 2) {
+        return 0;
+    }
+    const auto [heaviest, lightest] = GetHeaviestAndLightest();
+    const TDataCenterStat& heavy = DataCenters.at(heaviest);
+    const TDataCenterStat& light = DataCenters.at(lightest);
+    // moves which make tablets per node of the two data centers equal, rounded down so they never swap places
+    const i64 movements = (heavy.Tablets * light.Nodes - light.Tablets * heavy.Nodes) / (heavy.Nodes + light.Nodes);
+    if (maxMovements != 0 && movements > maxMovements) {
+        return maxMovements;
+    }
+    return static_cast<int>(std::min<i64>(movements, std::numeric_limits<int>::max()));
+}
+
+template<std::forward_iterator TIter>
+TDataCenterBalanceStats THive::GetDataCenterBalanceStats(TIter begin, TIter end) const {
+    TDataCenterBalanceStats stats;
+    for (auto it = begin; it != end; ++it) {
+        const TNodeInfo& node = *it;
+        if (!node.IsAlive() || node.Down) {
+            continue;
+        }
+        TDataCenterId dataCenterId = node.GetDataCenter();
+        if (dataCenterId.empty()) {
+            continue;
+        }
+        auto& stat = stats.DataCenters[dataCenterId];
+        stat.Tablets += node.DataCenterBalanceTablets;
+        ++stat.Nodes;
+        stat.NodeIds.push_back(node.Id);
+    }
+    return stats;
+}
+
+bool THive::IsTabletCountedForDataCenterBalance(const TTabletInfo& tablet) const {
+    if (!tablet.IsLeader() || !tablet.IsAllowedByBalancerPolicy()) {
+        return false;
+    }
+    const TLeaderTabletInfo& leader = tablet.AsLeader();
+    if (!leader.DataCentersPreference.GetDataCentersGroups().empty()) {
+        return false;
+    }
+    if (auto it = DefaultDataCentersPreference.find(leader.Type);
+            it != DefaultDataCentersPreference.end() && !it->second.GetDataCentersGroups().empty()) {
+        return false;
+    }
+    if (leader.Category && leader.Category->StickTogetherInDC) {
+        return false;
+    }
+    const TNodeFilter& filter = leader.GetNodeFilter();
+    if (!filter.AllowedNodes.empty()
+            || filter.AllowedDataCenters.DataCenterSize() != 0
+            || filter.AllowedDataCenters.DataCenterNumSize() != 0) {
+        return false;
+    }
+    return true;
+}
+
+void THive::UpdateTabletCountedForDataCenterBalance(TTabletInfo& tablet) {
+    // only the tablets alive on a node are counted, see TNodeInfo::OnTabletChangeVolatileState
+    if (tablet.Node == nullptr || !IsAliveState(tablet.GetVolatileState())) {
+        return;
+    }
+    const bool counted = IsTabletCountedForDataCenterBalance(tablet);
+    if (std::exchange(tablet.CountedForDataCenterBalance, counted) != counted) {
+        if (counted) {
+            ++tablet.Node->DataCenterBalanceTablets;
+        } else {
+            --tablet.Node->DataCenterBalanceTablets;
+        }
+    }
+}
+
+template<std::forward_iterator TIter>
+std::optional<TBalancerSettings> THive::CheckDataCenterBalance(const TSegmentId& segmentId, TIter begin, TIter end) const {
+    TDataCenterBalanceStats stats = GetDataCenterBalanceStats(begin, end);
+    // with a single node in every data center the node balancers already do the job
+    if (std::ranges::all_of(stats.DataCenters, [](const auto& item) { return item.second.Nodes <= 1; })) {
+        return std::nullopt;
+    }
+    const double imbalance = stats.GetImbalance();
+    const double threshold = GetDataCenterImbalanceToBalance();
+    if (imbalance <= threshold) {
+        return std::nullopt;
+    }
+    const auto heaviestAndLightest = stats.GetHeaviestAndLightest();
+    const TDataCenterId& heaviest = heaviestAndLightest.first;
+    const TDataCenterId& lightest = heaviestAndLightest.second;
+    const auto& heavyStat = stats.DataCenters.at(heaviest);
+    const auto& lightStat = stats.DataCenters.at(lightest);
+
+    // when even a single move would only overshoot, the balancer is not started
+    const int movements = stats.GetMovementsToBalance(GetMaxMovementsOnDataCenterBalancer());
+    if (movements == 0) {
+        return std::nullopt;
+    }
+    const double imbalanceAfter = stats.GetImbalance(heaviest, lightest, movements);
+
+    // the nodes of the lightest data center in this segment
+    TNodeFilter targetNodeFilter(*this);
+    targetNodeFilter.AllowedDomains = {std::get<TSubDomainKey>(segmentId)};
+    targetNodeFilter.AllowedDataCenters.AddDataCenter(lightest);
+    targetNodeFilter.MustBePrimaryPile = false; // the tablets' own filters decide on piles
+    YDB_LOG_DEBUG("ProcessTabletBalancer: data center imbalance triggered balancer",
+        {"logPrefix", GetLogPrefix()},
+        {"segmentId", segmentId},
+        {"imbalance", imbalance},
+        {"threshold", threshold},
+        {"heaviestDataCenter", heaviest},
+        {"lightestDataCenter", lightest},
+        {"movements", movements});
+    return TBalancerSettings{
+        .Type = EBalancerType::ScatterDataCenter,
+        .MaxMovements = movements,
+        .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
+        .MaxInFlight = GetBalancerInflight(),
+        .FilterNodeIds = heavyStat.NodeIds,
+        .ResourceToBalance = EResourceToBalance::ComputeResources,
+        .TargetNodeFilter = std::move(targetNodeFilter),
+        .Trigger = "data center imbalance",
+        .TriggerDetails = TStringBuilder() << "segment=" << segmentId
+            << " imbalance=" << Sprintf("%.3f", imbalance)
+            << " threshold=" << Sprintf("%.3f", threshold)
+            << " from=" << heaviest << " (" << heavyStat.Tablets << " tablets on " << heavyStat.Nodes << " nodes)"
+            << " to=" << lightest << " (" << lightStat.Tablets << " tablets on " << lightStat.Nodes << " nodes)"
+            << " expectedImbalance=" << Sprintf("%.3f", imbalanceAfter),
+    };
+}
+
+double THive::GetMaxDataCenterImbalance() const {
+    double result = 0;
+    for (const auto& [segmentId, nodes] : NodeSegments) {
+        result = std::max(result, GetDataCenterBalanceStats(nodes.begin(), nodes.end()).GetImbalance());
+    }
+    return result;
+}
+
 void THive::RemoveNodeFromSegments(TNodeInfo* node) {
     auto it = NodeSegments.find(node->GetSegment());
     if (it == NodeSegments.end()) {
@@ -3339,6 +3522,13 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         // is a more concrete problem than general scatter, so it goes first.
         if (auto namedSettings = CheckNamedResources(nodes.begin(), nodes.end())) {
             settings.emplace(std::move(*namedSettings));
+            if (maybeStartBalancer()) {
+                continue;
+            }
+        }
+
+        if (auto dataCenterSettings = CheckDataCenterBalance(segmentId, nodes.begin(), nodes.end())) {
+            settings.emplace(std::move(*dataCenterSettings));
             if (maybeStartBalancer()) {
                 continue;
             }
@@ -3894,6 +4084,7 @@ TDuration THive::GetBalancerCooldown(EBalancerType balancerType) const {
         case EBalancerType::SpreadNeighbours:
         case EBalancerType::Storage:
         case EBalancerType::ScatterNamed:
+        case EBalancerType::ScatterDataCenter:
             return GetMinPeriodBetweenBalance();
         case EBalancerType::Emergency:
             return GetMinPeriodBetweenEmergencyBalance();
@@ -4750,6 +4941,7 @@ void THive::Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr&) {
     TabletCounters->Simple()[NHive::COUNTER_BALANCE_SCATTER].Set(stats.Scatter * 100);
     TabletCounters->Simple()[NHive::COUNTER_BALANCE_USAGE_MIN].Set(stats.MinUsage * 100);
     TabletCounters->Simple()[NHive::COUNTER_BALANCE_USAGE_MAX].Set(stats.MaxUsage * 100);
+    TabletCounters->Simple()[NHive::COUNTER_DATA_CENTER_IMBALANCE].Set(GetMaxDataCenterImbalance() * 100);
 
     if (BalanceCounters) {
         auto setPerResource = [&](auto resource) {
@@ -5300,6 +5492,7 @@ consteval std::array<TStringBuf, EBalancerTypeSize> BalancerTypeCounterSuffixes(
     suffixes[static_cast<size_t>(EBalancerType::Emergency)] = "Emergency";
     suffixes[static_cast<size_t>(EBalancerType::SpreadNeighbours)] = "Spread";
     suffixes[static_cast<size_t>(EBalancerType::ScatterNamed)] = "ScatterNamed";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterDataCenter)] = "ScatterDc";
     return suffixes;
 }
 

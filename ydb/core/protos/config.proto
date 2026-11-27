@@ -2986,6 +2986,8 @@ message THiveConfig {
     optional ECountersExportMode CountersExportMode = 98 [default = COUNTERS_EXPORT_MODE_BASIC, (ParamDescription) = "Which balancing counters Hive and Locals of its nodes export. Each mode includes the previous ones. Per-node counters produce one counter group per node."];
     optional EBridgeTabletPlacement BridgeTabletPlacement = 99 [default = PRIMARY_PILE_ONLY, (ParamDescription) = "In bridge mode, which piles tablets may run in. Tablets in piles no longer allowed are moved away."];
     optional bool TrackResourceBrokerUsage = 100 [default = true, (ParamDescription) = "Whether Locals track resource broker queue usage and report it as rb/* named resources. When turned off, Locals stop polling the resource broker and reset the usage and queue limits they have reported."];
+    optional double DataCenterImbalanceToBalance = 101 [default = 0.05, (ParamDescription) = "Threshold for data center imbalance: the difference between the largest and smallest per-node tablet counts of data centers, relative to the largest one. Above it, tablets are moved between data centers so that each data center runs a share of the tablets proportional to its number of nodes; tablets with data center preferences are not counted or moved. 1 disables the balancing."];
+    optional uint64 MaxMovementsOnDataCenterBalancer = 102 [default = 10, (ParamDescription) = "Number of tablet movements per data center balancing iteration."];
 }
 
 message THealthCheckConfig {

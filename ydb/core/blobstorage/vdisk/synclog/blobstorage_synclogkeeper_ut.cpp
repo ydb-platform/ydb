@@ -124,6 +124,7 @@ namespace NKikimr {
             false,
             TControlWrapper(0, 0, 1),
             false,
+            false,
             TControlWrapper(20'000'000, 1, 100'000'000'000),
             TControlWrapper(1'000'000, 1, 10'000'000));
 

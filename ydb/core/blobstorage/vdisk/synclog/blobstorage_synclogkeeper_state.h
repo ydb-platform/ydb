@@ -107,6 +107,7 @@ namespace NKikimr {
             // Re-issue snapshot request to the persistent processor (used during
             // streaming recovery to fetch the next chunk).
             void ContinuePhantomFlagStorageSnapshot(std::unique_ptr<TEvPhantomFlagStorageGetSnapshot> request) const;
+            TActorId GetPhantomFlagStorageProcessorId() const;
             void UpdatePhantomFlagStorageData(std::optional<TPhantomFlagStorageData>&& data);
             void RetireExtractedChunks(const std::vector<ui32>& chunkIdxs);
             void ProcessLocalSyncData(ui32 orderNumber, const TString& data);

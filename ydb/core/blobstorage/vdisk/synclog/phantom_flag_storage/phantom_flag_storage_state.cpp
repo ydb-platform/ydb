@@ -17,7 +17,7 @@ TPhantomFlagStorageState::TPhantomFlagStorageState(TIntrusivePtr<TSyncLogCtx> sl
 {}
 
 void TPhantomFlagStorageState::InitializePersistent(TPhantomFlagStorageData&& data,
-        TActorId syncLogKeeperId, TActorId chunkKeeperId, ui32 appendBlockSize) {
+        TActorId syncLogKeeperId, TActorId chunkKeeperId, TVDiskIncarnationGuid vdiskIncarnationGuid, ui32 appendBlockSize) {
     Persistent = true;
 
     NActors::IActor* processorActor = CreatePhantomFlagStorageProcessor(std::move(data),
@@ -25,7 +25,9 @@ void TPhantomFlagStorageState::InitializePersistent(TPhantomFlagStorageData&& da
                 .SyncLogCtx = SlCtx,
                 .SyncLogKeeperId = syncLogKeeperId,
                 .ChunkKeeperId = chunkKeeperId,
+                .VDiskIncarnationGuid = vdiskIncarnationGuid,
                 .AppendBlockSize = appendBlockSize,
+                .EnableReplication = SlCtx->EnablePhantomFlagStorageReplication,
             });
     ProcessorId = TActivationContext::Register(processorActor);
 

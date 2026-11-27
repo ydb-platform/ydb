@@ -70,4 +70,10 @@ namespace NKikimr {
             return false;
         return true;
     }
+
+    bool IsCompleteVDiskID(const NKikimrBlobStorage::TVDiskID& id) {
+        // A conversion to TVDiskID narrows these three coordinates to ui8.
+        return id.HasGroupID() && id.HasGroupGeneration() && id.HasRing() && id.HasDomain() && id.HasVDisk()
+            && id.GetRing() <= Max<ui8>() && id.GetDomain() <= Max<ui8>() && id.GetVDisk() <= Max<ui8>();
+    }
 } // NKikimr

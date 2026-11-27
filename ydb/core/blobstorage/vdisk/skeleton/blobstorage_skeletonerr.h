@@ -9,6 +9,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 
+#include <concepts>
+
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
 namespace NKikimr {
@@ -231,6 +233,28 @@ namespace NKikimr {
     // NErrBuilder -- routines for error results
     ////////////////////////////////////////////////////////////////////////////
     namespace NErrBuilder {
+
+        template<class TRequest>
+        concept CPhantomFlagStorageRequest = std::same_as<TRequest, TEvBlobStorage::TEvVPhantomFlagStorageListChunks>
+            || std::same_as<TRequest, TEvBlobStorage::TEvVPhantomFlagStorageReadChunk>;
+
+        template<CPhantomFlagStorageRequest TRequest>
+        std::unique_ptr<IEventBase> ErroneousResult(const TVDiskContextPtr&, NKikimrProto::EReplyStatus status,
+                const TString&, TAutoPtr<TEventHandle<TRequest>>& ev, const TInstant&, const TActorIDPtr&,
+                const TVDiskID& vdiskId, ui64, const TIntrusivePtr<TBlobStorageGroupInfo>&);
+
+        template<>
+        std::unique_ptr<IEventBase> ErroneousResult<TEvBlobStorage::TEvVPhantomFlagStorageListChunks>(
+                const TVDiskContextPtr&, NKikimrProto::EReplyStatus status, const TString&,
+                TEvBlobStorage::TEvVPhantomFlagStorageListChunks::TPtr&, const TInstant&, const TActorIDPtr&,
+                const TVDiskID& vdiskId, ui64, const TIntrusivePtr<TBlobStorageGroupInfo>&);
+
+        template<>
+        std::unique_ptr<IEventBase> ErroneousResult<TEvBlobStorage::TEvVPhantomFlagStorageReadChunk>(
+                const TVDiskContextPtr&, NKikimrProto::EReplyStatus status, const TString&,
+                TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TPtr& ev, const TInstant&, const TActorIDPtr&,
+                const TVDiskID& vdiskId, ui64, const TIntrusivePtr<TBlobStorageGroupInfo>&);
+
         template <typename TEvPtr>
         static inline std::unique_ptr<IEventBase>
         ErroneousResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason,

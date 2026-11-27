@@ -22,7 +22,7 @@ public:
     TPhantomFlagStorageState(TIntrusivePtr<TSyncLogCtx> slCtx);
 
     void InitializePersistent(TPhantomFlagStorageData&& data, TActorId syncLogKeeperId,
-            TActorId chunkKeeperId, ui32 appendBlockSize);
+            TActorId chunkKeeperId, TVDiskIncarnationGuid vdiskIncarnationGuid, ui32 appendBlockSize);
     void StartBuilding();
 
     // Add all DoNotKeep records from cut synclog snapshot up to sizeLimit

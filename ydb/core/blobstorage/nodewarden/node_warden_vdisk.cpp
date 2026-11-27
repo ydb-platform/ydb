@@ -401,6 +401,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
             vdiskConfig->EnablePhantomFlagStorage = EnablePhantomFlagStorage;
             vdiskConfig->EnablePersistentPhantomFlagStorage = EnablePersistentPhantomFlagStorage;
+            vdiskConfig->EnablePhantomFlagStorageReplication = EnablePhantomFlagStorageReplication != 0;
             vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
             vdiskConfig->VolatilePhantomFlagStorageBlobSizeLimit = VolatilePhantomFlagStorageBlobSizeLimitBytes;
             vdiskConfig->EnableChecksumReadValidationOnVDisk = EnableChecksumReadValidationOnVDisk;

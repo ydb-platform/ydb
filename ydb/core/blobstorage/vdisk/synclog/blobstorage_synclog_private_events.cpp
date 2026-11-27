@@ -31,9 +31,10 @@ namespace NKikimr {
 
         TEvPhantomFlagStorageCommitData::TEvPhantomFlagStorageCommitData(
                 const std::optional<TPhantomFlagStorageData>& data,
-                std::vector<ui32> retiredChunks)
+                std::vector<ui32> retiredChunks, bool acknowledgeCommit)
             : Data(data)
             , RetiredChunks(std::move(retiredChunks))
+            , AcknowledgeCommit(acknowledgeCommit)
         {}
 
         TEvPhantomFlagExtractedFromChunk::TEvPhantomFlagExtractedFromChunk(

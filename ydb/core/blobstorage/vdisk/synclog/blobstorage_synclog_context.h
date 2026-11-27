@@ -61,6 +61,7 @@ public:
 
     TControlWrapper EnablePhantomFlagStorage;
     bool EnablePersistentPhantomFlagStorage;
+    const bool EnablePhantomFlagStorageReplication;
     TControlWrapper PhantomFlagStorageLimit;
     TControlWrapper VolatilePhantomFlagStorageBlobSizeLimit;
 
@@ -79,6 +80,7 @@ public:
             bool isReadOnlyVDisk,
             const TControlWrapper& enablePhantomFlagStorage,
             bool enablePersistentPhantomFlagStorage,
+            bool enablePhantomFlagStorageReplication,
             const TControlWrapper& phantomFlagStorageLimit,
             const TControlWrapper& volatilePhantomFlagStorageBlobSizeLimit)
         : VCtx(std::move(vctx))
@@ -99,6 +101,7 @@ public:
         , IsReadOnlyVDisk(isReadOnlyVDisk)
         , EnablePhantomFlagStorage(enablePhantomFlagStorage)
         , EnablePersistentPhantomFlagStorage(enablePersistentPhantomFlagStorage)
+        , EnablePhantomFlagStorageReplication(enablePhantomFlagStorageReplication)
         , PhantomFlagStorageLimit(phantomFlagStorageLimit)
         , VolatilePhantomFlagStorageBlobSizeLimit(volatilePhantomFlagStorageBlobSizeLimit)
     {}

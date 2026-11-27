@@ -286,6 +286,7 @@ namespace NKikimr {
         TControlWrapper MaxInProgressSyncCount;
         TControlWrapper EnablePhantomFlagStorage;
         bool EnablePersistentPhantomFlagStorage = false;
+        bool EnablePhantomFlagStorageReplication = false;
         TControlWrapper PhantomFlagStorageLimit;
         TControlWrapper VolatilePhantomFlagStorageBlobSizeLimit;
         TControlWrapper EnableFreshSyncDataThrottling;

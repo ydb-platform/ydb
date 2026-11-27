@@ -348,6 +348,7 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxInProgressSyncCount;
         TControlWrapper EnablePhantomFlagStorage;
         TControlWrapper EnablePersistentPhantomFlagStorage;
+        TControlWrapper EnablePhantomFlagStorageReplication;
         TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
         TControlWrapper VolatilePhantomFlagStorageBlobSizeLimitBytes;
         TControlWrapper EnableChecksumReadValidationOnVDisk;

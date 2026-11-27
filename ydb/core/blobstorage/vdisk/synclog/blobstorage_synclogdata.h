@@ -107,6 +107,7 @@ namespace NKikimr {
             const TEntryPointDbgInfo LastEntryPointDbgInfo;
             const TSyncLogHeader Header;
             const std::optional<TPhantomFlagStorageData> PhantomFlagStorageData;
+            const ui64 PhantomFlagStorageGeneration;
             const std::unordered_map<ui32, ui32> ChunksToExtract;
 
         private:
@@ -117,6 +118,7 @@ namespace NKikimr {
                              const TEntryPointDbgInfo &lastEntryPointDbgInfo,
                              const TSyncLogHeader &header,
                              const std::optional<TPhantomFlagStorageData>& phantomFlagStorageData,
+                             ui64 phantomFlagStorageGeneration,
                              const std::unordered_map<ui32, ui32>& chunksToExtract);
 
             friend class TSyncLog;
@@ -273,6 +275,8 @@ namespace NKikimr {
             // info about last serialized data written to the log as an entry point
             TEntryPointDbgInfo LastEntryPointDbgInfo;
             std::optional<TPhantomFlagStorageData> PhantomFlagStorageData;
+            // Keep allocation generations monotonic when the manifest is replaced or removed.
+            ui64 PhantomFlagStorageGeneration = 0;
             // chunkIdx -> UsedPagesNum
             std::unordered_map<ui32, ui32> ChunksToExtract;
 

@@ -13,8 +13,9 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        if min(self.versions) < (26, 3):
-            pytest.skip("Only available since 26-3")
+        min_ver = min(self.versions)
+        if min_ver < (26, 3) or len(min_ver) >= 4 and min_ver < (26, 3, 1, 12):
+            pytest.skip("Only available since 26-3-1-12")
         self.row_count = 50
         self.query_count = 5
         self.limit = 5

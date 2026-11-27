@@ -1744,6 +1744,14 @@ Y_UNIT_TEST(TableReferencesAndOptionCase) {
 
 Y_UNIT_TEST(InvalidOptions) {
     for (const auto& [options, error] : TVector<std::pair<TString, TString>>{
+             {"PUBLISH_TO_CHANGEFEEDS = true", "parenthesized list"},
+             {"PUBLISH_TO_CHANGEFEEDS = false", "parenthesized list"},
+             {"PUBLISH_TO_CHANGEFEEDS = 'a,b'", "parenthesized list"},
+             {"PUBLISH_TO_CHANGEFEEDS = (('a'), ('b'))", "parenthesized list"},
+             {"PUBLISH_TO_CHANGEFEEDS = ('a', 1)", "string literal"},
+             {"PUBLISH_TO_CHANGEFEEDS = ('')", "nonempty"},
+             {"PUBLISH_TO_CHANGEFEEDS = ('a', 'a')", "Duplicate changefeed name"},
+             {"PUBLISH_TO_CHANGEFEEDS = ('a'), publish_to_changefeeds = ('b')", "Duplicate CHECKSUM TABLE setting"},
              {"UNKNOWN = 'Sha256'", "Unknown CHECKSUM TABLE setting"},
              {"ALGORITHM = 'Sha256', algorithm = 'CityHash64'", "Duplicate CHECKSUM TABLE setting"},
              {"ALGORITHM = 1", "CHECKSUM TABLE ALGORITHM value should be a string literal"},
@@ -1752,10 +1760,27 @@ Y_UNIT_TEST(InvalidOptions) {
         UNIT_ASSERT(!result.IsOk());
         UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), error);
     }
-    for (const TString options : {"ALGORITHM = $algorithm", "ALGORITHM = 'Sha' || '256'"}) {
+    for (const TString options :
+         {"PUBLISH_TO_CHANGEFEEDS = ()", "PUBLISH_TO_CHANGEFEEDS = (a, b)", "ALGORITHM = $algorithm", "ALGORITHM = 'Sha' || '256'"}) {
         const auto result = SqlToYql("$algorithm = 'Sha256'; CHECKSUM TABLE plato.Input WITH (" + options + ");");
         UNIT_ASSERT(!result.IsOk());
     }
+}
+
+Y_UNIT_TEST(PublishOptionIsAnExecutionHint) {
+    const auto publish = SqlToYql("CHECKSUM TABLE plato.Input WITH (PUBLISH_TO_CHANGEFEEDS = ('audit,EU', 'Orders-v1'));", 10, "kikimr");
+    UNIT_ASSERT_C(publish.IsOk(), Err2Str(publish));
+    UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(publish), "publishtochangefeeds");
+    UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(publish), "audit,EU");
+    UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(publish), "Orders-v1");
+
+    const auto withAlgorithm = SqlToYql("CHECKSUM TABLE plato.Input WITH (PUBLISH_TO_CHANGEFEEDS = ('a'), ALGORITHM = 'Sha256');", 10, "kikimr");
+    UNIT_ASSERT_C(withAlgorithm.IsOk(), Err2Str(withAlgorithm));
+    UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(withAlgorithm), "Sha256");
+
+    const auto local = SqlToYql("CHECKSUM TABLE plato.Input;", 10, "kikimr");
+    UNIT_ASSERT_C(local.IsOk(), Err2Str(local));
+    UNIT_ASSERT(!GetPrettyPrint(local).Contains("publishtochangefeeds"));
 }
 
 Y_UNIT_TEST(ChecksumRemainsAnIdentifier) {

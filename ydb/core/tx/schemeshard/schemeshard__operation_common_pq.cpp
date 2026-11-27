@@ -5,7 +5,9 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/pqdata_transaction.pb.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/iterator/iterate_keys.h>
+#include <util/generic/algorithm.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -182,6 +184,71 @@ void AppendPQTabletConfigDelta(
         auto& partition = *config.AddAllPartitions();
         FillPartition(partition, partitionInfo, ui64(tabletId));
     }
+}
+
+bool IsKeyRangeHeartbeatsStream(const TPathId& streamPathId, const TOperationContext& context) {
+    const auto it = context.SS->CdcStreams.find(streamPathId);
+    if (it == context.SS->CdcStreams.end()) {
+        return false;
+    }
+
+    const auto& stream = it->second->AlterData ? it->second->AlterData : it->second;
+    return stream->HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
+}
+
+TSerializedCellVec MakeFullKeyBound(const TString& bound, size_t keySize) {
+    TVector<TCell> cells;
+    Y_ABORT_UNLESS(TSerializedCellVec::TryParseCells(bound, cells));
+    cells.resize(keySize);
+    return TSerializedCellVec(cells);
+}
+
+std::pair<size_t, size_t> FindSourcesInPartition(
+    const TVector<TSerializedCellVec>& sourceBounds,
+    const TMaybe<TTopicTabletInfo::TKeyRange>& partitionRange,
+    TConstArrayRef<NScheme::TTypeInfo> keyTypes)
+{
+    const auto less = [&](const TSerializedCellVec& lhs, const TSerializedCellVec& rhs) {
+        return CompareTypedCellVectors(lhs.GetCells().data(), rhs.GetCells().data(), keyTypes.data(), keyTypes.size()) < 0;
+    };
+
+    size_t first = 0;
+    if (partitionRange && partitionRange->FromBound) {
+        const auto fromBound = MakeFullKeyBound(*partitionRange->FromBound, keyTypes.size());
+        const auto it = std::upper_bound(sourceBounds.begin(), sourceBounds.end(), fromBound, less);
+        first = std::distance(sourceBounds.begin(), it);
+    }
+
+    size_t last = sourceBounds.size();
+    if (partitionRange && partitionRange->ToBound) {
+        const auto toBound = MakeFullKeyBound(*partitionRange->ToBound, keyTypes.size());
+        const auto it = std::lower_bound(sourceBounds.begin(), sourceBounds.end(), toBound, less);
+        last = std::distance(sourceBounds.begin(), it);
+    }
+
+    return {first, last};
+}
+
+NKikimrPQ::TBootstrapConfig SelectTabletSources(
+    const NKikimrPQ::TBootstrapConfig& bootstrapConfig,
+    const TVector<TSerializedCellVec>& sourceBounds,
+    const TTopicTabletInfo& pqShard,
+    TConstArrayRef<NScheme::TTypeInfo> keyTypes)
+{
+    TVector<size_t> sources;
+    for (const auto& partition : pqShard.Partitions) {
+        const auto [first, last] = FindSourcesInPartition(sourceBounds, partition->KeyRange, keyTypes);
+        for (size_t i = first; i <= last; ++i) {
+            sources.push_back(i);
+        }
+    }
+    SortUnique(sources);
+
+    NKikimrPQ::TBootstrapConfig tabletBootstrapConfig;
+    for (const size_t i : sources) {
+        *tabletBootstrapConfig.AddExplicitMessageGroups() = bootstrapConfig.GetExplicitMessageGroups(i);
+    }
+    return tabletBootstrapConfig;
 }
 
 }  // anonymous namespace
@@ -461,7 +528,10 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         }
     }
 
+    const auto& keyTypes = (pqGroup->AlterData ? pqGroup->AlterData : pqGroup)->KeySchema;
     NKikimrPQ::TBootstrapConfig bootstrapConfig;
+    TVector<TSerializedCellVec> sourceBounds;
+    bool keyRangeHeartbeats = false;
     if (cdcTopic && (create || !attachedCdcConsumer.empty())) {
         auto tablePath = topicPath.Parent().Parent(); // table/cdc_stream/topic
         Y_ABORT_UNLESS(tablePath.IsResolved());
@@ -469,15 +539,28 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
-        for (const auto* p : table->GetPartitions()) {
-            const auto* shardInfo = context.SS->ShardInfos.FindPtr(p->ShardIdx);
+        keyRangeHeartbeats = IsKeyRangeHeartbeatsStream(topicPath.Parent().Base()->PathId, context);
+        const auto& partitions = table->GetPartitions();
+        for (size_t i = 0; i < partitions.size(); ++i) {
+            const auto* shardInfo = context.SS->ShardInfos.FindPtr(partitions[i]->ShardIdx);
             Y_ABORT_UNLESS(shardInfo != nullptr);
 
             auto& mg = *bootstrapConfig.AddExplicitMessageGroups();
             const auto sourceId = NPQ::MakeCdcSourceId(ui64(shardInfo->TabletID), attachedCdcConsumer);
             mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
 
-            //NOTE: No KeyRange on the group: nothing consumes the key ranges on the pqtablet side.
+            // Pass the DataShard key range to a key range CDC topic: PQ registers the source only in its partitions
+            if (keyRangeHeartbeats) {
+                if (i > 0) {
+                    mg.MutableKeyRange()->SetFromBound(sourceBounds.back().GetBuffer());
+                }
+                if (i + 1 < partitions.size()) {
+                    sourceBounds.push_back(MakeFullKeyBound(partitions[i]->EndOfRange, keyTypes.size()));
+                    mg.MutableKeyRange()->SetToBound(sourceBounds.back().GetBuffer());
+                }
+            }
+
+            //NOTE: Other CDC topics get no KeyRange on the group: nothing consumes the key ranges on the pqtablet side.
             // Routing is datashard-side over the topic partitioning, split continuity is
             // the change-exchange re-registration, and the table split/merge re-registration
             // produces rangeless ids anyway.
@@ -504,7 +587,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
     );
 
     TRcBuf bootstrapPart;
-    if (bootstrapConfig.ByteSizeLong() > 0) {
+    if (!keyRangeHeartbeats && bootstrapConfig.ByteSizeLong() > 0) {
         bootstrapPart = MakePipeMessageFragment(BuildPQBootstrapPart(bootstrapConfig));
     }
 
@@ -521,6 +604,10 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                 {"partitionsCount", pqShard->Partitions.size()},
             );
 
+            const TRcBuf tabletBootstrapPart = keyRangeHeartbeats
+                ? MakePipeMessageFragment(BuildPQBootstrapPart(SelectTabletSources(bootstrapConfig, sourceBounds, *pqShard, keyTypes)))
+                : bootstrapPart;
+
             auto fragments = MakePQProposeTransactionFragments(
                 context.SS->SelfId(),
                 context.SS->ShardInfos,
@@ -528,7 +615,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                 txState->TxType,
                 *pqGroup,
                 configCommonPart,
-                bootstrapPart,
+                tabletBootstrapPart,
                 *pqShard
             );
 

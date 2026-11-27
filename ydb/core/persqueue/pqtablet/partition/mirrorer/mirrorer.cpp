@@ -14,7 +14,10 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
-#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletId)("partition_id", Partition)
+#define PQ_ENSURE(condition, ...) YDB_LOG_ENSURE(condition, \
+    {"tabletId", TabletId},                                 \
+    {"partitionId", Partition},                             \
+    __VA_ARGS__)
 
 using namespace NPersQueue;
 
@@ -258,16 +261,18 @@ void TMirrorer::ProcessWriteResponse(
     const TActorContext& ctx,
     const NKikimrClient::TPersQueuePartitionResponse& response
 ) {
-    PQ_ENSURE(response.CmdWriteResultSize() == WriteInFlight.size())
-        ("CmdWriteResultSize", response.CmdWriteResultSize())("expected", WriteInFlight.size())
-        ("First expected offset", (WriteInFlight.empty() ? -1 : WriteInFlight.front().GetOffset()))
-        ("response", response);
+    PQ_ENSURE(response.CmdWriteResultSize() == WriteInFlight.size(),
+        {"cmdWriteResultSize", response.CmdWriteResultSize()},
+        {"expected", WriteInFlight.size()},
+        {"firstExpectedOffset", (WriteInFlight.empty() ? -1 : WriteInFlight.front().GetOffset())},
+        {"response", response});
 
     NYdb::NTopic::TDeferredCommit deferredCommit;
 
     for (auto& result : response.GetCmdWriteResult()) {
         if (result.GetAlreadyWritten()) {
-            PQ_ENSURE(!WasSuccessfulRecording)("got write result 'already written', but we have successful recording before", result);
+            PQ_ENSURE(!WasSuccessfulRecording,
+                {"got write result 'already written', but we have successful recording before", result});
             ProcessError(ctx, TStringBuilder() << "got write result 'already written': " << result);
         } else {
             WasSuccessfulRecording = true;
@@ -279,7 +284,9 @@ void TMirrorer::ProcessWriteResponse(
         }
         ui64 offset = writtenMessageInfo.GetOffset();
         PQ_ENSURE((ui64)result.GetOffset() == offset);
-        PQ_ENSURE(EndOffset <= offset)("EndOffset", EndOffset)("offset", offset);
+        PQ_ENSURE(EndOffset <= offset,
+            {"endOffset", EndOffset},
+            {"offset", offset});
         const ui64 logicalMessageCount = GetLogicalMessageCount(writtenMessageInfo);
         EndOffset = offset + logicalMessageCount;
         BytesInFlight -= writtenMessageInfo.GetData().size();
@@ -544,7 +551,7 @@ void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
         if (ReplicatedOffsetsByConsumers.contains(consumer) && ReplicatedOffsetsByConsumers[consumer] == offsetToSend) {
             continue;
         }
-        
+
         offsetsByConsumersToSend[consumer] = offsetToSend;
     }
 

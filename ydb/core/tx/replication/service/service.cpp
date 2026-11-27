@@ -9,10 +9,9 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
-#include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 #include <ydb/core/protos/counters_replication.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/core/transfer/transfer_writer.h>
+#include <ydb/core/tx/replication/common/transfer_writer_stats.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -225,7 +224,8 @@ public:
             return; // old controller: do not authorize further source commits
         }
         const auto id = GetWorkerId(ev->Sender);
-        AFL_VERIFY_DEBUG(HasWorker(id))("worker", id);
+        YDB_LOG_VERIFY_DEBUG(HasWorker(id),
+            {"worker", id});
         auto& record = ev->Get()->Record;
         id.Serialize(*record.MutableWorker());
         ctx.Send(ev->Forward(ActorId));
@@ -814,9 +814,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             const ITransferWriterFactory* transferWriterFactory)
     {
         if (!CompilationService) {
-            CompilationService = Register(
-                NFq::NRowDispatcher::CreatePurecalcCompileService({}, MakeIntrusive<NMonitoring::TDynamicCounters>())
-            );
+            CompilationService = Register(transferWriterFactory->CreateCompilationService());
         }
 
         return [

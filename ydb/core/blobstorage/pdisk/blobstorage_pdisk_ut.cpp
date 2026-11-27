@@ -69,6 +69,140 @@ NPDisk::TEvChunkWrite::TPartsPtr GenParts(TReallyFastRng32& rng, size_t size) {
 }
 
 Y_UNIT_TEST_SUITE(TPDiskTest) {
+    Y_UNIT_TEST(CommitRecordValidation) {
+        using namespace NPDisk;
+        TTestActorRuntime runtime;
+        auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
+        runtime.Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}, {}});
+        auto context = std::make_shared<TPDiskCtx>(runtime.GetActorSystem(0), 12345, runtime.AllocateEdgeActor());
+        auto config = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
+            TPDiskCategory(DEVICE_TYPE_ROT, 0).GetRaw());
+        auto disk = MakeHolder<TPDisk>(context, config, MakeIntrusive<::NMonitoring::TDynamicCounters>());
+        disk->ChunkState = TVector<TChunkState>(8);
+        const TOwner owner = OwnerBeginUser;
+        TLogRecordHeader header(owner, TLogSignature(0, true), 8);
+        auto& ownerData = disk->OwnerData[owner];
+        ownerData.VDiskId = TVDiskID(0, 1, 0, 0, 0);
+
+        auto makeRecord = [](TString data, const TVector<ui32>& commits = {},
+                const TVector<ui32>& deletes = {}, const TVector<ui32>& dirties = {}) {
+            TCommitRecordFooter footer(data.size(), 8, commits.size(), deletes.size(), dirties.size(), true);
+            auto append = [&](const auto& value) {
+                data.append(reinterpret_cast<const char*>(&value), sizeof(value));
+            };
+            for (ui32 chunk : commits) { append(chunk); }
+            for (size_t i = 0; i < commits.size(); ++i) { append(ui64{42}); }
+            for (ui32 chunk : deletes) { append(chunk); }
+            if (TPDisk::IS_SHRED_ENABLED) {
+                for (ui32 chunk : dirties) { append(chunk); }
+            }
+            append(footer);
+            return data;
+        };
+        auto footerRecord = [](const TCommitRecordFooter& footer) {
+            TString data = "abc";
+            data.append(reinterpret_cast<const char*>(&footer), sizeof(footer));
+            return data;
+        };
+        TVector<std::pair<TString, TStringBuf>> invalidRecords = {
+            {TString(), "footer"},
+            {TString(sizeof(TCommitRecordFooter) - 1, '\0'), "footer"},
+            {footerRecord({3, 8, Max<ui32>(), 0, 0, true}), "CommitCount"},
+            {footerRecord({3, 8, 0, Max<ui32>(), 0, true}), "DeleteCount"},
+            {footerRecord({Max<ui64>(), 8, 0, 0, 0, true}), "UserDataSize"},
+            {footerRecord({0, 8, 0, 0, 0, true}), "UserDataSize"},
+            {makeRecord("abc", {1, 8}, {2}, {3}), "CommitChunks"},
+            {makeRecord("abc", {1}, {2, Max<ui32>()}, {3}), "DeleteChunks"},
+        };
+#ifdef ENABLE_PDISK_SHRED
+        invalidRecords.emplace_back(footerRecord({3, 8, 0, Max<ui32>(), Max<ui32>(), true}), "DirtyCount");
+        invalidRecords.emplace_back(makeRecord("abc", {1}, {2}, {3, 8}), "DirtyChunks");
+#endif
+        for (bool isInitial : {false, true}) {
+            auto resetOwner = [&] {
+                ownerData.CurrentFirstLsnToKeep = 4;
+                ownerData.LogRecordsInitiallyRead = 5;
+                ownerData.LogRecordsConsequentlyRead = 6;
+                ownerData.LastSeenLsn = 7;
+                ownerData.StartingPoints.clear();
+            };
+            for (const auto& [record, field] : invalidRecords) {
+                resetOwner();
+                TString data = record;
+                TMap<ui32, TChunkState> chunks;
+                chunks[0].Nonce = 77;
+                TEvReadLogResult result(NKikimrProto::OK, {}, {}, true, 0, "", owner);
+                UNIT_ASSERT_C(!disk->ProcessReadLogRecord(header, data, owner, 0, &result, &chunks,
+                    isInitial, true), field);
+                UNIT_ASSERT_STRING_CONTAINS(result.ErrorReason, field);
+                UNIT_ASSERT_VALUES_EQUAL(data, record);
+                UNIT_ASSERT_VALUES_EQUAL(chunks.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(chunks.at(0).Nonce, 77);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.CurrentFirstLsnToKeep, 4);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.LogRecordsInitiallyRead, 5);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.LogRecordsConsequentlyRead, 6);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.LastSeenLsn, 7);
+                UNIT_ASSERT(ownerData.StartingPoints.empty());
+                UNIT_ASSERT(result.Results.empty());
+            }
+            for (bool hasArrays : {false, true}) {
+                resetOwner();
+                TString data = hasArrays ? makeRecord("abc", {1}, {2}, {3}) : makeRecord("");
+                TMap<ui32, TChunkState> chunks;
+                TEvReadLogResult result(NKikimrProto::OK, {}, {}, true, 0, "", owner);
+                UNIT_ASSERT_C(disk->ProcessReadLogRecord(header, data, owner, 0, &result, &chunks,
+                    isInitial, true), result.ErrorReason);
+                UNIT_ASSERT_VALUES_EQUAL(data, hasArrays ? "abc" : "");
+                UNIT_ASSERT_VALUES_EQUAL(result.Results.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(result.Results.front().Data.Slice(), data);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.CurrentFirstLsnToKeep, isInitial ? 8 : 4);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.LogRecordsInitiallyRead, isInitial ? 6 : 5);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.LogRecordsConsequentlyRead, isInitial ? 6 : 7);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.LastSeenLsn, 8);
+                UNIT_ASSERT_VALUES_EQUAL(ownerData.StartingPoints.size(), isInitial ? 1 : 0);
+                UNIT_ASSERT_VALUES_EQUAL(chunks.size(), isInitial && hasArrays ? 2 + TPDisk::IS_SHRED_ENABLED : 0);
+                if (isInitial && hasArrays) {
+                    UNIT_ASSERT_VALUES_EQUAL(chunks.at(1).OwnerId, owner);
+                    UNIT_ASSERT_VALUES_EQUAL(chunks.at(1).Nonce, 42);
+                    UNIT_ASSERT_VALUES_EQUAL(chunks.at(2).OwnerId, OwnerUnallocated);
+                    UNIT_ASSERT(chunks.at(2).IsDirty.load());
+                    if (TPDisk::IS_SHRED_ENABLED) {
+                        UNIT_ASSERT(chunks.at(3).IsDirty.load());
+                    }
+                }
+            }
+        }
+    }
+
+#ifdef ENABLE_PDISK_SHRED
+    Y_UNIT_TEST(InvalidDirtyChunkRejectedBeforeCommit) {
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        const ui32 chunk = *vdisk.Chunks[EChunkState::RESERVED].begin();
+        const auto [invalidChunk, committed, uncommitted, isDirty] = testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            return std::make_tuple(ui32(p->ChunkState.size()), p->Mon.CommitedDataChunks->Val(),
+                p->Mon.UncommitedDataChunks->Val(), p->ChunkState[chunk].IsDirty.load());
+        });
+        NPDisk::TCommitRecord commit;
+        commit.CommitChunks = {chunk};
+        commit.DirtyChunks = {chunk, invalidChunk};
+        const auto result = testCtx.TestResponse<NPDisk::TEvLogResult>(new NPDisk::TEvLog(
+            vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0, commit, TRcBuf(TString("abc")),
+            vdisk.GetLsnSeg(), nullptr), NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result->ErrorReason, "DirtyChunks");
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            UNIT_ASSERT_VALUES_EQUAL(p->ChunkState[chunk].CommitsInProgress, 0);
+            UNIT_ASSERT_VALUES_EQUAL(p->ChunkState[chunk].CommitState, NPDisk::TChunkState::DATA_RESERVED);
+            UNIT_ASSERT_VALUES_EQUAL(p->ChunkState[chunk].IsDirty.load(), isDirty);
+            UNIT_ASSERT_VALUES_EQUAL(p->Mon.CommitedDataChunks->Val(), committed);
+            UNIT_ASSERT_VALUES_EQUAL(p->Mon.UncommitedDataChunks->Val(), uncommitted);
+        });
+        vdisk.CommitReservedChunks();
+    }
+#endif
+
     // A reservation that was never committed leaves no persistent trace, so the owner's
     // next incarnation cannot reference it. PDisk releases it at YardInit instead of
     // keeping it DATA_RESERVED -- holding quota that nobody can free -- until the PDisk

@@ -239,12 +239,10 @@ protected:
         return TConclusionStatus::Success();
     }
 
-    // Forced-compaction support: reports whether all portions have settled into the regular last
-    // level with no remaining intersections. Fail() means the optimizer does not support forced
-    // compaction (i.e. it is not tiling++); Success(true) means there are no intersections left,
-    // Success(false) means compaction is still in progress. Only tiling++ overrides this.
-    virtual TConclusion<bool> DoCheckNoIntersections() const {
-        return TConclusionStatus::Fail("forced compaction is not supported by this optimizer");
+    // Forced compaction (ALTER TABLE ... COMPACT): is there still something to compact before the request is answered?
+    // Only tiling++ has an end state to wait for (no intersections left); the other planners answer false.
+    virtual bool DoNeedCompaction() const {
+        return false;
     }
 
 public:
@@ -328,8 +326,8 @@ public:
         return DoCheckWriteData();
     }
 
-    TConclusion<bool> CheckNoIntersections() const {
-        return DoCheckNoIntersections();
+    bool NeedCompaction() const {
+        return DoNeedCompaction();
     }
 
     std::vector<TTaskDescription> GetTasksDescription() const {

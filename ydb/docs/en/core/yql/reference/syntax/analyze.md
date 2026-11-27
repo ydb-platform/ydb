@@ -1,5 +1,13 @@
 # ANALYZE
 
+{% if feature_flags.enable_column_statistics == false %}
+{% note info "Feature is disabled by default" %}
+
+In this version, column statistics are disabled by the [`enable_column_statistics`](../../../reference/configuration/feature_flags.md) flag. `ANALYZE` and the use of statistics by the optimizer become available after you enable the flag in the cluster configuration. [How to check availability](../../../reference/configuration/feature_flags.md#check-availability).
+
+{% endnote %}
+{% endif %}
+
 `ANALYZE` collects statistics for a table and its columns. The [{{ ydb-short-name }} cost-based optimizer](../../../concepts/query_execution/optimizer.md) uses them to estimate how much data a query will process and choose an execution plan.
 
 The statement works with one table and completes after updating the statistics.

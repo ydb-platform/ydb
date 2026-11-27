@@ -20,10 +20,13 @@ PEERDIR(
     ydb/core/client/server
     ydb/core/control
     ydb/core/formats
+    # Link counters used by SchemeShard and KQP runtime; a reverse PEERDIR would form a cycle.
+    ydb/core/kqp/counters
     ydb/core/mind
     ydb/core/node_whiteboard
     ydb/core/quoter
     ydb/core/statistics/service
+    ydb/core/sys_view
     ydb/core/tablet_flat
     ydb/core/testlib/actors
     ydb/core/testlib/basics/core

@@ -37,6 +37,7 @@ YT_DEFINE_ERROR_ENUM(
     ((InvalidObjectType)                         (1006))
     ((RequestInvolvesSequoia)                    (1007))
     ((RequestInvolvesCypress)                    (1008))
+    // COMPAT(h0pless): Keep the error code for older clients.
     ((BeginCopyDeprecated)                       (1009))
     ((PrerequisitePathDifferFromExecutionPaths)  (1010))
 );

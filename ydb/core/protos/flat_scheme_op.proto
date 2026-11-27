@@ -163,6 +163,8 @@ message TFamilyDescription {
     optional TStorageConfig StorageConfig = 9;
     optional int32 ColumnCodecLevel = 10;
     optional EColumnCacheMode ColumnCacheMode = 11;
+    optional bool KeyIndexInDescriptor = 12 [default = true]; // Main group index of tier parts
+    optional bool GroupIndexesInDescriptor = 13 [default = true]; // Other group indexes of tier parts
 }
 
 message TFastSplitSettings {
@@ -229,6 +231,12 @@ message TPartitionConfig {
     optional uint32 UniqueIndexKeySize = 29;
     // For fulltext indexes - to determine if the table is an impl table of an index
     optional ESpecialTableType SpecialTableType = 30;
+
+    // SchemeShard resolves column and family IDs before sending the policy to DataShard.
+    // ALTER replaces the policy when present and preserves it when omitted.
+    optional TTieringPolicySettings TieringPolicy = 32;
+    reserved 33;
+    reserved "ResetTieringPolicy";
 }
 
 message TByKeyFilterPrefix {
@@ -294,6 +302,30 @@ message TTTLSettings {
     }
 
     reserved 3;
+}
+
+message TTierBoundSettings {
+    oneof Kind {
+        uint64 RelativeOffsetUs = 1; // now - offset
+        int64 AbsoluteMicros = 2;    // microseconds since the epoch
+    }
+}
+
+message TTierRangeSettings {
+    optional TTierBoundSettings From = 1;
+    optional TTierBoundSettings To = 2;
+    optional bool ToInclusive = 3 [default = false];
+}
+
+message TTierRuleSettings {
+    optional uint32 TierId = 1;
+    repeated TTierRangeSettings Ranges = 2;
+}
+
+message TTieringPolicySettings {
+    optional uint32 ColumnTag = 1;
+    optional TTTLSettings.EUnit Unit = 2;
+    repeated TTierRuleSettings Rules = 3;
 }
 
 message TTableReplicationConfig {
@@ -1196,6 +1228,7 @@ enum ECdcStreamCompression {
 enum ECdcStreamHeartbeatMode {
     ECdcStreamHeartbeatModeDirect = 0;
     ECdcStreamHeartbeatModeAggregated = 1;
+    ECdcStreamHeartbeatModeKeyRange = 2;
 }
 
 message TCdcStreamScanProgress {
@@ -1496,6 +1529,14 @@ message TInitiateBuildIndexMainTable {
     optional string TableName = 1;
 }
 
+// Takes a snapshot of the main table and switches the vector index to WriteOnly.
+message TPrepareVectorIndex {
+    optional string IndexName = 1;
+
+    // Autodetected vector index settings to be persisted with the WriteOnly state.
+    optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 2;
+}
+
 message TBuildIndexOutcome {
     message TCancel {
         // Path id of the index whose creation was cancelled
@@ -1520,6 +1561,8 @@ message TFinalizeBuildIndexMainTable {
     optional uint64 SnapshotTxId = 2;
     optional uint64 BuildIndexId = 3;
     optional TBuildIndexOutcome Outcome = 4;
+    // Additional snapshot to drop in the same transaction (vector index delta scan).
+    optional uint64 ExtraSnapshotTxId = 5;
 }
 
 message TPrepareIndexValidation {
@@ -2213,6 +2256,8 @@ message TModifyScheme {
 
     // Conditional replication cleanup: skip if the table is owned by another replication.
     optional NKikimrProto.TPathID ExpectedReplicationOwnerPathId = 97;
+
+    optional TPrepareVectorIndex PrepareVectorIndex = 98;
 
     // Some entries are grouped by semantics, so are out of order
 }

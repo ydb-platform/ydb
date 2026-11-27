@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/intrlist.h>
 #include <util/generic/hash.h>

@@ -460,8 +460,29 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         CreateSchemaSecret(secretName, secretValue, session);
 
         TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = MakeShortRetryPolicy();
         auto promise = ResolveSecret(secretName, kikimr, /* userToken */ nullptr, std::move(describeSettings));
+        AssertSecretValue(secretValue, promise);
+    }
+
+    Y_UNIT_TEST(SchemeShardRetryWithDefaultPolicy) {
+        TKikimrSettings settings;
+        auto schemeShardStatusGetter = MakeHolder<TTestSchemeShardStatusGetter>(
+            /* statusOverwriteRemainingCount */ 1,
+            NKikimrScheme::EStatus::StatusNotAvailable);
+        auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
+            /* secretUpdateListener */ nullptr,
+            /* schemeCacheStatusGetter */ nullptr,
+            schemeShardStatusGetter.Get());
+        settings.SetDescribeSchemaSecretsServiceFactory(factory);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        const TString secretName = "/Root/secret-name";
+        const TString secretValue = "secret-value";
+        CreateSchemaSecret(secretName, secretValue, session);
+
+        auto promise = ResolveSecret(secretName, kikimr, /* userToken */ nullptr, /* settings */ {});
         AssertSecretValue(secretValue, promise);
     }
 
@@ -487,9 +508,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
             CreateSchemaSecret(secretNames[i], secretValues[i], session);
         }
 
-        TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = MakeShortRetryPolicy();
-        auto promise = ResolveSecrets(secretNames, kikimr, /* userToken */ nullptr, describeSettings);
+        auto promise = ResolveSecrets(secretNames, kikimr, /* userToken */ nullptr, TDescribeSecretSettings{});
         AssertSecretValues(secretValues, promise);
     }
 
@@ -519,9 +538,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
             CreateSchemaSecret(secretNames.back(), secretValues.back(), session);
         }
 
-        TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = MakeShortRetryPolicy();
-        auto promise = ResolveSecrets(secretNames, kikimr, /* userToken */ nullptr, describeSettings);
+        auto promise = ResolveSecrets(secretNames, kikimr, /* userToken */ nullptr, TDescribeSecretSettings{});
         AssertSecretValues(secretValues, promise);
     }
 
@@ -550,9 +567,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
             CreateSchemaSecret(secretNames.back(), secretValues.back(), session);
         }
 
-        TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = MakeShortRetryPolicy();
-        auto promise = ResolveSecrets(secretNames, kikimr, /* userToken */ nullptr, describeSettings);
+        auto promise = ResolveSecrets(secretNames, kikimr, /* userToken */ nullptr, TDescribeSecretSettings{});
         AssertSecretValues(secretValues, promise);
     }
 
@@ -576,12 +591,12 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         CreateSchemaSecret(secretName, "secret-value", session);
 
         TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = MakeLongRetryPolicy();
+        describeSettings.RetryPolicy = ERetryPolicy::LongRetries;
         auto promise = ResolveSecret(secretName, kikimr, /* userToken */ nullptr, describeSettings);
         AssertBadRequest(promise, "<main>: Error: Secret `/Root/secret-name` not found\n");
     }
 
-    Y_UNIT_TEST(SchemeShardNotAvailableWithoutRetryPolicy) {
+    Y_UNIT_TEST(SchemeShardNotAvailableWithExplicitNoRetryPolicy) {
         TKikimrSettings settings;
         auto schemeShardStatusGetter = MakeHolder<TTestSchemeShardStatusGetter>(
             /* statusOverwriteRemainingCount */ 1,
@@ -598,7 +613,9 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         const TString secretName = "/Root/secret-name";
         CreateSchemaSecret(secretName, "secret-value", session);
 
-        auto promise = ResolveSecret(secretName, kikimr);
+        TDescribeSecretSettings describeSettings;
+        describeSettings.RetryPolicy = ERetryPolicy::NoRetries;
+        auto promise = ResolveSecret(secretName, kikimr, /* userToken */ nullptr, describeSettings);
         AssertBadRequest(
             promise,
             "<main>: Error: Schemeshard is not available for secret `/Root/secret-name`\n",

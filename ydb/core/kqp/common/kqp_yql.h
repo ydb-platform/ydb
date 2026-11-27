@@ -77,6 +77,7 @@ struct TKqpStreamLookupSettings {
     static constexpr std::string_view LockAndLookupStrategyName = "LockAndLookupRows"sv;
 
     TMaybe<ui32> AllowNullKeysPrefixSize;
+    bool LookupJoinUniqueKeys = false;
     EStreamLookupStrategyType Strategy = EStreamLookupStrategyType::Unspecified;
 
     // VectorTopColumn must be a fixed string, but Target and Limit may be calculated in runtime

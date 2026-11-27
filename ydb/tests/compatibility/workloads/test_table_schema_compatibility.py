@@ -51,7 +51,7 @@ class BaseColumnTableCompatibilityTest:
                 {values_str}
         """
 
-        session_pool.execute_with_retries(query)
+        session_pool.execute_with_retries(query, retry_settings=ydb.RetrySettings(idempotent=True))
 
     def get_table_count(self, session_pool, table_name):
         query = f"SELECT COUNT(*) as cnt FROM `{table_name}`"

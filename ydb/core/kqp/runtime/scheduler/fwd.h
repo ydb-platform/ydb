@@ -1,14 +1,20 @@
 #pragma once
 
+#include <library/cpp/time_provider/monotonic_provider.h>
+
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/stream/output.h>
 
+#include <atomic>
 #include <list>
 #include <memory>
+#include <variant>
 
 namespace NKikimr::NKqp::NScheduler {
+
+    using TTimeProviderPtr = TIntrusivePtr<NMonotonic::IMonotonicTimeProvider>;
 
     namespace NHdrf {
         using TQueryId = ui64;
@@ -88,6 +94,7 @@ namespace NKikimr::NKqp::NScheduler {
         bool Enabled = true;
         TDelayParams DelayParams;
         bool MemoryEnabled = true; // TODO: remove later when FeatureFlags.EnableComputeSchedulerMemory=true always.
+        TTimeProviderPtr TimeProvider = {};
     };
 
 } // namespace NKikimr::NKqp::NScheduler

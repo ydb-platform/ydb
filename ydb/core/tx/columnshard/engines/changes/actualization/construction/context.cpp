@@ -25,6 +25,7 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
         return EAddPortionResult::PORTION_LOCKED;
     }
     if (DataLocksManager->IsLocked(*info, NDataLocks::ELockCategory::Actualization)) {
+        Counters.OnActualizationSkipRWProgress();
         return EAddPortionResult::PORTION_LOCKED;
     }
 
@@ -69,7 +70,7 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
             {"f", it->first.DebugString()});
     } else {
         if (!dWait) {
-            YDB_LOG_VERIFY(features.GetCurrentScheme()->GetVersion() < features.GetTargetScheme()->GetVersion());
+            YDB_LOG_VERIFY(features.GetPortionSchemaVersion() < features.GetTargetScheme()->GetVersion());
         } else {
             Counters.OnPortionToEvict(info->GetTotalBlobBytes(), *dWait);
         }

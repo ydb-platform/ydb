@@ -148,8 +148,7 @@ ui32 TQuery::ResumeTasks(ui32 count) {
 
     for (auto it = SchedulableTasks.begin(); run < count && it != SchedulableTasks.end();) {
         if (auto task = it->first.lock()) {
-            if (it->second) {
-                task->Resume();
+            if (it->second && task->TryResume()) {
                 ++run;
             }
             ++it;
@@ -167,7 +166,7 @@ ui32 TQuery::ResumeTasks(ui32 count) {
 // TPool
 ///////////////////////////////////////////////////////////////////////////////
 
-TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters)
+TPool::TPool(const TPoolId& id, const NMonitoring::TDynamicCounterPtr& counters)
     : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id)
     , TTreeElement(id)
     , NHdrf::TPool<ETreeType::DYNAMIC>(id)
@@ -176,7 +175,7 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters)
         return;
     }
 
-    auto group = counters->GetKqpCounters()->GetSubgroup("schedulerPool", id);
+    auto group = counters->GetSubgroup("schedulerPool", id);
 
     // TODO: since counters don't support float-point values, then use CPU * 1'000'000 to account with microsecond precision
 
@@ -268,7 +267,7 @@ NSnapshot::TPool* TPool::CreateSnapshot(const NStatic::TPoolPtr& pool) const {
 // TDefaultPool
 ///////////////////////////////////////////////////////////////////////////////
 
-TDefaultPool::TDefaultPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters)
+TDefaultPool::TDefaultPool(const TPoolId& id, const NMonitoring::TDynamicCounterPtr& counters)
     : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id)
     , TPool(id, counters)
 {
@@ -301,12 +300,13 @@ NSnapshot::TDatabase* TDatabase::TakeSnapshot() {
 // TRoot
 ///////////////////////////////////////////////////////////////////////////////
 
-TRoot::TRoot(const TIntrusivePtr<TKqpCounters>& counters)
+TRoot::TRoot(const NMonitoring::TDynamicCounterPtr& counters, TTimeProviderPtr timeProvider)
     : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>("(ROOT)")
     , TPool("(ROOT)", {})
+    , TimeProvider(std::move(timeProvider))
 {
     Y_ASSERT(counters);
-    auto group = counters->GetKqpCounters();
+    auto group = counters;
     Counters.TotalCpuLimit = group->GetCounter("scheduler/TotalLimit", false);
     Counters.TotalMemoryLimit = group->GetCounter("scheduler/TotalMemoryLimit", false);
 }
@@ -326,7 +326,7 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
 NSnapshot::TRoot* TRoot::TakeSnapshot() {
     // The scheduler holds its tree lock until all children have captured the same static version.
     const auto tree = GetStaticTree();
-    auto* newRoot = new NSnapshot::TRoot(tree);
+    auto* newRoot = new NSnapshot::TRoot(tree, TimeProvider ? TimeProvider->Now() : TMonotonic::Now());
     const ui64 totalCpuLimit = tree->TotalCpuLimit;
     const ui64 totalMemoryLimit = tree->TotalMemoryLimit;
 

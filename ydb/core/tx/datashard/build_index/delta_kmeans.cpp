@@ -165,10 +165,13 @@ public:
             }
         }
         PrefixColumns = PrefixColumnNames.size();
-        DataColumnsCount = request.DataColumnsSize();
 
         const auto& embedding = request.GetEmbeddingColumn();
-        ScanTags = MakeScanTags(table, embedding, request.GetDataColumns(), false /* forBuild */, EmbeddingPos, DataPos);
+        // An HNSW index keeps vectors in the posting table, so the embedding must be
+        // part of the uploaded data columns (same as in the local/reshuffle scans).
+        const auto data = MakeUploadDataColumns(table, embedding, request.GetDataColumns(), request.GetIndexType());
+        DataColumnsCount = data.size();
+        ScanTags = MakeScanTags(table, embedding, data, false /* forBuild */, EmbeddingPos, DataPos);
 
         if (PrefixColumns > 0) {
             auto allTags = GetAllTags(table);
@@ -194,7 +197,7 @@ public:
         }
 
         PostingBuf = Uploader.AddDestination(request.GetOutputName(),
-            MakeOutputTypes(table, NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING, embedding, request.GetDataColumns(),
+            MakeOutputTypes(table, NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING, embedding, data,
                 {}, false /* withForeignFlag */));
         PostingEraseBuf = Uploader.AddEraseDestination(request.GetOutputName());
         if (PrefixColumns > 0) {

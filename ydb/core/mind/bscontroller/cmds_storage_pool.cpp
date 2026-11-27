@@ -270,13 +270,15 @@ namespace NKikimr::NBsController {
             if (cur.DDisk) {
                 throw TExError() << "can't invoke DefineStoragePool against DDisk pool";
             }
-            if (cur.SchemeshardId != storagePool.SchemeshardId || cur.PathItemId != storagePool.PathItemId) {
+            if (cur.Name != storagePool.Name || cur.SchemeshardId != storagePool.SchemeshardId ||
+                    cur.PathItemId != storagePool.PathItemId) {
                 for (auto it = spToGroups.lower_bound({id, Min<TGroupId>()}); it != spToGroups.end() && it->first == id; ++it) {
                     GroupContentChanged.insert(it->second);
                 }
             }
             // retain some fields; TStoragePoolSettings are changed by UpdateStoragePoolSettings only
             storagePool.VDiskHeapAllocatorNumLeadingDisks = cur.VDiskHeapAllocatorNumLeadingDisks;
+            storagePool.TargetInvariant = cur.TargetInvariant;
             cur = std::move(storagePool); // update existing storage pool
         }
         Fit.PoolsAndGroups.emplace(id, std::nullopt);
@@ -382,11 +384,29 @@ namespace NKikimr::NBsController {
         }
         settings.MergeFrom(cmd.GetSettings());
 
+        using NKikimrBlobStorage::TGroupState;
+        if (cmd.GetSettings().HasTargetInvariant()) {
+            if (it->second.ErasureSpecies != TErasureType::ErasureMirror3dc || it->second.BridgeMode) {
+                throw TExError() << "TargetInvariant requires an ordinary mirror-3-dc pool";
+            }
+            if (!TGroupState::ETargetInvariant_IsValid(settings.GetTargetInvariant())) {
+                throw TExError() << "unknown TargetInvariant for StoragePoolId# " << id;
+            }
+        }
+        TMaybe<TGroupState::ETargetInvariant> targetInvariant;
+        if (settings.HasTargetInvariant()) {
+            targetInvariant = settings.GetTargetInvariant();
+        }
         const TMaybe<ui32> numLeadingDisks = settings.HasVDiskHeapAllocatorNumLeadingDisks()
             ? MakeMaybe(settings.GetVDiskHeapAllocatorNumLeadingDisks())
             : Nothing();
-        if (numLeadingDisks != it->second.VDiskHeapAllocatorNumLeadingDisks) {
-            StoragePools.Unshare().at(id).VDiskHeapAllocatorNumLeadingDisks = numLeadingDisks;
+        bool heapSettingChanged = numLeadingDisks != it->second.VDiskHeapAllocatorNumLeadingDisks;
+        if (targetInvariant != it->second.TargetInvariant || heapSettingChanged) {
+            TStoragePoolInfo& pool = StoragePools.Unshare().at(id);
+            pool.TargetInvariant = targetInvariant;
+            pool.VDiskHeapAllocatorNumLeadingDisks = numLeadingDisks;
+        }
+        if (heapSettingChanged) {
             HeapAllocatorNumLeadingDisksChanged.insert(id);
         }
     }
@@ -932,6 +952,9 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& cmd, TStatus& status) {
         NKikimrBlobStorage::TBaseConfig *pb = status.MutableBaseConfig();
+        pb->SetHasDDiskPools(std::ranges::any_of(StoragePools.Get(), [](const auto& entry) {
+            return entry.second.DDisk;
+        }));
 
         if (cmd.GetRetrieveDevices()) {
             DrivesSerials.ForEach([&](const auto& serial, const auto& driveInfo) {
@@ -1353,27 +1376,20 @@ namespace NKikimr::NBsController {
             }
             TGroups::iterator existing = Self.GroupMap.find(groupId);
             bool isNew = existing == Self.GroupMap.end();
-            TMirror3dcGroupConfiguration previous{NKikimrBlobStorage::TGroupState::NORMAL, normal};
-            if (!isNew) {
-                previous = {existing->second->Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL),
-                    existing->second->FailRealmStates.value_or(normal)};
-            }
-            TMirror3dcGroupConfiguration current{
-                group->Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL), group->FailRealmStates.value_or(normal)};
+            TMirror3dcGroupConfiguration previous = isNew
+                ? TMirror3dcGroupConfiguration{} : existing->second->GetMirror3dcConfiguration();
+            TMirror3dcGroupConfiguration current = group->GetMirror3dcConfiguration();
             if (parameters.FromGroupStateActor && previous != current) {
-                std::optional<TMirror3dcGroupConfiguration> next;
-                if (Self.HasDataCenterPolicy) {
-                    auto target = Self.GetTargetExcludedRealms(*group);
-                    if (!target) {
-                        return std::unexpected<TString>("Missing host location for group state transition");
-                    }
-                    next = NGroupSyncer::NextDataCenterTransition(previous, *target);
+                TGroupPolicyStepResult step = Self.GetGroupPolicyStep(*group, previous);
+                if (!step) {
+                    return std::unexpected<TString>(step.error());
                 }
+                std::optional<TMirror3dcGroupConfiguration> next = step.value();
                 if (!next) {
                     next = RecoveringComplete(previous);
                 }
                 if (next != current) {
-                    return std::unexpected<TString>("Group state proposal no longer matches the DC target");
+                    return std::unexpected<TString>("Group state proposal no longer matches the controller target");
                 }
             }
             if (previous.State != current.State) {

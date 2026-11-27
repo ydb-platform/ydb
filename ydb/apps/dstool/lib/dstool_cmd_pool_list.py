@@ -105,6 +105,7 @@ def do(args):
         'StdDevVDiskEstimatedUsage',
         'ItemConfigGeneration',
         'VDiskHeapAllocatorNumLeadingDisks',
+        'TargetInvariant',
     ]
     visible_columns = [
         'BoxId:PoolId',
@@ -207,6 +208,7 @@ def do(args):
         settings = sp.Settings
         row['VDiskHeapAllocatorNumLeadingDisks'] = (str(settings.VDiskHeapAllocatorNumLeadingDisks)
                                                     if settings.HasField('VDiskHeapAllocatorNumLeadingDisks') else 'inherit')
+        row['TargetInvariant'] = kikimr_bs3.TGroupState.ETargetInvariant.Name(settings.TargetInvariant)
 
         pool = box_pool_map[sp.BoxId, sp.StoragePoolId]
 

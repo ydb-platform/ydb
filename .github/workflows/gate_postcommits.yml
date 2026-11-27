@@ -59,7 +59,7 @@ jobs:
           ] | length
         ' <<<"$queued_json")
 
-        pr_check_items=$(jq '
+        pr_check_items=$(jq --argjson max_age "$max_age_seconds" '
           def fmt_duration:
             if . < 60 then "\(.|floor)s"
             elif . < 3600 then "\((./60)|floor)m"
@@ -80,7 +80,8 @@ jobs:
                 branch: .head_branch,
                 waiting: (.waiting_seconds | fmt_duration),
                 waiting_seconds,
-                age: (.age_seconds | fmt_duration)
+                age: (.age_seconds | fmt_duration),
+                ignored: (.age_seconds > $max_age)
               }
           ]
           | sort_by(-.waiting_seconds)
@@ -146,9 +147,15 @@ jobs:
           echo "### Queued PR-check (>60s)"
           echo ""
           if (( pr_check_queue_size > 0 )); then
-            echo "| Waiting | Age | Branch | Run |"
-            echo "|---------|-----|--------|-----|"
-            jq -r '.[] | "| \(.waiting) | \(.age) | `\(.branch)` | [\(.title|gsub("\\|"; "\\|"))](\(.html_url)) |"' <<<"$pr_check_items"
+            echo "| Gate | Waiting | Age | Branch | Run |"
+            echo "|------|---------|-----|--------|-----|"
+            jq -r '
+              def paint($s):
+                if .ignored then "<span style=\"color:#9a6700\">\($s)</span>" else $s end;
+              .[]
+              | (if .ignored then "<span style=\"color:#9a6700\">ignored</span>" else "counted" end) as $gate
+              | "| \($gate) | \(paint(.waiting)) | \(paint(.age)) | \(paint("`\(.branch)`")) | \(paint("[\(.title|gsub("\\|"; "\\|"))](\(.html_url))")) |"
+            ' <<<"$pr_check_items"
           else
             echo "_No queued PR-check runs._"
           fi

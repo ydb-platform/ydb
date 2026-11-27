@@ -313,6 +313,33 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(ExportTest) {
+    Y_UNIT_TEST_F(ExpandExternalDataSources, TExportFixture) {
+        for (const bool nfs : {false, true}) {
+            Service<TSchemeImpl>()
+                .ExpectListDirectory(GetDatabase())
+                .ExpectChild(GetDatabase(), "nested", Ydb::Scheme::Entry::DIRECTORY)
+                .ExpectChild(GetDatabase(), "skip", Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE)
+                .ExpectListDirectory(GetDatabase() + "/nested")
+                .ExpectChild(GetDatabase() + "/nested", "source", Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE);
+            auto& service = Service<TExportImpl>();
+            service.ExpectCommonDstPrefix("/dst")
+                .ExpectItem(GetDatabase() + "/nested/source", nfs ? "" : "/dst/nested/source");
+
+            TList<TString> args = {"-e", GetEndpoint(), "-d", GetDatabase(), "export"};
+            if (nfs) {
+                args.insert(args.end(), {"nfs", "--fs-path", "/dst"});
+            } else {
+                service.ExpectBucket(TEST_BUCKET).ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                    .ExpectS3AccessKey("test-key").ExpectS3SecretKey("test-access-key");
+                args.insert(args.end(), {"s3", "--destination-prefix", "/dst",
+                    "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
+                    "--access-key", "test-key", "--secret-key", "test-access-key"});
+            }
+            args.insert(args.end(), {"--exclude", "skip"});
+            RunCli(std::move(args));
+        }
+    }
+
     Y_UNIT_TEST_F(BadRequestDoesNotRetryWithTablesOnly, TExportFixture) {
         for (const bool nfs : {false, true}) {
             for (const bool includeTable : {false, true}) {

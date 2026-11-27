@@ -467,6 +467,9 @@ Y_UNIT_TEST_SUITE(ImportTest) {
         PutS3Object("/" + TEST_BUCKET + "/source/prefix/keep/data_00.csv");
         PutS3Object("/" + TEST_BUCKET + "/source/prefix/report/create_view.sql");
         PutS3Object("/" + TEST_BUCKET + "/source/prefix/updates/create_topic.pb");
+        PutS3Object("/" + TEST_BUCKET + "/source/prefix/nested/source/create_external_data_source.sql");
+        PutS3Object("/" + TEST_BUCKET + "/source/prefix/nested/source/create_external_data_source.sql.sha256");
+        PutS3Object("/" + TEST_BUCKET + "/source/prefix/skip_source/create_external_data_source.sql");
 
         const TString s3Endpoint = GetS3Endpoint();
 
@@ -478,6 +481,7 @@ Y_UNIT_TEST_SUITE(ImportTest) {
             .ExpectS3SecretKey("test-access-key")
             .ExpectDisableVirtualAddressing(true)
             .ExpectItem("source/prefix/keep", "/test_database/import-root/keep")
+            .ExpectItem("source/prefix/nested/source", "/test_database/import-root/nested/source")
             .ExpectItem("source/prefix/report", "/test_database/import-root/report")
             .ExpectItem("source/prefix/updates", "/test_database/import-root/updates")
             .ExpectItem("source/standalone", "/test_database/import-root/renamed");

@@ -1,3 +1,4 @@
+* Include external data sources when expanding objects for `export s3`, `export nfs`, and `import s3`.
 
 ## 2.36.0 ##
 

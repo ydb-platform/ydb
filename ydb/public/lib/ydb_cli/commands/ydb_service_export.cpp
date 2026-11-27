@@ -37,6 +37,7 @@ namespace {
             NScheme::ESchemeEntryType::ColumnTable,
             NScheme::ESchemeEntryType::View,
             NScheme::ESchemeEntryType::Topic,
+            NScheme::ESchemeEntryType::ExternalDataSource,
         }, entry.Type);
     }
 

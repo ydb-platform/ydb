@@ -998,7 +998,6 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
             {"effectiveOffset", offset}
     );
 
-    // Cookie zero is reserved for internal timestamp probes, which need message data.
     if (read->Cookie != 0 && userInfo->IsReplicationConsumer() && ProcessReadSchemaChanges(ctx, info, cookie)) {
         return;
     }
@@ -1392,18 +1391,12 @@ void TPartition::HandleSchemaChangesReadResponse(TEvKeyValue::TEvResponse::TPtr&
     readResult->SetLastOffset(static_cast<i64>(info.Offset) - 1);
     readResult->SetReadFromTimestampMs(info.ReadTimestampMs);
     readResult->SetSizeLag(GetSizeLag(info.Offset));
-    ui64 size = 0;
     for (size_t i = 0; i < info.SchemaChangesKeys.size(); ++i) {
         const auto& value = response.GetReadResult(i).GetValue();
         auto* result = readResult->AddResult();
         result->SetOffset(info.SchemaChangesKeys[i].GetOffset());
         result->SetData(value);
         result->SetIsServiceTopicChangesMessage(true);
-        size += value.size();
-        // Like data reads, allow the first indivisible record to exceed the limit.
-        if (size >= info.Size || static_cast<ui32>(readResult->ResultSize()) >= info.Count) {
-            break;
-        }
     }
     readResult->SetSizeEstimate(record.ByteSizeLong());
     const ui64 answerSize = record.ByteSizeLong();

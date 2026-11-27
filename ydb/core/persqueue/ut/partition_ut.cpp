@@ -9648,6 +9648,7 @@ Y_UNIT_TEST_F(SchemaChangesReadUsesDirectKvAndDistinctCookies, TPartitionFixture
             info.Destination = destination;
             if (destination == 102) {
                 info.Size = 512_KB;
+                info.Count = 1;
             }
             UNIT_ASSERT(TPartitionTestWrapper::ReadSchemaChanges(*partition, info, ctx));
         }
@@ -9683,7 +9684,7 @@ Y_UNIT_TEST_F(SchemaChangesReadUsesDirectKvAndDistinctCookies, TPartitionFixture
         UNIT_ASSERT(answer);
         UNIT_ASSERT_VALUES_EQUAL(answer->Cookie, destination);
         const auto& result = answer->Response->GetPartitionResponse().GetCmdReadResult();
-        const int expectedResults = destination == 102 ? 1 : 2;
+        const int expectedResults = 2;
         UNIT_ASSERT_VALUES_EQUAL(result.ResultSize(), expectedResults);
         UNIT_ASSERT_VALUES_EQUAL(result.GetRealReadOffset(), 0);
         UNIT_ASSERT_VALUES_EQUAL(result.GetLastOffset(), -1);

@@ -589,6 +589,8 @@ private:
     void SetupDetailedMetrics();
     void ResetDetailedMetrics();
 
+    bool IsSchemaChangesEnabled(const TActorContext& ctx) const;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;

@@ -5148,7 +5148,9 @@ void TPartition::AddCmdWriteConfig(NKikimrClient::TKeyValueRequest& request)
     write->SetValue(data.data(), data.size());
     write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 
-    SchemaChangesIndex.AddChange(request, Partition, GetEndOffset(), ChangeConfig->Config.GetSchemaVersion(), ChangeConfig->Config);
+    if (AppData()->FeatureFlags.GetEnableTopicChangesData()) {
+        SchemaChangesIndex.AddChange(request, Partition, GetEndOffset(), ChangeConfig->Config.GetSchemaVersion(), ChangeConfig->Config);
+    }
 }
 
 TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
@@ -5722,6 +5724,10 @@ void TPartition::Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationReque
 
 void TPartition::AddTopicChangeKey(ui64 schemaVersion, ui64 endOffset) {
     SchemaChangesIndex.AddKey(Partition, schemaVersion, endOffset);
+}
+
+bool TPartition::IsSchemaChangesEnabled(const TActorContext& ctx) const {
+    return AppData(ctx)->FeatureFlags.GetEnableTopicChangesData();
 }
 
 } // namespace NKikimr::NPQ

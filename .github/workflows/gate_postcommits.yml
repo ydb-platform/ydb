@@ -59,8 +59,41 @@ jobs:
           ] | length
         ' <<<"$queued_json")
 
+        postcommit_queued_json=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+          https://api.github.com/repos/${{github.repository}}/actions/runs?per_page=1000\&page=1\&status=queued\&event=push)
+
+        postcommit_items=$(jq '
+          def fmt_duration:
+            if . < 60 then "\(.|floor)s"
+            elif . < 3600 then "\((./60)|floor)m"
+            elif . < 86400 then "\((./3600)|floor)h \(((./60)|floor % 60))m"
+            else "\((./86400)|floor)d \(((./3600)|floor % 24))h"
+            end;
+          [.workflow_runs[]
+            | select(.name == "PR-check" or (.name | startswith("Postcommit_")))
+            | . + {
+                waiting_seconds: (now - (.updated_at | fromdate)),
+                age_seconds: (now - (.created_at | fromdate))
+              }
+            | select(.waiting_seconds > 60)
+            | {
+                id,
+                name,
+                title: (.display_title // .head_branch // ("run #" + (.id|tostring))),
+                html_url,
+                branch: .head_branch,
+                waiting: (.waiting_seconds | fmt_duration),
+                waiting_seconds,
+                age: (.age_seconds | fmt_duration)
+              }
+          ]
+          | sort_by(-.waiting_seconds)
+        ' <<<"$postcommit_queued_json")
+        postcommit_queue_size=$(jq 'length' <<<"$postcommit_items")
+
         echo "Queue size: $queue_size"
         echo "Queue threshold: $queue_threshold"
+        echo "Postcommit queue size: $postcommit_queue_size"
 
         if (( queue_size > queue_threshold )); then
           gate_action="closed"
@@ -90,6 +123,16 @@ jobs:
             jq -r '.[] | "| \(.waiting) | \(.age) | `\(.branch)` | [\(.title|gsub("\\|"; "\\|"))](\(.html_url)) |"' <<<"$queue_items"
           else
             echo "_No recent queued PR-check runs._"
+          fi
+          echo ""
+          echo "### Queued postcommit (>60s)"
+          echo ""
+          if (( postcommit_queue_size > 0 )); then
+            echo "| Waiting | Age | Workflow | Branch | Run |"
+            echo "|---------|-----|----------|--------|-----|"
+            jq -r '.[] | "| \(.waiting) | \(.age) | `\(.name)` | `\(.branch)` | [\(.title|gsub("\\|"; "\\|"))](\(.html_url)) |"' <<<"$postcommit_items"
+          else
+            echo "_No queued postcommit runs._"
           fi
         } >> "$GITHUB_STEP_SUMMARY"
 

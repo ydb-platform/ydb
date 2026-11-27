@@ -806,7 +806,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         };
         if constexpr (Join.Mark) {
             if (notEnoughMemory() && Mark_->SpillWhile(notEnoughMemory) == ESpillResult::Spilling) {
-                return WaitWhileSpilling();
+                return WaitWhileSpilling(ctx, &*Mark_, EExecutionWaitKind::SpillWrite,
+                    [&] { return Mark_->GetPendingSpill(); });
             }
         }
         if (std::get_if<Init>(&State_)) {

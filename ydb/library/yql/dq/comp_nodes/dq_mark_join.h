@@ -460,6 +460,17 @@ template <TSpillerSettings Settings> class TMarkScan {
         return condition() ? ESpillResult::DontHavePages : ESpillResult::FinishedSpilling;
     }
 
+    NThreading::TFuture<void> GetPendingSpill() const {
+        NThreading::TWaitGroup<NThreading::TWaitPolicy::TAll> wait;
+        if (Rows_) {
+            wait.Add(Rows_->GetPendingSpill());
+        }
+        if (Deferred_) {
+            wait.Add(Deferred_->GetPendingSpill());
+        }
+        return std::move(wait).Finish();
+    }
+
     EFetchResult Refine(std::invocable<TSingleTuple, EMarkValue> auto emit, std::predicate auto isFull,
                         std::predicate auto lowMemory) {
         const auto never = [] { return false; };
@@ -626,6 +637,10 @@ template <TSpillerSettings Settings> class TMarkJoin {
             return Scan_->SpillWhile(condition);
         }
         return condition() ? ESpillResult::DontHavePages : ESpillResult::FinishedSpilling;
+    }
+
+    NThreading::TFuture<void> GetPendingSpill() const {
+        return Scan_ ? Scan_->GetPendingSpill() : NThreading::MakeFuture();
     }
 
     EFetchResult Refine(std::invocable<TSingleTuple, EMarkValue> auto emit, std::predicate auto isFull,

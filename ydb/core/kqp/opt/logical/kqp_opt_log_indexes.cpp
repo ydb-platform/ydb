@@ -2234,7 +2234,8 @@ void CollectEagerFulltextQueryNodes(const TExprNode& node, TNodeSet& eagerNodes)
         for (const auto& child : node.Children()) {
             CollectEagerFulltextQueryNodes(*child, eagerNodes);
         }
-    } else if (node.IsCallable({"If", "IfPresent", "Coalesce", "Just", "SafeCast", "StrictCast", "ToString", "Unwrap"})) {
+    } else if (node.IsCallable({"If", "IfPresent", "Coalesce", "Just", "SafeCast", "StrictCast",
+        "Substring", "ToString", "Unwrap"})) {
         CollectEagerFulltextQueryNodes(node.Head(), eagerNodes);
     }
 }
@@ -2544,20 +2545,24 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
     const auto driver = MaxElementBy(result.Queries, [](const auto& query) { return query.Priority(); });
     const auto priority = driver->Priority();
     std::iter_swap(result.Queries.begin(), driver);
-    // Free-text queries use only their own terms for scoring and minimum-should-match.
+    const auto isLiteralOrParameter = [](const TFulltextQuery& query) {
+        const auto value = TExprBase(query.Query);
+        const auto pattern = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
+        return pattern.Maybe<TCoDataCtor>().IsValid() || pattern.Maybe<TCoParameter>().IsValid();
+    };
+    // A computed implicit pattern may fail. Evaluate it on candidate rows when the
+    // n-gram read can use another pattern and fall back if that pattern supplies no terms.
+    const bool isNgram = textColumn.analyzers().use_filter_ngram() || textColumn.analyzers().use_filter_edge_ngram();
+    const bool restrictImplicitPatterns = priority == 1
+        || (priority == 0 && isNgram && AnyOf(result.Queries, isLiteralOrParameter));
     TVector<TFulltextQuery> residualQueries;
     std::erase_if(result.Queries, [&](const auto& query) {
-        if (query.Priority() == priority) {
+        // Free-text queries use only their own terms for scoring and minimum-should-match.
+        const bool keep = query.Priority() == 0 && restrictImplicitPatterns
+            ? isLiteralOrParameter(query)
+            : query.Priority() == priority;
+        if (keep) {
             return false;
-        }
-        if (priority == 1) {
-            // A wildcard driver can use literal and parameter patterns alongside it.
-            // A computed implicit pattern may fail and must wait for candidate rows.
-            const auto value = TExprBase(query.Query);
-            const auto pattern = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
-            if (pattern.Maybe<TCoDataCtor>() || pattern.Maybe<TCoParameter>()) {
-                return false;
-            }
         }
         residualQueries.push_back(query);
         return true;
@@ -2617,7 +2622,6 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
         .Done();
 
     // A scan can replace the index only when every predicate is checked again on each row.
-    const bool isNgram = textColumn.analyzers().use_filter_ngram() || textColumn.analyzers().use_filter_edge_ngram();
     const bool canUseScanFallback = isNgram && AllOf(result.Queries, [](const TFulltextQuery& query) {
         return !query.PatternMode.empty();
     });
@@ -3025,12 +3029,19 @@ THybridRankSettings THybridRankSettings::Parse(const TExprNode::TPtr& hybridRank
 // GlobalSyncVectorKMeansTree index. An explicit (...) AS Indexes override (one name per scoring arg)
 // disambiguates. On any misuse it raises a precise error; queries it cannot rewrite fall through to the
 // peephole HybridRank stub, which fails with a clear message rather than returning wrong results.
-TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
+TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx, const TParentsMap& parents)
 {
-    if (!node.Maybe<TCoTopBase>()) {
+    const auto withoutProjection = [](const TExprBase& input) {
+        return TExprBase(&SkipCallables(input.Ref(), {"ExtractMembers"}));
+    };
+    const auto take = node.Maybe<TCoTake>();
+    const auto skip = take ? withoutProjection(take.Cast().Input()).Maybe<TCoSkip>() : TMaybeNode<TCoSkip>();
+    const auto maybeTop = (skip ? withoutProjection(skip.Cast().Input()) : node).Maybe<TCoTopBase>();
+    if (!maybeTop) {
         return node;
     }
-    auto top = node.Cast<TCoTopBase>();
+    const auto top = maybeTop.Cast();
 
     // The sort key of a hybrid query is HybridRank(...). Find that marker callable in the key selector.
     TExprNode::TPtr hybridRank;
@@ -3045,6 +3056,32 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         return true;
     });
     if (!hybridRank) {
+        return node;
+    }
+
+    // Rewrite pagination together with the sort, including when column pruning has
+    // moved ExtractMembers between them. Each inner node must have a single consumer.
+    const auto singleParentThroughProjection = [&](const TExprNode* child) -> const TExprNode* {
+        for (;;) {
+            const auto it = parents.find(child);
+            if (it == parents.end() || it->second.size() != 1) {
+                return nullptr;
+            }
+            const auto* parent = *it->second.begin();
+            if (!TCoExtractMembers::Match(parent)) {
+                return parent;
+            }
+            child = parent;
+        }
+    };
+    const auto* sortConsumer = singleParentThroughProjection(top.Raw());
+    const auto* pageConsumer = sortConsumer && TCoSkip::Match(sortConsumer)
+        ? singleParentThroughProjection(sortConsumer) : nullptr;
+    if (pageConsumer && TCoTake::Match(pageConsumer)) {
+        if (pageConsumer != node.Raw()) {
+            return node;
+        }
+    } else if (skip) {
         return node;
     }
 
@@ -3494,6 +3531,8 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         if (branch.FulltextQuery) {
             branch.FulltextQuery = BuildFulltextQueryPrecompute(
                 branch.FulltextQuery, fulltextQueryReplacements, ctx);
+        } else {
+            branch.ScoreExpr = ctx.ReplaceNodes(std::move(branch.ScoreExpr), fulltextQueryReplacements);
         }
     }
 
@@ -3507,7 +3546,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
     // ---------------------------------------------------------------------------------------------
     // Build the N index branches and fuse their per-document contributions.
     // ---------------------------------------------------------------------------------------------
-    const auto pos = node.Pos();
+    const auto pos = top.Pos();
 
     // The HybridRank sub-expressions reference the TopSort key-selector row argument; we rebind it to
     // each branch's own row when reusing those sub-expressions (which preserves the exact Knn shape,
@@ -3828,7 +3867,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         // (Double here), so Apply would reject it as "not a callable". The inlined body is then coalesced
         // to a plain Double (a NULL/failed cast sorts last).
         const auto applied = ctx.Builder(pos)
-            .Apply(customLambda)
+            .Apply(ctx.ReplaceNodes(TExprNode::TPtr(customLambda), fulltextQueryReplacements))
                 .With(0, ranksDict)
             .Seal().Build();
         const auto score = ctx.Builder(pos)
@@ -4170,6 +4209,10 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         .Seal()
         .Build();
 
+    if (skip) {
+        fulltextQueryReplacements.emplace(top.Raw(), result);
+        return TExprBase(ctx.ReplaceNodes(node.Ptr(), fulltextQueryReplacements));
+    }
     return TExprBase(result);
 }
 

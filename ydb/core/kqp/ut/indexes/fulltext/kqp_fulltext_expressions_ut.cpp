@@ -1211,6 +1211,50 @@ Y_UNIT_TEST_TWIN(WildcardDoesNotEvaluateFailingResidualWithoutCandidates, Compac
     }
 }
 
+Y_UNIT_TEST_TWIN(ImplicitPatternDoesNotEvaluateFailingResidualWithoutCandidates, Compact) {
+    TExpressionFixture fixture({.Compact = Compact, .Ngram = true});
+    const TString setup = R"sql(
+        DECLARE $prefix AS Utf8;
+        DECLARE $suffixA AS Utf8?;
+        DECLARE $suffixB AS Utf8?;
+        $suffix = Unwrap(IF(Random(1) < 0.5, $suffixA, $suffixB));
+        SELECT Id FROM `/Root/Docs` VIEW fulltext_idx WHERE
+    )sql";
+    const auto parameters = [](const TString& prefix, std::optional<std::string> suffix = std::nullopt) {
+        return NYdb::TParamsBuilder()
+            .AddParam("$prefix").Utf8(prefix).Build()
+            .AddParam("$suffixA").OptionalUtf8(suffix).Build()
+            .AddParam("$suffixB").OptionalUtf8(suffix).Build()
+            .Build();
+    };
+    for (bool reverse : {false, true}) {
+        const auto query = [&](const TString& prefix) {
+            const TString driver = "StartsWith(Text, " + prefix + ")";
+            const TString residual = "EndsWith(Text, $suffix)";
+            return setup + (reverse ? residual + " AND " + driver : driver + " AND " + residual) + " ORDER BY Id;";
+        };
+        fixture.ExpectIds(query("\"zzzzzz\"u"), {}, parameters("zzzzzz"));
+        fixture.ExpectError(query("\"alpha\"u"), "Failed to unwrap empty optional", parameters("alpha"),
+            NYdb::EStatus::PRECONDITION_FAILED);
+        fixture.ExpectIds(query("$prefix"), {}, parameters("zzzzzz"));
+        fixture.ExpectError(query("$prefix"), "Failed to unwrap empty optional", parameters("alpha"),
+            NYdb::EStatus::PRECONDITION_FAILED);
+        fixture.ExpectIds(query("$prefix"), {5}, parameters("alpha", "beta"));
+        fixture.ExpectIds(query("$prefix"), {5}, parameters("a", "beta"));
+    }
+}
+
+Y_UNIT_TEST_TWIN(ImplicitPatternsPreserveNonNgramSearchTerms, Compact) {
+    TExpressionFixture fixture({.Compact = Compact});
+    const TString query = fixture.Declarations() + R"sql(
+        SELECT Id FROM `/Root/Docs` VIEW fulltext_idx
+        WHERE StartsWith(Text, $q) AND EndsWith(Text, IF($choose, $other, $q))
+        ORDER BY Id;
+    )sql";
+    // The prefix supplies no whole tokens. The computed suffix supplies "beta".
+    fixture.ExpectIds(query, {5}, fixture.Parameters("alpha", " beta"));
+}
+
 Y_UNIT_TEST_TWIN(DiscardedWildcardKeepsPostfilter, Compact) {
     TExpressionFixture fixture({.Compact = Compact, .Ngram = true});
     for (bool reverse : {false, true}) {
@@ -1246,6 +1290,34 @@ Y_UNIT_TEST_TWIN(DiscardedPatternSharesNestedSourceQuery, Compact) {
             const TString search(parser.ColumnParser("Search").GetUtf8());
             UNIT_ASSERT_C(search == "alpha" || search == "beta", search);
             UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Id").GetUint64(), search == "alpha" ? 5ul : 2ul);
+        }
+    }
+}
+
+Y_UNIT_TEST_TWIN(DiscardedPatternSharesSubstringInput, Compact) {
+    TExpressionFixture fixture({.Compact = Compact, .Utf8 = false, .Ngram = true, .Empty = true});
+    fixture.Execute(R"sql(
+        UPSERT INTO `/Root/Docs` (Id, Text) VALUES (1ul, "alpha"), (2ul, "beta");
+    )sql");
+    const auto params = NYdb::TParamsBuilder().AddParam("$length").Uint32(5).Build().Build();
+    const TString match = "FulltextMatch(Text, SUBSTRING($search, 0u, $length))";
+    const TString residual = "StartsWith(Text, $search)";
+    for (bool reverse : {false, true}) {
+        const TString query = R"sql(
+            DECLARE $length AS Uint32;
+            $search = IF(Random(1) < 0.5, "alpha", "beta");
+            SELECT Id, $search AS Search FROM `/Root/Docs` VIEW fulltext_idx WHERE
+        )sql" + (reverse ? residual + " AND " + match : match + " AND " + residual) + ";";
+        for (ui32 iteration = 0; iteration < 16; ++iteration) {
+            const auto result = fixture.Db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            const auto& rows = result.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL_C(rows.RowsCount(), 1, NYdb::FormatResultSetYson(rows));
+            NYdb::TResultSetParser parser(rows);
+            UNIT_ASSERT(parser.TryNextRow());
+            const TString search(parser.ColumnParser("Search").GetString());
+            UNIT_ASSERT_C(search == "alpha" || search == "beta", search);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Id").GetUint64(), search == "alpha" ? 1ul : 2ul);
         }
     }
 }

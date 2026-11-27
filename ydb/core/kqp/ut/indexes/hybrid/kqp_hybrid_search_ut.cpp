@@ -553,6 +553,24 @@ void AssertKeySet(const std::vector<ui64>& keys, const std::set<ui64>& expected)
     UNIT_ASSERT_C(actual == expected, "unexpected hybrid key set");
 }
 
+std::pair<TString, std::vector<ui64>> RunSharedSearchKeys(TQueryClient& db, const TString& sql) {
+    const auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, sql << "\n" << result.GetIssues().ToString());
+    TResultSetParser parser(result.GetResultSet(0));
+    TString search;
+    std::vector<ui64> keys;
+    while (parser.TryNextRow()) {
+        const TString current(parser.ColumnParser("Search").GetUtf8());
+        if (keys.empty()) {
+            search = current;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(current, search);
+        keys.push_back(*parser.ColumnParser("Key").GetOptionalUint64());
+    }
+    UNIT_ASSERT_C(search == "cats" || search == "dogs", sql << "\n" << NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    return {search, keys};
+}
+
 TString RunFailIssues(TQueryClient& db, const TString& sql) {
     auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, "expected the query to fail, but it succeeded");
@@ -1220,6 +1238,41 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(VolatileFulltextQueryIsSharedWithPagination, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        const TString select = R"sql(
+            SELECT Key, $search AS Search FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, $search),
+                FullTextScore(Text, "cats dogs birds"u, "or" AS DefaultOperator),
+                (4, 4) AS Limits, (16.0, 1.0) AS Weights)
+        )sql";
+        const auto cats = RunKeys(db, SearchPragma + "$search = \"cats\"u;" + select + "LIMIT 4;");
+        const auto dogs = RunKeys(db, SearchPragma + "$search = \"dogs\"u;" + select + "LIMIT 4;");
+        UNIT_ASSERT_VALUES_EQUAL(cats.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(dogs.size(), 4);
+
+        const TString prologue = SearchPragma + R"sql(
+            $search = IF(Random(true) < 0.5, "cats"u, "dogs"u);
+        )sql";
+        for (bool varyLimit : {false, true}) {
+            const TString query = prologue + select + (varyLimit
+                ? "LIMIT IF($search = \"cats\"u, 1ul, 2ul) OFFSET 1;"
+                : "LIMIT 1 OFFSET IF($search = \"cats\"u, 0ul, 2ul);");
+            for (ui32 iteration = 0; iteration < 32; ++iteration) {
+                const auto [search, keys] = RunSharedSearchKeys(db, query);
+                const auto& all = search == "cats" ? cats : dogs;
+                const size_t offset = varyLimit ? 1 : search == "cats" ? 0 : 2;
+                const size_t limit = varyLimit && search == "dogs" ? 2 : 1;
+                const std::vector<ui64> expected(all.begin() + offset, all.begin() + offset + limit);
+                UNIT_ASSERT_VALUES_EQUAL_C(keys, expected, search << "\n" << query);
+            }
+        }
+    }
+
     Y_UNIT_TEST(ReadBackedRowsetsFeedLinearFusion) {
         auto kikimr = MakeRunnerWithCompact(/*compact=*/true);
         auto db = kikimr.GetQueryClient();
@@ -1301,6 +1354,35 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(VolatileFulltextQueryIsSharedWithVectorTarget, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        for (bool reverse : {false, true}) {
+            const TString query = SearchPragma + R"sql(
+                $search = IF(Random(true) < 0.5, "cats"u, "dogs"u);
+            )sql" + "$target = IF($search = \"cats\"u, " + Emb(2) + ", " + Emb(3) + ");" + R"sql(
+                SELECT Key, $search AS Search FROM `/Root/Docs`
+                ORDER BY HybridRank(
+            )sql" + (reverse ? R"sql(
+                    Knn::CosineDistance(Embedding, $target), FullTextScore(Text, $search),
+                    (1, 4) AS Limits)
+            )sql" : R"sql(
+                    FullTextScore(Text, $search), Knn::CosineDistance(Embedding, $target),
+                    (4, 1) AS Limits)
+            )sql") + "LIMIT 4;";
+            for (ui32 iteration = 0; iteration < 16; ++iteration) {
+                const auto [search, keys] = RunSharedSearchKeys(db, query);
+                if (search == "cats") {
+                    AssertKeySet(keys, {1u, 2u, 3u});
+                } else {
+                    AssertKeySet(keys, {2u, 3u});
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST_TWIN(FulltextQuerySharesReadWithCustomFusion, Compact) {
         auto kikimr = MakeRunnerWithCompact(Compact);
         auto db = kikimr.GetQueryClient();
@@ -1355,6 +1437,38 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             ExecOk(db, R"sql(UPSERT INTO `/Root/SearchTerms` (Key, Term) VALUES (1u, "cats"u);)sql");
             UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u}),
                 RunUint64Column(db, query, "DocKey", params(1, "dogs"), true));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(VolatileFulltextQueryIsSharedWithCustomFusion, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        for (bool useScores : {false, true}) {
+            const TString query = TargetDecl + R"sql(
+                $search = IF(Random(true) < 0.5, "cats"u, "dogs"u);
+                SELECT Key, $search AS Search FROM `/Root/Docs`
+                ORDER BY HybridRank(
+                    FullTextScore(Text, $search), Knn::CosineDistance(Embedding, $target),
+                    (4, 4) AS Limits,
+            )sql" + (useScores ? R"sql(
+                    ($scores) -> {
+                        RETURN IF($search = "cats"u,
+                            COALESCE($scores[0], -1.0), -COALESCE($scores[1], 1000000.0));
+                    } AS ScoreLambda)
+            )sql" : R"sql(
+                    ($ranks) -> {
+                        RETURN IF($search = "cats"u,
+                            1.0 / (60 + COALESCE($ranks[0], 100000)),
+                            1.0 / (60 + COALESCE($ranks[1], 100000)));
+                    } AS RankLambda)
+            )sql") + "LIMIT 2;";
+            for (ui32 iteration = 0; iteration < 16; ++iteration) {
+                const auto [search, keys] = RunSharedSearchKeys(db, query);
+                const std::vector<ui64> expected = search == "cats" ? std::vector<ui64>{1u, 3u} : std::vector<ui64>{2u, 1u};
+                UNIT_ASSERT_VALUES_EQUAL_C(keys, expected, search << "\n" << query);
+            }
         }
     }
 

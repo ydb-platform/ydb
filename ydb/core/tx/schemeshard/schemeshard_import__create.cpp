@@ -11,6 +11,7 @@
 
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/library/naming_conventions/scheme_object_names.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -50,6 +51,18 @@ void TSchemeShard::EraseEncryptionKey(NIceDb::TNiceDb& db, TImportInfo& importIn
 namespace {
 
 using TItem = TImportInfo::TItem;
+
+bool CanReuseDirectory(const TPath& path, const TImportInfo& info, const TItem& item) {
+    if (!path.IsResolved() || path.IsDeleted() || path.IsUnderDeleting() || !path.IsCommonSensePath()) {
+        return false;
+    }
+    if (path->PathId == info.DomainPathId) {
+        // A root-relative backup can represent the selected directory at the
+        // empty logical path, which maps to the target database by default.
+        return info.GetSource() && item.SrcPath.empty();
+    }
+    return path->IsDirectory() && !NNaming::IsInternalName(path->Name);
+}
 using EState = TImportInfo::EState;
 
 template <typename T>
@@ -181,7 +194,7 @@ bool ShouldDelayObjectCreationOnError(
 
 }
 
-bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& explain) {
+bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& explain, bool allowDirectory) {
     const TPath path = TPath::Resolve(dstPath, ss);
     TPath::TChecker checks = path.Check();
     checks
@@ -189,7 +202,11 @@ bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& ex
         .HasResolvedPrefix()
         .FailOnRestrictedCreateInTempZone();
 
-    if (path.IsResolved()) {
+    const bool existingDirectory = allowDirectory && path.IsResolved() && !path.IsDeleted()
+        && ((path->IsDirectory() && !path->IsSystemDirectory()) || path->IsDomainRoot());
+    if (existingDirectory) {
+        checks.NotUnderDeleting().IsCommonSensePath();
+    } else if (path.IsResolved()) {
         if (!path.IsDeleted() && path.IsWaitingImportReplica()) {
             checks
                 .NotUnderDeleting()
@@ -210,7 +227,7 @@ bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& ex
             .NotResolved();
     }
 
-    if (checks) {
+    if (checks && !existingDirectory) {
         checks
             //NOTE: using TSystemUsers::Metadata() here allows restoration of paths with system-reserved names/prefixes.
             // Reason is, that these names aren't being created anew but were legitimate elsewhere or
@@ -454,7 +471,7 @@ private:
                 return false;
             }
 
-            if (!ValidateImportDstPath(dstPath, Self, explain)) {
+            if (!ValidateImportDstPath(dstPath, Self, explain, true)) {
                 return false;
             }
         }
@@ -694,6 +711,19 @@ private:
     void GetScheme(TImportInfo::TPtr importInfo, ui32 itemIdx, const TActorContext& ctx) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
+        importInfo->IndexDstPaths();
+        if (item.SchemeGetter) {
+            return;
+        }
+        if (item.DstParentIdx != Max<ui32>()) {
+            const auto& parent = importInfo->Items.at(item.DstParentIdx);
+            // A child creation may implicitly create its ancestors. Let a selected
+            // directory install its owner, ACL and attributes first.
+            if (parent.State == EState::GetScheme
+                || (parent.Metadata.GetDirectoryAttributes() && parent.State != EState::Done)) {
+                return;
+            }
+        }
 
         YDB_LOG_INFO("TImport::TTxProgress: Get scheme",
             {"info", importInfo->ToString()},
@@ -702,6 +732,15 @@ private:
 
         item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV));
         Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
+    }
+
+    void ResumePathChildren(TImportInfo::TPtr importInfo, ui32 itemIdx, TTransactionContext& txc, const TActorContext& ctx) {
+        importInfo->IndexDstPaths();
+        for (ui32 child : importInfo->Items.at(itemIdx).DstChildren) {
+            if (importInfo->Items[child].State == EState::GetScheme) {
+                Resume(importInfo, child, txc, ctx);
+            }
+        }
     }
 
     void GetSchemaMapping(TImportInfo::TPtr importInfo, const TActorContext& ctx) {
@@ -1697,6 +1736,29 @@ private:
             return CancelAndPersist(db, importInfo, msg.ItemIdx, msg.Error, "cannot get scheme");
         }
 
+        const auto dst = TPath::Resolve(item.DstPathName, Self);
+        const bool directory = item.Metadata.GetDirectoryAttributes().has_value();
+        if (directory) {
+            if (dst.IsResolved() && !dst.IsDeleted()) {
+                if (!CanReuseDirectory(dst, *importInfo, item)) {
+                    return CancelAndPersist(db, importInfo, msg.ItemIdx,
+                        TStringBuilder() << "Expected a directory at " << item.DstPathName, "invalid destination");
+                }
+                if (!dst.IsUnderOperation()) {
+                    item.State = EState::Done;
+                    UpdateItemDstPathId(db, *importInfo, msg.ItemIdx);
+                }
+            } else {
+                TString error;
+                if (!CreateDirectoryPropose(Self, TTxId(), *importInfo, msg.ItemIdx, error)) {
+                    return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid directory backup");
+                }
+            }
+        } else if (dst.IsResolved() && !dst.IsDeleted() && (dst->IsDirectory() || dst->IsDomainRoot())) {
+            return CancelAndPersist(db, importInfo, msg.ItemIdx,
+                TStringBuilder() << "Destination is an existing directory: " << item.DstPathName, "invalid destination");
+        }
+
         if (IsCreatedByQuery(item)) {
             // Send the creation query to KQP to prepare.
             const auto database = GetDatabase(*Self);
@@ -1793,7 +1855,7 @@ private:
             }
         }
 
-        if (!IsCreatedByQuery(item)) {
+        if (item.State != EState::Done && !IsCreatedByQuery(item)) {
             if (item.SysView) {
                 ProcessSysViewRestore(txc, importInfo, msg.ItemIdx, ctx);
             } else {
@@ -1803,6 +1865,11 @@ private:
 
         if (!item.Kesus) {
             Self->PersistImportItemScheme(db, *importInfo, msg.ItemIdx);
+            if (directory && txc.DB.GetCommitRedoBytes() >= ((ui64(Self->MaxCommitRedoMB) - 1) << 20)) {
+                txc.DB.RollbackChanges();
+                return CancelAndPersist(db, importInfo, msg.ItemIdx, "Directory backup exceeds the maximum commit size",
+                    "directory backup is too large");
+            }
         }
 
         if (item.State != EState::Done) {
@@ -1840,6 +1907,9 @@ private:
             Self->PersistImportItemScheme(db, *importInfo, childIdx);
         }
 
+        if (!directory || importInfo->Items[msg.ItemIdx].State == EState::Done) {
+            ResumePathChildren(importInfo, msg.ItemIdx, txc, ctx);
+        }
         const auto stateCounts = CountItemsByState(importInfo->Items);
         if (AllDone(stateCounts)) {
             importInfo->State = EState::Done;
@@ -2018,6 +2088,18 @@ private:
                 break;
             }
             case EState::CreateSchemeObject:
+                if (item.Metadata.GetDirectoryAttributes()) {
+                    TString error;
+                    auto propose = CreateDirectoryPropose(Self, txId, *importInfo, i, error);
+                    if (!propose) {
+                        NIceDb::TNiceDb db(txc.DB);
+                        return CancelAndPersist(db, importInfo, i, error, "invalid directory backup");
+                    }
+                    importInfo->Items[i].SubState = ESubState::Proposed;
+                    Send(Self->SelfId(), std::move(propose));
+                    itemIdx = i;
+                    break;
+                }
                 if (item.Kesus) {
                     TString error;
                     if (!CreateKesus(*importInfo, i, txId, error)) {
@@ -2185,6 +2267,29 @@ private:
             }
         }
 
+        if (item.State == EState::CreateSchemeObject && item.Metadata.GetDirectoryAttributes()
+            && IsIn({NKikimrScheme::StatusSuccess, NKikimrScheme::StatusAlreadyExists,
+                NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAccepted}, record.GetStatus())) {
+            const auto dst = TPath::Resolve(item.DstPathName, Self);
+            if (!CanReuseDirectory(dst, *importInfo, item)) {
+                Self->TxIdToImport.erase(txId);
+                return CancelAndPersist(db, importInfo, itemIdx,
+                    TStringBuilder() << "Expected a directory at " << item.DstPathName, "invalid destination");
+            }
+            if (!dst.IsUnderOperation()) {
+                CompletedTxId = txId;
+                return OnNotifyResult(txc, ctx);
+            }
+            if (record.GetStatus() != NKikimrScheme::StatusAccepted) {
+                // Another operation owns this path. Keep its TxIdToImport entry
+                // intact and retry the mkdir after the concurrent change.
+                Self->TxIdToImport.erase(txId);
+                item.SubState = ESubState::AllocateTxId;
+                ctx.Schedule(TDuration::MilliSeconds(100), new IEventHandle(Self->TxAllocatorClient, Self->SelfId(),
+                    new TEvTxAllocatorClient::TEvAllocate(), 0, importInfo->Id));
+                return;
+            }
+        }
         if (record.GetStatus() == NKikimrScheme::StatusSuccess
                 && (item.State == EState::DropPlaceholder || item.State == EState::FinalizeImport
                     || (item.Kesus && item.State == EState::CreateSchemeObject))) {
@@ -2433,6 +2538,18 @@ private:
         }
 
         case EState::CreateSchemeObject:
+            if (item.Metadata.GetDirectoryAttributes()) {
+                const auto dst = TPath::Resolve(item.DstPathName, Self);
+                if (!CanReuseDirectory(dst, *importInfo, item) || dst.IsUnderOperation()
+                    || (item.DstPathId && dst->PathId != item.DstPathId)) {
+                    return CancelAndPersist(db, importInfo, itemIdx,
+                        TStringBuilder() << "Directory changed during import: " << item.DstPathName, "invalid destination");
+                }
+                UpdateItemDstPathId(db, *importInfo, itemIdx);
+                item.State = EState::Done;
+                ResumePathChildren(importInfo, itemIdx, txc, ctx);
+                break;
+            }
             if (item.Kesus) {
                 StartKesusRestore(db, importInfo, itemIdx);
                 return;

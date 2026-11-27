@@ -3697,6 +3697,31 @@ NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
     return timestamp;
 }
 
+void TImportInfo::IndexDstPaths() {
+    if (DstPathsIndexed) {
+        return;
+    }
+    THashMap<TString, ui32> byPath;
+    for (ui32 i : xrange(Items.size())) {
+        if (Items[i].ParentIdx == Max<ui32>()) {
+            byPath.emplace(CanonizePath(Items[i].DstPathName), i);
+        }
+    }
+    for (const auto& [path, i] : byPath) {
+        TStringBuf parent(path);
+        parent.RNextTok('/');
+        while (parent) {
+            if (const auto* idx = byPath.FindPtr(TString(parent))) {
+                Items[*idx].DstChildren.push_back(i);
+                Items[i].DstParentIdx = *idx;
+                break;
+            }
+            parent.RNextTok('/');
+        }
+    }
+    DstPathsIndexed = true;
+}
+
 TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaMapping(TSchemeShard* ss) {
     TFillItemsFromSchemaMappingResult result;
 
@@ -3733,21 +3758,29 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
     };
 
     TVector<TImportInfo::TItem> items;
+    THashMap<TString, const NBackup::TSchemaMapping::TItem*> byDestination;
+    auto add = [&](const TString& dstPath, const NBackup::TSchemaMapping::TItem& entry) {
+        const auto [it, inserted] = byDestination.emplace(CanonizePath(dstPath), &entry);
+        if (!inserted) {
+            if (it->second != &entry) {
+                result.AddError(TStringBuilder() << "Conflicting sources for destination path: " << dstPath);
+            }
+            return;
+        }
+        TString explain;
+        if (!ValidateImportDstPath(dstPath, ss, explain, true)) {
+            result.AddError(explain);
+            return;
+        }
+        init(entry, items.emplace_back(dstPath));
+    };
     if (Items.empty()) { // Fill the whole list from schema mapping
         for (const auto& schemaMappingItem : SchemaMapping->Items) {
             if (IsExcludedFromImport(schemaMappingItem.ObjectPath)) {
                 continue;
             }
 
-            TString dstPath = combineDstPath(schemaMappingItem.ObjectPath, dstRoot);
-            TString explain;
-            if (!ValidateImportDstPath(dstPath, ss, explain)) {
-                result.AddError(explain);
-                continue;
-            }
-
-            auto& item = items.emplace_back(dstPath);
-            init(schemaMappingItem, item);
+            add(combineDstPath(schemaMappingItem.ObjectPath, dstRoot), schemaMappingItem);
         }
     } else { // Take existing items from items list
         using TMapping = THashMap<TString, std::vector<std::pair<size_t /* index in schema mapping */, TString /* path suffix */>>>;
@@ -3808,14 +3841,7 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
                         dstPath << combineDstPath(schemaMappingItem.ObjectPath, dstRoot);
                     }
 
-                    TString explain;
-                    if (!ValidateImportDstPath(dstPath, ss, explain)) {
-                        result.AddError(explain);
-                        continue;
-                    }
-
-                    auto& item = items.emplace_back(dstPath);
-                    init(schemaMappingItem, item);
+                    add(dstPath, schemaMappingItem);
                 }
             } else {
                 notAllItemsFound = true;

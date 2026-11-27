@@ -1438,6 +1438,66 @@ void ImportWithExcludeRegexpsImpl(TBackupTestFixture& f, bool isOlap) {
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
+void ImportEmptyDirectoriesImpl(TBackupTestFixture& f) {
+    using namespace NKikimr;
+    TBackupTraits<TExportSettings> traits;
+    auto& flags = f.Server().GetRuntime()->GetAppData().FeatureFlags;
+    flags.SetEnableFsBackups(true);
+    flags.SetEnableDirectoryExport(true);
+    auto& scheme = f.YdbSchemeClient();
+    Tests::TClient client(*f.Server().ServerSettings);
+    const TString parent = "/Root/RecursiveFolderProcessing/dir1";
+    UNIT_ASSERT_VALUES_EQUAL(client.AlterUserAttributes(parent, "dir2", {{"team", "source"}}), NMsgBusProxy::MSTATUS_OK);
+    const auto permissions = NScheme::TModifyPermissionsSettings().AddChangeOwner("backup@builtin")
+        .AddGrantPermissions(NScheme::TPermissions("reader@builtin", {"ydb.generic.read"})).AddInterruptInheritance(true);
+    auto status = scheme.ModifyPermissions(parent + "/dir2", permissions).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    auto exportSettings = traits.MakeExportSettings(f, parent);
+    exportSettings.AppendItem(typename TExportSettings::TItem{.Src = "dir2"});
+    f.WaitOpSuccess(traits.Export(f, exportSettings));
+
+    const auto restore = [&](const TString& target) {
+        auto settings = traits.MakeImportSettings(f, "/Root");
+        settings.AppendItem(traits.MakeImportItem(target, "dir2"));
+        f.WaitOpSuccess(traits.Import(f, settings));
+        const auto empty = scheme.ListDirectory(target + "/dir3").GetValueSync();
+        UNIT_ASSERT_C(empty.IsSuccess(), empty.GetIssues().ToString());
+        UNIT_ASSERT(empty.GetChildren().empty());
+        f.ValidateHasYdbTables({target + "/Table2"});
+    };
+    const auto check = [&](const TString& target, const TString& owner, const TString& team, bool inheritInterrupted) {
+        const auto desc = scheme.DescribePath(target).GetValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        const auto& entry = desc.GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.Owner, owner);
+        UNIT_ASSERT_VALUES_EQUAL(entry.InterruptInheritance, inheritInterrupted);
+        UNIT_ASSERT_VALUES_EQUAL(AnyOf(entry.Permissions, [](const auto& acl) { return acl.Subject == "reader@builtin"; }),
+            inheritInterrupted);
+        const auto result = client.Describe(f.Server().GetRuntime(), target);
+        UNIT_ASSERT(AnyOf(result.GetPathDescription().GetUserAttributes(), [&](const auto& attr) {
+            return attr.GetKey() == "team" && attr.GetValue() == team;
+        }));
+    };
+    restore("/Root/fresh");
+    check("/Root/fresh", "backup@builtin", "source", true);
+
+    status = scheme.MakeDirectory("/Root/existing/keep").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    status = scheme.ModifyPermissions("/Root/existing",
+        NScheme::TModifyPermissionsSettings().AddChangeOwner("target@builtin")).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(client.AlterUserAttributes("/Root", "existing", {{"team", "target"}}), NMsgBusProxy::MSTATUS_OK);
+    restore("/Root/existing");
+    check("/Root/existing", "target@builtin", "target", false);
+    UNIT_ASSERT(scheme.DescribePath("/Root/existing/keep").GetValueSync().IsSuccess());
+
+    auto conflict = traits.MakeImportSettings(f, "/Root");
+    conflict.AppendItem(traits.MakeImportItem("/Root/existing/Table2", "dir2/dir3"));
+    f.WaitOpStatus(traits.Import(f, conflict), {EStatus::BAD_REQUEST, EStatus::CANCELLED});
+    f.ValidateHasYdbTables({"/Root/existing/Table2"});
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
 void ImportFilterByPrefixImpl(TBackupTestFixture& f, bool isOlap) {
     TBackupTraits<TExportSettings> traits;
     using TImportSettings = typename TBackupTraits<TExportSettings>::TImportSettings;
@@ -2460,6 +2520,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
     Y_UNIT_TEST(ImportWithExcludeRegexps) {
         ImportWithExcludeRegexpsImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
+    Y_UNIT_TEST(ImportEmptyDirectories) {
+        ImportEmptyDirectoriesImpl<NExport::TExportToFsSettings>(*this);
+    }
     Y_UNIT_TEST(ImportFilterByPrefix) {
         ImportFilterByPrefixImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
@@ -2539,6 +2602,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
 
     Y_UNIT_TEST_TWIN(ImportWithExcludeRegexps, IsOlap) {
         ImportWithExcludeRegexpsImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
+    }
+    Y_UNIT_TEST(ImportEmptyDirectories) {
+        ImportEmptyDirectoriesImpl<NExport::TExportToS3Settings>(*this);
     }
 
     Y_UNIT_TEST_TWIN(ExportWithCommonSourcePathAndExplicitTableInside, IsOlap) {

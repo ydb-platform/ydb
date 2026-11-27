@@ -4,11 +4,13 @@
 #include "index/index_utils.h"
 #include "schemeshard_path_describer.h"
 #include "schemeshard_xxport__helpers.h"
+#include "user_attributes.h"
 
 #include <algorithm>
 
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
+#include <ydb/library/naming_conventions/scheme_object_names.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/persqueue/public/schema/schema_propose.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -24,6 +26,48 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateDirectoryPropose(
+    TSchemeShard* ss, TTxId txId, const TImportInfo& importInfo, ui32 itemIdx, TString& error)
+{
+    const auto& item = importInfo.Items.at(itemIdx);
+    const auto domain = TPath::Init(importInfo.DomainPathId, ss);
+    std::pair<TString, TString> dst;
+    if (!TrySplitPathByDb(item.DstPathName, domain.PathString(), dst, error)) {
+        return nullptr;
+    }
+    if (AnyOf(SplitPath(dst.second), [](const TString& name) { return NNaming::IsInternalName(name); })) {
+        error = TStringBuilder() << "Cannot import a directory at an internal path: " << item.DstPathName;
+        return nullptr;
+    }
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
+    auto& record = propose->Record;
+    auto& tx = *record.AddTransaction();
+    tx.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+    tx.SetWorkingDir(dst.first);
+    tx.MutableMkDir()->SetName(dst.second);
+    tx.SetInternal(true);
+    tx.SetFailOnExist(true);
+    for (const auto& [key, value] : *item.Metadata.GetDirectoryAttributes()) {
+        if (TUserAttributes::ParseName(key) != EAttribute::USER) {
+            error = TStringBuilder() << "Unexpected system directory attribute: " << key;
+            return nullptr;
+        }
+        auto* attr = tx.MutableAlterUserAttributes()->AddUserAttributes();
+        attr->SetKey(key);
+        attr->SetValue(value);
+    }
+    TUserAttributes attrs(1);
+    if (!attrs.ApplyPatch(EUserAttributesOp::MkDir, tx.GetAlterUserAttributes(), error) || !attrs.CheckLimits(error)) {
+        return nullptr;
+    }
+    FillOwner(record, item.Permissions);
+    record.SetOwner(ChooseAppropriateOwner(record, AppData()));
+    if (!FillACL(tx, item.Permissions, error)) {
+        return nullptr;
+    }
+    return propose;
+}
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateKesusPropose(
     TSchemeShard* ss,

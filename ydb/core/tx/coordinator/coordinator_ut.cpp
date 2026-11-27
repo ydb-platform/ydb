@@ -60,7 +60,7 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
                 runtime.SimulateSleep(TDuration::Seconds(1));
                 UNIT_ASSERT_VALUES_EQUAL(spans.size(), verbosity >= 11 ? 1u : 0u);
                 if (!spans.empty()) {
-                    UNIT_ASSERT_VALUES_EQUAL(spans.front().status().code(), NWilson::NTraceProto::Status::STATUS_CODE_OK);
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(spans.front().status().code()), static_cast<int>(NWilson::NTraceProto::Status::STATUS_CODE_OK));
                     UNIT_ASSERT_VALUES_EQUAL(spans.front().events(spans.front().events_size() - 1).name(), "read step response dispatched");
                 }
             }

@@ -938,7 +938,7 @@ void TPartition::HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TA
 void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
     LOG_T("TPartition::HandleOnWrite TEvRegisterMessageGroup");
 
-    const auto& body = ev->Get()->Body;
+    auto& body = ev->Get()->Body;
 
     auto it = SourceIdStorage.GetInMemorySourceIds().find(body.SourceId);
     if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
@@ -954,6 +954,16 @@ void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const T
             if (!body.AfterSplit) {
                 return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
                     "AfterSplit must be set");
+            }
+            if (Config.GetSplitByPartitionKey() && it->second.KeyRange) {
+                NKikimrPQ::TPartitionKeyRange keyRange;
+                it->second.KeyRange->Serialize(keyRange);
+                if (body.KeyRange && (body.KeyRange->GetFromBound() != keyRange.GetFromBound()
+                        || body.KeyRange->GetToBound() != keyRange.GetToBound())) {
+                    return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                        "Key range does not match the split registration");
+                }
+                body.KeyRange = std::move(keyRange);
             }
             break;
         default:

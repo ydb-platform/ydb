@@ -291,6 +291,9 @@ class TestDataType(RestartToAnotherVersionFixture):
 
     @pytest.mark.parametrize("store_type", ["ROW", "COLUMN"], indirect=True)
     def test_parametrized_data_type(self):
+        if self.store_type == "COLUMN" and min(self.versions) < (26, 3):
+            pytest.skip("Timestamp equality pushdown needs the #51991 fix, absent in stable-26-2 and earlier")
+
         if any("Decimal" in type_name for type_name in self.all_types.keys()) and self.store_type == "COLUMN":
             if (min(self.versions) < (25, 1)):
                 types_not_supported_yet_in_columnshard.add("Decimal")

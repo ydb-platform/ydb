@@ -1,5 +1,7 @@
 DLL(simulator_api)
 
+ALLOCATOR(SYSTEM)
+
 SRCDIR(ydb/core/kqp/runtime/scheduler/ut/simulator)
 
 SRCS(

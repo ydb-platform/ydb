@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/headers.proto";
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+
+package NCloud.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/blockstore/public/api/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// Private API
+
+message TExecuteActionRequest
+{
+    // Optional requeest headers.
+    THeaders Headers = 1;
+
+    // Name of action to execute.
+    string Action = 2;
+
+    // Optional arguments represented in JSON format.
+    bytes Input = 3;
+}
+
+message TExecuteActionResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Action output.
+    bytes Output = 2;
+}

@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package NCloud.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/storage/core/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// Endpoint storage type
+
+enum EEndpointStorageType
+{
+    ENDPOINT_STORAGE_DEFAULT = 0;
+    ENDPOINT_STORAGE_KEYRING = 1;
+    ENDPOINT_STORAGE_FILE = 2;
+}

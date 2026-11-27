@@ -6,14 +6,6 @@
 
 namespace NYdb::NBS {
 
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-constexpr ui64 DefaultBlockSize = 4096;
-
-}   // namespace
-
 Y_UNIT_TEST_SUITE(TSgListTest)
 {
     Y_UNIT_TEST(ShouldNormalizeSgList)

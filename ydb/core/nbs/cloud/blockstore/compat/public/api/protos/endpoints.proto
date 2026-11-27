@@ -1,0 +1,229 @@
+syntax = "proto3";
+
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/client.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/encryption.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/headers.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/mount.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/volume.proto";
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+
+package NCloud.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/blockstore/public/api/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// Start volume endpoint
+
+message TStartEndpointRequest
+{
+    reserved 15, 16, 17;
+
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Unix-socket path.
+    string UnixSocketPath = 2;
+
+    // Label of volume to mount.
+    string DiskId = 3;
+
+    // VM information.
+    string InstanceId = 4;
+
+    // Volume access mode.
+    EVolumeAccessMode VolumeAccessMode = 5;
+
+    // Volume mount mode.
+    EVolumeMountMode VolumeMountMode = 6;
+
+    // IPC type used by client.
+    EClientIpcType IpcType = 7;
+
+    // Client version info.
+    string ClientVersionInfo = 8;
+
+    // Obsolete, use MountFlags instead.
+    bool ThrottlingDisabled = 9;
+
+    // Volume generation.
+    uint64 MountSeqNumber = 10;
+
+    // Client identifier.
+    string ClientId = 11;
+
+    // Client profile
+    TClientProfile ClientProfile = 12;
+
+    // Client performance profile
+    TClientPerformanceProfile ClientPerformanceProfile = 13;
+
+    // Vhost queues count.
+    uint32 VhostQueuesCount = 14;
+
+    // Unaligned request support can be explicitly disabled.
+    bool UnalignedRequestsDisabled = 18;
+
+    // Volume encryption spec.
+    TEncryptionSpec EncryptionSpec = 19;
+
+    // Send MinBlockSize to NBD-client (NBS-2250).
+    bool SendNbdMinBlockSize = 20;
+
+    // Mount flags.
+    uint32 MountFlags = 21;
+
+    // Device name for vhost endpoints.
+    string DeviceName = 22;
+
+    // Client's cgroups
+    repeated string ClientCGroups = 23;
+
+    // Restore endpoint after restart
+    bool Persistent = 24;
+
+    oneof NbdDevice {
+        // The device file (e.g. "/dev/nbd0") which nbd-client will connect to.
+        string NbdDeviceFile = 25;
+
+        // Use any free nbd device file which nbd-client will connect to.
+        bool UseFreeNbdDeviceFile = 26;
+    }
+
+    // Enable Discard/ZeroBlocks features for vhost device
+    // deprecated
+    bool VhostDiscardEnabled = 27;
+}
+
+message TStartEndpointResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Volume information.
+    TVolume Volume = 2;
+
+    // The device file (e.g. "/dev/nbd0") which nbd-client connected to.
+    string NbdDeviceFile = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Stop volume endpoint
+
+message TStopEndpointRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Unix-socket path.
+    string UnixSocketPath = 2;
+
+    optional string DiskId = 3;
+}
+
+message TStopEndpointResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// List volume endpoints
+
+message TListEndpointsRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+}
+
+message TListEndpointsResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // List of endpoints.
+    repeated TStartEndpointRequest Endpoints = 2;
+
+    // Endpoints restoring status.
+    bool EndpointsWereRestored = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Kick volume endpoint
+
+message TKickEndpointRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Keyring identifier.
+    uint32 KeyringId = 2;
+}
+
+message TKickEndpointResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// List keyring endpoints
+
+message TListKeyringsRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+}
+
+message TListKeyringsResponse
+{
+    message TKeyringEndpoint
+    {
+        string KeyringId = 1;
+        TStartEndpointRequest Request = 2;
+    }
+
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // List of keyring endpoints.
+    repeated TKeyringEndpoint Endpoints = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Describe endpoint
+
+message TDescribeEndpointRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Unix-socket path.
+    string UnixSocketPath = 2;
+}
+
+message TDescribeEndpointResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Client performance profile.
+    TClientPerformanceProfile PerformanceProfile = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Refresh endpoint
+
+message TRefreshEndpointRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Unix-socket path.
+    string UnixSocketPath = 2;
+}
+
+message TRefreshEndpointResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}

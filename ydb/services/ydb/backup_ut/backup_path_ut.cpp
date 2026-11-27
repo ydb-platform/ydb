@@ -1494,18 +1494,40 @@ void ImportEmptyDirectoriesImpl(TBackupTestFixture& f) {
         .AddGrantPermissions(NScheme::TPermissions("reader@builtin", {"ydb.generic.read"})).AddInterruptInheritance(true);
     auto status = scheme.ModifyPermissions(parent + "/dir2", permissions).GetValueSync();
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    const auto inserted = f.YdbQueryClient().ExecuteQuery(
+        "UPSERT INTO `/Root/RecursiveFolderProcessing/dir1/dir2/Table2` (key) VALUES (42u)",
+        NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
     auto exportSettings = traits.MakeExportSettings(f, parent);
     exportSettings.AppendItem(typename TExportSettings::TItem{.Src = "dir2"});
+    constexpr bool encrypted = std::is_same_v<TExportSettings, NExport::TExportToS3Settings>;
+    const TString key = "Cool random key!";
+    if constexpr (encrypted) {
+        traits.SetEncryption(exportSettings, NExport::TEncryptionAlgorithm::AES_128_GCM, key);
+    }
     f.WaitOpSuccess(traits.Export(f, exportSettings));
 
-    const auto restore = [&](const TString& target) {
+    const auto importSettings = [&] {
         auto settings = traits.MakeImportSettings(f, "/Root");
+        if constexpr (encrypted) {
+            traits.SetDecryptionKey(settings, key);
+        }
+        return settings;
+    };
+    const auto restore = [&](const TString& target) {
+        auto settings = importSettings();
         settings.AppendItem(traits.MakeImportItem(target, "dir2"));
         f.WaitOpSuccess(traits.Import(f, settings));
         const auto empty = scheme.ListDirectory(target + "/dir3").GetValueSync();
         UNIT_ASSERT_C(empty.IsSuccess(), empty.GetIssues().ToString());
         UNIT_ASSERT(empty.GetChildren().empty());
-        f.ValidateHasYdbTables({target + "/Table2"});
+        const auto result = f.YdbQueryClient().ExecuteQuery(fmt::format("SELECT key FROM `{}/Table2`", target.c_str()),
+            NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        auto rows = result.GetResultSetParser(0);
+        UNIT_ASSERT_VALUES_EQUAL(rows.RowsCount(), 1);
+        UNIT_ASSERT(rows.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser(0).GetUint32(), 42);
     };
     const auto check = [&](const TString& target, const std::string& owner, const TString& team, bool inheritInterrupted) {
         const auto desc = scheme.DescribePath(target).GetValueSync();
@@ -1533,7 +1555,7 @@ void ImportEmptyDirectoriesImpl(TBackupTestFixture& f) {
     check("/Root/existing", "target@builtin", "target", false);
     UNIT_ASSERT(scheme.DescribePath("/Root/existing/keep").GetValueSync().IsSuccess());
 
-    auto noAcl = traits.MakeImportSettings(f, "/Root");
+    auto noAcl = importSettings();
     noAcl.NoACL(true).AppendItem(traits.MakeImportItem("/Root/no-acl", "dir2"));
     f.WaitOpSuccess(traits.Import(f, noAcl));
     const auto noAclDesc = scheme.DescribePath("/Root/no-acl").GetValueSync();
@@ -1541,13 +1563,13 @@ void ImportEmptyDirectoriesImpl(TBackupTestFixture& f) {
     UNIT_ASSERT(noAclDesc.GetEntry().Owner != "backup@builtin");
     check("/Root/no-acl", noAclDesc.GetEntry().Owner, "source", false);
 
-    auto leaf = traits.MakeImportSettings(f, "/Root");
+    auto leaf = importSettings();
     leaf.AppendItem(traits.MakeImportItem("/Root/leaf-only/orders", "dir2/Table2"));
     f.WaitOpSuccess(traits.Import(f, leaf));
     f.ValidateHasYdbTables({"/Root/leaf-only/orders"});
     f.ValidateDoesNotHaveYdbTables({"/Root/leaf-only/dir3"});
 
-    auto conflict = traits.MakeImportSettings(f, "/Root");
+    auto conflict = importSettings();
     conflict.AppendItem(traits.MakeImportItem("/Root/existing/Table2", "dir2/dir3"));
     f.WaitOpStatus(traits.Import(f, conflict), {EStatus::BAD_REQUEST, EStatus::CANCELLED});
     f.ValidateHasYdbTables({"/Root/existing/Table2"});

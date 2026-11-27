@@ -59,9 +59,17 @@ bool CanReuseDirectory(const TPath& path, const TImportInfo& info, const TItem& 
     if (path->PathId == info.DomainPathId) {
         // A root-relative backup can represent the selected directory at the
         // empty logical path, which maps to the target database by default.
-        return info.GetSource() && item.SrcPath.empty();
+        return item.SrcPath.empty() && std::visit([](const auto& settings) { return settings.items().empty(); }, info.Settings);
     }
-    return path->IsDirectory() && !NNaming::IsInternalName(path->Name);
+    if (!path->IsDirectory() || path.GetPathIdForDomain() != info.DomainPathId) {
+        return false;
+    }
+    for (auto ancestor = path; !ancestor->IsDomainRoot(); ancestor.Rise()) {
+        if (NNaming::IsInternalName(ancestor->Name)) {
+            return false;
+        }
+    }
+    return true;
 }
 using EState = TImportInfo::EState;
 
@@ -1593,7 +1601,7 @@ private:
                 switch (item.State) {
                 case EState::GetScheme:
                     if (!Self->TableProfilesLoaded) {
-                        Self->WaitForTableProfiles(Id, itemIdx);
+                        Self->WaitForTableProfiles(importInfo->Id, itemIdx);
                     } else {
                         GetScheme(importInfo, itemIdx, ctx);
                     }

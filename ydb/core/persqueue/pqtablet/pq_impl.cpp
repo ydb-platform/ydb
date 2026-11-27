@@ -3156,11 +3156,18 @@ void TPersQueue::ScheduleDeleteExpiredKafkaTransactions() {
         return txWriteInfo.KafkaTransaction && txWriteInfo.CreatedAt + kafkaTxnTimeout < TAppData::TimeProvider->Now();
     };
 
-    for (auto& pair : TxWrites) {
+    TVector<TWriteId> expiredWriteIds;
+    for (const auto& pair : TxWrites) {
         if (txnExpired(pair.second)) {
+            expiredWriteIds.push_back(pair.first);
+        }
+    }
+
+    for (const auto& writeId : expiredWriteIds) {
+        if (auto it = TxWrites.find(writeId); it != TxWrites.end()) {
             LOG_D("Transaction for Kafka producer is expired",
-                {"kafkaProducerInstanceId", pair.first.GetKafkaProducerInstanceId()});
-            BeginDeletePartitions(pair.first, pair.second);
+                {"kafkaProducerInstanceId", writeId.GetKafkaProducerInstanceId()});
+            BeginDeletePartitions(writeId, it->second);
         }
     }
 }
@@ -5162,6 +5169,7 @@ void TPersQueue::DeleteWriteId(const TMaybe<TWriteId>& writeId)
     LOG_I("Delete WriteId",
         {"writeId", *writeId});
     TxWrites.erase(*writeId);
+    TxWritesChanged = true;
 }
 
 void TPersQueue::WriteTx(TDistributedTransaction& tx, NKikimrPQ::TTransaction::EState state)

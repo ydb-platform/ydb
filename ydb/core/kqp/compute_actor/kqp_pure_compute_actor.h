@@ -36,7 +36,7 @@ public:
         NScheduler::TSchedulableOptions schedulableOptions,
         NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-        const TString& database
+        const TString& database, NMonitoring::TDynamicCounterPtr taskCounters = nullptr
     );
 
     void DoBootstrap();

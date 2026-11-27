@@ -72,7 +72,7 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqPr
     NScheduler::TSchedulableOptions schedulableOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-    const TString& database
+    const TString& database, NMonitoring::TDynamicCounterPtr counters = nullptr
 );
 
 IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask* task,
@@ -81,7 +81,8 @@ IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId, NYql::N
     TIntrusivePtr<NActors::TProtoArenaHolder> arena,
     NScheduler::TSchedulableOptions schedulableOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database);
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database,
+    NMonitoring::TDynamicCounterPtr counters = nullptr);
 
 IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vector<NActors::TActorId>&& computeActors,
     const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings,

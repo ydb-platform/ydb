@@ -194,7 +194,8 @@ public:
             IActor* computeActor = CreateKqpScanComputeActor(
                 args.ExecuterId, args.TxId, args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
                 std::move(args.TraceId), std::move(args.Arena),
-                std::move(schedulableOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database);
+                std::move(schedulableOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database,
+                std::move(args.Counters));
             actorId = args.UseBatchPool
                 ? TlsActivationContext->Register(computeActor, TActorId(), TMailboxType::HTSwap, AppData()->BatchPoolId)
                 : TlsActivationContext->Register(computeActor);
@@ -208,7 +209,8 @@ public:
                 args.ExecuterId, args.TxId, args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
                 std::move(args.TraceId), std::move(args.Arena),
                 FederatedQuerySetup, GUCSettings,
-                std::move(schedulableOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database);
+                std::move(schedulableOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database,
+                std::move(args.Counters));
             if (args.UseBatchPool) {
                 return TlsActivationContext->Register(computeActor, TActorId(), TMailboxType::HTSwap, AppData()->BatchPoolId);
             }

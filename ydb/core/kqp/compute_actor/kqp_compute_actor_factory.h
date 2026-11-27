@@ -150,6 +150,8 @@ public:
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
 
         bool UseBatchPool = false;
+
+        NMonitoring::TDynamicCounterPtr Counters = nullptr;
     };
 
     virtual TActorId CreateKqpComputeActor(TCreateArgs&& args) = 0;

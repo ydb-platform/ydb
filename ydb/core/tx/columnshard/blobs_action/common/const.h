@@ -11,10 +11,8 @@ public:
 };
 
 inline bool IsValidColumnStorageId(const TString& storageId) {
-    return !storageId
-        || storageId == TGlobal::DefaultStorageId
-        || storageId == TGlobal::MemoryStorageId
-        || storageId == TGlobal::LocalMetadataStorageId;
+    return !storageId || storageId == TGlobal::DefaultStorageId || storageId == TGlobal::MemoryStorageId ||
+           storageId == TGlobal::LocalMetadataStorageId;
 }
 
 }   // namespace NKikimr::NOlap::NBlobOperations

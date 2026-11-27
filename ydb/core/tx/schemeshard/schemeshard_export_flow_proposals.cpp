@@ -202,6 +202,7 @@ void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription
         const TPathId& exportItemPathId) {
     NKikimrSchemeOp::TDescribeOptions opts;
     opts.SetReturnSetVal(true);
+    opts.SetShowPrivateTable(true);
 
     auto pathDescription = DescribePath(ss, TlsActivationContext->AsActorContext(), exportItemPathId, opts);
     auto tableDescription = pathDescription->GetRecord().GetPathDescription().GetTable();

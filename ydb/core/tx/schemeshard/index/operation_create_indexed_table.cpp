@@ -460,6 +460,22 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             return CreateNewTable(NextPartId(nextId, result), scheme, localSequences);
         };
 
+        auto createIndexSequence = [&](TTxTransaction& scheme, const NKikimrSchemeOp::TTableDescription& implTable) {
+            auto* sequence = scheme.MutableSequence();
+            if (tx.GetInternal() && baseTableDescription.GetIsRestore()) {
+                for (const auto& saved : implTable.GetSequences()) {
+                    if (saved.GetName() == sequence->GetName() && saved.HasSetVal()) {
+                        *sequence->MutableSetVal() = saved.GetSetVal();
+                        break;
+                    }
+                }
+            }
+            scheme.SetFailOnExist(tx.GetFailOnExist());
+            scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
+            scheme.SetInternal(tx.GetInternal());
+            return CreateNewSequence(NextPartId(nextId, result), scheme);
+        };
+
         const auto& implTableColumns = indexes.at(indexDescription.GetName());
         const auto indexType = GetIndexType(indexDescription);
 
@@ -512,10 +528,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     outTx.MutableSequence()->SetMaxValue(-1);
                     outTx.MutableSequence()->SetStartValue(NTableIndex::NKMeans::SetPostingParentFlag(1));
                     outTx.MutableSequence()->SetRestart(true);
-                    outTx.SetFailOnExist(tx.GetFailOnExist());
-                    outTx.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
-                    outTx.SetInternal(tx.GetInternal());
-                    result.push_back(CreateNewSequence(NextPartId(nextId, result), outTx));
+                    result.push_back(createIndexSequence(outTx, userPrefixDesc));
                 }
                 break;
             }
@@ -548,10 +561,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 outTx.MutableSequence()->SetStartValue(static_cast<i64>(Max<NTableIndex::NFulltext::TGen>() - 1));
                 outTx.MutableSequence()->SetIncrement(-1);
                 outTx.MutableSequence()->SetMaxValue(static_cast<i64>(Max<NTableIndex::NFulltext::TGen>() - 1));
-                outTx.SetFailOnExist(tx.GetFailOnExist());
-                outTx.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
-                outTx.SetInternal(tx.GetInternal());
-                result.push_back(CreateNewSequence(NextPartId(nextId, result), outTx));
+                result.push_back(createIndexSequence(outTx, userIndexDesc));
 
                 if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
                     const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};

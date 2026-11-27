@@ -873,7 +873,8 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             );
         )");
         query("ALTER TABLE `/Root/Source/Articles` ADD INDEX by_id LOCAL USING bloom_filter ON (id);");
-        query("UPSERT INTO `/Root/Source/Articles` (id, body) VALUES (42, 'red bicycle'), (99, 'green apple');");
+        query("UPSERT INTO `/Root/Source/Articles` (id, body) VALUES (42, 'red scooter'), (99, 'green apple');");
+        query("UPDATE `/Root/Source/Articles` SET body = 'red bicycle' WHERE id = 42;");
 
         auto exportSettings = MakeExportSettings("/Root/Source", "backup");
         exportSettings.IncludeIndexData(true).SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
@@ -891,6 +892,19 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         UNIT_ASSERT_VALUES_EQUAL(rows.RowsCount(), 1);
         UNIT_ASSERT(rows.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("id").GetUint64(), 42);
+
+        query("UPDATE `/Root/Restored/Articles` SET body = 'blue train' WHERE id = 42;");
+        const auto removed = query(R"(
+            SELECT id FROM `/Root/Restored/Articles` VIEW by_body WHERE FulltextMatch(body, "bicycle");
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(removed.GetResultSetParser(0).RowsCount(), 0);
+        const auto added = query(R"(
+            SELECT id FROM `/Root/Restored/Articles` VIEW by_body WHERE FulltextMatch(body, "train");
+        )");
+        auto matches = added.GetResultSetParser(0);
+        UNIT_ASSERT_VALUES_EQUAL(matches.RowsCount(), 1);
+        UNIT_ASSERT(matches.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(matches.ColumnParser("id").GetUint64(), 42);
     }
 
     Y_UNIT_TEST_TWIN(UniqueWithAnonymousBloom, Legacy) {

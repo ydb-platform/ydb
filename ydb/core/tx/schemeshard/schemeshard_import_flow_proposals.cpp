@@ -204,9 +204,9 @@ THashMap<TStringBuf, TImplTableSchemes> GetMaterializedIndexSchemes(const TImpor
 // the index as it would be created in this database. Returns false (and fills `error`) when they
 // cannot - for example when a backup of a compact fulltext index is restored with
 // EnableCompactFulltextIndex off. Such an index must not be materialized.
-bool CheckIndexMaterializationCompatible(
+bool PrepareIndexMaterialization(
     const NKikimrSchemeOp::TTableDescription& baseTable,
-    const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
+    NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
     const TImplTableSchemes& schemes,
     TString& error
 ) {
@@ -244,6 +244,29 @@ bool CheckIndexMaterializationCompatible(
             error = TStringBuilder() << "materialized index '" << indexDesc.GetName()
                 << "' has a scheme incompatible with this database";
             return false;
+        }
+        // The layout comparison above also checked which columns use an index-owned sequence.
+        // Transfer its cursor from the child scheme into the create request for that impl table.
+        for (const auto& column : scheme->columns()) {
+            if (!column.has_from_sequence()) {
+                continue;
+            }
+            const auto& sequence = column.from_sequence();
+            if (!sequence.set_val().has_next_value() || !sequence.set_val().has_next_used()) {
+                error = TStringBuilder() << "Missing position of sequence '" << sequence.name()
+                    << "' in materialized index '" << indexDesc.GetName() << "/" << implTableName << "'";
+                return false;
+            }
+            int position = 0;
+            if (implTableName == NTableIndex::NKMeans::PrefixTable) {
+                position = NTableIndex::NKMeans::PrefixTablePosition;
+            } else if (indexDesc.GetType() == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+                position = NTableIndex::NFulltext::PostingTablePosition;
+            }
+            auto* saved = indexDesc.MutableIndexImplTableDescriptions(position)->AddSequences();
+            saved->SetName(sequence.name());
+            saved->MutableSetVal()->SetNextValue(sequence.set_val().next_value());
+            saved->MutableSetVal()->SetNextUsed(sequence.set_val().next_used());
         }
         expected.erase(expectedIt);
     }
@@ -328,7 +351,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 
             std::vector<NKikimrSchemeOp::TIndexCreationConfig> compatible;
             compatible.reserve(indexedTable.IndexDescriptionSize());
-            for (const auto& indexDesc : indexedTable.GetIndexDescription()) {
+            for (auto& indexDesc : *indexedTable.MutableIndexDescription()) {
                 if (indexDesc.GetType() == NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
                     // A named prefix filter belongs to the base table and has no materialized files.
                     compatible.push_back(indexDesc);
@@ -336,7 +359,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
                 }
                 TString indexError;
                 const auto* schemes = materializedIndexes.FindPtr(indexDesc.GetName());
-                if (schemes && CheckIndexMaterializationCompatible(baseTable, indexDesc, *schemes, indexError)) {
+                if (schemes && PrepareIndexMaterialization(baseTable, indexDesc, *schemes, indexError)) {
                     compatible.push_back(indexDesc);
                 } else {
                     indexesToBuild.push_back(indexDesc.GetName());

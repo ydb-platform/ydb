@@ -14053,6 +14053,18 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, const
     if (options.ToggleCompactForExport) {
         runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(!compact);
     }
+    TString sequenceSuffix;
+    if (compact) {
+        sequenceSuffix = TStringBuilder() << "/index1/" << NTableIndex::ImplTable << "/" << NTableIndex::NFulltext::GenSequence;
+    } else if (options.Prefixed) {
+        sequenceSuffix = TStringBuilder() << "/index1/" << NTableIndex::NKMeans::PrefixTable << "/" << NTableIndex::NKMeans::IdColumnSequence;
+    }
+    i64 lastAllocated = 0;
+    if (sequenceSuffix) {
+        const TString path = "/MyRoot/Table" + sequenceSuffix;
+        DoNextVal(runtime, path);
+        lastAllocated = DoNextVal(runtime, path);
+    }
     TestExport(runtime, ++txId, "/MyRoot", storage.ExportRequest({{"/MyRoot/Table", "backup"}}, true, "zstd"));
     env.TestWaitNotification(runtime, txId);
     TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
@@ -14124,6 +14136,35 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, const
             UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table" + suffix),
                 ReadShards(runtime, TTestTxConfig::SchemeShard, restoredPath + suffix));
         }
+        if (sequenceSuffix) {
+            const i64 next = DoNextVal(runtime, restoredPath + sequenceSuffix);
+            UNIT_ASSERT_C(compact ? next < lastAllocated : next > lastAllocated,
+                sequenceSuffix << " reused a value after restore: last=" << lastAllocated << " next=" << next);
+        }
+    }
+
+    if (options.LegacyWithoutIndexList) {
+        const TString path = "backup/index1/indexImplTable/scheme.pb";
+        Ydb::Table::CreateTableRequest scheme;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(storage.Read(path), &scheme));
+        for (auto& column : *scheme.mutable_columns()) {
+            if (column.has_from_sequence()) {
+                UNIT_ASSERT(column.from_sequence().has_set_val());
+                column.mutable_from_sequence()->clear_set_val();
+            }
+        }
+        TString contents;
+        UNIT_ASSERT(google::protobuf::TextFormat::PrintToString(scheme, &contents));
+        storage.Write(path, contents);
+        storage.Write(NBackup::ChecksumKey(path), NBackup::ComputeChecksum(contents));
+
+        TVector<TString> builds;
+        auto observer = runtime.AddObserver<TEvIndexBuilder::TEvCreateRequest>([&](const auto& ev) {
+            builds.push_back(ev->Get()->Record.GetSettings().index().name());
+        });
+        restore("/MyRoot/WithoutSequencePosition", TSettings::INDEX_POPULATION_MODE_AUTO);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(builds, TVector<TString>{"index1"});
     }
 
     if (options.ToggleCompactForExport) {

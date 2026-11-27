@@ -2,8 +2,13 @@
 
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block.h>
 
 namespace NKikimr {
+    struct TFullSyncSnapshot : THullDsSnap {
+        TBlocksCache::TSnapshot CommittedBlocks;
+    };
+
     // Actor for legacy protocol
     // New instance of the actor is created to prepare every TEvVSyncFullResult message
     // Reads part of snapshot, starting from given key*
@@ -13,7 +18,7 @@ namespace NKikimr {
             const TIntrusivePtr<TVDiskConfig> &config,
             const TIntrusivePtr<THullCtx> &hullCtx,
             const TActorId &parentId,
-            THullDsSnap &&fullSnap,
+            TFullSyncSnapshot &&fullSnap,
             const TSyncState& syncState,
             const TVDiskID& selfVDiskId,
             const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,
@@ -34,7 +39,7 @@ namespace NKikimr {
         const TIntrusivePtr<THullCtx> &hullCtx,
         const TActorId &parentId,
         const TActorId& syncLogActorId,
-        THullDsSnap &&fullSnap,
+        TFullSyncSnapshot &&fullSnap,
         const TSyncState& syncState,
         const TVDiskID& selfVDiskId,
         const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,

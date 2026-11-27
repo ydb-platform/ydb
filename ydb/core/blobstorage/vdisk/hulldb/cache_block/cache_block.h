@@ -51,6 +51,14 @@ namespace NKikimr {
             }
         };
 
+        using TPersistentBlocks = THashMap<ui64, TBlockedGen>;
+        using TSnapshot = TCowPtr<TAtomicSharedPtr<TPersistentBlocks>>;
+
+        TSnapshot GetSnapshot() const {
+            Y_ABORT_UNLESS(Initialized);
+            return PersistentBlocks;
+        }
+
         TBlocksCache() = default;
         ~TBlocksCache() = default;
         TBlocksCache(const TBlocksCache &) = delete;
@@ -68,7 +76,7 @@ namespace NKikimr {
         template <typename TCallback>
         void ForEachDeletedTablet(TCallback&& callback) const {
             Y_ABORT_UNLESS(Initialized);
-            for (const auto& [tabletId, gen] : PersistentBlocks) {
+            for (const auto& [tabletId, gen] : *PersistentBlocks) {
                 if (NGc::CompleteDelBlock(gen.Generation)) {
                     callback(tabletId);
                 }
@@ -110,14 +118,12 @@ namespace NKikimr {
             TTabletId TabletId;
         };
 
-        // blocks that are persistently stored on disk
-        using TPersistentBlocks = THashMap<TTabletId, TBlockedGen>;
         // blocks that passed all checks and are being written to recovery log right now
         using TInFlightBlocks = THashMap<TTabletId, TInFlightState>;
         // index for TInFlightBlocks by TLsn
         using TInFlightBlocksQueue = TDeque<TLsnToTabletId>;
 
-        TPersistentBlocks PersistentBlocks;
+        TSnapshot PersistentBlocks{new TPersistentBlocks};
         TInFlightBlocks InFlightBlocks;
         TInFlightBlocksQueue InFlightBlocksQueue;
         bool Initialized = false;

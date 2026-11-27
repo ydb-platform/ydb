@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 
 Y_UNIT_TEST_SUITE(BlobStorageBlockRace) {
     Y_UNIT_TEST(Test) {
@@ -44,6 +45,73 @@ Y_UNIT_TEST_SUITE(BlobStorageBlockRace) {
             UNIT_ASSERT_VALUES_EQUAL(sendBlock(orderNum, 2, 1), NKikimrProto::OK);
             UNIT_ASSERT_VALUES_EQUAL(sendBlock(orderNum, 2, 2), NKikimrProto::ALREADY);
         }
+    }
+
+    Y_UNIT_TEST(BlockIssuerSurvivesFullSync) {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        env.CreateBoxAndPool(1, 1);
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const auto info = env.GetGroupInfo(groups.front());
+        env.Sim(TDuration::Seconds(30));
+
+        const TVDiskID vdiskId = info->GetVDiskId(0);
+        const TActorId vdiskActorId = info->GetActorId(0);
+
+        const ui64 tabletId = 1;
+        const ui32 blockedGeneration = 42;
+        const ui64 issuerGuid = 731;
+        auto sendBlock = [&] {
+            NKikimrProto::EReplyStatus status;
+            env.WithQueueId(vdiskId, NKikimrBlobStorage::PutTabletLog, [&](const TActorId& queue) {
+                const auto reply = env.SyncQuery<TEvBlobStorage::TEvVBlockResult, TEvBlobStorage::TEvVBlock>(
+                    queue, tabletId, blockedGeneration, vdiskId, TInstant::Max(), TWriteSource::Unknown, issuerGuid);
+                status = reply->Record.GetStatus();
+            });
+            return status;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(sendBlock(), NKikimrProto::OK);
+        env.Sim(TDuration::Seconds(30)); // Let the peers learn the block before wiping its source.
+        UNIT_ASSERT_VALUES_EQUAL(sendBlock(), NKikimrProto::OK);
+
+        std::optional<ui64> snapshotIssuer;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == vdiskActorId.NodeId() && ev->GetTypeRewrite() == TEvBlobStorage::EvVSyncFullResult) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvVSyncFullResult>()->Record;
+                if (record.GetStatus() == NKikimrProto::OK && !record.GetData().empty()) {
+                    auto observe = [&](const auto* rec, ui64 issuer) {
+                        if (rec->TabletId == tabletId && rec->Generation == blockedGeneration) {
+                            snapshotIssuer = issuer;
+                        }
+                    };
+                    NSyncLog::TFragmentReader reader(record.GetData());
+                    reader.ForEach([](const NSyncLog::TLogoBlobRec*) {},
+                        [&](const NSyncLog::TBlockRec* rec) { observe(rec, 0); },
+                        [](const NSyncLog::TBarrierRec*) {},
+                        [&](const NSyncLog::TBlockRecV2* rec) { observe(rec, rec->IssuerGuid); });
+                }
+            }
+            return true;
+        };
+        // Wiping one VDisk makes RecoverLostData restore its blocks from the peers' Hull snapshots.
+        const auto [nodeId, pdiskId, vslotId] = DecomposeVDiskServiceId(vdiskActorId);
+        env.Wipe(nodeId, pdiskId, vslotId, vdiskId);
+        env.Sim(TDuration::Seconds(30));
+        env.WaitForVDiskRepl(vdiskActorId, vdiskId);
+        env.Runtime->FilterFunction = {};
+
+        UNIT_ASSERT_C(snapshotIssuer.has_value(), "Wiped VDisk did not receive the block through full sync");
+        env.WithQueueId(vdiskId, NKikimrBlobStorage::GetFastRead, [&](const TActorId& queue) {
+            const auto reply = env.SyncQuery<TEvBlobStorage::TEvVGetBlockResult, TEvBlobStorage::TEvVGetBlock>(
+                queue, tabletId, vdiskId, TInstant::Max());
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetGeneration(), blockedGeneration);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(sendBlock(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(*snapshotIssuer, issuerGuid);
     }
 
     Y_UNIT_TEST(BlocksRacingViaSyncLog) {

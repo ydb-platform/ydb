@@ -186,6 +186,10 @@ namespace NKikimr {
                 ui64 lsn,
                 const TReplySender &replySender);
 
+        TBlocksCache::TSnapshot GetBlocksCacheSnapshot() const {
+            return BlocksCache.GetSnapshot();
+        }
+
         bool GetBlocked(ui64 tabletID, ui32 *outGen) {
             return BlocksCache.Find(tabletID, outGen);
         }

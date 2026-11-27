@@ -520,14 +520,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT_C(ast.Contains("DqCnMerge"), "Expected a merge connection out of the read stage, AST: " << ast);
         }
 
-        // ORDER BY a DESC (PK) LIMIT 3: the ascending direction is not pushed here, so
-        // WideTopSort stays and the read settings must not carry "Sorted".
+        // ORDER BY a DESC (PK) LIMIT 3: as in the old optimizer, the read returns its rows in the reverse
+        // key order ("Reverse"), so there is no sort either.
         {
             auto ast = explainAst("SELECT a FROM `/Root/t1` ORDER BY a DESC LIMIT 3;");
-            UNIT_ASSERT_C(!ast.Contains("'\"Sorted\""),
-                "ASC-only pushdown; DESC must not push \"Sorted\" into the read, AST: " << ast);
-            UNIT_ASSERT_C(ast.Contains("WideTopSort"),
-                "WideTopSort must stay for ORDER BY PK DESC LIMIT, AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("'\"Sorted\"") && ast.Contains("'\"Reverse\""),
+                "Expected a read in the reverse key order, AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("WideTopSort"), "The reverse row read needs no sort, AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("DqCnMerge"), "Expected a merge connection out of the read stage, AST: " << ast);
         }
 
         // Negative control: ORDER BY b (non-PK) LIMIT 3 -> no pushdown, WideTopSort stays,
@@ -1456,6 +1456,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             bool SortedRead;
             // Whether the read takes the limit of the sort.
             bool ReadLimit;
+            // Whether the read returns its rows in the reverse key order.
+            bool Reverse = false;
         };
 
         const std::vector<TCase> cases = {
@@ -1468,10 +1470,15 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             // A map can rename the sort keys, and the sort keys can skip the point prefix of the key range.
             {"select a as x, b as y from `/Root/t` where c > 3 order by x, y limit 2", "[[1;1];[1;2]]", true, false},
             {"select a, b from `/Root/t` where a = 1 and c > 5 order by b limit 1", "[[1;1]]", true, false},
-            // The sort stays for keys out of the key order, for a computed key and for the descending order.
+            // As in the old optimizer, a descending sort by the key is a read in the reverse key order.
+            {"select a, b from `/Root/t` order by a desc, b desc limit 2", "[[2;2];[2;1]]", true, true, true},
+            {"select a, b from `/Root/t` where c > 3 order by a desc, b desc limit 2", "[[2;2];[1;2]]", true, false, true},
+            {"select a, b from `/Root/t` order by a desc, b desc", "[[2;2];[2;1];[1;2];[1;1];[0;9]]", true, false, true},
+            {"select a, b from `/Root/t` where a = 1 order by b desc limit 1", "[[1;2]]", true, true, true},
+            // The sort stays for keys out of the key order, for a computed key and for keys in both directions.
             {"select a, b from `/Root/t` where c > 3 order by c limit 2", "[[2;2];[1;2]]", false, false},
             {"select a + b as s from `/Root/t` where c > 3 order by s limit 2", "[[2];[3]]", false, false},
-            {"select a, b from `/Root/t` where c > 3 order by a desc, b desc limit 2", "[[2;2];[1;2]]", false, false},
+            {"select a, b from `/Root/t` order by a desc, b limit 2", "[[2;1];[2;2]]", false, false},
         };
 
         auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
@@ -1491,6 +1498,341 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 UNIT_ASSERT_C(ast.Contains("DqCnMerge"), query << ": expected a merge connection out of the read stage, ast: " << ast);
             }
             UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("'\"ItemsLimit\""), testCase.ReadLimit, query << ", ast: " << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("'\"Reverse\""), testCase.Reverse, query << ", ast: " << ast);
+
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYson(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // NULL is smaller than any value, both in the key order of a datashard table and in the sorts of YQL. So a read in
+    // the key order returns NULLs first, as an ascending sort does, and a read in the reverse order returns them last,
+    // as a descending sort does.
+    Y_UNIT_TEST(SortByNullableKeyOverRowRead) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // Several shards, so that the merge of the read tasks decides the order of the result.
+        const auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/n` (
+                a Int64,
+                b Int64,
+                c Int64,
+                PRIMARY KEY (a, b)
+            ) WITH (PARTITION_AT_KEYS = (1));
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [a, b, c] : std::vector<std::tuple<std::optional<i64>, std::optional<i64>, i64>>{
+                {std::nullopt, std::nullopt, 1}, {std::nullopt, 1, 2}, {0, std::nullopt, 3}, {0, 1, 4}, {1, 2, 5}, {2, std::nullopt, 6}}) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("a").OptionalInt64(a)
+                .AddMember("b").OptionalInt64(b)
+                .AddMember("c").OptionalInt64(c)
+            .EndStruct();
+        }
+        rows.EndList();
+        const auto rowsResult = db.BulkUpsert("/Root/n", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(rowsResult.IsSuccess(), rowsResult.GetIssues().ToString());
+
+        const std::vector<std::pair<TString, TString>> cases = {
+            {"select a, b from `/Root/n` order by a desc, b desc", "[[[2];#];[[1];[2]];[[0];[1]];[[0];#];[#;[1]];[#;#]]"},
+            {"select a, b from `/Root/n` order by a desc, b desc limit 3", "[[[2];#];[[1];[2]];[[0];[1]]]"},
+            {"select a, b from `/Root/n` order by a, b", "[[#;#];[#;[1]];[[0];#];[[0];[1]];[[1];[2]];[[2];#]]"},
+            {"select a, b from `/Root/n` order by a, b limit 3", "[[#;#];[#;[1]];[[0];#]]"},
+            // The second key column after a point of the first one, which can be NULL as well.
+            {"select b from `/Root/n` where a = 0 order by b desc", "[[[1]];[#]]"},
+            {"select b from `/Root/n` where a is null order by b desc", "[[[1]];[#]]"},
+        };
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& [sql, expected] : cases) {
+            const TString query = "PRAGMA YqlSelect = 'force'; " + sql + ";";
+            auto explain = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString ast{*explain.GetStats()->GetAst()};
+            UNIT_ASSERT_C(ast.Contains("'\"Sorted\"") && !ast.Contains("TopSort") && !ast.Contains("WideSort") && !ast.Contains("(Sort "),
+                query << ": expected a sorted read and no sort, ast: " << ast);
+
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // As in the old optimizer, a top-N sort over a row table read without ranges reads the table through an index
+    // whose key order matches the sort and that covers the read, so the read stops at the limit.
+    Y_UNIT_TEST(TopSortSelectsIndex) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // Several shards, so that the merge of the read tasks decides the order of the result.
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64,
+                s String,
+                PRIMARY KEY (a, b)
+            ) WITH (PARTITION_AT_KEYS = (1, 2));
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [a, b, c, s] : std::vector<std::tuple<i64, i64, std::optional<i64>, std::string>>{
+                {0, 9, 5, "e"}, {1, 1, std::nullopt, "d"}, {1, 2, 3, "c"}, {2, 1, 1, "b"}, {2, 2, 4, "a"}}) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("a").Int64(a)
+                .AddMember("b").Int64(b)
+                .AddMember("c").OptionalInt64(c)
+                .AddMember("s").OptionalString(s)
+            .EndStruct();
+        }
+        rows.EndList();
+        const auto rowsResult = db.BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(rowsResult.IsSuccess(), rowsResult.GetIssues().ToString());
+
+        // The indexes are built over the loaded rows.
+        for (const auto* index : {"ALTER TABLE `/Root/t` ADD INDEX idx_c GLOBAL ON (c)",
+                                  "ALTER TABLE `/Root/t` ADD INDEX idx_s GLOBAL ON (s) COVER (c)"}) {
+            schemeResult = session.ExecuteSchemeQuery(index).GetValueSync();
+            UNIT_ASSERT_C(schemeResult.IsSuccess(), index << ": " << schemeResult.GetIssues().ToString());
+        }
+
+        struct TCase {
+            TString Query;
+            TString Expected;
+            // The table the query reads, a path relative to /Root.
+            TString Table;
+            // Whether the read returns the rows in the order of the sort and takes its limit, so the plan has no sort.
+            bool SortedRead;
+            bool Reverse = false;
+        };
+
+        const std::vector<TCase> cases = {
+            // NULLs come first in the key order of the index, as in an ascending sort.
+            {"select a, b, c from `/Root/t` order by c limit 2", "[[1;1;#];[2;1;[1]]]", "t/idx_c/indexImplTable", true},
+            {"select a, b, c from `/Root/t` order by c desc limit 2", "[[0;9;[5]];[2;2;[4]]]", "t/idx_c/indexImplTable", true, true},
+            // The sort keys may continue with the key of the main table, which ends the key of the index.
+            {"select c, a from `/Root/t` order by c, a limit 3", "[[#;1];[[1];2];[[3];1]]", "t/idx_c/indexImplTable", true},
+            // A map can rename the sort keys.
+            {"select a as x, c as y from `/Root/t` order by y limit 2", "[[1;#];[2;[1]]]", "t/idx_c/indexImplTable", true},
+            // An index covers its own columns, those of the main table key and those it stores.
+            {"select a, b, c from `/Root/t` order by s limit 2", "[[2;2;[4]];[2;1;[1]]]", "t/idx_s/indexImplTable", true},
+            // The main table is read in the order of its key without an index.
+            {"select a, b, c from `/Root/t` order by a, b limit 2", "[[0;9;[5]];[1;1;#]]", "t", true},
+            // An index that does not cover the read is not chosen, it needs a lookup into the main table.
+            {"select a, b, s from `/Root/t` order by c limit 2", "[[1;1;[\"d\"]];[2;1;[\"b\"]]]", "t", false},
+        };
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = "PRAGMA YqlSelect = 'force'; " + testCase.Query + ";";
+            auto explain = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString ast{*explain.GetStats()->GetAst()};
+            UNIT_ASSERT_C(ast.Contains("(KqpTable '\"/Root/" + testCase.Table + "\""), query << ": expected a read of " << testCase.Table << ", ast: " << ast);
+            if (testCase.Table == "t") {
+                UNIT_ASSERT_C(!ast.Contains("indexImplTable"), query << ": expected no index read, ast: " << ast);
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("'\"Sorted\""), testCase.SortedRead, query << ", ast: " << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("TopSort"), !testCase.SortedRead, query << ", ast: " << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("'\"ItemsLimit\""), testCase.SortedRead, query << ", ast: " << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("'\"Reverse\""), testCase.Reverse, query << ", ast: " << ast);
+
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYson(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // As in the old optimizer, VIEW PRIMARY KEY and disabled automatic index selection keep a read on the main table,
+    // both for a filter and for a top-N sort, while an explicit VIEW of an index still reads the index.
+    Y_UNIT_TEST(ViewPrimaryKeyKeepsMainTable) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64,
+                PRIMARY KEY (a, b)
+            ) WITH (PARTITION_AT_KEYS = (1, 2));
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [a, b, c] : std::vector<std::tuple<i64, i64, std::optional<i64>>>{
+                {0, 9, 5}, {1, 1, std::nullopt}, {1, 2, 3}, {2, 1, 1}, {2, 2, 4}}) {
+            rows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("b").Int64(b).AddMember("c").OptionalInt64(c).EndStruct();
+        }
+        rows.EndList();
+        const auto rowsResult = db.BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(rowsResult.IsSuccess(), rowsResult.GetIssues().ToString());
+
+        // The index is built over the loaded rows.
+        schemeResult = session.ExecuteSchemeQuery("ALTER TABLE `/Root/t` ADD INDEX idx_c GLOBAL ON (c)").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        const TString noAutoIndex = "PRAGMA ydb.OptDisableAutoIndexSelection = 'true'; ";
+        struct TCase {
+            TString Query;
+            TString Expected;
+            // Whether the query reads the index.
+            bool ReadsIndex;
+        };
+        const std::vector<TCase> cases = {
+            {"select a, b from `/Root/t` where c = 4", "[[2;2]]", true},
+            {"select a, b from `/Root/t` view primary key where c = 4", "[[2;2]]", false},
+            {noAutoIndex + "select a, b from `/Root/t` where c = 4", "[[2;2]]", false},
+            {"select a, b, c from `/Root/t` order by c limit 2", "[[1;1;#];[2;1;[1]]]", true},
+            {"select a, b, c from `/Root/t` view primary key order by c limit 2", "[[1;1;#];[2;1;[1]]]", false},
+            {noAutoIndex + "select a, b, c from `/Root/t` order by c limit 2", "[[1;1;#];[2;1;[1]]]", false},
+            // An explicit index is read whatever the automatic selection does.
+            {noAutoIndex + "select a, b from `/Root/t` view idx_c where c = 4", "[[2;2]]", true},
+        };
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = "PRAGMA YqlSelect = 'force'; " + testCase.Query + ";";
+            auto explain = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString ast{*explain.GetStats()->GetAst()};
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("(KqpTable '\"/Root/t/idx_c/indexImplTable\""), testCase.ReadsIndex,
+                query << ", ast: " << ast);
+
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYson(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // As in the old optimizer, a read of the index named by VIEW reads the index with the ranges of the predicate and
+    // only the columns the query needs, so it looks the rows up in the main table only when the index does not cover
+    // them. A lookup join probes the index. Without ranges the whole index is read, with a warning.
+    Y_UNIT_TEST(ViewIndexRead) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64,
+                s String,
+                PRIMARY KEY (a, b)
+            ) WITH (PARTITION_AT_KEYS = (1, 2));
+
+            CREATE TABLE `/Root/dim` (
+                a Int64,
+                d Int64,
+                PRIMARY KEY (a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [a, b, c, s] : std::vector<std::tuple<i64, i64, std::optional<i64>, std::string>>{
+                {0, 9, 5, "e"}, {1, 1, std::nullopt, "d"}, {1, 2, 3, "c"}, {2, 1, 1, "b"}, {2, 2, 4, "a"}}) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("a").Int64(a)
+                .AddMember("b").Int64(b)
+                .AddMember("c").OptionalInt64(c)
+                .AddMember("s").OptionalString(s)
+            .EndStruct();
+        }
+        rows.EndList();
+        const auto rowsResult = db.BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(rowsResult.IsSuccess(), rowsResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder dimRows;
+        dimRows.BeginList();
+        for (const auto& [a, d] : std::vector<std::pair<i64, i64>>{{1, 10}, {3, 30}, {4, 40}, {7, 70}}) {
+            dimRows.AddListItem().BeginStruct().AddMember("a").OptionalInt64(a).AddMember("d").OptionalInt64(d).EndStruct();
+        }
+        dimRows.EndList();
+        const auto dimResult = db.BulkUpsert("/Root/dim", dimRows.Build()).GetValueSync();
+        UNIT_ASSERT_C(dimResult.IsSuccess(), dimResult.GetIssues().ToString());
+
+        // The index is built over the loaded rows.
+        schemeResult = session.ExecuteSchemeQuery("ALTER TABLE `/Root/t` ADD INDEX idx_c GLOBAL ON (c)").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        struct TCase {
+            TString Query;
+            TString Expected;
+            // Whether the read of the index takes the ranges of the predicate.
+            bool Ranges;
+            // Whether the rows found in the index are looked up in the main table.
+            bool MainLookup;
+            // Whether a lookup join probes the index.
+            bool LookupJoin = false;
+            // Whether the filter runs on the index, before the rows are looked up in the main table.
+            bool FilterOnIndex = false;
+        };
+        const std::vector<TCase> cases = {
+            // The index covers the main table key.
+            {"select a, b from `/Root/t` view idx_c where c = 4", "[[2;2]]", true, false},
+            {"select a, b, s from `/Root/t` view idx_c where c = 4", "[[2;2;[\"a\"]]]", true, true},
+            // The index can not evaluate the rest of the predicate, which filters the rows looked up in the main table.
+            {"select a, b, s from `/Root/t` view idx_c where c >= 3 and s = 'a'", "[[2;2;[\"a\"]]]", true, true},
+            {"select c from `/Root/t` view idx_c where c > 3 order by c limit 1", "[[[4]]]", true, false},
+            {"select a, b from `/Root/t` view idx_c order by a, b", "[[0;9];[1;1];[1;2];[2;1];[2;2]]", false, false},
+            {"select a, s from `/Root/t` view idx_c where s = 'b'", "[[2;[\"b\"]]]", false, true},
+            // A filter without ranges which needs only the columns of the index runs on the index.
+            {"select a, s from `/Root/t` view idx_c where c + 0 = 4", "[[2;[\"a\"]]]", false, true, false, true},
+            {"select d.d, t.a, t.b from `/Root/dim` as d join `/Root/t` view idx_c as t on t.c = d.a order by d.d",
+                "[[[10];2;1];[[30];1;2];[[40];2;2]]", false, false, true},
+            {"select d.d, t.a, t.s from `/Root/dim` as d join `/Root/t` view idx_c as t on t.c = d.a order by d.d",
+                "[[[10];2;[\"b\"]];[[30];1;[\"c\"]];[[40];2;[\"a\"]]]", false, true, true},
+        };
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = "PRAGMA YqlSelect = 'force'; " + testCase.Query + ";";
+            auto explain = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString ast{*explain.GetStats()->GetAst()};
+            UNIT_ASSERT_C(ast.Contains("(KqpTable '\"/Root/t/idx_c/indexImplTable\""), query << ": expected an index read, ast: " << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("KqlKey"), testCase.Ranges, query << ", ast: " << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("(KqpTable '\"/Root/t\""), testCase.MainLookup, query << ", ast: " << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("LookupJoinRows"), testCase.LookupJoin, query << ", ast: " << ast);
+            if (testCase.MainLookup && !testCase.LookupJoin) {
+                // The stage which reads the index comes before the lookup in the plan.
+                UNIT_ASSERT_VALUES_EQUAL_C(ast.find("Filter") < ast.find("KqpCnStreamLookup"), testCase.FilterOnIndex,
+                    query << ", ast: " << ast);
+            }
+            const bool wholeIndex = !testCase.Ranges && !testCase.LookupJoin;
+            const TString issues{explain.GetIssues().ToString()};
+            UNIT_ASSERT_VALUES_EQUAL_C(issues.Contains("Given predicate is not suitable for used index: idx_c"), wholeIndex,
+                query << ": " << issues);
 
             auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
@@ -1718,6 +2060,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             {"select a, b, s from `/Root/t` view idx_c where c = 4"},
             {"select c from `/Root/t` view idx_c where c > 3 order by c limit 1"},
             {"select c from `/Root/t` view idx_s where s = 'x2'"},
+            {"select a, b, s from `/Root/t` view idx_c where c >= 4 and s = 'x4'"},
+            {"select a, b from `/Root/t` view idx_c"},
+            {"select a, s from `/Root/t` view idx_c where s = 'x3'"},
+            {"select a, s from `/Root/t` view idx_c where c + 0 = 4"},
+            {"select d.d, t.a, t.s from `/Root/dim` as d join `/Root/t` view idx_c as t on t.c = d.a"},
+            {"select d.d, t.a, t.b from `/Root/dim` as d join `/Root/t` view idx_c as t on t.c = d.a where t.c > 1"},
             // Unions and nested selects.
             {"select a from `/Root/t` where a = 1 union all select a from `/Root/t` where a = 2"},
             {"select a from (select a, b from `/Root/t` where a > 0) where b = 1"},

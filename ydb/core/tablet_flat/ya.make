@@ -109,7 +109,6 @@ GENERATE_ENUM_SERIALIZATION(flat_executor_recovery.h)
 GENERATE_ENUM_SERIALIZATION(flat_executor_vacuum_logic.h)
 GENERATE_ENUM_SERIALIZATION(flat_page_iface.h)
 GENERATE_ENUM_SERIALIZATION(flat_part_loader.h)
-GENERATE_ENUM_SERIALIZATION(flat_row_eggs.h)
 GENERATE_ENUM_SERIALIZATION(flat_scan_iface.h)
 GENERATE_ENUM_SERIALIZATION(shared_cache_s3fifo.h)
 GENERATE_ENUM_SERIALIZATION(shared_cache_events.h)
@@ -141,6 +140,7 @@ PEERDIR(
     ydb/core/control/lib
     ydb/core/protos
     ydb/core/tablet
+    ydb/core/tablet_flat/base
     ydb/core/tablet_flat/protos
     ydb/core/util
     ydb/core/io_formats/json
@@ -150,6 +150,10 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    base
+)
 
 RECURSE_FOR_TESTS(
     test

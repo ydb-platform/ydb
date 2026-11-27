@@ -845,17 +845,9 @@ TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const T
 
 namespace {
 
-const TTypeAnnotationNode* SkipTagged(const TTypeAnnotationNode* type) {
-    while (type->GetKind() == ETypeAnnotationKind::Tagged) {
-        type = type->Cast<TTaggedExprType>()->GetBaseType();
-    }
-    return type;
-}
-
 bool IsScalarColumnType(const TTypeAnnotationNode* type) {
     switch (type->GetKind()) {
         case ETypeAnnotationKind::Data:
-        case ETypeAnnotationKind::Pg:
         case ETypeAnnotationKind::Void:
         case ETypeAnnotationKind::Null:
         case ETypeAnnotationKind::EmptyList:
@@ -887,23 +879,12 @@ bool IsScalarColumnType(const TTypeAnnotationNode* type) {
             return true;
         case ETypeAnnotationKind::Variant:
             return IsScalarColumnType(type->Cast<TVariantExprType>()->GetUnderlyingType());
+        case ETypeAnnotationKind::Pg:
+            // The scalar hash join runtime rejects Pg. Keep MapJoinCore for these joins.
+            return false;
         default:
             return false;
     }
-}
-
-// Keep the existing Pg key path: types without presort need IHash/IEquate.
-bool IsScalarKeyType(const TTypeAnnotationNode* type, bool nullableSide) {
-    type = SkipTagged(type);
-    if (type->GetKind() == ETypeAnnotationKind::Pg) {
-        return !nullableSide;
-    }
-    if (type->GetKind() == ETypeAnnotationKind::Optional
-        && SkipTagged(type->Cast<TOptionalExprType>()->GetItemType())->GetKind() == ETypeAnnotationKind::Pg)
-    {
-        return false;
-    }
-    return IsScalarColumnType(type);
 }
 
 } // anonymous namespace
@@ -933,7 +914,6 @@ bool DqCanUseScalarHashJoin(const TDqJoin& join, TExprContext& ctx) {
             return false;
         }
     }
-    const bool rightNullable = joinType == "Left"sv;
     for (const auto* item : rightStructType->GetItems()) {
         if (!IsScalarColumnType(item->GetItemType())) {
             return false;
@@ -947,9 +927,7 @@ bool DqCanUseScalarHashJoin(const TDqJoin& join, TExprContext& ctx) {
         if (!leftKeyType || !rightKeyType) {
             return false;
         }
-        if (!IsScalarKeyType(leftKeyType, false)
-            || !IsScalarKeyType(rightKeyType, rightNullable))
-        {
+        if (!IsScalarColumnType(leftKeyType) || !IsScalarColumnType(rightKeyType)) {
             return false;
         }
         bool hasOptional = false;

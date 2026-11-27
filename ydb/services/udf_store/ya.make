@@ -18,13 +18,18 @@ SRCS(
 PEERDIR(
     library/cpp/digest/md5
     library/cpp/json
+    library/cpp/monlib/dynamic_counters
     ydb/core/base
     ydb/core/keyvalue
     ydb/core/kqp/common/dynamic_function_registry
+    ydb/core/protos
     ydb/core/tx/scheme_cache
+    ydb/library/accessor
     ydb/library/aclib
     ydb/library/actors/core
+    ydb/library/services
     ydb/library/table_creator
+    ydb/public/api/protos
     ydb/public/lib/udf/manifest
     ydb/services/metadata
     ydb/services/metadata/abstract

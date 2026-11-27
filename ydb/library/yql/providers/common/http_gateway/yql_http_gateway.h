@@ -2,7 +2,7 @@
 
 #include "yql_http_header.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
+#include <ydb/library/yql/dq/actors/common/dq_schedulable.h>
 
 #include <contrib/libs/curl/include/curl/curl.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>

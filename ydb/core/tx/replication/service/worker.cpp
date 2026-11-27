@@ -4,7 +4,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/counters_replication.pb.h>
-#include <ydb/core/transfer/transfer_writer.h>
+#include <ydb/core/tx/replication/common/transfer_writer_stats.h>
 #include <ydb/core/tx/replication/common/schema_change.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -961,7 +961,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         if (ev->Get()->Tag == LagReportWakeupTag) {
             return ReportLag();
         }
-        AFL_VERIFY(ev->Get()->Tag == SourceOffsetCommitWakeupTag);
+        YDB_LOG_VERIFY(ev->Get()->Tag == SourceOffsetCommitWakeupTag);
         Schedule(SourceOffsetCommitInterval, new TEvents::TEvWakeup(SourceOffsetCommitWakeupTag));
         if (!IsReaderValidated() || PendingSchemaChange || PendingWriterCheckpoint
             || !CompletedSourceOffset || *CompletedSourceOffset <= ReaderCommittedOffset.GetOrElse(0))

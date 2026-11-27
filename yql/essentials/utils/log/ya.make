@@ -22,6 +22,11 @@ PEERDIR(
     yql/essentials/utils
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    quality/relev_tools/personalization/user_history/antifraud/udf/library
+)
+
 END()
 
 RECURSE_FOR_TESTS(

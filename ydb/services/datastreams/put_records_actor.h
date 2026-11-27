@@ -3,6 +3,7 @@
 #include "datastreams_proxy.h"
 #include "events.h"
 
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
@@ -39,7 +40,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         TString str;
         bool res = proto.SerializeToString(&str);
-        AFL_ENSURE(res);
+        YDB_LOG_ENSURE(res);
         return str;
     }
 
@@ -133,8 +134,9 @@ namespace NKikimr::NDataStreams::V1 {
                 return;
             }
 
-            AFL_ENSURE(ev->Get()->Record.HasPartitionResponse());
-            AFL_ENSURE(ev->Get()->Record.GetPartitionResponse().GetCmdWriteResult().size() > 0)("reason", "Wrong number of cmd write commands");
+            YDB_LOG_ENSURE(ev->Get()->Record.HasPartitionResponse());
+            YDB_LOG_ENSURE(ev->Get()->Record.GetPartitionResponse().GetCmdWriteResult().size() > 0,
+                {"reason", "Wrong number of cmd write commands"});
             auto offset = ev->Get()->Record.GetPartitionResponse().GetCmdWriteResult(0).GetOffset();
             ReplySuccessAndDie(ctx, offset);
         }
@@ -275,7 +277,7 @@ namespace NKikimr::NDataStreams::V1 {
             , TRlHelpers({}, request, 4_KB, false, TDuration::Seconds(1))
             , Ip(request->GetPeerName())
     {
-        AFL_ENSURE(request);
+        YDB_LOG_ENSURE(request);
     }
 
     template<class TDerived, class TProto>
@@ -360,7 +362,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         if (IsQuotaRequired()) {
             const auto ru = 1 + CalcRuConsumption(GetPayloadSize());
-            AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, this->ActorContext()));
+            YDB_LOG_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, this->ActorContext()));
         } else {
             Write(this->ActorContext());
         }
@@ -405,7 +407,7 @@ namespace NKikimr::NDataStreams::V1 {
     template<class TDerived, class TProto>
     void TPutRecordsActorBase<TDerived, TProto>::Handle(NDataStreams::V1::TEvDataStreams::TEvPartitionActorResult::TPtr& ev, const TActorContext& ctx) {
         auto it = PartitionToActor.find(ev->Get()->PartitionId);
-        AFL_ENSURE(it != PartitionToActor.end());
+        YDB_LOG_ENSURE(it != PartitionToActor.end());
         if (ev->Get()->ErrorText.Defined()) {
             PutRecordsResult.set_failed_record_count(
                     PutRecordsResult.failed_record_count() + it->second.RecordIndexes.size());

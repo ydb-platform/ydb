@@ -6829,7 +6829,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST_TWIN(DefaultNullTableServiceCreateAndWrite, CompileTimeDefaults) {
-        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults, false));
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults, false).SetDisablePgCompatibility(false));
         for (const bool optionalLiteral : {false, true}) {
             Ydb::Table::CreateTableRequest request;
             UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
@@ -7070,7 +7070,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST_TWIN(DefaultNullCreateAndWrite, CompileTimeDefaults) {
-        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults));
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults).SetDisablePgCompatibility(false));
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,
@@ -7155,7 +7155,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST_TWIN(DefaultNullBulkUpsert, CompileTimeDefaults) {
-        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults));
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults).SetDisablePgCompatibility(false));
         fixture.Exec(R"(
             CREATE TABLE BulkTable (k Int32 NOT NULL, value String DEFAULT NULL,
                 number Uint32 DEFAULT NULL, pg_text PgText DEFAULT NULL, plain String, PRIMARY KEY (k));
@@ -7219,7 +7219,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST_TWIN(DefaultNullAddWithoutBackfill, CompileTimeDefaults) {
-        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults));
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults).SetDisablePgCompatibility(false));
         fixture.Exec("CREATE TABLE TestTable (k Int32 NOT NULL, value String, PRIMARY KEY (k));");
         fixture.Exec("INSERT INTO TestTable (k, value) VALUES (1, 'existing'), (2, NULL);");
         fixture.Exec("ALTER TABLE TestTable ADD COLUMN extra Uint32 DEFAULT NULL;");
@@ -7601,7 +7601,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST_TWIN(DefaultNullPostgreSqlTypes, CompileTimeDefaults) {
-        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults));
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults).SetDisablePgCompatibility(false));
         fixture.Exec(R"(
             CREATE TABLE TestTable (k Int32 NOT NULL,
                 value PgText DEFAULT 'original'pt, number PgInt4 DEFAULT NULL, PRIMARY KEY (k));
@@ -7624,7 +7624,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(DefaultNullConstraintValidation) {
-        TConstraintsFixture fixture(DefaultsSettings(true));
+        TConstraintsFixture fixture(DefaultsSettings(true).SetDisablePgCompatibility(false));
         fixture.Reject(R"(
             CREATE TABLE TestTable (k Int32 NOT NULL,
                 value Int32 DEFAULT NULL GENERATED ALWAYS AS (k + 1) STORED, PRIMARY KEY (k));
@@ -7662,7 +7662,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST_TWIN(DefaultNullExpressionCreateAndWrite, CompileTimeDefaults) {
-        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults));
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults).SetDisablePgCompatibility(false));
         fixture.Exec(R"(
             CREATE TABLE TestTable (k Int32 NOT NULL,
                 value String DEFAULT CAST(NULL AS String),
@@ -7685,7 +7685,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST_TWIN(DefaultNullExpressionAddWithoutBackfill, CompileTimeDefaults) {
-        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults));
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults).SetDisablePgCompatibility(false));
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,

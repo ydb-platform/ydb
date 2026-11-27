@@ -23,8 +23,7 @@ namespace NKikimr::NGroupSyncer {
         // bytes of the blobs counted in BytesToCopy that need no copying any more: written to the target, or gone from
         // the source
         std::atomic_uint64_t BytesCopied = 0;
-        // the scan has gone over all the blobs, so BytesToCopy is not going to grow any more, unless the target loses
-        // a blob it has been found to have
+        // The blob scan and the target reads that can add to BytesToCopy have finished.
         std::atomic_bool ScanFinished = false;
     };
 

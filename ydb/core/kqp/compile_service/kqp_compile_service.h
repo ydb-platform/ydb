@@ -7,6 +7,8 @@
 
 #include <util/system/spinlock.h>
 
+#include <optional>
+
 namespace NKikimr {
 namespace NPathAliasing {
 class TPathNormalizer;
@@ -97,7 +99,7 @@ public:
         return FindByUidImpl(uid, promote);
     }
 
-    void Replace(const TKqpCompileResult::TConstPtr& compileResult);
+    bool Replace(const TKqpCompileResult::TConstPtr& compileResult);
 
     TKqpCompileResult::TConstPtr FindByQuery(const TKqpQueryId& query, bool promote) {
         TGuard<TAdaptiveLock> guard(Lock);
@@ -109,6 +111,7 @@ public:
     TKqpCompileResult::TConstPtr Find(
         const TMaybe<TString>& uid,
         TMaybe<TKqpQueryId>& query,
+        bool disablePgCompatibility,
         TKqpTempTablesState::TConstPtr tempTablesState,
         bool promote,
         const NACLib::TSID& userSid,
@@ -121,6 +124,12 @@ public:
     bool EraseByUid(const TString& uid) {
         TGuard<TAdaptiveLock> guard(Lock);
         return EraseByUidImpl(uid);
+    }
+
+    bool EraseIfCurrent(const TKqpCompileResult::TConstPtr& compileResult) {
+        TGuard<TAdaptiveLock> guard(Lock);
+        const auto& uid = compileResult->Uid;
+        return FindByUidImpl(uid, false) == compileResult && EraseByUidImpl(uid);
     }
 
     size_t Size() const {
@@ -143,7 +152,7 @@ public:
     void Clear();
 
 private:
-    TKqpCompileResult::TConstPtr FindByUidImpl(const TString& uid, bool promote);
+    TKqpCompileResult::TConstPtr FindByUidImpl(const TString& uid, bool promote, std::optional<bool> disablePgCompatibility = std::nullopt);
     TKqpCompileResult::TConstPtr FindByQueryImpl(const TKqpQueryId& query, bool promote);
     bool EraseByUidImpl(const TString& uid);
 
@@ -151,6 +160,7 @@ private:
         return Index.size();
     }
 
+    void EraseQueryIndex(const TKqpCompileResult& compileResult);
     void InsertQuery(const TKqpCompileResult::TConstPtr& compileResult);
 
     void DecBytes(ui64 bytes) {

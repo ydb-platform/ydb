@@ -132,6 +132,10 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& no
     if (target) {
         return true;
     }
+    // The checks below probe the read table, which a read of the index named by VIEW does not.
+    if (!read->ForceIndex.empty()) {
+        return false;
+    }
 
     bool filterSupported = true;
     const auto fetchedRowFilter = BuildFetchedRowFilter(*read, rightFilter, filterSupported);

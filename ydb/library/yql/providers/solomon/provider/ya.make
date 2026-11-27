@@ -38,6 +38,7 @@ PEERDIR(
     yql/essentials/core/dq_integration
     yql/essentials/providers/common/config
     yql/essentials/providers/common/config/transformer
+    yql/essentials/providers/common/dq
     yql/essentials/providers/common/proto
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/transform
@@ -48,3 +49,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

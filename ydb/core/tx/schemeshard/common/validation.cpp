@@ -89,4 +89,21 @@ bool TTTLValidator::ValidateTiers(const google::protobuf::RepeatedPtrField<NKiki
     return true;
 }
 
+bool IsValidTableKey(TConstArrayRef<TCell> cells, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    if (cells.size() != keyTypes.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < keyTypes.size(); ++i) {
+        if (NScheme::HasUnexpectedValueSize(cells[i], keyTypes[i])) {
+            return false;
+        }
+        if (!cells[i].IsNull() && keyTypes[i].GetTypeId() == NScheme::NTypeIds::Pg
+            && NPg::PgNativeBinaryValidate(cells[i].AsBuf(), keyTypes[i].GetPgTypeDesc()))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 }

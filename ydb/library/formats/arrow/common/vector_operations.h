@@ -22,20 +22,20 @@ void EraseItems(std::vector<T>& container, const std::vector<ui32>& idxsToErase,
     if (idxsToErase.empty()) {
         return;
     }
-    AFL_VERIFY(idxsToErase.front() < container.size());
+    YDB_LOG_VERIFY(idxsToErase.front() < container.size());
 
     auto itNextEraseIdx = idxsToErase.begin();
     ui64 writeIdx = idxsToErase.front();
     ui64 readIdx = idxsToErase.front();
     while (readIdx != container.size()) {
-        AFL_VERIFY(itNextEraseIdx != idxsToErase.end() && readIdx == *itNextEraseIdx);
+        YDB_LOG_VERIFY(itNextEraseIdx != idxsToErase.end() && readIdx == *itNextEraseIdx);
 
         policy.OnEraseItem(container[readIdx]);
         ++readIdx;
         ++itNextEraseIdx;
         if (itNextEraseIdx != idxsToErase.end()) {
-            AFL_VERIFY(*itNextEraseIdx > *std::prev(itNextEraseIdx));
-            AFL_VERIFY(*itNextEraseIdx < container.size());
+            YDB_LOG_VERIFY(*itNextEraseIdx > *std::prev(itNextEraseIdx));
+            YDB_LOG_VERIFY(*itNextEraseIdx < container.size());
         }
 
         const ui64 nextReadIdx = itNextEraseIdx == idxsToErase.end() ? container.size() : *itNextEraseIdx;
@@ -48,7 +48,7 @@ void EraseItems(std::vector<T>& container, const std::vector<ui32>& idxsToErase,
     }
 
     container.resize(writeIdx);
-    AFL_VERIFY(itNextEraseIdx == idxsToErase.end());
+    YDB_LOG_VERIFY(itNextEraseIdx == idxsToErase.end());
 }
 
 }   // namespace NKikimr::NArrow::NUtil

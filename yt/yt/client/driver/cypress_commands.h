@@ -278,20 +278,4 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TInternalizeCommand
-    : public TTypedCommand<NApi::TInternalizeNodeOptions>
-{
-public:
-    REGISTER_YSON_STRUCT_LITE(TInternalizeCommand);
-
-    static void Register(TRegistrar registrar);
-
-private:
-    NYPath::TYPath Path;
-
-    void DoExecute(ICommandContextPtr context) override;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NYT::NDriver

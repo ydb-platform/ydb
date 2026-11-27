@@ -44,12 +44,153 @@ Ydb::Table::ColumnMeta NullDefaultColumn(const TString& typeText, bool notNull, 
 }
 
 Y_UNIT_TEST_SUITE(ConvertTableDescription) {
+    Y_UNIT_TEST_TWIN(DescribeTableBuildingColumns, Finalized) {
+        NKikimrSchemeOp::TTableDescription schema;
+        const auto addColumn = [&](ui32 id, const TString& name, bool building) {
+            auto* column = schema.AddColumns();
+            column->SetId(id);
+            column->SetName(name);
+            column->SetType("Uint32");
+            column->SetIsBuildInProgress(building && !Finalized);
+            return column;
+        };
+        addColumn(1, "key", false)->SetNotNull(true);
+        auto* extra = addColumn(2, "extra", true);
+        extra->MutableDefaultFromLiteral()->mutable_type()->set_type_id(Ydb::Type::UINT32);
+        extra->MutableDefaultFromLiteral()->mutable_value()->set_uint32_value(42);
+        addColumn(3, "value", false);
+        auto* other = addColumn(4, "other", true);
+        other->MutableDefaultFromLiteral()->mutable_type()->set_type_id(Ydb::Type::UINT32);
+        other->MutableDefaultFromLiteral()->mutable_value()->set_uint32_value(73);
+        schema.AddKeyColumnIds(1);
+
+        Ydb::Table::DescribeTableResult result;
+        NKikimrMiniKQL::TType splitKeyType;
+        FillColumnDescription(result, splitKeyType, schema);
+
+        UNIT_ASSERT_VALUES_EQUAL(result.columns_size(), Finalized ? 4 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(result.columns(0).name(), "key");
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(result.columns(0).type().type_id()), static_cast<int>(Ydb::Type::UINT32));
+        const auto& value = result.columns(Finalized ? 2 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(value.name(), "value");
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(value.type().optional_type().item().type_id()), static_cast<int>(Ydb::Type::UINT32));
+        if constexpr (Finalized) {
+            UNIT_ASSERT_VALUES_EQUAL(result.columns(1).name(), "extra");
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(result.columns(1).from_literal().type().type_id()), static_cast<int>(Ydb::Type::UINT32));
+            UNIT_ASSERT_VALUES_EQUAL(result.columns(1).from_literal().value().uint32_value(), 42);
+            UNIT_ASSERT_VALUES_EQUAL(result.columns(3).name(), "other");
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(result.columns(3).from_literal().type().type_id()), static_cast<int>(Ydb::Type::UINT32));
+            UNIT_ASSERT_VALUES_EQUAL(result.columns(3).from_literal().value().uint32_value(), 73);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(1).GetIsBuildInProgress(), !Finalized);
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(3).GetIsBuildInProgress(), !Finalized);
+    }
+
     NKikimrSchemeOp::TModifyScheme BuildInternalAlter(const NKikimrKqp::TKqpAlterTableRequest& request) {
         NKikimrSchemeOp::TModifyScheme result;
         auto status = Ydb::StatusIds::SUCCESS;
         TString error;
         UNIT_ASSERT_C(BuildAlterTableModifyScheme(&request, &result, TTableProfiles{}, TPathId{}, status, error), error);
         return result;
+    }
+
+    NKikimrSchemeOp::TModifyScheme BuildPublicAlterWithChangefeed(Ydb::Table::Changefeed changefeed) {
+        TActorSystemStub actorSystem;
+        Ydb::Table::AlterTableRequest request;
+        request.set_path("/Root/Table");
+        changefeed.set_name("feed");
+        changefeed.set_mode(Ydb::Table::ChangefeedMode::MODE_NEW_AND_OLD_IMAGES);
+        changefeed.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+        *request.add_add_changefeeds() = std::move(changefeed);
+        NKikimrSchemeOp::TModifyScheme result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+        UNIT_ASSERT_C(BuildAlterTableModifyScheme(&request, &result, TTableProfiles{}, TPathId{}, status, error), error);
+        return result;
+    }
+
+    Y_UNIT_TEST(ChangefeedTopicMaxDefaultsToMin) {
+        Ydb::Table::Changefeed changefeed;
+        auto& settings = *changefeed.mutable_topic_partitioning_settings();
+        settings.set_min_active_partitions(64);
+        settings.mutable_auto_partitioning_settings()->set_strategy(
+            Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+
+        const auto result = BuildPublicAlterWithChangefeed(std::move(changefeed));
+        const auto& stream = result.GetCreateCdcStream();
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetTopicPartitions(), 64);
+        UNIT_ASSERT(stream.GetTopicAutoPartitioning());
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetMaxPartitionCount(), 64);
+    }
+
+    Y_UNIT_TEST(ChangefeedTopicUnsetMinMaxDefaultToFifty) {
+        Ydb::Table::Changefeed changefeed;
+        changefeed.mutable_topic_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(
+            Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+
+        const auto result = BuildPublicAlterWithChangefeed(std::move(changefeed));
+        const auto& stream = result.GetCreateCdcStream();
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetTopicPartitions(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetMaxPartitionCount(), 50);
+    }
+
+    Y_UNIT_TEST(ChangefeedTopicExplicitMaxKept) {
+        Ydb::Table::Changefeed changefeed;
+        auto& settings = *changefeed.mutable_topic_partitioning_settings();
+        settings.set_min_active_partitions(10);
+        settings.set_max_active_partitions(100);
+        settings.mutable_auto_partitioning_settings()->set_strategy(
+            Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+
+        const auto result = BuildPublicAlterWithChangefeed(std::move(changefeed));
+        const auto& stream = result.GetCreateCdcStream();
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetTopicPartitions(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetMaxPartitionCount(), 100);
+    }
+
+    Y_UNIT_TEST(ChangefeedTopicMinActivePartitionsOverflow) {
+        // 2^32 + 64 fits the public int64 field but would silently truncate
+        // to 64 in the uint32 internal fields.
+        TActorSystemStub actorSystem;
+        Ydb::Table::AlterTableRequest request;
+        request.set_path("/Root/Table");
+        auto& changefeed = *request.add_add_changefeeds();
+        changefeed.set_name("feed");
+        changefeed.set_mode(Ydb::Table::ChangefeedMode::MODE_NEW_AND_OLD_IMAGES);
+        changefeed.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+        auto& settings = *changefeed.mutable_topic_partitioning_settings();
+        settings.set_min_active_partitions(4294967360LL);
+        settings.mutable_auto_partitioning_settings()->set_strategy(
+            Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+
+        NKikimrSchemeOp::TModifyScheme result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+        UNIT_ASSERT(!BuildAlterTableModifyScheme(&request, &result, TTableProfiles{}, TPathId{}, status, error));
+        UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(error, "must not exceed");
+    }
+
+    Y_UNIT_TEST(ChangefeedTopicMaxActivePartitionsOverflow) {
+        TActorSystemStub actorSystem;
+        Ydb::Table::AlterTableRequest request;
+        request.set_path("/Root/Table");
+        auto& changefeed = *request.add_add_changefeeds();
+        changefeed.set_name("feed");
+        changefeed.set_mode(Ydb::Table::ChangefeedMode::MODE_NEW_AND_OLD_IMAGES);
+        changefeed.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+        auto& settings = *changefeed.mutable_topic_partitioning_settings();
+        settings.set_min_active_partitions(10);
+        settings.set_max_active_partitions(4294967296LL); // 2^32
+        settings.mutable_auto_partitioning_settings()->set_strategy(
+            Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+
+        NKikimrSchemeOp::TModifyScheme result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+        UNIT_ASSERT(!BuildAlterTableModifyScheme(&request, &result, TTableProfiles{}, TPathId{}, status, error));
+        UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(error, "must not exceed");
     }
 
     Y_UNIT_TEST(InternalGeneratedColumnPreservesExpression) {

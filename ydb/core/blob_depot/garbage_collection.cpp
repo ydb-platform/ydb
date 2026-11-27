@@ -95,11 +95,8 @@ namespace NKikimr::NBlobDepot {
             const TGenStep genCtr(record.GetGeneration(), record.GetPerGenerationCounter());
             const TGenStep collectGenStep(record.GetCollectGeneration(), record.GetCollectStep());
 
-            if (Self->BlocksManager->IsTabletDeleted(tabletId)) {
-                // The tablet has been deleted for good: TTxDeleteTabletData has dropped all of its
-                // keys and UpdateKey refuses to create new ones, so there is nothing left for this
-                // barrier to collect. Do not remember it either -- Hive retries the delete barrier,
-                // and recording it would resurrect the row OnTabletDeleted has just purged.
+            if (Self->DropBarriersOnTabletDeletion && Self->BlocksManager->IsTabletDeleted(tabletId)) {
+                // A retry from Hive must not recreate a purged barrier.
                 return true;
             }
 
@@ -220,7 +217,7 @@ namespace NKikimr::NBlobDepot {
 
     bool TBlobDepot::TBarrierServer::AddBarrierOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBarrier& barrier,
             ui32& maxItems, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        if (Self->BlocksManager->IsTabletDeleted(barrier.TabletId)) {
+        if (Self->DropBarriersOnTabletDeletion && Self->BlocksManager->IsTabletDeleted(barrier.TabletId)) {
             // blocks are assimilated before any barrier, so we already know this tablet is gone and
             // none of its blobs will be taken in -- there is nothing for this barrier to guard
             return true;

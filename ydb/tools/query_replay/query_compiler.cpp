@@ -278,7 +278,7 @@ public:
         GUCSettings->ImportFromJson(ReplayDetails);
 
         Config->Init(KqpSettings.DefaultSettings.GetDefaultSettings(), ReplayDetails["query_cluster"].GetStringSafe(), KqpSettings.Settings, false);
-        if (!Query->Database.empty()) {
+        if (!Query->Database().empty()) {
             Config->_KqpTablePathPrefix = ReplayDetails["query_database"].GetStringSafe();
         }
 
@@ -294,17 +294,17 @@ public:
         counters->Counters = new TKqpCounters(c);
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(c);
 
-        Gateway = CreateKikimrIcGateway(Query->Cluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, Query->Database, Query->DatabaseId, std::move(loader),
+        Gateway = CreateKikimrIcGateway(TString(Query->Cluster()), NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, TString(Query->Database()), TString(Query->DatabaseId()), std::move(loader),
             TActivationContext::ActorSystem(), SelfId().NodeId(), counters);
         auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>(TKqpFederatedQuerySetup{
             .HttpGateway = NYql::IHTTPGateway::Make(),
         });
-        KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
+        KqpHost = CreateKqpHost(Gateway, TString(Query->Cluster()), TString(Query->Database()), Config, ModuleResolverState->ModuleResolver,
             federatedQuerySetup, nullptr, GUCSettings, NKikimrConfig::TQueryServiceConfig(), Nothing(), FunctionRegistry, false);
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = false;
-        AsyncCompileResult = KqpHost->PrepareDataQuery(Query->Text, prepareSettings);
+        AsyncCompileResult = KqpHost->PrepareDataQuery(Query->Text(), prepareSettings);
         Continue();
 
         Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());

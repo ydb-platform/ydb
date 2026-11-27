@@ -9,9 +9,9 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/protos
-    ydb/core/tx/tx_proxy
     ydb/core/sys_view/service
-    ydb/library/yql/dq/actors/spilling
+    ydb/core/tx/tx_proxy
+    ydb/library/yql/dq/actors/spilling/counters
     yql/essentials/minikql
 )
 

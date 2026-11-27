@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/kqp/gateway/behaviour/streaming_query/common
     ydb/core/kqp/runtime/common
     ydb/core/sys_view/common
+    ydb/core/sys_view/scan
     ydb/library/actors/core
     ydb/library/query_actor
     ydb/services/workload_manager/actors

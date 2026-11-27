@@ -13,6 +13,7 @@ SRCS(
     kqp_scan_compute_stat.cpp
     kqp_scan_events.cpp
     kqp_scan_fetcher_actor.cpp
+    kqp_schedulable_compute_actor.h
 )
 
 PEERDIR(
@@ -22,7 +23,9 @@ PEERDIR(
     ydb/core/kqp/federated_query
     ydb/core/kqp/federated_query/actors/lookup_actor
     ydb/core/kqp/runtime
+    ydb/core/kqp/runtime/scheduler
     ydb/core/kqp/tracing
+    ydb/core/sys_view/scan_factory
     ydb/core/tx/datashard
     ydb/core/tx/scheme_cache
     ydb/library/formats/arrow

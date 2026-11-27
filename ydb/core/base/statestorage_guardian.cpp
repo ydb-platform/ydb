@@ -117,13 +117,15 @@ protected:
         if (ReplicaMissingReported < value) {
             const TMonotonic now = TActivationContext::Monotonic();
             if (LastReplicaMissing == TMonotonic::Max()) {
-                // this if the first time in row we report replica missing
+                // Start the grace period without reporting the first failure.
                 LastReplicaMissing = now;
+                value = false;
             } else {
                 // make it actually "missing" only after a specific amount of time
                 value = LastReplicaMissing + TDuration::Seconds(3) < now;
             }
-        } else if (value < ReplicaMissingReported) {
+        } else if (!value) {
+            // Reset on recovery even if the grace period has not expired.
             LastReplicaMissing = TMonotonic::Max();
         }
         if (value != ReplicaMissingReported) {
@@ -134,13 +136,13 @@ protected:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Cookie == LastCookie) {
-            ReplicaMissing(true);
             SomeSleep();
         }
     }
 
     void HandleThenSomeSleep(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         if (ev->Cookie == LastCookie) {
+            // A subsequent TEvUndelivered would be ignored in StateSleep.
             ++LastCookie;
             SomeSleep();
         }
@@ -154,6 +156,7 @@ protected:
     }
 
     void SomeSleep() {
+        ReplicaMissing(true);
         const TInstant now = TActivationContext::Now();
         if (DowntimeFrom > now) {
             DowntimeFrom = now;
@@ -415,11 +418,16 @@ public:
 };
 
 class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
+    struct TReplicaSlot {
+        TActorId Replica;
+        TActorId Guardian;
+        bool Missing = false;
+    };
+
     TIntrusivePtr<TGuardedInfo> Info;
     TIntrusivePtr<TFollowerInfo> FollowerInfo;
 
-    TVector<std::pair<TActorId, TActorId>> ReplicaGuardians; // replica -> guardian, position dependant so vector
-    THashSet<TActorId> MissingReplicas;
+    TVector<TReplicaSlot> ReplicaGuardians; // indices match FollowerTracker
     ui32 ReplicasOnlineThreshold;
 
     THolder<TFollowerTracker> FollowerTracker;
@@ -429,8 +437,8 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     }
 
     void HandlePoison() {
-        for (const auto &xpair : ReplicaGuardians)
-            Send(xpair.second, new TEvents::TEvPoison());
+        for (const auto& slot : ReplicaGuardians)
+            Send(slot.Guardian, new TEvents::TEvPoison());
 
         return PassAway();
     }
@@ -449,7 +457,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
 
         const ui32 replicaSz = replicasList.size();
 
-        TVector<std::pair<TActorId, TActorId>> updatedReplicaGuardians;
+        TVector<TReplicaSlot> updatedReplicaGuardians;
         updatedReplicaGuardians.reserve(replicaSz);
         // a kept child sends its followers again only when they change, so what it has reported goes to the new
         // tracker; the reports of the children going away do not
@@ -459,27 +467,27 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
             const TActorId replica = replicasList[idx];
             bool found = false;
             for (ui32 oldIdx : xrange(ReplicaGuardians.size()))
-                if (auto& p = ReplicaGuardians[oldIdx]; p.first == replica && p.second) {
+                if (auto& slot = ReplicaGuardians[oldIdx]; slot.Replica == replica && slot.Guardian) {
                     if (FollowerTracker) {
                         TVector<TActorId> reported = FollowerTracker->GetReported(oldIdx);
                         followerTracker->Merge(idx, reported);
                     }
-                    updatedReplicaGuardians.emplace_back(p);
-                    Send(p.second, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid));
-                    p.second = TActorId();
+                    updatedReplicaGuardians.push_back(slot);
+                    Send(slot.Guardian, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid));
+                    slot.Guardian = TActorId();
                     found = true;
                     break;
                 }
             if (!found) {
-                if (Info)
-                    updatedReplicaGuardians.emplace_back(replica, RegisterWithSameMailbox(new TReplicaGuardian(Info.Get(), replica, SelfId(), clusterStateGeneration, clusterStateGuid)));
-                else
-                    updatedReplicaGuardians.emplace_back(replica, RegisterWithSameMailbox(new TFollowerGuardian(FollowerInfo.Get(), replica, SelfId(), clusterStateGeneration, clusterStateGuid)));
+                const TActorId guardian = Info
+                    ? RegisterWithSameMailbox(new TReplicaGuardian(Info.Get(), replica, SelfId(), clusterStateGeneration, clusterStateGuid))
+                    : RegisterWithSameMailbox(new TFollowerGuardian(FollowerInfo.Get(), replica, SelfId(), clusterStateGeneration, clusterStateGuid));
+                updatedReplicaGuardians.push_back({replica, guardian});
             }
         }
-        for (const auto &xpair : ReplicaGuardians) {
-            if (xpair.second) {
-                Send(xpair.second, new TEvents::TEvPoison());
+        for (const auto& slot : ReplicaGuardians) {
+            if (slot.Guardian) {
+                Send(slot.Guardian, new TEvents::TEvPoison());
             }
         }
         ReplicaGuardians.swap(updatedReplicaGuardians);
@@ -509,8 +517,8 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     ui32 CountOnlineReplicas() const {
         ui32 replicasOnline = 0;
 
-        for (auto& pr : ReplicaGuardians) {
-            if (pr.second && !MissingReplicas.contains(pr.second)) {
+        for (const auto& slot : ReplicaGuardians) {
+            if (slot.Guardian && !slot.Missing) {
                 ++replicasOnline;
             }
         }
@@ -530,23 +538,22 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         return true;
     }
 
-    bool ReplicaDown(TActorId guardian) {
-        bool ret = false;
-
-        for (auto it = ReplicaGuardians.begin(), end = ReplicaGuardians.end(); it != end; ++it) {
-            if (it->second == guardian) {
-                it->second = TActorId();
-                ret = true;
-                break;
+    TReplicaSlot* FindReplicaSlot(const TActorId& guardian) {
+        for (auto& slot : ReplicaGuardians) {
+            if (slot.Guardian && slot.Guardian == guardian) {
+                return &slot;
             }
         }
+        return nullptr;
+    }
 
-        if (ret && !ValidateOnlineReplicasOrDie()) {
-            // we are dead now
-            return false;
+    bool ReplicaDown(const TActorId& guardian) {
+        if (auto* slot = FindReplicaSlot(guardian)) {
+            slot->Guardian = TActorId();
+            slot->Missing = false;
+            return ValidateOnlineReplicasOrDie();
         }
-
-        return ret; // true on erase, false on outdated notify
+        return false;
     }
 
     void SendResolveRequest(TDuration delay, bool initial) {
@@ -578,13 +585,11 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     }
 
     void Handle(TEvPrivate::TEvReplicaMissing::TPtr &ev) {
-        auto* msg = ev->Get();
-
-        if (msg->Missing) {
-            MissingReplicas.insert(ev->Sender);
-            ValidateOnlineReplicasOrDie();
-        } else {
-            MissingReplicas.erase(ev->Sender);
+        if (auto* slot = FindReplicaSlot(ev->Sender)) {
+            slot->Missing = ev->Get()->Missing;
+            if (slot->Missing) {
+                ValidateOnlineReplicasOrDie();
+            }
         }
     }
 
@@ -594,7 +599,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         const NKikimrStateStorage::TEvInfo &record = ev->Get()->Record;
         const TActorId guardian = ev->Sender;
         for (ui32 idx : xrange(ReplicaGuardians.size())) {
-            if (ReplicaGuardians[idx].second != guardian)
+            if (ReplicaGuardians[idx].Guardian != guardian)
                 continue;
 
             TVector<TActorId> reported;
@@ -664,9 +669,8 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         if (!RefreshFollowerInfo(ev))
             return;
 
-        for (auto &xpair : ReplicaGuardians) {
-            const TActorId guardian = xpair.second;
-            Send(guardian, new TEvPrivate::TEvRefreshFollowerState(FollowerInfo));
+        for (const auto& slot : ReplicaGuardians) {
+            Send(slot.Guardian, new TEvPrivate::TEvRefreshFollowerState(FollowerInfo));
         }
     }
 

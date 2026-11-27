@@ -697,6 +697,7 @@ protected:
     void HandleInit(TEvPrivate::TEvProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessPileDrains::TPtr&);
+    void HandleInit(TEvPrivate::TEvProcessPileDrains::TPtr&);
     void Handle(TEvPrivate::TEvPostponeProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessDisconnectNode::TPtr&);
     void HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&);

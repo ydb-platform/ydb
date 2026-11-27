@@ -216,6 +216,47 @@ Y_UNIT_TEST(ProjectSettingsRejectOtherConfigPragmas) {
     }
 }
 
+Y_UNIT_TEST(LineageFlagsFromConfigAreNormalizedAndSeparate) {
+    TTypeAnnotationContext types;
+    TExprContext ctx;
+    TGatewaysConfig config;
+    AddCoreFlag(config, "LineageFlags", {"FixSomething", "fixsomething", "DisableFixOther"});
+    auto provider = CreateConfigProvider(types, &config, "testuser", {});
+
+    UNIT_ASSERT_C(provider->Initialize(ctx), ctx.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(types.LineageSettings.Flags.size(), 2);
+    UNIT_ASSERT(types.LineageSettings.Flags.contains("fixsomething"));
+    UNIT_ASSERT(types.LineageSettings.Flags.contains("disablefixother"));
+    UNIT_ASSERT(types.OptimizerFlags.empty());
+}
+
+Y_UNIT_TEST(LineageFlagsPragmaAccumulatesAndAcceptsNoArguments) {
+    TTypeAnnotationContext types;
+    TExprContext ctx;
+    auto provider = CreateConfigProvider(types, nullptr, "testuser", {});
+    UNIT_ASSERT(provider->Initialize(ctx));
+
+    UNIT_ASSERT(ApplyPragma(*provider, ctx, "LineageFlags") == IGraphTransformer::TStatus::Ok);
+    UNIT_ASSERT(types.LineageSettings.Flags.empty());
+    UNIT_ASSERT(ApplyPragma(*provider, ctx, "LineageFlags", {"FixOne"}) == IGraphTransformer::TStatus::Ok);
+    UNIT_ASSERT(ApplyPragma(*provider, ctx, "LineageFlags", {"FixTwo", "FIXONE"}) == IGraphTransformer::TStatus::Ok);
+    UNIT_ASSERT_VALUES_EQUAL(types.LineageSettings.Flags.size(), 2);
+    UNIT_ASSERT(types.LineageSettings.Flags.contains("fixone"));
+    UNIT_ASSERT(types.LineageSettings.Flags.contains("fixtwo"));
+    UNIT_ASSERT(types.OptimizerFlags.empty());
+}
+
+Y_UNIT_TEST(LineageFlagsRejectEmptyFlag) {
+    TTypeAnnotationContext types;
+    TExprContext ctx;
+    auto provider = CreateConfigProvider(types, nullptr, "testuser", {});
+    UNIT_ASSERT(provider->Initialize(ctx));
+
+    UNIT_ASSERT(ApplyPragma(*provider, ctx, "LineageFlags", {""}) == IGraphTransformer::TStatus::Error);
+    UNIT_ASSERT_STRING_CONTAINS(ctx.IssueManager.GetIssues().ToString(), "Empty flags are not supported");
+    UNIT_ASSERT(types.LineageSettings.Flags.empty());
+}
+
 Y_UNIT_TEST(UnknownConfigFlagsAreIgnored) {
     TTypeAnnotationContext types;
     TExprContext ctx;

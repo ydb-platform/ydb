@@ -4,8 +4,10 @@
 
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
+#include <ydb/core/tablet_flat/flat_tier_predicate.h>
 
 #include <google/protobuf/util/message_differencer.h>
+#include <util/generic/algorithm.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
@@ -30,6 +32,7 @@ private:
     bool IsDatabaseFreezeUnfreeze(const NKikimrSchemeOp::TTableDescription& alter) const;
     bool CheckCreate(TActiveTransaction *activeTx);
     bool CheckDrop(TActiveTransaction *activeTx);
+    bool CheckTablePolicies(TActiveTransaction* activeTx, const NTable::TScheme& scheme);
     bool CheckAlter(TActiveTransaction *activeTx);
     bool CheckBackup(TActiveTransaction *activeTx);
     bool CheckRestore(TActiveTransaction *activeTx);
@@ -230,6 +233,11 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
 
         // Store the most recent tx body
         if (Y_LIKELY(!existingOp->GetStep())) {
+            if (!CheckTablePolicies(activeTx, txc.DB.GetScheme())) {
+                op->Abort(EExecutionUnitKind::FinishPropose);
+                return EExecutionStatus::ExecutedNoMoreRestarts;
+            }
+
             // 1. If transaction has not yet been planned, then tx details are
             //    currently cleared and would be loaded as soon as transaction
             //    is planned and ready to execute. We need to store the updated
@@ -254,7 +262,7 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
     }
 
     // Check scheme tx content.
-    if (!CheckSchemeTx(activeTx)) {
+    if (!CheckSchemeTx(activeTx) || !CheckTablePolicies(activeTx, txc.DB.GetScheme())) {
         Y_ENSURE(op->Result());
         op->Abort(EExecutionUnitKind::FinishPropose);
 
@@ -511,6 +519,99 @@ bool TCheckSchemeTxUnit::CheckDrop(TActiveTransaction *activeTx) {
     }
     Y_ENSURE(DataShard.GetUserTables().FindPtr(tableId));
 
+    return true;
+}
+
+bool TCheckSchemeTxUnit::CheckTablePolicies(TActiveTransaction* activeTx, const NTable::TScheme& scheme)
+{
+    const auto& tx = activeTx->GetSchemeTx();
+    if (!tx.HasCreateTable() && !tx.HasAlterTable()) {
+        return true;
+    }
+    const auto& description = tx.HasCreateTable() ? tx.GetCreateTable() : tx.GetAlterTable();
+    const auto& config = description.GetPartitionConfig();
+    const bool changingPolicies = config.HasCompactionPolicy() || config.HasTieringPolicy();
+    if (!changingPolicies && description.DropColumnsSize() == 0) {
+        return true;
+    }
+
+    auto reject = [&](const TString& error) {
+        BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)->AddError(
+            NKikimrTxDataShard::TError::BAD_ARGUMENT, error);
+        return false;
+    };
+
+    const NTable::TScheme::TTableInfo* current = nullptr;
+    if (tx.HasAlterTable()) {
+        const ui64 tableId = description.HasPathId() ? description.GetPathId().GetLocalId() : description.GetId_Deprecated();
+        const auto* table = DataShard.GetUserTables().FindPtr(tableId);
+        if (!table) {
+            return reject(TStringBuilder() << "Unknown table " << tableId);
+        }
+        current = &scheme.Tables.at((*table)->LocalTid);
+    }
+
+    TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> compaction;
+    if (config.HasCompactionPolicy()) {
+        TString error;
+        compaction = NLocalDb::TryParseCompactionPolicy(config.GetCompactionPolicy(), error);
+        if (!compaction) {
+            return reject(error);
+        }
+        const bool valid = current
+            ? NLocalDb::ValidateCompactionPolicyChange(*current->CompactionPolicy, *compaction, error)
+            : NLocalDb::ValidateCompactionPolicy(*compaction, error);
+        if (!valid) {
+            return reject(error);
+        }
+    } else {
+        compaction = current ? current->CompactionPolicy : NLocalDb::CreateDefaultUserTablePolicy();
+    }
+
+    const auto* tiering = current && current->TieringPolicy ? &*current->TieringPolicy : nullptr;
+    std::optional<NTable::TTieringPolicy> replacement;
+    if (config.HasTieringPolicy()) {
+        try {
+            replacement = NTable::TieringPolicyFromProto(config.GetTieringPolicy());
+            tiering = &*replacement;
+            NTable::TTierPredicate::Validate(*tiering);
+            if (const auto* column = FindIfPtr(description.GetColumns(), [&](const auto& col) {
+                    return col.GetId() == tiering->ColumnTag;
+                })) {
+                const auto type = NScheme::TypeInfoModFromProtoColumnType(column->GetTypeId(), &column->GetTypeInfo());
+                NTable::TTierPredicate::ValidateColumn(*tiering, type.TypeInfo);
+            } else if (current && current->Columns.contains(tiering->ColumnTag)) {
+                NTable::TTierPredicate::ValidateColumn(*tiering, current->Columns.at(tiering->ColumnTag).PType);
+            } else {
+                return reject(TStringBuilder() << "Tiering column " << tiering->ColumnTag << " does not exist");
+            }
+        } catch (const yexception& ex) {
+            return reject(ex.what());
+        }
+    }
+
+    if (tiering && changingPolicies) {
+        THashSet<ui32> boundTiers;
+        for (const auto& generation : compaction->Generations) {
+            boundTiers.insert(generation.TierId.value_or(0));
+        }
+        for (const auto& rule : tiering->Rules) {
+            if (!boundTiers.contains(rule.TierId)) {
+                return reject(TStringBuilder() << "Tiering policy refers to tier " << rule.TierId << " that has no compaction generation");
+            }
+            if (!(current && current->Families.contains(rule.TierId)) &&
+                !AnyOf(config.GetColumnFamilies(), [&](const auto& family) { return family.GetId() == rule.TierId; })) {
+                return reject(TStringBuilder() << "Tiering policy refers to tier " << rule.TierId << " that is not a family of the table");
+            }
+        }
+    }
+    if (tiering) {
+        for (const auto& column : description.GetDropColumns()) {
+            if (column.GetId() == tiering->ColumnTag) {
+                return reject(TStringBuilder() << "Cannot drop column " << column.GetName() << " used by the tiering policy");
+            }
+        }
+    }
     return true;
 }
 

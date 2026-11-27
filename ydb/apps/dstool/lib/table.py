@@ -67,7 +67,8 @@ class TableOutput(object):
 
             def key_func(d):
                 def getter(key):
-                    return d.get(key, self.default_values.get(key))
+                    value = d.get(key, self.default_values.get(key))
+                    return (value is None, value)
                 return tuple(map(getter, columns_for_sort))
 
             rows.sort(key=key_func, reverse=args.reverse)

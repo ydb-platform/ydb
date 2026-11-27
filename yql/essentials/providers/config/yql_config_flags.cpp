@@ -6,6 +6,19 @@
 
 namespace NYql {
 
+TConfigFlags::TFlagHandler TConfigFlags::FlagsHandler(THashSet<TString>& flags) {
+    return [&flags](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        for (const auto& arg : args) {
+            if (arg.empty()) {
+                ctx.AddError(TIssue(pos, "Empty flags are not supported"));
+                return false;
+            }
+            flags.insert(to_lower(ToString(arg)));
+        }
+        return true;
+    };
+}
+
 TConfigFlags::TConfigFlags(TTypeAnnotationContext& types, TAllowSettingPolicy policy, bool forPartialTypeCheck)
     : Types_(types)
     , ForPartialTypeCheck_(forPartialTypeCheck)
@@ -669,27 +682,9 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("OptimizerFlags", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
-        for (auto& arg : args) {
-            if (arg.empty()) {
-                ctx.AddError(TIssue(pos, "Empty flags are not supported"));
-                return false;
-            }
-            Types_.OptimizerFlags.insert(to_lower(ToString(arg)));
-        }
-        return true;
-    });
-
-    AddFlag("PeepholeFlags", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
-        for (auto& arg : args) {
-            if (arg.empty()) {
-                ctx.AddError(TIssue(pos, "Empty flags are not supported"));
-                return false;
-            }
-            Types_.PeepholeFlags.insert(to_lower(ToString(arg)));
-        }
-        return true;
-    });
+    AddFlag("LineageFlags", {}, /*system=*/false, /*allowInProjectSettings=*/false, FlagsHandler(Types_.LineageSettings.Flags));
+    AddFlag("OptimizerFlags", {}, /*system=*/false, /*allowInProjectSettings=*/false, FlagsHandler(Types_.OptimizerFlags));
+    AddFlag("PeepholeFlags", {}, /*system=*/false, /*allowInProjectSettings=*/false, FlagsHandler(Types_.PeepholeFlags));
 
     AddFlag("_EnableStreamLookupJoin", "DisableStreamLookupJoin", /*system=*/true, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.StreamLookupJoin, "_EnableStreamLookupJoin"));

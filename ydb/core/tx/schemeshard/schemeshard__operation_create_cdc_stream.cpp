@@ -16,6 +16,33 @@ namespace NCdc {
 
 namespace {
 
+bool IsReplicationSupport(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc, const TString& capability) {
+    for (auto& attribute : streamDesc.GetUserAttributes()) {
+        if (attribute.GetKey() == ATTR_ASYNC_REPLICATION) {
+            if (!attribute.HasValue()) {
+                break;
+            }
+
+            NJson::TJsonValue result;
+            if (!NJson::ReadJsonFastTree(attribute.GetValue(), &result)) {
+                break;
+            }
+
+            auto map = result.GetMap();
+            return map[capability].GetBoolean();
+        }
+    }
+
+    return false;
+}
+
+bool ShouldUseKeyRangeHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc, const TFeatureFlags& featureFlags) {
+    return featureFlags.GetEnableCdcKeyRangeHeartbeats()
+        && streamDesc.GetResolvedTimestampsIntervalMs() > 0
+        && !streamDesc.GetSchemaChanges()
+        && IsReplicationSupport(streamDesc, "supports_key_range_autopartitioning");
+}
+
 class TPropose: public TSubOperationState {
 public:
     virtual const char* Name() const override final { return "TPropose"; }
@@ -343,6 +370,12 @@ public:
             return result;
         }
 
+        const auto [heartbeatMode, heartbeatModeError] = ChooseHeartbeatMode(op, AppData()->FeatureFlags);
+        if (!heartbeatMode) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, heartbeatModeError);
+            return result;
+        }
+
         TMaybe<TChannelsBindings> aggregatorChannels;
         if (ShouldAggregateHeartbeats(streamDesc)) {
             aggregatorChannels = CheckCdcAggregatorCanBeCreated(op, streamPath, context, result);
@@ -387,6 +420,8 @@ public:
         streamPath.Base()->UserAttrs->AlterData = userAttrs;
 
         context.SS->CdcStreams.Set(pathId, stream);
+
+        stream->AlterData->HeartbeatMode = *heartbeatMode;
 
         if (aggregatorChannels) {
             PlanCdcAggregatorCreation(OperationId, streamPath, *aggregatorChannels, context);
@@ -708,40 +743,47 @@ void DoCreateLock(
     result.push_back(CreateLock(NextPartId(opId, result), outTx));
 }
 
-bool IsReplicationSupportTopicAutopartitioning(const NKikimrSchemeOp::TCreateCdcStream& op) {
-    auto& descr = op.GetStreamDescription();
-    for (auto& attribute : descr.GetUserAttributes()) {
-        if (attribute.GetKey() == ATTR_ASYNC_REPLICATION) {
-            if (!attribute.HasValue()) {
-                break;
-            }
-
-            NJson::TJsonValue result;
-            if (!NJson::ReadJsonFastTree(attribute.GetValue(), &result)) {
-                break;
-            }
-
-            auto map = result.GetMap();
-            return map["supports_topic_autopartitioning"].GetBoolean();
-        }
-    }
-
-    return false;
-}
-
 } // anonymous
 
-TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount, ui64 maxShardsInPath) {
+std::pair<std::optional<NKikimrSchemeOp::ECdcStreamHeartbeatMode>, TString> ChooseHeartbeatMode(
+    const NKikimrSchemeOp::TCreateCdcStream& op,
+    const TFeatureFlags& featureFlags)
+{
+    if (!ShouldUseKeyRangeHeartbeats(op.GetStreamDescription(), featureFlags)) {
+        return {NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect, TString()};
+    }
+
+    if (op.HasTopicPartitions() || op.GetTopicAutoPartitioning()) {
+        return {std::nullopt,
+            "TopicPartitions and TopicAutoPartitioning are not supported for CDC streams with key range heartbeats"};
+    }
+
+    return {NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange, TString()};
+}
+
+TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount,
+        ui64 maxShardsInPath, const TFeatureFlags& featureFlags) {
     // Autopartitioned replication topics are hash-partitioned. Cap that split
     // range by the path shard limit so a large table still gets a creatable topic.
     const ui64 maxPartitionCountLimit = std::min<ui64>(maxShardsInPath, Max<ui32>());
     const ui64 minPartitionCountLimit = maxPartitionCountLimit / 4;
 
+    // Start a key range CDC topic with one partition per table shard and let it split up to the path shard limit
+    if (ShouldUseKeyRangeHeartbeats(op.GetStreamDescription(), featureFlags)) {
+        const auto totalGroupCount = static_cast<ui32>(tablePartitionCount);
+        return TCdcPqPartParams{
+            .TotalGroupCount = totalGroupCount,
+            .KeyRangeAutoPartitioning = true,
+            .MinPartitionCount = totalGroupCount,
+            .MaxPartitionCount = static_cast<ui32>(std::max<ui64>(totalGroupCount, maxPartitionCountLimit)),
+        };
+    }
+
     TCdcPqPartParams params;
     params.TotalGroupCount = static_cast<ui32>(op.HasTopicPartitions() ? op.GetTopicPartitions() : tablePartitionCount);
     params.PartitionPerTablet = 2;
 
-    if (!IsReplicationSupportTopicAutopartitioning(op)) {
+    if (!IsReplicationSupport(op.GetStreamDescription(), "supports_topic_autopartitioning")) {
         return params;
     }
 
@@ -782,7 +824,7 @@ void DoCreatePqPart(
     outTx.SetFailOnExist(!acceptExisted);
 
     const ui64 maxShardsInPath = streamPath.DomainInfo()->GetSchemeLimits().MaxShardsInPath;
-    const auto pqParams = MakeCdcPqPartParams(op, table->GetPartitions().size(), maxShardsInPath);
+    const auto pqParams = MakeCdcPqPartParams(op, table->GetPartitions().size(), maxShardsInPath, AppData()->FeatureFlags);
 
     auto& desc = *outTx.MutableCreatePersQueueGroup();
     desc.SetName("streamImpl");
@@ -799,7 +841,7 @@ void DoCreatePqPart(
     partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
     partitionConfig.SetMaxCountInPartition(Max<i32>());
 
-    if (pqParams.ReplicationAutoPartitioning) {
+    if (pqParams.ReplicationAutoPartitioning || pqParams.KeyRangeAutoPartitioning) {
         auto * ps = pqConfig.MutablePartitionStrategy();
         ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
         ps->SetMinPartitionCount(pqParams.MinPartitionCount);
@@ -808,10 +850,23 @@ void DoCreatePqPart(
     } else if (op.GetTopicAutoPartitioning()) {
         auto * ps = pqConfig.MutablePartitionStrategy();
         ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
-        ps->SetMaxPartitionCount(op.GetMaxPartitionCount());
-        ps->SetMinPartitionCount(op.HasTopicPartitions() ? op.GetTopicPartitions() : 1);
+        const ui32 minPartitionCount = op.HasTopicPartitions() ? op.GetTopicPartitions() : 1;
+        ps->SetMinPartitionCount(minPartitionCount);
+        // An explicit max is kept as-is: min > max is rejected in CreatePersQueueGroup.
+        // An absent max keeps the historical ceiling of 50, but never below the min.
+        if (op.HasMaxPartitionCount()) {
+            ps->SetMaxPartitionCount(op.GetMaxPartitionCount());
+        } else {
+            ps->SetMaxPartitionCount(std::max<ui32>(minPartitionCount, 50));
+        }
         ps->SetScaleThresholdSeconds(30);
-    } else {
+    }
+
+    if (pqParams.KeyRangeAutoPartitioning) {
+        pqConfig.SetSplitByPartitionKey(true);
+    }
+
+    if (!pqParams.ReplicationAutoPartitioning && !op.GetTopicAutoPartitioning()) {
         for (const auto& tag : table->KeyColumnIds) {
             Y_ABORT_UNLESS(table->Columns.contains(tag));
             const auto& column = table->Columns.at(tag);
@@ -1000,7 +1055,8 @@ bool FillBoundaries(const TTableInfo& table, const NKikimrSchemeOp::TCreateCdcSt
 bool ShouldAggregateHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
     return AppData()->FeatureFlags.GetEnableCdcAggregator()
         // DataShards emit heartbeats only with a resolved timestamps interval, otherwise there is nothing to aggregate
-        && streamDesc.GetResolvedTimestampsIntervalMs() > 0;
+        && streamDesc.GetResolvedTimestampsIntervalMs() > 0
+        && !ShouldUseKeyRangeHeartbeats(streamDesc, AppData()->FeatureFlags);
 }
 
 TMaybe<TChannelsBindings> CheckCdcAggregatorCanBeCreated(

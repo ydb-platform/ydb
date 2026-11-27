@@ -229,6 +229,7 @@ jobs:
           fi
 
           ./ya make -DDEBUGINFO_LINES_ONLY --build "$INPUT_BUILD_PRESET" -tA --test-disable-timeout \
+            --remove-cpu-detect-via-ram \
             ydb/tests/stress/compare_index_performance/tests \
             --test-param compare_duration="$INPUT_DURATION" \
             --test-param compare_build_preset="$INPUT_BUILD_PRESET" \

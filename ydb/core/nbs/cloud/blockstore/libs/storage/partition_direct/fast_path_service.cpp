@@ -608,18 +608,20 @@ void TFastPathService::SetNodeChaosMode(
 }
 
 NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
-    std::optional<size_t> dbgIndex) const
+    std::optional<size_t> dbgIndex,
+    size_t vChunkFrom,
+    size_t vChunkCount) const
 {
     TVector<NThreading::TFuture<TDbgSnapshot>> futures;
     if (dbgIndex) {
         if (*dbgIndex < DirectBlockGroups.size()) {
             futures.push_back(DirectBlockGroups[*dbgIndex]->BuildMonSnapshot(
-                EDbgMonSnapshotDetail::PerVChunk));
+                vChunkFrom,
+                vChunkCount));
         }
     } else {
         for (const auto& dbg: DirectBlockGroups) {
-            futures.push_back(
-                dbg->BuildMonSnapshot(EDbgMonSnapshotDetail::Summary));
+            futures.push_back(dbg->BuildMonSnapshot(0, 0));
         }
     }
 

@@ -14,7 +14,8 @@ struct TRemoteEmbedderHttpResponse {
 };
 
 NThreading::TFuture<TRemoteEmbedderHttpResponse> PostRemoteEmbedderRequest(
-    TString host, ui16 port, bool useTls, TString request, TDuration timeout = TDuration::Seconds(60));
+    TStringBuf authority, bool useTls, TStringBuf path, TStringBuf authorization, TStringBuf body,
+    TDuration timeout = TDuration::Seconds(60));
 NThreading::TFuture<void> WaitBeforeRemoteEmbedderRequest(TDuration delay);
 
 } // namespace NKnn

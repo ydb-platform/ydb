@@ -13,7 +13,10 @@
 
 #include <ydb/public/sdk/cpp/tests/unit/client/oidc/helpers/test_server.h>
 
+#include <util/generic/scope.h>
 #include <util/string/subst.h>
+
+#include <thread>
 
 namespace NKikimr {
 namespace NKqp {
@@ -22,6 +25,68 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpKnn) {
+    Y_UNIT_TEST_TWIN(RemoteEmbedderYieldsDuringHttp, streaming) {
+        TOidcTestServer server;
+        const TString url(server.Issuer());
+        const TString origin(url.substr(0, url.rfind('/')));
+        server.Enqueue(R"({"data":[{"index":0,"embedding":[1]}]})", HTTP_OK);
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+        auto* queryConfig = settings.AppConfig.MutableQueryServiceConfig();
+        queryConfig->AddHostnamePatterns("^localhost$");
+        (*queryConfig->MutableRemoteEmbedderSecretOrigins())["/Root/embedder_token"] = origin;
+        TKikimrRunner kikimr(settings);
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto client = kikimr.GetQueryClient();
+        auto create = kikimr.RunCall([&] {
+            return client.ExecuteQuery("CREATE SECRET `/Root/embedder_token` WITH (value = 'embedder-token')",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        auto release = NThreading::NewPromise();
+        auto handshake = NThreading::NewPromise();
+        server.BlockTlsHandshakeUntil(release.GetFuture());
+        std::jthread watchdog([&] {
+            if (server.WaitForTlsHandshake()) {
+                handshake.SetValue();
+                release.GetFuture().Wait(TDuration::Seconds(5));
+            }
+            release.TrySetValue();
+        });
+        Y_DEFER { release.TrySetValue(); };
+
+        TStringBuilder query;
+        if (streaming) {
+            query << R"(
+                PROCESS AS_TABLE(AsList(AsStruct('text' AS Text, 1 AS PassThrough)))
+                USING ApplyRemoteEmbedder(TableRows(), 'model', ')";
+        } else {
+            query << "SELECT ApplyRemoteEmbedder('text', 'model', '";
+        }
+        query << url << "', '/Root/embedder_token'";
+        query << (streaming ? ", 1, 0, 0)" : ", 0).Status AS Status");
+        auto pending = kikimr.RunInThreadPool([&] {
+            return client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+        });
+
+        // The simulated runtime dispatches one actor at a time. It can reach this
+        // condition while TLS is held only if the compute actor gives up the worker.
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] { return handshake.HasValue() || pending.IsReady(); };
+        runtime->DispatchEvents(options);
+        const bool parked = handshake.HasValue() && !release.HasValue() && !pending.IsReady();
+        release.TrySetValue();
+        const auto result = runtime->WaitFuture(pending);
+        UNIT_ASSERT(parked);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        auto rows = TResultSetParser(result.GetResultSet(0));
+        UNIT_ASSERT(rows.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Status").GetUint32(), 200);
+        UNIT_ASSERT(!rows.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
+    }
+
     Y_UNIT_TEST(RemoteEmbedderRfcSyntax) {
         TOidcTestServer server;
         const TString url(server.Issuer());

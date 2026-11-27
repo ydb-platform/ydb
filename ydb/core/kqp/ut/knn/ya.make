@@ -5,6 +5,11 @@ SPLIT_FACTOR(20)
 
 SIZE(MEDIUM)
 
+# This test executable exceeds DWARF32 relocation limits in relwithdebinfo builds.
+IF (OS_LINUX)
+    LDFLAGS(-Wl,--strip-debug)
+ENDIF()
+
 SRCS(
     kqp_knn_ut.cpp
 )

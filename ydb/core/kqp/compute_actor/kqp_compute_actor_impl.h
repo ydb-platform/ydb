@@ -26,6 +26,10 @@ public:
         return TDqTaskRunnerExecutionContext::CreateChannelStorage(channelId, WithSpilling_ || withSpilling);
     }
 
+    NActors::TActorId GetAsyncUdfWakeupActor() const override {
+        return NActors::TActivationContext::AsActorContext().SelfID;
+    }
+
 private:
     const bool WithSpilling_;
     const TMaybe<ui8> MinFillPercentage_;

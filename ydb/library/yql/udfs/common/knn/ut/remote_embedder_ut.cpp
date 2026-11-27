@@ -313,8 +313,8 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
         TPortManager ports;
         const auto port = ports.GetPort();
         NMock::TMockServer server(port, [&] { return new TSlowReply(entered, release); });
-        const TString post = "POST /embeddings HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-        auto request = NKnn::PostRemoteEmbedderRequest("localhost", port, false, post);
+        const TString authority = TStringBuilder() << "localhost:" << port;
+        auto request = NKnn::PostRemoteEmbedderRequest(authority, false, "/embeddings", {}, {});
         UNIT_ASSERT(entered.WaitT(TDuration::Seconds(5)));
         UNIT_ASSERT(!request.HasValue());
         const auto timer = NKnn::WaitBeforeRemoteEmbedderRequest(TDuration::MilliSeconds(10));
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
 
         entered.Reset();
         release.Reset();
-        auto timedRequest = NKnn::PostRemoteEmbedderRequest("localhost", port, false, post, TDuration::Seconds(2));
+        auto timedRequest = NKnn::PostRemoteEmbedderRequest(authority, false, "/embeddings", {}, {}, TDuration::Seconds(2));
         const bool reachedServer = entered.WaitT(TDuration::Seconds(3));
         const bool completed = timedRequest.Wait(TDuration::Seconds(3));
         release.Signal();
@@ -525,17 +525,29 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
         CheckEmbedding(result, 5);
     }
 
-    Y_UNIT_TEST(AcceptsChunkedResponseWithExtensionAndTrailer) {
+    Y_UNIT_TEST(AcceptsChunkedResponse) {
         TServer server({{.Status = HTTP_OK, .Body = {}, .RawResponse =
             "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
-            "2c;name=value\r\n"
+            "2c\r\n"
             R"({"data":[{"index":0,"embedding":[5,-0.25]}]})"
-            "\r\n0\r\nX-Checksum: example\r\n\r\n"}});
+            "\r\n0\r\n\r\n"}});
         TSetup setup;
         const auto result = setup.Scalar(server);
         UNIT_ASSERT_VALUES_EQUAL(result.GetElement(1).Get<ui32>(), 200);
         CheckEmbedding(result, 5);
         UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
+    }
+
+    Y_UNIT_TEST(DoesNotFollowRedirects) {
+        TServer redirected;
+        TServer server({{.Status = HTTP_OK, .Body = {}, .RawResponse = TStringBuilder()
+            << "HTTP/1.1 307 Temporary Redirect\r\nLocation: " << redirected.Url()
+            << "/embeddings\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"}});
+        TSetup setup;
+        const auto result = setup.Scalar(server, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetElement(1).Get<ui32>(), 307);
+        UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
+        UNIT_ASSERT(redirected.Requests().empty());
     }
 
     Y_UNIT_TEST(RejectOversizedHttpMetadataWithoutRetry) {

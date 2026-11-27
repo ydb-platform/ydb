@@ -45,7 +45,8 @@ class TDqComputeActorWatermarks;
 enum class ERunStatus : ui32 {
     Finished,
     PendingInput,
-    PendingOutput
+    PendingOutput,
+    PendingAsync
 };
 
 struct TMkqlStat {
@@ -178,6 +179,7 @@ public:
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
 
     virtual TWakeUpCallback GetWakeupCallback() const = 0;
+    virtual NActors::TActorId GetAsyncUdfWakeupActor() const { return {}; }
     virtual TErrorCallback GetErrorCallback() const = 0;
     virtual TIntrusivePtr<TSpillingTaskCounters> GetSpillingTaskCounters() const = 0;
     virtual TTxId GetTxId() const = 0;
@@ -464,6 +466,7 @@ public:
         TDqWatermarkGeneratorTracker* sourceWatermarksTracker = nullptr
     ) = 0;
     virtual ERunStatus Run() = 0;
+    virtual bool IsOutputEvaluationSuspended() const { return false; }
 
     virtual bool HasEffects() const = 0;
 
@@ -504,6 +507,7 @@ public:
     virtual TString GetOutputDebugString() = 0;
     TInstant LastFetchTime;
     ERunStatus LastFetchStatus = ERunStatus::PendingInput;
+    bool YieldAfterOutput = false;
 
 };
 

@@ -3,6 +3,9 @@
 
 #include "knn-serializer-shared.h"
 
+#include <ydb/library/actors/http/http.h>
+
+#include <yql/essentials/public/udf/udf_async_waiter.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -44,6 +47,16 @@ struct TBatchResult {
     ui32 Status = TransportError;
     TVector<TString> Embeddings;
 };
+
+template <class T>
+bool WaitFor(const NThreading::TFuture<T>& future, TMonotonic deadline) {
+    if (auto* waiter = IAsyncUdfWaiter::Current) {
+        return waiter->Wait(future.IgnoreResult(), deadline);
+    }
+    // Direct, standalone UDF callers have no actor to wake up.
+    const auto now = TMonotonic::Now();
+    return now < deadline && future.Wait(deadline - now);
+}
 
 // Keep only the response fields needed to validate and serialize the batch.
 class TEmbeddingResponseParser final : public NJson::TJsonCallbacks {
@@ -267,11 +280,10 @@ public:
         const auto host = url.GetHost();
         DialHost_ = host.StartsWith('[') && host.EndsWith(']') ? host.SubStr(1, host.size() - 2) : host;
         NKnn::ValidateRemoteEmbedderDestination(SecretName_, DialHost_, Port_, UseTls_);
-        Authority_ = host;
-        if (Port_ != (UseTls_ ? 443 : 80)) {
-            Authority_ += TStringBuilder() << ':' << Port_;
-        }
-        Y_ENSURE(IsSafeHttpRequestPart(Path_) && IsSafeHttpRequestPart(Authority_),
+        // Include the port in the proxy DNS cache key even for a default port.
+        Authority_ = TStringBuilder() << host << ':' << Port_;
+        Y_ENSURE(Path_.size() <= NHttp::THttpRequestParser::MaxURLSize
+            && IsSafeHttpRequestPart(Path_) && IsSafeHttpRequestPart(Authority_),
             "RemoteEmbedder: invalid HTTP request target");
         Authorization_ = "Bearer " + token;
     }
@@ -295,15 +307,13 @@ public:
 
 private:
     TBatchResult ApplyRequest(NJson::TJsonValue input, size_t count, ui64 estimatedTokens) {
+        Y_ENSURE(IAsyncUdfWaiter::Current || !SecretName_.StartsWith('/'),
+            "RemoteEmbedder: asynchronous query execution is unavailable");
         NJson::TJsonValue request(NJson::JSON_MAP);
         request["model"] = Model_;
         request["encoding_format"] = "float";
         request["input"] = std::move(input);
         const TString body = NJson::WriteJson(request);
-        const TString httpRequest = TStringBuilder()
-            << "POST " << Path_ << " HTTP/1.1\r\nHost: " << Authority_
-            << "\r\nConnection: close\r\nAccept-Encoding: identity\r\nContent-Type: application/json\r\nAuthorization: " << Authorization_
-            << "\r\nContent-Length: " << body.size() << "\r\n\r\n" << body;
         const auto deadline = TMonotonic::Now() + BatchTimeout;
         for (ui64 attempt = 0; ; ++attempt) {
             Y_ENSURE(Throttle(estimatedTokens, deadline), "RemoteEmbedder: rate-limit wait exceeds the batch deadline");
@@ -313,8 +323,8 @@ private:
                 return {TransportError, {}};
             }
             auto pending = NKnn::PostRemoteEmbedderRequest(
-                DialHost_, Port_, UseTls_, httpRequest, Min(deadline - now, AttemptTimeout));
-            if (!pending.Wait(deadline - now)) {
+                Authority_, UseTls_, Path_, Authorization_, body, Min(deadline - now, AttemptTimeout));
+            if (!WaitFor(pending, deadline)) {
                 return {TransportError, {}};
             }
             const auto response = pending.ExtractValue();
@@ -336,7 +346,7 @@ private:
     static bool Wait(TDuration delay, TMonotonic deadline) {
         const auto now = TMonotonic::Now();
         return now < deadline && delay < deadline - now
-            && NKnn::WaitBeforeRemoteEmbedderRequest(delay).Wait(deadline - now);
+            && WaitFor(NKnn::WaitBeforeRemoteEmbedderRequest(delay), deadline);
     }
 
     bool Throttle(ui64 tokens, TMonotonic deadline) {

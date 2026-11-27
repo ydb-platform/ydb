@@ -653,7 +653,7 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                         (reqCtx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, AUDIT_MODE})); \
             }, \
             &Ydb::Coordination::V1::CoordinationService::AsyncService::Request ## NAME, \
-            "Coordination/" #NAME,             \
+            #NAME,  \
             logger, \
             getCounterBlock("coordination", #NAME))->Run(); \
     }
@@ -676,7 +676,7 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCoordinationSessionRequest(context));
             },
             *ActorSystem_,
-            "Coordination/Session",
+            "Session",
             getCounterBlock("coordination", "Session", true),
             getLimiter("CoordinationService", "Session", DEFAULT_MAX_SESSIONS_INFLIGHT));
     }

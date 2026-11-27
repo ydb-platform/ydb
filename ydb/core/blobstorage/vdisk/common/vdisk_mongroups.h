@@ -67,6 +67,26 @@ public:                                                                         
 
 
         ///////////////////////////////////////////////////////////////////////////////////
+        // TLsmCompactionRankGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TLsmCompactionRankGroup : public TBase {
+        public:
+            // Gauges are expressed in percent: a rank of 1.0 is reported as 100.
+            static constexpr ui64 RankScale = 100;
+
+            GROUP_CONSTRUCTOR(TLsmCompactionRankGroup)
+            {
+                COUNTER_INIT(Rank0, false);
+                COUNTER_INIT(Rank1_16, false);
+                Rank17Plus_ = GroupCounters->GetCounter("Rank17_", false);
+            }
+
+            COUNTER_DEF(Rank0);
+            COUNTER_DEF(Rank1_16);
+            COUNTER_DEF(Rank17Plus);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
         // TLsmHullGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TLsmHullGroup : public TBase {
@@ -79,6 +99,8 @@ public:                                                                         
                 COUNTER_INIT(LsmCompactionWriteRequests, true);
                 COUNTER_INIT(LsmHugeBytesWritten, true);
                 COUNTER_INIT(LsmLogBytesWritten, true);
+                COUNTER_INIT(LsmCompactionWaitingTimeSeconds, false);
+                COUNTER_INIT(LsmCompactionWorkingTimeSeconds, false);
             }
 
             COUNTER_DEF(LsmCompactionBytesRead)
@@ -87,6 +109,8 @@ public:                                                                         
             COUNTER_DEF(LsmCompactionWriteRequests)
             COUNTER_DEF(LsmHugeBytesWritten)
             COUNTER_DEF(LsmLogBytesWritten)
+            COUNTER_DEF(LsmCompactionWaitingTimeSeconds)
+            COUNTER_DEF(LsmCompactionWorkingTimeSeconds)
         };
 
 
@@ -198,6 +222,15 @@ public:                                                                         
                 COUNTER_INIT(HugeUsedChunks, false);
                 COUNTER_INIT_IF_EXTENDED(HugeCanBeFreedChunks, false);
                 COUNTER_INIT_IF_EXTENDED(HugeLockedChunks, false);
+                COUNTER_INIT(CapacityAlertGreen, false);
+                COUNTER_INIT(CapacityAlertCyan, false);
+                COUNTER_INIT(CapacityAlertLightYellow, false);
+                COUNTER_INIT(CapacityAlertYellow, false);
+                COUNTER_INIT(CapacityAlertLightOrange, false);
+                COUNTER_INIT(CapacityAlertPreOrange, false);
+                COUNTER_INIT(CapacityAlertOrange, false);
+                COUNTER_INIT(CapacityAlertRed, false);
+                COUNTER_INIT(CapacityAlertBlack, false);
             }
 
             COUNTER_DEF(DskOutOfSpace);
@@ -208,6 +241,15 @@ public:                                                                         
             COUNTER_DEF(HugeUsedChunks);       // chunks used by huge heap
             COUNTER_DEF(HugeCanBeFreedChunks); // number of chunks that can be freed after defragmentation
             COUNTER_DEF(HugeLockedChunks);
+            COUNTER_DEF(CapacityAlertGreen);
+            COUNTER_DEF(CapacityAlertCyan);
+            COUNTER_DEF(CapacityAlertLightYellow);
+            COUNTER_DEF(CapacityAlertYellow);
+            COUNTER_DEF(CapacityAlertLightOrange);
+            COUNTER_DEF(CapacityAlertPreOrange);
+            COUNTER_DEF(CapacityAlertOrange);
+            COUNTER_DEF(CapacityAlertRed);
+            COUNTER_DEF(CapacityAlertBlack);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -290,6 +332,11 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(ReplTotalBlobsWithProblems, false);
                 COUNTER_INIT_IF_EXTENDED(ReplPhantomBlobsWithProblems, false);
                 COUNTER_INIT_IF_EXTENDED(ReplMadeNoProgress, false);
+                COUNTER_INIT_IF_EXTENDED(ReplPDiskWriteThrottledMicroseconds, false);
+                COUNTER_INIT_IF_EXTENDED(ReplNodeRequestThrottledMicroseconds, false);
+                COUNTER_INIT_IF_EXTENDED(ReplNodeResponseThrottledMicroseconds, false);
+                COUNTER_INIT_IF_EXTENDED(ReplPDiskReadThrottledMicroseconds, false);
+                COUNTER_INIT(ReplIsHoldingToken, false);
             }
 
             COUNTER_DEF(SyncerVSyncMessagesSent);
@@ -315,6 +362,11 @@ public:                                                                         
             COUNTER_DEF(ReplTotalBlobsWithProblems);
             COUNTER_DEF(ReplPhantomBlobsWithProblems);
             COUNTER_DEF(ReplMadeNoProgress);
+            COUNTER_DEF(ReplPDiskWriteThrottledMicroseconds);
+            COUNTER_DEF(ReplNodeRequestThrottledMicroseconds);
+            COUNTER_DEF(ReplNodeResponseThrottledMicroseconds);
+            COUNTER_DEF(ReplPDiskReadThrottledMicroseconds);
+            COUNTER_DEF(ReplIsHoldingToken);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -541,7 +593,7 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(PutTotalBytes, true);
                 COUNTER_INIT_IF_EXTENDED(GetTotalBytes, true);
             }
-                
+
             void MinHugeBlobInBytes(ui32 size) {
                 auto getCounter = [&](ui32 size) {
                     return GroupCounters->GetSubgroup("MinHugeBlobInBytes", ToString(size))->GetCounter("count", 1);
@@ -607,10 +659,12 @@ public:                                                                         
             {
                 COUNTER_INIT_IF_EXTENDED(DefragBytesRewritten, true);
                 COUNTER_INIT_IF_EXTENDED(DefragThreshold, false);
+                COUNTER_INIT_IF_EXTENDED(SpaceInHugeChunksCouldBeFreedViaCompaction, false);
             }
 
             COUNTER_DEF(DefragBytesRewritten);
             COUNTER_DEF(DefragThreshold);
+            COUNTER_DEF(SpaceInHugeChunksCouldBeFreedViaCompaction);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -718,7 +772,7 @@ public:                                                                         
             COUNTER_DEF(PutTabletLog);
             COUNTER_DEF(PutUserData);
             COUNTER_DEF(PutAsyncBlob);
-            
+
             ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EGetHandleClass>& handleClass) {
                 if (!handleClass) {
                     return Undefined();
@@ -900,6 +954,8 @@ public:                                                                         
                 COUNTER_INIT(BlobsPromoteSsts, true);
                 COUNTER_INIT(BlobsExplicit, true);
                 COUNTER_INIT(BlobsBalance, true);
+                COUNTER_INIT(BlobsBalanceLevel, true);
+                COUNTER_INIT(BlobsBalanceFull, true);
                 COUNTER_INIT(BlobsFreeSpace, true);
                 COUNTER_INIT(BlobsSqueeze, true);
 
@@ -916,6 +972,8 @@ public:                                                                         
             COUNTER_DEF(BlobsPromoteSsts);
             COUNTER_DEF(BlobsExplicit);
             COUNTER_DEF(BlobsBalance);
+            COUNTER_DEF(BlobsBalanceLevel);
+            COUNTER_DEF(BlobsBalanceFull);
             COUNTER_DEF(BlobsFreeSpace);
             COUNTER_DEF(BlobsSqueeze);
 
@@ -926,6 +984,48 @@ public:                                                                         
             COUNTER_DEF(BarriersPromoteSsts);
             COUNTER_DEF(BarriersExplicit);
             COUNTER_DEF(BarriersBalance);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TStorageRatioGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TStorageRatioGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TStorageRatioGroup)
+            {
+                COUNTER_INIT(StorageRatioInvocations, true);
+                COUNTER_INIT(StorageRatioNoCalculationInvocations, true);
+                COUNTER_INIT(StorageRatioFeatureDisabledCalculations, true);
+                COUNTER_INIT(StorageRatioNonOverlappingFallbacks, true);
+                COUNTER_INIT(StorageRatioFullRecalculations, true);
+                COUNTER_INIT(StorageRatioTimeouts, true);
+                COUNTER_INIT(StorageRatioTotalElapsedMicroseconds, true);
+            }
+
+            COUNTER_DEF(StorageRatioInvocations);
+            COUNTER_DEF(StorageRatioNoCalculationInvocations);
+            COUNTER_DEF(StorageRatioFeatureDisabledCalculations);
+            COUNTER_DEF(StorageRatioNonOverlappingFallbacks);
+            COUNTER_DEF(StorageRatioFullRecalculations);
+            COUNTER_DEF(StorageRatioTimeouts);
+            COUNTER_DEF(StorageRatioTotalElapsedMicroseconds);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TStorageRatioAlgorithmGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TStorageRatioAlgorithmGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TStorageRatioAlgorithmGroup)
+            {
+                COUNTER_INIT(StorageRatioCalculations, true);
+                COUNTER_INIT(StorageRatioSstsCalculated, true);
+                COUNTER_INIT(StorageRatioElapsedMicroseconds, true);
+            }
+
+            COUNTER_DEF(StorageRatioCalculations);
+            COUNTER_DEF(StorageRatioSstsCalculated);
+            COUNTER_DEF(StorageRatioElapsedMicroseconds);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

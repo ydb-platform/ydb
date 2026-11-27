@@ -22,6 +22,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/library/actors/interconnect/ut/lib
+    ydb/library/actors/interconnect/ut/lib/port_manager
     ydb/library/actors/interconnect/ut/protos
     library/cpp/testing/unittest
     ydb/library/actors/testlib

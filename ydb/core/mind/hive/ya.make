@@ -11,6 +11,8 @@ SRCS(
     domain_info.h
     drain.cpp
     drain.h
+    event_history.h
+    event_history.cpp
     fill.cpp
     hive.cpp
     hive.h
@@ -65,6 +67,8 @@ SRCS(
     tx__process_metrics.cpp
     tx__process_pending_operations.cpp
     tx__reassign_groups.cpp
+    tx__reassign_tablets.cpp
+    tx__reassign_tablets.h
     tx__reassign_groups_on_decommit.cpp
     tx__register_node.cpp
     tx__release_tablets.cpp
@@ -98,6 +102,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect
     library/cpp/containers/ring_buffer
+    library/cpp/html/pcdata
     library/cpp/json
     library/cpp/monlib/dynamic_counters
     ydb/core/base

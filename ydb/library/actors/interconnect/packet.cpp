@@ -1,10 +1,20 @@
 #include "packet.h"
+#include "interconnect_counters.h"
 
 #include <ydb/library/actors/core/probes.h>
 
 #include <util/system/datetime.h>
 
 LWTRACE_USING(ACTORLIB_PROVIDER);
+
+TTcpPacketOutTask::TTcpPacketOutTask(const TSessionParams& params, NInterconnect::TOutgoingStream& outgoingStream,
+    NInterconnect::TOutgoingStream& xdcStream, bool usePreallocatedInternalStream)
+    : Params(params)
+    , OutgoingStream(outgoingStream)
+    , XdcStream(xdcStream)
+    , UsePreallocatedInternalStream(usePreallocatedInternalStream)
+    , HeaderBookmark(BookmarkStream(OutgoingStream, sizeof(TTcpPacketHeader_v2), UsePreallocatedInternalStream))
+{}
 
 ui32 TEventHolder::Fill(IEventHandle& ev) {
     Serial = 0;
@@ -30,4 +40,9 @@ ui32 TEventHolder::Fill(IEventHandle& ev) {
     }
 
     return EventSerializedSize;
+}
+
+ui32 TEventHolder::Fill(IEventHandle& ev, TInstant now) {
+    EnqueueTime = now;
+    return Fill(ev);
 }

@@ -17,6 +17,7 @@ namespace NKikimr {
         TIntrusivePtr<THullCtx> HullCtx;
         TPDiskCtxPtr PDiskCtx;
         NMonGroup::TInterfaceGroup MonGroup;
+        NMonGroup::TReplGroup ReplMonGroup;
         std::atomic<ui64> PDiskReadBytes;
         TActorId SkeletonId;
 
@@ -24,6 +25,7 @@ namespace NKikimr {
             : HullCtx(std::move(hullCtx))
             , PDiskCtx(std::move(pdiskCtx))
             , MonGroup(HullCtx->VCtx->VDiskCounters, "subsystem", "interface")
+            , ReplMonGroup(HullCtx->VCtx->VDiskCounters, "subsystem", "repl")
             , PDiskReadBytes(0)
             , SkeletonId(skeletonId)
         {}

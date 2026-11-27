@@ -1,6 +1,7 @@
 #pragma once
 
 #include "interconnect_common.h"
+#include "interconnect_stream.h"
 
 #include "event_holder_pool.h"
 

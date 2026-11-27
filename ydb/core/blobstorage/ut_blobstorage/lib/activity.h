@@ -140,7 +140,7 @@ public:
             IssueWrites();
         } else {
             auto msg = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, Generation, 1, 0, true,
-                Generation - 1, Max<ui32>(), nullptr, nullptr, TInstant::Max(), false, false);
+                Generation - 1, Max<ui32>(), nullptr, nullptr, TInstant::Max(), false, TWriteSource::Unknown, false);
             LOG_DEBUG_S(*TlsActivationContext, NActorsServices::TEST, Prefix << "sending TEvCollectGarbage# "
                 << msg->ToString());
             SendToProxy(TDuration::MilliSeconds(100), msg.release());

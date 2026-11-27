@@ -202,6 +202,33 @@ Y_UNIT_TEST_SUITE(TDynamicCountersTest) {
                                   "}\n");
     }
 
+    Y_UNIT_TEST(RemoveHistogram) {
+        TDynamicCounterPtr rootGroup(new TDynamicCounters());
+
+        rootGroup->GetHistogram("h1", ExponentialHistogram(4, 2));
+        rootGroup->GetNamedHistogram("label", "h2", ExponentialHistogram(4, 2));
+        rootGroup->GetHistogram("h3", ExponentialHistogram(4, 2));
+        rootGroup->GetCounter("c");
+
+        rootGroup->RemoveHistogram("h1");
+        rootGroup->RemoveHistogram("missing");
+        rootGroup->RemoveNamedHistogram("label", "h2");
+        // A plain counter must not be removed via the histogram methods...
+        rootGroup->RemoveHistogram("c");
+        // ...and a histogram must not be removed via the counter methods.
+        rootGroup->RemoveCounter("h3");
+
+        TStringStream ss;
+        TCountersPrinter printer(&ss);
+        rootGroup->Accept("root", "counters", printer);
+
+        UNIT_ASSERT_STRINGS_EQUAL(ss.Str(),
+                                  "root:counters {\n"
+                                  "  sensor:c = 0\n"
+                                  "  sensor:h3 = {1: 0, 2: 0, 4: 0, inf: 0}\n"
+                                  "}\n");
+    }
+
     Y_UNIT_TEST(RemoveSubgroup) {
         TDynamicCounterPtr rootGroup(new TDynamicCounters());
 

@@ -1,8 +1,10 @@
 #include "dsproxy_mock.h"
 #include "model.h"
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/util/stlog.h>
+#include <util/random/fast.h>
 
 namespace NKikimr {
 
@@ -123,6 +125,105 @@ namespace NKikimr {
                 , Model(MakeIntrusive<NFake::TProxyDS>(groupId))
             {}
         };
+
+        ////////////////////////////////////////////////////////////////////////////////
+
+        class TBlobStorageFailureInjectingActor final
+            : public TActor<TBlobStorageFailureInjectingActor>
+        {
+        private:
+            const TActorId RealProxy;
+            const TGroupId GroupId;
+            const double FailureProbability;
+            const ui64 RandomFailureSeed;
+            const NKikimrProto::EReplyStatus ErrorReplyStatus;
+            TFastRng64 Rng;
+            const TString FailureErrorReason;
+
+        public:
+            TBlobStorageFailureInjectingActor(
+                    TActorId realProxy,
+                    TGroupId groupId,
+                    TBSFailureInjectionConfig config)
+                : TActor(&TThis::StateWork)
+                , RealProxy(realProxy)
+                , GroupId(groupId)
+                , FailureProbability(std::clamp(config.GetFailureProbability(), 0.0, 1.0))
+                , RandomFailureSeed(config.HasRandomSeed() ? config.GetRandomSeed() : RandomNumber<ui64>())
+                , ErrorReplyStatus(config.GetErrorReplyStatus())
+                , Rng(RandomFailureSeed)
+                , FailureErrorReason(TStringBuilder()
+                    << "injected by BSProxyInterceptor"
+                    << " group " << GroupId
+                    << " seed " << RandomFailureSeed)
+            {
+            }
+
+        private:
+            bool ShouldInjectFailure()
+            {
+                return Rng.GenRandReal4() < FailureProbability;
+            }
+
+            template <typename TRequest>
+            bool MaybeInjectFailure(
+                TAutoPtr<IEventHandle>& ev,
+                TRequest& request,
+                const TString& eventName)
+            {
+                if (!ShouldInjectFailure()) {
+                    return false;
+                }
+
+                auto response = request.MakeErrorResponse(ErrorReplyStatus, FailureErrorReason, GroupId);
+                response->ExecutionRelay = std::move(request.ExecutionRelay);
+
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
+                    "[BSProxyInterceptor] group " << GroupId
+                    << " injecting " << eventName
+                    << " failure; not forwarding to " << RealProxy.ToString()
+                    << " sender " << ev->Sender.ToString()
+                    << " cookie " << ev->Cookie
+                    << " probability " << FailureProbability
+                    << " seed " << RandomFailureSeed);
+
+                Send(ev->Sender, response.release(), 0, ev->Cookie);
+                return true;
+            }
+
+            STFUNC(StateWork)
+            {
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
+                    "[BSProxyInterceptor] group " << GroupId << " " << ev->GetTypeName() << " " << ev->ToString());
+
+                #define HANDLE_EVENT(evType)                                        \
+                    case evType::EventType: {                                       \
+                        auto* msg = ev->Get<evType>();                              \
+                        if (MaybeInjectFailure(ev, *msg, ev->GetTypeName())) {      \
+                            return;                                                 \
+                        }                                                           \
+                        break;                                                      \
+                    }
+
+                switch (ev->GetTypeRewrite()) {
+                    DSPROXY_ENUM_EVENTS(HANDLE_EVENT)
+                    case TEvents::TEvPoison::EventType: {
+                        TActor::PassAway();
+                        [[fallthrough]];
+                    }
+                    default: {
+                        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
+                            "[BSProxyInterceptor] group " << GroupId
+                            << " skipping event type " << ev->GetTypeName());
+                        break;
+                    }
+                }
+
+                TActivationContext::Forward(ev, RealProxy);
+                #undef HANDLE_EVENT
+            }
+        };
+
     } // anon
 
     IActor *CreateBlobStorageGroupProxyMockActor(TIntrusivePtr<NFake::TProxyDS> model) {
@@ -131,6 +232,10 @@ namespace NKikimr {
 
     IActor *CreateBlobStorageGroupProxyMockActor(TGroupId groupId) {
         return new TBlobStorageGroupProxyMockActor(groupId);
+    }
+
+    IActor *CreateBlobStorageGroupFailureInjectingActor(TActorId actorId, TGroupId groupId, const TBSFailureInjectionConfig& config) {
+        return new TBlobStorageFailureInjectingActor(actorId, groupId, config);
     }
 
 } // NKikimr

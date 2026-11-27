@@ -33,23 +33,13 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_TABLET_STATUS; }
 
-    bool IsGoodStatusForPenalties() const {
-        switch (Status) {
-            case TEvLocal::TEvTabletStatus::StatusBootFailed:
-                switch (Reason) {
-                    case TEvTablet::TEvTabletDead::EReason::ReasonBootSSError:
-                    case TEvTablet::TEvTabletDead::EReason::ReasonBootBSError:
-                    case TEvTablet::TEvTabletDead::EReason::ReasonBootSSTimeout:
-                        return true;
-                    default:
-                        break;
-                }
-                break;
+    bool IsFailStatusForPostponeRestart() const {
+        return Status != TEvLocal::TEvTabletStatus::StatusOk && Status != TEvLocal::TEvTabletStatus::StatusSupersededByLeader;
+    }
 
-            default:
-                break;
-        }
-        return false;
+    bool IsFailStatusForNodePenalty() const {
+        // Hive can send Poison to tablets, it must not make penalty for the node
+        return IsFailStatusForPostponeRestart() && Reason != TEvTablet::TEvTabletDead::EReason::ReasonPill;
     }
 
     TString GetStatus() {
@@ -76,10 +66,8 @@ public:
                         << " from local "
                         << Local);
             NIceDb::TNiceDb db(txc.DB);
-            TInstant now = TActivationContext::Now();
+            const TInstant now = TActivationContext::Now();
             if (Status == TEvLocal::TEvTabletStatus::StatusOk) {
-                tablet->Statistics.AddRestartTimestamp(now.MilliSeconds());
-                tablet->ActualizeTabletStatistics(now);
                 if (tablet->BootTime != TInstant()) {
                     TDuration startTime = now - tablet->BootTime;
                     if (startTime > TDuration::Seconds(30)) {
@@ -106,11 +94,11 @@ public:
                     tablet->SendStopTablet(SideEffects);
                     return true;
                 }
-                tablet->BecomeRunning(Local.NodeId());
+                tablet->BecomeRunning(Local.NodeId(), EHiveEventReason::StatusOk);
                 if (tablet->GetLeader().IsLockedToActor()) {
                     // Tablet is locked and shouldn't be running, but we just found out it's running on this node
                     // Ask it to stop using InitiateStop (which uses data saved by BecomeRunning call above)
-                    tablet->InitiateStop(SideEffects);
+                    tablet->InitiateStop(SideEffects, EHiveEventReason::TabletLocked);
                 }
                 tablet->BootState = Self->BootStateRunning;
                 tablet->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
@@ -145,16 +133,21 @@ public:
                 if (Local) {
                     SideEffects.Send(Local, new TEvLocal::TEvDeadTabletAck(std::make_pair(TabletId, FollowerId), Generation));
                 }
+                if (tablet->IsLeader() && Generation < tablet->AsLeader().KnownGeneration) {
+                    return true;
+                }
+                Self->RecordTabletEvent(*tablet, EHiveEventType::BootFailed, EHiveEventReason::TabletDead,
+                    TStringBuilder() << "node=" << Local.NodeId() << " generation=" << Generation
+                        << " status=" << static_cast<int>(Status) << " deadReason=" << Reason);
                 if (tablet->IsLeader()) {
                     TLeaderTabletInfo& leader(tablet->AsLeader());
-                    if (Generation < leader.KnownGeneration) {
-                        return true;
-                    }
-                    if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriodForPenalties()) >= Self->GetTabletRestartsMaxCount()) {
-                        if (IsGoodStatusForPenalties()) {
+                    if (IsFailStatusForPostponeRestart()) {
+                        if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriodForPenalties()) >= Self->GetTabletRestartsMaxCount()) {
                             leader.PostponeStart(now + Self->GetPostponeStartPeriod());
                             BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet " << tablet->ToString()
                                 << " postponed start until " << leader.PostponedStart);
+                            Self->RecordTabletEvent(*tablet, EHiveEventType::StartPostponed, EHiveEventReason::RestartPenalty,
+                                TStringBuilder() << "postponedStart=" << leader.PostponedStart);
                         }
                     }
                 }
@@ -171,9 +164,9 @@ public:
                                         NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0),
                                         NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics));
                         }
-                        tablet->InitiateStop(SideEffects);
+                        tablet->InitiateStop(SideEffects, EHiveEventReason::TabletDead);
                     }
-                    if (IsGoodStatusForPenalties()) {
+                    if (IsFailStatusForNodePenalty()) {
                         tablet->FailedNodeId = Local.NodeId();
                     }
                 }

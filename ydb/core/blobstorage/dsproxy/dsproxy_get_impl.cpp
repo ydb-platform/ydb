@@ -277,10 +277,14 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
             ui32 orderNumber = Info->GetTopology().GetOrderNumber(VDiskIDFromVDiskID(vget->Record.GetVDiskID()));
             DSP_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# " << orderNumber << " vget# " << vget->ToString());
             if (vget->Record.ExtremeQueriesSize() > 0) {
-                TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(vget->Record.GetExtremeQueries(0).GetId());
-                History.AddVGetToWaitingList(blobId.PartId(), vget->Record.ExtremeQueriesSize(), orderNumber);
+                auto vgetItem = History.CreateVGet(vget->Record.ExtremeQueriesSize(), orderNumber);
+                for (const auto& query : vget->Record.GetExtremeQueries()) {
+                    TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(query.GetId());
+                    vgetItem.AddSubrequest(blobId, query.GetShift(), query.GetSize());
+                }
+                History.AddVGetToWaitingList(std::move(vgetItem));
             } else {
-                History.AddVGetToWaitingList(THistory::InvalidPartId, 0, orderNumber);
+                History.AddVGetToWaitingList(0, orderNumber);
             }
             outVGets.push_back(std::move(vget));
             ++RequestIndex;
@@ -298,9 +302,9 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobS
         const bool checksumming = Blackboard.GroupQueues->ChecksumExpected(Info->GetTopology(), vdiskId,
             TGroupQueues::TVDisk::TQueues::VDiskQueueId(Blackboard.PutHandleClass));
         auto vput = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vdiskId, true, nullptr, Deadline,
-            Blackboard.PutHandleClass, checksumming);
+            Blackboard.PutHandleClass, checksumming, TWriteSource::DSProxyGetAccelerate);
         DSP_LOG_DEBUG_SX(logCtx, "BPG15", "Send put to orderNumber# " << put.OrderNumber << " vput# " << vput->ToString());
-        History.AddVPutToWaitingList(put.Id.PartId(), 1, put.OrderNumber);
+        History.AddVPutToWaitingList(put.Id, put.OrderNumber);
         outVPuts.push_back(std::move(vput));
         ++VPutRequests;
     }
@@ -358,7 +362,7 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &
     Y_ABORT_UNLESS(record.HasVDiskID());
     TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
     TVDiskIdShort shortId(vdisk);
-    ui32 orderNumber = Info->GetOrderNumber(shortId);
+    ui32 orderNumber = GetOrderNumber(shortId);
     const TLogoBlobID blob = LogoBlobIDFromLogoBlobID(record.GetBlobID());
 
     const NKikimrProto::EReplyStatus status = record.GetStatus();

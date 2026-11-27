@@ -9,11 +9,13 @@ protected:
     TFullTabletId TabletId;
     TNodeId PreferredNodeId;
     TSideEffects SideEffects;
+    bool ForceStop = false;
 public:
-    TTxRestartTablet(TFullTabletId tabletId, THive *hive)
+    TTxRestartTablet(TFullTabletId tabletId, THive *hive, bool forceStop = false)
         : TBase(hive)
         , TabletId(tabletId)
         , PreferredNodeId(0)
+        , ForceStop(forceStop)
     {}
 
     TTxRestartTablet(TFullTabletId tabletId, TNodeId preferredNodeId, THive *hive)
@@ -42,7 +44,8 @@ public:
                         db.Table<Schema::TabletFollowerTablet>().Key(tablet->GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
                     }
                 }
-                tablet->InitiateStop(SideEffects, PreferredNodeId != 0);
+                // a restart with a preferred node is a move, see RecordTabletMove for who initiated it
+                tablet->InitiateStop(SideEffects, PreferredNodeId != 0 ? EHiveEventReason::Move : EHiveEventReason::RestartRequest, !ForceStop);
             }
             if (tablet->IsLeader() && tablet->AsLeader().ChannelProfileNewGroup.any()) {
                 tablet->AsLeader().InitiateAssignTabletGroups();
@@ -68,6 +71,10 @@ ITransaction* THive::CreateRestartTablet(TFullTabletId tabletId) {
 
 ITransaction* THive::CreateRestartTablet(TFullTabletId tabletId, TNodeId preferredNodeId) {
     return new TTxRestartTablet(tabletId, preferredNodeId, this);
+}
+
+ITransaction* THive::CreateForceRestartTablet(TFullTabletId tabletId) {
+    return new TTxRestartTablet(tabletId, this, true);
 }
 
 } // NHive

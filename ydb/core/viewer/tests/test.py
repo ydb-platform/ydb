@@ -29,6 +29,16 @@ config.yaml_config['domains_config']['security_config']['administration_allowed_
 cluster = KiKiMR(config)
 cluster.start()
 
+BSC_STORAGE_STATS_VALUE_FIELDS = {
+    'AvailableGroupsToCreate',
+    'AvailableSizeToCreate',
+    'CurrentAllocatedSize',
+    'CurrentAvailableSize',
+    'CurrentGroupsCreated',
+    'ImmediateGroupsToCreate',
+    'ImmediateSizeToCreate',
+}
+
 
 def login_user(request):
     return requests.post("http://localhost:%s/login" % cluster.nodes[1].mon_port, json=request)
@@ -579,6 +589,33 @@ def get_viewer_db_normalized(url, params=None):
     return normalize_result(get_viewer_db(url, params))
 
 
+def has_calculated_bsc_storage_stats(result):
+    for entry in result.get('StorageStats', []):
+        for key in BSC_STORAGE_STATS_VALUE_FIELDS:
+            value = entry.get(key)
+            if value is None:
+                continue
+            try:
+                if int(value) != 0:
+                    return True
+            except (TypeError, ValueError):
+                continue
+    return False
+
+
+def get_viewer_cluster_with_calculated_storage_stats():
+    result = {}
+    tries = 15
+    while tries > 0:
+        result = get_viewer("/viewer/cluster")
+        if has_calculated_bsc_storage_stats(result):
+            return result
+        tries -= 1
+        time.sleep(1)
+    assert has_calculated_bsc_storage_stats(result), \
+        "BSC storage stats were not calculated in /viewer/cluster response: %s" % result.get('StorageStats', [])
+
+
 def test_viewer_nodelist():
     result = get_viewer_db_normalized("/viewer/nodelist", {
     })
@@ -661,7 +698,10 @@ def test_viewer_describe():
 
 
 def test_viewer_cluster():
-    return get_viewer_normalized("/viewer/cluster")
+    result = get_viewer_cluster_with_calculated_storage_stats()
+    result = normalize_result(result)
+    delete_keys_recursively(result, BSC_STORAGE_STATS_VALUE_FIELDS)
+    return result
 
 
 def test_viewer_tenantinfo():

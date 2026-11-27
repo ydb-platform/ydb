@@ -52,6 +52,7 @@ public:
             node->UpdateResourceTotalUsage(record, db);
             node->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
             node->ActualizeNodeStatistics(now);
+            Self->UpdateNodeCounters(*node);
             BLOG_TRACE("THive::TTxUpdateTabletMetrics UpdateResourceTotalUsage node "
                        << nodeId
                        << " value "

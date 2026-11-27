@@ -2,6 +2,7 @@
 
 #include "hive.h"
 #include "metrics.h"
+#include "event_history.h"
 
 namespace NKikimr {
 namespace NHive {
@@ -107,6 +108,10 @@ protected:
     ETabletRole TabletRole;
     TInstant VolatileStateChangeTime;
     TInstant LastBalancerDecisionTime;
+    // Stamp of the last balancer run that counted this tablet and the bit set of the counters
+    // (TBalancerRunStats::ETabletCounter) it was counted in, see MarkCountedByBalancerRun.
+    ui32 BalancerRunId = 0;
+    ui16 BalancerRunCounted = 0;
 
 public:
     static TString EVolatileStateName(EVolatileState value) {
@@ -133,7 +138,23 @@ public:
         return VolatileStateChangeTime;
     }
 
-    bool IsGoodForBalancer(TInstant now) const;
+    bool IsAllowedByBalancerPolicy() const; // balancer policy allows moves and the tablet type is not in the ignore list
+    bool IsInBalancerCooldown(TInstant now) const; // moved by the balancer too recently
+
+    // Returns true the first time balancer run runId marks this tablet with the given counter bit, false on
+    // repeats within the same run. Lets a run count a tablet once per counter without a per-run map of tablets.
+    bool MarkCountedByBalancerRun(ui32 runId, ui8 counterBit) {
+        if (BalancerRunId < runId) { // stamped by an older run, ids only grow
+            BalancerRunId = runId;
+            BalancerRunCounted = 0;
+        }
+        const ui16 mask = static_cast<ui16>(1) << counterBit;
+        if (BalancerRunCounted & mask) {
+            return false;
+        }
+        BalancerRunCounted |= mask;
+        return true;
+    }
 
     void MakeBalancerDecision(TInstant now) {
         LastBalancerDecisionTime = now;
@@ -159,6 +180,8 @@ public:
     TVector<TActorId> ActorsToNotifyOnRestart; // volatile
     double Weight;
     mutable TString BootState;
+    // diagnostics only: newest events of this tablet, constructed on the first event, see THive::RecordTabletEvent
+    mutable TEventHistory EventHistory;
     TInstant PostponedStart;
     EBalancerPolicy BalancerPolicy;
     TNodeId FailedNodeId = 0; // last time we tried to start the tablet, we failed on this node
@@ -204,10 +227,8 @@ public:
     TString FamilyString() const;
     void ChangeVolatileState(EVolatileState state);
 
-    bool IsReadyToBoot() const {
-        return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STOPPED;
-    }
-
+    bool IsReadyToWork() const;
+    bool IsReadyToBoot() const;
     bool IsReadyToStart(TInstant now) const;
     bool IsStarting() const;
     bool IsStartingOnNode(TNodeId nodeId) const;
@@ -219,15 +240,16 @@ public:
     bool IsAliveOnLocal(const TActorId& local) const;
     bool IsStopped() const;
     bool InitiateBoot(TNodeId node = 0);
-    bool BecomeStarting(TNodeId nodeId);
-    bool BecomeRunning(TNodeId nodeId);
-    bool BecomeStopped();
+    // reason describes who/what initiated the transition, see THive::RecordTabletEvent
+    bool BecomeStarting(TNodeId nodeId, EHiveEventReason reason);
+    bool BecomeRunning(TNodeId nodeId, EHiveEventReason reason);
+    bool BecomeStopped(EHiveEventReason reason);
 
     TNodeInfo* GetNode() const;
     TActorId GetLocal() const;
     void SendStopTablet(TSideEffects& sideEffects);
     void SendStopTablet(const TActorId& local, TSideEffects& sideEffects);
-    bool InitiateStop(TSideEffects& sideEffects, bool forMove = false);
+    bool InitiateStop(TSideEffects& sideEffects, EHiveEventReason reason, bool forMove = false);
 
     void BecomeUnknown(TNodeInfo* node);
     bool Kick();
@@ -303,6 +325,7 @@ public:
         return ResourceValues;
     }
 
+    void AddRestartTimestamp(TInstant now);
     void ActualizeTabletStatistics(TInstant now);
     ui64 GetRestartsPerPeriod(TInstant barrier) const;
     bool RestartsOften() const;
@@ -317,4 +340,3 @@ public:
 
 } // NHive
 } // NKikimr
-

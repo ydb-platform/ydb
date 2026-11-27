@@ -12,6 +12,7 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/tx/tx.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <util/string/ascii.h>
 #include <util/string/builder.h>
 
 ////////////////////////////////////////////
@@ -28,6 +29,9 @@ bool IsFormUrlencoded(const NMonitoring::IMonHttpRequest& request) {
     const TStringBuf contentType = value.NextTok(';');
     return contentType == "application/x-www-form-urlencoded";
 }
+
+static constexpr TDuration RequestTimeout = TDuration::Seconds(60);
+static constexpr TStringBuf RequestDeadlineHeader = "x-ydb-monitoring-deadline-us";
 
 class TForwardingActor : public TActorBootstrapped<TForwardingActor> {
 public:
@@ -63,6 +67,9 @@ public:
             pb.SetPostContent(content.data(), content.size());
         }
         for (const auto& header : request.GetHeaders()) {
+            if (AsciiEqualsIgnoreCase(header.Name(), RequestDeadlineHeader)) {
+                continue;
+            }
             auto *p = pb.AddHeaders();
             p->SetName(header.Name());
             p->SetValue(header.Value());
@@ -75,6 +82,11 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        const TInstant deadline = TAppData::TimeProvider->Now() + RequestTimeout;
+        auto* deadlineHeader = Request.AddHeaders();
+        deadlineHeader->SetName(TString(RequestDeadlineHeader));
+        deadlineHeader->SetValue(TStringBuilder() << deadline.MicroSeconds());
+
         NTabletPipe::TClientConfig config;
         config.AllowFollower = ForceFollower;
         config.ForceFollower = ForceFollower;
@@ -84,7 +96,7 @@ public:
         PipeClient = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, TargetTablet, config));
         NTabletPipe::SendData(ctx, PipeClient, new NMon::TEvRemoteHttpInfo(std::move(Request)));
 
-        ctx.Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
+        ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup());
         Become(&TThis::StateWork);
     }
 

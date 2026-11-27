@@ -77,15 +77,32 @@ private:
         request->Record.SetIssuer(map["issuer"].GetString());
         request->Record.SetAction(map["action"].GetString());
 
+        if (map.contains("drain_data")) {
+            if (!map["drain_data"].IsBoolean()) {
+                ReplyWithError("HTTP/1.1 400 Bad Request\r\n\r\ndrain_data must be a boolean", ctx);
+                return;
+            }
+            request->Record.SetDrainData(map["drain_data"].GetBoolean());
+        }
+
         auto &hosts = map["hosts"].GetArray();
         for (auto &host : hosts)
             *request->Record.AddHosts() = host.GetString();
+        
+        auto &devices = map["devices"].GetArray();
+        for (auto &device : devices)
+            *request->Record.AddDevices() = device.GetString();
 
         const auto &params = http.GetParams();
         if (params.contains("dry_run"))
             request->Record.SetDryRun(params.find("dry_run")->second == "true");
 
-        SendToCms(request.Release(), ctx);
+        CreateCmsPipe(ctx);
+        if (request->Record.GetDrainData()) {
+            CreateTaskRequest = request.Release();
+        } else {
+            NTabletPipe::SendData(ctx, CmsPipe, request.Release());
+        }
         Become(&TThis::StateCreateTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -109,9 +126,15 @@ private:
         NJson::TJsonValue hosts(NJson::JSON_ARRAY);
         for (auto &host : resp.GetHosts())
             hosts.AppendValue(host);
+
+        NJson::TJsonValue devices(NJson::JSON_ARRAY);
+        for (auto &device : resp.GetDevices())
+            devices.AppendValue(device);
+
         NJson::TJsonValue map;
         map.InsertValue("id", resp.GetTaskId());
         map.InsertValue("hosts", hosts);
+        map.InsertValue("devices", devices);
         map.InsertValue("status", status);
         map.InsertValue("message", resp.GetStatus().GetReason());
 
@@ -128,7 +151,8 @@ private:
     void ProcessListTasksRequest(const TActorContext &ctx) {
         TAutoPtr<TEvCms::TEvWalleListTasksRequest> request = new TEvCms::TEvWalleListTasksRequest;
 
-        SendToCms(request.Release(), ctx);
+        CreateCmsPipe(ctx);
+        NTabletPipe::SendData(ctx, CmsPipe, request.Release());
         Become(&TThis::StateListTasks, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -147,12 +171,19 @@ private:
     void Reply(const TWalleListTasksResponse &resp, const TActorContext &ctx) {
         NJson::TJsonValue tasks(NJson::JSON_ARRAY);
         for (auto &task : resp.GetTasks()) {
+
             NJson::TJsonValue hosts(NJson::JSON_ARRAY);
             for (auto &host : task.GetHosts())
                 hosts.AppendValue(host);
+
+            NJson::TJsonValue devices(NJson::JSON_ARRAY);
+            for (auto &device : task.GetDevices())
+                devices.AppendValue(device);
+
             NJson::TJsonValue map;
             map.InsertValue("id", task.GetTaskId());
             map.InsertValue("hosts", hosts);
+            map.InsertValue("devices", devices);
             map.InsertValue("status", task.GetStatus());
 
             tasks.AppendValue(map);
@@ -175,7 +206,8 @@ private:
         TAutoPtr<TEvCms::TEvWalleCheckTaskRequest> request = new TEvCms::TEvWalleCheckTaskRequest;
         request->Record.SetTaskId(id);
 
-        SendToCms(request.Release(), ctx);
+        CreateCmsPipe(ctx);
+        NTabletPipe::SendData(ctx, CmsPipe, request.Release());
         Become(&TThis::StateCheckTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -199,9 +231,15 @@ private:
         NJson::TJsonValue hosts(NJson::JSON_ARRAY);
         for (auto &host : resp.GetTask().GetHosts())
             hosts.AppendValue(host);
+
+        NJson::TJsonValue devices(NJson::JSON_ARRAY);
+        for (auto &device : resp.GetTask().GetDevices())
+            devices.AppendValue(device);
+
         NJson::TJsonValue map;
         map.InsertValue("id", resp.GetTask().GetTaskId());
         map.InsertValue("hosts", hosts);
+        map.InsertValue("devices", devices);
         map.InsertValue("status", status);
         map.InsertValue("message", resp.GetStatus().GetReason());
 
@@ -219,7 +257,8 @@ private:
         TAutoPtr<TEvCms::TEvWalleRemoveTaskRequest> request = new TEvCms::TEvWalleRemoveTaskRequest;
         request->Record.SetTaskId(id);
 
-        SendToCms(request.Release(), ctx);
+        CreateCmsPipe(ctx);
+        NTabletPipe::SendData(ctx, CmsPipe, request.Release());
         Become(&TThis::StateRemoveTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -306,7 +345,7 @@ private:
         ReplyWithError(TString("HTTP/1.1 408 Request Timeout\r\n\r\nCMS request timeout"), ctx);
     }
 
-    void SendToCms(IEventBase *ev, const TActorContext &ctx) {
+    void CreateCmsPipe(const TActorContext &ctx) {
         Y_ABORT_UNLESS(!CmsPipe);
 
         NTabletPipe::TClientConfig pipeConfig;
@@ -315,17 +354,28 @@ private:
             .MaxRetryTime = TDuration::Seconds(10),
         };
         CmsPipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(), pipeConfig));
-        NTabletPipe::SendData(ctx, CmsPipe, ev);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
-        if (msg->ClientId != CmsPipe || msg->Status == NKikimrProto::OK) {
+        if (msg->ClientId != CmsPipe) {
             return;
         }
 
-        HandlePipeDestroyed(ctx);
+        if (msg->Status != NKikimrProto::OK) {
+            HandlePipeDestroyed(ctx);
+            return;
+        }
+
+        if (CreateTaskRequest) {
+            NKikimrCms::TVersionInfo versionInfo;
+            if (!versionInfo.ParseFromString(msg->VersionInfo) || !versionInfo.GetSupportWalleDrainData()) {
+                ReplyWithError("HTTP/1.1 400 Bad Request\r\n\r\nCMS does not support drain_data", ctx);
+                return;
+            }
+            NTabletPipe::SendData(ctx, CmsPipe, CreateTaskRequest.Release());
+        }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
@@ -346,6 +396,7 @@ private:
     }
 
     NMon::TEvHttpInfo::TPtr RequestEvent;
+    TAutoPtr<TEvCms::TEvWalleCreateTaskRequest> CreateTaskRequest;
     TActorId CmsPipe;
 };
 

@@ -136,7 +136,8 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType
+            TEvHive::TEvCreateTabletReply::EventType,
+            TEvFileStore::TEvUpdateConfigResponse::EventType,
         });
     }
 
@@ -364,6 +365,15 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         result->SetError(
             NKikimrScheme::StatusPreconditionFailed,
             "Wrong version in config");
+        return result;
+    }
+
+    if (!TFileStoreInfo::ValidateFileStoreConfigSpaceOverflow(
+            fs->Config.GetBlockSize(),
+            alterConfig->GetBlocksCount(),
+            errStr))
+    {
+        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
         return result;
     }
 

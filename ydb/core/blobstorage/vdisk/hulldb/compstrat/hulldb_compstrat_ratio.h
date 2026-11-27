@@ -2,8 +2,15 @@
 
 #include "defs.h"
 #include "hulldb_compstrat_defs.h"
+#include "hulldb_compstrat_ratio_batch.h"
+#include "hulldb_compstrat_ratio_iterators.h"
+#include "hulldb_compstrat_ratio_stat.h"
+#include "hulldb_compstrat_yield.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullmergeits.h>
+#include <util/digest/numeric.h>
+
+#include <functional>
 
 namespace NKikimr {
     namespace NHullComp {
@@ -26,26 +33,60 @@ namespace NKikimr {
 
             TStrategyStorageRatio(TIntrusivePtr<THullCtx> hullCtx,
                                   const TLevelIndexSnapshot &levelSnap,
-                                  TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> &&barriersEssence,
-                                  bool allowGarbageCollection)
+                                  TBarriersSnapshot &barriersSnap,
+                                  bool allowGarbageCollection,
+                                  TCompactionYield* yield = nullptr)
                 : HullCtx(std::move(hullCtx))
                 , LevelSnap(levelSnap)
-                , BarriersEssence(std::move(barriersEssence))
+                , BarriersSnap(barriersSnap)
                 , AllowGarbageCollection(allowGarbageCollection)
+                , Yield(yield)
             {}
 
 
             void Work() {
+                Work(TStorageRatioIteratorFactory<TKey, TMemRec>{});
+            }
+
+            template <class TIteratorFactory>
+            void Work(const TIteratorFactory& iterators) {
+                const bool optimizationEnabled = HullCtx->VCfg->FeatureFlags
+                    .GetEnableHullCompStorageRatioOptimization();
                 TInstant startTime(TAppData::TimeProvider->Now());
+                const auto monotonicStart = TActivationContext::Monotonic();
+                const TDuration suspendedBefore = Yield ? Yield->GetSuspendedTime() : TDuration::Zero();
                 TStat stat;
-                UpdateStorageRatioForDb(startTime, stat);
+                bool fullBatchScheduled = false;
+                if (optimizationEnabled) {
+                    if (TFullBatch::IsCalculationDue(*HullCtx, startTime)) {
+                        fullBatchScheduled = true;
+                        BarriersEssence = iterators.TakeBarriersEssence(HullCtx, BarriersSnap);
+                        UpdateStorageRatioForDbFullBatch(startTime, stat, iterators);
+                    }
+                } else {
+                    HullCtx->StorageRatioFullBatchNextCalculationTime.reset();
+                    BarriersEssence = iterators.TakeBarriersEssence(HullCtx, BarriersSnap);
+                    UpdateStorageRatioForDb(startTime, stat, iterators);
+                }
+
                 TInstant finishTime(TAppData::TimeProvider->Now());
+                if (fullBatchScheduled) {
+                    TFullBatch::ScheduleNextCalculation(*HullCtx, finishTime);
+                }
+
+                // Report the time this pass actually ran, not the time the
+                // coroutine spent suspended between turns.
+                const TDuration wall = TActivationContext::Monotonic() - monotonicStart;
+                const TDuration suspended = Yield ? Yield->GetSuspendedTime() - suspendedBefore : TDuration::Zero();
+                const TDuration elapsed = wall > suspended ? wall - suspended : TDuration::Zero();
+                stat.AccountMetrics(*HullCtx, optimizationEnabled, elapsed);
                 if (HullCtx->VCtx->ActorSystem) {
-                    LOG_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                    LOG_DEBUG(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "%s: StorageRatio: timeSpent# %s stat# %s",
+                                "%s: StorageRatio: timeSpent# %s suspended# %s stat# %s",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                (finishTime - startTime).ToString().data(), stat.ToString().data()));
+                                elapsed.ToString().data(), suspended.ToString().data(),
+                                stat.ToString().data()));
                 }
 
                 BarriersEssence.Reset();
@@ -54,64 +95,106 @@ namespace NKikimr {
         private:
             TIntrusivePtr<THullCtx> HullCtx;
             const TLevelIndexSnapshot &LevelSnap;
+            TBarriersSnapshot &BarriersSnap;
             TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> BarriersEssence;
             const bool AllowGarbageCollection;
+            TCompactionYield* const Yield;
 
-            struct TStat {
-                ui32 SstsChecked = 0;
-                bool BreakedActualRatio = false;
-                bool BreakedTimeout = false;
-
-                TString ToString() const {
-                    auto bool2str = [] (bool v) { return v ? "true" : "false"; };
-                    return Sprintf("{SstsChecked# %" PRIu32 " BreakedActualRatio# %s "
-                                   "BreakedTimeout# %s}", SstsChecked, bool2str(BreakedActualRatio),
-                                   bool2str(BreakedTimeout));
-                }
-            };
+            using TStat = TStorageRatioStat;
+            using TFullBatch = TStorageRatioFullBatch<TKey, TMemRec>;
 
             struct TTimeSst {
-                ui64 Seconds;
+                TInstant NextCalculationTime;
                 TLevelSstPtr LevelSstPtr;
 
-                TTimeSst(ui64 seconds, const TLevelSstPtr &p)
-                    : Seconds(seconds)
+                TTimeSst(TInstant nextCalculationTime, const TLevelSstPtr &p)
+                    : NextCalculationTime(nextCalculationTime)
                     , LevelSstPtr(p)
                 {}
 
                 bool operator < (const TTimeSst &s) const {
-                    return Seconds < s.Seconds;
+                    return NextCalculationTime < s.NextCalculationTime;
                 }
             };
 
-            void OrderSstByStorageRatioTime(TVector<TTimeSst> &vec) {
+            static ui64 GetSstId(const TLevelSstPtr &p) {
+                return p.SstPtr->AssignedSstId ? p.SstPtr->AssignedSstId : p.SstPtr->VolatileOrderId;
+            }
+
+            static TDuration GetInitialRecalculationAge(const TLevelSstPtr &p, TDuration calcPeriod) {
+                const ui64 calcPeriodSeconds = calcPeriod.Seconds();
+                if (!calcPeriodSeconds) {
+                    return calcPeriod;
+                }
+
+                return TDuration::Seconds(IntHash(GetSstId(p)) % calcPeriodSeconds);
+            }
+
+            static TInstant GetInitialCalculationTime(const TLevelSstPtr &p, TInstant startTime, TDuration calcPeriod) {
+                const TInstant createTime = p.SstPtr->Info.CTime;
+                if (createTime != TInstant::Zero() && startTime < createTime + calcPeriod) {
+                    return createTime;
+                }
+
+                return startTime - GetInitialRecalculationAge(p, calcPeriod);
+            }
+
+            static TInstant GetCalculationTime(const TLevelSstPtr &p, TInstant startTime, TDuration calcPeriod) {
+                TInstant calculationTime = p.SstPtr->StorageRatio.GetCalculationTime();
+                if (calculationTime != TInstant::Zero()) {
+                    return calculationTime;
+                }
+
+                TSstRatioPtr ratio = p.SstPtr->StorageRatio.Get();
+                const TInstant initialCalculationTime = GetInitialCalculationTime(p, startTime, calcPeriod);
+                if (!ratio) {
+                    p.SstPtr->StorageRatio.SetCalculationTime(initialCalculationTime);
+                    return initialCalculationTime;
+                }
+
+                if (ratio->Time == TInstant::Zero()) {
+                    return TInstant::Zero();
+                }
+
+                p.SstPtr->StorageRatio.SetCalculationTime(ratio->Time);
+                return ratio->Time;
+            }
+
+            static TInstant GetNextCalculationTime(const TLevelSstPtr &p, TInstant startTime, TDuration calcPeriod) {
+                return GetCalculationTime(p, startTime, calcPeriod) + calcPeriod;
+            }
+
+            void OrderSstByStorageRatioTime(TVector<TTimeSst> &vec, TInstant startTime, TDuration calcPeriod) {
                 vec.clear();
                 TSstIterator it(&LevelSnap.SliceSnap);
                 it.SeekToFirst();
                 while (it.Valid()) {
+                    CheckCompactionYield(Yield);
                     TLevelSstPtr p = it.Get();
-                    ui64 seconds = p.SstPtr->StorageRatio.GetTime().Seconds();
-                    vec.push_back(TTimeSst(seconds, p));
+                    vec.push_back(TTimeSst(GetNextCalculationTime(p, startTime, calcPeriod), p));
                     it.Next();
                 }
                 Sort(vec.begin(), vec.end());
             }
 
-            void UpdateStorageRatioForDb(TInstant startTime, TStat &stat) {
+            template <class TIteratorFactory>
+            void UpdateStorageRatioForDb(TInstant startTime, TStat &stat, const TIteratorFactory& iterators) {
+                const auto calcStart = TActivationContext::Monotonic();
+                const TDuration suspendedBefore = Yield ? Yield->GetSuspendedTime() : TDuration::Zero();
                 const TDuration &calcPeriod = HullCtx->HullCompStorageRatioCalcPeriod;
                 const TDuration &calcDuration = HullCtx->HullCompStorageRatioMaxCalcDuration;
 
                 // order all ssts (including level 0) by storage ratio calculation time
                 TVector<TTimeSst> vec;
                 vec.reserve(1000u);
-                OrderSstByStorageRatioTime(vec);
+                OrderSstByStorageRatioTime(vec, startTime, calcPeriod);
 
                 // calculate storage ratio, don't spend much time on it, skip ssts that are actualized
                 for (const auto &x : vec) {
-                    const TInstant time = x.LevelSstPtr.SstPtr->StorageRatio.GetTime();
-                    if (startTime >= time + calcPeriod) {
-                        TSstRatioPtr newRatio = CalculateSstRatio(x.LevelSstPtr.SstPtr, startTime);
-                        x.LevelSstPtr.SstPtr->StorageRatio.Set(newRatio);
+                    CheckCompactionYield(Yield);
+                    if (startTime >= x.NextCalculationTime) {
+                        TSstRatioPtr newRatio = CalculateSstRatio(x.LevelSstPtr.SstPtr, startTime, iterators);
+                        x.LevelSstPtr.SstPtr->StorageRatio.Set(newRatio, newRatio->Time);
                         stat.SstsChecked++;
                     } else {
                         stat.BreakedActualRatio = true;
@@ -119,33 +202,55 @@ namespace NKikimr {
                     }
 
                     // avoid spending too much time on storage ratio calculation
-                    TInstant now = TAppData::TimeProvider->Now();
-                    if (now > startTime + calcDuration) {
+                    const auto now = TActivationContext::Monotonic();
+                    const TDuration suspended = Yield ? Yield->GetSuspendedTime() - suspendedBefore : TDuration::Zero();
+                    // Queueing between coroutine turns must not consume the calculation budget.
+                    if (now - suspended > calcStart + calcDuration) {
                         stat.BreakedTimeout = true;
                         break;
                     }
                 }
-
-                BarriersEssence.Reset();
             }
 
-            TSstRatioPtr CalculateSstRatio(TLevelSegmentPtr sst, TInstant now) {
+            template <class TIteratorFactory>
+            void UpdateStorageRatioForDbFullBatch(TInstant startTime, TStat& stat, const TIteratorFactory& iterators) {
+                TFullBatch batch(
+                    HullCtx,
+                    LevelSnap,
+                    *BarriersEssence,
+                    AllowGarbageCollection,
+                    Yield);
+                batch.Calculate(
+                    startTime,
+                    stat,
+                    [this, startTime, &iterators](const TLevelSegmentPtr& sst) {
+                        return CalculateSstRatio(sst, startTime, iterators);
+                    },
+                    iterators);
+            }
+
+            template <class TIteratorFactory>
+            TSstRatioPtr CalculateSstRatio(TLevelSegmentPtr sst, TInstant now, const TIteratorFactory& iterators) {
+                return iterators.WithSstIterators(HullCtx, LevelSnap, sst, [this, now](auto& subsIt, auto& dbIt) {
+                    return this->CalculateSstRatio(now, subsIt, dbIt);
+                });
+            }
+
+            template <class TSubsIterator, class TDbIterator>
+            TSstRatioPtr CalculateSstRatio(TInstant now, TSubsIterator& subsIt, TDbIterator& dbIt) {
                 TSstRatioPtr r = MakeIntrusive<TSstRatio>(now);
                 TSstRatio *ratio = r.Get();
 
-                // the subset we processing
-                TMemIterator subsIt(sst.Get());
                 subsIt.SeekToFirst();
-                // for the whole level index
-                TLevelIt dbIt(HullCtx, &LevelSnap);
 
-                auto newItem = [] (const TMemIterator &subsIt, const TIndexRecordMerger &subsMerger) {
+                auto newItem = [this] (const TSubsIterator &subsIt, const TIndexRecordMerger &subsMerger) {
                     Y_UNUSED(subsIt);
                     Y_UNUSED(subsMerger);
+                    CheckCompactionYield(Yield);
                 };
 
-                auto doMerge = [this, ratio] (const TMemIterator &subsIt,
-                                              const TLevelIt &dbIt,
+                auto doMerge = [this, ratio] (const TSubsIterator &subsIt,
+                                              const TDbIterator &dbIt,
                                               const TIndexRecordMerger &subsMerger,
                                               const TIndexRecordMerger &dbMerger) {
                     Y_UNUSED(subsIt);
@@ -178,7 +283,7 @@ namespace NKikimr {
                     }
                 };
 
-                auto crash = [ratio, this] (const TMemIterator &subsIt, const TLevelIt &dbIt) {
+                auto crash = [ratio, this] (const TSubsIterator &subsIt, const TDbIterator &dbIt) {
                     TStringStream str;
                     str << MergeIteratorWithWholeDbDefaultCrashReport(HullCtx->VCtx->VDiskLogPrefix,
                                                                       subsIt, dbIt);
@@ -186,7 +291,7 @@ namespace NKikimr {
                     return str.Str();
                 };
 
-                MergeIteratorWithWholeDb<TMemIterator, TLevelIt, TIndexRecordMerger>(
+                MergeIteratorWithWholeDb<TSubsIterator, TDbIterator, TIndexRecordMerger>(
                             HullCtx->VCtx->Top->GType, subsIt, dbIt, newItem, doMerge, crash);
                 return r;
             }

@@ -45,6 +45,12 @@ public:
         return false;
     }
 
+    void NotifyCancel(const TLeaderTabletInfo* tablet) {
+        for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) {
+            SideEffects.Send(actor, new TEvPrivate::TEvRestartCancelled(tablet->GetFullTabletId()));
+        }
+    }
+
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
         SideEffects.Reset(Self->SelfId());
 
@@ -74,6 +80,7 @@ public:
             db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
             tablet->State = ETabletState::ReadyToWork;
             tablet->TryToBoot();
+            NotifyCancel(tablet);
             return true;
         }
 
@@ -84,6 +91,7 @@ public:
             db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
             tablet->State = ETabletState::ReadyToWork;
             tablet->TryToBoot();
+            NotifyCancel(tablet);
             return true;
         }
 
@@ -109,6 +117,7 @@ public:
                 db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
                 tablet->State = ETabletState::ReadyToWork;
                 tablet->TryToBoot();
+                NotifyCancel(tablet);
                 return true;
             }
         }
@@ -270,6 +279,7 @@ public:
             BLOG_W("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
                    << tablet->Id
                    << " wasn't changed");
+            NotifyCancel(tablet);
             if (hasEmptyChannel) {
                 // we can't continue with partial/unsuccessfull reassign on 0 generation
                 newTabletState = ETabletState::GroupAssignment;
@@ -283,14 +293,20 @@ public:
                         tablet->ChannelProfileNewGroup.reset(channelId);
                     }
                 }
-                for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) {
-                    SideEffects.Send(actor, new TEvPrivate::TEvRestartCancelled(tablet->GetFullTabletId()));
-                }
                 newTabletState = ETabletState::ReadyToWork;
             }
         }
 
+        if (tablet->ChannelProfileNewGroup.none()) {
+            if (std::exchange(tablet->IsMarkedForReassign, false)) {
+                Self->UpdateCounterTabletsReassigning(-1);
+            }
+        }
+
         db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(newTabletState);
+        Self->RecordTabletEvent(*tablet, EHiveEventType::GroupsReassigned, EHiveEventReason::StorageReassign,
+            TStringBuilder() << "reassignReason=" << NKikimrHive::TEvReassignTablet::EHiveReassignReason_Name(tablet->ChannelProfileReassignReason)
+                << " changed=" << changed << " from=" << ETabletStateName(tablet->State) << " to=" << ETabletStateName(newTabletState), true);
         tablet->State = newTabletState;
 
         if (!tabletBootState.empty()) {
@@ -307,7 +323,7 @@ public:
                             " - InitiateBlockStorage was not successfull");
                 }
             } else if (tablet->IsReadyToWork()) {
-                if (!tablet->InitiateStop(SideEffects)) {
+                if (!tablet->InitiateStop(SideEffects, EHiveEventReason::GroupsChanged)) {
                     BLOG_W("THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Execute"
                             " - InitiateStop was not successfull");
                 }

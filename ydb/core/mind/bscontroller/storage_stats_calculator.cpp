@@ -144,6 +144,7 @@ public:
                                 .NumSlots = pdisk.GetNumActiveSlots(),
                                 .MaxSlots = pdisk.GetExpectedSlotCount(), // either inferred or user-defined
                                 .SlotSizeInUnits = pdisk.GetSlotSizeInUnits(), // either inferred or user-defined
+                                .SlotSizeInBytes = pdisk.GetExpectedSlotSize(), // either inferred or user-defined, 0 if not set
                                 .Groups = {},
                                 .SpaceAvailable = 0,
                                 .Operational = true,
@@ -157,7 +158,7 @@ public:
 
                 // calculate number of groups we can create without accounting reserve
                 TGroupMapper::TGroupDefinition group;
-                TString error;
+                TGroupMapperError error;
                 std::deque<ui64> groupSizes;
                 while (mapper.AllocateGroup(groupSizes.size(), group, {}, {}, 1u, 0, false, {}, error)) {
                     std::vector<TGroupDiskInfo> disks;
@@ -178,7 +179,7 @@ public:
                                         pm.SetEnforcedDynamicSlotSize(pdisk.GetEnforcedDynamicSlotSize());
                                     }
                                     vm.SetAllocatedSize(0);
-                                    disks.push_back({&pm, &vm, pdisk.GetExpectedSlotCount()});
+                                    disks.push_back({&pm, &vm, pdisk.GetExpectedSlotCount(), pdisk.GetExpectedSlotSize()});
                                 }
                             }
                         }

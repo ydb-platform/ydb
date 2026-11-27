@@ -364,18 +364,6 @@ namespace NActors {
     void TMailbox::OnPreProcessed(IEventHandle* head, IEventHandle* tail) noexcept {
         Y_DEBUG_ABORT_UNLESS(head && tail);
         Y_DEBUG_ABORT_UNLESS(GetNextPtr(tail) == nullptr);
-#ifdef ACTORSLIB_COLLECT_EXEC_STATS
-        // Mark events as enqueued when usage stats are enabled
-         if constexpr (ActorLibCollectUsageStats) {
-            for (IEventHandle* ev = head; ev; ev = GetNextPtr(ev)) {
-                if (IActor* actor = FindActor(ev->GetRecipientRewrite().LocalId())) {
-                    actor->OnEnqueueEvent(ev->SendTime);
-                } else if (IActor* alias = FindAlias(ev->GetRecipientRewrite().LocalId())) {
-                    actor->OnEnqueueEvent(ev->SendTime);
-                }
-            }
-        }
-#endif
     }
 
     void TMailbox::AppendPreProcessed(IEventHandle* head, IEventHandle* tail) noexcept {
@@ -474,7 +462,7 @@ namespace NActors {
     }
 
     TAutoPtr<IEventHandle> TMailbox::Pop() noexcept {
-        if (!EventHead || ActorLibCollectUsageStats) {
+        if (!EventHead) {
             PreProcessEvents();
         }
 

@@ -1,9 +1,49 @@
 #include "hive_impl.h"
 
 #include <library/cpp/json/json_value.h>
+#include <google/protobuf/text_format.h>
+#include <util/string/strip.h>
 
 namespace NKikimr {
 namespace NHive {
+
+TString GetHiveConfigFieldText(const NKikimrConfig::THiveConfig& config, const google::protobuf::FieldDescriptor* field) {
+    google::protobuf::TextFormat::Printer printer;
+    printer.SetSingleLineMode(true);
+    TProtoStringType value;
+    if (!field->is_repeated()) {
+        // an absent field is not the same as its default: e.g. absent MinCPUScatterToBalance falls back to MinScatterToBalance
+        if (field->has_presence() && !config.GetReflection()->HasField(config, field)) {
+            return "<unset>";
+        }
+        printer.PrintFieldValueToString(config, field, -1, &value);
+        return TString(value);
+    }
+    TStringBuilder result;
+    result << '[';
+    int size = config.GetReflection()->FieldSize(config, field);
+    for (int i = 0; i < size; ++i) {
+        value.clear();
+        printer.PrintFieldValueToString(config, field, i, &value);
+        result << (i ? ", " : "") << StripString(TString(value));
+    }
+    result << ']';
+    return result;
+}
+
+TString GetHiveConfigDiffText(const NKikimrConfig::THiveConfig& from, const NKikimrConfig::THiveConfig& to) {
+    TStringBuilder result;
+    const google::protobuf::Descriptor* descriptor = NKikimrConfig::THiveConfig::GetDescriptor();
+    for (int i = 0; i < descriptor->field_count(); ++i) {
+        const google::protobuf::FieldDescriptor* field = descriptor->field(i);
+        TString fromValue = GetHiveConfigFieldText(from, field);
+        TString toValue = GetHiveConfigFieldText(to, field);
+        if (fromValue != toValue) {
+            result << (result.empty() ? "" : "; ") << field->name() << ": " << fromValue << " -> " << toValue;
+        }
+    }
+    return result;
+}
 
 TResourceRawValues ResourceRawValuesFromMetrics(const NKikimrTabletBase::TMetrics& metrics) {
     TResourceRawValues values = {};

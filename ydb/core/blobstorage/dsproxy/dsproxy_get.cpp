@@ -218,6 +218,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(vdisk);
+        ui32 orderNumber = GetImpl.GetOrderNumber(shortId);
 
         LWTRACK(DSProxyVDiskRequestDuration, Orbit, TEvBlobStorage::EvVGet, totalSize, tabletId, vdisk.GroupID.GetRawId(), channel,
                 Info->GetFailDomainOrderNumber(shortId),
@@ -233,7 +234,6 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                     GetVDiskTimeMs(record.GetTimestamps()));
         }
 
-        ui32 orderNumber = Info->GetOrderNumber(shortId);
         if (DiskCounters.size() <= orderNumber) {
             DiskCounters.resize(orderNumber + 1);
         }
@@ -294,6 +294,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         const auto &record = ev->Get()->Record;
         const TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         TVDiskIdShort shortId(vDiskId);
+        ui32 orderNumber = GetImpl.GetOrderNumber(shortId);
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         NActors::NLog::EPriority priority = PriorityForStatusInbound(status);
         DSP_LOG_LOG_S(priority, "BPG30", "Handle VPuEventResult"
@@ -317,7 +318,6 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                     GetVDiskTimeMs(record.GetTimestamps()));
         }
 
-        ui32 orderNumber = Info->GetOrderNumber(shortId);
         if (DiskCounters.size() <= orderNumber) {
             DiskCounters.resize(orderNumber + 1);
         }
@@ -408,7 +408,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
 
 
         if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(handleClass)) {
-            STLOG(PRI_WARN, BS_PROXY_GET, BPG71, "Long TEvGet request detected",         
+            STLOG(PRI_WARN, BS_PROXY_GET, BPG71, "Long TEvGet request detected",
                     (LongRequestThreshold, LongRequestThreshold),
                     (GroupId, Info->GroupID),
                     (SubrequestsCount, evResult->ResponseSz),
@@ -418,11 +418,14 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                     (History, GetImpl.PrintHistory()));
         }
 
-        STLOG(GetImpl.WasNotOkResponses() && PopAllowToken(handleClass) ? PRI_NOTICE : PRI_DEBUG,
+        auto resultStatusPriority = PriorityForStatusResult(evResult->Status);
+        if (IS_LOG_PRIORITY_ENABLED(resultStatusPriority, LogCtx.LogComponent) && PopAllowToken(handleClass)) {
+            STLOG(resultStatusPriority,
                 BS_PROXY_GET, BPG72, "Query history",
                 (GroupId, Info->GroupID),
                 (HandleClass, NKikimrBlobStorage::EGetHandleClass_Name(handleClass)),
                 (History, GetImpl.PrintHistory()));
+        }
 
         return SendResponseAndDie(std::unique_ptr<TEvBlobStorage::TEvGetResult>(evResult.Release()));
     }

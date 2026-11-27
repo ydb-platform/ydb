@@ -16,16 +16,17 @@ SRCS(
     event_filter.h
     event_holder_pool.h
     events_local.h
-    interconnect_address.cpp
-    interconnect_address.h
     interconnect_channel.cpp
     interconnect_channel.h
     interconnect_common.cpp
     interconnect_common.h
     interconnect_counters.cpp
     interconnect.h
+    interconnect_direct_session.h
     interconnect_handshake.cpp
     interconnect_handshake.h
+    interconnect_metrics_aggregator.cpp
+    interconnect_metrics_aggregator.h
     interconnect_impl.h
     interconnect_mon.cpp
     interconnect_mon.h
@@ -34,6 +35,9 @@ SRCS(
     interconnect_proxy_wrapper.cpp
     interconnect_proxy_wrapper.h
     interconnect_resolve.cpp
+    interconnect_session_iface.h
+    interconnect_session_pool_mapping.cpp
+    interconnect_session_pool_mapping.h
     interconnect_stream.cpp
     interconnect_stream.h
     interconnect_tcp_input_session.cpp
@@ -43,23 +47,16 @@ SRCS(
     interconnect_tcp_server.h
     interconnect_tcp_session.cpp
     interconnect_tcp_session.h
+    interconnect_tcp_session_v2.cpp
+    interconnect_tcp_session_v2.h
     interconnect_zc_processor.cpp
     interconnect_zc_processor.h
     load.cpp
     load.h
-    logging.h
     packet.cpp
     packet.h
-    poller_actor.cpp
-    poller_actor.h
-    poller.h
-    poller_tcp.cpp
-    poller_tcp.h
-    poller_tcp_unit.cpp
-    poller_tcp_unit.h
-    poller_tcp_unit_select.cpp
-    poller_tcp_unit_select.h
     profiler.h
+    rdma_sync_actor.cpp
     slowpoke_actor.h
     subscription_manager.cpp
     subscription_manager.h
@@ -67,13 +64,6 @@ SRCS(
     types.h
     watchdog_timer.h
 )
-
-IF (OS_LINUX)
-    SRCS(
-        poller_tcp_unit_epoll.cpp
-        poller_tcp_unit_epoll.h
-    )
-ENDIF()
 
 PEERDIR(
     contrib/libs/libc_compat
@@ -83,6 +73,10 @@ PEERDIR(
     ydb/library/actors/dnscachelib
     ydb/library/actors/dnsresolver
     ydb/library/actors/helpers
+    ydb/library/actors/interconnect/address
+    ydb/library/actors/interconnect/poller
+    ydb/library/actors/interconnect/rdma
+    ydb/library/actors/interconnect/rdma/cq_actor
     ydb/library/actors/prof
     ydb/library/actors/protos
     ydb/library/actors/util
@@ -105,7 +99,13 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    ut_rdma
+)
+
+RECURSE_FOR_TESTS(
+    address
     ut
     ut_fat
     ut_huge_cluster
+    ut_kernel_liveness
 )

@@ -978,7 +978,7 @@ bool TPDisk::AllocateLogChunks(ui32 chunksNeeded, ui32 chunksContainingPayload, 
         ChunkState[chunkIdx].PreviousNonce = lastNonce + noncesPerChunk * (ui64)i;
         // Mark newly allocated log chunks as chunks containing this owners record
         LogChunks.push_back(TLogChunkInfo(chunkIdx, (ui32)OwnerData.size()));
-        Mon.LogChunks->Inc();
+        *Mon.LogChunks = LogChunks.size();
         if (IsOwnerUser(owner) && i < chunksContainingPayload && OwnerData[owner].VDiskId != TVDiskID::InvalidId) {
             LogChunks.back().RegisterLogSector<true>(owner, lsn);
         }
@@ -1645,8 +1645,10 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
 
                 // Reset chunk trackers
                 TKeeperParams params;
+                NormalizeExpectedSlotSettings();
                 params.TotalChunks = Format.DiskSizeChunks();
                 params.ExpectedOwnerCount = Cfg->ExpectedSlotCount;
+                params.ExpectedOwnerSize = GetExpectedOwnerSizeInChunks();
                 params.SysLogSize = Format.SystemChunkCount; // sysLogSize = chunk 0 + additional SysLog chunks
                 if (Format.IsDiskSmall() && Cfg->FeatureFlags.GetEnableSmallDiskOptimization()) {
                     params.SeparateCommonLog = false;
@@ -1662,7 +1664,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                         params.OwnersInfo[ownerId] = {
                             .ChunksOwned = usedForOwner[ownerId],
                             .VDiskId = OwnerData[ownerId].VDiskId,
-                            .Weight = Cfg->GetOwnerWeight(OwnerData[ownerId].GroupSizeInUnits),
+                            .Weight = GetOwnerWeight(OwnerData[ownerId].GroupSizeInUnits),
                         };
                         if (OwnerData[ownerId].IsStaticGroupOwner()) {
                             params.HasStaticGroups = true;

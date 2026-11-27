@@ -1274,11 +1274,13 @@ class TChangeExpectedSlotCount : public TRequestBase {
 public:
     ui32 ExpectedSlotCount;
     ui32 SlotSizeInUnits;
+    ui64 ExpectedSlotSize;
 
     TChangeExpectedSlotCount(const NPDisk::TEvChangeExpectedSlotCount &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChangeExpectedSlotCount, reqIdx), OwnerSystem, 0, NPriInternal::Other)
         , ExpectedSlotCount(ev.ExpectedSlotCount)
         , SlotSizeInUnits(ev.SlotSizeInUnits)
+        , ExpectedSlotSize(ev.ExpectedSlotSize)
     {}
 
     ERequestType GetType() const override {
@@ -1290,6 +1292,7 @@ public:
         str << "TChangeExpectedSlotCount {"
             << " ExpectedSlotCount# " << ExpectedSlotCount
             << " SlotSizeInUnits# " << SlotSizeInUnits
+            << " ExpectedSlotSize# " << ExpectedSlotSize
             << " }";
         return str.Str();
     }

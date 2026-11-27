@@ -442,7 +442,8 @@ void TTestChunkWrite20Read02::TestFSM(const TActorContext &ctx) {
         ChunkWriteParts[0].Data = ChunkWriteData.data();
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
         ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, BlockSize * 3,
-            new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, true, 1, false));
+            new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, true, 1,
+            TWriteSource::Unknown, false));
         break;
     }
     case 40:
@@ -454,7 +455,8 @@ void TTestChunkWrite20Read02::TestFSM(const TActorContext &ctx) {
         ChunkWriteParts[0].Data = ChunkWriteData.data();
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
         ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, BlockSize,
-            new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, true, 1, false));
+            new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, true, 1,
+            TWriteSource::Unknown, false));
         break;
     }
     case 50:

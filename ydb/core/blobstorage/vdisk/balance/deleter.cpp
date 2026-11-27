@@ -23,6 +23,7 @@ namespace {
         const TActorId NotifyId;
         TVector<TLogoBlobID> Parts;
         TReplQuoter::TPtr Quoter;
+        NMonitoring::TDynamicCounters::TCounterPtr QuoterThrottledCounter;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TQueueActorMapPtr QueueActorMapPtr;
         NMonGroup::TBalancingGroup& MonGroup;
@@ -32,10 +33,11 @@ namespace {
         ui32 Responses = 0;
     public:
 
-        TPartsRequester(TActorId notifyId, TVector<TLogoBlobID>&& parts, TReplQuoter::TPtr quoter, TIntrusivePtr<TBlobStorageGroupInfo> gInfo, TQueueActorMapPtr queueActorMapPtr, NMonGroup::TBalancingGroup& monGroup)
+        TPartsRequester(TActorId notifyId, TVector<TLogoBlobID>&& parts, TReplQuoter::TPtr quoter, NMonitoring::TDynamicCounters::TCounterPtr quoterThrottledCounter, TIntrusivePtr<TBlobStorageGroupInfo> gInfo, TQueueActorMapPtr queueActorMapPtr, NMonGroup::TBalancingGroup& monGroup)
             : NotifyId(notifyId)
             , Parts(std::move(parts))
             , Quoter(quoter)
+            , QuoterThrottledCounter(quoterThrottledCounter)
             , GInfo(gInfo)
             , QueueActorMapPtr(queueActorMapPtr)
             , MonGroup(monGroup)
@@ -72,7 +74,9 @@ namespace {
                 TReplQuoter::QuoteMessage(
                     Quoter,
                     std::make_unique<IEventHandle>(QueueActorMapPtr->at(TVDiskIdShort(vDiskId)), selfId, ev.release()),
-                    msgSize
+                    msgSize,
+                    0,
+                    QuoterThrottledCounter
                 );
                 ++RequestsSent;
             }
@@ -301,7 +305,7 @@ namespace {
             : NotifyId(notifyId)
             , Ctx(ctx)
             , GInfo(ctx->GInfo)
-            , PartsRequester(SelfId(), std::move(parts), Ctx->VCtx->ReplNodeRequestQuoter, GInfo, queueActorMapPtr, Ctx->MonGroup)
+            , PartsRequester(SelfId(), std::move(parts), Ctx->VCtx->ReplNodeRequestQuoter, Ctx->ReplMonGroup.ReplNodeRequestThrottledMicrosecondsPtr(), GInfo, queueActorMapPtr, Ctx->MonGroup)
             , PartsDeleter(ctx, GInfo)
         {
         }

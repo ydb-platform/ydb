@@ -349,7 +349,7 @@ public:
         }
     }
 
-    void Deactivate() {
+    void Deactivate() override {
         Y_ABORT_UNLESS(Active);
         LWPROBE(SessionDeactivate,
                 GetResource()->GetQuoterPath(),
@@ -600,6 +600,22 @@ void TQuoterResourceTree::CalcParameters() {
 
 void TQuoterResourceTree::SetResourceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> resourceCounters) {
     Counters.SetResourceCounters(std::move(resourceCounters));
+
+    // Counters can be rebound while the resource already has sessions
+    // (e.g. when detailed counters mode is enabled), so initialize the gauges
+    // from the current state instead of relying on Inc/Dec history.
+    size_t activeSessions = 0;
+    for (const auto& [_, session] : Sessions) {
+        if (session->IsActive()) {
+            ++activeSessions;
+        }
+    }
+    if (Counters.Sessions) {
+        Counters.Sessions->Set(Sessions.size());
+    }
+    if (Counters.ActiveSessions) {
+        Counters.ActiveSessions->Set(activeSessions);
+    }
 }
 
 void TQuoterResourceTree::UpdateActiveTime(TInstant now) {
@@ -1211,6 +1227,10 @@ bool TQuoterResources::DeleteResource(TQuoterResourceTree* resource, TString& er
     Y_ABORT_UNLESS(resByPathIt->second == resource);
     ResourcesByPath.erase(resByPathIt);
 
+    if (Counters.QuoterCounters) {
+        Counters.QuoterCounters->RemoveSubgroup(RESOURCE_COUNTERS_LABEL, resource->GetProps().GetResourcePath());
+    }
+
     const auto resByIdIt = ResourcesById.find(resource->GetResourceId());
     Y_ABORT_UNLESS(resByIdIt != ResourcesById.end());
     Y_ABORT_UNLESS(resByIdIt->second.Get() == resource);
@@ -1366,35 +1386,51 @@ void TQuoterResources::FillCounters(NKikimrKesus::TEvGetQuoterResourceCountersRe
 
 void TQuoterResources::SetPipeServerId(TQuoterSessionId sessionId, const NActors::TActorId& prevId, const NActors::TActorId& id) {
     if (prevId) {
-        auto [prevIt, prevItEnd] = PipeServerIdToSession.equal_range(prevId);
-        for (; prevIt != prevItEnd; ++prevIt) {
-            if (prevIt->second.second == sessionId.second) { // compare resource id
-                PipeServerIdToSession.erase(prevIt);
-                break;
+        auto outerIt = PipeServerIdToSession.find(prevId);
+        if (outerIt != PipeServerIdToSession.end()) {
+            outerIt->second.erase(sessionId);
+            if (outerIt->second.empty()) {
+                PipeServerIdToSession.erase(outerIt);
             }
         }
     }
     if (id) {
-        PipeServerIdToSession.emplace(id, sessionId);
+        PipeServerIdToSession[id].insert(sessionId);
     }
 }
 
+void TQuoterResources::CloseSession(const NActors::TActorId& clientId, ui64 resourceId) {
+    const TQuoterSessionId sessionId(clientId, resourceId);
+    const auto sessionIt = Sessions.find(sessionId);
+    if (sessionIt == Sessions.end()) {
+        return; // Idempotent: session was already closed/never existed.
+    }
+    TQuoterSession* session = sessionIt->second.Get();
+    if (session->IsActive()) {
+        session->Deactivate(); // Keep resource active-children tree consistent.
+    }
+    session->GetResource()->OnSessionDisconnected(clientId);
+    const NActors::TActorId pipeServerId = session->SetPipeServerId({});
+    SetPipeServerId(sessionId, pipeServerId, {}); // Erase from PipeServerIdToSession index.
+    Sessions.erase(sessionIt);
+}
+
 void TQuoterResources::DisconnectSession(const NActors::TActorId& pipeServerId) {
-    auto [pipeToSessionItBegin, pipeToSessionItEnd] = PipeServerIdToSession.equal_range(pipeServerId);
-    for (auto pipeToSessionIt = pipeToSessionItBegin; pipeToSessionIt != pipeToSessionItEnd; ++pipeToSessionIt) {
-        const TQuoterSessionId sessionId = pipeToSessionIt->second;
+    auto outerIt = PipeServerIdToSession.find(pipeServerId);
+    if (outerIt == PipeServerIdToSession.end()) {
+        return;
+    }
+    for (const TQuoterSessionId& sessionId : outerIt->second) {
         const NActors::TActorId sessionClientId = sessionId.first;
 
-        {
-            const auto sessionIter = Sessions.find(sessionId);
-            Y_ABORT_UNLESS(sessionIter != Sessions.end());
-            TQuoterSession* session = sessionIter->second.Get();
-            session->GetResource()->OnSessionDisconnected(sessionClientId);
-            session->CloseSession(Ydb::StatusIds::SESSION_EXPIRED, "Disconected.");
-            Sessions.erase(sessionIter);
-        }
+        const auto sessionIter = Sessions.find(sessionId);
+        Y_ABORT_UNLESS(sessionIter != Sessions.end());
+        TQuoterSession* session = sessionIter->second.Get();
+        session->GetResource()->OnSessionDisconnected(sessionClientId);
+        session->CloseSession(Ydb::StatusIds::SESSION_EXPIRED, "Disconnected.");
+        Sessions.erase(sessionIter);
     }
-    PipeServerIdToSession.erase(pipeToSessionItBegin, pipeToSessionItEnd);
+    PipeServerIdToSession.erase(outerIt);
 }
 
 void TQuoterResources::SetQuoterPath(const TString& quoterPath) {

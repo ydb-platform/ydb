@@ -4,12 +4,15 @@ SRCS(
     affinity.cpp
     affinity.h
     cpu_load_log.h
+    cpu_topology.cpp
+    cpu_topology.h
     cpumask.h
     datetime.h
     defs.h
     funnel_queue.h
     futex.h
     intrinsics.h
+    intrusive_funnel_queue.h
     local_process_key.h
     named_tuple.h
     queue_chunk.h
@@ -48,4 +51,8 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+)
+
+RECURSE(
+    benchmark
 )

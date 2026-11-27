@@ -67,10 +67,11 @@ namespace NActors {
             ui32 IOPoolId = 2;
             ui32 BatchPoolId = 3;
             TMap<TString, ui32> ServicePools = {};
+            TVector<ui32> BlobStorageExecutorPoolIds = {};
         };
 
         TTestActorRuntime(THeSingleSystemEnv d);
-        TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads);
+        TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads, bool useRdmaAllocator=false);
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount);
         TTestActorRuntime(ui32 nodeCount = 1, bool useRealThreads = false);
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, NKikimr::NAudit::TAuditLogBackends&& auditLogBackends);
@@ -81,6 +82,7 @@ namespace NActors {
         virtual void Initialize(TEgg);
         void SetupStatsCollectors();
         void SetupActorSystemConfig(const TActorSystemSetupConfig& config, const TActorSystemPools& pools);
+        const TVector<ui32>& GetBlobStorageExecutorPoolIds() const;
 
         ui16 GetMonPort(ui32 nodeIndex = 0) const;
 

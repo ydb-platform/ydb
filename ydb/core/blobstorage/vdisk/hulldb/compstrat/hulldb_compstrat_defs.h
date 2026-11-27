@@ -1,6 +1,8 @@
 #pragma once
 
 #include "defs.h"
+#include "hulldb_compstrat_yield.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_compaction_priority.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstslice.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_leveledssts.h>
 
@@ -26,6 +28,17 @@ namespace NKikimr {
                 default:                return "UNKNOWN";
             }
         }
+
+        enum class ESelectStrategy {
+            None,
+            DelSst,
+            PromoteSsts,
+            Explicit,
+            BalanceLevel,
+            BalanceFull,
+            FreeSpace,
+            Squeeze,
+        };
 
         ////////////////////////////////////////////////////////////////////////////
         // NHullComp::TFullCompactionAttrs
@@ -161,19 +174,20 @@ namespace NKikimr {
                 bool CollectDeletedSsts() const override { return true; }
 
                 // for complete sst deletion
-                void DeleteSst(ui32 level, TLevelSegmentPtr s) {
+                void DeleteSst(ui32 level, TLevelSegmentPtr s, TCompactionYield* yield = nullptr) {
                     // find huge blobs that this sst stores and put them into HugeBlobsToDelete
-                    FindHugeBlobsForRemoval(s.Get());
+                    FindHugeBlobsForRemoval(s.Get(), yield);
                     // put Sst itself
                     TablesToDelete.PushBack(TLevelSstPtr(level, s));
                 }
 
             private:
-                void FindHugeBlobsForRemoval(const TLevelSegment *seg) {
+                void FindHugeBlobsForRemoval(const TLevelSegment *seg, TCompactionYield* yield) {
                     typename TLevelSegment::TMemIterator it(seg);
                     it.SeekToFirst();
                     TDiskDataExtractor extr;
                     while (it.Valid()) {
+                        CheckCompactionYield(yield);
                         it.GetDiskData(&extr);
                         if (extr.BlobType == TBlobType::HugeBlob || extr.BlobType == TBlobType::ManyHugeBlobs) {
                             for (const TDiskPart *part = extr.Begin; part < extr.End; ++part) {
@@ -229,17 +243,18 @@ namespace NKikimr {
 
                 // for levels starting from 1
                 void PushSstFromLevelX(ui32 level, typename TSegments::const_iterator first,
-                                       typename TSegments::const_iterator last) {
-                    ui32 tables = 0;
+                                       typename TSegments::const_iterator last, TCompactionYield* yield = nullptr) {
+                    if (first == last) {
+                        return;
+                    }
+                    auto chain = MakeIntrusive<TOrderedLevelSegments>();
+                    chain->Segments.reserve(last - first);
                     for (typename TSegments::const_iterator i = first; i != last; ++i) {
+                        CheckCompactionYield(yield);
                         TablesToDelete.PushBack(TLevelSstPtr(level, *i));
-                        tables++;
+                        chain->Segments.push_back(*i);
                     }
-
-                    if (tables) {
-                        TOrderedLevelSegmentsPtr chain(new TOrderedLevelSegments(first, last));
-                        CompactionChains.push_back(chain);
-                    }
+                    CompactionChains.push_back(std::move(chain));
                 }
 
                 // for pushing one sst (level0 or partially sorted level)
@@ -299,10 +314,14 @@ namespace NKikimr {
             TDeleteSsts DeleteSsts;
             TMoveSsts MoveSsts;
             TCompactSsts CompactSsts;
+            bool IsFullCompaction = false;
+            ESelectStrategy SelectStrategy = ESelectStrategy::None;
             // this field contains
             // * original std::optional<TFullCompactionAttrs>
             // * if 'first' was set, than result of full compaction: second=true -- full compaction has been finished
             std::pair<std::optional<TFullCompactionAttrs>, bool> FullCompactionInfo;
+            // Current LSM pressure and emergency mode used as the compaction broker priority.
+            TCompactionPriority Priority;
 
             TTask() {
                 Clear();
@@ -313,6 +332,9 @@ namespace NKikimr {
                 DeleteSsts.Clear();
                 MoveSsts.Clear();
                 CompactSsts.Clear();
+                IsFullCompaction = false;
+                SelectStrategy = ESelectStrategy::None;
+                Priority = {};
                 FullCompactionInfo.first.reset();
                 FullCompactionInfo.second = false;
             }

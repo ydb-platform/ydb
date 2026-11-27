@@ -9,9 +9,13 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/hulldb
     ydb/core/blobstorage/vdisk/hulldb/test
+    ydb/library/actors/testlib
 )
 
 SRCS(
+    hulldb_compstrat_ratio_test_iterators.h
+    hulldb_compstrat_ratio_ut.cpp
+    hulldb_compstrat_test_context.h
     hulldb_compstrat_ut.cpp
 )
 

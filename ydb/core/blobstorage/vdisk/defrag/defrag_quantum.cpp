@@ -95,6 +95,10 @@ namespace NKikimr {
 
                     STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD11, DCtx->VCtx->VDiskLogPrefix << "locked chunks",
                         (ActorId, SelfActorId), (LockedChunks, lockedChunks));
+
+                    if (lockedChunks.empty()) {
+                        STLOG(PRI_NOTICE, BS_VDISK_DEFRAG, BSVDD17, DCtx->VCtx->VDiskLogPrefix << "could not lock chunks, going to run full compaction instead", (ChunksToDefrag, *ChunksToDefrag));
+                    }
                 } else {
                     auto forbiddenChunks = GetForbiddenChunks();
 
@@ -178,22 +182,24 @@ namespace NKikimr {
                     }
                 }
 
-                // scan index again to find tables we have to compact
-                for (findRecords.StartFindingTablesToCompact(); findRecords.Scan(NDefrag::WorkQuantum, GetSnapshot()); Yield()) {}
-                if (auto records = findRecords.GetRecordsToRewrite(); !records.empty()) {
-                    for (const auto& item : records) {
-                        STLOG(PRI_WARN, BS_VDISK_DEFRAG, BSVDD16, DCtx->VCtx->VDiskLogPrefix
-                            << "blob found again after rewriting", (ActorId, SelfActorId), (Id, item.LogoBlobId),
-                            (Location, item.OldDiskPart));
+                if (DCtx->VCfg->GarbageThresholdToRunFullCompactionPerMille == 0 || (!isShred && lockedChunks.empty())) {
+                    // scan index again to find tables we have to compact
+                    for (findRecords.StartFindingTablesToCompact(); findRecords.Scan(NDefrag::WorkQuantum, GetSnapshot()); Yield()) {}
+                    if (auto records = findRecords.GetRecordsToRewrite(); !records.empty()) {
+                        for (const auto& item : records) {
+                            STLOG(PRI_WARN, BS_VDISK_DEFRAG, BSVDD16, DCtx->VCtx->VDiskLogPrefix
+                                << "blob found again after rewriting", (ActorId, SelfActorId), (Id, item.LogoBlobId),
+                                (Location, item.OldDiskPart));
+                        }
                     }
-                }
 
-                auto tablesToCompact = findRecords.GetTablesToCompact();
-                const bool needsFreshCompaction = findRecords.GetNeedsFreshCompaction();
-                STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD13, DCtx->VCtx->VDiskLogPrefix << "compacting",
-                    (ActorId, SelfActorId), (TablesToCompact, tablesToCompact),
-                    (NeedsFreshCompaction, needsFreshCompaction));
-                Compact(std::move(tablesToCompact), needsFreshCompaction);
+                    auto tablesToCompact = findRecords.GetTablesToCompact();
+                    const bool needsFreshCompaction = findRecords.GetNeedsFreshCompaction();
+                    STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD13, DCtx->VCtx->VDiskLogPrefix << "compacting",
+                        (ActorId, SelfActorId), (TablesToCompact, tablesToCompact),
+                        (NeedsFreshCompaction, needsFreshCompaction));
+                    Compact(std::move(tablesToCompact), needsFreshCompaction);
+                }
             }
 
             STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD15, DCtx->VCtx->VDiskLogPrefix << "quantum finished",
@@ -227,7 +233,7 @@ namespace NKikimr {
 
         void Compact(THashSet<ui64> tablesToCompact, bool needsFreshCompaction) {
             if (tablesToCompact) {
-                Send(DCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, std::move(tablesToCompact)));
+                Send(DCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, std::move(tablesToCompact)), false);
             } else if (needsFreshCompaction) {
                 Send(DCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, TEvCompactVDisk::EMode::FRESH_ONLY));
             } else {

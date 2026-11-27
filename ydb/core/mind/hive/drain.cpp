@@ -60,7 +60,7 @@ protected:
             TNodeInfo* nodeInfo = Hive->FindNode(nodeId);
             if (nodeInfo != nullptr) {
                 if (!downBefore) {
-                    nodeInfo->SetDown(false);
+                    nodeInfo->SetDown(false, EHiveEventReason::DrainFinished);
                 }
             }
         }
@@ -89,7 +89,7 @@ protected:
                                 << " from node " << tablet->Node->Id
                                 << " to node " << node->Id);
                     Hive->TabletCounters->Cumulative()[NHive::COUNTER_DRAIN_EXECUTED].Increment(1);
-                    Hive->RecordTabletMove(THive::TTabletMoveInfo(TInstant::Now(), *tablet, tablet->Node->Id, node->Id));
+                    Hive->RecordTabletMove(TInstant::Now(), *tablet, *tablet->Node, *node, EHiveEventReason::Drain);
                     Hive->Execute(Hive->CreateRestartTablet(tabletId, node->Id));
                 } else {
                     if (std::holds_alternative<THive::TNoNodeFound>(result) || std::holds_alternative<THive::TNotEnoughResources>(result)) {
@@ -194,7 +194,7 @@ public:
                     }
                 }
                 DownBefore[nodeId] = nodeInfo->Down;
-                nodeInfo->SetDown(true);
+                nodeInfo->SetDown(true, EHiveEventReason::DrainStarted);
             } else {
                 return ReplyAndDie(NKikimrProto::ERROR);
             }

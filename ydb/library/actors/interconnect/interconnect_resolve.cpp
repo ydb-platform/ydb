@@ -1,8 +1,7 @@
 #include "interconnect.h"
-#include "interconnect_address.h"
 #include "events_local.h"
-#include "logging.h"
 
+#include <ydb/library/actors/interconnect/logging/logging.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/dnsresolver/dnsresolver.h>

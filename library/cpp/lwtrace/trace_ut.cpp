@@ -789,6 +789,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
 
         UNIT_ASSERT(parsed);
         mngr.New("Query1", q);
+        mngr.New("Query2", q);
 
         {
             TOrbit a, b, c, d;
@@ -849,6 +850,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
             }
         } reader;
         mngr.ReadDepot("Query1", reader);
+        mngr.ReadDepot("Query2", reader);
     }
 
     Y_UNIT_TEST(TrackForkError) {

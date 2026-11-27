@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    blobstorage_executor_pool_mapping.cpp
+    blobstorage_executor_pool_mapping.h
     group_stat_aggregator.cpp
     group_stat_aggregator.h
     distconf.cpp
@@ -52,12 +54,14 @@ PEERDIR(
     library/cpp/openssl/crypto
     ydb/core/base
     ydb/core/blob_depot/agent
+    ydb/core/blobstorage/base
     ydb/core/blobstorage/bridge/proxy
     ydb/core/blobstorage/bridge/syncer
     ydb/core/blobstorage/common
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/vdisk/localrecovery
     ydb/core/control/lib
     ydb/library/pdisk_io
     ydb/library/yaml_config

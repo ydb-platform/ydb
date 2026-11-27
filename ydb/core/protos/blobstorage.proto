@@ -290,6 +290,7 @@ message TEvVPut {
     optional TTimestamps Timestamps = 23;
 
     repeated TExtraBlockCheck ExtraBlockChecks = 11;
+    optional uint32 WriteSourceOp = 24;
 }
 
 message TEvVPutResult {
@@ -323,6 +324,7 @@ message TVMultiPutItem {
     repeated TEvVPut.TExtraBlockCheck ExtraBlockChecks = 5;
 
     optional NActorsProto.TTraceId TraceId = 6;
+    optional uint32 WriteSourceOp = 11;
 }
 
 message TEvVMultiPut {
@@ -462,6 +464,7 @@ message TEvVBlock {
     optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
     optional bool NotifyIfNotReady = 4;
     optional TMsgQoS MsgQoS = 10;
+    optional uint32 WriteSourceOp = 11;
 }
 
 message TEvVBlockResult {
@@ -597,6 +600,7 @@ message TEvVCollectGarbage {
     optional NKikimrBlobStorage.TVDiskID VDiskID = 8;
     optional bool NotifyIfNotReady = 9;
     optional TMsgQoS MsgQoS = 10;
+    optional uint32 WriteSourceOp = 14;
 }
 
 message TEvVCollectGarbageResult {
@@ -1050,12 +1054,20 @@ message TNodeWardenServiceSet {
         optional uint64 TotalResponseBytesPerSecond = 6; // quota for generated responses at network layer
     }
 
+    message TFailureInjectionConfig {
+        optional double FailureProbability = 1; // positive values enable failure injection
+        optional bool IncludeStaticGroups = 2; // also inject failures in request to static groups
+        optional uint64 RandomSeed = 3;
+        optional NKikimrProto.EReplyStatus ErrorReplyStatus = 4 [default = ERROR];
+    }
+
     repeated TPDisk PDisks = 1;
     repeated TVDisk VDisks = 2;
     repeated NKikimrBlobStorage.TGroupInfo Groups = 3;
     repeated uint64 AvailabilityDomains = 4;
     optional TReplBrokerConfig ReplBrokerConfig = 5;
     optional bool EnableProxyMock = 7;
+    optional TFailureInjectionConfig FailureInjectionConfig = 8;
 }
 
 message TNodeWardenCache {

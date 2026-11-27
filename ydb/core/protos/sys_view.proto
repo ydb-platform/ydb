@@ -188,6 +188,7 @@ message TPDiskInfo {
     optional string State = 19;
     optional uint32 SlotSizeInUnits = 20; // either inferred or user-defined
     optional uint64 InferPDiskSlotCountFromUnitSize = 21;
+    optional uint64 ExpectedSlotSize = 23; // either inferred or user-defined, 0 if not set
     // metrics ?
     // physical location ?
     // config ?
@@ -235,6 +236,7 @@ message TVSlotInfo {
     optional string State = 17;
     optional bool IsThrottling = 18;
     optional uint32 ThrottlingRate = 19;
+    optional bool PhantomOnly = 20;
 }
 
 message TVSlotEntry {

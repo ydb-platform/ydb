@@ -167,6 +167,10 @@ TFuture<TExportToYtResponse> TExportClient::ExportToYt(const TExportToYtSettings
 
     request.mutable_settings()->set_use_type_v3(settings.UseTypeV3_);
 
+    for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
+        request.mutable_settings()->add_exclude_regexps(excludeRegexp);
+    }
+
     return Impl_->ExportToYt(std::move(request), settings);
 }
 
@@ -215,6 +219,10 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
     if (!settings.EncryptionAlgorithm_.empty() && !settings.SymmetricKey_.empty()) {
         request.mutable_settings()->mutable_encryption_settings()->set_encryption_algorithm(settings.EncryptionAlgorithm_);
         request.mutable_settings()->mutable_encryption_settings()->mutable_symmetric_key()->set_key(settings.SymmetricKey_);
+    }
+
+    for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
+        request.mutable_settings()->add_exclude_regexps(excludeRegexp);
     }
 
     return Impl_->ExportToS3(std::move(request), settings);

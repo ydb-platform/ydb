@@ -103,7 +103,6 @@ namespace NActors {
                         actorPtr = pool->Actors.back();
                         actorPtr->StuckIndex = i;
                         pool->Actors.pop_back();
-                        pool->DeadActorsUsage.emplace_back(actor->GetActivityType().GetIndex(), actor->GetUsage(GetCycleCountFast()));
                     }
                 }
             }
@@ -269,8 +268,6 @@ namespace NActors {
 
                     hpnow = GetCycleCountFast();
                     hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-
-                    actor->OnDequeueEvent();
 
                     size_t dyingActorsCnt = DyingActors.size();
                     EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "dyingActorsCnt ", dyingActorsCnt);

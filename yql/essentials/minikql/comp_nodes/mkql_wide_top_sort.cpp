@@ -12,6 +12,7 @@
 
 #include <yql/essentials/utils/sort.h>
 
+#include <deque>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -85,6 +86,7 @@ using NYql::TChunkedBuffer;
 using TAsyncWriteOperation = std::optional<NThreading::TFuture<ISpiller::TKey>>;
 using TAsyncReadOperation = std::optional<NThreading::TFuture<std::optional<TChunkedBuffer>>>;
 using TStorage = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
+using TStorageDeque = std::deque<TStorage, TMKQLAllocator<TStorage, EMemorySubPool::Temporary>>;
 
 struct TSpilledData {
     using TPtr = TSpilledData*;
@@ -209,10 +211,30 @@ private:
         return std::max<size_t>(Count << 2ULL, 1ULL << 8ULL);
     }
 
+    static constexpr size_t GetStorageBlockSize() {
+        return 1ULL << 10ULL;
+    }
+
     void ResetFields() {
+        MaybeGrowStorage();
         auto ptr = Tongue = Free.back();
         std::for_each(Indexes.cbegin(), Indexes.cend(), [&](ui32 index) { Fields[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
     }
+
+    void MaybeGrowStorage() {
+        if (Free.empty()) {
+            const size_t fieldsCount = Indexes.size();
+            const size_t blockSize = std::min(GetStorageBlockSize(), GetStorageSize());
+            TStorage& newStorageBlock = Storage.emplace_back(blockSize * fieldsCount);
+            auto* ptr = newStorageBlock.data();
+            Free.reserve(Free.size() + blockSize);
+            for (size_t i = 0; i < blockSize; ++i) {
+                Free.emplace_back(ptr);
+                ptr += fieldsCount;
+            }
+        }
+    }
+
 public:
     TState(TMemoryUsageInfo* memInfo, ui64 count, const bool* directons, size_t keyWidth, const TCompareFunc& compare, const std::vector<ui32>& indexes)
         : TBase(memInfo)
@@ -222,16 +244,8 @@ public:
         , LessFunc(std::bind(std::less<int>(), std::bind(compare, Directions.data(), std::placeholders::_1, std::placeholders::_2), 0))
         , Fields(Indexes.size(), nullptr)
     {
-        Storage.resize(GetStorageSize() * Indexes.size());
-        Free.resize(GetStorageSize(), nullptr);
         if (Count) {
-            Full.reserve(GetStorageSize());
-            auto ptr = Storage.data();
-            std::generate(Free.begin(), Free.end(), [&ptr, this]() {
-                const auto p = ptr;
-                ptr += Indexes.size();
-                return p;
-            });
+            Full.reserve(std::min(GetStorageBlockSize(), GetStorageSize()));
             ResetFields();
         } else
             InputStatus = EFetchResult::Finish;
@@ -300,7 +314,7 @@ private:
     const std::vector<ui32> Indexes;
     const std::vector<bool> Directions;
     const std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)> LessFunc;
-    TStorage Storage;
+    TStorageDeque Storage;
     TPointers Free, Full;
     TFields Fields;
 };

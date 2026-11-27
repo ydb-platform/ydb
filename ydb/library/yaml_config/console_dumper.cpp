@@ -145,8 +145,7 @@ std::pair<TDomainItemsContainer, TSelectorItemsContainer> ExtractSuitableItems(
         }
 
 
-        if (kind == NKikimrConsole::TConfigItem::NameserviceConfigItem ||
-            kind == NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem ||
+        if (kind == NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem ||
             kind == NKikimrConsole::TConfigItem::NamedConfigsItem ||
             item.GetCookie().StartsWith("ydbcp")) {
             continue;

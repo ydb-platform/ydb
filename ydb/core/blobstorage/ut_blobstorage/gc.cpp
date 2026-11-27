@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(GarbageCollection) {
         runtime->WrapInActorContext(edge, [&] {
             SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(tabletId, recordGeneration,
                 perGenerationCounter, channel, true, collectGeneration, collectStep, nullptr, nullptr, TInstant::Max(),
-                false, false));
+                false, TWriteSource::Unknown, false));
         });
         {
             auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge);

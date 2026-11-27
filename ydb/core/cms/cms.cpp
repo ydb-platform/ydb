@@ -575,7 +575,7 @@ bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
         return false;
     }
 
-    if (State->Config.SentinelConfig.EvictVDisksStatus.Empty()) {
+    if (State->Config.SentinelConfig.EvictVDisksStatus == EEvictVDisksStatus::Disabled) {
         error.Code = TStatus::ERROR;
         error.Reason = "Evict vdisks is disabled in Sentinel (self heal)";
         return false;
@@ -1179,28 +1179,41 @@ void TCms::CleanupWalleTasks(const TActorContext &ctx)
     // permissions which means we might have some Wall-E requests
     // not attached to Wall-E tasks and Wall-E tasks with no
     // request and permissions. Cleanup the mess here.
+
+    TVector<TString> permissionsToRemove;
+    THashSet<TString> requestsWithPermissions;
+    for (const auto &entry : State->Permissions) {
+        const auto &permission = entry.second;
+        if (permission.Owner == WALLE_CMS_USER
+            && !State->WalleRequests.contains(permission.RequestId))
+        {
+            permissionsToRemove.push_back(permission.PermissionId);
+            requestsWithPermissions.insert(permission.RequestId);
+        }
+    }
+
     TVector<TString> requestsToRemove;
     for (const auto &entry : State->ScheduledRequests) {
         const auto &request = entry.second;
         if (request.Owner == WALLE_CMS_USER
             && !State->WalleRequests.contains(request.RequestId))
+        {
+            if (request.Request.GetEvictVDisks() && requestsWithPermissions.contains(request.RequestId)) {
+                // TTxRemovePermissions also removes this eviction request and its host markers.
+                continue;
+            }
+
             requestsToRemove.push_back(request.RequestId);
+        }
+    }
+
+    if (!permissionsToRemove.empty()) {
+        Execute(CreateTxRemovePermissions(permissionsToRemove, nullptr, nullptr), ctx);
     }
 
     for (const auto &requestId : requestsToRemove) {
         Execute(CreateTxRemoveRequest(requestId, nullptr, nullptr), ctx);
     }
-
-    TVector<TString> permissionsToRemove;
-    for (const auto &entry : State->Permissions) {
-        const auto &permission = entry.second;
-        if (permission.Owner == WALLE_CMS_USER
-            && !State->WalleRequests.contains(permission.RequestId))
-            permissionsToRemove.push_back(permission.PermissionId);
-    }
-
-    if (!permissionsToRemove.empty())
-        Execute(CreateTxRemovePermissions(permissionsToRemove, nullptr, nullptr), ctx);
 
     RemoveEmptyTasks(ctx);
 
@@ -1560,6 +1573,10 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
         TInstant deadline = TActivationContext::Now() + TDuration::MicroSeconds(copy->Request.GetDuration());
         perm->SetDeadline(deadline.GetValue());
     }
+
+    copy->Request.ClearActions();
+
+    it->second = *copy;
 
     AcceptPermissions(resp->Record, rec.GetRequestId(), rec.GetUser(), ctx, true);
 
@@ -2191,6 +2208,10 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
         auto order = request.Order;
         auto priority = request.Priority;
 
+        if (!ok && request.Request.GetEvictVDisks() && !scheduled.Request.ActionsSize()) {
+            scheduled.Request.MutableActions()->CopyFrom(request.Request.GetActions());
+        }
+
         ClusterInfo->UnscheduleActions(request.RequestId);
         State->ScheduledRequests.erase(it);
         if (scheduled.Request.ActionsSize() || scheduled.Request.GetEvictVDisks()) {
@@ -2427,7 +2448,8 @@ void TCms::Handle(TEvCms::TEvRemoveWalleTask::TPtr &ev, const TActorContext &ctx
     if (State->WalleTasks.contains(id)) {
         auto &task = State->WalleTasks.find(id)->second;
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
-        if (State->ScheduledRequests.contains(task.RequestId)) {
+        auto request = State->ScheduledRequests.find(task.RequestId);
+        if (request != State->ScheduledRequests.end() && request->second.Request.ActionsSize()) {
             Execute(CreateTxRemoveRequest(task.RequestId, std::move(ev->Release()), handle), ctx);
         } else {
             TVector<TString> ids(task.Permissions.begin(), task.Permissions.end());

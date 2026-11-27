@@ -261,7 +261,8 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
             EPrimitiveType::Yson,
             EPrimitiveType::Json,
             EPrimitiveType::JsonDocument,
-            EPrimitiveType::DyNumber
+            EPrimitiveType::DyNumber,
+            EPrimitiveType::Uuid,
         };
 
         for (EPrimitiveType t : ydbTypes) {
@@ -1140,7 +1141,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
             std::optional<bool> value = rs.ColumnParser("res").GetOptionalBool();
             UNIT_ASSERT(*value);
         }
-    }    
+    }
 
     void Index(NYdb::NTable::EIndexType indexType, bool enableBulkUpsertToAsyncIndexedTables = false) {
         auto server = TKikimrWithGrpcAndRootSchema({}, {}, {}, false, nullptr, [=](auto& settings) {

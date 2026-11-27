@@ -21,18 +21,19 @@ namespace NKikimr {
     void TVDiskCompactionState::SendLocalCompactCmd(const TActorContext &ctx, TCompactionReq cReq) {
         ui64 requestId = ++RequestIdCounter;
         const auto mode = cReq.Mode;
+        const auto force = cReq.Force;
         auto insRes = Requests.insert({requestId, std::move(cReq)});
         Y_VERIFY_S(insRes.second, VDiskLogPrefix);
         auto &req = insRes.first->second;
 
         if (req.CompactLogoBlobs) {
-            ctx.Send(LogoBlobsActorId, new TEvHullCompact(EHullDbType::LogoBlobs, requestId, mode, req.TablesToCompact));
+            ctx.Send(LogoBlobsActorId, new TEvHullCompact(EHullDbType::LogoBlobs, requestId, mode, req.TablesToCompact, force));
         }
         if (req.CompactBlocks) {
-            ctx.Send(BlocksActorId, new TEvHullCompact(EHullDbType::Blocks, requestId, mode, req.TablesToCompact));
+            ctx.Send(BlocksActorId, new TEvHullCompact(EHullDbType::Blocks, requestId, mode, req.TablesToCompact, force));
         }
         if (req.CompactBarriers) {
-            ctx.Send(BarriersActorId, new TEvHullCompact(EHullDbType::Barriers, requestId, mode, req.TablesToCompact));
+            ctx.Send(BarriersActorId, new TEvHullCompact(EHullDbType::Barriers, requestId, mode, req.TablesToCompact, force));
         }
     }
 

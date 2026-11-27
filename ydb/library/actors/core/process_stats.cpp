@@ -143,12 +143,24 @@ namespace NActors {
                 }
             }
 
-            if (!memoryCGroup.empty() && memoryCGroup != "/") {
+            if (!memoryCGroup.empty()) {
                 TString cgroupFileName;
                 if (isV2) {
-                    cgroupFileName = "/sys/fs/cgroup" + memoryCGroup + "/memory.max";
+                    if (memoryCGroup == "/") {
+                        cgroupFileName = "/sys/fs/cgroup/memory.max";
+                    } else {
+                        cgroupFileName = "/sys/fs/cgroup" + memoryCGroup + "/memory.max";
+                        // fallback for cgroup namespaces / incomplete controller delegation
+                        if (!NFs::Exists(cgroupFileName)) {
+                            cgroupFileName = "/sys/fs/cgroup/memory.max";
+                        }
+                    }
                 } else {
-                    cgroupFileName = "/sys/fs/cgroup/memory" + memoryCGroup + "/memory.limit_in_bytes";
+                    if (memoryCGroup == "/") {
+                        cgroupFileName = "/sys/fs/cgroup/memory/memory.limit_in_bytes";
+                    } else {
+                        cgroupFileName = "/sys/fs/cgroup/memory" + memoryCGroup + "/memory.limit_in_bytes";
+                    }
                     // fallback for mk8s
                     if (!NFs::Exists(cgroupFileName)) {
                         cgroupFileName = "/sys/fs/cgroup/memory/memory.limit_in_bytes";

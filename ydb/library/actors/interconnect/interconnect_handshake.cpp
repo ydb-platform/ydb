@@ -2,18 +2,55 @@
 #include "handshake_broker.h"
 #include "interconnect_tcp_proxy.h"
 
+#include "rdma/link_manager.h"
+#include "rdma/events.h"
+#include "rdma/mem_pool.h"
+#include "rdma/rdma.h"
+
+#include "rdma_sync_actor.h"
+
+#include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
+
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <util/network/socket.h>
 #include <util/system/getpid.h>
+#include <util/system/hp_timer.h>
 #include <util/random/entropy.h>
 
 #include <google/protobuf/text_format.h>
 
+#include <limits>
 #include <variant>
 
 namespace NActors {
-    static constexpr size_t StackSize = 64 * 1024; // 64k should be enough
+    static constexpr ui32 StackSize = 64 * 1024; // 64k should be enough
+
+    static constexpr size_t RdmaHandshakeRegionSize = 4096;
+    static constexpr ui32 RdmaSendReceiveVersion = 1;
+
+    namespace {
+        class THandshakeActorCreateTimer {
+            const NMonitoring::THistogramPtr Histogram;
+            const ui64 Start;
+
+        public:
+            explicit THandshakeActorCreateTimer(const TInterconnectProxyCommon::TPtr& common)
+                : Histogram(common->MonCounters
+                    ? common->MonCounters->GetHistogram("HandshakeActorCreateUs", NMonitoring::ExponentialHistogram(16, 2, 4))
+                    : nullptr)
+                , Start(Histogram ? GetCycleCountFast() : 0)
+            {}
+
+            ~THandshakeActorCreateTimer() {
+                if (Histogram) {
+                    Histogram->Collect(NHPTimer::GetSeconds(GetCycleCountFast() - Start) * 1000000.0);
+                }
+            }
+        };
+    }
 
     class THandshakeActor
        : public TActorCoroImpl
@@ -85,6 +122,7 @@ namespace NActors {
             THandshakeActor *Actor = nullptr;
             TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
             TPollerToken::TPtr PollerToken;
+            bool KernelLivenessReady = false;
 
         public:
             TConnection(THandshakeActor *actor, TIntrusivePtr<NInterconnect::TStreamSocket> socket)
@@ -138,6 +176,7 @@ namespace NActors {
             void Reset() {
                 Socket.Reset();
                 PollerToken.Reset();
+                KernelLivenessReady = false;
             }
 
             void SetupSocket() {
@@ -153,6 +192,8 @@ namespace NActors {
                 if (const auto& buffer = Actor->Common->Settings.TCPSocketBufferSize) {
                     Socket->SetSendBufferSize(buffer);
                 }
+
+                KernelLivenessReady = SetupKernelLiveness();
             }
 
             void RegisterInPoller() {
@@ -216,8 +257,94 @@ namespace NActors {
                 }
             }
 
+            bool IsKernelLivenessReady() const {
+                return KernelLivenessReady;
+            }
+
             TIntrusivePtr<NInterconnect::TStreamSocket>& GetSocketRef() { return Socket; }
             operator bool() const { return static_cast<bool>(Socket); }
+
+        private:
+            static int ClampSockOptValue(ui64 value) {
+                constexpr ui64 maxValue = static_cast<ui64>(std::numeric_limits<int>::max());
+                return value > maxValue ? std::numeric_limits<int>::max() : static_cast<int>(value);
+            }
+
+            bool SetIntSockOpt(int level, int option, int value, const char *name) {
+                if (SetSockOpt(*Socket, level, option, value) == 0) {
+                    return true;
+                }
+
+                const int err = errno;
+                LOG_LOG(*TlsActivationContext, NLog::PRI_WARN, NActorsServices::INTERCONNECT,
+                    "%s ICH40 Kernel liveness disabled for socket# %d due to setsockopt(%s=%d) failure, errno# %d (%s)",
+                    Actor->LogPrefix.data(), int(*Socket), name, value, err, strerror(err));
+                return false;
+            }
+
+            bool SetupKernelLiveness() {
+                if (!Actor->Common->Settings.EnableKernelLiveness) {
+                    return false;
+                }
+
+#if defined(_linux_)
+#if !defined(TCP_KEEPIDLE) || !defined(TCP_KEEPINTVL) || !defined(TCP_KEEPCNT)
+                LOG_LOG(*TlsActivationContext, NLog::PRI_WARN, NActorsServices::INTERCONNECT,
+                    "%s ICH42 Kernel liveness requested, but TCP keepalive tuning options are unavailable on this platform",
+                    Actor->LogPrefix.data());
+                return false;
+#else
+                auto toSockOptSeconds = [](TDuration value) -> ui64 {
+                    const ui64 ms = value.MilliSeconds();
+                    return ms ? (ms - 1) / 1000 + 1 : 0; // ceil(ms / 1000) for non-zero durations
+                };
+
+                const auto& settings = Actor->Common->Settings;
+                const ui64 keepAliveIdleSec = toSockOptSeconds(settings.KernelKeepAliveIdle);
+                const ui64 keepAliveIntervalSec = toSockOptSeconds(settings.KernelKeepAliveInterval);
+                const ui64 userTimeoutMs = settings.KernelUserTimeout.MilliSeconds();
+                if (!keepAliveIdleSec || !keepAliveIntervalSec || !settings.KernelKeepAliveProbes || !userTimeoutMs) {
+                    LOG_LOG(*TlsActivationContext, NLog::PRI_WARN, NActorsServices::INTERCONNECT,
+                        "%s ICH43 Kernel liveness disabled due to invalid settings KeepAliveIdle# %s KeepAliveInterval# %s KeepAliveProbes# %" PRIu32
+                        " KernelUserTimeout# %s",
+                        Actor->LogPrefix.data(), settings.KernelKeepAliveIdle.ToString().data(),
+                        settings.KernelKeepAliveInterval.ToString().data(), settings.KernelKeepAliveProbes,
+                        settings.KernelUserTimeout.ToString().data());
+                    return false;
+                }
+
+                if (!SetIntSockOpt(SOL_SOCKET, SO_KEEPALIVE, 1, "SO_KEEPALIVE")) {
+                    return false;
+                }
+                if (!SetIntSockOpt(IPPROTO_TCP, TCP_KEEPIDLE, ClampSockOptValue(keepAliveIdleSec), "TCP_KEEPIDLE")) {
+                    return false;
+                }
+                if (!SetIntSockOpt(IPPROTO_TCP, TCP_KEEPINTVL, ClampSockOptValue(keepAliveIntervalSec), "TCP_KEEPINTVL")) {
+                    return false;
+                }
+                if (!SetIntSockOpt(IPPROTO_TCP, TCP_KEEPCNT, ClampSockOptValue(settings.KernelKeepAliveProbes), "TCP_KEEPCNT")) {
+                    return false;
+                }
+
+#if defined(TCP_USER_TIMEOUT)
+                if (!SetIntSockOpt(IPPROTO_TCP, TCP_USER_TIMEOUT, ClampSockOptValue(userTimeoutMs), "TCP_USER_TIMEOUT")) {
+                    return false;
+                }
+#else
+                LOG_LOG(*TlsActivationContext, NLog::PRI_WARN, NActorsServices::INTERCONNECT,
+                    "%s ICH45 Kernel liveness requested, but TCP_USER_TIMEOUT is unavailable on this platform",
+                    Actor->LogPrefix.data());
+                return false;
+#endif
+
+                return true;
+#endif
+#else
+                LOG_LOG(*TlsActivationContext, NLog::PRI_WARN, NActorsServices::INTERCONNECT,
+                    "%s ICH44 Kernel liveness requested, but this platform is unsupported", Actor->LogPrefix.data());
+                return false;
+#endif
+            }
         };
 
     private:
@@ -235,18 +362,32 @@ namespace NActors {
         TString HandshakeKind;
         TMaybe<THolder<TProgramInfo>> ProgramInfo; // filled in in case of successful handshake; even if null
         TSessionParams Params;
-        std::optional<TInstant> LastLogNotice;
-        const TDuration MuteDuration = TDuration::Seconds(15);
         TMonotonic Deadline;
         TActorId HandshakeBroker;
         std::optional<TBrokerLeaseHolder> BrokerLeaseHolder;
         std::optional<TString> HandshakeId; // for XDC
+        THolder<TEvReportConnection::THandle> PendingXdcConnection;
         bool SubscribedForConnection = false;
+
+        struct {
+            NInterconnect::NRdma::ICq::TPtr Cq;
+            NInterconnect::NRdma::TQueuePair::TPtr Qp;
+            NInterconnect::NRdma::TMemRegionPtr HandShakeMemRegion;
+            TActorId SyncActor;
+            void Clear() noexcept {
+                Qp.reset();
+                Cq.reset();
+            }
+            operator bool() const noexcept {
+                return Cq && Qp;
+            }
+        } Rdma;
+        bool RunDelayedRdmaHandshake = false;
 
     public:
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
                         ui32 nodeId, ui64 nextPacket, TString peerHostName, TSessionParams params)
-            : TActorCoroImpl(StackSize, true)
+            : TActorCoroImpl(UsePooledStack<StackSize>(), true)
             , Common(std::move(common))
             , SelfVirtualId(self)
             , PeerVirtualId(peer)
@@ -269,7 +410,7 @@ namespace NActors {
         }
 
         THandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket)
-            : TActorCoroImpl(StackSize, true)
+            : TActorCoroImpl(UsePooledStack<StackSize>(), true)
             , Common(std::move(common))
             , MainChannel(this, std::move(socket))
             , ExternalDataChannel(this, nullptr)
@@ -301,8 +442,15 @@ namespace NActors {
             } catch (...) {
                 Y_ABORT("unhandled exception");
             }
+            StopRdmaSyncActor();
             if (SubscribedForConnection) {
                 SendToProxy(MakeHolder<TEvSubscribeForConnection>(*HandshakeId, false));
+            }
+        }
+
+        void StopRdmaSyncActor() {
+            if (const TActorId actorId = std::exchange(Rdma.SyncActor, TActorId())) {
+                Send(actorId, new TEvents::TEvPoisonPill);
             }
         }
 
@@ -332,13 +480,14 @@ namespace NActors {
 
             Deadline = TActivationContext::Monotonic() + timeout;
             Schedule(Deadline, new TEvents::TEvWakeup);
-
+            TRdmaPreinitedSessionPtr rdmaPreinitSession;
             try {
+                std::optional<NActorsInterconnect::TRdmaCred> rdmaIncomingRead;
                 const bool incoming = MainChannel;
                 if (incoming) {
-                    PerformIncomingHandshake();
+                    PerformIncomingHandshake(rdmaIncomingRead, rdmaPreinitSession);
                 } else {
-                    PerformOutgoingHandshake();
+                    PerformOutgoingHandshake(rdmaPreinitSession);
                 }
 
                 // establish encrypted channel, or, in case when encryption is disabled, check if it matches settings
@@ -346,15 +495,42 @@ namespace NActors {
                     if (Params.UseExternalDataChannel) {
                         if (incoming) {
                             Y_ABORT_UNLESS(SubscribedForConnection);
-                            auto ev = WaitForSpecificEvent<TEvReportConnection>("WaitInboundXdcStream");
+                            auto ev = PendingXdcConnection
+                                ? std::move(PendingXdcConnection)
+                                : WaitForSpecificEvent<TEvReportConnection>("WaitInboundXdcStream");
                             SubscribedForConnection = false;
                             if (ev->Get()->HandshakeId != *HandshakeId) {
                                 Y_DEBUG_ABORT_UNLESS(false);
                                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Mismatching HandshakeId in external data channel");
                             }
+                            // RDMA is part of XDC.
+                            // Try to complete rdma handshake by reading remote region via RDMA READ verb
+                            if (rdmaIncomingRead) {
+                                auto ack = TryRdmaRead(rdmaIncomingRead.value());
+                                SendExBlock(MainChannel, ack, "TRdmaHandshakeReadAck");
+                                if (ack.HasDigest()) {
+                                    Params.UseRdmaRead = true;
+                                } else {
+                                    Rdma.Clear();
+                                }
+                            }
                             ExternalDataChannel.GetSocketRef() = std::move(ev->Get()->Socket);
                         } else {
                             EstablishExternalDataChannel();
+                            if (Rdma.HandShakeMemRegion && Rdma.Qp) {
+                                if (WaitRdmaReadResult() == false) {
+                                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                                        "RDMA memory read failed, disable rdma on the initiator");
+                                    Rdma.HandShakeMemRegion.Reset();
+                                    Rdma.Clear();
+                                    // During outgoing handshake we got rdma qp
+                                    // but unable to got rdma read confirmation - run pending rdma handshake to try to reestablish
+                                    // session with rdma in a future
+                                    RunDelayedRdmaHandshake = true;
+                                } else {
+                                    Params.UseRdmaRead = true;
+                                }
+                            }
                         }
                     }
 
@@ -377,10 +553,15 @@ namespace NActors {
                 MainChannel.ResetPollerToken();
                 ExternalDataChannel.ResetPollerToken();
                 Y_ABORT_UNLESS(!ExternalDataChannel == !Params.UseExternalDataChannel);
+                TEvHandshakeDone::TRdmaResult rdmaResult = (Rdma.Qp && Rdma.Cq)
+                    ? TEvHandshakeDone::TRdmaResult(std::move(Rdma.Qp), std::move(Rdma.Cq), std::move(rdmaPreinitSession))
+                    : TEvHandshakeDone::TRdmaResult(TEvHandshakeDone::TRdmaResult::TDisabled(RunDelayedRdmaHandshake));
                 SendToProxy(MakeHolder<TEvHandshakeDone>(std::move(MainChannel.GetSocketRef()), PeerVirtualId, SelfVirtualId,
-                    *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params), std::move(ExternalDataChannel.GetSocketRef())));
+                    *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params), std::move(ExternalDataChannel.GetSocketRef()),
+                    std::move(rdmaResult)));
             }
 
+            Rdma.Clear();
             MainChannel.Reset();
             ExternalDataChannel.Reset();
         }
@@ -437,6 +618,15 @@ namespace NActors {
 
                 case TEvPollerReady::EventType:
                    break;
+
+                case TEvReportConnection::EventType:
+                    PendingXdcConnection.Reset(static_cast<TEvReportConnection::THandle*>(ev.Release()));
+                    break;
+
+                case NInterconnect::NRdma::TEvQpCacheReady::EventType:
+                case NInterconnect::NRdma::TEvQpCacheNoResources::EventType:
+                case NInterconnect::NRdma::TEvQpCacheError::EventType:
+                    break; // stale notification after the local QP cache wait timed out
 
                 case TEvents::TSystem::Poison:
                    throw TExPoison();
@@ -672,14 +862,114 @@ namespace NActors {
             SendExBlock(ExternalDataChannel, params, "ExternalDataChannelParams");
         }
 
-        void PerformOutgoingHandshake() {
+        bool WaitRdmaReadResult() {
+            NActorsInterconnect::TRdmaHandshakeReadAck rdmaReadAck;
+            ReceiveExBlock(MainChannel, rdmaReadAck, "WaitRdmaReadResult");
+            ui32 crc = Crc32cExtendMSanCompatible(0, Rdma.HandShakeMemRegion->GetAddr(), RdmaHandshakeRegionSize);
+            return rdmaReadAck.GetDigest() == crc;
+        }
+
+        NInterconnect::NRdma::TMemRegionPtr SetupRdmaHandshakeRegion(NActorsInterconnect::TRdmaHandshake& proto) {
+            NInterconnect::NRdma::TMemRegionPtr region = Common->RdmaMemPool->Alloc(RdmaHandshakeRegionSize, NInterconnect::NRdma::IMemPool::PAGE_ALIGNED);
+            if (!region) {
+                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                    "Unable to allocate memory region to perform rdma handshake");
+                RunDelayedRdmaHandshake = true;
+                return nullptr;
+            }
+
+            void* addr = region->GetAddr();
+            ::memset(addr, 0, RdmaHandshakeRegionSize);
+            //addr is page alligned here, so reinterpret to ui64 is fine
+            *reinterpret_cast<ui64*>(addr) = RandomNumber<ui64>();
+
+            auto read = proto.MutableRead();
+            read->SetAddress(reinterpret_cast<ui64>(addr));
+
+            //read whole page to check the case with mtu missmatch
+            read->SetSize(RdmaHandshakeRegionSize);
+            read->SetRkey(region->GetRKey(Rdma.Qp->GetDeviceIndex()));
+            return region;
+        }
+
+        TRdmaPreinitedSessionPtr RunRdmaIncomingHandshakePart() {
+            MainChannel.ResetPollerToken();
+            Rdma.SyncActor = Register(NInterconnect::NRdma::CreateRdmaIncommingSyncActor(
+                Common, SelfVirtualId, PeerVirtualId, PeerNodeId, MainChannel.GetSocketRef(), Rdma.Qp, Rdma.Cq));
+
+            auto ev = WaitForSpecificEvent<TEvRdmaSyncResult>("TEvRdmaSyncResult");
+            Rdma.SyncActor = TActorId();
+            MainChannel.RegisterInPoller();
+
+            if (auto err = ev->Get()->Error()) {
+                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                "RDMA send/receive handshake failed: %s", err->data());
+                Params.AllowRdmaSendReceive = false;
+                return {};
+            } else {
+                return std::move(ev->Get()->ExtractSession());
+            }
+        }
+
+        TRdmaPreinitedSessionPtr RunRdmaOutgoingHandshakePart(const ::NActorsInterconnect::THandshakeSuccess& success) {
+            const auto& remoteQpPrepared = success.GetQpPrepared();
+            LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_TRACE,
+                "peer has prepared qp: %d", remoteQpPrepared.GetQpNum());
+            NInterconnect::NRdma::THandshakeData hd {
+                .QpNum = remoteQpPrepared.GetQpNum(),
+                .SubnetPrefix = remoteQpPrepared.GetSubnetPrefix(),
+                .InterfaceId = remoteQpPrepared.GetInterfaceId(),
+                .MtuIndex = remoteQpPrepared.GetMtuIndex(),
+            };
+            int err = Rdma.Qp->ToRtsState(hd);
+            if (err) {
+                TStringBuilder sb;
+                sb << hd;
+                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                        "Unable to promote QP to RTS, err: %d (%s), handshake data: %s", err, strerror(err), sb.data());
+                Rdma.HandShakeMemRegion.Reset();
+                Rdma.Clear();
+                return {};
+            } else {
+                Params.ChecksumRdmaEvent = remoteQpPrepared.GetRdmaChecksum();
+                Params.AllowRdmaSendReceive = Common->Settings.EnableRdmaSendReceive
+                    && (remoteQpPrepared.GetSendReceiveVersion() == 1);
+                if (Params.AllowRdmaSendReceive) {
+                    // QP is ready, now we need two things:
+                    // 1. make sure send and receive works
+                    // 2. perform barrier to make sure sessions are ready to handle receive
+                    MainChannel.ResetPollerToken();
+
+                    Rdma.SyncActor = Register(NInterconnect::NRdma::CreateRdmaOutgoingSyncActor(
+                        Common, SelfVirtualId, PeerVirtualId, PeerNodeId, MainChannel.GetSocketRef(), Rdma.Qp, Rdma.Cq));
+
+                    auto ev = WaitForSpecificEvent<TEvRdmaSyncResult>("TEvRdmaSyncResult");
+                    Rdma.SyncActor = TActorId();
+                    MainChannel.RegisterInPoller();
+                    if (auto err = ev->Get()->Error()) {
+                        LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                        "RDMA send/receive handshake failed: %s", err->data());
+                        Params.AllowRdmaSendReceive = false;
+                        return {};
+                    } else {
+                        return std::move(ev->Get()->ExtractSession());
+                    }
+                } else {
+                    return {};
+                }
+            }
+        }
+
+        void PerformOutgoingHandshake(TRdmaPreinitedSessionPtr& rdmaSession) {
             LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH01", NLog::PRI_DEBUG,
                 "starting outgoing handshake");
 
             // perform connection and log its result
             MainChannel.Connect(&PeerAddr);
-            auto logPriority = std::exchange(LastLogNotice, std::nullopt) ? NActors::NLog::PRI_NOTICE : NActors::NLog::PRI_DEBUG;
-            LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH05", logPriority, "connected to peer");
+            LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH05", NActors::NLog::PRI_DEBUG, "connected to peer");
+
+            // Try to create rdma stuff
+            CreateRdmaPrimitives();
 
             // send initial request packet
             if (Params.UseExternalDataChannel && PeerVirtualId) { // special case for XDC continuation
@@ -759,6 +1049,10 @@ namespace NActors {
                 request.SetRequestExternalDataChannel(Common->Settings.EnableExternalDataChannel);
                 request.SetRequestXxhash(true);
                 request.SetRequestXdcShuffle(true);
+                request.SetRequestAllowDisablingPayloadChecksums(true);
+                // v2 session is incompatible with encryption; only request it when encryption is disabled locally
+                request.SetRequestSessionV2(Common->Settings.EnableInterconnectSessionV2 &&
+                    Common->Settings.EncryptionMode == EEncryptionMode::DISABLED);
                 request.SetHandshakeId(*HandshakeId);
 
                 ui32 pending = 0;
@@ -782,6 +1076,24 @@ namespace NActors {
                             }
                         }
                     }, ev->Get()->Conclusion);
+                }
+
+                if (Rdma) {
+                    auto rdmaHs = request.MutableRdmaHandshake();
+                    NInterconnect::NRdma::THandshakeData hd = Rdma.Qp->GetHandshakeData();
+                    rdmaHs->SetQpNum(hd.QpNum);
+                    rdmaHs->SetSubnetPrefix(hd.SubnetPrefix);
+                    rdmaHs->SetInterfaceId(hd.InterfaceId);
+                    rdmaHs->SetMtuIndex(hd.MtuIndex);
+                    rdmaHs->SetRdmaChecksum(Common->Settings.RdmaChecksum);
+                    if (Common->Settings.EnableRdmaSendReceive) {
+                        rdmaHs->SetSendReceiveVersion(RdmaSendReceiveVersion);
+                    }
+                    if (auto region = SetupRdmaHandshakeRegion(*rdmaHs)) {
+                        Rdma.HandShakeMemRegion = std::move(region);
+                    } else {
+                        Rdma.Clear();
+                    }
                 }
 
                 SendExBlock(MainChannel, request, "ExRequest");
@@ -837,8 +1149,25 @@ namespace NActors {
                 Params.UseExternalDataChannel = success.GetUseExternalDataChannel();
                 Params.UseXxhash = success.GetUseXxhash();
                 Params.UseXdcShuffle = success.GetUseXdcShuffle();
+                Params.AllowDisablingPayloadChecksums = success.GetAllowDisablingPayloadChecksums();
+                Params.UseSessionV2 = success.GetUseSessionV2();
+                // Kernel liveness mode is a local transport decision: it depends on whether this side
+                // configured keepalive/user-timeout on its own socket.
+                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
                 if (success.HasServerScopeId()) {
                     ParsePeerScopeId(success.GetServerScopeId());
+                }
+
+                if (Rdma) {
+                    if (success.HasQpPrepared()) {
+                        rdmaSession = std::move(RunRdmaOutgoingHandshakePart(success));
+                    } else {
+                        LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                            "Non success qp response from remote side");
+                        Rdma.HandShakeMemRegion.Reset();
+                        Rdma.Clear();
+                        RunDelayedRdmaHandshake = success.GetRdmaRetryable();
+                    }
                 }
 
                 // recover peer process info from peer's reply
@@ -855,6 +1184,8 @@ namespace NActors {
             } else {
                 ProgramInfo.ConstructInPlace(); // successful handshake
             }
+
+            Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
         }
 
         std::vector<NInterconnect::TAddress> ResolvePeer() {
@@ -915,13 +1246,15 @@ namespace NActors {
                 << " PeerAddr# " << PeerAddr << " AddressList# " << makeList(), true);
         }
 
-        void PerformIncomingHandshake() {
+        void PerformIncomingHandshake(std::optional<NActorsInterconnect::TRdmaCred>& rdma, TRdmaPreinitedSessionPtr& rdmaSession) {
             LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH02", NLog::PRI_DEBUG,
                 "starting incoming handshake");
 
             // set up incoming socket
             MainChannel.SetupSocket();
             MainChannel.RegisterInPoller();
+
+            CreateRdmaPrimitives();
 
             // wait for initial request packet
             TInitialPacket request;
@@ -984,6 +1317,7 @@ namespace NActors {
                     PeerVirtualId = request.Header.SelfVirtualId;
                     NextPacketToPeer = ack->NextPacket;
                     Params = ack->Params;
+                    Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
 
                     // only succeed in case when proxy returned valid SelfVirtualId; otherwise it wants us to terminate
                     // the handshake process and it does not expect the handshake reply
@@ -1099,6 +1433,11 @@ namespace NActors {
                 Params.UseExternalDataChannel = request.GetRequestExternalDataChannel() && Common->Settings.EnableExternalDataChannel;
                 Params.UseXxhash = request.GetRequestXxhash();
                 Params.UseXdcShuffle = request.GetRequestXdcShuffle();
+                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
+                Params.AllowDisablingPayloadChecksums = request.GetRequestAllowDisablingPayloadChecksums();
+                // v2 session is used only when both peers enabled it and encryption is not in effect
+                Params.UseSessionV2 = request.GetRequestSessionV2() &&
+                    Common->Settings.EnableInterconnectSessionV2 && !Params.Encryption;
 
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {
@@ -1123,6 +1462,14 @@ namespace NActors {
                     params.emplace(item.GetKey(), item.GetValue());
                 }
 
+                const bool peerRequestedRdma = request.HasRdmaHandshake();
+                std::optional<NActorsInterconnect::TRdmaHandshake> rdmaIncomingHandshake;
+                if (Rdma && peerRequestedRdma) {
+                    rdmaIncomingHandshake = request.GetRdmaHandshake();
+                } else {
+                    Rdma.Clear();
+                }
+
                 // send to proxy
                 auto reply = AskProxy<TEvHandshakeReplyOK, TEvHandshakeReplyError>(std::move(ev), "TEvHandshakeRequest");
 
@@ -1139,12 +1486,43 @@ namespace NActors {
                     if (Common->LocalScopeId != TScopeId()) {
                         FillInScopeId(*success.MutableServerScopeId());
                     }
+
+                    if (rdmaIncomingHandshake) {
+                        TryRdmaQpExchange(rdmaIncomingHandshake.value(), success);
+                        if (Rdma) {
+                            if (rdmaIncomingHandshake->HasRead()) {
+                                rdma = rdmaIncomingHandshake->GetRead();
+                                if (rdmaIncomingHandshake->HasRdmaChecksum() && rdmaIncomingHandshake->GetRdmaChecksum() == true) {
+                                    Params.ChecksumRdmaEvent = Common->Settings.RdmaChecksum;
+                                    success.MutableQpPrepared()->SetRdmaChecksum(Params.ChecksumRdmaEvent);
+                                } else {
+                                    Params.ChecksumRdmaEvent = false;
+                                    success.MutableQpPrepared()->SetRdmaChecksum(false);
+                                }
+                            }
+                            if (Common->Settings.EnableRdmaSendReceive
+                                    && (rdmaIncomingHandshake->GetSendReceiveVersion() == RdmaSendReceiveVersion)) {
+                                Params.AllowRdmaSendReceive = true;
+                                success.MutableQpPrepared()->SetSendReceiveVersion(RdmaSendReceiveVersion);
+                            }
+                        } else {
+                            success.SetRdmaErr("Unable to perform qp exchange on the incoming side");
+                        }
+                    } else {
+                        success.SetRdmaErr("Rdma is not ready on the incoming side");
+                    }
+                    if (peerRequestedRdma && RunDelayedRdmaHandshake) {
+                        success.SetRdmaRetryable(true);
+                    }
+
                     success.SetUseModernFrame(true);
                     success.SetAuthOnly(Params.AuthOnly);
                     success.SetUseExtendedTraceFmt(true);
                     success.SetUseExternalDataChannel(Params.UseExternalDataChannel);
                     success.SetUseXxhash(Params.UseXxhash);
                     success.SetUseXdcShuffle(Params.UseXdcShuffle);
+                    success.SetAllowDisablingPayloadChecksums(Params.AllowDisablingPayloadChecksums);
+                    success.SetUseSessionV2(Params.UseSessionV2);
 
                     ui32 pending = 0;
                     auto& actors = Common->ConnectionCheckerActorIds;
@@ -1175,6 +1553,9 @@ namespace NActors {
                     // extract sender actor id (self virtual id)
                     const auto& str = success.GetSenderActorId();
                     SelfVirtualId.Parse(str.data(), str.size());
+                    if (Params.AllowRdmaSendReceive) {
+                        rdmaSession = std::move(RunRdmaIncomingHandshakePart());
+                    }
                 } else if (auto ev = reply->CastAsLocal<TEvHandshakeReplyError>()) {
                     // in case of error just send reply to the peer and terminate handshake
                     SendExBlock(MainChannel, ev->Record, "ExReply");
@@ -1219,6 +1600,249 @@ namespace NActors {
         }
 
     private:
+        template <typename T>
+        void ReceiveExBlock(TConnection& connection, T& proto, const char* what) {
+            if (!proto.ParseFromString(ReceiveExBlock(connection, what))) {
+                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Incorrect packet from peer");
+            }
+        }
+
+        NInterconnect::NRdma::TRdmaCtx* GetRdmaCtx() {
+            using namespace NInterconnect::NRdma;
+            TRdmaCtx* rdmaCtx = nullptr;
+
+            if (Common->Settings.RdmaAddress) {
+                const NInterconnect::TAddress address(Common->Settings.RdmaAddress, 0);
+                rdmaCtx = NLinkMgr::GetCtx(address);
+                if (rdmaCtx) {
+                    LOG_TRACE_IC("ICRDMA", "Found verbs context for specified RDMA address %s",
+                        Common->Settings.RdmaAddress.data());
+                } else {
+                    const char* fallbackTarget = Common->Settings.RdmaInterface
+                        ? "the specified RDMA interface"
+                        : "the local TCP socket address";
+                    LOG_WARN_IC("ICRDMA", "Unable to find verbs context for specified RDMA address %s. Falling back to %s",
+                        Common->Settings.RdmaAddress.data(), fallbackTarget);
+                }
+            }
+
+            if (!rdmaCtx && Common->Settings.RdmaInterface) {
+                rdmaCtx = NLinkMgr::GetCtxByInterface(Common->Settings.RdmaInterface);
+                if (rdmaCtx) {
+                    LOG_TRACE_IC("ICRDMA", "Found verbs context for specified RDMA interface %s",
+                        Common->Settings.RdmaInterface.data());
+                } else {
+                    LOG_WARN_IC("ICRDMA", "Unable to find verbs context for specified RDMA interface %s. Falling back to the local TCP socket address",
+                        Common->Settings.RdmaInterface.data());
+                }
+            }
+
+            if (!rdmaCtx) {
+                auto sockname = MainChannel.GetSocketRef()->GetSockName();
+                if (const NInterconnect::TAddress* addr = std::get_if<NInterconnect::TAddress>(&sockname)) {
+                    rdmaCtx = NLinkMgr::GetCtx(*addr);
+                    if (rdmaCtx) {
+                        LOG_TRACE_IC("ICRDMA", "Found verbs context for local TCP address %s",
+                            std::get<0>(sockname).ToString().data());
+                    } else {
+                        LOG_WARN_IC("ICRDMA", "Unable to find verbs context using local TCP address %s",
+                            std::get<0>(sockname).ToString().data());
+                    }
+                } else if (int* err = get_if<int>(&sockname)) {
+                    LOG_ERROR_IC("ICRDMA", "Unable to get local address of the TCP socket: %d, err: %d. RDMA will not be used",
+                        (int)(*MainChannel.GetSocketRef()), *err);
+                } else {
+                    LOG_CRIT_IC("ICRDMA", "Unknown GetSockName return type for socket: %d. It is a BUG. RDMA will not be used",
+                        (int)(*MainChannel.GetSocketRef()));
+                }
+            }
+            return rdmaCtx;
+        }
+
+        void CreateRdmaPrimitives() {
+            using namespace NInterconnect::NRdma;
+            // Rdma disabled
+            if (!Common->RdmaMemPool) {
+                return;
+            }
+
+            TRdmaCtx* rdmaCtx = GetRdmaCtx();
+
+            if (rdmaCtx) {
+                if (ICq::TPtr cqPtr = CreateRdmaCq(rdmaCtx)) {
+                    LOG_TRACE_IC("ICRDMA", "Got CQ handle at: %p", (void*)cqPtr.get());
+
+                    const TMonotonic now = TActivationContext::Monotonic();
+                    const TMonotonic qpCacheDeadline = now + (Deadline - now) / 2;
+                    for (;;) {
+                        ICq::TGetQpResult result = cqPtr->GetQp(GetActorContext());
+                        if (auto* qp = std::get_if<TQueuePair::TPtr>(&result)) {
+                            Rdma.Qp = std::move(*qp);
+                            Rdma.Cq = std::move(cqPtr);
+                            break;
+                        }
+
+                        if (std::holds_alternative<ICq::TQpCacheEmpty>(result)) {
+                            auto ev = WaitForSpecificEvent<TEvQpCacheReady, TEvQpCacheNoResources, TEvQpCacheError>(
+                                "WaitRdmaQpCache", qpCacheDeadline);
+                            if (!ev) {
+                                LOG_WARN_IC("ICRDMA", "Timed out waiting for RDMA QP cache, continue handshake without RDMA");
+                                RunDelayedRdmaHandshake = true;
+                                break;
+                            }
+                            if (ev->GetTypeRewrite() == TEvQpCacheReady::EventType) {
+                                // The notification does not reserve a QP for this handshake.
+                                // Retry because another consumer may have taken it already.
+                                continue;
+                            }
+                            if (ev->GetTypeRewrite() == TEvQpCacheNoResources::EventType) {
+                                LOG_WARN_IC("ICRDMA", "Unable to fill RDMA QP cache due to temporary resource exhaustion");
+                            } else {
+                                Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvQpCacheError::EventType);
+                                LOG_ERROR_IC("ICRDMA", "Unable to get QP due to RDMA QP cache error");
+                            }
+                        } else if (std::holds_alternative<ICq::TQpNoResources>(result)) {
+                            LOG_WARN_IC("ICRDMA", "Unable to get QP due to temporary RDMA resource exhaustion");
+                        } else {
+                            Y_ABORT_UNLESS(std::holds_alternative<ICq::TQpCacheError>(result));
+                            LOG_ERROR_IC("ICRDMA", "Unable to get QP due to RDMA QP cache error");
+                        }
+
+                        RunDelayedRdmaHandshake = true;
+                        break;
+                    }
+                } else {
+                    LOG_ERROR_IC("ICRDMA", "Unable to get CQ handle, no more attempt to use RDMA on this session");
+                    RunDelayedRdmaHandshake = true;
+                }
+            }
+        }
+
+        NInterconnect::NRdma::ICq::TPtr CreateRdmaCq(NInterconnect::NRdma::TRdmaCtx* rdmaCtx) {
+            const bool success = Send(NInterconnect::NRdma::MakeCqActorId(), new NInterconnect::NRdma::TEvGetCqHandle(rdmaCtx));
+            if (!success) {
+                LOG_CRIT_IC("ICRDMA", "Cq service is not configured. This is a bug.");
+                return nullptr;
+            }
+            auto ev = WaitForSpecificEvent<NInterconnect::NRdma::TEvGetCqHandle>("TEvGetCqHandle");
+            if (!ev) {
+                LOG_CRIT_IC("ICRDMA", "Unable to get response from CQ actor");
+                return nullptr;
+            } else {
+                return ev->Get()->CqPtr;
+            }
+        }
+
+        void TryRdmaQpExchange(const NActorsInterconnect::TRdmaHandshake& proto, NActorsInterconnect::THandshakeSuccess& success) {
+            ui32 mtuIndex = Rdma.Qp->GetMinMtuIndex(proto.GetMtuIndex());
+            // Promote qp to ready to send state
+            {
+                NInterconnect::NRdma::THandshakeData hd {
+                    .QpNum = proto.GetQpNum(),
+                    .SubnetPrefix = proto.GetSubnetPrefix(),
+                    .InterfaceId = proto.GetInterfaceId(),
+                    .MtuIndex = mtuIndex,
+                };
+                int err = Rdma.Qp->ToRtsState(hd);
+                if (err) {
+                    TStringBuilder sb;
+                    sb << hd;
+                    success.SetRdmaErr("Unable to promote QP to RTS on the incoming side");
+                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                        "Unable to promote QP to RTS, err: %d (%s), handshake data: %s", err, strerror(err), sb.data());
+                    Rdma.Clear();
+                    return;
+                }
+            }
+            // Fill handshare response
+            {
+                auto rdmaHsResp = success.MutableQpPrepared();
+                NInterconnect::NRdma::THandshakeData hd = Rdma.Qp->GetHandshakeData();
+                rdmaHsResp->SetQpNum(hd.QpNum);
+                rdmaHsResp->SetSubnetPrefix(hd.SubnetPrefix);
+                rdmaHsResp->SetInterfaceId(hd.InterfaceId);
+                rdmaHsResp->SetMtuIndex(mtuIndex);
+            }
+        }
+
+        NActorsInterconnect::TRdmaHandshakeReadAck TryRdmaRead(const NActorsInterconnect::TRdmaCred& cred) {
+            using namespace NInterconnect::NRdma;
+            NActorsInterconnect::TRdmaHandshakeReadAck rdmaReadAck;
+            if (cred.GetSize() > RdmaHandshakeRegionSize) {
+                TStringBuilder err;
+                err << "Unexpected rdma region size for READ request, sz: " << cred.GetSize();
+                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR, err.c_str());
+                rdmaReadAck.SetErr(err);
+                return rdmaReadAck;
+            }
+
+            TMemRegionPtr mr = Common->RdmaMemPool->Alloc(cred.GetSize(),IMemPool::EMPTY);
+            if (!mr) {
+                TString err("Unable to allocate memory region for handshake rdma read");
+                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                    err.c_str());
+                rdmaReadAck.SetErr(err);
+                return rdmaReadAck;
+            }
+
+            void* addr = mr->GetAddr();
+            ::memset(addr, 0, cred.GetSize());
+
+            TActorId actorId = SelfActorId;
+            // make sure mr is alive during the RDMA read
+            auto cb = [actorId, mr](NActors::TActorSystem* as, TEvRdmaIoDone* ev){
+                Y_UNUSED(mr);
+                as->Send(actorId, ev);
+            };
+
+            std::unique_ptr<IIbVerbsBuilder> verbsBuilder = CreateIbVerbsBuilder(1);
+
+            verbsBuilder->AddReadVerb(
+                reinterpret_cast<char*>(mr->GetAddr()),
+                mr->GetLKey(Rdma.Qp->GetDeviceIndex()),
+                reinterpret_cast<void*>(cred.GetAddress()),
+                cred.GetRkey(),
+                cred.GetSize(),
+                std::move(cb)
+            );
+
+            auto err = Rdma.Cq->DoWrBatchAsync(Rdma.Qp, std::move(verbsBuilder));
+            if (err) {
+                TStringBuilder sb;
+                sb << "Unable to launch work reqeust";
+                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                    sb.c_str());
+                rdmaReadAck.SetErr(sb);
+                return rdmaReadAck;
+            }
+
+            {
+                auto ev = WaitForSpecificEvent<TEvRdmaIoDone>("TryRdmaRead");
+                if (ev->Get()->IsSuccess()) {
+                    // In case of success calc checksum of read region to send it back
+                    ui32 crc = Crc32cExtendMSanCompatible(0, mr->GetAddr(), cred.GetSize());
+                    rdmaReadAck.SetDigest(crc);
+                } else {
+                    // Rdma low level diagnostic
+                    TStringBuilder sb;
+                    if (ev->Get()->IsWcError()) {
+                        sb << "Unable to complete rdma READ work request due to wc error, code: " << ev->Get()->GetErrCode();
+                    } else if (ev->Get()->IsWrError()) {
+                        sb << "Unable to complete rdma READ work request due to post wr error, code: " << ev->Get()->GetErrCode();
+                    } else {
+                        sb << "Unable to complete rdma READ work request due to cq runtime error";
+                    }
+                    if (Rdma.Qp) {
+                        sb << " qp: " << Rdma.Qp;
+                    }
+                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR, sb.c_str());
+                    rdmaReadAck.SetErr(sb);
+                }
+            }
+
+            return rdmaReadAck;
+        }
+
         void SendToProxy(THolder<IEventBase> ev) {
             Y_ABORT_UNLESS(PeerNodeId);
             Send(GetActorSystem()->InterconnectProxy(PeerNodeId), ev.Release());
@@ -1253,13 +1877,7 @@ namespace NActors {
                 PeerAddr.size() ? PeerAddr.data() : "<unknown>", explanation.data());
 
             if (network) {
-                TInstant now = Now();
-                NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG;
-                if (!LastLogNotice || now - *LastLogNotice > MuteDuration) {
-                    logPriority = NActors::NLog::PRI_NOTICE;
-                    LastLogNotice.emplace(now);
-                }
-                LOG_LOG_NET_X(logPriority, PeerNodeId, "network-related error occured on handshake: %s", msg.data());
+                LOG_LOG_NET_X(NActors::NLog::PRI_DEBUG, PeerNodeId, "network-related error occured on handshake: %s", msg.data());
             } else {
                 // calculate log severity based on failure type; permanent failures lead to error log messages
                 auto severity = reason == TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT
@@ -1306,11 +1924,13 @@ namespace NActors {
     IActor* CreateOutgoingHandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self,
                                          const TActorId& peer, ui32 nodeId, ui64 nextPacket, TString peerHostName,
                                          TSessionParams params) {
+        THandshakeActorCreateTimer timer(common);
         return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), self, peer, nodeId, nextPacket,
             std::move(peerHostName), std::move(params)), IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }
 
     IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket) {
+        THandshakeActorCreateTimer timer(common);
         return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), std::move(socket)),
             IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }

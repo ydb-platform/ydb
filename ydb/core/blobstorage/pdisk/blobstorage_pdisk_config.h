@@ -15,6 +15,9 @@
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/library/pdisk_io/wcache.h>
+#include <ydb/library/actors/util/cpumask.h>
+
+#include <optional>
 
 namespace NKikimr {
 
@@ -134,11 +137,14 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 BufferPoolBufferSizeBytes;
     ui32 BufferPoolBufferCount;
     ui32 MaxQueuedCompletionActions;
+    ui32 IoPieceSizeBytes = 0;
     bool UseSpdkNvmeDriver;
 
-    // Next 2 are either user-defined or inferred from drive size
+    // Slot sizing settings are either user-defined or inferred from drive size
     ui32 ExpectedSlotCount = 0;
     ui32 SlotSizeInUnits = 0;
+    ui64 ExpectedSlotSize = 0;
+    ui32 MaxSlots = 0;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
     ui32 ChunkBaseLimit = 130;
@@ -176,6 +182,10 @@ struct TPDiskConfig : public TThrRefBase {
     bool MetadataOnly = false;
 
     bool ReadOnly = false;
+
+    bool SortFreeChunksHDD = true;
+
+    std::optional<TCpuMask> BlobStorageExecutorPoolAffinity;
 
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
@@ -233,6 +243,9 @@ struct TPDiskConfig : public TThrRefBase {
         BufferPoolBufferSizeBytes = choose(128 << 10, 256 << 10, 512 << 10);
         BufferPoolBufferCount = choose(1024, 512, 256);
         MaxQueuedCompletionActions = BufferPoolBufferCount / 2;
+        IoPieceSizeBytes = choose(64 << 10, 64 << 10, 512 << 10);
+        // piece size should be ≤ buffer size
+        IoPieceSizeBytes = Min(IoPieceSizeBytes, BufferPoolBufferSizeBytes);
 
         UseSpdkNvmeDriver = Path.StartsWith("PCIe:");
         Y_VERIFY_S(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
@@ -319,7 +332,10 @@ struct TPDiskConfig : public TThrRefBase {
         str << " BufferPoolBufferSizeBytes# " << BufferPoolBufferSizeBytes << x;
         str << " BufferPoolBufferCount# " << BufferPoolBufferCount << x;
         str << " MaxQueuedCompletionActions# " << MaxQueuedCompletionActions << x;
+        str << " IoPieceSizeBytes# " << IoPieceSizeBytes << x;
         str << " ExpectedSlotCount# " << ExpectedSlotCount << x;
+        str << " ExpectedSlotSize# " << ExpectedSlotSize << x;
+        str << " MaxSlots# " << MaxSlots << x;
         str << " SlotSizeInUnits# " << SlotSizeInUnits << x;
 
         str << " ReserveLogChunksMultiplier# " << ReserveLogChunksMultiplier << x;
@@ -334,6 +350,10 @@ struct TPDiskConfig : public TThrRefBase {
         str << " UseNoopScheduler# " << (UseNoopScheduler ? "true" : "false") << x;
         str << " PlainDataChunks# " << PlainDataChunks << x;
         str << " SeparateHugePriorities# " << SeparateHugePriorities << x;
+        if (BlobStorageExecutorPoolAffinity) {
+            str << " BlobStorageExecutorPoolAffinityCpuCount# "
+                << BlobStorageExecutorPoolAffinity->CpuCount() << x;
+        }
         str << "}";
         return str.Str();
     }
@@ -404,12 +424,23 @@ struct TPDiskConfig : public TThrRefBase {
         if (cfg->HasMaxQueuedCompletionActions()) {
             MaxQueuedCompletionActions = cfg->GetMaxQueuedCompletionActions();
         }
+        if (cfg->HasIoPieceSizeBytes()) {
+            IoPieceSizeBytes = cfg->GetIoPieceSizeBytes();
+        }
         if (cfg->HasInsaneLogChunksMultiplier()) {
             InsaneLogChunksMultiplier = cfg->GetInsaneLogChunksMultiplier();
         }
 
         if (cfg->HasExpectedSlotCount()) {
             ExpectedSlotCount = cfg->GetExpectedSlotCount();
+        }
+
+        if (cfg->HasExpectedSlotSize()) {
+            ExpectedSlotSize = cfg->GetExpectedSlotSize();
+        }
+
+        if (cfg->HasMaxSlots()) {
+            MaxSlots = cfg->GetMaxSlots();
         }
 
         if (cfg->HasChunkBaseLimit()) {
@@ -437,16 +468,55 @@ struct TPDiskConfig : public TThrRefBase {
         if (cfg->HasSeparateHugePriorities()) {
             SeparateHugePriorities = cfg->GetSeparateHugePriorities();
         }
+
+        if (cfg->HasSortFreeChunksHDD()) {
+            SortFreeChunksHDD = cfg->GetSortFreeChunksHDD();
+        }
     }
 
     ui32 GetOwnerWeight(ui32 groupSizeInUnits) {
-        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits);
+        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, ExpectedSlotSize);
+    }
+
+    static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits, ui64 expectedSlotSize) {
+        return expectedSlotSize ? 1 : GetOwnerWeight(groupSizeInUnits, slotSizeInUnits);
     }
 
     static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits) {
         ui32 vu = groupSizeInUnits ? groupSizeInUnits : 1;
         ui32 pu = slotSizeInUnits ? slotSizeInUnits : 1;
         return int(vu / pu) + !!(vu % pu);
+    }
+};
+
+struct TInferPDiskSlotCountSettingsForDriveType {
+    ui64 SlotSize = 0;
+    ui64 UnitSize = 0;
+    ui32 MaxSlots = 0;
+    bool PreferInferredSettingsOverExplicit = false;
+
+    TInferPDiskSlotCountSettingsForDriveType(const NKikimrBlobStorage::TInferPDiskSlotCountSettings& settings, NPDisk::EDeviceType type) {
+        switch (type) {
+            case NPDisk::DEVICE_TYPE_ROT:
+                SlotSize = settings.GetRot().GetSlotSize();
+                UnitSize = settings.GetRot().GetUnitSize();
+                MaxSlots = settings.GetRot().GetMaxSlots();
+                PreferInferredSettingsOverExplicit = settings.GetRot().GetPreferInferredSettingsOverExplicit();
+                break;
+            case NPDisk::DEVICE_TYPE_SSD:
+            case NPDisk::DEVICE_TYPE_NVME:
+                SlotSize = settings.GetSsd().GetSlotSize();
+                UnitSize = settings.GetSsd().GetUnitSize();
+                MaxSlots = settings.GetSsd().GetMaxSlots();
+                PreferInferredSettingsOverExplicit = settings.GetSsd().GetPreferInferredSettingsOverExplicit();
+                break;
+            case NPDisk::DEVICE_TYPE_UNKNOWN:
+                break;
+        }
+    }
+
+    explicit operator bool() const {
+        return (SlotSize || UnitSize) && MaxSlots;
     }
 };
 

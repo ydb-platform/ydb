@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     kqp_response.cpp
     kqp_session_actor.cpp
+    kqp_snapshot_tables.cpp
     kqp_worker_actor.cpp
     kqp_worker_common.cpp
     kqp_query_state.cpp
@@ -12,6 +13,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/docapi
+    ydb/core/engine
     ydb/core/kqp/common
     ydb/core/kqp/federated_query
     ydb/public/sdk/cpp/src/library/operation_id

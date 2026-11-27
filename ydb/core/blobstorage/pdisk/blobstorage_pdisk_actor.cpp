@@ -72,7 +72,7 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
     TIntrusivePtr<TPDisk> PDisk;
     bool IsMagicAlreadyChecked = false;
 
-    THolder<TThread> FormattingThread;
+    THolder<TPDiskFunctionThread> FormattingThread;
     bool IsFormattingNow = false;
     std::function<void(bool, TString&)> PendingRestartResponse;
 
@@ -420,7 +420,7 @@ public:
 
         // Is used to pass parameters into formatting thread, because TThread can pass only void*
         using TCookieType = std::tuple<TIntrusivePtr<TPDiskConfig>, NPDisk::TKey, TActorSystem*, TActorId, std::optional<TRcBuf>>;
-        FormattingThread.Reset(new TThread(
+        FormattingThread.Reset(new TPDiskFunctionThread(
                 [] (void *cookie) -> void* {
                     auto params = static_cast<TCookieType*>(cookie);
                     auto [cfg, mainKey, actorSystem, pDiskActor, metadata] = std::move(*params);
@@ -459,7 +459,8 @@ public:
                     }
                     return nullptr;
                 },
-                new TCookieType(Cfg, MainKey.Keys.back(), TlsActivationContext->ActorSystem(), SelfId(), std::move(ev->Get()->Metadata))));
+                new TCookieType(Cfg, MainKey.Keys.back(), TlsActivationContext->ActorSystem(), SelfId(), std::move(ev->Get()->Metadata)),
+                Cfg->BlobStorageExecutorPoolAffinity));
 
         FormattingThread->Start();
     }
@@ -474,7 +475,7 @@ public:
 
         // Is used to pass parameters into formatting thread, because TThread can pass only void*
         using TCookieType = std::tuple<TDiskFormat, NPDisk::TKey, TIntrusivePtr<TPDiskConfig>, std::shared_ptr<TPDiskCtx>>;
-        FormattingThread.Reset(new TThread(
+        FormattingThread.Reset(new TPDiskFunctionThread(
             [] (void *cookie) -> void* {
                 std::unique_ptr<TCookieType> params(static_cast<TCookieType*>(cookie));
                 TDiskFormat format = std::get<0>(*params);
@@ -507,7 +508,8 @@ public:
                 }
                 return nullptr;
             },
-            new TCookieType(format, newMainKey, PDisk->Cfg, PCtx)
+            new TCookieType(format, newMainKey, PDisk->Cfg, PCtx),
+            PDisk->Cfg->BlobStorageExecutorPoolAffinity
         ));
         FormattingThread->Start();
     }
@@ -742,6 +744,7 @@ public:
         THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str(), 0));
         result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
         PDisk->Mon.WriteLog.CountRequest(0);
+        PDisk->Mon.CountLogWriteOpRequest(evLog.WriteSource, evLog.Data.size());
         Send(ev->Sender, result.Release());
         PDisk->Mon.WriteLog.CountResponse();
     }
@@ -766,6 +769,7 @@ public:
         THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str(), 0));
         for (auto &[log, _] : evMultiLog.Logs) {
             result->Results.push_back(NPDisk::TEvLogResult::TRecord(log->Lsn, log->Cookie));
+            PDisk->Mon.CountLogWriteOpRequest(log->WriteSource, log->Data.size());
         }
         PDisk->Mon.WriteLog.CountRequest(0);
         Send(ev->Sender, result.Release());
@@ -793,7 +797,9 @@ public:
 
     void ErrorHandle(NPDisk::TEvChunkWrite::TPtr &ev) {
         const NPDisk::TEvChunkWrite &evChunkWrite = *ev->Get();
+        const ui32 size = evChunkWrite.PartsPtr ? evChunkWrite.PartsPtr->ByteSize() : 0;
         PDisk->Mon.GetWriteCounter(evChunkWrite.PriorityClass)->CountRequest(0);
+        PDisk->Mon.CountChunkWriteOpRequest(evChunkWrite.WriteSource, size);
         PDisk->Mon.GetWriteCounter(evChunkWrite.PriorityClass)->CountResponse();
         auto res = std::make_unique<NPDisk::TEvChunkWriteResult>(NKikimrProto::CORRUPTED,
             evChunkWrite.ChunkIdx, evChunkWrite.Cookie, 0, StateErrorReason);
@@ -839,6 +845,12 @@ public:
         PDisk->Mon.ChangeExpectedSlotCount.CountRequest();
         Send(ev->Sender, new NPDisk::TEvChangeExpectedSlotCountResult(NKikimrProto::CORRUPTED, StateErrorReason));
         PDisk->Mon.ChangeExpectedSlotCount.CountResponse();
+    }
+
+    void ErrorHandle(NPDisk::TEvConfigureScheduler::TPtr &ev) {
+        PDisk->Mon.YardConfigureScheduler.CountRequest();
+        Send(ev->Sender, new NPDisk::TEvConfigureSchedulerResult(NKikimrProto::CORRUPTED, StateErrorReason));
+        PDisk->Mon.YardConfigureScheduler.CountResponse();
     }
 
     void ErrorHandle(NPDisk::TEvChunkReserve::TPtr &ev) {
@@ -1571,6 +1583,7 @@ public:
             hFunc(NPDisk::TEvContinueShred, ErrorHandle);
             hFunc(NPDisk::TEvYardResize, ErrorHandle);
             hFunc(NPDisk::TEvChangeExpectedSlotCount, ErrorHandle);
+            hFunc(NPDisk::TEvConfigureScheduler, ErrorHandle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);

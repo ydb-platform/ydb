@@ -95,7 +95,8 @@ public:
             auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletInfo->TabletID, RecordGeneration,
                 PerGenerationCounter, channel, advanceBarrier, CollectOperation->Header.CollectGeneration,
                 CollectOperation->Header.CollectStep, value.Keep ? new TVector<TLogoBlobID>(value.Keep) : nullptr,
-                value.DoNotKeep ? new TVector<TLogoBlobID>(value.DoNotKeep) : nullptr, TInstant::Max(), true);
+                value.DoNotKeep ? new TVector<TLogoBlobID>(value.DoNotKeep) : nullptr, TInstant::Max(), true,
+                TWriteSource::KeyValueGC);
             STLOG(PRI_DEBUG, KEYVALUE_GC, KVC00, "Sending TEvCollectGarbage", (TabletId, TabletInfo->TabletID),
                 (GroupId, groupId), (Channel, (int)channel), (RecordGeneration, RecordGeneration),
                 (PerGenerationCounter, PerGenerationCounter), (AdvanceBarrier, advanceBarrier),

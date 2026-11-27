@@ -44,6 +44,14 @@ struct TTableConstInfoMap : public TAtomicRefCount<TTableConstInfoMap> {
     THashMap<NKikimr::TTableId, TIntrusivePtr<TTableConstInfo>> Map;
 };
 
+struct TQueryTable {
+    TString Path;
+    // Key ranges of the reads from this table, when every read is bounded by
+    // a key range known before execution: literals and parameters supplied
+    // with the query. Empty otherwise.
+    TVector<const NKqpProto::TKqpPhyKeyRange*> KeyRanges;
+};
+
 class TKqpPhyTxHolder {
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
     const NKqpProto::TKqpPhyTx* Proto;
@@ -146,7 +154,7 @@ private:
     YDB_ACCESSOR_DEF(TLlvmSettings, LlvmSettings);
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> Proto;
     std::shared_ptr<TPreparedQueryAllocHolder> Alloc;
-    TVector<TString> QueryTables;
+    TVector<TQueryTable> QueryTables;
     std::vector<TKqpPhyTxHolder::TConstPtr> Transactions;
     TIntrusivePtr<TTableConstInfoMap> TableConstInfoById;
 
@@ -189,7 +197,7 @@ public:
         return Proto->ByteSize();
     }
 
-    const TVector<TString>& GetQueryTables() const {
+    const TVector<TQueryTable>& GetQueryTables() const {
         return QueryTables;
     }
 

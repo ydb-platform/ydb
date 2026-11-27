@@ -2,6 +2,7 @@
 #include "interconnect_tcp_session.h"
 #include "interconnect_handshake.h"
 #include "interconnect_zc_processor.h"
+#include "rdma/ctx.h"
 
 #include <ydb/library/actors/core/probes.h>
 #include <ydb/library/actors/core/log.h>
@@ -27,22 +28,153 @@ namespace NActors {
         }
     }
 
-    TInterconnectSessionTCP::TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params)
+    class TInterconnectSessionTCP::TTcpWriteStrategy final : public IWriteStrategy {
+        TInterconnectSessionTCP& Session;
+        const TIntrusivePtr<NInterconnect::TStreamSocket>& Socket;
+        const TPollerToken::TPtr& PollerToken;
+        bool& WriteBlocked;
+        ui64& BytesWritten;
+
+    public:
+        TTcpWriteStrategy(TInterconnectSessionTCP& session,
+                const TIntrusivePtr<NInterconnect::TStreamSocket>& socket,
+                const TPollerToken::TPtr& pollerToken, bool& writeBlocked, ui64& bytesWritten)
+            : Session(session)
+            , Socket(socket)
+            , PollerToken(pollerToken)
+            , WriteBlocked(writeBlocked)
+            , BytesWritten(bytesWritten)
+        {}
+
+        size_t Write(NInterconnect::TOutgoingStream& stream, size_t maxBytes) override {
+            if (!stream || !Socket || WriteBlocked) {
+                return 0;
+            }
+
+            for (;;) {
+                if (const ssize_t res = Session.Write(stream, *Socket, maxBytes); res > 0) {
+                    BytesWritten += res;
+                    return res;
+                } else if (res == -1) {
+                    if (PollerToken && Socket->RequestWriteNotificationAfterWouldBlock(*PollerToken)) {
+                        continue;
+                    }
+                    WriteBlocked = true;
+                } else if (res != 0) {
+                    Y_UNREACHABLE();
+                }
+                return 0;
+            }
+        }
+
+        size_t GetMaxBytesAtOnce() const override {
+            return 256 * 1024;
+        }
+
+        size_t GetExpectedWriteLength() const override {
+            return Socket ? Socket->ExpectedWriteLength() : 0;
+        }
+
+        bool IsWriteBlocked() const override {
+            return WriteBlocked;
+        }
+    };
+
+    class TInterconnectSessionTCP::TRdmaSendStrategy final : public IWriteStrategy {
+        TInterconnectSessionTCP& Session;
+
+    public:
+        explicit TRdmaSendStrategy(TInterconnectSessionTCP& session)
+            : Session(session)
+        {}
+
+        size_t Write(NInterconnect::TOutgoingStream& stream, size_t maxBytes) override {
+            if (!stream) {
+                return 0;
+            }
+
+            static constexpr size_t MaxRdmaSendSge = 16;
+
+            Y_ABORT_UNLESS(Session.RdmaQp);
+            Y_ABORT_UNLESS(Session.RdmaCq);
+
+            TStackVec<NInterconnect::NRdma::TSendSge, MaxRdmaSendSge> sgList;
+            std::array<NInterconnect::NRdma::TMemRegionPtr, MaxRdmaSendSge> regions;
+            const size_t sgeLimit = Min((int)MaxRdmaSendSge,
+                Max<int>(1, Session.RdmaQp->GetCtx()->GetMaxSge()));
+            const size_t totalBytes = stream.ProduceRdmaSendVec(sgList, sgeLimit, maxBytes);
+
+            // The verbs builder does not own send buffers; keep their regions alive until completion.
+            for (size_t i = 0; i < sgList.size(); ++i) {
+                regions[i] = NInterconnect::NRdma::TMemRegionPtr(
+                    const_cast<NInterconnect::NRdma::TMemRegion*>(sgList[i].MemRegion));
+            }
+
+            if (sgList.empty()) {
+                LOG_LOG(TActivationContext::AsActorContext(), NLog::PRI_ERROR, NActorsServices::INTERCONNECT_SESSION,
+                    "ICRDMA RDMA main produced empty SG list IsOutOfBand# %d StreamSize# %zu"
+                    " StreamUnsent# %zu SendQueueSize# %zu", &stream == &Session.OutOfBandStream,
+                    stream.CalculateOutgoingSize(), stream.CalculateUnsentSize(), stream.GetSendQueueSize());
+                Session.ReestablishConnectionWithHandshake(TDisconnectReason::RdmaError());
+                return 0;
+            }
+
+            auto builder = NInterconnect::NRdma::CreateIbVerbsBuilder(1);
+            const TActorId selfId = Session.SelfId();
+            builder->AddSendVerb(std::span<const NInterconnect::NRdma::TSendSge>(sgList.data(), sgList.size()),
+                [selfId, regions{std::move(regions)}](TActorSystem* as, NInterconnect::NRdma::TEvRdmaIoDone* ioDone) {
+                    as->Send(selfId, ioDone);
+                    Y_UNUSED(regions);
+                });
+
+            if (Session.RdmaCq->DoWrBatchAsync(Session.RdmaQp, std::move(builder))) {
+                LOG_LOG(TActivationContext::AsActorContext(), NLog::PRI_ERROR, NActorsServices::INTERCONNECT_SESSION,
+                    "ICRDMA RDMA send post failed");
+                Session.ReestablishConnectionWithHandshake(TDisconnectReason::RdmaError());
+                return 0;
+            }
+
+            ++Session.RdmaSendWrSubmitted;
+            return totalBytes;
+        }
+
+        size_t GetMaxBytesAtOnce() const override {
+            // One SEND WR consumes one posted SRQ receive buffer of this size on the peer.
+            return TTcpPacketBuf::FullPacketSize;
+        }
+
+        size_t GetExpectedWriteLength() const override {
+            return 0;
+        }
+
+        bool IsWriteBlocked() const override {
+            return false;
+        }
+    };
+
+    TInterconnectSessionTCP::TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy)
         : TActor(&TInterconnectSessionTCP::StateFunc)
         , Created(TInstant::Now())
         , Proxy(proxy)
         , CloseOnIdleWatchdog(GetCloseOnIdleTimeout(), std::bind(&TThis::OnCloseOnIdleTimerHit, this))
         , LostConnectionWatchdog(GetLostConnectionTimeout(), std::bind(&TThis::OnLostConnectionTimerHit, this))
-        , Params(std::move(params))
+        , KernelLivenessMode(Params.UseKernelLiveness)
         , TotalOutputQueueSize(0)
         , OutputStuckFlag(false)
         , OutputQueueUtilization(16)
         , OutputCounter(0ULL)
         , ZcProcessor(proxy->Common->Settings.SocketSendOptimization == ESocketSendOptimization::IC_MSG_ZEROCOPY)
     {
-        Proxy->Metrics->SetConnected(0);
         PartUpdateTimestamp = GetCycleCountFast();
         ReceiveContext.Reset(new TReceiveContext);
+    }
+
+    TInterconnectSessionTCP::TInterconnectSessionTCP(
+        TInterconnectProxyTCP* const proxy,
+        NInterconnect::NRdma::TQueuePair::TPtr rdmaQp)
+        : TInterconnectSessionTCP(proxy)
+    {
+        RdmaQp = rdmaQp;
     }
 
     TInterconnectSessionTCP::~TInterconnectSessionTCP() {
@@ -55,33 +187,63 @@ namespace NActors {
         }
     }
 
-    void TInterconnectSessionTCP::Init() {
+    void TInterconnectSessionTCP::Init(const TSessionParams& params) {
+        Params = params;
+        if (Params.AllowRdmaSendReceive) {
+            OutgoingStream = NInterconnect::TOutgoingStream(Proxy->Common->RdmaMemPool);
+            OutOfBandStream = NInterconnect::TOutgoingStream(Proxy->Common->RdmaMemPool);
+        }
+        Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
+        Proxy->Metrics->SetConnected(0);
         auto destroyCallback = [as = TActivationContext::ActorSystem(), id = Proxy->Common->DestructorId](THolder<IEventBase> event) {
             as->Send(id, event.Release());
         };
         Pool = std::make_unique<TEventHolderPool>(Proxy->Common, std::move(destroyCallback));
         ChannelScheduler.ConstructInPlace(Proxy->PeerNodeId, Proxy->Common->ChannelsConfig, Proxy->Metrics,
-            Proxy->Common->Settings.MaxSerializedEventSize, Params);
+            Proxy->Common->Settings.MaxSerializedEventSize, Params, Proxy->Common->RdmaMemPool);
 
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session created", Proxy->PeerNodeId);
         SetPrefix(Sprintf("Session %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
         SendUpdateToWhiteboard();
     }
 
-    std::optional<ui8> TInterconnectSessionTCP::GetXDCFlags() const {
+    std::optional<ui8> TInterconnectSessionTCP::GetXDCFlags() const noexcept {
+        std::optional<ui8> flags;
+        using NInterconnect::NRdma::TQueuePair;
         if (XdcSocket) {
+            flags = TInterconnectProxyTCP::TProxyStats::NONE;
             if (ZcProcessor.ZcStateIsOk()) {
-                return TInterconnectProxyTCP::TProxyStats::MSG_ZERO_COPY_SEND;
-            } else {
-                return TInterconnectProxyTCP::TProxyStats::NONE;
+                *flags |= TInterconnectProxyTCP::TProxyStats::MSG_ZERO_COPY_SEND;
             }
-        } else {
-            return {};
+            if (RdmaQp) {
+                TQueuePair::TQpState res = RdmaQp->GetState(false);
+                TQueuePair::TQpS* qpState = std::get_if<TQueuePair::TQpS>(&res);
+                if (qpState) {
+                    if (TQueuePair::IsRtsState(*qpState)) {
+                        *flags |= TInterconnectProxyTCP::TProxyStats::RDMA_READ;
+                    }
+                }
+            }
         }
+        return flags;
     }
 
     void TInterconnectSessionTCP::CloseInputSession() {
         Send(ReceiverId, new TEvInterconnect::TEvCloseInputSession);
+    }
+
+    IInterconnectSession::ERdmaState TInterconnectSessionTCP::GetRdmaState() const {
+        if (RdmaQp) {
+            using NInterconnect::NRdma::TQueuePair;
+            const TQueuePair::TQpState res = RdmaQp->GetState(false);
+            const TQueuePair::TQpS* qpState = std::get_if<TQueuePair::TQpS>(&res);
+            if (qpState && TQueuePair::IsRtsState(*qpState)) {
+                return ERdmaState::Active;
+            }
+        }
+        return Params.UseRdmaRead || RdmaQp
+            ? ERdmaState::Present
+            : ERdmaState::None;
     }
 
     void TInterconnectSessionTCP::Handle(TEvTerminate::TPtr& ev) {
@@ -94,6 +256,11 @@ namespace NActors {
 
     void TInterconnectSessionTCP::Terminate(TDisconnectReason reason) {
         LOG_INFO_IC_SESSION("ICS01", "socket: %" PRIi64 " reason# %s", (Socket ? i64(*Socket) : -1), reason.ToString().data());
+
+        // Move RdmaQp to the error state to prevent read our memory from the peer side after possible desctuction events
+        if (RdmaQp) {
+            RdmaQp->ToErrorState();
+        }
 
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::UnregisterSession, this);
         ShutdownSocket(std::move(reason));
@@ -125,6 +292,7 @@ namespace NActors {
 
         Proxy->Metrics->SubOutputBuffersTotalSize(TotalOutputQueueSize);
         Proxy->Metrics->SubInflightDataAmount(InflightDataAmount);
+        Proxy->Metrics->SubInflightRdmaDataAmount(RdmaInflightDataAmount);
 
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session destroyed", Proxy->PeerNodeId);
 
@@ -153,7 +321,9 @@ namespace NActors {
         auto& oChannel = ChannelScheduler->GetOutputChannel(evChannel);
         const bool wasWorking = oChannel.IsWorking();
 
-        const auto [dataSize, event] = oChannel.Push(*ev, *Pool);
+        TInstant now = TlsActivationContext->Now();
+
+        const auto [dataSize, event] = oChannel.Push(*ev, *Pool, now);
         LWTRACK(ForwardEvent, event->Orbit, Proxy->PeerNodeId, event->Descr.Type, event->Descr.Flags, LWACTORID(event->Descr.Recipient), LWACTORID(event->Descr.Sender), event->Descr.Cookie, event->EventSerializedSize);
 
         TotalOutputQueueSize += dataSize;
@@ -164,6 +334,7 @@ namespace NActors {
         }
 
         SetOutputStuckFlag(true);
+        Proxy->Metrics->UpdateNumEventsInQueueHistogram(NumEventsInQueue);
         ++NumEventsInQueue;
         if (State == EState::Idle) {
             UpdateState(EState::Utilized);
@@ -256,9 +427,10 @@ namespace NActors {
             return;
         }
 
-        LOG_INFO_IC_SESSION("ICS09", "handshake done sender: %s self: %s peer: %s socket: %" PRIi64,
+        LOG_INFO_IC_SESSION("ICS09", "handshake done sender: %s self: %s peer: %s socket: %" PRIi64 " qp: %d",
             ev->Sender.ToString().data(), ev->Get()->Self.ToString().data(), ev->Get()->Peer.ToString().data(),
-            i64(*ev->Get()->Socket));
+            i64(*ev->Get()->Socket),
+            (ev->Get()->RdmaHanshakeResult.IsOk() ? (int)ev->Get()->RdmaHanshakeResult.GetOk()->RdmaQp->GetQpNum() : -1));
 
         NewConnectionSet = TActivationContext::Now();
         BytesWrittenToSocket = 0;
@@ -267,9 +439,19 @@ namespace NActors {
         Socket = std::move(ev->Get()->Socket);
         XdcSocket = std::move(ev->Get()->XdcSocket);
 
+        RdmaQp.reset();
+        RdmaCq.reset();
+        if (auto rdmaSuccess = ev->Get()->RdmaHanshakeResult.GetOk()) {
+            RdmaCq = std::move(rdmaSuccess->RdmaCq);
+            RdmaQp = std::move(rdmaSuccess->RdmaQp);
+        }
+
         if (XdcSocket) {
             ZcProcessor.ApplySocketOption(*XdcSocket);
         }
+
+        // Apply kernel-liveness decision for this concrete transport connection.
+        KernelLivenessMode = ev->Get()->Params.UseKernelLiveness;
 
         // there may be a race
         const ui64 nextPacket = Max(LastConfirmed, ev->Get()->NextPacket);
@@ -278,7 +460,8 @@ namespace NActors {
         RearmCloseOnIdle();
 
         // reset activity timestamps
-        LastInputActivityTimestamp = LastPayloadActivityTimestamp = TActivationContext::Monotonic();
+        LastInputActivityTimestamp = LastPayloadActivityTimestamp = LastPingTimestamp = TActivationContext::Monotonic();
+        ClockSkewPingTimestamp = TMonotonic::Max();
 
         LOG_INFO_IC_SESSION("ICS10", "traffic start");
 
@@ -291,9 +474,21 @@ namespace NActors {
 
         // create input session actor
         ReceiveContext->UnlockLastPacketSerialToConfirm();
-        auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, XdcSocket, ReceiveContext, Proxy->Common,
-            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params);
-        ReceiverId = RegisterWithSameMailbox(actor.Release());
+        // Keep most session params stable, but pass current transport-level liveness mode.
+        TSessionParams inputSessionParams = Params;
+        inputSessionParams.UseKernelLiveness = KernelLivenessMode;
+
+        TInputSessionTCP* inputSession = nullptr;
+        if (ev->Get()->RdmaHanshakeResult.HasPreinitedSession()) {
+            inputSession = ev->Get()->RdmaHanshakeResult.ReleasePreinitedSession();
+            ReceiverId = IActor::InvokeOtherActor(*inputSession, &TInputSessionTCP::SelfId);
+        } else {
+            inputSession = new TInputSessionTCP(Proxy->Common, RdmaQp, RdmaCq);
+            ReceiverId = RegisterWithSameMailbox(inputSession);
+        }
+
+        IActor::InvokeOtherActor(*inputSession, &TInputSessionTCP::StartRecieve, SelfId(), Socket, XdcSocket,
+            ReceiveContext, Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), std::move(inputSessionParams));
 
         // register our socket in poller actor
         LOG_DEBUG_IC_SESSION("ICS11", "registering socket in PollerActor");
@@ -305,8 +500,13 @@ namespace NActors {
         }
 
         LostConnectionWatchdog.Disarm();
+        Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
         Proxy->Metrics->SetConnected(1);
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] connected", Proxy->PeerNodeId);
+        if (Proxy->Common->Settings.MergePerHostCounters) {
+            LOG_INFO_IC_SESSION("ICS80", "peer-level connect PeerNodeId# %" PRIu32 " Peer# %s Host# %s",
+                Proxy->PeerNodeId, Proxy->Metrics->GetHumanFriendlyPeerHostName().data(), Proxy->TechnicalPeerHostName.data());
+        }
 
         // arm pinger timer
         ResetFlushLogic();
@@ -326,7 +526,9 @@ namespace NActors {
         OutgoingIndex = SendQueue.size();
         DropConfirmed(nextPacket);
         OutgoingStream.Rewind();
-        OutOfBandStream = {};
+        OutOfBandStream = UseRdmaSendReceiveTransport()
+            ? NInterconnect::TOutgoingStream(Proxy->Common->RdmaMemPool)
+            : NInterconnect::TOutgoingStream();
         XdcStream.Rewind();
         OutgoingOffset = XdcOffset = 0;
         OutgoingIndex = 0;
@@ -437,7 +639,17 @@ namespace NActors {
                 return;
             }
 
-            WriteData();
+            const bool useRdmaMain = UseRdmaSendReceiveTransport();
+
+            if (useRdmaMain) {
+                TRdmaSendStrategy writer(*this);
+                WriteData(writer);
+            } else {
+                TTcpWriteStrategy writer(*this, Socket, PollerToken,
+                    ReceiveContext->MainWriteBlocked, BytesWrittenToSocket);
+                WriteData(writer);
+            }
+
             if (!Socket) {
                 return;
             }
@@ -445,11 +657,14 @@ namespace NActors {
             bool canProducePackets;
             bool canWriteData;
 
-            canProducePackets = NumEventsInQueue && InflightDataAmount < GetTotalInflightAmountOfData() &&
+            canProducePackets = NumEventsInQueue && (InflightDataAmount + RdmaInflightDataAmount) < GetTotalInflightAmountOfData() &&
                 GetUnsentSize() < GetUnsentLimit();
 
-            canWriteData = ((OutgoingStream || OutOfBandStream) && !ReceiveContext->MainWriteBlocked) ||
-                (XdcStream && !ReceiveContext->XdcWriteBlocked);
+            const bool canWriteMain = useRdmaMain
+                ? (OutgoingStream || OutOfBandStream)
+                : (OutgoingStream || OutOfBandStream) && !ReceiveContext->MainWriteBlocked;
+            const bool canWriteXdc = XdcStream && !ReceiveContext->XdcWriteBlocked;
+            canWriteData = canWriteMain || canWriteXdc;
 
             if (!canProducePackets && !canWriteData) {
                 SetEnoughCpu(true); // we do not starve
@@ -482,12 +697,21 @@ namespace NActors {
         // we exit cycle
         static constexpr ui32 maxBytesToProduce = 64 * 1024;
         ui32 bytesProduced = 0;
-        while (NumEventsInQueue && InflightDataAmount < GetTotalInflightAmountOfData() && GetUnsentSize() < GetUnsentLimit()) {
-            if ((bytesProduced && TimeLimit->CheckExceeded()) || bytesProduced >= maxBytesToProduce) {
+        // Give more chanse to send XDC command via regular channel after RDMA region preparation.
+        // It reduces rdma memory usage and latency but in theory may also decrease effecincy of regular tcp channel in case of mixed RDMA + TCP traffic
+        // TODO (dcherednik): recheck impact on the huge clusters
+        const ui64 rdmaBytesToProduce = RdmaInflightDataAmount; 
+        while (NumEventsInQueue &&  (InflightDataAmount + RdmaInflightDataAmount) < GetTotalInflightAmountOfData() && GetUnsentSize() < GetUnsentLimit()) {
+            if ((bytesProduced && TimeLimit->CheckExceeded()) || bytesProduced >= maxBytesToProduce || RdmaInflightDataAmount > rdmaBytesToProduce) {
                 break;
             }
             try {
-                bytesProduced += MakePacket(true);
+                // Break loop in case of prealocation failure
+                if (ui32 packetSize = MakePacket(true)) {
+                    bytesProduced += packetSize;
+                } else {
+                    return;
+                }
             } catch (const TExSerializedEventTooLarge& ex) {
                 // terminate session if the event can't be serialized properly
                 LOG_CRIT_IC("ICS31", "serialized event Type# 0x%08" PRIx32 " is too large", ex.Type);
@@ -498,6 +722,11 @@ namespace NActors {
 
     void TInterconnectSessionTCP::StartHandshake() {
         LOG_INFO_IC_SESSION("ICS15", "start handshake");
+        if (GetRdmaState() != ERdmaState::None) {
+            LOG_NOTICE_IC_SESSION("ICRDMA", "start initial handshake instead of graceful reconnect for RDMA session");
+            IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::StartInitialHandshake);
+            return;
+        }
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::StartResumeHandshake, ReceiveContext->LockLastPacketSerialToConfirm());
     }
 
@@ -555,6 +784,11 @@ namespace NActors {
             Proxy->RegisterDisconnect();
             SetOutputStuckFlag(false);
             LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] disconnected", Proxy->PeerNodeId);
+            if (Proxy->Common->Settings.MergePerHostCounters) {
+                LOG_NOTICE_IC_SESSION("ICS81", "peer-level disconnect PeerNodeId# %" PRIu32 " Peer# %s Host# %s Reason# %s",
+                    Proxy->PeerNodeId, Proxy->Metrics->GetHumanFriendlyPeerHostName().data(),
+                    Proxy->TechnicalPeerHostName.data(), reason.ToString().data());
+            }
         }
         if (XdcSocket) {
             // call shutdown but do not call close and do not free wrapper object - we need descriptor to finish ZC op
@@ -621,40 +855,12 @@ namespace NActors {
         }
     }
 
-    void TInterconnectSessionTCP::WriteData() {
+    void TInterconnectSessionTCP::WriteData(IWriteStrategy& mainWriter) {
         // total bytes written during this call
         ui64 written = 0;
 
-        auto process = [&](NInterconnect::TOutgoingStream& stream, const TIntrusivePtr<NInterconnect::TStreamSocket>& socket,
-                const TPollerToken::TPtr& token, bool *writeBlocked, size_t maxBytes) {
-            size_t totalWritten = 0;
-
-            if (stream && socket && !*writeBlocked) {
-                for (;;) {
-                    if (const ssize_t r = Write(stream, *socket, maxBytes); r > 0) {
-                        stream.Advance(r);
-                        totalWritten += r;
-                    } else if (r == -1) {
-                        if (token && socket->RequestWriteNotificationAfterWouldBlock(*token)) {
-                            continue; // we can try again
-                        }
-                        *writeBlocked = true;
-                    } else if (r == 0) {
-                        // error condition
-                    } else {
-                        Y_UNREACHABLE();
-                    }
-                    break;
-                }
-            }
-
-            written += totalWritten;
-            return totalWritten;
-        };
-
         auto sendQueueIt = SendQueue.begin() + OutgoingIndex;
-        static constexpr size_t maxBytesAtOnce = 256 * 1024;
-        size_t bytesToSendInMain = maxBytesAtOnce;
+        size_t bytesToSendInMain = mainWriter.GetMaxBytesAtOnce();
 
         Y_DEBUG_ABORT_UNLESS(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream));
 
@@ -675,28 +881,41 @@ namespace NActors {
         }
 
         if (bytesToSendInMain) {
-            const size_t w = process(OutgoingStream, Socket, PollerToken, &ReceiveContext->MainWriteBlocked, bytesToSendInMain);
+            const size_t w = mainWriter.Write(OutgoingStream, bytesToSendInMain);
+            OutgoingStream.Advance(w);
+            written += w;
 
             // adjust sending queue iterator
             for (OutgoingOffset += w; OutgoingOffset && sendQueueIt->PacketSize <= OutgoingOffset; ++sendQueueIt, ++OutgoingIndex) {
                 OutgoingOffset -= sendQueueIt->PacketSize;
             }
 
-            BytesWrittenToSocket += w;
-
             if (OutOfBandStream) {
                 BytesAlignedForOutOfBand += w;
                 bytesToSendInMain -= w;
             }
 
-            ForcedWriteLength = Socket ? Socket->ExpectedWriteLength() : 0;
+            ForcedWriteLength = mainWriter.GetExpectedWriteLength();
+            if (!Socket) {
+                if (written) {
+                    Proxy->Metrics->AddTotalBytesWritten(written);
+                }
+                return;
+            }
         }
 
         if (!bytesToSendInMain && !ForcedWriteLength) {
-            if (const size_t w = process(OutOfBandStream, Socket, PollerToken, &ReceiveContext->MainWriteBlocked, maxBytesAtOnce)) {
+            if (const size_t w = mainWriter.Write(OutOfBandStream, mainWriter.GetMaxBytesAtOnce())) {
+                OutOfBandStream.Advance(w);
                 OutOfBandStream.DropFront(w);
-                BytesWrittenToSocket += w;
                 OutOfBandBytesSent += w;
+                written += w;
+            }
+            if (!Socket) {
+                if (written) {
+                    Proxy->Metrics->AddTotalBytesWritten(written);
+                }
+                return;
             }
         }
 
@@ -713,9 +932,12 @@ namespace NActors {
             }
         }
 
-        if (const size_t w = process(XdcStream, XdcSocket, XdcPollerToken, &ReceiveContext->XdcWriteBlocked, maxBytesAtOnce)) {
-            XdcBytesSent += w;
+        TTcpWriteStrategy xdcWriter(*this, XdcSocket, XdcPollerToken,
+            ReceiveContext->XdcWriteBlocked, XdcBytesSent);
+        if (const size_t w = xdcWriter.Write(XdcStream, xdcWriter.GetMaxBytesAtOnce())) {
+            XdcStream.Advance(w);
             XdcOffset += w;
+            written += w;
         }
 
         if (written) {
@@ -724,7 +946,8 @@ namespace NActors {
 
         DropConfirmed(LastConfirmed);
 
-        const bool writeBlockedByFullSendBuffer = ReceiveContext->MainWriteBlocked || ReceiveContext->XdcWriteBlocked;
+        const bool writeBlockedByFullSendBuffer =
+            mainWriter.IsWriteBlocked() || ReceiveContext->XdcWriteBlocked;
         if (WriteBlockedByFullSendBuffer < writeBlockedByFullSendBuffer) { // became blocked
             WriteBlockedCycles = GetCycleCountFast();
             LOG_DEBUG_IC_SESSION("ICS18", "hit send buffer limit");
@@ -732,6 +955,16 @@ namespace NActors {
             WriteBlockedTotal += TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - WriteBlockedCycles));
         }
         WriteBlockedByFullSendBuffer = writeBlockedByFullSendBuffer;
+    }
+
+    void TInterconnectSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaIoDone::TPtr& ev) {
+        ++RdmaSendWrCompleted;
+        if (!ev->Get()->IsSuccess()) {
+            LOG_NOTICE_IC_SESSION("ICRDMA", "RDMA send failed Source# %s ErrCode# %d",
+                ev->Get()->GetErrSource().data(), ev->Get()->GetErrCode());
+            ReestablishConnectionWithHandshake(TDisconnectReason::RdmaError());
+            return;
+        }
     }
 
     ssize_t TInterconnectSessionTCP::HandleWriteResult(ssize_t r, const TString& err) {
@@ -826,9 +1059,12 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::ScheduleFlush() {
-        if (FlushSchedule.empty() || ForcePacketTimestamp < FlushSchedule.top()) {
-            Schedule(ForcePacketTimestamp, new TEvFlush);
-            FlushSchedule.push(ForcePacketTimestamp);
+        const TMonotonic nextFlushTimestamp = UseKernelLivenessMode()
+            ? Min(ForcePacketTimestamp, ClockSkewPingTimestamp)
+            : ForcePacketTimestamp;
+        if (nextFlushTimestamp != TMonotonic::Max() && (FlushSchedule.empty() || nextFlushTimestamp < FlushSchedule.top())) {
+            Schedule(nextFlushTimestamp, new TEvFlush);
+            FlushSchedule.push(nextFlushTimestamp);
             MaxFlushSchedule = Max(MaxFlushSchedule, FlushSchedule.size());
             ++FlushEventsScheduled;
         }
@@ -844,7 +1080,11 @@ namespace NActors {
                 ++ConfirmPacketsForcedByTimeout;
                 ++FlushEventsProcessed;
                 MakePacket(false); // just generate confirmation packet if we have preconditions for this
-            } else if (ForcePacketTimestamp != TMonotonic::Max()) {
+            }
+            const TMonotonic nextFlushTimestamp = UseKernelLivenessMode()
+                ? Min(ForcePacketTimestamp, ClockSkewPingTimestamp)
+                : ForcePacketTimestamp;
+            if (nextFlushTimestamp != TMonotonic::Max() && now < nextFlushTimestamp) {
                 ScheduleFlush();
             }
             GenerateTraffic();
@@ -854,9 +1094,20 @@ namespace NActors {
     void TInterconnectSessionTCP::ResetFlushLogic() {
         ForcePacketTimestamp = TMonotonic::Max();
         UnconfirmedBytes = 0;
-        const TDuration ping = Proxy->Common->Settings.PingPeriod;
-        if (ping != TDuration::Zero() && !NumEventsInQueue) {
-            SetForcePacketTimestamp(ping);
+        if (UseKernelLivenessMode()) {
+            const TDuration clockSkewPingTimeout = Proxy->Common->Settings.ClockSkewPingTimeout;
+            if (clockSkewPingTimeout == TDuration::Zero()) {
+                ClockSkewPingTimestamp = TMonotonic::Max();
+            } else {
+                ClockSkewPingTimestamp = LastPingTimestamp + clockSkewPingTimeout;
+                ScheduleFlush();
+            }
+        } else {
+            Y_DEBUG_ABORT_UNLESS(ClockSkewPingTimestamp == TMonotonic::Max());
+            const TDuration ping = Proxy->Common->Settings.PingPeriod;
+            if (ping != TDuration::Zero() && !NumEventsInQueue) {
+                SetForcePacketTimestamp(ping);
+            }
         }
     }
 
@@ -871,7 +1122,19 @@ namespace NActors {
         stream.Align();
         XdcStream.Align();
 
-        TTcpPacketOutTask packet(Params, stream, XdcStream);
+        const bool usePreallocatedInternalStream = UseRdmaSendReceiveTransport();
+        if (usePreallocatedInternalStream &&
+                !stream.PreallocateForWriting(TTcpPacketBuf::FullPacketSize)) {
+            Proxy->Metrics->IncRdmaSendBufferAllocationFails();
+
+            LOG_NOTICE_IC_SESSION("ICRDMA", "RDMA send buffer preallocation failed Data# %d QueuedEvents# %zu"
+                " StreamSize# %zu StreamUnsent# %zu", data, NumEventsInQueue,
+                stream.CalculateOutgoingSize(), stream.CalculateUnsentSize());
+            ReestablishConnectionWithHandshake(TDisconnectReason::RdmaError());
+            return 0;
+        }
+
+        TTcpPacketOutTask packet(Params, stream, XdcStream, usePreallocatedInternalStream);
         ui64 serial = 0;
 
         if (data) {
@@ -886,8 +1149,10 @@ namespace NActors {
             Y_ABORT_UNLESS(!packet.IsEmpty());
 
             InflightDataAmount += packet.GetDataSize();
+            RdmaInflightDataAmount += packet.GetRdmaPayloadSize();
             Proxy->Metrics->AddInflightDataAmount(packet.GetDataSize());
-            if (InflightDataAmount > GetTotalInflightAmountOfData()) {
+            Proxy->Metrics->AddInflightRdmaDataAmount(packet.GetRdmaPayloadSize());
+            if ((InflightDataAmount + RdmaInflightDataAmount) > GetTotalInflightAmountOfData()) {
                 Proxy->Metrics->IncInflyLimitReach();
             }
 
@@ -925,12 +1190,14 @@ namespace NActors {
         if (data) {
             SendQueue.push_back(TOutgoingPacket{
                 static_cast<ui32>(packetSize),
-                static_cast<ui32>(packet.GetExternalSize())
+                static_cast<ui32>(packet.GetExternalSize()),
+                packet.GetRdmaPayloadSize()
             });
         }
 
         LOG_DEBUG_IC_SESSION("ICS22", "outgoing packet Serial# %" PRIu64 " Confirm# %" PRIu64 " DataSize# %" PRIu32
-            " InflightDataAmount# %" PRIu64, serial, lastInputSerial, packet.GetDataSize(), InflightDataAmount);
+            " RdmaPayload# %" PRIu32 " InflightDataAmount# %" PRIu64 " RdmaInflightDataAmount# %" PRIu64, serial, lastInputSerial,
+            packet.GetDataSize(), packet.GetRdmaPayloadSize(), InflightDataAmount, RdmaInflightDataAmount);
 
         // reset forced packet sending timestamp as we have confirmed all received data
         ResetFlushLogic();
@@ -955,6 +1222,7 @@ namespace NActors {
         // making Serial <= confirm true
         size_t bytesDropped = 0;
         size_t bytesDroppedFromXdc = 0;
+        size_t bytesDroppedFromRdma = 0;
         ui64 frontPacketSerial = OutputCounter - SendQueue.size() + 1;
         Y_DEBUG_ABORT_UNLESS(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream),
             "OutgoingIndex# %zu SendQueue.size# %zu OutgoingOffset# %zu Unsent# %zu Total# %zu",
@@ -966,6 +1234,7 @@ namespace NActors {
             XdcOffset -= front.ExternalSize;
             bytesDropped += front.PacketSize;
             bytesDroppedFromXdc += front.ExternalSize;
+            bytesDroppedFromRdma += front.RdmaPayloadSize;
             ++numDropped;
 
             ++frontPacketSerial;
@@ -988,11 +1257,13 @@ namespace NActors {
 
         PacketsConfirmed += numDropped;
         InflightDataAmount -= droppedDataAmount;
+        RdmaInflightDataAmount -= bytesDroppedFromRdma;
         Proxy->Metrics->SubInflightDataAmount(droppedDataAmount);
+        Proxy->Metrics->SubInflightRdmaDataAmount(bytesDroppedFromRdma);
         LWPROBE(DropConfirmed, Proxy->PeerNodeId, droppedDataAmount, InflightDataAmount);
 
-        LOG_DEBUG_IC_SESSION("ICS24", "exit InflightDataAmount: %" PRIu64 " bytes droppedDataAmount: %" PRIu64 " bytes"
-            " dropped %" PRIu32 " packets", InflightDataAmount, droppedDataAmount, numDropped);
+        LOG_DEBUG_IC_SESSION("ICS24", "exit InflightDataAmount: %" PRIu64 " bytes RdmaInflightDataAmount: %" PRIu64 " bytes droppedDataAmount: %" PRIu64 " bytes"
+            " dropped %" PRIu32 " rdma bytes dropped %" PRIu32 " packets", InflightDataAmount, RdmaInflightDataAmount, droppedDataAmount, bytesDroppedFromRdma, numDropped);
 
         Pool->Trim(); // send any unsent free requests
 
@@ -1010,13 +1281,13 @@ namespace NActors {
             // generate some data within this channel
             const ui64 netBefore = channel->GetBufferedAmountOfData();
             const ui32 grossBefore = task.GetDataSize();
-            const bool eventDone = channel->FeedBuf(task, serial);
+            const bool eventDone = channel->FeedBuf(task, serial, RdmaQp ? RdmaQp->GetDeviceIndex() : -1);
             const ui32 grossAfter = task.GetDataSize();
             Y_DEBUG_ABORT_UNLESS(grossBefore <= grossAfter);
             const ui32 gross = grossAfter - grossBefore;
             channel->UnaccountedTraffic += gross;
             const ui64 netAfter = channel->GetBufferedAmountOfData();
-            Y_DEBUG_ABORT_UNLESS(netAfter <= netBefore); // net amount should shrink
+            Y_DEBUG_ABORT_UNLESS(netAfter <= netBefore, "netBefore# %" PRIu64 " netAfter# %" PRIu64, netBefore, netAfter); // net amount should shrink
             const ui64 net = netBefore - netAfter; // number of net bytes serialized
 
             // adjust metrics for local and global queue size
@@ -1069,12 +1340,14 @@ namespace NActors {
                 flagState = EFlag::GREEN;
 
                 do {
-                    auto lastInputDelay = TActivationContext::Monotonic() - LastInputActivityTimestamp;
-                    if (lastInputDelay * 4 >= GetDeadPeerTimeout() * 3) {
-                        flagState = EFlag::ORANGE;
-                        break;
-                    } else if (lastInputDelay * 2 >= GetDeadPeerTimeout()) {
-                        flagState = EFlag::YELLOW;
+                    if (!UseKernelLivenessMode()) {
+                        auto lastInputDelay = TActivationContext::Monotonic() - LastInputActivityTimestamp;
+                        if (lastInputDelay * 4 >= GetDeadPeerTimeout() * 3) {
+                            flagState = EFlag::ORANGE;
+                            break;
+                        } else if (lastInputDelay * 2 >= GetDeadPeerTimeout()) {
+                            flagState = EFlag::YELLOW;
+                        }
                     }
 
                     // check utilization
@@ -1169,14 +1442,20 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::IssuePingRequest() {
+        const TDuration period = UseKernelLivenessMode()
+            ? Proxy->Common->Settings.ClockSkewPingTimeout
+            : PingPeriodicity;
+        if (period == TDuration::Zero()) {
+            return;
+        }
         const TMonotonic now = TActivationContext::Monotonic();
-        if (now >= LastPingTimestamp + PingPeriodicity) {
+        if (now >= LastPingTimestamp + period) {
             LOG_DEBUG_IC_SESSION("ICS00", "Issuing ping request");
+            LastPingTimestamp = now;
             if (Socket) {
                 MakePacket(false, GetCycleCountFast() | TTcpPacketBuf::PingRequestMask);
                 MakePacket(false, TInstant::Now().MicroSeconds() | TTcpPacketBuf::ClockMask);
             }
-            LastPingTimestamp = now;
         }
     }
 
@@ -1303,6 +1582,22 @@ namespace NActors {
                                 TABLED() { str << "Frame version/Checksum"; }
                                 TABLED() { str << (Params.Encryption ? "v2/none" : Params.UseXxhash ? "v2/xxhash" : "v2/crc32c"); }
                             }
+                            TABLER() {
+                                TABLED() { str << "RdmaMode" ; }
+                                TABLED() {
+                                    if (Params.UseRdmaRead || Params.AllowRdmaSendReceive) {
+                                        str << "On";
+                                        if (Params.UseRdmaRead && Params.ChecksumRdmaEvent) {
+                                            str << " | SoftwareChecksum";
+                                        }
+                                        if (Params.AllowRdmaSendReceive) {
+                                            str << " | SendReceive";
+                                        }
+                                    } else {
+                                        str << "Off";
+                                    }
+                                }
+                            }
 #define MON_VAR(NAME)     \
     TABLER() {            \
         TABLED() {        \
@@ -1315,6 +1610,10 @@ namespace NActors {
 
                             MON_VAR(Created)
                             MON_VAR(Params.UseExternalDataChannel)
+                            TABLER() {
+                                TABLED() { str << "Params.UseKernelLiveness"; }
+                                TABLED() { str << UseKernelLivenessMode(); }
+                            }
                             MON_VAR(NewConnectionSet)
                             MON_VAR(ReceiverId)
                             MON_VAR(MessagesGot)
@@ -1366,6 +1665,7 @@ namespace NActors {
                             MON_VAR(NumEventsInQueue)
                             MON_VAR(TotalOutputQueueSize)
                             MON_VAR(InflightDataAmount)
+                            MON_VAR(RdmaInflightDataAmount)
                             MON_VAR(unsentQueueSize)
                             MON_VAR(SendBufferSize)
                             MON_VAR(now - LastInputActivityTimestamp)
@@ -1399,6 +1699,9 @@ namespace NActors {
                             MON_VAR(XdcStream.CalculateUnsentSize())
                             MON_VAR(XdcStream.GetSendQueueSize())
                             MON_VAR(XdcOffset)
+
+                            MON_VAR(RdmaSendWrSubmitted)
+                            MON_VAR(RdmaSendWrCompleted)
 
                             MON_VAR(CpuStarvationEvents)
                             MON_VAR(CpuStarvationEventsOnWriteData)

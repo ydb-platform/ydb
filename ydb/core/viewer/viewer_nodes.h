@@ -71,6 +71,11 @@ class TJsonNodes : public TViewerPipeClient {
         EBoardInfoRequestResource,
     };
 
+    enum class EPDisksSort {
+        Path,
+        PDiskId,
+    };
+
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfoResponse;
     std::optional<TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> NodeStateResponse;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> PathNavigateResponse;
@@ -249,24 +254,21 @@ class TJsonNodes : public TViewerPipeClient {
         }
 
         TString GetDataCenter() const {
-            if (NodeInfo.Location.GetDataCenterId()) {
-                return NodeInfo.Location.GetDataCenterId();
-            }
             return SystemState.GetLocation().GetDataCenter();
         }
 
         TString GetRack() const {
-            if (NodeInfo.Location.GetRackId()) {
-                return NodeInfo.Location.GetRackId();
-            }
             return SystemState.GetLocation().GetRack();
         }
 
         TString GetPileName() const {
-            if (NodeInfo.Location.GetBridgePileName()) {
-                return NodeInfo.Location.GetBridgePileName().value_or("");
-            }
             return SystemState.GetLocation().GetBridgePileName();
+        }
+
+        void MergeInterconnectLocation() {
+            NActorsInterconnect::TNodeLocation location;
+            NodeInfo.Location.Serialize(&location, false);
+            SystemState.MutableLocation()->MergeFrom(location);
         }
 
         void Cleanup() {
@@ -387,6 +389,7 @@ class TJsonNodes : public TViewerPipeClient {
                     pDiskState.SetTotalSize(pdisk.GetTotalSize());
                     pDiskState.SetAvailableSize(pdisk.GetAvailableSize());
                     pDiskState.SetExpectedSlotCount(pdisk.GetExpectedSlotCount());
+                    pDiskState.SetExpectedSlotSize(pdisk.GetExpectedSlotSize());
                 }
             }
             if (VDisks.empty() && !SysViewVDisks.empty()) {
@@ -832,6 +835,8 @@ class TJsonNodes : public TViewerPipeClient {
 
     ENodeFields SortBy = ENodeFields::NodeId;
     bool ReverseSort = false;
+    EPDisksSort PDisksSort = EPDisksSort::Path;
+    bool ReversePDisksSort = false;
     ENodeFields GroupBy = ENodeFields::NodeId;
     ENodeFields FilterGroupBy = ENodeFields::NodeId;
     TString FilterGroup;
@@ -916,6 +921,14 @@ class TJsonNodes : public TViewerPipeClient {
             result = ENodeFields::ClockSkew;
         } else if (field == "PileName") {
             result = ENodeFields::PileName;
+        }
+        return result;
+    }
+
+    static EPDisksSort ParseEPDisksSort(TStringBuf sort) {
+        EPDisksSort result = EPDisksSort::Path;
+        if (sort == "PDiskId") {
+            result = EPDisksSort::PDiskId;
         }
         return result;
     }
@@ -1050,6 +1063,16 @@ public:
             }
             SortBy = ParseENodeFields(sort);
             FieldsRequired.set(+SortBy);
+        }
+        TStringBuf pdisksSort = params.Get("pdisks_sort");
+        if (pdisksSort) {
+            bool reversePDisksSort = false;
+            if (pdisksSort.StartsWith("-") || pdisksSort.StartsWith("+")) {
+                reversePDisksSort = (pdisksSort[0] == '-');
+                pdisksSort.Skip(1);
+            }
+            PDisksSort = ParseEPDisksSort(pdisksSort);
+            ReversePDisksSort = reversePDisksSort;
         }
         TString fieldsRequired = params.Get("fields_required");
         if (!fieldsRequired.empty()) {
@@ -1186,6 +1209,15 @@ public:
             return itNode->second;
         }
         return nullptr;
+    }
+
+    void SetNodeDisconnected(TNodeId nodeId) {
+        if (TNode* node = FindNode(nodeId)) {
+            node->DisconnectNode();
+            if (FieldsRequired.test(+ENodeFields::PDisks) || FieldsRequired.test(+ENodeFields::VDisks)) {
+                node->RemapDisks();
+            }
+        }
     }
 
     bool PreFilterDone() const {
@@ -1802,6 +1834,8 @@ public:
                     for (const auto& ni : NodesInfoResponse->Get()->Nodes) {
                         TNode& node = NodeData.emplace_back();
                         node.NodeInfo = ni;
+                        node.MergeInterconnectLocation();
+
                         if (ni.Host && !node.SystemState.GetHost()) {
                             node.SystemState.SetHost(ni.Host);
                         }
@@ -2101,14 +2135,18 @@ public:
         }
         if (FilterStorageStage == EFilterStorageStage::VSlots && VSlotsResponse && VSlotsResponse->IsDone()) {
             if (VSlotsResponse->IsOk()) {
-                std::unordered_set<TNodeId> prevFilterNodeIds = std::move(FilterNodeIds);
-                std::unordered_map<std::pair<TNodeId, ui32>, std::size_t> slotsPerDisk;
-                for (const auto& slotEntry : VSlotsResponse->Get()->Record.GetEntries()) {
-                    if (FilterGroupIds.count(slotEntry.GetInfo().GetGroupId()) > 0) {
-                        if (prevFilterNodeIds.empty() || prevFilterNodeIds.count(slotEntry.GetKey().GetNodeId()) > 0) {
-                            FilterNodeIds.insert(slotEntry.GetKey().GetNodeId());
+                if (!FilterGroupIds.empty()) {
+                    std::unordered_set<TNodeId> prevFilterNodeIds = std::move(FilterNodeIds);
+                    for (const auto& slotEntry : VSlotsResponse->Get()->Record.GetEntries()) {
+                        if (FilterGroupIds.count(slotEntry.GetInfo().GetGroupId()) > 0) {
+                            if (prevFilterNodeIds.empty() || prevFilterNodeIds.count(slotEntry.GetKey().GetNodeId()) > 0) {
+                                FilterNodeIds.insert(slotEntry.GetKey().GetNodeId());
+                            }
                         }
                     }
+                }
+                std::unordered_map<std::pair<TNodeId, ui32>, std::size_t> slotsPerDisk;
+                for (const auto& slotEntry : VSlotsResponse->Get()->Record.GetEntries()) {
                     TNode* node = FindNode(slotEntry.GetKey().GetNodeId());
                     if (node) {
                         node->SysViewVDisks.emplace_back(slotEntry);
@@ -2448,16 +2486,10 @@ public:
                         hasMemoryDetailed |= systemInfo.HasMemoryStats();
                     }
                     for (auto nodeId : nodesWithoutData) {
-                        TNode* node = FindNode(nodeId);
-                        if (node) {
-                            node->DisconnectNode();
-                        }
+                        SetNodeDisconnected(nodeId);
                     }
                 } else {
-                    TNode* node = FindNode(responseNodeId);
-                    if (node) {
-                        node->DisconnectNode();
-                    }
+                    SetNodeDisconnected(responseNodeId);
                 }
             }
             for (const auto& [nodeId, response] : SystemStateResponse) {
@@ -2479,10 +2511,7 @@ public:
                         hasMemoryDetailed |= systemState.GetSystemStateInfo(0).HasMemoryStats();
                     }
                 } else {
-                    TNode* node = FindNode(nodeId);
-                    if (node) {
-                        node->DisconnectNode();
-                    }
+                    SetNodeDisconnected(nodeId);
                 }
             }
             if (!removeNodes.empty()) {
@@ -2930,13 +2959,7 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         TNodeId nodeId = ev->Get()->NodeId;
-        TNode* node = FindNode(nodeId);
-        if (node) {
-            node->DisconnectNode();
-            if (FieldsRequired.test(+ENodeFields::PDisks) || FieldsRequired.test(+ENodeFields::VDisks)) {
-                node->RemapDisks();
-            }
-        }
+        SetNodeDisconnected(nodeId);
         TString error("NodeDisconnected");
         {
             auto itSystemStateResponse = SystemStateResponse.find(nodeId);
@@ -3275,8 +3298,11 @@ public:
                     }
                 }
                 if (FieldsAvailable.test(+ENodeFields::PDisks) && FieldsRequested.test(+ENodeFields::PDisks)) {
-                    std::sort(node->PDisks.begin(), node->PDisks.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
-                        return a.path() < b.path();
+                    std::sort(node->PDisks.begin(), node->PDisks.end(), [this](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
+                        if (PDisksSort == EPDisksSort::PDiskId) {
+                            return ReversePDisksSort ? a.GetPDiskId() > b.GetPDiskId() : a.GetPDiskId() < b.GetPDiskId();
+                        }
+                        return ReversePDisksSort ? a.path() > b.path() : a.path() < b.path();
                     });
                     for (NKikimrWhiteboard::TPDiskStateInfo& pDisk : node->PDisks) {
                         (*jsonNode.AddPDisks()) = std::move(pDisk);
@@ -3423,6 +3449,15 @@ public:
                           * `PingTime`
                           * `SendThroughput`
                           * `ReceiveThroughput`
+                    required: false
+                    type: string
+                  - name: pdisks_sort
+                    in: query
+                    description: >
+                        sort PDisks by:
+                          * `Path`
+                          * `PDiskId`
+                        A `+` or `-` prefix selects ascending or descending order respectively.
                     required: false
                     type: string
                   - name: group

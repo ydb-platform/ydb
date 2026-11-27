@@ -64,6 +64,7 @@ struct TImportFromS3Settings : public TOperationRequestSettings<TImportFromS3Set
     FLUENT_SETTING_OPTIONAL(std::string, SourcePrefix);
     FLUENT_SETTING_OPTIONAL(std::string, DestinationPath);
     FLUENT_SETTING_OPTIONAL(std::string, SymmetricKey);
+    FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
 };
 
 class TImportFromS3Response : public TOperation {
@@ -99,6 +100,7 @@ struct TListObjectsInS3ExportSettings : public TOperationRequestSettings<TListOb
     FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
     FLUENT_SETTING_OPTIONAL(std::string, Prefix);
     FLUENT_SETTING_OPTIONAL(std::string, SymmetricKey);
+    FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
 };
 
 class TListObjectsInS3ExportResult : public TStatus {

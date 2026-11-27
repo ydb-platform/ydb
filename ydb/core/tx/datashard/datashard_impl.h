@@ -396,22 +396,27 @@ class TDataShard
                 FETCH_PAGE_FAILED,
                 RESOURCE_ALLOCATION_FAILED,
                 ACTOR_DIED,
-                UNKNOWN
+                UNHANDLED_EXCEPTION,
+                UNHANDLED_EVENT
             };
 
-            TEvBuildTableStatsError(ui64 tableId, ECode code, const TString& msg)
+            TEvBuildTableStatsError(ui64 tableId, ECode code, const TString& message)
                 : TableId(tableId)
                 , Code(code)
-                , Message(msg)
+                , Message(message)
             {}
 
-            TEvBuildTableStatsError(ui64 tableId, ECode code)
-                : TEvBuildTableStatsError(tableId, code, "")
+            TEvBuildTableStatsError(ui64 tableId, std::exception_ptr exception, const TString& message)
+                : TableId(tableId)
+                , Code(ECode::UNHANDLED_EXCEPTION)
+                , Message(message)
+                , Exception(std::move(exception))
             {}
 
             const ui64 TableId;
             const ECode Code;
             const TString Message;
+            std::exception_ptr Exception;
         };
 
         struct TEvRemoveOldInReadSets : public TEventLocal<TEvRemoveOldInReadSets, EvRemoveOldInReadSets> {};
@@ -1376,6 +1381,9 @@ class TDataShard
     // change sending
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx);
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx);
+    void WaitChangeRecordsVisibility(const TActorId& recipient, ui64 order, ui64 step);
+    void ActivateChangeRecordsWaitingVisibility(const TActorContext& ctx);
+    void PromoteCdcReadVisibility(const TRowVersion& version);
     void ScheduleRequestChangeRecords(const TActorContext& ctx);
     void ScheduleRemoveChangeRecords(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestChangeRecords::TPtr& ev, const TActorContext& ctx);
@@ -2956,7 +2964,14 @@ private:
     THashSet<ui64> ReceiveActivationsFrom;
 
     // out
+    struct TChangeRecordsVisibilityWait {
+        ui64 Order;
+        ui64 Step;
+    };
+
     THashMap<TActorId, TSet<TRequestedRecord>> ChangeRecordsRequested;
+    // One barrier for the first blocked record; later records remain requested.
+    THashMap<TActorId, TChangeRecordsVisibilityWait> ChangeRecordsWaitingVisibility;
     TSet<ui64> ChangeRecordsToRemove; // ui64 is order
     bool RequestChangeRecordsInFly = false;
     bool RemoveChangeRecordsInFly = false;

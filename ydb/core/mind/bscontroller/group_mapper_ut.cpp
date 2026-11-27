@@ -192,15 +192,21 @@ public:
         UNIT_ASSERT(index == v.size());
     }
 
+    void AllocateGroupCatchingError(TGroupMapper& mapper, TGroupMapper::TGroupDefinition& group, TGroupMapperError& error) {
+        ui32 groupId = NextGroupId++;
+        bool success = mapper.AllocateGroup(groupId, group, {}, {}, 0, 0, false, TBridgePileId(), error);
+        UNIT_ASSERT_C(!success, "Allocation should have failed");
+    }
+
     ui32 AllocateGroup(TGroupMapper& mapper, TGroupMapper::TGroupDefinition& group, ui32 groupSizeInUnits = 0u, bool allowFailure = false) {
         ui32 groupId = NextGroupId++;
-        TString error;
+        TGroupMapperError error;
         bool success = mapper.AllocateGroup(groupId, group, {}, {}, groupSizeInUnits, 0, false, TBridgePileId(), error);
         if (!success && allowFailure) {
-            Ctest << "error# " << error << Endl;
+            Ctest << "error# " << error.ErrorMessage << Endl;
             return 0;
         }
-        UNIT_ASSERT_C(success, error);
+        UNIT_ASSERT_C(success, error.ErrorMessage);
         TGroupRecord& record = Groups[groupId];
         record.Group = group;
         record.GroupSizeInUnits = groupSizeInUnits;
@@ -242,11 +248,11 @@ public:
 
         Ctest << "groupId# " << groupId << " reallocating group# " << FormatGroup(group.Group) << Endl;
 
-        TString error;
+        TGroupMapperError error;
         bool success = mapper.AllocateGroup(groupId, group.Group, replacedDisks, std::move(forbid), group.GroupSizeInUnits, 0,
             requireOperational, TBridgePileId(), error);
         if (!success) {
-            Ctest << "error# " << error << Endl;
+            Ctest << "error# " << error.ErrorMessage << Endl;
             if (allowError) {
                 // revert group to its original state
                 for (const auto& [vdiskId, pdiskId] : replacedDisks) {
@@ -492,6 +498,7 @@ public:
                 .NumSlots = pair.second.NumSlots,
                 .MaxSlots = equalSlots || location.Rack < 8 ? maxSlots : 2 * maxSlots,
                 .SlotSizeInUnits = pair.second.SlotSizeInUnits,
+                .SlotSizeInBytes = 0,
                 .Groups{g.begin(), g.end()},
                 .SpaceAvailable = 0,
                 .Operational = !nonoperationalDisks.contains(pair.first),
@@ -620,6 +627,33 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         Ctest << "group after allocation:" << Endl;
         context.DumpGroup(g1);
         context.DumpGroup(g2);
+    }
+
+    Y_UNIT_TEST(SlotSizeInBytesLimitsRequiredSpace) {
+        NActorsInterconnect::TNodeLocation locationProto;
+        locationProto.SetDataCenter("1");
+        locationProto.SetModule("1");
+        locationProto.SetRack("1");
+        locationProto.SetUnit("1");
+
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1));
+        UNIT_ASSERT(mapper.RegisterPDisk({
+            .PDiskId = TPDiskId(1, 1),
+            .Location = TNodeLocation(locationProto),
+            .Usable = true,
+            .NumSlots = 0,
+            .MaxSlots = 2,
+            .SlotSizeInUnits = 1,
+            .SlotSizeInBytes = 100,
+            .Groups{},
+            .SpaceAvailable = 1000,
+            .Operational = true,
+            .Decommitted = false,
+        }));
+
+        TGroupMapper::TGroupDefinition group;
+        TGroupMapperError error;
+        UNIT_ASSERT_C(!mapper.AllocateGroup(1, group, {}, {}, 2, 150, false, TBridgePileId(), error), error.ErrorMessage);
     }
 
     Y_UNIT_TEST(SimplestMirror3dc) {
@@ -794,6 +828,30 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
 
         TGroupMapper::TGroupDefinition group;
         UNIT_ASSERT_UNEQUAL(0, context.AllocateGroup(mapper, group));
+    }
+
+    Y_UNIT_TEST(GroupMapperErrorExample) {
+        // 3 dc 3 nodes config, but with incorrect domain level end, so this result in error
+        TTestContext context(
+            {
+                {1, 1, 1, 1, 3},
+                {2, 1, 2, 1, 3},
+                {3, 1, 3, 1, 3},
+            }
+        );
+
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1, 10, 20, 10, 40));
+        context.PopulateGroupMapper(mapper, 9);
+
+        TGroupMapper::TGroupDefinition group;
+        TGroupMapperError error;
+        context.AllocateGroupCatchingError(mapper, group, error);
+        UNIT_ASSERT_VALUES_EQUAL(error.FailRealmsWithMissingDomainsCount, 3);
+        UNIT_ASSERT_VALUES_EQUAL(error.MissingFailRealmsCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(error.OkDisksCount, 9);
+        UNIT_ASSERT_VALUES_EQUAL(error.DomainsWithMissingDisksCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(error.RealmLocationKey, "DataCenter");
+        UNIT_ASSERT_VALUES_EQUAL(error.DomainLocationKey, "Rack");
     }
 
     Y_UNIT_TEST(NonUniformCluster) {

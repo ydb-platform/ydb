@@ -27,7 +27,7 @@
                     }));                                                                              \
         },                                                                                            \
         &Ydb::serviceType::V1::Y_CAT(serviceType, Service)::AsyncService::Y_CAT(Request, methodName), \
-        Y_STRINGIZE(serviceType) "/" Y_STRINGIZE(methodName),                                         \
+        Y_STRINGIZE(methodName),                                                                      \
         logger,                                                                                       \
         getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))                            \
     )->Run()

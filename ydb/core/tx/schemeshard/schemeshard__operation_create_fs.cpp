@@ -445,15 +445,27 @@ TFileStoreInfo::TPtr TCreateFileStore::CreateFileStoreInfo(
     TFileStoreInfo::TPtr fs = new TFileStoreInfo();
 
     const auto& config = op.GetConfig();
+
     if (!config.HasBlockSize()) {
         status = NKikimrScheme::StatusSchemeError;
         errStr = "Block size is required";
         return nullptr;
     }
 
+    if (config.GetBlockSize() == 0) {
+        status = NKikimrScheme::StatusInvalidParameter;
+        errStr = "Non zero block size is required";
+        return nullptr;
+    }
+
     if (config.HasVersion()) {
         status = NKikimrScheme::StatusSchemeError;
         errStr = "Setting version is not allowed";
+        return nullptr;
+    }
+
+    if (!TFileStoreInfo::ValidateFileStoreConfigSpaceOverflow(config.GetBlockSize(), config.GetBlocksCount(), errStr)) {
+        status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
     }
 

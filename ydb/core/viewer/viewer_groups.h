@@ -190,6 +190,7 @@ public:
         TInstant StatusChangeTimestamp;
         ui64 EnforcedDynamicSlotSize = 0;
         ui32 SlotCount = 0;
+        ui64 ExpectedSlotSize = 0;
         ui32 NumActiveSlots = 0;
         ui64 Category = 0;
         TString DecommitStatus;
@@ -213,7 +214,9 @@ public:
         }
 
         ui64 GetSlotTotalSize() const {
-            if (SlotCount) {
+            if (ExpectedSlotSize) {
+                return ExpectedSlotSize;
+            } else if (SlotCount) {
                 return TotalSize / SlotCount;
             } else {
                 // temporary solution because EnforcedDynamicSlotSize is not reliable
@@ -1473,6 +1476,7 @@ public:
                     pDisk.StatusChangeTimestamp = TInstant::MicroSeconds(info.GetStatusChangeTimestamp());
                     pDisk.EnforcedDynamicSlotSize = info.GetEnforcedDynamicSlotSize();
                     pDisk.SlotCount = info.GetExpectedSlotCount();
+                    pDisk.ExpectedSlotSize = info.GetExpectedSlotSize();
                     pDisk.NumActiveSlots = info.GetNumActiveSlots();
                     pDisk.Category = info.GetCategory();
                     pDisk.DecommitStatus = info.GetDecommitStatus();
@@ -1836,6 +1840,9 @@ public:
                     }
                     if (pDisk.SlotCount < info.GetExpectedSlotCount()) {
                         pDisk.SlotCount = info.GetExpectedSlotCount();
+                    }
+                    if (info.GetExpectedSlotSize()) {
+                        pDisk.ExpectedSlotSize = info.GetExpectedSlotSize();
                     }
                     if (pDisk.NumActiveSlots < info.GetNumActiveSlots()) {
                         pDisk.NumActiveSlots = info.GetNumActiveSlots();

@@ -45,6 +45,8 @@ namespace NKikimr::NBsController {
         const bool IsSelfHealReasonDecommit;
         const bool IgnoreDegradedGroupsChecks;
         const bool DonorMode;
+        const bool PreferLessOccupiedRack;
+        const bool WithAttentionToReplication;
         THashSet<TVDiskID> PendingVDisks;
         THashMap<TActorId, TVDiskID> ActorToDiskMap;
         THashMap<TNodeId, TVector<TVDiskID>> NodeToDiskMap;
@@ -52,7 +54,8 @@ namespace NKikimr::NBsController {
     public:
         TReassignerActor(TActorId controllerId, TGroupId groupId, TEvControllerUpdateSelfHealInfo::TGroupContent group,
                 std::optional<TVDiskID> vdiskToReplace, std::shared_ptr<TBlobStorageGroupInfo::TTopology> topology,
-                bool isSelfHealReasonDecommit, bool ignoreDegradedGroupsChecks, bool donorMode)
+                bool isSelfHealReasonDecommit, bool ignoreDegradedGroupsChecks, bool donorMode, bool preferLessOccupiedRack,
+                bool withAttentionToReplication)
             : ControllerId(controllerId)
             , GroupId(groupId)
             , Group(std::move(group))
@@ -62,6 +65,8 @@ namespace NKikimr::NBsController {
             , IsSelfHealReasonDecommit(isSelfHealReasonDecommit)
             , IgnoreDegradedGroupsChecks(ignoreDegradedGroupsChecks)
             , DonorMode(donorMode)
+            , PreferLessOccupiedRack(preferLessOccupiedRack)
+            , WithAttentionToReplication(withAttentionToReplication)
         {}
 
         void Bootstrap(const TActorId& parent) {
@@ -181,6 +186,8 @@ namespace NKikimr::NBsController {
                 cmd->SetFailRealmIdx(VDiskToReplace->FailRealm);
                 cmd->SetFailDomainIdx(VDiskToReplace->FailDomain);
                 cmd->SetVDiskIdx(VDiskToReplace->VDisk);
+                cmd->SetPreferLessOccupiedRack(PreferLessOccupiedRack);
+                cmd->SetWithAttentionToReplication(WithAttentionToReplication);
             } else {
                 ev->GroupLayoutSanitizer = true;
                 auto *cmd = request->AddCommand()->MutableSanitizeGroup();
@@ -293,6 +300,7 @@ namespace NKikimr::NBsController {
         THostRecordMap HostRecords;
         std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
         std::shared_ptr<std::atomic_uint64_t> GroupsWithInvalidLayoutCounter;
+        const TSelfHealSettings SelfHealSettings;
 
         using TTopologyDescr = std::tuple<TBlobStorageGroupType::EErasureSpecies, ui32, ui32, ui32>;
         THashMap<TTopologyDescr, std::shared_ptr<TBlobStorageGroupInfo::TTopology>> Topologies;
@@ -310,7 +318,8 @@ namespace NKikimr::NBsController {
         TSelfHealActor(ui64 tabletId, std::shared_ptr<std::atomic_uint64_t> unreassignableGroups, THostRecordMap hostRecords,
                 bool groupLayoutSanitizerEnabled, bool allowMultipleRealmsOccupation, bool donorMode,
                 std::shared_ptr<TControlWrapper> enableSelfHealWithDegraded,
-                std::shared_ptr<std::atomic_uint64_t> groupsWithInvalidLayoutCounter)
+                std::shared_ptr<std::atomic_uint64_t> groupsWithInvalidLayoutCounter,
+                const TSelfHealSettings& selfHealSettings)
             : TabletId(tabletId)
             , UnreassignableGroupsCount(std::move(unreassignableGroups))
             , GroupLayoutSanitizerEnabled(groupLayoutSanitizerEnabled)
@@ -319,6 +328,7 @@ namespace NKikimr::NBsController {
             , HostRecords(std::move(hostRecords))
             , EnableSelfHealWithDegraded(std::move(enableSelfHealWithDegraded))
             , GroupsWithInvalidLayoutCounter(std::move(groupsWithInvalidLayoutCounter))
+            , SelfHealSettings(selfHealSettings)
         {}
 
         void Bootstrap(const TActorId& parentId) {
@@ -356,7 +366,7 @@ namespace NKikimr::NBsController {
                     const auto [it, inserted] = Groups.try_emplace(groupId, groupId);
                     auto& g = it->second;
                     bool hasVDisksToReassign = false;
-                    
+
                     g.Content = std::move(*data);
 
                     UpdateGroupLayoutInformation(g);
@@ -424,10 +434,13 @@ namespace NKikimr::NBsController {
                     auto& group = it->second;
                     if (const auto it = group.Content.VDisks.find(item.VDiskId); it != group.Content.VDisks.end()) {
                         auto& vdisk = it->second;
-                        vdisk.OnlyPhantomsRemain = item.OnlyPhantomsRemain.value_or(vdisk.OnlyPhantomsRemain);
                         vdisk.IsReady = item.IsReady.value_or(vdisk.IsReady);
                         vdisk.ReadySince = item.ReadySince.value_or(vdisk.ReadySince);
                         vdisk.VDiskStatus = item.VDiskStatus.value_or(vdisk.VDiskStatus);
+                        vdisk.OnlyPhantomsRemain = item.OnlyPhantomsRemain.value_or(vdisk.OnlyPhantomsRemain);
+                        if (vdisk.VDiskStatus != NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                            vdisk.OnlyPhantomsRemain = false;
+                        }
                     }
                 }
             }
@@ -445,7 +458,7 @@ namespace NKikimr::NBsController {
                 if (group.UpdateConfigTxSeqNo < group.ResponseConfigTxSeqNo) {
                     continue; // response from bsc was received before selfheal info update
                 }
-            
+
                 EnqueueReassign(group, EGroupRepairOperation::SelfHeal);
             }
 
@@ -537,12 +550,14 @@ namespace NKikimr::NBsController {
             // semi-replicated disk to prevent selfheal blocking
             TBlobStorageGroupInfo::TGroupVDisks failedByReadiness(topology);
             TBlobStorageGroupInfo::TGroupVDisks failedByUnavailabilityRisk(topology);
-            ui32 numReplicatingWithPhantomsOnly = 0;
+            bool alreadySeenReplicatingWithPhantomsOnly = false;
             for (const auto& [vdiskId, vdisk] : content.VDisks) {
+                bool replicatingWithPhantomsOnly = false;
                 switch (vdisk.VDiskStatus) {
                     case NKikimrBlobStorage::EVDiskStatus::REPLICATING:
-                        if (vdisk.OnlyPhantomsRemain && !numReplicatingWithPhantomsOnly) {
-                            ++numReplicatingWithPhantomsOnly;
+                        if (vdisk.OnlyPhantomsRemain && !alreadySeenReplicatingWithPhantomsOnly) {
+                            alreadySeenReplicatingWithPhantomsOnly = true;
+                            replicatingWithPhantomsOnly = true;
                             break;
                         }
                         [[fallthrough]];
@@ -553,7 +568,7 @@ namespace NKikimr::NBsController {
                         break;
                 }
 
-                if (!IsReady(vdisk, now)) {
+                if (!IsReady(vdisk, now) && !replicatingWithPhantomsOnly) {
                     failedByReadiness |= {topology, vdiskId};
                 }
                 if (vdisk.UnavailabilityRisk) {
@@ -614,7 +629,7 @@ namespace NKikimr::NBsController {
         }
 
         using TVDiskInfo = TEvControllerUpdateSelfHealInfo::TGroupContent::TVDiskInfo;
-        TGroupMapper::TGroupDefinition MakeGroupDefinition(const TMap<TVDiskID, TVDiskInfo>& vdisks, 
+        TGroupMapper::TGroupDefinition MakeGroupDefinition(const TMap<TVDiskID, TVDiskInfo>& vdisks,
                 const TGroupGeometryInfo& geom) {
             TGroupMapper::TGroupDefinition groupDefinition;
             geom.ResizeGroup(groupDefinition);
@@ -705,7 +720,7 @@ namespace NKikimr::NBsController {
                     ss << "]";
                     return ss.Str();
                 };
-    
+
                 STLOG(PRI_INFO, BS_SELFHEAL, BSSH11, "group can't be reassigned right now " << log(), (GroupId, groupId));
             }
             return false;
@@ -717,7 +732,8 @@ namespace NKikimr::NBsController {
             group.ReassignStatus = EReassignStatus::Active;
             Y_ABORT_UNLESS(!ActiveReassignerActorId);
             ActiveReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content,
-                    vdiskId, group.Topology, isSelfHealReasonDecommit, ignoreDegradedGroupsChecks, DonorMode));
+                    vdiskId, group.Topology, isSelfHealReasonDecommit, ignoreDegradedGroupsChecks, DonorMode,
+                    SelfHealSettings.PreferLessOccupiedRack, SelfHealSettings.WithAttentionToReplication));
         }
 
         void EnqueueReassign(TGroupRecord& group, EGroupRepairOperation operation) {
@@ -884,7 +900,7 @@ namespace NKikimr::NBsController {
                                         TABLED() {
                                             out << i;
                                         }
-                                        TABLED() { 
+                                        TABLED() {
                                             auto record = GroupLayoutSanitizerOperationLog.BorrowByIdx(i);
                                             if (record) {
                                                 out << *record;
@@ -984,7 +1000,7 @@ namespace NKikimr::NBsController {
     IActor *TBlobStorageController::CreateSelfHealActor() {
         Y_ABORT_UNLESS(HostRecords);
         return new TSelfHealActor(TabletID(), SelfHealUnreassignableGroups, HostRecords, GroupLayoutSanitizerEnabled,
-            AllowMultipleRealmsOccupation, DonorMode, EnableSelfHealWithDegraded, GroupLayoutSanitizerInvalidGroups);
+            AllowMultipleRealmsOccupation, DonorMode, EnableSelfHealWithDegraded, GroupLayoutSanitizerInvalidGroups, SelfHealSettings);
     }
 
     void TBlobStorageController::InitializeSelfHealState() {
@@ -1032,7 +1048,7 @@ namespace NKikimr::NBsController {
                     .UnavailabilityRisk = slot->PDisk->BadInTermsOfSelfHeal(),
                     .Decommitted =  slot->PDisk->Decommitted(),
                     .IsSelfHealReasonDecommit = slot->PDisk->IsSelfHealReasonDecommit(),
-                    .OnlyPhantomsRemain = slot->OnlyPhantomsRemain,
+                    .OnlyPhantomsRemain = slot->IsReplicatingWithPhantomsOnly(),
                     .IsReady = slot->IsReady,
                     .ReadySince = TMonotonic::Zero(),
                     .VDiskStatus = slot->GetStatus(),
@@ -1082,7 +1098,7 @@ namespace NKikimr::NBsController {
                         pdiskInfo ? pdiskInfo->BadInTermsOfSelfHeal() : false,
                         pdiskInfo ? pdiskInfo->Decommitted() : false,
                         pdiskInfo ? pdiskInfo->IsSelfHealReasonDecommit() : false,
-                        false, /* OnlyPhantomsRemain */
+                        info.IsReplicatingWithPhantomsOnly(), /* OnlyPhantomsRemain */
                         true, /* IsReady; decision is based on ReadySince */
                         info.ReadySince,
                         info.VDiskStatus.value_or(NKikimrBlobStorage::EVDiskStatus::ERROR),
@@ -1107,13 +1123,15 @@ namespace NKikimr::NBsController {
         for (const auto& m : s) {
             const TVSlotId vslotId(m.GetNodeId(), m.GetPDiskId(), m.GetVSlotId());
             const auto vdiskId = VDiskIDFromVDiskID(m.GetVDiskId());
+            const bool onlyPhantomsRemain = m.GetStatus() == NKikimrBlobStorage::EVDiskStatus::REPLICATING &&
+                m.GetOnlyPhantomsRemain();
             if (TVSlotInfo *slot = FindVSlot(vslotId); slot && !slot->IsBeingDeleted() &&
                     slot->PDisk->Guid == m.GetPDiskGuid() && vdiskId.SameExceptGeneration(slot->GetVDiskId())) {
                 const bool was = slot->IsOperational();
                 if (const TGroupInfo *group = slot->Group) {
                     const bool wasReady = slot->IsReady;
-                    if (slot->GetStatus() != m.GetStatus() || slot->OnlyPhantomsRemain != m.GetOnlyPhantomsRemain()) {
-                        slot->SetStatus(m.GetStatus(), mono, now, m.GetOnlyPhantomsRemain(), this);
+                    if (slot->GetStatus() != m.GetStatus() || slot->OnlyPhantomsRemain != onlyPhantomsRemain) {
+                        slot->SetStatus(m.GetStatus(), mono, now, onlyPhantomsRemain, this);
                         if (slot->IsReady != wasReady) {
                             ScrubState.UpdateVDiskState(slot);
                             if (wasReady) {
@@ -1124,7 +1142,7 @@ namespace NKikimr::NBsController {
                     }
                     updates.push_back({
                         .VDiskId = vdiskId,
-                        .OnlyPhantomsRemain = slot->OnlyPhantomsRemain,
+                        .OnlyPhantomsRemain = slot->IsReplicatingWithPhantomsOnly(),
                         .IsReady = slot->IsReady,
                         .VDiskStatus = slot->GetStatus(),
                     });
@@ -1148,6 +1166,7 @@ namespace NKikimr::NBsController {
                     vdiskId.SameExceptGeneration(it->second.VDiskId)) {
                 auto& vslot = it->second;
                 vslot.VDiskStatus = m.GetStatus();
+                vslot.OnlyPhantomsRemain = onlyPhantomsRemain;
                 if (vslot.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::READY) {
                     vslot.ReadySince = Min(vslot.ReadySince, mono + ReadyStablePeriod);
                 } else {
@@ -1155,6 +1174,7 @@ namespace NKikimr::NBsController {
                 }
                 updates.push_back({
                     .VDiskId = vslot.VDiskId,
+                    .OnlyPhantomsRemain = vslot.IsReplicatingWithPhantomsOnly(),
                     .ReadySince = vslot.ReadySince,
                     .VDiskStatus = vslot.VDiskStatus,
                 });
@@ -1253,6 +1273,37 @@ namespace NKikimr::NBsController {
         TabletCounters->Simple()[NBlobStorageController::COUNTER_GROUP_LAYOUT_SANITIZER_INVALID_GROUPS] = GroupLayoutSanitizerInvalidGroups->load();
 
         Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateSelfHealCounters);
+    }
+
+    TSelfHealSettings ParseSelfHealSettings(const std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> storageConfig) {
+        TSelfHealSettings settings;
+
+        if (!storageConfig->HasBlobStorageConfig()) {
+            return settings;
+        }
+
+        const auto& bsConfig = storageConfig->GetBlobStorageConfig();
+
+        if (!bsConfig.HasBscSettings()) {
+            return settings;
+        }
+
+        const auto& bscSettings = bsConfig.GetBscSettings();
+
+        if (!bscSettings.HasSelfHealSettings()) {
+            return settings;
+        }
+
+        const auto& selfHealSettings = bscSettings.GetSelfHealSettings();
+
+        if (selfHealSettings.HasPreferLessOccupiedRack()) {
+            settings.PreferLessOccupiedRack = selfHealSettings.GetPreferLessOccupiedRack();
+        }
+        if (selfHealSettings.HasWithAttentionToReplication()) {
+            settings.WithAttentionToReplication = selfHealSettings.GetWithAttentionToReplication();
+        }
+
+        return settings;
     }
 
 } // NKikimr::NBsController

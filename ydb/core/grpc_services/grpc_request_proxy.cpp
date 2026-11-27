@@ -86,7 +86,6 @@ private:
     void Handle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
-            requestBaseCtx->FinishSpan();
             TGRpcRequestProxyHandleMethods::Handle(event, ctx);
         }
     }
@@ -94,7 +93,6 @@ private:
     void Handle(TEvListEndpointsRequest::TPtr& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
-            requestBaseCtx->FinishSpan();
             TGRpcRequestProxy::Handle(event, ctx);
         }
     }
@@ -102,7 +100,6 @@ private:
     void Handle(TEvProxyRuntimeEvent::TPtr& event, const TActorContext&) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
-            requestBaseCtx->FinishSpan();
             event->Release().Release()->Pass(*this);
         }
     }
@@ -118,7 +115,6 @@ private:
     }
 
     void Handle(TEvRequestAuthAndCheck::TPtr& ev, const TActorContext&) {
-        ev->Get()->FinishSpan();
         ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
     }
 
@@ -155,7 +151,6 @@ private:
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, error);
             requestBaseCtx->RaiseIssue(issue);
             requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-            requestBaseCtx->FinishSpan();
             return;
         }
 
@@ -170,7 +165,6 @@ private:
 
         if (state.State == NYdbGrpc::TAuthState::AS_FAIL) {
             requestBaseCtx->ReplyUnauthenticated();
-            requestBaseCtx->FinishSpan();
             return;
         }
 
@@ -180,7 +174,6 @@ private:
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
             requestBaseCtx->RaiseIssue(issue);
             requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-            requestBaseCtx->FinishSpan();
             return;
         }
 
@@ -203,7 +196,6 @@ private:
             } else {
                 if (!AllowYdbRequestsWithoutDatabase && DynamicNode && !std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
                     requestBaseCtx->ReplyUnauthenticated("Requests without specified database are not allowed");
-                    requestBaseCtx->FinishSpan();
                     return;
                 } else {
                     databaseName = RootDatabase;
@@ -214,7 +206,6 @@ private:
             if (databaseName.empty()) {
                 Counters->IncDatabaseUnavailableCounter();
                 requestBaseCtx->ReplyUnauthenticated("Empty database name");
-                requestBaseCtx->FinishSpan();
                 return;
             }
             auto it = Databases.find(databaseName);
@@ -229,7 +220,6 @@ private:
                     const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
                     requestBaseCtx->RaiseIssue(issue);
                     requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-                    requestBaseCtx->FinishSpan();
                     return;
                 }
                 return;
@@ -246,7 +236,6 @@ private:
                 const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
                 requestBaseCtx->RaiseIssue(issue);
                 requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-                requestBaseCtx->FinishSpan();
                 return;
             }
 
@@ -270,7 +259,6 @@ private:
                         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
                         requestBaseCtx->RaiseIssue(issue);
                         requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
-                        requestBaseCtx->FinishSpan();
                         return;
                     }
                 }
@@ -282,7 +270,6 @@ private:
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, "database unavailable");
                 requestBaseCtx->RaiseIssue(issue);
                 requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-                requestBaseCtx->FinishSpan();
                 return;
             }
 
@@ -291,7 +278,6 @@ private:
                 LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
                     "Client was disconnected before processing request (grpc request proxy)");
                 requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-                requestBaseCtx->FinishSpan();
                 return;
             }
 
@@ -310,7 +296,6 @@ private:
         const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, "Can't authenticate request");
         requestBaseCtx->RaiseIssue(issue);
         requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-        requestBaseCtx->FinishSpan();
         return;
     }
 
@@ -331,7 +316,6 @@ private:
         for (auto& [_, queue] : DeferredEvents) {
             for (TEventReqHolder& req : queue) {
                 req.Ctx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-                req.Ctx->FinishSpan();
             }
         }
 
@@ -475,7 +459,6 @@ void TGRpcRequestProxyImpl::HandleBootstrapClusterEvent(TAutoPtr<TEventHandle<TE
         LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
             "Client was disconnected before processing request (grpc request proxy)");
         requestProxyCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-        requestProxyCtx->FinishSpan();
         return;
     }
 
@@ -596,7 +579,6 @@ void TGRpcRequestProxyImpl::ForgetDatabase(const TString& database) {
         while (!queue.empty()) {
             Counters->IncDatabaseUnavailableCounter();
             queue.front().Ctx->ReplyUnauthenticated("Unknown database");
-            queue.front().Ctx->FinishSpan();
             queue.pop_front();
         }
         DeferredEvents.erase(itDeferredEvents);

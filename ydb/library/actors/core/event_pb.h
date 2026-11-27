@@ -18,6 +18,10 @@ namespace NActorsProto {
     class TActorId;
 } // NActorsProto
 
+namespace NInterconnect::NRdma {
+    class TMemRegion;
+}
+
 namespace NActors {
     TString EventPBBaseToString(const TString& header, const TString& dbgStr);
 
@@ -76,14 +80,25 @@ namespace NActors {
 
     class TCoroutineChunkSerializer final : public TChunkSerializer, protected ITrampoLine {
     public:
-        using TChunk = std::pair<const char*, size_t>;
+        struct TChunk {
+            const char* Buf;
+            size_t Size;
+            const NInterconnect::NRdma::TMemRegion* MemRegion;
+        };
+
+        enum class EAliasedMode {
+            PassThrough,
+            CopyToBuffer,
+        };
 
         TCoroutineChunkSerializer();
         ~TCoroutineChunkSerializer();
 
         void SetSerializingEvent(const IEventBase *event);
+        void DiscardEvent() { Event = nullptr; };
         void Abort();
-        std::span<TChunk> FeedBuf(void* data, size_t size);
+        std::span<TChunk> FeedBuf(void* data, size_t size,
+            EAliasedMode aliasedMode = EAliasedMode::PassThrough);
         bool IsComplete() const {
             return !Event;
         }
@@ -108,7 +123,10 @@ namespace NActors {
     protected:
         void DoRun() override;
         void Resume();
-        void Produce(const void *data, size_t size);
+        void Produce(const void* data, size_t size,
+            const NInterconnect::NRdma::TMemRegion* memRegion);
+        bool WriteAliasedRawImpl(const void* data, int size,
+            const NInterconnect::NRdma::TMemRegion* memRegion);
 
         i64 TotalSerializedDataSize;
         TMappedAllocation Stack;
@@ -118,6 +136,7 @@ namespace NActors {
         char *BufferPtr;
         size_t SizeRemain;
         std::vector<TChunk> Chunks;
+        EAliasedMode AliasedMode = EAliasedMode::PassThrough;
         const IEventBase *Event = nullptr;
         bool CancelFlag = false;
         bool AbortFlag;
@@ -143,13 +162,16 @@ namespace NActors {
         }
     };
 
-    static const size_t EventMaxByteSize = 140 << 20; // (140MB)
+    static constexpr size_t EventLargeByteSize = 50 << 20; // (50MB)
+    static constexpr size_t EventMaxByteSize = (140 << 20) * 2; // (280MB)
     static constexpr char ExtendedPayloadMarker = 0x06;
     static constexpr char PayloadMarker = 0x07;
     static constexpr size_t MaxNumberBytes = (sizeof(size_t) * CHAR_BIT + 6) / 7;
 
     void ParseExtendedFormatPayload(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize);
     bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload);
+    ui32 CalculateSerializedHeaderSizeImpl(const TVector<TRope> &payload);
+    std::optional<TRope> SerializeToRopeImpl(const google::protobuf::MessageLite& msg, const TVector<TRope>& payload, IRcBufAllocator* allocator);
     ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize);
     TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize);
 
@@ -200,6 +222,10 @@ namespace NActors {
 
         ui32 CalculateSerializedSize() const override {
             return CalculateSerializedSizeImpl(Payload, Record.ByteSize());
+        }
+
+        std::optional<TRope> SerializeToRope(IRcBufAllocator* allocator) const override {
+            return NActors::SerializeToRopeImpl(Record, Payload, allocator);
         }
 
         static TEv* Load(const TEventSerializedData *input) {
@@ -409,13 +435,13 @@ namespace NActors {
             if (!SerializeToArcadiaStreamImpl(chunker, TBase::GetPayload())) {
                 return false;
             }
-            
+
             if (PreSerializedData && !chunker->WriteString(&PreSerializedData)) {
                 return false;
             }
 
             return Record.SerializeToZeroCopyStream(chunker);
-            
+
         }
 
         ui32 CalculateSerializedSize() const override {

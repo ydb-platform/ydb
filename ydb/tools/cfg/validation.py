@@ -87,8 +87,16 @@ EXECUTOR_SCHEMA = {
             "type": "integer",
             "min": 1,
         },
+        "harmonizer_needy_cpu_window_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32,
+        },
     },
 }
+
+IO_EXECUTOR_SCHEMA = copy.deepcopy(EXECUTOR_SCHEMA)
+IO_EXECUTOR_SCHEMA["not"] = {"required": ["harmonizer_needy_cpu_window_seconds"]}
 
 SYS_SCHEMA = {
     "type": "object",
@@ -103,7 +111,7 @@ SYS_SCHEMA = {
                 "system": copy.deepcopy(EXECUTOR_SCHEMA),
                 "batch": copy.deepcopy(EXECUTOR_SCHEMA),
                 "user": copy.deepcopy(EXECUTOR_SCHEMA),
-                "io": copy.deepcopy(EXECUTOR_SCHEMA),
+                "io": copy.deepcopy(IO_EXECUTOR_SCHEMA),
                 "ic": copy.deepcopy(EXECUTOR_SCHEMA),
             },
             "additionalProperties": False,
@@ -155,6 +163,8 @@ DRIVE_SCHEMA = {
         "path": dict(type="string", minLength=1),
         "shared_with_os": dict(type="boolean"),
         "expected_slot_count": dict(type="integer"),
+        "expected_slot_size": dict(type="integer"),
+        "max_slots": dict(type="integer"),
         "pdisk_config": {
             "type": "object",
             "additionalProperties": True,

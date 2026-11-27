@@ -34,7 +34,7 @@ public:
                         BLOG_W("THive::TTxBlockStorageResult Complete status was " << NKikimrProto::EReplyStatus_Name(msg->Status) << " for TabletId " << tablet->Id);
                     }
                     for (TFollowerTabletInfo& follower : tablet->Followers) {
-                        follower.InitiateStop(SideEffects);
+                        follower.InitiateStop(SideEffects, EHiveEventReason::Deleting);
                     }
                     SideEffects.Send(Self->SelfId(), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
                 } else {
@@ -44,11 +44,11 @@ public:
                         // Use best effort to kill currently running tablet
                         SideEffects.Register(CreateTabletKiller(TabletId, /* nodeId */ 0, tablet->KnownGeneration));
                     } else {
-                        Self->Execute(Self->CreateRestartTablet(tablet->GetFullTabletId()));
+                        Self->Execute(Self->CreateForceRestartTablet(tablet->GetFullTabletId()));
                     }
                 }
             } else {
-                BLOG_W("THive::TTxBlockStorageResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status));
+                BLOG_W("THive::TTxBlockStorageResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status) << ": " << msg->ErrorReason);
                 if (tablet->IsDeleting()) {
                     --Self->DeleteTabletInProgress;
                     Self->UpdateCounterTabletsDeleting();

@@ -29,7 +29,6 @@ SRCS(
     blobstorage_replmonhandler.cpp
     defs.h
     query_donor.h
-    repl_quoter.h
 )
 
 END()

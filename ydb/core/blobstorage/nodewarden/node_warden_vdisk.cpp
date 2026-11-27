@@ -40,7 +40,6 @@ namespace NKikimr::NStorage {
             case TVDiskRecord::EScrubState::QUANTUM_FINISHED: // quantum finished, no work is in progress
             case TVDiskRecord::EScrubState::QUANTUM_FINISHED_AND_WAITING_FOR_NEXT_ONE: // like QUERY_START_QUANTUM
                 break;
-
             case TVDiskRecord::EScrubState::IN_PROGRESS: { // scrub is in progress, report scrub stop to BS_CONTROLLER
                 const TVSlotId vslotId = vdisk.GetVSlotId();
                 SendToController(std::make_unique<TEvBlobStorage::TEvControllerScrubQuantumFinished>(vslotId.NodeId,
@@ -203,8 +202,13 @@ namespace NKikimr::NStorage {
         vdiskConfig->FreshCompMaxInFlightReads = FreshCompMaxInFlightReads;
         vdiskConfig->HullCompMaxInFlightWrites = HullCompMaxInFlightWrites;
         vdiskConfig->HullCompMaxInFlightReads = HullCompMaxInFlightReads;
-
+        vdiskConfig->HullCompFullCompPeriodSec = HullCompFullCompPeriodSec;
+        vdiskConfig->HullCompStorageRatioSkipRank = HullCompStorageRatioSkipRank;
+        vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
+        vdiskConfig->GarbageThresholdToRunFullCompactionPerMille = GarbageThresholdToRunFullCompactionPerMille;
+        vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
         vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
+
         if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
             vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionHDD;
             vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightHDD;
@@ -224,6 +228,9 @@ namespace NKikimr::NStorage {
         vdiskConfig->ThrottlingMaxOccupancyPerMille = ThrottlingMaxOccupancyPerMille;
         vdiskConfig->ThrottlingMinLogChunkCount = ThrottlingMinLogChunkCount;
         vdiskConfig->ThrottlingMaxLogChunkCount = ThrottlingMaxLogChunkCount;
+        vdiskConfig->MaxActiveCompactionsPerPDisk = MaxActiveCompactionsPerPDisk;
+        vdiskConfig->SyncLogMaxDiskAmount = SyncLogMaxDiskAmount;
+        vdiskConfig->SyncLogMaxMemAmount = SyncLogMaxMemAmount;
 
         vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
 
@@ -231,8 +238,8 @@ namespace NKikimr::NStorage {
 
         vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
-        if (StorageConfig->HasBlobStorageConfig() && StorageConfig->GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
-            for (auto &type : StorageConfig->GetBlobStorageConfig().GetVDiskPerformanceSettings().GetVDiskTypes()) {
+        if (Cfg->BlobStorageConfig.HasVDiskPerformanceSettings()) {
+            for (auto &type : Cfg->BlobStorageConfig.GetVDiskPerformanceSettings().GetVDiskTypes()) {
                 if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
                     if (type.HasMinHugeBlobSizeInBytes()) {
                         vdiskConfig->MinHugeBlobInBytes = type.GetMinHugeBlobSizeInBytes();
@@ -259,6 +266,10 @@ namespace NKikimr::NStorage {
 
         vdiskConfig->EnableDeepScrubbing = EnableDeepScrubbing;
 
+        if (Cfg->VDiskConfigPreprocessor) {
+            Cfg->VDiskConfigPreprocessor(*vdiskConfig);
+        }
+
         // issue initial report to whiteboard before creating actor to avoid races
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
             vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors), vdiskConfig->GroupSizeInUnits));
@@ -267,17 +278,19 @@ namespace NKikimr::NStorage {
 
         // create an actor
         auto *as = TActivationContext::ActorSystem();
+        const ui32 blobStorageExecutorPoolId =
+            GetBlobStorageExecutorPoolId(vslotId.PDiskId).value_or(AppData()->SystemPoolId);
         TActorId actorId = as->Register(CreateVDisk(vdiskConfig, groupInfo, AppData()->Counters),
-            TMailboxType::Revolving, AppData()->SystemPoolId);
+            TMailboxType::Revolving, blobStorageExecutorPoolId);
         as->RegisterLocalService(vdiskServiceId, actorId);
         VDiskIdByActor.try_emplace(actorId, vslotId);
 
         STLOG(PRI_DEBUG, BS_NODE, NW24, "StartLocalVDiskActor done", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId),
-            (PDiskGuid, pdiskGuid));
+            (PDiskGuid, pdiskGuid), (BlobStorageExecutorPoolId, blobStorageExecutorPoolId));
 
         // for dynamic groups -- start state aggregator
         if (TGroupID(groupInfo->GroupID).ConfigurationType() == EGroupConfigurationType::Dynamic) {
-            StartAggregator(vdiskServiceId, groupInfo->GroupID.GetRawId());
+            StartAggregator(vdiskServiceId, groupInfo->GroupID.GetRawId(), blobStorageExecutorPoolId);
         }
 
         Y_ABORT_UNLESS(vdisk.ScrubState == TVDiskRecord::EScrubState::IDLE);
@@ -354,19 +367,44 @@ namespace NKikimr::NStorage {
 
         record.Config.CopyFrom(vdisk);
 
+        // Sticky runtime marker: if this node ever had a local dynamic VDisk for the group, keep subscribing
+        // for its updates in RegisterNode even when proxy is not currently running. We don't need it after restart
+        // so this flag is purely local.
+        if (!vdisk.GetDoDestroy() && vdisk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
+            const ui32 groupId = vdisk.GetVDiskID().GetGroupID();
+            if (TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic) {
+                if (!std::exchange(Groups[groupId].MustSubscribe, true) && PipeClientId) {
+                    // A delayed placement may arrive after RegisterNode has omitted this group.
+                    // Subscribe on the current pipe as well as on subsequent reconnects.
+                    SendToController(std::make_unique<TEvBlobStorage::TEvControllerGetGroup>(
+                        LocalNodeId, &groupId, &groupId + 1));
+                }
+            }
+        }
+
+        const TPDiskKey pdiskKey(vslotId.NodeId, vslotId.PDiskId);
+        const bool pdiskMissing = !LocalPDisks.contains(pdiskKey);
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
-            if (record.UnderlyingPDiskDestroyed) {
+            if (record.UnderlyingPDiskDestroyed || pdiskMissing) {
                 PoisonLocalVDisk(record);
+                SlayInFlight.erase(vslotId);
                 SendVDiskReport(vslotId, record.GetVDiskId(), NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED);
                 record.UnderlyingPDiskDestroyed = false;
             } else {
-                Slay(record);
+                Slay(record, ESlayAction::DESTROY);
             }
             DestroyLocalVDisk(record);
             LocalVDisks.erase(it);
             ApplyServiceSetPDisks(); // destroy unneeded PDisk actors
         } else if (vdisk.GetDoWipe()) {
-            Slay(record);
+            if (pdiskMissing) {
+                PoisonLocalVDisk(record);
+                SlayInFlight.erase(vslotId);
+                SendVDiskReport(vslotId, record.GetVDiskId(), NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
+                record.UnderlyingPDiskDestroyed = false;
+            } else {
+                Slay(record, ESlayAction::WIPE);
+            }
         } else if (!record.RuntimeData) {
             StartLocalVDiskActor(record);
         } else if (record.RuntimeData->DonorMode < record.Config.HasDonorMode() || record.RuntimeData->ReadOnly != record.Config.GetReadOnly()) {
@@ -375,18 +413,51 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TNodeWarden::Slay(TVDiskRecord& vdisk) {
+    void TNodeWarden::Slay(TVDiskRecord& vdisk, ESlayAction action) {
         const TVSlotId vslotId = vdisk.GetVSlotId();
-        STLOG(PRI_INFO, BS_NODE, NW33, "Slay", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()),
+        const TVDiskID vdiskId = vdisk.GetVDiskId();
+        STLOG(PRI_INFO, BS_NODE, NW33, "Slay", (VDiskId, vdiskId), (VSlotId, vslotId),
+            (Action, action == ESlayAction::DESTROY ? "destroy" : "wipe"),
             (SlayInFlight, SlayInFlight.contains(vslotId)));
-        if (!SlayInFlight.contains(vslotId)) {
+
+        if (auto it = SlayInFlight.find(vslotId); it != SlayInFlight.end()) {
+            if (!it->second.VDiskId.SameExceptGeneration(vdiskId)) {
+                STLOG(PRI_ERROR, BS_NODE, NW113, "Slay VDiskId mismatch", (ExistingVDiskId, it->second.VDiskId),
+                    (IncomingVDiskId, vdiskId), (VSlotId, vslotId));
+                return;
+            }
+
+            const bool upgradeToDestroy = action == ESlayAction::DESTROY &&
+                it->second.Action != ESlayAction::DESTROY;
+            it->second.VDiskId = vdiskId;
+            if (action == ESlayAction::DESTROY) {
+                it->second.Action = ESlayAction::DESTROY;
+            }
+            if (upgradeToDestroy) {
+                it->second.RetryDelay = SlayRetryInitialDelay;
+                IssueSlay(vslotId, it->second);
+            }
+        } else {
             PoisonLocalVDisk(vdisk);
-            const TVSlotId vslotId = vdisk.GetVSlotId();
-            const TActorId pdiskServiceId = MakeBlobStoragePDiskID(vslotId.NodeId, vslotId.PDiskId);
-            const ui64 round = NextLocalPDiskInitOwnerRound();
-            Send(pdiskServiceId, new NPDisk::TEvSlay(vdisk.GetVDiskId(), round, vslotId.PDiskId, vslotId.VDiskSlotId));
-            SlayInFlight.emplace(vslotId, round);
+            auto [insertedIt, inserted] = SlayInFlight.emplace(vslotId, TSlayInFlight{
+                .VDiskId = vdiskId,
+                .Action = action,
+            });
+            Y_ABORT_UNLESS(inserted);
+            IssueSlay(vslotId, insertedIt->second);
         }
+    }
+
+    void TNodeWarden::IssueSlay(const TVSlotId& vslotId, TSlayInFlight& slay) {
+        const ui64 round = NextLocalPDiskInitOwnerRound();
+        slay.Round = round;
+
+        Send(MakeBlobStoragePDiskID(vslotId.NodeId, vslotId.PDiskId),
+            new NPDisk::TEvSlay(slay.VDiskId, round, vslotId.PDiskId, vslotId.VDiskSlotId));
+        Schedule(slay.RetryDelay,
+            new TEvPrivate::TEvRetrySlay(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId, round,
+                TEvPrivate::TEvRetrySlay::EReason::UNCONFIRMED));
+        slay.RetryDelay = Min(slay.RetryDelay * 2, TDuration::Minutes(1));
     }
 
     void TNodeWarden::Handle(TEvBlobStorage::TEvAskRestartVDisk::TPtr ev) {

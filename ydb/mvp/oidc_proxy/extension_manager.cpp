@@ -5,6 +5,8 @@
 
 namespace NMVP::NOIDC {
 
+using namespace NActors;
+
 TExtensionManager::TExtensionManager(const TActorId sender,
                                      const TOpenIdConnectSettings& settings,
                                      const TCrackedPage& protectedPage,

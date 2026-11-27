@@ -240,6 +240,14 @@ namespace NKikimr {
         RecoveredLogStartLsn = lsn;
     }
 
+    void TLocalRecoveryInfo::SetRecoveredLocalSyncDataLsn(ui64 lsn) {
+        RecoveredLocalSyncDataLsn = Max(RecoveredLocalSyncDataLsn, lsn);
+    }
+
+    ui64 TLocalRecoveryInfo::GetRecoveredLocalSyncDataLsn() const {
+        return RecoveredLocalSyncDataLsn;
+    }
+
     void TLocalRecoveryInfo::CheckConsistency() {
         if (SuccessfulRecovery) {
             bool emptyLog = (RecoveryLogFirstLsn == Max<ui64>()) && RecoveryLogLastLsn == 0;

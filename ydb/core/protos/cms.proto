@@ -361,12 +361,16 @@ message TWalleCreateTaskRequest {
   optional string Action = 4;
   repeated string Hosts = 5;
   optional bool   DryRun = 6;
+  repeated string Devices = 7;
+  // Passed as EvictVDisks in the CMS permission request.
+  optional bool   DrainData = 8; // Passed as EvictVDisks in the CMS permission request.
 }
 
 message TWalleCreateTaskResponse {
   optional TStatus Status = 1;
   optional string  TaskId = 2;
   repeated string  Hosts = 3;
+  repeated string  Devices = 4;
 }
 
 message TWalleListTasksRequest {
@@ -376,6 +380,7 @@ message TWalleTaskInfo {
   optional string TaskId = 1;
   repeated string Hosts = 2;
   optional string Status = 3;
+  repeated string Devices = 4;
 }
 
 message TWalleListTasksResponse {
@@ -453,6 +458,7 @@ message TCmsConfig {
             UNKNOWN = 0;
             DISABLED = 1;
             FAULTY = 2;
+            MAINTENANCE = 3;
         }
 
         optional bool Enable = 1 [default = true];
@@ -549,6 +555,10 @@ message TResetMarkerResponse {
     optional TStatus Status = 1;
 }
 
+message TVersionInfo {
+    optional bool SupportWalleDrainData = 1;
+}
+
 message TGetConfigRequest {
 }
 
@@ -600,6 +610,8 @@ message TLogRecordData {
         optional TAvailabilityStats NodeAvailabilityStats = 7;
         optional string Host = 8;
         optional string Reason = 9;
+        optional NKikimrBlobStorage.TMaintenanceStatus.E CurrentMaintenanceStatus = 10;
+        optional NKikimrBlobStorage.TMaintenanceStatus.E RequiredMaintenanceStatus = 11;
     }
 
     message TMarkersModification {
@@ -694,6 +706,9 @@ message TPDiskInfo {
     optional string LastStatusChange = 11;
     optional EIgnoreReason IgnoreReason = 12;
     optional bool StatusChangeFailed = 13;
+    optional uint32 MaintenanceStatus = 14;
+    optional uint32 DesiredMaintenanceStatus = 15;
+    optional uint32 PrevDesiredMaintenanceStatus = 16;
 }
 
 message TPDisk {

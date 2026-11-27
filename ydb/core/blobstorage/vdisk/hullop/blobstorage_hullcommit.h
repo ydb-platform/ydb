@@ -271,7 +271,7 @@ namespace NKikimr {
                 TString data = GenerateEntryPointData();
                 // create sync log message covering this segment; it will be issued when log entry is written
                 CommitMsg = CreateHullUpdate(HullLogCtx, PDiskSignatureForHullDbKey<TKey>(), CommitRecord,
-                    data, LsnSeg, nullptr, nullptr);
+                    data, LsnSeg, nullptr, nullptr, TWriteSource::HullDbCommit);
             } else {
                 LsnSeg = Ctx->LsnMngr->AllocLsnForLocalUse();
                 DebugMessage << "Db# " << TKey::Name()
@@ -282,7 +282,7 @@ namespace NKikimr {
                 }
                 TRcBuf data = TRcBuf(GenerateEntryPointData());
                 CommitMsg = std::make_unique<NPDisk::TEvLog>(Ctx->PDiskCtx->Dsk->Owner, Ctx->PDiskCtx->Dsk->OwnerRound,
-                    PDiskSignatureForHullDbKey<TKey>(), CommitRecord, data, LsnSeg, nullptr);
+                    PDiskSignatureForHullDbKey<TKey>(), CommitRecord, data, LsnSeg, nullptr, TWriteSource::HullDbCommit, NPDisk::TEvLog::TCallback());
             }
         }
 

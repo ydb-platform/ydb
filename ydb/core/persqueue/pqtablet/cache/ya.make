@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     ydb/core/keyvalue
     ydb/core/persqueue/pqtablet/blob
+    ydb/public/api/grpc/draft
 )
 
 END()
@@ -16,4 +17,3 @@ END()
 RECURSE_FOR_TESTS(
     ut
 )
-

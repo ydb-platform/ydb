@@ -857,6 +857,19 @@ void TTestContext::UpdateConsumptionState(const TActorId& client, const TActorId
     UpdateConsumptionState(client, edge, {TResourceConsumingInfo(id, consume, amount, status)});
 }
 
+void TTestContext::CloseQuoterSession(const TActorId& client, const TActorId& edge, ui64 id) {
+    const ui64 cookie = RandomNumber<ui64>();
+    auto req = MakeHolder<TEvKesus::TEvUpdateConsumptionState>();
+    ActorIdToProto(client, req->Record.MutableActorID());
+    auto* reqRes = req->Record.AddResourcesInfo();
+    reqRes->SetResourceId(id);
+    reqRes->SetConsumeResource(false);
+    reqRes->SetCloseSession(true);
+
+    SendFromEdge(edge, std::move(req), cookie);
+    ExpectEdgeEvent<TEvKesus::TEvUpdateConsumptionStateAck>(edge, cookie);
+}
+
 void TTestContext::AccountResources(const TActorId& client, const TActorId& edge, const std::vector<TResourceAccountInfo>& info) {
     const ui64 cookie = RandomNumber<ui64>();
     auto req = MakeHolder<TEvKesus::TEvAccountResources>();

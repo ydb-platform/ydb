@@ -45,6 +45,26 @@ TString EBalancerTypeName(EBalancerType value) {
     }
 }
 
+TString EBalancerSuppressReasonName(EBalancerSuppressReason value) {
+    switch (value) {
+        case EBalancerSuppressReason::PreviousRunNoMovements: return "previous run of this type made no movements";
+        case EBalancerSuppressReason::AnotherBalancerRunning: return "another balancer is running";
+        case EBalancerSuppressReason::SubActorActivity: return "sub-actor activity";
+    }
+    return Sprintf("%d", static_cast<int>(value));
+}
+
+TString EResourceToBalanceName(EResourceToBalance value) {
+    switch (value) {
+        case EResourceToBalance::ComputeResources: return "ComputeResources";
+        case EResourceToBalance::Counter: return "Counter";
+        case EResourceToBalance::CPU: return "CPU";
+        case EResourceToBalance::Memory: return "Memory";
+        case EResourceToBalance::Network: return "Network";
+    }
+    return Sprintf("%d", static_cast<int>(value));
+}
+
 EResourceToBalance ToResourceToBalance(NMetrics::EResource resource) {
     switch (resource) {
         case NMetrics::EResource::CPU: return EResourceToBalance::CPU;
@@ -178,7 +198,8 @@ const std::unordered_map<TTabletTypes::EType, TString> TABLET_TYPE_SHORT_NAMES =
                                                                                   {TTabletTypes::Coordinator, "C"},
                                                                                   {TTabletTypes::Mediator, "M"},
                                                                                   {TTabletTypes::BlockStoreVolume, "BV"},
-                                                                                  {TTabletTypes::BlockStorePartition2, "BP"},
+                                                                                  {TTabletTypes::BlockStorePartition, "BP"},
+                                                                                  {TTabletTypes::BlockStorePartition2, "BP2"},
                                                                                   {TTabletTypes::Kesus, "K"},
                                                                                   {TTabletTypes::SysViewProcessor, "SV"},
                                                                                   {TTabletTypes::FileStore, "FS"},

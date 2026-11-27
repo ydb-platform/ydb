@@ -5,12 +5,16 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/vdisk/common/disk_part.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_dbtype.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
 #include <util/generic/vector.h>
 #include <util/generic/buffer.h>
 #include <util/stream/output.h>
 #include <util/string/printf.h>
 #include <util/ysaveload.h>
+#include <array>
+
+#include <optional>
 
 // FIXME: only for TIngressCache (put it to vdisk/common)
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
@@ -138,9 +142,16 @@ namespace NKikimr {
 
         ui32 HullCompLevel0MaxSstsAtOnce;
         ui32 HullCompSortedPartsNum;
+        // Production FullBatch has a VDisk-wide cadence. It must not be
+        // retriggered by every newly created SST with an uninitialized ratio.
+        std::optional<TInstant> StorageRatioFullBatchNextCalculationTime;
 
         NMonGroup::TCompactionStrategyGroup CompactionStrategyGroup;
+        NMonGroup::TStorageRatioGroup StorageRatioGroup;
+        NMonGroup::TStorageRatioAlgorithmGroup StorageRatioPerSstGroup;
+        NMonGroup::TStorageRatioAlgorithmGroup StorageRatioBatchGroup;
         NMonGroup::TLsmHullGroup LsmHullGroup;
+        std::array<NMonGroup::TLsmCompactionRankGroup, ui32(EHullDbType::Max)> LsmCompactionRankGroups;
         NMonGroup::TLsmHullSpaceGroup LsmHullSpaceGroup;
 
         THullCtx(

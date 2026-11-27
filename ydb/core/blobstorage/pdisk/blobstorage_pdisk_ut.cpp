@@ -8,6 +8,8 @@
 #include <ydb/core/driver_lib/version/ut/ut_helpers.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+
 #include <util/system/hp_timer.h>
 
 namespace NKikimr {
@@ -1431,6 +1433,89 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota, 0, 3, 4, TColor::RED);
     }
 
+    Y_UNIT_TEST(ExpectedSlotSizeHardLimitRoundsDownToChunkSize) {
+        TActorTestContext testCtx({
+            .DiskSize = 1_GB,
+            .ChunkSize = 1_MB,
+        });
+
+        const ui32 formatChunkSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return pdisk->Format.ChunkSize;
+        });
+        const ui64 expectedSlotSize = 3ull * formatChunkSize + 1;
+
+        auto pdiskConfig = testCtx.GetPDiskConfig();
+        pdiskConfig->ExpectedSlotSize = expectedSlotSize;
+        testCtx.UpdateConfigRecreatePDisk(pdiskConfig);
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+
+        const auto evCheckSpaceResult = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+
+        const ui32 expectedHardLimitChunks = expectedSlotSize / formatChunkSize;
+        UNIT_ASSERT_VALUES_EQUAL(expectedHardLimitChunks, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->TotalChunks, expectedHardLimitChunks);
+        UNIT_ASSERT_LE(ui64(evCheckSpaceResult->TotalChunks) * formatChunkSize, expectedSlotSize);
+    }
+
+    Y_UNIT_TEST(SlotSizeBytesUsesFormulaUnlessExpectedSlotSizeIsSet) {
+        TActorTestContext testCtx({
+            .DiskSize = 1_GB,
+            .ChunkSize = 1_MB,
+        });
+
+        const ui32 firstNodeId = testCtx.GetRuntime()->GetFirstNodeId();
+        testCtx.GetRuntime()->SetDispatchTimeout(10 * TDuration::MilliSeconds(testCtx.GetPDiskConfig()->StatisticsUpdateIntervalMs));
+        testCtx.GetRuntime()->RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(firstNodeId), testCtx.Sender);
+
+        auto waitForPDiskStateUpdate = [&](ui32 expectedSlotCount, ui64 expectedSlotSize) {
+            for (ui32 i = 0; i < 10; ++i) {
+                const auto evPDiskStateUpdate = testCtx.Recv<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
+                const NKikimrWhiteboard::TPDiskStateInfo& pdiskInfo = evPDiskStateUpdate->Record;
+                if (pdiskInfo.GetExpectedSlotCount() == expectedSlotCount &&
+                        pdiskInfo.GetExpectedSlotSize() == expectedSlotSize) {
+                    return;
+                }
+            }
+            UNIT_ASSERT_C(false, "No PDisk state update with expected slot settings received");
+        };
+
+        auto getSlotSizeBytes = [&] {
+            return testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+                return pdisk->Mon.SlotSizeBytes->Val();
+            });
+        };
+
+        const ui32 expectedSlotCount = 4;
+        const ui32 slotSizeInUnits = 0;
+
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(expectedSlotCount, slotSizeInUnits),
+            NKikimrProto::OK);
+        testCtx.Send(new TEvents::TEvWakeup());
+        waitForPDiskStateUpdate(expectedSlotCount, 0);
+
+        const ui64 formulaSlotSizeBytes = testCtx.SafeRunOnPDisk([&](const NPDisk::TPDisk* pdisk) {
+            return ui64(pdisk->Keeper.GetUserChunkPoolSize() / expectedSlotCount) * ui64(pdisk->Format.ChunkSize);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), formulaSlotSizeBytes);
+
+        const ui64 expectedSlotSize = 3ull * testCtx.GetPDiskConfig()->ChunkSize + 1;
+        UNIT_ASSERT_VALUES_UNEQUAL(expectedSlotSize, formulaSlotSizeBytes);
+
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(expectedSlotCount, slotSizeInUnits, expectedSlotSize),
+            NKikimrProto::OK);
+        testCtx.Send(new TEvents::TEvWakeup());
+        waitForPDiskStateUpdate(expectedSlotCount, expectedSlotSize);
+
+        UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), expectedSlotSize);
+    }
+
     Y_UNIT_TEST(TestChunkWriteCrossOwner) {
         TActorTestContext testCtx{{}};
 
@@ -1560,9 +1645,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         return data;
     }
 
-    void ChunkWriteDifferentOffsetAndSizeImpl(bool plainDataChunks) {
+    void ChunkWriteDifferentOffsetAndSizeImpl(bool plainDataChunks, bool rdmaAlloc) {
         TActorTestContext testCtx({
             .PlainDataChunks = plainDataChunks,
+            .UseRdmaAllocator = rdmaAlloc,
         });
         Cerr << "plainDataChunks# " << plainDataChunks << Endl;
 
@@ -1606,9 +1692,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             UNIT_ASSERT(ConvertIPartsToString(parts.Get()) == res->Data.ToString().Slice());
         }
     }
+
     Y_UNIT_TEST(ChunkWriteDifferentOffsetAndSize) {
-        for (int i = 0; i <= 1; ++i) {
-            ChunkWriteDifferentOffsetAndSizeImpl(i);
+        for (ui32 i = 0; i <= 1; ++i) {
+            ChunkWriteDifferentOffsetAndSizeImpl(i & 1, false);
         }
     }
 
@@ -1843,6 +1930,28 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         return shares;
     }
 
+    Y_UNIT_TEST(ConfigureSchedulerAppliesWeights) {
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        const ui32 owner = vdisk.PDiskParams->Owner;
+        const ui32 ownerRound = vdisk.PDiskParams->OwnerRound;
+
+        TPDiskSchedulerConfig cfg;
+        cfg.LowReadWeight = 42;
+
+        auto *ev = new NPDisk::TEvConfigureScheduler(owner, ownerRound);
+        ev->SchedulerCfg = cfg;
+        testCtx.TestResponse<NPDisk::TEvConfigureSchedulerResult>(ev, NKikimrProto::OK);
+
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+            auto* low = pdisk->ForsetiScheduler.GetCbs(owner, NPDisk::GateLow);
+            UNIT_ASSERT(low);
+            UNIT_ASSERT_EQUAL(low->Weight, cfg.LowReadWeight);
+        });
+    }
+
     Y_UNIT_TEST(CheckChunkReadOperationPriorities) {
         using namespace NPriRead;
         std::vector<ui8> PriRead = {SyncLog, HullComp, HullOnlineRt, HullOnlineOther, HullLoad, HullLow};
@@ -1871,6 +1980,85 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     shares[HullHugeAsyncBlob] * 0.80 < shares[HullHugeUserData]);
         UNIT_ASSERT(shares[HullComp] * 0.90 > shares[HullFresh]);
     }
+
+    Y_UNIT_TEST(TestPDiskFormattingCases) {
+        TActorTestContext testCtx{{}};
+        auto cfg = testCtx.GetPDiskConfig();
+
+        TVDiskMock vdisk(&testCtx);
+
+        auto writeFormatArea = [&](bool fillWithGarbage, bool addIncompleteMagic) {
+            constexpr ui32 formatAreaSize = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
+            NPDisk::TAlignedData data(formatAreaSize);
+            ui8 fillByte = 0xab;
+            memset(data.Get(), fillByte, data.Size());
+
+            if (fillWithGarbage) {
+                testCtx.TestCtx.SectorMap->Write(data.Get(), data.Size(), 0);
+            }
+
+            if (addIncompleteMagic) {
+                auto* magicBegin = reinterpret_cast<ui64*>(data.Get());
+                auto* magicEnd = reinterpret_cast<ui64*>(data.Get() + NPDisk::MagicIncompleteFormatSize);
+                for (auto* p = magicBegin; p != magicEnd; ++p) {
+                    *p = NPDisk::MagicIncompleteFormat;
+                }
+                // write only one Format record
+                testCtx.TestCtx.SectorMap->Write(data.Get(), NPDisk::FormatSectorSize, 0);
+            }
+        };
+
+        auto restartPDiskFromErrorState = [&] {
+            testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, reinterpret_cast<void*>(&testCtx.MainKey)),
+                NKikimrProto::OK);
+        };
+
+        auto assertVDiskIsKnown = [&] {
+            const ui64 expectedLogRecords = vdisk.OwnedLogRecords();
+            vdisk.Init();
+            UNIT_ASSERT_VALUES_EQUAL(vdisk.ReadLog(), expectedLogRecords);
+            vdisk.CutLogAllButOne();
+        };
+
+        auto assertVDiskIsNew = [&] {
+            vdisk.Init();
+            UNIT_ASSERT_VALUES_EQUAL(vdisk.ReadLog(), 0);
+
+            vdisk.Chunks.clear();
+            vdisk.LastUsedLsn = 0;
+            vdisk.FirstLsnToKeep = 1;
+            vdisk.CutLogAllButOne();
+        };
+
+        auto assertVDiskInitFails = [&] {
+            testCtx.Send(new NPDisk::TEvYardInit(TVDiskMock::OwnerRound.fetch_add(1), vdisk.VDiskID,
+                testCtx.TestCtx.PDiskGuid, testCtx.Sender));
+            const auto evInitRes = testCtx.Recv<NPDisk::TEvYardInitResult>();
+            UNIT_ASSERT_C(evInitRes->Status != NKikimrProto::OK, evInitRes->ToString());
+            UNIT_ASSERT_C(!evInitRes->ErrorReason.empty(), evInitRes->ToString());
+        };
+
+        // Test start
+
+        assertVDiskIsNew();
+
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+        assertVDiskIsKnown();
+
+        writeFormatArea(false, true);
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+        assertVDiskIsKnown();
+
+        writeFormatArea(true, false);
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+        assertVDiskInitFails();
+
+        writeFormatArea(true, true);
+        restartPDiskFromErrorState();
+        assertVDiskIsNew();
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
@@ -2479,6 +2667,117 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         UNIT_ASSERT_VALUES_EQUAL(res2->ShredGeneration, shredGeneration);
     }
 #endif
+}
+
+// RDMA use ibverbs shared library which is part of hardware vendor provided drivers and can't be linked staticaly
+// This library is not MSan-instrumented, so it causes msan fail if we run. So skip such run...
+static bool IsMsanEnabled() {
+#if defined(_msan_enabled_)
+    return true;
+#else
+    return false;
+#endif
+}
+
+Y_UNIT_TEST_SUITE(RDMA) {
+    void TestChunkReadWithRdmaAllocator(bool plainDataChunks) {
+        TActorTestContext testCtx({
+            .PlainDataChunks = plainDataChunks,
+            .UseRdmaAllocator = true,
+        });
+        TVDiskMock vdisk(&testCtx);
+
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        auto chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+
+        for (i64 writeSize: {1_KB - 123, 64_KB, 128_KB + 8765}) {
+            for (i64 readOffset: {0_KB, 0_KB + 123, 4_KB, 8_KB + 123}) {
+                for (i64 readSize: {writeSize, writeSize - 567, writeSize - i64(8_KB), writeSize - i64(8_KB) + 987}) {
+                    if (readOffset < 0 || readSize < 0 || readOffset + readSize > writeSize) {
+                        continue;
+                    }
+                    Cerr << "chunkBufSize: " << writeSize << ", readOffset: " << readOffset << ", readSize: " << readSize << Endl;
+                    auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(PrepareData(writeSize));
+                    testCtx.Send(new NPDisk::TEvChunkWrite(
+                        vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunk, 0, parts, nullptr, false, 0));
+                    auto write = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+
+                    testCtx.Send(new NPDisk::TEvChunkRead(
+                        vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunk, readOffset, readSize, 0, nullptr));
+                    auto read = testCtx.Recv<NPDisk::TEvChunkReadResult>();
+                    TRcBuf readBuf = read->Data.ToString();
+                    NInterconnect::NRdma::TMemRegionSlice memReg = NInterconnect::NRdma::TryExtractFromRcBuf(readBuf);
+                    UNIT_ASSERT_C(!memReg.Empty(), "Failed to extract RDMA memory region from RcBuf");
+                    UNIT_ASSERT_VALUES_EQUAL_C(memReg.GetSize(), readSize, "Unexpected size of RDMA memory region");
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestChunkReadWithRdmaAllocatorEncryptedChunks) {
+        if (IsMsanEnabled())
+            return;
+
+        TestChunkReadWithRdmaAllocator(false);
+    }
+
+    Y_UNIT_TEST(TestChunkReadWithRdmaAllocatorPlainChunks) {
+        if (IsMsanEnabled())
+            return;
+
+        TestChunkReadWithRdmaAllocator(true);
+    }
+
+    Y_UNIT_TEST(TestRcBuf) {
+        if (IsMsanEnabled())
+            return;
+
+        ui32 size = 129961;
+        ui32 offset = 123;
+        ui32 tailRoom = 1111;
+        ui32 totalSize = size + tailRoom;
+        UNIT_ASSERT_VALUES_EQUAL(totalSize, 131072);
+
+        auto alloc1 = [](ui32 size, ui32 headRoom, ui32 tailRoom) {
+            TRcBuf buf = TRcBuf::UninitializedPageAligned(size + headRoom + tailRoom);
+            buf.TrimFront(size + tailRoom);
+            buf.TrimBack(size);
+            Cerr << "alloc1: " << buf.Size() << " " << buf.Tailroom() << " " << buf.UnsafeTailroom() << Endl;
+            return buf;
+        };
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto alloc2 = [memPool](ui32 size, ui32 headRoom, ui32 tailRoom) -> TRcBuf {
+            TRcBuf buf = memPool->AllocRcBuf(size + headRoom + tailRoom, NInterconnect::NRdma::IMemPool::EMPTY).value();
+            buf.TrimFront(size + tailRoom);
+            buf.TrimBack(size);
+            Cerr << "alloc2: " << buf.Size() << " " << buf.Tailroom() << " " << buf.UnsafeTailroom() << Endl;
+            return buf;
+        };
+
+        auto buf1 = TBufferWithGaps(offset, alloc1(size, 0, tailRoom));
+        auto buf2 = TBufferWithGaps(offset, alloc2(size, 0, tailRoom));
+
+        Cerr << "buf1: " << buf1.PrintState() << " " << buf1.Size() << " " << buf1.SizeWithTail() << Endl;
+        Cerr << "buf2: " << buf2.PrintState() << " " << buf2.Size() << " " << buf2.SizeWithTail() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(buf1.Size(), buf2.Size(), "Buffers should have the same size");
+
+        buf1.RawDataPtr(0, totalSize);
+        buf2.RawDataPtr(0, totalSize);
+    }
+
+    Y_UNIT_TEST(ChunkWriteDifferentOffsetAndSize) {
+        if (IsMsanEnabled())
+            return;
+
+        for (ui32 i = 0; i <= 1; ++i) {
+            NTestSuiteTPDiskTest::ChunkWriteDifferentOffsetAndSizeImpl(i & 1, true);
+        }
+    }
 }
 
 } // namespace NKikimr

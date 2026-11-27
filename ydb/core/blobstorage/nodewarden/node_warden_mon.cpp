@@ -21,6 +21,12 @@ void TNodeWarden::Handle(NMon::TEvHttpInfo::TPtr &ev) {
     if (cgi.Get("page") == "distconf") {
         TActivationContext::Send(ev->Forward(DistributedConfigKeeperId));
         return;
+    } else if (cgi.Get("page") == "localrecoverybroker") {
+        TActivationContext::Send(ev->Forward(MakeBlobStorageLocalRecoveryBrokerID()));
+        return;
+    } else if (cgi.Get("page") == "startupdatasyncbroker") {
+        TActivationContext::Send(ev->Forward(MakeBlobStorageStartupDataSyncBrokerID()));
+        return;
     }
 
     TStringBuf pathInfo = ev->Get()->Request.GetPathInfo();
@@ -107,6 +113,12 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
             }
         }
 
+        TAG(TH3) { out << "VDisk Brokers"; }
+        DIV() {
+            out << "<a href=\"?page=localrecoverybroker\">VDisk Local Recovery Broker</a><br>";
+            out << "<a href=\"?page=startupdatasyncbroker\">VDisk Startup Data Sync Broker</a>";
+        }
+
         TAG(TH3) { out << "StorageConfig"; }
         DIV() {
             out << "<p>Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "</p>";
@@ -141,6 +153,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                     TABLEH() { out << "Category"; }
                     TABLEH() { out << "Temporary"; }
                     TABLEH() { out << "Pending"; }
+                    TABLEH() { out << "PDiskConfig warning"; }
                 }
             }
             TABLEBODY() {
@@ -163,6 +176,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                         TABLED() { out << value.Record.GetPDiskCategory(); }
                         TABLED() { out << value.Temporary; }
                         TABLED() { out << pending; }
+                        TABLED() { out << value.PDiskConfigWarning; }
                     }
                 }
             }

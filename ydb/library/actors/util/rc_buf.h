@@ -270,6 +270,11 @@ public:
 struct IContiguousChunk : TThrRefBase {
     using TPtr = TIntrusivePtr<IContiguousChunk>;
 
+    enum EInnerType {
+        OTHER=0,
+        RDMA_MEM_REG=1,
+    };
+
     virtual ~IContiguousChunk() = default;
 
     /**
@@ -278,31 +283,35 @@ struct IContiguousChunk : TThrRefBase {
     virtual TContiguousSpan GetData() const = 0;
 
     /**
-     * Should give mutable access to underlying data
-     * If data is shared - data should be copied
-     * E.g. for TString str.Detach() should be used
-     * Possibly invalidates previous *GetData*() calls
-     */
-    virtual TMutableContiguousSpan GetDataMut() = 0;
-
-    /**
      * Should give mutable access to undelying data as fast as possible
      * Even if data is shared this property should be ignored
      * E.g. in TString const_cast<char *>(str.data()) should be used
      * Possibly invalidates previous *GetData*() calls
      */
-    virtual TMutableContiguousSpan UnsafeGetDataMut() {
-        return GetDataMut();
-    }
+    virtual TMutableContiguousSpan UnsafeGetDataMut() = 0;
 
     /**
-     * Should return true if GetDataMut() would not copy contents when called.
+     * Must return false if the implementation shares data
      */
     virtual bool IsPrivate() const {
-        return true;
+        return RefCount() == 1;
     }
 
     virtual size_t GetOccupiedMemorySize() const = 0;
+
+    /**
+     * Returns type of the inner data
+     * Used to distinguish between different types of data and downcast
+     */
+    virtual EInnerType GetInnerType() const noexcept {
+        return OTHER;
+    }
+
+    /**
+     * Allocate new chunk and copy data into it
+     * NOTE: The actual implementation of clonned chunk may be different
+     */
+    virtual IContiguousChunk::TPtr Clone() = 0;
 };
 
 class TRope;
@@ -445,7 +454,7 @@ class TRcBuf {
                 } else if constexpr (std::is_same_v<T, TString>) {
                     return value.IsDetached();
                 } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
-                    return value.RefCount() == 1 && value->IsPrivate();
+                    return value->IsPrivate();
                 } else {
                     static_assert(TDependentFalse<T>);
                 }
@@ -487,7 +496,10 @@ class TRcBuf {
                     }
                     return {value.mutable_data(), value.size()};
                 } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
-                    return value->GetDataMut();
+                    if (!value->IsPrivate()) {
+                        value = value->Clone();
+                    }
+                    return value->UnsafeGetDataMut();
                 } else {
                     static_assert(TDependentFalse<T>, "unexpected type");
                 }
@@ -847,7 +859,9 @@ public:
 
     static TRcBuf Copy(TContiguousSpan data, size_t headroom = 0, size_t tailroom = 0) {
         TRcBuf res = Uninitialized(data.size(), headroom, tailroom);
-        std::memcpy(res.UnsafeGetDataMut(), data.GetData(), data.GetSize());
+        if (data.GetSize()) {
+            std::memcpy(res.UnsafeGetDataMut(), data.GetData(), data.GetSize());
+        }
         return res;
     }
 
@@ -936,6 +950,17 @@ public:
             std::memcpy(data, GetData(), GetSize());
         }
 
+        return res;
+    }
+
+    template<class TResult>
+    std::optional<TResult> ExtractFullUnderlyingContainer() const {
+        std::optional<TResult> res = std::nullopt;
+        Backend.ApplySpecificValue<TResult>([&](const TResult *raw) {
+            if (raw) {
+                res = *raw;
+            }
+        });
         return res;
     }
 
@@ -1103,7 +1128,7 @@ public:
     }
 
     size_t Headroom() const {
-        if (Backend.CanGrowFront(Begin)) {
+        if (Backend.CanGrowFront(Begin) || IsPrivate()) {
             return UnsafeHeadroom();
         }
 
@@ -1111,7 +1136,7 @@ public:
     }
 
     size_t Tailroom() const {
-        if (Backend.CanGrowBack(End)) {
+        if (Backend.CanGrowBack(End) || IsPrivate()) {
             return UnsafeTailroom();
         }
 
@@ -1126,3 +1151,12 @@ public:
         return TMutableContiguousSpan(GetDataMut(), GetSize());
     }
 };
+
+class IRcBufAllocator {
+public:
+    virtual ~IRcBufAllocator() = default;
+    virtual TRcBuf AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept = 0;
+    virtual TRcBuf AllocPageAlignedRcBuf(size_t size, size_t tailRoom) noexcept = 0;
+};
+
+IRcBufAllocator* GetDefaultRcBufAllocator() noexcept;

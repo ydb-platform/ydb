@@ -37,6 +37,9 @@ class TListOperationsRPC
     , public TExportConv
     , public TBackupCollectionRestoreConv
 {
+    ui32 GetRequiredAccessRights() const override {
+        return NACLib::GenericRead;
+    }
 
     TStringBuf GetLogPrefix() const override {
         switch (ParseKind(GetProtoRequest()->kind())) {

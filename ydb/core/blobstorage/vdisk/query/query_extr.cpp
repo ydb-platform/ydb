@@ -108,7 +108,7 @@ namespace NKikimr {
             TQuery *query = nullptr;
             while ((query = FetchNextQuery()) && !ResultSize.IsOverflow()) {
                 // only full blobs (w/o specifying a part) are allowed
-                Y_VERIFY_S(query->PartId == 0, QueryCtx->HullCtx->VCtx->VDiskLogPrefix); 
+                Y_VERIFY_S(query->PartId == 0, QueryCtx->HullCtx->VCtx->VDiskLogPrefix);
                 const ui64 *cookiePtr = query->HasCookie ? &query->CookieVal : nullptr;
                 ResultSize.AddLogoBlobIndex();
                 if (!BlobInIndex) {
@@ -314,11 +314,14 @@ namespace NKikimr {
             if (IsRepl()) {
                 quoter = QueryCtx->HullCtx->VCtx->ReplNodeResponseQuoter;
             }
+            const TMonotonic now = TActivationContext::Monotonic();
             const TDuration duration = quoter
-                ? quoter->Take(TActivationContext::Monotonic(), Result->CalculateSerializedSizeCached())
+                ? quoter->Take(now, Result->CalculateSerializedSizeCached())
                 : TDuration::Zero();
             if (duration != TDuration::Zero()) {
                 Schedule(duration, new TEvents::TEvWakeup);
+                const auto deltaMicrosec = quoter->MergeThrottledIntervalAndGetDeltaMicrosec(now, duration);
+                QueryCtx->ReplMonGroup.ReplNodeResponseThrottledMicroseconds() += deltaMicrosec;
                 Become(&TThis::StateFunc);
             } else {
                 SendResponse(ctx);

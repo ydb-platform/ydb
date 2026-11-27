@@ -204,6 +204,10 @@ ITransactionPtr TClient::AttachTransaction(
     auto connection = GetRpcProxyConnection();
     auto client = GetRpcProxyClient();
 
+    if (options.ValidateStickyAddress && options.StickyAddress && !Connection_->IsKnownProxyAddress(*options.StickyAddress)) {
+        THROW_ERROR_EXCEPTION("Sticky transaction address does not belong to this RPC proxy connection");
+    }
+
     auto channel = options.StickyAddress
         ? WrapStickyChannelIntoRetrying(CreateNonRetryingChannelByAddress(*options.StickyAddress))
         : GetRetryingChannel();

@@ -768,21 +768,4 @@ void TExternalizeCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TInternalizeCommand::Register(TRegistrar registrar)
-{
-    registrar.Parameter("path", &TThis::Path);
-}
-
-void TInternalizeCommand::DoExecute(ICommandContextPtr context)
-{
-    auto asyncResult = context->GetClient()->InternalizeNode(
-        Path,
-        Options);
-
-    WaitFor(asyncResult)
-        .ThrowOnError();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NYT::NDriver

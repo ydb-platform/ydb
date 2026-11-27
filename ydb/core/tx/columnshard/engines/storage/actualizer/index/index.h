@@ -34,10 +34,6 @@ private:
 
 public:
     std::vector<TCSMetadataRequest> CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions);
-    // The MoveData driver also classifies restored uncommitted writes, outside the tiering metadata cycle.
-    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions,
-        const TWrittenPortionsById& uncommitted, TMoveDataMetadataBudget& budget);
-
     bool IsStarted() const {
         return Actualizers.size();
     }
@@ -53,8 +49,7 @@ public:
     void RefreshScheme(const TAddExternalContext& context);
     bool IsSchemeActualizationFinished() const;
 
-    void StartMoveData(THashSet<ui32> targetGroups, const TAddExternalContext& context,
-        const TWrittenPortionsById& uncommitted);
+    void AddMoveDataCandidate(ui64 portionId, bool committed);
     void StopMoveData();
     TMoveDataQueueSizes UpdateMoveDataQueueSizes(
         const THashMap<ui64, TPortionInfo::TPtr>& portions, const TWrittenPortionsById& uncommitted, size_t& visitsLeft);

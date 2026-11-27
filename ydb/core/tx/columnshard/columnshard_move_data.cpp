@@ -47,19 +47,33 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
         RefuseMoveData(ev->Sender, TabletID(), *activeGroup, ctx);
         return;
     }
-    if (!MoveDataDriver) {
-        MoveDataDriver = new TMoveDataDriver(this);
-        ctx.RegisterWithSameMailbox(MoveDataDriver);
+    if (!MoveDataCoordinator) {
+        MoveDataCoordinator = std::make_unique<TMoveDataCoordinator>(this);
+    }
+    const bool startVacuum = !MoveDataCoordinator->IsActive();
+    MoveDataCoordinator->AcceptRequest(ev->Sender, groups, ctx);
+    if (startVacuum) {
         Counters.GetCSCounters().OnMoveDataStarted();
         Executor()->StartMoveDataVacuumFromOwner();
     }
-    MoveDataDriver->AcceptRequest(ev->Sender, groups, ctx);
 }
 
 void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
-    if (MoveDataDriver != nullptr) {
-        MoveDataDriver->OnVacuumCompleted(ctx);
+    if (MoveDataCoordinator && MoveDataCoordinator->IsActive()) {
+        MoveDataCoordinator->OnVacuumCompleted(ctx);
     }
+}
+
+void TColumnShard::Handle(TEvMoveData::TEvBatch::TPtr& ev, const TActorContext& ctx) {
+    MoveDataCoordinator->OnBatch(ev, ctx);
+}
+
+void TColumnShard::Handle(TEvMoveData::TEvWakeup::TPtr&, const TActorContext& ctx) {
+    MoveDataCoordinator->OnWakeup(ctx);
+}
+
+void TColumnShard::Handle(TEvMoveData::TEvPoke::TPtr&, const TActorContext& ctx) {
+    MoveDataCoordinator->OnPoke(ctx);
 }
 
 }   // namespace NKikimr::NColumnShard

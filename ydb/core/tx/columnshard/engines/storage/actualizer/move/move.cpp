@@ -1,7 +1,5 @@
 #include "move.h"
 
-#include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
-#include <ydb/core/tx/columnshard/data_accessor/request.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
@@ -18,37 +16,6 @@ namespace NKikimr::NOlap::NActualizer {
 namespace {
 
 using EPortionState = TPortionQueue::EPortionState;
-
-class TMoveDataActualizationReply: public IMetadataAccessorResultProcessor {
-private:
-    std::weak_ptr<TMoveDataActualizer> MoveDataActualizer;
-
-    void DoApplyResult(NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs&) override {
-        auto locked = MoveDataActualizer.lock();
-        if (!locked) {
-            return;
-        }
-        if (result.GetValue().HasErrors()) {
-            // Affected portions stay pending and are re-requested next cycle.
-            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "MoveData accessor request failed",
-                {"error", result.GetValue().GetErrorMessage()});
-        }
-        if (result.GetValue().HasRemovedData()) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "MoveData accessor result contains removed portions",
-                {"removedCount", result.GetValue().GetRemovedData().size()});
-        }
-        for (auto&& [_, accessor] : result.GetValue().GetPortions()) {
-            locked->ActualizePortionInfo(*accessor);
-        }
-    }
-
-public:
-    TMoveDataActualizationReply(std::weak_ptr<TMoveDataActualizer> actualizer)
-        : MoveDataActualizer(std::move(actualizer))
-    {
-        AFL_VERIFY(!MoveDataActualizer.expired());
-    }
-};
 
 TTieringProcessContext::EAddPortionResult AddPortionToMove(
     TTieringProcessContext& tasks, const TPortionInfo::TConstPtr& portion, const TVersionedIndex& index) {
@@ -90,74 +57,14 @@ void TMoveDataActualizer::DoExtractTasks(
     });
 }
 
-namespace {
-std::vector<ui32> GetDistinctBlobGroups(const std::vector<TUnifiedBlobId>& blobIds) {
-    std::vector<ui32> result;
-    for (const auto& blobId : blobIds) {
-        result.emplace_back(blobId.GetDsGroup());
-    }
-    SortUnique(result);
-    return result;
-}
-}   // namespace
-
 bool TMoveDataActualizer::HasBlobInGroups(const std::vector<TUnifiedBlobId>& blobIds, const THashSet<ui32>& groups) {
     return AnyOf(blobIds, [&groups](const TUnifiedBlobId& blobId) {
         return groups.contains(blobId.GetDsGroup());
     });
 }
 
-void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& accessor) {
-    const auto& info = accessor.GetPortionInfo();
-    const ui64 portionId = info.GetPortionId();
-    Queue.ClassifyPending(portionId, [&] {
-        if (!HasBlobInGroups(accessor.GetBlobIds(), TargetGroups)) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "MoveData portion has no blobs in target groups",
-                {"event", "move_data_portion_rejected"},
-                {"portionId", portionId},
-                {"blobs", JoinSeq(",", GetDistinctBlobGroups(accessor.GetBlobIds()))},
-                {"targets", JoinSeq(",", TargetGroups)});
-            return EPortionState::Rejected;
-        }
-        if (info.HasRemoveSnapshot()) {
-            return EPortionState::Retired;
-        }
-        return info.IsCommitted() ? EPortionState::Ready : EPortionState::Uncommitted;
-    });
-}
-
-std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions,
-    const TWrittenPortionsById& uncommitted, const std::shared_ptr<TMoveDataActualizer>& self,
-    TMoveDataMetadataBudget& budget) {
-    if (!Queue.HasPending() || budget.IsExhausted()) {
-        return {};
-    }
-    std::vector<TCSMetadataRequest> requests;
-    std::shared_ptr<TDataAccessorsRequest> currentRequest;
-    Queue.ScanForMetadata(budget.PortionsLeft, [&](ui64 portionId, EPortionState state) {
-        --budget.PortionsLeft;
-        if (state == EPortionState::Pending) {
-            TPortionInfo::TPtr portion;
-            if (const auto* found = MapFindPtr(portions, portionId)) {
-                portion = *found;
-            } else if (const auto* found = MapFindPtr(uncommitted, portionId)) {
-                portion = *found;
-            }
-            if (portion) {
-                if (!currentRequest) {
-                    currentRequest = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::MOVE_DATA);
-                }
-                currentRequest->AddPortion(portion);
-                budget.Memory += portion->PredictAccessorsMemory(portion->GetSchema(VersionedIndex));
-                ++budget.RequestedPortions;
-            }
-        }
-        return !budget.IsExhausted();
-    });
-    if (currentRequest) {
-        requests.emplace_back(std::move(currentRequest), std::make_shared<TMoveDataActualizationReply>(self));
-    }
-    return requests;
+void TMoveDataActualizer::AddCandidate(ui64 portionId, bool committed) {
+    Queue.Add(portionId, committed ? EPortionState::Ready : EPortionState::Uncommitted);
 }
 
 size_t TMoveDataActualizer::UpdatePortionStates(
@@ -175,12 +82,8 @@ size_t TMoveDataActualizer::UpdatePortionStates(
             Queue.SetState(state, EPortionState::Finished);
             return true;
         }
-        if (state == EPortionState::Pending) {
-            // Retired candidates still need classification: unrelated groups must not hold the gate.
-            return true;
-        }
         if (portion->HasRemoveSnapshot()) {
-            Queue.SetState(state, EPortionState::Retired);
+            Queue.SetState(state, EPortionState::Finished);
         } else if (!committed) {
             Queue.SetState(state, EPortionState::Uncommitted);
         } else if (state != EPortionState::RewriteStarted) {
@@ -192,21 +95,6 @@ size_t TMoveDataActualizer::UpdatePortionStates(
 
 TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes() const {
     return Queue.GetSizes();
-}
-
-void TMoveDataActualizer::InitializePortionQueue(
-    const TAddExternalContext& externalContext, const TWrittenPortionsById& uncommitted) {
-    AFL_VERIFY(!PortionQueueInitialized);
-    PortionQueueInitialized = true;
-    const auto add = [this](const auto& source) {
-        for (const auto& [portionId, portion] : source) {
-            if (portion->HasBlobsInBlobStorage(portion->GetSchema(VersionedIndex)->GetIndexInfo())) {
-                Queue.Add(portionId);
-            }
-        }
-    };
-    add(externalContext.GetPortions());
-    add(uncommitted);
 }
 
 }   // namespace NKikimr::NOlap::NActualizer

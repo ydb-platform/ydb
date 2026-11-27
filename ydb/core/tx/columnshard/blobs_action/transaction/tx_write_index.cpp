@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/maintenance/move_data/move_data.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
@@ -86,9 +87,11 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     if (!Ev->Get()->IndexChanges->IsAborted()) {
         NOlap::TWriteIndexCompleteContext context(
             ctx, blobsWritten, bytesWritten, Ev->Get()->Duration, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>(), CurrentSnapshot);
-        Ev->Get()->IndexChanges->WriteIndexOnComplete(Self, context);
+        changes->WriteIndexOnComplete(Self, context);
+        if (Self->MoveDataCoordinator) {
+            Self->MoveDataCoordinator->RequestStep(ctx);
+        }
     }
-
     Self->EnqueueBackgroundActivities(false);
     changes->MutableBlobsAction().OnCompleteTxAfterAction(*Self, Ev->Get()->GetPutStatus() == NKikimrProto::OK);
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexComplete(*changes, *Self);

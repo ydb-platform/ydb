@@ -116,15 +116,12 @@ private:
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsPending;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsConfirmedToMove;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsRewriteStarted;
-    // Either can hold the completion gate while every other queue gauge is zero.
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsUncommitted;
-    std::shared_ptr<TValueAggregationClient> MoveDataPortionsRetired;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataFinishedCount;
     // The denominator for every GateBlocked counter below.
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateCheckedCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByVacuumCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByPortionsCount;
-    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByCleanupCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedBySharedCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataPortionsRejectedCount;
 
@@ -242,7 +239,6 @@ public:
         MoveDataPortionsConfirmedToMove->SetValue(queues.ConfirmedToMove);
         MoveDataPortionsRewriteStarted->SetValue(queues.RewriteStarted);
         MoveDataPortionsUncommitted->SetValue(queues.Uncommitted);
-        MoveDataPortionsRetired->SetValue(queues.Retired);
     }
 
     void OnMoveDataGateChecked() const {
@@ -262,10 +258,6 @@ public:
         MoveDataGateBlockedByPortionsCount->Add(1);
     }
 
-    void OnMoveDataGateBlockedByCleanup() const {
-        MoveDataGateBlockedByCleanupCount->Add(1);
-    }
-
     // Shared and borrowed links are not ours to collect, so they are not a GC wait.
     void OnMoveDataGateBlockedByShared() const {
         MoveDataGateBlockedBySharedCount->Add(1);
@@ -278,7 +270,6 @@ public:
         MoveDataPortionsConfirmedToMove->SetValue(0);
         MoveDataPortionsRewriteStarted->SetValue(0);
         MoveDataPortionsUncommitted->SetValue(0);
-        MoveDataPortionsRetired->SetValue(0);
     }
 
     void OnWriteOverloadMetadata(const ui64 size) const {

@@ -25,6 +25,7 @@
 #include "loading/deferred_portion_loader.h"
 #include "local_db_backup/events.h"
 #include "maintenance/cut_history/find_empty_history_intervals.h"
+#include "maintenance/move_data/scan.h"
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"
@@ -133,7 +134,7 @@ class TGeneralCompactColumnEngineChanges;
 
 namespace NKikimr::NColumnShard {
 
-class TMoveDataDriver;
+class TMoveDataCoordinator;
 class TArrowData;
 class TEvWriteCommitPrimaryTransactionOperator;
 class TEvWriteCommitSecondaryTransactionOperator;
@@ -201,7 +202,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;
     friend class TTxInit;
-    friend class TMoveDataDriver;
+    friend class TMoveDataCoordinator;
     friend class TTxLoadPortionsBatch;
     friend class TTxCleanupSchemasWithnoData;
     friend class TTxInitSchema;
@@ -574,7 +575,7 @@ private:
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
 
     // Owned by the actor runtime; cleared before shutdown. The shared mailbox permits synchronous admission.
-    TMoveDataDriver* MoveDataDriver = nullptr;
+    std::unique_ptr<TMoveDataCoordinator> MoveDataCoordinator;
 
     // Outstanding metadata subscribers for this tablet; gates SetupMetadata.
     std::shared_ptr<TAtomicCounter> MetadataSubscribersInFlight = std::make_shared<TAtomicCounter>();
@@ -647,6 +648,9 @@ private:
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
+    void Handle(TEvMoveData::TEvBatch::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvMoveData::TEvWakeup::TPtr&, const TActorContext& ctx);
+    void Handle(TEvMoveData::TEvPoke::TPtr&, const TActorContext& ctx);
     void Handle(TEvFindEmptyHistoryIntervals::TEvScanFinished::TPtr& ev, const TActorContext& ctx);
     void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);
     void SetupMetadata();

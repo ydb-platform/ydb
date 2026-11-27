@@ -150,18 +150,6 @@ public:
         return OptimizerRuntimeSettings;
     }
 
-    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(NActualizer::TMoveDataMetadataBudget& budget) {
-        std::vector<TCSMetadataRequest> result;
-        for (auto&& [_, tableInfo] : Tables) {
-            if (budget.IsExhausted()) {
-                break;
-            }
-            auto requests = tableInfo->CollectMoveDataMetadataRequests(budget);
-            result.insert(result.end(), std::make_move_iterator(requests.begin()), std::make_move_iterator(requests.end()));
-        }
-        return result;
-    }
-
     std::vector<TCSMetadataRequest> CollectMetadataRequests() {
         std::vector<TCSMetadataRequest> result;
         for (auto&& i : Tables) {

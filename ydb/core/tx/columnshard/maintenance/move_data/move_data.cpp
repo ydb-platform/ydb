@@ -9,65 +9,116 @@
 
 namespace NKikimr::NColumnShard {
 
-TMoveDataDriver::TMoveDataDriver(TColumnShard* self)
-    : Self(self)
-    , MetadataTaskSubscription("CS::MOVE_DATA", self->Counters.GetSubscribeCounters())
-{
-}
-
-void TMoveDataDriver::AcceptRequest(const TActorId& sender, const THashSet<ui32>& requested, const TActorContext& ctx) {
+void TMoveDataCoordinator::AcceptRequest(const TActorId& sender, const THashSet<ui32>& requested, const TActorContext& ctx) {
     State.Subscribers.insert(sender);
     for (const auto groupId : requested) {
         State.TargetsChanged |= State.TargetGroups.emplace(groupId).second;
     }
     YDB_LOG_INFO("MoveData requested", {"tabletId", Self->TabletID()}, {"groups", State.TargetGroups.size()}, {"changed", State.TargetsChanged});
-    ctx.Send(SelfId(), new TEvMoveData::TEvPoke());
+    RequestStep(ctx);
 }
 
-void TMoveDataDriver::RestartActualizer() {
+void TMoveDataCoordinator::StopScan(const TActorContext& ctx) {
+    if (ScanActor) {
+        ctx.Send(ScanActor, new TEvents::TEvPoisonPill());
+        ScanActor = {};
+    }
+}
+
+void TMoveDataCoordinator::RestartScan(const TActorContext& ctx) {
+    StopScan(ctx);
     State.TargetsChanged = false;
-    // A fresh actualizer counts rejections from zero again.
-    State.ReportedRejections = 0;
+    Pending = 0;
     if (!Self->HasIndex()) {
         return;
     }
     auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
-    // A changed target set replaces the actualizers and seeds fresh queues.
     index.StopMoveData();
-    index.StartMoveData(State.TargetGroups);
+    std::vector<TMoveDataScanPortion> portions;
+    const auto append = [&](const auto& source) {
+        for (const auto& [_, portion] : source) {
+            if (portion->HasRemoveSnapshot()) {
+                continue;
+            }
+            const auto schema = portion->GetSchema(index.GetVersionedIndex());
+            if (portion->HasBlobsInBlobStorage(schema->GetIndexInfo())) {
+                portions.push_back({ portion->GetPathId(), portion->GetPortionId(), portion->PredictAccessorsMemory(schema) });
+            }
+        }
+    };
+    for (const auto& [_, granule] : index.GetTables()) {
+        append(granule->GetPortions());
+        append(granule->GetInsertedPortions());
+    }
+    Pending = portions.size();
+    if (Pending) {
+        ScanActor = ctx.Register(CreateMoveDataScan(Self->SelfId(), std::move(portions), State.TargetGroups,
+                                     NYDBTest::TControllers::GetColumnShardController()->GetMetadataRequestSoftMemoryLimit()),
+            TMailboxType::HTSwap, AppDataVerified().BatchPoolId);
+    }
 }
 
-void TMoveDataDriver::Stop(TColumnShard& owner, const TActorContext& ctx) {
-    if (owner.MoveDataDriver == nullptr) {
+void TMoveDataCoordinator::OnBatch(TEvMoveData::TEvBatch::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Sender != ScanActor || State.TargetsChanged) {
         return;
     }
-    // Same-mailbox callbacks cannot run between invalidation and tablet cleanup.
-    owner.MoveDataDriver->Self = nullptr;
-    ctx.Send(owner.MoveDataDriver->SelfId(), new TEvents::TEvPoison());
-    owner.MoveDataDriver = nullptr;
+    const auto& batch = *ev->Get();
+    auto next = std::make_unique<TEvMoveData::TEvContinue>();
+    auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
+    const auto visit = [&](const TMoveDataScanPortion& item, bool missing) {
+        const auto granule = index.GetGranuleOptional(item.PathId);
+        const auto portion = granule ? granule->GetPortionOptional(item.PortionId, false) : nullptr;
+        if (portion && !portion->HasRemoveSnapshot()) {
+            if (missing) {
+                next->Retry.push_back(item);
+            } else {
+                granule->AddMoveDataCandidate(*portion);
+            }
+        }
+    };
+    for (const auto& item : batch.Matches) {
+        visit(item, false);
+    }
+    for (const auto& item : batch.Missing) {
+        visit(item, true);
+    }
+    const size_t classified = batch.Matches.size() + batch.Rejected + batch.Missing.size() - next->Retry.size();
+    AFL_VERIFY(Pending >= classified);
+    Pending -= classified;
+    Self->Counters.GetCSCounters().OnMoveDataPortionsRejected(batch.Rejected);
+    ctx.Send(ScanActor, next.release());
+    if (!Pending) {
+        ScanActor = {};
+    }
+    RunMigrationStep(ctx);
 }
 
-void TMoveDataDriver::OnVacuumCompleted(const TActorContext& ctx) {
+void TMoveDataCoordinator::RequestStep(const TActorContext& ctx) {
+    if (IsActive() && !PokeScheduled) {
+        PokeScheduled = true;
+        ctx.Send(Self->SelfId(), new TEvMoveData::TEvPoke());
+    }
+}
+
+void TMoveDataCoordinator::OnVacuumCompleted(const TActorContext& ctx) {
     State.VacuumCompleted = true;
-    ctx.Send(SelfId(), new TEvMoveData::TEvPoke());
+    RequestStep(ctx);
 }
 
-NOlap::NActualizer::TMoveDataQueueSizes TMoveDataDriver::UpdateQueueSizes() {
+NOlap::NActualizer::TMoveDataQueueSizes TMoveDataCoordinator::UpdateQueueSizes() {
     if (!Self->HasIndex()) {
         return {};
     }
     return Self->MutableIndexAs<NOlap::TColumnEngineForLogs>().UpdateMoveDataQueueSizes();
 }
 
-TMoveDataDriver::ECompletionBlocker TMoveDataDriver::GetCompletionBlocker(const NOlap::NActualizer::TMoveDataQueueSizes& queues) const {
+TMoveDataCoordinator::ECompletionBlocker TMoveDataCoordinator::GetCompletionBlocker(
+    const NOlap::NActualizer::TMoveDataQueueSizes& queues) const {
     if (!State.VacuumCompleted) {
         return ECompletionBlocker::Vacuum;
     }
     if (queues.GetTotal() != 0) {
         return ECompletionBlocker::Portions;
-    }
-    if (queues.Retired != 0) {
-        return ECompletionBlocker::Cleanup;
     }
     const auto& sharedBlobs = Self->GetStoragesManager()->GetDefaultOperator()->GetSharedBlobs();
     AFL_VERIFY(sharedBlobs);
@@ -77,13 +128,9 @@ TMoveDataDriver::ECompletionBlocker TMoveDataDriver::GetCompletionBlocker(const 
     return ECompletionBlocker::None;
 }
 
-void TMoveDataDriver::ReportProgress(const NOlap::NActualizer::TMoveDataQueueSizes& queues, ECompletionBlocker blocker) {
+void TMoveDataCoordinator::ReportProgress(const NOlap::NActualizer::TMoveDataQueueSizes& queues, ECompletionBlocker blocker) {
     Self->Counters.GetCSCounters().OnMoveDataGateChecked();
     Self->Counters.GetCSCounters().OnMoveDataQueues(queues);
-    if (queues.Rejected > State.ReportedRejections) {
-        Self->Counters.GetCSCounters().OnMoveDataPortionsRejected(queues.Rejected - State.ReportedRejections);
-        State.ReportedRejections = queues.Rejected;
-    }
     switch (blocker) {
         case ECompletionBlocker::None:
             break;
@@ -96,10 +143,6 @@ void TMoveDataDriver::ReportProgress(const NOlap::NActualizer::TMoveDataQueueSiz
                 YDB_LOG_INFO("MoveData gate waits for uncommitted writes", {"tabletId", Self->TabletID()}, {"uncommitted", queues.Uncommitted});
             }
             break;
-        case ECompletionBlocker::Cleanup:
-            Self->Counters.GetCSCounters().OnMoveDataGateBlockedByCleanup();
-            YDB_LOG_INFO("MoveData gate waits for cleanup", {"tabletId", Self->TabletID()}, {"retired", queues.Retired});
-            break;
         case ECompletionBlocker::SharedBlobs:
             Self->Counters.GetCSCounters().OnMoveDataGateBlockedByShared();
             YDB_LOG_INFO("MoveData gate waits for shared blobs", {"tabletId", Self->TabletID()});
@@ -107,40 +150,21 @@ void TMoveDataDriver::ReportProgress(const NOlap::NActualizer::TMoveDataQueueSiz
     }
 }
 
-void TMoveDataDriver::FinishMigration(const TActorContext& ctx) {
+void TMoveDataCoordinator::FinishMigration(const TActorContext& ctx) {
     YDB_LOG_INFO("MoveData gate passed", {"tabletId", Self->TabletID()});
 
     if (Self->HasIndex()) {
         Self->MutableIndexAs<NOlap::TColumnEngineForLogs>().StopMoveData();
     }
-    // Rewrites and cleanup are committed. GC acknowledgements and CutHistory may follow after Hive restarts us.
+    // Removal snapshots are durable. Cleanup can resume after Hive restarts the tablet.
     for (const auto& subscriber : State.Subscribers) {
         ctx.Send(subscriber, new TEvTablet::TEvMoveDataResponse(Self->TabletID(), NKikimrTabletBase::TEvMoveDataResponse::Success));
     }
     Self->Counters.GetCSCounters().OnMoveDataFinished();
-    Stop(*Self, ctx);
+    State = {};
 }
 
-void TMoveDataDriver::SetupMetadataRequests() {
-    if (MetadataSubscribersInFlight->Val()) {
-        return;
-    }
-    NOlap::NActualizer::TMoveDataMetadataBudget budget(NYDBTest::TControllers::GetColumnShardController()->GetMetadataRequestSoftMemoryLimit());
-    Self->StartMetadataRequests(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().CollectMoveDataMetadataRequests(budget),
-        MetadataTaskSubscription, MetadataSubscribersInFlight, SelfId());
-}
-
-void TMoveDataDriver::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx) {
-    if (Self == nullptr) {
-        PassAway();
-        return;
-    }
-    AFL_VERIFY(ev->Get()->GetGeneration() == Self->Generation())("ev", ev->Get()->GetGeneration())("tablet", Self->Generation());
-    ev->Get()->GetProcessor()->ApplyResult(ev->Get()->ExtractResult(), Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());
-    RunMigrationStep(ctx);
-}
-
-void TMoveDataDriver::StartPortionRewrites() {
+void TMoveDataCoordinator::StartPortionRewrites() {
     const ui64 memoryUsageLimit = AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit();
     std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges = Self->TablesManager.MutablePrimaryIndex().StartTtl(
         {}, Self->DataLocksManager, memoryUsageLimit, NOlap::NActualizer::EActualizationScope::MoveDataOnly);
@@ -150,18 +174,23 @@ void TMoveDataDriver::StartPortionRewrites() {
     Self->StartTtlChanges(std::move(indexChanges));
 }
 
-void TMoveDataDriver::RunMigrationStep(const TActorContext& ctx) {
+void TMoveDataCoordinator::RunMigrationStep(const TActorContext& ctx) {
+    if (!IsActive()) {
+        return;
+    }
+    if (!WakeupScheduled) {
+        WakeupScheduled = true;
+        ctx.Schedule(TDuration::Seconds(5), new TEvMoveData::TEvWakeup());
+    }
     if (State.TargetsChanged) {
         // Initialize the portion queue only after deferred loading has populated the portion catalog.
         if (Self->HasIndex() && !Self->GetIndexAs<NOlap::TColumnEngineForLogs>().AreAllPortionsLoaded(std::nullopt)) {
             return;
         }
-        RestartActualizer();
+        RestartScan(ctx);
     }
-    const auto queues = UpdateQueueSizes();
-    if (queues.Pending) {
-        SetupMetadataRequests();
-    }
+    auto queues = UpdateQueueSizes();
+    queues.Pending = Pending;
     if (queues.ConfirmedToMove || queues.RewriteStarted) {
         StartPortionRewrites();
     }
@@ -172,20 +201,13 @@ void TMoveDataDriver::RunMigrationStep(const TActorContext& ctx) {
     }
 }
 
-void TMoveDataDriver::Handle(TEvMoveData::TEvWakeup::TPtr&, const TActorContext& ctx) {
-    if (Self == nullptr) {
-        PassAway();
-        return;
-    }
+void TMoveDataCoordinator::OnWakeup(const TActorContext& ctx) {
+    WakeupScheduled = false;
     RunMigrationStep(ctx);
-    ScheduleWakeup(ctx);
 }
 
-void TMoveDataDriver::Handle(TEvMoveData::TEvPoke::TPtr&, const TActorContext& ctx) {
-    if (Self == nullptr) {
-        PassAway();
-        return;
-    }
+void TMoveDataCoordinator::OnPoke(const TActorContext& ctx) {
+    PokeScheduled = false;
     RunMigrationStep(ctx);
 }
 

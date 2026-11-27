@@ -22,33 +22,28 @@ void TPortionQueue::SetState(EPortionState& state, EPortionState next) {
 }
 
 void TPortionQueue::ErasePortion(TPortions::iterator portion) {
-    AFL_VERIFY(portion->second == EPortionState::Finished || portion->second == EPortionState::Rejected);
+    AFL_VERIFY(portion->second == EPortionState::Finished);
     const auto next = std::next(portion);
-    for (auto* cursor : { &StateUpdateCursor, &RewriteCursor, &MetadataCursor }) {
+    for (auto* cursor : { &StateUpdateCursor, &RewriteCursor }) {
         if (*cursor == portion) {
             *cursor = next;
         }
     }
-    PortionsById.erase(portion->first);
     Portions.erase(portion);
     // Terminal counters are cumulative; only active states count towards the completion gate.
 }
 
 TMoveDataQueueSizes TPortionQueue::GetSizes() const {
     return TMoveDataQueueSizes{
-        .Pending = Count(EPortionState::Pending),
         .ConfirmedToMove = Count(EPortionState::Ready),
         .RewriteStarted = Count(EPortionState::RewriteStarted),
         .Uncommitted = Count(EPortionState::Uncommitted),
-        .Retired = Count(EPortionState::Retired),
-        .Rejected = Count(EPortionState::Rejected),
     };
 }
 
-void TPortionQueue::Add(ui64 portionId) {
-    const auto entry = Portions.emplace(Portions.end(), portionId, EPortionState::Pending);
-    AFL_VERIFY(PortionsById.emplace(portionId, entry).second);
-    ++Count(EPortionState::Pending);
+void TPortionQueue::Add(ui64 portionId, EPortionState state) {
+    Portions.emplace_back(portionId, state);
+    ++Count(state);
 }
 
 }   // namespace NKikimr::NOlap::NActualizer

@@ -23,14 +23,12 @@ namespace NKikimr::NOlap::NActualizer {
 // Rewrites portions out of the given BS groups; the filter needs a loaded accessor for BlobIds.
 class TMoveDataActualizer: public IActualizer {
 private:
-    const THashSet<ui32> TargetGroups;
     const TVersionedIndex& VersionedIndex;
     TPortionQueue Queue;
-    bool PortionQueueInitialized = false;
     static constexpr size_t PortionsPerPass = 1024;
 
 protected:
-    // Progress is read from the seeded portions; normal index notifications do not change session membership.
+    // Only portions selected by the scan enter the rewrite queue.
     void DoAddPortion(const TPortionInfo&, const TAddExternalContext&) override {
     }
 
@@ -43,28 +41,19 @@ protected:
 public:
     static bool HasBlobInGroups(const std::vector<TUnifiedBlobId>& blobIds, const THashSet<ui32>& groups);
 
-    void ActualizePortionInfo(const TPortionDataAccessor& accessor);
+    void AddCandidate(ui64 portionId, bool committed);
 
-    // Resume a bounded metadata pass after the preceding requests finish.
-    std::vector<TCSMetadataRequest> BuildMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions,
-        const TWrittenPortionsById& uncommitted, const std::shared_ptr<TMoveDataActualizer>& self,
-        TMoveDataMetadataBudget& budget);
-
-    // Update a bounded batch from current portion state, including commits, retirement, and cleanup.
+    // Update a bounded batch from current portion state, including commits and durable retirement.
     size_t UpdatePortionStates(
         const THashMap<ui64, TPortionInfo::TPtr>& portions, const TWrittenPortionsById& uncommitted, size_t limit = PortionsPerPass);
 
     TMoveDataQueueSizes GetMoveDataQueueSizes() const;
 
-    // Once, right after construction: a new target set gets a new actualizer.
-    void InitializePortionQueue(const TAddExternalContext& externalContext, const TWrittenPortionsById& uncommitted);
-
     TMoveDataActualizer(const TMoveDataActualizer&) = delete;
     TMoveDataActualizer& operator=(const TMoveDataActualizer&) = delete;
 
-    TMoveDataActualizer(THashSet<ui32> targetGroups, const TVersionedIndex& versionedIndex)
-        : TargetGroups(std::move(targetGroups))
-        , VersionedIndex(versionedIndex)
+    explicit TMoveDataActualizer(const TVersionedIndex& versionedIndex)
+        : VersionedIndex(versionedIndex)
     {
     }
 };

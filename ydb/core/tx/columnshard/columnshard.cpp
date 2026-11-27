@@ -51,8 +51,9 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     for (auto&& i : ActorsToStop) {
         ctx.Send(i, new TEvents::TEvPoisonPill);
     }
-    // The driver holds a raw pointer to this tablet, so it must not outlive it.
-    TMoveDataDriver::Stop(*this, ctx);
+    if (MoveDataCoordinator) {
+        MoveDataCoordinator->StopScan(ctx);
+    }
     StopLocalDbBackup(ctx);
 
     StoragesManager->Stop();

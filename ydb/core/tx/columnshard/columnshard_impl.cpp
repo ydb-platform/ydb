@@ -6,6 +6,7 @@
 #include "blobs_action/bs/storage.h"
 #include "blobs_reader/task.h"
 #include "common/tablet_id.h"
+#include "maintenance/move_data/move_data.h"
 #include "resource_subscriber/task.h"
 
 #ifndef KIKIMR_DISABLE_S3_OPS
@@ -2052,6 +2053,9 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvUpdateChannelApproximateFreeSpace, Handle);
         HFunc(TEvPrivate::TEvStartCompaction, Handle);
         HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
+        HFunc(TEvMoveData::TEvBatch, Handle);
+        HFunc(TEvMoveData::TEvWakeup, Handle);
+        HFunc(TEvMoveData::TEvPoke, Handle);
         HFunc(TEvFindEmptyHistoryIntervals::TEvScanFinished, Handle);
         HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);
         HFunc(NOlap::TEvPassWriteGate, Handle);

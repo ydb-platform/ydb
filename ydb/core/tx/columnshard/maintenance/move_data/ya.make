@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     move_data.cpp
+    scan.cpp
 )
 
 PEERDIR(
@@ -13,7 +14,9 @@ PEERDIR(
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/engines
     ydb/core/tx/columnshard/hooks/abstract
-    ydb/core/tx/columnshard/resource_subscriber
+    ydb/core/tx/columnshard/data_accessor/cache_policy
+    ydb/core/tx/columnshard/engines/storage/actualizer/move
+    ydb/core/tx/general_cache/usage
     ydb/library/actors/core
 )
 

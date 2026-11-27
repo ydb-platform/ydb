@@ -173,10 +173,6 @@ public:
         return GranulesStorage->CollectMetadataRequests();
     }
 
-    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(NActualizer::TMoveDataMetadataBudget& budget) const {
-        return GranulesStorage->CollectMoveDataMetadataRequests(budget);
-    }
-
     ui64 GetCompactionPriority(const std::set<TInternalPathId>& pathIds, const std::optional<ui64> waitingPriority) const noexcept override;
     std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
@@ -194,12 +190,6 @@ public:
 
     void ReturnToIndexes(const THashMap<TInternalPathId, THashSet<ui64>>& portions) const {
         return GranulesStorage->ReturnToIndexes(portions);
-    }
-
-    void StartMoveData(const THashSet<ui32>& targetGroups) {
-        for (auto& [_, granule] : GranulesStorage->GetTables()) {
-            granule->StartMoveData(targetGroups);
-        }
     }
 
     void StopMoveData() {

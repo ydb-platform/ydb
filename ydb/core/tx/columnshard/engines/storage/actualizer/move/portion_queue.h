@@ -3,7 +3,6 @@
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/queue_sizes.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/hash.h>
 
 #include <array>
 #include <list>
@@ -14,24 +13,19 @@ namespace NKikimr::NOlap::NActualizer {
 class TPortionQueue {
 public:
     enum class EPortionState {
-        Pending,   // Blob groups have not been classified yet.
         Ready,
         RewriteStarted,   // A target-group rewrite was scheduled; retry after abort, wait for retirement after success.
         Uncommitted,
-        Retired,
         Finished,
-        Rejected,
         Count,
     };
 
 private:
     using TPortions = std::list<std::pair<ui64, EPortionState>>;
     TPortions Portions;
-    THashMap<ui64, TPortions::iterator> PortionsById;
     std::array<ui64, static_cast<size_t>(EPortionState::Count)> StateCounts = {};
     TPortions::iterator StateUpdateCursor = Portions.end();
     TPortions::iterator RewriteCursor = Portions.end();
-    TPortions::iterator MetadataCursor = Portions.end();
 
     ui64& Count(EPortionState state);
     const ui64& Count(EPortionState state) const;
@@ -42,28 +36,9 @@ public:
     TPortionQueue(const TPortionQueue&) = delete;
     TPortionQueue& operator=(const TPortionQueue&) = delete;
 
-    void Add(ui64 portionId);
+    void Add(ui64 portionId, EPortionState state);
     void SetState(EPortionState& state, EPortionState next);
     TMoveDataQueueSizes GetSizes() const;
-
-    bool HasPending() const {
-        return Count(EPortionState::Pending) != 0;
-    }
-
-    template <class TClassifier>
-    void ClassifyPending(ui64 portionId, TClassifier&& classify) {
-        const auto found = PortionsById.find(portionId);
-        if (found == PortionsById.end()) {
-            return;
-        }
-        const auto entry = found->second;
-        if (entry->second == EPortionState::Pending) {
-            SetState(entry->second, classify());
-            if (entry->second == EPortionState::Rejected) {
-                ErasePortion(entry);
-            }
-        }
-    }
 
     template <class TVisitor>
     size_t ScanForStateUpdate(size_t limit, TVisitor&& visitor) {
@@ -78,11 +53,6 @@ public:
         return Scan(RewriteCursor, limit, visitor);
     }
 
-    template <class TVisitor>
-    size_t ScanForMetadata(size_t limit, TVisitor&& visitor) {
-        return Scan(MetadataCursor, limit, visitor);
-    }
-
 private:
     template <class TVisitor>
     size_t Scan(TPortions::iterator& position, size_t limit, TVisitor&& visitor) {
@@ -93,7 +63,7 @@ private:
             }
             const auto current = position++;
             const bool keepScanning = visitor(current->first, current->second);
-            if (current->second == EPortionState::Finished || current->second == EPortionState::Rejected) {
+            if (current->second == EPortionState::Finished) {
                 ErasePortion(current);
             }
             if (!keepScanning) {

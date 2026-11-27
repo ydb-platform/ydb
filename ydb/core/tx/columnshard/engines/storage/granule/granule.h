@@ -178,10 +178,6 @@ public:
         return ActualizationIndex->CollectMetadataRequests(Portions);
     }
 
-    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(NActualizer::TMoveDataMetadataBudget& budget) {
-        return ActualizationIndex->CollectMoveDataMetadataRequests(Portions, InsertedPortionsById, budget);
-    }
-
     const NStorageOptimizer::IOptimizerPlanner& GetOptimizerPlanner() const {
         return *OptimizerPlanner;
     }
@@ -269,9 +265,8 @@ public:
         ActualizationIndex->RefreshScheme(context);
     }
 
-    void StartMoveData(THashSet<ui32> targetGroups) {
-        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
-        ActualizationIndex->StartMoveData(std::move(targetGroups), context, InsertedPortionsById);
+    void AddMoveDataCandidate(const TPortionInfo& portion) {
+        ActualizationIndex->AddMoveDataCandidate(portion.GetPortionId(), portion.IsCommitted());
     }
 
     void StopMoveData() {

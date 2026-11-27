@@ -14,8 +14,13 @@ jobs:
       shell: bash
       run: |
         # Count only recent queued PR-check runs (see POSTCOMMIT_GATE_CONFIG).
+        # Avoid ${var:-{}} — bash treats the first } as end of expansion and
+        # leaves a stray }, which breaks jq JSON parsing.
         gate_config='${{ vars.POSTCOMMIT_GATE_CONFIG }}'
-        max_age_hours=$(jq -r '.ignore_pr_check_older_than_hours // 6' <<<"${gate_config:-{}}")
+        if [ -z "$gate_config" ]; then
+          gate_config='{}'
+        fi
+        max_age_hours=$(jq -r '.ignore_pr_check_older_than_hours // 6' <<<"$gate_config")
         max_age_seconds=$(jq -n --argjson h "$max_age_hours" '$h * 3600')
         queue_threshold='${{ vars.POSTCOMMIT_QUEUE_THRESHOLD }}'
 

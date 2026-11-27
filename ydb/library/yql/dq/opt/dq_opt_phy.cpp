@@ -1589,6 +1589,9 @@ TExprBase DqNarrowPartitionsByKeysInput(TExprBase node, TExprContext& ctx, const
         return node;
     }
     const auto& rowType = *itemType->Cast<TStructExprType>();
+    if (rowType.GetSize() < 2) {
+        return node;
+    }
 
     const auto& stream = partition.ListHandlerLambda().Args().Arg(0).Ref();
     const auto streamParents = parentsMap.find(&stream);

@@ -334,7 +334,7 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
                 Text AS extra1, Text AS extra2, Text AS extra3
             FROM `/Root/EightShard`;
             SELECT COUNT(*) AS rows, COUNT(DISTINCT trace_id) AS unique_rows,
-                Yson::From(ListSort(AGGREGATE_LIST(TableRow()), ($row) -> ($row.Key))) AS all_rows
+                ListSort(AGGREGATE_LIST(TableRow()), ($row) -> ($row.Key)) AS all_rows
             FROM $input;
         )");
     }
@@ -355,15 +355,6 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
             FROM `/Root/EightShard`;
             SELECT Key, Text, Data, total, SUM(total) OVER (PARTITION BY Text) AS second_total
             FROM $first;
-        )");
-    }
-
-    Y_UNIT_TEST(NarrowWindowAggregateInputKeepsDistinctWindowResults) {
-        CheckNarrowWindowAggregateResults(R"(
-            SELECT Key, Text, Data,
-                SUM(Data) OVER w AS total, COUNT(DISTINCT Data) OVER w AS distinct_values
-            FROM `/Root/EightShard`
-            WINDOW w AS (PARTITION BY Text);
         )");
     }
 

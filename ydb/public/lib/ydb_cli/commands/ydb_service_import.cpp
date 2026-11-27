@@ -159,7 +159,8 @@ void TCommandImportBase::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
     for (auto& item : Items) {
         if (item.Destination) {
-            if (CommonDestinationPath && item.Destination[0] != '/') {
+            if (CommonDestinationPath && item.Destination[0] != '/'
+                && (config.Database.empty() || config.Database.StartsWith('/'))) {
                 item.Destination = CommonDestinationPath + "/" + item.Destination;
             }
             NConsoleClient::AdjustPath(item.Destination, config);
@@ -235,7 +236,7 @@ void TCommandImportBase::FillItemsFromItemParam(NImport::TImportFromS3Settings& 
             if (!item.Source.empty() && item.Source.back() != '/') {
                 item.Source += "/";
             }
-            if (!item.Destination.empty() && item.Destination.back() == '.') {
+            if (item.Destination.StartsWith('/') && item.Destination.back() == '.') {
                 item.Destination.pop_back();
             }
             if (item.Destination.empty() || item.Destination.back() != '/') {

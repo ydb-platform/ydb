@@ -92,7 +92,7 @@ void TCommandToolsInferCsv::Parse(TConfig& config) {
 
 namespace {
     std::string GetRelativePath(const std::string& fullPath, TClientCommand::TConfig& config) {
-        if (!config.Database) {
+        if (!config.Database || !config.Database.StartsWith('/')) {
             return fullPath;
         }
 

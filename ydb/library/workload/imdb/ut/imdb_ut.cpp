@@ -51,21 +51,33 @@ Y_UNIT_TEST_SUITE(ImdbWorkload) {
     }
 
     Y_UNIT_TEST(AllQueriesTranslate) {
-        TImdbWorkloadParams params;
-        params.DbPath = "/Root";
-        params.SetPath("benchmarks/imdb");
-        const auto generator = params.CreateGenerator();
-        const auto queries = generator->GetWorkload(0);
-        UNIT_ASSERT_VALUES_EQUAL(queries.size(), 113);
-        UNIT_ASSERT_VALUES_EQUAL(queries.front().QueryName, "1a");
-        UNIT_ASSERT_VALUES_EQUAL(queries.back().QueryName, "33c");
-        THashSet<TString> names;
-        for (const auto& query: queries) {
-            UNIT_ASSERT(names.insert(query.QueryName).second);
-            UNIT_ASSERT_STRING_CONTAINS(query.Query, "PRAGMA TablePathPrefix = \"/Root/benchmarks/imdb\";");
-            AssertTranslates(query.Query);
+        struct TCase {
+            std::string Database;
+            TString Path;
+            TString Prefix;
+        };
+        for (const auto& testCase : TVector<TCase>{
+            {"/Root", "benchmarks/imdb", "PRAGMA TablePathPrefix = \"/Root/benchmarks/imdb\";"},
+            {".", "benchmarks/imdb", "PRAGMA RelativePathPrefix = \"./benchmarks/imdb\";"},
+            {".", "/Root/benchmarks/imdb", "PRAGMA TablePathPrefix = \"/Root/benchmarks/imdb\";"},
+            {"", "benchmarks/imdb", "PRAGMA TablePathPrefix = \"/benchmarks/imdb\";"},
+        }) {
+            TImdbWorkloadParams params;
+            params.DbPath = testCase.Database;
+            params.SetPath(testCase.Path);
+            const auto generator = params.CreateGenerator();
+            const auto queries = generator->GetWorkload(0);
+            UNIT_ASSERT_VALUES_EQUAL(queries.size(), 113);
+            UNIT_ASSERT_VALUES_EQUAL(queries.front().QueryName, "1a");
+            UNIT_ASSERT_VALUES_EQUAL(queries.back().QueryName, "33c");
+            THashSet<TString> names;
+            for (const auto& query: queries) {
+                UNIT_ASSERT(names.insert(query.QueryName).second);
+                UNIT_ASSERT_STRING_CONTAINS(query.Query, testCase.Prefix);
+                AssertTranslates(query.Query);
+            }
+            UNIT_ASSERT(generator->GetWorkload(1).empty());
         }
-        UNIT_ASSERT(generator->GetWorkload(1).empty());
     }
 
     Y_UNIT_TEST(SchemaAndCleanupPaths) {

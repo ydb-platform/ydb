@@ -18,7 +18,7 @@ void TWorkloadCommandIndexBase::Config(TConfig& config) {
 }
 
 int TWorkloadCommandIndexBase::Run(TConfig& config) {
-    Params.DbPath = config.Database;
+    Params.DbPath = config.Database.empty() || config.Database.StartsWith('/') ? config.Database : TString(".");
 
     Driver = MakeHolder<NYdb::NConsoleClient::TScopedDriver>(CreateDriver(config));
     QueryClient = MakeHolder<NYdb::NQuery::TQueryClient>(*Driver);
@@ -53,7 +53,7 @@ int TWorkloadCommandBuildIndex::DoRun() {
     }
 
     TStringBuilder ddlQuery;
-    ddlQuery << "ALTER TABLE `" << Params.DbPath << "/" << Params.TableOpts.Name << "`\n";
+    ddlQuery << "ALTER TABLE `" << Params.GetFullTableName(Params.TableOpts.Name.c_str()) << "`\n";
     ddlQuery << "ADD INDEX `" << Params.IndexName << "`\n";
     ddlQuery << "GLOBAL USING vector_kmeans_tree\n";
     ddlQuery << "ON (embedding)\n";
@@ -93,11 +93,10 @@ void TWorkloadCommandDropIndex::DoConfig(TConfig& config) {
 
 int TWorkloadCommandDropIndex::DoRun() {
     const TString ddlQuery = std::format(R"_(
-            ALTER TABLE `{0}/{1}`
-            DROP INDEX `{2}`;
+            ALTER TABLE `{0}`
+            DROP INDEX `{1}`;
         )_",
-        Params.DbPath.c_str(),
-        Params.TableOpts.Name.c_str(),
+        Params.GetFullTableName(Params.TableOpts.Name.c_str()).c_str(),
         Params.IndexName.c_str()
     );
 

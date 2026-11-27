@@ -300,9 +300,9 @@ class TExportFixture : public TCliTestFixture {
     }
 
 public:
-    TList<TString> S3ExportArgs(const TList<TString>& options) {
+    TList<TString> S3ExportArgs(const TList<TString>& options, const TString& database = {}) {
         TList<TString> args = {
-            "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+            "-e", GetEndpoint(), "-d", database.empty() ? GetDatabase() : database, "export", "s3",
             "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
             "--access-key", "test-key", "--secret-key", "test-access-key",
             "--destination-prefix", "dst",
@@ -313,6 +313,51 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(ExportTest) {
+    Y_UNIT_TEST_F(RelativeDatabaseCommonBase, TExportFixture) {
+        for (const bool expand : {false, true}) {
+            Service<TSchemeImpl>().ExpectedDatabase = "tenant";
+            if (expand) {
+                Service<TSchemeImpl>().ExpectListDirectory("root/path/orders", Ydb::Scheme::Entry::TABLE);
+            }
+            Service<TExportImpl>().ExpectBucket(TEST_BUCKET).ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key").ExpectS3SecretKey("test-access-key")
+                .ExpectCommonSourcePrefix("root/path").ExpectCommonDstPrefix("dst")
+                .ExpectItem("orders", "");
+            auto args = S3ExportArgs({"--root-path", "root/path", "--include", "orders"}, "tenant");
+            if (expand) {
+                args.insert(args.end(), {"--exclude", "^never$"});
+            }
+            RunCli(args);
+        }
+    }
+
+    Y_UNIT_TEST_F(RelativeDatabaseRootExclusions, TExportFixture) {
+        for (const TString root : {"", ".", "reports", "reports/", "/test_database/tenant/reports"}) {
+            for (const bool excludeAll : {false, true}) {
+                const TString listRoot = root.empty() || root == "." ? TString(".") : root == "reports/" ? TString("reports") : root;
+                Service<TSchemeImpl>().ExpectedDatabase = "tenant";
+                Service<TSchemeImpl>().ExpectListDirectory(listRoot)
+                    .ExpectChild(listRoot, "keep", Ydb::Scheme::Entry::TABLE)
+                    .ExpectChild(listRoot, "skip", Ydb::Scheme::Entry::TABLE);
+                auto& service = Service<TExportImpl>();
+                service.ExpectBucket(TEST_BUCKET).ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                    .ExpectS3AccessKey("test-key").ExpectS3SecretKey("test-access-key")
+                    .ExpectCommonSourcePrefix(root).ExpectCommonDstPrefix("dst");
+                if (excludeAll) {
+                    service.ExpectNoExportCall();
+                    ExpectFail();
+                } else {
+                    service.ExpectItem("keep", "dst/keep");
+                }
+                auto args = S3ExportArgs({"--exclude", excludeAll ? "^.*$" : "^skip$"}, "tenant");
+                if (!root.empty()) {
+                    args.insert(args.end(), {"--root-path", root});
+                }
+                RunCli(args);
+            }
+        }
+    }
+
     Y_UNIT_TEST_F(BadRequestDoesNotRetryWithTablesOnly, TExportFixture) {
         for (const bool nfs : {false, true}) {
             for (const bool includeTable : {false, true}) {

@@ -253,7 +253,7 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
 }
 
 void TWorkloadBaseParams::Validate(const ECommandType /*commandType*/, int /*workloadType*/) {
-    if (Path.StartsWith('/')) {
+    if (Path.StartsWith('/') && DbPath != ".") {
         if (!Path.StartsWith("/" + DbPath)) {
             throw yexception() << "Absolute path does not start with " << DbPath << ": " << Path;
         }
@@ -262,6 +262,9 @@ void TWorkloadBaseParams::Validate(const ECommandType /*commandType*/, int /*wor
 }
 
 TString TWorkloadBaseParams::GetFullTableName(const char* table) const {
+    if (DbPath == "." && TStringBuf(table).StartsWith('/')) {
+        return table;
+    }
     TStringBuilder result;
     if (Path.StartsWith('/')) {
         result << Path;

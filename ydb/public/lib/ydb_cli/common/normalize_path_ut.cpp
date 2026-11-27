@@ -32,6 +32,18 @@ Y_UNIT_TEST_SUITE(NormalizePathTest) {
 
         UNIT_ASSERT_EXCEPTION(AdjustPath("/abc", FakeConfig("/root/db")), TMisuseException);
         UNIT_ASSERT_EXCEPTION(AdjustPath("/root/bd/abc", FakeConfig("/root/db")), TMisuseException);
+        UNIT_ASSERT(AdjustPath("abc", FakeConfig("db")) == "abc");
+        UNIT_ASSERT(AdjustPath("./abc", FakeConfig("db")) == "./abc");
+        UNIT_ASSERT(AdjustPath("/abc", FakeConfig("db")) == "/abc");
+        UNIT_ASSERT(AdjustPath("", FakeConfig("/root/db")) == "/root/db");
+        UNIT_ASSERT(AdjustPath("", FakeConfig("")) == "");
+        UNIT_ASSERT(AdjustPath("abc", FakeConfig("")) == "/abc");
+        UNIT_ASSERT(AdjustPath("/abc", FakeConfig("")) == "/abc");
+        for (const TString path : {"", ".", "./abc", "dir//abc/", "/root/other/abc"}) {
+            UNIT_ASSERT_VALUES_EQUAL(AdjustPath(path, FakeConfig("tenant")), path);
+        }
+        auto config = FakeConfig("/root/db");
+        config.Path = "/root/db/subdir";
+        UNIT_ASSERT_VALUES_EQUAL(AdjustPath("abc", config), "/root/db/subdir/abc");
     }
 }
-

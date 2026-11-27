@@ -967,6 +967,7 @@ template<class Pointer = void, class Smart, class... Args>
 
 #  if _LIBCPP_STD_VER >= 20
 #    include <__memory/assume_aligned.h>
+#    include <__memory/atomic_shared_ptr.h>
 #    include <__memory/concepts.h>
 #    include <__memory/ranges_construct_at.h>
 #    include <__memory/ranges_destroy.h>

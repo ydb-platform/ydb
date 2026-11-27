@@ -39,15 +39,7 @@ class TMirror3dcGetStrategy : public IStrategy {
         const auto& disk = state.Disks[diskIdx];
         ui64 score = ui64((diskIdx < 3 ? 0 : 1) + (disk.IsSlow ? 2 : 0)) << 32;
         if (NodeLayout) {
-            const auto& diskItems = NodeLayout->LocationPerOrderNumber[disk.OrderNumber].GetItems();
-            const auto& selfItems = NodeLayout->SelfLocation.GetItems();
-            ui32 commonPrefixKey = Min<ui32>();
-            for (auto diskIt = diskItems.begin(), selfIt = selfItems.begin();
-                    diskIt != diskItems.end() && selfIt != selfItems.end() && *diskIt == *selfIt;
-                    ++diskIt, ++selfIt) {
-                commonPrefixKey = diskIt->first;
-            }
-            score += Max<ui32>() - commonPrefixKey;
+            score += NodeLayout->DistancePerOrderNumber[disk.OrderNumber];
         }
         return score;
     }

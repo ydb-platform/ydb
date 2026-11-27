@@ -759,12 +759,12 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
             TTest legacy({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
             for (auto* test : {&current, &legacy}) {
                 THashMap<ui32, NActors::TNodeLocation> nodeLocations;
-                test->NodeLayout = MakeIntrusive<TNodeLayoutInfo>(self, test->Info, nodeLocations);
                 for (ui32 disk = 0; disk < 9; ++disk) {
                     auto& state = test->Blackboard[test->Id].Disks[disk];
                     state.IsSlow = mask & (1u << disk);
-                    test->NodeLayout->LocationPerOrderNumber[state.OrderNumber] = locations[disk];
+                    nodeLocations.emplace(test->Info->GetActorId(state.OrderNumber).NodeId(), locations[disk]);
                 }
+                test->NodeLayout = MakeIntrusive<TNodeLayoutInfo>(self, test->Info, nodeLocations);
             }
             UNIT_ASSERT(current.Run() == EStrategyOutcome::IN_PROGRESS);
             UNIT_ASSERT(legacy.Run(false, true) == EStrategyOutcome::IN_PROGRESS);

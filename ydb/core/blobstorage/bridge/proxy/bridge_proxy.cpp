@@ -70,6 +70,8 @@ namespace NKikimr {
         bool Passthrough = false;
         std::shared_ptr<const TBridgeProxyPoolCounters> PoolCounters;
         TBridgeProxyCounters RequestCounters;
+        std::vector<TBridgePileReadLayout> ReadLayouts;
+        bool SubscribedToReadLayouts = false;
 
         using TClusterState = NKikimrBridge::TClusterState;
 
@@ -95,6 +97,115 @@ namespace NKikimr {
         static bool GroupPartTakesGets(NKikimrBridge::TGroupState::EStage stage) {
             return stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA
                 || stage == NKikimrBridge::TGroupState::SYNCED;
+        }
+
+        struct TReadCost {
+            ui32 WorstDistance = 0;
+            ui64 ReadsAtWorstDistance = 0;
+
+            void Add(ui32 distance) {
+                if (distance > WorstDistance) {
+                    WorstDistance = distance;
+                    ReadsAtWorstDistance = 0;
+                }
+                ReadsAtWorstDistance += distance == WorstDistance;
+            }
+
+            auto operator<=>(const TReadCost&) const = default;
+        };
+
+        std::optional<TReadCost> EstimateReadCost(const TEvBlobStorage::TEvGet& get, TBridgePileId pile,
+                const NKikimrBridge::TGroupState::TPile& part) const {
+            if (pile.GetPileIndex() >= ReadLayouts.size()) {
+                return std::nullopt;
+            }
+            const auto& layout = ReadLayouts[pile.GetPileIndex()];
+            if (!layout.Group || layout.Group->GroupID != GetPartGroupId(part) ||
+                    layout.Group->GroupGeneration != part.GetGroupGeneration() || !layout.Nodes->HasAllDataCenters) {
+                return std::nullopt;
+            }
+            const auto& group = *layout.Group;
+            const auto& distances = layout.Nodes->DistancePerOrderNumber;
+            TReadCost cost;
+            for (const auto& query : std::span(get.Queries.Get(), get.QuerySize)) {
+                TBlobStorageGroupInfo::TOrderNums disks;
+                group.GetTopology().PickSubgroup(query.Id.Hash(), disks);
+                if (group.Type.ErasureFamily() == TErasureType::ErasureParityBlock) {
+                    // A healthy block read goes straight to the data parts intersecting the requested range.
+                    const ui32 size = query.Id.BlobSize();
+                    if (query.Shift >= size) {
+                        return std::nullopt;
+                    }
+                    const ui32 end = query.Size ? query.Shift + Min(query.Size, size - query.Shift) : size;
+                    TBlockSplitRange range;
+                    group.Type.BlockSplitRange(static_cast<TErasureType::ECrcMode>(query.Id.CrcMode()),
+                        size, query.Shift, end, &range);
+                    for (ui32 part = range.BeginPartIdx; part < range.EndPartIdx; ++part) {
+                        if (range.PartRanges[part].Begin != range.PartRanges[part].End) {
+                            cost.Add(distances[disks[part]]);
+                        }
+                    }
+                } else if (group.Type.GetErasure() == TErasureType::ErasureMirror3dc) {
+                    std::optional<ui32> nearest;
+                    for (ui32 main = 0; main < 3; ++main) {
+                        const ui32 order = disks[main];
+                        if (group.IsFailRealmReadable(group.GetTopology().GetVDiskId(order).FailRealm)) {
+                            nearest = Min(nearest.value_or(Max<ui32>()), distances[order]);
+                        }
+                    }
+                    if (!nearest) {
+                        return std::nullopt;
+                    }
+                    cost.Add(*nearest);
+                } else if (group.Type.GetErasure() == TErasureType::ErasureMirror3of4) {
+                    // DS proxy shuffles the four possible primary reads. Use the furthest possible primary.
+                    cost.Add(std::max({distances[disks[0]], distances[disks[1]],
+                        distances[disks[2]], distances[disks[3]]}));
+                } else {
+                    Y_DEBUG_ABORT_UNLESS(group.Type.GetErasure() == TErasureType::ErasureNone);
+                    cost.Add(distances[disks[0]]);
+                }
+            }
+            return cost;
+        }
+
+        TBridgePileId PickInitialGetPile(const TEvBlobStorage::TEvGet& get, const NKikimrBridge::TGroupState& state,
+                TBridgePileId authorityPileId) const {
+            const bool canProbeStandby = !get.ReaderTabletData && !get.ForceBlockTabletData && !get.AcquireBlockedGeneration &&
+                !get.Decommission && !get.IsInternal && !get.PhantomCheck && !get.CollectDebugInfo &&
+                !get.ReportDetailedPartMap && !get.IsVerboseNoDataEnabled;
+            TBridgePileId local, best;
+            std::optional<std::tuple<TReadCost, bool, bool>> bestRank;
+            bool comparable = true;
+            NBridge::ForEachGroupPile(state, [&](TBridgePileId id, const auto& part) {
+                const auto* pile = BridgeInfo->FindPile(id);
+                if (!pile) {
+                    return;
+                }
+                const bool standby = pile->State == TClusterState::HOT_STANDBY && id != authorityPileId && canProbeStandby;
+                if (!standby && !(pile->State == TClusterState::SYNCHRONIZED && IsPileInDataQuorum(id) &&
+                        PartHoldsEverything(state, *pile, authorityPileId))) {
+                    return;
+                }
+                const bool self = pile == BridgeInfo->SelfNodePile;
+                if (self) {
+                    local = id;
+                }
+                if (!comparable) {
+                    return;
+                }
+                if (const auto cost = EstimateReadCost(get, id, part)) {
+                    const auto rank = std::tuple(*cost, !self, standby);
+                    if (!bestRank || rank < *bestRank) {
+                        bestRank = rank;
+                        best = id;
+                    }
+                } else {
+                    comparable = false;
+                }
+            });
+            // A cold or changing layout is only a routing hint. Use the eligible local pile or fan out immediately.
+            return comparable ? best : local;
         }
 
         static std::unique_ptr<TEvBlobStorage::TEvGet> MakeGetSubrequest(const TEvBlobStorage::TEvGet& original,
@@ -1207,12 +1318,21 @@ namespace NKikimr {
 
             // the proxy is in the registry of Node Warden before it gets the storage config it needs to serve requests,
             // so that every seal Node Warden handles from now on reaches it
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NStorage::TEvNodeWardenRegisterBridgeProxy(GroupId,
-                true));
+            RegisterWithNodeWarden(AppData()->FeatureFlags.GetEnableBridgeProxyLocalPileFirstGet());
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(/*subscribe=*/ true));
             Become(&TThis::StateWaitBridgeInfo);
             WaitBridgeInfoSince = TActivationContext::Monotonic();
             HandleWakeup();
+        }
+
+        void RegisterWithNodeWarden(bool subscribeToReadLayouts) {
+            SubscribedToReadLayouts = subscribeToReadLayouts;
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NStorage::TEvNodeWardenRegisterBridgeProxy(GroupId,
+                true, subscribeToReadLayouts));
+        }
+
+        void Handle(TEvBridgeProxyReadLayouts::TPtr ev) {
+            ReadLayouts = std::move(ev->Get()->Piles);
         }
 
         void HandleWakeup() {
@@ -1625,21 +1745,14 @@ namespace NKikimr {
             TBridgePileId initialGetPileId;
             bool probeStandby = false;
             if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvGet>) {
-                const auto *selfPile = BridgeInfo->SelfNodePile;
                 const auto& get = *ev->Get();
                 if (AppData()->FeatureFlags.GetEnableBridgeProxyLocalPileFirstGet() && !get.MustRestoreFirst &&
                         !get.IsIndexOnly && get.Deadline == TInstant::Max()) {
-                    if (selfPile->State == TClusterState::SYNCHRONIZED && IsPileInDataQuorum(selfPile->BridgePileId) &&
-                            PartHoldsEverything(state, *selfPile, authorityPileId)) {
-                        initialGetPileId = selfPile->BridgePileId;
-                    } else if (selfPile->State == TClusterState::HOT_STANDBY && selfPile->BridgePileId != authorityPileId &&
-                            NBridge::GetGroupPile(state, selfPile->BridgePileId) &&
-                            !get.ReaderTabletData && !get.ForceBlockTabletData && !get.AcquireBlockedGeneration &&
-                            !get.Decommission && !get.IsInternal && !get.PhantomCheck && !get.CollectDebugInfo &&
-                            !get.ReportDetailedPartMap && !get.IsVerboseNoDataEnabled) {
-                        initialGetPileId = selfPile->BridgePileId;
-                        probeStandby = true;
+                    if (!SubscribedToReadLayouts) {
+                        RegisterWithNodeWarden(true); // the feature was enabled at runtime
                     }
+                    initialGetPileId = PickInitialGetPile(get, state, authorityPileId);
+                    probeStandby = initialGetPileId && BridgeInfo->GetPile(initialGetPileId)->State == TClusterState::HOT_STANDBY;
                 }
             }
 
@@ -2442,6 +2555,7 @@ namespace NKikimr {
             hFunc(TEvBlobStorage::TEvConfigureProxy, Handle)
             hFunc(TEvBlobStorage::TEvBunchOfEvents, Handle)
             hFunc(TEvNodeWardenStorageConfig, Handle)
+            hFunc(TEvBridgeProxyReadLayouts, Handle)
             hFunc(NStorage::TEvNodeWardenStandbySeal, Handle)
             hFunc(TEvCheckPendingRequests, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
@@ -2499,8 +2613,9 @@ namespace NKikimr {
                 for (auto& ev : std::exchange(PendingQ, {})) {
                     TActivationContext::Send(ev.release());
                 }
-            } else if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
-                StateFunc(ev); // pending requests are answered with error
+            } else if (ev->GetTypeRewrite() == TEvBridgeProxyReadLayouts::EventType ||
+                    ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
+                StateFunc(ev);
             } else if (ev->GetTypeRewrite() == TEvents::TSystem::Wakeup) {
                 HandleWakeup();
                 CheckWaitBridgeInfoTimeout();

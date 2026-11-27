@@ -99,16 +99,7 @@ namespace NKikimr {
 
                 if (NodeLayout) {
                     const ui32 orderNumber = state.Disks[diskIdx].OrderNumber;
-                    const auto& diskItems = NodeLayout->LocationPerOrderNumber[orderNumber].GetItems();
-                    const auto& selfItems = NodeLayout->SelfLocation.GetItems();
-                    i64 commonPrefixKey = Min<int>();
-                    for (auto diskIt = diskItems.begin(), selfIt = selfItems.begin();; ++diskIt, ++selfIt) {
-                        if (diskIt == diskItems.end() || selfIt == selfItems.end() || *diskIt != *selfIt) {
-                            break;
-                        }
-                        commonPrefixKey = diskIt->first;
-                    }
-                    score += Max<int>() - commonPrefixKey;
+                    score += NodeLayout->DistancePerOrderNumber[orderNumber];
                 }
 
                 return score;

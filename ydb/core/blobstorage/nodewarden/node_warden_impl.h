@@ -981,7 +981,8 @@ namespace NKikimr::NStorage {
         // the bridge proxies running on this node by the group they serve, and the seals of the parts promoted from
         // HOT_STANDBY being waited for from them (by cookie); a proxy registering while the seal is in progress gets it
         // too
-        THashMap<TGroupId, THashSet<TActorId>> BridgeProxies;
+        THashMap<TGroupId, THashMap<TActorId, bool>> BridgeProxies; // value is subscription to physical read layouts
+        void SendBridgeReadLayouts(TGroupId groupId, bool resolveMissing = false);
         struct TStandbySealInProgress {
             TGroupId BridgeProxyGroupId;
             ui32 BridgeProxyGroupGeneration;

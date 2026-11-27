@@ -223,10 +223,12 @@ namespace NKikimr::NStorage {
     {
         const TGroupId GroupId;
         const bool Registered;
+        const bool SubscribeToReadLayouts;
 
-        TEvNodeWardenRegisterBridgeProxy(TGroupId groupId, bool registered)
+        TEvNodeWardenRegisterBridgeProxy(TGroupId groupId, bool registered, bool subscribeToReadLayouts = false)
             : GroupId(groupId)
             , Registered(registered)
+            , SubscribeToReadLayouts(subscribeToReadLayouts)
         {}
     };
 

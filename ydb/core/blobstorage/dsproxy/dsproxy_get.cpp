@@ -63,12 +63,14 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         TLogoBlobID BlobId;
         ui64 Shift;
         ui64 Size;
+        std::optional<ui32> BlobIndex;
     };
     struct TVGetTrace {
         NWilson::TSpan Span;
         TVector<TTraceQuery> Queries;
     };
     THashMap<ui64, TVGetTrace> VGetTraces;
+    THashMap<TLogoBlobID, ui32> TraceBlobIndices;
     NWilson::TSpanEventBudget TraceEvents;
     ui32 VGetTraceCount = 0;
     ui64 VGetTraceDropped = 0;
@@ -188,6 +190,19 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         GetImpl.History.AddAllWaiting();
     }
 
+    std::optional<ui32> TraceBlobIndex(const TLogoBlobID& id) {
+        const auto full = id.FullID();
+        if (auto it = TraceBlobIndices.find(full); it != TraceBlobIndices.end()) {
+            return it->second;
+        }
+        if (TraceBlobIndices.size() == 32) {
+            return {};
+        }
+        const ui32 index = TraceBlobIndices.size();
+        TraceBlobIndices.emplace(full, index);
+        return index;
+    }
+
     void TraceVGetSent(const TEvBlobStorage::TEvVGet& event, ui32 disk, const char* cause) {
         auto* owner = Span.GetWilsonSpanPtr();
         if (!owner || !*owner || owner->GetTraceId().GetVerbosity() < 13) {
@@ -219,7 +234,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
             const ui64 shift = query.GetShift();
             const ui64 partSize = Info->Type.PartSize(blob);
             const ui64 size = query.GetSize() ? query.GetSize() : (partSize >= shift ? partSize - shift : 0);
-            trace.Queries.push_back({blob, shift, size});
+            trace.Queries.push_back({blob, shift, size, TraceBlobIndex(blob)});
         }
         trace.Span.Attribute("ydb.storage.items_truncated", event.Record.ExtremeQueriesSize() > 32);
         TraceEvents.Event(trace.Span, 13, "VGet dispatched");
@@ -276,7 +291,11 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                     state = &done->second;
                 }
                 if (state) {
-                    attributes["blob_index"] = static_cast<i64>(state->BlobIdx);
+                    if (requested.BlobIndex) {
+                        attributes["blob_index"] = static_cast<i64>(*requested.BlobIndex);
+                    } else {
+                        attributes["blob_index_truncated"] = true;
+                    }
                     attributes["strategy_whole_situation"] = static_cast<i64>(state->WholeSituation);
                 }
                 return attributes;

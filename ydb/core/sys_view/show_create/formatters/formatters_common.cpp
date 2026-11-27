@@ -2,10 +2,12 @@
 
 #include <yql/essentials/ast/yql_ast_escaping.h>
 
+#include <util/string/subst.h>
+
 namespace NKikimr::NSysView {
 
 void EscapeName(const TString& str, TStringStream& stream) {
-    NYql::EscapeArbitraryAtom(str, '`', &stream);
+    NYql::EscapeArbitraryAtom(SubstGlobalCopy(str, "`", "``"), '`', &stream);
 }
 
 void EscapeString(const TString& str, TStringStream& stream) {

@@ -487,7 +487,7 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
         case TType::EKind::Struct: {
             auto structType = static_cast<const TStructType*>(type);
             NUdf::TUnboxedValue* itemsPtr = nullptr;
-            auto res = holderFactory.CreateDirectArrayHolder(structType->GetMembersCount(), itemsPtr);
+            NUdf::TUnboxedValue res = holderFactory.CreateDirectArrayHolder(structType->GetMembersCount(), itemsPtr);
             for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
                 auto memberType = structType->GetMemberType(index);
                 itemsPtr[index] = UnpackFromChunkedBuffer<Fast>(memberType, buf, topLength, holderFactory, s);
@@ -498,7 +498,7 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
         case TType::EKind::Tuple: {
             auto tupleType = static_cast<const TTupleType*>(type);
             NUdf::TUnboxedValue* itemsPtr = nullptr;
-            auto res = holderFactory.CreateDirectArrayHolder(tupleType->GetElementsCount(), itemsPtr);
+            NUdf::TUnboxedValue res = holderFactory.CreateDirectArrayHolder(tupleType->GetElementsCount(), itemsPtr);
             for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
                 auto elementType = tupleType->GetElementType(index);
                 itemsPtr[index] = UnpackFromChunkedBuffer<Fast>(elementType, buf, topLength, holderFactory, s);

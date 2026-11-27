@@ -576,8 +576,10 @@ namespace NKikimr::NStorage {
         }
 
         Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
+        const auto* op = std::get_if<TInvokeExternalOperation>(&Query);
+        const bool skipPlacement = op && op->Command.GetSwitchBridgeClusterState().GetSkipBootstrapPlacementCheck();
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
-                                      SelfId(), mindPrev, AdvancesConflictingGeneration, RecoveryProposition);
+            SelfId(), mindPrev, AdvancesConflictingGeneration, RecoveryProposition, skipPlacement, BootstrapPlacementWarnings);
         if (error) {
             YDB_LOG_DEBUG("Config update validation failed",
                 {"marker", "NWDC78"},
@@ -712,7 +714,7 @@ namespace NKikimr::NStorage {
                 }
             },
             [&](TProposeConfig&) {
-                if (status != TResult::OK && InvokePipelineGeneration == Self->InvokePipelineGeneration) {
+                if (status != TResult::OK && status != TResult::PRECONDITION_FAILED && InvokePipelineGeneration == Self->InvokePipelineGeneration) {
                     // we were asked to commit config, but error has occured
                     Y_ABORT_UNLESS(errorReason);
                     switchToError.emplace(*errorReason);
@@ -767,6 +769,7 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::PassAway() {
+        CancelBootstrapPlacementWait();
         if (!LifetimeToken.expired()) {
             if (FreshConfigQueryGroup) {
                 for (const auto& [nodeId, request] : FreshConfigQueryGroup->RefillRequests) {
@@ -810,6 +813,7 @@ namespace NKikimr::NStorage {
         try {
             STRICT_STFUNC_BODY(
                 cFunc(TEvPrivate::EvExecuteQuery, HandleExecuteQuery);
+                cFunc(TEvPrivate::EvBootstrapPlacementReady, HandleBootstrapPlacementReady);
                 hFunc(TEvPrivate::TEvAbortQuery, Handle);
                 hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
                 hFunc(TEvNodeConfigGather, Handle);

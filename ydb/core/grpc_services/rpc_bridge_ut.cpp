@@ -87,6 +87,8 @@ struct TUpdateOptions {
     Ydb::Bridge::PileState::State RequestedState = Ydb::Bridge::PileState::DISCONNECTED;
     bool PublishConfigBeforeReply = false;
     bool SuspendPrimary = false;
+    bool SkipBootstrapPlacementCheck = false;
+    bool ThirdPilePromoted = false;
 };
 
 struct TGetOptions {
@@ -124,6 +126,7 @@ struct TSetup {
         if (options.BadQuorum) {
             request.add_quorum_piles("unknown");
         }
+        request.set_skip_bootstrap_placement_check(options.SkipBootstrapPlacementCheck);
         if (options.ExpectedGeneration) {
             request.set_expected_generation(*options.ExpectedGeneration);
         }
@@ -132,7 +135,7 @@ struct TSetup {
         auto ctx = std::make_unique<NRpcService::TLocalRpcCtx<TRpc, TCb>>(
             std::move(request), TCb(promise), "/Root", Nothing(), Nothing(), false);
         Runtime.Register(new TStartRequest(std::move(ctx)));
-        const auto rpc = ReplyWithConfig(options.ConfigGeneration, options.SecondaryState);
+        const auto rpc = ReplyWithConfig(options.ConfigGeneration, options.SecondaryState, options.ThirdPilePromoted);
         return std::pair{rpc, promise.GetFuture()};
     }
 
@@ -198,7 +201,8 @@ struct TSetup {
     }
 
     TActorId ReplyWithConfig(std::optional<ui64> generation = 1,
-            NKikimrBridge::TClusterState::EPileState secondaryState = NKikimrBridge::TClusterState::SYNCHRONIZED)
+            NKikimrBridge::TClusterState::EPileState secondaryState = NKikimrBridge::TClusterState::SYNCHRONIZED,
+            bool thirdPilePromoted = false)
     {
         const auto query = Runtime.GrabEdgeEventIf<TEvNodeWardenQueryStorageConfig>(NodeWarden,
             [](const auto& ev) { return !ev->Get()->Subscribe; }, TDuration::Seconds(5));
@@ -227,6 +231,16 @@ struct TSetup {
             bridge->Piles[i].Name = i ? "secondary" : "primary";
             bridge->Piles[i].State = i ? secondaryState : NKikimrBridge::TClusterState::SYNCHRONIZED;
             bridge->Piles[i].IsPrimary = i == 0;
+        }
+        if (thirdPilePromoted) {
+            auto& pile = bridge->Piles.emplace_back();
+            pile.BridgePileId = TBridgePileId::FromPileIndex(2);
+            pile.Name = "promoted";
+            pile.State = NKikimrBridge::TClusterState::SYNCHRONIZED;
+            pile.IsBeingPromoted = true;
+            bridge->BeingPromotedPile = &pile;
+            state->AddPerPileState(pile.State);
+            pile.BridgePileId.CopyToProto(state, &NKikimrBridge::TClusterState::SetPromotedPile);
         }
         bridge->PrimaryPile = &bridge->Piles[0];
         bridge->SelfNodePile = &bridge->Piles[1];
@@ -1439,6 +1453,26 @@ Y_UNIT_TEST_SUITE(BridgeUpdateClusterState) {
         UNIT_ASSERT_VALUES_EQUAL_C(reply.operation().status(), Ydb::StatusIds::ABORTED,
             reply.operation().DebugString());
         UNIT_ASSERT_STRING_CONTAINS(reply.operation().DebugString(), "root generation mismatch");
+    }
+
+    Y_UNIT_TEST(ForwardsBootstrapPlacementOverrideAndGeneration) {
+        const auto reply = TestForwarded({.ExpectedGeneration = 14, .ConfigGeneration = 14,
+            .RequestedState = Ydb::Bridge::PileState::PROMOTED, .SkipBootstrapPlacementCheck = true},
+            EInvokeStatus::OK, {}, [](const auto& cmd) {
+                UNIT_ASSERT(cmd.GetSkipBootstrapPlacementCheck());
+                UNIT_ASSERT_VALUES_EQUAL(cmd.GetExpectedGeneration(), 14);
+            });
+        UNIT_ASSERT_VALUES_EQUAL(reply.operation().status(), Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(DisconnectingSecondaryDoesNotOverridePendingPlacement) {
+        const auto reply = TestForwarded({.SkipBootstrapPlacementCheck = true, .ThirdPilePromoted = true}, EInvokeStatus::OK, {},
+            [](const auto& cmd) {
+                UNIT_ASSERT(!cmd.GetSkipBootstrapPlacementCheck());
+                UNIT_ASSERT_VALUES_EQUAL(cmd.GetNewClusterState().GetPrimaryPile(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(cmd.GetNewClusterState().GetPromotedPile(), 3);
+            });
+        UNIT_ASSERT_VALUES_EQUAL(reply.operation().status(), Ydb::StatusIds::SUCCESS);
     }
 
     Y_UNIT_TEST(PlannedTakedownReportsPlacementFailure) {

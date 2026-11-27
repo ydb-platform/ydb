@@ -56,6 +56,10 @@ namespace NKikimr::NStorage {
             TExRace() { Status = TResult::RACE; }
         };
 
+        struct TExPlacement : TExError {
+            TExPlacement() { Status = TResult::PRECONDITION_FAILED; }
+        };
+
         struct TExGenerationMismatch : TExError {
             TExGenerationMismatch() { Status = TResult::GENERATION_MISMATCH; }
         };
@@ -160,7 +164,12 @@ namespace NKikimr::NStorage {
         std::optional<ui64> StorageYamlVersion;
         bool IsDryRun = false;
         std::vector<TString> BootstrapPlacementWarnings;
-        bool CheckBootstrapPlacement(const NKikimrBlobStorage::TStorageConfig& config, TBridgePileId targetPile = {});
+        std::shared_ptr<TBootstrapPlacement> WaitingForBootstrapPlacement;
+        std::function<void()> ResumeAfterBootstrapPlacement;
+        bool BootstrapPlacementWaitFinished = false;
+        bool AwaitBootstrapPlacement(const std::shared_ptr<TBootstrapPlacement>& entry, std::function<void()> resume);
+        void HandleBootstrapPlacementReady();
+        void CancelBootstrapPlacementWait();
 
         static constexpr TDuration CommitConfirmationTimeout = TDuration::Seconds(30);
         TDuration NextDisableRetryOffset = TDuration::Seconds(1);

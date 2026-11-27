@@ -1559,6 +1559,7 @@ endDiskTypeCheck:   ;
     }
 
     void PrepareBootstrapConfig(NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed) {
+        PrepareSystemTabletsInfo(config, ephemeralConfig, relaxed);
         if (config.HasBootstrapConfig() && config.GetBootstrapConfig().TabletSize()) {
             return;
         }
@@ -1637,6 +1638,13 @@ endDiskTypeCheck:   ;
         }
     }
 
+    void TransformBootstrapPlacement(TTransformContext&, NKikimrConfig::TAppConfig& config,
+            NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed) {
+        PrepareHosts(ephemeralConfig);
+        PrepareNameserviceConfig(config, ephemeralConfig);
+        PrepareBootstrapConfig(config, ephemeralConfig, relaxed);
+    }
+
     void TransformProtoConfig(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed) {
         PrepareHosts(ephemeralConfig);
         MoveFields(ctx, config, ephemeralConfig);
@@ -1644,7 +1652,6 @@ endDiskTypeCheck:   ;
         PrepareNameserviceConfig(config, ephemeralConfig);
         PrepareStaticGroup(ctx, config, ephemeralConfig);
         PrepareBlobStorageConfig(config, ephemeralConfig);
-        PrepareSystemTabletsInfo(config, ephemeralConfig, relaxed);
         PrepareBootstrapConfig(config, ephemeralConfig, relaxed);
         PrepareDomainsConfig(config, ephemeralConfig, relaxed);
         PrepareIcConfig(config, ephemeralConfig);
@@ -1737,8 +1744,20 @@ endDiskTypeCheck:   ;
         }
     }
 
+    void MergeStorageConfig(NJson::TJsonValue& main, NJson::TJsonValue storage) {
+        auto& target = main["config"].GetMapSafe();
+        for (auto& [key, value] : storage["config"].GetMapSafe()) {
+            target.emplace(key, std::move(value));
+        }
+    }
+
     void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config,
                bool transform, EParsePhase* phase, bool relaxed) {
+        Parse(json, std::move(convertConfig), config, transform ? TransformProtoConfig : nullptr, phase, relaxed);
+    }
+
+    void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config,
+               TProtoConfigTransform transform, EParsePhase* phase, bool relaxed) {
         auto runPhase = [phase](EParsePhase value, auto&& func) {
             try {
                 func();
@@ -1788,7 +1807,7 @@ endDiskTypeCheck:   ;
 
         if (transform) {
             runPhase(EParsePhase::Transform, [&] {
-                TransformProtoConfig(ctx, config, ephemeralConfig, relaxed);
+                transform(ctx, config, ephemeralConfig, relaxed);
             });
         }
     }

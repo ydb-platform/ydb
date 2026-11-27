@@ -126,19 +126,15 @@ namespace NKikimr::NStorage {
                     << " expected# " << current.GetGeneration() + 1;
             }
 
-            const auto primary = TBridgePileId::FromProto(&newClusterState, &NKikimrBridge::TClusterState::GetPrimaryPile);
-            const auto promoted = TBridgePileId::FromProto(&newClusterState, &NKikimrBridge::TClusterState::GetPromotedPile);
-            const auto oldPrimary = Self->BridgeInfo->PrimaryPile->BridgePileId;
-            if (primary != oldPrimary || (numDifferent && onlyDisconnects)) {
-                const bool emergency = numDifferent && onlyDisconnects && (primary == oldPrimary ||
-                    newClusterState.GetPerPileState(oldPrimary.GetPileIndex()) == NKikimrBridge::TClusterState::DISCONNECTED);
-                if (!CheckBootstrapPlacement(*Self->StorageConfig, primary) && !emergency) {
-                    return Finish(TResult::PRECONDITION_FAILED, JoinSeq("\n", BootstrapPlacementWarnings));
-                }
-            }
-            if (promoted != primary && newClusterState.GetPromotedPile() != current.GetPromotedPile() &&
-                    !CheckBootstrapPlacement(*Self->StorageConfig, promoted)) {
-                return Finish(TResult::PRECONDITION_FAILED, JoinSeq("\n", BootstrapPlacementWarnings));
+            const bool plannedPrimary = newClusterState.GetPrimaryPile() != current.GetPrimaryPile() &&
+                !Self->IsEmergencyPileDisconnect(current, newClusterState);
+            const bool newPromoted = newClusterState.GetPromotedPile() != current.GetPromotedPile() &&
+                newClusterState.GetPromotedPile() != newClusterState.GetPrimaryPile();
+            if ((plannedPrimary || newPromoted) && !cmd.GetSkipBootstrapPlacementCheck() &&
+                    AwaitBootstrapPlacement(Self->GetBootstrapPlacement(*Self->StorageConfig), [this] {
+                        SwitchBridgeClusterState(std::get<TInvokeExternalOperation>(Query).Command.GetSwitchBridgeClusterState());
+                    })) {
+                return;
             }
         }
 

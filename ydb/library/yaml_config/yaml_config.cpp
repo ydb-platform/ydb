@@ -13,10 +13,10 @@
 
 namespace NKikimr::NYamlConfig {
 
-NKikimrConfig::TAppConfig YamlToProto(
+static NKikimrConfig::TAppConfig ParseYamlNode(
     const NFyaml::TNodeRef& node,
     bool allowUnknown,
-    bool preTransform,
+    NYaml::TProtoConfigTransform transform,
     TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector)
 {
     TStringStream sstr;
@@ -30,9 +30,24 @@ NKikimrConfig::TAppConfig YamlToProto(
     NJson::ReadJsonTree(resolvedJsonConfig, &json);
 
     NKikimrConfig::TAppConfig yamlProtoConfig;
-    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(allowUnknown, std::move(unknownFieldsCollector)), yamlProtoConfig, preTransform, /*phase=*/ nullptr, /*relaxed=*/ true);
+    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(allowUnknown, std::move(unknownFieldsCollector)), yamlProtoConfig, transform, /*phase=*/ nullptr, /*relaxed=*/ true);
 
     return yamlProtoConfig;
+}
+
+NKikimrConfig::TAppConfig YamlToProto(const NFyaml::TNodeRef& node, bool allowUnknown, bool preTransform,
+        TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> collector) {
+    return ParseYamlNode(node, allowUnknown, preTransform ? NYaml::TransformProtoConfig : nullptr, std::move(collector));
+}
+
+void EnumerateBootstrapPlacementConfigs(NFyaml::TDocument& doc,
+        const std::function<void(const NKikimrConfig::TBootstrap*, const TProjectionMatches&)>& visit) {
+    // These are the inputs to node eligibility, including generated IDs and default node lists.
+    static const TVector<TString> sections{"/bootstrap_config", "/system_tablets", "/nameservice_config", "/hosts"};
+    EnumerateDistinctProjections(doc, sections, [&](NFyaml::TNodeRef node, const TProjectionMatches& matches) {
+        const auto app = ParseYamlNode(node, true, NYaml::TransformBootstrapPlacement, {});
+        visit(app.HasBootstrapConfig() ? &app.GetBootstrapConfig() : nullptr, matches);
+    }, /*maxStates=*/256, /*maxTransitions=*/100000);
 }
 
 void ResolveAndParseYamlConfig(
@@ -197,6 +212,8 @@ EValidationResult IConfigSwissKnife::ValidateConfig(
     return EValidationResult::Ok;
 }
 
+namespace {
+
 const TVector<TString>& SharedValidationInputs() {
     static const TVector<TString> sections = [] {
         TVector<TString> result = {
@@ -213,8 +230,6 @@ const TVector<TString>& SharedValidationInputs() {
     }();
     return sections;
 }
-
-namespace {
 
 TVector<TVector<TString>> ValidationGroups(
     NFyaml::TDocument& doc, const TVector<TVector<TString>>& dependencies)

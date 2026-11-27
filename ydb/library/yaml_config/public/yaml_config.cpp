@@ -6,6 +6,7 @@
 #include <functional>
 #include <limits>
 #include <stack>
+#include <utility>
 
 template <>
 struct THash<NKikimr::NYamlConfig::TLabel> {
@@ -1412,22 +1413,49 @@ public:
         return Universe;
     }
 
-    bool Matches(TId region, const TMap<TString, TString>& knownLabels) {
+    bool Matches(TId region, const TMap<TString, TString>& knownLabels) const {
+        // Follow assigned bits; either branch of an unknown label can match.
+        TMap<size_t, bool> bits;
         for (const auto& [name, value] : knownLabels) {
             const auto it = Domains.find(name);
             if (it == Domains.end()) {
                 continue;
             }
             const auto& domain = it->second;
+            size_t index = 0; // all other values of an open label
             if (const auto pos = domain.Values.find(value); pos != domain.Values.end()) {
-                region = And(region, Equal(domain, pos->second));
-            } else if (domain.Labels->begin()->Type == TLabel::EType::Negative) {
-                region = And(region, Equal(domain, 0)); // all other values of an open label
-            } else {
+                index = pos->second;
+            } else if (domain.Labels->begin()->Type != TLabel::EType::Negative) {
                 return false;
             }
+            for (size_t bit = domain.Bits; bit; --bit, index >>= 1) {
+                bits.emplace(domain.FirstBit + bit - 1, index & 1);
+            }
         }
-        return region != 0;
+        if (bits.empty() || region <= 1) {
+            return region != 0;
+        }
+        TVector<TId> pending{region};
+        THashSet<TId> visited;
+        while (!pending.empty()) {
+            const auto id = pending.back();
+            pending.pop_back();
+            if (id == 1) {
+                return true;
+            }
+            if (!id || !visited.insert(id).second) {
+                continue;
+            }
+            const auto& node = Nodes[id >> 1];
+            const auto bit = bits.find(node.Bit);
+            if (bit == bits.end() || !bit->second) {
+                pending.push_back(node.Low ^ (id & 1));
+            }
+            if (bit == bits.end() || bit->second) {
+                pending.push_back(node.High ^ (id & 1));
+            }
+        }
+        return false;
     }
 
     TId MatchValues(const TString& name, const TSet<TString>& values) {
@@ -1665,7 +1693,8 @@ void EnumerateDistinctProjections(
 void EnumerateDistinctProjections(
     NFyaml::TDocument& doc,
     const TVector<TString>& sectionPrefixes,
-    const std::function<void(NFyaml::TNodeRef, const TProjectionMatches&)>& onProjection)
+    const std::function<void(NFyaml::TNodeRef, const TProjectionMatches&)>& onProjection,
+    size_t maxStates, size_t maxTransitions)
 {
     auto model = ParseConfig(doc);
     TVector<TString> names;
@@ -1702,22 +1731,26 @@ void EnumerateDistinctProjections(
         TLabelRegions::TId Region;
     };
     TMap<TString, TState> states;
-    auto insert = [&](auto& into, NFyaml::TDocument config, TLabelRegions::TId region) {
-        if (region == 0) {
-            return;
-        }
-        // Tags on the destination do not affect Apply; only overlay tags do.
-        RemoveTags(config);
-        auto key = ProjectionStateKey(config.Root());
+    auto insert = [&](auto& into, auto&& key, NFyaml::TDocument&& config, TLabelRegions::TId region) {
         if (auto it = into.find(key); it != into.end()) {
             it->second.Region = regions.Or(it->second.Region, region);
         } else {
-            into.emplace(std::move(key), TState{std::move(config), region});
+            Y_ENSURE(into.size() < maxStates, "too many distinct YAML projections");
+            into.emplace(std::forward<decltype(key)>(key), TState{std::move(config), region});
         }
     };
-    insert(states, ProjectSections(model.Config, sectionPrefixes), compatible);
+    auto insertProjection = [&](auto& into, NFyaml::TDocument config, TLabelRegions::TId region) {
+        // Tags on the destination do not affect Apply; only overlay tags do.
+        RemoveTags(config);
+        insert(into, ProjectionStateKey(config.Root()), std::move(config), region);
+    };
+    if (compatible) {
+        insertProjection(states, ProjectSections(model.Config, sectionPrefixes), compatible);
+    }
 
     for (auto& overlay : overlays) {
+        Y_ENSURE(states.size() <= maxTransitions, "too many YAML selector combinations");
+        maxTransitions -= states.size();
         TLabelRegions::TId matches = 1;
         for (const auto& [name, values] : overlay.Selector->In) {
             matches = regions.And(matches, regions.MatchValues(name, values.Values));
@@ -1738,14 +1771,10 @@ void EnumerateDistinctProjections(
                     auto patch = overlay.Config.Root().Copy(config);
                     Apply(root, patch.Ref());
                 }
-                insert(next, std::move(config), hit);
+                insertProjection(next, std::move(config), hit);
             }
             if (miss != 0) {
-                if (auto it = next.find(key); it != next.end()) {
-                    it->second.Region = regions.Or(it->second.Region, miss);
-                } else {
-                    next.emplace(key, TState{std::move(state.Config), miss});
-                }
+                insert(next, key, std::move(state.Config), miss);
             }
         }
         states = std::move(next);

@@ -91,8 +91,9 @@ NKikimrConfig::TAppConfig YamlToProto(
     bool preTransform = true,
     TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector = nullptr);
 
-// Sections needed to apply the YAML transforms when validating a projection.
-const TVector<TString>& SharedValidationInputs();
+// A null bootstrap section uses the merged startup configuration. Both arguments are valid only during the visit.
+void EnumerateBootstrapPlacementConfigs(NFyaml::TDocument& doc,
+    const std::function<void(const NKikimrConfig::TBootstrap*, const TProjectionMatches&)>& visit);
 
 /**
  * Resolves config for given labels and stores result to appConfig

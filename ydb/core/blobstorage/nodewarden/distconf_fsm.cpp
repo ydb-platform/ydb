@@ -1438,7 +1438,8 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> TDistributedConfigKeeper::StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev,
-            bool advancesConflictingGeneration, bool recoveryProposition) {
+            bool advancesConflictingGeneration, bool recoveryProposition, bool skipBootstrapPlacementCheck,
+            std::vector<TString>& warnings) {
         // ensure we are not proposing any other config right now
         Y_ABORT_UNLESS(!CurrentProposition);
 
@@ -1469,8 +1470,6 @@ namespace NKikimr::NStorage {
             if (auto error = TransformConfigBeforeCommit(configToPropose)) {
                 return error;
             }
-
-            UpdateFingerprint(configToPropose);
         }
 
 #define VALIDATE_SELECTION(NAME) \
@@ -1484,13 +1483,6 @@ namespace NKikimr::NStorage {
         VALIDATE_SELECTION(SchemeBoard)
 #undef VALIDATE_SELECTION
 
-        YDB_LOG_INFO("StartProposition",
-            {"marker", "NWDC60"},
-            {"configToPropose", *configToPropose},
-            {"propositionBase", propositionBase},
-            {"storageConfig", StorageConfig.get()},
-            {"actorId", actorId});
-
         if (propositionBase) {
             if (auto error = ValidateConfig(*propositionBase)) {
                 return TStringBuilder() << "failed to propose configuration, base config contains errors: " << *error;
@@ -1503,6 +1495,20 @@ namespace NKikimr::NStorage {
         } else if (auto error = ValidateConfig(*configToPropose)) {
             return TStringBuilder() << "incorrect config proposed: " << *error;
         }
+
+        if (!recoveryProposition) {
+            if (propositionBase && propositionBase->HasClusterState() && configToPropose->HasClusterState()) {
+                CheckBootstrapPlacementChange(*propositionBase, *configToPropose, skipBootstrapPlacementCheck, warnings);
+            }
+            UpdateFingerprint(configToPropose);
+        }
+
+        YDB_LOG_INFO("StartProposition",
+            {"marker", "NWDC60"},
+            {"configToPropose", *configToPropose},
+            {"propositionBase", propositionBase},
+            {"storageConfig", StorageConfig.get()},
+            {"actorId", actorId});
 
         // remember proposition
         CurrentProposition.emplace(TProposition{

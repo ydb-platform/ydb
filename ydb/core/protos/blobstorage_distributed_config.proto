@@ -337,6 +337,7 @@ message TEvNodeConfigInvokeOnRoot {
         // when set, apply only if the current cluster state generation equals this value;
         // NewClusterState.Generation must then be ExpectedGeneration + 1
         optional uint64 ExpectedGeneration = 3;
+        bool SkipBootstrapPlacementCheck = 4;
     }
 
     message TNotifyBridgeSyncFinished {

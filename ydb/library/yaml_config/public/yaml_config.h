@@ -6,6 +6,7 @@
 #include <openssl/sha.h>
 
 #include <functional>
+#include <limits>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -212,12 +213,14 @@ void EnumerateDistinctProjections(
     const TVector<TString>& sections,
     const std::function<void(NFyaml::TNodeRef)>& onProjection);
 
-// The predicate tests whether a projection can apply to a node with the given known labels.
+// During the callback, the predicate tests whether a projection can apply to a node with the given known labels.
 using TProjectionMatches = std::function<bool(const TMap<TString, TString>&)>;
 void EnumerateDistinctProjections(
     NFyaml::TDocument& doc,
     const TVector<TString>& sections,
-    const std::function<void(NFyaml::TNodeRef, const TProjectionMatches&)>& onProjection);
+    const std::function<void(NFyaml::TNodeRef, const TProjectionMatches&)>& onProjection,
+    size_t maxStates = std::numeric_limits<size_t>::max(),
+    size_t maxTransitions = std::numeric_limits<size_t>::max());
 
 // Collect top-level section paths from the base config and all selector overrides.
 TSet<TString> CollectConfigSections(NFyaml::TDocument& doc);

@@ -73,6 +73,12 @@ namespace NKikimr::NYaml {
 
     // TODO: replace bools with something meaningful
 
+    using TProtoConfigTransform = decltype(&TransformProtoConfig);
+    void TransformBootstrapPlacement(TTransformContext& ctx, NKikimrConfig::TAppConfig& config,
+        NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed);
+
+    void MergeStorageConfig(NJson::TJsonValue& main, NJson::TJsonValue storage);
+
     enum class EParsePhase {
         Preprocess,
         JsonToProto,
@@ -81,6 +87,8 @@ namespace NKikimr::NYaml {
 
     void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config,
                bool transform, EParsePhase* phase = nullptr, bool relaxed = false);
+    void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config,
+               TProtoConfigTransform transform, EParsePhase* phase = nullptr, bool relaxed = false);
     NKikimrConfig::TAppConfig Parse(const TString& data, bool transform = true);
 
     void ValidateMetadata(const NJson::TJsonValue& metadata);

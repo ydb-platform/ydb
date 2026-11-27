@@ -1,6 +1,7 @@
 #include "yaml_config.h"
 
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/builder.h>
@@ -420,6 +421,41 @@ selector_config:
             UNIT_ASSERT_VALUES_EQUAL(config.Map().at("log_config").Map().at("cluster_name").Scalar(), "base");
         });
         UNIT_ASSERT_VALUES_EQUAL(count, 1);
+    }
+
+    Y_UNIT_TEST(BootstrapPlacementLimitsOnlyRelevantSelectorCombinations) {
+        for (bool changesPlacement : {false, true}) {
+            TStringBuilder yaml;
+            yaml << "config: {bootstrap_config: {tablet: [{type: FLAT_HIVE, node: [1]}]}}\nallowed_labels:\n";
+            for (ui32 i = 0; i < 10; ++i) {
+                yaml << "  label" << i << ": {type: string}\n";
+            }
+            yaml << "selector_config:\n";
+            for (ui32 i = 0; i < 10; ++i) {
+                yaml << "- description: add an independent setting\n  selector: {label" << i << ": enabled}\n  config:\n";
+                if (changesPlacement) {
+                    yaml << "    bootstrap_config: !inherit {tablet: !append [{type: CONSOLE, node: [" << i + 2 << "]}]}\n";
+                } else {
+                    yaml << "    log_config: !inherit {entry: !append [{component: c" << i << ", level: 4}]}\n";
+                }
+            }
+            auto doc = NFyaml::TDocument::Parse(yaml);
+            size_t count = 0;
+            auto enumerate = [&] {
+                EnumerateBootstrapPlacementConfigs(doc, [&](const auto* bootstrap, const TProjectionMatches& matches) {
+                    ++count;
+                    UNIT_ASSERT(matches({{"node_id", "1"}}));
+                    UNIT_ASSERT(bootstrap);
+                    UNIT_ASSERT_VALUES_EQUAL(bootstrap->GetTablet(0).GetNode(0), 1);
+                });
+            };
+            if (changesPlacement) {
+                UNIT_ASSERT_EXCEPTION_CONTAINS(enumerate(), yexception, "too many distinct YAML projections");
+            } else {
+                enumerate();
+                UNIT_ASSERT_VALUES_EQUAL(count, 1);
+            }
+        }
     }
 
     Y_UNIT_TEST(ManyValuesOfOneLabelConvergeToNonBaseConfig) {

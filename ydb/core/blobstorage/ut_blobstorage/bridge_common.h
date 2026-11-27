@@ -261,16 +261,26 @@ namespace NBridgeTest {
         }
     }
 
-    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult InvokeDistconf(TEnvironmentSetup& env,
-            const std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&)>& fill, ui32 nodeId = 1,
-            TInstant deadline = TInstant::Max()) {
+    inline TActorId SendDistconf(TEnvironmentSetup& env,
+            const std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&)>& fill, ui32 nodeId) {
         const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
         auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         fill(ev->Record);
         env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge, ev.release()), nodeId);
+        return edge;
+    }
+
+    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult WaitForDistconf(TEnvironmentSetup& env,
+            TActorId edge, TInstant deadline) {
         auto res = env.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge, false, deadline);
         UNIT_ASSERT_C(res, "Timed out waiting for a bridge configuration command");
         return res->Get()->Record;
+    }
+
+    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult InvokeDistconf(TEnvironmentSetup& env,
+            const std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&)>& fill, ui32 nodeId = 1,
+            TInstant deadline = TInstant::Max()) {
+        return WaitForDistconf(env, SendDistconf(env, fill, nodeId), deadline);
     }
 
     inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult ConvertToBridge(TEnvironmentSetup& env,

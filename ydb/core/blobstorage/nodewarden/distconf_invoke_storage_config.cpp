@@ -17,9 +17,7 @@
 
 #include <google/protobuf/util/message_differencer.h>
 #include <util/generic/algorithm.h>
-#include <util/generic/is_in.h>
 
-#include <array>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
@@ -404,94 +402,6 @@ namespace NKikimr::NStorage {
         return appConfig.GetBridgeConfig();
     }
 
-    bool TInvokeRequestHandlerActor::CheckBootstrapPlacement(const NKikimrBlobStorage::TStorageConfig& config,
-            TBridgePileId targetPile) {
-        if (!config.HasClusterState()) {
-            return true;
-        }
-        const auto registry = Self->GetConfigPileRegistry(config);
-        if (!registry || CountIf(registry->GetPiles(), [](const auto& pile) { return pile.HasName(); }) < 2) {
-            return true;
-        }
-
-        using TBootstrap = NKikimrConfig::TBootstrap;
-        static constexpr std::array systemTypes{TBootstrap::FLAT_HIVE, TBootstrap::HIVE, TBootstrap::FLAT_BS_CONTROLLER,
-            TBootstrap::BS_DOMAINCONTROLLER, TBootstrap::FLAT_SCHEMESHARD, TBootstrap::SCHEMESHARD,
-            TBootstrap::FLAT_TX_COORDINATOR, TBootstrap::TX_COORDINATOR, TBootstrap::TX_MEDIATOR, TBootstrap::TX_ALLOCATOR,
-            TBootstrap::TX_PROXY, TBootstrap::FLAT_TX_PROXY, TBootstrap::CMS, TBootstrap::CONSOLE,
-            TBootstrap::NODE_BROKER, TBootstrap::TENANT_SLOT_BROKER, TBootstrap::DBS_CONTROLLER};
-        struct TPlacement {
-            TBootstrap::ETabletType Type;
-            THashSet<ui32> Nodes;
-            THashSet<TBridgePileId> Piles;
-        };
-        TMap<ui64, TPlacement> tablets;
-        try {
-            const auto& mainYaml = NewYaml ? *NewYaml : Self->MainConfigYaml;
-            Y_ENSURE(mainYaml, "main YAML configuration is unavailable");
-            auto doc = NFyaml::TDocument::Parse(mainYaml);
-            doc.Resolve();
-            std::optional<TBootstrap> fallback;
-            NYamlConfig::EnumerateDistinctProjections(doc, NYamlConfig::SharedValidationInputs(),
-                [&](NFyaml::TNodeRef projection, const NYamlConfig::TProjectionMatches& matches) {
-                    THashMap<ui32, TBridgePileId> nodes;
-                    for (const auto& node : config.GetAllNodes()) {
-                        if (matches({{"node_id", ToString(node.GetNodeId())}, {"node_kind", "static"}, {"dynamic", "false"}})) {
-                            nodes.emplace(node.GetNodeId(), NBridge::ResolvePileId(*registry,
-                                TNodeLocation(node.GetLocation()).GetBridgePileName()));
-                        }
-                    }
-                    if (nodes.empty()) {
-                        return;
-                    }
-                    const auto app = NYamlConfig::YamlToProto(projection, true, true);
-                    if (!app.HasBootstrapConfig() && !fallback) {
-                        // Static nodes fill fields absent from their resolved main YAML from the merged startup config.
-                        auto base = NYaml::Yaml2Json(YAML::Load(mainYaml), true)["config"];
-                        if (const auto yaml = GetStorageYaml(config)) {
-                            auto storage = NYaml::Yaml2Json(YAML::Load(*yaml), true);
-                            for (auto& [key, value] : storage["config"].GetMapSafe()) {
-                                base.GetMapSafe().emplace(key, std::move(value));
-                            }
-                        }
-                        NKikimrConfig::TAppConfig merged;
-                        NYaml::Parse(base, NYaml::GetJsonToProtoConfig(true), merged, true);
-                        fallback.emplace(std::move(*merged.MutableBootstrapConfig()));
-                    }
-                    for (const auto& tablet : (app.HasBootstrapConfig() ? app.GetBootstrapConfig() : *fallback).GetTablet()) {
-                        if (tablet.GetStandBy() || !tablet.GetInfo().HasTabletID() || !IsIn(systemTypes, tablet.GetType())) {
-                            continue;
-                        }
-                        auto& placement = tablets[tablet.GetInfo().GetTabletID()];
-                        placement.Type = tablet.GetType();
-                        for (ui32 id : tablet.GetNode()) {
-                            if (const auto it = nodes.find(id); it != nodes.end() && it->second) {
-                                placement.Nodes.insert(id);
-                                placement.Piles.insert(it->second);
-                            }
-                        }
-                    }
-                });
-        } catch (const std::exception& ex) {
-            BootstrapPlacementWarnings.emplace_back(TStringBuilder() << "Could not verify system tablet bootstrap placement: " << ex.what());
-            return true;
-        }
-
-        const auto before = BootstrapPlacementWarnings.size();
-        for (const auto& [id, placement] : tablets) {
-            for (size_t i = 0; i < registry->PilesSize(); ++i) {
-                const auto pileId = TBridgePileId::FromPileIndex(i);
-                const auto& pile = registry->GetPiles(i);
-                if (pile.HasName() && (!targetPile || targetPile == pileId) && !placement.Piles.contains(pileId)) {
-                    BootstrapPlacementWarnings.emplace_back(TStringBuilder() << TBootstrap::ETabletType_Name(placement.Type)
-                        << " tablet " << id << " has no eligible bootstrap node in pile '" << pile.GetName()
-                        << "'. Eligible nodes elsewhere: " << placement.Nodes.size() << ". Add a node from this pile to its bootstrap node list.");
-                }
-            }
-        }
-        return BootstrapPlacementWarnings.size() == before;
-    }
-
     void TInvokeRequestHandlerActor::ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request) {
         RunCommonChecks();
 
@@ -512,7 +422,13 @@ namespace NKikimr::NStorage {
             if (request.HasSwitchDedicatedStorageSection()) {
                 throw TExError() << "Switching dedicated storage section mode without providing any new config";
             }
-            CheckBootstrapPlacement(*Self->StorageConfig);
+            const auto placement = Self->GetBootstrapPlacement(*Self->StorageConfig);
+            if (AwaitBootstrapPlacement(placement, [this] {
+                    ReplaceStorageConfig(std::get<TInvokeExternalOperation>(Query).Command.GetReplaceStorageConfig());
+                })) {
+                return;
+            }
+            Self->CheckBootstrapPlacement(placement, {}, &BootstrapPlacementWarnings);
             if (!IsDryRun && Self->StorageConfig->GetGeneration()
                     && (Self->SelfManagementEnabled || IsDisablingDistconf(*Self->StorageConfig))) {
                 return StartCommitConfirmation();
@@ -760,13 +676,21 @@ namespace NKikimr::NStorage {
             ReplaceStorageConfigExecute();
         } else if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml, request.GetAllowUnknownFields())) {
             throw TExRace() << "Console pipe is not available";
+        } else if (ControllerOp == EControllerOp::DISABLE_DISTCONF) {
+            ProposedStorageConfig.ClearConfigComposite();
+            ProposedStorageConfig.ClearCompressedStorageYaml();
+            ProposedStorageConfig.ClearExpectedStorageYamlVersion();
         }
     }
 
     void TInvokeRequestHandlerActor::ReplaceStorageConfigExecute() {
         Y_ABORT_UNLESS(!LifetimeToken.expired());
         WaitingForConfigValidation = false;
-        CheckBootstrapPlacement(ProposedStorageConfig);
+        const auto placement = Self->GetBootstrapPlacement(ProposedStorageConfig);
+        if (AwaitBootstrapPlacement(placement, [this] { ReplaceStorageConfigExecute(); })) {
+            return;
+        }
+        Self->CheckBootstrapPlacement(placement, {}, &BootstrapPlacementWarnings);
 
         if (IsDryRun) {
             return Finish(TResult::OK, std::nullopt);
@@ -1211,9 +1135,6 @@ namespace NKikimr::NStorage {
                     : 0;
                 ReplaceStorageConfigResume(Self->StorageConfigYaml, expectedMainYamlVersion,
                     Self->StorageConfig->GetExpectedStorageYamlVersion(), false);
-                ProposedStorageConfig.ClearConfigComposite();
-                ProposedStorageConfig.ClearCompressedStorageYaml();
-                ProposedStorageConfig.ClearExpectedStorageYamlVersion();
                 break;
             }
 

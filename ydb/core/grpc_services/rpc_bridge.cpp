@@ -292,6 +292,10 @@ private:
         if (request.has_expected_generation()) {
             cmd->SetExpectedGeneration(request.expected_generation());
         }
+        if (const auto it = updates.find(*finalPromoted); request.skip_bootstrap_placement_check() && it != updates.end() &&
+                (it->second == Ydb::Bridge::PileState::PROMOTED || it->second == Ydb::Bridge::PileState::PRIMARY)) {
+            cmd->SetSkipBootstrapPlacementCheck(true);
+        }
 
         // quorum_piles is deprecated and doesn't change the quorum of the update, but the names are still checked, as
         // they were when the request was accepted with them

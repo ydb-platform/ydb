@@ -31,6 +31,8 @@ AUTH_CONFIG = f'staff_api_user_token: {TOKEN}'
 
 # local configuration for the ydb cluster (fetched by ydb_cluster_configuration fixture)
 CLUSTER_CONFIG = dict(
+    # dstool add-group audit body encodes pool NumGroups; keep historical 2-group pool.
+    dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0, num_groups=2)],
     additional_log_configs={
         # more logs
         'GRPC_PROXY': LogLevels.DEBUG,

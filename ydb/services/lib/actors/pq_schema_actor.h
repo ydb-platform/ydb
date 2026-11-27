@@ -129,6 +129,31 @@ namespace NKikimr::NGRpcProxy::V1 {
             return true;
         }
 
+        // YDBBUGS-1205: a CDC stream has exactly one private topic; a different
+        // count means it is being created or dropped right now. Reply SCHEME_ERROR
+        // instead of aborting the process, as rpc_describe_path.cpp does.
+        // Returns true when the layout is unexpected and the error response has been sent.
+        bool ReplyIfCdcStreamHasUnexpectedLayout(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) {
+            if (response.ListNodeEntry && response.ListNodeEntry->Children.size() == 1) {
+                return false;
+            }
+            const size_t childrenCount = response.ListNodeEntry ? response.ListNodeEntry->Children.size() : 0;
+            auto ctx = *NActors::TlsActivationContext;
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::PERSQUEUE,
+                "Describe request for a cdc stream with unexpected scheme layout",
+                {"database", Database},
+                {"path", GetTopicPath()},
+                {"childrenCount", childrenCount},
+                {"hasListNodeEntry", static_cast<bool>(response.ListNodeEntry)});
+            AddIssue(FillIssue(
+                TStringBuilder() << "path '" << GetTopicPath() << "' is not created yet or has an unexpected scheme layout"
+                                 << " (private topic children: " << childrenCount << ", expected 1)",
+                Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
+            ));
+            RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
+            return true;
+        }
+
         void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             auto const& entries = ev->Get()->Request.Get()->ResultSet;
             Y_ABORT_UNLESS(entries.size() == 1);
@@ -355,13 +380,9 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
             if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
-                    YDB_LOG_ENSURE(response.ListNodeEntry,
-                        {"path", GetTopicPath()},
-                        {"database", TActorBase::Database});
-                    YDB_LOG_ENSURE(response.ListNodeEntry->Children.size() == 1,
-                        {"path", GetTopicPath()},
-                        {"database", TActorBase::Database},
-                        {"children", response.ListNodeEntry->Children.size()});
+                    if (TActorBase::ReplyIfCdcStreamHasUnexpectedLayout(response)) {
+                        return true;
+                    }
                     PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
 
                     if (response.Self) {
@@ -607,7 +628,9 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
             if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
-                    Y_ABORT_UNLESS(response.ListNodeEntry->Children.size() == 1);
+                    if (TBase::ReplyIfCdcStreamHasUnexpectedLayout(response)) {
+                        return true;
+                    }
                     PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
                     SendDescribeProposeRequest(true);
                     return true;

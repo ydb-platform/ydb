@@ -3801,7 +3801,9 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
     if (UseKqpTasksGraphV2) {
         MaxTasksGraph->EstimateTasksResources();
         MaxTasksGraph->DistributeTasksToNodes(placementParams);
+        Cerr << "Before shrink: " << MaxTasksGraph->DumpToString() << Endl;
         MaxTasksGraph->Shrink();
+        Cerr << "After shrink: " << MaxTasksGraph->DumpToString() << Endl;
     }
 
     MaxTasksGraph->PlaceTasks(*this);
@@ -3915,7 +3917,8 @@ TKqpTasksGraph::TKqpTasksGraph(
     const TKqpRequestCounters::TPtr& counters,
     TActorId bufferActorId,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-    bool useKqpTasksGraphV2)
+    bool useKqpTasksGraphV2,
+    const ui64 maxTasksPerStage)
     : Transactions(transactions)
     , TxAlloc(txAlloc)
     , AggregationSettings(aggregationSettings)
@@ -3931,6 +3934,7 @@ TKqpTasksGraph::TKqpTasksGraph(
               .MkqlLightProgramMemoryLimit = resourceManagerConfig.GetMkqlLightProgramMemoryLimit(),
           }))
     , UseKqpTasksGraphV2(useKqpTasksGraphV2)
+    , MaxTasksPerStage(maxTasksPerStage)
 {
     GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
     GetMeta().Database = database;
@@ -4475,6 +4479,9 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
         } else {
             auto [newPartitionCount, _] = GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount);
             partitionsCount = std::max(newPartitionCount, partitionsCount);
+            if (MaxTasksPerStage != 0) {
+                partitionsCount = std::min(static_cast<ui64>(partitionsCount), MaxTasksPerStage);
+            }
         }
     }
 

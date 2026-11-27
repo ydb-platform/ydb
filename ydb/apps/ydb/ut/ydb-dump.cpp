@@ -94,6 +94,18 @@ class TDatabaseRestoreFixture : public TCliTestFixture {
 
 Y_UNIT_TEST_SUITE(YdbDump) {
 
+Y_UNIT_TEST_F(DumpRejectsEmptyAndParentPaths, TCliTestFixture) {
+    NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(GetAddress()).SetDatabase(TEST_DATABASE));
+    NYdb::NDump::TClient client(driver);
+    TTempDir temp;
+    const auto output = TFsPath(temp.Name()).Child("dump");
+    for (const TString path : {"", "..", "../other", "dir/..", "dir/../other", "/Root/tenant/.."}) {
+        const auto result = client.Dump(path, output.GetPath(), NYdb::NDump::TDumpSettings().Database(TEST_DATABASE));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::BAD_REQUEST, path);
+        UNIT_ASSERT(!output.Exists());
+    }
+}
+
 Y_UNIT_TEST_F(RelativeDestinationUsesTheConfiguredDatabase, TDatabaseRestoreFixture) {
     for (const bool relative : {false, true}) {
         auto& scheme = Service<TDatabaseRestoreScheme>();

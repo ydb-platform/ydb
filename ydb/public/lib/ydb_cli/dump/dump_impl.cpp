@@ -13,9 +13,13 @@ TDumpClient::TDumpClient(const TDriver& driver, const std::shared_ptr<TLog>& log
 }
 
 TDumpResult TDumpClient::Dump(const TString& dbPath, const TString& fsPath, const TDumpSettings& settings) {
+    if (dbPath.empty() || dbPath == ".." || dbPath.StartsWith("../")
+        || dbPath.EndsWith("/..") || dbPath.Contains("/../")) {
+        return Result<TDumpResult>(EStatus::BAD_REQUEST, "Dump source must not be empty or contain '..' path components");
+    }
     try {
         NBackup::SetLog(Log);
-        const TString database = settings.Database_.empty() && !dbPath.empty() && !dbPath.StartsWith('/')
+        const TString database = settings.Database_.empty() && !dbPath.StartsWith('/')
             ? TString(Driver.GetConfig().GetDatabase())
             : settings.Database_;
         NBackup::BackupFolder(

@@ -437,6 +437,58 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
     Y_UNIT_TEST_PK_SCENARIO(TestDecimalAsPrimaryKey, PkLookupScenario);
     Y_UNIT_TEST_CSV_SCENARIO(TestCsv, CsvScenario);
 
+    // A Decimal primary key is ordered by its numeric value: range predicates on the key and ORDER BY key LIMIT,
+    // which are pushed down to the column shards, must follow that order.
+    Y_UNIT_TEST_TWIN(TestDecimalPrimaryKeyOrder, TrivialReader) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        settings.SetColumnShardReaderClassName(TrivialReader ? "TRIVIAL" : "SIMPLE");
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        const auto execute = [&](const TString& query) {
+            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return result.GetResultSets().empty() ? TString() : FormatResultSetYson(result.GetResultSet(0));
+        };
+        TStringBuilder mismatches;
+        const auto check = [&](const TString& expected, const TString& query) {
+            const TString actual = execute(query);
+            if (ReformatYson(actual) != ReformatYson(expected)) {
+                mismatches << query << " expected " << expected << ", got " << actual << Endl;
+            }
+        };
+
+        execute(R"(
+            CREATE TABLE `/Root/DecimalPk` (
+                k Decimal(22,9) NOT NULL,
+                v Int32,
+                PRIMARY KEY (k)
+            ) WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )");
+        execute(R"(
+            UPSERT INTO `/Root/DecimalPk` (k, v) VALUES
+                (Decimal("0.000000001", 22, 9), 1),
+                (Decimal("0.000000256", 22, 9), 256);
+        )");
+        check(R"([[[256]]])", R"(
+            SELECT v FROM `/Root/DecimalPk` WHERE k > Decimal("0.000000001", 22, 9) ORDER BY k;
+        )");
+
+        execute(R"(
+            UPSERT INTO `/Root/DecimalPk` (k, v) VALUES (Decimal("-0.000000001", 22, 9), -1);
+        )");
+        check(R"([[[-1]]])", R"(
+            SELECT v FROM `/Root/DecimalPk` ORDER BY k LIMIT 1;
+        )");
+        check(R"([[[256]]])", R"(
+            SELECT v FROM `/Root/DecimalPk` ORDER BY k DESC LIMIT 1;
+        )");
+        check(R"([[[-1]]])", R"(
+            SELECT v FROM `/Root/DecimalPk` WHERE k < Decimal("0", 22, 9) ORDER BY k;
+        )");
+        UNIT_ASSERT_C(mismatches.empty(), mismatches);
+    }
+
     Y_UNIT_TEST(TestDmlParityAndCTAS, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();

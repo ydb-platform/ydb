@@ -23,6 +23,7 @@ def _dedupe_history_rows(rows):
 BASE_DATE = datetime.date(1970, 1, 1)
 DEFAULT_DAYS_BACK = 30  # cold start when branch has no flaky_tests_window history
 MAX_RESUME_GAP_DAYS = 180  # safety cap on incremental resume if collection was paused a long time
+INCREMENTAL_LOOKBACK_DAYS = 1  # reprocess N days before max(date_window); catches late Large/Nightly
 
 
 def parse_arguments():
@@ -90,11 +91,12 @@ def determine_start_date(ydb_wrapper, test_runs_table, flaky_tests_table, build_
     
     Logic:
     1. If start_date_override is provided, use it (must be <= end_date)
-    2. If history exists, continue from max(date_window) (incremental; no cold-start cap),
-       but never look back further than MAX_RESUME_GAP_DAYS even if collection was
-       paused for a long time — avoids re-creating the unbounded-backfill problem this
-       cold-start rework was meant to fix, at the cost of leaving an un-backfilled gap
-       in the rare case collection was dormant that long.
+    2. If history exists, resume from max(date_window) - INCREMENTAL_LOOKBACK_DAYS
+       (reprocess recent days for late-arriving runs), but never look back further
+       than MAX_RESUME_GAP_DAYS even if collection was paused for a long time —
+       avoids re-creating the unbounded-backfill problem this cold-start rework
+       was meant to fix, at the cost of leaving an un-backfilled gap in the rare
+       case collection was dormant that long.
     3. If no history, check test_runs_table for min_run_date, capped at DEFAULT_DAYS_BACK
     4. Default cold start to DEFAULT_DAYS_BACK ago from end_date
     """
@@ -112,16 +114,18 @@ def determine_start_date(ydb_wrapper, test_runs_table, flaky_tests_table, build_
     max_date_window = get_max_date_from_history(ydb_wrapper, flaky_tests_table, build_type, branch)
     
     if max_date_window is not None:
-        # Incremental resume: continue from the last stored day (do not apply cold-start
-        # lookback), capped so a long-dormant branch cannot trigger an unbounded backfill.
-        start_date = min(max_date_window, end_date)
-        if start_date < max_resume_start_date:
+        # Cap against max(date_window) itself, then apply lookback only when uncapped
+        # (avoids disabling lookback at gap == MAX_RESUME_GAP_DAYS).
+        capped_max = min(max_date_window, end_date)
+        if capped_max < max_resume_start_date:
             print(
-                f'⚠️  Last recorded date_window ({start_date}) is more than {MAX_RESUME_GAP_DAYS} days '
+                f'⚠️  Last recorded date_window ({max_date_window}) is more than {MAX_RESUME_GAP_DAYS} days '
                 f'old — history collection looks paused. Capping resume start to '
                 f'{max_resume_start_date} instead of backfilling the full gap.'
             )
             start_date = max_resume_start_date
+        else:
+            start_date = capped_max - datetime.timedelta(days=INCREMENTAL_LOOKBACK_DAYS)
         return start_date, end_date
     
     # No history exists, check test_runs_table for min date
@@ -140,8 +144,15 @@ def determine_start_date(ydb_wrapper, test_runs_table, flaky_tests_table, build_
     return start_date, end_date
 
 
-def build_history_query(date, test_runs_table, testowners_table, build_type, branch):
-    """Build SQL query to get test history for a specific date."""
+def build_history_query(date, test_runs_table, testowners_table, flaky_tests_table, build_type, branch):
+    """Build SQL query to get test history for a specific date.
+
+    owners preference for that calendar day:
+    1. last non-empty owners from test_runs that day (owner may change mid-day);
+    2. else owners already stored in flaky for this date (do not rewrite with today's
+       testowners on lookback reprocess when the day still has no_runs);
+    3. else current testowners snapshot.
+    """
     return f"""
         select
             full_name,
@@ -158,35 +169,54 @@ def build_history_query(date, test_runs_table, testowners_table, build_type, bra
 
         from (
             select
-                full_name,
-                date_base,
-                AGG_LIST(status) as history_list ,
-                String::JoinFromList( ListSort(AGG_LIST_DISTINCT(status)) ,',') as dist_hist,
-                suite_folder,
-                test_name,
-                owners,
-                build_type,
-                branch,
-                min(run_timestamp) as first_run,
-                max(run_timestamp) as last_run
+                j.full_name AS full_name,
+                j.date_base AS date_base,
+                AGG_LIST(j.status) AS history_list,
+                String::JoinFromList(ListSort(AGG_LIST_DISTINCT(j.status)), ',') AS dist_hist,
+                j.suite_folder AS suite_folder,
+                j.test_name AS test_name,
+                COALESCE(
+                    MAX_BY(
+                        j.run_owners,
+                        IF(j.run_owners IS NOT NULL AND j.run_owners != '', j.run_timestamp, NULL)
+                    ),
+                    prev.owners,
+                    j.testowners_owners
+                ) AS owners,
+                j.build_type AS build_type,
+                j.branch AS branch,
+                min(j.run_timestamp) AS first_run,
+                max(j.run_timestamp) AS last_run
             from (
-                select * from (
+                select
+                    test_and_date.full_name AS full_name,
+                    test_and_date.suite_folder AS suite_folder,
+                    test_and_date.test_name AS test_name,
+                    test_and_date.owners AS testowners_owners,
+                    test_and_date.date_base AS date_base,
+                    test_and_date.build_type AS build_type,
+                    test_and_date.branch AS branch,
+                    hist.run_timestamp AS run_timestamp,
+                    hist.status AS status,
+                    hist.owners AS run_owners
+                from (
                     select distinct
                         full_name,
                         suite_folder,
                         test_name,
                         owners,
                         Date('{date}') as date_base,
-                        '{build_type}' as  build_type,
-                        '{branch}' as  branch
-                    from  `{testowners_table}` 
+                        '{build_type}' as build_type,
+                        '{branch}' as branch
+                    from `{testowners_table}`
                 ) as test_and_date
                 left JOIN (
                     select
                         suite_folder || '/' || test_name as full_name,
                         run_timestamp,
-                        status
-                    from  `{test_runs_table}`
+                        status,
+                        owners
+                    from `{test_runs_table}`
                     where
                         run_timestamp >= Date('{date}')
                         and run_timestamp < Date('{date}') + Interval("P1D")
@@ -197,17 +227,34 @@ def build_history_query(date, test_runs_table, testowners_table, build_type, bra
                             'Regression-run_Small_and_Medium',
                             'Regression-run_compatibility',
                             'Regression-whitelist-run',
-                            'Postcommit_relwithdebinfo', 
+                            'Postcommit_relwithdebinfo',
                             'Postcommit_asan'
-                        ) 
+                        )
                         and build_type = '{build_type}'
                         and branch = '{branch}'
                         and (pull IS NULL OR NOT String::Contains(pull, 'manual'))
-                    order by full_name,run_timestamp desc
                 ) as hist
-                ON test_and_date.full_name=hist.full_name
-            )
-            GROUP BY full_name,suite_folder,test_name,date_base,build_type,branch,owners
+                ON test_and_date.full_name = hist.full_name
+            ) AS j
+            LEFT JOIN (
+                SELECT full_name, suite_folder, test_name, owners
+                FROM `{flaky_tests_table}`
+                WHERE date_window = Date('{date}')
+                    AND build_type = '{build_type}'
+                    AND branch = '{branch}'
+            ) AS prev
+            ON j.full_name = prev.full_name
+                AND j.suite_folder = prev.suite_folder
+                AND j.test_name = prev.test_name
+            GROUP BY
+                j.full_name,
+                j.suite_folder,
+                j.test_name,
+                j.date_base,
+                j.build_type,
+                j.branch,
+                j.testowners_owners,
+                prev.owners
         )
     """
                 
@@ -274,7 +321,9 @@ def process_date_range(ydb_wrapper, test_runs_table, testowners_table, flaky_tes
     for i, date in enumerate(sorted(date_list), 1):
         print(f'📅 Processing date {i}/{len(date_list)}: {date}')
         
-        query = build_history_query(date, test_runs_table, testowners_table, build_type, branch)
+        query = build_history_query(
+            date, test_runs_table, testowners_table, flaky_tests_table, build_type, branch,
+        )
         results = ydb_wrapper.execute_scan_query(
             query, 
             query_name=f"get_flaky_test_history_for_date_{branch}"

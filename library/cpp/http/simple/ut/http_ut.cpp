@@ -1044,4 +1044,72 @@ Y_UNIT_TEST_SUITE(SimpleHttp) {
         TStringStream s;
         UNIT_ASSERT_EXCEPTION_CONTAINS(cl.DoGet("/ping", &s), THttpRequestException, "304");
     }
+
+    // With a connection pool the client closes second, after the server, so it gets no TIME_WAIT.
+    // It must still close a quarantined connection once it is older than 2 s, even when fewer than 100 requests follow it.
+    Y_UNIT_TEST(connectionPoolClosesConnectionsOlderThanQuarantineAge) {
+        constexpr size_t threads = 4;
+        constexpr size_t requestsPerThread = 4;
+        TPortManager pm;
+        const ui16 port = pm.GetPort(80);
+        TInetStreamSocket listener;
+        CheckedSetSockOpt((SOCKET)listener, SOL_SOCKET, SO_REUSEADDR, 1, "listener");
+        SetSocketTimeout((SOCKET)listener, 10, 0); // accept() gives up instead of hanging the test
+        TSockAddrInet addr("127.0.0.1", port);
+        TBaseSocket::Check(listener.Bind(&addr), "bind");
+        TBaseSocket::Check(listener.Listen(threads * requestsPerThread), "listen");
+
+        // The server replies, half-closes and keeps the socket to see the client's close later.
+        TVector<THolder<TStreamSocket>> conns;
+        auto serve = [&](size_t count) {
+            for (size_t i = 0; i < count; ++i) {
+                auto conn = MakeHolder<TStreamSocket>();
+                TBaseSocket::Check(listener.Accept(conn.Get()), "accept");
+                SetSocketTimeout((SOCKET)*conn, 1, 0);
+                const TStringBuf reply = "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\npong";
+                conn->Send(reply.data(), reply.size());
+                conn->ShutDown(SHUT_WR);
+                conns.push_back(std::move(conn));
+            }
+        };
+        // Drains the request; EOF or RST after it means the client has closed its socket.
+        auto closedByClient = [](TStreamSocket& conn, int flags) {
+            char buf[512];
+            ssize_t got = 0;
+            while ((got = conn.Recv(buf, sizeof(buf), flags)) > 0) {
+            }
+            return got == 0 || got == -ECONNRESET;
+        };
+        auto get = [port] {
+            TRedirectableHttpClient cl(TSimpleHttpClientOptions().Host("127.0.0.1").Port(port).UseKeepAlive(false).UseConnectionPool(true));
+            TStringStream s;
+            cl.DoGet("/ping", &s);
+        };
+
+        auto pool = CreateThreadPool(threads + 1);
+        auto server = NThreading::Async([&] { serve(threads * requestsPerThread); }, *pool);
+        TVector<NThreading::TFuture<void>> clients;
+        for (size_t t = 0; t < threads; ++t) {
+            clients.push_back(NThreading::Async([&] {
+                for (size_t i = 0; i < requestsPerThread; ++i) {
+                    get();
+                }
+            }, *pool));
+        }
+        for (auto& client : clients) {
+            client.GetValueSync();
+        }
+        server.GetValueSync();
+        for (size_t i = 0; i < conns.size(); ++i) {
+            UNIT_ASSERT_C(!closedByClient(*conns[i], MSG_DONTWAIT), "closed before the quarantine age: " << i);
+        }
+
+        Sleep(TDuration::MilliSeconds(2500)); // a bit longer than the quarantine age
+        auto last = NThreading::Async([&] { serve(1); }, *pool);
+        get();
+        last.GetValueSync();
+        for (size_t i = 0; i + 1 < conns.size(); ++i) {
+            UNIT_ASSERT_C(closedByClient(*conns[i], 0), "still open after the quarantine age: " << i);
+        }
+    }
 }

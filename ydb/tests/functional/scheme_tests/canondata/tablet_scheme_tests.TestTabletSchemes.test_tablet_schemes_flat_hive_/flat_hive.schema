@@ -63,19 +63,9 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 116,
-                "ColumnName": "ObjectDomain",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 0,
                 "ColumnName": "ID",
                 "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 117,
-                "ColumnName": "SeizedByChild",
-                "ColumnType": "Bool"
             },
             {
                 "ColumnId": 1,
@@ -83,18 +73,8 @@
                 "ColumnType": "PairUi64Ui64"
             },
             {
-                "ColumnId": 118,
-                "ColumnName": "NeedToReleaseFromParent",
-                "ColumnType": "Bool"
-            },
-            {
                 "ColumnId": 2,
                 "ColumnName": "KnownGeneration",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 119,
-                "ColumnName": "ReassignReason",
                 "ColumnType": "Uint64"
             },
             {
@@ -103,18 +83,13 @@
                 "ColumnType": "Uint64"
             },
             {
-                "ColumnId": 120,
-                "ColumnName": "Statistics",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 4,
                 "ColumnName": "LeaderNode",
                 "ColumnType": "Uint64"
             },
             {
-                "ColumnId": 121,
-                "ColumnName": "DataCentersPreference",
+                "ColumnId": 111,
+                "ColumnName": "ActorsToNotify",
                 "ColumnType": "String"
             },
             {
@@ -123,8 +98,13 @@
                 "ColumnType": "Uint64"
             },
             {
-                "ColumnId": 123,
-                "ColumnName": "BalancerPolicy",
+                "ColumnId": 112,
+                "ColumnName": "AllowedDomains",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 113,
+                "ColumnName": "BootMode",
                 "ColumnType": "Uint64"
             },
             {
@@ -133,9 +113,79 @@
                 "ColumnType": "String"
             },
             {
+                "ColumnId": 114,
+                "ColumnName": "LockedToActor",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 115,
+                "ColumnName": "LockedReconnectTimeout",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 116,
+                "ColumnName": "ObjectDomain",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "ActorToNotify",
+                "ColumnType": "ActorID"
+            },
+            {
+                "ColumnId": 117,
+                "ColumnName": "SeizedByChild",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 118,
+                "ColumnName": "NeedToReleaseFromParent",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "Category",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 119,
+                "ColumnName": "ReassignReason",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 120,
+                "ColumnName": "Statistics",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 121,
+                "ColumnName": "DataCentersPreference",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "AllowedDataCenters",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 123,
+                "ColumnName": "BalancerPolicy",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "TabletStorageVersion",
+                "ColumnType": "Uint32"
+            },
+            {
                 "ColumnId": 124,
                 "ColumnName": "StoppedByTenant",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "ObjectID",
+                "ColumnType": "Uint64"
             },
             {
                 "ColumnId": 125,
@@ -153,53 +203,13 @@
                 "ColumnType": "Uint32"
             },
             {
-                "ColumnId": 11,
-                "ColumnName": "ActorToNotify",
-                "ColumnType": "ActorID"
-            },
-            {
-                "ColumnId": 13,
-                "ColumnName": "Category",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 17,
-                "ColumnName": "AllowedDataCenters",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 18,
-                "ColumnName": "TabletStorageVersion",
+                "ColumnId": 128,
+                "ColumnName": "BackupPileId",
                 "ColumnType": "Uint32"
             },
             {
-                "ColumnId": 19,
-                "ColumnName": "ObjectID",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 111,
-                "ColumnName": "ActorsToNotify",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 112,
-                "ColumnName": "AllowedDomains",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 113,
-                "ColumnName": "BootMode",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 114,
-                "ColumnName": "LockedToActor",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 115,
-                "ColumnName": "LockedReconnectTimeout",
+                "ColumnId": 129,
+                "ColumnName": "BackupPileAddedGeneration",
                 "ColumnType": "Uint64"
             }
         ],
@@ -207,34 +217,36 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    116,
                     0,
-                    117,
                     1,
-                    118,
                     2,
-                    119,
                     3,
-                    120,
                     4,
-                    121,
+                    111,
                     5,
-                    123,
+                    112,
+                    113,
                     7,
+                    114,
+                    115,
+                    116,
+                    11,
+                    117,
+                    118,
+                    13,
+                    119,
+                    120,
+                    121,
+                    17,
+                    123,
+                    18,
                     124,
+                    19,
                     125,
                     126,
                     127,
-                    11,
-                    13,
-                    17,
-                    18,
-                    19,
-                    111,
-                    112,
-                    113,
-                    114,
-                    115
+                    128,
+                    129
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -103,6 +103,8 @@ struct Schema : NIceDb::Schema {
         struct ConfirmedStorageVersion : Column<127, NScheme::NTypeIds::Uint32> {
             static constexpr ui32 Default = Max<ui32>();
         };
+        struct BackupPileId : Column<128, NScheme::NTypeIds::Uint32> {};
+        struct BackupPileAddedGeneration : Column<129, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<
@@ -133,7 +135,9 @@ struct Schema : NIceDb::Schema {
             BalancerPolicy,
             StoppedByTenant,
             IsBackup,
-            ConfirmedStorageVersion
+            ConfirmedStorageVersion,
+            BackupPileId,
+            BackupPileAddedGeneration
         >;
     };
 

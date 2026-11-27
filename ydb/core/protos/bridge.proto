@@ -2,6 +2,11 @@ syntax = "proto3";
 
 package NKikimrBridge;
 
+enum EPileType {
+    REGULAR = 0;
+    BACKUP = 1;
+}
+
 message TClusterState {
     // each realm state in relation to primary one
     enum EPileState {

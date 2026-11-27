@@ -19,6 +19,8 @@ namespace NKikimr {
         struct TPile {
             TBridgePileId BridgePileId; // essentially an index into TBridgeInfo::Piles array
             TString Name; // textual name as written in config, may be empty
+            NKikimrBridge::EPileType Type = NKikimrBridge::REGULAR;
+            ui64 AddedGeneration = 0;
             bool IsFreeSlot = false; // slot of pile registry not taken by any pile; such pile has no name and no nodes
             std::vector<ui32> StaticNodeIds; // a sorted set of static node ids belonging to this very pile
             NKikimrBridge::TClusterState::EPileState State = {}; // state of this pile

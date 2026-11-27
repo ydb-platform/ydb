@@ -491,6 +491,10 @@ public:
                 Self->ObjectToTabletMetrics[tablet.ObjectId].IncreaseCount();
                 Self->TabletTypeToTabletMetrics[tablet.Type].IncreaseCount();
                 tablet.NodeFilter.AllowedNodes = tabletRowset.GetValue<Schema::Tablet::AllowedNodes>();
+                tablet.NodeFilter.BackupPileId = TBridgePileId::FromLocalDb(
+                    tabletRowset.GetValueOrDefault<Schema::Tablet::BackupPileId>());
+                tablet.NodeFilter.BackupPileAddedGeneration =
+                    tabletRowset.GetValueOrDefault<Schema::Tablet::BackupPileAddedGeneration>();
                 tablet.NodeFilter.AllowedDataCenters = tabletRowset.GetValueOrDefault<Schema::Tablet::NewAllowedDataCenterIds>();
                 tablet.DataCentersPreference = tabletRowset.GetValueOrDefault<Schema::Tablet::DataCentersPreference>();
                 TVector<TSubDomainKey> allowedDomains = tabletRowset.GetValueOrDefault<Schema::Tablet::AllowedDomains>();

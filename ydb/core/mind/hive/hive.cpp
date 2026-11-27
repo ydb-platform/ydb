@@ -130,6 +130,12 @@ bool TNodeFilter::IsAllowedDataCenter(TDataCenterId dc) const {
 }
 
 bool TNodeFilter::IsAllowedPile(TBridgePileId pile) const {
+    if (BackupPileId) {
+        const auto* pileInfo = Hive->BridgeInfo ? Hive->BridgeInfo->FindPile(pile) : nullptr;
+        return pile == BackupPileId && pileInfo && pileInfo->Type == NKikimrBridge::BACKUP &&
+            pileInfo->AddedGeneration == BackupPileAddedGeneration &&
+            NBridge::PileStateTraits(pileInfo->State).AllowsConnection;
+    }
     if (MustBePrimaryPile && Hive->GetBridgeTabletPlacement() == NKikimrConfig::THiveConfig::PRIMARY_PILE_ONLY) {
         return Hive->IsPrimaryPile(pile);
     }

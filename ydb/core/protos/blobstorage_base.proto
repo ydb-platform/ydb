@@ -188,6 +188,7 @@ message TGroupMetrics {
         optional uint64 AllocatedSize = 10; // the same basis
         optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColor = 11;
         optional uint32 GroupSizeInUnits = 14;
+        optional uint32 BackupPileId = 15; // dedicated physical backing group for the specified pile
     }
 
     optional fixed64 GroupId = 1;

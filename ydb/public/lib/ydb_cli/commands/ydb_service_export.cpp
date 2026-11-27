@@ -462,10 +462,13 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     if (expandItems) {
         const TDescribePathSettings::THeader capability{{YDB_CLIENT_CAPABILITIES, YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT}};
         const auto probe = schemeClient.DescribePath(config.Database, TDescribePathSettings().Header(capability)).GetValueSync();
-        NStatusHelpers::ThrowOnErrorOrPrintIssues(probe);
-        const auto [begin, end] = probe.GetResponseMetadata().equal_range(YDB_SERVER_HINTS);
-        const bool serverExpandsDirectories = std::any_of(begin, end,
-            [](const auto& hint) { return hint.second == YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT; });
+        bool serverExpandsDirectories = false;
+        if (probe.GetStatus() != EStatus::CLIENT_CALL_UNIMPLEMENTED && probe.GetStatus() != EStatus::UNSUPPORTED) {
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(probe);
+            const auto [begin, end] = probe.GetResponseMetadata().equal_range(YDB_SERVER_HINTS);
+            serverExpandsDirectories = std::any_of(begin, end,
+                [](const auto& hint) { return hint.second == YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT; });
+        }
         if (settings.Item_.empty()) {
             constexpr bool isFs = std::is_same_v<TSettings, NExport::TExportToFsSettings>;
             TString source = CommonSourcePath ? CommonSourcePath : config.Database;

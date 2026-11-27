@@ -17,6 +17,7 @@
 
 #include <util/stream/file.h>
 #include <util/generic/hash.h>
+#include <util/generic/maybe.h>
 #include <util/system/env.h>
 #include <util/folder/tempdir.h>
 #include <util/system/tempfile.h>
@@ -112,6 +113,33 @@ public:
         std::vector<std::pair<TString, Ydb::Scheme::Entry::Type>> Children;
     };
 
+    struct TCapabilityProbe {
+        TString ClientCapability;
+        TString ServerHint;
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+    };
+
+    grpc::Status DescribePath(grpc::ServerContext* context, const Ydb::Scheme::DescribePathRequest* request,
+        Ydb::Scheme::DescribePathResponse* response) override {
+        if (!CapabilityProbe) {
+            return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "");
+        }
+        CHECK_EXP(request->path() == TEST_DATABASE, "Unexpected capability probe path: " << request->path());
+        CheckClientMetadata(context, "x-ydb-client-capabilities", CapabilityProbe->ClientCapability);
+        if (CapabilityProbe->ServerHint) {
+            context->AddTrailingMetadata("x-ydb-server-hints", CapabilityProbe->ServerHint);
+        }
+        auto* operation = response->mutable_operation();
+        operation->set_ready(true);
+        operation->set_status(CapabilityProbe->Status);
+        if (CapabilityProbe->Status == Ydb::StatusIds::SUCCESS) {
+            Ydb::Scheme::DescribePathResult result;
+            result.mutable_self()->set_type(Ydb::Scheme::Entry::DATABASE);
+            operation->mutable_result()->PackFrom(result);
+        }
+        return grpc::Status::OK;
+    }
+
     grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) {
         CheckClientMetadata(context, "x-ydb-database", TEST_DATABASE);
         if (Token) {
@@ -187,6 +215,7 @@ public:
     void ClearExpectations() {
         ExpectedClientCert = Token = {};
         Directories.clear();
+        CapabilityProbe.Clear();
     }
 
     void ExpectClientCert(const TString& cert) {
@@ -196,6 +225,7 @@ public:
     TString Token;
     TString ExpectedClientCert;
     THashMap<TString, TDirectory> Directories;
+    TMaybe<TCapabilityProbe> CapabilityProbe;
 };
 
 class TAuthImpl : public TMockGrpcServiceBase<Ydb::Auth::V1::AuthService::Service> {

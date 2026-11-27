@@ -591,6 +591,53 @@ void OnlyOneEmptyDirectoryImpl(TBackupTestFixture& f, bool /*isOlap*/) {
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
+void ExportEmptyDirectoriesImpl(TBackupTestFixture& f) {
+    using namespace NKikimr;
+    TBackupTraits<TExportSettings> traits;
+    auto& flags = f.Server().GetRuntime()->GetAppData().FeatureFlags;
+    flags.SetEnableFsBackups(true);
+    flags.SetEnableDirectoryExport(true);
+    const TString parent = "/Root/RecursiveFolderProcessing/dir1/dir2";
+    Tests::TClient client(*f.Server().ServerSettings);
+    UNIT_ASSERT_VALUES_EQUAL(client.AlterUserAttributes(parent, "dir3", {{"team", "billing"}}), NMsgBusProxy::MSTATUS_OK);
+    auto status = f.YdbSchemeClient().MakeDirectory(parent + "/dir3/metadata.json").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+    auto settings = traits.MakeExportSettings(f, parent + "/dir3");
+    f.WaitOpSuccess(traits.Export(f, settings));
+    const auto read = [&](const TString& name) -> TString {
+        const TString path = traits.FilePrefix() + name;
+        if constexpr (std::is_same_v<TExportSettings, NExport::TExportToS3Settings>) {
+            const auto& data = f.GetS3Data();
+            UNIT_ASSERT_C(data.contains(path), path);
+            return data.at(path);
+        } else {
+            return TFileInput(TFsPath(f.GetTempDir().Path()) / path).ReadAll();
+        }
+    };
+    NKikimr::NBackup::TSchemaMapping mapping;
+    TString error;
+    UNIT_ASSERT_C(mapping.Deserialize(read("SchemaMapping/mapping.json"), error), error);
+    UNIT_ASSERT_VALUES_EQUAL(mapping.Items.size(), 2);
+    THashSet<TString> names;
+    for (const auto& entry : mapping.Items) {
+        names.insert(entry.ObjectPath);
+        const TString prefix = NKikimr::NBackup::NormalizeItemPrefix(entry.ExportPrefix) + "/";
+        const auto metadata = NKikimr::NBackup::TMetadata::Deserialize(read(prefix + "metadata.json"));
+        UNIT_ASSERT(metadata.GetDirectoryAttributes());
+        if (entry.ObjectPath.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(metadata.GetDirectoryAttributes()->at("team"), "billing");
+        } else {
+            UNIT_ASSERT(metadata.GetDirectoryAttributes()->empty());
+        }
+        read(prefix + "permissions.pb");
+        read(prefix + "metadata.json.sha256");
+    }
+    UNIT_ASSERT(names.contains(""));
+    UNIT_ASSERT(names.contains("metadata.json"));
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
 void ExportWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
@@ -2383,6 +2430,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
     Y_UNIT_TEST(OnlyOneEmptyDirectory) {
         OnlyOneEmptyDirectoryImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
+    Y_UNIT_TEST(ExportEmptyDirectories) {
+        ExportEmptyDirectoriesImpl<NExport::TExportToFsSettings>(*this);
+    }
     Y_UNIT_TEST(ExportWholeDatabase) {
         ExportWholeDatabaseImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
@@ -2556,6 +2606,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
 
     Y_UNIT_TEST_TWIN(OnlyOneEmptyDirectory, IsOlap) {
         OnlyOneEmptyDirectoryImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
+    }
+    Y_UNIT_TEST(ExportEmptyDirectories) {
+        ExportEmptyDirectoriesImpl<NExport::TExportToS3Settings>(*this);
     }
 
     Y_UNIT_TEST_TWIN(ExportRecursiveWithoutDestinationPrefix, IsOlap) {

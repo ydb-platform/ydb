@@ -71,6 +71,9 @@ public:
     void SetSourceDatabase(const TString& database);
     const TString& GetSourceDatabase() const;
 
+    void SetDirectoryAttributes(TMap<TString, TString> attributes);
+    const std::optional<TMap<TString, TString>>& GetDirectoryAttributes() const;
+
     void AddChangefeed(const TChangefeedMetadata& changefeed);
     const std::optional<std::vector<TChangefeedMetadata>>& GetChangefeeds() const;
 
@@ -96,6 +99,8 @@ private:
     TMap<TVirtualTimestamp, TLogMetadata::TPtr> Logs;
     TMaybeFail<ui64> Version;
     TString SourceDatabase;
+    // An empty map represents a directory with no user attributes.
+    std::optional<TMap<TString, TString>> DirectoryAttributes;
 
     // Changefeeds:
     // Undefined (previous versions): we don't know if we see the export with changefeeds or without them, so list suitable S3 files to find out all changefeeds

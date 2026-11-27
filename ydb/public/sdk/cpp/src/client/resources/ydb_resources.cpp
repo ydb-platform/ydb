@@ -28,6 +28,7 @@ const char* YDB_SESSION_CLOSE = "session-close";
 // Send ("x-ydb-client-capabilities", "session-balancer") pair in metadata with a СreateSession request to enable server side session balancing feature.
 const char* YDB_CLIENT_CAPABILITIES = "x-ydb-client-capabilities";
 const char* YDB_CLIENT_CAPABILITY_SESSION_BALANCER = "session-balancer";
+const char* YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT = "directory-export";
 
 
 std::string GetSdkSemver() {

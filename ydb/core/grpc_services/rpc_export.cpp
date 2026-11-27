@@ -173,12 +173,17 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         return "[CreateExport]";
     }
 
-    static bool IsItemSupportedInExport(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+    bool IsItemSupportedInExport(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) const {
         if (NBackup::IsOmittedFromBackup(entry.Attributes)) {
             return false;
         }
 
         switch (entry.Kind) {
+            case NSchemeCache::TSchemeCacheNavigate::KindPath:
+                return (IsS3Export || IsFsExport) && AppData()->FeatureFlags.GetEnableDirectoryExport()
+                    && entry.Self && entry.Self->Info.GetPathType() == NKikimrSchemeOp::EPathTypeDir
+                    && !entry.Path.empty() && !NNaming::IsInternalName(entry.Path.back())
+                    && CanonizePath(entry.Path) != CanonizePath(this->GetDatabaseName());
             case NSchemeCache::TSchemeCacheNavigate::KindTable: {
                 auto it = entry.Attributes.find("__async_replica");
                 return it == entry.Attributes.end() || it->second != "true";
@@ -265,7 +270,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 && !HasCommonSourcePathPrefix(fullPath) && fullPath != CommonSourcePath) {
                 fullPath = CommonSourcePath + fullPath;
             }
-            if (IsExcludedFromExport(fullPath)) {
+            if (!AbsoluteExcludePaths && IsExcludedFromExport(fullPath)) {
                 continue;
             }
             paths.emplace_back(fullPath);
@@ -428,6 +433,10 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 if (IsLikeDirectory(kind)) {
                     DirectoryItems[path] = it->second;
                 }
+                if (AbsoluteExcludePaths && IsExcludedFromExport(path)) {
+                    ExportItems.erase(it);
+                    continue;
+                }
                 if (!IsItemSupportedInExport(entry)) {
                     if (IsLikeDirectory(kind)) { // If directories/databases are not supported => it is OK, they are expanded and then thrown
                         ExportItems.erase(it);
@@ -452,6 +461,17 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                         << path << "\" does not have list entry");
                 }
                 const bool isRoot = path == canonizedDatabasePath;
+                const auto directory = std::move(it->second);
+                DirectoryItems.erase(it);
+                if (NBackup::IsOmittedFromBackup(entry.Attributes)) {
+                    ExportItems.erase(path);
+                    continue;
+                }
+                if (IsItemSupportedInExport(entry) && !IsExcludedFromExport(path)) {
+                    ExportItems.try_emplace(path, TExportItemInfo{.Destination = directory.Destination, .Resolved = true});
+                } else {
+                    ExportItems.erase(path);
+                }
                 for (const NSchemeCache::TSchemeCacheNavigate::TListNodeEntry::TChild& child : entry.ListNodeEntry->Children) {
                     const NSchemeCache::TSchemeCacheNavigate::EKind kind = child.Kind;
                     if (isRoot && kind == NSchemeCache::TSchemeCacheNavigate::KindPath) {
@@ -462,8 +482,8 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                     }
                     const TString childPath = CanonizePath(TStringBuilder() << path << "/" << child.Name);
                     TString destination;
-                    if (it->second.Destination) {
-                        destination = TStringBuilder() << it->second.Destination << "/" << child.Name;
+                    if (directory.Destination) {
+                        destination = TStringBuilder() << directory.Destination << "/" << child.Name;
                     }
                     if (IsLikeDirectory(kind)) {
                         DirectoryItems.insert({childPath, TExportItemInfo{.Destination = destination}});
@@ -474,7 +494,6 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                         }
                     }
                 }
-                DirectoryItems.erase(it);
             }
         }
 
@@ -576,7 +595,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
     bool IsExcludedFromExport(const TString& exportPath) const {
         const char* path = exportPath.c_str();
-        if (HasCommonSourcePathPrefix(exportPath)) {
+        if (!AbsoluteExcludePaths && HasCommonSourcePathPrefix(exportPath)) {
             path += CommonSourcePath.size() + 1; // prefix + /
         }
         for (const auto& regexp : ExcludeRegexps) {
@@ -598,6 +617,8 @@ public:
 
         const auto& settings = request.settings();
         InitCommonSourcePath();
+        AbsoluteExcludePaths = (IsS3Export || IsFsExport)
+            && this->Request->HasClientCapability(NYdb::YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT);
 
         if constexpr (TTraits::HasEncryption) {
             if (settings.has_encryption_settings()) { // Validate that it is possible to encrypt with these settings
@@ -718,6 +739,7 @@ private:
     THashMap<TString, TExportItemInfo> ExportItems;
     THashMap<TString, TExportItemInfo> DirectoryItems;
     std::vector<TRegExMatch> ExcludeRegexps;
+    bool AbsoluteExcludePaths = false;
 }; // TExportRPC
 
 class TExportToYtRPC: public TExportRPC<TExportToYtRPC, TEvExportToYtRequest> {

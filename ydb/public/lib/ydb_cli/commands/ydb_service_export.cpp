@@ -1,6 +1,7 @@
 #include "ydb_service_export.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/public/lib/ydb_cli/common/exclude_item.h>
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
@@ -445,10 +446,6 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     // YDB supported recursive directories handling along with --destination-prefix option.
     // So if we use it, then we can suppose that YDB already supports expanding of items.
     const bool expandItems = (!CommonDestinationPrefix || !ExclusionPatterns.empty());
-    if (expandItems && settings.Item_.empty()) {
-        constexpr bool isFs = std::is_same_v<TSettings, NExport::TExportToFsSettings>;
-        settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database, .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
-    }
 
     const auto driver = CreateDriver(config);
 
@@ -461,14 +458,26 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     TTableClient tableClient(driver);
 
     if (expandItems) {
-        ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
-        if (settings.Item_.empty()) {
-            if (!ExclusionPatterns.empty()) {
-                Cerr << "No items to export after applying exclude filters" << Endl;
-            } else {
-                Cerr << "No items to export" << Endl;
+        const TDescribePathSettings::THeader capability{{YDB_CLIENT_CAPABILITIES, YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT}};
+        const auto probe = schemeClient.DescribePath(config.Database, TDescribePathSettings().Header(capability)).GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(probe);
+        const auto [begin, end] = probe.GetResponseMetadata().equal_range(YDB_SERVER_HINTS);
+        if (std::any_of(begin, end, [](const auto& hint) { return hint.second == YDB_CLIENT_CAPABILITY_DIRECTORY_EXPORT; })) {
+            settings.Header(capability);
+            for (const auto& pattern : ExclusionPatterns) {
+                settings.AppendExcludeRegexp(pattern.GetRegExpr());
             }
-            return EXIT_FAILURE;
+        } else {
+            if (settings.Item_.empty()) {
+                constexpr bool isFs = std::is_same_v<TSettings, NExport::TExportToFsSettings>;
+                settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database,
+                    .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
+            }
+            ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
+            if (settings.Item_.empty()) {
+                Cerr << (ExclusionPatterns.empty() ? "No items to export" : "No items to export after applying exclude filters") << Endl;
+                return EXIT_FAILURE;
+            }
         }
     }
 

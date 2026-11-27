@@ -51,6 +51,9 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     struct TAccountClusters {
         absl::flat_hash_set<TString> Read;
         absl::flat_hash_set<TString> Write;
+        // Cluster name -> KB/s from the account rolling write quota (Account.writeWeights).
+        // Empty when the Account table has no writeWeights column.
+        absl::flat_hash_map<TString, ui64> WriteWeights;
         // From PQ/Config/V2/Account.version. Independent of every other account.
         i64 Version = 0;
 

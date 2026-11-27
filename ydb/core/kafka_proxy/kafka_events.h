@@ -11,6 +11,8 @@
 #include "actors/actors.h"
 #include <util/generic/hash.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 using namespace NActors;
 
 namespace NKafka {
@@ -49,6 +51,10 @@ struct TEvKafka {
         EvFetchActorStateResponse,
         EvMtlsAuthRequest,
         EvTokenRecheck,
+        EvGetGroupMemberCounter,
+        EvSaveGroupMemberCounter,
+        EvReleaseGroupMemberCounter,
+        EvCleanupGroupMemberCounter,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -257,6 +263,7 @@ struct TEvKafka {
         {}
     };
 
+
     struct TEvReadSessionInfo : public TEventLocal<TEvReadSessionInfo, EvReadSessionInfo> {
         TEvReadSessionInfo(const TString& groupId)
         : GroupId(groupId)
@@ -294,6 +301,58 @@ struct PartitionConsumerOffset {
         , Metadata(metadata)
     {}
 };
+
+    struct TEvGetGroupMemberCounter : public TEventLocal<TEvGetGroupMemberCounter, EvGetGroupMemberCounter> {
+        TVector<std::pair<TString, TString>> Labels;
+        TActorId ConnectionId;
+        TString GroupId;
+        ui64 Generation;
+        std::optional<i64> MemberCount;
+
+        TEvGetGroupMemberCounter(TVector<std::pair<TString, TString>> labels,
+                                 TActorId connectionId,
+                                 TString groupId,
+                                 ui64 generation,
+                                 std::optional<i64> memberCount = std::nullopt)
+            : Labels(std::move(labels))
+            , ConnectionId(connectionId)
+            , GroupId(std::move(groupId))
+            , Generation(generation)
+            , MemberCount(memberCount)
+        {}
+    };
+
+    struct TEvSaveGroupMemberCounter : public TEventLocal<TEvSaveGroupMemberCounter, EvSaveGroupMemberCounter> {
+        NMonitoring::TDynamicCounters::TCounterPtr Counter;
+        TString GroupId;
+        ui64 Generation;
+
+        TEvSaveGroupMemberCounter(NMonitoring::TDynamicCounters::TCounterPtr counter, TString groupId, ui64 generation)
+            : Counter(std::move(counter))
+            , GroupId(std::move(groupId))
+            , Generation(generation)
+        {}
+    };
+
+    struct TEvReleaseGroupMemberCounter : public TEventLocal<TEvReleaseGroupMemberCounter, EvReleaseGroupMemberCounter> {
+        TString GroupId;
+        ui64 Generation;
+        TVector<std::pair<TString, TString>> Labels;
+
+        TEvReleaseGroupMemberCounter(TString groupId, ui64 generation, TVector<std::pair<TString, TString>> labels)
+            : GroupId(std::move(groupId))
+            , Generation(generation)
+            , Labels(std::move(labels))
+        {}
+    };
+
+    struct TEvCleanupGroupMemberCounter : public TEventLocal<TEvCleanupGroupMemberCounter, EvCleanupGroupMemberCounter> {
+        TVector<std::pair<TString, TString>> Labels;
+
+        explicit TEvCleanupGroupMemberCounter(TVector<std::pair<TString, TString>> labels)
+            : Labels(std::move(labels))
+        {}
+    };
 
 struct TPartitionOffsetsInfo {
     ui64 PartitionId = 0;

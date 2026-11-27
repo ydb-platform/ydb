@@ -8,6 +8,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+
+#include <google/protobuf/util/time_util.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
@@ -16,6 +19,21 @@
 
 namespace NKikimr::NReplication::NController {
 
+namespace {
+
+struct TTopicToDescribe {
+    TString SrcPath;
+    TString Consumer;
+};
+
+bool CanDescribeMirror(const TReplication& replication, const TReplication::ITarget& target) {
+    return IsTopicTarget(target.GetKind())
+        && replication.GetState() == TReplication::EState::Ready
+        && replication.GetDesiredState() == TReplication::EState::Ready
+        && target.GetDstState() == TReplication::EDstState::Ready
+        && target.GetStreamState() == TReplication::EStreamState::Ready;
+}
+
 class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
     void DescribeTarget(ui64 id) {
         Y_ABORT_UNLESS(Targets.contains(id));
@@ -23,7 +41,7 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
     }
 
     void Reply() {
-        Send(Parent, new TEvPrivate::TEvDescribeTargetsResult(Sender, ReplicationId, std::move(Result)));
+        Send(Parent, new TEvPrivate::TEvDescribeTargetsResult(Sender, ReplicationId, std::move(Result), std::move(TopicLags)));
         PassAway();
     }
 
@@ -62,7 +80,35 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
             Result.emplace(id, std::nullopt);
         }
 
-        if (Result.size() == Targets.size()) {
+        CheckDone();
+    }
+
+    void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
+        const auto id = ev->Cookie;
+        const auto it = Topics.find(id);
+        if (it == Topics.end() || TopicLags.contains(id)) {
+            return;
+        }
+
+        std::optional<ui64> lagMs;
+        const auto& result = ev->Get()->Result;
+        if (result.IsSuccess()) {
+            const auto& topic = NYdb::TProtoAccessor::GetProto(result.GetTopicDescription());
+            const auto* consumer = FindIfPtr(topic.consumers(), [&](const auto& consumer) {
+                return consumer.name() == it->second.Consumer;
+            });
+            if (consumer && consumer->consumer_stats().has_max_committed_time_lag()) {
+                lagMs = google::protobuf::util::TimeUtil::DurationToMilliseconds(
+                    consumer->consumer_stats().max_committed_time_lag());
+            }
+        }
+
+        TopicLags.emplace(id, lagMs);
+        CheckDone();
+    }
+
+    void CheckDone() {
+        if (Result.size() == Targets.size() && TopicLags.size() == Topics.size()) {
             Reply();
         }
     }
@@ -77,29 +123,37 @@ public:
             const TActorId& parent,
             ui64 rid,
             const TActorId& proxy,
-            THashMap<ui64, TString>&& targets)
+            THashMap<ui64, TString>&& targets,
+            THashMap<ui64, TTopicToDescribe>&& topics)
         : Sender(sender)
         , Parent(parent)
         , ReplicationId(rid)
         , YdbProxy(proxy)
-        , Targets (std::move(targets))
+        , Targets(std::move(targets))
+        , Topics(std::move(topics))
         , LogPrefix(CreateActorLogPrefix("TargetDescriber", ReplicationId))
     {
     }
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
-        if (!YdbProxy || Targets.empty()) {
+        if (!YdbProxy || (Targets.empty() && Topics.empty())) {
             return Reply();
         }
 
         // Source statistics are optional: even a live proxy may never receive
         // a response from the source. Return the available results on timeout.
-        Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
+        constexpr auto timeout = TDuration::Seconds(5);
+        const auto deadline = NYdb::TDeadline::AfterDuration(timeout);
+        Schedule(timeout, new TEvents::TEvWakeup());
         for (const auto& [id, _] : Targets) {
             DescribeTarget(id);
         }
 
+        for (const auto& [id, topic] : Topics) {
+            Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(topic.SrcPath,
+                NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true).Deadline(deadline)), 0, id);
+        }
         Become(&TThis::StateWork);
     }
 
@@ -108,6 +162,7 @@ public:
             {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
+            hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
             sFunc(TEvents::TEvWakeup, Reply);
             sFunc(TEvents::TEvPoison, Reply);
         }
@@ -119,11 +174,15 @@ private:
     const ui64 ReplicationId;
     const TActorId YdbProxy;
     const THashMap<ui64, TString> Targets;
+    const THashMap<ui64, TTopicToDescribe> Topics;
+    TEvPrivate::TEvDescribeTargetsResult::TTopicLags TopicLags;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TEvPrivate::TEvDescribeTargetsResult::TResult Result;
 
 }; // TTargetDescriber
+
+} // anonymous namespace
 
 class TController::TTxDescribeReplication: public TTxBase {
     const TActorId Sender;
@@ -132,6 +191,7 @@ class TController::TTxDescribeReplication: public TTxBase {
     TReplication::TPtr Replication;
     THolder<TEvController::TEvDescribeReplicationResult> Result;
     THashMap<ui64, TString> TargetsToDescribe;
+    THashMap<ui64, TTopicToDescribe> TopicsToDescribe;
 
     static bool HasInitialScan(TReplication::ETargetKind kind) {
         return EqualToOneOf(kind, TReplication::ETargetKind::Table, TReplication::ETargetKind::IndexTable);
@@ -189,14 +249,18 @@ public:
         {
             for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
                 auto* target = Replication->FindTarget(tid);
-                if (!target || !HasInitialScan(target->GetKind())) {
+                if (!target) {
                     continue;
                 }
 
-                TargetsToDescribe.emplace(tid, target->GetSrcPath());
+                if (HasInitialScan(target->GetKind())) {
+                    TargetsToDescribe.emplace(tid, target->GetSrcPath());
+                } else if (CanDescribeMirror(*Replication, *target)) {
+                    TopicsToDescribe.emplace(tid, TTopicToDescribe{target->GetSrcPath(), target->GetStreamConsumerName()});
+                }
             }
 
-            if (TargetsToDescribe) {
+            if (TargetsToDescribe || TopicsToDescribe) {
                 return true;
             }
         }
@@ -252,8 +316,8 @@ public:
         using TInitialScanProgress = NYdb::NTable::TChangefeedDescription::TInitialScanProgress;
         std::optional<TInitialScanProgress> totalScanProgress;
 
-        if (PrivEv) {
-            totalScanProgress = std::make_optional<TInitialScanProgress>();
+        if (PrivEv && !PrivEv->Get()->Result.empty()) {
+            totalScanProgress.emplace();
         }
 
         bool isTransfer = replication->GetConfig().HasTransferSpecific();
@@ -302,6 +366,13 @@ public:
                 auto& issue = *item.AddIssues();
                 issue.set_severity(static_cast<uint32_t>(NYdb::NIssue::ESeverity::Error));
                 issue.set_message(target->GetIssue());
+            }
+
+            if (PrivEv && CanDescribeMirror(*replication, *target)) {
+                const auto& lags = PrivEv->Get()->TopicLags;
+                if (auto it = lags.find(tid); it != lags.end() && it->second) {
+                    item.SetLagMilliSeconds(*it->second);
+                }
             }
 
             if (PrivEv && HasInitialScan(target->GetKind())) {
@@ -365,14 +436,15 @@ public:
 
         if (Result) {
             ctx.Send(Sender, Result.Release());
-        } else if (TargetsToDescribe) {
+        } else if (TargetsToDescribe || TopicsToDescribe) {
             Y_ABORT_UNLESS(Replication);
             Replication->AddTargetDescriber(ctx.Register(new TTargetDescriber(
                 Sender,
                 ctx.SelfID,
                 Replication->GetId(),
                 Replication->GetYdbProxy(),
-                std::move(TargetsToDescribe))));
+                std::move(TargetsToDescribe),
+                std::move(TopicsToDescribe))));
         }
     }
 

@@ -1,4 +1,5 @@
 #include "ydb_proxy.h"
+#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/security/sasl/base_auth_actors.h>
 #include <ydb/library/testlib/helpers.h>
 
@@ -9,6 +10,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/hash_set.h>
+#include <util/generic/scope.h>
 #include <util/string/printf.h>
 
 namespace NKikimr::NReplication {
@@ -697,6 +699,46 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
             UNIT_ASSERT_VALUES_EQUAL(schema.GetTotalPartitionsCount(), 1);
             UNIT_ASSERT_VALUES_EQUAL(schema.GetRetentionPeriod(), TDuration::Days(1));
         }
+
+        const auto local = env.GetRuntime().Register(CreateLocalYdbProxy("/Root"));
+        for (const auto& proxy : {env.GetYdbProxy(), local}) {
+            auto settings = NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true).Deadline(NYdb::TDeadline::Now());
+            auto ev = env.Send<TEvYdbProxy::TEvDescribeTopicResponse>(proxy,
+                new TEvYdbProxy::TEvDescribeTopicRequest("/Root/topic", settings));
+            UNIT_ASSERT(ev);
+            const auto status = ev->Get()->Result.GetStatus();
+            UNIT_ASSERT_C(status == NYdb::EStatus::TIMEOUT || status == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED, status);
+        }
+    }
+
+    Y_UNIT_TEST(LocalDescribeTopicDeadlineWhileWaitingForSchema) {
+        TEnv<> env(true, NTestHelpers::ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        const auto proxy = runtime.Register(CreateLocalYdbProxy("/Root"));
+
+        auto previous = runtime.SetRegistrationObserverFunc(
+            [proxy](TTestActorRuntimeBase& rt, const TActorId& parent, const TActorId& actor) {
+                if (parent == proxy) {
+                    rt.EnableScheduleForActor(actor);
+                }
+            });
+        Y_DEFER { runtime.SetRegistrationObserverFunc(std::move(previous)); };
+
+        bool waiting = false;
+        auto block = runtime.AddObserver<NPQ::NDescriber::TEvDescribeTopicsResponse>([&](auto& ev) {
+            waiting = true;
+            ev.Reset();
+        });
+        auto settings = NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true)
+            .Deadline(NYdb::TDeadline::AfterDuration(TDuration::Seconds(5)));
+        runtime.Send(new IEventHandle(proxy, env.GetSender(),
+            new TEvYdbProxy::TEvDescribeTopicRequest("/Root/topic", settings)), 0, /* viaActorSystem */ true);
+
+        const auto response = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicResponse>(
+            env.GetSender(), TDuration::Seconds(10));
+        UNIT_ASSERT(waiting);
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Result.GetStatus(), NYdb::EStatus::TIMEOUT);
     }
 
     Y_UNIT_TEST(DescribeConsumer) {

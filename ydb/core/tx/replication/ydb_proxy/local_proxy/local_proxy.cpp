@@ -4,8 +4,11 @@
 #include <ydb/core/grpc_services/service_scheme.h>
 #include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/util/proto_duration.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+
+#include <chrono>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_YDB_PROXY
 
@@ -114,10 +117,11 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
     YDB_LOG_TRACE("Handle",
         {"ev", ev->Get()->ToString()});
 
-    auto [path, _] = std::move(ev->Get()->GetArgs());
+    auto [path, settings] = std::move(ev->Get()->GetArgs());
     path = MakeLocalPath(path);
 
     auto request = std::make_unique<Ydb::Topic::DescribeTopicRequest>();
+    request->set_include_stats(settings.IncludeStats_);
     request->set_path(TStringBuilder() << Database << "/" << path);
 
     class TDescribeTopicContext: public TCaptureContext {
@@ -144,6 +148,17 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
     };
 
     auto cb = CreateCallback(std::make_shared<TDescribeTopicContext>(ev->Sender, ev->Cookie));
+    if (settings.Deadline_ != NYdb::TDeadline::Max()) {
+        const auto deadline = settings.Deadline_.GetTimePoint();
+        const auto now = NYdb::TDeadline::Clock::now();
+        if (deadline <= now) {
+            return cb(Ydb::StatusIds::TIMEOUT, nullptr);
+        }
+
+        const TDuration remaining = std::chrono::ceil<std::chrono::microseconds>(deadline - now);
+        SetDuration(remaining, *request->mutable_operation_params()->mutable_operation_timeout());
+    }
+
     NGRpcService::DoDescribeTopicRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), cb), *this);
 }
 

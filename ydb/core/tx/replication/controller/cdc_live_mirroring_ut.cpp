@@ -199,9 +199,13 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(mirrored.Producer, first.Producer);
         UNIT_ASSERT_VALUES_EQUAL(mirrored.SeqNo, first.SeqNo);
         CheckOffsets(1);
+        WaitForReplication(Destination, [&] {
+            return DescribeTopicLag(Destination, "/Root/replication", DestinationFeed) == TDuration::Zero();
+        }, "CDC mirroring consumer has caught up");
 
         Scheme(Destination, "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'PAUSED');");
         WaitForState(NKikimrReplication::TReplicationState::kPaused);
+        UNIT_ASSERT(!DescribeTopicLag(Destination, "/Root/replication", DestinationFeed));
         Execute(Source, "UPSERT INTO `/Root/source` (key, value) VALUES (2u, 20u);");
 
         Scheme(Destination, "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'STANDBY');");

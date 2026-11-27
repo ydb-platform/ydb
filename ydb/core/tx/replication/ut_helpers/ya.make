@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/tx/replication/ydb_proxy
     ydb/library/actors/core
     ydb/public/api/grpc
+    ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/topic
     library/cpp/testing/unittest
 )

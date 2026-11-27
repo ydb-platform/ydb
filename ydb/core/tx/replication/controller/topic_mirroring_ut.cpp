@@ -710,9 +710,17 @@ Y_UNIT_TEST_SUITE(TopicMirroring) {
         UNIT_ASSERT_VALUES_EQUAL(test.GetSourceConsumerOffset(), appOffset);
 
         test.CheckBacklog(1, end);
+        UNIT_ASSERT(!DescribeTopicLag(test.Destination, "/Root/replication", "/Root/topic", false));
+        WaitForReplication(test.Destination, [&] {
+            const auto lag = DescribeTopicLag(test.Destination, "/Root/replication", "/Root/topic");
+            return lag && *lag > TDuration::Zero();
+        }, "mirroring consumer has committed time lag");
         mirrorReader.Resume();
         test.ReadBack(backlog, 1);
         test.WaitForOffsets(end, appOffset);
+        WaitForReplication(test.Destination, [&] {
+            return DescribeTopicLag(test.Destination, "/Root/replication", "/Root/topic") == TDuration::Zero();
+        }, "mirroring consumer has committed the backlog");
         UNIT_ASSERT_VALUES_EQUAL(test.GetSourceConsumerOffset(), appOffset);
     }
 

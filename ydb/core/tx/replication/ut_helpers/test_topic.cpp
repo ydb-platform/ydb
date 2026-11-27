@@ -3,6 +3,8 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
 
@@ -83,6 +85,24 @@ std::optional<TTopicOffsets> DescribeTopicOffsets(TEnv<true>& env, const TString
 
 void WaitForReplication(TEnv<true>& env, const std::function<bool()>& ready, const TString& description) {
     WaitForReplicationUntil(env, [&](NYdb::TDeadline) { return ready(); }, description);
+}
+
+std::optional<TDuration> DescribeTopicLag(TEnv<true>& env, const TString& replication, const TString& target,
+        bool includeStats)
+{
+    NYdb::NReplication::TReplicationClient client(env.GetDriver());
+    auto result = env.RunCall([&] {
+        return client.DescribeReplication(replication, NYdb::NReplication::TDescribeReplicationSettings()
+            .IncludeStats(includeStats)).ExtractValueSync();
+    });
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    for (const auto& item : result.GetReplicationDescription().GetItems()) {
+        if (item.DstPath == target) {
+            return item.Stats.GetLag();
+        }
+    }
+    UNIT_FAIL("Missing replication target " << target);
+    return std::nullopt;
 }
 
 std::optional<TTopicOffsets> GetTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer, ui32 partitionId) {

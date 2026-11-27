@@ -119,7 +119,32 @@ void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2, bo
     ])", FormatResultSetYson(exec.GetResultSet(0)));
 }
 
-void CheckNarrowWindowAggregateResults(const TString& query) {
+// Returns the first DqPhyStage of the AST that contains the marker.
+TString FindStage(const TString& ast, TStringBuf marker) {
+    for (size_t pos = 0; (pos = ast.find("(DqPhyStage", pos)) != TString::npos; ++pos) {
+        int depth = 0;
+        size_t end = pos;
+        for (; end < ast.size(); ++end) {
+            if (ast[end] == '(') {
+                ++depth;
+            } else if (ast[end] == ')' && --depth == 0) {
+                ++end;
+                break;
+            }
+        }
+        const auto stage = ast.substr(pos, end - pos);
+        if (stage.Contains(marker)) {
+            return stage;
+        }
+    }
+    return {};
+}
+
+// Runs the query with and without the narrowing and checks that the results are equal.
+// checkAst gets the explain AST of both runs.
+void CheckNarrowWindowAggregateResults(const TString& query,
+    const std::function<void(const TString& ast, bool narrow)>& checkAst = {})
+{
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(true);
     TKikimrRunner kikimr(appConfig);
@@ -129,6 +154,12 @@ void CheckNarrowWindowAggregateResults(const TString& query) {
         const TString configuredQuery = TStringBuilder()
             << "--!syntax_v1\nPRAGMA ydb.EnableNarrowWindowAggregateInput = '" << (narrow ? "true" : "false") << "';\n"
             << query;
+        if (checkAst) {
+            auto explain = session.ExecuteQuery(configuredQuery, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+            checkAst(*explain.GetStats()->GetAst(), narrow);
+        }
         auto result = session.ExecuteQuery(configuredQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         const auto actual = FormatResultSetYson(result.GetResultSet(0));
@@ -267,18 +298,31 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
             WindowFunctionsV2);
     }
 
-    Y_UNIT_TEST(NarrowWindowAggregateInputKeepsUnusedColumnResults) {
-        for (TStringBuf order : {"", "ORDER BY Key ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING"}) {
+    Y_UNIT_TEST(NarrowWindowAggregateInputDropsUnusedColumn) {
+        for (bool ordered : {false, true}) {
+            const TStringBuf order = ordered ? "ORDER BY Key ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING" : "";
             CheckNarrowWindowAggregateResults(TStringBuilder() << R"(
                 $input = SELECT Key, Text, Data,
                     Unwrap(CAST(Key AS String) || Text || CAST(Data AS String)) AS unused_fat_col
                 FROM `/Root/EightShard`;
                 SELECT Key, Text, Data, unused_fat_col, SUM(Data) OVER w AS total
                 FROM $input WINDOW w AS (PARTITION BY Text
-            )" << order << ");");
+            )" << order << ");", [&](const TString& ast, bool narrow) {
+                // The join side keeps the wide row.
+                UNIT_ASSERT_C(ast.Contains("unused_fat_col"), ast);
+                const auto aggregateStage = FindStage(ast, "AggrAdd");
+                UNIT_ASSERT_C(!aggregateStage.empty(), ast);
+                UNIT_ASSERT_C(aggregateStage.Contains("\"Data\""), aggregateStage);
+                if (ordered) {
+                    // The sort key stays in the aggregate input.
+                    UNIT_ASSERT_C(aggregateStage.Contains("\"Key\""), aggregateStage);
+                }
+                UNIT_ASSERT_VALUES_EQUAL_C(aggregateStage.Contains("unused_fat_col"), !narrow, aggregateStage);
+            });
         }
     }
 
+    // #59253: AGGREGATE_LIST(TableRow()) reads the whole row, so the aggregate input must stay wide.
     Y_UNIT_TEST(NarrowWindowAggregateInputKeepsPlainWholeRowAggregate) {
         CheckNarrowWindowAggregateResults(R"(
             $input = SELECT Key, Text, Data, CAST(Key AS String) AS trace_id,
@@ -286,6 +330,17 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
             FROM `/Root/EightShard`;
             SELECT COUNT(*) AS rows, COUNT(DISTINCT trace_id) AS unique_rows,
                 Yson::From(ListSort(AGGREGATE_LIST(TableRow()), ($row) -> ($row.Key))) AS all_rows
+            FROM $input;
+        )");
+    }
+
+    // No partition key and no aggregate argument: the aggregate input keeps a single column.
+    Y_UNIT_TEST(NarrowWindowAggregateInputCountOverWholeTable) {
+        CheckNarrowWindowAggregateResults(R"(
+            $input = SELECT Key, Text, Data,
+                Unwrap(CAST(Key AS String) || Text || CAST(Data AS String)) AS unused_fat_col
+            FROM `/Root/EightShard`;
+            SELECT Key, unused_fat_col, COUNT(*) OVER () AS rows
             FROM $input;
         )");
     }

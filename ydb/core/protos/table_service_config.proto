@@ -654,7 +654,7 @@ message TTableServiceConfig {
     // Requires EnableFallbackToYqlOptimizer; without it these queries fail compilation.
     optional bool EnableFallbackOnRowTables = 157 [default = false, (InvalidateCompileCache) = true];
 
-    // Drop columns a full-frame window aggregate does not read from the aggregate input.
-    // The joined input keeps those columns. Overridable via PRAGMA ydb.EnableNarrowWindowAggregateInput.
+    // Drop input columns that a PartitionsByKeys over Condense1 (e.g. an expanded full-frame window
+    // aggregate) does not read. The joined input keeps those columns. Overridable via PRAGMA ydb.EnableNarrowWindowAggregateInput.
     optional bool EnableNarrowWindowAggregateInput = 158 [default = false, (InvalidateCompileCache) = true];
 };

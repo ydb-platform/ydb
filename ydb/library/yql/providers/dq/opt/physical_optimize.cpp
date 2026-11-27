@@ -197,7 +197,10 @@ protected:
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildPartitionsStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        return DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        const bool narrowInput = Config->EnableNarrowWindowAggregateInput.Get().GetOrElse(
+            TDqSettings::TDefault::EnableNarrowWindowAggregateInput);
+        return DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, /*typeCtx=*/nullptr,
+            /*enableShuffleElimination=*/false, /*useSortForPartitionsByKeys=*/false, narrowInput);
     }
 
     template <bool IsGlobal>

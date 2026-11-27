@@ -557,7 +557,8 @@ protected:
     {
         bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleEliminationForAggregation());
         const bool windowFunctionsV2 = KqpCtx.Config->GetWindowFunctionsV2();
-        TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination, windowFunctionsV2);
+        const bool narrowInput = KqpCtx.Config->GetEnableNarrowWindowAggregateInput();
+        TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination, windowFunctionsV2, narrowInput);
         DumpAppliedRule("BuildPartitionsStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

@@ -290,7 +290,8 @@ class RestartToAnotherVersionFixture(CompatibilityReadinessMixin):
                 yield
         finally:
             self.stop_driver()
-            self.cluster.stop()
+            # Kill: graceful drain can SIGSEGV after the test body already passed.
+            self.cluster.stop(kill=True)
 
     def change_cluster_version(self):
         self.current_binary_paths_index = (self.current_binary_paths_index + 1) % len(self.all_binary_paths)

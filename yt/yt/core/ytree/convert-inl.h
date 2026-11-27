@@ -217,7 +217,7 @@ TTo ConvertTo(const TFrom& value)
     std::unique_ptr<NYson::IBuildingYsonConsumer<TTo>> buildingConsumer;
     CreateBuildingYsonConsumer(&buildingConsumer, type);
     Serialize(value, buildingConsumer.get());
-    return buildingConsumer->Finish();
+    return std::move(*buildingConsumer).Finish();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

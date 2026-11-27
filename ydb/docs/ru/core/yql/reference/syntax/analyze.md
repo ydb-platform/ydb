@@ -1,5 +1,13 @@
 # ANALYZE
 
+{% if feature_flags.enable_column_statistics == false %}
+{% note info "Функциональность выключена по умолчанию" %}
+
+В этой версии статистика столбцов выключена флагом [`enable_column_statistics`](../../../reference/configuration/feature_flags.md). `ANALYZE` и использование статистики оптимизатором становятся доступны после включения флага в конфигурации кластера. [Как проверить доступность](../../../reference/configuration/feature_flags.md#check-availability).
+
+{% endnote %}
+{% endif %}
+
 `ANALYZE` собирает статистику таблицы и её столбцов. [Стоимостной оптимизатор {{ ydb-short-name }}](../../../concepts/query_execution/optimizer.md) использует её, чтобы оценивать объём обрабатываемых данных и выбирать план запроса.
 
 Оператор работает с одной таблицей и завершается после обновления статистики.

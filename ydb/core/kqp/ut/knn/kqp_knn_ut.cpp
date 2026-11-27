@@ -1,5 +1,10 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -361,6 +366,112 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
 
         // Observer is automatically removed when it goes out of scope
         observer.Remove();
+    }
+
+    Y_UNIT_TEST(VectorSearchStageDoesNotPushIntoUnrelatedSource) {
+        using namespace NYql;
+        using namespace NYql::NNodes;
+
+        TExprContext ctx;
+        const TPositionHandle pos;
+        const auto sourceRows = Build<TCoArgument>(ctx, pos).Name("sourceRows").Done();
+        const auto otherRows = Build<TCoArgument>(ctx, pos).Name("otherRows").Done();
+        const auto rows = Build<TCoArgument>(ctx, pos).Name("rows").Done();
+        const auto row = Build<TCoArgument>(ctx, pos).Name("row").Done();
+        const auto sort = Build<TCoTopSort>(ctx, pos)
+            .Input(rows)
+            .Count<TCoUint64>().Literal().Build("1").Build()
+            .SortDirections<TCoBool>().Literal().Build("true").Build()
+            .KeySelectorLambda().Args({row}).Body<TCoMember>().Struct(row).Name().Build("emb").Build().Build()
+            .Done();
+        const auto stage = Build<TDqStage>(ctx, pos)
+            .Inputs()
+                .Add<TDqSource>()
+                    .DataSource<TCoDataSource>().Category().Build("kqp").Build()
+                    .Settings<TKqpReadRangesSourceSettings>()
+                        .Table<TKqpTable>()
+                            .Path().Build("/Root/TestTable")
+                            .PathId().Build("1:1")
+                            .SysView().Build("")
+                            .Version().Build("1")
+                            .Build()
+                        .Columns().Build()
+                        .Settings().Build()
+                        .RangesExpr<TCoVoid>().Build()
+                        .Build()
+                    .Build()
+                .Add(TExprBase(ctx.NewCallable(pos, "OtherSource", {})))
+                .Build()
+            .Program()
+                .Args({sourceRows, otherRows})
+                .Body<TCoMap>()
+                    .Input<TCoAsList>().Add(otherRows).Build()
+                    .Lambda().Args({rows}).Body(sort).Build()
+                    .Build()
+                .Build()
+            .Settings().Build()
+            .Done();
+
+        // Resolving row-source metadata would be incorrect for this sort.
+        const NOpt::TKqpOptimizeContext optimizeCtx("cluster", MakeIntrusive<TKikimrConfiguration>(),
+            MakeIntrusive<TKikimrQueryContext>(nullptr, nullptr, nullptr), MakeIntrusive<TKikimrTablesData>(), {});
+        UNIT_ASSERT_VALUES_EQUAL(NOpt::KqpApplyVectorTopKToStageWithSource(stage, ctx, optimizeCtx).Raw(), stage.Raw());
+    }
+
+    Y_UNIT_TEST_TWIN(VectorSearchPushdownPreservesReadPath, ScanQuery) {
+        auto settings = TKikimrSettings().SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        TKikimrRunner kikimr(settings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return CreateTableForVectorSearch(db, true); });
+        const auto table = Navigate(runtime, runtime.AllocateEdgeActor(), "/Root/TestTable",
+            NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown)->ResultSet.at(0).TableId.PathId.LocalPathId;
+
+        ui32 reads = 0;
+        bool expectPushdown = true;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+            const auto& read = ev->Get()->Record;
+            if (read.GetTableId().GetTableId() == table) {
+                ++reads;
+                UNIT_ASSERT_VALUES_EQUAL(read.HasVectorTopK(), expectPushdown);
+            }
+        });
+        auto check = [&](const TString& query, const char* expected) {
+            reads = 0;
+            const auto result = kikimr.RunCall([&]() -> TString {
+                if constexpr (ScanQuery) {
+                    auto stream = db.StreamExecuteScanQuery(query).GetValueSync();
+                    UNIT_ASSERT_C(stream.IsSuccess(), stream.GetIssues().ToString());
+                    return StreamResultToYson(stream);
+                } else {
+                    auto result = session.ExecuteDataQuery(query,
+                        TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).GetValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                    return FormatResultSetYson(result.GetResultSet(0));
+                }
+            });
+            CompareYson(expected, result);
+            UNIT_ASSERT(reads > 0);
+        };
+
+        check(R"(
+            SELECT pk FROM `/Root/TestTable`
+            ORDER BY Knn::CosineDistance(emb, String::HexDecode("677102")) LIMIT 1;
+        )", "[[[8]]]");
+
+        expectPushdown = false;
+        check(R"(
+            SELECT pk FROM (
+                SELECT pk, Knn::CosineDistance(emb, String::HexDecode("677102")) AS distance
+                FROM `/Root/TestTable` WHERE data != "8"
+            ) ORDER BY distance LIMIT 1;
+        )", "[[[5]]]");
+        check(R"(
+            SELECT pk FROM `/Root/TestTable`
+            FLATTEN LIST BY (IF(data = "8", ListCreate(Int64?), AsList(pk)) AS item)
+            ORDER BY Knn::CosineDistance(emb, String::HexDecode("677102")) LIMIT 1;
+        )", "[[[5]]]");
     }
 
     Y_UNIT_TEST_TWIN(VectorSearchSamplingSkipsPushdown, ScanQuery) {

@@ -391,6 +391,12 @@ public:
             return result;
         }
 
+        const auto [heartbeatMode, heartbeatModeError] = ChooseHeartbeatMode(newStreamOp, AppData()->FeatureFlags);
+        if (!heartbeatMode) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, heartbeatModeError);
+            return result;
+        }
+
         TMaybe<TChannelsBindings> aggregatorChannels;
         if (ShouldAggregateHeartbeats(newStreamDesc)) {
             aggregatorChannels = CheckCdcAggregatorCanBeCreated(newStreamOp, newStreamPath, context, result);
@@ -447,6 +453,8 @@ public:
         newStreamPath.Base()->UserAttrs->AlterData = userAttrs;
 
         context.SS->CdcStreams.Set(pathId, newStream);
+
+        newStream->AlterData->HeartbeatMode = *heartbeatMode;
 
         if (aggregatorChannels) {
             PlanCdcAggregatorCreation(OperationId, newStreamPath, *aggregatorChannels, context);

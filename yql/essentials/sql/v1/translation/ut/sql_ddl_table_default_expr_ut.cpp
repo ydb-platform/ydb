@@ -1057,7 +1057,7 @@ Y_UNIT_TEST(DefaultSourcePreservesCommentsAndUtf8) {
 Y_UNIT_TEST(DefaultSourceWithAnsiLexer) {
     const TString expression = "('it''s a DEFAULT, value' || 'x')";
     const auto res = SqlToYqlWithAnsiLexer(
-        "USE ydb; ALTER TABLE \"table\" ADD COLUMN \"value\" String DEFAULT " + expression + ";");
+        R"(USE ydb; ALTER TABLE "table" ADD COLUMN "value" String DEFAULT )" + expression + ";");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     UNIT_ASSERT_C(FindNodeByChildAtomContent(res.Root, 1, expression), GetPrettyPrint(res));
 }
@@ -1210,7 +1210,7 @@ Y_UNIT_TEST(SplitTranslationSharesSourceTokenization) {
         for (size_t i = 0; i < defaults; ++i) {
             query << "ALTER TABLE tbl ALTER COLUMN c" << i << " SET DEFAULT $base + " << i << ";";
         }
-        const auto results = NSQLTranslationV1::SqlToAstStatements(env.Lexers, env.Parsers, query, env.Settings, nullptr);
+        const auto results = NSQLTranslationV1::SqlToAstStatements(env.Lexers, env.Parsers, query, env.Settings, /* warningRules = */ nullptr);
         UNIT_ASSERT_VALUES_EQUAL(results.size(), defaults);
         for (const auto& result : results) {
             UNIT_ASSERT_C(result.IsOk(), Err2Str(result));

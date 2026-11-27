@@ -1,5 +1,6 @@
 TAG(
     ya:fat
+    ya:not_autocheck
     sb:ttl=1
     sb:logs_ttl=1
 )

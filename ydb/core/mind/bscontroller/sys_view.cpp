@@ -186,8 +186,7 @@ public:
     }
 
     template <typename TResponse, typename TRequest, typename TIndex>
-    void Reply(TRequest& request, TIndex& index) {
-        const auto& record = request->Get()->Record;
+    THolder<TResponse> BuildResponse(const TRequest& record, const TIndex& index) {
         auto response = MakeHolder<TResponse>();
 
         auto begin = index.begin();
@@ -209,29 +208,50 @@ public:
             }
         }
 
-        for (; begin != end; ++begin) {
+        for (; begin != index.end(); ++begin) {
+            if (end != index.end() && !(begin->first < end->first)) {
+                break;
+            }
             auto* entry = response->Record.AddEntries();
             FillKey(entry->MutableKey(), begin->first);
             entry->MutableInfo()->CopyFrom(*begin->second);
         }
 
-        Send(request->Sender, response.Release());
+        return response;
     }
 
     void Handle(TEvSysView::TEvGetPDisksRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetPDisksResponse>(ev, PDiskIndex);
+        Send(ev->Sender, BuildResponse<TEvSysView::TEvGetPDisksResponse>(ev->Get()->Record, PDiskIndex).Release());
     }
 
     void Handle(TEvSysView::TEvGetVSlotsRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetVSlotsResponse>(ev, VSlotIndex);
+        const auto& request = ev->Get()->Record;
+        auto response = BuildResponse<TEvSysView::TEvGetVSlotsResponse>(request, VSlotIndex);
+        if (request.GetIncludeDDiskPoolNames()) {
+            for (auto& entry : *response->Record.MutableEntries()) {
+                auto* slot = entry.MutableInfo();
+                if (!slot->GetDDisk()) {
+                    continue;
+                }
+                const auto group = GroupIndex.find(TGroupId::FromValue(slot->GetGroupId()));
+                if (group == GroupIndex.end()) {
+                    continue;
+                }
+                const TBoxStoragePoolId poolId(group->second->GetBoxId(), group->second->GetStoragePoolId());
+                if (const auto pool = StoragePoolIndex.find(poolId); pool != StoragePoolIndex.end() && pool->second->HasName()) {
+                    slot->SetStoragePoolName(pool->second->GetName());
+                }
+            }
+        }
+        Send(ev->Sender, response.Release());
     }
 
     void Handle(TEvSysView::TEvGetGroupsRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetGroupsResponse>(ev, GroupIndex);
+        Send(ev->Sender, BuildResponse<TEvSysView::TEvGetGroupsResponse>(ev->Get()->Record, GroupIndex).Release());
     }
 
     void Handle(TEvSysView::TEvGetStoragePoolsRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetStoragePoolsResponse>(ev, StoragePoolIndex);
+        Send(ev->Sender, BuildResponse<TEvSysView::TEvGetStoragePoolsResponse>(ev->Get()->Record, StoragePoolIndex).Release());
     }
 
     void Handle(TEvSysView::TEvGetStorageStatsRequest::TPtr& ev) {
@@ -315,6 +335,15 @@ IActor* TBlobStorageController::CreateSystemViewsCollector() {
 }
 
 void TBlobStorageController::ForwardToSystemViewsCollector(STATEFN_SIG) {
+    if (ev->GetTypeRewrite() == TEvSysView::EvGetStoragePoolsRequest &&
+            ev->Get<TEvSysView::TEvGetStoragePoolsRequest>()->Record.GetNbsDiscoveryOnly()) {
+        auto response = std::make_unique<TEvSysView::TEvGetStoragePoolsResponse>();
+        response->Record.SetHasDDiskPools(std::ranges::any_of(StoragePools, [](const auto& entry) {
+            return entry.second.DDisk;
+        }));
+        Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
     TActivationContext::Forward(ev, SystemViewsCollectorId);
 }
 
@@ -482,6 +511,7 @@ void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageControll
     info->SetErasureSpeciesV2(TErasureType::ErasureSpeciesName(poolInfo.ErasureSpecies));
     info->SetVDiskKindV2(NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(poolInfo.VDiskKind));
     info->SetKind(poolInfo.Kind);
+    info->SetBridgeMode(poolInfo.BridgeMode);
     info->SetNumGroups(poolInfo.NumGroups);
     if (poolInfo.EncryptionMode) {
         info->SetEncryptionMode(*poolInfo.EncryptionMode);
@@ -745,10 +775,11 @@ void TBlobStorageController::UpdateSystemViews() {
                 g.SetBridgeSyncFirstErrorTimestamp(state.FirstErrorTimestamp.GetValue());
                 g.SetBridgeSyncErrorCount(state.ErrorCount);
             }
-            if (const auto stage = GetBridgeSyncStage(groupId)) {
-                g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(*stage));
-                if (*stage != NKikimrBridge::TGroupState::SYNCED) {
-                    if (const auto remaining = GetBridgeSyncRemaining(groupId, *stage)) {
+            ui64 currentRound = 0;
+            if (const auto* pile = FindBridgeSyncPile(groupId, &currentRound)) {
+                g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile->GetStage()));
+                if (pile->GetStage() != NKikimrBridge::TGroupState::SYNCED && pile->GetBecameUnsyncedGeneration() == currentRound) {
+                    if (const auto remaining = GetBridgeSyncRemaining(*pile)) {
                         g.SetBridgeSyncRemainingBytes(remaining->Bytes);
                         g.SetBridgeSyncRemainingBytesComplete(remaining->Complete);
                     }

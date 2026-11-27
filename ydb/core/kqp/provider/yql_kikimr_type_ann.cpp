@@ -3,6 +3,8 @@
 #include "yql_kikimr_settings.h"
 #include "yql_kikimr_type_ann_pg.h"
 
+#include <ydb/core/kqp/common/pg_policy/pg_policy.h>
+
 #include <ydb/core/base/fulltext.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/base/kmeans_clusters.h>
@@ -202,7 +204,7 @@ bool ValidateInteger(TExprContext& ctx, const TMaybeNode<TExprBase>& value, TStr
 }
 
 IGraphTransformer::TStatus CoerceGeneratedLambdaToColumnType(TExprNode::TPtr& lambda, const TTypeAnnotationNode* rowType,
-    const TTypeAnnotationNode& columnType, const TString& columnName, TExprContext& ctx, TTypeAnnotationContext& typeCtx)
+    const TTypeAnnotationNode& columnType, const TString& columnName, TExprContext& ctx, TTypeAnnotationContext& typeCtx, bool disablePgCompatibility)
 {
     if (!rowType) {
         return IGraphTransformer::TStatus::Ok;
@@ -213,7 +215,7 @@ IGraphTransformer::TStatus CoerceGeneratedLambdaToColumnType(TExprNode::TPtr& la
     if (!UpdateLambdaAllArgumentsTypes(probe, {rowType}, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
-    if (!InstantAnnotateTypes(probe, ctx, /* wholeProgram */ false, typeCtx) || !probe->GetTypeAnn()) {
+    if (!NKikimr::NKqp::InstantAnnotateKqpTypes(probe, ctx, typeCtx, disablePgCompatibility) || !probe->GetTypeAnn()) {
         ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder()
             << "Failed to infer the type of generated column " << columnName));
         return IGraphTransformer::TStatus::Error;
@@ -256,7 +258,8 @@ IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription
         }
 
         if (const auto* columnType = table.GetColumnType(name)) {
-            if (auto status = CoerceGeneratedLambdaToColumnType(lambda, table.SchemeNode, *columnType, name, ctx, typeCtx);
+            if (auto status = CoerceGeneratedLambdaToColumnType(lambda, table.SchemeNode, *columnType, name, ctx, typeCtx,
+                sessionCtx.Config().FeatureFlags.GetDisablePgCompatibility());
                 status != IGraphTransformer::TStatus::Ok)
             {
                 return status;
@@ -433,7 +436,7 @@ private:
         return TStatus::Error;
     }
 
-    TStatus HandleRead(TExprBase node, TExprContext& ctx) override {
+    TStatus HandleRead(TExprBase node, TExprNode::TPtr&, TExprContext& ctx) override {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Failed to annotate Read!, IO rewrite should handle this"));
         return TStatus::Error;
     }
@@ -792,7 +795,8 @@ namespace {
             }
 
             // Type the expression body
-            if (!InstantAnnotateTypes(lambda, ctx, /* wholeProgram */ false, typeCtx)) {
+            if (!NKikimr::NKqp::InstantAnnotateKqpTypes(lambda, ctx, typeCtx,
+                sessionCtx.Config().FeatureFlags.GetDisablePgCompatibility())) {
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -1643,6 +1647,16 @@ private:
                 indexType = TIndexDescription::EType::GlobalSyncUnique;
             } else if (type == "globalVectorKmeansTree") {
                 indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
+            } else if (type == "globalHnsw") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableHnswIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "HNSW index support is disabled (EnableHnswIndex)"));
+                    return TStatus::Error;
+                }
+                if (meta->StoreType == EStoreType::Column) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "HNSW indexes require STORE = ROW"));
+                    return TStatus::Error;
+                }
+                indexType = TIndexDescription::EType::GlobalSyncHnsw;
             } else if (type == "globalFulltextPlain") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
@@ -1753,6 +1767,12 @@ private:
 
                 TString error;
                 switch (indexType) {
+                    case TIndexDescription::EType::GlobalSyncHnsw: {
+                        NKikimr::NKMeans::FillHnswSetting(
+                            *vectorIndexKmeansTreeDescription.MutableSettings(),
+                            nameLower, value.StringValue(), error);
+                        break;
+                    }
                     case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                         NKikimr::NKMeans::FillSetting(
                             *vectorIndexKmeansTreeDescription.MutableSettings(),
@@ -1804,9 +1824,13 @@ private:
                     // no specialized index description
                     // no settings validation
                     break;
-                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                case TIndexDescription::EType::GlobalSyncHnsw: {
                     TString error;
-                    if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), error)) {
+                    const bool valid = indexType == TIndexDescription::EType::GlobalSyncHnsw
+                        ? NKikimr::NKMeans::ValidateHnswSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), error)
+                        : NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), error);
+                    if (!valid) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
                         return IGraphTransformer::TStatus::Error;
                     }

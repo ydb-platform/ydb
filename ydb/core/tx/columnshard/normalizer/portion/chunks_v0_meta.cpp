@@ -2,11 +2,11 @@
 #include "normalizer.h"
 
 #include <ydb/core/formats/arrow/size_calcer.h>
-#include <ydb/core/tx/columnshard/counters/portion_index.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/data_stats/shard_data_stats.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
 
 namespace NKikimr::NOlap {
@@ -63,8 +63,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksV0MetaNormalizer::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    TTablesManager tablesManager(
-        controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), 0);
+    TTablesManager tablesManager(controller.GetStoragesManager(), controller.GetDataAccessorsManager(),
+        std::make_shared<TShardDataStats>(controller.GetStoragesManager(), 0), 0);
     if (!tablesManager.InitFromDB(db, nullptr)) {
         YDB_LOG_TRACE_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
             {"normalizer", "TChunksV0MetaNormalizer"},

@@ -36,6 +36,11 @@ CFLAGS(
 )
 ENDIF()
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    toloka/analytics/programs/yql_parser
+)
+
 END()
 
 RECURSE_FOR_TESTS(

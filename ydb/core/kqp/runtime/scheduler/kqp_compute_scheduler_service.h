@@ -4,7 +4,10 @@
 #include "tree/static.h"
 
 #include <ydb/core/base/events.h>
-#include <ydb/core/kqp/counters/kqp_counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
+#include <util/system/mutex.h>
+#include <util/system/rwlock.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 
 namespace NKikimr::NKqp::NScheduler {
@@ -13,7 +16,7 @@ class TCpuGuaranteeError : public yexception {};
 
 class TComputeScheduler : public std::enable_shared_from_this<TComputeScheduler> {
 public:
-    TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters, const TOptions& options);
+    TComputeScheduler(const NMonitoring::TDynamicCounterPtr& counters, const TOptions& options);
 
     void ToggleEnabled(bool enable) {
         Enabled = enable;
@@ -82,7 +85,7 @@ private:
     THashMap<NHdrf::TFullPoolId, NHdrf::NDynamic::TQueryPtr> ReadQueries; // protected by Mutex
 
     const TDelayParams DelayParams;
-    TIntrusivePtr<TKqpCounters> KqpCounters;
+    NMonitoring::TDynamicCounterPtr KqpCounters;
 
     struct {
         NMonitoring::TDynamicCounters::TCounterPtr UpdateFairShare;
@@ -154,5 +157,4 @@ namespace NKikimr::NKqp {
     NScheduler::TComputeSchedulerPtr CreateKqpComputeScheduler(
         const NMonitoring::TDynamicCounterPtr& counters,
         const NKikimrConfig::TAppConfig& appConfig);
-    IActor* CreateKqpComputeSchedulerService(TDuration updateFairSharePeriod);
 }

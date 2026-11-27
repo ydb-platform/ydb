@@ -215,6 +215,8 @@ message TStoragePoolSettings {
     // blob_storage_config.vdisk_heap_allocator_num_leading_disks for this pool, including 0; absent inherits it.
     // Takes effect when a VDisk starts; running VDisks are not restarted.
     optional uint32 VDiskHeapAllocatorNumLeadingDisks = 1;
+    // Target for the ordinary mirror-3-dc groups in this pool. The default is NO_INVARIANT.
+    optional TGroupState.ETargetInvariant TargetInvariant = 2;
 }
 
 message TUpdateStoragePoolSettings {
@@ -673,7 +675,8 @@ message TAllocateVirtualGroup {
     }
     repeated NKikimrBlobDepot.TChannelProfile ChannelProfiles = 5;
     uint64 BlobDepotId = 6; // when the tablet is already created; for testing purposes only
-    optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 8; // if S3 is used as a backend for this instance
+    // Each depot needs a dedicated <ObjectKeyPattern>/<Name> in the backing store.
+    optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 8;
 }
 
 message TDecommitGroups {
@@ -706,7 +709,11 @@ message TUpdateBridgeGroupInfo {
 
 message TReconfigureVirtualGroup {
     string Name = 1;
+    // Changing the bucket or key prefix redirects existing locators. Move any referenced objects first.
     optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 2;
+    // Confirm the new route accesses the same S3 objects, including writes already in flight.
+    bool ConfirmS3RouteChange = 3;
+    reserved 4 to 6;
 }
 
 message TRecommissionGroups {
@@ -753,7 +760,7 @@ message TDefineDataCenterStates {
 message TDefineGroupState {
     message TGroupDefinition {
         optional uint32 GroupId = 1;
-        // Required: exactly three physical realm roles.
+        // Specify exactly three physical realm roles when setting GroupState.
         repeated TDataCenterState.EState FailRealmStates = 2;
         // If set, apply only to this group generation.
         optional uint32 ExpectedGroupGeneration = 3;
@@ -766,6 +773,7 @@ message TDefineGroupState {
 
 message TConfigRequest {
     message TCommand {
+        reserved 68;
         oneof Command {
             TDefineHostConfig DefineHostConfig = 1;
             TReadHostConfig ReadHostConfig = 2;
@@ -964,6 +972,7 @@ message TBaseConfig {
         // Effective mirror-3-dc realms in physical order (0/1/2); empty for other erasure species.
         repeated TFailRealmInfo FailRealms = 14;
         optional TGroupState.EState Mirror3dcState = 15;
+        optional bool DDisk = 16;
     }
     message TNode {
         uint32 NodeId = 1;
@@ -994,6 +1003,8 @@ message TBaseConfig {
     repeated TDevice Device = 5;
     TUpdateSettings Settings = 6;
     TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 7;
+    // Present when the controller supplies typed DDisk pool groups.
+    optional bool HasDDiskPools = 8;
 }
 
 message TMoveCommand {

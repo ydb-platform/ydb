@@ -250,8 +250,15 @@ TIntrusivePtr<TOpRead> TOpRead::FromExpr(TExprNode::TPtr node, TInfoUnitRegistry
     TUnorderedIUs columns;
     columns.Assign(ids);
     const auto storageType = opSource.SourceType().StringValue() == "Row" ? NYql::EStorageType::RowStorage : NYql::EStorageType::ColumnStorage;
-    return MakeIntrusive<TOpRead>(alias, std::move(columns), storageType, opSource.Table().Ptr(),
+    auto read = MakeIntrusive<TOpRead>(alias, std::move(columns), storageType, opSource.Table().Ptr(),
         nullptr, nullptr, std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, node->Pos());
+    if (const auto settings = opSource.Settings()) {
+        read->ForcePrimary = TKqpReadTableSettings::Parse(settings.Cast()).ForcePrimary;
+    }
+    if (const auto index = opSource.Index()) {
+        read->ForceIndex = index.Cast().StringValue();
+    }
+    return read;
 }
 
 TOpRead::TOpRead(const TString& alias, TUnorderedIUs columns, const NYql::EStorageType storageType,

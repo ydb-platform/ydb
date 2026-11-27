@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 
 #include <util/generic/string.h>
@@ -13,4 +14,7 @@ public:
 
 private:
 };
+
+bool IsValidTableKey(TConstArrayRef<TCell> cells, TConstArrayRef<NScheme::TTypeInfo> keyTypes);
+
 }

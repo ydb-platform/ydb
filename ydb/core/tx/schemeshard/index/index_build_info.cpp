@@ -555,6 +555,7 @@ bool TIndexBuildInfo::IsValidState(EState value)
         case EState::AlterSequence:
         case EState::AlterIndexTable:
         case EState::PrepareValidation:
+        case EState::PrepareVectorIndex:
         case EState::Done:
         case EState::Cancellation_Applying:
         case EState::Cancellation_Unlocking:

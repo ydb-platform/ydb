@@ -41,6 +41,9 @@ message TDqSolomonShard {
 
     string ServiceAccount = 40;
     TToken Token = 41;
+
+    optional uint64 MaxRequestsInflight = 50;
+    optional uint64 MaxPointsPerRequest = 51;
 }
 
 message TDownsampling {

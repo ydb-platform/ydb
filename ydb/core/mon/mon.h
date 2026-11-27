@@ -115,6 +115,7 @@ public:
         TActorId Handler;
         EAuthMode AuthMode = EAuthMode::Enforce;
         TVector<TString> AllowedSIDs;
+        bool ExtractDatabaseUserToken = false;
     };
 
     void RegisterActorHandler(const TRegisterHandlerFields& fields);

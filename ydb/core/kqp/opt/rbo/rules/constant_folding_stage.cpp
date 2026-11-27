@@ -50,7 +50,9 @@ void ExtractConstantExprs(const TExprNode::TPtr& input, TVector<std::pair<TExprN
         return;
     }
 
-    if (NKikimr::NKqp::IsConstantExpr(input, foldUdfs) && !input->IsCallable("PgConst")) {
+    // EvaluateExpr must serialize its result. A constant UDF can return a
+    // callable or resource (for example DateTime::Parse), which cannot be folded on its own.
+    if (NKikimr::NKqp::IsConstantExpr(input, foldUdfs) && input->IsPersistable() && !input->IsCallable("PgConst")) {
         TNodeOnNodeOwnedMap deepClones;
         auto inputClone = ctx.DeepCopy(*input, ctx, deepClones, false, true, true);
         exprs.push_back(std::make_pair(input, inputClone));
@@ -147,6 +149,9 @@ void TConstantFoldingStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     do {
         status = evaluator->Transform(evalList, evalList, ctx.ExprCtx);
     } while (status == IGraphTransformer::TStatus::Repeat);
+
+    Y_ENSURE(status == IGraphTransformer::TStatus::Ok && evalList,
+        "RBO constant evaluation failed");
 
     // Iterate over affected operators and modify their expressions with folded expressions
     for (size_t i = 0; i < lambdaList.size(); i++) {

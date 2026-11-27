@@ -83,6 +83,13 @@ GENERATE_ENUM_SERIALIZATION(node.h)
 
 GENERATE_ENUM_SERIALIZATION(sql_call_param.h)
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    classifieds/vsdwh/tools/ci/jobs/yql_udf/parser
+    logos/projects/ads/mldwh/querygen
+    toloka/analytics/programs/yql_parser
+)
+
 END()
 
 RECURSE(

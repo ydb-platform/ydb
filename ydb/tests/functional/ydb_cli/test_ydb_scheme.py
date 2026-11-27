@@ -7,7 +7,7 @@ from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin, set_ydb_cli_te
 
 CLUSTER_CONFIG = dict(
     extra_feature_flags=["enable_views", "enable_external_data_sources"],
-    extra_grpc_services=["view"],
+    extra_grpc_services=["view", "secret"],
     query_service_config=dict(available_external_data_sources=["ObjectStorage"]),
 )
 
@@ -251,12 +251,6 @@ class TestSecretSchemeDescribe:
             assert int(description["version"]) == expected_version, (
                 f"actual version: {description.get('version')!r}"
             )
-
-    @pytest.fixture(scope="module")
-    def ydb_cluster_configuration(self, request):
-        return dict(
-            extra_grpc_services=["secret"],
-        )
 
     def test_describe_secret_format_default(self, ydb_cluster, ydb_database, ydb_client_session):
         secret_name = "cli_scheme_describe_secret"

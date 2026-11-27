@@ -32,6 +32,12 @@ RESOURCE(
     yql/essentials/data/language/langver.json yql/essentials/data/language/langver.json
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    logos/libs/testy/yql_lite
+    logos/projects/ads/mldwh/querygen
+)
+
 END()
 
 RECURSE(

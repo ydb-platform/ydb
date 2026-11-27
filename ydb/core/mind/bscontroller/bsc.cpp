@@ -742,7 +742,7 @@ void TBlobStorageController::ReconcileDataCenterStates() {
         return;
     }
     std::expected<TDataCenterStates, TString> desired = ParseDataCenterStates(StorageConfig->GetDataCenterStates());
-    if (!desired || *desired == DataCenterStates) {
+    if (!desired || (HasDataCenterPolicy && *desired == DataCenterStates)) {
         return;
     }
     auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
@@ -1046,6 +1046,13 @@ void TBlobStorageController::SetHostRecords(THostRecordMap hostRecords) {
     if (std::exchange(HostRecords, std::move(hostRecords))) {
         // we already had some host records, so this isn't the first time this function called
         Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
+        if (GroupStateActorId && !DataCenterStates.empty()) {
+            for (const auto& [groupId, group] : GroupMap) {
+                if (group->ErasureSpecies == TErasureType::ErasureMirror3dc) {
+                    UpdateGroupStateActor(groupId);
+                }
+            }
+        }
         return;
     }
 
@@ -1183,6 +1190,7 @@ STFUNC(TBlobStorageController::StateWork) {
         fFunc(TEvBlobStorage::EvRequestControllerInfo, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerNodeReport, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerConfigRequest, EnqueueIncomingEvent);
+        fFunc(NGroupSyncer::TEvGroupState::EvPropose, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerProposeGroupKey, EnqueueIncomingEvent);
         fFunc(NSysView::TEvSysView::EvGetPDisksRequest, ForwardToSystemViewsCollector);
         fFunc(NSysView::TEvSysView::EvGetVSlotsRequest, ForwardToSystemViewsCollector);
@@ -1346,6 +1354,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerScrubReportQuantumInProgress: return 2;
         case TEvBlobStorage::EvControllerUpdateNodeDrives:             return 2;
         case TEvBlobStorage::EvControllerShredRequest:                 return 2;
+        case NGroupSyncer::TEvGroupState::EvPropose:                   return 2;
 
         // hive-related commands
         case TEvBlobStorage::EvControllerSelectGroups:                 return 4;

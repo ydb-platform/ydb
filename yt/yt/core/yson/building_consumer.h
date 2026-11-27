@@ -11,8 +11,8 @@ template <class T>
 struct IBuildingYsonConsumer
     : public virtual IYsonConsumer
 {
-    //! Finalizes the parsing process and returns the object built by the processed YSON stream.
-    virtual T Finish() = 0;
+    //! Finalizes the parsing process and transfers ownership of the object built by the YSON stream.
+    virtual T Finish() && = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

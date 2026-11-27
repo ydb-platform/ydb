@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
@@ -3069,6 +3070,36 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
             CompareYson(R"([[1u;"1";"1"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
+    }
+
+    Y_UNIT_TEST(CTASRejectsPgBeforeSplit) {
+        auto settings = TKikimrSettings()
+            .SetUseRealThreads(false)
+            .SetWithSampleTables(false)
+            .SetEnableTempTables(true)
+            .SetDisablePgCompatibility(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
+        TKikimrRunner kikimr(settings);
+
+        bool rejectedBeforeSplit = false;
+        const auto observer = kikimr.GetTestServer().GetRuntime()->AddObserver<TEvKqp::TEvSplitResponse>(
+            [&](TEvKqp::TEvSplitResponse::TPtr& ev) {
+                const auto& result = *ev->Get();
+                rejectedBeforeSplit = result.Status == Ydb::StatusIds::BAD_REQUEST && result.Exprs.empty();
+            });
+
+        auto client = kikimr.GetQueryClient();
+        const auto result = kikimr.RunCall([&] {
+            return client.ExecuteQuery(R"(
+                CREATE TABLE Table1 (PRIMARY KEY (Key)) WITH (STORE = ROW)
+                AS SELECT 1u AS Key, FromPg(42p) ?? 0 AS Value;
+            )", TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
+        UNIT_ASSERT(rejectedBeforeSplit);
     }
 
      Y_UNIT_TEST_TWIN(CTAS_BadKey, IsOlap) {

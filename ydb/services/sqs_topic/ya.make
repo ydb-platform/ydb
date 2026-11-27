@@ -24,36 +24,41 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/persqueue/topic_parser
-    ydb/library/grpc/server
+    library/cpp/digest/md5
+    library/cpp/json
+    library/cpp/openssl/crypto
+    library/cpp/string_utils/base64
     ydb/core/base
-    ydb/core/client/server
     ydb/core/grpc_services
-    ydb/core/mind
-    ydb/public/api/grpc
-    ydb/public/api/grpc/draft
-    ydb/public/sdk/cpp/src/library/operation_id
-    ydb/public/sdk/cpp/src/client/resources
-    ydb/services/datastreams/codes
-    ydb/services/lib/actors
-    ydb/services/lib/sharding
-    ydb/services/persqueue_v1
-    ydb/services/sqs_topic/queue_url
-    ydb/services/sqs_topic/queue_url/holder
-    ydb/services/sqs_topic/protos/receipt
-    ydb/services/ydb
+    ydb/core/grpc_services/base
     ydb/core/metering
+    ydb/core/persqueue/events
     ydb/core/persqueue/public
-    ydb/core/persqueue/public/metrics
     ydb/core/persqueue/public/describer
+    ydb/core/persqueue/public/list_topics
+    ydb/core/persqueue/public/metrics
     ydb/core/persqueue/public/mlp
     ydb/core/persqueue/public/ru_quoter
     ydb/core/persqueue/public/schema
+    ydb/core/protos
+    ydb/core/tx/scheme_cache
+    ydb/core/util
     ydb/core/ymq/attributes
     ydb/core/ymq/base
     ydb/core/ymq/error
-    library/cpp/json
-    library/cpp/openssl/crypto
+    ydb/library/aclib
+    ydb/library/actors/core
+    ydb/library/grpc/server
+    ydb/library/http_proxy/error
+    ydb/library/persqueue/topic_parser
+    ydb/library/services
+    ydb/public/api/grpc/draft
+    ydb/public/api/protos
+    ydb/services/datastreams/codes
+    ydb/services/lib/actors
+    ydb/services/sqs_topic/protos/receipt
+    ydb/services/sqs_topic/queue_url
+    ydb/services/sqs_topic/queue_url/holder
 )
 
 END()

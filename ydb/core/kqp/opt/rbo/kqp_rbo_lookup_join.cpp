@@ -123,6 +123,17 @@ size_t GetLookupKeyPrefixLen(const TVector<TString>& keyColumnNames, size_t poin
 
 std::optional<TLookupJoinRightSide> MatchLookupJoinRightSide(const TIntrusivePtr<IOperator>& input) {
     auto op = input;
+    // A filter of the rows a lookup fetches from the main table, e.g. the part of the predicate the index named by
+    // VIEW can not evaluate.
+    TIntrusivePtr<TOpFilter> lookupFilter;
+    if (op->Kind == EOperator::Filter && op->GetChildren().front()->Kind == EOperator::TableLookup) {
+        if (op->Parents.size() > 1) {
+            return std::nullopt;
+        }
+        lookupFilter = CastOperator<TOpFilter>(op);
+        op = lookupFilter->GetInput();
+    }
+
     TIntrusivePtr<TOpTableLookup> sourceLookup;
     if (op->Kind == EOperator::TableLookup) {
         sourceLookup = CastOperator<TOpTableLookup>(op);
@@ -159,7 +170,8 @@ std::optional<TLookupJoinRightSide> MatchLookupJoinRightSide(const TIntrusivePtr
                                              sourceLookup->Table, nullptr, nullptr, std::move(rangeInfo), source.Predicate,
                                              ESortDir::None, sourceLookup->Props, sourceLookup->Pos);
     sourceRead->Type = sourceLookup->Type;
-    return TLookupJoinRightSide{sourceRead, nullptr};
+    sourceRead->ForceIndex = source.ForceIndex;
+    return TLookupJoinRightSide{sourceRead, lookupFilter};
 }
 
 std::optional<THashSet<TString>> GetLookupJoinKeyColumns(const TOpRead& read, const TUnorderedIUs& rightJoinKeys,
@@ -196,7 +208,14 @@ std::optional<TLookupJoinTarget> ChooseLookupJoinTarget(const TOpRead& read, con
         && read.RangeInfo->MainTable != table.Path().Value();
     const auto& mainTableDesc = redirected ? kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.RangeInfo->MainTable) : tableDesc;
     Y_ENSURE(mainTableDesc.Metadata);
-    const bool autoIndexSelection = kqpCtx.Config->IsAutoIndexSelectionForIndexLookupJoinEnabled();
+    // As in the old optimizer, a lookup join probes only the index named by VIEW: the read is either redirected to it
+    // already or still on the main table.
+    auto readTable = tableDesc.Metadata;
+    if (!read.ForceIndex.empty() && !redirected) {
+        readTable = tableDesc.Metadata->GetIndexMetadata(read.ForceIndex).first;
+        Y_ENSURE(readTable, "No metadata of the index " << read.ForceIndex);
+    }
+    const bool autoIndexSelection = read.ForceIndex.empty() && kqpCtx.Config->IsAutoIndexSelectionForIndexLookupJoinEnabled();
     const bool allPointPrefixes = kqpCtx.Config->GetEnableLookupJoinPointPrefixes();
 
     // Without a pushed predicate the read can be redirected to a covering index whose key starts with join keys.
@@ -249,14 +268,14 @@ std::optional<TLookupJoinTarget> ChooseLookupJoinTarget(const TOpRead& read, con
     TVector<const TOpRead::TPointPrefix*> otherPrefixes;
     if (read.RangeInfo.has_value()) {
         for (const auto& prefix : read.RangeInfo->PointPrefixes) {
-            if (prefix.Table == table.Path().Value()) {
-                consider(tableDesc.Metadata, &prefix);
+            if (prefix.Table == readTable->Name) {
+                consider(readTable, &prefix);
             } else if (autoIndexSelection && allPointPrefixes) {
                 otherPrefixes.push_back(&prefix);
             }
         }
     }
-    consider(tableDesc.Metadata, nullptr);
+    consider(readTable, nullptr);
     // A read redirected to an index can be probed in the main table instead, which covers every column. It gets
     // no point prefix above unless the predicate pins its key.
     if (redirected && autoIndexSelection && allPointPrefixes) {

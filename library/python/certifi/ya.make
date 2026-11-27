@@ -15,4 +15,9 @@ PY_SRCS(
     certifi/source.py
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    contrib/python/certifi
+)
+
 END()

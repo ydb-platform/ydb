@@ -388,6 +388,8 @@ message TKqpVectorResolveSettings {
     optional uint64 QuerySpanId = 20;
 
     optional string PoolId = 21;
+    optional NKqpProto.TKqpPhyCnVectorResolve.EIndexType IndexType = 22;
+    optional NKqpProto.TKqpPhyCnVectorResolve.EOperation Operation = 23;
 }
 
 // Settings of the input-transform actor reading top-K rows from a vector KMeans tree index.
@@ -454,6 +456,10 @@ message TKqpVectorSearchSettings {
     // Inconsistent online RO: the reads carry neither a snapshot nor a lock.
     optional bool AllowInconsistentReads = 28;
     optional NKikimrProto.TPathID HnswIndexId = 29;
+
+    // Search all posting partitions without k-means cluster-range pruning.
+    optional bool FullRangeHnsw = 30;
+    optional uint32 HnswEfSearch = 31 [default = 15];
 }
 
 message TKqpTaskInfo {
@@ -599,6 +605,10 @@ message TFinalizeBuildIndex {
     optional uint64 BuildIndexId = 5;
 
     optional NKikimrSchemeOp.TBuildIndexOutcome Outcome = 6;
+
+    // Additional snapshot to remove in the same transaction (vector index delta scan).
+    optional uint64 ExtraSnapshotStep = 7;
+    optional uint64 ExtraSnapshotTxId = 8;
 }
 
 message TDropIndexNotice {
@@ -719,6 +729,9 @@ message TFlatSchemeTransaction {
     optional TTruncateTable TruncateTable = 25;
 
     optional TPrepareIndexValidation PrepareIndexValidation = 26;
+
+    // Seed the sole leaf of an inline, unprefixed HNSW index during table creation.
+    optional bytes InitialHnswCentroid = 27;
 }
 
 message TDistributedEraseTransaction {
@@ -2119,6 +2132,10 @@ message TEvDeltaKMeansRequest {
     // Names of the index prefix columns, in the index key order. Empty for a
     // non-prefixed index; when empty, PrefixColumns leading table key columns are used.
     repeated string PrefixColumnNames = 22;
+
+    // An HNSW index stores vectors in the posting table to build its graph,
+    // so the scan has to add the embedding column to posting rows.
+    optional NKikimrSchemeOp.EIndexType IndexType = 23 [default = EIndexTypeGlobalVectorKmeansTree];
 }
 
 message TEvDeltaKMeansResponse {
@@ -2410,6 +2427,11 @@ message TEvCompactTable {
     optional NKikimrProto.TPathID PathId = 1;
     optional bool CompactBorrowed = 2; // i.e. taken
     optional bool CompactSinglePartedShards = 3;
+    // Column tables: Cascade also rewrites every portion to the current schema before the reply. TxId is the forced
+    // compaction's id in the schemeshard (the TxId of its create request): the same id again is a retry of the request
+    // being served, another id a new forced compaction, none a plain compaction (pre-upgrade schemeshards).
+    optional bool Cascade = 4;
+    optional uint64 TxId = 5;
 }
 
 message TEvCompactTableResult {
@@ -2571,6 +2593,9 @@ message TEvRead {
         // will attempt to use low-priority reads when possible, minimizing
         // effects on concurrent OLTP queries.
         HINT_LOW_PRIORITY = 2;
+
+        // Internal KQP reads of a private export copy.
+        HINT_READ_BACKUP_COPY = 4;
     }
 
     // Optional bit flags with hints

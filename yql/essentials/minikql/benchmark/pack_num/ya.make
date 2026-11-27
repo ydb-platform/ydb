@@ -1,3 +1,5 @@
+NO_BUILD_IF(SANITIZER_TYPE)
+
 # lfalloc crashes on Windows.
 NO_BUILD_IF(OS_WINDOWS)
 

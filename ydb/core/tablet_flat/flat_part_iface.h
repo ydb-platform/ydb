@@ -3,7 +3,7 @@
 #include "flat_page_iface.h"
 #include "flat_sausage_solid.h"
 #include "flat_table_stats.h"
-#include "flat_row_eggs.h"
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include "util_basics.h"
 
 #include <ydb/library/actors/util/shared_data.h>

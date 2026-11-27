@@ -143,7 +143,7 @@ namespace NKikimr::NStorage {
         auto config = *Self->StorageConfig;
         try {
             if (!ApplyStaticDataCenterStates(&config, command)) {
-                return StartDataCenterReconciliation();
+                return StartDataCenterReconciliation(*Self->StorageConfig);
             }
         } catch (const yexception& error) {
             throw TExError() << error.what();
@@ -151,7 +151,7 @@ namespace NKikimr::NStorage {
         if (Self->StorageConfig->HasDataCenterStates()) {
             ProposedStorageConfig = std::move(config);
             DataCenterPreflight = true;
-            return StartDataCenterReconciliation();
+            return StartDataCenterReconciliation(*Self->StorageConfig);
         }
         StartProposition(&config);
     }
@@ -385,35 +385,34 @@ namespace NKikimr::NStorage {
         }
         SuccessfulVDisks.emplace(&GroupInfo->GetTopology());
 
-        TVector<ui32> nodesToConnect;
-        for (ui32 i = 0, num = GroupInfo->GetTotalVDisksNum(); i < num; ++i) {
-            const TVDiskID vdiskId = GroupInfo->GetVDiskId(i);
-            const TActorId actorId = GroupInfo->GetActorId(i);
-            const ui32 nodeId = actorId.NodeId();
-            if (nodeId == SelfId().NodeId()) {
-                SendVStatusQuery(actorId, vdiskId);
+        for (ui32 i = 0; i < GroupInfo->GetTotalVDisksNum(); ++i) {
+            IssueVStatusQuery(GroupInfo->GetActorId(i), GroupInfo->GetVDiskId(i));
+        }
+    }
+
+    void TInvokeRequestHandlerActor::IssueVStatusQuery(TActorId actorId, TVDiskID vdiskId) {
+        if (PendingVDiskIds.empty()) {
+            TActivationContext::Schedule(TDuration::Seconds(30), new IEventHandle(TEvents::TSystem::Wakeup, 0,
+                SelfId(), {}, nullptr, VStatusTimeoutCookie));
+        }
+        ActorToVDisk.emplace(actorId, vdiskId);
+        PendingVDiskIds.emplace(vdiskId);
+
+        const ui32 nodeId = actorId.NodeId();
+        if (nodeId == SelfId().NodeId()) {
+            SendVStatusQuery(actorId, vdiskId);
+        } else {
+            NodeToVDisk.emplace(nodeId, vdiskId);
+            const auto [it, inserted] = Subscriptions.try_emplace(nodeId);
+            if (it->second) {
+                SendVStatusQuery(actorId, vdiskId, it->second);
             } else {
-                NodeToVDisk.emplace(nodeId, vdiskId);
-                const auto [it, inserted] = Subscriptions.try_emplace(nodeId);
-                if (it->second) {
-                    SendVStatusQuery(actorId, vdiskId, it->second);
-                } else {
-                    VStatusQueriesAwaitingConnection[nodeId].emplace_back(actorId, vdiskId);
-                }
-                if (inserted) {
-                    nodesToConnect.push_back(nodeId);
-                }
+                VStatusQueriesAwaitingConnection[nodeId].emplace_back(actorId, vdiskId);
             }
-            ActorToVDisk.emplace(actorId, vdiskId);
-            PendingVDiskIds.emplace(vdiskId);
+            if (inserted) {
+                Send(TActivationContext::InterconnectProxy(nodeId), new TEvInterconnect::TEvConnectNode);
+            }
         }
-
-        for (const ui32 nodeId : nodesToConnect) {
-            Send(TActivationContext::InterconnectProxy(nodeId), new TEvInterconnect::TEvConnectNode);
-        }
-
-        TActivationContext::Schedule(TDuration::Seconds(30), new IEventHandle(TEvents::TSystem::Wakeup, 0,
-            SelfId(), {}, nullptr, VStatusTimeoutCookie));
     }
 
     void TInvokeRequestHandlerActor::SendVStatusQuery(TActorId actorId, TVDiskID vdiskId, TActorId sessionId) {
@@ -448,6 +447,20 @@ namespace NKikimr::NStorage {
             {"selfId", SelfId()},
             {"record", record},
             {"VDiskId", vdiskId});
+        if (DropAllDonorsBase) {
+            const auto& slot = std::get<TInvokeExternalOperation>(Query).Command.GetDropDonor().GetVSlotId();
+            if (PendingVDiskIds.empty() || ev->Sender.NodeId() != slot.GetNodeId()) {
+                return;
+            }
+            if (!PendingVDiskIds.erase(vdiskId) || Self->StorageConfig != DropAllDonorsBase) {
+                throw TExRace() << "Donor recipient changed while checking its status";
+            }
+            if (record.GetStatus() != NKikimrProto::OK || record.GetIsReadOnly()
+                    || !record.GetJoinedGroup() || !record.GetDurabilityReplicated()) {
+                throw TExRace() << "The donor recipient has not confirmed durable replication";
+            }
+            return StartProposition(&ProposedStorageConfig);
+        }
         if (!PendingVDiskIds.erase(vdiskId)) {
             return;
         }
@@ -467,6 +480,9 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::OnVStatusError(TVDiskID vdiskId) {
         if (!PendingVDiskIds.erase(vdiskId)) {
             return;
+        }
+        if (DropAllDonorsBase) {
+            throw TExRace() << "Could not obtain the donor recipient status";
         }
         CheckReassignGroupDisk();
     }
@@ -678,7 +694,12 @@ namespace NKikimr::NStorage {
         }
         auto *ss = bsConfig->MutableServiceSet();
 
+        auto matchesSlot = [&](const auto& loc) {
+            return loc.GetNodeID() == vslotId.GetNodeId() && loc.GetPDiskID() == vslotId.GetPDiskId()
+                && loc.GetVDiskSlotID() == vslotId.GetVSlotId();
+        };
         bool changes = false;
+        bool slotReused = false;
 
         ui32 actualGroupGeneration = 0;
         for (const auto& group : ss->GetGroups()) {
@@ -699,10 +720,49 @@ namespace NKikimr::NStorage {
                 << " ActualGroupGeneration# " << actualGroupGeneration;
         }
 
+        if (isDropDonor && !vdiskId.GroupGeneration) {
+            const TVDiskID activeId(vdiskId.GroupID, actualGroupGeneration, vdiskId);
+            auto& disks = *ss->MutableVDisks();
+            auto active = std::ranges::find_if(disks, [&](const auto& disk) {
+                return !disk.HasDonorMode() && disk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY
+                    && VDiskIDFromVDiskID(disk.GetVDiskID()) == activeId;
+            });
+            if (active == disks.end() || !matchesSlot(active->GetVDiskLocation())) {
+                if (Self->ConfigRecoveryScheduled) {
+                    throw TExRace() << "Cannot verify donor recipient slot until configuration recovery completes";
+                }
+                return Finish(TResult::OK, std::nullopt);
+            }
+            if (!active->DonorsSize()) {
+                if (!config.GetGeneration()) {
+                    return Finish(TResult::OK, std::nullopt);
+                }
+                return StartCommitConfirmation();
+            }
+
+            THashSet<TVDiskID> donors;
+            for (const auto& donor : active->GetDonors()) {
+                donors.insert(VDiskIDFromVDiskID(donor.GetVDiskId()));
+            }
+            active->ClearDonors();
+            for (auto& disk : disks) {
+                if (disk.HasDonorMode() && disk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY
+                        && donors.contains(VDiskIDFromVDiskID(disk.GetVDiskID()))) {
+                    disk.ClearDonorMode();
+                    disk.SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+                }
+            }
+            DropAllDonorsBase = Self->StorageConfig;
+            ProposedStorageConfig.Swap(&config);
+            return IssueVStatusQuery(MakeBlobStorageVDiskID(vslotId.GetNodeId(), vslotId.GetPDiskId(), vslotId.GetVSlotId()), activeId);
+        }
+
         for (size_t i = 0; i < ss->VDisksSize(); ++i) {
             if (const auto& vdisk = ss->GetVDisks(i); vdisk.HasVDiskID() && vdisk.HasVDiskLocation()) {
                 const TVDiskID currentVDiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-                if (!currentVDiskId.SameExceptGeneration(vdiskId)) {
+                const bool samePosition = currentVDiskId.SameExceptGeneration(vdiskId);
+                slotReused |= currentVDiskId != vdiskId && matchesSlot(vdisk.GetVDiskLocation());
+                if (!samePosition) {
                     continue; // definitely incorrect group or position in group
                 }
                 if (!isDropDonor && currentVDiskId != vdiskId) {
@@ -716,27 +776,18 @@ namespace NKikimr::NStorage {
                     // this is the active disk and we want to drop its donor
                     Y_ABORT_UNLESS(currentVDiskId.GroupGeneration == actualGroupGeneration);
                     auto *m = ss->MutableVDisks(i);
-                    if (vdiskId.GroupGeneration) { // drop specific donor
-                        for (size_t k = 0; k < m->DonorsSize(); ++k) {
-                            const auto& donor = m->GetDonors(k);
-                            const auto& loc = donor.GetVDiskLocation();
-                            if (VDiskIDFromVDiskID(donor.GetVDiskId()) == vdiskId && loc.GetNodeID() == vslotId.GetNodeId() &&
-                                    loc.GetPDiskID() == vslotId.GetPDiskId() && loc.GetVDiskSlotID() == vslotId.GetVSlotId()) {
-                                m->MutableDonors()->DeleteSubrange(k, 1);
-                                changes = true;
-                                break;
-                            }
+                    for (size_t k = 0; k < m->DonorsSize(); ++k) {
+                        const auto& donor = m->GetDonors(k);
+                        if (VDiskIDFromVDiskID(donor.GetVDiskId()) == vdiskId && matchesSlot(donor.GetVDiskLocation())) {
+                            m->MutableDonors()->DeleteSubrange(k, 1);
+                            changes = true;
+                            break;
                         }
-                    } else { // drop all of them
-                        m->ClearDonors();
-                        changes = true;
                     }
                     continue;
                 }
 
-                const auto& loc = vdisk.GetVDiskLocation();
-                if (loc.GetNodeID() != vslotId.GetNodeId() || loc.GetPDiskID() != vslotId.GetPDiskId() ||
-                        loc.GetVDiskSlotID() != vslotId.GetVSlotId()) {
+                if (!matchesSlot(vdisk.GetVDiskLocation())) {
                     continue; // doesn't match our pdisk
                 }
 
@@ -753,7 +804,7 @@ namespace NKikimr::NStorage {
                     changes = true;
                 } else {
                     Y_ABORT_UNLESS(vdisk.HasDonorMode()); // we have already checked this case by now
-                    if (vdiskId.GroupGeneration == 0 || vdiskId.GroupGeneration == currentVDiskId.GroupGeneration) {
+                    if (vdiskId == currentVDiskId) {
                         // sign up this entity for destruction
                         auto *m = ss->MutableVDisks(i);
                         m->ClearDonorMode();
@@ -765,6 +816,9 @@ namespace NKikimr::NStorage {
         }
 
         if (!changes) {
+            if (!slotReused && config.GetGeneration()) {
+                return StartCommitConfirmation();
+            }
             return Finish(TResult::OK, std::nullopt);
         }
 

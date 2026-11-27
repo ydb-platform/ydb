@@ -4,8 +4,10 @@
 
 #include <util/generic/scope.h>
 #include <util/generic/strbuf.h>
+#include <util/string/builder.h>
 #include <util/generic/yexception.h>
 #include <util/stream/output.h>
+#include <util/string/printf.h>
 
 #include <functional>
 
@@ -90,6 +92,46 @@ namespace NKnnVectorSerialization {
         }
         count = capacity - padding;
         return true;
+    }
+
+    inline bool IsExpectedFormat(TStringBuf data, EFormat format, ui32 dimensions, size_t elementSize) {
+        if (data.empty() || format != static_cast<ui8>(data.back())) {
+            return false;
+        }
+
+        if (format == EFormat::BitVector) {
+            return data.size() >= 2 && dimensions == (data.size() - 2) * 8 - data[data.size() - 2];
+        }
+        if (format == EFormat::Int4Vector || format == EFormat::Uint4Vector) {
+            size_t count = 0;
+            return TryGetInt4ElementCount(data, count) && count == dimensions;
+        }
+        return data.size() == 1 + elementSize * dimensions;
+    }
+
+    inline TString FormatError(TStringBuf data, EFormat format, ui32 dimensions, size_t elementSize) {
+        if (data.empty()) {
+            return TStringBuilder() << "Empty vector data, expected dimension " << dimensions;
+        }
+        if (format != static_cast<ui8>(data.back())) {
+            return Sprintf("Invalid vector format byte, got %02x, expected %02x",
+                static_cast<ui8>(data.back()), static_cast<ui8>(format));
+        }
+        if (format == EFormat::BitVector) {
+            const auto actualDim = data.size() >= 2 ? (data.size() - 2) * 8 - static_cast<ui8>(data[data.size() - 2]) : 0;
+            return TStringBuilder() << "Vector dimension mismatch: got " << static_cast<int>(actualDim)
+                << " expected " << dimensions;
+        }
+        if (format == EFormat::Int4Vector || format == EFormat::Uint4Vector) {
+            size_t count = 0;
+            if (!TryGetInt4ElementCount(data, count)) {
+                return "Invalid packed 4-bit vector payload or padding";
+            }
+            return TStringBuilder() << "Vector dimension mismatch: got " << count << " expected " << dimensions;
+        }
+        return TStringBuilder() << "Vector dimension mismatch: got " << (data.size() - 1) / elementSize
+            << " (size " << data.size() << " bytes) expected " << dimensions
+            << " (size " << (1 + elementSize * dimensions) << " bytes)";
     }
 
     template <bool Signed>

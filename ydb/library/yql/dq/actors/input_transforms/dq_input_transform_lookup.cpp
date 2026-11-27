@@ -235,14 +235,14 @@ private:   //IDqComputeActorAsyncInput
             case TCollectStatsLevel::Basic:
                 TaskCounters = nullptr;
                 return;
+            case TCollectStatsLevel::Full:
+                [[fallthrough]];
             case TCollectStatsLevel::Profile:
                 TaskCountersGroup = std::pair{ "tx_id", ToString(txId) };
                 // XXX this nests counters twice by $TxId, ("operation_id", $TxId)->("tx_id", $TxId) in (obsolete) yqv1
                 TaskCounters = TaskCounters->GetSubgroup(TaskCountersGroup->first, TaskCountersGroup->second)
                                    ->GetSubgroup("task_id", ToString(args.TaskId))
                                    ->GetSubgroup("input", ToString(args.InputIndex));
-                break;
-            case TCollectStatsLevel::Full:
                 break;
         }
         auto component = TaskCounters->GetSubgroup("component", "Lookup");

@@ -3,7 +3,7 @@
 #include "flat_part_iface.h"
 #include "flat_part_index_iter_iface.h"
 #include "flat_table_part.h"
-#include "flat_row_eggs.h"
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include "flat_row_state.h"
 #include "flat_part_pinout.h"
 #include "flat_part_slice.h"

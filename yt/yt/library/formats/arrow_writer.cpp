@@ -22,6 +22,9 @@
 #include <yt/yt/core/misc/blob_output.h>
 #include <yt/yt/core/misc/error.h>
 
+#include <yt/yt/core/yson/pull_parser.h>
+#include <yt/yt/core/yson/token_writer.h>
+
 #include <library/cpp/yt/memory/range.h>
 
 #include <util/stream/mem.h>
@@ -238,11 +241,23 @@ TArrowSchemaType SerializeLeafColumnType(
             };
 
         case ESimpleLogicalValueType::String:
+            return TArrowSchemaType{
+                .Type = flatbuf::Type_Binary,
+                .Offset = flatbuf::CreateBinary(*flatbufBuilder)
+                    .Union(),
+            };
+
         case ESimpleLogicalValueType::Any:
             return TArrowSchemaType{
                 .Type = flatbuf::Type_Binary,
                 .Offset = flatbuf::CreateBinary(*flatbufBuilder)
                     .Union(),
+                .CustomMetadata = {
+                    flatbuf::CreateKeyValue(
+                        *flatbufBuilder,
+                        SerializeString(flatbufBuilder, YTTypeMetadataKey),
+                        SerializeString(flatbufBuilder, YTTypeMetadataValueYson)),
+                },
             };
 
         case ESimpleLogicalValueType::TzDate:
@@ -1529,6 +1544,25 @@ void AppendSimpleTypeToBuffer(
 {
     auto simpleType = CastToV1Type(logicalType).first;
 
+    if (simpleType == ESimpleLogicalValueType::Any) {
+        auto& offsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+        TBlob& valueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+
+        // TODO(dagorokhov): Use a non-owning blob output adapter (YT-30459).
+        TBlobOutput output;
+        output.Blob() = std::move(valueBuffer);
+        {
+            TCheckedInDebugYsonTokenWriter writer(&output);
+            cursor.TransferComplexValue(&writer);
+            writer.Flush();
+        }
+        valueBuffer = std::move(output.Blob());
+
+        offsetsBuffer.AppendValue<ui32>(valueBuffer.Size());
+
+        return;
+    }
+
     if (IsStringLikeType(simpleType)) {
         auto& offsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
         auto& valueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
@@ -1538,6 +1572,7 @@ void AppendSimpleTypeToBuffer(
         valueBuffer.Append(string.Data(), string.Size());
         offsetsBuffer.AppendValue<ui32>(valueBuffer.Size());
 
+        cursor.Next();
         return;
     }
 
@@ -1577,10 +1612,12 @@ void AppendSimpleTypeToBuffer(
                 YT_ABORT();
         }
 
+        cursor.Next();
         return;
     }
 
     if (simpleType == ESimpleLogicalValueType::Null || simpleType == ESimpleLogicalValueType::Void) {
+        cursor.Next();
         return;
     }
 
@@ -1636,6 +1673,8 @@ void AppendSimpleTypeToBuffer(
         default:
             THROW_ERROR_EXCEPTION("Column has unexpected nested type %Qlv", simpleType);
     }
+
+    cursor.Next();
 }
 
 void AppendNullSimpleTypeToBuffer(
@@ -1794,12 +1833,9 @@ void FillBuffersForComplexType(
     TYsonPullParserCursor& cursor)
 {
     switch (type->GetMetatype()) {
-        case ELogicalMetatype::Simple: {
+        case ELogicalMetatype::Simple:
             AppendSimpleTypeToBuffer(type, buffers, currentBufferIndex, cursor);
-            cursor.Next();
-
             break;
-        }
 
         case ELogicalMetatype::Optional: {
             // See https://ytsaurus.tech/docs/user-guide/storage/data-types#yson_optional
@@ -1919,6 +1955,14 @@ void FillBuffersForComplexType(
                     currentBufferIndex,
                     *cursor);
             });
+
+            for (; fieldIndex < std::ssize(fields); ++fieldIndex) {
+                const auto& field = fields[fieldIndex];
+                FillBuffersForComplexTypeWithNulls(
+                    field.Type,
+                    buffers,
+                    currentBufferIndex);
+            }
 
             break;
         }
@@ -2786,13 +2830,6 @@ private:
             auto nameOffset = SerializeString(&flatbufBuilder, columnSchema.Name());
 
             auto [typeType, typeOffset, childrenFields, customMetadata] = SerializeColumnType(&flatbufBuilder, columnSchema.LogicalType(), ArrowConfig_);
-
-            if (CastToV1Type(columnSchema.LogicalType()).first == ESimpleLogicalValueType::Any) {
-                customMetadata.push_back(flatbuf::CreateKeyValue(
-                    flatbufBuilder,
-                    flatbufBuilder.CreateString(YTTypeMetadataKey),
-                    flatbufBuilder.CreateString(YTTypeMetadataValueYson)));
-            }
 
             flatbuffers::Offset<flatbuf::DictionaryEncoding> dictionaryEncodingOffset;
             auto indexTypeOffset = flatbuf::CreateInt(flatbufBuilder, /*bitWidth*/ 32, /*is_signed*/ false);

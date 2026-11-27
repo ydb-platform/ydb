@@ -4,7 +4,6 @@
 #include "column_tables.h"
 #include "columnshard.h"
 #include "indexation.h"
-#include "portion_index.h"
 #include "req_tracer.h"
 #include "scan.h"
 #include "tablet_counters.h"
@@ -30,7 +29,6 @@ private:
 
     YDB_READONLY_DEF(std::shared_ptr<TBackgroundControllerCounters>, BackgroundControllerCounters);
     YDB_READONLY_DEF(std::shared_ptr<TColumnTablesCounters>, ColumnTablesCounters);
-    YDB_READONLY_DEF(std::shared_ptr<TPortionIndexStats>, PortionIndexCounters);
 
     YDB_READONLY(TCSCounters, CSCounters, TCSCounters());
     YDB_READONLY(TIndexationCounters, EvictionCounters, TIndexationCounters("Eviction"));
@@ -46,7 +44,6 @@ public:
         , WritesMonitor(std::make_shared<TWritesMonitor>(tabletCounters))
         , BackgroundControllerCounters(std::make_shared<TBackgroundControllerCounters>())
         , ColumnTablesCounters(std::make_shared<TColumnTablesCounters>())
-        , PortionIndexCounters(std::make_shared<TPortionIndexStats>())
         , RequestsTracingCounters(std::make_shared<TRequestsTracerCounters>())
         , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>())
     {

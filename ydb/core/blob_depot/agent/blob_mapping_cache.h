@@ -12,6 +12,7 @@ namespace NKikimr::NBlobDepot {
         struct TCachedKeyItem : TIntrusiveListItem<TCachedKeyItem> {
             TStringBuf Key; // key buffer (view of key part of the Cache set)
             TResolvedValue Value; // recently resolved value, if any
+            ui64 RouteRevision = 0;
             ui32 OrdinaryResolvePending = 0;
             ui32 MustRestoreFirstResolvePending = 0;
             THashMap<ui64, bool> PendingQueries; // a set of queries waiting for this blob
@@ -23,6 +24,9 @@ namespace NKikimr::NBlobDepot {
 
         THashMap<TString, TCachedKeyItem> Cache;
         TIntrusiveList<TCachedKeyItem> Queue;
+        ui64 RouteRevision = 0;
+
+        void CheckRouteRevision(TCachedKeyItem& entry);
 
     public:
         TBlobMappingCache(TBlobDepotAgent& agent)
@@ -32,6 +36,8 @@ namespace NKikimr::NBlobDepot {
         void HandleResolveResult(ui64 tag, const NKikimrBlobDepot::TEvResolveResult& msg, TRequestContext::TPtr context);
         const TResolvedValue *ResolveKey(TString key, TQuery *query, TRequestContext::TPtr context, bool mustRestoreFirst,
             NKikimrBlobStorage::TDataKind::E dataKind);
+        void RefreshAfterMissing(const TString& key, const TResolvedValue& stale, const TResolvedValue& current);
+        void InvalidateS3Mappings() { ++RouteRevision; }
 
     private:
         void ProcessResponse(ui64 tag, TRequestContext::TPtr /*context*/, TResponse response) override;

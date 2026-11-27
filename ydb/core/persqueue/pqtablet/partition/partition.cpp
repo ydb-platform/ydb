@@ -135,6 +135,7 @@ static const ui32 MAX_WRITE_CYCLE_SIZE = 16_MB;
 
 TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
                                                      const NKikimrPQ::TPartitions& partitionsData,
+                                                     const NKikimrPQ::TPQTabletConfig& tabletConfig,
                                                      const TPartitionGraph& graph,
                                                      ui32 partitionId);
 
@@ -177,6 +178,18 @@ bool SeqnoViolation(TMaybe<i16> lastEpoch, ui64 lastSeqNo, TMaybe<i16> messageEp
     }
 
     return messageSeqNo <= lastSeqNo;
+}
+
+TDuration TPartition::GetOffsetsSnapshotSendInterval(const TActorContext& ctx) const {
+    const auto& featureFlags = AppData(ctx)->FeatureFlags;
+    bool isTopicMutateDisabled = featureFlags.GetEnableSourceTopicMutateRestricted() ||
+        !featureFlags.GetEnableClientModifications() ||
+        Config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED ||
+        Config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE;
+
+    return isTopicMutateDisabled ?
+        TDuration::Seconds(1) :
+        TDuration::Seconds(30);
 }
 
 bool TPartition::LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const {
@@ -588,7 +601,8 @@ bool TPartition::CleanUpBlobsInEncoder(TPartitionBlobEncoder& encoder, bool isCo
                 return false;
             }
         } else {
-            PQ_ENSURE(nextKey)("topic", TopicName());
+            PQ_ENSURE(nextKey,
+                {"topic", TopicName()});
             if (ImportantConsumersNeedToKeepCurrentKey(firstKey, *nextKey, now)) {
                 return false;
             }
@@ -1826,10 +1840,14 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCommit> ev, con
         }
     }
 
-    PQ_ENSURE(!TransactionsInflight.empty())("Step", ev->Step)("TxId",  ev->TxId);
+    PQ_ENSURE(!TransactionsInflight.empty(),
+        {"step", ev->Step},
+        {"txId", ev->TxId});
 
     auto txIter = TransactionsInflight.find(ev->TxId);
-    PQ_ENSURE(!txIter.IsEnd())("Step", ev->Step)("TxId",  ev->TxId);
+    PQ_ENSURE(!txIter.IsEnd(),
+        {"step", ev->Step},
+        {"txId", ev->TxId});
     auto& tx = txIter->second;
 
     PQ_ENSURE(tx->State == ECommitState::Pending);
@@ -2235,6 +2253,9 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
                 auto* m = result->Data.AddMessageGroup();
                 m->SetId(id);
                 m->SetSeqNo(v.SeqNo);
+                if (Config.GetSplitByPartitionKey() && v.KeyRange) {
+                    v.KeyRange->Serialize(*m->MutableKeyRange());
+                }
             }
         }
         Send(TabletActorId, result.Release());
@@ -2256,8 +2277,12 @@ void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorCont
 
         auto info = SourceManager.Get(sourceId);
 
-        PQ_ENSURE(info.Offset <= (ui64)Max<i64>())("description", "Offset is too big")("offset", info.Offset);
-        PQ_ENSURE(info.SeqNo <= (ui64)Max<i64>())("description", "SeqNo is too big")("seqNo", info.SeqNo);
+        PQ_ENSURE(info.Offset <= (ui64)Max<i64>(),
+            {"description", "Offset is too big"},
+            {"offset", info.Offset});
+        PQ_ENSURE(info.SeqNo <= (ui64)Max<i64>(),
+            {"description", "SeqNo is too big"},
+            {"seqNo", info.SeqNo});
 
         protoInfo.SetSeqNo(info.SeqNo);
         protoInfo.SetOffset(info.Offset);
@@ -2746,7 +2771,8 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     }
 
     if (PartitionKeyCompactionCounters) {
-        PQ_ENSURE(Compacter)("topic", TopicName());
+        PQ_ENSURE(Compacter,
+            {"topic", TopicName()});
         auto counters = Compacter->GetCounters();
         SET_METRIC(PartitionKeyCompactionCounters, METRIC_UNCOMPACTED_SIZE_MAX, counters.UncompactedSize);
         SET_METRIC(PartitionKeyCompactionCounters, METRIC_UNCOMPACTED_SIZE_SUM, counters.UncompactedSize);
@@ -3667,7 +3693,8 @@ void TPartition::TryAppendStaleTxMetaWrites()
         return;
     }
 
-    PQ_ENSURE(StaleTxMetaInFlight.empty())("StaleTxMetaInFlight", StaleTxMetaInFlight.size());
+    PQ_ENSURE(StaleTxMetaInFlight.empty(),
+        {"staleTxMetaInFlight", StaleTxMetaInFlight.size()});
 
     while (!StaleTxMetaPending.empty()) {
         auto it = StaleTxMetaPending.begin();
@@ -3725,7 +3752,7 @@ void TPartition::AddCmdWritePersistStaleTxMeta(const TStaleTxMetaEntry& entry)
 
     const auto graph = MakePartitionGraph(*entry.TabletConfig);
     for (const auto& partition : entry.TabletConfig->GetPartitions()) {
-        const auto explicitMessageGroups = CreateExplicitMessageGroups(*entry.BootstrapConfig, *entry.PartitionsData, graph, partition.GetPartitionId());
+        const auto explicitMessageGroups = CreateExplicitMessageGroups(*entry.BootstrapConfig, *entry.PartitionsData, *entry.TabletConfig, graph, partition.GetPartitionId());
 
         TSourceIdWriter sourceIdWriter(ESourceIdFormat::Proto);
         for (const auto& [id, mg] : *explicitMessageGroups) {
@@ -4265,11 +4292,14 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
         }
     }
 
-    if (replicationSessionEstablished) {
+    if (replicationSessionEstablished || ctx.Now() - LastOffsetsSnapshotSentTime > GetOffsetsSnapshotSendInterval(ctx)) {
         SendOffsetsToReplicationConsumer(ctx);
+        LastOffsetsSnapshotSentTime = ctx.Now();
     } else if (!changedUsers.empty()) {
         SendOffsetsToReplicationConsumer(ctx, changedUsers);
+        LastOffsetsSnapshotSentTime = ctx.Now();
     }
+
     ChangeConfigActs.clear();
     AnswerCurrentReplies(ctx);
 
@@ -4290,7 +4320,8 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
                                           NPersQueue::TTopicConverterPtr topicConverter,
                                           const TActorContext& ctx)
 {
-    bool autopartitioningChanged = SplitMergeEnabled(Config) != SplitMergeEnabled(config);
+    bool autopartitioningChanged = SplitMergeEnabled(Config) != SplitMergeEnabled(config)
+        || Config.GetSplitByPartitionKey() != config.GetSplitByPartitionKey();
 
     TVector<TString> consumersToResendOffsets;
     for (const auto& consumer : config.GetConsumers()) {
@@ -4413,8 +4444,10 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t,
             continue; //Write operation - handled separately via WriteInfo
         }
 
-        PQ_ENSURE(GetReadCommitOffsetsBegin(operation) <= (ui64)Max<i64>())("Unexpected begin offset", GetReadCommitOffsetsBegin(operation));
-        PQ_ENSURE(GetReadCommitOffsetsEnd(operation) <= (ui64)Max<i64>())("Unexpected end offset", GetReadCommitOffsetsEnd(operation));
+        PQ_ENSURE(GetReadCommitOffsetsBegin(operation) <= (ui64)Max<i64>(),
+            {"unexpectedBeginOffset", GetReadCommitOffsetsBegin(operation)});
+        PQ_ENSURE(GetReadCommitOffsetsEnd(operation) <= (ui64)Max<i64>(),
+            {"unexpectedEndOffset", GetReadCommitOffsetsEnd(operation)});
 
         const TString& user = GetReadConsumer(operation);
         if (TxAffectedConsumers.contains(user)) {
@@ -4474,8 +4507,10 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             continue; //Write operation - handled separately via WriteInfo
         }
 
-        PQ_ENSURE(GetReadCommitOffsetsBegin(operation) <= (ui64)Max<i64>())("Unexpected begin offset", GetReadCommitOffsetsBegin(operation));
-        PQ_ENSURE(GetReadCommitOffsetsEnd(operation) <= (ui64)Max<i64>())("Unexpected end offset", GetReadCommitOffsetsEnd(operation));
+        PQ_ENSURE(GetReadCommitOffsetsBegin(operation) <= (ui64)Max<i64>(),
+            {"unexpectedBeginOffset", GetReadCommitOffsetsBegin(operation)});
+        PQ_ENSURE(GetReadCommitOffsetsEnd(operation) <= (ui64)Max<i64>(),
+            {"unexpectedEndOffset", GetReadCommitOffsetsEnd(operation)});
 
         const TString& user = GetReadConsumer(operation);
         if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
@@ -4741,7 +4776,8 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         );
     }
 
-    PQ_ENSURE(offset <= (ui64)Max<i64>())("Offset is too big", offset);
+    PQ_ENSURE(offset <= (ui64)Max<i64>(),
+        {"tooBigOffset", offset});
 
     const ui64 maxOffset = act.ResetOffsetReply ? GetAcceptedEndOffset() : GetEndOffset();
     if (offset > maxOffset) {
@@ -4864,7 +4900,8 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             FailStaleSessionReadRequests(user, ctx);
         }
 
-        PQ_ENSURE(offset <= (ui64)Max<i64>())("Unexpected Offset", offset);
+        PQ_ENSURE(offset <= (ui64)Max<i64>(),
+            {"unexpectedOffset", offset});
         LOG_D(
             "Topic partition user is set to (startOffset session",
             {"topicName", TopicName()},
@@ -5470,17 +5507,23 @@ void TPartition::AddCmdDeleteRangeForAllKeys(TEvKeyValue::TEvRequest& request)
 
 void TPartition::ScheduleNegativeReply(const TEvPQ::TEvSetClientInfo&)
 {
-    PQ_ENSURE(false)("reason", "The supportive partition does not accept read operations")("topic", TopicName());
+    PQ_ENSURE(false,
+        {"reason", "The supportive partition does not accept read operations"},
+        {"topic", TopicName()});
 }
 
 void TPartition::ScheduleNegativeReply(const TEvPersQueue::TEvProposeTransaction&)
 {
-    PQ_ENSURE(false)("reason", "The supportive partition does not accept immediate transactions")("topic", TopicName());
+    PQ_ENSURE(false,
+        {"reason", "The supportive partition does not accept immediate transactions"},
+        {"topic", TopicName()});
 }
 
 void TPartition::ScheduleNegativeReply(const TTransaction&)
 {
-    PQ_ENSURE(false)("reason", "The supportive partition does not accept distribute transactions")("topic", TopicName());
+    PQ_ENSURE(false,
+        {"reason", "The supportive partition does not accept distribute transactions"},
+        {"topic", TopicName()});
 }
 
 void TPartition::ScheduleNegativeReply(const TMessage& msg)

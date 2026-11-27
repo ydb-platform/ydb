@@ -1,9 +1,16 @@
 LIBRARY()
 
 PEERDIR(
+    ydb/core/base
+    ydb/core/grpc_services
+    ydb/core/grpc_services/base
+    ydb/core/persqueue/public
     ydb/core/persqueue/public/schema
-    ydb/services/persqueue_v1/actors/schema/common
+    ydb/library/persqueue/topic_parser
+    ydb/public/api/protos
+    ydb/public/sdk/cpp/src/library/persqueue/obfuscate
     ydb/services/lib/actors
+    ydb/services/persqueue_v1/actors/schema/common
 )
 
 SRCS(

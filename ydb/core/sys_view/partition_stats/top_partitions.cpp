@@ -1,7 +1,7 @@
 #include "top_partitions.h"
 
 #include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/sys_view/common/processor_scan.h>
+#include <ydb/core/sys_view/scan/processor_scan.h>
 #include <ydb/core/sys_view/common/registry.h>
 
 namespace {

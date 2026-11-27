@@ -147,10 +147,6 @@ public:
         NObjectClient::TCellTag cellTag,
         const TExternalizeNodeOptions& options = {}) override;
 
-    TFuture<void> InternalizeNode(
-        const NYPath::TYPath& path,
-        const TInternalizeNodeOptions& options = {}) override;
-
     // Objects.
     TFuture<NObjectClient::TObjectId> CreateObject(
         NObjectClient::EObjectType type,

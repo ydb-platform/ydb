@@ -177,11 +177,28 @@ namespace NKikimr::NStorage {
 
     static constexpr TDuration DefaultWaitForConfigStep = TDuration::Minutes(1);
     static constexpr TDuration MaxWaitForConfigStep = TDuration::Minutes(10);
+    static constexpr TDuration MinStepResponseTimeout = TDuration::Minutes(2);
+
+    TStateStorageSelfHealStep::TStateStorageSelfHealStep(TDuration waitForConfigStep)
+        : WaitForConfigStep(waitForConfigStep > TDuration::Zero() && waitForConfigStep < MaxWaitForConfigStep
+            ? waitForConfigStep : DefaultWaitForConfigStep)
+    {}
+
+    void TStateStorageSelfHealStep::Send(const TActorIdentity& self, std::unique_ptr<TEvNodeConfigInvokeOnRoot> request) {
+        Committed = false;
+        self.Send(MakeBlobStorageNodeWardenID(self.NodeId()), request.release(), 0, ++Cookie);
+        self.Schedule(Max(WaitForConfigStep, MinStepResponseTimeout), new TEvents::TEvWakeup(Cookie));
+    }
+
+    void TStateStorageSelfHealStep::OnCommit(const TActorIdentity& self) {
+        Committed = true;
+        self.Schedule(WaitForConfigStep, new TEvents::TEvWakeup(++Cookie));
+    }
 
     TStateStorageSelfhealActor::TStateStorageSelfhealActor(TActorId sender, ui64 cookie, TDuration waitForConfigStep
         , NKikimrBlobStorage::TStateStorageConfig&& currentConfig, NKikimrBlobStorage::TStateStorageConfig&& targetConfig,
         bool prepareCurrentConfig)
-        : WaitForConfigStep(waitForConfigStep > TDuration::Seconds(0) && waitForConfigStep < MaxWaitForConfigStep ? waitForConfigStep : DefaultWaitForConfigStep)
+        : Step(waitForConfigStep)
         , StateStorageReconfigurationStep(NONE)
         , Sender(sender)
         , Cookie(cookie)
@@ -253,14 +270,12 @@ namespace NKikimr::NStorage {
             {"stateStorageReconfigurationStep", (ui32)StateStorageReconfigurationStep},
             {"stateStorageConfig", config});
 
-        AllowNextStep = false;
-        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+        Step.Send(SelfId(), std::move(request));
     }
 
     void TStateStorageSelfhealActor::Bootstrap(TActorId /*parentId*/) {
         StateStorageReconfigurationStep = PrepareCurrentConfig ? PREPARE_CURRENT_GROUPS : INTRODUCE_NEW_GROUP;
         RequestChangeStateStorage();
-        Schedule(WaitForConfigStep, new TEvents::TEvWakeup());
         Become(&TThis::StateFunc);
     }
 
@@ -293,8 +308,11 @@ namespace NKikimr::NStorage {
         return INVALID_RECONFIGURATION_STEP;
     }
 
-    void TStateStorageSelfhealActor::HandleWakeup() {
-        if (!AllowNextStep) {
+    void TStateStorageSelfhealActor::HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
+        if (!Step.IsCurrent(ev->Get()->Tag)) {
+            return;
+        }
+        if (!Step.IsCommitted()) {
             YDB_LOG_ERROR("TStateStorageSelfhealActor::HandleWakeup aborted. Previous reconfiguration step not finished yet",
                 {"marker", "NW78"},
                 {"stateStorageReconfigurationStep", (ui32)StateStorageReconfigurationStep});
@@ -307,17 +325,19 @@ namespace NKikimr::NStorage {
         }
         StateStorageReconfigurationStep = GetNextStep(StateStorageReconfigurationStep);
         RequestChangeStateStorage();
-        Schedule(WaitForConfigStep, new TEvents::TEvWakeup());
     }
 
     void TStateStorageSelfhealActor::HandleResult(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
+        if (!Step.IsCurrent(ev->Cookie)) {
+            return;
+        }
         if (ev->Get()->Record.GetStatus() != TResult::OK) {
             YDB_LOG_ERROR("TStateStorageSelfhealActor::HandleResult aborted",
                 {"marker", "NW72"},
                 {"reason", ev->Get()->Record.GetErrorReason()});
             Finish(TResult::ERROR, ev->Get()->Record.GetErrorReason());
         } else {
-            AllowNextStep = true;
+            Step.OnCommit(SelfId());
         }
     }
 
@@ -329,14 +349,14 @@ namespace NKikimr::NStorage {
     STFUNC(TStateStorageSelfhealActor::StateFunc) {
         STRICT_STFUNC_BODY(
             cFunc(TEvents::TSystem::Poison, PassAway);
-            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            hFunc(TEvents::TEvWakeup, HandleWakeup);
             hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, HandleResult);
         )
     }
 
     TStateStorageReassignNodeSelfhealActor::TStateStorageReassignNodeSelfhealActor(TActorId sender, ui64 cookie, TDuration waitForConfigStep
         , ui32 nodeFrom, ui32 nodeTo, bool needReconfigSS, bool needReconfigSSB, bool needReconfigSB)
-        : WaitForConfigStep(waitForConfigStep > TDuration::Seconds(0) && waitForConfigStep < MaxWaitForConfigStep ? waitForConfigStep : DefaultWaitForConfigStep)
+        : Step(waitForConfigStep)
         , Sender(sender)
         , Cookie(cookie)
         , NodeFrom(nodeFrom)
@@ -348,7 +368,6 @@ namespace NKikimr::NStorage {
 
     void TStateStorageReassignNodeSelfhealActor::Bootstrap(TActorId /*parentId*/) {
         RequestChangeStateStorage(true);
-        Schedule(WaitForConfigStep, new TEvents::TEvWakeup());
         Become(&TThis::StateFunc);
     }
 
@@ -361,11 +380,10 @@ namespace NKikimr::NStorage {
         cmd->SetStateStorageBoard(NeedReconfigSSB);
         cmd->SetSchemeBoard(NeedReconfigSB);
         cmd->SetDisableRing(disable);
-        AllowNextStep = false;
         YDB_LOG_ERROR("StateStorageReassignNodeSelfhealActor::RequestChangeStateStorage",
             {"marker", "NW72"},
             {"cmd", cmd});
-        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+        Step.Send(SelfId(), std::move(request));
     }
 
     void TStateStorageReassignNodeSelfhealActor::Finish(TResult::EStatus result, const TString& errorReason) {
@@ -380,18 +398,24 @@ namespace NKikimr::NStorage {
     }
 
     void TStateStorageReassignNodeSelfhealActor::HandleResult(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
+        if (!Step.IsCurrent(ev->Cookie)) {
+            return;
+        }
         if (ev->Get()->Record.GetStatus() != TResult::OK) {
             YDB_LOG_ERROR("TStateStorageReassignNodeSelfhealActor::HandleResult aborted",
                 {"marker", "NW72"},
                 {"reason", ev->Get()->Record.GetErrorReason()});
             Finish(TResult::ERROR, ev->Get()->Record.GetErrorReason());
         } else {
-            AllowNextStep = true;
+            Step.OnCommit(SelfId());
         }
     }
 
-    void TStateStorageReassignNodeSelfhealActor::HandleWakeup() {
-        if (!AllowNextStep) {
+    void TStateStorageReassignNodeSelfhealActor::HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
+        if (!Step.IsCurrent(ev->Get()->Tag)) {
+            return;
+        }
+        if (!Step.IsCommitted()) {
             YDB_LOG_ERROR("TStateStorageReassignNodeSelfhealActor::HandleWakeup aborted. Previous reconfiguration step not finished yet",
                 {"marker", "NW78"});
             Finish(TResult::ERROR, "Previous reconfiguration step not finished yet.");
@@ -403,13 +427,12 @@ namespace NKikimr::NStorage {
         }
         FinishReassign = true;
         RequestChangeStateStorage(false);
-        Schedule(WaitForConfigStep, new TEvents::TEvWakeup());
     }
 
     STFUNC(TStateStorageReassignNodeSelfhealActor::StateFunc) {
         STRICT_STFUNC_BODY(
             cFunc(TEvents::TSystem::Poison, PassAway);
-            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            hFunc(TEvents::TEvWakeup, HandleWakeup);
             hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, HandleResult);
         )
     }

@@ -7,7 +7,9 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
-#define PQ_ENSURE(condition) AFL_ENSURE(condition)("topic", TopicName)
+#define PQ_ENSURE(condition, ...) YDB_LOG_ENSURE(condition, \
+    {"topic", TopicName},                                   \
+    __VA_ARGS__)
 
 using namespace NPersQueue;
 

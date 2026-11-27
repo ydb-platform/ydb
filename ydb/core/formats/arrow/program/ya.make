@@ -1,20 +1,19 @@
 YQL_LIBRARY()
 
 PEERDIR(
-    ydb/library/conclusion
-    ydb/library/actors/core
-    ydb/library/services
     ydb/core/formats/arrow/accessor/composite
     ydb/core/formats/arrow/accessor/plain
     ydb/core/formats/arrow/accessor/sub_columns
     ydb/core/formats/arrow/filter
-
+    ydb/core/formats/arrow/program/index_check
+    ydb/library/actors/core
+    ydb/library/conclusion
+    ydb/library/services
     yql/essentials/core/arrow_kernels/registry
     yql/essentials/core/arrow_kernels/request
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/minikql/computation
     yql/essentials/minikql/invoke_builtins/llvm16
-
 )
 
 IF (OS_WINDOWS)
@@ -74,5 +73,6 @@ RECURSE_FOR_TESTS(
 
 RECURSE(
     ascii_contains
+    index_check
     olap_kernels
 )

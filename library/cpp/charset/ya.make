@@ -28,6 +28,11 @@ ELSE()
     )
 ENDIF()
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    contrib
+)
+
 END()
 
 RECURSE_FOR_TESTS(

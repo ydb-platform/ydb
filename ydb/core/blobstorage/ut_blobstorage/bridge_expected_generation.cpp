@@ -146,7 +146,6 @@ void TestLostConcurrentReply(bool expectedGeneration) {
     expected.SetGuid(committed.GetGuid()); // distconf assigns a new GUID when proposing the state
     UNIT_ASSERT_VALUES_EQUAL(committed.SerializeAsString(), expected.SerializeAsString());
 
-    // Wait until the forwarding node has received the winner's configuration, which enables the fallback.
     const auto localEdge = runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
     runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), localEdge,
         new TEvNodeWardenQueryStorageConfig(true)), nodeId);
@@ -171,11 +170,8 @@ void TestLostConcurrentReply(bool expectedGeneration) {
         runtime->GetClock() + TDuration::Seconds(30));
     UNIT_ASSERT_C(result, "Timed out waiting for forwarding failure");
     const auto& record = result->Get()->Record;
-    UNIT_ASSERT_C(record.GetStatus() == (expectedGeneration ? TInvokeResult::RACE : TInvokeResult::OK),
-        record.DebugString());
-    if (expectedGeneration) {
-        UNIT_ASSERT_STRING_CONTAINS(record.GetErrorReason(), "Hop node disconnected");
-    }
+    UNIT_ASSERT_C(record.GetStatus() == TInvokeResult::RACE, record.DebugString());
+    UNIT_ASSERT_STRING_CONTAINS(record.GetErrorReason(), "Hop node disconnected");
     UNIT_ASSERT_VALUES_EQUAL(f.Query().SerializeAsString(), committed.SerializeAsString());
 }
 
@@ -186,7 +182,7 @@ Y_UNIT_TEST_SUITE(BridgeExpectedGeneration) {
         TestLostConcurrentReply(true);
     }
 
-    Y_UNIT_TEST(LostConcurrentLegacyReplyKeepsSuccess) {
+    Y_UNIT_TEST(LostConcurrentLegacyReplyIsUnknown) {
         TestLostConcurrentReply(false);
     }
 

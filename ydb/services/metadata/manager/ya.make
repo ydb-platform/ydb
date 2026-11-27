@@ -18,16 +18,26 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/accessor
-    ydb/library/actors/core
-    ydb/library/table_creator
-    yql/essentials/sql/settings
-    ydb/public/api/protos
-    ydb/core/protos
-    ydb/services/bg_tasks/abstract
-    ydb/services/metadata/initializer
+    contrib/libs/apache/arrow
+    library/cpp/retry
+    library/cpp/threading/future
     ydb/core/base
+    ydb/core/protos
+    ydb/core/scheme_types
+    ydb/core/tx/locks
+    ydb/library/accessor
+    ydb/library/aclib
+    ydb/library/actors/core
+    ydb/library/conclusion
+    ydb/library/services
+    ydb/library/table_creator
+    ydb/public/api/protos
+    ydb/public/lib/scheme_types
+    ydb/services/bg_tasks/abstract
+    ydb/services/metadata/abstract
+    ydb/services/metadata/initializer
     ydb/services/metadata/request
+    yql/essentials/sql/settings
 )
 
 GENERATE_ENUM_SERIALIZATION(abstract.h)

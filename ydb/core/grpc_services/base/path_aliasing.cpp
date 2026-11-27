@@ -57,13 +57,18 @@ namespace NKikimr::NGRpcService {
             return;
         }
 
+        const TString method = GetRpcMethodName();
+        if (method == "Ydb.Discovery.V1.DiscoveryService/NodeRegistration") {
+            DisablePathNormalization();
+            return;
+        }
+
         auto database = GetDatabaseNameFromRequest();
         const auto* appData = HasAppData() ? AppData() : nullptr;
         const bool relativeDatabase = database && !database->empty() && !database->StartsWith('/')
             && appData && appData->FeatureFlags.GetEnableRelativePaths()
             && appData->DomainsInfo && appData->DomainsInfo->Domain;
 
-        const TString method = GetRpcMethodName();
         if (method.StartsWith("Ydb.PersQueue.V1.") ||
             method.StartsWith("Ydb.Cms.V1.CmsService/")) {
             DisablePathNormalization();

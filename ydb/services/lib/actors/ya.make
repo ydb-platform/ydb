@@ -6,19 +6,17 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/grpc/server
     library/cpp/json
     ydb/core/grpc_services
     ydb/core/grpc_services/base
-    ydb/core/metering
-    ydb/core/mind
-    ydb/core/protos
+    ydb/core/persqueue/public
     ydb/core/persqueue/public/schema
-    ydb/core/util
+    ydb/core/protos
+    ydb/core/protos/schemeshard
+    ydb/library/actors/core
     ydb/library/persqueue/topic_parser
-    ydb/public/api/grpc
     ydb/public/api/grpc/draft
-    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/api/protos
 )
 
 END()

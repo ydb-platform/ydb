@@ -59,6 +59,34 @@ jobs:
           ] | length
         ' <<<"$queued_json")
 
+        pr_check_items=$(jq '
+          def fmt_duration:
+            if . < 60 then "\(.|floor)s"
+            elif . < 3600 then "\((./60)|floor)m"
+            elif . < 86400 then "\((./3600)|floor)h \(((./60)|floor % 60))m"
+            else "\((./86400)|floor)d \(((./3600)|floor % 24))h"
+            end;
+          [.workflow_runs[]
+            | select(.name == "PR-check")
+            | . + {
+                waiting_seconds: (now - (.updated_at | fromdate)),
+                age_seconds: (now - (.created_at | fromdate))
+              }
+            | select(.waiting_seconds > 60)
+            | {
+                id,
+                title: (.display_title // .head_branch // ("run #" + (.id|tostring))),
+                html_url,
+                branch: .head_branch,
+                waiting: (.waiting_seconds | fmt_duration),
+                waiting_seconds,
+                age: (.age_seconds | fmt_duration)
+              }
+          ]
+          | sort_by(-.waiting_seconds)
+        ' <<<"$queued_json")
+        pr_check_queue_size=$(jq 'length' <<<"$pr_check_items")
+
         postcommit_queued_json=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
           https://api.github.com/repos/${{github.repository}}/actions/runs?per_page=1000\&page=1\&status=queued\&event=push)
 
@@ -115,14 +143,14 @@ jobs:
           echo "| Max age filter | ${max_age_hours}h (vars.POSTCOMMIT_GATE_CONFIG.ignore_pr_check_older_than_hours) |"
           echo "| Ignored stale PR-check | ${ignored_stale} |"
           echo ""
-          if (( queue_size > 0 )); then
-            echo "### Queued PR-check (>60s)"
-            echo ""
+          echo "### Queued PR-check (>60s)"
+          echo ""
+          if (( pr_check_queue_size > 0 )); then
             echo "| Waiting | Age | Branch | Run |"
             echo "|---------|-----|--------|-----|"
-            jq -r '.[] | "| \(.waiting) | \(.age) | `\(.branch)` | [\(.title|gsub("\\|"; "\\|"))](\(.html_url)) |"' <<<"$queue_items"
+            jq -r '.[] | "| \(.waiting) | \(.age) | `\(.branch)` | [\(.title|gsub("\\|"; "\\|"))](\(.html_url)) |"' <<<"$pr_check_items"
           else
-            echo "_No recent queued PR-check runs._"
+            echo "_No queued PR-check runs._"
           fi
           echo ""
           echo "### Queued postcommit (>60s)"

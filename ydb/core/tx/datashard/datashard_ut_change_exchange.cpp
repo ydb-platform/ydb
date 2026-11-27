@@ -8167,13 +8167,19 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 UNIT_ASSERT_VALUES_EQUAL(table["indexes"].GetMap().size(), outcome == 0 ? 1 : 0);
                 if (outcome == 0) {
                     const auto& added = records[0]["tableChanges"][0]["table"]["indexes"]["by_value"];
-                    UNIT_ASSERT(added["fulltextSettings"].IsString());
-                    UNIT_ASSERT_VALUES_EQUAL(added["useRowIdAsDocId"].GetBoolean(), false);
-                    Ydb::Table::FulltextIndexSettings settings;
-                    UNIT_ASSERT(settings.ParseFromString(Base64Decode(added["fulltextSettings"].GetString())));
-                    if (kind != "json") {
-                        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(settings.columns(0).analyzers().tokenizer()),
-                            static_cast<int>(Ydb::Table::FulltextIndexSettings::WHITESPACE));
+                    UNIT_ASSERT(added.IsMap());
+                    UNIT_ASSERT(!added.Has("useRowIdAsDocId"));
+                    if (Compact) {
+                        UNIT_ASSERT(added["fulltextSettings"].IsString());
+                        Ydb::Table::FulltextIndexSettings settings;
+                        UNIT_ASSERT(settings.ParseFromString(Base64Decode(added["fulltextSettings"].GetString())));
+                        if (kind != "json") {
+                            UNIT_ASSERT_VALUES_EQUAL(settings.columns_size(), 1);
+                            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(settings.columns(0).analyzers().tokenizer()),
+                                static_cast<int>(Ydb::Table::FulltextIndexSettings::WHITESPACE));
+                        }
+                    } else {
+                        UNIT_ASSERT(!added.Has("fulltextSettings"));
                     }
                     WaitTxNotification(server, edge, AsyncAlterAddStream(server, "/Root", "Table",
                         WithSchemaChanges(Updates(NKikimrSchemeOp::ECdcStreamFormatJson, "Stream2"))));

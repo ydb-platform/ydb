@@ -2281,7 +2281,9 @@ private:
             const auto dst = TPath::Resolve(item.DstPathName, Self);
             const bool creatingParent = record.GetStatus() == NKikimrScheme::StatusMultipleModifications
                 && !dst.IsResolved() && dst.FirstExistedParent().IsUnderCreating();
-            if (!creatingParent && !CanReuseDirectory(dst, *importInfo, item)) {
+            const bool replaced = record.GetStatus() == NKikimrScheme::StatusAccepted && record.HasPathId()
+                && dst.IsResolved() && dst->PathId.LocalPathId != record.GetPathId();
+            if (replaced || (!creatingParent && !CanReuseDirectory(dst, *importInfo, item))) {
                 Self->TxIdToImport.erase(txId);
                 return CancelAndPersist(db, importInfo, itemIdx,
                     TStringBuilder() << "Expected a directory at " << item.DstPathName, "invalid destination");
@@ -2291,6 +2293,9 @@ private:
                 return OnNotifyResult(txc, ctx);
             }
             if (record.GetStatus() != NKikimrScheme::StatusAccepted) {
+                if (item.WaitTxId != InvalidTxId) {
+                    return SubscribeTx(*importInfo, itemIdx);
+                }
                 // Another operation owns this path. Keep its TxIdToImport entry
                 // intact and retry the mkdir after the concurrent change.
                 Self->TxIdToImport.erase(txId);

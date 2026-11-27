@@ -1494,8 +1494,8 @@ void ImportEmptyDirectoriesImpl(TBackupTestFixture& f) {
     Tests::TClient client(*f.Server().ServerSettings);
     const TString parent = "/Root/RecursiveFolderProcessing/dir1";
     UNIT_ASSERT_VALUES_EQUAL(client.AlterUserAttributes(parent, "dir2", {{"team", "source"}}), NMsgBusProxy::MSTATUS_OK);
-    const auto permissions = NScheme::TModifyPermissionsSettings().AddChangeOwner("backup@builtin")
-        .AddGrantPermissions(NScheme::TPermissions("reader@builtin", {"ydb.generic.read"})).AddInterruptInheritance(true);
+    const auto permissions = NYdb::NScheme::TModifyPermissionsSettings().AddChangeOwner("backup@builtin")
+        .AddGrantPermissions(NYdb::NScheme::TPermissions("reader@builtin", {"ydb.generic.read"})).AddInterruptInheritance(true);
     auto status = scheme.ModifyPermissions(parent + "/dir2", permissions).GetValueSync();
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
     const auto inserted = f.YdbQueryClient().ExecuteQuery(
@@ -1552,7 +1552,7 @@ void ImportEmptyDirectoriesImpl(TBackupTestFixture& f) {
     status = scheme.MakeDirectory("/Root/existing/keep").GetValueSync();
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
     status = scheme.ModifyPermissions("/Root/existing",
-        NScheme::TModifyPermissionsSettings().AddChangeOwner("target@builtin")).GetValueSync();
+        NYdb::NScheme::TModifyPermissionsSettings().AddChangeOwner("target@builtin")).GetValueSync();
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
     UNIT_ASSERT_VALUES_EQUAL(client.AlterUserAttributes("/Root", "existing", {{"team", "target"}}), NMsgBusProxy::MSTATUS_OK);
     restore("/Root/existing");

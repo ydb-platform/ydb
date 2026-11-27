@@ -427,6 +427,8 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
         req.Cookie = ev->Cookie;
         req.TableIds = std::move(msg->TableIds);
         req.Orbit = std::move(msg->Orbit);
+        req.Span = NWilson::TSpan(10, ev->TraceId, "Snapshot request queue", NWilson::EFlags::AUTO_END);
+        req.Span.Event("request queued");
     }
 
     if (Settings.Counters) {
@@ -549,6 +551,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
                 {"freshnessRetries", req->FreshnessRetries});
             if (req->FreshnessRetries < MaxAcquireSnapshotFreshnessRetries) {
                 ++req->FreshnessRetries;
+                req->Span.Event("freshness retry scheduled", {{"retry", static_cast<i64>(req->FreshnessRetries)}});
                 Schedule(AcquireSnapshotRetryDelay, new TEvPrivate::TEvAcquireSnapshotRetry(ev->Cookie));
                 return;
             }
@@ -589,18 +592,21 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
                     LWTRACK(AcquireReadSnapshotFailure, userReq.Orbit, int(Ydb::StatusIds::BAD_REQUEST));
                     Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(Ydb::StatusIds::BAD_REQUEST,
                                              NYql::TIssues{ NYql::TIssue("Snapshot already registered by this actor") },
-                                             std::move(userReq.Orbit)), 0, userReq.Cookie);
+                                             std::move(userReq.Orbit)), 0, userReq.Cookie, userReq.Span.GetTraceId());
+                    userReq.Span.EndError("snapshot registration failed");
                     continue;
                 }
             }
 
             LWTRACK(AcquireReadSnapshotSuccess, userReq.Orbit, msg->Snapshot.Step, msg->Snapshot.TxId);
-            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(databaseName, msg->Snapshot, std::move(snapshotHandle), std::move(userReq.Orbit)), 0, userReq.Cookie);
+            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(databaseName, msg->Snapshot, std::move(snapshotHandle), std::move(userReq.Orbit)), 0, userReq.Cookie, userReq.Span.GetTraceId());
+            userReq.Span.EndOk();
         }
     } else {
         for (auto& userReq : req->UserRequests) {
             LWTRACK(AcquireReadSnapshotFailure, userReq.Orbit, int(status));
-            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(status, issues, std::move(userReq.Orbit)), 0, userReq.Cookie);
+            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(status, issues, std::move(userReq.Orbit)), 0, userReq.Cookie, userReq.Span.GetTraceId());
+            userReq.Span.EndError("snapshot acquisition failed");
         }
         for (auto& beginReq : req->BeginTxRequests) {
             Send(beginReq.Sender, new TEvLongTxService::TEvBeginTxResult(status, issues), 0, beginReq.Cookie);
@@ -612,6 +618,13 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
         Settings.Counters->AcquireReadSnapshotOutInFlight->Dec();
     }
 
+    req->Span.Attribute("ydb.snapshot.status", static_cast<i64>(status));
+    req->Span.Attribute("ydb.snapshot.freshness_retries", static_cast<i64>(req->FreshnessRetries));
+    if (status == Ydb::StatusIds::SUCCESS) {
+        req->Span.EndOk();
+    } else {
+        req->Span.EndError("snapshot acquisition failed");
+    }
     state->ActiveRequests.erase(ev->Cookie);
     AcquireSnapshotInFlight.erase(ev->Cookie);
 

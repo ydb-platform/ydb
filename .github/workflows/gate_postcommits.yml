@@ -108,7 +108,7 @@ jobs:
           echo "| Max age filter | ${max_age_hours}h (vars.POSTCOMMIT_GATE_CONFIG.ignore_pr_check_older_than_hours) |"
           echo "| Ignored stale PR-check | ${ignored_stale} |"
           echo ""
-          echo "### Queued PR-check (>60s)"
+          echo "### Queued PR-check (>60s): ${pr_check_queue_size} total, ${queue_size} in queue, ${ignored_stale} ignored"
           echo ""
           if (( pr_check_queue_size > 0 )); then
             echo "| Gate | Waiting | Branch | Run |"
@@ -123,7 +123,7 @@ jobs:
             echo "_No queued PR-check runs._"
           fi
           echo ""
-          echo "### Queued postcommit (>60s)"
+          echo "### Queued postcommit (>60s): ${postcommit_queue_size}"
           echo ""
           if (( postcommit_queue_size > 0 )); then
             echo "| Waiting | Workflow | Branch | Run |"

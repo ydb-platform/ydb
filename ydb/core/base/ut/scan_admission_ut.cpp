@@ -73,24 +73,27 @@ Y_UNIT_TEST_SUITE(TScanAdmission) {
         UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 96);
     }
 
-    Y_UNIT_TEST(StaleRejectionCannotOverrideResetBrokerLimit) {
+    Y_UNIT_TEST(BudgetIncreaseKeepsBrokerLimitUntilAcknowledged) {
         TScanAdmissionControl quota;
         quota.SetTotalLimit(256, 64, true);
+        quota.ConfirmBrokerLimit(64);
         const ui64 generation = quota.GetBrokerLimitGeneration();
-        quota.RestrictBrokerLimit(32, generation);
-        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 32);
 
         quota.SetTotalLimit(256, 128, true);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 64);
         quota.RestrictBrokerLimit(32, generation);
-        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 128);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 32);
         UNIT_ASSERT(quota.IsBrokerConfigurationPending());
 
-        const ui64 resetGeneration = quota.GetBrokerLimitGeneration();
-        quota.RestrictBrokerLimit(96, resetGeneration);
+        quota.ConfirmBrokerLimit(128);
+        quota.RestrictBrokerLimit(32, generation);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 128);
+        const ui64 confirmedGeneration = quota.GetBrokerLimitGeneration();
+        quota.RestrictBrokerLimit(96, confirmedGeneration);
         UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 96);
         // A tick which keeps the active limit must preserve its current hint.
         quota.SetTotalLimit(512, 128, true);
-        UNIT_ASSERT_VALUES_EQUAL(quota.GetBrokerLimitGeneration(), resetGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(quota.GetBrokerLimitGeneration(), confirmedGeneration);
         UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64), 96);
     }
 

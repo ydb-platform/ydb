@@ -151,13 +151,20 @@ public:
         }
     }
 
+    // Apply a pending-budget reduction before measuring outstanding leases.
+    // This prevents concurrent admissions from using the old, larger slice.
+    ui64 ShrinkPendingBudget(ui64 totalLimit) {
+        with_lock(State->Lock) {
+            State->TotalLimit = Min(State->TotalLimit, totalLimit);
+            return State->Bytes;
+        }
+    }
+
     void SetTotalLimit(ui64 bytes, ui64 activeLimit = Max<ui64>(), bool configurationPending = false) {
         with_lock(State->Lock) {
             State->TotalLimit = bytes;
-            if (State->ActiveLimit != activeLimit) {
-                State->BrokerLimit = Max<ui64>();
-                ++State->BrokerLimitGeneration;
-            }
+            // A local budget change does not establish new broker capacity.
+            // Keep the effective broker cap until the configuration is acknowledged.
             State->ActiveLimit = activeLimit;
             State->BrokerConfigurationPending |= configurationPending;
         }

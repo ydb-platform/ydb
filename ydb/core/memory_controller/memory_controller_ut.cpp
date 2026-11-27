@@ -3,6 +3,9 @@
 #include <memory_controller.h>
 #include <memory_controller_config.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/scan_admission.h>
+#include <ydb/core/driver_lib/run/config_helpers.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -55,10 +58,12 @@ struct TControllerFixture {
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TActorId MemoryController;
 
-    explicit TControllerFixture(const NKikimrConfig::TMemoryControllerConfig& config) {
+    explicit TControllerFixture(const NKikimrConfig::TMemoryControllerConfig& config,
+        const TResourceBrokerConfig& brokerConfig = {}, bool resourceBrokerEnabled = true) {
         Runtime.Initialize(TAppPrepare().Unwrap());
         MemoryController = Runtime.Register(CreateMemoryController(
-            TDuration::Seconds(1), TIntrusivePtr<IProcessMemoryInfoProvider>(Provider), config, TResourceBrokerConfig{}, CountersRoot));
+            TDuration::Seconds(1), TIntrusivePtr<IProcessMemoryInfoProvider>(Provider), config, brokerConfig,
+            CountersRoot, resourceBrokerEnabled));
         Runtime.EnableScheduleForActor(MemoryController);
         NActors::TDispatchOptions bootstrapOptions;
         bootstrapOptions.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
@@ -102,17 +107,8 @@ private:
         ProcessMemoryInfoProvider = MakeIntrusive<TFixedProcessMemoryInfoProvider>();
         ProcessMemoryInfo = &ProcessMemoryInfoProvider->ProcessMemoryInfo;
 
-        // copy-paste from TMemoryControllerInitializer::InitializeServices
-        NMemory::TResourceBrokerConfig resourceBrokerSelfConfig;
-        const auto& resourceBrokerConfig = Settings->AppConfig->GetResourceBrokerConfig();
-        if (resourceBrokerConfig.HasResourceLimit() && resourceBrokerConfig.GetResourceLimit().HasMemory()) {
-            resourceBrokerSelfConfig.LimitBytes = resourceBrokerConfig.GetResourceLimit().GetMemory();
-        }
-        for (const auto& queue : resourceBrokerConfig.GetQueues()) {
-            if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
-                resourceBrokerSelfConfig.QueueLimits[queue.GetName()] = queue.GetLimit().GetMemory();
-            }
-        }
+        const auto resourceBrokerSelfConfig =
+            NKikimrConfigHelpers::CreateMemoryControllerResourceBrokerConfig(*Settings->AppConfig);
         Cerr << "ResourceBrokerSelfConfig: " << resourceBrokerSelfConfig.ToString() << Endl;
 
         for (ui32 nodeIndex = 0; nodeIndex < Runtime->GetNodeCount(); ++nodeIndex) {
@@ -506,6 +502,152 @@ Y_UNIT_TEST(MemTable) {
     UNIT_ASSERT_GT(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(1_KB));
 }
 
+Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(16_GB);
+    TControllerFixture fixture(config);
+    const ui64 total = GetIndexBuildLimitBytes(config, 16_GB);
+    const ui64 initialPending = TScanAdmissionControl::CalculatePendingByteLimit(total, 64_MB);
+    auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuild/Limit"), total);
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetByteLimit(64_MB), initialPending);
+    auto lease = quota.TryAcquire(initialPending, 128, 64_MB);
+    UNIT_ASSERT(lease);
+    UNIT_ASSERT(!quota.TryAcquire(1, 128, 64_MB));
+
+    auto broker = fixture.Runtime.Register(NResourceBroker::CreateResourceBrokerActor(
+        NResourceBroker::MakeDefaultConfig(), MakeIntrusive<::NMonitoring::TDynamicCounters>()));
+    fixture.Runtime.RegisterService(NResourceBroker::MakeResourceBrokerID(), broker);
+    ui64 activeLimit = 0;
+    ui64 brokerLimit = 0;
+    ui32 configurations = 0;
+    auto observer = fixture.Runtime.AddObserver<NResourceBroker::TEvResourceBroker::TEvConfigure>([&](auto& event) {
+        ++configurations;
+        brokerLimit = event->Get()->Record.GetResourceLimit().GetMemory();
+        activeLimit = event->Get()->IndexBuildMemoryLimit.value_or(0);
+    });
+    // Reduce the pending slice while the original leases are still outstanding.
+    fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexPendingBytesLimit(32_MB);
+    fixture.Tick();
+    const ui64 activities = GetResourceBrokerLimitBytes(config, 16_GB, false);
+    UNIT_ASSERT_GT(activeLimit, 0);
+    UNIT_ASSERT_VALUES_EQUAL(activeLimit + initialPending, total);
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(32_MB), activeLimit);
+    UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities - initialPending);
+    lease.reset();
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(activeLimit + 32_MB, total);
+    UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities);
+    lease = quota.TryAcquire(1_MB, 128, 32_MB);
+    UNIT_ASSERT(lease);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities - 8_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Consumption"), 1_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Reserved"), 8_MB);
+    const ui32 initialConfigurations = configurations;
+    auto secondLease = quota.TryAcquire(2_MB, 128, 32_MB);
+    UNIT_ASSERT(secondLease);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(configurations, initialConfigurations);
+    secondLease.reset();
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(configurations, initialConfigurations);
+    lease.reset();
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuildPending/Reserved"), 0);
+}
+
+Y_UNIT_TEST(DisabledBrokerSkipsConfiguration) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(2_GB);
+    TControllerFixture fixture(config, {}, /*resourceBrokerEnabled=*/false);
+    using TConfigure = NResourceBroker::TEvResourceBroker::TEvConfigure;
+    TBlockEvents<TConfigure> requests(fixture.Runtime, [&](const TConfigure::TPtr& event) {
+        return event->Sender == fixture.MemoryController;
+    });
+
+    auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
+    UNIT_ASSERT(!quota.IsBrokerConfigurationPending());
+    fixture.Provider->ProcessMemoryInfo.AllocatedMemory = 128_MB;
+    fixture.Tick();
+
+    UNIT_ASSERT(requests.empty());
+    UNIT_ASSERT(!quota.IsBrokerConfigurationPending());
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/AllocatedMemory"), 128_MB);
+}
+
+Y_UNIT_TEST(IndexBuildBrokerCapacityRefreshWaitsForAcknowledgement) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(16_GB);
+    TControllerFixture fixture(config);
+    auto broker = fixture.Runtime.Register(NResourceBroker::CreateResourceBrokerActor(
+        NResourceBroker::MakeDefaultConfig(), MakeIntrusive<::NMonitoring::TDynamicCounters>()));
+    fixture.Runtime.RegisterService(NResourceBroker::MakeResourceBrokerID(), broker);
+    using TAck = NResourceBroker::TEvResourceBroker::TEvConfigureResult;
+    TBlockEvents<TAck> acks(fixture.Runtime, [&](const TAck::TPtr& event) {
+        return event->Recipient == fixture.MemoryController;
+    });
+    fixture.Tick();
+    fixture.Runtime.WaitFor("broker configuration acknowledgement held", [&] { return !acks.empty(); });
+    auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
+    const ui64 capacity = quota.GetActiveByteLimit(64_MB);
+    quota.RestrictBrokerLimit(1, quota.GetBrokerLimitGeneration());
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64_MB), 1);
+    acks.Unblock(1);
+    fixture.Runtime.WaitFor("broker capacity confirmed", [&] { return quota.GetActiveByteLimit(64_MB) == capacity; });
+
+    fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexPendingBytesLimit(32_MB);
+    fixture.Tick();
+    fixture.Runtime.WaitFor("broker capacity increase acknowledgement held", [&] { return !acks.empty(); });
+    UNIT_ASSERT(quota.IsBrokerConfigurationPending());
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(32_MB), capacity);
+    acks.Stop().Unblock();
+    fixture.Runtime.WaitFor("broker capacity increase confirmed", [&] {
+        return quota.GetActiveByteLimit(32_MB) == capacity + 32_MB;
+    });
+}
+
+Y_UNIT_TEST(IndexBuildBudgetOnSmallNodes) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(2_GB);
+    TControllerFixture fixture(config);
+    fixture.Tick();
+    auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuild/Limit"), 256_MB);
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetByteLimit(64_MB), 64_MB);
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64_MB), 192_MB);
+
+    const ui64 activities = GetResourceBrokerLimitBytes(config, 2_GB, true);
+    const ui64 total = GetIndexBuildBudgetBytes(config, 2_GB, activities);
+    UNIT_ASSERT_LE(total, activities);
+    UNIT_ASSERT_GT(TScanAdmissionControl::CalculatePendingByteLimit(total, 64_MB), 32_MB);
+    auto queryExecution = fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::QueryExecution);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/IndexBuild/Limit"), total);
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetByteLimit(64_MB), total / 4);
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64_MB), total - total / 4);
+    config.SetIndexBuildLimitBytes(64_MB);
+    UNIT_ASSERT_VALUES_EQUAL(GetIndexBuildBudgetBytes(config, 2_GB, activities), 64_MB);
+    config.ClearIndexBuildLimitBytes();
+    config.SetIndexBuildLimitPercent(1);
+    UNIT_ASSERT_VALUES_EQUAL(GetIndexBuildBudgetBytes(config, 2_GB, activities), 2_GB / 100);
+}
+
+Y_UNIT_TEST(IndexBuildAdmissionRespectsBrokerOverrides) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(2_GB);
+    TResourceBrokerConfig brokerConfig;
+    brokerConfig.QueueLimits["queue_build_index"] = 96_MB;
+    brokerConfig.LimitBytes = 256_MB;
+    TControllerFixture fixture(config, brokerConfig);
+    fixture.Tick();
+    auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64_MB), 96_MB);
+}
+
 Y_UNIT_TEST_TWIN(ResourceBroker, EnableComputeSchedulerMemory) {
     using namespace NResourceBroker;
 
@@ -522,6 +664,14 @@ Y_UNIT_TEST_TWIN(ResourceBroker, EnableComputeSchedulerMemory) {
     auto queue = resourceBrokerConfig->AddQueues();
     queue->SetName("queue_cs_scan_read");
     queue->MutableLimit()->SetMemory(13_MB);
+    auto* indexQueue = resourceBrokerConfig->AddQueues();
+    indexQueue->SetName("queue_custom_build_index");
+    indexQueue->SetWeight(10);
+    indexQueue->MutableLimit()->AddResource(2);
+    indexQueue->MutableLimit()->AddResource(17_MB);
+    auto* indexTask = resourceBrokerConfig->AddTasks();
+    indexTask->SetName("build_index");
+    indexTask->SetQueueName(indexQueue->GetName());
 
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
     server->ProcessMemoryInfo->CGroupLimit = 1000_MB;
@@ -559,6 +709,13 @@ Y_UNIT_TEST_TWIN(ResourceBroker, EnableComputeSchedulerMemory) {
 
     config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(senderSubscriber);
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 75_MB);
+
+    runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender,
+        new TEvResourceBroker::TEvConfigRequest("queue_custom_build_index")));
+    config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 17_MB);
+    UNIT_ASSERT(!config->Get()->QueueConfig->GetStrictMemoryLimit());
+    UNIT_ASSERT_VALUES_EQUAL(runtime.GetAppData().BuildIndexScanAdmission->GetActiveByteLimit(64_MB), 17_MB);
 
     // ensure that other settings are not affected:
     runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest("queue_cs_scan_read")));

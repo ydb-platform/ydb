@@ -10,6 +10,8 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/string_utils/quote
+    library/cpp/uri
     ydb/mvp/core
     ydb/mvp/meta/support_links
     ydb/mvp/meta/protos

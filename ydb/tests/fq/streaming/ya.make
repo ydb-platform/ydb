@@ -3,14 +3,16 @@ PY3TEST()
 STYLE_PYTHON()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/vm_metadata_emulator/recipe/recipe.inc)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/iam_grpc_emulator/recipe/recipe.inc)
+
 ENV(YDB_DEFAULT_CLUSTERADMIN=root@builtin)
 
 ENV(YDB_ENABLE_SIGNAL_BACKTRACE=1)
 
 TEST_SRCS(
-    test_compatibility.py
     test_iam.py
     test_partitions.py
     test_scalar_topic_write.py
@@ -31,7 +33,9 @@ PY_SRCS(
 )
 
 REQUIREMENTS(cpu:1)
+
 REQUIREMENTS(ram:16)
+
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -52,13 +56,11 @@ PEERDIR(
     ydb/tests/olap/common
     ydb/tests/tools/datastreams_helpers
     ydb/tests/fq/streaming_common
-    ydb/tests/library/compatibility
 )
 
 DEPENDS(
     ydb/apps/ydb
     yql/essentials/udfs/common/python/python3_small
-    ydb/tests/library/compatibility/binaries
 )
 
 END()

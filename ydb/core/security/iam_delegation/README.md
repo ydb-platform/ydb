@@ -20,8 +20,13 @@ cluster-wide scheduling belongs to the later service-tablet implementation.
 Privileged callers own authorization and limits on request volume and payload
 size. The shared backoff does not cap healthy concurrent requests.
 
-Per-request deadlines, requests and intermediate results live in coroutine
-frames. Cancellation during cooldown sends no IAM request. Local token-provider
+Each request owns its deadlines, caller cookie, operation ID and intermediate
+results. Token readiness, RPC replies and timeout events retain their delivery
+order: a wake for one request cannot expire another request's queued response.
+Shared backoff retains one logical timer owner and FIFO waiters; health changes
+and owner cancellation notify waiters in the same actor turn. Unrelated events
+do not trigger admission. Unique RPC cookies reject stale replies. Shutdown
+cancels pending waits without sending new IAM requests. Local token-provider
 failure does not assert an IAM service outage. Credentials are read again after
 cooldown so rotation is observed before dispatch.
 
@@ -34,6 +39,7 @@ IAM response and error text; the returned-diagnostic guarantee does not cover it
 Tests in `ut` cover request forwarding and mutation uncertainty, raw-error
 redaction, token updates, real gRPC integration, startup/config notifications,
 shared scheduling across operations, stale reports, exact deadlines and shutdown.
-Shared helper timer ownership and cancellation tests live in
-`core/util/async_backoff_ut`. Existing upstream event IDs/config fields are preserved;
+Shared admission/version tests live in `core/util/shared_backoff_ut`. Bulk
+credential/backoff expiry, late replies and hard teardown are tested through
+the real service actor in `ut`. Existing upstream event IDs/config fields are preserved;
 the existing request/result API is retained. This PR adds no tablet type or persisted schema.

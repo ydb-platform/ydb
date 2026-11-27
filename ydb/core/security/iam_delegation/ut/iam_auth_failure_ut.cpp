@@ -1,4 +1,4 @@
-#include <ydb/core/security/iam_delegation/iam_actor_base.h>
+#include <ydb/core/security/iam_delegation/iam_errors.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <google/rpc/error_details.pb.h>

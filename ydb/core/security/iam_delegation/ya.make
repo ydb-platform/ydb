@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     iam_actor_base.cpp
     iam_delegation_service.cpp
+    iam_errors.cpp
     settings.cpp
 )
 
@@ -19,6 +20,7 @@ PEERDIR(
     ydb/library/ycloud/api
     ydb/library/ycloud/impl
     ydb/public/api/protos
+    ydb/public/sdk/cpp/src/library/grpc/client
     yql/essentials/public/issue
 )
 

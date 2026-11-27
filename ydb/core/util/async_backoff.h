@@ -1,6 +1,6 @@
 #pragma once
 
-#include "backoff.h"
+#include "shared_backoff.h"
 
 #include <ydb/library/actors/async/event.h>
 #include <ydb/library/actors/core/monotonic.h>
@@ -32,9 +32,7 @@ public:
     NActors::TMonotonic GetNextAllowedAt() const;
 
 private:
-    TBackoff Backoff;
-    ui64 Version = 0;
-    NActors::TMonotonic NextAllowedAt = NActors::TMonotonic::Zero();
+    TSharedBackoff Backoff;
     NActors::TAsyncEvent Changed;
     bool WakeupActive = false;
 };

@@ -8,20 +8,14 @@ namespace NKikimr {
 TAsyncBackoff::TAsyncBackoff(TDuration initialDelay, TDuration maxDelay)
     : Backoff(initialDelay, maxDelay)
 {
-    Y_ABORT_UNLESS(initialDelay.MilliSeconds() > 0);
 }
 
 NActors::async<ui64> TAsyncBackoff::Wait(TDuration requestTimeout) {
     Y_ABORT_UNLESS(requestTimeout > TDuration::Zero() && requestTimeout != TDuration::Max());
     for (;;) {
         const auto now = NActors::TActivationContext::Monotonic();
-        if (now >= NextAllowedAt) {
-            if (Backoff.GetIteration() != 0) {
-                // Fence both previous outcomes and other waiters before dispatch.
-                ++Version;
-                NextAllowedAt = now + requestTimeout;
-            }
-            co_return Version;
+        if (auto version = Backoff.TryAcquire(now, requestTimeout)) {
+            co_return *version;
         }
 
         if (WakeupActive) {
@@ -40,7 +34,7 @@ NActors::async<ui64> TAsyncBackoff::Wait(TDuration requestTimeout) {
                     Changed.NotifyOne();
                 }
             };
-            co_await NActors::WithDeadline(NextAllowedAt, [this]() -> NActors::async<void> {
+            co_await NActors::WithDeadline(Backoff.GetNextAllowedAt(), [this]() -> NActors::async<void> {
                 co_await Changed.Wait();
             });
         }
@@ -50,34 +44,32 @@ NActors::async<ui64> TAsyncBackoff::Wait(TDuration requestTimeout) {
 }
 
 TAsyncBackoff::EUpdate TAsyncBackoff::OnFailure(ui64 version) {
-    if (version != Version) {
+    if (version != Backoff.GetVersion()) {
         return EUpdate::Stale;
     }
-    NextAllowedAt = NActors::TActivationContext::Monotonic() + Backoff.Next();
-    ++Version;
+    Backoff.OnFailure(version, NActors::TActivationContext::Monotonic());
     Changed.NotifyAll();
     return EUpdate::Applied;
 }
 
 TAsyncBackoff::EUpdate TAsyncBackoff::OnSuccess(ui64 version) {
-    if (version != Version) {
+    if (version != Backoff.GetVersion()) {
         return EUpdate::Stale;
     }
-    if (Backoff.GetIteration() != 0) {
-        Backoff.Reset();
-        NextAllowedAt = NActors::TMonotonic::Zero();
-        ++Version;
+    const auto previousVersion = Backoff.GetVersion();
+    Backoff.OnSuccess(version);
+    if (Backoff.GetVersion() != previousVersion) {
         Changed.NotifyAll();
     }
     return EUpdate::Applied;
 }
 
 ui64 TAsyncBackoff::GetVersion() const {
-    return Version;
+    return Backoff.GetVersion();
 }
 
 NActors::TMonotonic TAsyncBackoff::GetNextAllowedAt() const {
-    return NextAllowedAt;
+    return Backoff.GetNextAllowedAt();
 }
 
 } // namespace NKikimr

@@ -433,6 +433,15 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 }
             }
 
+            // TEMP: Query Replay GenA filing probe. Distinct from YDBBUGS-1180
+            // (no UpdateLambdaConstraints). Only a stage that already has more
+            // than one scalar HashV1 shuffle. Do not merge.
+            if (scalarHashShuffleCount > 1) {
+                YQL_ENSURE(false,
+                    "Peephole: multiple scalar HashV1 shuffles in one stage ("
+                    << scalarHashShuffleCount << ")");
+            }
+
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
                 auto oldArg = stage.Program().Args().Arg(i);
                 auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));

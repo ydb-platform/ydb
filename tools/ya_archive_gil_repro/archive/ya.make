@@ -1,0 +1,10 @@
+EXECTEST()
+# Keep the 16 GiB fixture out of small/medium CI.
+SIZE(LARGE)
+TIMEOUT(300)
+IF (NOT PROBE_MIB)
+    SET(PROBE_MIB 16384)
+ENDIF()
+RUN(/usr/bin/python3 ${ARCADIA_ROOT}/tools/ya_archive_gil_repro/task.py archive ${TEST_OUT_ROOT}/large.log ${PROBE_MIB} ${PROBE_OUT})
+DATA(arcadia/tools/ya_archive_gil_repro/task.py)
+END()

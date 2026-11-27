@@ -22,7 +22,8 @@
 #define PARTITION_ENSURE(condition,...) YDB_LOG_ENSURE(condition,           \
     {"session", Session},                                                   \
     {"partition", Partition},                                               \
-    {"tablet_id", TabletID})
+    {"tablet_id", TabletID},                                                \
+    __VA_ARGS__)
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -1346,8 +1347,9 @@ void TPartitionActor::Handle(TEvPQProxy::TEvLockPartition::TPtr& ev, const TActo
     ClientMaxOffset = ev->Get()->MaxOffset;
 
     if (StartReading) {
-        PARTITION_ENSURE(ev->Get()->StartReading) //otherwise it is signal from actor, this could not be done
-            ("start_reading", StartReading);
+        // otherwise it is signal from actor, this could not be done
+        PARTITION_ENSURE(ev->Get()->StartReading,
+            {"startReading", StartReading});
         ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("double partition locking", PersQueue::ErrorCode::BAD_REQUEST));
         return;
     }
@@ -1739,15 +1741,17 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
     PARTITION_ENSURE(record.HasEndOffset(),
         {"record", record.ShortDebugString()});
-    PARTITION_ENSURE(EndOffset <= record.GetEndOffset()) //end offset could not be changed if no data arrived, but signal will be sended anyway after timeout
-        ("end_offset", EndOffset)
-        ("record_end_offset", record.GetEndOffset());
-    PARTITION_ENSURE(MaxTimeLagMs || ReadTimestampMs || IsNeedMorePartitionData()) //otherwise no WaitData were needed
-        ("max_time_lag_ms", MaxTimeLagMs)
-        ("read_timestamp_ms", ReadTimestampMs)
-        ("wait_for_data", WaitForData)
-        ("read_offset", ReadOffset)
-        ("end_offset", EndOffset);
+    //end offset could not be changed if no data arrived, but signal will be sended anyway after timeout
+    PARTITION_ENSURE(EndOffset <= record.GetEndOffset(),
+        {"endOffset", EndOffset},
+        {"recordEndOffset", record.GetEndOffset()});
+    //otherwise no WaitData were needed
+    PARTITION_ENSURE(MaxTimeLagMs || ReadTimestampMs || IsNeedMorePartitionData(),
+        {"maxTimeLagMs", MaxTimeLagMs},
+        {"readTimestampMs", ReadTimestampMs},
+        {"waitForData", WaitForData},
+        {"readOffset", ReadOffset},
+        {"endOffset", EndOffset});
 
     LOG_D("Wait for data done: readOffset EndOffset newEndOffset commitOffset clientCommitOffset clientMaxOffset cookie readingFinished firstRead",
         {"partition", Partition},

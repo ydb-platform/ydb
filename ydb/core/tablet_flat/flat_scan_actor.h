@@ -738,13 +738,14 @@ namespace NOps {
 
         void Terminate(EStatus status, const std::exception* exc = nullptr)
         {
-            auto trace = Args.Trace ? Cache->GrabTraces() : nullptr;
+            auto trace = Args.Trace && Cache ? Cache->GrabTraces() : nullptr;
 
             if (auto logl = Logger->Log(ELnLev::Info)) {
-                logl
-                    << NFmt::Do(*this) << " end=" << status
-                    << ", " << Seen << "r seen, " << NFmt::Do(Cache->Stats())
-                    << ", bio " << NFmt::If(Spent.Get());
+                logl << NFmt::Do(*this) << " end=" << status << ", " << Seen << "r seen";
+                if (Cache) {
+                    logl << ", " << NFmt::Do(Cache->Stats());
+                }
+                logl << ", bio " << NFmt::If(Spent.Get());
 
                 if (trace)
                     logl
@@ -777,7 +778,9 @@ namespace NOps {
                 Send(pr.second, new TEvents::TEvPoison);
             }
 
-            Send(MakeSharedPageCacheId(), Cache->Protocol().MakeUnregisterRequest());
+            if (Cache) {
+                Send(MakeSharedPageCacheId(), Cache->Protocol().MakeUnregisterRequest());
+            }
             PassAway();
         }
 

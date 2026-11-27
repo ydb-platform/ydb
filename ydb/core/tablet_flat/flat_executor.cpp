@@ -700,7 +700,9 @@ void TExecutor::TryActivateWaitingTransaction(
     }
     TTransactionWaitPad& transaction = *it->second;
 
-    PageCache.AdoptLoadedPages(*transaction.Seat, result);
+    if (result) {
+        PageCache.AdoptLoadedPages(*transaction.Seat, result);
+    }
 
     if (waitPad->PendingRequests) {
         LogWaitingTransaction(transaction);

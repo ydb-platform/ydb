@@ -4,6 +4,10 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(1)
 
+IF (OS_LINUX)
+    LINKER_SCRIPT(${ARCADIA_ROOT}/ydb/apps/ydbd/strip_debug.ld)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

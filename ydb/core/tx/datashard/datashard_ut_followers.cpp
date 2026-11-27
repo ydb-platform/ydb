@@ -2,6 +2,7 @@
 #include "datashard_ut_common_kqp.h"
 #include "datashard_ut_read_table.h"
 
+#include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/library/actors/core/mon.h>
 

@@ -1905,11 +1905,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "EstimatedBytesToCopy",
-                "ColumnType": "Uint64"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "TargetGroupId",
                 "ColumnType": "Uint32"
@@ -1938,19 +1933,30 @@
                 "ColumnId": 6,
                 "ColumnName": "ErrorCount",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "EstimatedBytesToCopy",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "EstimateRound",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2300,68 +2306,6 @@
                     1,
                     2,
                     3
-                ],
-                "RoomID": 0,
-                "Codec": 0,
-                "InMemory": false,
-                "Cache": 0,
-                "Small": 4294967295,
-                "Large": 4294967295
-            }
-        },
-        "Rooms": {
-            "0": {
-                "Main": 1,
-                "Outer": 1,
-                "Blobs": 1,
-                "ExternalBlobs": [
-                    1
-                ]
-            }
-        }
-    },
-    {
-        "TableId": 137,
-        "TableName": "RetiredS3Namespaces",
-        "TableKey": [
-            1
-        ],
-        "ColumnsAdded": [
-            {
-                "ColumnId": 1,
-                "ColumnName": "GroupId",
-                "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 2,
-                "ColumnName": "BlobDepotId",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 3,
-                "ColumnName": "S3Config",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 4,
-                "ColumnName": "NextS3Sweep",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 5,
-                "ColumnName": "SweepPhase",
-                "ColumnType": "Uint32"
-            }
-        ],
-        "ColumnsDropped": [],
-        "ColumnFamilies": {
-            "0": {
-                "Columns": [
-                    1,
-                    2,
-                    3,
-                    4,
-                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,

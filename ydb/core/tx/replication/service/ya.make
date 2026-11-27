@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/scheme_types
     ydb/core/tablet_flat
+    ydb/core/tablet_flat/base
     ydb/core/tx/replication/common
     ydb/core/tx/replication/ydb_proxy
     ydb/core/tx/replication/ydb_proxy/local_proxy

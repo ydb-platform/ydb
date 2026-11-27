@@ -9,7 +9,6 @@
 #include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/monlib/consumers/collecting_consumer.h>
-#include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <library/cpp/monlib/encode/spack/spack_v1.h>
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -568,7 +567,7 @@ Y_UNIT_TEST_SUITE(MessageBusHttp) {
 }
 
 Y_UNIT_TEST_SUITE(TMemOnlyCountersTest) {
-    Y_UNIT_TEST(MarkedMetricsExportMemOnly) {
+    Y_UNIT_TEST(FactorySetsMemOnly) {
         auto counters = MakeIntrusive<TDynamicCounters>();
         TMetricFactoryForDynamicCounters factory(counters->GetSubgroup("subsystem", "mon"));
         auto labels = [](TStringBuf sensor) {
@@ -577,42 +576,12 @@ Y_UNIT_TEST_SUITE(TMemOnlyCountersTest) {
         factory.RateWithOpts(labels("count"), {.MemOnly = true})->Inc();
         factory.HistogramRateWithOpts(labels("time_ms"), ExplicitHistogram({1, 10}), {.MemOnly = true})->Record(5);
         factory.Rate(labels("plain"))->Inc();
-        // Same value under another label name: another counter, not marked.
-        const auto otherName = counters->GetSubgroup("subsystem", "mon")->GetSubgroup("url", "/a")->GetNamedCounter("name", "count");
         UNIT_ASSERT_EXCEPTION_CONTAINS(factory.Rate(labels("count")), yexception, "memOnly=");
 
-        auto encode = [](const TDynamicCounters& tree) {
-            TStringStream out;
-            auto encoder = NMemOnlyShim::CreateEncoder(&out, EFormat::JSON);
-            tree.Accept(TString(), TString(), *encoder);
-            return out.Str();
-        };
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(encode(*counters), &json));
-        THashMap<TString, bool> memOnly;
-        for (const auto& sensor : json["sensors"].GetArray()) {
-            memOnly[sensor["labels"]["sensor"].GetString()] = sensor["memOnly"].GetBooleanSafe(false);
-        }
-        UNIT_ASSERT_VALUES_EQUAL(memOnly.size(), 4);
-        UNIT_ASSERT(memOnly["count"]);
-        UNIT_ASSERT(memOnly["time_ms"]);
-        UNIT_ASSERT(!memOnly["plain"]);
-        UNIT_ASSERT(!memOnly[""]); // name=count
-
-        // A plain metric accepted without its group encodes without memOnly.
-        TStringStream bare;
-        otherName->Accept("name", "count", *NMemOnlyShim::CreateEncoder(&bare, EFormat::JSON));
-        NJson::TJsonValue bareJson;
-        UNIT_ASSERT(NJson::ReadJsonTree(bare.Str(), &bareJson));
-        UNIT_ASSERT(!bareJson.Has("memOnly"));
-
-        // Without memOnly the encoder writes what the TDynamicCountersPage encoder writes.
-        auto plainTree = MakeIntrusive<TDynamicCounters>();
-        TMetricFactoryForDynamicCounters plainFactory(plainTree->GetSubgroup("subsystem", "mon"));
-        plainFactory.Rate(labels("count"))->Inc();
-        plainFactory.HistogramRate(labels("time_ms"), ExplicitHistogram({1, 10}))->Record(5);
-        plainFactory.Rate(labels("plain"))->Inc();
-        UNIT_ASSERT_VALUES_EQUAL(encode(*plainTree), ToJson(*plainTree));
+        const auto group = counters->FindSubgroup("subsystem", "mon")->FindSubgroup("url", "/a");
+        UNIT_ASSERT(group->FindCounter("count")->IsMemOnly());
+        UNIT_ASSERT(group->FindHistogram("time_ms")->IsMemOnly());
+        UNIT_ASSERT(!group->FindCounter("plain")->IsMemOnly());
     }
 
     // Fails if /counters does not export the HTTP proxy sensors memOnly.
@@ -654,12 +623,15 @@ Y_UNIT_TEST_SUITE(TMemOnlyCountersTest) {
         };
 
         // A request's sensors are recorded once its reply is built, so a scrape never shows its own request.
-        const auto hasMon = [&] { return AnyOf(fromJson(fetch("json")), [](const auto& flag) { return flag.first; }); };
+        TFlags json;
+        const auto hasMon = [&] {
+            json = fromJson(fetch("json"));
+            return AnyOf(json, [](const auto& flag) { return flag.first; });
+        };
         for (const TInstant deadline = TInstant::Now() + TDuration::Seconds(30); !hasMon() && TInstant::Now() < deadline;) {
             Sleep(TDuration::MilliSeconds(100));
         }
-        // The series may be registered during the last poll scrape; it gets memOnly from the next scrape on.
-        check(fromJson(fetch("json")), "json");
+        check(json, "json");
         check(fromSpack(fetch("spack")), "spack");
     }
 }

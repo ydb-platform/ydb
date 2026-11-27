@@ -364,7 +364,9 @@ public:
         for (auto id : SessionCtx->Query().ExecutionOrder) {
             auto result = SessionCtx->Query().Results.FindPtr(id);
             if (result) {
-                queryPlans.push_back(SerializeAnalyzePlan(result->QueryStats, SessionCtx->Config().GetEnableNewRBO()));
+                queryPlans.push_back(result->QueryPlan.empty()
+                    ? SerializeAnalyzePlan(result->QueryStats)
+                    : result->QueryPlan);
                 AddQueryStats(queryResult.QueryStats, std::move(result->QueryStats));
             }
         }

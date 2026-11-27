@@ -15,8 +15,9 @@ public:
     TNodePtr Build(const TRule_checksum_table_stmt& rule);
 
 private:
-    bool ParseSetting(const TRule_table_settings_entry& entry, TMaybe<TString>& algorithm);
-    bool ParseSettings(const TRule_with_table_settings& settings, TMaybe<TString>& algorithm);
+    bool ParseChangefeeds(const TRule_table_setting_value& value, TVector<TString>& changefeeds);
+    bool ParseSetting(const TRule_table_settings_entry& entry, TMaybe<TString>& algorithm, TVector<TString>& changefeeds);
+    bool ParseSettings(const TRule_with_table_settings& settings, TMaybe<TString>& algorithm, TVector<TString>& changefeeds);
 };
 
 } // namespace NSQLTranslationV1

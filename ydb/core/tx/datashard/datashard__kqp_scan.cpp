@@ -5,12 +5,12 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/common/events/scan.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_row_celled.h>
 
 #include <ydb/library/chunks_limiter/chunks_limiter.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
@@ -652,6 +652,12 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
             reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
                 << " Cant find table '" << request.GetTablePath() << "'"
                 << " column " << request.GetColumnTags(i)  << " at " << TabletID());
+            return;
+        }
+        if (column->IsBuildInProgress) {
+            reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
+                << " Cannot read table '" << request.GetTablePath() << "' column '" << column->Name
+                << "' (" << request.GetColumnTags(i) << ") at " << TabletID() << ": column build is in progress");
             return;
         }
 

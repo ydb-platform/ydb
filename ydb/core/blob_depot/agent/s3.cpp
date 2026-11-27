@@ -347,7 +347,7 @@ namespace NKikimr::NBlobDepot {
                 outcome.Error.emplace(msg.GetError().GetMessage());
                 outcome.SlowDown = IsS3SlowDown(msg.GetError());
                 const int status = static_cast<int>(msg.GetError().GetResponseCode());
-                outcome.MayArriveLate |= status < 400 || status >= 500 || status == 408;
+                outcome.MayArriveLate |= S3PutMayArriveAfterError(msg.GetError());
                 IncS3HttpErrorCounter("Puts", status);
             }
         }

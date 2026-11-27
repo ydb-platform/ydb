@@ -54,7 +54,7 @@ def test_rounded_slot_size_in_list(command, use_grpc, group_size_in_units, expec
     monkeypatch.setattr(table.TableOutput, 'dump', lambda self, result, args: rows.extend(result))
     command.do(SimpleNamespace(show_pdisk_status=False, show_vdisk_usage=True, show_vdisk_status=False,
                                show_group_status=False, show_vdisk_estimated_usage=True, all_columns=False,
-                               virtual_groups_only=False))
+                               virtual_groups_only=False, show_donors=False))
 
     assert len(rows) == 1
     row = rows[0]

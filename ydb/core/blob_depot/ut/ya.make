@@ -21,6 +21,7 @@ UNITTEST_FOR(ydb/core/blob_depot)
         config_ut.cpp
         given_id_range_ut.cpp
         s3_limits_ut.cpp
+        value_chain_ut.cpp
     )
 
     PEERDIR(

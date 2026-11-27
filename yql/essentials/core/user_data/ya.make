@@ -6,9 +6,4 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(yql_user_data.h)
 
-PEERDIR_FROM_POLICY(
-    ALLOW
-    .*
-)
-
 END()

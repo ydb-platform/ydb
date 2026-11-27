@@ -13,7 +13,11 @@ SRCS(
 
 PEERDIR_FROM_POLICY(
     ALLOW
+    classifieds/vsdwh/tools/ci/jobs/yql_udf/parser
     cml/util/yql_validate_metric/lib
+    extsearch/geo/tools/yql_formatter
+    logos/projects/ads/mldwh/querygen
+    toloka/analytics/programs/yql_parser
 )
 
 END()

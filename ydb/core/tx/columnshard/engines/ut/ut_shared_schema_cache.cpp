@@ -1,8 +1,8 @@
-#include <ydb/core/tx/columnshard/counters/portion_index.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_diff.h>
+#include <ydb/core/tx/columnshard/engines/storage/data_stats/shard_data_stats.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -68,7 +68,7 @@ private:
 public:
     TShard(const std::shared_ptr<TSchemaObjectsCache>& cache, const TSnapshot& v1Snapshot, const TSnapshot& v2Snapshot)
         : Engine(0, cache, std::make_shared<TNoDataAccessorsManager>(), TTestStoragesManager::GetInstance(), v1Snapshot, PresetId,
-              IColumnEngine::TSchemaVersionView(V1), std::make_shared<NColumnShard::TPortionIndexStats>())
+              IColumnEngine::TSchemaVersionView(V1), std::make_shared<NColumnShard::TShardDataStats>(TTestStoragesManager::GetInstance(), 0))
     {
         Engine.RegisterSchemaVersion(v2Snapshot, PresetId, IColumnEngine::TSchemaVersionView(V2));
     }

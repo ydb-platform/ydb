@@ -3,7 +3,7 @@
 #include "util_basics.h"
 #include "util_fmt_abort.h"
 #include "flat_page_iface.h"
-#include "flat_row_eggs.h"
+#include <ydb/core/tablet_flat/base/flat_row_eggs.h>
 #include "flat_row_column.h"
 #include "flat_row_nulls.h"
 #include "flat_part_pinout.h"

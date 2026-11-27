@@ -1,5 +1,5 @@
 #include "s3_router.h"
-#include "s3_put_timeout.h"
+#include "config.h"
 #include "s3_request_timer.h"
 #include "s3_router_events.h"
 #include "types.h"
@@ -926,6 +926,12 @@ namespace NKikimr::NBlobDepot {
             }
             switch (type) {
                 hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+                hFunc(TEvents::TEvGone, [&](TEvents::TEvGone::TPtr ev) {
+                    std::erase_if(PendingRequests, [&](const TPendingRequest& pending) {
+                        return pending.Ev->Sender == ev->Sender &&
+                            pending.Ev->GetTypeRewrite() == NWrappers::TEvExternalStorage::TEvListObjectsRequest::EventType;
+                    });
+                });
                 cFunc(TEvPrivate::EvBalancerTick, HandleBalancerTick);
                 cFunc(TEvPrivate::EvRefreshNow, HandleRefreshNow);
                 cFunc(TEvPrivate::EvSweepRetiring, HandleSweepRetiring);

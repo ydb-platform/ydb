@@ -15,6 +15,32 @@ NJson::TJsonValue ParsePlan(const TString& text) {
     return plan;
 }
 
+NJson::TJsonValue MakeRboPlan(const TString& stageGuid, i64 operatorId = 7) {
+    auto plan = ParsePlan(R"({
+        "SimplifiedPlan": {
+            "Node Type": "TableFullScan",
+            "Operators": [{"Name": "TableFullScan", "Table": "T"}]
+        },
+        "Plans": [{
+            "Node Type": "TableFullScan",
+            "Operators": [{"Name": "TableFullScan"}]
+        }]
+    })");
+    plan["Plans"][0]["StageGuid"] = stageGuid;
+    plan["Plans"][0]["Operators"][0]["OperatorId"] = operatorId;
+    plan["SimplifiedPlan"]["Operators"][0]["OperatorId"] = operatorId;
+    return plan;
+}
+
+const TString LegacyTxPlan = R"({
+    "Node Type": "Phase",
+    "Plans": [{
+        "Node Type": "TableFullScan", "PlanNodeId": 1, "StageGuid": "legacy",
+        "Operators": [{"Name": "TableFullScan", "Table": "LegacyTable", "Inputs": []}],
+        "Stats": {"Tasks": 2, "Table": [{"Path": "LegacyTable", "ReadRows": {"Sum": 3}}]}
+    }]
+})";
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpQueryPlanSerialization) {
@@ -107,7 +133,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPlanSerialization) {
         stats.MutableCompilation()->SetFromCache(true);
         stats.MutableCompilation()->SetDurationUs(90);
 
-        const auto plan = ParsePlan(SerializeAnalyzePlan(stats, false, "pool"));
+        const auto plan = ParsePlan(SerializeAnalyzePlan(stats, "pool"));
         const auto& queryStats = plan["Plan"]["Stats"];
         UNIT_ASSERT_VALUES_EQUAL(queryStats["ProcessCpuTimeUs"].GetIntegerRobust(), 123);
         UNIT_ASSERT_VALUES_EQUAL(queryStats["TotalDurationUs"].GetIntegerRobust(), 456);
@@ -136,13 +162,68 @@ Y_UNIT_TEST_SUITE(KqpQueryPlanSerialization) {
             }]
         })");
 
-        const auto plan = ParsePlan(SerializeAnalyzePlan(stats, true));
+        const auto plan = ParsePlan(SerializeAnalyzePlan(stats));
         const auto& op = plan["SimplifiedPlan"]["Operators"][0];
         UNIT_ASSERT_VALUES_EQUAL(op["A-Rows"].GetDoubleSafe(), 3.0);
         UNIT_ASSERT_VALUES_EQUAL(op["A-Size"].GetDoubleSafe(), 120.0);
         UNIT_ASSERT_VALUES_EQUAL(op["A-Cpu"].GetDoubleSafe(), 2.0);
         UNIT_ASSERT(!op.Has("OperatorId"));
         UNIT_ASSERT(!plan["Plan"]["Plans"][0]["Operators"][0].Has("OperatorId"));
+    }
+
+    Y_UNIT_TEST(AnalyzeUsesLegacyTransactionPlanAfterFallback) {
+        NKqpProto::TKqpStatsQuery stats;
+        stats.AddExecutions()->AddTxPlansWithStats(""); // A schema/commit-only part.
+        stats.AddExecutions()->AddTxPlansWithStats(LegacyTxPlan);
+        stats.AddExecutions()->AddTxPlansWithStats("");
+
+        const auto plan = ParsePlan(SerializeAnalyzePlan(stats));
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"].GetArraySafe().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 2);
+        const auto& node = plan["SimplifiedPlan"]["Plans"][0]["Operators"][0];
+        UNIT_ASSERT_VALUES_EQUAL(node["Table"].GetStringSafe(), "LegacyTable");
+        UNIT_ASSERT_VALUES_EQUAL(node["A-Rows"].GetDoubleSafe(), 3);
+    }
+
+    Y_UNIT_TEST(AnalyzeMergesTransactionsOfTheSameRboQuery) {
+        auto first = MakeRboPlan("first");
+        const auto secondStage = MakeRboPlan("second", 8);
+        first["Plans"][0]["Plans"].AppendValue(secondStage["Plans"][0]);
+        first["SimplifiedPlan"]["Plans"].AppendValue(secondStage["SimplifiedPlan"]);
+        auto second = first;
+        first["Plans"][0]["Stats"]["Tasks"] = 2;
+        second["Plans"][0]["Plans"][0]["Stats"]["Tasks"] = 3;
+
+        NKqpProto::TKqpStatsQuery stats;
+        stats.AddExecutions()->AddTxPlansWithStats("");
+        stats.AddExecutions()->AddTxPlansWithStats(first.GetStringRobust());
+        stats.AddExecutions()->AddTxPlansWithStats("");
+        stats.AddExecutions()->AddTxPlansWithStats(second.GetStringRobust());
+        const auto plan = ParsePlan(SerializeAnalyzePlan(stats));
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"].GetArraySafe().size(), 1);
+        const auto& stage = plan["Plan"]["Plans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(stage["Stats"]["Tasks"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stage["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 3);
+    }
+
+    Y_UNIT_TEST_TWIN(ScriptPreservesSerializedSimplifiedPlans, NewRbo) {
+        NKqpProto::TKqpStatsQuery stats;
+        auto rbo = MakeRboPlan("rbo");
+        rbo["SimplifiedPlan"]["OptimizerStats"]["CBOTreesOptimized"] = 1;
+        stats.AddExecutions()->AddTxPlansWithStats(rbo.GetStringRobust());
+        const auto queryPlan = NewRbo ? SerializeAnalyzePlan(stats) : SerializeTxPlans({LegacyTxPlan});
+        const auto script = ParsePlan(SerializeScriptPlan({queryPlan}));
+        const auto& queries = script["queries"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(queries.size(), 1);
+        UNIT_ASSERT(queries[0]["SimplifiedPlan"] == ParsePlan(queryPlan)["SimplifiedPlan"]);
+    }
+
+    Y_UNIT_TEST(ScriptBuildsMissingLegacySimplifiedPlan) {
+        auto legacyPlan = ParsePlan(SerializeTxPlans({LegacyTxPlan}));
+        const auto expected = legacyPlan["SimplifiedPlan"];
+        legacyPlan.EraseValue("SimplifiedPlan");
+        const auto script = ParsePlan(SerializeScriptPlan({legacyPlan.GetStringRobust()}));
+        UNIT_ASSERT(script["queries"][0]["SimplifiedPlan"] == expected);
     }
 }
 

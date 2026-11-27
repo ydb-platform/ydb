@@ -6,15 +6,18 @@ import pytest
 from ydb.apps.dstool.lib import dstool_cmd_group_virtual_reconfigure as reconfigure
 
 
-@pytest.mark.parametrize('confirmation', [None, '--confirm-s3-empty', '--confirm-s3-namespace-migration'])
-def test_empty_s3_settings_on_wire(tmp_path, confirmation):
+@pytest.mark.parametrize('with_settings', [False, True])
+@pytest.mark.parametrize('confirm_route_change', [False, True])
+def test_empty_s3_settings_on_wire(tmp_path, with_settings, confirm_route_change):
     parser = argparse.ArgumentParser()
     reconfigure.add_options(parser)
     options = ['--name', 'vg']
-    if confirmation:
+    if confirm_route_change:
+        options.append('--confirm-s3-route-change')
+    if with_settings:
         settings = tmp_path / 'empty.json'
         settings.write_text('{}')
-        options.extend([confirmation, '--s3-settings', str(settings)])
+        options.extend(['--s3-settings', str(settings)])
     args = parser.parse_args(options)
     args.dry_run = True
     with (
@@ -26,6 +29,5 @@ def test_empty_s3_settings_on_wire(tmp_path, confirmation):
         args.s3_settings.close()
     request = invoke.call_args.args[0]
     cmd = request.FromString(request.SerializeToString()).Command[0].ReconfigureVirtualGroup
-    assert cmd.HasField('S3BackendSettings') == bool(confirmation)
-    assert cmd.ConfirmS3Empty == (confirmation == '--confirm-s3-empty')
-    assert cmd.ConfirmS3NamespaceMigration == (confirmation == '--confirm-s3-namespace-migration')
+    assert cmd.HasField('S3BackendSettings') == with_settings
+    assert cmd.ConfirmS3RouteChange == confirm_route_change

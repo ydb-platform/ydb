@@ -142,6 +142,7 @@ namespace NKikimr::NBlobDepot {
             // tablet responses
             TEvBlobDepot::TEvRegisterAgentResult*,
             TEvBlobDepot::TEvAllocateIdsResult*,
+            TEvBlobDepot::TEvHotWriteCreditResult*,
             TEvBlobDepot::TEvBlockResult*,
             TEvBlobDepot::TEvQueryBlocksResult*,
             TEvBlobDepot::TEvCollectGarbageResult*,
@@ -287,6 +288,7 @@ namespace NKikimr::NBlobDepot {
                 EvPushMetrics,
                 EvS3GetThrottleWakeup,
                 EvS3Result,
+                EvReturnIdleHotWriteCredits,
             };
         };
 
@@ -316,6 +318,7 @@ namespace NKikimr::NBlobDepot {
 
                 hFunc(TEvBlobDepot::TEvRegisterAgentResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvAllocateIdsResult, HandleTabletResponse);
+                hFunc(TEvBlobDepot::TEvHotWriteCreditResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvBlockResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvQueryBlocksResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvCollectGarbageResult, HandleTabletResponse);
@@ -340,6 +343,7 @@ namespace NKikimr::NBlobDepot {
 
                 fFunc(TEvPrivate::EvS3Result, HandleS3Result);
                 cFunc(TEvPrivate::EvS3GetThrottleWakeup, HandleS3GetThrottleWakeup);
+                cFunc(TEvPrivate::EvReturnIdleHotWriteCredits, ReturnIdleHotWriteCredits);
             )
 
             DeletePendingQueries.Clear();
@@ -436,6 +440,14 @@ namespace NKikimr::NBlobDepot {
             {}
         };
 
+        struct THotWriteCreditContext : TRequestContext {
+            explicit THotWriteCreditContext(ui64 queryId)
+                : QueryId(queryId)
+            {}
+
+            const ui64 QueryId;
+        };
+
         ui32 BlobDepotGeneration = 0;
         std::optional<ui32> DecommitGroupId;
         NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColor = {};
@@ -472,6 +484,7 @@ namespace NKikimr::NBlobDepot {
         void ProcessResponse(ui64 id, TRequestContext::TPtr context, TResponse response) override;
         void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvRegisterAgentResult& msg);
         void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvAllocateIdsResult& msg);
+        void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvHotWriteCreditResult& msg);
 
         template<typename T, typename = typename TEvBlobDepot::TEventFor<T>::Type>
         ui64 Issue(T msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId = {});
@@ -486,11 +499,13 @@ namespace NKikimr::NBlobDepot {
         struct TExecutingQueries {};
         struct TPendingBlockChecks {};
         struct TPendingId {};
+        struct TPendingHotWriteCredit {};
 
         class TQuery
             : public TIntrusiveListItem<TQuery, TExecutingQueries>
             , public TIntrusiveListItem<TQuery, TPendingBlockChecks>
             , public TIntrusiveListItem<TQuery, TPendingId>
+            , public TIntrusiveListItem<TQuery, TPendingHotWriteCredit>
             , public TRequestSender
         {
         protected:
@@ -514,6 +529,12 @@ namespace NKikimr::NBlobDepot {
         public:
             TQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event, TMonotonic received);
             virtual ~TQuery();
+
+            ui64 GetQueryNumber() const { return QueryId; }
+            TInstant GetDeadline() const { return Deadline; }
+            ui64 HotWriteCreditNeeded = 0;
+            bool HotWriteCreditFailOnSlowDown = false;
+            virtual void OnHotWriteCredit() { Y_ABORT(); }
 
             void CheckQueryExecutionTime(TMonotonic now);
             bool CheckDeadline(TMonotonic now);
@@ -588,6 +609,22 @@ namespace NKikimr::NBlobDepot {
         private:
             void DoDestroy();
         };
+
+        ui64 HotWriteCreditEpoch = 0;
+        ui64 HotWriteCreditAvailable = 0;
+        // Include fixed request storage so tiny writes also stay bounded during an outage.
+        static constexpr ui64 HotWriteCreditWaiterOverhead = sizeof(TQuery) + sizeof(TEvBlobStorage::TEvPut) + sizeof(IEventHandle);
+        ui64 HotWriteCreditQueueBytes = 0;
+        bool HotWriteCreditInFlight = false;
+        bool HotWriteCreditReturnScheduled = false;
+        TIntrusiveList<TQuery, TPendingHotWriteCredit> QueriesWaitingForHotWriteCredit;
+
+        bool EnsureHotWriteCredit(TQuery *query, ui64 bytes, bool failOnSlowDown);
+        bool RemoveHotWriteCreditWaiter(TQuery *query);
+        void ProcessHotWriteCreditQueue();
+        void ScheduleReturnIdleHotWriteCredits();
+        void ReturnIdleHotWriteCredits();
+        void ReturnHotWriteCredits();
 
         template<typename TEvent>
         class TBlobStorageQuery : public TQuery {

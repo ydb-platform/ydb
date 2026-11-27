@@ -50,7 +50,6 @@ public:
             auto scrubState = db.Table<Schema::ScrubState>().Select();
             auto pdiskSerial = db.Table<Schema::DriveSerial>().Select();
             auto blobDepotDeleteQueue = db.Table<Schema::BlobDepotDeleteQueue>().Select();
-            auto retiredS3Namespaces = db.Table<Schema::RetiredS3Namespaces>().Select();
             auto bridgeSyncState = db.Table<Schema::BridgeSyncState>().Select();
             auto databaseSpaceExhaustedPool = db.Table<Schema::DatabaseSpaceExhaustedPool>().Select();
             if (!state.IsReady()
@@ -74,7 +73,6 @@ public:
                     || !scrubState.IsReady()
                     || !pdiskSerial.IsReady()
                     || !blobDepotDeleteQueue.IsReady()
-                    || !retiredS3Namespaces.IsReady()
                     || !bridgeSyncState.IsReady()
                     || !databaseSpaceExhaustedPool.IsReady()) {
                 return false;
@@ -316,8 +314,7 @@ public:
                 || !NTableAdapter::FetchTable<Schema::Box>(db, Self, Self->Boxes)
                 || !NTableAdapter::FetchTable<Schema::BoxStoragePool>(db, Self, Self->StoragePools)
                 || !NTableAdapter::FetchTable<Schema::DriveSerial>(db, Self, Self->DrivesSerials)
-                || !NTableAdapter::FetchTable<Schema::BlobDepotDeleteQueue>(db, Self, Self->BlobDepotDeleteQueue)
-                || !NTableAdapter::FetchTable<Schema::RetiredS3Namespaces>(db, Self, Self->RetiredS3Namespaces)) {
+                || !NTableAdapter::FetchTable<Schema::BlobDepotDeleteQueue>(db, Self, Self->BlobDepotDeleteQueue)) {
             return false;
         }
         for (auto& [storagePoolId, storagePool] : Self->StoragePools) {
@@ -696,9 +693,12 @@ public:
                     .LastErrorTimestamp = bridgeSyncState.GetValue<Table::LastErrorTimestamp>(),
                     .FirstErrorTimestamp = bridgeSyncState.GetValue<Table::FirstErrorTimestamp>(),
                     .ErrorCount = bridgeSyncState.GetValue<Table::ErrorCount>(),
-                    .EstimatedBytesToCopy = bridgeSyncState.HaveValue<Table::EstimatedBytesToCopy>()
+                    // Estimates saved before the round was recorded cannot be attributed to the current rejoin.
+                    .EstimatedBytesToCopy = bridgeSyncState.HaveValue<Table::EstimateRound>() &&
+                            bridgeSyncState.HaveValue<Table::EstimatedBytesToCopy>()
                         ? std::make_optional(bridgeSyncState.GetValue<Table::EstimatedBytesToCopy>())
                         : std::nullopt,
+                    .EstimateRound = bridgeSyncState.GetValueOrDefault<Table::EstimateRound>(),
                 };
                 if (!bridgeSyncState.Next()) {
                     return false;

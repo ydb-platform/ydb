@@ -13,6 +13,8 @@ namespace NKikimr::NBlobDepot {
 
             TLink(const NKikimrBlobDepot::TResolvedValueChain& link);
 
+            bool IsRangeValid() const;
+
             void Output(IOutputStream& s) const;
             TString ToString() const;
 

@@ -26,6 +26,11 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
+    bool TResolvedValue::TLink::IsRangeValid() const {
+        const ui32 length = Blob ? std::get<0>(*Blob).BlobSize() : S3Locator ? S3Locator->Len : 0;
+        return SubrangeBegin < SubrangeEnd && SubrangeEnd <= length;
+    }
+
     void TResolvedValue::TLink::Output(IOutputStream& s) const {
         if (Blob) {
             const auto& [blobId, groupId] = *Blob;

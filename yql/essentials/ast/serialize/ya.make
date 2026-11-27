@@ -10,12 +10,4 @@ PEERDIR(
     yql/essentials/minikql
 )
 
-PEERDIR_FROM_POLICY(
-    ALLOW
-    statbox/qb3/ast_builder
-    statbox/qb4/udfs/enum_based
-    statbox/uv
-    classifieds/vsdwh/tools/ci/jobs/yql_udf/parser
-)
-
 END()

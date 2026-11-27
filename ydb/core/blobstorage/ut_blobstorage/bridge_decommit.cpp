@@ -82,46 +82,6 @@ namespace {
             TStringBuilder() << "decommit status " << NKikimrBlobStorage::TGroupDecommitStatus::E_Name(expected));
     }
 
-    // keeps events matching the predicate until released
-    class TEventHold {
-        TEnvironmentSetup& Env;
-        const std::function<bool(IEventHandle&)> Predicate;
-        bool Hold = true;
-        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> Held;
-
-    public:
-        TEventHold(TEnvironmentSetup& env, std::function<bool(IEventHandle&)> predicate)
-            : Env(env)
-            , Predicate(std::move(predicate))
-        {}
-
-        bool Filter(ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
-            if (Hold && Predicate(*ev)) {
-                Held.emplace_back(nodeId, std::move(ev));
-                return false;
-            }
-            return true;
-        }
-
-        bool HasHeld() const {
-            return !Held.empty();
-        }
-
-        void WaitForHeld() {
-            for (ui32 i = 0; i < 120 && Held.empty(); ++i) {
-                Env.Sim(TDuration::Seconds(1));
-            }
-            UNIT_ASSERT(!Held.empty());
-        }
-
-        void Release() {
-            Hold = false;
-            for (auto& [nodeId, ev] : std::exchange(Held, {})) {
-                ResendEvent(Env, nodeId, std::move(ev));
-            }
-        }
-    };
-
     // runtime has the only filter function, this one combines several filters
     class TFilterChain {
         using TFilter = std::function<bool(ui32, std::unique_ptr<IEventHandle>&)>;

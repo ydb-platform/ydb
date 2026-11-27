@@ -109,6 +109,7 @@ def start(args):
                 endpoint, os.environ['OIDC_CLUSTER_ADMIN_TOKEN'], os.environ['YDB_CLUSTER_ADMIN'], is_admin=True
             )
             recipe.write_endpoint(endpoint)
+            recipe.write_mon_port(cluster.nodes[1].mon_port)
             recipe.write_database('/Root')
             recipe.write_connection_string(f'grpc://{endpoint}?database=/Root')
         except BaseException:

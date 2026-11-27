@@ -578,8 +578,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     YDB_LOG_VERIFY(AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
 
     NIceDb::TNiceDb db(txc.DB);
-    NColumnShard::TTablesManager tablesManager(
-        controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), TabletId);
+    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), controller.GetDataAccessorsManager(),
+        std::make_shared<TShardDataStats>(controller.GetStoragesManager(), TabletId), TabletId);
     if (!tablesManager.InitFromDB(db, nullptr)) {
         YDB_LOG_COMP(LogLevel, NKikimrServices::TX_COLUMNSHARD, "",
             {"normalizer", TLeakedBlobsNormalizer::GetClassNameStatic()},

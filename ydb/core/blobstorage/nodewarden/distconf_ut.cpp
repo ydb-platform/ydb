@@ -357,10 +357,12 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         return response;
     }
 
-    void BootstrapCluster(TTestActorSystem& runtime, TActorId keeperId) {
+    NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult BootstrapCluster(TTestActorSystem& runtime, TActorId keeperId) {
+        const auto edge = runtime.AllocateEdgeActor(keeperId.NodeId());
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         request->Record.MutableBootstrapCluster()->SetSelfAssemblyUUID("partial-bootstrap-test");
-        InvokeKeeper(runtime, keeperId, std::move(request));
+        runtime.Send(new IEventHandle(keeperId, edge, request.release()), keeperId.NodeId());
+        return runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge)->Get()->Record;
     }
 
     NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult QueryKeeper(TTestActorSystem& runtime, TActorId keeperId,
@@ -2850,6 +2852,21 @@ selector_config: []
                 nodeId, "/dev/disk" + std::to_string(nodeId) + "_1"});
             return it != state.Metadata.end() ? it->second : emptyMetadata;
         };
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        const auto hasCommittedQuorum = [&](const NKikimrBlobStorage::TStorageConfig& committed) {
+            std::vector<NStorage::TSuccessfulDisk> disks;
+            for (const auto& [location, record] : state.Metadata) {
+                const auto& stored = record.GetCommittedStorageConfig();
+                if (stored.GetGeneration() == committed.GetGeneration()
+                    && stored.GetFingerprint() == committed.GetFingerprint()) {
+                    const auto& [nodeId, path] = location;
+                    disks.emplace_back(NStorage::TNodeIdentifier(committed.GetAllNodes(nodeId - 1)),
+                        path, std::nullopt);
+                }
+            }
+            return NStorage::HasConfigQuorum(committed, disks, TBridgePileId(),
+                *MakeNodeWardenConfig(committed), false);
+        };
 
         {
             TTestActorSystem runtime(3);
@@ -2866,7 +2883,9 @@ selector_config: []
                 return ev->GetTypeRewrite() != NStorage::TEvNodeConfigReversePush::EventType
                        || !ev->Get<NStorage::TEvNodeConfigReversePush>()->Record.HasCommittedStorageConfig();
             };
-            BootstrapCluster(runtime, keeperIds.front());
+            const auto response = BootstrapCluster(runtime, keeperIds.front());
+            const bool committedQuorum = hasCommittedQuorum(metadata(1).GetCommittedStorageConfig());
+            UNIT_ASSERT_C(response.GetStatus() == (committedQuorum ? TResult::OK : TResult::NO_QUORUM), response.DebugString());
             UNIT_ASSERT(SimUntil(runtime, [&] {
                 return state.Metadata.size() == (unevenDrives ? 5 : 3) && metadata(1).HasCommittedStorageConfig();
             }));
@@ -3006,12 +3025,8 @@ selector_config: []
         const auto root = std::ranges::find_if(keeperIds, [&](TActorId id) { return id.NodeId() == rootNodeId; });
         if (stallSurvivorReads) {
             UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(runtime, *root).GetQueryConfig().GetConfig().GetGeneration(), 0);
-            const TActorId edge = runtime.AllocateEdgeActor(rootNodeId);
-            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-            request->Record.MutableBootstrapCluster()->SetSelfAssemblyUUID("partial-bootstrap-test");
-            runtime.Send(new IEventHandle(*root, edge, request.release()), rootNodeId);
-            const auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
-            UNIT_ASSERT_C(response->Get()->Record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            const auto response = BootstrapCluster(runtime, *root);
+            UNIT_ASSERT_C(response.GetStatus() != TResult::OK,
                 "partial bootstrap read acknowledged a newly generated configuration");
             UNIT_ASSERT(expiredSurvivorReads);
             stallSurvivorReads = false;
@@ -3021,7 +3036,13 @@ selector_config: []
                 });
             }), "proposed bootstrap quorum was not recovered after the read resumed");
         }
-        BootstrapCluster(runtime, *root);
+        auto result = BootstrapCluster(runtime, *root);
+        if (result.GetStatus() == TResult::NO_QUORUM) {
+            UNIT_ASSERT(SimUntil(runtime, [&] { return hasCommittedQuorum(originalConfig); }));
+            result = BootstrapCluster(runtime, *root);
+        }
+        UNIT_ASSERT_C(result.GetStatus() == TResult::OK, result.DebugString());
+        UNIT_ASSERT(hasCommittedQuorum(originalConfig));
         UNIT_ASSERT_C(SimUntil(runtime, [&] {
             return std::ranges::all_of(keeperIds, [&](TActorId id) {
                 return metadata(id.NodeId()).GetCommittedStorageConfig().GetFingerprint() == fingerprint;
@@ -4197,12 +4218,8 @@ selector_config: []
             return true;
         };
         const auto failBootstrap = [&] {
-            const TActorId edge = fixture.Runtime.AllocateEdgeActor(1);
-            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-            request->Record.MutableBootstrapCluster()->SetSelfAssemblyUUID("partial-bootstrap-test");
-            fixture.Runtime.Send(new IEventHandle(root, edge, request.release()), 1);
-            const auto response = fixture.Runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
-            UNIT_ASSERT(response->Get()->Record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+            const auto response = BootstrapCluster(fixture.Runtime, root);
+            UNIT_ASSERT(response.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
         };
         failBootstrap();
         UNIT_ASSERT_VALUES_EQUAL(fixture.State.Metadata.size(), 1);
@@ -4234,7 +4251,8 @@ selector_config: []
             }));
         }
         failWrites = false;
-        BootstrapCluster(fixture.Runtime, fixture.Root());
+        const auto response = BootstrapCluster(fixture.Runtime, fixture.Root());
+        UNIT_ASSERT_C(response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, response.DebugString());
         const auto committed = QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(committed.GetSelfAssemblyUUID(), "partial-bootstrap-test");
         CheckDurableConfigConverges(fixture, committed);
@@ -4546,9 +4564,17 @@ selector_config: []
         TActorId handler;
         NKikimrBlobStorage::TDataCenterStates snapshot;
         ui32 requests = 0;
+        bool holdCommits = true;
+        std::vector<std::unique_ptr<IEventHandle>> heldWrites;
         std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
         runtime.FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
             SetMetadataDiskGuid(node, *event);
+            if (holdCommits && node != 1 && event->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType
+                    && event->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record.GetCommittedStorageConfig().GetGeneration()
+                        == fixture.Config.GetGeneration() + 1) {
+                heldWrites.push_back(std::move(event));
+                return false;
+            }
             if (CaptureInvokeResult(*event, client, response)) {
                 return false;
             }
@@ -4594,6 +4620,10 @@ selector_config: []
         UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 2; }));
         UNIT_ASSERT(!response);
         acknowledge(true);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return !heldWrites.empty(); }));
+        UNIT_ASSERT(!SimUntil(runtime, [&] { return response.has_value(); }, TDuration::Seconds(2)));
+        holdCommits = false;
+        ReplayDelayedEvents(runtime, heldWrites);
         UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
         UNIT_ASSERT_VALUES_EQUAL(ui32(response->GetStatus()), ui32(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK));
         UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().SerializeAsString(), snapshot.SerializeAsString());
@@ -4615,6 +4645,25 @@ selector_config: []
         UNIT_ASSERT_VALUES_EQUAL(ui32(response->GetStatus()), ui32(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK));
         UNIT_ASSERT(response->HasAppliedDataCenterStates());
         UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().DataCenterSize(), 0);
+
+        const TActorId root = fixture.Root();
+        const auto& committed = fixture.Metadata(root.NodeId()).GetCommittedStorageConfig();
+        const auto newer = MakeNextConfig(committed, committed.GetGeneration() + 1);
+        response.reset();
+        request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        UNIT_ASSERT(request->Record.MutableApplyDataCenterStates()->ParseFromString(previousSnapshot));
+        runtime.Send(new IEventHandle(root, client, request.release()), root.NodeId());
+        UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 5; }));
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.DataCenterSize(), 0);
+        UNIT_ASSERT(runtime.WrapInActorContext(root, [&](IActor *actor) {
+            static_cast<NStorage::TDistributedConfigKeeper*>(actor)->ApplyCommittedStorageConfig(newer);
+        }));
+        CheckDurableConfigConverges(fixture, newer);
+        acknowledge(true);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
+        UNIT_ASSERT_C(response->GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE, response->DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(requests, 5u);
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(runtime, root).GetQueryConfig().GetConfig().GetFingerprint(), newer.GetFingerprint());
     }
 
     Y_UNIT_TEST(UpdateConfigCannotPromoteStaticMirror3dcGroup) {
@@ -4727,20 +4776,32 @@ selector_config: []
         }
     }
 
-    void CheckStaticVDiskSlainAfterSlotReuse(bool obsoleteOccupant) {
-        TCommitConfirmationFixture fixture;
+    auto AddObsoleteStaticVDisk(TCommitConfirmationFixture& fixture, bool donor) {
         auto *ss = fixture.Config.MutableBlobStorageConfig()->MutableServiceSet();
         ss->MutableGroups(0)->SetGroupGeneration(2);
         ss->MutableVDisks(0)->MutableVDiskID()->SetGroupGeneration(2);
         auto oldVDisk = ss->GetVDisks(0);
         oldVDisk.MutableVDiskID()->SetGroupGeneration(1);
         oldVDisk.MutableVDiskLocation()->SetVDiskSlotID(1);
-        oldVDisk.SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+        if (donor) {
+            oldVDisk.MutableDonorMode()->SetErasureSpecies(TBlobStorageGroupType::ErasureNone);
+            auto *reference = ss->MutableVDisks(0)->AddDonors();
+            reference->MutableVDiskId()->CopyFrom(oldVDisk.GetVDiskID());
+            reference->MutableVDiskLocation()->CopyFrom(oldVDisk.GetVDiskLocation());
+        } else {
+            oldVDisk.SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+        }
         ss->AddVDisks()->CopyFrom(oldVDisk);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
         for (ui32 nodeId : {1, 2, 3}) {
             fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
         }
+        return oldVDisk;
+    }
+
+    void CheckStaticVDiskSlainAfterSlotReuse(bool obsoleteOccupant) {
+        TCommitConfirmationFixture fixture;
+        const auto oldVDisk = AddObsoleteStaticVDisk(fixture, false);
         fixture.Runtime.FilterFunction = [](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             SetMetadataDiskGuid(nodeId, *ev);
             return true;
@@ -4818,6 +4879,223 @@ selector_config: []
         CheckStaticVDiskSlainAfterSlotReuse(true);
     }
 
+    enum class EStaticVDiskCleanup { Slain, DropDonor, DropAllDonors };
+
+    void CheckRepeatedStaticVDiskCleanup(EStaticVDiskCleanup cleanup) {
+        const bool dropDonor = cleanup != EStaticVDiskCleanup::Slain;
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        TCommitConfirmationFixture fixture;
+        const auto oldVDisk = AddObsoleteStaticVDisk(fixture, dropDonor);
+        auto& runtime = fixture.Runtime;
+        TActorId edge;
+        std::optional<TResult> response;
+        bool holdWrites = true;
+        enum class ERecipientStatus { Replicating, Moved, ReadOnly, Ready };
+        auto recipientStatus = ERecipientStatus::Replicating;
+        ui32 statusQueries = 0;
+        std::vector<std::unique_ptr<IEventHandle>> heldWrites;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVStatus::EventType) {
+                const auto& active = fixture.Config.GetBlobStorageConfig().GetServiceSet().GetVDisks(0);
+                TVDiskID id = VDiskIDFromVDiskID(active.GetVDiskID());
+                UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(ev->Get<TEvBlobStorage::TEvVStatus>()->Record.GetVDiskID()), id);
+                const bool moved = recipientStatus == ERecipientStatus::Moved;
+                const bool readOnly = recipientStatus == ERecipientStatus::ReadOnly;
+                if (moved) {
+                    ++id.GroupGeneration;
+                }
+                auto result = std::make_unique<TEvBlobStorage::TEvVStatusResult>(
+                    moved ? NKikimrProto::RACE : NKikimrProto::OK, id, !moved, !moved, readOnly, 1);
+                result->Record.SetDurabilityReplicated(readOnly || recipientStatus == ERecipientStatus::Ready);
+                runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), result.release()), nodeId);
+                ++statusQueries;
+                return false;
+            }
+            if (edge && CaptureInvokeResult(*ev, edge, response)) {
+                return false;
+            }
+            if (holdWrites && nodeId != 1 && ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType
+                    && ev->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record.GetCommittedStorageConfig().GetGeneration() == 2) {
+                heldWrites.push_back(std::move(ev));
+                return false;
+            }
+            return true;
+        };
+        Y_DEFER { runtime.FilterFunction = {}; };
+        fixture.Start();
+        const auto root = fixture.Root();
+        edge = runtime.AllocateEdgeActor(root.NodeId());
+        auto report = [&](ui32 generation, ui32 slot) {
+            response.reset();
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            auto fill = [&](auto *cmd) {
+                cmd->MutableVDiskId()->CopyFrom(oldVDisk.GetVDiskID());
+                cmd->MutableVDiskId()->SetGroupGeneration(generation);
+                cmd->MutableVSlotId()->SetNodeId(oldVDisk.GetVDiskLocation().GetNodeID());
+                cmd->MutableVSlotId()->SetPDiskId(oldVDisk.GetVDiskLocation().GetPDiskID());
+                cmd->MutableVSlotId()->SetVSlotId(slot);
+            };
+            if (dropDonor) {
+                fill(request->Record.MutableDropDonor());
+            } else {
+                fill(request->Record.MutableStaticVDiskSlain());
+            }
+            runtime.Send(new IEventHandle(root, edge, request.release()), root.NodeId());
+        };
+        if (cleanup == EStaticVDiskCleanup::DropAllDonors) {
+            RegisterStaticTestVDisks(runtime, fixture.Config);
+            const auto deadline = runtime.GetClock() + TDuration::Seconds(30);
+            do {
+                report(0, 1);
+                UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }, TDuration::Seconds(1)));
+                if (response->GetStatus() != TResult::RACE) {
+                    break;
+                }
+                SimUntil(runtime, [] { return false; }, TDuration::Seconds(3));
+            } while (runtime.GetClock() < deadline);
+            UNIT_ASSERT_C(response->GetStatus() == TResult::OK, response->DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(statusQueries, 0u);
+            for (const auto status : {ERecipientStatus::Replicating, ERecipientStatus::Moved, ERecipientStatus::ReadOnly}) {
+                recipientStatus = status;
+                report(0, 0);
+                UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }, TDuration::Seconds(1)));
+                UNIT_ASSERT_C(response->GetStatus() == TResult::RACE, response->DebugString());
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(1).GetCommittedStorageConfig().GetFingerprint(), fixture.Config.GetFingerprint());
+            }
+            recipientStatus = ERecipientStatus::Ready;
+            report(0, 0);
+        } else {
+            report(1, 1);
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }, TDuration::Seconds(35)));
+        UNIT_ASSERT_C(response->GetStatus() == TResult::NO_QUORUM, response->DebugString());
+        UNIT_ASSERT(!heldWrites.empty());
+        const auto fingerprint = fixture.Metadata(1).GetCommittedStorageConfig().GetFingerprint();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(1).GetCommittedStorageConfig().GetGeneration(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(2).GetCommittedStorageConfig().GetGeneration(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(3).GetCommittedStorageConfig().GetGeneration(), 1u);
+
+        report(1, 0);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }, TDuration::Seconds(1)));
+        UNIT_ASSERT_C(response->GetStatus() == TResult::OK, response->DebugString());
+
+        if (cleanup == EStaticVDiskCleanup::DropAllDonors) {
+            const auto& serviceSet = fixture.Metadata(1).GetCommittedStorageConfig().GetBlobStorageConfig().GetServiceSet();
+            UNIT_ASSERT_VALUES_EQUAL(serviceSet.GetVDisks(0).DonorsSize(), 0u);
+            UNIT_ASSERT(serviceSet.GetVDisks(1).GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY);
+            UNIT_ASSERT(!serviceSet.GetVDisks(1).HasDonorMode());
+            UNIT_ASSERT_VALUES_EQUAL(statusQueries, 4u);
+            report(0, 0);
+        } else {
+            report(1, 1);
+        }
+        UNIT_ASSERT(!SimUntil(runtime, [&] { return response.has_value(); }, TDuration::Seconds(2)));
+        holdWrites = false;
+        ReplayDelayedEvents(runtime, heldWrites);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
+        UNIT_ASSERT_C(response->GetStatus() == TResult::OK, response->DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(2).GetCommittedStorageConfig().GetFingerprint(), fingerprint);
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(runtime, root).GetQueryConfig().GetConfig().GetGeneration(), 2u);
+    }
+
+    Y_UNIT_TEST(RepeatedStaticVDiskSlainConfirmsCommit) {
+        CheckRepeatedStaticVDiskCleanup(EStaticVDiskCleanup::Slain);
+    }
+
+    Y_UNIT_TEST(RepeatedStaticDropDonorConfirmsCommit) {
+        CheckRepeatedStaticVDiskCleanup(EStaticVDiskCleanup::DropDonor);
+    }
+
+    Y_UNIT_TEST(RepeatedStaticDropAllDonorsConfirmsCommit) {
+        CheckRepeatedStaticVDiskCleanup(EStaticVDiskCleanup::DropAllDonors);
+    }
+
+    Y_UNIT_TEST(DropAllDonorsRetriesAfterRootRecoversMovedVDisk) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        TCommitConfirmationFixture fixture;
+        AddMultiVDiskGroup(fixture.Config, {3}, TBlobStorageGroupType::ErasureNone, 1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        auto moved = MakeNextConfig(fixture.Config);
+        auto *ss = moved.MutableBlobStorageConfig()->MutableServiceSet();
+        auto *active = ss->MutableVDisks(0);
+        auto *donor = ss->AddVDisks();
+        donor->CopyFrom(*active);
+        donor->MutableDonorMode()->SetErasureSpecies(TBlobStorageGroupType::ErasureNone);
+        auto *reference = active->AddDonors();
+        reference->MutableVDiskId()->CopyFrom(donor->GetVDiskID());
+        reference->MutableVDiskLocation()->CopyFrom(donor->GetVDiskLocation());
+        active->MutableVDiskID()->SetGroupGeneration(2);
+        const auto target = MakeStorageConfig(3, 1, {2}).GetBlobStorageConfig().GetServiceSet();
+        ss->AddPDisks()->CopyFrom(target.GetPDisks(0));
+        active->MutableVDiskLocation()->CopyFrom(target.GetVDisks(0).GetVDiskLocation());
+        auto *group = ss->MutableGroups(0);
+        group->SetGroupGeneration(2);
+        group->MutableRings(0)->MutableFailDomains(0)->MutableVDiskLocations(0)->CopyFrom(active->GetVDiskLocation());
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&moved);
+        fixture.Metadata(1).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        fixture.Metadata(2).MutableCommittedStorageConfig()->CopyFrom(moved);
+        fixture.Metadata(3).MutableCommittedStorageConfig()->CopyFrom(moved);
+
+        auto& runtime = fixture.Runtime;
+        bool failReads = true;
+        THashSet<ui32> initialized;
+        ui32 statusQueries = 0;
+        const auto recipientId = VDiskIDFromVDiskID(active->GetVDiskID());
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (failReads && ev->GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadataResult::EventType
+                    && !initialized.insert(nodeId).second) {
+                ev->Get<NStorage::TEvNodeWardenReadMetadataResult>()->Outcome = NPDisk::EPDiskMetadataOutcome::ERROR;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVStatus::EventType) {
+                UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(ev->Get<TEvBlobStorage::TEvVStatus>()->Record.GetVDiskID()), recipientId);
+                auto result = std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::OK, recipientId, true, true, false, 1);
+                result->Record.SetDurabilityReplicated(true);
+                runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), result.release()), nodeId);
+                ++statusQueries;
+                return false;
+            }
+            return true;
+        };
+        Y_DEFER { runtime.FilterFunction = {}; };
+        fixture.Start();
+        RegisterStaticTestVDisks(runtime, moved);
+        const auto root = fixture.Root();
+        UNIT_ASSERT_VALUES_EQUAL(root.NodeId(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.State.NodeWardenConfigs.at(2)->GetFingerprint(), moved.GetFingerprint());
+        auto report = [&] {
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            auto *cmd = request->Record.MutableDropDonor();
+            cmd->MutableVDiskId()->CopyFrom(active->GetVDiskID());
+            cmd->MutableVDiskId()->SetGroupGeneration(0);
+            const auto& slot = active->GetVDiskLocation();
+            cmd->MutableVSlotId()->SetNodeId(slot.GetNodeID());
+            cmd->MutableVSlotId()->SetPDiskId(slot.GetPDiskID());
+            cmd->MutableVSlotId()->SetVSlotId(slot.GetVDiskSlotID());
+            const auto edge = runtime.AllocateEdgeActor(2);
+            runtime.Send(new IEventHandle(fixture.Keepers[1], edge, request.release()), 2);
+            return runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge)->Get()->Record;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(runtime, root).GetQueryConfig().GetConfig().GetFingerprint(), fixture.Config.GetFingerprint());
+        auto result = report();
+        UNIT_ASSERT_C(result.GetStatus() == TResult::RACE, result.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(statusQueries, 0u);
+
+        failReads = false;
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            const auto& local = fixture.State.NodeWardenConfigs[root.NodeId()];
+            return local && local->GetFingerprint() == moved.GetFingerprint();
+        }));
+        result = report();
+        UNIT_ASSERT_C(result.GetStatus() == TResult::OK, result.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(statusQueries, 1u);
+        const auto cleaned = QueryKeeper(runtime, root).GetQueryConfig().GetConfig();
+        const auto& disks = cleaned.GetBlobStorageConfig().GetServiceSet().GetVDisks();
+        UNIT_ASSERT_VALUES_EQUAL(disks.Get(0).DonorsSize(), 0u);
+        UNIT_ASSERT(disks.Get(2).GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY);
+        CheckDurableConfigConverges(fixture, cleaned);
+    }
+
     Y_UNIT_TEST(StaticVDiskSlainIgnoresMissingSlotOnUnusedPDisk) {
         TCommitConfirmationFixture fixture;
         auto *ss = fixture.Config.MutableBlobStorageConfig()->MutableServiceSet();
@@ -4856,7 +5134,9 @@ selector_config: []
             || (edge && CaptureInvokeResult(ev, edge, response));
     }
 
-    void CheckDisableDistconfVersion(ui64 version) {
+    enum class EDisableDistconfCase { Normal, QueuedRepeat, LostPublication };
+
+    void CheckDisableDistconfVersion(ui64 version, EDisableDistconfCase testCase = EDisableDistconfCase::Normal) {
         TCommitConfirmationFixture fixture(true);
         fixture.State.RequiredRootNodeId = 1;
         const auto currentYaml = fixture.MakeReplacementYaml(4);
@@ -4870,9 +5150,39 @@ selector_config: []
         auto& runtime = fixture.Runtime;
         const TActorId edge = runtime.AllocateEdgeActor(1);
         std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        const TActorId retryEdge = testCase == EDisableDistconfCase::QueuedRepeat ? runtime.AllocateEdgeActor(1) : TActorId();
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> retryResponse;
+        bool holdWrites = testCase == EDisableDistconfCase::QueuedRepeat;
+        std::vector<std::unique_ptr<IEventHandle>> heldWrites;
+        const bool losePublication = testCase == EDisableDistconfCase::LostPublication;
+        const ui64 disableGeneration = fixture.Config.GetGeneration() + (losePublication ? 2 : 1);
+        TInstant previousPublication;
+        bool longRetryPending = false;
+        ui32 publicationsToNode2 = 0;
         std::optional<NKikimrBlobStorage::TStorageConfig> disabledCommittedConfig;
         ui32 disableRequests = 0;
         runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (retryEdge && CaptureInvokeResult(*ev, retryEdge, retryResponse)) {
+                return false;
+            }
+            if (holdWrites && nodeId != 1 && ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType
+                    && ev->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record.GetCommittedStorageConfig().GetGeneration() == 2) {
+                heldWrites.push_back(std::move(ev));
+                return false;
+            }
+            if (losePublication && nodeId != 1 && ev->InterconnectSession
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeConfigReversePush::EventType) {
+                const ui64 generation = ev->Get<NStorage::TEvNodeConfigReversePush>()->Record.GetCommittedStorageConfig().GetGeneration();
+                if (nodeId == 3 && generation == disableGeneration - 1) {
+                    const TInstant now = runtime.GetClock();
+                    longRetryPending |= previousPublication && now - previousPublication >= TDuration::Seconds(16);
+                    previousPublication = now;
+                    return false;
+                }
+                if (generation == disableGeneration && (nodeId == 3 || ++publicationsToNode2 == 1)) {
+                    return false;
+                }
+            }
             if (ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType
                     && ev->Recipient == MakeBlobStorageNodeWardenID(1)) {
                 const auto& msg = *ev->Get<TEvNodeWardenStorageConfig>();
@@ -4895,16 +5205,38 @@ selector_config: []
             }
             return !HandleReplaceEvent(runtime, nodeId, *ev, edge, response);
         };
-        auto request = fixture.MakeReplaceRequest(version);
-        TString yaml = request->Record.GetReplaceStorageConfig().GetYAML();
-        const TStringBuf enabled = "enabled: true";
-        const size_t pos = yaml.find(enabled);
-        UNIT_ASSERT(pos != TString::npos);
-        yaml.replace(pos, enabled.size(), "enabled: false");
-        request->Record.MutableReplaceStorageConfig()->SetYAML(yaml);
-        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
-        UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
+        auto sendDisable = [&](TActorId sender) {
+            auto request = fixture.MakeReplaceRequest(version);
+            TString yaml = request->Record.GetReplaceStorageConfig().GetYAML();
+            const TStringBuf enabled = "enabled: true";
+            const size_t pos = yaml.find(enabled);
+            UNIT_ASSERT(pos != TString::npos);
+            yaml.replace(pos, enabled.size(), "enabled: false");
+            request->Record.MutableReplaceStorageConfig()->SetYAML(yaml);
+            runtime.Send(new IEventHandle(fixture.Keepers.front(), sender, request.release()), 1);
+        };
+        if (losePublication) {
+            auto advance = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            advance->Record.MutableAdvanceGeneration();
+            InvokeKeeper(runtime, fixture.Keepers.front(), std::move(advance));
+            UNIT_ASSERT(SimUntil(runtime, [&] { return longRetryPending; }, TDuration::Minutes(2)));
+        }
+        sendDisable(edge);
+        if (retryEdge) {
+            sendDisable(retryEdge);
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); },
+            losePublication ? TDuration::Seconds(5) : TDuration::Minutes(1)));
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        if (retryEdge) {
+            UNIT_ASSERT_C(response->GetStatus() == TResult::NO_QUORUM, response->DebugString());
+            UNIT_ASSERT(!heldWrites.empty());
+            UNIT_ASSERT(!SimUntil(runtime, [&] { return retryResponse.has_value(); }, TDuration::Seconds(2)));
+            holdWrites = false;
+            ReplayDelayedEvents(runtime, heldWrites);
+            UNIT_ASSERT(SimUntil(runtime, [&] { return retryResponse.has_value(); }));
+            response = std::move(retryResponse);
+        }
         if (version != 5) {
             UNIT_ASSERT_C(response->GetStatus() == TResult::ERROR, response->DebugString());
             UNIT_ASSERT_STRING_CONTAINS(response->GetErrorReason(), "Main config version must be increasing by one");
@@ -4916,13 +5248,20 @@ selector_config: []
             UNIT_ASSERT_VALUES_EQUAL(disableRequests, 1);
             UNIT_ASSERT_C(SimUntil(runtime, [&] {
                 return disabledCommittedConfig
-                    && disabledCommittedConfig->GetGeneration() == fixture.Config.GetGeneration() + 1
+                    && disabledCommittedConfig->GetGeneration() == disableGeneration
                     && !disabledCommittedConfig->GetSelfManagementConfig().GetEnabled();
             }), (disabledCommittedConfig ? disabledCommittedConfig->DebugString() : "missing disabled notification"));
             const auto applied = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
-            UNIT_ASSERT_VALUES_EQUAL(applied.GetGeneration(), fixture.Config.GetGeneration() + 1);
+            UNIT_ASSERT_VALUES_EQUAL(applied.GetGeneration(), disableGeneration);
             UNIT_ASSERT(!applied.GetSelfManagementConfig().GetEnabled());
             UNIT_ASSERT_VALUES_EQUAL(applied.GetFingerprint(), disabledCommittedConfig->GetFingerprint());
+            if (losePublication) {
+                UNIT_ASSERT(publicationsToNode2 >= 2);
+                for (ui32 nodeId : {1, 2}) {
+                    UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint(), applied.GetFingerprint());
+                }
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(3).GetCommittedStorageConfig().GetGeneration(), 1u);
+            }
         }
     }
 
@@ -4932,6 +5271,14 @@ selector_config: []
 
     Y_UNIT_TEST(DisableDistconfAcceptsNextYamlVersion) {
         CheckDisableDistconfVersion(5);
+    }
+
+    Y_UNIT_TEST(QueuedDisableDistconfConfirmsCommit) {
+        CheckDisableDistconfVersion(5, EDisableDistconfCase::QueuedRepeat);
+    }
+
+    Y_UNIT_TEST(DisableDistconfRetriesLostPublication) {
+        CheckDisableDistconfVersion(5, EDisableDistconfCase::LostPublication);
     }
 
     bool HasTestConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config,
@@ -4945,7 +5292,7 @@ selector_config: []
             *MakeNodeWardenConfig(config, bridge), true);
     }
 
-    void CheckAcknowledgedUpdateSurvivesQuorumTurnover(bool fragmentWithChild) {
+    void CheckChosenUpdateSurvivesQuorumTurnover(bool fragmentWithChild) {
         TCommitConfirmationFixture fixture(true);
         fixture.UseMirror3dcGroup();
         fixture.State.RequiredRootNodeId = 1;
@@ -5002,10 +5349,10 @@ selector_config: []
         UNIT_ASSERT_C(SimUntil(runtime, [&] { return response.has_value(); }, TDuration::Seconds(65)),
             "the original update did not return a result");
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
-        UNIT_ASSERT_C(response->GetStatus() == TResult::OK, response->DebugString());
+        UNIT_ASSERT_C(response->GetStatus() == TResult::NO_QUORUM, response->DebugString());
         UNIT_ASSERT_C(SimUntil(runtime, [&] {
             return !delayedPublications.empty() && !delayedCommittedWrites.empty();
-        }), "the acknowledged update did not reach its delayed commit publication");
+        }), "the chosen update did not reach its delayed commit publication");
         const auto accepted = fixture.Metadata(1).GetProposedStorageConfig();
         UNIT_ASSERT_VALUES_EQUAL(accepted.GetGeneration(), 2);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(1).GetCommittedStorageConfig().GetGeneration(), 1);
@@ -5078,7 +5425,7 @@ selector_config: []
         const auto winner = QueryKeeper(runtime, fixture.Keepers[1]).GetQueryConfig().GetConfig();
         UNIT_ASSERT(winner.GetGeneration() > 2);
         UNIT_ASSERT_C(winner.GetSelfManagementConfig().GetAutomaticBootstrap(),
-            "the successful post-failover mutation lost the body of the acknowledged update");
+            "the successful post-failover mutation lost the body of the chosen update");
         UNIT_ASSERT_C(SimUntil(runtime, [&] {
             return std::ranges::all_of(survivors, [&](TActorId id) {
                 return fixture.Metadata(id.NodeId()).GetCommittedStorageConfig().GetFingerprint() == winner.GetFingerprint();
@@ -5088,12 +5435,12 @@ selector_config: []
         CheckDurableConfigConverges(fixture, winner);
     }
 
-    Y_UNIT_TEST(AcknowledgedUpdateSurvivesQuorumTurnover) {
-        CheckAcknowledgedUpdateSurvivesQuorumTurnover(false);
+    Y_UNIT_TEST(ChosenUpdateSurvivesQuorumTurnover) {
+        CheckChosenUpdateSurvivesQuorumTurnover(false);
     }
 
-    Y_UNIT_TEST(AcknowledgedUpdateSurvivesMinorityChildProposal) {
-        CheckAcknowledgedUpdateSurvivesQuorumTurnover(true);
+    Y_UNIT_TEST(ChosenUpdateSurvivesMinorityChildProposal) {
+        CheckChosenUpdateSurvivesQuorumTurnover(true);
     }
 
     Y_UNIT_TEST(RecoveryDoesNotPublishUnchosenProposalBeforeQuorum) {
@@ -6111,6 +6458,152 @@ selector_config: []
 
     Y_UNIT_TEST(DeliverySkipsNewerGeneration) {
         CheckPropagationSkipsDifferentConfig(true);
+    }
+
+    void CheckAdvanceWaitsForCommittedQuorum(bool slowGather) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.State.RequiredRootNodeId = 1;
+        auto& runtime = fixture.Runtime;
+        TActorId edge;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        std::unique_ptr<IEventHandle> secondWrite;
+        bool releaseSecond = false;
+        THashSet<ui64> delayedGathers;
+        THashSet<TActorId> delayedReaders;
+        bool sentNextRead = false;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (slowGather && ev->InterconnectSession && nodeId == 1 && ev->Sender.NodeId() == 3
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeConfigPush::EventType) {
+                auto& record = ev->Get<NStorage::TEvNodeConfigPush>()->Record;
+                record.ClearSubtreeHeight();
+                record.ClearSupportsMetadataOnlyCollect();
+            }
+            if (!edge) {
+                return true;
+            }
+            if (CaptureInvokeResult(*ev, edge, response)) {
+                return false;
+            }
+            if (response && nodeId == 3 && ev->InterconnectSession
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeConfigScatter::EventType) {
+                sentNextRead |= ev->Get<NStorage::TEvNodeConfigScatter>()->Record.HasCollectConfigs();
+            }
+            if (slowGather && !response && ev->GetTypeRewrite() == NStorage::TEvNodeConfigGather::EventType
+                    && ev->InterconnectSession && ev->Sender.NodeId() == 3 && ev->GetRecipientRewrite() == fixture.Keepers.front()
+                    && fixture.Metadata(3).GetProposedStorageConfig().GetGeneration() == 2) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigGather>()->Record;
+                if (record.HasCollectConfigs() && delayedGathers.insert(record.GetCookie()).second) {
+                    runtime.Schedule(runtime.GetClock() + TDuration::Seconds(16), ev.release(), nullptr, nodeId);
+                    return false;
+                }
+            }
+            if (slowGather && !response && releaseSecond && nodeId == 2
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadataResult::EventType
+                    && delayedReaders.insert(ev->GetRecipientRewrite()).second) {
+                runtime.Schedule(runtime.GetClock() + TDuration::Seconds(7), ev.release(), nullptr, nodeId);
+                return false;
+            }
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType
+                    && ev->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record.GetCommittedStorageConfig().GetGeneration() == 2) {
+                if (nodeId == 2 && !releaseSecond) {
+                    secondWrite = std::move(ev);
+                    return false;
+                }
+                return nodeId != 3;
+            }
+            return true;
+        };
+        Y_DEFER { runtime.FilterFunction = {}; };
+        fixture.Start();
+        const auto root = fixture.Root();
+        edge = runtime.AllocateEdgeActor(root.NodeId());
+        const auto started = runtime.GetClock();
+        auto advance = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        advance->Record.MutableAdvanceGeneration();
+        runtime.Send(new IEventHandle(root, edge, advance.release()), root.NodeId());
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            return secondWrite && fixture.Metadata(1).GetCommittedStorageConfig().GetGeneration() == 2;
+        }));
+        const auto fingerprint = fixture.Metadata(1).GetCommittedStorageConfig().GetFingerprint();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(2).GetProposedStorageConfig().GetFingerprint(), fingerprint);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(2).GetCommittedStorageConfig().GetGeneration(), 1);
+        UNIT_ASSERT(!SimUntil(runtime, [&] { return response.has_value(); }, TDuration::Seconds(2)));
+        releaseSecond = true;
+        runtime.Send(secondWrite.release(), 2);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
+        UNIT_ASSERT_C(response->GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, response->DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(2).GetCommittedStorageConfig().GetFingerprint(), fingerprint);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(3).GetCommittedStorageConfig().GetGeneration(), 1);
+        if (slowGather) {
+            UNIT_ASSERT_VALUES_EQUAL(delayedGathers.size(), 2u);
+            UNIT_ASSERT(!delayedReaders.empty());
+            UNIT_ASSERT(runtime.GetClock() - started <= TDuration::Seconds(30));
+            auto fresh = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            fresh->Record.MutableQueryConfig()->SetRequireFresh(true);
+            InvokeKeeper(runtime, root, std::move(fresh));
+            UNIT_ASSERT(sentNextRead);
+        }
+    }
+
+    Y_UNIT_TEST(AdvanceWaitsForCommittedQuorum) {
+        CheckAdvanceWaitsForCommittedQuorum(false);
+    }
+
+    Y_UNIT_TEST(AdvanceConfirmsWithSlowGatherOnSecondRead) {
+        CheckAdvanceWaitsForCommittedQuorum(true);
+    }
+
+    Y_UNIT_TEST(RepeatedBootstrapConfirmsWithSlowGatherAndMinorityProposal) {
+        TCommitConfirmationFixture fixture(true, 4);
+        fixture.Config = MakeStorageConfig(4, 1, {1});
+        fixture.Config.MutableSelfManagementConfig()->SetEnabled(true);
+        fixture.Config.SetSelfAssemblyUUID("repeated-bootstrap");
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        fixture.State.RequiredParentNodeIds = {{1, 0}, {2, 1}, {3, 1}, {4, 1}};
+        for (ui32 id : {1, 2, 3, 4}) {
+            fixture.Metadata(id).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        auto& runtime = fixture.Runtime;
+        runtime.FilterFunction = [](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            return true;
+        };
+        fixture.Start();
+        const auto root = fixture.Root();
+        auto fresh = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        fresh->Record.MutableQueryConfig()->SetRequireFresh(true);
+        InvokeKeeper(runtime, root, std::move(fresh));
+        const auto higher = MakeNextConfig(fixture.Config);
+        fixture.Metadata(2).MutableProposedStorageConfig()->CopyFrom(higher);
+        UNIT_ASSERT(HasTestConfigQuorum(fixture.Config, {1, 2, 3}));
+        UNIT_ASSERT(!HasTestConfigQuorum(higher, {2, 4}));
+
+        THashSet<ui64> delayedCookies;
+        bool sawFull = false;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigGather::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigGather>()->Record;
+                if (record.HasCollectConfigs() && ev->GetRecipientRewrite() == root && ev->Sender.NodeId() == 4
+                        && ev->InterconnectSession && delayedCookies.insert(record.GetCookie()).second) {
+                    runtime.Schedule(runtime.GetClock() + TDuration::Seconds(16), ev.release(), nullptr, nodeId);
+                    return false;
+                }
+                sawFull |= ev->Sender == root && record.HasCollectConfigs() && !record.GetCollectConfigs().GetMetadataOnly()
+                    && std::ranges::any_of(record.GetCollectConfigs().GetProposedConfigs(), [&](const auto& item) {
+                        return item.GetConfig().GetFingerprint() == higher.GetFingerprint();
+                    });
+            }
+            return true;
+        };
+        Y_DEFER { runtime.FilterFunction = {}; };
+        const auto started = runtime.GetClock();
+        auto bootstrap = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        bootstrap->Record.MutableBootstrapCluster()->SetSelfAssemblyUUID(fixture.Config.GetSelfAssemblyUUID());
+        InvokeKeeper(runtime, root, std::move(bootstrap));
+        UNIT_ASSERT(sawFull && !delayedCookies.empty());
+        UNIT_ASSERT(runtime.GetClock() - started <= TDuration::Seconds(30));
     }
 
     void CheckReplaceCommitConfirmation(ECommitConfirmationScenario scenario) {
@@ -7466,6 +7959,58 @@ selector_config: []
         return config;
     }
 
+    Y_UNIT_TEST(BridgeAdvanceRejectsPeerCommitAfterProposal) {
+        TCommitConfirmationFixture fixture(true, 8);
+        fixture.Config = MakeBridgeStorageConfig();
+        fixture.State.RequiredRootNodeId = 1;
+        auto& runtime = fixture.Runtime;
+        auto& bridge = runtime.GetAppDataBridgeConfig();
+        bridge.AddPiles()->SetName("pile0");
+        bridge.AddPiles()->SetName("pile1");
+        for (const auto& node : fixture.Config.GetAllNodes()) {
+            fixture.Metadata(node.GetNodeId()).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        TActorId root;
+        bool holdProposal = true;
+        std::unique_ptr<IEventHandle> proposed;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (root && holdProposal && ev->Sender == root && ev->GetTypeName().EndsWith("::TEvConfigProposed")) {
+                proposed = std::move(ev);
+                return false;
+            }
+            return ev->GetTypeRewrite() != NStorage::TEvNodeWardenWriteMetadata::EventType
+                || ev->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record.GetCommittedStorageConfig().GetGeneration() != 2;
+        };
+        Y_DEFER { runtime.FilterFunction = {}; };
+        fixture.Start(false, &bridge);
+        root = fixture.Root();
+        const auto edge = runtime.AllocateEdgeActor(root.NodeId());
+        auto advance = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        advance->Record.MutableAdvanceGeneration();
+        runtime.Send(new IEventHandle(root, edge, advance.release()), root.NodeId());
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            return proposed && fixture.State.NodeWardenConfigs.at(root.NodeId())->GetGeneration() == 2;
+        }));
+
+        const auto newer = MakeNextConfig(*fixture.State.NodeWardenConfigs.at(root.NodeId()), 3);
+        for (const auto& node : newer.GetAllNodes()) {
+            auto& disk = fixture.Metadata(node.GetNodeId());
+            disk.ClearProposedStorageConfig();
+            disk.MutableCommittedStorageConfig()->CopyFrom(newer);
+        }
+        runtime.Send(new IEventHandle(root, edge, new NStorage::TEvNodeWardenUpdateConfigFromPeer(newer, newer)),
+            root.NodeId());
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            return fixture.State.NodeWardenConfigs.at(root.NodeId())->GetFingerprint() == newer.GetFingerprint();
+        }));
+        holdProposal = false;
+        runtime.Send(proposed.release(), root.NodeId());
+        const auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        UNIT_ASSERT_C(response->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE,
+            response->Get()->Record.DebugString());
+    }
+
     Y_UNIT_TEST(BridgeRecoveryAdoptsPossiblyChosenCommittedConfig) {
         TCommitConfirmationFixture fixture(true, 8);
         fixture.Config = MakeBridgeStorageConfig();
@@ -8032,7 +8577,7 @@ selector_config: []
             return oldResponse && delayedPublicationNodes.size() == 2
                 && fixture.Metadata(1).GetCommittedStorageConfig().GetGeneration() == 2;
         }, TDuration::Seconds(35)), "the original bridge failover did not reach a physical proposal quorum");
-        UNIT_ASSERT_C(oldResponse->GetStatus() == TResult::OK, oldResponse->DebugString());
+        UNIT_ASSERT_C(oldResponse->GetStatus() == TResult::NO_QUORUM, oldResponse->DebugString());
         const auto accepted = fixture.Metadata(2).GetProposedStorageConfig();
         UNIT_ASSERT_VALUES_EQUAL(accepted.GetGeneration(), 2);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(3).GetProposedStorageConfig().GetFingerprint(), accepted.GetFingerprint());
@@ -8588,7 +9133,9 @@ selector_config: []
         CheckDisconnectPreservesOtherAddedNodeResponses(10);
     }
 
-    Y_UNIT_TEST(BridgeBoardFullSelfHealLeavesDisabledSubsystemsUnchanged) {
+    enum class EBoardHealAdvance { None, Confirmed, LostReplies };
+
+    void CheckBridgeBoardFullSelfHeal(EBoardHealAdvance advanceCase) {
         TCommitConfirmationFixture fixture(false);
         fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageManagement(false);
         fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageBoardManagement(true);
@@ -8629,11 +9176,19 @@ selector_config: []
         const TString originalStateStorage = fixture.Config.GetStateStorageConfig().SerializeAsString();
         const TString originalSchemeBoard = fixture.Config.GetSchemeBoardConfig().SerializeAsString();
         const auto& policy = fixture.Config.GetSelfManagementConfig();
-        ui32 reconfigurationRequests = 0;
+        std::vector<TInstant> reconfigurationRequests;
+        std::optional<TInstant> releaseCommit;
+        std::optional<TInstant> advanceConfirmed;
+        bool loseAdvanceReplies = advanceCase == EBoardHealAdvance::LostReplies;
         TActorId edge;
         std::vector<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> results;
         runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             SetMetadataDiskGuid(nodeId, *ev);
+            if (loseAdvanceReplies && ev->InterconnectSession && ev->GetTypeRewrite() == NStorage::TEvNodeConfigGather::EventType
+                    && ev->Get<NStorage::TEvNodeConfigGather>()->Record.HasProposeStorageConfig()
+                    && fixture.Metadata(ev->Sender.NodeId()).GetProposedStorageConfig().GetGeneration() == 4) {
+                return false;
+            }
             if (edge && ev->GetRecipientRewrite() == edge
                     && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
                 const auto& result = ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record;
@@ -8653,7 +9208,7 @@ selector_config: []
                     UNIT_ASSERT_C(!config.HasStateStorageConfig(), config.DebugString());
                     UNIT_ASSERT_C(!config.HasSchemeBoardConfig(), config.DebugString());
                     UNIT_ASSERT_C(config.HasStateStorageBoardConfig(), config.DebugString());
-                    ++reconfigurationRequests;
+                    reconfigurationRequests.push_back(runtime.GetClock());
                 }
             }
             if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType) {
@@ -8664,6 +9219,16 @@ selector_config: []
                         UNIT_ASSERT_VALUES_EQUAL(config->GetSchemeBoardConfig().SerializeAsString(), originalSchemeBoard);
                     }
                 }
+                const auto& board = record.GetCommittedStorageConfig().GetStateStorageBoardConfig();
+                if (advanceCase != EBoardHealAdvance::None && board.RingGroupsSize() == 2 && board.GetRingGroups(1).GetWriteOnly()) {
+                    if (!releaseCommit) {
+                        releaseCommit = runtime.GetClock() + TDuration::Seconds(31);
+                    }
+                    if (runtime.GetClock() < *releaseCommit) {
+                        runtime.Schedule(*releaseCommit, ev.release(), nullptr, nodeId);
+                        return false;
+                    }
+                }
             }
             return true;
         };
@@ -8672,6 +9237,9 @@ selector_config: []
             fixture.Keepers.push_back(RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State, {}, &bridge, &policy));
         }
         UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, fixture.Keepers) == 1; }));
+        if (loseAdvanceReplies) {
+            CheckStaysConverged(runtime, fixture.Keepers);
+        }
         edge = runtime.AllocateEdgeActor(1);
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         auto *command = request->Record.MutableSelfHealNodesStateUpdate();
@@ -8686,8 +9254,32 @@ selector_config: []
             nodeState->SetState(0);
         }
         runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        if (advanceCase != EBoardHealAdvance::None) {
+            UNIT_ASSERT(SimUntil(runtime, [&] { return releaseCommit.has_value(); }));
+            auto advance = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            advance->Record.MutableAdvanceGeneration();
+            if (loseAdvanceReplies) {
+                const auto advanceEdge = runtime.AllocateEdgeActor(1);
+                runtime.Send(new IEventHandle(fixture.Keepers.front(), advanceEdge, advance.release()), 1);
+                const auto reply = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(advanceEdge);
+                const auto& result = reply->Get()->Record;
+                UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR, result.DebugString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetErrorReason(), "no quorum for ProposedStorageConfig");
+                for (ui32 id : {1, 2}) {
+                    UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(id).GetCommittedStorageConfig().GetGeneration(), 3u);
+                    UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(id).GetProposedStorageConfig().GetGeneration(), 4u);
+                }
+                loseAdvanceReplies = false;
+            } else {
+                InvokeKeeper(runtime, fixture.Keepers.front(), std::move(advance));
+                advanceConfirmed = runtime.GetClock();
+            }
+        }
         UNIT_ASSERT_C(SimUntil(runtime, [&] { return results.size() == 2; }), "Board self-heal did not complete");
-        UNIT_ASSERT_VALUES_EQUAL(reconfigurationRequests, 4);
+        UNIT_ASSERT_VALUES_EQUAL(reconfigurationRequests.size(), 4u);
+        if (advanceConfirmed) {
+            UNIT_ASSERT(reconfigurationRequests[1] >= *advanceConfirmed + TDuration::Seconds(1));
+        }
         const auto committed = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(committed.GetStateStorageConfig().SerializeAsString(), originalStateStorage);
         UNIT_ASSERT_VALUES_EQUAL(committed.GetSchemeBoardConfig().SerializeAsString(), originalSchemeBoard);
@@ -8699,6 +9291,18 @@ selector_config: []
         UNIT_ASSERT_EQUAL(TBridgePileId::FromProto(&boardGroup,
             &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId), TBridgePileId::FromPileIndex(0));
         CheckDurableConfigConverges(fixture, committed);
+    }
+
+    Y_UNIT_TEST(BridgeBoardFullSelfHealLeavesDisabledSubsystemsUnchanged) {
+        CheckBridgeBoardFullSelfHeal(EBoardHealAdvance::None);
+    }
+
+    Y_UNIT_TEST(BridgeBoardFullSelfHealResumesAfterAdvanceGeneration) {
+        CheckBridgeBoardFullSelfHeal(EBoardHealAdvance::Confirmed);
+    }
+
+    Y_UNIT_TEST(BridgeBoardFullSelfHealResumesAfterRecoveringAdvanceGeneration) {
+        CheckBridgeBoardFullSelfHeal(EBoardHealAdvance::LostReplies);
     }
 
     // State storage of three single-node rings 1, 2, 3, two of them needed for the quorum. Node 1 is seen bad, and the
@@ -8783,85 +9387,384 @@ selector_config: []
     // Self-heal replaces the bad node 3 of state storage with node 4, while the board, on nodes 7, 6, 5, only gets
     // its rings in another order. The board has no node to replace, so the replacement of node 3 must be made in state
     // storage only.
-    Y_UNIT_TEST(SelfHealReplacesNodeOnlyInItsSubsystem) {
-        TCommitConfirmationFixture fixture(false, 7);
-        fixture.Config = MakeStorageConfig(7, 1, {1});
-        auto *policy = fixture.Config.MutableSelfManagementConfig();
-        policy->SetEnabled(true);
-        policy->SetAutomaticStateStorageManagement(true);
-        policy->SetAutomaticStateStorageBoardManagement(true);
-        policy->SetAutomaticSchemeBoardManagement(false);
-        for (ui32 nodeId : {1, 2, 3, 4}) {
-            policy->AddStateStorageSelfHealAllowedNodes(nodeId);
-        }
-        for (ui32 nodeId : {5, 6, 7}) {
-            policy->AddStateStorageBoardSelfHealAllowedNodes(nodeId);
-        }
-        for (auto& node : *fixture.Config.MutableAllNodes()) {
-            node.MutableLocation()->SetDataCenter("dc-1");
-        }
-        auto makeConfig = [](auto *config, const std::vector<ui32>& nodes) {
-            config->SetSSId(1);
-            auto *group = config->MutableRing();
-            group->SetNToSelect(3);
-            for (ui32 nodeId : nodes) {
-                group->AddRing()->AddNode(nodeId);
-            }
-        };
-        makeConfig(fixture.Config.MutableStateStorageConfig(), {1, 2, 3});
-        makeConfig(fixture.Config.MutableStateStorageBoardConfig(), {7, 6, 5});
-        makeConfig(fixture.Config.MutableSchemeBoardConfig(), {1, 2, 3});
-        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
-        for (ui32 nodeId = 1; nodeId <= 7; ++nodeId) {
-            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
-        }
-        const auto& policyRef = fixture.Config.GetSelfManagementConfig();
+    struct TSelfHealReassignFixture : TCommitConfirmationFixture {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        using TFilter = decltype(Runtime.FilterFunction);
 
-        auto& runtime = fixture.Runtime;
-        std::vector<std::decay_t<decltype(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot().GetReassignStateStorageNode())>> reassigns;
-        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
-            SetMetadataDiskGuid(nodeId, *ev);
-            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType) {
-                const auto& command = ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record;
-                if (command.HasReassignStateStorageNode()) {
-                    reassigns.push_back(command.GetReassignStateStorageNode());
+        TFilter InjectFault;
+        std::vector<NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TReassignStateStorageNode> Reassigns;
+        TActorId SelfHeal;
+        TActorId SelfHealClient;
+        std::vector<TResult> SelfHealReplies;
+        std::optional<TInstant> ReplacedAt;
+        bool DelayDisableCommit = true;
+        ui32 SuccessorCommitNodeLimit = 7;
+        std::vector<std::unique_ptr<IEventHandle>> HeldWrites;
+        bool SawStartupQuorum = false;
+
+        TSelfHealReassignFixture()
+            : TCommitConfirmationFixture(false, 7)
+        {
+            Config = MakeStorageConfig(7, 1, {1});
+            auto *policy = Config.MutableSelfManagementConfig();
+            policy->SetEnabled(true);
+            policy->SetAutomaticStateStorageManagement(true);
+            policy->SetAutomaticStateStorageBoardManagement(true);
+            policy->SetAutomaticSchemeBoardManagement(false);
+            for (ui32 nodeId : {1, 2, 3, 4}) {
+                policy->AddStateStorageSelfHealAllowedNodes(nodeId);
+            }
+            for (ui32 nodeId : {5, 6, 7}) {
+                policy->AddStateStorageBoardSelfHealAllowedNodes(nodeId);
+            }
+            for (auto& node : *Config.MutableAllNodes()) {
+                node.MutableLocation()->SetDataCenter("dc-1");
+            }
+            auto makeConfig = [](auto *config, const std::vector<ui32>& nodes) {
+                config->SetSSId(1);
+                auto *group = config->MutableRing();
+                group->SetNToSelect(3);
+                for (ui32 nodeId : nodes) {
+                    group->AddRing()->AddNode(nodeId);
                 }
-                if (ev->Recipient == MakeBlobStorageNodeWardenID(1) && !fixture.Keepers.empty()) {
-                    ev->Rewrite(NStorage::TEvNodeConfigInvokeOnRoot::EventType, fixture.Keepers.front());
+            };
+            makeConfig(Config.MutableStateStorageConfig(), {1, 2, 3});
+            makeConfig(Config.MutableStateStorageBoardConfig(), {7, 6, 5});
+            makeConfig(Config.MutableSchemeBoardConfig(), {1, 2, 3});
+            NStorage::TDistributedConfigKeeper::UpdateFingerprint(&Config);
+            for (ui32 nodeId = 1; nodeId <= 7; ++nodeId) {
+                Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(Config);
+            }
+            Runtime.FilterFunction = [this](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+                SetMetadataDiskGuid(nodeId, *ev);
+                if (!SelfHeal) {
+                    if (const auto *collect = RootCollection(*ev); collect && collect->CommittedConfigsSize() == 1) {
+                        SawStartupQuorum |= collect->GetCommittedConfigs(0).DisksSize() >= 4;
+                    }
+                }
+                if (InjectFault && !InjectFault(nodeId, ev)) {
+                    return false;
+                }
+                const auto type = ev->GetTypeRewrite();
+                if (type == NStorage::TEvNodeConfigInvokeOnRootResult::EventType && ev->GetRecipientRewrite() == SelfHealClient) {
+                    SelfHealReplies.push_back(ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record);
+                    return false;
+                } else if (type == NStorage::TEvNodeWardenWriteMetadata::EventType) {
+                    const auto generation = ev->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record.GetCommittedStorageConfig().GetGeneration();
+                    if ((DelayDisableCommit && generation == 2) || (generation == 3 && nodeId > SuccessorCommitNodeLimit)) {
+                        HeldWrites.push_back(std::move(ev));
+                        return false;
+                    }
+                } else if (type == NStorage::TEvNodeConfigInvokeOnRoot::EventType) {
+                    const auto& command = ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record;
+                    if (command.HasReassignStateStorageNode()) {
+                        Reassigns.push_back(command.GetReassignStateStorageNode());
+                        if (Reassigns.back().GetDisableRing()) {
+                            SelfHeal = ev->Sender;
+                        } else {
+                            ReplacedAt = Runtime.GetClock();
+                        }
+                    }
+                    if (ev->Recipient == MakeBlobStorageNodeWardenID(1) && !Keepers.empty()) {
+                        ev->Rewrite(type, Keepers.front());
+                    }
+                }
+                return true;
+            };
+            Runtime.Start();
+            const auto& policyRef = Config.GetSelfManagementConfig();
+            for (ui32 nodeId = 1; nodeId <= 7; ++nodeId) {
+                Keepers.push_back(RegisterKeeper(Runtime, Config, nodeId, State, {}, nullptr, &policyRef));
+            }
+            UNIT_ASSERT(SimUntil(Runtime, [&] { return FindConvergedRoot(Runtime, Keepers) == 1; }));
+        }
+
+        ~TSelfHealReassignFixture() {
+            Runtime.FilterFunction = {};
+        }
+
+        const TCollectedConfigs *RootCollection(IEventHandle& ev) const {
+            if (ev.GetTypeRewrite() == NStorage::TEvNodeConfigGather::EventType && !Keepers.empty()
+                    && ev.Sender == Keepers.front() && !ev.InterconnectSession) {
+                const auto& record = ev.Get<NStorage::TEvNodeConfigGather>()->Record;
+                if (record.HasCollectConfigs()) {
+                    return &record.GetCollectConfigs();
+                }
+            }
+            return nullptr;
+        }
+
+        void StartSelfHeal() {
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            auto *command = request->Record.MutableSelfHealNodesStateUpdate();
+            command->SetEnableSelfHealStateStorage(true);
+            command->SetWaitForConfigStep(1);
+            command->SetPileupReplicas(true);
+            command->SetOverrideRingsCount(3);
+            command->SetOverrideReplicasInRingCount(1);
+            for (ui32 nodeId = 1; nodeId <= 7; ++nodeId) {
+                auto *nodeState = command->AddNodesState();
+                nodeState->SetNodeId(nodeId);
+                nodeState->SetState(nodeId == 3 ? NKikimr::BAD : NKikimr::GOOD);
+            }
+            SelfHealClient = SendRequest(std::move(request));
+            UNIT_ASSERT(SimUntil(Runtime, [&] { return !SelfHealReplies.empty(); }));
+            UNIT_ASSERT_C(SelfHealReplies.front().GetStatus() == TResult::OK, SelfHealReplies.front().DebugString());
+            UNIT_ASSERT(SimUntil(Runtime, [&] { return !HeldWrites.empty(); }));
+        }
+
+        TActorId SendRequest(std::unique_ptr<NStorage::TEvNodeConfigInvokeOnRoot> request) {
+            const auto edge = Runtime.AllocateEdgeActor(1);
+            Runtime.Send(new IEventHandle(Keepers.front(), edge, request.release()), 1);
+            return edge;
+        }
+
+        TActorId SendAdvanceGeneration() {
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            request->Record.MutableAdvanceGeneration();
+            return SendRequest(std::move(request));
+        }
+
+        TResult WaitForReply(TActorId edge) {
+            return Runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge)->Get()->Record;
+        }
+
+        const NKikimrBlobStorage::TStorageConfig& DisabledConfig() {
+            return HeldWrites.front()->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record.GetCommittedStorageConfig();
+        }
+
+        void CheckNoReplacementFor(TDuration duration) {
+            UNIT_ASSERT(!SimUntil(Runtime, [&] { return Reassigns.size() > 1; }, duration));
+        }
+
+        void ReleaseDisableCommit() {
+            DelayDisableCommit = false;
+            ReplayDelayedEvents(Runtime, HeldWrites);
+        }
+
+        void CheckReplacement(ui64 expectedGeneration, TInstant confirmedAt, TDuration timeout = TDuration::Seconds(30)) {
+            UNIT_ASSERT(SimUntil(Runtime, [&] {
+                const auto& committed = Metadata(1).GetCommittedStorageConfig();
+                return committed.GetGeneration() == expectedGeneration
+                    && committed.GetStateStorageConfig().GetRing().GetRing(2).GetNode(0) == 4;
+            }, timeout));
+            UNIT_ASSERT(ReplacedAt && *ReplacedAt >= confirmedAt + TDuration::Seconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(Reassigns.size(), 2u);
+            UNIT_ASSERT(Reassigns.front().GetDisableRing() && !Reassigns.back().GetDisableRing());
+            for (const auto& reassign : Reassigns) {
+                UNIT_ASSERT_VALUES_EQUAL(reassign.GetFrom(), 3);
+                UNIT_ASSERT(reassign.GetStateStorage());
+                UNIT_ASSERT_C(!reassign.GetStateStorageBoard(), reassign.ShortDebugString());
+            }
+        }
+
+        void StartWithDelayedSuccessorCommit() {
+            SuccessorCommitNodeLimit = 3;
+            UNIT_ASSERT(SimUntil(Runtime, [&] { return SawStartupQuorum; }));
+            StartSelfHeal();
+        }
+
+        void WaitForPartialSuccessorCommit() {
+            UNIT_ASSERT(!HasTestConfigQuorum(Config, {1, 2, 3}));
+            UNIT_ASSERT(HasTestConfigQuorum(Config, {1, 2, 3, 4}));
+            UNIT_ASSERT(SimUntil(Runtime, [&] {
+                return !HeldWrites.empty() && std::ranges::all_of(std::array{1u, 2u, 3u}, [&](ui32 id) {
+                    return Metadata(id).GetCommittedStorageConfig().GetGeneration() == 3;
+                });
+            }));
+        }
+
+        void CheckReplacementAfterSuccessorQuorum() {
+            CheckNoReplacementFor(TDuration::Seconds(2));
+            SuccessorCommitNodeLimit = 4;
+            ReplayDelayedEvents(Runtime, HeldWrites);
+            const auto confirmedAt = Runtime.GetClock();
+            UNIT_ASSERT(SimUntil(Runtime, [&] { return ReplacedAt.has_value(); }));
+            SuccessorCommitNodeLimit = 7;
+            ReplayDelayedEvents(Runtime, HeldWrites);
+            CheckReplacement(4, confirmedAt);
+        }
+    };
+
+    Y_UNIT_TEST(SelfHealReplacesNodeOnlyInItsSubsystem) {
+        TSelfHealReassignFixture fixture;
+        fixture.StartSelfHeal();
+        fixture.CheckNoReplacementFor(TDuration::Seconds(31));
+        fixture.ReleaseDisableCommit();
+        fixture.CheckReplacement(3, fixture.Runtime.GetClock());
+    }
+
+    Y_UNIT_TEST(SelfHealResumesDisableRingAfterAdvanceGeneration) {
+        TSelfHealReassignFixture fixture;
+        fixture.StartSelfHeal();
+        const auto edge = fixture.SendAdvanceGeneration();
+        fixture.CheckNoReplacementFor(TDuration::Seconds(31));
+        fixture.ReleaseDisableCommit();
+        const auto result = fixture.WaitForReply(edge);
+        UNIT_ASSERT_C(result.GetStatus() == TSelfHealReassignFixture::TResult::OK, result.DebugString());
+        fixture.CheckReplacement(4, fixture.Runtime.GetClock());
+    }
+
+    struct TSelfHealFailedAdvanceFixture : TSelfHealReassignFixture {
+        bool LoseAdvanceReplies = true;
+        std::optional<bool> FirstRetryReadSawProposal;
+
+        void RecoverFailedAdvance(TFilter extraFault = {}) {
+            InjectFault = [this, extraFault = std::move(extraFault)](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+                if (extraFault && !extraFault(nodeId, ev)) {
+                    return false;
+                }
+                if (!LoseAdvanceReplies && !FirstRetryReadSawProposal.has_value()) {
+                    if (const auto *collect = RootCollection(*ev)) {
+                        FirstRetryReadSawProposal = collect->GetMetadataOnly() && std::ranges::any_of(collect->GetProposedConfigs(),
+                            [](const auto& item) { return item.GetConfig().GetGeneration() == 3; });
+                    }
+                }
+                return !(LoseAdvanceReplies && ev->InterconnectSession && ev->GetTypeRewrite() == NStorage::TEvNodeConfigGather::EventType
+                    && ev->Get<NStorage::TEvNodeConfigGather>()->Record.HasProposeStorageConfig()
+                    && Metadata(ev->Sender.NodeId()).GetProposedStorageConfig().GetGeneration() == 3);
+            };
+            StartWithDelayedSuccessorCommit();
+            const auto edge = SendAdvanceGeneration();
+            CheckNoReplacementFor(TDuration::Seconds(31));
+            ReleaseDisableCommit();
+            const auto result = WaitForReply(edge);
+            LoseAdvanceReplies = false;
+            UNIT_ASSERT_C(result.GetStatus() == TResult::ERROR, result.DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetErrorReason(), "no quorum for ProposedStorageConfig");
+            for (ui32 id : {1, 2, 3, 4}) {
+                UNIT_ASSERT_VALUES_EQUAL(Metadata(id).GetProposedStorageConfig().GetGeneration(), 3u);
+                UNIT_ASSERT_VALUES_EQUAL(Metadata(id).GetCommittedStorageConfig().GetGeneration(), 2u);
+            }
+            WaitForPartialSuccessorCommit();
+            UNIT_ASSERT(FirstRetryReadSawProposal.value_or(false));
+        }
+    };
+
+    Y_UNIT_TEST(SelfHealResumesDisableRingAfterRecoveringAdvanceGeneration) {
+        TSelfHealFailedAdvanceFixture fixture;
+        fixture.RecoverFailedAdvance();
+        fixture.CheckReplacementAfterSuccessorQuorum();
+    }
+
+    Y_UNIT_TEST(SelfHealResumesDisableRingAfterReproposingAdvanceGeneration) {
+        TSelfHealFailedAdvanceFixture fixture;
+        bool sawReproposal = false;
+        fixture.RecoverFailedAdvance([&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            const auto type = ev->GetTypeRewrite();
+            if (type == NStorage::TEvNodeConfigScatter::EventType && ev->InterconnectSession
+                    && ev->Get<NStorage::TEvNodeConfigScatter>()->Record.GetProposeStorageConfig().GetConfig().GetGeneration() == 3) {
+                if (fixture.LoseAdvanceReplies && nodeId >= 5) {
+                    return false;
+                }
+                sawReproposal |= !fixture.LoseAdvanceReplies;
+            } else if (!fixture.LoseAdvanceReplies && fixture.SuccessorCommitNodeLimit == 3 && nodeId == 4
+                    && type == NStorage::TEvNodeWardenReadMetadataResult::EventType) {
+                ev->Get<NStorage::TEvNodeWardenReadMetadataResult>()->Outcome = NPDisk::EPDiskMetadataOutcome::ERROR;
+            }
+            return true;
+        });
+        UNIT_ASSERT(sawReproposal);
+        fixture.CheckReplacementAfterSuccessorQuorum();
+    }
+
+    Y_UNIT_TEST(SelfHealWaitsForObservedCommittedSuccessor) {
+        TSelfHealReassignFixture fixture;
+        fixture.StartWithDelayedSuccessorCommit();
+        const auto restored = MakeNextConfig(fixture.DisabledConfig(), 3);
+        bool sawRestoredMeta = false;
+        bool unavailable = false;
+        fixture.InjectFault = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == 2 && ev->GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadataResult::EventType) {
+                auto *read = ev->Get<NStorage::TEvNodeWardenReadMetadataResult>();
+                if (unavailable) {
+                    read->Outcome = NPDisk::EPDiskMetadataOutcome::ERROR;
+                } else if (read->Record.GetCommittedStorageConfig().GetGeneration() < restored.GetGeneration()) {
+                    read->Record.MutableCommittedStorageConfig()->CopyFrom(restored);
+                }
+            } else if (const auto *collect = fixture.RootCollection(*ev); collect && collect->GetMetadataOnly() && !sawRestoredMeta) {
+                sawRestoredMeta = std::ranges::any_of(collect->GetCommittedConfigs(),
+                    [&](const auto& item) { return item.GetConfig().GetFingerprint() == restored.GetFingerprint(); });
+                unavailable = sawRestoredMeta;
+            }
+            return true;
+        };
+        fixture.ReleaseDisableCommit();
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return sawRestoredMeta; }));
+        UNIT_ASSERT(!SimUntil(fixture.Runtime, [&] { return fixture.ReplacedAt.has_value(); }, TDuration::Seconds(32)));
+        unavailable = false;
+        fixture.WaitForPartialSuccessorCommit();
+        fixture.CheckReplacementAfterSuccessorQuorum();
+    }
+
+    Y_UNIT_TEST(SelfHealStopsWhenDisabledRingIsReenabled) {
+        TSelfHealReassignFixture fixture;
+        fixture.StartSelfHeal();
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *config = request->Record.MutableUpdateConfig()->MutableConfig();
+        config->CopyFrom(fixture.DisabledConfig());
+        auto *ring = config->MutableStateStorageConfig()->MutableRing()->MutableRing(2);
+        UNIT_ASSERT(ring->GetIsDisabled());
+        ring->ClearIsDisabled();
+        const auto edge = fixture.SendRequest(std::move(request));
+        fixture.CheckNoReplacementFor(TDuration::Seconds(31));
+        fixture.ReleaseDisableCommit();
+        const auto result = fixture.WaitForReply(edge);
+        UNIT_ASSERT_C(result.GetStatus() == TSelfHealReassignFixture::TResult::OK, result.DebugString());
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return fixture.SelfHealReplies.size() >= 2; }));
+        const auto& completion = fixture.SelfHealReplies[1];
+        UNIT_ASSERT_C(completion.GetStatus() == TSelfHealReassignFixture::TResult::ERROR, completion.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(completion.GetErrorReason(), "Configuration changed");
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return !fixture.Runtime.GetActor(fixture.SelfHeal); }));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Reassigns.size(), 1u);
+        const auto& finalRing = fixture.Metadata(1).GetCommittedStorageConfig().GetStateStorageConfig().GetRing().GetRing(2);
+        UNIT_ASSERT_VALUES_EQUAL(finalRing.GetNode(0), 3u);
+        UNIT_ASSERT(!finalRing.GetIsDisabled());
+    }
+
+    Y_UNIT_TEST(SelfHealRetriesFullReadAfterSlowConflictingProposal) {
+        TSelfHealReassignFixture fixture;
+        THashSet<std::pair<ui32, ui64>> delayedGathers;
+        size_t compactRounds = 0;
+        size_t fullRounds = 0;
+        fixture.InjectFault = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (!fixture.SelfHeal || fixture.ReplacedAt) {
+                return true;
+            }
+            const auto type = ev->GetTypeRewrite();
+            if (nodeId == 2 && type == NStorage::TEvNodeWardenWriteMetadata::EventType) {
+                fixture.Metadata(2).MutableProposedStorageConfig()->CopyFrom(MakeNextConfig(fixture.Config));
+                auto *error = new NStorage::TEvNodeWardenWriteMetadataResult(std::nullopt, NPDisk::EPDiskMetadataOutcome::ERROR);
+                fixture.Runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), error, 0, ev->Cookie), nodeId);
+                return false;
+            }
+            if (type == NStorage::TEvNodeConfigGather::EventType && ev->InterconnectSession
+                    && ev->Sender.NodeId() >= 4 && ev->GetRecipientRewrite() == fixture.Keepers.front()
+                    && fixture.Metadata(2).HasProposedStorageConfig()) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigGather>()->Record;
+                if (record.HasCollectConfigs() && delayedGathers.emplace(ev->Sender.NodeId(), record.GetCookie()).second) {
+                    if (ev->Sender.NodeId() == 7) {
+                        if (record.GetCollectConfigs().GetMetadataOnly()) {
+                            ++compactRounds;
+                        } else {
+                            ++fullRounds;
+                        }
+                    }
+                    fixture.Runtime.Schedule(fixture.Runtime.GetClock() + TDuration::Seconds(16), ev.release(), nullptr, nodeId);
+                    return false;
                 }
             }
             return true;
         };
-        runtime.Start();
-        for (ui32 nodeId = 1; nodeId <= 7; ++nodeId) {
-            fixture.Keepers.push_back(RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State, {}, nullptr,
-                &policyRef));
-        }
-        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, fixture.Keepers) == 1; }));
-
-        const TActorId edge = runtime.AllocateEdgeActor(1);
-        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        auto *command = request->Record.MutableSelfHealNodesStateUpdate();
-        command->SetEnableSelfHealStateStorage(true);
-        command->SetWaitForConfigStep(1);
-        command->SetPileupReplicas(true);
-        command->SetOverrideRingsCount(3);
-        command->SetOverrideReplicasInRingCount(1);
-        for (ui32 nodeId = 1; nodeId <= 7; ++nodeId) {
-            auto *nodeState = command->AddNodesState();
-            nodeState->SetNodeId(nodeId);
-            nodeState->SetState(nodeId == 3 ? NKikimr::BAD : NKikimr::GOOD); // node 3 is bad
-        }
-        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
-        const auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
-        UNIT_ASSERT_C(response->Get()->Record.GetStatus() ==
-            NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, response->Get()->Record.DebugString());
-        UNIT_ASSERT_C(SimUntil(runtime, [&] { return !reassigns.empty(); }), "self-heal didn't replace node 3");
-        for (const auto& reassign : reassigns) {
-            UNIT_ASSERT_VALUES_EQUAL(reassign.GetFrom(), 3);
-            UNIT_ASSERT(reassign.GetStateStorage());
-            UNIT_ASSERT_C(!reassign.GetStateStorageBoard(), reassign.ShortDebugString());
-        }
+        fixture.StartSelfHeal();
+        fixture.ReleaseDisableCommit();
+        const auto confirmedAt = fixture.Runtime.GetClock();
+        fixture.CheckReplacement(3, confirmedAt, TDuration::Minutes(2));
+        UNIT_ASSERT(!HasTestConfigQuorum(fixture.Config, {1, 3}));
+        UNIT_ASSERT(HasTestConfigQuorum(fixture.Config, {1, 3, 4, 5, 6, 7}));
+        UNIT_ASSERT_VALUES_EQUAL(compactRounds, 1u);
+        UNIT_ASSERT(fullRounds >= 2);
+        UNIT_ASSERT(*fixture.ReplacedAt >= confirmedAt + TDuration::Seconds(30));
     }
 
     // Self-heal replaces the single bad node 3 of state storage with node 4, sending a command to reassign it. The
@@ -9879,7 +10782,7 @@ selector_config: []
         ReplayDelayedEvents(runtime, heldReads);
         UNIT_ASSERT(SimUntil(runtime, [&] { return batch.AllReplied(); }));
         const auto winner = QueryKeeper(runtime, fixture.Keepers[0]).GetQueryConfig().GetConfig();
-        UNIT_ASSERT_VALUES_EQUAL(rootReaders.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(rootReaders.size(), 5);
         UNIT_ASSERT(batch.Requests[1].Buffer && batch.Requests[1].Buffer == batch.Requests[2].Buffer);
         UNIT_ASSERT(batch.Requests[5].Buffer && batch.Requests[5].Buffer == batch.Requests[6].Buffer);
         UNIT_ASSERT(batch.Requests[1].Buffer != batch.Requests[5].Buffer);
@@ -10561,7 +11464,10 @@ selector_config: []
         LegacyIntermediate,
         UnexpectedMetadata,
         CorruptBody,
+        CorruptFullBody,
         HigherProposal,
+        ConflictingCommit,
+        NewerCommit,
     };
 
     void CheckCompactCommitConfirmation(ECompactConfirmationCase scenario) {
@@ -10570,6 +11476,10 @@ selector_config: []
         const bool legacy = scenario == ECompactConfirmationCase::LegacyIntermediate
             || scenario == ECompactConfirmationCase::UnexpectedMetadata
             || scenario == ECompactConfirmationCase::CorruptBody;
+        const bool conflictingCommit = scenario == ECompactConfirmationCase::ConflictingCommit
+            || scenario == ECompactConfirmationCase::NewerCommit;
+        const bool corruptBody = scenario == ECompactConfirmationCase::CorruptBody
+            || scenario == ECompactConfirmationCase::CorruptFullBody;
         if (legacy) {
             fixture.State.RequiredParentNodeIds = {{1, 0}, {2, 1}, {3, 2}};
         }
@@ -10577,6 +11487,7 @@ selector_config: []
         TActorId edge;
         std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
         bool checking = false;
+        bool readConflictingDisk = false;
         ui32 compactRequests = 0;
         ui32 fullRequests = 0;
         ui32 compactReplies = 0;
@@ -10605,6 +11516,10 @@ selector_config: []
             }
             if (!checking) {
                 return true;
+            }
+            if (conflictingCommit && nodeId == 3 && type == NStorage::TEvNodeWardenReadMetadataResult::EventType
+                    && std::exchange(readConflictingDisk, true)) {
+                ev->Get<NStorage::TEvNodeWardenReadMetadataResult>()->Outcome = NPDisk::EPDiskMetadataOutcome::ERROR;
             }
             if (ev->InterconnectSession && type == NStorage::TEvNodeConfigScatter::EventType) {
                 const auto& record = ev->Get<NStorage::TEvNodeConfigScatter>()->Record;
@@ -10640,11 +11555,12 @@ selector_config: []
                         if (scenario == ECompactConfirmationCase::UnexpectedMetadata && nodeId == 1) {
                             collect.SetMetadataOnly(true);
                             ++invalidModes;
-                        } else if (scenario == ECompactConfirmationCase::CorruptBody && nodeId == 1) {
-                            for (auto& item : *collect.MutableCommittedConfigs()) {
-                                item.MutableConfig()->SetClusterUUID("damaged-body");
-                                ++corruptedBodies;
-                            }
+                        }
+                    }
+                    if (corruptBody && nodeId == 1 && !collect.GetMetadataOnly()) {
+                        for (auto& item : *collect.MutableCommittedConfigs()) {
+                            item.MutableConfig()->SetClusterUUID("damaged-body");
+                            ++corruptedBodies;
                         }
                     }
                 }
@@ -10672,17 +11588,48 @@ selector_config: []
         auto fresh = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         fresh->Record.MutableQueryConfig()->SetRequireFresh(true);
         InvokeKeeper(runtime, fixture.Keepers.front(), std::move(fresh));
-        if (scenario == ECompactConfirmationCase::HigherProposal) {
+        const ui64 proposedGeneration = committed.GetGeneration() + 2;
+        if (scenario == ECompactConfirmationCase::HigherProposal || scenario == ECompactConfirmationCase::CorruptFullBody) {
             auto proposal = committed;
             proposal.SetGeneration(3);
             proposal.MutableSelfManagementConfig()->SetAutomaticBootstrap(true);
             NStorage::TDistributedConfigKeeper::UpdateFingerprint(&proposal);
             fixture.Metadata(3).MutableProposedStorageConfig()->CopyFrom(proposal);
+        } else if (conflictingCommit) {
+            auto other = committed;
+            other.SetSelfAssemblyUUID("other-committed-config");
+            if (scenario == ECompactConfirmationCase::NewerCommit) {
+                other.SetGeneration(committed.GetGeneration() + 1);
+            }
+            NStorage::TDistributedConfigKeeper::UpdateFingerprint(&other);
+            fixture.Metadata(3).MutableCommittedStorageConfig()->CopyFrom(other);
+            fixture.Metadata(3).MutableProposedStorageConfig()->CopyFrom(MakeNextConfig(other, proposedGeneration));
         }
         checking = true;
         replace(0);
-        if (scenario == ECompactConfirmationCase::CorruptBody
-            || scenario == ECompactConfirmationCase::UnexpectedMetadata) {
+        if (conflictingCommit) {
+            const auto expected = scenario == ECompactConfirmationCase::NewerCommit ? TResult::RACE : TResult::ERROR;
+            UNIT_ASSERT_C(response->GetStatus() == expected, response->DebugString());
+            UNIT_ASSERT(readConflictingDisk && compactRequests && compactReplies);
+            UNIT_ASSERT_VALUES_EQUAL(fullRequests, 0u);
+            if (scenario == ECompactConfirmationCase::ConflictingCommit) {
+                checking = false;
+                fixture.Metadata(3).ClearProposedStorageConfig();
+                response.reset();
+                auto advance = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+                advance->Record.MutableAdvanceGeneration();
+                runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, advance.release()), 1);
+                UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
+                UNIT_ASSERT_C(response->GetStatus() == TResult::NO_QUORUM, response->DebugString());
+                UNIT_ASSERT_STRING_CONTAINS(response->GetErrorReason(), "different fingerprints");
+
+                replace(1);
+                UNIT_ASSERT_C(response->GetStatus() == TResult::OK, response->DebugString());
+                const auto repaired = fixture.Metadata(1).GetCommittedStorageConfig();
+                UNIT_ASSERT(repaired.GetGeneration() > proposedGeneration);
+                CheckDurableConfigConverges(fixture, repaired);
+            }
+        } else if (corruptBody || scenario == ECompactConfirmationCase::UnexpectedMetadata) {
             UNIT_ASSERT_C(response->GetStatus() == TResult::NO_QUORUM, response->DebugString());
             if (scenario == ECompactConfirmationCase::UnexpectedMetadata) {
                 UNIT_ASSERT(invalidModes);
@@ -10715,6 +11662,14 @@ selector_config: []
         CheckCompactCommitConfirmation(ECompactConfirmationCase::Metadata);
     }
 
+    Y_UNIT_TEST(CommitConfirmationRejectsConflictSeenOnlyInMetadata) {
+        CheckCompactCommitConfirmation(ECompactConfirmationCase::ConflictingCommit);
+    }
+
+    Y_UNIT_TEST(CommitConfirmationRejectsNewerCommitSeenOnlyInMetadata) {
+        CheckCompactCommitConfirmation(ECompactConfirmationCase::NewerCommit);
+    }
+
     Y_UNIT_TEST(CommitConfirmationLegacyFallback) {
         CheckCompactCommitConfirmation(ECompactConfirmationCase::LegacyIntermediate);
     }
@@ -10725,6 +11680,10 @@ selector_config: []
 
     Y_UNIT_TEST(CommitConfirmationRejectsCorruptBody) {
         CheckCompactCommitConfirmation(ECompactConfirmationCase::CorruptBody);
+    }
+
+    Y_UNIT_TEST(CommitConfirmationRejectsCorruptFullGather) {
+        CheckCompactCommitConfirmation(ECompactConfirmationCase::CorruptFullBody);
     }
 
     Y_UNIT_TEST(CommitConfirmationLoadsHigherProposal) {

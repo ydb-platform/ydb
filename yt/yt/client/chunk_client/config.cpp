@@ -278,6 +278,8 @@ void TErasureReaderConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("enable_auto_repair", &TThis::EnableAutoRepair)
         .Default(true);
+    registrar.Parameter("enable_session_failure_history", &TThis::EnableSessionFailureHistory)
+        .Default(false);
     registrar.Parameter("replication_reader_speed_limit_per_sec", &TThis::ReplicationReaderSpeedLimitPerSec)
         .Default(5_MB);
     registrar.Parameter("slow_reader_expiration_timeout", &TThis::SlowReaderExpirationTimeout)

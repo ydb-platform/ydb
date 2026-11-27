@@ -1385,6 +1385,32 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         server.PQClient().RunYqlDataQuery(
             "UPDATE `/Root/PQ/Config/V2/Account` SET writeWeights = \"dc1:8,dc2:4\" WHERE name = \"prod\";");
         WaitForAccountWriteWeights(server.ActorSystem(), "prod", {{"dc1", 8}, {"dc2", 4}});
+
+        // A populated Account table without version used to fail the explicit query and keep the cache.
+        // SELECT A.* must do the same instead of parsing a missing column.
+        server.PQClient().RunYqlSchemeQuery("DROP TABLE `/Root/PQ/Config/V2/Account`;");
+        server.PQClient().RunYqlSchemeQuery(
+            "CREATE TABLE `/Root/PQ/Config/V2/Account` ("
+            "name Utf8, readClusters Utf8, writeClusters Utf8, PRIMARY KEY (name));");
+        server.PQClient().RunYqlDataQuery(
+            "UPSERT INTO `/Root/PQ/Config/V2/Account` (name, readClusters, writeClusters) "
+            "VALUES (\"other\", \"dc1\", \"dc1\");\n"
+            "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) "
+            "SELECT name, version + 1 FROM `/Root/PQ/Config/V2/Versions` WHERE name == \"Cluster\";");
+        wrapper.WaitForExactClustersDataVersion(4);
+        WaitForAccountWriteWeights(server.ActorSystem(), "prod", {{"dc1", 8}, {"dc2", 4}});
+        {
+            const TActorId sender = server.ActorSystem().AllocateEdgeActor();
+            server.ActorSystem().Send(new IEventHandle(
+                NPQ::NClusterTracker::MakeClusterTrackerID(),
+                sender,
+                new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList()));
+            TAutoPtr<IEventHandle> handle;
+            const auto* event = server.ActorSystem().GrabEdgeEvent<
+                NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse>(handle);
+            UNIT_ASSERT(event && event->Success && event->ClustersList);
+            UNIT_ASSERT(!event->ClustersList->Accounts.contains("other"));
+        }
     }
 
     Y_UNIT_TEST(TestPreferredClusterAlreadyFirst) {

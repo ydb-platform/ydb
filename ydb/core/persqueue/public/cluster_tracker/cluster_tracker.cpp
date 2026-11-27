@@ -458,6 +458,18 @@ private:
         };
 
         NYdb::TResultSetParser parser(resultSet);
+        // SELECT A.* succeeds on a table that CM has not migrated. ColumnParser throws
+        // TContractViolation for a missing column, and the actor does not catch it.
+        // A missing required column keeps the previous cache, as a failed explicit query did.
+        // writeWeights stays optional.
+        for (const char* column : {"name", "readClusters", "writeClusters", "version"}) {
+            if (parser.ColumnIndex(column) < 0) {
+                YDB_LOG_ERROR_CTX(Ctx(), "Account list misses a required column, keep the previous account cache",
+                    {"column", column});
+                FinishWithCachedAccounts();
+                return;
+            }
+        }
         const bool hasWriteWeights = parser.ColumnIndex("writeWeights") >= 0;
         TString pageLastName;
         while (parser.TryNextRow()) {

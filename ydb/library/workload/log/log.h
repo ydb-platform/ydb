@@ -38,12 +38,14 @@ public:
     TWorkloadDataInitializer::TList CreateDataInitializers() const override;
 
     void Validate(const ECommandType commandType, int workloadType) override;
-private:
+
+protected:
+    void ConfigureOptsPath(NLastGetopt::TOpts& opts);
     void ConfigureOptsFillData(NLastGetopt::TOpts& opts);
     void ConfigureOptsColumns(NLastGetopt::TOpts& opts);
 };
 
-class TLogGenerator final: public TWorkloadQueryGeneratorBase<TLogWorkloadParams> {
+class TLogGenerator: public TWorkloadQueryGeneratorBase<TLogWorkloadParams> {
 public:
     using TBase = TWorkloadQueryGeneratorBase<TLogWorkloadParams>;
     struct TRow {
@@ -79,13 +81,44 @@ public:
         Delete
     };
 
-private:
+protected:
     TQueryInfoList WriteRows(TString operation, TVector<TRow>&& rows) const;
     TQueryInfoList Insert(TVector<TRow>&& rows) const;
     TQueryInfoList Upsert(TVector<TRow>&& rows) const;
     TQueryInfoList BulkUpsert(TVector<TRow>&& rows) const;
     TQueryInfoList Select() const;
     TQueryInfoList Delete(TVector<TRow>&& rows) const;
+};
+
+// Produces random rows for the log table. Derived workloads override the two
+// timestamp hooks to get a different time distribution with the same row content.
+class TRandomLogGenerator {
+public:
+    using TRow = TLogGenerator::TRow;
+
+    explicit TRandomLogGenerator(const TLogWorkloadParams& params)
+        : Params(params)
+    {}
+    virtual ~TRandomLogGenerator() = default;
+
+    TVector<TRow> GenerateRandomRows(ui64 count) const;
+
+protected:
+    // The `timestamp` column: uniform in [date-from, date-to) when both are set,
+    // otherwise now minus timestamp_subtract plus a normal deviation.
+    virtual TInstant GenerateTimestamp() const;
+    // The `ingested_at` column: the same deviation around now, null with NullPercent probability.
+    virtual TInstant GenerateIngestedAt() const;
+
+    TInstant RandomInstant() const;
+    bool RandomIsNotNull() const;
+
+    const TLogWorkloadParams& Params;
+
+private:
+    std::string RandomWord(bool canBeEmpty) const;
+    std::string RandomPhrase(ui32 maxLen, ui32 minLen = 1) const;
+    TInstant UniformInstant(ui64 from, ui64 to) const;
 };
 
 } // namespace NLog

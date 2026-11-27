@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 0, 0, nullptr, std::move(trace)));
             const auto response = runtime.GrabEdgeEventRethrow<NKqp::TEvKqpSnapshot::TEvCreateSnapshotResponse>(sender);
             UNIT_ASSERT_VALUES_EQUAL(response->Cookie, 17u);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, NKikimrIssues::TStatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(response->Get()->Status), static_cast<int>(NKikimrIssues::TStatusIds::SUCCESS));
             runtime.SimulateSleep(TDuration::Seconds(1));
             const auto* span = FindSpan(*uploader, "Snapshot acquisition");
             UNIT_ASSERT_VALUES_EQUAL(bool(span), level >= 10);

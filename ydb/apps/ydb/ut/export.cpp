@@ -4,6 +4,7 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <algorithm>
 #include <type_traits>
 
 const TString TEST_BUCKET = "test-bucket";
@@ -13,17 +14,18 @@ const ui32 DEFAULT_RETRIES = 10;
 class TExportImpl : public TMockGrpcServiceBase<Ydb::Export::V1::ExportService::Service> {
 public:
     grpc::Status ExportToS3(grpc::ServerContext* context, const Ydb::Export::ExportToS3Request* request, Ydb::Export::ExportToS3Response* response) override {
-        Y_UNUSED(context);
         ++ExportCalls;
         CheckS3Params(request);
+        CheckExcludeRegexps(context, request->settings());
         CheckItems(request);
         auto status = FillResponse<Ydb::Export::ExportToS3Result>(response, "s3");
         return status;
     }
 
-    grpc::Status ExportToFs(grpc::ServerContext*, const Ydb::Export::ExportToFsRequest* request, Ydb::Export::ExportToFsResponse* response) override {
+    grpc::Status ExportToFs(grpc::ServerContext* context, const Ydb::Export::ExportToFsRequest* request, Ydb::Export::ExportToFsResponse* response) override {
         ++ExportCalls;
         CHECK_EXP(request->settings().base_path() == CommonDstPrefix, "Incorrect FS base path");
+        CheckExcludeRegexps(context, request->settings());
         CheckItems(request);
         return FillResponse<Ydb::Export::ExportToFsResult>(response, "fs");
     }
@@ -52,7 +54,6 @@ public:
             CHECK_EXP(settings.has_ydb_dump(), "Expected YDB dump format");
         }
         CheckEncryptionSettings(settings);
-        CheckExcludeRegexps(settings);
     }
 
     template <typename TRequest>
@@ -83,7 +84,14 @@ public:
             "Incorrect symmetric encryption key: \"" << encryptionSettings.symmetric_key().key() << "\" instead of \"" << SymmetricKey << "\"");
     }
 
-    void CheckExcludeRegexps(const Ydb::Export::ExportToS3Settings& settings) {
+    template <typename TSettings>
+    void CheckExcludeRegexps(grpc::ServerContext* context, const TSettings& settings) {
+        const auto& metadata = context->client_metadata();
+        const auto [begin, end] = metadata.equal_range("x-ydb-client-capabilities");
+        const bool hasDirectoryCapability = std::any_of(begin, end, [](const auto& header) {
+            return header.second == "directory-export";
+        });
+        CHECK_EXP(hasDirectoryCapability == ExpectDirectoryCapability, "Unexpected directory export capability");
         CHECK_EXP(settings.exclude_regexps_size() == static_cast<int>(ExcludeRegexps.size()),
             "Exclude regexps size does not match. settings.exclude_regexps_size(): " << settings.exclude_regexps_size() << ". ExcludeRegexps.size(): " << ExcludeRegexps.size());
         for (int i = 0; i < settings.exclude_regexps_size() && i < static_cast<int>(ExcludeRegexps.size()); ++i) {
@@ -133,6 +141,7 @@ public:
         SymmetricKey.clear();
         IncludeIndexData = false;
         ExcludeRegexps.clear();
+        ExpectDirectoryCapability = false;
         ExpectedExportCalls = 1;
         ExportCalls = 0;
         BadRequestMessage.clear();
@@ -258,6 +267,7 @@ public:
     TString SymmetricKey;
     bool IncludeIndexData = false;
     std::vector<TString> ExcludeRegexps;
+    bool ExpectDirectoryCapability = false;
     int ExpectedExportCalls = 1;
     int ExportCalls = 0;
     TString BadRequestMessage;
@@ -313,6 +323,57 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(ExportTest) {
+    Y_UNIT_TEST_F(EmptyDirectoriesUseServerSelection, TExportFixture) {
+        const TString root = GetDatabase() + "/archive";
+        for (bool nfs : {false, true}) {
+            for (bool explicitItem : {false, true}) {
+                Service<TSchemeImpl>().CapabilityProbe = TSchemeImpl::TCapabilityProbe{"directory-export", "directory-export"};
+                auto& service = Service<TExportImpl>();
+                service.ExpectDirectoryCapability = true;
+                service.ExpectItem(root, nfs || explicitItem ? "" : "dst")
+                    .ExpectExcludeRegexp(".*").ExpectExcludeRegexp("skip");
+                TList<TString> args;
+                if (nfs) {
+                    service.ExpectCommonDstPrefix("/dst");
+                    args = {"-e", GetEndpoint(), "-d", GetDatabase(), "export", "nfs", "--fs-path", "/dst"};
+                } else {
+                    service.ExpectBucket(TEST_BUCKET).ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                        .ExpectS3AccessKey("test-key").ExpectS3SecretKey("test-access-key")
+                        .ExpectCommonDstPrefix("dst").ExpectCommonSourcePrefix(explicitItem ? TString{} : root);
+                    args = S3ExportArgs({});
+                }
+                if (explicitItem) {
+                    args.insert(args.end(), {"--include", "archive"});
+                } else {
+                    args.insert(args.end(), {"--root-path", root});
+                }
+                args.insert(args.end(), {"--exclude", "skip"});
+                RunCli(std::move(args));
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(EmptyDirectoriesWithoutServerCapabilityUseClientSelection, TExportFixture) {
+        for (auto status : {Ydb::StatusIds::SUCCESS, Ydb::StatusIds::UNSUPPORTED}) {
+            auto& scheme = Service<TSchemeImpl>();
+            scheme.CapabilityProbe = TSchemeImpl::TCapabilityProbe{"directory-export", "unrelated-hint", status};
+            scheme.ExpectListDirectory(GetDatabase()).ExpectChild(GetDatabase(), "keep", Ydb::Scheme::Entry::TABLE);
+            Service<TExportImpl>().ExpectBucket(TEST_BUCKET).ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key").ExpectS3SecretKey("test-access-key").ExpectCommonDstPrefix("dst")
+                .ExpectItem(GetDatabase() + "/keep", "dst/keep");
+            RunCli(S3ExportArgs({"--exclude", "skip"}));
+        }
+    }
+
+    Y_UNIT_TEST_F(EmptyDirectoriesProbePropagatesAccessErrors, TExportFixture) {
+        Service<TSchemeImpl>().CapabilityProbe = TSchemeImpl::TCapabilityProbe{"directory-export", "", Ydb::StatusIds::UNAUTHORIZED};
+        Service<TExportImpl>().ExpectNoExportCall();
+        ExpectFail();
+        TString stderrOutput;
+        RunCli(S3ExportArgs({"--exclude", "skip"}), {}, {}, &stderrOutput);
+        UNIT_ASSERT_STRING_CONTAINS(stderrOutput, "UNAUTHORIZED");
+    }
+
     Y_UNIT_TEST_F(BadRequestDoesNotRetryWithTablesOnly, TExportFixture) {
         for (const bool nfs : {false, true}) {
             for (const bool includeTable : {false, true}) {

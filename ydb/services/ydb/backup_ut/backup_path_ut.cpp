@@ -664,8 +664,10 @@ void ExportEmptyDirectoriesWithCliFiltersImpl(TBackupTestFixture& f) {
     auto settings = traits.MakeExportSettings(f, root);
     settings.AppendItem(typename TExportSettings::TItem{.Src = root});
     settings.AppendExcludeRegexp(".*");
-    settings.AppendExcludeRegexp("^/Root/RecursiveFolderProcessing/dir1/dir2(/Table2)?$");
-    settings.AppendExcludeRegexp(R"(/(ab)\1$)");
+    // TRegExMatch disables automatic captures. Named groups still get a number
+    // in each expression, so the second filter must keep its own group 1.
+    settings.AppendExcludeRegexp("^/Root/RecursiveFolderProcessing/dir1/dir2(?<table>/Table2)?$");
+    settings.AppendExcludeRegexp(R"(/(?<pair>ab)\1$)");
     // A node unaware of the CLI capability rejects the same body without
     // scheduling an export, even if it usually handles relative filters.
     f.WaitOpStatus(traits.Export(f, settings), EStatus::BAD_REQUEST);

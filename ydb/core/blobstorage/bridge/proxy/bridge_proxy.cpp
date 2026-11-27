@@ -6,7 +6,6 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
-
 #include <ydb/library/actors/async/wait_for_event.h>
 
 #include <map>

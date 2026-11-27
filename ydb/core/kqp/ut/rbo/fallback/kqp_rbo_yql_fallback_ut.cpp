@@ -304,6 +304,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(FallbackToYql);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(FallbackOnRowTables);
+        // Fixture inserts must compile even when legacy retry is disabled.
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         CreateSimpleTable(kikimr);
 

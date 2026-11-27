@@ -1751,6 +1751,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        // This test checks NewRBO index plans, including joins with row tables.
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnRowTables(false);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

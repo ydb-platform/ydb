@@ -908,6 +908,28 @@ protected: //TDqComputeActorChannels::ICallbacks
 
     // void PeerFinished(ui64 channelId) is pure and must be overridded in derived class
 
+    void TraceChannelProgress(const char* name, const TDqComputeActorChannels::TChannelTraceInfo& info) override {
+        LifecycleEvents.Event(LifecycleSpan, 10, name, [&] {
+            NWilson::TKeyValueList attributes;
+            attributes["channel_id"] = static_cast<i64>(info.ChannelId);
+            attributes["sequence_no"] = static_cast<i64>(info.SeqNo);
+            attributes["message_eof"] = info.MessageEof;
+            attributes["early_finish"] = info.EarlyFinish;
+            attributes["retained_messages"] = static_cast<i64>(info.RetainedMessages);
+            if (info.FreeSpaceKnown) {
+                attributes[TStringBuf(name) == "channel data dispatched"
+                    ? "available_credit_bytes" : "advertised_free_bytes"] = info.FreeSpace;
+            }
+            if (info.EofSeqNo) {
+                attributes["eof_sequence_no"] = static_cast<i64>(info.EofSeqNo);
+                if (TStringBuf(name) == "channel data ack received") {
+                    attributes["eof_acknowledged"] = info.SeqNo >= info.EofSeqNo;
+                }
+            }
+            return attributes;
+        });
+    }
+
     void ResumeExecution(EResumeSource source) override final{
         ContinueExecute(source);
     }

@@ -164,6 +164,9 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
         inputChannel.Finished = true;
     }
 
+    Cbs->TraceChannelProgress("channel input data received", {
+        channelId, record.GetSeqNo(), 0, channelData.Proto.GetFinished(), false,
+        0, false, inputChannel.InFlight.size()});
     Cbs->TakeInputChannelData(std::move(channelData), !record.GetNoAck());
 }
 
@@ -189,6 +192,9 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
         outputChannel.RetryState.reset();
         outputChannel.Finished = true;
         outputChannel.EarlyFinish = true;
+        Cbs->TraceChannelProgress("channel early finish received", {
+            record.GetChannelId(), record.GetSeqNo(), outputChannel.TraceEofSeqNo, false, true,
+            record.GetFreeSpace(), true, outputChannel.InFlight.size()});
         Cbs->PeerFinished(record.GetChannelId());
         return;
     }
@@ -201,6 +207,9 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
     }
 
     outputChannel.PeerState.ActualizeFreeSpace(record.GetFreeSpace());
+    Cbs->TraceChannelProgress("channel data ack received", {
+        record.GetChannelId(), record.GetSeqNo(), outputChannel.TraceEofSeqNo, false, false,
+        record.GetFreeSpace(), true, outputChannel.InFlight.size()});
 
     LOG_T("PeerState, peerState:(" << outputChannel.PeerState.DebugString() << ")"
         << ", sentSeqNo: " << outputChannel.LastSentSeqNo
@@ -585,6 +594,9 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, con
         )
     );
     outputChannel.Finished = finished;
+    if (finished) {
+        outputChannel.TraceEofSeqNo = seqNo;
+    }
 
     ui32 flags = CalcMessageFlags(*outputChannel.Peer);
     dataEv->Record.SetNoAck(!needAck);
@@ -592,6 +604,9 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, con
     LastOutputMessageTime = TInstant::Now();
 
     outputChannel.PeerState.AddInFlight(dataBytes, dataChunks);
+    Cbs->TraceChannelProgress("channel data dispatched", {
+        outputChannel.ChannelId, seqNo, outputChannel.TraceEofSeqNo, finished, false,
+        outputChannel.PeerState.GetFreeMemory(), true, outputChannel.InFlight.size()});
 }
 
 bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {
@@ -747,6 +762,9 @@ void TDqComputeActorChannels::SendChannelDataAck(TInputChannelState& inputChanne
     ackEv->Record.SetFreeSpace(freeSpace);
 
     ui32 flags = (inputChannel.Finished && !SupportCheckpoints) ? 0 : CalcMessageFlags(*inputChannel.Peer);
+    Cbs->TraceChannelProgress("channel data ack dispatched", {
+        inputChannel.ChannelId, inputChannel.LastRecvSeqNo, 0, false, false,
+        freeSpace, true, inputChannel.InFlight.size()});
     Send(*inputChannel.Peer, ackEv.Release(), flags, /* cookie */ inputChannel.ChannelId);
 }
 

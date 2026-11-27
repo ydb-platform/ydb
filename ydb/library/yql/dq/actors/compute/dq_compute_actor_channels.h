@@ -63,11 +63,23 @@ public:
         }
     };
 
+    struct TChannelTraceInfo {
+        ui64 ChannelId;
+        ui64 SeqNo;
+        ui64 EofSeqNo;
+        bool MessageEof;
+        bool EarlyFinish;
+        i64 FreeSpace;
+        bool FreeSpaceKnown;
+        ui64 RetainedMessages;
+    };
+
     struct ICallbacks {
         virtual i64 GetInputChannelFreeSpace(ui64 channelId) const = 0;
         virtual void TakeInputChannelData(TChannelDataOOB&& channelData, bool ack) = 0;
         virtual void PeerFinished(ui64 channelId) = 0;
         virtual void ResumeExecution(EResumeSource source) = 0;
+        virtual void TraceChannelProgress(const char*, const TChannelTraceInfo&) {}
 
         virtual ~ICallbacks() = default;
     };
@@ -186,6 +198,7 @@ private:
     };
 
     struct TOutputChannelState {
+        ui64 TraceEofSeqNo = 0;
         ui64 ChannelId = 0;
         std::optional<NActors::TActorId> Peer;
         ui64 LastSentSeqNo = 0;

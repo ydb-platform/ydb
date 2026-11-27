@@ -12,6 +12,12 @@ static const bool TESTS_VERBOSE = getenv("TESTS_VERBOSE") != nullptr;
 }
 struct TMockChannelCallbacks: public TDqComputeActorChannels::ICallbacks
 {
+    std::vector<std::pair<TString, TDqComputeActorChannels::TChannelTraceInfo>> Trace;
+
+    void TraceChannelProgress(const char* name, const TDqComputeActorChannels::TChannelTraceInfo& info) override {
+        Trace.emplace_back(name, info);
+    }
+
     i64 GetInputChannelFreeSpace(ui64 channelId) const override {
         Y_UNUSED(channelId);
         return 100;
@@ -103,6 +109,17 @@ struct TChannelsTestFixture: public NUnitTest::TBaseFixture
         ActorSystem.SetEventFilter(prev);
     }
 
+    void SendOutputEof() {
+        auto& output = Channels->OutputChannelsMap[7];
+        output.ChannelId = 7;
+        output.Peer = EdgeActor;
+        output.PeerState.ActualizeFreeSpace(1000);
+        TChannelDataOOB data;
+        data.Proto.SetChannelId(7);
+        data.Proto.SetFinished(true);
+        Channels->SendChannelData(std::move(data), true);
+    }
+
     void SendAck(i64 freeSpace) {
         Channels->SendChannelDataAck(*InputChannel, freeSpace);
     }
@@ -114,6 +131,37 @@ struct TChannelsTestFixture: public NUnitTest::TBaseFixture
 
 Y_UNIT_TEST_SUITE(TComputeActorTest) {
     Y_UNIT_TEST_F(Empty, TChannelsTestFixture) { }
+
+    Y_UNIT_TEST_F(EofSendAndAcknowledgmentAreSeparate, TChannelsTestFixture) {
+        RunInActorContext([&] { SendOutputEof(); });
+        UNIT_ASSERT_VALUES_EQUAL(Callbacks.Trace.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(Callbacks.Trace.back().first, "channel data dispatched");
+        UNIT_ASSERT(Callbacks.Trace.back().second.MessageEof);
+        UNIT_ASSERT_VALUES_EQUAL(Callbacks.Trace.back().second.RetainedMessages, 1u);
+        auto ack = MakeHolder<TEvDqCompute::TEvChannelDataAck>();
+        ack->Record.SetChannelId(7);
+        ack->Record.SetSeqNo(1);
+        ack->Record.SetFreeSpace(1000);
+        ActorSystem.Send(ChannelsId, EdgeActor, ack.Release());
+        UNIT_ASSERT_VALUES_EQUAL(Callbacks.Trace.back().first, "channel data ack received");
+        UNIT_ASSERT_VALUES_EQUAL(Callbacks.Trace.back().second.EofSeqNo, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(Callbacks.Trace.back().second.SeqNo, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(Callbacks.Trace.back().second.RetainedMessages, 0u);
+        UNIT_ASSERT(!Callbacks.Trace.back().second.EarlyFinish);
+    }
+
+    Y_UNIT_TEST_F(EarlyFinishIsDistinctFromEofAck, TChannelsTestFixture) {
+        RunInActorContext([&] { SendOutputEof(); });
+        auto ack = MakeHolder<TEvDqCompute::TEvChannelDataAck>();
+        ack->Record.SetChannelId(7);
+        ack->Record.SetSeqNo(0);
+        ack->Record.SetFinish(true);
+        ActorSystem.Send(ChannelsId, EdgeActor, ack.Release());
+        UNIT_ASSERT_VALUES_EQUAL(Callbacks.Trace.back().first, "channel early finish received");
+        UNIT_ASSERT(Callbacks.Trace.back().second.EarlyFinish);
+        UNIT_ASSERT_VALUES_EQUAL(Callbacks.Trace.back().second.SeqNo, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(Callbacks.Trace.back().second.EofSeqNo, 1u);
+    }
 
     Y_UNIT_TEST_F(ReceiveData, TChannelsTestFixture) {
         auto ev = MakeHolder<TEvDqCompute::TEvChannelData>();
